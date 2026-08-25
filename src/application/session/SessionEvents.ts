@@ -1,0 +1,48 @@
+import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
+import type { PerformanceReport, StepResult } from '../../domain/scoring/PerformanceReport.js';
+import type { SessionScore } from '../../domain/scoring/IScoringStrategy.js';
+import type { TimelineStep } from '../../domain/timeline/Timeline.js';
+import type { MetronomeTick } from '../ports/IMetronome.js';
+import type { SessionStatus } from './SessionState.js';
+
+export interface StatusChangedEvent {
+  readonly previous: SessionStatus;
+  readonly status: SessionStatus;
+}
+
+export interface CountInEvent {
+  readonly beatsRemaining: number;
+}
+
+export interface StepEnteredEvent {
+  readonly step: TimelineStep;
+}
+
+export interface StepCompletedEvent {
+  readonly result: StepResult;
+}
+
+export interface NoteJudgedEvent {
+  readonly midi: number;
+  readonly verdict: NoteVerdict;
+  readonly stepIndex: number;
+  /** Only meaningful in beat-driven modes; `null` when timing is not judged. */
+  readonly deviationMs: number | null;
+  readonly remaining: readonly number[];
+}
+
+export interface SessionFinishedEvent {
+  readonly report: PerformanceReport;
+  readonly score: SessionScore;
+}
+
+/** Everything a practice session publishes. */
+export interface SessionEventMap {
+  statusChanged: StatusChangedEvent;
+  countIn: CountInEvent;
+  stepEntered: StepEnteredEvent;
+  stepCompleted: StepCompletedEvent;
+  noteJudged: NoteJudgedEvent;
+  beat: MetronomeTick;
+  finished: SessionFinishedEvent;
+}

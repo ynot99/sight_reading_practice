@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Piano Sight-Reading Trainer</title>
+  </head>
+  <body>
+    <div class="app">
+      <header class="app-header">
+        <div class="brand">
+          <h1>Piano Sight-Reading Trainer</h1>
+          <p id="exercise-title" class="subtitle">No exercise loaded</p>
+        </div>
+        <div class="midi-cluster">
+          <span id="midi-status" class="pill pill--idle">MIDI: not connected</span>
+          <button id="connect-midi" type="button" class="button button--ghost">Connect MIDI</button>
+          <select id="midi-input" aria-label="MIDI input device">
+            <option value="">All inputs</option>
+          </select>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section id="score" class="score" aria-label="Score"></section>
+
+        <aside class="panel">
+          <div class="panel__row">
+            <span class="label">Session</span>
+            <strong id="session-status">Idle</strong>
+          </div>
+          <div class="panel__row">
+            <span class="label">Play now</span>
+            <strong id="expected" class="expected">—</strong>
+          </div>
+          <progress id="progress" value="0" max="1"></progress>
+          <div class="panel__row panel__row--compact">
+            <span class="label">Position</span>
+            <span id="position">—</span>
+          </div>
+
+          <ul id="log" class="log" aria-label="Recent notes"></ul>
+
+          <div id="result" class="result" hidden></div>
+        </aside>
+      </main>
+
+      <footer class="controls">
+        <div class="control-group">
+          <label for="preset">Level</label>
+          <select id="preset"></select>
+          <p id="preset-description" class="hint"></p>
+        </div>
+
+        <div class="control-group">
+          <label for="mode">Mode</label>
+          <select id="mode"></select>
+          <p id="mode-description" class="hint"></p>
+        </div>
+
+        <div class="control-group">
+          <label for="key">Key</label>
+          <select id="key"></select>
+        </div>
+
+        <div class="control-group">
+          <label for="time-signature">Time</label>
+          <select id="time-signature"></select>
+        </div>
+
+        <div class="control-group">
+          <label for="measures">Bars: <output id="measures-value">4</output></label>
+          <input id="measures" type="range" min="2" max="16" step="1" value="4" />
+        </div>
+
+        <div class="control-group">
+          <label for="tempo">Tempo: <output id="tempo-value">60</output> bpm</label>
+          <input id="tempo" type="range" min="30" max="180" step="1" value="60" />
+        </div>
+
+        <div class="control-group">
+          <label for="count-in">Count-in: <output id="count-in-value">4</output> beats</label>
+          <input id="count-in" type="range" min="0" max="8" step="1" value="4" />
+        </div>
+
+        <div class="control-group">
+          <label for="tolerance">Chord window: <output id="tolerance-value">250</output> ms</label>
+          <input id="tolerance" type="range" min="40" max="800" step="10" value="250" />
+        </div>
+
+        <div class="control-group control-group--checks">
+          <label><input id="metronome-muted" type="checkbox" /> Mute metronome</label>
+          <label><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
+          <label><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
+          <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
+        </div>
+
+        <div class="control-group control-group--actions">
+          <button id="new-exercise" type="button" class="button">New exercise</button>
+          <button id="start" type="button" class="button button--primary">Start</button>
+          <button id="pause" type="button" class="button" disabled>Pause</button>
+          <button id="stop" type="button" class="button button--ghost" disabled>Stop</button>
+        </div>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

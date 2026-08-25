@@ -21,6 +21,7 @@ import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRen
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
+import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
 import { AppView } from '../../src/ui/AppView.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
@@ -41,7 +42,7 @@ interface Rig {
   readonly clock: ManualClock;
 }
 
-function createRig(): Rig {
+function createRig(webMidiOverride?: AppRuntime['webMidi']): Rig {
   const clock = new ManualClock();
   const midi = new MockMidiAdapter({ clock });
   const metronome = new ManualMetronome(clock);
@@ -72,7 +73,7 @@ function createRig(): Rig {
     controller,
     presets,
     modes,
-    webMidi: midi,
+    webMidi: webMidiOverride ?? midi,
     computerKeyboard: new ComputerKeyboardMidiSource(
       document as unknown as KeyboardTarget,
       clock,
@@ -212,6 +213,25 @@ describe('AppView', () => {
 
     expect(element('midi-status').textContent).toBe('MIDI: connected');
     expect(element<HTMLSelectElement>('midi-input').options.length).toBeGreaterThan(1);
+  });
+
+  it('explains a browser that has no Web MIDI at all', async () => {
+    const { view } = createRig(new WebMidiAdapter(null, new ManualClock()));
+    await view.initialize();
+    await Promise.resolve();
+
+    expect(element('midi-status').textContent).toBe('MIDI: unsupported browser');
+    const hint = element('midi-hint');
+    expect(hint.hidden).toBe(false);
+    expect(hint.textContent).toContain('Web MIDI Browser');
+  });
+
+  it('keeps the hint out of the way when MIDI works', async () => {
+    const { view, midi } = createRig();
+    await view.initialize();
+    await midi.connect();
+
+    expect(element('midi-hint').hidden).toBe(true);
   });
 
   it('detaches its listeners on dispose', async () => {

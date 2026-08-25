@@ -30,6 +30,15 @@ const MIDI_STATUS_LABELS: Readonly<Record<MidiConnectionStatus, string>> = {
   error: 'MIDI: error',
 };
 
+/** Shown under the connection controls when there is something to explain. */
+const MIDI_HINTS: Partial<Readonly<Record<MidiConnectionStatus, string>>> = {
+  unsupported:
+    'This browser has no Web MIDI. On iPad or iPhone, open this page in the free “Web MIDI Browser” app; on a computer use Chrome, Edge or Opera.',
+  denied:
+    'Permission was refused. Allow MIDI access for this site in the browser settings, then reload.',
+  error: 'The browser could not reach your MIDI devices. Reconnect the cable and try again.',
+};
+
 function keyValue(key: KeySignature): string {
   return `${key.fifths}:${key.mode}`;
 }
@@ -67,6 +76,7 @@ export class AppView {
     midiStatus: HTMLElement;
     connectMidi: HTMLButtonElement;
     midiInput: HTMLSelectElement;
+    midiHint: HTMLElement;
     sessionStatus: HTMLElement;
     expected: HTMLElement;
     position: HTMLElement;
@@ -105,6 +115,7 @@ export class AppView {
       midiStatus: requireElement(doc, 'midi-status'),
       connectMidi: requireElement(doc, 'connect-midi'),
       midiInput: requireElement(doc, 'midi-input'),
+      midiHint: requireElement(doc, 'midi-hint'),
       sessionStatus: requireElement(doc, 'session-status'),
       expected: requireElement(doc, 'expected'),
       position: requireElement(doc, 'position'),
@@ -363,6 +374,7 @@ export class AppView {
             : status === 'denied' || status === 'error' || status === 'unsupported'
               ? 'pill pill--error'
               : 'pill pill--idle';
+        this.renderMidiHint(status);
         this.refreshInputs();
       }),
     );
@@ -370,6 +382,19 @@ export class AppView {
     this.subscriptions.push(this.runtime.webMidi.onInputsChanged(() => this.refreshInputs()));
 
     this.subscriptions.push(this.subscribeAudioFeedback());
+  }
+
+  /**
+   * Explains a missing MIDI connection instead of just reporting it.
+   *
+   * iPadOS matters here: every browser on it is WebKit, and WebKit ships no
+   * Web MIDI API, so "unsupported" is the normal state on the device this is
+   * most likely to be practised on.
+   */
+  private renderMidiHint(status: MidiConnectionStatus): void {
+    const hint = MIDI_HINTS[status];
+    this.el.midiHint.textContent = hint ?? '';
+    this.el.midiHint.hidden = hint === undefined;
   }
 
   /** Sounds the player's own keys for controllers without built-in audio. */

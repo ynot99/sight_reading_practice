@@ -73,8 +73,18 @@ body {
 
 .midi-cluster {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
   align-items: center;
+}
+
+/* Wraps onto its own line under the connection controls. */
+.midi-hint {
+  flex-basis: 100%;
+  max-width: 46ch;
+  text-align: right;
+  min-height: 0;
 }
 
 .layout {

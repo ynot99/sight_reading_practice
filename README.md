@@ -216,7 +216,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # 247 tests
+npm test           # ~250 tests
 npm run coverage   # ~92% of statements in src/
 ```
 
@@ -272,7 +272,8 @@ than from the engraver's internals.
 - Generated music is deliberately simple — diatonic, no accidentals outside the
   key — though the notation layer already handles accidentals correctly.
 - Notes are not coloured on the page when you get them right or wrong; feedback
-  lives in the side panel.
+  lives in the side panel. The side panel also still names the notes you owe,
+  so hiding the cursor is not yet a full "read it blind" mode.
 - No progress tracking between sessions yet: reports exist, but nothing stores
   them. Because every exercise is reproducible from its seed, "practise that
   one again" is a small feature away.

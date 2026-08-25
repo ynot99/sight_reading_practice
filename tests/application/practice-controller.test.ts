@@ -247,3 +247,72 @@ describe('PracticeController', () => {
     expect(renderer.clearCount).toBe(1);
   });
 });
+
+describe('cursor visibility', () => {
+  it('shows the cursor by default', async () => {
+    const { controller, renderer } = createController();
+    expect(controller.settings.showCursor).toBe(true);
+
+    await controller.loadNewExercise();
+
+    expect(renderer.cursor.visible).toBe(true);
+  });
+
+  it('hides the cursor as soon as the setting is turned off', async () => {
+    const { controller, renderer } = createController();
+    await controller.loadNewExercise();
+
+    controller.updateSettings({ showCursor: false });
+
+    expect(renderer.cursor.visible).toBe(false);
+  });
+
+  it('keeps it hidden across a new exercise', async () => {
+    const { controller, renderer } = createController();
+    controller.updateSettings({ showCursor: false });
+
+    await controller.loadNewExercise();
+    await controller.loadNewExercise();
+
+    expect(renderer.cursor.visible).toBe(false);
+  });
+
+  it('still follows the music while hidden', async () => {
+    const { controller, renderer, midi } = createController();
+    controller.updateSettings({ showCursor: false });
+    await controller.loadNewExercise();
+
+    const session = controller.start();
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
+    for (const midiNote of step.expectedMidi) {
+      midi.noteOn(midiNote, 0);
+    }
+
+    // The position keeps advancing; only the marker is invisible.
+    expect(renderer.cursor.moves).toEqual([0, 1]);
+    expect(renderer.cursor.visible).toBe(false);
+  });
+
+  it('brings it back when the setting is turned on again', async () => {
+    const { controller, renderer } = createController();
+    await controller.loadNewExercise();
+    controller.updateSettings({ showCursor: false });
+
+    controller.updateSettings({ showCursor: true });
+
+    expect(renderer.cursor.visible).toBe(true);
+  });
+
+  it('leaves visibility alone when other settings change', async () => {
+    const { controller, renderer } = createController();
+    await controller.loadNewExercise();
+    controller.updateSettings({ showCursor: false });
+
+    controller.updateSettings({ tempoBpm: 90 });
+
+    expect(renderer.cursor.visible).toBe(false);
+  });
+});

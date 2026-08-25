@@ -27,6 +27,13 @@ export interface PracticeSettings {
   readonly metronomeMuted: boolean;
   readonly matchToleranceMs: number;
   readonly pitchClassOnly: boolean;
+  /**
+   * Draw the position marker on the score.
+   *
+   * Turning it off is a practice aid in its own right: it forces you to keep
+   * your place by reading rather than by following the highlight.
+   */
+  readonly showCursor: boolean;
 }
 
 export interface ExerciseLoadedEvent {
@@ -92,6 +99,7 @@ export class PracticeController {
       metronomeMuted: false,
       matchToleranceMs: 250,
       pitchClassOnly: false,
+      showCursor: true,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();
@@ -142,6 +150,10 @@ export class PracticeController {
       this.currentSettings = next;
     }
 
+    if (changes.showCursor !== undefined) {
+      this.applyCursorVisibility();
+    }
+
     this.emitter.emit('settingsChanged', { settings: next });
     return next;
   }
@@ -181,7 +193,7 @@ export class PracticeController {
 
     await this.deps.renderer.load(musicXml);
     this.deps.cursor.reset();
-    this.deps.cursor.show();
+    this.applyCursorVisibility();
 
     this.emitter.emit('exerciseLoaded', { exercise, timeline: this.timeline, musicXml });
     return exercise;
@@ -265,6 +277,14 @@ export class PracticeController {
     this.sessionSubscriptions = [];
     this.currentSession?.dispose();
     this.currentSession = null;
+  }
+
+  private applyCursorVisibility(): void {
+    if (this.currentSettings.showCursor) {
+      this.deps.cursor.show();
+    } else {
+      this.deps.cursor.hide();
+    }
   }
 
   private createProvider(): IExerciseProvider {

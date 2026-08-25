@@ -97,6 +97,7 @@ export class AppView {
     countInValue: HTMLOutputElement;
     tolerance: HTMLInputElement;
     toleranceValue: HTMLOutputElement;
+    showCursor: HTMLInputElement;
     metronomeMuted: HTMLInputElement;
     pitchClass: HTMLInputElement;
     audioFeedback: HTMLInputElement;
@@ -136,6 +137,7 @@ export class AppView {
       countInValue: requireElement(doc, 'count-in-value'),
       tolerance: requireElement(doc, 'tolerance'),
       toleranceValue: requireElement(doc, 'tolerance-value'),
+      showCursor: requireElement(doc, 'show-cursor'),
       metronomeMuted: requireElement(doc, 'metronome-muted'),
       pitchClass: requireElement(doc, 'pitch-class'),
       audioFeedback: requireElement(doc, 'audio-feedback'),
@@ -244,6 +246,10 @@ export class AppView {
       controller.updateSettings({
         matchToleranceMs: Number.parseInt(this.el.tolerance.value, 10),
       });
+    });
+
+    this.listen(this.el.showCursor, 'change', () => {
+      controller.updateSettings({ showCursor: this.el.showCursor.checked });
     });
 
     this.listen(this.el.metronomeMuted, 'change', () => {
@@ -463,6 +469,7 @@ export class AppView {
     this.el.countInValue.value = String(settings.countInBeats);
     this.el.tolerance.value = String(settings.matchToleranceMs);
     this.el.toleranceValue.value = String(settings.matchToleranceMs);
+    this.el.showCursor.checked = settings.showCursor;
     this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.presetDescription.textContent = this.runtime.presets.get(settings.presetId).description;

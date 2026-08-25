@@ -206,6 +206,23 @@ describe('AppView', () => {
     expect(element('mode-description').textContent).toContain('with the beat');
   });
 
+  it('hides the score cursor from the checkbox', async () => {
+    const { view, runtime, renderer } = createRig();
+    await view.initialize();
+    expect(renderer.cursor.visible).toBe(true);
+
+    const toggle = element<HTMLInputElement>('show-cursor');
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event('change'));
+
+    expect(runtime.controller.settings.showCursor).toBe(false);
+    expect(renderer.cursor.visible).toBe(false);
+
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    expect(renderer.cursor.visible).toBe(true);
+  });
+
   it('reports the MIDI connection state', async () => {
     const { view, midi } = createRig();
     await view.initialize();

@@ -4,6 +4,7 @@ import { measureOf, noteEntry, restEntry } from '../../model/Exercise.js';
 import { fillMeasure } from '../RhythmFiller.js';
 import type { VoiceRole } from '../RhythmProfile.js';
 import type { IVoiceGenerator, PitchRange, VoiceContext } from './IVoiceGenerator.js';
+import { tonicNearestMiddle } from './voiceRange.js';
 
 export interface MelodyVoiceOptions {
   readonly range: PitchRange;
@@ -32,7 +33,7 @@ export class MelodyVoiceGenerator implements IVoiceGenerator {
   generate(context: VoiceContext): Measure[] {
     const low = this.options.range.lowest.diatonicIndex;
     const high = this.options.range.highest.diatonicIndex;
-    let current = this.startingIndex(context, low, high);
+    let current = tonicNearestMiddle(context.key, low, high);
 
     const measures: Measure[] = [];
     let isFirstNote = true;
@@ -54,20 +55,6 @@ export class MelodyVoiceGenerator implements IVoiceGenerator {
     }
 
     return measures;
-  }
-
-  /** Starts on the tonic nearest the middle of the range. */
-  private startingIndex(context: VoiceContext, low: number, high: number): number {
-    const middle = Math.round((low + high) / 2);
-    let candidate = context.key.tonicIndexAtOrAbove(low);
-    let best = candidate;
-    while (candidate <= high) {
-      if (Math.abs(candidate - middle) < Math.abs(best - middle)) {
-        best = candidate;
-      }
-      candidate += 7;
-    }
-    return clamp(best, low, high);
   }
 
   private nextIndex(context: VoiceContext, current: number, low: number, high: number): number {

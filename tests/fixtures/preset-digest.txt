@@ -77,3 +77,35 @@ staff 2 (bass)
   6: R/quarter E3/quarter F3/quarter R/quarter
   7: Bb2/half A2/quarter G2/quarter
   8: D3/quarter Bb3/quarter C4/quarter Bb3/quarter
+
+# figures
+staff 1 (treble)
+  1: B4/eighth A4/eighth G4/half B4/quarter
+  2: A4/quarter G4/quarter D4/eighth E4/eighth F4/eighth G4/eighth
+  3: R/quarter A4/quarter G4/quarter F4/quarter
+  4: E4/eighth D4/eighth E4/half F4/quarter
+staff 2 (bass)
+  1: E3/half G3/half
+  2: E3/quarter R/quarter C3/quarter E3/quarter
+  3: G3/half E3/half
+  4: C3/quarter E3/half G3/quarter
+
+# sequences
+staff 1 (treble)
+  1: F#4/eighth E4/eighth D4/half F#4/quarter
+  2: E4/quarter D4/quarter G4/eighth F#4/eighth E4/eighth A4/eighth
+  3: G4/quarter F#4/quarter A4/quarter G4/quarter
+  4: F#4/eighth B4/eighth D5/quarter G4/eighth D4/eighth F#4/quarter
+  5: A4/quarter C5/eighth B4/eighth C5/eighth B4/eighth A4/quarter
+  6: G4/half A4/eighth G4/eighth F#4/quarter
+  7: D4/quarter C4/half B3/quarter
+  8: G3/half B3/eighth D4/eighth F#4/quarter
+staff 2 (bass)
+  1: A3/quarter F#3/half D3/quarter
+  2: A3/quarter F#3/half D3/quarter
+  3: G3/quarter E3/quarter C3/half
+  4: G3/quarter E3/quarter R/half
+  5: C3/quarter E3/half C3/quarter
+  6: A2/half F#3/quarter D3/quarter
+  7: B2/quarter B3/half G3/quarter
+  8: E3/quarter C3/quarter G3/quarter E3/quarter

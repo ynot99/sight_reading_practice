@@ -5,6 +5,7 @@ import type { ExercisePreset } from './ExercisePresetRegistry.js';
 import { GrandStaffExerciseGenerator } from './GrandStaffExerciseGenerator.js';
 import { HarmonyVoiceGenerator } from './voices/HarmonyVoiceGenerator.js';
 import { MelodyVoiceGenerator } from './voices/MelodyVoiceGenerator.js';
+import { PatternVoiceGenerator } from './voices/PatternVoiceGenerator.js';
 import { SilentVoiceGenerator } from './voices/SilentVoiceGenerator.js';
 import type { PitchRange } from './voices/IVoiceGenerator.js';
 
@@ -225,6 +226,101 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
       rhythmProfileId: 'flowing',
       timeSignature: new TimeSignature(4, 4),
       key: KeySignature.major(-1),
+      tempoBpm: 76,
+    },
+  },
+  {
+    id: 'figures',
+    label: '7 · Scales and broken chords',
+    description: 'Built from melodic figures rather than single steps: runs, turns and arpeggios.',
+    generator: new GrandStaffExerciseGenerator({
+      id: 'gen.figures',
+      label: 'Melodic figures',
+      staves: [
+        {
+          clef: 'treble',
+          voice: new PatternVoiceGenerator({
+            range: range('C4', 'A5'),
+            role: 'lead',
+            figures: [
+              { value: 'scale', weight: 5 },
+              { value: 'arpeggio', weight: 4 },
+              { value: 'neighbour', weight: 2 },
+              { value: 'sequence', weight: 2 },
+              { value: 'repeat', weight: 1 },
+            ],
+            maxLeap: 3,
+          }),
+        },
+        {
+          clef: 'bass',
+          voice: new PatternVoiceGenerator({
+            range: range('F2', 'C4'),
+            role: 'inner',
+            figures: [
+              { value: 'arpeggio', weight: 6 },
+              { value: 'scale', weight: 2 },
+              { value: 'repeat', weight: 2 },
+            ],
+            // Wide enough that the snapped chord root actually moves between
+            // I, IV and V instead of settling on whichever is nearest.
+            maxLeap: 4,
+          }),
+        },
+      ],
+    }),
+    defaults: {
+      measures: 4,
+      rhythmProfileId: 'flowing',
+      timeSignature: new TimeSignature(4, 4),
+      key: KeySignature.major(0),
+      tempoBpm: 72,
+    },
+  },
+  {
+    id: 'sequences',
+    label: '8 · Sequences',
+    description: 'Short motifs repeated a step higher or lower - reading by pattern, not by note.',
+    generator: new GrandStaffExerciseGenerator({
+      id: 'gen.sequences',
+      label: 'Sequences',
+      staves: [
+        {
+          clef: 'treble',
+          voice: new PatternVoiceGenerator({
+            range: range('G3', 'A5'),
+            role: 'lead',
+            figures: [
+              { value: 'sequence', weight: 6 },
+              { value: 'scale', weight: 3 },
+              { value: 'arpeggio', weight: 3 },
+              { value: 'neighbour', weight: 2 },
+              { value: 'repeat', weight: 2 },
+            ],
+            maxLeap: 4,
+          }),
+        },
+        {
+          clef: 'bass',
+          voice: new PatternVoiceGenerator({
+            range: range('E2', 'D4'),
+            role: 'inner',
+            figures: [
+              { value: 'sequence', weight: 4 },
+              { value: 'arpeggio', weight: 3 },
+              { value: 'scale', weight: 2 },
+              { value: 'repeat', weight: 2 },
+            ],
+            maxLeap: 3,
+          }),
+        },
+      ],
+    }),
+    defaults: {
+      measures: 8,
+      rhythmProfileId: 'flowing',
+      timeSignature: new TimeSignature(4, 4),
+      key: KeySignature.major(1),
       tempoBpm: 76,
     },
   },

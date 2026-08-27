@@ -157,11 +157,13 @@ src/
 │   │   ├── RhythmFiller.ts         #   fills a bar exactly, without syncopation
 │   │   ├── Rng.ts                  #   seeded, reproducible randomness
 │   │   ├── ExercisePresetRegistry.ts
-│   │   ├── presets.ts              #   the six built-in levels (material)
+│   │   ├── presets.ts              #   the eight built-in levels (material)
 │   │   ├── RhythmProfile.ts        #   voice roles + the profile registry
 │   │   ├── rhythmProfiles.ts       #   the rhythmic levels (calm ➜ sixteenths)
 │   │   └── voices/                 #   IVoiceGenerator strategies
 │   │       ├── MelodyVoiceGenerator.ts
+│   │       ├── PatternVoiceGenerator.ts
+│   │       ├── figures.ts          #     scales, arpeggios, sequences
 │   │       ├── HarmonyVoiceGenerator.ts
 │   │       └── SilentVoiceGenerator.ts
 │   └── scoring/
@@ -329,9 +331,16 @@ does rhythmically — so a new profile combines with every existing preset inste
 of multiplying the level list. Short values that are only readable in groups
 carry `repeat` in their pool; the group is all-or-nothing against the beat.
 
-**A new kind of material.** Implement `IVoiceGenerator` — arpeggios, two-voice
-counterpoint, chromatic passing notes — and hand it to
+**A new kind of material.** Implement `IVoiceGenerator` — two-voice
+counterpoint, chromatic passing notes, walking bass — and hand it to
 `GrandStaffExerciseGenerator`. Nothing else changes.
+
+**A new melodic figure.** Add a kind to `FIGURE_KINDS` and a shape to
+`FigureWalker`. Figures are why `PatternVoiceGenerator` exists: fluent reading
+is mostly recognising groups — a scale fragment, a broken chord, a motif
+answered a step higher — and a line made of independent random steps offers
+nothing to recognise. Everything is in scale degrees, so a figure is in key and
+correctly spelled for free.
 
 **A new practice mode.** Extend `BasePracticeMode`, override the hooks you care
 about, register it. Adding a hook to the interface later cannot break existing

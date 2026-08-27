@@ -48,6 +48,10 @@ assumed, so zoom, engraving rules, or a different engraver cannot silently
 slide the marks off their notes. A test renders a real score and checks the
 marks land on the printed staff lines.
 
+**Fade notes once passed** empties the page behind you as the music goes by,
+which pushes the eye forward instead of letting it rest on what has already
+been read. Off by default.
+
 ### The piano sound
 
 Notes you play are sounded with real piano recordings, so a MIDI controller
@@ -282,7 +286,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~450 tests
+npm test           # ~460 tests
 npm run coverage   # ~92% of statements in src/
 ```
 

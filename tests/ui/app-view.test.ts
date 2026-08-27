@@ -116,6 +116,7 @@ function createRig(
     renderer,
     cursor: renderer.cursor,
     overlay: renderer,
+    fade: renderer,
     zoom: renderer,
     midi,
     metronome,
@@ -570,6 +571,25 @@ describe('AppView', () => {
       toggle.dispatchEvent(new Event('change'));
 
       expect(runtime.controller.settings.showPlayedNotes).toBe(false);
+    });
+
+    it('turns fading on from the checkbox, and remembers it', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      expect(first.runtime.controller.settings.fadePassedNotes).toBe(false);
+
+      const toggle = element<HTMLInputElement>('fade-passed');
+      toggle.checked = true;
+      toggle.dispatchEvent(new Event('change'));
+      expect(first.runtime.controller.settings.fadePassedNotes).toBe(true);
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      await second.view.initialize();
+
+      expect(element<HTMLInputElement>('fade-passed').checked).toBe(true);
+      expect(second.runtime.controller.settings.fadePassedNotes).toBe(true);
     });
 
     it('remembers the note size on this device', async () => {

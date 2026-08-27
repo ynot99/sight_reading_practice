@@ -153,6 +153,33 @@ describe('played notes drawn over a real engraving', () => {
     expect(noteheads(container)).toHaveLength(0);
   });
 
+  it('dims the notes of a step once it is passed, and only those', () => {
+    renderer.fadePassed(0);
+
+    const dimmed = container.querySelectorAll('.note--passed');
+    expect(dimmed.length).toBeGreaterThan(0);
+    // Step 0 of the fixture is C4 over C3: one note on each stave.
+    expect(dimmed).toHaveLength(2);
+  });
+
+  it('keeps the dimming through a re-engraving', () => {
+    renderer.fadePassed(0);
+    const before = container.querySelectorAll('.note--passed').length;
+
+    renderer.refresh();
+
+    expect(container.querySelectorAll('.note--passed')).toHaveLength(before);
+  });
+
+  it('brings every note back', () => {
+    renderer.fadePassed(0);
+    renderer.fadePassed(1);
+
+    renderer.clearFaded();
+
+    expect(container.querySelectorAll('.note--passed')).toHaveLength(0);
+  });
+
   it('draws nothing for a step that was never engraved', () => {
     renderer.showPlayed({ stepIndex: 99, midi: 60, correct: false });
     expect(noteheads(container)).toHaveLength(0);

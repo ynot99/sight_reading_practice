@@ -155,6 +155,7 @@ export class AppView {
     zoom: HTMLInputElement;
     zoomValue: HTMLOutputElement;
     showPlayed: HTMLInputElement;
+    fadePassed: HTMLInputElement;
     showCursor: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
     sampleLoadingHint: HTMLElement;
@@ -214,6 +215,7 @@ export class AppView {
       zoom: requireElement(doc, 'zoom'),
       zoomValue: requireElement(doc, 'zoom-value'),
       showPlayed: requireElement(doc, 'show-played'),
+      fadePassed: requireElement(doc, 'fade-passed'),
       showCursor: requireElement(doc, 'show-cursor'),
       sampleLoading: requireElement(doc, 'sample-loading'),
       sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
@@ -349,6 +351,10 @@ export class AppView {
 
     this.listen(this.el.showPlayed, 'change', () => {
       controller.updateSettings({ showPlayedNotes: this.el.showPlayed.checked });
+    });
+
+    this.listen(this.el.fadePassed, 'change', () => {
+      controller.updateSettings({ fadePassedNotes: this.el.fadePassed.checked });
     });
 
     this.listen(this.el.showCursor, 'change', () => {
@@ -815,6 +821,7 @@ export class AppView {
     this.el.zoom.value = String(Math.round(settings.zoom * 100));
     this.el.zoomValue.value = this.el.zoom.value;
     this.el.showPlayed.checked = settings.showPlayedNotes;
+    this.el.fadePassed.checked = settings.fadePassedNotes;
     this.el.showCursor.checked = settings.showCursor;
     this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;

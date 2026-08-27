@@ -15,6 +15,7 @@ import type { IMidiSource } from './ports/IMidiSource.js';
 import type {
   IPlayedNoteOverlay,
   IScoreCursor,
+  IScoreFade,
   IScoreRenderer,
   IScoreZoom,
 } from './ports/IScoreRenderer.js';
@@ -42,6 +43,8 @@ export interface PracticeSettings {
   readonly showCursor: boolean;
   /** Draw what was actually played over the engraving. */
   readonly showPlayedNotes: boolean;
+  /** Dim each note once it has been passed, to push the eye forward. */
+  readonly fadePassedNotes: boolean;
   /** Note size on the page, as a multiplier. */
   readonly zoom: number;
 }
@@ -66,6 +69,7 @@ export interface PracticeControllerDependencies {
   readonly renderer: IScoreRenderer;
   readonly cursor: IScoreCursor;
   readonly overlay: IPlayedNoteOverlay;
+  readonly fade: IScoreFade;
   readonly zoom: IScoreZoom;
   readonly midi: IMidiSource;
   readonly metronome: IMetronome;
@@ -113,6 +117,7 @@ export class PracticeController {
       pitchClassOnly: false,
       showCursor: true,
       showPlayedNotes: true,
+      fadePassedNotes: false,
       zoom: 0.85,
       ...dependencies.initialSettings,
     };
@@ -177,6 +182,10 @@ export class PracticeController {
       this.deps.overlay.clearPlayed();
     }
 
+    if (changes.fadePassedNotes === false) {
+      this.deps.fade.clearFaded();
+    }
+
     this.emitter.emit('settingsChanged', { settings: next });
     return next;
   }
@@ -238,6 +247,7 @@ export class PracticeController {
       ),
     });
     this.deps.overlay.clearPlayed();
+    this.deps.fade.clearFaded();
     this.deps.cursor.reset();
     this.applyCursorVisibility();
 
@@ -281,6 +291,17 @@ export class PracticeController {
 
     this.currentSession = session;
     this.deps.overlay.clearPlayed();
+    this.deps.fade.clearFaded();
+
+    this.sessionSubscriptions.push(
+      // A step is dimmed the moment it is done with, whether it was played
+      // well, badly or not at all: the page empties as the music passes.
+      session.events.on('stepCompleted', ({ result }) => {
+        if (this.currentSettings.fadePassedNotes) {
+          this.deps.fade.fadePassed(result.index);
+        }
+      }),
+    );
 
     this.sessionSubscriptions.push(
       // Every press is drawn where it was actually struck, right or wrong. A

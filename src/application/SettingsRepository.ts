@@ -113,6 +113,7 @@ export function decodePracticeSettings(
     pitchClassOnly: readBoolean(value['pitchClassOnly']),
     showCursor: readBoolean(value['showCursor']),
     showPlayedNotes: readBoolean(value['showPlayedNotes']),
+    fadePassedNotes: readBoolean(value['fadePassedNotes']),
     zoom: readNumber(value['zoom'], 0.3, 3),
   } as PracticeSettings);
 }
@@ -134,6 +135,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     pitchClassOnly: settings.pitchClassOnly,
     showCursor: settings.showCursor,
     showPlayedNotes: settings.showPlayedNotes,
+    fadePassedNotes: settings.fadePassedNotes,
     zoom: settings.zoom,
   };
 }

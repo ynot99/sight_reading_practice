@@ -1,5 +1,6 @@
 import type {
   IPlayedNoteOverlay,
+  IScoreFade,
   IScoreCursor,
   IScoreRenderer,
   IScoreZoom,
@@ -44,7 +45,9 @@ export class FakeScoreCursor implements IScoreCursor {
  * Lets the controller and the cursor synchronisation be tested end to end
  * without a DOM, an SVG backend or OSMD.
  */
-export class FakeScoreRenderer implements IScoreRenderer, IPlayedNoteOverlay, IScoreZoom {
+export class FakeScoreRenderer
+  implements IScoreRenderer, IPlayedNoteOverlay, IScoreFade, IScoreZoom
+{
   readonly cursor = new FakeScoreCursor();
   loadedXml: string | null = null;
   loadCount = 0;
@@ -70,6 +73,19 @@ export class FakeScoreRenderer implements IScoreRenderer, IPlayedNoteOverlay, IS
     this.clearPlayedCount += 1;
   }
 
+  /** Steps dimmed because they have been passed. */
+  readonly faded = new Set<number>();
+  clearFadedCount = 0;
+
+  fadePassed(stepIndex: number): void {
+    this.faded.add(stepIndex);
+  }
+
+  clearFaded(): void {
+    this.faded.clear();
+    this.clearFadedCount += 1;
+  }
+
   setZoom(zoom: number): void {
     this.zoom = zoom;
   }
@@ -88,6 +104,7 @@ export class FakeScoreRenderer implements IScoreRenderer, IPlayedNoteOverlay, IS
     this.loadedXml = null;
     this.clearCount += 1;
     this.played.length = 0;
+    this.faded.clear();
   }
 }
 

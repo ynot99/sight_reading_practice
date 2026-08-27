@@ -42,6 +42,7 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
     renderer,
     cursor: renderer.cursor,
     overlay: renderer,
+    fade: renderer,
     zoom: renderer,
     midi,
     metronome,

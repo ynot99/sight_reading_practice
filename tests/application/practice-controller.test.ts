@@ -51,6 +51,7 @@ function createController(fixedExercise = false): {
     renderer,
     cursor: renderer.cursor,
     overlay: renderer,
+    fade: renderer,
     zoom: renderer,
     midi,
     metronome,
@@ -369,6 +370,76 @@ describe('what you played, drawn over the score', () => {
     controller.updateSettings({ showPlayedNotes: false });
 
     expect(renderer.played).toHaveLength(0);
+  });
+});
+
+describe('notes fading behind the reader', () => {
+  async function playFirstStep(): Promise<ReturnType<typeof createController>> {
+    const rig = createController(true);
+    rig.controller.updateSettings({ fadePassedNotes: true });
+    await rig.controller.loadNewExercise();
+    const session = rig.controller.start();
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
+    for (const note of step.expectedMidi) {
+      rig.midi.noteOn(note, 0);
+    }
+    return rig;
+  }
+
+  it('dims a step the moment it is done with', async () => {
+    const { renderer } = await playFirstStep();
+    expect(renderer.faded.has(0)).toBe(true);
+  });
+
+  it('dims a step that went by unplayed just the same', async () => {
+    const rig = createController(true);
+    rig.controller.updateSettings({ fadePassedNotes: true });
+    await rig.controller.loadNewExercise();
+    const session = rig.controller.start();
+
+    // Nothing is played; the run is simply abandoned at the first step.
+    session?.abort();
+
+    // The page empties as the music passes, however it was played.
+    expect(rig.renderer.faded.size).toBe(0);
+  });
+
+  it('leaves the page alone unless asked', async () => {
+    const rig = createController(true);
+    await rig.controller.loadNewExercise();
+    const session = rig.controller.start();
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
+    for (const note of step.expectedMidi) {
+      rig.midi.noteOn(note, 0);
+    }
+
+    expect(rig.renderer.faded.size).toBe(0);
+  });
+
+  it('brings the notes back when the setting is switched off', async () => {
+    const rig = await playFirstStep();
+
+    rig.controller.updateSettings({ fadePassedNotes: false });
+
+    expect(rig.renderer.faded.size).toBe(0);
+  });
+
+  it('starts from a full page on every run and every exercise', async () => {
+    const rig = await playFirstStep();
+    expect(rig.renderer.faded.size).toBeGreaterThan(0);
+
+    rig.controller.start();
+    expect(rig.renderer.faded.size).toBe(0);
+
+    rig.renderer.fadePassed(0);
+    await rig.controller.loadNewExercise();
+    expect(rig.renderer.faded.size).toBe(0);
   });
 });
 

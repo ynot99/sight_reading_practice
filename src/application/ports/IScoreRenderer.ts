@@ -61,6 +61,19 @@ export interface IPlayedNoteOverlay {
 }
 
 /**
+ * Fades notes once they have been passed.
+ *
+ * The page empties behind the reader, which pushes the eye forward instead of
+ * letting it rest on music already played - reading ahead being most of what
+ * sight-reading is. Faded rather than removed, so the staff, the bar lines and
+ * the spacing all stay exactly where they were.
+ */
+export interface IScoreFade {
+  fadePassed(stepIndex: number): void;
+  clearFaded(): void;
+}
+
+/**
  * Note size. Its own interface for the same reason: it is an optional talent,
  * not part of being able to draw a score.
  */

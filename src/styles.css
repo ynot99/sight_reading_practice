@@ -498,6 +498,17 @@ select {
   display: none;
 }
 
+/* ---- Notes already passed ----------------------------------------------- */
+
+/*
+ * Dimmed rather than removed: the staff, the bar lines and the spacing all
+ * stay put, so the page empties without shifting under the reader's eye.
+ */
+.note--passed {
+  opacity: 0.1;
+  transition: opacity 400ms ease-out;
+}
+
 /* ---- What you played --------------------------------------------------- */
 
 /*

@@ -31,6 +31,7 @@ const SETTINGS: PracticeSettings = {
   pitchClassOnly: true,
   showCursor: false,
   showPlayedNotes: false,
+  fadePassedNotes: true,
   zoom: 1.2,
 };
 

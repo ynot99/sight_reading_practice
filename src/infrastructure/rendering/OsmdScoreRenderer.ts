@@ -2,6 +2,7 @@ import type { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
 import type {
   IPlayedNoteOverlay,
   IScoreCursor,
+  IScoreFade,
   IScoreRenderer,
   IScoreZoom,
   OverlayContext,
@@ -38,8 +39,12 @@ const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
  */
 const UNITS_TO_PIXELS = 10;
 
+/** Class that dims the notes of a step already played. */
+const FADED_CLASS = 'note--passed';
+
 /** The part of the engraver's graphical note this adapter reads. */
 interface DrawnNote {
+  getSVGGElement?: () => SVGGElement | null;
   readonly sourceNote?: {
     readonly pitch?: { readonly FundamentalNote?: number; readonly Octave?: number } | null;
     readonly parentStaffEntry?: { readonly parentStaff?: { readonly id?: number } };
@@ -93,7 +98,7 @@ class OsmdCursorPrimitive implements ICursorPrimitive {
  * still downloading.
  */
 export class OsmdScoreRenderer
-  implements IScoreRenderer, IPlayedNoteOverlay, IScoreZoom
+  implements IScoreRenderer, IPlayedNoteOverlay, IScoreFade, IScoreZoom
 {
   private readonly container: HTMLElement;
   private readonly options: OsmdRendererOptions;
@@ -101,6 +106,8 @@ export class OsmdScoreRenderer
 
   /** Where each timeline step sits, and the notes drawn there. */
   private stepX = new Map<number, number>();
+  private stepElements = new Map<number, SVGGElement[]>();
+  private faded = new Set<number>();
   private samples: DrawnNoteSample[] = [];
   private marks: PlayedMark[] = [];
   private overlayContext: OverlayContext | null = null;
@@ -142,6 +149,7 @@ export class OsmdScoreRenderer
     this.navigator.reset();
     this.indexDrawnNotes();
     this.paintOverlay();
+    this.paintFaded();
   }
 
   refresh(): void {
@@ -151,15 +159,18 @@ export class OsmdScoreRenderer
     this.osmd.zoom = this.currentZoom;
     this.osmd.render();
     this.navigator.reset();
-    // Re-engraving throws the old SVG away, and the overlay with it.
+    // Re-engraving throws the old SVG away, and everything drawn on it.
     this.indexDrawnNotes();
     this.paintOverlay();
+    this.paintFaded();
   }
 
   clear(): void {
     this.osmd?.clear();
     this.marks = [];
     this.stepX = new Map();
+    this.stepElements = new Map();
+    this.faded = new Set();
     this.samples = [];
     this.overlayGroup = null;
     this.loaded = false;
@@ -177,6 +188,31 @@ export class OsmdScoreRenderer
   clearPlayed(): void {
     this.marks = [];
     this.paintOverlay();
+  }
+
+  fadePassed(stepIndex: number): void {
+    this.faded.add(stepIndex);
+    for (const element of this.stepElements.get(stepIndex) ?? []) {
+      element.classList.add(FADED_CLASS);
+    }
+  }
+
+  clearFaded(): void {
+    for (const stepIndex of this.faded) {
+      for (const element of this.stepElements.get(stepIndex) ?? []) {
+        element.classList.remove(FADED_CLASS);
+      }
+    }
+    this.faded.clear();
+  }
+
+  /** Re-dims everything already passed, after the page has been redrawn. */
+  private paintFaded(): void {
+    for (const stepIndex of this.faded) {
+      for (const element of this.stepElements.get(stepIndex) ?? []) {
+        element.classList.add(FADED_CLASS);
+      }
+    }
   }
 
   /** Everything drawn over the engraving, rebuilt from the marks. */
@@ -275,6 +311,7 @@ export class OsmdScoreRenderer
     const restoreTo = this.navigator.position;
     const stepX = new Map<number, number>();
     const samples: DrawnNoteSample[] = [];
+    this.stepElements = new Map();
 
     cursor.reset();
     let index = 0;
@@ -309,6 +346,13 @@ export class OsmdScoreRenderer
 
         if (!stepX.has(stepIndex)) {
           stepX.set(stepIndex, position.x * UNITS_TO_PIXELS);
+        }
+
+        const drawn = typeof note.getSVGGElement === 'function' ? note.getSVGGElement() : null;
+        if (drawn !== null && drawn !== undefined) {
+          const bucket = this.stepElements.get(stepIndex) ?? [];
+          bucket.push(drawn);
+          this.stepElements.set(stepIndex, bucket);
         }
 
         const diatonicIndex = diatonicIndexOf(pitch.FundamentalNote ?? -1, pitch.Octave ?? 0);

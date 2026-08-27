@@ -12,7 +12,14 @@ import type { IClock } from './ports/IClock.js';
 import { GeneratedExerciseProvider, type IExerciseProvider } from './ports/IExerciseProvider.js';
 import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource } from './ports/IMidiSource.js';
-import type { IScoreCursor, IScoreRenderer } from './ports/IScoreRenderer.js';
+import type {
+  IScoreCursor,
+  IScoreHighlighter,
+  IScoreRenderer,
+  IScoreZoom,
+  StepHighlight,
+} from './ports/IScoreRenderer.js';
+import type { StepResult } from '../domain/scoring/PerformanceReport.js';
 import { PracticeSession } from './session/PracticeSession.js';
 
 /** Everything the user can dial in before pressing start. */
@@ -34,6 +41,39 @@ export interface PracticeSettings {
    * your place by reading rather than by following the highlight.
    */
   readonly showCursor: boolean;
+  /** Colour the notes as they are judged. */
+  readonly highlightNotes: boolean;
+  /** Note size on the page, as a multiplier. */
+  readonly zoom: number;
+}
+
+/**
+ * How a judged step is shown on the page.
+ *
+ * Timing only earns its own colour where it is actually being measured: in
+ * Wait mode the player sets the pace, so calling anything "late" there would
+ * be meaningless.
+ */
+export function highlightFor(
+  result: StepResult,
+  options: { readonly judgeTiming: boolean; readonly toleranceMs: number },
+): StepHighlight | null {
+  switch (result.status) {
+    case 'skipped':
+      return null;
+    case 'missed':
+      return 'missed';
+    case 'incorrect':
+      return 'incorrect';
+    case 'correct': {
+      const deviation = result.deviationMs;
+      const late =
+        options.judgeTiming && deviation !== null && Math.abs(deviation) > options.toleranceMs;
+      return late ? 'late' : 'correct';
+    }
+    default:
+      return null;
+  }
 }
 
 export interface ExerciseLoadedEvent {
@@ -55,6 +95,10 @@ export interface PracticeControllerDependencies {
   readonly serializer: IMusicXmlSerializer;
   readonly renderer: IScoreRenderer;
   readonly cursor: IScoreCursor;
+  readonly highlighter: IScoreHighlighter;
+  readonly zoom: IScoreZoom;
+  /** Deviation past which a correct note counts as out of time. */
+  readonly timingToleranceMs?: number;
   readonly midi: IMidiSource;
   readonly metronome: IMetronome;
   readonly clock: IClock;
@@ -100,6 +144,8 @@ export class PracticeController {
       matchToleranceMs: 250,
       pitchClassOnly: false,
       showCursor: true,
+      highlightNotes: true,
+      zoom: 0.85,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();
@@ -152,6 +198,15 @@ export class PracticeController {
 
     if (changes.showCursor !== undefined) {
       this.applyCursorVisibility();
+    }
+
+    if (changes.zoom !== undefined && changes.zoom !== this.deps.zoom.zoom) {
+      this.deps.zoom.setZoom(changes.zoom);
+      this.refreshScore();
+    }
+
+    if (changes.highlightNotes === false) {
+      this.deps.highlighter.clearHighlights();
     }
 
     this.emitter.emit('settingsChanged', { settings: next });
@@ -208,6 +263,7 @@ export class PracticeController {
     this.lastSeed = exercise.metadata.seed;
 
     await this.deps.renderer.load(musicXml);
+    this.deps.highlighter.clearHighlights();
     this.deps.cursor.reset();
     this.applyCursorVisibility();
 
@@ -250,6 +306,22 @@ export class PracticeController {
     });
 
     this.currentSession = session;
+    this.deps.highlighter.clearHighlights();
+
+    this.sessionSubscriptions.push(
+      session.events.on('stepCompleted', ({ result }) => {
+        if (!this.currentSettings.highlightNotes) {
+          return;
+        }
+        const highlight = highlightFor(result, {
+          judgeTiming: mode.requiresMetronome,
+          toleranceMs: this.deps.timingToleranceMs ?? 150,
+        });
+        if (highlight !== null) {
+          this.deps.highlighter.highlight(result.index, highlight);
+        }
+      }),
+    );
     this.sessionSubscriptions.push(
       session.events.on('stepEntered', ({ step }) => {
         this.deps.cursor.moveTo(step.index);

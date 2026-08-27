@@ -23,6 +23,15 @@
         </div>
       </header>
 
+      <div class="toolbar">
+        <button id="start" type="button" class="button button--primary">Start</button>
+        <button id="pause" type="button" class="button" disabled>Pause</button>
+        <button id="stop" type="button" class="button button--ghost" disabled>Stop</button>
+        <span class="toolbar__gap"></span>
+        <button id="new-exercise" type="button" class="button">New exercise</button>
+        <button id="focus" type="button" class="button">Fullscreen</button>
+      </div>
+
       <main class="layout">
         <section id="score" class="score" aria-label="Score"></section>
 
@@ -104,7 +113,13 @@
           <input id="instrument-volume" type="range" min="0" max="100" step="5" value="60" />
         </div>
 
+        <div class="control-group">
+          <label for="zoom">Note size: <output id="zoom-value">85</output>%</label>
+          <input id="zoom" type="range" min="40" max="220" step="5" value="85" />
+        </div>
+
         <div class="control-group control-group--checks">
+          <label><input id="highlight-notes" type="checkbox" checked /> Colour played notes</label>
           <label><input id="show-cursor" type="checkbox" checked /> Show cursor</label>
           <label><input id="metronome-muted" type="checkbox" /> Mute metronome</label>
           <label><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
@@ -112,13 +127,6 @@
           <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
         </div>
 
-        <div class="control-group control-group--actions">
-          <button id="focus" type="button" class="button">Fullscreen</button>
-          <button id="new-exercise" type="button" class="button">New exercise</button>
-          <button id="start" type="button" class="button button--primary">Start</button>
-          <button id="pause" type="button" class="button" disabled>Pause</button>
-          <button id="stop" type="button" class="button button--ghost" disabled>Stop</button>
-        </div>
       </footer>
 
       <div id="focus-bar" class="focus-bar" hidden>

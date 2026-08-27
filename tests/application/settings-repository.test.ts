@@ -30,6 +30,8 @@ const SETTINGS: PracticeSettings = {
   matchToleranceMs: 180,
   pitchClassOnly: true,
   showCursor: false,
+  highlightNotes: false,
+  zoom: 1.2,
 };
 
 describe('practice settings codec', () => {

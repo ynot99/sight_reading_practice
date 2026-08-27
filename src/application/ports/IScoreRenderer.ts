@@ -24,3 +24,39 @@ export interface IScoreCursor {
   reset(): void;
   moveTo(stepIndex: number): void;
 }
+
+/**
+ * How a step is marked up on the page after it has been judged.
+ *
+ * Kept coarse on purpose: the page is notation, not a dashboard, and a reader
+ * glancing at a bar should be able to tell these apart without decoding them.
+ */
+export type StepHighlight =
+  /** Every notated pitch, in time. */
+  | 'correct'
+  /** The right notes, but outside the timing tolerance. */
+  | 'late'
+  /** Wrong notes were played here. */
+  | 'incorrect'
+  /** The step went by unplayed. */
+  | 'missed';
+
+/**
+ * Colours notes on the score.
+ *
+ * Separate from {@link IScoreRenderer} so a renderer that cannot mark
+ * individual notes is still a perfectly good renderer.
+ */
+export interface IScoreHighlighter {
+  highlight(stepIndex: number, highlight: StepHighlight): void;
+  clearHighlights(): void;
+}
+
+/**
+ * Note size. Its own interface for the same reason: it is an optional talent,
+ * not part of being able to draw a score.
+ */
+export interface IScoreZoom {
+  readonly zoom: number;
+  setZoom(zoom: number): void;
+}

@@ -246,7 +246,7 @@ is asserted in `tests/application/session-state.test.ts`.
 | `IMidiDeviceDirectory` | `WebMidiAdapter`                              | `MockMidiAdapter`      |
 | `IMetronome`         | `WebAudioMetronome`                             | `ManualMetronome`      |
 | `IClock`             | `SystemClock`                                   | `ManualClock`          |
-| `IScoreRenderer` / `IScoreCursor` | `OsmdScoreRenderer` / `CursorNavigator` | `FakeScoreRenderer` |
+| `IScoreRenderer` / `IScoreCursor` / `IScoreHighlighter` / `IScoreZoom` | `OsmdScoreRenderer` / `CursorNavigator` | `FakeScoreRenderer` |
 | `IExerciseProvider`  | `GeneratedExerciseProvider`                     | any stub               |
 | `ISettingsStore`     | `LocalStorageSettingsStore`                     | `InMemorySettingsStore` |
 | `IVolumeControl`     | `WebAudioMetronome`, `WebAudioPitchPlayer`      | any stub               |
@@ -259,7 +259,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~350 tests
+npm test           # ~370 tests
 npm run coverage   # ~92% of statements in src/
 ```
 
@@ -314,9 +314,8 @@ than from the engraver's internals.
 - Rhythms stop at sixteenth notes and one dot; no tuplets, ties or pickup bars.
 - Generated music is deliberately simple — diatonic, no accidentals outside the
   key — though the notation layer already handles accidentals correctly.
-- Notes are not coloured on the page when you get them right or wrong; feedback
-  lives in the side panel. The side panel also still names the notes you owe,
-  so hiding the cursor is not yet a full "read it blind" mode.
+- The side panel still names the notes you owe, so hiding the cursor is not yet
+  a full "read it blind" mode.
 - No progress tracking between sessions yet: settings are remembered on the
   device, but performance reports are not stored. Because every exercise is
   reproducible from its seed, "practise that one again" is a small feature

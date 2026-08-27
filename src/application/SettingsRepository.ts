@@ -109,6 +109,8 @@ export function decodePracticeSettings(
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
     pitchClassOnly: readBoolean(value['pitchClassOnly']),
     showCursor: readBoolean(value['showCursor']),
+    highlightNotes: readBoolean(value['highlightNotes']),
+    zoom: readNumber(value['zoom'], 0.3, 3),
   } as PracticeSettings);
 }
 
@@ -128,6 +130,8 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
       : undefined,
     pitchClassOnly: settings.pitchClassOnly,
     showCursor: settings.showCursor,
+    highlightNotes: settings.highlightNotes,
+    zoom: settings.zoom,
   };
 }
 

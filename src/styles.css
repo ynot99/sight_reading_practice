@@ -431,3 +431,80 @@ select {
 .focus-bar__button--exit {
   background: transparent;
 }
+
+/* ---- Action bar -------------------------------------------------------- */
+
+/*
+ * Sticky, because these are the buttons reached between every exercise. The
+ * settings below are set once and left alone, which is why they stay at the
+ * bottom of the page.
+ */
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.toolbar__gap {
+  flex: 1;
+}
+
+.toolbar .button {
+  min-height: 40px;
+}
+
+.app.is-focus .toolbar {
+  display: none;
+}
+
+/* ---- Judged notes ------------------------------------------------------ */
+
+/*
+ * A CSS class beats VexFlow's presentation attributes in the cascade, so the
+ * notes can be recoloured without re-engraving the page.
+ *
+ * The score keeps a white background in either theme, so these are fixed
+ * colours chosen to read against it.
+ */
+.note--correct path,
+.note--correct rect,
+.note--correct ellipse,
+.note--correct circle {
+  fill: #15803d;
+  stroke: #15803d;
+}
+
+.note--late path,
+.note--late rect,
+.note--late ellipse,
+.note--late circle {
+  fill: #b45309;
+  stroke: #b45309;
+}
+
+.note--incorrect path,
+.note--incorrect rect,
+.note--incorrect ellipse,
+.note--incorrect circle {
+  fill: #b91c1c;
+  stroke: #b91c1c;
+}
+
+.note--missed path,
+.note--missed rect,
+.note--missed ellipse,
+.note--missed circle {
+  fill: #94a3b8;
+  stroke: #94a3b8;
+}

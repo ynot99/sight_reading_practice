@@ -1,4 +1,10 @@
-import type { IScoreCursor, IScoreRenderer } from '../../application/ports/IScoreRenderer.js';
+import type {
+  IScoreCursor,
+  IScoreHighlighter,
+  IScoreRenderer,
+  IScoreZoom,
+  StepHighlight,
+} from '../../application/ports/IScoreRenderer.js';
 import type { ICursorPrimitive } from '../rendering/CursorNavigator.js';
 
 /** In-memory cursor that records every move. */
@@ -37,12 +43,30 @@ export class FakeScoreCursor implements IScoreCursor {
  * Lets the controller and the cursor synchronisation be tested end to end
  * without a DOM, an SVG backend or OSMD.
  */
-export class FakeScoreRenderer implements IScoreRenderer {
+export class FakeScoreRenderer implements IScoreRenderer, IScoreHighlighter, IScoreZoom {
   readonly cursor = new FakeScoreCursor();
   loadedXml: string | null = null;
   loadCount = 0;
   refreshCount = 0;
   clearCount = 0;
+
+  /** Highlight applied to each step, in the order they were applied. */
+  readonly highlights = new Map<number, StepHighlight>();
+  clearHighlightCount = 0;
+  zoom = 0.85;
+
+  highlight(stepIndex: number, highlight: StepHighlight): void {
+    this.highlights.set(stepIndex, highlight);
+  }
+
+  clearHighlights(): void {
+    this.highlights.clear();
+    this.clearHighlightCount += 1;
+  }
+
+  setZoom(zoom: number): void {
+    this.zoom = zoom;
+  }
 
   load(musicXml: string): Promise<void> {
     this.loadedXml = musicXml;
@@ -57,6 +81,7 @@ export class FakeScoreRenderer implements IScoreRenderer {
   clear(): void {
     this.loadedXml = null;
     this.clearCount += 1;
+    this.highlights.clear();
   }
 }
 

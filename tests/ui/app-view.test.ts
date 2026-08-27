@@ -85,6 +85,8 @@ function createRig(
     serializer: new MusicXmlSerializer(),
     renderer,
     cursor: renderer.cursor,
+    highlighter: renderer,
+    zoom: renderer,
     midi,
     metronome,
     clock,
@@ -266,6 +268,66 @@ describe('AppView', () => {
     toggle.checked = true;
     toggle.dispatchEvent(new Event('change'));
     expect(renderer.cursor.visible).toBe(true);
+  });
+
+  describe('layout and score settings', () => {
+    it('keeps the run controls in the toolbar, out of the settings', async () => {
+      const { view } = createRig();
+      await view.initialize();
+
+      const toolbar = document.querySelector('.toolbar');
+      const controls = document.querySelector('.controls');
+      expect(toolbar).not.toBeNull();
+      for (const id of ['start', 'pause', 'stop', 'new-exercise', 'focus']) {
+        expect(toolbar?.contains(element(id))).toBe(true);
+        expect(controls?.contains(element(id))).toBe(false);
+      }
+    });
+
+    it('resizes the notes on release, not on every drag step', async () => {
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+
+      const zoom = element<HTMLInputElement>('zoom');
+      zoom.value = '150';
+      zoom.dispatchEvent(new Event('input'));
+
+      expect(element<HTMLOutputElement>('zoom-value').value).toBe('150');
+      expect(renderer.zoom).toBe(0.85);
+
+      zoom.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.zoom).toBe(1.5);
+      expect(renderer.zoom).toBe(1.5);
+    });
+
+    it('turns note colouring off from the checkbox', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      const toggle = element<HTMLInputElement>('highlight-notes');
+      toggle.checked = false;
+      toggle.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.highlightNotes).toBe(false);
+    });
+
+    it('remembers the note size on this device', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      const zoom = element<HTMLInputElement>('zoom');
+      zoom.value = '120';
+      zoom.dispatchEvent(new Event('change'));
+      await Promise.resolve();
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      await second.view.initialize();
+
+      expect(second.runtime.controller.settings.zoom).toBe(1.2);
+      expect(element<HTMLInputElement>('zoom').value).toBe('120');
+    });
   });
 
   describe('volume and remembered settings', () => {

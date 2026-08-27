@@ -41,6 +41,8 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
     serializer: new MusicXmlSerializer(),
     renderer,
     cursor: renderer.cursor,
+    highlighter: renderer,
+    zoom: renderer,
     midi,
     metronome,
     clock,

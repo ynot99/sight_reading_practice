@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PracticeController } from '../../src/application/PracticeController.js';
+import { PracticeController, highlightFor } from '../../src/application/PracticeController.js';
+import type { StepResult } from '../../src/domain/scoring/PerformanceReport.js';
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
@@ -42,6 +43,8 @@ function createController(): {
     serializer: new MusicXmlSerializer(),
     renderer,
     cursor: renderer.cursor,
+    highlighter: renderer,
+    zoom: renderer,
     midi,
     metronome,
     clock,
@@ -245,6 +248,162 @@ describe('PracticeController', () => {
 
     expect(controller.session).toBeNull();
     expect(renderer.clearCount).toBe(1);
+  });
+});
+
+function stepResult(overrides: Partial<StepResult> & Pick<StepResult, 'status'>): StepResult {
+  return {
+    index: 0,
+    measureIndex: 0,
+    beat: 1,
+    expected: [60],
+    played: [60],
+    wrong: [],
+    missing: [],
+    deviationMs: null,
+    ...overrides,
+  };
+}
+
+describe('highlightFor', () => {
+  const timed = { judgeTiming: true, toleranceMs: 150 };
+  const untimed = { judgeTiming: false, toleranceMs: 150 };
+
+  it('marks a clean step correct', () => {
+    expect(highlightFor(stepResult({ status: 'correct' }), timed)).toBe('correct');
+  });
+
+  it('marks wrong notes and missed steps apart', () => {
+    expect(highlightFor(stepResult({ status: 'incorrect', wrong: [61] }), timed)).toBe('incorrect');
+    expect(highlightFor(stepResult({ status: 'missed' }), timed)).toBe('missed');
+  });
+
+  it('says nothing about a rest', () => {
+    expect(highlightFor(stepResult({ status: 'skipped' }), timed)).toBeNull();
+  });
+
+  it('calls a correct but out-of-time step late', () => {
+    expect(highlightFor(stepResult({ status: 'correct', deviationMs: 400 }), timed)).toBe('late');
+    expect(highlightFor(stepResult({ status: 'correct', deviationMs: -400 }), timed)).toBe('late');
+    expect(highlightFor(stepResult({ status: 'correct', deviationMs: 100 }), timed)).toBe('correct');
+  });
+
+  it('never judges timing where timing is not being measured', () => {
+    // In Wait mode the player sets the pace, so "late" would mean nothing.
+    expect(highlightFor(stepResult({ status: 'correct', deviationMs: 9_000 }), untimed)).toBe(
+      'correct',
+    );
+  });
+});
+
+describe('note highlighting', () => {
+  it('colours each step as it is judged', async () => {
+    const { controller, renderer, midi } = createController();
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
+
+    for (const note of step.expectedMidi) {
+      midi.noteOn(note, 0);
+    }
+
+    expect(renderer.highlights.get(0)).toBe('correct');
+  });
+
+  it('marks a step where a wrong note crept in', async () => {
+    const { controller, renderer, midi } = createController();
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
+
+    midi.noteOn((step.expectedMidi[0] ?? 60) + 1, 0);
+    for (const note of step.expectedMidi) {
+      midi.noteOn(note, 0);
+    }
+
+    expect(renderer.highlights.get(0)).toBe('incorrect');
+  });
+
+  it('stays out of the way when the reader turns it off', async () => {
+    const { controller, renderer, midi } = createController();
+    controller.updateSettings({ highlightNotes: false });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
+
+    for (const note of step.expectedMidi) {
+      midi.noteOn(note, 0);
+    }
+
+    expect(renderer.highlights.size).toBe(0);
+  });
+
+  it('wipes the colours when the run restarts or the music changes', async () => {
+    const { controller, renderer, midi } = createController();
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
+    for (const note of step.expectedMidi) {
+      midi.noteOn(note, 0);
+    }
+    expect(renderer.highlights.size).toBe(1);
+
+    controller.start();
+    expect(renderer.highlights.size).toBe(0);
+
+    await controller.loadNewExercise();
+    expect(renderer.highlights.size).toBe(0);
+  });
+
+  it('clears the page when the setting is switched off mid-run', async () => {
+    const { controller, renderer, midi } = createController();
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
+    for (const note of step.expectedMidi) {
+      midi.noteOn(note, 0);
+    }
+
+    controller.updateSettings({ highlightNotes: false });
+
+    expect(renderer.highlights.size).toBe(0);
+  });
+});
+
+describe('note size', () => {
+  it('re-engraves at the new size', async () => {
+    const { controller, renderer } = createController();
+    await controller.loadNewExercise();
+
+    controller.updateSettings({ zoom: 1.5 });
+
+    expect(renderer.zoom).toBe(1.5);
+    expect(renderer.refreshCount).toBe(1);
+  });
+
+  it('does not re-engrave when the size has not moved', async () => {
+    const { controller, renderer } = createController();
+    await controller.loadNewExercise();
+    controller.updateSettings({ zoom: 1.5 });
+
+    controller.updateSettings({ zoom: 1.5 });
+
+    expect(renderer.refreshCount).toBe(1);
   });
 });
 

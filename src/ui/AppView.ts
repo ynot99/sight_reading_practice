@@ -110,6 +110,9 @@ export class AppView {
     countInValue: HTMLOutputElement;
     tolerance: HTMLInputElement;
     toleranceValue: HTMLOutputElement;
+    zoom: HTMLInputElement;
+    zoomValue: HTMLOutputElement;
+    highlightNotes: HTMLInputElement;
     showCursor: HTMLInputElement;
     metronomeVolume: HTMLInputElement;
     metronomeVolumeValue: HTMLOutputElement;
@@ -163,6 +166,9 @@ export class AppView {
       countInValue: requireElement(doc, 'count-in-value'),
       tolerance: requireElement(doc, 'tolerance'),
       toleranceValue: requireElement(doc, 'tolerance-value'),
+      zoom: requireElement(doc, 'zoom'),
+      zoomValue: requireElement(doc, 'zoom-value'),
+      highlightNotes: requireElement(doc, 'highlight-notes'),
       showCursor: requireElement(doc, 'show-cursor'),
       metronomeVolume: requireElement(doc, 'metronome-volume'),
       metronomeVolumeValue: requireElement(doc, 'metronome-volume-value'),
@@ -279,6 +285,19 @@ export class AppView {
       controller.updateSettings({
         matchToleranceMs: Number.parseInt(this.el.tolerance.value, 10),
       });
+    });
+
+    this.listen(this.el.zoom, 'input', () => {
+      this.el.zoomValue.value = this.el.zoom.value;
+    });
+
+    this.listen(this.el.zoom, 'change', () => {
+      // On change, not on input: every step of the slider re-engraves the page.
+      controller.updateSettings({ zoom: Number.parseInt(this.el.zoom.value, 10) / 100 });
+    });
+
+    this.listen(this.el.highlightNotes, 'change', () => {
+      controller.updateSettings({ highlightNotes: this.el.highlightNotes.checked });
     });
 
     this.listen(this.el.showCursor, 'change', () => {
@@ -649,6 +668,9 @@ export class AppView {
     this.el.countInValue.value = String(settings.countInBeats);
     this.el.tolerance.value = String(settings.matchToleranceMs);
     this.el.toleranceValue.value = String(settings.matchToleranceMs);
+    this.el.zoom.value = String(Math.round(settings.zoom * 100));
+    this.el.zoomValue.value = this.el.zoom.value;
+    this.el.highlightNotes.checked = settings.highlightNotes;
     this.el.showCursor.checked = settings.showCursor;
     this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;

@@ -13,8 +13,10 @@ import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import type { PerformanceReport } from '../../src/domain/scoring/PerformanceReport.js';
 import type { SessionScore } from '../../src/domain/scoring/IScoringStrategy.js';
+import { ScoringStrategyRegistry } from '../../src/domain/scoring/ScoringStrategyRegistry.js';
 import {
   AccuracyScoringStrategy,
+  ContinuityScoringStrategy,
   TimingWeightedScoringStrategy,
 } from '../../src/domain/scoring/strategies.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
@@ -35,8 +37,6 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
   const midi = new MockMidiAdapter({ clock });
   const metronome = new ManualMetronome(clock);
   const renderer = new FakeScoreRenderer();
-  const accuracy = new AccuracyScoringStrategy();
-  const timing = new TimingWeightedScoringStrategy();
 
   const controller = new PracticeController({
     presets: new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS),
@@ -51,7 +51,11 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
     midi,
     metronome,
     clock,
-    scoringFor: (modeId) => (modeId === FLOW_MODE_ID ? timing : accuracy),
+    scorings: new ScoringStrategyRegistry().registerAll([
+      new AccuracyScoringStrategy(),
+      new TimingWeightedScoringStrategy(),
+      new ContinuityScoringStrategy(),
+    ]),
     initialSettings: {
       presetId: 'melody-and-intervals',
       measures: 4,

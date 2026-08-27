@@ -27,6 +27,15 @@ export interface StepResult {
 
 export interface PerformanceTotals {
   readonly steps: number;
+  /**
+   * Playable steps the exercise contains, reached or not.
+   *
+   * Without it an abandoned run looks flawless: two steps played out of
+   * sixteen still gives two correct steps out of two recorded. Anything that
+   * grades how far the reader got needs the denominator to be the music, not
+   * the attempt.
+   */
+  readonly playableSteps: number;
   readonly correct: number;
   readonly incorrect: number;
   readonly missed: number;
@@ -62,6 +71,8 @@ export interface PerformanceReport {
 }
 
 export interface PerformanceReportInput {
+  /** Playable steps in the exercise, whether or not they were reached. */
+  readonly playableSteps: number;
   readonly exerciseId: string;
   readonly modeId: string;
   readonly tempoBpm: number;
@@ -81,6 +92,7 @@ function mean(values: readonly number[]): number {
 export function buildPerformanceReport(input: PerformanceReportInput): PerformanceReport {
   const totals: PerformanceTotals = {
     steps: input.steps.length,
+    playableSteps: input.playableSteps,
     correct: input.steps.filter((step) => step.status === 'correct').length,
     incorrect: input.steps.filter((step) => step.status === 'incorrect').length,
     missed: input.steps.filter((step) => step.status === 'missed').length,

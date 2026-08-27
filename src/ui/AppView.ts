@@ -16,6 +16,15 @@ import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { FocusMode } from './FocusMode.js';
 
+const SCORING_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  'scoring.accuracy': 'The notes alone. You set the pace, so timing is not judged.',
+  'scoring.timing-weighted': 'The notes, and how close each press was to its beat.',
+  'scoring.continuity':
+    'How far you got without the music leaving you behind. A fluffed note costs ' +
+    'little; stopping costs everything. Says nothing in Wait mode, where nothing ' +
+    'moves without you.',
+};
+
 const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
   downbeat: 'First beat of the bar',
   pulse: 'Every beat',
@@ -179,6 +188,8 @@ export class AppView {
     rhythmDescription: HTMLElement;
     mode: HTMLSelectElement;
     modeDescription: HTMLElement;
+    scoring: HTMLSelectElement;
+    scoringDescription: HTMLElement;
     key: HTMLSelectElement;
     timeSignature: HTMLSelectElement;
     measures: HTMLInputElement;
@@ -245,6 +256,8 @@ export class AppView {
       rhythmDescription: requireElement(doc, 'rhythm-description'),
       mode: requireElement(doc, 'mode'),
       modeDescription: requireElement(doc, 'mode-description'),
+      scoring: requireElement(doc, 'scoring'),
+      scoringDescription: requireElement(doc, 'scoring-description'),
       key: requireElement(doc, 'key'),
       timeSignature: requireElement(doc, 'time-signature'),
       measures: requireElement(doc, 'measures'),
@@ -317,6 +330,13 @@ export class AppView {
       this.runtime.controller.settings.rhythmProfileId,
     );
     fillSelect(
+      this.el.scoring,
+      this.runtime.scorings
+        .list()
+        .map((strategy) => ({ value: strategy.id, label: strategy.label })),
+      this.runtime.controller.settings.scoringId,
+    );
+    fillSelect(
       this.el.click,
       CLICK_PATTERNS.map((pattern) => ({ value: pattern, label: CLICK_LABELS[pattern] })),
       this.runtime.controller.settings.clickPattern,
@@ -358,6 +378,11 @@ export class AppView {
       void this.reload(true);
     });
 
+    this.listen(this.el.scoring, 'change', () => {
+      controller.updateSettings({ scoringId: this.el.scoring.value });
+      this.syncControlsFromSettings();
+    });
+
     this.listen(this.el.click, 'change', () => {
       controller.updateSettings({ clickPattern: this.el.click.value as ClickPattern });
       this.syncControlsFromSettings();
@@ -370,6 +395,8 @@ export class AppView {
 
     this.listen(this.el.mode, 'change', () => {
       controller.updateSettings({ modeId: this.el.mode.value });
+      // The mode brings its own default grading, so the panel has to catch up.
+      this.syncControlsFromSettings();
       this.describeMode();
     });
 
@@ -889,6 +916,8 @@ export class AppView {
     this.el.preset.value = settings.presetId;
     this.el.rhythm.value = settings.rhythmProfileId;
     this.el.mode.value = settings.modeId;
+    this.el.scoring.value = settings.scoringId;
+    this.el.scoringDescription.textContent = SCORING_DESCRIPTIONS[settings.scoringId] ?? '';
     this.el.key.value = keyValue(settings.key);
     this.el.timeSignature.value = settings.timeSignature.toString();
     this.el.measures.value = String(settings.measures);

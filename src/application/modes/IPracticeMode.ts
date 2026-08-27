@@ -20,6 +20,13 @@ export interface IPracticeMode {
   readonly label: string;
   /** When true, the session starts a pulse even if the click is muted. */
   readonly requiresMetronome: boolean;
+  /**
+   * Grading this mode is usually judged by.
+   *
+   * A default, not a binding: the reader may grade any mode by any registered
+   * strategy, the way any preset combines with any rhythm.
+   */
+  readonly defaultScoringId: string;
 
   onSessionStart(context: PracticeContext): void;
   onStepEntered(context: PracticeContext, step: PracticeStep): void;
@@ -40,6 +47,9 @@ export abstract class BasePracticeMode implements IPracticeMode {
   abstract readonly id: string;
   abstract readonly label: string;
   abstract readonly requiresMetronome: boolean;
+
+  /** Concrete so that adding the field cannot break an existing mode. */
+  readonly defaultScoringId: string = 'scoring.accuracy';
 
   onSessionStart(_context: PracticeContext): void {
     // No-op by default.

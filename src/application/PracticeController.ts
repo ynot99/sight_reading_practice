@@ -5,7 +5,7 @@ import type { Exercise } from '../domain/model/Exercise.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
 import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
-import type { IScoringStrategy } from '../domain/scoring/IScoringStrategy.js';
+import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
 import { buildTimeline, type ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
@@ -28,6 +28,14 @@ import { PracticeSession } from './session/PracticeSession.js';
 export interface PracticeSettings {
   readonly presetId: string;
   readonly modeId: string;
+  /**
+   * What the run is graded on.
+   *
+   * Its own axis, not a consequence of the mode: the same Flow run is worth
+   * grading for accuracy, for timing, or for how far it went unbroken, and
+   * which of those you are working on is a choice.
+   */
+  readonly scoringId: string;
   /**
    * Rhythmic level, chosen independently of the preset.
    *
@@ -95,8 +103,7 @@ export interface PracticeControllerDependencies {
   readonly midi: IMidiSource;
   readonly metronome: IMetronome;
   readonly clock: IClock;
-  /** Grading policy per practice mode. */
-  readonly scoringFor: (modeId: string) => IScoringStrategy;
+  readonly scorings: ScoringStrategyRegistry;
   /** Seam for alternative exercise sources (files, network, ear training). */
   readonly providerFor?: (generator: IExerciseGenerator) => IExerciseProvider;
   readonly initialSettings?: Partial<PracticeSettings>;
@@ -133,9 +140,15 @@ export class PracticeController {
       restoredPresetId !== undefined && dependencies.presets.has(restoredPresetId)
         ? dependencies.presets.get(restoredPresetId)
         : dependencies.presets.first();
+    const restoredModeId = dependencies.initialSettings?.modeId;
+    const mode =
+      restoredModeId !== undefined && dependencies.modes.has(restoredModeId)
+        ? dependencies.modes.get(restoredModeId)
+        : dependencies.modes.first();
     this.currentSettings = {
       presetId: preset.id,
-      modeId: dependencies.modes.first().id,
+      modeId: mode.id,
+      scoringId: mode.defaultScoringId,
       rhythmProfileId: preset.defaults.rhythmProfileId,
       key: preset.defaults.key,
       timeSignature: preset.defaults.timeSignature,
@@ -185,6 +198,15 @@ export class PracticeController {
    */
   updateSettings(changes: Partial<PracticeSettings>): PracticeSettings {
     let next: PracticeSettings = { ...this.currentSettings, ...changes };
+
+    if (changes.modeId !== undefined && changes.modeId !== this.currentSettings.modeId) {
+      // Same idea as the preset ladder: a mode brings the grading it is
+      // usually judged by, unless the caller said otherwise in the same breath.
+      next = {
+        ...next,
+        scoringId: changes.scoringId ?? this.deps.modes.get(changes.modeId).defaultScoringId,
+      };
+    }
 
     if (changes.presetId !== undefined && changes.presetId !== this.currentSettings.presetId) {
       const defaults = this.deps.presets.get(changes.presetId).defaults;
@@ -312,7 +334,7 @@ export class PracticeController {
       midi: this.deps.midi,
       metronome: this.deps.metronome,
       clock: this.deps.clock,
-      scoring: this.deps.scoringFor(this.currentSettings.modeId),
+      scoring: this.deps.scorings.get(this.currentSettings.scoringId),
       options: {
         matchPolicy: {
           toleranceMs: this.currentSettings.matchToleranceMs,

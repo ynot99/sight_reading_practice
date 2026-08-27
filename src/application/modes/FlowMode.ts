@@ -20,6 +20,7 @@ export class FlowMode extends BasePracticeMode {
   readonly id = FLOW_MODE_ID;
   readonly label = 'Flow with the metronome';
   readonly requiresMetronome = true;
+  override readonly defaultScoringId = 'scoring.timing-weighted';
 
   /** Presses that arrived just before the beat they were aimed at. */
   private early: MidiNoteOnEvent[] = [];

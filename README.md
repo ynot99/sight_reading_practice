@@ -182,7 +182,8 @@ src/
 │   └── scoring/
 │       ├── PerformanceReport.ts    #   StepResult ➜ aggregated report
 │       ├── IScoringStrategy.ts
-│       └── strategies.ts           #   Accuracy | TimingWeighted
+│       ├── ScoringStrategyRegistry.ts
+│       └── strategies.ts           #   Accuracy | TimingWeighted | Continuity
 │
 ├── application/                    # orchestration; depends only on interfaces
 │   ├── PracticeController.ts       # settings ➜ exercise ➜ render ➜ session ➜ cursor
@@ -359,8 +360,10 @@ correctly spelled for free.
 about, register it. Adding a hook to the interface later cannot break existing
 modes, because the base class supplies no-op defaults.
 
-**A different grading policy.** Implement `IScoringStrategy` and return it from
-`scoringFor(modeId)` in the composition root.
+**A different grading policy.** Implement `IScoringStrategy` and register it.
+Grading is its own axis: a mode names the policy it is usually judged by, but
+the reader can grade any mode by any of them. Three ship — the notes alone, the
+notes and their timing, and how far the run got without breaking.
 
 **A new click pattern.** Add it to `CLICK_PATTERNS` and say how many clicks a
 beat holds in `clicksPerPulse`. `subdivisionsPerPulseFor` takes the lowest

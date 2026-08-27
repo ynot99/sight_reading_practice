@@ -16,7 +16,12 @@ import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { AccuracyScoringStrategy, TimingWeightedScoringStrategy } from '../../src/domain/scoring/strategies.js';
+import {
+  AccuracyScoringStrategy,
+  ContinuityScoringStrategy,
+  TimingWeightedScoringStrategy,
+} from '../../src/domain/scoring/strategies.js';
+import { ScoringStrategyRegistry } from '../../src/domain/scoring/ScoringStrategyRegistry.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
@@ -54,8 +59,6 @@ function createController(
   const midi = new MockMidiAdapter({ clock });
   const metronome = new ManualMetronome(clock);
   const renderer = new FakeScoreRenderer();
-  const accuracy = new AccuracyScoringStrategy();
-  const timing = new TimingWeightedScoringStrategy();
 
   const controller = new PracticeController({
     presets: new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS),
@@ -70,7 +73,11 @@ function createController(
     midi,
     metronome,
     clock,
-    scoringFor: (modeId) => (modeId === FLOW_MODE_ID ? timing : accuracy),
+    scorings: new ScoringStrategyRegistry().registerAll([
+      new AccuracyScoringStrategy(),
+      new TimingWeightedScoringStrategy(),
+      new ContinuityScoringStrategy(),
+    ]),
     ...(fixedExercise
       ? { providerFor: () => ({ provide: () => Promise.resolve(twoBarExercise()) }) }
       : {}),
@@ -166,6 +173,36 @@ describe('PracticeController', () => {
 
     expect(settings.key.fifths).toBe(-2);
     expect(settings.measures).toBe(7);
+  });
+
+  it('adopts the grading a mode is usually judged by', () => {
+    const { controller } = createController();
+    expect(controller.settings.modeId).toBe(new WaitMode().id);
+    expect(controller.settings.scoringId).toBe('scoring.accuracy');
+
+    const settings = controller.updateSettings({ modeId: FLOW_MODE_ID });
+    expect(settings.scoringId).toBe('scoring.timing-weighted');
+  });
+
+  it('lets the reader grade a mode however they like', () => {
+    const { controller } = createController();
+
+    // Named in the same breath as the mode, so it is not a default to adopt.
+    const together = controller.updateSettings({
+      modeId: FLOW_MODE_ID,
+      scoringId: 'scoring.continuity',
+    });
+    expect(together.scoringId).toBe('scoring.continuity');
+
+    // And chosen on its own, it simply stays.
+    const alone = controller.updateSettings({ scoringId: 'scoring.accuracy' });
+    expect(alone.scoringId).toBe('scoring.accuracy');
+    expect(alone.modeId).toBe(FLOW_MODE_ID);
+  });
+
+  it('takes its grading from the restored mode, not from mode one', () => {
+    const { controller } = createController(false, undefined, { modeId: FLOW_MODE_ID });
+    expect(controller.settings.scoringId).toBe('scoring.timing-weighted');
   });
 
   it('adopts a preset’s rhythm profile with its other defaults', () => {

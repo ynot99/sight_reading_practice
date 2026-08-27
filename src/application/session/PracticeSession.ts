@@ -304,6 +304,7 @@ export class PracticeSession {
       startedAtMs: this.runStartedAt,
       endedAtMs: this.clock.now(),
       completed,
+      playableSteps: this.timeline.playableSteps.length,
       steps: this.results,
     });
     const score = this.scoring.score(report);

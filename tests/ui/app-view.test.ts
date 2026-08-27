@@ -16,8 +16,10 @@ import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import {
   AccuracyScoringStrategy,
+  ContinuityScoringStrategy,
   TimingWeightedScoringStrategy,
 } from '../../src/domain/scoring/strategies.js';
+import { ScoringStrategyRegistry } from '../../src/domain/scoring/ScoringStrategyRegistry.js';
 import type { KeyboardTarget } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { ComputerKeyboardMidiSource } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
@@ -100,13 +102,17 @@ function createRig(
   const presets = new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS);
   const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
-  const accuracy = new AccuracyScoringStrategy();
-  const timing = new TimingWeightedScoringStrategy();
+  const scorings = new ScoringStrategyRegistry().registerAll([
+    new AccuracyScoringStrategy(),
+    new TimingWeightedScoringStrategy(),
+    new ContinuityScoringStrategy(),
+  ]);
 
   const settings = new SettingsRepository(store, {
     presetIds: presets.list().map((preset) => preset.id),
     modeIds: modes.list().map((mode) => mode.id),
     rhythmProfileIds: rhythms.list().map((profile) => profile.id),
+    scoringIds: scorings.list().map((strategy) => strategy.id),
   });
   const restored = settings.load();
   const metronomeVolume = new FakeVolume();
@@ -127,7 +133,7 @@ function createRig(
     midi,
     metronome,
     clock,
-    scoringFor: (modeId) => (modeId === FLOW_MODE_ID ? timing : accuracy),
+    scorings,
     initialSettings: {
       countInBars: 0,
       metronomeMuted: true,
@@ -143,6 +149,7 @@ function createRig(
     controller,
     presets,
     rhythms,
+    scorings,
     modes,
     webMidi: webMidiOverride ?? midi,
     bridge: null,
@@ -209,6 +216,8 @@ describe('AppView', () => {
     expect(element<HTMLSelectElement>('dropout').options).toHaveLength(4);
     expect(element('dropout-description').textContent).not.toBe('');
     expect(element('mode-description').textContent).toContain('waits');
+    expect(element<HTMLSelectElement>('scoring').options).toHaveLength(3);
+    expect(element('scoring-description').textContent).not.toBe('');
   });
 
   it('loads and renders an exercise on start-up', async () => {
@@ -248,6 +257,27 @@ describe('AppView', () => {
     expect(element('click-description').textContent).toContain('One click per bar');
     // The click is not part of the exercise, so nothing is regenerated.
     expect(renderer.loadCount).toBe(before);
+  });
+
+  it('follows the mode with a grading, and lets it be overridden', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    const mode = element<HTMLSelectElement>('mode');
+    mode.value = FLOW_MODE_ID;
+    mode.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+
+    expect(runtime.controller.settings.scoringId).toBe('scoring.timing-weighted');
+    expect(element<HTMLSelectElement>('scoring').value).toBe('scoring.timing-weighted');
+
+    const scoring = element<HTMLSelectElement>('scoring');
+    scoring.value = 'scoring.continuity';
+    scoring.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+
+    expect(runtime.controller.settings.scoringId).toBe('scoring.continuity');
+    expect(element('scoring-description').textContent).toContain('without the music leaving you');
   });
 
   it('lets the click drop out for whole bars', async () => {

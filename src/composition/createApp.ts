@@ -1,9 +1,8 @@
 import { PracticeController } from '../application/PracticeController.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
-import { FlowMode, FLOW_MODE_ID } from '../application/modes/FlowMode.js';
+import { FlowMode } from '../application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../application/modes/WaitMode.js';
-import type { IScoringStrategy } from '../domain/scoring/IScoringStrategy.js';
 import type {
   IPitchPlayer,
   ISampleLibrary,
@@ -27,8 +26,10 @@ import { BUILT_IN_PRESETS } from '../domain/generation/presets.js';
 import { BUILT_IN_RHYTHM_PROFILES } from '../domain/generation/rhythmProfiles.js';
 import { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.js';
 import { MusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
+import { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
 import {
   AccuracyScoringStrategy,
+  ContinuityScoringStrategy,
   TimingWeightedScoringStrategy,
 } from '../domain/scoring/strategies.js';
 import { WebAudioMetronome, createAudioContextFactory } from '../infrastructure/audio/WebAudioMetronome.js';
@@ -76,6 +77,7 @@ export interface AppRuntime {
   readonly controller: PracticeController;
   readonly presets: ExercisePresetRegistry;
   readonly rhythms: RhythmProfileRegistry;
+  readonly scorings: ScoringStrategyRegistry;
   readonly modes: PracticeModeRegistry;
   readonly webMidi: IMidiSource & IMidiConnection & IMidiDeviceDirectory;
   /** `null` when the page cannot reach a bridge, e.g. on the public site. */
@@ -141,6 +143,11 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
 
   const presets = new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS);
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
+  const scorings = new ScoringStrategyRegistry().registerAll([
+    new AccuracyScoringStrategy(),
+    new TimingWeightedScoringStrategy(),
+    new ContinuityScoringStrategy(),
+  ]);
   const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
 
   const settings = new SettingsRepository(
@@ -149,6 +156,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       presetIds: presets.list().map((preset) => preset.id),
       modeIds: modes.list().map((mode) => mode.id),
       rhythmProfileIds: rhythms.list().map((profile) => profile.id),
+      scoringIds: scorings.list().map((strategy) => strategy.id),
     },
   );
   const restored = settings.load();
@@ -156,10 +164,6 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   pitchPlayer.setVolume(restored.audio.instrumentVolume);
   pitchPlayer.setLoading(restored.audio.sampleLoading);
 
-  const accuracyScoring = new AccuracyScoringStrategy();
-  const timingScoring = new TimingWeightedScoringStrategy();
-  const scoringFor = (modeId: string): IScoringStrategy =>
-    modeId === FLOW_MODE_ID ? timingScoring : accuracyScoring;
 
   const controller = new PracticeController({
     presets,
@@ -174,7 +178,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     midi,
     metronome,
     clock,
-    scoringFor,
+    scorings,
     initialSettings: restored.practice,
   });
 
@@ -187,6 +191,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     controller,
     presets,
     rhythms,
+    scorings,
     modes,
     webMidi,
     bridge,

@@ -92,11 +92,11 @@ export function buildOverlayShapes(
     }
 
     const pitch = spellPlayed(mark.midi, layout.key);
-    const staffNumber = staffForDiatonic(layout.geometry, pitch.diatonicIndex);
+    const staffNumber = staffForDiatonic(layout.geometry, mark.stepIndex, pitch.diatonicIndex);
     if (staffNumber === null) {
       continue;
     }
-    const y = yForDiatonic(layout.geometry, staffNumber, pitch.diatonicIndex);
+    const y = yForDiatonic(layout.geometry, staffNumber, mark.stepIndex, pitch.diatonicIndex);
     if (y === null) {
       continue;
     }
@@ -104,7 +104,7 @@ export function buildOverlayShapes(
     const clef = layout.clefByStaff.get(staffNumber) ?? 'treble';
     const [bottomLine, topLine] = CLEF_LINE_RANGE[clef];
     for (const ledgerIndex of ledgerIndicesFor(bottomLine, topLine, pitch.diatonicIndex)) {
-      const ledgerY = yForDiatonic(layout.geometry, staffNumber, ledgerIndex);
+      const ledgerY = yForDiatonic(layout.geometry, staffNumber, mark.stepIndex, ledgerIndex);
       if (ledgerY !== null) {
         shapes.push({
           kind: 'ledger',

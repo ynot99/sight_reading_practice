@@ -5,6 +5,8 @@ import { floorMod } from '../../shared/asserts.js';
  * else on that staff belongs.
  */
 export interface DrawnNoteSample {
+  /** Timeline step this note was drawn for. */
+  readonly stepIndex: number;
   readonly staffNumber: number;
   /** Absolute staff position: `C4` is 28, `D4` is 29. */
   readonly diatonicIndex: number;
@@ -12,17 +14,18 @@ export interface DrawnNoteSample {
   readonly y: number;
 }
 
-export interface StaffAnchor {
-  readonly diatonicIndex: number;
-  readonly y: number;
-  /** Average position of the notes drawn here; used to pick a staff. */
-  readonly centreIndex: number;
-}
-
 export interface StaffGeometry {
   /** Vertical distance between neighbouring staff positions. */
   readonly stepHeight: number;
-  readonly anchors: ReadonlyMap<number, StaffAnchor>;
+  /**
+   * Every drawn note, grouped by staff.
+   *
+   * A page holds several systems, one under another, so a staff has no single
+   * vertical position: the third bar's treble stave may be four hundred units
+   * below the first one's. Marks are therefore placed against the nearest note
+   * in the same *step*, never against a page-wide average.
+   */
+  readonly byStaff: ReadonlyMap<number, readonly DrawnNoteSample[]>;
 }
 
 /** Semitone value of each letter, which is what the engraver reports. */
@@ -67,19 +70,22 @@ export function fitStaffGeometry(samples: readonly DrawnNoteSample[]): StaffGeom
     byStaff.set(sample.staffNumber, bucket);
   }
 
+  // Neighbours only. Two notes from different systems are hundreds of units
+  // apart vertically for reasons that have nothing to do with pitch, and
+  // pairing them would measure the gap between staves instead of the gap
+  // between staff positions.
   const heights: number[] = [];
   for (const bucket of byStaff.values()) {
-    for (let i = 0; i < bucket.length; i += 1) {
-      for (let j = i + 1; j < bucket.length; j += 1) {
-        const a = bucket[i];
-        const b = bucket[j];
-        if (a === undefined || b === undefined) {
-          continue;
-        }
-        const steps = a.diatonicIndex - b.diatonicIndex;
-        if (steps !== 0) {
-          heights.push(Math.abs((b.y - a.y) / steps));
-        }
+    const ordered = [...bucket].sort((left, right) => left.stepIndex - right.stepIndex);
+    for (let index = 1; index < ordered.length; index += 1) {
+      const previous = ordered[index - 1];
+      const current = ordered[index];
+      if (previous === undefined || current === undefined) {
+        continue;
+      }
+      const steps = previous.diatonicIndex - current.diatonicIndex;
+      if (steps !== 0) {
+        heights.push(Math.abs((current.y - previous.y) / steps));
       }
     }
   }
@@ -93,39 +99,78 @@ export function fitStaffGeometry(samples: readonly DrawnNoteSample[]): StaffGeom
     return null;
   }
 
-  const anchors = new Map<number, StaffAnchor>();
+  const sorted = new Map<number, readonly DrawnNoteSample[]>();
   for (const [staffNumber, bucket] of byStaff) {
-    const first = bucket[0];
-    if (first === undefined) {
-      continue;
-    }
-    const centreIndex =
-      bucket.reduce((total, sample) => total + sample.diatonicIndex, 0) / bucket.length;
-    anchors.set(staffNumber, { diatonicIndex: first.diatonicIndex, y: first.y, centreIndex });
+    sorted.set(
+      staffNumber,
+      [...bucket].sort((left, right) => left.stepIndex - right.stepIndex),
+    );
   }
 
-  return { stepHeight, anchors };
+  return { stepHeight, byStaff: sorted };
 }
 
-/** Where a staff position sits vertically, or `null` for an unknown staff. */
+/**
+ * The drawn note to measure from: the nearest one on that staff, in steps.
+ *
+ * Nearest in time is nearest on the page, because that is the order the music
+ * is laid out in - so this lands on the same system as the mark being placed.
+ */
+export function anchorFor(
+  geometry: StaffGeometry,
+  staffNumber: number,
+  stepIndex: number,
+): DrawnNoteSample | null {
+  const bucket = geometry.byStaff.get(staffNumber);
+  if (bucket === undefined || bucket.length === 0) {
+    return null;
+  }
+  let best = bucket[0] ?? null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const sample of bucket) {
+    const distance = Math.abs(sample.stepIndex - stepIndex);
+    if (distance < bestDistance) {
+      best = sample;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+/** Where a staff position sits vertically, near a given step. */
 export function yForDiatonic(
   geometry: StaffGeometry,
   staffNumber: number,
+  stepIndex: number,
   diatonicIndex: number,
 ): number | null {
-  const anchor = geometry.anchors.get(staffNumber);
-  if (anchor === undefined) {
+  const anchor = anchorFor(geometry, staffNumber, stepIndex);
+  if (anchor === null) {
     return null;
   }
   // Higher pitch, smaller y: the page grows downwards.
   return anchor.y - (diatonicIndex - anchor.diatonicIndex) * geometry.stepHeight;
 }
 
-/** The staff a played note belongs on: whichever one it is nearest. */
-export function staffForDiatonic(geometry: StaffGeometry, diatonicIndex: number): number | null {
+/**
+ * The staff a played note belongs on.
+ *
+ * Judged against what each staff is carrying *at that point in the music*,
+ * not against a page-wide average: a left hand that climbs above middle C in
+ * one bar must not drag every later mark onto the wrong stave.
+ */
+export function staffForDiatonic(
+  geometry: StaffGeometry,
+  stepIndex: number,
+  diatonicIndex: number,
+): number | null {
   let best: { staffNumber: number; distance: number } | null = null;
-  for (const [staffNumber, anchor] of geometry.anchors) {
-    const distance = Math.abs(diatonicIndex - anchor.centreIndex);
+  for (const staffNumber of geometry.byStaff.keys()) {
+    const anchor = anchorFor(geometry, staffNumber, stepIndex);
+    if (anchor === null) {
+      continue;
+    }
+    const distance = Math.abs(diatonicIndex - anchor.diatonicIndex);
     if (best === null || distance < best.distance) {
       best = { staffNumber, distance };
     }

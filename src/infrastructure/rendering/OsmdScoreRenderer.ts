@@ -316,6 +316,7 @@ export class OsmdScoreRenderer
           continue;
         }
         samples.push({
+          stepIndex,
           staffNumber: note.sourceNote?.parentStaffEntry?.parentStaff?.id ?? 1,
           diatonicIndex,
           y: position.y * UNITS_TO_PIXELS,

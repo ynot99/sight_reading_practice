@@ -16,9 +16,9 @@ import { Pitch } from '../../src/domain/model/Pitch.js';
  * whose bottom line sits at 145.5.
  */
 const TREBLE: DrawnNoteSample[] = [
-  { staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
-  { staffNumber: 1, diatonicIndex: Pitch.parse('D4').diatonicIndex, y: 150.5 },
-  { staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
+  { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
+  { stepIndex: 1, staffNumber: 1, diatonicIndex: Pitch.parse('D4').diatonicIndex, y: 150.5 },
+  { stepIndex: 2, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
 ];
 
 describe('diatonicIndexOf', () => {
@@ -45,7 +45,7 @@ describe('fitStaffGeometry', () => {
   it('is not fooled by two notes sharing a position', () => {
     const geometry = fitStaffGeometry([
       ...TREBLE,
-      { staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
+      { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
     ]);
     expect(geometry?.stepHeight).toBeCloseTo(5, 10);
   });
@@ -58,7 +58,7 @@ describe('fitStaffGeometry', () => {
   it('gives up when there is nothing to measure from', () => {
     expect(fitStaffGeometry([])).toBeNull();
     expect(
-      fitStaffGeometry([{ staffNumber: 1, diatonicIndex: 28, y: 155.5 }]),
+      fitStaffGeometry([{ stepIndex: 0, staffNumber: 1, diatonicIndex: 28, y: 155.5 }]),
     ).toBeNull();
   });
 });
@@ -68,37 +68,57 @@ describe('yForDiatonic', () => {
 
   it('reproduces the positions it was given', () => {
     for (const sample of TREBLE) {
-      expect(yForDiatonic(geometry!, 1, sample.diatonicIndex)).toBeCloseTo(sample.y, 10);
+      expect(yForDiatonic(geometry!, 1, 0, sample.diatonicIndex)).toBeCloseTo(sample.y, 10);
     }
   });
 
   it('places notes the engraver never drew', () => {
     // G4 is four positions above C4, so four steps higher up the page.
-    expect(yForDiatonic(geometry!, 1, Pitch.parse('G4').diatonicIndex)).toBeCloseTo(135.5, 10);
+    expect(yForDiatonic(geometry!, 1, 0, Pitch.parse('G4').diatonicIndex)).toBeCloseTo(135.5, 10);
     // A3 is two below.
-    expect(yForDiatonic(geometry!, 1, Pitch.parse('A3').diatonicIndex)).toBeCloseTo(165.5, 10);
+    expect(yForDiatonic(geometry!, 1, 0, Pitch.parse('A3').diatonicIndex)).toBeCloseTo(165.5, 10);
   });
 
   it('knows nothing about a staff it never saw', () => {
-    expect(yForDiatonic(geometry!, 2, 28)).toBeNull();
+    expect(yForDiatonic(geometry!, 2, 0, 28)).toBeNull();
   });
 });
 
 describe('staffForDiatonic', () => {
   const geometry = fitStaffGeometry([
     ...TREBLE,
-    { staffNumber: 2, diatonicIndex: Pitch.parse('C3').diatonicIndex, y: 210.5 },
-    { staffNumber: 2, diatonicIndex: Pitch.parse('G2').diatonicIndex, y: 225.5 },
+    { stepIndex: 0, staffNumber: 2, diatonicIndex: Pitch.parse('C3').diatonicIndex, y: 210.5 },
+    { stepIndex: 1, staffNumber: 2, diatonicIndex: Pitch.parse('G2').diatonicIndex, y: 225.5 },
   ]);
 
   it('puts a note on the staff it is nearest', () => {
-    expect(staffForDiatonic(geometry!, Pitch.parse('G4').diatonicIndex)).toBe(1);
-    expect(staffForDiatonic(geometry!, Pitch.parse('E2').diatonicIndex)).toBe(2);
+    expect(staffForDiatonic(geometry!, 0, Pitch.parse('G4').diatonicIndex)).toBe(1);
+    expect(staffForDiatonic(geometry!, 0, Pitch.parse('E2').diatonicIndex)).toBe(2);
   });
 
   it('keeps a wildly wrong note on the nearer staff rather than dropping it', () => {
-    expect(staffForDiatonic(geometry!, Pitch.parse('C7').diatonicIndex)).toBe(1);
-    expect(staffForDiatonic(geometry!, Pitch.parse('A0').diatonicIndex)).toBe(2);
+    expect(staffForDiatonic(geometry!, 0, Pitch.parse('C7').diatonicIndex)).toBe(1);
+    expect(staffForDiatonic(geometry!, 0, Pitch.parse('A0').diatonicIndex)).toBe(2);
+  });
+});
+
+describe('systems stacked down the page', () => {
+  /** Two systems: the same staff, four hundred units apart. */
+  const geometry = fitStaffGeometry([
+    { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
+    { stepIndex: 1, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
+    { stepIndex: 8, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 555.5 },
+    { stepIndex: 9, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 545.5 },
+  ]);
+
+  it('places a mark on the system its step belongs to', () => {
+    // A page-wide anchor would drag every later mark up to the first system.
+    expect(yForDiatonic(geometry!, 1, 9, Pitch.parse('G4').diatonicIndex)).toBeCloseTo(535.5, 10);
+    expect(yForDiatonic(geometry!, 1, 0, Pitch.parse('G4').diatonicIndex)).toBeCloseTo(135.5, 10);
+  });
+
+  it('measures one step height for the whole page', () => {
+    expect(geometry?.stepHeight).toBeCloseTo(5, 10);
   });
 });
 

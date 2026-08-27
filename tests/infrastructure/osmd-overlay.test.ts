@@ -5,6 +5,8 @@ import { Pitch } from '../../src/domain/model/Pitch.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
 import type { ClefKind } from '../../src/domain/model/Clef.js';
+import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
+import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { twoBarExercise } from '../support/fixtures.js';
 import { createScoreContainer, installCanvasStub, staffLineYs } from '../support/osmdHarness.js';
 
@@ -154,5 +156,50 @@ describe('played notes drawn over a real engraving', () => {
   it('draws nothing for a step that was never engraved', () => {
     renderer.showPlayed({ stepIndex: 99, midi: 60, correct: false });
     expect(noteheads(container)).toHaveLength(0);
+  });
+});
+
+/**
+ * The case a two-bar fixture cannot show: a page long enough to be broken
+ * into several systems, one under another.
+ */
+describe('played notes on a page of several systems', () => {
+  beforeAll(() => {
+    installCanvasStub();
+  });
+
+  it('draws a mark on the system its step belongs to', async () => {
+    document.body.replaceChildren();
+    const container = createScoreContainer(650);
+    const renderer = new OsmdScoreRenderer(container, { zoom: 1 });
+    const preset = BUILT_IN_PRESETS[0];
+    if (preset === undefined) {
+      throw new Error('expected a preset');
+    }
+    const exercise = preset.generator.generate({
+      measures: 16,
+      timeSignature: new TimeSignature(4, 4),
+      key: KeySignature.major(0),
+      tempoBpm: 60,
+      seed: 7,
+    });
+    await renderer.load(new MusicXmlSerializer().serialize(exercise));
+    renderer.configureOverlay({ key: KeySignature.major(0), clefByStaff: CLEFS });
+
+    const lines = staffLineYs(container);
+    const firstSystemBottom = lines[10] ?? 0;
+    expect(lines.length).toBeGreaterThan(20);
+
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+    const early = centreY(noteheads(container)[0]);
+    renderer.clearPlayed();
+
+    renderer.showPlayed({ stepIndex: 40, midi: Pitch.parse('C4').midi, correct: false });
+    const late = centreY(noteheads(container)[0]);
+
+    // A page-wide anchor put every mark in the first system; a late step
+    // belongs well below it.
+    expect(early).toBeLessThan(firstSystemBottom);
+    expect(late).toBeGreaterThan(firstSystemBottom);
   });
 });

@@ -19,6 +19,9 @@ function bootstrap(): void {
     // The DOM's overloaded listener signature is wider than the port needs.
     keyboardTarget: document as unknown as KeyboardTarget,
     location: window.location,
+    // Relative to the document, so it works both at the site root and under
+    // the project path on GitHub Pages.
+    sampleBaseUrl: new URL('samples/piano/', document.baseURI).href,
   });
 
   const view = new AppView(runtime, document);

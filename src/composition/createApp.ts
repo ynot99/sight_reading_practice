@@ -27,6 +27,7 @@ import {
 } from '../domain/scoring/strategies.js';
 import { WebAudioMetronome, createAudioContextFactory } from '../infrastructure/audio/WebAudioMetronome.js';
 import { WebAudioPitchPlayer } from '../infrastructure/audio/WebAudioPitchPlayer.js';
+import { SampledPitchPlayer } from '../infrastructure/audio/SampledPitchPlayer.js';
 import { CompositeMidiSource } from '../infrastructure/midi/CompositeMidiSource.js';
 import {
   ComputerKeyboardMidiSource,
@@ -46,6 +47,8 @@ export interface AppRuntimeOptions {
   readonly location: LocationLike;
   /** Defaults to this device's browser storage. */
   readonly settingsStore?: ISettingsStore;
+  /** Where the piano samples live; resolved against the page by default. */
+  readonly sampleBaseUrl?: string;
 }
 
 /**
@@ -99,7 +102,13 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const audioContextFactory = createAudioContextFactory();
 
   const metronome = new WebAudioMetronome(audioContextFactory);
-  const pitchPlayer = new WebAudioPitchPlayer(audioContextFactory);
+
+  // Recorded piano, with the synthesised tone standing in until the samples
+  // have downloaded - a key must never be silent while waiting on the network.
+  const pitchPlayer = new SampledPitchPlayer(audioContextFactory, {
+    baseUrl: options.sampleBaseUrl ?? 'samples/piano/',
+    fallback: new WebAudioPitchPlayer(audioContextFactory),
+  });
 
   const webMidi = new WebMidiAdapter(browserMidiAccessProvider(), clock);
   const computerKeyboard = new ComputerKeyboardMidiSource(options.keyboardTarget, clock);

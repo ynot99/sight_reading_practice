@@ -35,6 +35,22 @@ No keyboard to hand? The computer keyboard is wired up as a second MIDI source:
 `z s x d c v g b h n j m` is the lower octave, `q 2 w 3 e r 5 t 6 y 7 u` the
 upper one.
 
+### The piano sound
+
+Notes you play are sounded with real piano recordings, so a MIDI controller
+with no speakers of its own still sounds like an instrument.
+
+The source library - the [Salamander Grand
+Piano](https://archive.org/details/SalamanderGrandPianoV3), CC-BY 3.0 - is
+1.9 GB, which no browser is going to download. What ships is a reduction of it:
+one velocity layer, one note every three semitones, five seconds long, mono.
+**1.7 MB in total.** The notes in between are covered by resampling the nearest
+recording, never more than a semitone away.
+
+They load in the background on the first key press, and a synthesised tone
+covers the notes until they arrive. See
+[public/samples/piano/CREDITS.md](public/samples/piano/CREDITS.md).
+
 ### Practising on a tablet
 
 iPadOS has no Web MIDI in any browser — every browser there is Safari
@@ -146,7 +162,7 @@ src/
 │   ├── midi/                       #   WebMidiAdapter, WebSocketMidiSource,
 │   │                               #   ComputerKeyboardMidiSource, Composite…
 │   ├── audio/                      #   WebAudioMetronome (look-ahead scheduler),
-│   │                               #   WebAudioPitchPlayer, metronomeMath
+│   │                               #   SampledPitchPlayer, WebAudioPitchPlayer
 │   ├── rendering/                  #   OsmdScoreRenderer, CursorNavigator
 │   ├── storage/                    #   LocalStorageSettingsStore
 │   ├── time/SystemClock.ts
@@ -233,7 +249,7 @@ is asserted in `tests/application/session-state.test.ts`.
 | `IExerciseProvider`  | `GeneratedExerciseProvider`                     | any stub               |
 | `ISettingsStore`     | `LocalStorageSettingsStore`                     | `InMemorySettingsStore` |
 | `IVolumeControl`     | `WebAudioMetronome`, `WebAudioPitchPlayer`      | any stub               |
-| `IPitchPlayer`       | `WebAudioPitchPlayer`                           | `SilentPitchPlayer`    |
+| `IPitchPlayer`       | `SampledPitchPlayer` (falls back to `WebAudioPitchPlayer`) | `SilentPitchPlayer` |
 | `IScoringStrategy`   | `AccuracyScoringStrategy`, `TimingWeightedScoringStrategy` | any stub    |
 
 Everything is wired in one place, `src/composition/createApp.ts`. Nothing else
@@ -242,7 +258,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~330 tests
+npm test           # ~350 tests
 npm run coverage   # ~92% of statements in src/
 ```
 

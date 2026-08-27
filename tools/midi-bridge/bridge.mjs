@@ -37,6 +37,10 @@ const MIME_TYPES = {
   '.woff2': 'font/woff2',
   '.map': 'application/json; charset=utf-8',
   '.xml': 'application/xml; charset=utf-8',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
+  '.md': 'text/markdown; charset=utf-8',
 };
 
 const DEVICE_POLL_MS = 1_000;
@@ -129,9 +133,12 @@ function serveStatic(root, request, response) {
     return;
   }
 
+  // The samples are 1.7 MB and never change; the app shell must not be
+  // cached, or a rebuild would not reach the tablet.
+  const isSample = target.includes(`${sep}samples${sep}`);
   response.writeHead(200, {
     'content-type': MIME_TYPES[extname(target)] ?? 'application/octet-stream',
-    'cache-control': 'no-cache',
+    'cache-control': isSample ? 'public, max-age=604800' : 'no-cache',
   });
   createReadStream(target).pipe(response);
 }

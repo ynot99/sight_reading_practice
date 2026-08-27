@@ -29,6 +29,9 @@ export interface SampledPitchPlayerOptions {
   readonly fetchAudio?: AudioFetcher;
 }
 
+/** Fade applied at the end of a recording, which is cut rather than faded. */
+const END_FADE_SEC = 0.4;
+
 interface Voice {
   readonly source: AudioBufferSourceNode;
   readonly envelope: GainNode;
@@ -68,7 +71,7 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl {
     this.fallback = options.fallback ?? new SilentPitchPlayer();
     this.fetchAudio = options.fetchAudio ?? fetchAudioBuffer;
     this.options = {
-      gain: options.gain ?? 0.9,
+      gain: options.gain ?? 1,
       releaseSec: options.releaseSec ?? 0.35,
       maxVoices: options.maxVoices ?? 16,
     };
@@ -136,6 +139,15 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl {
     // The recording carries its own attack; this only avoids a click.
     envelope.gain.setValueAtTime(0.0001, now);
     envelope.gain.linearRampToValueAtTime(peak, now + 0.006);
+
+    // The recordings are cut, not faded, so a note held to the very end would
+    // stop dead. Resampling changes how long the buffer lasts, so the fade
+    // has to follow the playback rate.
+    const playedSeconds = buffer.duration / source.playbackRate.value;
+    if (playedSeconds > END_FADE_SEC) {
+      envelope.gain.setValueAtTime(peak, now + playedSeconds - END_FADE_SEC);
+      envelope.gain.linearRampToValueAtTime(0.0001, now + playedSeconds);
+    }
 
     source.connect(envelope).connect(context.destination);
     source.start(now);

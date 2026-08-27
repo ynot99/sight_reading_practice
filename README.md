@@ -43,9 +43,10 @@ with no speakers of its own still sounds like an instrument.
 The source library - the [Salamander Grand
 Piano](https://archive.org/details/SalamanderGrandPianoV3), CC-BY 3.0 - is
 1.9 GB, which no browser is going to download. What ships is a reduction of it:
-one velocity layer, one note every three semitones, five seconds long, mono.
-**1.7 MB in total.** The notes in between are covered by resampling the nearest
-recording, never more than a semitone away.
+one velocity layer, one note every three semitones, six seconds long.
+**1.0 MB in total**, trimmed by stream copy so the audio itself is untouched.
+The notes in between are covered by resampling the nearest recording, never
+more than a semitone away.
 
 They load in the background on the first key press, and a synthesised tone
 covers the notes until they arrive. See

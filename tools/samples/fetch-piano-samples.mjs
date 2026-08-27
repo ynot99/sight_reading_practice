@@ -7,16 +7,21 @@
  * can go into a browser, so this takes the subset Tone.js publishes - one
  * velocity layer, one note every three semitones - and cuts it down further:
  *
- *   422 seconds of stereo audio   ->  142 MB once decoded in memory
- *   trimmed to 5 s and made mono  ->   25 MB
+ *   422 seconds of audio  ->  142 MB once decoded in memory
+ *   trimmed to 6 s        ->   61 MB
  *
- * The player fills the two semitones between samples by resampling, which is
- * exactly what a hardware sampler does.
+ * The trim is a stream copy: MP3 frames are cut, never re-encoded, so the
+ * recordings keep the quality and the stereo image they were published with.
+ * Re-encoding them was measurably pointless - the source averages about
+ * 39 kbit/s, so a "higher" bitrate only adds a second generation of loss.
+ *
+ * The player fills the two semitones between samples by resampling, and fades
+ * the cut end itself, which is why nothing is baked in here.
  *
  * Requires ffmpeg on PATH. Run it from anywhere:
  *
  *   node tools/samples/fetch-piano-samples.mjs
- *   node tools/samples/fetch-piano-samples.mjs --seconds 8 --bitrate 128k
+ *   node tools/samples/fetch-piano-samples.mjs --seconds 10
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -44,28 +49,16 @@ const NOTES = (() => {
 })();
 
 function parseArguments(argv) {
-  const options = { seconds: 5, fade: 0.5, bitrate: '96k', channels: 1 };
+  const options = { seconds: 6 };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index + 1];
-    switch (argv[index]) {
-      case '--seconds':
-        options.seconds = Number.parseFloat(value ?? '');
-        index += 1;
-        break;
-      case '--fade':
-        options.fade = Number.parseFloat(value ?? '');
-        index += 1;
-        break;
-      case '--bitrate':
-        options.bitrate = value ?? options.bitrate;
-        index += 1;
-        break;
-      case '--stereo':
-        options.channels = 2;
-        break;
-      default:
-        break;
+    if (argv[index] === '--seconds') {
+      options.seconds = Number.parseFloat(value ?? '');
+      index += 1;
     }
+  }
+  if (!Number.isFinite(options.seconds) || options.seconds <= 0) {
+    throw new Error('--seconds must be a positive number');
   }
   return options;
 }
@@ -86,15 +79,13 @@ async function main() {
     const raw = join(scratch, `${note}.mp3`);
     writeFileSync(raw, Buffer.from(await response.arrayBuffer()));
 
-    const fadeStart = Math.max(0, options.seconds - options.fade);
+    // Stream copy: cut on a frame boundary, do not touch the audio.
     execFileSync('ffmpeg', [
       '-y',
       '-v', 'error',
       '-i', raw,
       '-t', String(options.seconds),
-      '-af', `afade=t=out:st=${fadeStart}:d=${options.fade}`,
-      '-ac', String(options.channels),
-      '-b:a', options.bitrate,
+      '-c', 'copy',
       join(OUTPUT_DIR, `${note}.mp3`),
     ]);
     total += 1;

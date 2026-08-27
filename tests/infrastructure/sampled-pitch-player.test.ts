@@ -260,6 +260,33 @@ describe('SampledPitchPlayer', () => {
     expect(context.sources[0]?.stoppedAt).toBeCloseTo(2.37, 5);
   });
 
+  it('fades the cut end of the recording instead of stopping dead', async () => {
+    const { player, context } = createPlayer();
+    await player.load();
+
+    player.play(60, 1);
+
+    // The fake buffers report five seconds; the fade lands in the last 0.4 s.
+    const ramps = context.gains[0]?.gain.ramps ?? [];
+    expect(ramps.some((ramp) => Math.abs(ramp.time - 4.6) < 1e-9)).toBe(true);
+    expect(ramps.some((ramp) => Math.abs(ramp.time - 5) < 1e-9 && ramp.value < 0.001)).toBe(true);
+  });
+
+  it('moves the end fade with the playback rate', async () => {
+    const { player, context } = createPlayer();
+    await player.load();
+
+    // C#4 is resampled a semitone up, so the buffer runs out sooner.
+    player.play(61, 1);
+
+    const playedSeconds = 5 / playbackRateFor(1);
+    const ramps = context.gains[0]?.gain.ramps ?? [];
+    expect(playedSeconds).toBeLessThan(5);
+    expect(
+      ramps.some((ramp) => Math.abs(ramp.time - playedSeconds) < 1e-9 && ramp.value < 0.001),
+    ).toBe(true);
+  });
+
   it('retriggers a repeated key instead of stacking voices', async () => {
     const { player, context } = createPlayer();
     await player.load();

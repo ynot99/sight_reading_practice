@@ -10,6 +10,9 @@ import { SilentPitchPlayer } from '../../src/application/ports/IPitchPlayer.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
+import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
+import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
+
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import {
   AccuracyScoringStrategy,
@@ -96,12 +99,14 @@ function createRig(
   const renderer = new FakeScoreRenderer();
   const presets = new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS);
   const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
+  const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const accuracy = new AccuracyScoringStrategy();
   const timing = new TimingWeightedScoringStrategy();
 
   const settings = new SettingsRepository(store, {
     presetIds: presets.list().map((preset) => preset.id),
     modeIds: modes.list().map((mode) => mode.id),
+    rhythmProfileIds: rhythms.list().map((profile) => profile.id),
   });
   const restored = settings.load();
   const metronomeVolume = new FakeVolume();
@@ -111,6 +116,7 @@ function createRig(
 
   const controller = new PracticeController({
     presets,
+    rhythms,
     modes,
     serializer: new MusicXmlSerializer(),
     renderer,
@@ -136,6 +142,7 @@ function createRig(
   const runtime: AppRuntime = {
     controller,
     presets,
+    rhythms,
     modes,
     webMidi: webMidiOverride ?? midi,
     bridge: null,
@@ -190,9 +197,13 @@ describe('AppView', () => {
     await view.initialize();
 
     expect(element<HTMLSelectElement>('preset').options).toHaveLength(BUILT_IN_PRESETS.length);
+    expect(element<HTMLSelectElement>('rhythm').options).toHaveLength(
+      BUILT_IN_RHYTHM_PROFILES.length,
+    );
     expect(element<HTMLSelectElement>('mode').options).toHaveLength(2);
     expect(element<HTMLSelectElement>('key').options.length).toBeGreaterThan(5);
     expect(element('preset-description').textContent).not.toBe('');
+    expect(element('rhythm-description').textContent).not.toBe('');
     expect(element('mode-description').textContent).toContain('waits');
   });
 
@@ -216,6 +227,21 @@ describe('AppView', () => {
     await Promise.resolve();
 
     expect(runtime.controller.settings.presetId).toBe('triads-left-hand');
+    expect(renderer.loadCount).toBe(2);
+  });
+
+  it('regenerates when the rhythm changes', async () => {
+    const { view, renderer, runtime } = createRig();
+    await view.initialize();
+
+    const select = element<HTMLSelectElement>('rhythm');
+    select.value = 'sixteenths';
+    select.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(runtime.controller.settings.rhythmProfileId).toBe('sixteenths');
+    expect(element('rhythm-description').textContent).toContain('Sixteenths');
     expect(renderer.loadCount).toBe(2);
   });
 

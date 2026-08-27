@@ -3,7 +3,18 @@ import { Duration, NOTE_TYPES } from '../model/Duration.js';
 import type { TimeSignature } from '../model/TimeSignature.js';
 import type { Rng, WeightedItem } from './Rng.js';
 
-export type WeightedDuration = WeightedItem<Duration>;
+export interface WeightedDuration extends WeightedItem<Duration> {
+  /**
+   * How many copies to emit in a row when this value is drawn.
+   *
+   * Short values are only readable in groups: `repeat: 2` on a sixteenth is
+   * the difference between a beamed pair and a lone sixteenth stranded
+   * between two eighths. The group is all-or-nothing - a value is only
+   * offered where every copy fits inside the beat - so the grid rule still
+   * wins and the pair is never split.
+   */
+  readonly repeat?: number;
+}
 
 export interface RhythmOptions {
   /** Pool the filler samples from. Weights need not be normalised. */
@@ -30,9 +41,16 @@ const LONGEST_FIRST: readonly Duration[] = NOTE_TYPES.flatMap((type) => [
   Duration.of(type, 0),
 ]).sort((left, right) => right.ticks - left.ticks);
 
+/**
+ * Whether a span of `ticks` starting at `onsetTicks` respects the beat grid.
+ *
+ * Takes a tick span rather than a single value so that a repeated group can be
+ * tested as a whole: two sixteenths are only worth offering when both of them
+ * fit inside the same beat.
+ */
 function fitsRhythmicGrid(
   onsetTicks: number,
-  duration: Duration,
+  ticks: number,
   ticksPerBeat: number,
   keepInsideBeats: boolean,
 ): boolean {
@@ -42,10 +60,15 @@ function fitsRhythmicGrid(
   const startsOnBeat = onsetTicks % ticksPerBeat === 0;
   if (startsOnBeat) {
     // A value that begins on a beat may span whole beats, or stay inside one.
-    return duration.ticks % ticksPerBeat === 0 || duration.ticks < ticksPerBeat;
+    return ticks % ticksPerBeat === 0 || ticks < ticksPerBeat;
   }
   const nextBeatBoundary = (Math.floor(onsetTicks / ticksPerBeat) + 1) * ticksPerBeat;
-  return onsetTicks + duration.ticks <= nextBeatBoundary;
+  return onsetTicks + ticks <= nextBeatBoundary;
+}
+
+/** How many copies of a value one draw emits. */
+function copiesOf(candidate: WeightedDuration): number {
+  return Math.max(1, Math.trunc(candidate.repeat ?? 1));
 }
 
 /**
@@ -67,24 +90,35 @@ export function fillMeasure(
   while (onsetTicks < total) {
     const remaining = total - onsetTicks;
     const position = onsetTicks;
-    const candidates = options.durations.filter(
-      (candidate) =>
-        candidate.value.ticks <= remaining &&
-        candidate.weight > 0 &&
-        fitsRhythmicGrid(position, candidate.value, ticksPerBeat, options.keepInsideBeats),
-    );
+    // Weighted over the entries themselves rather than their values, so the
+    // drawn item keeps its `repeat` count. A repeated value is offered only
+    // when the whole group fits, which is what stops a pair of sixteenths from
+    // being split across a beat into two stranded ones.
+    const candidates = options.durations
+      .filter((candidate) => {
+        const span = candidate.value.ticks * copiesOf(candidate);
+        return (
+          span <= remaining &&
+          candidate.weight > 0 &&
+          fitsRhythmicGrid(position, span, ticksPerBeat, options.keepInsideBeats)
+        );
+      })
+      .map((candidate) => ({ value: candidate, weight: candidate.weight }));
 
-    const duration =
-      candidates.length > 0 ? rng.weighted(candidates) : largestThatFits(remaining);
+    const drawn = candidates.length > 0 ? rng.weighted(candidates) : undefined;
+    const duration = drawn?.value ?? largestThatFits(remaining);
+    const copies = drawn === undefined ? 1 : copiesOf(drawn);
 
-    const restEligible =
-      onsetTicks % ticksPerBeat === 0 && duration.ticks % ticksPerBeat === 0;
-    slots.push({
-      duration,
-      isRest: restEligible && rng.bool(options.restProbability),
-      onsetTicks,
-    });
-    onsetTicks += duration.ticks;
+    for (let copy = 0; copy < copies; copy += 1) {
+      const restEligible =
+        onsetTicks % ticksPerBeat === 0 && duration.ticks % ticksPerBeat === 0;
+      slots.push({
+        duration,
+        isRest: restEligible && rng.bool(options.restProbability),
+        onsetTicks,
+      });
+      onsetTicks += duration.ticks;
+    }
   }
 
   return slots;

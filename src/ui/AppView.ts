@@ -140,6 +140,8 @@ export class AppView {
     result: HTMLElement;
     preset: HTMLSelectElement;
     presetDescription: HTMLElement;
+    rhythm: HTMLSelectElement;
+    rhythmDescription: HTMLElement;
     mode: HTMLSelectElement;
     modeDescription: HTMLElement;
     key: HTMLSelectElement;
@@ -200,6 +202,8 @@ export class AppView {
       result: requireElement(doc, 'result'),
       preset: requireElement(doc, 'preset'),
       presetDescription: requireElement(doc, 'preset-description'),
+      rhythm: requireElement(doc, 'rhythm'),
+      rhythmDescription: requireElement(doc, 'rhythm-description'),
       mode: requireElement(doc, 'mode'),
       modeDescription: requireElement(doc, 'mode-description'),
       key: requireElement(doc, 'key'),
@@ -263,6 +267,13 @@ export class AppView {
       this.runtime.controller.settings.presetId,
     );
     fillSelect(
+      this.el.rhythm,
+      this.runtime.rhythms
+        .list()
+        .map((profile) => ({ value: profile.id, label: profile.label })),
+      this.runtime.controller.settings.rhythmProfileId,
+    );
+    fillSelect(
       this.el.mode,
       this.runtime.modes.list().map((mode) => ({ value: mode.id, label: mode.label })),
       this.runtime.controller.settings.modeId,
@@ -284,6 +295,12 @@ export class AppView {
 
     this.listen(this.el.preset, 'change', () => {
       controller.updateSettings({ presetId: this.el.preset.value });
+      this.syncControlsFromSettings();
+      void this.reload(true);
+    });
+
+    this.listen(this.el.rhythm, 'change', () => {
+      controller.updateSettings({ rhythmProfileId: this.el.rhythm.value });
       this.syncControlsFromSettings();
       void this.reload(true);
     });
@@ -807,6 +824,7 @@ export class AppView {
   private syncControlsFromSettings(): void {
     const settings = this.runtime.controller.settings;
     this.el.preset.value = settings.presetId;
+    this.el.rhythm.value = settings.rhythmProfileId;
     this.el.mode.value = settings.modeId;
     this.el.key.value = keyValue(settings.key);
     this.el.timeSignature.value = settings.timeSignature.toString();
@@ -826,6 +844,9 @@ export class AppView {
     this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.presetDescription.textContent = this.runtime.presets.get(settings.presetId).description;
+    this.el.rhythmDescription.textContent = this.runtime.rhythms.get(
+      settings.rhythmProfileId,
+    ).description;
 
     const audio = this.runtime.settings.currentAudio;
     this.el.metronomeVolume.value = String(Math.round(audio.metronomeVolume * 100));

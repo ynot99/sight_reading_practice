@@ -7,6 +7,9 @@ import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import type { PracticeSession } from '../../src/application/session/PracticeSession.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
+import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
+import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
+
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import type { PerformanceReport } from '../../src/domain/scoring/PerformanceReport.js';
 import type { SessionScore } from '../../src/domain/scoring/IScoringStrategy.js';
@@ -37,6 +40,7 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
 
   const controller = new PracticeController({
     presets: new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS),
+    rhythms: new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES),
     modes: new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]),
     serializer: new MusicXmlSerializer(),
     renderer,
@@ -51,6 +55,9 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
     initialSettings: {
       presetId: 'melody-and-intervals',
       measures: 4,
+      // A quarter note is exactly 1000 ms here, so the timing assertions below
+      // can compare exact numbers instead of chasing floating-point dust.
+      tempoBpm: 60,
       countInBeats: 0,
       metronomeMuted: true,
       matchToleranceMs: Number.POSITIVE_INFINITY,

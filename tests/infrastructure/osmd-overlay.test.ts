@@ -6,9 +6,14 @@ import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer
 import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
 import type { ClefKind } from '../../src/domain/model/Clef.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
+import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
+import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
+
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { twoBarExercise } from '../support/fixtures.js';
 import { createScoreContainer, installCanvasStub, staffLineYs } from '../support/osmdHarness.js';
+
+const RHYTHMS = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
 
 const CLEFS = new Map<number, ClefKind>([
   [1, 'treble'],
@@ -208,6 +213,7 @@ describe('played notes on a page of several systems', () => {
       timeSignature: new TimeSignature(4, 4),
       key: KeySignature.major(0),
       tempoBpm: 60,
+      rhythm: RHYTHMS.get(preset.defaults.rhythmProfileId),
       seed: 7,
     });
     await renderer.load(new MusicXmlSerializer().serialize(exercise));

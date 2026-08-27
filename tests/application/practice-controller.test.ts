@@ -1,10 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PracticeController } from '../../src/application/PracticeController.js';
+import {
+  PracticeController,
+  type PracticeControllerDependencies,
+  type PracticeSettings,
+} from '../../src/application/PracticeController.js';
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
+import type { ExerciseRequest } from '../../src/domain/generation/IExerciseGenerator.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
+import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
+import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
+
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
@@ -13,6 +21,7 @@ import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRen
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
+import { DomainError } from '../../src/shared/errors.js';
 import { twoBarExercise } from '../support/fixtures.js';
 
 /** Strips the printed tempo so two renderings can be compared note for note. */
@@ -30,7 +39,11 @@ function withoutTempoMark(xml: string): string {
  * step is which has to pin it down - otherwise a bar that happens to start
  * with a rest makes the test fail once in a while.
  */
-function createController(fixedExercise = false): {
+function createController(
+  fixedExercise = false,
+  providerFor?: PracticeControllerDependencies['providerFor'],
+  extraSettings: Partial<PracticeSettings> = {},
+): {
   controller: PracticeController;
   renderer: FakeScoreRenderer;
   midi: MockMidiAdapter;
@@ -46,6 +59,7 @@ function createController(fixedExercise = false): {
 
   const controller = new PracticeController({
     presets: new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS),
+    rhythms: new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES),
     modes: new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]),
     serializer: new MusicXmlSerializer(),
     renderer,
@@ -60,10 +74,12 @@ function createController(fixedExercise = false): {
     ...(fixedExercise
       ? { providerFor: () => ({ provide: () => Promise.resolve(twoBarExercise()) }) }
       : {}),
+    ...(providerFor === undefined ? {} : { providerFor }),
     initialSettings: {
       countInBeats: 0,
       metronomeMuted: true,
       matchToleranceMs: Number.POSITIVE_INFINITY,
+      ...extraSettings,
     },
   });
 
@@ -150,6 +166,72 @@ describe('PracticeController', () => {
 
     expect(settings.key.fifths).toBe(-2);
     expect(settings.measures).toBe(7);
+  });
+
+  it('adopts a preset’s rhythm profile with its other defaults', () => {
+    const { controller } = createController();
+    // A different preset from the one the controller opened on, or the
+    // adopt-the-defaults branch never runs.
+    const target = BUILT_IN_PRESETS[2];
+    if (target === undefined || target.id === controller.settings.presetId) {
+      throw new Error('expected several presets');
+    }
+
+    controller.updateSettings({ rhythmProfileId: 'sixteenths' });
+    const settings = controller.updateSettings({ presetId: target.id });
+
+    expect(settings.rhythmProfileId).toBe(target.defaults.rhythmProfileId);
+  });
+
+  it('keeps an explicitly chosen rhythm when the level changes with it', () => {
+    const { controller } = createController();
+    const target = BUILT_IN_PRESETS[3];
+    if (target === undefined) {
+      throw new Error('expected several presets');
+    }
+
+    const settings = controller.updateSettings({
+      presetId: target.id,
+      rhythmProfileId: 'sixteenths',
+    });
+
+    expect(settings.rhythmProfileId).toBe('sixteenths');
+  });
+
+  it('defaults a missing rhythm to the restored level, not to level one', () => {
+    const target = BUILT_IN_PRESETS[5];
+    if (target === undefined) {
+      throw new Error('expected several presets');
+    }
+    // What settings stored before the rhythm axis existed look like: a preset
+    // id and nothing to say which rhythm goes with it.
+    const { controller } = createController(false, undefined, { presetId: target.id });
+
+    expect(controller.settings.presetId).toBe(target.id);
+    expect(controller.settings.rhythmProfileId).toBe(target.defaults.rhythmProfileId);
+    expect(controller.settings.tempoBpm).toBe(target.defaults.tempoBpm);
+  });
+
+  it('hands the chosen rhythm profile to the generator', async () => {
+    const requests: ExerciseRequest[] = [];
+    const { controller } = createController(false, (generator) => ({
+      provide: (request) => {
+        requests.push(request);
+        return Promise.resolve(generator.generate(request));
+      },
+    }));
+
+    controller.updateSettings({ rhythmProfileId: 'sixteenths' });
+    await controller.loadNewExercise();
+
+    expect(requests.at(-1)?.rhythm.id).toBe('sixteenths');
+  });
+
+  it('refuses a rhythm profile nobody registered', () => {
+    const { controller } = createController();
+    controller.updateSettings({ rhythmProfileId: 'no-such-profile' });
+
+    return expect(controller.loadNewExercise()).rejects.toThrow(DomainError);
   });
 
   it('honours requested settings when generating', async () => {

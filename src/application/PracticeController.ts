@@ -1,5 +1,6 @@
 import type { ExercisePresetRegistry } from '../domain/generation/ExercisePresetRegistry.js';
 import type { ExerciseRequest, IExerciseGenerator } from '../domain/generation/IExerciseGenerator.js';
+import type { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.js';
 import type { Exercise } from '../domain/model/Exercise.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
 import type { TimeSignature } from '../domain/model/TimeSignature.js';
@@ -26,6 +27,13 @@ import { PracticeSession } from './session/PracticeSession.js';
 export interface PracticeSettings {
   readonly presetId: string;
   readonly modeId: string;
+  /**
+   * Rhythmic level, chosen independently of the preset.
+   *
+   * Material and rhythm are separate axes: any preset combines with any
+   * profile, so adding sixteenths does not mean duplicating the whole ladder.
+   */
+  readonly rhythmProfileId: string;
   readonly key: KeySignature;
   readonly timeSignature: TimeSignature;
   readonly measures: number;
@@ -64,6 +72,7 @@ export interface ControllerEventMap {
 
 export interface PracticeControllerDependencies {
   readonly presets: ExercisePresetRegistry;
+  readonly rhythms: RhythmProfileRegistry;
   readonly modes: PracticeModeRegistry;
   readonly serializer: IMusicXmlSerializer;
   readonly renderer: IScoreRenderer;
@@ -103,10 +112,19 @@ export class PracticeController {
 
   constructor(dependencies: PracticeControllerDependencies) {
     this.deps = dependencies;
-    const preset = dependencies.presets.first();
+    // Defaults come from the preset that is actually about to be used, not
+    // from the first one registered: restored settings name a preset but may
+    // predate a field, and that field has to default to something coherent
+    // with the level being restored.
+    const restoredPresetId = dependencies.initialSettings?.presetId;
+    const preset =
+      restoredPresetId !== undefined && dependencies.presets.has(restoredPresetId)
+        ? dependencies.presets.get(restoredPresetId)
+        : dependencies.presets.first();
     this.currentSettings = {
       presetId: preset.id,
       modeId: dependencies.modes.first().id,
+      rhythmProfileId: preset.defaults.rhythmProfileId,
       key: preset.defaults.key,
       timeSignature: preset.defaults.timeSignature,
       measures: preset.defaults.measures,
@@ -158,6 +176,7 @@ export class PracticeController {
       const defaults = this.deps.presets.get(changes.presetId).defaults;
       next = {
         ...next,
+        rhythmProfileId: changes.rhythmProfileId ?? defaults.rhythmProfileId,
         key: changes.key ?? defaults.key,
         timeSignature: changes.timeSignature ?? defaults.timeSignature,
         measures: changes.measures ?? defaults.measures,
@@ -229,6 +248,7 @@ export class PracticeController {
       timeSignature: this.currentSettings.timeSignature,
       key: this.currentSettings.key,
       tempoBpm: this.currentSettings.tempoBpm,
+      rhythm: this.deps.rhythms.get(this.currentSettings.rhythmProfileId),
       ...(seed === undefined ? {} : { seed }),
     };
 

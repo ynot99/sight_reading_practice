@@ -25,6 +25,7 @@ export interface RestoredSettings {
 export interface KnownIds {
   readonly presetIds: readonly string[];
   readonly modeIds: readonly string[];
+  readonly rhythmProfileIds: readonly string[];
 }
 
 const STORAGE_VERSION = 1;
@@ -103,6 +104,7 @@ export function decodePracticeSettings(
   return compact<PracticeSettings>({
     presetId: readId(value['presetId'], known.presetIds),
     modeId: readId(value['modeId'], known.modeIds),
+    rhythmProfileId: readId(value['rhythmProfileId'], known.rhythmProfileIds),
     key: readKey(value['key']),
     timeSignature: readTimeSignature(value['timeSignature']),
     measures: readInteger(value['measures'], 1, 32),
@@ -122,6 +124,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
   return {
     presetId: settings.presetId,
     modeId: settings.modeId,
+    rhythmProfileId: settings.rhythmProfileId,
     key: { fifths: settings.key.fifths, mode: settings.key.mode },
     timeSignature: settings.timeSignature.toString(),
     measures: settings.measures,

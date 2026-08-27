@@ -1,6 +1,7 @@
 import type { Exercise } from '../model/Exercise.js';
 import type { KeySignature } from '../model/KeySignature.js';
 import type { TimeSignature } from '../model/TimeSignature.js';
+import type { RhythmProfile } from './RhythmProfile.js';
 
 /** Everything the user (or the UI) gets to choose about an exercise. */
 export interface ExerciseRequest {
@@ -8,6 +9,8 @@ export interface ExerciseRequest {
   readonly timeSignature: TimeSignature;
   readonly key: KeySignature;
   readonly tempoBpm: number;
+  /** Rhythmic level, chosen independently of the material. */
+  readonly rhythm: RhythmProfile;
   /** Omit for a fresh exercise; supply to reproduce a previous one exactly. */
   readonly seed?: number;
 }

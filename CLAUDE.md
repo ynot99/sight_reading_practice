@@ -46,7 +46,10 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
 ## Testing
 
 - Every rule in `domain/` and `application/` gets a test. New practice modes,
-  voice generators and scoring strategies need one each.
+  voice generators, rhythm profiles and scoring strategies need one each.
+- `tests/fixtures/preset-digest.txt` pins what every built-in preset generates.
+  Refactoring the generation layer must leave it byte-identical; a deliberate
+  change to the ladder means regenerating it and reading the diff.
 - The whole practice loop runs headless via `ManualClock`, `ManualMetronome`
   and `MockMidiAdapter` — no `setTimeout`, no sleeping, no hardware. Keep it
   that way; a test asserts it.

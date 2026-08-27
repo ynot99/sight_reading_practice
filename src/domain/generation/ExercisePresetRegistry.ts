@@ -6,6 +6,8 @@ import type { IExerciseGenerator } from './IExerciseGenerator.js';
 /** Sensible starting values the UI pre-fills when a preset is chosen. */
 export interface PresetDefaults {
   readonly measures: number;
+  /** Rhythmic level this preset was tuned for. */
+  readonly rhythmProfileId: string;
   readonly timeSignature: TimeSignature;
   readonly key: KeySignature;
   readonly tempoBpm: number;

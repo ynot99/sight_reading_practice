@@ -2,6 +2,7 @@ import type { Measure } from '../../model/Exercise.js';
 import type { KeySignature } from '../../model/KeySignature.js';
 import type { Pitch } from '../../model/Pitch.js';
 import type { TimeSignature } from '../../model/TimeSignature.js';
+import type { RhythmProfile } from '../RhythmProfile.js';
 import type { Rng } from '../Rng.js';
 
 /** Inclusive playable span for one hand. */
@@ -16,6 +17,12 @@ export interface VoiceContext {
   readonly key: KeySignature;
   readonly timeSignature: TimeSignature;
   readonly measures: number;
+  /**
+   * Rhythmic level for this exercise. A voice looks up its own role here
+   * rather than owning a rhythm, which is what lets any preset be combined
+   * with any rhythm.
+   */
+  readonly rhythm: RhythmProfile;
 }
 
 /**

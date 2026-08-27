@@ -1,10 +1,8 @@
-import { Duration } from '../model/Duration.js';
 import { KeySignature } from '../model/KeySignature.js';
 import { Pitch } from '../model/Pitch.js';
 import { TimeSignature } from '../model/TimeSignature.js';
 import type { ExercisePreset } from './ExercisePresetRegistry.js';
 import { GrandStaffExerciseGenerator } from './GrandStaffExerciseGenerator.js';
-import type { RhythmOptions } from './RhythmFiller.js';
 import { HarmonyVoiceGenerator } from './voices/HarmonyVoiceGenerator.js';
 import { MelodyVoiceGenerator } from './voices/MelodyVoiceGenerator.js';
 import { SilentVoiceGenerator } from './voices/SilentVoiceGenerator.js';
@@ -14,59 +12,22 @@ function range(lowest: string, highest: string): PitchRange {
   return { lowest: Pitch.parse(lowest), highest: Pitch.parse(highest) };
 }
 
-/** Quarters and halves only: the first thing a reader can hold together. */
-const CALM_RHYTHM: RhythmOptions = {
-  durations: [
-    { value: Duration.QUARTER, weight: 5 },
-    { value: Duration.HALF, weight: 3 },
-    { value: Duration.WHOLE, weight: 1 },
-  ],
-  restProbability: 0.08,
-  keepInsideBeats: true,
-};
-
-/** Adds eighth-note motion. */
-const FLOWING_RHYTHM: RhythmOptions = {
-  durations: [
-    { value: Duration.QUARTER, weight: 5 },
-    { value: Duration.EIGHTH, weight: 4 },
-    { value: Duration.HALF, weight: 2 },
-  ],
-  restProbability: 0.06,
-  keepInsideBeats: true,
-};
-
-/** Long accompaniment values that leave the reading effort to the other hand. */
-const SUSTAINED_RHYTHM: RhythmOptions = {
-  durations: [
-    { value: Duration.WHOLE, weight: 3 },
-    { value: Duration.HALF, weight: 2 },
-  ],
-  restProbability: 0,
-  keepInsideBeats: true,
-};
-
-const HALF_NOTE_RHYTHM: RhythmOptions = {
-  durations: [
-    { value: Duration.HALF, weight: 3 },
-    { value: Duration.WHOLE, weight: 2 },
-    { value: Duration.QUARTER, weight: 1 },
-  ],
-  restProbability: 0.05,
-  keepInsideBeats: true,
-};
-
 /**
  * The built-in difficulty ladder.
  *
  * Each entry is data, not code: adding a level means adding an object here (or
  * registering one from anywhere else) rather than editing a switch statement.
+ *
+ * Presets describe *material* only - which pitches, how far they leap, how
+ * many notes at once. Rhythm is the other axis and lives in
+ * {@link ../rhythmProfiles.js}; `defaults.rhythmProfileId` merely says which
+ * rhythmic level a preset was tuned for.
  */
 export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   {
     id: 'five-finger-c',
     label: '1 · Five-finger position',
-    description: 'Both hands inside a five-finger position, quarter and half notes.',
+    description: 'Both hands inside a five-finger position, one note at a time.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.five-finger',
       label: 'Five-finger grand staff',
@@ -75,7 +36,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
           clef: 'treble',
           voice: new MelodyVoiceGenerator({
             range: range('C4', 'G4'),
-            rhythm: CALM_RHYTHM,
+            role: 'lead',
             maxLeap: 2,
             stepProbability: 0.75,
           }),
@@ -84,7 +45,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
           clef: 'bass',
           voice: new MelodyVoiceGenerator({
             range: range('C3', 'G3'),
-            rhythm: SUSTAINED_RHYTHM,
+            role: 'accompaniment',
             maxLeap: 2,
             stepProbability: 0.7,
           }),
@@ -93,6 +54,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
     }),
     defaults: {
       measures: 4,
+      rhythmProfileId: 'calm',
       timeSignature: new TimeSignature(4, 4),
       key: KeySignature.major(0),
       tempoBpm: 60,
@@ -110,7 +72,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
           clef: 'treble',
           voice: new MelodyVoiceGenerator({
             range: range('C4', 'C5'),
-            rhythm: FLOWING_RHYTHM,
+            role: 'lead',
             maxLeap: 3,
             stepProbability: 0.7,
           }),
@@ -120,6 +82,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
     }),
     defaults: {
       measures: 4,
+      rhythmProfileId: 'flowing',
       timeSignature: new TimeSignature(4, 4),
       key: KeySignature.major(0),
       tempoBpm: 72,
@@ -138,7 +101,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
           clef: 'bass',
           voice: new MelodyVoiceGenerator({
             range: range('F2', 'C4'),
-            rhythm: CALM_RHYTHM,
+            role: 'lead',
             maxLeap: 3,
             stepProbability: 0.7,
           }),
@@ -147,6 +110,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
     }),
     defaults: {
       measures: 4,
+      rhythmProfileId: 'calm',
       timeSignature: new TimeSignature(4, 4),
       key: KeySignature.major(0),
       tempoBpm: 66,
@@ -164,7 +128,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
           clef: 'treble',
           voice: new MelodyVoiceGenerator({
             range: range('B3', 'E5'),
-            rhythm: FLOWING_RHYTHM,
+            role: 'lead',
             maxLeap: 4,
             stepProbability: 0.65,
           }),
@@ -173,7 +137,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
           clef: 'bass',
           voice: new HarmonyVoiceGenerator({
             range: range('F2', 'D4'),
-            rhythm: HALF_NOTE_RHYTHM,
+            role: 'accompaniment',
             shape: 'interval',
             intervalDegrees: [2, 4, 5],
             degreePool: [0, 3, 4, 5],
@@ -184,6 +148,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
     }),
     defaults: {
       measures: 4,
+      rhythmProfileId: 'flowing',
       timeSignature: new TimeSignature(4, 4),
       key: KeySignature.major(1),
       tempoBpm: 72,
@@ -201,7 +166,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
           clef: 'treble',
           voice: new MelodyVoiceGenerator({
             range: range('C4', 'G5'),
-            rhythm: FLOWING_RHYTHM,
+            role: 'lead',
             maxLeap: 4,
             stepProbability: 0.6,
           }),
@@ -210,7 +175,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
           clef: 'bass',
           voice: new HarmonyVoiceGenerator({
             range: range('F2', 'C4'),
-            rhythm: HALF_NOTE_RHYTHM,
+            role: 'accompaniment',
             shape: 'triad',
             intervalDegrees: [2, 4],
             degreePool: [0, 3, 4],
@@ -221,6 +186,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
     }),
     defaults: {
       measures: 4,
+      rhythmProfileId: 'flowing',
       timeSignature: new TimeSignature(4, 4),
       key: KeySignature.major(0),
       tempoBpm: 66,
@@ -229,7 +195,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   {
     id: 'wide-grand-staff',
     label: '6 · Full grand staff',
-    description: 'Wider ranges, larger leaps and eighth-note motion in both hands.',
+    description: 'Wider ranges and larger leaps, with both hands reading at once.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.wide',
       label: 'Wide grand staff',
@@ -238,7 +204,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
           clef: 'treble',
           voice: new MelodyVoiceGenerator({
             range: range('G3', 'A5'),
-            rhythm: FLOWING_RHYTHM,
+            role: 'lead',
             maxLeap: 5,
             stepProbability: 0.55,
           }),
@@ -247,7 +213,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
           clef: 'bass',
           voice: new MelodyVoiceGenerator({
             range: range('E2', 'D4'),
-            rhythm: CALM_RHYTHM,
+            role: 'inner',
             maxLeap: 5,
             stepProbability: 0.55,
           }),
@@ -256,6 +222,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
     }),
     defaults: {
       measures: 8,
+      rhythmProfileId: 'flowing',
       timeSignature: new TimeSignature(4, 4),
       key: KeySignature.major(-1),
       tempoBpm: 76,

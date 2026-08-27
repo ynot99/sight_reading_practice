@@ -16,11 +16,13 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 const KNOWN: KnownIds = {
   presetIds: ['five-finger-c', 'triads-left-hand'],
   modeIds: ['mode.wait', 'mode.flow'],
+  rhythmProfileIds: ['calm', 'flowing', 'sixteenths'],
 };
 
 const SETTINGS: PracticeSettings = {
   presetId: 'triads-left-hand',
   modeId: 'mode.flow',
+  rhythmProfileId: 'sixteenths',
   key: KeySignature.major(-2),
   timeSignature: new TimeSignature(3, 4),
   measures: 6,

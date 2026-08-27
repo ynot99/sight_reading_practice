@@ -2,14 +2,16 @@ import { clamp } from '../../../shared/asserts.js';
 import type { Measure, MusicalEntry } from '../../model/Exercise.js';
 import { measureOf, noteEntry, restEntry } from '../../model/Exercise.js';
 import type { Pitch } from '../../model/Pitch.js';
-import { fillMeasure, type RhythmOptions } from '../RhythmFiller.js';
+import { fillMeasure } from '../RhythmFiller.js';
+import type { VoiceRole } from '../RhythmProfile.js';
 import type { IVoiceGenerator, PitchRange, VoiceContext } from './IVoiceGenerator.js';
 
 export type HarmonyShape = 'single' | 'interval' | 'triad';
 
 export interface HarmonyVoiceOptions {
   readonly range: PitchRange;
-  readonly rhythm: RhythmOptions;
+  /** Which rhythm of the active profile this line follows. */
+  readonly role: VoiceRole;
   readonly shape: HarmonyShape;
   /** Scale degrees above the root used by the `interval` shape (2 = a third). */
   readonly intervalDegrees: readonly number[];
@@ -45,7 +47,7 @@ export class HarmonyVoiceGenerator implements IVoiceGenerator {
       const entries: MusicalEntry[] = [];
       let measureRoot: number | null = null;
 
-      for (const slot of fillMeasure(context.timeSignature, context.rng, this.options.rhythm)) {
+      for (const slot of fillMeasure(context.timeSignature, context.rng, context.rhythm.byRole[this.options.role])) {
         if (slot.isRest) {
           entries.push(restEntry(slot.duration));
           continue;

@@ -4,6 +4,8 @@ import { GrandStaffExerciseGenerator } from '../../src/domain/generation/GrandSt
 import type { ExerciseRequest } from '../../src/domain/generation/IExerciseGenerator.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
 import { fillMeasure, splitIntoRests, type RhythmOptions } from '../../src/domain/generation/RhythmFiller.js';
+import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
+import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
 import { createRng } from '../../src/domain/generation/Rng.js';
 import { HarmonyVoiceGenerator } from '../../src/domain/generation/voices/HarmonyVoiceGenerator.js';
 import { MelodyVoiceGenerator } from '../../src/domain/generation/voices/MelodyVoiceGenerator.js';
@@ -15,8 +17,10 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { DomainError } from '../../src/shared/errors.js';
+import { steadyProfile } from '../support/rhythm.js';
 
 const COMMON = new TimeSignature(4, 4);
+const RHYTHMS = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
 
 function noteEntriesOf(exercise: Exercise, staffIndex: number): NoteEntry[] {
   const staff = exercise.staves[staffIndex];
@@ -150,16 +154,13 @@ describe('voice generators', () => {
     key: KeySignature.major(0),
     timeSignature: COMMON,
     measures: 4,
+    rhythm: steadyProfile(Duration.QUARTER),
   };
 
   it('keeps a melody inside its range and in key', () => {
     const generator = new MelodyVoiceGenerator({
       range: { lowest: Pitch.parse('C4'), highest: Pitch.parse('C5') },
-      rhythm: {
-        durations: [{ value: Duration.QUARTER, weight: 1 }],
-        restProbability: 0,
-        keepInsideBeats: true,
-      },
+      role: 'lead',
       maxLeap: 3,
       stepProbability: 0.7,
     });
@@ -185,11 +186,7 @@ describe('voice generators', () => {
   it('spells a melody for the key signature', () => {
     const generator = new MelodyVoiceGenerator({
       range: { lowest: Pitch.parse('C4'), highest: Pitch.parse('C5') },
-      rhythm: {
-        durations: [{ value: Duration.QUARTER, weight: 1 }],
-        restProbability: 0,
-        keepInsideBeats: true,
-      },
+      role: 'lead',
       maxLeap: 6,
       stepProbability: 0.2,
     });
@@ -199,6 +196,7 @@ describe('voice generators', () => {
       key: KeySignature.major(2),
       timeSignature: COMMON,
       measures: 8,
+      rhythm: steadyProfile(Duration.QUARTER),
     });
     const pitches = measures.flatMap((measure) =>
       measure.entries.flatMap((entry) => (entry.kind === 'note' ? [...entry.pitches] : [])),
@@ -214,11 +212,7 @@ describe('voice generators', () => {
   it('respects the maximum leap', () => {
     const generator = new MelodyVoiceGenerator({
       range: { lowest: Pitch.parse('C3'), highest: Pitch.parse('C6') },
-      rhythm: {
-        durations: [{ value: Duration.QUARTER, weight: 1 }],
-        restProbability: 0,
-        keepInsideBeats: true,
-      },
+      role: 'lead',
       maxLeap: 2,
       stepProbability: 0.5,
     });
@@ -238,18 +232,19 @@ describe('voice generators', () => {
   it('builds triads that stay inside the hand', () => {
     const generator = new HarmonyVoiceGenerator({
       range: { lowest: Pitch.parse('F2'), highest: Pitch.parse('C4') },
-      rhythm: {
-        durations: [{ value: Duration.WHOLE, weight: 1 }],
-        restProbability: 0,
-        keepInsideBeats: true,
-      },
+      role: 'lead',
       shape: 'triad',
       intervalDegrees: [2, 4],
       degreePool: [0, 3, 4],
       harmonyPerMeasure: true,
     });
 
-    const measures = generator.generate({ ...context, rng: createRng(8), measures: 6 });
+    const measures = generator.generate({
+      ...context,
+      rng: createRng(8),
+      measures: 6,
+      rhythm: steadyProfile(Duration.WHOLE),
+    });
     for (const measure of measures) {
       for (const entry of measure.entries) {
         if (entry.kind !== 'note') {
@@ -268,18 +263,19 @@ describe('voice generators', () => {
   it('writes intervals from the configured set', () => {
     const generator = new HarmonyVoiceGenerator({
       range: { lowest: Pitch.parse('C3'), highest: Pitch.parse('C5') },
-      rhythm: {
-        durations: [{ value: Duration.HALF, weight: 1 }],
-        restProbability: 0,
-        keepInsideBeats: true,
-      },
+      role: 'lead',
       shape: 'interval',
       intervalDegrees: [2, 4],
       degreePool: [0, 4],
       harmonyPerMeasure: false,
     });
 
-    const measures = generator.generate({ ...context, rng: createRng(17), measures: 6 });
+    const measures = generator.generate({
+      ...context,
+      rng: createRng(17),
+      measures: 6,
+      rhythm: steadyProfile(Duration.HALF),
+    });
     for (const measure of measures) {
       for (const entry of measure.entries) {
         if (entry.kind !== 'note' || entry.pitches.length < 2) {
@@ -313,11 +309,7 @@ describe('GrandStaffExerciseGenerator', () => {
         clef: 'treble',
         voice: new MelodyVoiceGenerator({
           range: { lowest: Pitch.parse('C4'), highest: Pitch.parse('G4') },
-          rhythm: {
-            durations: [{ value: Duration.QUARTER, weight: 1 }],
-            restProbability: 0,
-            keepInsideBeats: true,
-          },
+          role: 'lead',
           maxLeap: 2,
           stepProbability: 0.8,
         }),
@@ -331,6 +323,7 @@ describe('GrandStaffExerciseGenerator', () => {
     timeSignature: COMMON,
     key: KeySignature.major(0),
     tempoBpm: 72,
+    rhythm: steadyProfile(Duration.QUARTER),
     seed: 2024,
   };
 
@@ -379,6 +372,7 @@ describe('built-in presets', () => {
         timeSignature: preset.defaults.timeSignature,
         key: preset.defaults.key,
         tempoBpm: preset.defaults.tempoBpm,
+        rhythm: RHYTHMS.get(preset.defaults.rhythmProfileId),
         seed: 4242,
       });
       expect(() => validateExercise(exercise)).not.toThrow();
@@ -396,9 +390,33 @@ describe('built-in presets', () => {
             timeSignature,
             key: KeySignature.major(fifths),
             tempoBpm: 60,
+            rhythm: RHYTHMS.get(preset.defaults.rhythmProfileId),
             seed: fifths + 100,
           });
           expect(() => validateExercise(exercise)).not.toThrow();
+        }
+      }
+    }
+  });
+
+  // Rhythm is a free axis, so every combination has to be playable - not just
+  // the pairing each preset happens to ship with.
+  it('generate valid material under every rhythm profile', () => {
+    const signatures = [new TimeSignature(4, 4), new TimeSignature(3, 4), new TimeSignature(6, 8)];
+    for (const preset of BUILT_IN_PRESETS) {
+      for (const profile of BUILT_IN_RHYTHM_PROFILES) {
+        for (const timeSignature of signatures) {
+          for (let seed = 0; seed < 8; seed += 1) {
+            const exercise = preset.generator.generate({
+              measures: 3,
+              timeSignature,
+              key: KeySignature.major(0),
+              tempoBpm: 60,
+              rhythm: profile,
+              seed,
+            });
+            expect(() => validateExercise(exercise)).not.toThrow();
+          }
         }
       }
     }

@@ -24,6 +24,8 @@ import {
 } from '../infrastructure/storage/LocalStorageSettingsStore.js';
 import { ExercisePresetRegistry } from '../domain/generation/ExercisePresetRegistry.js';
 import { BUILT_IN_PRESETS } from '../domain/generation/presets.js';
+import { BUILT_IN_RHYTHM_PROFILES } from '../domain/generation/rhythmProfiles.js';
+import { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.js';
 import { MusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import {
   AccuracyScoringStrategy,
@@ -73,6 +75,7 @@ export interface IMidiBridge extends IMidiSource, IMidiConnection {
 export interface AppRuntime {
   readonly controller: PracticeController;
   readonly presets: ExercisePresetRegistry;
+  readonly rhythms: RhythmProfileRegistry;
   readonly modes: PracticeModeRegistry;
   readonly webMidi: IMidiSource & IMidiConnection & IMidiDeviceDirectory;
   /** `null` when the page cannot reach a bridge, e.g. on the public site. */
@@ -137,11 +140,16 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const serializer = new MusicXmlSerializer();
 
   const presets = new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS);
+  const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
 
   const settings = new SettingsRepository(
     options.settingsStore ?? new LocalStorageSettingsStore(browserStorage()),
-    { presetIds: presets.list().map((preset) => preset.id), modeIds: modes.list().map((mode) => mode.id) },
+    {
+      presetIds: presets.list().map((preset) => preset.id),
+      modeIds: modes.list().map((mode) => mode.id),
+      rhythmProfileIds: rhythms.list().map((profile) => profile.id),
+    },
   );
   const restored = settings.load();
   metronome.setVolume(restored.audio.metronomeVolume);
@@ -155,6 +163,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
 
   const controller = new PracticeController({
     presets,
+    rhythms,
     modes,
     serializer,
     renderer,
@@ -177,6 +186,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   return {
     controller,
     presets,
+    rhythms,
     modes,
     webMidi,
     bridge,

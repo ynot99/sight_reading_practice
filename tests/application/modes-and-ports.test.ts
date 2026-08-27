@@ -8,6 +8,8 @@ import { GeneratedExerciseProvider } from '../../src/application/ports/IExercise
 import type { PracticeContext } from '../../src/application/session/PracticeContext.js';
 import { DEFAULT_SESSION_OPTIONS } from '../../src/application/session/PracticeContext.js';
 import { GrandStaffExerciseGenerator } from '../../src/domain/generation/GrandStaffExerciseGenerator.js';
+import { steadyProfile } from '../support/rhythm.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import { SilentVoiceGenerator } from '../../src/domain/generation/voices/SilentVoiceGenerator.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
@@ -99,6 +101,7 @@ describe('GeneratedExerciseProvider', () => {
       timeSignature: new TimeSignature(4, 4),
       key: KeySignature.major(0),
       tempoBpm: 60,
+      rhythm: steadyProfile(Duration.QUARTER),
       seed: 5,
     });
 

@@ -1,12 +1,14 @@
 import { clamp } from '../../../shared/asserts.js';
 import type { Measure, MusicalEntry } from '../../model/Exercise.js';
 import { measureOf, noteEntry, restEntry } from '../../model/Exercise.js';
-import { fillMeasure, type RhythmOptions } from '../RhythmFiller.js';
+import { fillMeasure } from '../RhythmFiller.js';
+import type { VoiceRole } from '../RhythmProfile.js';
 import type { IVoiceGenerator, PitchRange, VoiceContext } from './IVoiceGenerator.js';
 
 export interface MelodyVoiceOptions {
   readonly range: PitchRange;
-  readonly rhythm: RhythmOptions;
+  /** Which rhythm of the active profile this line follows. */
+  readonly role: VoiceRole;
   /** Largest allowed jump, in scale degrees (1 = a second, 2 = a third). */
   readonly maxLeap: number;
   /** Probability that the next note is a neighbouring scale degree. */
@@ -37,7 +39,7 @@ export class MelodyVoiceGenerator implements IVoiceGenerator {
 
     for (let measureIndex = 0; measureIndex < context.measures; measureIndex += 1) {
       const entries: MusicalEntry[] = [];
-      for (const slot of fillMeasure(context.timeSignature, context.rng, this.options.rhythm)) {
+      for (const slot of fillMeasure(context.timeSignature, context.rng, context.rhythm.byRole[this.options.role])) {
         if (slot.isRest) {
           entries.push(restEntry(slot.duration));
           continue;

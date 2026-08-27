@@ -157,7 +157,9 @@ src/
 │   │   ├── RhythmFiller.ts         #   fills a bar exactly, without syncopation
 │   │   ├── Rng.ts                  #   seeded, reproducible randomness
 │   │   ├── ExercisePresetRegistry.ts
-│   │   ├── presets.ts              #   the six built-in levels
+│   │   ├── presets.ts              #   the six built-in levels (material)
+│   │   ├── RhythmProfile.ts        #   voice roles + the profile registry
+│   │   ├── rhythmProfiles.ts       #   the rhythmic levels (calm ➜ sixteenths)
 │   │   └── voices/                 #   IVoiceGenerator strategies
 │   │       ├── MelodyVoiceGenerator.ts
 │   │       ├── HarmonyVoiceGenerator.ts
@@ -320,6 +322,13 @@ cursor — lives in `CursorNavigator` and is fully tested.
 anywhere): a generator plus the settings it was tuned for. It appears in the UI
 automatically.
 
+**A new rhythmic level.** Add a `RhythmProfile` to `rhythmProfiles.ts`. Material
+and rhythm are separate axes — a preset says which pitches and how far they
+leap, a profile says what every `VoiceRole` (`lead`, `inner`, `accompaniment`)
+does rhythmically — so a new profile combines with every existing preset instead
+of multiplying the level list. Short values that are only readable in groups
+carry `repeat` in their pool; the group is all-or-nothing against the beat.
+
 **A new kind of material.** Implement `IVoiceGenerator` — arpeggios, two-voice
 counterpoint, chromatic passing notes — and hand it to
 `GrandStaffExerciseGenerator`. Nothing else changes.
@@ -339,6 +348,7 @@ than from the engraver's internals.
 ## Known limits and next steps
 
 - Rhythms stop at sixteenth notes and one dot; no tuplets, ties or pickup bars.
+  Sixteenths arrive in beamed pairs, never singly.
 - Generated music is deliberately simple — diatonic, no accidentals outside the
   key — though the notation layer already handles accidentals correctly.
 - The side panel still names the notes you owe, so hiding the cursor is not yet

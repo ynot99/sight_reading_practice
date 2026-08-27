@@ -111,6 +111,10 @@ export class AppView {
     tolerance: HTMLInputElement;
     toleranceValue: HTMLOutputElement;
     showCursor: HTMLInputElement;
+    metronomeVolume: HTMLInputElement;
+    metronomeVolumeValue: HTMLOutputElement;
+    instrumentVolume: HTMLInputElement;
+    instrumentVolumeValue: HTMLOutputElement;
     metronomeMuted: HTMLInputElement;
     pitchClass: HTMLInputElement;
     audioFeedback: HTMLInputElement;
@@ -160,6 +164,10 @@ export class AppView {
       tolerance: requireElement(doc, 'tolerance'),
       toleranceValue: requireElement(doc, 'tolerance-value'),
       showCursor: requireElement(doc, 'show-cursor'),
+      metronomeVolume: requireElement(doc, 'metronome-volume'),
+      metronomeVolumeValue: requireElement(doc, 'metronome-volume-value'),
+      instrumentVolume: requireElement(doc, 'instrument-volume'),
+      instrumentVolumeValue: requireElement(doc, 'instrument-volume-value'),
       metronomeMuted: requireElement(doc, 'metronome-muted'),
       pitchClass: requireElement(doc, 'pitch-class'),
       audioFeedback: requireElement(doc, 'audio-feedback'),
@@ -275,6 +283,14 @@ export class AppView {
 
     this.listen(this.el.showCursor, 'change', () => {
       controller.updateSettings({ showCursor: this.el.showCursor.checked });
+    });
+
+    this.listen(this.el.metronomeVolume, 'input', () => {
+      this.applyVolumes(true);
+    });
+
+    this.listen(this.el.instrumentVolume, 'input', () => {
+      this.applyVolumes(true);
     });
 
     this.listen(this.el.metronomeMuted, 'change', () => {
@@ -594,6 +610,31 @@ export class AppView {
     }
   }
 
+  /**
+   * Pushes both sliders into the audio sources.
+   *
+   * Called on restore as well as on change, so the sound always matches what
+   * the sliders show - reading the stored value into the DOM alone would
+   * leave the audio at its construction default.
+   */
+  private applyVolumes(persist: boolean): void {
+    const metronome = Number.parseInt(this.el.metronomeVolume.value, 10) / 100;
+    const instrument = Number.parseInt(this.el.instrumentVolume.value, 10) / 100;
+
+    this.el.metronomeVolumeValue.value = this.el.metronomeVolume.value;
+    this.el.instrumentVolumeValue.value = this.el.instrumentVolume.value;
+
+    this.runtime.metronomeVolume.setVolume(metronome);
+    this.runtime.instrumentVolume.setVolume(instrument);
+
+    if (persist) {
+      this.runtime.settings.saveAudio({
+        metronomeVolume: metronome,
+        instrumentVolume: instrument,
+      });
+    }
+  }
+
   private syncControlsFromSettings(): void {
     const settings = this.runtime.controller.settings;
     this.el.preset.value = settings.presetId;
@@ -612,6 +653,14 @@ export class AppView {
     this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.presetDescription.textContent = this.runtime.presets.get(settings.presetId).description;
+
+    const audio = this.runtime.settings.currentAudio;
+    this.el.metronomeVolume.value = String(Math.round(audio.metronomeVolume * 100));
+    this.el.metronomeVolumeValue.value = this.el.metronomeVolume.value;
+    this.el.instrumentVolume.value = String(Math.round(audio.instrumentVolume * 100));
+    this.el.instrumentVolumeValue.value = this.el.instrumentVolume.value;
+    this.applyVolumes(false);
+
     this.describeMode();
   }
 

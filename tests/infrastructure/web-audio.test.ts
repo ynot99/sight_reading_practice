@@ -148,6 +148,18 @@ describe('WebAudioMetronome', () => {
     expect(downbeat?.type).toBe('square');
   });
 
+  it('scales the click with the volume, and goes silent at zero', () => {
+    metronome.setVolume(0);
+    metronome.start();
+    context.advance(0.06);
+    vi.advanceTimersByTime(20);
+
+    expect(metronome.volume).toBe(0);
+    expect(context.oscillators).toHaveLength(0);
+    // The pulse itself keeps running; only the sound is gone.
+    expect(ticks.length).toBeGreaterThan(0);
+  });
+
   it('keeps the pulse but makes no sound when muted', () => {
     metronome.configure({
       bpm: 60,
@@ -243,6 +255,38 @@ describe('WebAudioPitchPlayer', () => {
     // The oldest voice was released to make room.
     expect(context.oscillators[0]?.stoppedAt).not.toBeNull();
     expect(context.oscillators[2]?.stoppedAt).toBeNull();
+  });
+
+  it('scales note loudness with the volume', () => {
+    const context = new FakeAudioContext();
+    const player = new WebAudioPitchPlayer(contextFactory(context), { gain: 0.4 });
+
+    player.setVolume(0.5);
+    player.play(60, 1);
+
+    // Half the slider is a quarter of the gain: 0.4 * 0.5 * 0.5 = 0.1.
+    const peak = context.gains[0]?.gain.ramps.find((ramp) => ramp.value > 0.001)?.value ?? 0;
+    expect(peak).toBeCloseTo(0.1, 6);
+    expect(player.volume).toBe(0.5);
+  });
+
+  it('plays nothing at all at zero volume', () => {
+    const context = new FakeAudioContext();
+    const player = new WebAudioPitchPlayer(contextFactory(context));
+
+    player.setVolume(0);
+    player.play(60, 1);
+
+    expect(context.oscillators).toHaveLength(0);
+  });
+
+  it('clamps volumes from outside the slider range', () => {
+    const player = new WebAudioPitchPlayer(contextFactory(new FakeAudioContext()));
+
+    player.setVolume(5);
+    expect(player.volume).toBe(1);
+    player.setVolume(-2);
+    expect(player.volume).toBe(0);
   });
 
   it('releases everything on demand and ignores unknown notes', () => {

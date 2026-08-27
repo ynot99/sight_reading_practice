@@ -1,4 +1,5 @@
 import type { IPitchPlayer } from '../../application/ports/IPitchPlayer.js';
+import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 
 export interface WebAudioPitchPlayerOptions {
   readonly gain?: number;
@@ -22,11 +23,12 @@ function frequencyOf(midi: number): number {
  * registered, not a convincing instrument. A sampled implementation can
  * replace it behind {@link IPitchPlayer} whenever that becomes worthwhile.
  */
-export class WebAudioPitchPlayer implements IPitchPlayer {
+export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
   private readonly contextFactory: () => AudioContext;
   private readonly options: Required<WebAudioPitchPlayerOptions>;
   private readonly voices = new Map<number, Voice>();
   private context: AudioContext | null = null;
+  private currentVolume = 1;
 
   constructor(contextFactory: () => AudioContext, options: WebAudioPitchPlayerOptions = {}) {
     this.contextFactory = contextFactory;
@@ -37,7 +39,20 @@ export class WebAudioPitchPlayer implements IPitchPlayer {
     };
   }
 
+  get volume(): number {
+    return this.currentVolume;
+  }
+
+  /** Takes effect from the next note; sounding ones are left alone. */
+  setVolume(volume: number): void {
+    this.currentVolume = Math.min(1, Math.max(0, volume));
+  }
+
   play(midi: number, velocity: number): void {
+    const level = volumeToGain(this.currentVolume, this.options.gain);
+    if (level <= 0) {
+      return;
+    }
     const context = this.ensureContext();
     this.stop(midi);
     if (this.voices.size >= this.options.maxVoices) {
@@ -53,7 +68,7 @@ export class WebAudioPitchPlayer implements IPitchPlayer {
     oscillator.type = 'triangle';
     oscillator.frequency.value = frequencyOf(midi);
 
-    const peak = Math.max(0.02, this.options.gain * Math.max(0.2, velocity));
+    const peak = Math.max(0.001, level * Math.max(0.2, velocity));
     envelope.gain.setValueAtTime(0.0001, now);
     envelope.gain.exponentialRampToValueAtTime(peak, now + 0.012);
     envelope.gain.exponentialRampToValueAtTime(peak * 0.55, now + 0.35);

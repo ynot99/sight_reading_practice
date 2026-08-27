@@ -21,6 +21,9 @@ import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRen
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
+import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
+import { SettingsRepository } from '../../src/application/SettingsRepository.js';
+import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.js';
 import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
 import { AppView } from '../../src/ui/AppView.js';
 
@@ -34,15 +37,31 @@ function mountRealMarkup(): void {
   document.body.innerHTML = body.replace(/<script[\s\S]*?<\/script>/g, '');
 }
 
+/** Records what the sliders asked for. */
+class FakeVolume implements IVolumeControl {
+  volume = 1;
+
+  setVolume(volume: number): void {
+    this.volume = volume;
+  }
+}
+
 interface Rig {
   readonly runtime: AppRuntime;
   readonly view: AppView;
   readonly midi: MockMidiAdapter;
   readonly renderer: FakeScoreRenderer;
   readonly clock: ManualClock;
+  readonly store: InMemorySettingsStore;
+  readonly settings: SettingsRepository;
+  readonly metronomeVolume: FakeVolume;
+  readonly instrumentVolume: FakeVolume;
 }
 
-function createRig(webMidiOverride?: AppRuntime['webMidi']): Rig {
+function createRig(
+  webMidiOverride?: AppRuntime['webMidi'],
+  store: InMemorySettingsStore = new InMemorySettingsStore(),
+): Rig {
   const clock = new ManualClock();
   const midi = new MockMidiAdapter({ clock });
   const metronome = new ManualMetronome(clock);
@@ -51,6 +70,14 @@ function createRig(webMidiOverride?: AppRuntime['webMidi']): Rig {
   const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
   const accuracy = new AccuracyScoringStrategy();
   const timing = new TimingWeightedScoringStrategy();
+
+  const settings = new SettingsRepository(store, {
+    presetIds: presets.list().map((preset) => preset.id),
+    modeIds: modes.list().map((mode) => mode.id),
+  });
+  const restored = settings.load();
+  const metronomeVolume = new FakeVolume();
+  const instrumentVolume = new FakeVolume();
 
   const controller = new PracticeController({
     presets,
@@ -66,7 +93,11 @@ function createRig(webMidiOverride?: AppRuntime['webMidi']): Rig {
       countInBeats: 0,
       metronomeMuted: true,
       matchToleranceMs: Number.POSITIVE_INFINITY,
+      ...restored.practice,
     },
+  });
+  controller.events.on('settingsChanged', ({ settings: current }) => {
+    settings.savePractice(current);
   });
 
   const runtime: AppRuntime = {
@@ -81,10 +112,23 @@ function createRig(webMidiOverride?: AppRuntime['webMidi']): Rig {
     ),
     pitchPlayer: new SilentPitchPlayer(),
     renderer,
+    settings,
+    metronomeVolume,
+    instrumentVolume,
     dispose: () => undefined,
   };
 
-  return { runtime, view: new AppView(runtime, document), midi, renderer, clock };
+  return {
+    runtime,
+    view: new AppView(runtime, document),
+    midi,
+    renderer,
+    clock,
+    store,
+    settings,
+    metronomeVolume,
+    instrumentVolume,
+  };
 }
 
 function element<T extends HTMLElement>(id: string): T {
@@ -222,6 +266,73 @@ describe('AppView', () => {
     toggle.checked = true;
     toggle.dispatchEvent(new Event('change'));
     expect(renderer.cursor.visible).toBe(true);
+  });
+
+  describe('volume and remembered settings', () => {
+    it('sends both sliders to their sound sources', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+
+      const metronome = element<HTMLInputElement>('metronome-volume');
+      metronome.value = '30';
+      metronome.dispatchEvent(new Event('input'));
+
+      const instrument = element<HTMLInputElement>('instrument-volume');
+      instrument.value = '0';
+      instrument.dispatchEvent(new Event('input'));
+
+      expect(rig.metronomeVolume.volume).toBeCloseTo(0.3, 10);
+      expect(rig.instrumentVolume.volume).toBe(0);
+      expect(element<HTMLOutputElement>('metronome-volume-value').value).toBe('30');
+      expect(element<HTMLOutputElement>('instrument-volume-value').value).toBe('0');
+    });
+
+    it('brings the sliders back where they were left', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      const slider = element<HTMLInputElement>('metronome-volume');
+      slider.value = '15';
+      slider.dispatchEvent(new Event('input'));
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      await second.view.initialize();
+
+      expect(element<HTMLInputElement>('metronome-volume').value).toBe('15');
+      expect(second.metronomeVolume.volume).toBeCloseTo(0.15, 10);
+    });
+
+    it('brings the practice settings back too', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+
+      const tempo = element<HTMLInputElement>('tempo');
+      tempo.value = '128';
+      tempo.dispatchEvent(new Event('change'));
+      const cursor = element<HTMLInputElement>('show-cursor');
+      cursor.checked = false;
+      cursor.dispatchEvent(new Event('change'));
+      await Promise.resolve();
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      await second.view.initialize();
+
+      expect(second.runtime.controller.settings.tempoBpm).toBe(128);
+      expect(second.runtime.controller.settings.showCursor).toBe(false);
+      expect(element<HTMLInputElement>('tempo').value).toBe('128');
+      expect(element<HTMLInputElement>('show-cursor').checked).toBe(false);
+    });
+
+    it('starts from the defaults when the device has nothing stored', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+
+      expect(element<HTMLInputElement>('metronome-volume').value).toBe('60');
+      expect(rig.metronomeVolume.volume).toBeCloseTo(0.6, 10);
+    });
   });
 
   it('reports the MIDI connection state', async () => {

@@ -127,6 +127,7 @@ src/
 │
 ├── application/                    # orchestration; depends only on interfaces
 │   ├── PracticeController.ts       # settings ➜ exercise ➜ render ➜ session ➜ cursor
+│   ├── SettingsRepository.ts       # what you chose last time, validated on the way in
 │   ├── ports/                      # IMidiSource, IMetronome, IClock,
 │   │                               # IScoreRenderer, IScoreCursor,
 │   │                               # IExerciseProvider, IPitchPlayer
@@ -147,6 +148,7 @@ src/
 │   ├── audio/                      #   WebAudioMetronome (look-ahead scheduler),
 │   │                               #   WebAudioPitchPlayer, metronomeMath
 │   ├── rendering/                  #   OsmdScoreRenderer, CursorNavigator
+│   ├── storage/                    #   LocalStorageSettingsStore
 │   ├── time/SystemClock.ts
 │   └── testing/                    #   MockMidiAdapter, ManualClock,
 │                                   #   ManualMetronome, FakeScoreRenderer
@@ -229,6 +231,8 @@ is asserted in `tests/application/session-state.test.ts`.
 | `IClock`             | `SystemClock`                                   | `ManualClock`          |
 | `IScoreRenderer` / `IScoreCursor` | `OsmdScoreRenderer` / `CursorNavigator` | `FakeScoreRenderer` |
 | `IExerciseProvider`  | `GeneratedExerciseProvider`                     | any stub               |
+| `ISettingsStore`     | `LocalStorageSettingsStore`                     | `InMemorySettingsStore` |
+| `IVolumeControl`     | `WebAudioMetronome`, `WebAudioPitchPlayer`      | any stub               |
 | `IPitchPlayer`       | `WebAudioPitchPlayer`                           | `SilentPitchPlayer`    |
 | `IScoringStrategy`   | `AccuracyScoringStrategy`, `TimingWeightedScoringStrategy` | any stub    |
 
@@ -238,7 +242,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~300 tests
+npm test           # ~330 tests
 npm run coverage   # ~92% of statements in src/
 ```
 
@@ -296,9 +300,10 @@ than from the engraver's internals.
 - Notes are not coloured on the page when you get them right or wrong; feedback
   lives in the side panel. The side panel also still names the notes you owe,
   so hiding the cursor is not yet a full "read it blind" mode.
-- No progress tracking between sessions yet: reports exist, but nothing stores
-  them. Because every exercise is reproducible from its seed, "practise that
-  one again" is a small feature away.
+- No progress tracking between sessions yet: settings are remembered on the
+  device, but performance reports are not stored. Because every exercise is
+  reproducible from its seed, "practise that one again" is a small feature
+  away.
 
 ## Licence
 

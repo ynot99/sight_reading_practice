@@ -1,5 +1,6 @@
 import { TimeSignature } from '../../domain/model/TimeSignature.js';
 import type { IMetronome, MetronomeConfig, MetronomeTick } from '../../application/ports/IMetronome.js';
+import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
 import { buildMetronomeTick, subdivisionSeconds } from './metronomeMath.js';
 
@@ -34,7 +35,7 @@ const DEFAULT_CONFIG: MetronomeConfig = {
  * its due moment. Each tick also carries the exact time it represents, which
  * lets Flow mode grade timing without inheriting any scheduler jitter.
  */
-export class WebAudioMetronome implements IMetronome {
+export class WebAudioMetronome implements IMetronome, IVolumeControl {
   private readonly emitter = new TypedEventEmitter<{ tick: MetronomeTick }>();
   private readonly contextFactory: () => AudioContext;
   private readonly options: Required<WebAudioMetronomeOptions>;
@@ -46,6 +47,7 @@ export class WebAudioMetronome implements IMetronome {
   private nextTickIndex = 0;
   private nextTickAudioTime = 0;
   private audioEpochMs = 0;
+  private currentVolume = 1;
 
   constructor(contextFactory: () => AudioContext, options: WebAudioMetronomeOptions = {}) {
     this.contextFactory = contextFactory;
@@ -61,6 +63,15 @@ export class WebAudioMetronome implements IMetronome {
 
   get isRunning(): boolean {
     return this.timer !== null;
+  }
+
+  get volume(): number {
+    return this.currentVolume;
+  }
+
+  /** Takes effect from the next click; already-scheduled ones keep their level. */
+  setVolume(volume: number): void {
+    this.currentVolume = Math.min(1, Math.max(0, volume));
   }
 
   configure(config: MetronomeConfig): void {
@@ -137,6 +148,10 @@ export class WebAudioMetronome implements IMetronome {
     if (!tick.isBeat && this.options.subdivisionFrequency <= 0) {
       return;
     }
+    const level = volumeToGain(this.currentVolume, this.options.gain);
+    if (level <= 0) {
+      return;
+    }
     const oscillator = context.createOscillator();
     const envelope = context.createGain();
 
@@ -147,7 +162,7 @@ export class WebAudioMetronome implements IMetronome {
         : this.options.subdivisionFrequency;
     oscillator.type = 'square';
 
-    const peak = tick.isBeat ? this.options.gain : this.options.gain * 0.35;
+    const peak = tick.isBeat ? level : level * 0.35;
     envelope.gain.setValueAtTime(0.0001, at);
     envelope.gain.exponentialRampToValueAtTime(peak, at + 0.002);
     envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.05);

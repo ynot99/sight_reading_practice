@@ -90,6 +90,20 @@
           <input id="tolerance" type="range" min="40" max="800" step="10" value="250" />
         </div>
 
+        <div class="control-group">
+          <label for="metronome-volume">
+            Metronome: <output id="metronome-volume-value">60</output>%
+          </label>
+          <input id="metronome-volume" type="range" min="0" max="100" step="5" value="60" />
+        </div>
+
+        <div class="control-group">
+          <label for="instrument-volume">
+            Note sound: <output id="instrument-volume-value">60</output>%
+          </label>
+          <input id="instrument-volume" type="range" min="0" max="100" step="5" value="60" />
+        </div>
+
         <div class="control-group control-group--checks">
           <label><input id="show-cursor" type="checkbox" checked /> Show cursor</label>
           <label><input id="metronome-muted" type="checkbox" /> Mute metronome</label>

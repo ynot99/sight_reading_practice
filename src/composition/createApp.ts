@@ -11,6 +11,13 @@ import type {
   IMidiSource,
 } from '../application/ports/IMidiSource.js';
 import type { IScoreRenderer } from '../application/ports/IScoreRenderer.js';
+import type { IVolumeControl } from '../application/ports/IVolumeControl.js';
+import type { ISettingsStore } from '../application/ports/ISettingsStore.js';
+import { SettingsRepository } from '../application/SettingsRepository.js';
+import {
+  LocalStorageSettingsStore,
+  browserStorage,
+} from '../infrastructure/storage/LocalStorageSettingsStore.js';
 import { ExercisePresetRegistry } from '../domain/generation/ExercisePresetRegistry.js';
 import { BUILT_IN_PRESETS } from '../domain/generation/presets.js';
 import { MusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
@@ -37,6 +44,8 @@ export interface AppRuntimeOptions {
   readonly keyboardTarget: KeyboardTarget;
   /** Where the page was loaded from; decides whether to look for a bridge. */
   readonly location: LocationLike;
+  /** Defaults to this device's browser storage. */
+  readonly settingsStore?: ISettingsStore;
 }
 
 /**
@@ -64,6 +73,9 @@ export interface AppRuntime {
   readonly computerKeyboard: IMidiSource & IToggleableInput;
   readonly pitchPlayer: IPitchPlayer;
   readonly renderer: IScoreRenderer;
+  readonly settings: SettingsRepository;
+  readonly metronomeVolume: IVolumeControl;
+  readonly instrumentVolume: IVolumeControl;
   dispose(): void;
 }
 
@@ -110,6 +122,14 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const presets = new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS);
   const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
 
+  const settings = new SettingsRepository(
+    options.settingsStore ?? new LocalStorageSettingsStore(browserStorage()),
+    { presetIds: presets.list().map((preset) => preset.id), modeIds: modes.list().map((mode) => mode.id) },
+  );
+  const restored = settings.load();
+  metronome.setVolume(restored.audio.metronomeVolume);
+  pitchPlayer.setVolume(restored.audio.instrumentVolume);
+
   const accuracyScoring = new AccuracyScoringStrategy();
   const timingScoring = new TimingWeightedScoringStrategy();
   const scoringFor = (modeId: string): IScoringStrategy =>
@@ -125,6 +145,12 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     metronome,
     clock,
     scoringFor,
+    initialSettings: restored.practice,
+  });
+
+  // Whatever the reader changes is what they will find next time.
+  controller.events.on('settingsChanged', ({ settings: current }) => {
+    settings.savePractice(current);
   });
 
   return {
@@ -136,6 +162,9 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     computerKeyboard,
     pitchPlayer,
     renderer,
+    settings,
+    metronomeVolume: metronome,
+    instrumentVolume: pitchPlayer,
     dispose(): void {
       controller.dispose();
       computerKeyboard.disable();

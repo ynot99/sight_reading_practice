@@ -242,7 +242,9 @@ report a verdict and finish a step but cannot touch the state machine.
 
 Flow mode grades timing against the **scheduled** onset derived from the tempo,
 never against the moment a tick callback happened to run, so audio-scheduler
-jitter never reaches your score.
+jitter never reaches your score. A press landing just before a beat is held
+back and judged against the note it was reaching for, rather than counted as a
+wrong note added to the one going out.
 
 ### Session lifecycle
 
@@ -280,7 +282,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~440 tests
+npm test           # ~450 tests
 npm run coverage   # ~92% of statements in src/
 ```
 

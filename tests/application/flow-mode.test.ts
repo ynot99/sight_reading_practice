@@ -181,6 +181,117 @@ describe('Flow mode', () => {
     expect(last?.result.wrong).toEqual([MIDI.C4]);
   });
 
+  describe('a press that arrives just before the beat', () => {
+    it('counts for the note it was reaching for, not against the one going out', () => {
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      // Step 0 is due at 2000 and step 1 at 3000.
+      harness.metronome.advanceSubdivisions(3);
+
+      harness.clock.set(2_950);
+      harness.midi.noteOn(MIDI.D4);
+      // Nothing is judged yet: the step it belongs to has not opened.
+      expect(harness.of('noteJudged')).toHaveLength(0);
+
+      harness.metronome.advanceSubdivisions(1);
+
+      const [judged] = harness.of('noteJudged');
+      expect(judged?.verdict).toBe('correct');
+      expect(judged?.stepIndex).toBe(1);
+      // Fifty milliseconds early, and recorded as such.
+      expect(judged?.deviationMs).toBe(-50);
+    });
+
+    it('leaves the step it was aimed at looking clean', () => {
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      harness.metronome.advanceSubdivisions(3);
+      harness.clock.set(2_950);
+      harness.midi.noteOn(MIDI.D4);
+      // Far enough for both steps to have run their course.
+      harness.metronome.advanceSubdivisions(8);
+
+      const results = harness.of('stepCompleted').map((event) => event.result);
+      // The bar it was played against keeps no wrong note...
+      expect(results[0]?.wrong).toEqual([]);
+      // ...and the bar it was meant for counts it.
+      expect(results[1]?.status).toBe('correct');
+      expect(results[1]?.played).toEqual([MIDI.D4]);
+    });
+
+    it('still belongs where it fell when it is nowhere near the beat', () => {
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      harness.metronome.advanceSubdivisions(2);
+
+      // Three hundred milliseconds early is not a mis-timed beat, it is a
+      // different note.
+      harness.clock.set(2_700);
+      harness.midi.noteOn(MIDI.D4);
+
+      const [judged] = harness.of('noteJudged');
+      expect(judged?.verdict).toBe('wrong');
+      expect(judged?.stepIndex).toBe(0);
+    });
+
+    it('never steals a chord note the current step is still waiting for', () => {
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      harness.midi.noteOn(MIDI.C4);
+      harness.metronome.advanceSubdivisions(3);
+
+      // C3 completes the chord of step 0, late but unmistakably its own.
+      harness.clock.set(2_950);
+      harness.midi.noteOn(MIDI.C3);
+
+      const judged = harness.of('noteJudged');
+      expect(judged.at(-1)?.verdict).toBe('correct');
+      expect(judged.at(-1)?.stepIndex).toBe(0);
+      expect(judged.at(-1)?.deviationMs).toBe(950);
+    });
+
+    it('shrinks the window with the tempo, rather than swallowing a step', () => {
+      const harness = createHarness({
+        // A quarter note lasts 200 ms here, so half a step is 100 ms.
+        exercise: twoBarExercise({ tempoBpm: 300 }),
+        mode: new FlowMode(),
+        options: {
+          countInBeats: COUNT_IN_BEATS,
+          metronomeMuted: true,
+          subdivisionsPerBeat: 4,
+          matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+        },
+      });
+      startAndCountIn(harness);
+      // Step 0 is due at 400 here, and step 1 at 600.
+      harness.metronome.advanceSubdivisions(1);
+
+      // 119 ms early: inside the fixed window, but past half a step, which is
+      // all the room there is at this tempo.
+      harness.clock.set(481);
+      harness.midi.noteOn(MIDI.D4);
+
+      const [judged] = harness.of('noteJudged');
+      expect(judged?.stepIndex).toBe(0);
+      expect(judged?.verdict).toBe('wrong');
+    });
+
+    it('forgets anything held back when the run ends', () => {
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      harness.metronome.advanceSubdivisions(3);
+      harness.clock.set(2_950);
+      harness.midi.noteOn(MIDI.D4);
+
+      harness.session.abort();
+      harness.session.start();
+      harness.metronome.advanceSubdivisions(TICKS_TO_START);
+
+      // The press belonged to a run that is over.
+      expect(harness.of('noteJudged')).toHaveLength(0);
+    });
+  });
+
   it('publishes the pulse to interested listeners only while running', () => {
     const harness = flowHarness();
     harness.session.start();

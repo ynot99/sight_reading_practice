@@ -13,6 +13,14 @@ export interface SessionOptions {
   readonly subdivisionsPerBeat: number;
   /** Run the pulse without sounding it. */
   readonly metronomeMuted: boolean;
+  /**
+   * How far before a beat a press still counts as aimed at it.
+   *
+   * Nobody lands exactly on the beat, and a press a few milliseconds early is
+   * a well-timed attempt at the note coming up - not a wrong note added to the
+   * one going out. Beyond this it is treated as belonging where it fell.
+   */
+  readonly earlyWindowMs: number;
 }
 
 export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
@@ -20,6 +28,7 @@ export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   countInBeats: 4,
   subdivisionsPerBeat: 4,
   metronomeMuted: false,
+  earlyWindowMs: 120,
 };
 
 /**

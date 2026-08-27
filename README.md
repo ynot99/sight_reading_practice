@@ -83,6 +83,10 @@ It prints an address to open on the tablet. The keyboard's notes are relayed
 over the local network, and the iPad becomes a screen on the music stand. See
 [tools/midi-bridge](tools/midi-bridge/README.md) for the details.
 
+The space bar starts, pauses and resumes, so a run can be driven without
+reaching for the mouse. It steps aside whenever a control has focus, since
+that is how buttons and checkboxes are worked.
+
 **Fullscreen** hides everything but the score and leaves a pill of controls at
 the bottom of the screen - start or pause, stop, next exercise, and the way
 out. It asks for real fullscreen where the browser allows it, but the layout
@@ -276,7 +280,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~430 tests
+npm test           # ~440 tests
 npm run coverage   # ~92% of statements in src/
 ```
 

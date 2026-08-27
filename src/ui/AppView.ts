@@ -23,6 +23,21 @@ const SAMPLE_LOADING_HINTS: Readonly<Record<SampleLoading, string>> = {
   off: 'A plain synthesised tone, and no download at all.',
 };
 
+/** Anything the space bar already means something to. */
+function isFormControl(element: Element | null): boolean {
+  if (element === null) {
+    return false;
+  }
+  const tag = element.tagName;
+  return (
+    tag === 'INPUT' ||
+    tag === 'SELECT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'BUTTON' ||
+    element.hasAttribute('contenteditable')
+  );
+}
+
 function readSampleLoading(value: string): SampleLoading {
   return SAMPLE_LOADING_MODES.includes(value as SampleLoading)
     ? (value as SampleLoading)
@@ -398,6 +413,8 @@ export class AppView {
       controller.stop();
     });
 
+    this.bindSpaceBar();
+
     this.listen(this.el.connectMidi, 'click', () => {
       void this.runtime.webMidi.connect();
     });
@@ -443,18 +460,7 @@ export class AppView {
     });
 
     this.listen(this.el.focusPlay, 'click', () => {
-      const status = controller.session?.status;
-      if (status === 'running' || status === 'counting-in') {
-        controller.pause();
-        return;
-      }
-      if (status === 'paused') {
-        controller.resume();
-        return;
-      }
-      this.clearLog();
-      this.el.result.hidden = true;
-      controller.start();
+      this.togglePlayback();
     });
 
     this.listen(this.el.focusStop, 'click', () => {
@@ -463,6 +469,53 @@ export class AppView {
 
     this.listen(this.el.focusNext, 'click', () => {
       void this.reload(true);
+    });
+  }
+
+  /**
+   * Start, pause or resume, depending on where the run is.
+   *
+   * Shared by the pill and the space bar, so the two can never disagree about
+   * what pressing "play" means.
+   */
+  private togglePlayback(): void {
+    const { controller } = this.runtime;
+    const status = controller.session?.status;
+
+    if (status === 'running' || status === 'counting-in') {
+      controller.pause();
+      return;
+    }
+    if (status === 'paused') {
+      controller.resume();
+      return;
+    }
+    this.clearLog();
+    this.el.result.hidden = true;
+    controller.start();
+  }
+
+  /**
+   * The space bar starts and pauses, rather than scrolling the page.
+   *
+   * Ignored while a control has focus: space is how a button is pressed and
+   * how a checkbox is ticked, and a number box needs it even less disturbed.
+   */
+  private bindSpaceBar(): void {
+    const handler = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space' || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+      if (isFormControl(this.doc.activeElement)) {
+        return;
+      }
+      event.preventDefault();
+      this.togglePlayback();
+    };
+
+    this.doc.addEventListener('keydown', handler);
+    this.subscriptions.push(() => {
+      this.doc.removeEventListener('keydown', handler);
     });
   }
 

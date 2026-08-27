@@ -304,6 +304,104 @@ describe('AppView', () => {
     expect(renderer.cursor.visible).toBe(true);
   });
 
+  describe('the space bar', () => {
+    function pressSpace(target: Element = document.body): boolean {
+      const event = new KeyboardEvent('keydown', {
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    }
+
+    it('starts, pauses and resumes a run', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      pressSpace();
+      expect(runtime.controller.session?.status).toBe('running');
+
+      pressSpace();
+      expect(runtime.controller.session?.status).toBe('paused');
+
+      pressSpace();
+      expect(runtime.controller.session?.status).toBe('running');
+    });
+
+    it('stops the page scrolling away underneath', async () => {
+      const { view } = createRig();
+      await view.initialize();
+
+      // The browser's own use of space is what made this necessary.
+      expect(pressSpace()).toBe(true);
+    });
+
+    it('leaves the controls alone while one of them has focus', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      const box = element<HTMLInputElement>('measures-value');
+      box.focus();
+      const prevented = pressSpace(box);
+
+      expect(prevented).toBe(false);
+      expect(runtime.controller.session).toBeNull();
+    });
+
+    it('leaves a focused button to do its own job', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      const button = element<HTMLButtonElement>('new-exercise');
+      button.focus();
+      pressSpace(button);
+
+      // Space on a button is how a button is pressed; it must not also start.
+      expect(runtime.controller.session).toBeNull();
+    });
+
+    it('ignores a shortcut that happens to include space', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      const event = new KeyboardEvent('keydown', {
+        code: 'Space',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      document.body.dispatchEvent(event);
+
+      expect(runtime.controller.session).toBeNull();
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it('agrees with the pill about what play means', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      element<HTMLButtonElement>('focus-play').click();
+      expect(runtime.controller.session?.status).toBe('running');
+
+      pressSpace();
+      expect(runtime.controller.session?.status).toBe('paused');
+      expect(element<HTMLButtonElement>('focus-play').textContent).toBe('Resume');
+    });
+
+    it('lets go when the view does', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      view.dispose();
+      pressSpace();
+
+      expect(runtime.controller.session).toBeNull();
+    });
+  });
+
   describe('the note log', () => {
     async function playNotes(rig: Rig, count: number): Promise<number[]> {
       await rig.view.initialize();

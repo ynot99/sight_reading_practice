@@ -2,15 +2,21 @@ import type { ChordMatcher, MatchPolicy, NoteVerdict } from '../../domain/matchi
 import type { StepStatus } from '../../domain/scoring/PerformanceReport.js';
 import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timeline.js';
 import type { IClock } from '../ports/IClock.js';
-import type { MetronomeTick } from '../ports/IMetronome.js';
+import type { ClickPattern, MetronomeTick } from '../ports/IMetronome.js';
 
 export interface SessionOptions {
   /** How simultaneous presses are collected into chords. */
   readonly matchPolicy: MatchPolicy;
-  /** Beats of click before the first note. */
-  readonly countInBeats: number;
-  /** Metronome resolution; 4 resolves sixteenth notes. */
-  readonly subdivisionsPerBeat: number;
+  /**
+   * Bars of click before the first note.
+   *
+   * Counted in bars rather than beats because that is what a count-in is: one
+   * bar of 6/8 is two felt beats, not four, and asking for "four beats" of it
+   * gives two thirds of a bar and leaves the reader out of phase.
+   */
+  readonly countInBars: number;
+  /** How much of the pulse the reader hears. */
+  readonly click: ClickPattern;
   /** Run the pulse without sounding it. */
   readonly metronomeMuted: boolean;
   /**
@@ -25,8 +31,8 @@ export interface SessionOptions {
 
 export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
-  countInBeats: 4,
-  subdivisionsPerBeat: 4,
+  countInBars: 1,
+  click: 'pulse',
   metronomeMuted: false,
   earlyWindowMs: 120,
 };

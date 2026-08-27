@@ -6,9 +6,13 @@ import { createHarness, type Harness } from '../support/harness.js';
 
 /** Bar of 4/4 at 60 bpm: one quarter note lasts 1000 ms, one subdivision 250 ms. */
 const SUBDIVISION_MS = 250;
-const COUNT_IN_BEATS = 2;
+const COUNT_IN_BARS = 1;
+/** Felt beats the count-in occupies: one bar of 4/4. */
+const COUNT_IN_PULSES = 4;
 /** Ticks consumed by the count-in, plus the tick that starts the music. */
-const TICKS_TO_START = COUNT_IN_BEATS * 4 + 1;
+const TICKS_TO_START = COUNT_IN_PULSES * 4 + 1;
+/** Clock time of musical position zero, once the count-in has been played. */
+const RUN_STARTS_AT_MS = (TICKS_TO_START - 1) * SUBDIVISION_MS;
 
 function flowHarness(): Harness {
   return createHarness({
@@ -16,9 +20,12 @@ function flowHarness(): Harness {
     mode: new FlowMode(),
     scoring: new TimingWeightedScoringStrategy(),
     options: {
-      countInBeats: COUNT_IN_BEATS,
+      countInBars: COUNT_IN_BARS,
       metronomeMuted: true,
-      subdivisionsPerBeat: 4,
+      // Sixteenth-note resolution: the loop ticks at least as often as the
+      // chosen click, and this exercise's quarters would otherwise need only
+      // one tick per beat.
+      click: 'subdivision',
       matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
     },
   });
@@ -39,11 +46,14 @@ describe('Flow mode', () => {
     expect(harness.metronome.isRunning).toBe(true);
 
     harness.metronome.advanceSubdivisions(4);
-    expect(harness.of('countIn').map((event) => event.beatsRemaining)).toEqual([2]);
+    expect(harness.of('countIn').map((event) => event.beatsRemaining)).toEqual([4]);
     expect(harness.session.status).toBe('counting-in');
 
     harness.metronome.advanceSubdivisions(4);
-    expect(harness.of('countIn').map((event) => event.beatsRemaining)).toEqual([2, 1]);
+    expect(harness.of('countIn').map((event) => event.beatsRemaining)).toEqual([4, 3]);
+
+    harness.metronome.advanceSubdivisions(8);
+    expect(harness.of('countIn').map((event) => event.beatsRemaining)).toEqual([4, 3, 2, 1]);
 
     harness.metronome.advanceSubdivisions(1);
     expect(harness.session.status).toBe('running');
@@ -185,10 +195,10 @@ describe('Flow mode', () => {
     it('counts for the note it was reaching for, not against the one going out', () => {
       const harness = flowHarness();
       startAndCountIn(harness);
-      // Step 0 is due at 2000 and step 1 at 3000.
+      // Step 0 falls on musical zero, step 1 a quarter note later.
       harness.metronome.advanceSubdivisions(3);
 
-      harness.clock.set(2_950);
+      harness.clock.set(RUN_STARTS_AT_MS + 950);
       harness.midi.noteOn(MIDI.D4);
       // Nothing is judged yet: the step it belongs to has not opened.
       expect(harness.of('noteJudged')).toHaveLength(0);
@@ -206,7 +216,7 @@ describe('Flow mode', () => {
       const harness = flowHarness();
       startAndCountIn(harness);
       harness.metronome.advanceSubdivisions(3);
-      harness.clock.set(2_950);
+      harness.clock.set(RUN_STARTS_AT_MS + 950);
       harness.midi.noteOn(MIDI.D4);
       // Far enough for both steps to have run their course.
       harness.metronome.advanceSubdivisions(8);
@@ -226,7 +236,7 @@ describe('Flow mode', () => {
 
       // Three hundred milliseconds early is not a mis-timed beat, it is a
       // different note.
-      harness.clock.set(2_700);
+      harness.clock.set(RUN_STARTS_AT_MS + 700);
       harness.midi.noteOn(MIDI.D4);
 
       const [judged] = harness.of('noteJudged');
@@ -241,7 +251,7 @@ describe('Flow mode', () => {
       harness.metronome.advanceSubdivisions(3);
 
       // C3 completes the chord of step 0, late but unmistakably its own.
-      harness.clock.set(2_950);
+      harness.clock.set(RUN_STARTS_AT_MS + 950);
       harness.midi.noteOn(MIDI.C3);
 
       const judged = harness.of('noteJudged');
@@ -256,19 +266,20 @@ describe('Flow mode', () => {
         exercise: twoBarExercise({ tempoBpm: 300 }),
         mode: new FlowMode(),
         options: {
-          countInBeats: COUNT_IN_BEATS,
+          countInBars: COUNT_IN_BARS,
           metronomeMuted: true,
-          subdivisionsPerBeat: 4,
+          click: 'subdivision',
           matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
         },
       });
       startAndCountIn(harness);
-      // Step 0 is due at 400 here, and step 1 at 600.
+      // A subdivision is 50 ms at this tempo, so the music starts here.
+      const fastStart = (TICKS_TO_START - 1) * 50;
       harness.metronome.advanceSubdivisions(1);
 
       // 119 ms early: inside the fixed window, but past half a step, which is
       // all the room there is at this tempo.
-      harness.clock.set(481);
+      harness.clock.set(fastStart + 81);
       harness.midi.noteOn(MIDI.D4);
 
       const [judged] = harness.of('noteJudged');
@@ -280,7 +291,7 @@ describe('Flow mode', () => {
       const harness = flowHarness();
       startAndCountIn(harness);
       harness.metronome.advanceSubdivisions(3);
-      harness.clock.set(2_950);
+      harness.clock.set(RUN_STARTS_AT_MS + 950);
       harness.midi.noteOn(MIDI.D4);
 
       harness.session.abort();
@@ -295,12 +306,12 @@ describe('Flow mode', () => {
   it('publishes the pulse to interested listeners only while running', () => {
     const harness = flowHarness();
     harness.session.start();
-    harness.metronome.advanceSubdivisions(8);
+    harness.metronome.advanceSubdivisions(TICKS_TO_START - 1);
     expect(harness.of('beat')).toHaveLength(0);
 
     harness.metronome.advanceSubdivisions(1);
     expect(harness.of('beat')).toHaveLength(1);
-    expect(harness.of('beat')[0]?.positionTicks).toBe(960);
+    expect(harness.of('beat')[0]?.positionTicks).toBe(1920);
   });
 
   it('stops the pulse when the run ends', () => {

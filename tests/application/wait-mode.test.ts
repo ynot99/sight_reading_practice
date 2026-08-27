@@ -8,7 +8,7 @@ function waitHarness(overrides: Partial<Parameters<typeof createHarness>[0]> = {
     exercise: twoBarExercise(),
     mode: new WaitMode(),
     options: {
-      countInBeats: 0,
+      countInBars: 0,
       metronomeMuted: true,
       matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
     },
@@ -140,7 +140,7 @@ describe('Wait mode', () => {
         exercise: twoBarExercise(),
         mode: new WaitMode(),
         options: {
-          countInBeats: 0,
+          countInBars: 0,
           metronomeMuted: true,
           matchPolicy: { toleranceMs: 200, pitchClassOnly: false },
         },
@@ -163,7 +163,7 @@ describe('Wait mode', () => {
         exercise: twoBarExercise(),
         mode: new WaitMode(),
         options: {
-          countInBeats: 0,
+          countInBars: 0,
           metronomeMuted: true,
           matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: true },
         },

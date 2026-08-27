@@ -13,6 +13,7 @@ import type { IPracticeMode } from '../modes/IPracticeMode.js';
 import type { IClock } from '../ports/IClock.js';
 import type { IMetronome, MetronomeTick } from '../ports/IMetronome.js';
 import type { IMidiSource, MidiEvent } from '../ports/IMidiSource.js';
+import { subdivisionsPerPulseFor } from './metronomePlan.js';
 import { DEFAULT_SESSION_OPTIONS, type PracticeContext, type SessionOptions } from './PracticeContext.js';
 import type { SessionEventMap } from './SessionEvents.js';
 import { createSessionMachine, type SessionStatus, type SessionTrigger } from './SessionState.js';
@@ -118,7 +119,12 @@ export class PracticeSession {
     this.metronome.configure({
       bpm: this.tempoBpm,
       timeSignature: this.timeline.exercise.timeSignature,
-      subdivisionsPerBeat: this.options.subdivisionsPerBeat,
+      subdivisionsPerPulse: subdivisionsPerPulseFor(
+        this.timeline,
+        this.timeline.exercise.timeSignature,
+        this.options.click,
+      ),
+      click: this.options.click,
       muted: this.options.metronomeMuted,
     });
 
@@ -126,7 +132,7 @@ export class PracticeSession {
     this.subscriptions.push(this.metronome.onTick((tick) => this.handleTick(tick)));
 
     if (this.usesPulse()) {
-      this.countInRemaining = Math.max(0, this.options.countInBeats);
+      this.countInRemaining = Math.max(0, this.countInPulses());
       this.metronome.start();
       return;
     }
@@ -178,10 +184,16 @@ export class PracticeSession {
     this.emitter.removeAllListeners();
   }
 
+  /** Count-in length in felt beats: one bar of 6/8 is two, not six. */
+  private countInPulses(): number {
+    const pulses = this.timeline.exercise.timeSignature.pulsesPerMeasure;
+    return Math.max(0, Math.round(this.options.countInBars * pulses));
+  }
+
   private usesPulse(): boolean {
     return (
       this.mode.requiresMetronome ||
-      this.options.countInBeats > 0 ||
+      this.options.countInBars > 0 ||
       !this.options.metronomeMuted
     );
   }
@@ -325,7 +337,7 @@ export class PracticeSession {
 
   private handleTick(tick: MetronomeTick): void {
     if (this.status === 'counting-in') {
-      if (!tick.isBeat) {
+      if (!tick.isPulse) {
         return;
       }
       if (this.countInRemaining > 0) {

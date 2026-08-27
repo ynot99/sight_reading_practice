@@ -129,7 +129,7 @@ function createRig(
     clock,
     scoringFor: (modeId) => (modeId === FLOW_MODE_ID ? timing : accuracy),
     initialSettings: {
-      countInBeats: 0,
+      countInBars: 0,
       metronomeMuted: true,
       matchToleranceMs: Number.POSITIVE_INFINITY,
       ...restored.practice,
@@ -204,6 +204,8 @@ describe('AppView', () => {
     expect(element<HTMLSelectElement>('key').options.length).toBeGreaterThan(5);
     expect(element('preset-description').textContent).not.toBe('');
     expect(element('rhythm-description').textContent).not.toBe('');
+    expect(element<HTMLSelectElement>('click').options).toHaveLength(4);
+    expect(element('click-description').textContent).not.toBe('');
     expect(element('mode-description').textContent).toContain('waits');
   });
 
@@ -228,6 +230,22 @@ describe('AppView', () => {
 
     expect(runtime.controller.settings.presetId).toBe('triads-left-hand');
     expect(renderer.loadCount).toBe(2);
+  });
+
+  it('changes the click without touching the music', async () => {
+    const { view, renderer, runtime } = createRig();
+    await view.initialize();
+    const before = renderer.loadCount;
+
+    const select = element<HTMLSelectElement>('click');
+    select.value = 'downbeat';
+    select.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+
+    expect(runtime.controller.settings.clickPattern).toBe('downbeat');
+    expect(element('click-description').textContent).toContain('One click per bar');
+    // The click is not part of the exercise, so nothing is regenerated.
+    expect(renderer.loadCount).toBe(before);
   });
 
   it('regenerates when the rhythm changes', async () => {

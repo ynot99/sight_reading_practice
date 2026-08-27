@@ -2,6 +2,7 @@ import type { AppRuntime } from '../composition/createApp.js';
 import type { PracticeSession } from '../application/session/PracticeSession.js';
 import type { SessionStatus } from '../application/session/SessionState.js';
 import type { MidiConnectionStatus, MidiEvent } from '../application/ports/IMidiSource.js';
+import { CLICK_PATTERNS, type ClickPattern } from '../application/ports/IMetronome.js';
 import type { SessionScore } from '../domain/scoring/IScoringStrategy.js';
 import {
   SAMPLE_LOADING_MODES,
@@ -14,6 +15,20 @@ import { midiToLabel } from '../domain/model/Pitch.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { FocusMode } from './FocusMode.js';
+
+const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
+  downbeat: 'First beat of the bar',
+  pulse: 'Every beat',
+  division: 'Every half beat',
+  subdivision: 'Every quarter beat',
+};
+
+const CLICK_DESCRIPTIONS: Readonly<Record<ClickPattern, string>> = {
+  downbeat: 'One click per bar. You keep the pulse inside it.',
+  pulse: 'The felt beat: two dotted quarters in 6/8, four quarters in 4/4.',
+  division: 'Halves the beat, or thirds it in compound time.',
+  subdivision: 'The finest click. Useful for sixteenths, busy everywhere else.',
+};
 
 const TIME_SIGNATURES = ['4/4', '3/4', '2/4', '6/8'] as const;
 
@@ -150,6 +165,8 @@ export class AppView {
     measuresValue: HTMLInputElement;
     tempo: HTMLInputElement;
     tempoValue: HTMLOutputElement;
+    click: HTMLSelectElement;
+    clickDescription: HTMLElement;
     countIn: HTMLInputElement;
     countInValue: HTMLOutputElement;
     tolerance: HTMLInputElement;
@@ -212,6 +229,8 @@ export class AppView {
       measuresValue: requireElement(doc, 'measures-value'),
       tempo: requireElement(doc, 'tempo'),
       tempoValue: requireElement(doc, 'tempo-value'),
+      click: requireElement(doc, 'click'),
+      clickDescription: requireElement(doc, 'click-description'),
       countIn: requireElement(doc, 'count-in'),
       countInValue: requireElement(doc, 'count-in-value'),
       tolerance: requireElement(doc, 'tolerance'),
@@ -274,6 +293,11 @@ export class AppView {
       this.runtime.controller.settings.rhythmProfileId,
     );
     fillSelect(
+      this.el.click,
+      CLICK_PATTERNS.map((pattern) => ({ value: pattern, label: CLICK_LABELS[pattern] })),
+      this.runtime.controller.settings.clickPattern,
+    );
+    fillSelect(
       this.el.mode,
       this.runtime.modes.list().map((mode) => ({ value: mode.id, label: mode.label })),
       this.runtime.controller.settings.modeId,
@@ -303,6 +327,11 @@ export class AppView {
       controller.updateSettings({ rhythmProfileId: this.el.rhythm.value });
       this.syncControlsFromSettings();
       void this.reload(true);
+    });
+
+    this.listen(this.el.click, 'change', () => {
+      controller.updateSettings({ clickPattern: this.el.click.value as ClickPattern });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.mode, 'change', () => {
@@ -347,7 +376,7 @@ export class AppView {
 
     this.listen(this.el.countIn, 'input', () => {
       this.el.countInValue.value = this.el.countIn.value;
-      controller.updateSettings({ countInBeats: Number.parseInt(this.el.countIn.value, 10) });
+      controller.updateSettings({ countInBars: Number.parseInt(this.el.countIn.value, 10) });
     });
 
     this.listen(this.el.tolerance, 'input', () => {
@@ -832,8 +861,10 @@ export class AppView {
     this.el.measuresValue.value = String(settings.measures);
     this.el.tempo.value = String(settings.tempoBpm);
     this.el.tempoValue.value = String(settings.tempoBpm);
-    this.el.countIn.value = String(settings.countInBeats);
-    this.el.countInValue.value = String(settings.countInBeats);
+    this.el.click.value = settings.clickPattern;
+    this.el.clickDescription.textContent = CLICK_DESCRIPTIONS[settings.clickPattern];
+    this.el.countIn.value = String(settings.countInBars);
+    this.el.countInValue.value = String(settings.countInBars);
     this.el.tolerance.value = String(settings.matchToleranceMs);
     this.el.toleranceValue.value = String(settings.matchToleranceMs);
     this.el.zoom.value = String(Math.round(settings.zoom * 100));

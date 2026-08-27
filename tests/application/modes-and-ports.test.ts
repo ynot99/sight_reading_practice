@@ -45,7 +45,7 @@ describe('BasePracticeMode', () => {
         index: 0,
         measure: 0,
         beat: 1,
-        isBeat: true,
+        isPulse: true,
         isDownbeat: true,
         positionTicks: 0,
         scheduledTimeMs: 0,
@@ -151,8 +151,8 @@ describe('browserMidiAccessProvider', () => {
 
 describe('session defaults', () => {
   it('ship sensible values', () => {
-    expect(DEFAULT_SESSION_OPTIONS.countInBeats).toBeGreaterThan(0);
-    expect(DEFAULT_SESSION_OPTIONS.subdivisionsPerBeat).toBeGreaterThanOrEqual(1);
+    expect(DEFAULT_SESSION_OPTIONS.countInBars).toBeGreaterThan(0);
+    expect(DEFAULT_SESSION_OPTIONS.click).toBe('pulse');
     expect(DEFAULT_SESSION_OPTIONS.matchPolicy.toleranceMs).toBeGreaterThan(0);
   });
 });

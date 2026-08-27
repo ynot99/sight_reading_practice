@@ -2,7 +2,7 @@ import { TimeSignature } from '../../domain/model/TimeSignature.js';
 import type { IMetronome, MetronomeConfig, MetronomeTick } from '../../application/ports/IMetronome.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
-import { buildMetronomeTick, subdivisionSeconds } from './metronomeMath.js';
+import { buildMetronomeTick, isAudibleClick, subdivisionSeconds } from './metronomeMath.js';
 
 export interface WebAudioMetronomeOptions {
   /** How often the scheduler wakes up, in milliseconds. */
@@ -23,7 +23,8 @@ interface ScheduledTick {
 const DEFAULT_CONFIG: MetronomeConfig = {
   bpm: 72,
   timeSignature: new TimeSignature(4, 4),
-  subdivisionsPerBeat: 4,
+  subdivisionsPerPulse: 4,
+  click: 'pulse',
   muted: false,
 };
 
@@ -122,7 +123,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
 
     while (this.nextTickAudioTime < horizon) {
       const tick = this.buildTick(this.nextTickIndex, this.nextTickAudioTime);
-      if (!this.config.muted) {
+      if (!this.config.muted && isAudibleClick(tick, this.config)) {
         this.playClick(context, tick, this.nextTickAudioTime);
       }
       this.queue.push({ tick, audioTime: this.nextTickAudioTime });
@@ -145,9 +146,6 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   }
 
   private playClick(context: AudioContext, tick: MetronomeTick, at: number): void {
-    if (!tick.isBeat && this.options.subdivisionFrequency <= 0) {
-      return;
-    }
     const level = volumeToGain(this.currentVolume, this.options.gain);
     if (level <= 0) {
       return;
@@ -157,12 +155,12 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
 
     oscillator.frequency.value = tick.isDownbeat
       ? this.options.downbeatFrequency
-      : tick.isBeat
+      : tick.isPulse
         ? this.options.beatFrequency
         : this.options.subdivisionFrequency;
     oscillator.type = 'square';
 
-    const peak = tick.isBeat ? level : level * 0.35;
+    const peak = tick.isPulse ? level : level * 0.35;
     envelope.gain.setValueAtTime(0.0001, at);
     envelope.gain.exponentialRampToValueAtTime(peak, at + 0.002);
     envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.05);

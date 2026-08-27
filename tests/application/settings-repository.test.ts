@@ -27,7 +27,8 @@ const SETTINGS: PracticeSettings = {
   timeSignature: new TimeSignature(3, 4),
   measures: 6,
   tempoBpm: 84,
-  countInBeats: 2,
+  countInBars: 2,
+  clickPattern: 'downbeat',
   metronomeMuted: true,
   matchToleranceMs: 180,
   pitchClassOnly: true,
@@ -47,7 +48,7 @@ describe('practice settings codec', () => {
     expect(restored.timeSignature?.toString()).toBe('3/4');
     expect(restored.measures).toBe(6);
     expect(restored.tempoBpm).toBe(84);
-    expect(restored.countInBeats).toBe(2);
+    expect(restored.countInBars).toBe(2);
     expect(restored.metronomeMuted).toBe(true);
     expect(restored.matchToleranceMs).toBe(180);
     expect(restored.pitchClassOnly).toBe(true);
@@ -72,7 +73,7 @@ describe('practice settings codec', () => {
         ...encodePracticeSettings(SETTINGS),
         measures: 0,
         tempoBpm: 5_000,
-        countInBeats: -1,
+        countInBars: -1,
         key: { fifths: 99, mode: 'major' },
         timeSignature: '4/7',
         metronomeMuted: 'yes',
@@ -82,7 +83,7 @@ describe('practice settings codec', () => {
 
     expect(restored.measures).toBeUndefined();
     expect(restored.tempoBpm).toBeUndefined();
-    expect(restored.countInBeats).toBeUndefined();
+    expect(restored.countInBars).toBeUndefined();
     expect(restored.key).toBeUndefined();
     expect(restored.timeSignature).toBeUndefined();
     expect(restored.metronomeMuted).toBeUndefined();

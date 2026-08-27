@@ -58,7 +58,7 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
       // A quarter note is exactly 1000 ms here, so the timing assertions below
       // can compare exact numbers instead of chasing floating-point dust.
       tempoBpm: 60,
-      countInBeats: 0,
+      countInBars: 0,
       metronomeMuted: true,
       matchToleranceMs: Number.POSITIVE_INFINITY,
       ...initial,
@@ -185,7 +185,7 @@ describe('end-to-end practice loop', () => {
   it('plays a generated exercise in time in Flow mode', async () => {
     const { controller, midi, metronome } = createRig({
       modeId: FLOW_MODE_ID,
-      countInBeats: 1,
+      countInBars: 1,
       matchToleranceMs: 250,
     });
     await controller.loadNewExercise();
@@ -200,9 +200,8 @@ describe('end-to-end practice loop', () => {
       throw new Error('expected a timeline');
     }
 
-    const ticksPerBeat = timeline.exercise.timeSignature.ticksPerBeat;
-    // One beat of count-in shifts every musical position by one beat.
-    const offset = ticksPerBeat;
+    // One bar of count-in shifts every musical position by a whole bar.
+    const offset = timeline.exercise.timeSignature.ticksPerMeasure;
 
     for (const step of timeline.playableSteps) {
       metronome.advanceToTicks(offset + step.onsetTicks);
@@ -220,7 +219,7 @@ describe('end-to-end practice loop', () => {
   it('penalises a run that is consistently behind the beat', async () => {
     const { controller, midi, metronome, clock } = createRig({
       modeId: FLOW_MODE_ID,
-      countInBeats: 1,
+      countInBars: 1,
       matchToleranceMs: 400,
     });
     await controller.loadNewExercise();
@@ -235,7 +234,7 @@ describe('end-to-end practice loop', () => {
       throw new Error('expected a timeline');
     }
 
-    const offset = timeline.exercise.timeSignature.ticksPerBeat;
+    const offset = timeline.exercise.timeSignature.ticksPerMeasure;
     for (const step of timeline.playableSteps) {
       metronome.advanceToTicks(offset + step.onsetTicks);
       midi.playChord(step.expectedMidi, clock.now() + 180);

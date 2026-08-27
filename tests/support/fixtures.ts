@@ -93,6 +93,42 @@ export function singleBarExercise(overrides: ExerciseOverrides = {}): Exercise {
 }
 
 /** MIDI numbers of the fixture pitches, for readable expectations. */
+/**
+ * One bar of 6/8: two dotted-quarter beats, each filled with three eighths.
+ *
+ * Exists so that compound time can be exercised without pretending a bar of
+ * 4/4 is one - the whole point of the pulse arithmetic is that the two count
+ * differently.
+ */
+export function compoundBarExercise(overrides: ExerciseOverrides = {}): Exercise {
+  const melody = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4'].map((name) =>
+    noteEntry(p(name), Duration.EIGHTH),
+  );
+  return {
+    id: overrides.id ?? 'fixture-compound',
+    title: overrides.title ?? 'Compound fixture',
+    key: overrides.key ?? KeySignature.major(0),
+    timeSignature: overrides.timeSignature ?? new TimeSignature(6, 8),
+    tempoBpm: overrides.tempoBpm ?? 60,
+    metadata: { generatorId: 'fixture', seed: 2 },
+    staves: [
+      { staffNumber: 1, voice: 1, clef: 'treble', measures: [bar(...melody)] },
+      {
+        staffNumber: 2,
+        voice: 2,
+        clef: 'bass',
+        measures: [
+          bar(
+            noteEntry(p('C3'), Duration.QUARTER),
+            restEntry(Duration.QUARTER),
+            restEntry(Duration.QUARTER),
+          ),
+        ],
+      },
+    ],
+  };
+}
+
 export const MIDI = {
   G2: p('G2').midi,
   C3: p('C3').midi,

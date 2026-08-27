@@ -13,6 +13,14 @@ Two practice modes:
 - **Flow mode** — the cursor walks with the metronome and grades how close each
   press was to its beat. For building fluency.
 
+The click is a practice setting of its own: it can sound every beat, halve or
+third it, or give only the downbeat and leave the pulse inside the bar to you.
+It is deliberately separate from the rate the practice loop runs at, which is
+derived from the shortest note in the exercise — one number cannot both resolve
+sixteenths and click once a bar. Compound metres are counted as they are felt:
+6/8 is two dotted quarters, not six eighths, and a count-in is a bar long
+whatever that works out to.
+
 ## Quick start
 
 ```bash
@@ -348,6 +356,11 @@ modes, because the base class supplies no-op defaults.
 
 **A different grading policy.** Implement `IScoringStrategy` and return it from
 `scoringFor(modeId)` in the composition root.
+
+**A new click pattern.** Add it to `CLICK_PATTERNS` and say how many clicks a
+beat holds in `clicksPerPulse`. `subdivisionsPerPulseFor` takes the lowest
+common multiple of that and what the music needs, so the loop automatically
+ticks often enough to sound it.
 
 **Load MusicXML files instead of generating.** Implement `IExerciseProvider`.
 The one piece of work is parsing MusicXML back into an `Exercise`, since the

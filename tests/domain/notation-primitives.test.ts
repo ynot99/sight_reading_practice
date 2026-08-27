@@ -66,6 +66,36 @@ describe('TimeSignature', () => {
     expect(common.beatOf(240)).toBe(1.5);
   });
 
+  it('tells a felt beat from a notated one', () => {
+    const common = new TimeSignature(4, 4);
+    expect(common.isCompound).toBe(false);
+    expect(common.ticksPerPulse).toBe(480);
+    expect(common.pulsesPerMeasure).toBe(4);
+    expect(common.divisionsPerPulse).toBe(2);
+
+    // 6/8 is written in eighths and counted in two dotted quarters.
+    const compound = new TimeSignature(6, 8);
+    expect(compound.isCompound).toBe(true);
+    expect(compound.ticksPerPulse).toBe(720);
+    expect(compound.pulsesPerMeasure).toBe(2);
+    expect(compound.divisionsPerPulse).toBe(3);
+    expect(compound.pulseOf(0)).toBe(1);
+    expect(compound.pulseOf(720)).toBe(2);
+    expect(compound.pulseOf(240)).toBeCloseTo(1 + 1 / 3, 10);
+
+    expect(new TimeSignature(9, 8).pulsesPerMeasure).toBe(3);
+    expect(new TimeSignature(12, 8).pulsesPerMeasure).toBe(4);
+  });
+
+  it('leaves 3/8 and 6/4 alone, which are not counted in threes', () => {
+    // Written the same way as 6/8 but counted as three, everywhere except at
+    // the fastest tempos.
+    expect(new TimeSignature(3, 8).isCompound).toBe(false);
+    expect(new TimeSignature(3, 8).pulsesPerMeasure).toBe(3);
+    expect(new TimeSignature(6, 4).isCompound).toBe(false);
+    expect(new TimeSignature(6, 4).pulsesPerMeasure).toBe(6);
+  });
+
   it('parses and rejects denominators it cannot notate', () => {
     expect(TimeSignature.parse('3/4').equals(new TimeSignature(3, 4))).toBe(true);
     expect(() => new TimeSignature(4, 5)).toThrow(DomainError);

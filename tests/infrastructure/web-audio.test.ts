@@ -94,7 +94,8 @@ describe('WebAudioMetronome', () => {
     metronome.configure({
       bpm: 60,
       timeSignature: new TimeSignature(4, 4),
-      subdivisionsPerBeat: 1,
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
       muted: false,
     });
     ticks = [];
@@ -119,6 +120,30 @@ describe('WebAudioMetronome', () => {
     expect(ticks).toHaveLength(1);
     expect(ticks[0]?.index).toBe(0);
     expect(ticks[0]?.isDownbeat).toBe(true);
+  });
+
+  it('ticks for the loop but only clicks where the pattern says', () => {
+    // Sixteenth-note resolution with a click on the beat: the loop still has
+    // to tick four times, and the reader must still hear one sound.
+    metronome.configure({
+      bpm: 60,
+      timeSignature: new TimeSignature(4, 4),
+      subdivisionsPerPulse: 4,
+      click: 'pulse',
+      muted: false,
+    });
+    metronome.start();
+    // A subdivision is 250 ms here, so run the clock out over several beats.
+    for (let step = 0; step < 30; step += 1) {
+      context.advance(0.05);
+      vi.advanceTimersByTime(20);
+    }
+
+    expect(ticks.length).toBeGreaterThanOrEqual(5);
+    // One oscillator per audible click, and the pulse comes once per four.
+    expect(context.oscillators.length).toBe(
+      ticks.filter((tick) => tick.isPulse).length,
+    );
   });
 
   it('keeps the pulse at the configured tempo', () => {
@@ -164,7 +189,8 @@ describe('WebAudioMetronome', () => {
     metronome.configure({
       bpm: 60,
       timeSignature: new TimeSignature(4, 4),
-      subdivisionsPerBeat: 1,
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
       muted: true,
     });
     metronome.start();

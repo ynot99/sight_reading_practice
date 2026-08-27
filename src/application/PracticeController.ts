@@ -13,6 +13,7 @@ import type { IClock } from './ports/IClock.js';
 import { GeneratedExerciseProvider, type IExerciseProvider } from './ports/IExerciseProvider.js';
 import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource } from './ports/IMidiSource.js';
+import type { ClickPattern } from './ports/IMetronome.js';
 import type {
   IPlayedNoteOverlay,
   IScoreCursor,
@@ -38,8 +39,17 @@ export interface PracticeSettings {
   readonly timeSignature: TimeSignature;
   readonly measures: number;
   readonly tempoBpm: number;
-  readonly countInBeats: number;
+  /** Bars of click before the first note. */
+  readonly countInBars: number;
   readonly metronomeMuted: boolean;
+  /**
+   * How much of the pulse is sounded.
+   *
+   * A practice setting in its own right, not just comfort: clicking only on
+   * the downbeat makes the reader keep the pulse inside the bar rather than
+   * leaning on it.
+   */
+  readonly clickPattern: ClickPattern;
   readonly matchToleranceMs: number;
   readonly pitchClassOnly: boolean;
   /**
@@ -129,8 +139,9 @@ export class PracticeController {
       timeSignature: preset.defaults.timeSignature,
       measures: preset.defaults.measures,
       tempoBpm: preset.defaults.tempoBpm,
-      countInBeats: 4,
+      countInBars: 1,
       metronomeMuted: false,
+      clickPattern: 'pulse',
       matchToleranceMs: 250,
       pitchClassOnly: false,
       showCursor: true,
@@ -304,7 +315,8 @@ export class PracticeController {
           toleranceMs: this.currentSettings.matchToleranceMs,
           pitchClassOnly: this.currentSettings.pitchClassOnly,
         },
-        countInBeats: this.currentSettings.countInBeats,
+        countInBars: this.currentSettings.countInBars,
+        click: this.currentSettings.clickPattern,
         metronomeMuted: this.currentSettings.metronomeMuted,
       },
     });

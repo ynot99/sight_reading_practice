@@ -3,6 +3,7 @@ import type { MetronomeConfig, MetronomeTick } from '../../src/application/ports
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import {
   buildMetronomeTick,
+  isAudibleClick,
   subdivisionSeconds,
   ticksPerSubdivision,
 } from '../../src/infrastructure/audio/metronomeMath.js';
@@ -12,28 +13,66 @@ import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronom
 const COMMON: MetronomeConfig = {
   bpm: 60,
   timeSignature: new TimeSignature(4, 4),
-  subdivisionsPerBeat: 4,
+  subdivisionsPerPulse: 4,
+  click: 'subdivision',
   muted: true,
 };
+
+function audibleIndices(config: MetronomeConfig, count: number): number[] {
+  return Array.from({ length: count }, (_, index) => index).filter((index) =>
+    isAudibleClick(buildMetronomeTick(index, config, 0), config),
+  );
+}
+
+describe('which ticks are heard', () => {
+  it('sounds as much of the pulse as was asked for', () => {
+    expect(audibleIndices({ ...COMMON, click: 'subdivision' }, 8)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7,
+    ]);
+    expect(audibleIndices({ ...COMMON, click: 'division' }, 8)).toEqual([0, 2, 4, 6]);
+    expect(audibleIndices({ ...COMMON, click: 'pulse' }, 8)).toEqual([0, 4]);
+    expect(audibleIndices({ ...COMMON, click: 'downbeat' }, 32)).toEqual([0, 16]);
+  });
+
+  it('divides a compound pulse in three, not in two', () => {
+    const compound: MetronomeConfig = {
+      ...COMMON,
+      timeSignature: new TimeSignature(6, 8),
+      subdivisionsPerPulse: 6,
+    };
+    // Two dotted-quarter beats to the bar, each of three eighths.
+    expect(audibleIndices({ ...compound, click: 'pulse' }, 12)).toEqual([0, 6]);
+    expect(audibleIndices({ ...compound, click: 'division' }, 12)).toEqual([0, 2, 4, 6, 8, 10]);
+    expect(audibleIndices({ ...compound, click: 'downbeat' }, 24)).toEqual([0, 12]);
+  });
+
+  it('falls back to the pulse when the resolution cannot express the click', () => {
+    // Two ticks per beat cannot sound four clicks in it; the beat can always
+    // be sounded, so that is what happens rather than nothing or a stutter.
+    const coarse: MetronomeConfig = { ...COMMON, subdivisionsPerPulse: 2, click: 'subdivision' };
+    expect(audibleIndices(coarse, 8)).toEqual([0, 2, 4, 6]);
+  });
+});
 
 describe('metronome maths', () => {
   it('derives subdivision length from the tempo and the denominator', () => {
     expect(subdivisionSeconds(COMMON)).toBeCloseTo(0.25, 10);
     expect(subdivisionSeconds({ ...COMMON, bpm: 120 })).toBeCloseTo(0.125, 10);
-    expect(subdivisionSeconds({ ...COMMON, subdivisionsPerBeat: 1 })).toBeCloseTo(1, 10);
-    // In 6/8 a beat is an eighth note, so it is half as long as a quarter.
+    expect(subdivisionSeconds({ ...COMMON, subdivisionsPerPulse: 1 })).toBeCloseTo(1, 10);
+    // 6/8 is felt in two dotted quarters, so one pulse is a quarter and a
+    // half - not the eighth note the denominator names.
     expect(
       subdivisionSeconds({
         ...COMMON,
         timeSignature: new TimeSignature(6, 8),
-        subdivisionsPerBeat: 1,
+        subdivisionsPerPulse: 1,
       }),
-    ).toBeCloseTo(0.5, 10);
+    ).toBeCloseTo(1.5, 10);
   });
 
   it('derives the musical length of a subdivision', () => {
     expect(ticksPerSubdivision(COMMON)).toBe(120);
-    expect(ticksPerSubdivision({ ...COMMON, subdivisionsPerBeat: 1 })).toBe(480);
+    expect(ticksPerSubdivision({ ...COMMON, subdivisionsPerPulse: 1 })).toBe(480);
   });
 
   it('locates a tick in the bar', () => {
@@ -42,19 +81,19 @@ describe('metronome maths', () => {
       index: 0,
       measure: 0,
       beat: 1,
-      isBeat: true,
+      isPulse: true,
       isDownbeat: true,
       positionTicks: 0,
       scheduledTimeMs: 0,
     });
 
     const offBeat = buildMetronomeTick(2, COMMON, 500);
-    expect(offBeat.isBeat).toBe(false);
+    expect(offBeat.isPulse).toBe(false);
     expect(offBeat.beat).toBe(1);
     expect(offBeat.positionTicks).toBe(240);
 
     const secondBeat = buildMetronomeTick(4, COMMON, 1000);
-    expect(secondBeat.isBeat).toBe(true);
+    expect(secondBeat.isPulse).toBe(true);
     expect(secondBeat.isDownbeat).toBe(false);
     expect(secondBeat.beat).toBe(2);
 

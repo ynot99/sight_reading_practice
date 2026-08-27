@@ -3,6 +3,7 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { PracticeSettings } from './PracticeController.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { SAMPLE_LOADING_MODES, type SampleLoading } from './ports/IPitchPlayer.js';
+import { CLICK_PATTERNS, type ClickPattern } from './ports/IMetronome.js';
 
 /** Loudness of each sound source, `0..1`. Not a practice rule, so kept apart. */
 export interface AudioSettings {
@@ -51,6 +52,10 @@ function readInteger(value: unknown, min: number, max: number): number | undefin
 
 function readId(value: unknown, known: readonly string[]): string | undefined {
   return typeof value === 'string' && known.includes(value) ? value : undefined;
+}
+
+function readClickPattern(value: unknown): ClickPattern | undefined {
+  return CLICK_PATTERNS.includes(value as ClickPattern) ? (value as ClickPattern) : undefined;
 }
 
 function readKey(value: unknown): KeySignature | undefined {
@@ -109,7 +114,8 @@ export function decodePracticeSettings(
     timeSignature: readTimeSignature(value['timeSignature']),
     measures: readInteger(value['measures'], 1, 32),
     tempoBpm: readInteger(value['tempoBpm'], 20, 300),
-    countInBeats: readInteger(value['countInBeats'], 0, 8),
+    countInBars: readInteger(value['countInBars'], 0, 4),
+    clickPattern: readClickPattern(value['clickPattern']),
     metronomeMuted: readBoolean(value['metronomeMuted']),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
     pitchClassOnly: readBoolean(value['pitchClassOnly']),
@@ -129,7 +135,8 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     timeSignature: settings.timeSignature.toString(),
     measures: settings.measures,
     tempoBpm: settings.tempoBpm,
-    countInBeats: settings.countInBeats,
+    countInBars: settings.countInBars,
+    clickPattern: settings.clickPattern,
     metronomeMuted: settings.metronomeMuted,
     // `Infinity` has no JSON representation; the slider cannot reach it anyway.
     matchToleranceMs: Number.isFinite(settings.matchToleranceMs)

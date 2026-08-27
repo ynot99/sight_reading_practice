@@ -7,7 +7,8 @@ import type { ManualClock } from './ManualClock.js';
 const DEFAULT_CONFIG: MetronomeConfig = {
   bpm: 60,
   timeSignature: new TimeSignature(4, 4),
-  subdivisionsPerBeat: 4,
+  subdivisionsPerPulse: 4,
+  click: 'pulse',
   muted: true,
 };
 
@@ -93,7 +94,7 @@ export class ManualMetronome implements IMetronome {
 
   /** Emits whole beats' worth of subdivisions. */
   advanceBeats(count = 1): MetronomeTick[] {
-    return this.advanceSubdivisions(count * this.config.subdivisionsPerBeat);
+    return this.advanceSubdivisions(count * this.config.subdivisionsPerPulse);
   }
 
   /** Emits subdivisions until the given musical position has been reached. */
@@ -101,7 +102,8 @@ export class ManualMetronome implements IMetronome {
     const emitted: MetronomeTick[] = [];
     let guard = 100_000;
     while (this.running && guard > 0) {
-      const nextPosition = this.nextIndex * (this.config.timeSignature.ticksPerBeat / this.config.subdivisionsPerBeat);
+      const nextPosition =
+        this.nextIndex * (this.config.timeSignature.ticksPerPulse / this.config.subdivisionsPerPulse);
       if (nextPosition > positionTicks) {
         break;
       }

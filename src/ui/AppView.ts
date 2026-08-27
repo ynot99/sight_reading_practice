@@ -139,7 +139,7 @@ export class AppView {
     toleranceValue: HTMLOutputElement;
     zoom: HTMLInputElement;
     zoomValue: HTMLOutputElement;
-    highlightNotes: HTMLInputElement;
+    showPlayed: HTMLInputElement;
     showCursor: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
     sampleLoadingHint: HTMLElement;
@@ -198,7 +198,7 @@ export class AppView {
       toleranceValue: requireElement(doc, 'tolerance-value'),
       zoom: requireElement(doc, 'zoom'),
       zoomValue: requireElement(doc, 'zoom-value'),
-      highlightNotes: requireElement(doc, 'highlight-notes'),
+      showPlayed: requireElement(doc, 'show-played'),
       showCursor: requireElement(doc, 'show-cursor'),
       sampleLoading: requireElement(doc, 'sample-loading'),
       sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
@@ -332,8 +332,8 @@ export class AppView {
       controller.updateSettings({ zoom: Number.parseInt(this.el.zoom.value, 10) / 100 });
     });
 
-    this.listen(this.el.highlightNotes, 'change', () => {
-      controller.updateSettings({ highlightNotes: this.el.highlightNotes.checked });
+    this.listen(this.el.showPlayed, 'change', () => {
+      controller.updateSettings({ showPlayedNotes: this.el.showPlayed.checked });
     });
 
     this.listen(this.el.showCursor, 'change', () => {
@@ -761,7 +761,7 @@ export class AppView {
     this.el.toleranceValue.value = String(settings.matchToleranceMs);
     this.el.zoom.value = String(Math.round(settings.zoom * 100));
     this.el.zoomValue.value = this.el.zoom.value;
-    this.el.highlightNotes.checked = settings.highlightNotes;
+    this.el.showPlayed.checked = settings.showPlayedNotes;
     this.el.showCursor.checked = settings.showCursor;
     this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;

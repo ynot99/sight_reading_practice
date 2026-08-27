@@ -1,12 +1,23 @@
 import type { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
 import type {
+  IPlayedNoteOverlay,
   IScoreCursor,
-  IScoreHighlighter,
   IScoreRenderer,
   IScoreZoom,
-  StepHighlight,
+  OverlayContext,
+  PlayedNote,
 } from '../../application/ports/IScoreRenderer.js';
 import { CursorNavigator, type ICursorPrimitive } from './CursorNavigator.js';
+import {
+  buildOverlayShapes,
+  type OverlayShape,
+  type PlayedMark,
+} from './playedNoteShapes.js';
+import {
+  diatonicIndexOf,
+  fitStaffGeometry,
+  type DrawnNoteSample,
+} from './staffGeometry.js';
 
 export interface OsmdRendererOptions {
   readonly zoom?: number;
@@ -14,19 +25,26 @@ export interface OsmdRendererOptions {
   readonly drawTitle?: boolean;
 }
 
-/** CSS class applied to the notes of a judged step. */
-const HIGHLIGHT_CLASS: Readonly<Record<StepHighlight, string>> = {
-  correct: 'note--correct',
-  late: 'note--late',
-  incorrect: 'note--incorrect',
-  missed: 'note--missed',
-};
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
-const ALL_HIGHLIGHT_CLASSES = Object.values(HIGHLIGHT_CLASS);
+/**
+ * Engraver units to drawing units.
+ *
+ * Zoom is applied by shrinking the SVG viewBox rather than by moving anything
+ * inside it, so this stays constant and an overlay drawn into the same SVG
+ * scales along with the notation. A test pins the relationship against a real
+ * rendering, so a change in the engraver fails loudly instead of quietly
+ * sliding every mark off its note.
+ */
+const UNITS_TO_PIXELS = 10;
 
-/** The part of OSMD's graphical note that exposes its drawn output. */
+/** The part of the engraver's graphical note this adapter reads. */
 interface DrawnNote {
-  getSVGGElement?: () => SVGGElement | null;
+  readonly sourceNote?: {
+    readonly pitch?: { readonly FundamentalNote?: number; readonly Octave?: number } | null;
+    readonly parentStaffEntry?: { readonly parentStaff?: { readonly id?: number } };
+  };
+  readonly PositionAndShape?: { readonly AbsolutePosition?: { x: number; y: number } };
 }
 
 /** Bridges OSMD's forward-only cursor to {@link ICursorPrimitive}. */
@@ -74,14 +92,19 @@ class OsmdCursorPrimitive implements ICursorPrimitive {
  * is imported dynamically: the controls are interactive while the engraver is
  * still downloading.
  */
-export class OsmdScoreRenderer implements IScoreRenderer, IScoreHighlighter, IScoreZoom {
+export class OsmdScoreRenderer
+  implements IScoreRenderer, IPlayedNoteOverlay, IScoreZoom
+{
   private readonly container: HTMLElement;
   private readonly options: OsmdRendererOptions;
   private readonly navigator: CursorNavigator;
 
-  /** Drawn notes per timeline step, rebuilt whenever the score is re-engraved. */
-  private stepElements: SVGGElement[][] = [];
-  private readonly highlights = new Map<number, StepHighlight>();
+  /** Where each timeline step sits, and the notes drawn there. */
+  private stepX = new Map<number, number>();
+  private samples: DrawnNoteSample[] = [];
+  private marks: PlayedMark[] = [];
+  private overlayContext: OverlayContext | null = null;
+  private overlayGroup: SVGGElement | null = null;
 
   private osmd: OpenSheetMusicDisplay | null = null;
   private loaded = false;
@@ -111,13 +134,14 @@ export class OsmdScoreRenderer implements IScoreRenderer, IScoreHighlighter, ISc
 
   async load(musicXml: string): Promise<void> {
     const osmd = await this.ensureEngraver();
-    this.highlights.clear();
+    this.marks = [];
     await osmd.load(musicXml);
     osmd.zoom = this.currentZoom;
     osmd.render();
     this.loaded = true;
     this.navigator.reset();
     this.indexDrawnNotes();
+    this.paintOverlay();
   }
 
   refresh(): void {
@@ -127,90 +151,179 @@ export class OsmdScoreRenderer implements IScoreRenderer, IScoreHighlighter, ISc
     this.osmd.zoom = this.currentZoom;
     this.osmd.render();
     this.navigator.reset();
-    // Re-engraving throws the old SVG away, taking every highlight with it.
+    // Re-engraving throws the old SVG away, and the overlay with it.
     this.indexDrawnNotes();
-    this.applyHighlights();
+    this.paintOverlay();
   }
 
   clear(): void {
     this.osmd?.clear();
-    this.highlights.clear();
-    this.stepElements = [];
+    this.marks = [];
+    this.stepX = new Map();
+    this.samples = [];
+    this.overlayGroup = null;
     this.loaded = false;
   }
 
-  highlight(stepIndex: number, highlight: StepHighlight): void {
-    this.highlights.set(stepIndex, highlight);
-    this.paint(stepIndex, highlight);
+  configureOverlay(context: OverlayContext): void {
+    this.overlayContext = context;
   }
 
-  clearHighlights(): void {
-    for (const stepIndex of this.highlights.keys()) {
-      for (const element of this.stepElements[stepIndex] ?? []) {
-        element.classList.remove(...ALL_HIGHLIGHT_CLASSES);
+  showPlayed(note: PlayedNote): void {
+    this.marks.push({ stepIndex: note.stepIndex, midi: note.midi, correct: note.correct });
+    this.paintOverlay();
+  }
+
+  clearPlayed(): void {
+    this.marks = [];
+    this.paintOverlay();
+  }
+
+  /** Everything drawn over the engraving, rebuilt from the marks. */
+  private paintOverlay(): void {
+    const group = this.ensureOverlayGroup();
+    if (group === null) {
+      return;
+    }
+    while (group.firstChild !== null) {
+      group.firstChild.remove();
+    }
+
+    const context = this.overlayContext;
+    const geometry = fitStaffGeometry(this.samples);
+    if (context === null || geometry === null || this.marks.length === 0) {
+      return;
+    }
+
+    const shapes = buildOverlayShapes(this.marks, {
+      geometry,
+      stepX: this.stepX,
+      clefByStaff: context.clefByStaff,
+      key: context.key,
+    });
+    for (const shape of shapes) {
+      group.append(this.createShape(shape, group.ownerDocument));
+    }
+  }
+
+  private createShape(shape: OverlayShape, doc: Document): SVGElement {
+    const colourClass = shape.correct ? 'played--correct' : 'played--wrong';
+    switch (shape.kind) {
+      case 'notehead': {
+        const element = doc.createElementNS(SVG_NAMESPACE, 'ellipse');
+        element.setAttribute('cx', String(shape.x));
+        element.setAttribute('cy', String(shape.y));
+        element.setAttribute('rx', String(shape.radiusX));
+        element.setAttribute('ry', String(shape.radiusY));
+        element.setAttribute('class', `played-note ${colourClass}`);
+        return element;
       }
+      case 'ledger': {
+        const element = doc.createElementNS(SVG_NAMESPACE, 'line');
+        element.setAttribute('x1', String(shape.x1));
+        element.setAttribute('x2', String(shape.x2));
+        element.setAttribute('y1', String(shape.y));
+        element.setAttribute('y2', String(shape.y));
+        element.setAttribute('class', `played-ledger ${colourClass}`);
+        return element;
+      }
+      case 'accidental': {
+        const element = doc.createElementNS(SVG_NAMESPACE, 'text');
+        element.setAttribute('x', String(shape.x));
+        element.setAttribute('y', String(shape.y));
+        element.setAttribute('font-size', String(shape.size));
+        element.setAttribute('text-anchor', 'middle');
+        element.setAttribute('class', `played-accidental ${colourClass}`);
+        element.textContent = shape.text;
+        return element;
+      }
+      default:
+        return doc.createElementNS(SVG_NAMESPACE, 'g');
     }
-    this.highlights.clear();
   }
 
-  private paint(stepIndex: number, highlight: StepHighlight): void {
-    for (const element of this.stepElements[stepIndex] ?? []) {
-      element.classList.remove(...ALL_HIGHLIGHT_CLASSES);
-      element.classList.add(HIGHLIGHT_CLASS[highlight]);
+  private ensureOverlayGroup(): SVGGElement | null {
+    if (this.overlayGroup !== null && this.overlayGroup.isConnected) {
+      return this.overlayGroup;
     }
-  }
-
-  private applyHighlights(): void {
-    for (const [stepIndex, highlight] of this.highlights) {
-      this.paint(stepIndex, highlight);
+    const svg = this.container.querySelector('svg');
+    if (svg === null) {
+      return null;
     }
+    const doc = svg.ownerDocument;
+    const group = doc.createElementNS(SVG_NAMESPACE, 'g');
+    group.setAttribute('class', 'played-overlay');
+    svg.append(group);
+    this.overlayGroup = group;
+    return group;
   }
 
   /**
-   * Records which drawn notes belong to which timeline step.
+   * Records where the engraver put each step, and the pitches it drew there.
    *
-   * Walking the cursor is the only way to ask OSMD this question, so the
-   * visible cursor is walked once and then put back where it was.
+   * Walking the cursor is the only way to ask, so the visible cursor is walked
+   * once and then put back where it was.
    */
   private indexDrawnNotes(): void {
-    const osmd = this.osmd;
-    const cursor = osmd?.cursor;
-    if (osmd === null || cursor === undefined || cursor === null) {
-      this.stepElements = [];
+    const cursor = this.osmd?.cursor;
+    if (cursor === undefined || cursor === null) {
+      this.stepX = new Map();
+      this.samples = [];
       return;
     }
 
     const restoreTo = this.navigator.position;
-    const collected: SVGGElement[][] = [];
+    const stepX = new Map<number, number>();
+    const samples: DrawnNoteSample[] = [];
 
     cursor.reset();
+    let index = 0;
     let guard = 10_000;
     while (!cursor.iterator.EndReached && guard > 0) {
       guard -= 1;
-      collected.push(this.drawnNotesUnderCursor(cursor));
+      this.readStep(cursor, index, stepX, samples);
+      index += 1;
       cursor.next();
     }
 
-    this.stepElements = collected;
+    this.stepX = stepX;
+    this.samples = samples;
     this.navigator.reset();
     this.navigator.moveTo(restoreTo);
   }
 
-  private drawnNotesUnderCursor(cursor: NonNullable<OpenSheetMusicDisplay['cursor']>): SVGGElement[] {
-    const elements: SVGGElement[] = [];
+  private readStep(
+    cursor: NonNullable<OpenSheetMusicDisplay['cursor']>,
+    stepIndex: number,
+    stepX: Map<number, number>,
+    samples: DrawnNoteSample[],
+  ): void {
     try {
-      for (const note of cursor.GNotesUnderCursor()) {
-        const drawn = note as unknown as DrawnNote;
-        const element = typeof drawn.getSVGGElement === 'function' ? drawn.getSVGGElement() : null;
-        if (element !== null && element !== undefined) {
-          elements.push(element);
+      for (const graphical of cursor.GNotesUnderCursor()) {
+        const note = graphical as unknown as DrawnNote;
+        const position = note.PositionAndShape?.AbsolutePosition;
+        const pitch = note.sourceNote?.pitch;
+        if (position === undefined || pitch === undefined || pitch === null) {
+          continue;
         }
+
+        if (!stepX.has(stepIndex)) {
+          stepX.set(stepIndex, position.x * UNITS_TO_PIXELS);
+        }
+
+        const diatonicIndex = diatonicIndexOf(pitch.FundamentalNote ?? -1, pitch.Octave ?? 0);
+        if (diatonicIndex === null) {
+          continue;
+        }
+        samples.push({
+          staffNumber: note.sourceNote?.parentStaffEntry?.parentStaff?.id ?? 1,
+          diatonicIndex,
+          y: position.y * UNITS_TO_PIXELS,
+        });
       }
     } catch {
-      // A note that was not drawn (an invisible staff, say) simply has no
-      // element to colour.
+      // A step the engraver could not describe simply contributes nothing.
     }
-    return elements;
   }
 
   private async ensureEngraver(): Promise<OpenSheetMusicDisplay> {

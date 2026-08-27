@@ -115,7 +115,7 @@ function createRig(
     serializer: new MusicXmlSerializer(),
     renderer,
     cursor: renderer.cursor,
-    highlighter: renderer,
+    overlay: renderer,
     zoom: renderer,
     midi,
     metronome,
@@ -463,15 +463,15 @@ describe('AppView', () => {
       expect(renderer.zoom).toBe(1.5);
     });
 
-    it('turns note colouring off from the checkbox', async () => {
+    it('turns the played-note overlay off from the checkbox', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
 
-      const toggle = element<HTMLInputElement>('highlight-notes');
+      const toggle = element<HTMLInputElement>('show-played');
       toggle.checked = false;
       toggle.dispatchEvent(new Event('change'));
 
-      expect(runtime.controller.settings.highlightNotes).toBe(false);
+      expect(runtime.controller.settings.showPlayedNotes).toBe(false);
     });
 
     it('remembers the note size on this device', async () => {

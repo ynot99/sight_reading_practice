@@ -30,7 +30,7 @@ const SETTINGS: PracticeSettings = {
   matchToleranceMs: 180,
   pitchClassOnly: true,
   showCursor: false,
-  highlightNotes: false,
+  showPlayedNotes: false,
   zoom: 1.2,
 };
 

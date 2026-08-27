@@ -1,3 +1,6 @@
+import type { ClefKind } from '../../domain/model/Clef.js';
+import type { KeySignature } from '../../domain/model/KeySignature.js';
+
 /**
  * Engraves notation into whatever surface the host provides.
  *
@@ -25,31 +28,36 @@ export interface IScoreCursor {
   moveTo(stepIndex: number): void;
 }
 
-/**
- * How a step is marked up on the page after it has been judged.
- *
- * Kept coarse on purpose: the page is notation, not a dashboard, and a reader
- * glancing at a bar should be able to tell these apart without decoding them.
- */
-export type StepHighlight =
-  /** Every notated pitch, in time. */
-  | 'correct'
-  /** The right notes, but outside the timing tolerance. */
-  | 'late'
-  /** Wrong notes were played here. */
-  | 'incorrect'
-  /** The step went by unplayed. */
-  | 'missed';
+/** One key press, and whether it belonged where it landed. */
+export interface PlayedNote {
+  readonly stepIndex: number;
+  readonly midi: number;
+  readonly correct: boolean;
+}
+
+/** What the overlay needs in order to spell and place a press. */
+export interface OverlayContext {
+  readonly key: KeySignature;
+  readonly clefByStaff: ReadonlyMap<number, ClefKind>;
+}
 
 /**
- * Colours notes on the score.
+ * Draws what was actually played over the engraving.
  *
- * Separate from {@link IScoreRenderer} so a renderer that cannot mark
- * individual notes is still a perfectly good renderer.
+ * Deliberately additive: the notation underneath is never recoloured, because
+ * black noteheads are the thing being learned to read. A press shows as a ring
+ * at the pitch that was struck - green where it belonged, red where it did
+ * not - so the page says *what* was played, rather than merely that something
+ * went wrong.
+ *
+ * Separate from {@link IScoreRenderer} so a renderer that cannot draw over
+ * itself is still a perfectly good renderer.
  */
-export interface IScoreHighlighter {
-  highlight(stepIndex: number, highlight: StepHighlight): void;
-  clearHighlights(): void;
+export interface IPlayedNoteOverlay {
+  /** Supplied whenever the music changes; spelling depends on the key. */
+  configureOverlay(context: OverlayContext): void;
+  showPlayed(note: PlayedNote): void;
+  clearPlayed(): void;
 }
 
 /**

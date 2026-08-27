@@ -1,0 +1,158 @@
+// @vitest-environment jsdom
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { KeySignature } from '../../src/domain/model/KeySignature.js';
+import { Pitch } from '../../src/domain/model/Pitch.js';
+import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
+import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
+import type { ClefKind } from '../../src/domain/model/Clef.js';
+import { twoBarExercise } from '../support/fixtures.js';
+import { createScoreContainer, installCanvasStub, staffLineYs } from '../support/osmdHarness.js';
+
+const CLEFS = new Map<number, ClefKind>([
+  [1, 'treble'],
+  [2, 'bass'],
+]);
+
+function noteheads(container: HTMLElement): SVGEllipseElement[] {
+  return [...container.querySelectorAll('ellipse.played-note')] as SVGEllipseElement[];
+}
+
+function centreY(element: Element | undefined): number {
+  return Number.parseFloat(element?.getAttribute('cy') ?? 'NaN');
+}
+
+/**
+ * The overlay against the real engraver.
+ *
+ * Everything else about it is covered by arithmetic on fabricated numbers;
+ * this is the test that says the arithmetic matches what OSMD actually drew.
+ */
+describe('played notes drawn over a real engraving', () => {
+  let container: HTMLElement;
+  let renderer: OsmdScoreRenderer;
+
+  beforeAll(() => {
+    installCanvasStub();
+  });
+
+  beforeEach(async () => {
+    document.body.replaceChildren();
+    container = createScoreContainer();
+    renderer = new OsmdScoreRenderer(container, { zoom: 1 });
+    await renderer.load(new MusicXmlSerializer().serialize(twoBarExercise()));
+    renderer.configureOverlay({ key: KeySignature.major(0), clefByStaff: CLEFS });
+  });
+
+  it('draws a correct press exactly on the note the engraver printed', () => {
+    // Step 0 of the fixture is C4 over C3.
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+
+    const [head] = noteheads(container);
+    expect(head).toBeDefined();
+    // The treble stave's bottom line is E4; middle C sits two positions below.
+    const lines = staffLineYs(container);
+    const trebleBottom = lines[4];
+    expect(trebleBottom).toBeDefined();
+    expect(centreY(head)).toBeCloseTo((trebleBottom ?? 0) + 2 * 5, 6);
+    expect(head?.getAttribute('class')).toContain('played--correct');
+  });
+
+  it('puts a bass note on the bass stave', () => {
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C3').midi, correct: true });
+
+    const lines = staffLineYs(container);
+    const trebleBottom = lines[4] ?? 0;
+    // Below every treble line, which is what "on the other stave" means here.
+    expect(centreY(noteheads(container)[0])).toBeGreaterThan(trebleBottom);
+  });
+
+  it('separates two pitches by the printed line spacing', () => {
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('E4').midi, correct: false });
+
+    const lines = staffLineYs(container);
+    const spacing = (lines[1] ?? 0) - (lines[0] ?? 0);
+    const heads = noteheads(container);
+    // C4 to E4 is two staff positions, which is one line of separation.
+    expect(centreY(heads[0]) - centreY(heads[1])).toBeCloseTo(spacing, 6);
+  });
+
+  it('marks a wrong press differently, at the pitch actually struck', () => {
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('F4').midi, correct: false });
+
+    const [head] = noteheads(container);
+    expect(head?.getAttribute('class')).toContain('played--wrong');
+    const lines = staffLineYs(container);
+    // F4 is the space just above the bottom treble line.
+    expect(centreY(head)).toBeCloseTo((lines[4] ?? 0) - 5, 6);
+  });
+
+  it('draws a ledger line through middle C', () => {
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+
+    const ledgers = container.querySelectorAll('line.played-ledger');
+    expect(ledgers).toHaveLength(1);
+    expect(Number.parseFloat(ledgers[0]?.getAttribute('y1') ?? 'NaN')).toBeCloseTo(
+      centreY(noteheads(container)[0]),
+      6,
+    );
+  });
+
+  it('writes an accidental for a black key, so the mark cannot lie', () => {
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C#4').midi, correct: false });
+
+    const accidental = container.querySelector('text.played-accidental');
+    expect(accidental?.textContent).toBe('♯');
+    // Drawn on C, with the sign saying which C.
+    expect(centreY(noteheads(container)[0])).toBeCloseTo(
+      (staffLineYs(container)[4] ?? 0) + 10,
+      6,
+    );
+  });
+
+  it('places marks along the page, one step after another', () => {
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+    renderer.showPlayed({ stepIndex: 1, midi: Pitch.parse('D4').midi, correct: true });
+
+    const heads = noteheads(container);
+    const first = Number.parseFloat(heads[0]?.getAttribute('cx') ?? 'NaN');
+    const second = Number.parseFloat(heads[1]?.getAttribute('cx') ?? 'NaN');
+    expect(second).toBeGreaterThan(first);
+  });
+
+  it('survives being re-engraved, and comes back in the same place', () => {
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+    const before = centreY(noteheads(container)[0]);
+
+    renderer.refresh();
+
+    expect(noteheads(container)).toHaveLength(1);
+    expect(centreY(noteheads(container)[0])).toBeCloseTo(before, 6);
+  });
+
+  it('keeps its place when the notes are made larger', () => {
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+
+    renderer.setZoom(1.5);
+    renderer.refresh();
+
+    // Zoom shrinks the viewBox rather than moving anything inside it, so the
+    // mark keeps the same coordinates and scales with the notation.
+    const lines = staffLineYs(container);
+    expect(centreY(noteheads(container)[0])).toBeCloseTo((lines[4] ?? 0) + 10, 6);
+  });
+
+  it('wipes every mark on demand', () => {
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true });
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: false });
+
+    renderer.clearPlayed();
+
+    expect(noteheads(container)).toHaveLength(0);
+  });
+
+  it('draws nothing for a step that was never engraved', () => {
+    renderer.showPlayed({ stepIndex: 99, midi: 60, correct: false });
+    expect(noteheads(container)).toHaveLength(0);
+  });
+});

@@ -498,43 +498,43 @@ select {
   display: none;
 }
 
-/* ---- Judged notes ------------------------------------------------------ */
+/* ---- What you played --------------------------------------------------- */
 
 /*
- * A CSS class beats VexFlow's presentation attributes in the cascade, so the
- * notes can be recoloured without re-engraving the page.
- *
- * The score keeps a white background in either theme, so these are fixed
- * colours chosen to read against it.
+ * Rings drawn over the engraving, never a recolouring of it: the printed
+ * notes stay black, because reading them is the point of the exercise. Fixed
+ * colours, since the score keeps a white background in either theme.
  */
-.note--correct path,
-.note--correct rect,
-.note--correct ellipse,
-.note--correct circle {
-  fill: #15803d;
+.played-note {
+  fill: none;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.played-ledger {
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.played-accidental {
+  stroke: none;
+  font-weight: 700;
+}
+
+.played--correct {
   stroke: #15803d;
+  fill: none;
 }
 
-.note--late path,
-.note--late rect,
-.note--late ellipse,
-.note--late circle {
-  fill: #b45309;
-  stroke: #b45309;
+.played-accidental.played--correct {
+  fill: #15803d;
 }
 
-.note--incorrect path,
-.note--incorrect rect,
-.note--incorrect ellipse,
-.note--incorrect circle {
-  fill: #b91c1c;
+.played--wrong {
   stroke: #b91c1c;
+  fill: none;
 }
 
-.note--missed path,
-.note--missed rect,
-.note--missed ellipse,
-.note--missed circle {
-  fill: #94a3b8;
-  stroke: #94a3b8;
+.played-accidental.played--wrong {
+  fill: #b91c1c;
 }

@@ -159,7 +159,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     serializer,
     renderer,
     cursor: renderer.cursor,
-    highlighter: renderer,
+    overlay: renderer,
     zoom: renderer,
     midi,
     metronome,

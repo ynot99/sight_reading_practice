@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PracticeController, highlightFor } from '../../src/application/PracticeController.js';
-import type { StepResult } from '../../src/domain/scoring/PerformanceReport.js';
+import { PracticeController } from '../../src/application/PracticeController.js';
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
@@ -51,7 +50,7 @@ function createController(fixedExercise = false): {
     serializer: new MusicXmlSerializer(),
     renderer,
     cursor: renderer.cursor,
-    highlighter: renderer,
+    overlay: renderer,
     zoom: renderer,
     midi,
     metronome,
@@ -262,53 +261,35 @@ describe('PracticeController', () => {
   });
 });
 
-function stepResult(overrides: Partial<StepResult> & Pick<StepResult, 'status'>): StepResult {
-  return {
-    index: 0,
-    measureIndex: 0,
-    beat: 1,
-    expected: [60],
-    played: [60],
-    wrong: [],
-    missing: [],
-    deviationMs: null,
-    ...overrides,
-  };
-}
+describe('what you played, drawn over the score', () => {
+  it('is told the key and the clefs, so a press can be spelled and placed', async () => {
+    const { controller, renderer } = createController(true);
+    await controller.loadNewExercise();
 
-describe('highlightFor', () => {
-  const timed = { judgeTiming: true, toleranceMs: 150 };
-  const untimed = { judgeTiming: false, toleranceMs: 150 };
-
-  it('marks a clean step correct', () => {
-    expect(highlightFor(stepResult({ status: 'correct' }), timed)).toBe('correct');
+    expect(renderer.overlayContext?.key.name).toBe('C major');
+    expect(renderer.overlayContext?.clefByStaff.get(1)).toBe('treble');
+    expect(renderer.overlayContext?.clefByStaff.get(2)).toBe('bass');
   });
 
-  it('marks wrong notes and missed steps apart', () => {
-    expect(highlightFor(stepResult({ status: 'incorrect', wrong: [61] }), timed)).toBe('incorrect');
-    expect(highlightFor(stepResult({ status: 'missed' }), timed)).toBe('missed');
-  });
+  it('draws the notes that belonged there as correct', async () => {
+    const { controller, renderer, midi } = createController(true);
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
 
-  it('says nothing about a rest', () => {
-    expect(highlightFor(stepResult({ status: 'skipped' }), timed)).toBeNull();
-  });
+    for (const note of step.expectedMidi) {
+      midi.noteOn(note, 0);
+    }
 
-  it('calls a correct but out-of-time step late', () => {
-    expect(highlightFor(stepResult({ status: 'correct', deviationMs: 400 }), timed)).toBe('late');
-    expect(highlightFor(stepResult({ status: 'correct', deviationMs: -400 }), timed)).toBe('late');
-    expect(highlightFor(stepResult({ status: 'correct', deviationMs: 100 }), timed)).toBe('correct');
-  });
-
-  it('never judges timing where timing is not being measured', () => {
-    // In Wait mode the player sets the pace, so "late" would mean nothing.
-    expect(highlightFor(stepResult({ status: 'correct', deviationMs: 9_000 }), untimed)).toBe(
-      'correct',
+    expect(renderer.played).toEqual(
+      step.expectedMidi.map((midiNote) => ({ stepIndex: 0, midi: midiNote, correct: true })),
     );
   });
-});
 
-describe('note highlighting', () => {
-  it('colours each step as it is judged', async () => {
+  it('draws a wrong press at the pitch that was actually struck', async () => {
     const { controller, renderer, midi } = createController(true);
     await controller.loadNewExercise();
     const session = controller.start();
@@ -316,15 +297,15 @@ describe('note highlighting', () => {
     if (step === undefined || step === null) {
       throw new Error('expected a first step');
     }
+    const wrong = (step.expectedMidi[0] ?? 60) + 1;
 
-    for (const note of step.expectedMidi) {
-      midi.noteOn(note, 0);
-    }
+    midi.noteOn(wrong, 0);
 
-    expect(renderer.highlights.get(0)).toBe('correct');
+    // Not "something was wrong here" - the note he actually hit.
+    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false }]);
   });
 
-  it('marks a step where a wrong note crept in', async () => {
+  it('does not draw the same note twice for one press', async () => {
     const { controller, renderer, midi } = createController(true);
     await controller.loadNewExercise();
     const session = controller.start();
@@ -332,18 +313,17 @@ describe('note highlighting', () => {
     if (step === undefined || step === null) {
       throw new Error('expected a first step');
     }
+    const note = step.expectedMidi[0] ?? 60;
 
-    midi.noteOn((step.expectedMidi[0] ?? 60) + 1, 0);
-    for (const note of step.expectedMidi) {
-      midi.noteOn(note, 0);
-    }
+    midi.noteOn(note, 0);
+    midi.noteOn(note, 10);
 
-    expect(renderer.highlights.get(0)).toBe('incorrect');
+    expect(renderer.played).toHaveLength(1);
   });
 
   it('stays out of the way when the reader turns it off', async () => {
     const { controller, renderer, midi } = createController(true);
-    controller.updateSettings({ highlightNotes: false });
+    controller.updateSettings({ showPlayedNotes: false });
     await controller.loadNewExercise();
     const session = controller.start();
     const step = session?.currentStep;
@@ -355,10 +335,10 @@ describe('note highlighting', () => {
       midi.noteOn(note, 0);
     }
 
-    expect(renderer.highlights.size).toBe(0);
+    expect(renderer.played).toHaveLength(0);
   });
 
-  it('wipes the colours when the run restarts or the music changes', async () => {
+  it('wipes the page when the run restarts or the music changes', async () => {
     const { controller, renderer, midi } = createController(true);
     await controller.loadNewExercise();
     const session = controller.start();
@@ -366,16 +346,14 @@ describe('note highlighting', () => {
     if (step === undefined || step === null) {
       throw new Error('expected a first step');
     }
-    for (const note of step.expectedMidi) {
-      midi.noteOn(note, 0);
-    }
-    expect(renderer.highlights.size).toBe(1);
+    midi.noteOn(step.expectedMidi[0] ?? 60, 0);
+    expect(renderer.played.length).toBeGreaterThan(0);
 
     controller.start();
-    expect(renderer.highlights.size).toBe(0);
+    expect(renderer.played).toHaveLength(0);
 
     await controller.loadNewExercise();
-    expect(renderer.highlights.size).toBe(0);
+    expect(renderer.played).toHaveLength(0);
   });
 
   it('clears the page when the setting is switched off mid-run', async () => {
@@ -386,13 +364,11 @@ describe('note highlighting', () => {
     if (step === undefined || step === null) {
       throw new Error('expected a first step');
     }
-    for (const note of step.expectedMidi) {
-      midi.noteOn(note, 0);
-    }
+    midi.noteOn(step.expectedMidi[0] ?? 60, 0);
 
-    controller.updateSettings({ highlightNotes: false });
+    controller.updateSettings({ showPlayedNotes: false });
 
-    expect(renderer.highlights.size).toBe(0);
+    expect(renderer.played).toHaveLength(0);
   });
 });
 

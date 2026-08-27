@@ -1,9 +1,10 @@
 import type {
+  IPlayedNoteOverlay,
   IScoreCursor,
-  IScoreHighlighter,
   IScoreRenderer,
   IScoreZoom,
-  StepHighlight,
+  OverlayContext,
+  PlayedNote,
 } from '../../application/ports/IScoreRenderer.js';
 import type { ICursorPrimitive } from '../rendering/CursorNavigator.js';
 
@@ -43,25 +44,30 @@ export class FakeScoreCursor implements IScoreCursor {
  * Lets the controller and the cursor synchronisation be tested end to end
  * without a DOM, an SVG backend or OSMD.
  */
-export class FakeScoreRenderer implements IScoreRenderer, IScoreHighlighter, IScoreZoom {
+export class FakeScoreRenderer implements IScoreRenderer, IPlayedNoteOverlay, IScoreZoom {
   readonly cursor = new FakeScoreCursor();
   loadedXml: string | null = null;
   loadCount = 0;
   refreshCount = 0;
   clearCount = 0;
 
-  /** Highlight applied to each step, in the order they were applied. */
-  readonly highlights = new Map<number, StepHighlight>();
-  clearHighlightCount = 0;
+  /** Every press drawn over the score, in order. */
+  readonly played: PlayedNote[] = [];
+  overlayContext: OverlayContext | null = null;
+  clearPlayedCount = 0;
   zoom = 0.85;
 
-  highlight(stepIndex: number, highlight: StepHighlight): void {
-    this.highlights.set(stepIndex, highlight);
+  configureOverlay(context: OverlayContext): void {
+    this.overlayContext = context;
   }
 
-  clearHighlights(): void {
-    this.highlights.clear();
-    this.clearHighlightCount += 1;
+  showPlayed(note: PlayedNote): void {
+    this.played.push(note);
+  }
+
+  clearPlayed(): void {
+    this.played.length = 0;
+    this.clearPlayedCount += 1;
   }
 
   setZoom(zoom: number): void {
@@ -81,7 +87,7 @@ export class FakeScoreRenderer implements IScoreRenderer, IScoreHighlighter, ISc
   clear(): void {
     this.loadedXml = null;
     this.clearCount += 1;
-    this.highlights.clear();
+    this.played.length = 0;
   }
 }
 

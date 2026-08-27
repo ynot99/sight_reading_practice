@@ -35,6 +35,19 @@ No keyboard to hand? The computer keyboard is wired up as a second MIDI source:
 `z s x d c v g b h n j m` is the lower octave, `q 2 w 3 e r 5 t 6 y 7 u` the
 upper one.
 
+### Seeing what you played
+
+Each press is drawn over the engraving at the pitch actually struck: a green
+ring where the note belonged, a red one where it did not, with an accidental
+and ledger lines so a mark can never claim a pitch that was not played. The
+printed notes are never recoloured - reading black noteheads is the point of
+the exercise.
+
+The geometry is measured from notes the engraver has already drawn rather than
+assumed, so zoom, engraving rules, or a different engraver cannot silently
+slide the marks off their notes. A test renders a real score and checks the
+marks land on the printed staff lines.
+
 ### The piano sound
 
 Notes you play are sounded with real piano recordings, so a MIDI controller
@@ -250,7 +263,7 @@ is asserted in `tests/application/session-state.test.ts`.
 | `IMidiDeviceDirectory` | `WebMidiAdapter`                              | `MockMidiAdapter`      |
 | `IMetronome`         | `WebAudioMetronome`                             | `ManualMetronome`      |
 | `IClock`             | `SystemClock`                                   | `ManualClock`          |
-| `IScoreRenderer` / `IScoreCursor` / `IScoreHighlighter` / `IScoreZoom` | `OsmdScoreRenderer` / `CursorNavigator` | `FakeScoreRenderer` |
+| `IScoreRenderer` / `IScoreCursor` / `IPlayedNoteOverlay` / `IScoreZoom` | `OsmdScoreRenderer` / `CursorNavigator` | `FakeScoreRenderer` |
 | `IExerciseProvider`  | `GeneratedExerciseProvider`                     | any stub               |
 | `ISettingsStore`     | `LocalStorageSettingsStore`                     | `InMemorySettingsStore` |
 | `IVolumeControl`     | `WebAudioMetronome`, `WebAudioPitchPlayer`      | any stub               |
@@ -263,7 +276,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~390 tests
+npm test           # ~430 tests
 npm run coverage   # ~92% of statements in src/
 ```
 

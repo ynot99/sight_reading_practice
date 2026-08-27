@@ -206,6 +206,8 @@ describe('AppView', () => {
     expect(element('rhythm-description').textContent).not.toBe('');
     expect(element<HTMLSelectElement>('click').options).toHaveLength(4);
     expect(element('click-description').textContent).not.toBe('');
+    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(4);
+    expect(element('dropout-description').textContent).not.toBe('');
     expect(element('mode-description').textContent).toContain('waits');
   });
 
@@ -245,6 +247,21 @@ describe('AppView', () => {
     expect(runtime.controller.settings.clickPattern).toBe('downbeat');
     expect(element('click-description').textContent).toContain('One click per bar');
     // The click is not part of the exercise, so nothing is regenerated.
+    expect(renderer.loadCount).toBe(before);
+  });
+
+  it('lets the click drop out for whole bars', async () => {
+    const { view, renderer, runtime } = createRig();
+    await view.initialize();
+    const before = renderer.loadCount;
+
+    const select = element<HTMLSelectElement>('dropout');
+    select.value = '2';
+    select.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+
+    expect(runtime.controller.settings.dropoutBars).toBe(2);
+    expect(element('dropout-description').textContent).toContain('2 bars');
     expect(renderer.loadCount).toBe(before);
   });
 

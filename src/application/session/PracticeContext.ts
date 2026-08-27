@@ -17,6 +17,15 @@ export interface SessionOptions {
   readonly countInBars: number;
   /** How much of the pulse the reader hears. */
   readonly click: ClickPattern;
+  /**
+   * Bars of click followed by as many bars of silence; 0 keeps it throughout.
+   *
+   * Not a comfort setting: carrying the pulse alone for a bar or two and
+   * finding out on the way back whether you drifted is the timekeeping
+   * exercise, and it is the one thing a metronome cannot teach while it is
+   * playing.
+   */
+  readonly dropoutBars: number;
   /** Run the pulse without sounding it. */
   readonly metronomeMuted: boolean;
   /**
@@ -33,6 +42,7 @@ export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
   countInBars: 1,
   click: 'pulse',
+  dropoutBars: 0,
   metronomeMuted: false,
   earlyWindowMs: 120,
 };

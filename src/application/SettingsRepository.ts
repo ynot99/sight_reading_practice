@@ -116,6 +116,7 @@ export function decodePracticeSettings(
     tempoBpm: readInteger(value['tempoBpm'], 20, 300),
     countInBars: readInteger(value['countInBars'], 0, 4),
     clickPattern: readClickPattern(value['clickPattern']),
+    dropoutBars: readInteger(value['dropoutBars'], 0, 8),
     metronomeMuted: readBoolean(value['metronomeMuted']),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
     pitchClassOnly: readBoolean(value['pitchClassOnly']),
@@ -137,6 +138,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     tempoBpm: settings.tempoBpm,
     countInBars: settings.countInBars,
     clickPattern: settings.clickPattern,
+    dropoutBars: settings.dropoutBars,
     metronomeMuted: settings.metronomeMuted,
     // `Infinity` has no JSON representation; the slider cannot reach it anyway.
     matchToleranceMs: Number.isFinite(settings.matchToleranceMs)

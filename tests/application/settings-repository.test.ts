@@ -29,6 +29,7 @@ const SETTINGS: PracticeSettings = {
   tempoBpm: 84,
   countInBars: 2,
   clickPattern: 'downbeat',
+  dropoutBars: 2,
   metronomeMuted: true,
   matchToleranceMs: 180,
   pitchClassOnly: true,

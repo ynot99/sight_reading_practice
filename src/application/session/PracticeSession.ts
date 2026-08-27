@@ -125,6 +125,10 @@ export class PracticeSession {
         this.options.click,
       ),
       click: this.options.click,
+      dropout:
+        this.options.dropoutBars > 0
+          ? { bars: this.options.dropoutBars, fromBar: Math.max(0, this.options.countInBars) }
+          : null,
       muted: this.options.metronomeMuted,
     });
 

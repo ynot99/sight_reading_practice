@@ -43,6 +43,22 @@ export function buildMetronomeTick(
 }
 
 /**
+ * Whether a tick falls in one of the bars the click sits out.
+ *
+ * The cycle is a run of sounding bars followed by an equally long run of
+ * silent ones, counted from where the music starts rather than from where the
+ * metronome did, so the count-in always sounds.
+ */
+function isInSilentBar(tick: MetronomeTick, config: MetronomeConfig): boolean {
+  const dropout = config.dropout;
+  if (dropout === null || dropout.bars <= 0 || tick.measure < dropout.fromBar) {
+    return false;
+  }
+  const cycle = Math.floor((tick.measure - dropout.fromBar) / dropout.bars);
+  return cycle % 2 === 1;
+}
+
+/**
  * Whether a tick is one the reader hears.
  *
  * The metronome always ticks at the resolution the loop needs; this decides
@@ -50,6 +66,9 @@ export function buildMetronomeTick(
  * resolve sixteenth notes while clicking only on the beat.
  */
 export function isAudibleClick(tick: MetronomeTick, config: MetronomeConfig): boolean {
+  if (isInSilentBar(tick, config)) {
+    return false;
+  }
   if (config.click === 'downbeat') {
     return tick.isDownbeat;
   }

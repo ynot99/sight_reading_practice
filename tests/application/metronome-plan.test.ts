@@ -104,6 +104,27 @@ describe('subdivisionsPerPulseFor', () => {
   });
 });
 
+describe('dropping the click', () => {
+  function configFor(bars: number, countInBars: number) {
+    const harness = createHarness({
+      exercise: twoBarExercise(),
+      mode: new FlowMode(),
+      options: { countInBars, metronomeMuted: false, click: 'pulse', dropoutBars: bars },
+    });
+    harness.session.start();
+    return harness.metronome.currentConfig;
+  }
+
+  it('starts the cycle where the music does, not where the metronome did', () => {
+    expect(configFor(2, 1).dropout).toEqual({ bars: 2, fromBar: 1 });
+    expect(configFor(2, 0).dropout).toEqual({ bars: 2, fromBar: 0 });
+  });
+
+  it('asks for nothing when it is switched off', () => {
+    expect(configFor(0, 1).dropout).toBeNull();
+  });
+});
+
 describe('count-in', () => {
   function countInBeatsFor(exercise: Exercise, bars: number): number[] {
     const harness = createHarness({

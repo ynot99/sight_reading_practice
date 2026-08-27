@@ -50,6 +50,8 @@ export interface PracticeSettings {
    * leaning on it.
    */
   readonly clickPattern: ClickPattern;
+  /** Bars of click, then as many silent ones. 0 clicks throughout. */
+  readonly dropoutBars: number;
   readonly matchToleranceMs: number;
   readonly pitchClassOnly: boolean;
   /**
@@ -142,6 +144,7 @@ export class PracticeController {
       countInBars: 1,
       metronomeMuted: false,
       clickPattern: 'pulse',
+      dropoutBars: 0,
       matchToleranceMs: 250,
       pitchClassOnly: false,
       showCursor: true,
@@ -317,6 +320,7 @@ export class PracticeController {
         },
         countInBars: this.currentSettings.countInBars,
         click: this.currentSettings.clickPattern,
+        dropoutBars: this.currentSettings.dropoutBars,
         metronomeMuted: this.currentSettings.metronomeMuted,
       },
     });

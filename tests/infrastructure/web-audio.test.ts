@@ -96,6 +96,7 @@ describe('WebAudioMetronome', () => {
       timeSignature: new TimeSignature(4, 4),
       subdivisionsPerPulse: 1,
       click: 'pulse',
+      dropout: null,
       muted: false,
     });
     ticks = [];
@@ -130,6 +131,7 @@ describe('WebAudioMetronome', () => {
       timeSignature: new TimeSignature(4, 4),
       subdivisionsPerPulse: 4,
       click: 'pulse',
+      dropout: null,
       muted: false,
     });
     metronome.start();
@@ -191,6 +193,7 @@ describe('WebAudioMetronome', () => {
       timeSignature: new TimeSignature(4, 4),
       subdivisionsPerPulse: 1,
       click: 'pulse',
+      dropout: null,
       muted: true,
     });
     metronome.start();

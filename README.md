@@ -21,6 +21,11 @@ sixteenths and click once a bar. Compound metres are counted as they are felt:
 6/8 is two dotted quarters, not six eighths, and a count-in is a bar long
 whatever that works out to.
 
+The click can also be told to drop out: two bars of pulse, two bars where you
+carry it alone, and you find out on its return whether you drifted. The
+count-in is never dropped, and a silent bar is silent to its downbeat — a click
+on the first beat would answer the only question the exercise asks.
+
 ## Quick start
 
 ```bash

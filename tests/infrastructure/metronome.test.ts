@@ -15,6 +15,7 @@ const COMMON: MetronomeConfig = {
   timeSignature: new TimeSignature(4, 4),
   subdivisionsPerPulse: 4,
   click: 'subdivision',
+  dropout: null,
   muted: true,
 };
 
@@ -51,6 +52,57 @@ describe('which ticks are heard', () => {
     // be sounded, so that is what happens rather than nothing or a stutter.
     const coarse: MetronomeConfig = { ...COMMON, subdivisionsPerPulse: 2, click: 'subdivision' };
     expect(audibleIndices(coarse, 8)).toEqual([0, 2, 4, 6]);
+  });
+});
+
+describe('bars the click sits out', () => {
+  // One tick per beat keeps the arithmetic readable: index 4 starts bar 2.
+  const PULSED: MetronomeConfig = { ...COMMON, subdivisionsPerPulse: 1, click: 'pulse' };
+
+  function barsHeard(config: MetronomeConfig, bars: number): number[] {
+    return Array.from({ length: bars * 4 }, (_, index) => index)
+      .filter((index) => isAudibleClick(buildMetronomeTick(index, config, 0), config))
+      .map((index) => Math.floor(index / 4) + 1)
+      .filter((bar, at, all) => all.indexOf(bar) === at);
+  }
+
+  it('alternates equal runs of click and silence', () => {
+    const config = { ...PULSED, dropout: { bars: 2, fromBar: 0 } };
+    expect(barsHeard(config, 8)).toEqual([1, 2, 5, 6]);
+  });
+
+  it('leaves the reader completely alone, downbeat included', () => {
+    const config: MetronomeConfig = { ...PULSED, dropout: { bars: 1, fromBar: 0 } };
+    const secondBar = [4, 5, 6, 7].map((index) => buildMetronomeTick(index, config, 0));
+    expect(secondBar[0]?.isDownbeat).toBe(true);
+    for (const tick of secondBar) {
+      expect(isAudibleClick(tick, config)).toBe(false);
+    }
+  });
+
+  it('never drops the count-in, which is the reference being given', () => {
+    // One bar of count-in, then two on and two off from the music onwards.
+    const config = { ...PULSED, dropout: { bars: 2, fromBar: 1 } };
+    expect(barsHeard(config, 8)).toEqual([1, 2, 3, 6, 7]);
+  });
+
+  it('is off when no cycle is set', () => {
+    expect(barsHeard({ ...PULSED, dropout: null }, 4)).toEqual([1, 2, 3, 4]);
+    expect(barsHeard({ ...PULSED, dropout: { bars: 0, fromBar: 0 } }, 4)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('drops whatever the click pattern would have sounded', () => {
+    const config: MetronomeConfig = {
+      ...COMMON,
+      click: 'subdivision',
+      dropout: { bars: 1, fromBar: 0 },
+    };
+    // Bar one keeps all sixteen sixteenths; bar two keeps none.
+    const heard = Array.from({ length: 32 }, (_, index) => index).filter((index) =>
+      isAudibleClick(buildMetronomeTick(index, config, 0), config),
+    );
+    expect(heard).toHaveLength(16);
+    expect(Math.max(...heard)).toBe(15);
   });
 });
 

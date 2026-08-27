@@ -23,6 +23,26 @@ const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
   subdivision: 'Every quarter beat',
 };
 
+/**
+ * Dropout cycles offered, as bars of click followed by as many silent ones.
+ *
+ * Symmetric on purpose: an equal stretch of silence is the standard exercise,
+ * and it makes the setting one number the reader can reason about.
+ */
+const DROPOUT_CHOICES: readonly { readonly bars: number; readonly label: string }[] = [
+  { bars: 0, label: 'Never' },
+  { bars: 1, label: '1 bar on, 1 off' },
+  { bars: 2, label: '2 bars on, 2 off' },
+  { bars: 4, label: '4 bars on, 4 off' },
+];
+
+function dropoutDescription(bars: number): string {
+  return bars <= 0
+    ? 'The click plays all the way through.'
+    : `The click leaves you alone for ${bars} bar${bars === 1 ? '' : 's'} at a time. ` +
+      'You find out on its return whether you drifted.';
+}
+
 const CLICK_DESCRIPTIONS: Readonly<Record<ClickPattern, string>> = {
   downbeat: 'One click per bar. You keep the pulse inside it.',
   pulse: 'The felt beat: two dotted quarters in 6/8, four quarters in 4/4.',
@@ -167,6 +187,8 @@ export class AppView {
     tempoValue: HTMLOutputElement;
     click: HTMLSelectElement;
     clickDescription: HTMLElement;
+    dropout: HTMLSelectElement;
+    dropoutDescription: HTMLElement;
     countIn: HTMLInputElement;
     countInValue: HTMLOutputElement;
     tolerance: HTMLInputElement;
@@ -231,6 +253,8 @@ export class AppView {
       tempoValue: requireElement(doc, 'tempo-value'),
       click: requireElement(doc, 'click'),
       clickDescription: requireElement(doc, 'click-description'),
+      dropout: requireElement(doc, 'dropout'),
+      dropoutDescription: requireElement(doc, 'dropout-description'),
       countIn: requireElement(doc, 'count-in'),
       countInValue: requireElement(doc, 'count-in-value'),
       tolerance: requireElement(doc, 'tolerance'),
@@ -298,6 +322,11 @@ export class AppView {
       this.runtime.controller.settings.clickPattern,
     );
     fillSelect(
+      this.el.dropout,
+      DROPOUT_CHOICES.map((choice) => ({ value: String(choice.bars), label: choice.label })),
+      String(this.runtime.controller.settings.dropoutBars),
+    );
+    fillSelect(
       this.el.mode,
       this.runtime.modes.list().map((mode) => ({ value: mode.id, label: mode.label })),
       this.runtime.controller.settings.modeId,
@@ -331,6 +360,11 @@ export class AppView {
 
     this.listen(this.el.click, 'change', () => {
       controller.updateSettings({ clickPattern: this.el.click.value as ClickPattern });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.dropout, 'change', () => {
+      controller.updateSettings({ dropoutBars: Number.parseInt(this.el.dropout.value, 10) });
       this.syncControlsFromSettings();
     });
 
@@ -863,6 +897,8 @@ export class AppView {
     this.el.tempoValue.value = String(settings.tempoBpm);
     this.el.click.value = settings.clickPattern;
     this.el.clickDescription.textContent = CLICK_DESCRIPTIONS[settings.clickPattern];
+    this.el.dropout.value = String(settings.dropoutBars);
+    this.el.dropoutDescription.textContent = dropoutDescription(settings.dropoutBars);
     this.el.countIn.value = String(settings.countInBars);
     this.el.countInValue.value = String(settings.countInBars);
     this.el.tolerance.value = String(settings.matchToleranceMs);

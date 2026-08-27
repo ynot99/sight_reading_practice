@@ -9,6 +9,7 @@ const DEFAULT_CONFIG: MetronomeConfig = {
   timeSignature: new TimeSignature(4, 4),
   subdivisionsPerPulse: 4,
   click: 'pulse',
+  dropout: null,
   muted: true,
 };
 

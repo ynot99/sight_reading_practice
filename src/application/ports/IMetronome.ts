@@ -48,6 +48,26 @@ export function clicksPerPulse(pattern: ClickPattern, timeSignature: TimeSignatu
   }
 }
 
+/**
+ * Bars where the click falls silent and the reader carries the pulse alone.
+ *
+ * The strongest timekeeping exercise there is, and the one closest to what
+ * sight-reading actually asks for: keeping going when nothing is holding you
+ * up. Silence is total, downbeat included - a click on the first beat would
+ * answer the only question the exercise asks, which is whether you drifted.
+ */
+export interface MetronomeDropout {
+  /** Bars of click, then the same number of bars of silence. */
+  readonly bars: number;
+  /**
+   * Measure the cycle starts from.
+   *
+   * The count-in is never dropped: it is the reference the reader is given,
+   * so the cycle begins where the music does.
+   */
+  readonly fromBar: number;
+}
+
 export interface MetronomeConfig {
   readonly bpm: number;
   readonly timeSignature: TimeSignature;
@@ -62,6 +82,8 @@ export interface MetronomeConfig {
   readonly subdivisionsPerPulse: number;
   /** Which of those ticks are sounded. */
   readonly click: ClickPattern;
+  /** Bars to fall silent for, or `null` to click throughout. */
+  readonly dropout: MetronomeDropout | null;
   /** Keep the pulse but stay silent (Flow mode without a click). */
   readonly muted: boolean;
 }

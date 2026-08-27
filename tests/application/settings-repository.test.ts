@@ -105,10 +105,11 @@ describe('practice settings codec', () => {
 
 describe('audio settings codec', () => {
   it('reads volumes and falls back per field', () => {
-    expect(decodeAudioSettings({ metronomeVolume: 0.25, instrumentVolume: 0 })).toEqual({
-      metronomeVolume: 0.25,
-      instrumentVolume: 0,
-    });
+    expect(
+      decodeAudioSettings({ metronomeVolume: 0.25, instrumentVolume: 0, sampleLoading: 'eager' }),
+    ).toEqual({ metronomeVolume: 0.25, instrumentVolume: 0, sampleLoading: 'eager' });
+    // An unknown mode falls back rather than reaching the player.
+    expect(decodeAudioSettings({ sampleLoading: 'whenever' }).sampleLoading).toBe('lazy');
     expect(decodeAudioSettings({ metronomeVolume: 4 })).toEqual(DEFAULT_AUDIO_SETTINGS);
     expect(decodeAudioSettings(null)).toEqual(DEFAULT_AUDIO_SETTINGS);
   });
@@ -129,14 +130,18 @@ describe('SettingsRepository', () => {
     const first = new SettingsRepository(store, KNOWN);
     first.load();
     first.savePractice(SETTINGS);
-    first.saveAudio({ metronomeVolume: 0.2, instrumentVolume: 0.9 });
+    first.saveAudio({ metronomeVolume: 0.2, instrumentVolume: 0.9, sampleLoading: 'off' });
 
     const second = new SettingsRepository(store, KNOWN);
     const restored = second.load();
 
     expect(restored.practice.tempoBpm).toBe(84);
     expect(restored.practice.presetId).toBe('triads-left-hand');
-    expect(restored.audio).toEqual({ metronomeVolume: 0.2, instrumentVolume: 0.9 });
+    expect(restored.audio).toEqual({
+      metronomeVolume: 0.2,
+      instrumentVolume: 0.9,
+      sampleLoading: 'off',
+    });
   });
 
   it('keeps the practice settings when only the volume changes', () => {
@@ -145,7 +150,7 @@ describe('SettingsRepository', () => {
     repository.load();
     repository.savePractice(SETTINGS);
 
-    repository.saveAudio({ metronomeVolume: 0, instrumentVolume: 0 });
+    repository.saveAudio({ metronomeVolume: 0, instrumentVolume: 0, sampleLoading: 'eager' });
 
     const restored = new SettingsRepository(store, KNOWN).load();
     expect(restored.practice.tempoBpm).toBe(84);

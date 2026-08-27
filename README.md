@@ -48,8 +48,10 @@ one velocity layer, one note every three semitones, six seconds long.
 The notes in between are covered by resampling the nearest recording, never
 more than a semitone away.
 
-They load in the background on the first key press, and a synthesised tone
-covers the notes until they arrive. The sustain pedal is followed too: a
+When they load is a setting: with the page, on the first key press (the
+default, so an idle visit costs nothing), or not at all. A synthesised tone
+covers the notes until they arrive, and stands in permanently when the
+download is switched off. The sustain pedal is followed too: a
 released key keeps ringing while the pedal is down, and is damped when it
 comes up. See
 [public/samples/piano/CREDITS.md](public/samples/piano/CREDITS.md).
@@ -261,7 +263,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~380 tests
+npm test           # ~390 tests
 npm run coverage   # ~92% of statements in src/
 ```
 

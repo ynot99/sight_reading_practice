@@ -3,6 +3,10 @@ import type { PracticeSession } from '../application/session/PracticeSession.js'
 import type { SessionStatus } from '../application/session/SessionState.js';
 import type { MidiConnectionStatus, MidiEvent } from '../application/ports/IMidiSource.js';
 import type { SessionScore } from '../domain/scoring/IScoringStrategy.js';
+import {
+  SAMPLE_LOADING_MODES,
+  type SampleLoading,
+} from '../application/ports/IPitchPlayer.js';
 import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
@@ -12,6 +16,18 @@ import { fillSelect, requireElement } from './dom.js';
 import { FocusMode } from './FocusMode.js';
 
 const TIME_SIGNATURES = ['4/4', '3/4', '2/4', '6/8'] as const;
+
+const SAMPLE_LOADING_HINTS: Readonly<Record<SampleLoading, string>> = {
+  eager: 'About 1 MB, fetched as the page opens.',
+  lazy: 'Nothing is fetched until you play a note.',
+  off: 'A plain synthesised tone, and no download at all.',
+};
+
+function readSampleLoading(value: string): SampleLoading {
+  return SAMPLE_LOADING_MODES.includes(value as SampleLoading)
+    ? (value as SampleLoading)
+    : 'lazy';
+}
 
 /** Matches what the stored-settings codec will accept back. */
 const MIN_BARS = 1;
@@ -119,6 +135,8 @@ export class AppView {
     zoomValue: HTMLOutputElement;
     highlightNotes: HTMLInputElement;
     showCursor: HTMLInputElement;
+    sampleLoading: HTMLSelectElement;
+    sampleLoadingHint: HTMLElement;
     metronomeVolume: HTMLInputElement;
     metronomeVolumeValue: HTMLOutputElement;
     instrumentVolume: HTMLInputElement;
@@ -176,6 +194,8 @@ export class AppView {
       zoomValue: requireElement(doc, 'zoom-value'),
       highlightNotes: requireElement(doc, 'highlight-notes'),
       showCursor: requireElement(doc, 'show-cursor'),
+      sampleLoading: requireElement(doc, 'sample-loading'),
+      sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
       metronomeVolume: requireElement(doc, 'metronome-volume'),
       metronomeVolumeValue: requireElement(doc, 'metronome-volume-value'),
       instrumentVolume: requireElement(doc, 'instrument-volume'),
@@ -312,6 +332,10 @@ export class AppView {
 
     this.listen(this.el.showCursor, 'change', () => {
       controller.updateSettings({ showCursor: this.el.showCursor.checked });
+    });
+
+    this.listen(this.el.sampleLoading, 'change', () => {
+      this.applySampleLoading(readSampleLoading(this.el.sampleLoading.value));
     });
 
     this.listen(this.el.metronomeVolume, 'input', () => {
@@ -657,6 +681,17 @@ export class AppView {
     }
   }
 
+  /** Applies and remembers when the recordings should be fetched. */
+  private applySampleLoading(mode: SampleLoading): void {
+    this.el.sampleLoading.value = mode;
+    this.el.sampleLoadingHint.textContent = SAMPLE_LOADING_HINTS[mode];
+    this.runtime.samples?.setLoading(mode);
+    this.runtime.settings.saveAudio({
+      ...this.runtime.settings.currentAudio,
+      sampleLoading: mode,
+    });
+  }
+
   /**
    * Accepts a bar count from either the slider or the box.
    *
@@ -697,6 +732,7 @@ export class AppView {
 
     if (persist) {
       this.runtime.settings.saveAudio({
+        ...this.runtime.settings.currentAudio,
         metronomeVolume: metronome,
         instrumentVolume: instrument,
       });
@@ -731,6 +767,11 @@ export class AppView {
     this.el.instrumentVolume.value = String(Math.round(audio.instrumentVolume * 100));
     this.el.instrumentVolumeValue.value = this.el.instrumentVolume.value;
     this.applyVolumes(false);
+
+    const mode = this.runtime.settings.currentAudio.sampleLoading;
+    this.el.sampleLoading.value = mode;
+    this.el.sampleLoadingHint.textContent = SAMPLE_LOADING_HINTS[mode];
+    this.runtime.samples?.setLoading(mode);
 
     this.describeMode();
   }

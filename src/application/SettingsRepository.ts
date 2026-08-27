@@ -2,16 +2,19 @@ import { KeySignature, type KeyMode } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { PracticeSettings } from './PracticeController.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
+import { SAMPLE_LOADING_MODES, type SampleLoading } from './ports/IPitchPlayer.js';
 
 /** Loudness of each sound source, `0..1`. Not a practice rule, so kept apart. */
 export interface AudioSettings {
   readonly metronomeVolume: number;
   readonly instrumentVolume: number;
+  readonly sampleLoading: SampleLoading;
 }
 
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   metronomeVolume: 0.6,
   instrumentVolume: 0.6,
+  sampleLoading: 'lazy',
 };
 
 export interface RestoredSettings {
@@ -139,11 +142,15 @@ export function decodeAudioSettings(value: unknown): AudioSettings {
   if (!isRecord(value)) {
     return DEFAULT_AUDIO_SETTINGS;
   }
+  const mode = value['sampleLoading'];
   return {
     metronomeVolume:
       readNumber(value['metronomeVolume'], 0, 1) ?? DEFAULT_AUDIO_SETTINGS.metronomeVolume,
     instrumentVolume:
       readNumber(value['instrumentVolume'], 0, 1) ?? DEFAULT_AUDIO_SETTINGS.instrumentVolume,
+    sampleLoading: SAMPLE_LOADING_MODES.includes(mode as SampleLoading)
+      ? (mode as SampleLoading)
+      : DEFAULT_AUDIO_SETTINGS.sampleLoading,
   };
 }
 

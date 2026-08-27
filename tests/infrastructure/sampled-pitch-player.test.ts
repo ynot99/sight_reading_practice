@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { IPitchPlayer } from '../../src/application/ports/IPitchPlayer.js';
+import type { IPitchPlayer, SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { SampledPitchPlayer } from '../../src/infrastructure/audio/SampledPitchPlayer.js';
 import {
   HIGHEST_SAMPLED_MIDI,
@@ -119,7 +119,7 @@ class RecordingFallback implements IPitchPlayer {
   }
 }
 
-function createPlayer(options: { failing?: readonly string[] } = {}): {
+function createPlayer(options: { failing?: readonly string[]; loading?: SampleLoading } = {}): {
   player: SampledPitchPlayer;
   context: FakeAudioContext;
   fallback: RecordingFallback;
@@ -132,6 +132,7 @@ function createPlayer(options: { failing?: readonly string[] } = {}): {
   const player = new SampledPitchPlayer(() => context as unknown as AudioContext, {
     baseUrl: 'samples/piano',
     fallback,
+    ...(options.loading === undefined ? {} : { loading: options.loading }),
     fetchAudio: (url) => {
       requested.push(url);
       if ((options.failing ?? []).some((name) => url.endsWith(`${name}.mp3`))) {
@@ -313,6 +314,60 @@ describe('SampledPitchPlayer', () => {
     expect(context.sources).toHaveLength(0);
     // The stand-in follows the same slider, so the sound cannot jump.
     expect(fallback.volume).toBe(0);
+  });
+
+  describe('when to download', () => {
+    it('waits for the first note by default', () => {
+      const { player, requested } = createPlayer();
+      expect(player.loading).toBe('lazy');
+      expect(requested).toEqual([]);
+    });
+
+    it('downloads nothing at all when switched off', async () => {
+      const { player, requested, fallback } = createPlayer({ loading: 'off' });
+
+      player.play(60, 1);
+      await player.load();
+
+      expect(requested).toEqual([]);
+      expect(player.ready).toBe(false);
+      expect(fallback.played).toEqual([60]);
+    });
+
+    it('starts downloading the moment it is set to eager', () => {
+      const { player, requested } = createPlayer();
+
+      player.setLoading('eager');
+
+      expect(requested).toHaveLength(30);
+    });
+
+    it('releases the decoded audio when switched off', async () => {
+      const { player, requested } = createPlayer();
+      await player.load();
+      expect(player.ready).toBe(true);
+
+      player.setLoading('off');
+
+      // Memory is the larger cost of the two, so it goes as well.
+      expect(player.ready).toBe(false);
+      expect(player.loadedCount).toBe(0);
+
+      // And it can come back.
+      player.setLoading('lazy');
+      await player.load();
+      expect(player.loadedCount).toBe(30);
+      expect(requested).toHaveLength(60);
+    });
+
+    it('ignores a mode it is already in', () => {
+      const { player, requested } = createPlayer({ loading: 'eager' });
+      const initial = requested.length;
+
+      player.setLoading('eager');
+
+      expect(requested).toHaveLength(initial);
+    });
   });
 
   describe('sustain pedal', () => {

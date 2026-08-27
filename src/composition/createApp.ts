@@ -4,7 +4,11 @@ import { FlowMode, FLOW_MODE_ID } from '../application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../application/modes/WaitMode.js';
 import type { IScoringStrategy } from '../domain/scoring/IScoringStrategy.js';
-import type { IPitchPlayer, ISustainPedal } from '../application/ports/IPitchPlayer.js';
+import type {
+  IPitchPlayer,
+  ISampleLibrary,
+  ISustainPedal,
+} from '../application/ports/IPitchPlayer.js';
 import type {
   IMidiConnection,
   IMidiDeviceDirectory,
@@ -77,6 +81,8 @@ export interface AppRuntime {
   readonly pitchPlayer: IPitchPlayer;
   /** `null` when the instrument has no dampers to lift. */
   readonly sustain: ISustainPedal | null;
+  /** `null` when the instrument needs nothing downloaded. */
+  readonly samples: ISampleLibrary | null;
   readonly renderer: IScoreRenderer;
   readonly settings: SettingsRepository;
   readonly metronomeVolume: IVolumeControl;
@@ -140,6 +146,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const restored = settings.load();
   metronome.setVolume(restored.audio.metronomeVolume);
   pitchPlayer.setVolume(restored.audio.instrumentVolume);
+  pitchPlayer.setLoading(restored.audio.sampleLoading);
 
   const accuracyScoring = new AccuracyScoringStrategy();
   const timingScoring = new TimingWeightedScoringStrategy();
@@ -175,6 +182,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     computerKeyboard,
     pitchPlayer,
     sustain: pitchPlayer,
+    samples: pitchPlayer,
     renderer,
     settings,
     metronomeVolume: metronome,

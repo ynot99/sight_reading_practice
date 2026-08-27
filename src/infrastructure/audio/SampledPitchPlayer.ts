@@ -1,4 +1,9 @@
-import type { IPitchPlayer, ISustainPedal } from '../../application/ports/IPitchPlayer.js';
+import type {
+  IPitchPlayer,
+  ISampleLibrary,
+  ISustainPedal,
+  SampleLoading,
+} from '../../application/ports/IPitchPlayer.js';
 import { SilentPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { PIANO_SAMPLES, nearestSample, playbackRateFor } from './pianoSampleMap.js';
@@ -31,6 +36,7 @@ export interface SampledPitchPlayerOptions {
   readonly releaseSec?: number;
   readonly maxVoices?: number;
   readonly fetchAudio?: AudioFetcher;
+  readonly loading?: SampleLoading;
 }
 
 /** Fade applied at the end of a recording, which is cut rather than faded. */
@@ -54,12 +60,16 @@ interface Voice {
  * any sample that failed to arrive - notes are handed to the fallback player,
  * so a key always makes a sound.
  */
-export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl, ISustainPedal {
+export class SampledPitchPlayer
+  implements IPitchPlayer, IVolumeControl, ISustainPedal, ISampleLibrary
+{
   private readonly contextFactory: () => AudioContext;
   private readonly baseUrl: string;
   private readonly fallback: IPitchPlayer;
   private readonly fetchAudio: AudioFetcher;
-  private readonly options: Required<Omit<SampledPitchPlayerOptions, 'baseUrl' | 'fallback' | 'fetchAudio'>>;
+  private readonly options: Required<
+    Omit<SampledPitchPlayerOptions, 'baseUrl' | 'fallback' | 'fetchAudio' | 'loading'>
+  >;
 
   private readonly buffers = new Map<number, AudioBuffer>();
   private readonly voices = new Map<number, Voice>();
@@ -69,15 +79,17 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl, ISustai
   private readonly heldByPedal = new Set<number>();
 
   private context: AudioContext | null = null;
-  private loading: Promise<void> | null = null;
+  private loadPromise: Promise<void> | null = null;
   private currentVolume = 1;
   private pedalDown = false;
+  private loadingMode: SampleLoading;
 
   constructor(contextFactory: () => AudioContext, options: SampledPitchPlayerOptions) {
     this.contextFactory = contextFactory;
     this.baseUrl = options.baseUrl.endsWith('/') ? options.baseUrl : `${options.baseUrl}/`;
     this.fallback = options.fallback ?? new SilentPitchPlayer();
     this.fetchAudio = options.fetchAudio ?? fetchAudioBuffer;
+    this.loadingMode = options.loading ?? 'lazy';
     this.options = {
       gain: options.gain ?? 1,
       releaseSec: options.releaseSec ?? 0.35,
@@ -92,6 +104,34 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl, ISustai
 
   get isReady(): boolean {
     return this.buffers.size > 0;
+  }
+
+  get ready(): boolean {
+    return this.isReady;
+  }
+
+  get loading(): SampleLoading {
+    return this.loadingMode;
+  }
+
+  /**
+   * Switching off releases the decoded audio as well as stopping the
+   * download: it is the larger of the two costs by a wide margin.
+   */
+  setLoading(mode: SampleLoading): void {
+    if (this.loadingMode === mode) {
+      return;
+    }
+    this.loadingMode = mode;
+    if (mode === 'off') {
+      this.stopAll();
+      this.buffers.clear();
+      this.loadPromise = null;
+      return;
+    }
+    if (mode === 'eager') {
+      void this.load();
+    }
   }
 
   get volume(): number {
@@ -139,8 +179,11 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl, ISustai
    * happens once.
    */
   load(): Promise<void> {
-    this.loading ??= this.loadAll();
-    return this.loading;
+    if (this.loadingMode === 'off') {
+      return Promise.resolve();
+    }
+    this.loadPromise ??= this.loadAll();
+    return this.loadPromise;
   }
 
   play(midi: number, velocity: number): void {

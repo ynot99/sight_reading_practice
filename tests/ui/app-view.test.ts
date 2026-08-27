@@ -24,6 +24,7 @@ import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapte
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../../src/application/SettingsRepository.js';
 import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.js';
+import type { SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
 import { AppView } from '../../src/ui/AppView.js';
 
@@ -35,6 +36,22 @@ const INDEX_HTML = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
 function mountRealMarkup(): void {
   const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(INDEX_HTML)?.[1] ?? '';
   document.body.innerHTML = body.replace(/<script[\s\S]*?<\/script>/g, '');
+}
+
+/** Records what the sample selector asked for. */
+class FakeSampleLibrary {
+  ready = false;
+  loading: SampleLoading = 'lazy';
+  loadCalls = 0;
+
+  setLoading(mode: SampleLoading): void {
+    this.loading = mode;
+  }
+
+  load(): Promise<void> {
+    this.loadCalls += 1;
+    return Promise.resolve();
+  }
 }
 
 /** Records the pedal, so the view's routing can be checked. */
@@ -66,6 +83,7 @@ interface Rig {
   readonly metronomeVolume: FakeVolume;
   readonly instrumentVolume: FakeVolume;
   readonly sustain: FakeSustain;
+  readonly samples: FakeSampleLibrary;
 }
 
 function createRig(
@@ -89,6 +107,7 @@ function createRig(
   const metronomeVolume = new FakeVolume();
   const instrumentVolume = new FakeVolume();
   const sustain = new FakeSustain();
+  const samples = new FakeSampleLibrary();
 
   const controller = new PracticeController({
     presets,
@@ -125,6 +144,7 @@ function createRig(
     ),
     pitchPlayer: new SilentPitchPlayer(),
     sustain,
+    samples,
     renderer,
     settings,
     metronomeVolume,
@@ -143,6 +163,7 @@ function createRig(
     metronomeVolume,
     instrumentVolume,
     sustain,
+    samples,
   };
 }
 
@@ -459,6 +480,42 @@ describe('AppView', () => {
       expect(second.runtime.controller.settings.showCursor).toBe(false);
       expect(element<HTMLInputElement>('tempo').value).toBe('128');
       expect(element<HTMLInputElement>('show-cursor').checked).toBe(false);
+    });
+
+    it('chooses when the piano samples are fetched, and remembers it', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      expect(first.samples.loading).toBe('lazy');
+
+      const select = element<HTMLSelectElement>('sample-loading');
+      select.value = 'off';
+      select.dispatchEvent(new Event('change'));
+
+      expect(first.samples.loading).toBe('off');
+      expect(element('sample-loading-hint').textContent).toContain('no download');
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      await second.view.initialize();
+
+      expect(element<HTMLSelectElement>('sample-loading').value).toBe('off');
+      expect(second.samples.loading).toBe('off');
+    });
+
+    it('keeps the volumes when the sample mode changes', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const slider = element<HTMLInputElement>('metronome-volume');
+      slider.value = '20';
+      slider.dispatchEvent(new Event('input'));
+
+      const select = element<HTMLSelectElement>('sample-loading');
+      select.value = 'eager';
+      select.dispatchEvent(new Event('change'));
+
+      expect(rig.settings.currentAudio.metronomeVolume).toBeCloseTo(0.2, 10);
+      expect(rig.settings.currentAudio.sampleLoading).toBe('eager');
     });
 
     it('starts from the defaults when the device has nothing stored', async () => {

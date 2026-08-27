@@ -133,6 +133,16 @@
           <input id="zoom" type="range" min="40" max="220" step="5" value="85" />
         </div>
 
+        <div class="control-group">
+          <label for="sample-loading">Piano samples</label>
+          <select id="sample-loading">
+            <option value="eager">Download on open</option>
+            <option value="lazy">Download on first note</option>
+            <option value="off">Do not download</option>
+          </select>
+          <p id="sample-loading-hint" class="hint"></p>
+        </div>
+
         <div class="control-group control-group--checks">
           <label><input id="highlight-notes" type="checkbox" checked /> Colour played notes</label>
           <label><input id="show-cursor" type="checkbox" checked /> Show cursor</label>

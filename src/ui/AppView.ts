@@ -74,6 +74,7 @@ export class AppView {
   private readonly el: {
     exerciseTitle: HTMLElement;
     midiStatus: HTMLElement;
+    bridgeStatus: HTMLElement;
     connectMidi: HTMLButtonElement;
     midiInput: HTMLSelectElement;
     midiHint: HTMLElement;
@@ -114,6 +115,7 @@ export class AppView {
     this.el = {
       exerciseTitle: requireElement(doc, 'exercise-title'),
       midiStatus: requireElement(doc, 'midi-status'),
+      bridgeStatus: requireElement(doc, 'bridge-status'),
       connectMidi: requireElement(doc, 'connect-midi'),
       midiInput: requireElement(doc, 'midi-input'),
       midiHint: requireElement(doc, 'midi-hint'),
@@ -386,8 +388,47 @@ export class AppView {
     );
 
     this.subscriptions.push(this.runtime.webMidi.onInputsChanged(() => this.refreshInputs()));
+    this.bindBridge();
 
     this.subscriptions.push(this.subscribeAudioFeedback());
+  }
+
+  /**
+   * Surfaces the desktop relay, when the page was served by one.
+   *
+   * This is the path that makes a tablet usable, so its state has to be
+   * visible: which computer, which keyboard, and whether notes can arrive.
+   */
+  private bindBridge(): void {
+    const bridge = this.runtime.bridge;
+    if (bridge === null) {
+      this.el.bridgeStatus.hidden = true;
+      return;
+    }
+
+    this.el.bridgeStatus.hidden = false;
+    const render = (): void => {
+      const status = bridge.status;
+      const device = bridge.deviceName;
+      this.el.bridgeStatus.textContent =
+        status === 'connected'
+          ? `Bridge: ${device ?? 'no keyboard'}`
+          : status === 'connecting'
+            ? 'Bridge: connecting…'
+            : 'Bridge: offline';
+      this.el.bridgeStatus.className =
+        status === 'connected' && device !== null
+          ? 'pill pill--connected'
+          : status === 'connected'
+            ? 'pill pill--idle'
+            : 'pill pill--error';
+      this.renderMidiHint(this.runtime.webMidi.status);
+    };
+
+    this.subscriptions.push(bridge.onStatusChange(render));
+    this.subscriptions.push(bridge.onDeviceChange(render));
+    render();
+    void bridge.connect();
   }
 
   /**
@@ -398,6 +439,12 @@ export class AppView {
    * most likely to be practised on.
    */
   private renderMidiHint(status: MidiConnectionStatus): void {
+    // A working bridge means notes are already arriving; telling the reader
+    // that this browser lacks Web MIDI would be true but useless noise.
+    if (this.runtime.bridge?.status === 'connected') {
+      this.el.midiHint.hidden = true;
+      return;
+    }
     const hint = MIDI_HINTS[status];
     this.el.midiHint.textContent = hint ?? '';
     this.el.midiHint.hidden = hint === undefined;

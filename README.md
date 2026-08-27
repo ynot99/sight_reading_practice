@@ -28,11 +28,26 @@ npm run dev        # http://localhost:5173
 | `npm test`          | Vitest, single run                                |
 | `npm run test:watch`| Vitest in watch mode                              |
 | `npm run coverage`  | Vitest with a V8 coverage report                  |
+| `npm run bridge`    | Build, then serve the app + relay MIDI to a tablet |
 
 Web MIDI needs Chrome, Edge or Opera and a secure context (`localhost` counts).
 No keyboard to hand? The computer keyboard is wired up as a second MIDI source:
 `z s x d c v g b h n j m` is the lower octave, `q 2 w 3 e r 5 t 6 y 7 u` the
 upper one.
+
+### Practising on a tablet
+
+iPadOS has no Web MIDI in any browser — every browser there is Safari
+underneath — so a tablet can never see a MIDI keyboard by itself. Plug the
+keyboard into a computer on the same Wi-Fi and run:
+
+```bash
+npm run bridge
+```
+
+It prints an address to open on the tablet. The keyboard's notes are relayed
+over the local network, and the iPad becomes a screen on the music stand. See
+[tools/midi-bridge](tools/midi-bridge/README.md) for the details.
 
 ## Architecture
 
@@ -121,8 +136,8 @@ src/
 │       └── PracticeModeRegistry.ts
 │
 ├── infrastructure/                 # the only code that touches the platform
-│   ├── midi/                       #   WebMidiAdapter, ComputerKeyboardMidiSource,
-│   │                               #   CompositeMidiSource, webmidi-dom types
+│   ├── midi/                       #   WebMidiAdapter, WebSocketMidiSource,
+│   │                               #   ComputerKeyboardMidiSource, Composite…
 │   ├── audio/                      #   WebAudioMetronome (look-ahead scheduler),
 │   │                               #   WebAudioPitchPlayer, metronomeMath
 │   ├── rendering/                  #   OsmdScoreRenderer, CursorNavigator
@@ -132,6 +147,7 @@ src/
 ├── composition/createApp.ts        # the composition root
 └── ui/                             # AppView, dom helpers
 
+tools/midi-bridge/                  # desktop relay: MIDI ➜ WebSocket ➜ tablet
 tests/                              # mirrors src/, plus integration/
 ```
 
@@ -200,7 +216,7 @@ is asserted in `tests/application/session-state.test.ts`.
 
 | Port                 | Production adapter                              | Test double            |
 | -------------------- | ----------------------------------------------- | ---------------------- |
-| `IMidiSource`        | `WebMidiAdapter`, `ComputerKeyboardMidiSource`, `CompositeMidiSource` | `MockMidiAdapter` |
+| `IMidiSource`        | `WebMidiAdapter`, `WebSocketMidiSource`, `ComputerKeyboardMidiSource`, `CompositeMidiSource` | `MockMidiAdapter` |
 | `IMidiConnection`    | `WebMidiAdapter`                                | `MockMidiAdapter`      |
 | `IMidiDeviceDirectory` | `WebMidiAdapter`                              | `MockMidiAdapter`      |
 | `IMetronome`         | `WebAudioMetronome`                             | `ManualMetronome`      |
@@ -216,7 +232,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~250 tests
+npm test           # ~280 tests
 npm run coverage   # ~92% of statements in src/
 ```
 

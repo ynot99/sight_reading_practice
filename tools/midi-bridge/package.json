@@ -1,0 +1,18 @@
+{
+  "name": "sight-reading-midi-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Serves the trainer on the local network and relays MIDI from a keyboard plugged into this computer.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node bridge.mjs",
+    "list": "node bridge.mjs --list"
+  },
+  "dependencies": {
+    "@julusian/midi": "^3.8.1",
+    "ws": "^8.21.3"
+  }
+}

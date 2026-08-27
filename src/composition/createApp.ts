@@ -1,4 +1,5 @@
 import { PracticeController } from '../application/PracticeController.js';
+import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { FlowMode, FLOW_MODE_ID } from '../application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../application/modes/WaitMode.js';
@@ -25,6 +26,8 @@ import {
   type KeyboardTarget,
 } from '../infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { WebMidiAdapter } from '../infrastructure/midi/WebMidiAdapter.js';
+import { WebSocketMidiSource } from '../infrastructure/midi/WebSocketMidiSource.js';
+import { resolveBridgeUrl, type LocationLike } from '../infrastructure/midi/bridgeUrl.js';
 import { browserMidiAccessProvider } from '../infrastructure/midi/webmidi-dom.js';
 import { OsmdScoreRenderer } from '../infrastructure/rendering/OsmdScoreRenderer.js';
 import { SystemClock } from '../infrastructure/time/SystemClock.js';
@@ -32,6 +35,17 @@ import { SystemClock } from '../infrastructure/time/SystemClock.js';
 export interface AppRuntimeOptions {
   readonly scoreContainer: HTMLElement;
   readonly keyboardTarget: KeyboardTarget;
+  /** Where the page was loaded from; decides whether to look for a bridge. */
+  readonly location: LocationLike;
+}
+
+/**
+ * A desktop relay standing in for hardware the browser cannot reach itself.
+ */
+export interface IMidiBridge extends IMidiSource, IMidiConnection {
+  readonly deviceName: string | null;
+  readonly endpoint: string;
+  onDeviceChange(listener: (device: string | null) => void): Unsubscribe;
 }
 
 /**
@@ -45,6 +59,8 @@ export interface AppRuntime {
   readonly presets: ExercisePresetRegistry;
   readonly modes: PracticeModeRegistry;
   readonly webMidi: IMidiSource & IMidiConnection & IMidiDeviceDirectory;
+  /** `null` when the page cannot reach a bridge, e.g. on the public site. */
+  readonly bridge: IMidiBridge | null;
   readonly computerKeyboard: IMidiSource & IToggleableInput;
   readonly pitchPlayer: IPitchPlayer;
   readonly renderer: IScoreRenderer;
@@ -75,7 +91,18 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
 
   const webMidi = new WebMidiAdapter(browserMidiAccessProvider(), clock);
   const computerKeyboard = new ComputerKeyboardMidiSource(options.keyboardTarget, clock);
-  const midi = new CompositeMidiSource([webMidi, computerKeyboard]);
+
+  // On a tablet the keyboard is plugged into a computer on the same network,
+  // not into the device showing the page.
+  const bridgeUrl = resolveBridgeUrl(options.location);
+  const bridge =
+    bridgeUrl === null ? null : new WebSocketMidiSource({ url: bridgeUrl, clock });
+
+  const sources: IMidiSource[] = [webMidi, computerKeyboard];
+  if (bridge !== null) {
+    sources.push(bridge);
+  }
+  const midi = new CompositeMidiSource(sources);
 
   const renderer = new OsmdScoreRenderer(options.scoreContainer);
   const serializer = new MusicXmlSerializer();
@@ -105,6 +132,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     presets,
     modes,
     webMidi,
+    bridge,
     computerKeyboard,
     pitchPlayer,
     renderer,
@@ -112,6 +140,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       controller.dispose();
       computerKeyboard.disable();
       void webMidi.disconnect();
+      void bridge?.disconnect();
       metronome.stop();
       pitchPlayer.stopAll();
     },

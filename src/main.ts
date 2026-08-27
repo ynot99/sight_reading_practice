@@ -18,6 +18,7 @@ function bootstrap(): void {
     scoreContainer,
     // The DOM's overloaded listener signature is wider than the port needs.
     keyboardTarget: document as unknown as KeyboardTarget,
+    location: window.location,
   });
 
   const view = new AppView(runtime, document);

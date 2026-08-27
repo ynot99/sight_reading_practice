@@ -74,6 +74,7 @@ function createRig(webMidiOverride?: AppRuntime['webMidi']): Rig {
     presets,
     modes,
     webMidi: webMidiOverride ?? midi,
+    bridge: null,
     computerKeyboard: new ComputerKeyboardMidiSource(
       document as unknown as KeyboardTarget,
       clock,

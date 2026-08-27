@@ -29,6 +29,12 @@ function readSampleLoading(value: string): SampleLoading {
     : 'lazy';
 }
 
+/** Entries kept in the note log; older ones fall off the end. */
+const MAX_LOG_ENTRIES = 40;
+
+/** How far from the newest entry still counts as following along. */
+const FOLLOW_THRESHOLD_PX = 8;
+
 /** Matches what the stored-settings codec will accept back. */
 const MIN_BARS = 1;
 const MAX_BARS = 32;
@@ -808,9 +814,16 @@ export class AppView {
     const right = this.doc.createElement('span');
     right.textContent = remaining.length > 0 ? `still: ${formatNotes(remaining)}` : '';
     item.append(left, right);
-    this.el.log.append(item);
-    while (this.el.log.childElementCount > 40) {
-      this.el.log.firstElementChild?.remove();
+
+    // Newest first, and the view follows it - unless the reader has scrolled
+    // down to look at something, in which case leave them where they are.
+    const wasFollowing = this.el.log.scrollTop <= FOLLOW_THRESHOLD_PX;
+    this.el.log.prepend(item);
+    while (this.el.log.childElementCount > MAX_LOG_ENTRIES) {
+      this.el.log.lastElementChild?.remove();
+    }
+    if (wasFollowing) {
+      this.el.log.scrollTop = 0;
     }
   }
 

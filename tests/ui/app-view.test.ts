@@ -304,6 +304,74 @@ describe('AppView', () => {
     expect(renderer.cursor.visible).toBe(true);
   });
 
+  describe('the note log', () => {
+    async function playNotes(rig: Rig, count: number): Promise<number[]> {
+      await rig.view.initialize();
+      element<HTMLButtonElement>('start').click();
+      const played: number[] = [];
+      for (let index = 0; index < count; index += 1) {
+        const midi = 60 + index;
+        rig.midi.noteOn(midi, index);
+        played.push(midi);
+      }
+      return played;
+    }
+
+    it('puts the newest note at the top', async () => {
+      const rig = createRig();
+      await playNotes(rig, 3);
+
+      const log = element('log');
+      // Played C4, C#4, D4 - the most recent is the one the reader should not
+      // have to hunt for.
+      expect(log.firstElementChild?.textContent).toContain('D4');
+      expect(log.lastElementChild?.textContent).toContain('C4');
+    });
+
+    it('keeps the view on the newest entry', async () => {
+      const rig = createRig();
+      const log = element('log');
+      log.scrollTop = 0;
+
+      await playNotes(rig, 5);
+
+      expect(log.scrollTop).toBe(0);
+    });
+
+    it('leaves the reader alone when they have scrolled away', async () => {
+      const rig = createRig();
+      await playNotes(rig, 3);
+      const log = element('log');
+
+      log.scrollTop = 120;
+      rig.midi.noteOn(72, 99);
+
+      expect(log.scrollTop).toBe(120);
+    });
+
+    it('drops the oldest entries rather than growing without end', async () => {
+      const rig = createRig();
+      await playNotes(rig, 45);
+
+      const log = element('log');
+      expect(log.childElementCount).toBe(40);
+      // The first five presses fell off the far end.
+      expect(log.textContent).not.toContain('C4 ');
+    });
+
+    it('starts empty on a new run', async () => {
+      const rig = createRig();
+      await playNotes(rig, 3);
+      expect(element('log').childElementCount).toBeGreaterThan(0);
+
+      // Start is disabled while a run is going, so stop it first.
+      element<HTMLButtonElement>('stop').click();
+      element<HTMLButtonElement>('start').click();
+
+      expect(element('log').childElementCount).toBe(0);
+    });
+  });
+
   describe('layout and score settings', () => {
     it('keeps the run controls in the toolbar, out of the settings', async () => {
       const { view } = createRig();

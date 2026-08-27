@@ -170,9 +170,15 @@ progress {
   margin: 0;
   padding: 0;
   display: flex;
-  flex-direction: column-reverse;
+  /*
+   * Not column-reverse: it flips the scroll origin too, so the view sticks to
+   * the oldest entry while new ones pile up out of sight. The newest is put
+   * first in the markup instead, and the list scrolls normally.
+   */
+  flex-direction: column;
   gap: 4px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   max-height: 220px;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;

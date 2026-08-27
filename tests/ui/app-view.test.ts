@@ -252,6 +252,98 @@ describe('AppView', () => {
     expect(element('midi-hint').hidden).toBe(true);
   });
 
+  describe('fullscreen', () => {
+    it('hides the page furniture and shows the pill', async () => {
+      const { view, renderer } = createRig();
+      await view.initialize();
+      const rendersBefore = renderer.refreshCount;
+
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      expect(element('app').classList.contains('is-focus')).toBe(true);
+      expect(element('focus-bar').hidden).toBe(false);
+      expect(element<HTMLButtonElement>('focus').textContent).toBe('Exit fullscreen');
+      // The score has the whole width now, so it has to be laid out again.
+      expect(renderer.refreshCount).toBeGreaterThan(rendersBefore);
+    });
+
+    it('starts and pauses the run from the pill', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      element<HTMLButtonElement>('focus-play').click();
+      expect(runtime.controller.session?.status).toBe('running');
+      expect(element<HTMLButtonElement>('focus-play').textContent).toBe('Pause');
+      expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
+
+      element<HTMLButtonElement>('focus-play').click();
+      expect(runtime.controller.session?.status).toBe('paused');
+      expect(element<HTMLButtonElement>('focus-play').textContent).toBe('Resume');
+
+      element<HTMLButtonElement>('focus-play').click();
+      expect(runtime.controller.session?.status).toBe('running');
+
+      element<HTMLButtonElement>('focus-stop').click();
+      expect(runtime.controller.session?.status).toBe('aborted');
+    });
+
+    it('shows where you are, then the grade, without the side panel', async () => {
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+      element<HTMLButtonElement>('focus-play').click();
+
+      expect(element('focus-status').textContent).toContain('bar 1');
+
+      const session = runtime.controller.session;
+      let guard = 400;
+      while (session?.status === 'running' && guard > 0) {
+        guard -= 1;
+        const step = session.currentStep;
+        if (step === null) {
+          break;
+        }
+        for (const note of step.expectedMidi) {
+          midi.noteOn(note, 0);
+        }
+      }
+
+      expect(session?.status).toBe('completed');
+      expect(element('focus-status').textContent).toMatch(/^[A-F] · \d+%$/);
+    });
+
+    it('loads a new exercise from the pill', async () => {
+      const { view, renderer } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      element<HTMLButtonElement>('focus-next').click();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(renderer.loadCount).toBe(2);
+    });
+
+    it('comes back out again', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      element<HTMLButtonElement>('focus-exit').click();
+      await Promise.resolve();
+
+      expect(element('app').classList.contains('is-focus')).toBe(false);
+      expect(element('focus-bar').hidden).toBe(true);
+      expect(element<HTMLButtonElement>('focus').textContent).toBe('Fullscreen');
+    });
+  });
+
   it('detaches its listeners on dispose', async () => {
     const { view, runtime } = createRig();
     await view.initialize();

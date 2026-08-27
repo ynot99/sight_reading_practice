@@ -6,7 +6,7 @@
     <title>Piano Sight-Reading Trainer</title>
   </head>
   <body>
-    <div class="app">
+    <div class="app" id="app">
       <header class="app-header">
         <div class="brand">
           <h1>Piano Sight-Reading Trainer</h1>
@@ -99,12 +99,25 @@
         </div>
 
         <div class="control-group control-group--actions">
+          <button id="focus" type="button" class="button">Fullscreen</button>
           <button id="new-exercise" type="button" class="button">New exercise</button>
           <button id="start" type="button" class="button button--primary">Start</button>
           <button id="pause" type="button" class="button" disabled>Pause</button>
           <button id="stop" type="button" class="button button--ghost" disabled>Stop</button>
         </div>
       </footer>
+
+      <div id="focus-bar" class="focus-bar" hidden>
+        <span id="focus-status" class="focus-bar__status">Idle</span>
+        <button id="focus-play" type="button" class="focus-bar__button focus-bar__button--primary">
+          Start
+        </button>
+        <button id="focus-stop" type="button" class="focus-bar__button" disabled>Stop</button>
+        <button id="focus-next" type="button" class="focus-bar__button">New</button>
+        <button id="focus-exit" type="button" class="focus-bar__button focus-bar__button--exit">
+          Exit
+        </button>
+      </div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

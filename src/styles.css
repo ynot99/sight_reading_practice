@@ -331,3 +331,103 @@ select {
 .pill--idle {
   color: var(--text-muted);
 }
+
+/* ---- Focus mode -------------------------------------------------------- */
+
+/*
+ * The score takes the whole screen and everything else steps aside. Driven by
+ * a class rather than by the Fullscreen API, so it still works on a device
+ * that refuses real fullscreen.
+ */
+.app.is-focus {
+  padding: 0;
+  gap: 0;
+  background: #ffffff;
+}
+
+.app.is-focus .app-header,
+.app.is-focus .controls,
+.app.is-focus .panel {
+  display: none;
+}
+
+.app.is-focus .layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.app.is-focus .score {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Room for the pill, so the last system is never hidden behind it. */
+  padding-bottom: 92px;
+}
+
+.focus-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 20;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px); /* Safari needs the prefix before 18. */
+  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 24px rgb(16 24 40 / 18%);
+  max-width: calc(100vw - 24px);
+}
+
+.focus-bar[hidden] {
+  display: none;
+}
+
+.focus-bar__status {
+  padding: 0 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 42vw;
+}
+
+.focus-bar__button {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: var(--text);
+  border-radius: 999px;
+  /* Comfortable to hit with a finger on a music stand. */
+  min-height: 40px;
+  padding: 0 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.focus-bar__button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.focus-bar__button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.focus-bar__button--exit {
+  background: transparent;
+}

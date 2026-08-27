@@ -9,6 +9,7 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
+import { FocusMode } from './FocusMode.js';
 
 const TIME_SIGNATURES = ['4/4', '3/4', '2/4', '6/8'] as const;
 
@@ -70,8 +71,19 @@ export class AppView {
   private sessionSubscriptions: Unsubscribe[] = [];
   private audioFeedbackEnabled = true;
   private totalSteps = 1;
+  private focusMode: FocusMode | null = null;
+  private lastStatus: SessionStatus = 'idle';
+  private lastPosition = '';
 
   private readonly el: {
+    app: HTMLElement;
+    focus: HTMLButtonElement;
+    focusBar: HTMLElement;
+    focusStatus: HTMLElement;
+    focusPlay: HTMLButtonElement;
+    focusStop: HTMLButtonElement;
+    focusNext: HTMLButtonElement;
+    focusExit: HTMLButtonElement;
     exerciseTitle: HTMLElement;
     midiStatus: HTMLElement;
     bridgeStatus: HTMLElement;
@@ -113,6 +125,14 @@ export class AppView {
     this.runtime = runtime;
     this.doc = doc;
     this.el = {
+      app: requireElement(doc, 'app'),
+      focus: requireElement(doc, 'focus'),
+      focusBar: requireElement(doc, 'focus-bar'),
+      focusStatus: requireElement(doc, 'focus-status'),
+      focusPlay: requireElement(doc, 'focus-play'),
+      focusStop: requireElement(doc, 'focus-stop'),
+      focusNext: requireElement(doc, 'focus-next'),
+      focusExit: requireElement(doc, 'focus-exit'),
       exerciseTitle: requireElement(doc, 'exercise-title'),
       midiStatus: requireElement(doc, 'midi-status'),
       bridgeStatus: requireElement(doc, 'bridge-status'),
@@ -154,6 +174,7 @@ export class AppView {
   async initialize(): Promise<void> {
     this.populateSelects();
     this.bindControls();
+    this.bindFocusMode();
     this.bindControllerEvents();
     this.bindMidi();
     this.syncControlsFromSettings();
@@ -163,6 +184,8 @@ export class AppView {
   }
 
   dispose(): void {
+    this.focusMode?.dispose();
+    this.focusMode = null;
     for (const unsubscribe of [...this.subscriptions, ...this.sessionSubscriptions]) {
       unsubscribe();
     }
@@ -314,6 +337,64 @@ export class AppView {
     }
   }
 
+  /**
+   * Fullscreen reading, with a pill of controls where a hand can reach it.
+   *
+   * The pill is not a second copy of the app: it exposes only what is needed
+   * once the page is gone - start or pause, stop, next exercise, and the way
+   * out - and it drives exactly the same controller calls as the main buttons.
+   */
+  private bindFocusMode(): void {
+    const { controller } = this.runtime;
+
+    this.focusMode = new FocusMode({
+      root: this.el.app,
+      doc: this.doc,
+      onChange: (active) => {
+        this.el.focusBar.hidden = !active;
+        this.el.focus.textContent = active ? 'Exit fullscreen' : 'Fullscreen';
+        // The score just changed width; re-engrave it for the new space.
+        controller.refreshScore();
+        this.updateButtons(this.lastStatus);
+      },
+    });
+
+    this.listen(this.el.focus, 'click', () => {
+      void this.focusMode?.toggle();
+    });
+
+    this.listen(this.el.focusExit, 'click', () => {
+      void this.focusMode?.exit();
+    });
+
+    this.listen(this.el.focusPlay, 'click', () => {
+      const status = controller.session?.status;
+      if (status === 'running' || status === 'counting-in') {
+        controller.pause();
+        return;
+      }
+      if (status === 'paused') {
+        controller.resume();
+        return;
+      }
+      this.clearLog();
+      this.el.result.hidden = true;
+      controller.start();
+    });
+
+    this.listen(this.el.focusStop, 'click', () => {
+      controller.stop();
+    });
+
+    this.listen(this.el.focusNext, 'click', () => {
+      void this.reload(true);
+    });
+  }
+
+  private renderFocusStatus(text: string): void {
+    this.el.focusStatus.textContent = text;
+  }
+
   private bindControllerEvents(): void {
     const { controller } = this.runtime;
 
@@ -351,15 +432,23 @@ export class AppView {
     this.sessionSubscriptions.push(
       session.events.on('statusChanged', ({ status }) => {
         this.el.sessionStatus.textContent = STATUS_LABELS[status];
+        this.renderFocusStatus(
+          status === 'running' && this.lastPosition !== ''
+            ? this.lastPosition
+            : STATUS_LABELS[status],
+        );
         this.updateButtons(status);
       }),
       session.events.on('countIn', ({ beatsRemaining }) => {
         this.el.sessionStatus.textContent = `Counting in… ${beatsRemaining}`;
+        this.renderFocusStatus(`Counting in… ${beatsRemaining}`);
       }),
       session.events.on('stepEntered', ({ step }) => {
         this.el.expected.textContent = formatNotes(step.expectedMidi);
-        this.el.position.textContent = `bar ${step.measureIndex + 1} · beat ${step.beat.toFixed(2).replace(/\.00$/, '')}`;
+        this.lastPosition = `bar ${step.measureIndex + 1} · beat ${step.beat.toFixed(2).replace(/\.00$/, '')}`;
+        this.el.position.textContent = this.lastPosition;
         this.el.progress.value = step.index;
+        this.renderFocusStatus(this.lastPosition);
       }),
       session.events.on('noteJudged', ({ midi, verdict, remaining }) => {
         this.appendLog(midi, verdict, remaining);
@@ -367,6 +456,9 @@ export class AppView {
       session.events.on('finished', ({ report, score }) => {
         this.el.progress.value = this.totalSteps;
         this.el.expected.textContent = '—';
+        this.lastPosition = '';
+        // In fullscreen the result panel is hidden, so the pill carries it.
+        this.renderFocusStatus(`${score.grade} · ${percent(score.overall)}`);
         this.renderResult(score, report);
       }),
     );
@@ -531,13 +623,20 @@ export class AppView {
   }
 
   private updateButtons(status: SessionStatus): void {
+    this.lastStatus = status;
     const running = status === 'running' || status === 'counting-in';
     const paused = status === 'paused';
+
     this.el.start.disabled = running || paused;
     this.el.pause.disabled = !running && !paused;
     this.el.pause.textContent = paused ? 'Resume' : 'Pause';
     this.el.stop.disabled = !running && !paused;
     this.el.newExercise.disabled = running || paused;
+
+    this.el.focusPlay.textContent = running ? 'Pause' : paused ? 'Resume' : 'Start';
+    this.el.focusStop.disabled = !running && !paused;
+    this.el.focusNext.disabled = running || paused;
+    this.el.focus.disabled = false;
   }
 
   private appendLog(midi: number, verdict: string, remaining: readonly number[]): void {

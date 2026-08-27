@@ -306,6 +306,38 @@ describe('cursor visibility', () => {
     expect(renderer.cursor.visible).toBe(true);
   });
 
+  it('puts the cursor back after the score is re-engraved', async () => {
+    const { controller, renderer, midi } = createController();
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
+    for (const note of step.expectedMidi) {
+      midi.noteOn(note, 0);
+    }
+    expect(renderer.cursor.position).toBe(1);
+
+    // Going fullscreen changes the width; the engraver rewinds when it
+    // re-renders, so the position has to be restored.
+    controller.refreshScore();
+
+    expect(renderer.refreshCount).toBe(1);
+    expect(renderer.cursor.position).toBe(1);
+  });
+
+  it('does not force a cursor move when nothing is running', async () => {
+    const { controller, renderer } = createController();
+    await controller.loadNewExercise();
+    const movesBefore = renderer.cursor.moves.length;
+
+    controller.refreshScore();
+
+    expect(renderer.cursor.moves).toHaveLength(movesBefore);
+    expect(renderer.cursor.visible).toBe(true);
+  });
+
   it('leaves visibility alone when other settings change', async () => {
     const { controller, renderer } = createController();
     await controller.loadNewExercise();

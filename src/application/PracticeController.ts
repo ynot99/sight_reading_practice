@@ -173,6 +173,22 @@ export class PracticeController {
     return this.load(this.lastSeed ?? undefined);
   }
 
+  /**
+   * Re-lays out the score after the container changed size.
+   *
+   * The engraver rewinds its cursor when it re-renders, so the session's
+   * position is put back afterwards - otherwise switching to fullscreen
+   * mid-exercise would silently send the marker back to the first note.
+   */
+  refreshScore(): void {
+    this.deps.renderer.refresh();
+    this.applyCursorVisibility();
+    const index = this.currentSession?.currentIndex ?? -1;
+    if (index > 0) {
+      this.deps.cursor.moveTo(index);
+    }
+  }
+
   private async load(seed: number | undefined): Promise<Exercise> {
     this.disposeSession();
 

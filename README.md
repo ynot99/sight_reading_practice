@@ -49,6 +49,12 @@ It prints an address to open on the tablet. The keyboard's notes are relayed
 over the local network, and the iPad becomes a screen on the music stand. See
 [tools/midi-bridge](tools/midi-bridge/README.md) for the details.
 
+**Fullscreen** hides everything but the score and leaves a pill of controls at
+the bottom of the screen - start or pause, stop, next exercise, and the way
+out. It asks for real fullscreen where the browser allows it, but the layout
+does not depend on that: if fullscreen is refused, the score still takes the
+whole page and the pill still gets you out.
+
 ## Architecture
 
 Four layers, dependencies pointing strictly inwards. The domain knows nothing
@@ -232,7 +238,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~280 tests
+npm test           # ~300 tests
 npm run coverage   # ~92% of statements in src/
 ```
 

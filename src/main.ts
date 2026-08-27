@@ -9,9 +9,11 @@ import { AppView } from './ui/AppView.js';
  * Builds the object graph, hands it to the view and gets out of the way.
  */
 function bootstrap(): void {
-  const scoreContainer = document.getElementById('score');
+  // The engraver measures its container with offsetWidth, which counts
+  // padding and border, so it gets an element that has neither.
+  const scoreContainer = document.getElementById('score-surface');
   if (scoreContainer === null) {
-    throw new Error('Missing #score container.');
+    throw new Error('Missing #score-surface container.');
   }
 
   const runtime = createApp({

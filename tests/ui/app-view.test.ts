@@ -297,6 +297,16 @@ describe('AppView', () => {
       }
     });
 
+    it('gives the engraver a container of its own', () => {
+      // OSMD sizes the sheet from container.offsetWidth, which counts padding
+      // and border. Drawing into the framed element would make the sheet wider
+      // than the space it has, and put a horizontal scrollbar under it.
+      const surface = document.getElementById('score-surface');
+      expect(surface).not.toBeNull();
+      expect(surface?.parentElement?.classList.contains('score')).toBe(true);
+      expect(surface?.children).toHaveLength(0);
+    });
+
     it('resizes the notes on release, not on every drag step', async () => {
       const { view, runtime, renderer } = createRig();
       await view.initialize();

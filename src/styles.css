@@ -107,8 +107,20 @@ body {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow: auto;
-  padding: 8px;
+  /* Reserved up front: a scrollbar that appears later would shrink the width
+     the engraver already measured, and push the notation off the right edge. */
+  scrollbar-gutter: stable;
+  padding: 8px 0;
   min-height: 340px;
+}
+
+/*
+ * What the engraver draws into. It carries no padding and no border on
+ * purpose: OSMD sizes the sheet from `container.offsetWidth`, which counts
+ * both, and would draw wider than the space it actually has.
+ */
+.score__surface {
+  width: 100%;
 }
 
 .panel {

@@ -96,6 +96,11 @@ class RecordingFallback implements IPitchPlayer {
   readonly stopped: number[] = [];
   stopAllCalls = 0;
   volume = 1;
+  sustained = false;
+
+  setSustain(down: boolean): void {
+    this.sustained = down;
+  }
 
   play(midi: number): void {
     this.played.push(midi);
@@ -308,6 +313,96 @@ describe('SampledPitchPlayer', () => {
     expect(context.sources).toHaveLength(0);
     // The stand-in follows the same slider, so the sound cannot jump.
     expect(fallback.volume).toBe(0);
+  });
+
+  describe('sustain pedal', () => {
+    it('keeps a released key ringing while the pedal is down', async () => {
+      const { player, context } = createPlayer();
+      await player.load();
+      player.play(60, 1);
+
+      player.setSustain(true);
+      player.stop(60);
+
+      expect(player.sustained).toBe(true);
+      // The finger is off the key, but the damper has not come down.
+      expect(context.sources[0]?.stoppedAt).toBeNull();
+    });
+
+    it('damps everything the pedal was holding when it comes up', async () => {
+      const { player, context } = createPlayer();
+      await player.load();
+      player.play(60, 1);
+      player.play(64, 1);
+      player.setSustain(true);
+      player.stop(60);
+      player.stop(64);
+
+      player.setSustain(false);
+
+      expect(player.sustained).toBe(false);
+      expect(context.sources.every((source) => source.stoppedAt !== null)).toBe(true);
+    });
+
+    it('leaves a key that is still held alone when the pedal comes up', async () => {
+      const { player, context } = createPlayer();
+      await player.load();
+      player.play(60, 1);
+      player.setSustain(true);
+
+      player.setSustain(false);
+
+      // Never released, so it keeps sounding.
+      expect(context.sources[0]?.stoppedAt).toBeNull();
+    });
+
+    it('forgets a pedal-held note when the key is struck again', async () => {
+      const { player, context } = createPlayer();
+      await player.load();
+      player.play(60, 1);
+      player.setSustain(true);
+      player.stop(60);
+
+      player.play(60, 1);
+      player.setSustain(false);
+
+      // The retrigger stopped the first voice; the second is still ringing.
+      expect(context.sources[0]?.stoppedAt).not.toBeNull();
+      expect(context.sources[1]?.stoppedAt).toBeNull();
+    });
+
+    it('ignores a pedal message that changes nothing', async () => {
+      const { player } = createPlayer();
+      await player.load();
+
+      player.setSustain(true);
+      player.setSustain(true);
+
+      expect(player.sustained).toBe(true);
+    });
+
+    it('passes the pedal on to the stand-in player', () => {
+      const { player, fallback } = createPlayer();
+      player.play(60, 1);
+
+      player.setSustain(true);
+      player.stop(60);
+
+      // Sounding on the fallback, which does its own damping.
+      expect(fallback.stopped).toEqual([60]);
+    });
+
+    it('drops the pedal when everything is silenced', async () => {
+      const { player, context } = createPlayer();
+      await player.load();
+      player.play(60, 1);
+      player.setSustain(true);
+      player.stop(60);
+
+      player.stopAll();
+
+      expect(context.sources.every((source) => source.stoppedAt !== null)).toBe(true);
+    });
   });
 
   it('releases everything on demand', async () => {

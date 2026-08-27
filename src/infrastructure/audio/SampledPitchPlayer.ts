@@ -1,4 +1,4 @@
-import type { IPitchPlayer } from '../../application/ports/IPitchPlayer.js';
+import type { IPitchPlayer, ISustainPedal } from '../../application/ports/IPitchPlayer.js';
 import { SilentPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { PIANO_SAMPLES, nearestSample, playbackRateFor } from './pianoSampleMap.js';
@@ -8,6 +8,10 @@ export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
 /** Not every pitch player has a volume; the built-in ones do. */
 function hasVolumeControl(player: IPitchPlayer): player is IPitchPlayer & IVolumeControl {
   return typeof (player as Partial<IVolumeControl>).setVolume === 'function';
+}
+
+function hasSustain(player: IPitchPlayer): player is IPitchPlayer & ISustainPedal {
+  return typeof (player as Partial<ISustainPedal>).setSustain === 'function';
 }
 
 export const fetchAudioBuffer: AudioFetcher = async (url) => {
@@ -50,7 +54,7 @@ interface Voice {
  * any sample that failed to arrive - notes are handed to the fallback player,
  * so a key always makes a sound.
  */
-export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl {
+export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl, ISustainPedal {
   private readonly contextFactory: () => AudioContext;
   private readonly baseUrl: string;
   private readonly fallback: IPitchPlayer;
@@ -61,9 +65,13 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl {
   private readonly voices = new Map<number, Voice>();
   private readonly onFallback = new Set<number>();
 
+  /** Keys released while the pedal was down; the dampers are still up. */
+  private readonly heldByPedal = new Set<number>();
+
   private context: AudioContext | null = null;
   private loading: Promise<void> | null = null;
   private currentVolume = 1;
+  private pedalDown = false;
 
   constructor(contextFactory: () => AudioContext, options: SampledPitchPlayerOptions) {
     this.contextFactory = contextFactory;
@@ -99,6 +107,33 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl {
     }
   }
 
+  get sustained(): boolean {
+    return this.pedalDown;
+  }
+
+  /**
+   * Lifts or drops the dampers.
+   *
+   * While the pedal is down a released key keeps ringing, exactly as on the
+   * instrument; letting the pedal up damps everything that was waiting on it.
+   */
+  setSustain(down: boolean): void {
+    if (this.pedalDown === down) {
+      return;
+    }
+    this.pedalDown = down;
+    if (hasSustain(this.fallback)) {
+      this.fallback.setSustain(down);
+    }
+    if (down) {
+      return;
+    }
+    for (const midi of [...this.heldByPedal]) {
+      this.heldByPedal.delete(midi);
+      this.releaseNow(midi);
+    }
+  }
+
   /**
    * Downloads and decodes the samples. Safe to call repeatedly; the work
    * happens once.
@@ -116,6 +151,7 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl {
     // First key press is what starts the download, so nothing is fetched for
     // a reader who never turns the sound on.
     void this.load();
+    this.heldByPedal.delete(midi);
 
     const choice = nearestSample(midi);
     const buffer = this.buffers.get(choice.sample.midi);
@@ -126,7 +162,9 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl {
     }
 
     const context = this.ensureContext();
-    this.stop(midi);
+    // Striking the key again re-hits the string, pedal or no pedal, so this
+    // must not go through stop(), which would hand the voice to the pedal.
+    this.releaseNow(midi);
     this.evictOldestIfFull();
 
     const now = context.currentTime;
@@ -160,6 +198,18 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl {
   }
 
   stop(midi: number): void {
+    if (this.pedalDown) {
+      // The key is up but the damper is not: remember it for the pedal lift.
+      this.heldByPedal.add(midi);
+      if (this.onFallback.has(midi)) {
+        this.fallback.stop(midi);
+      }
+      return;
+    }
+    this.releaseNow(midi);
+  }
+
+  private releaseNow(midi: number): void {
     if (this.onFallback.delete(midi)) {
       this.fallback.stop(midi);
       return;
@@ -173,6 +223,7 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl {
   }
 
   stopAll(): void {
+    this.heldByPedal.clear();
     for (const midi of [...this.onFallback]) {
       this.onFallback.delete(midi);
     }
@@ -208,7 +259,9 @@ export class SampledPitchPlayer implements IPitchPlayer, IVolumeControl {
     }
     const oldest = this.voices.keys().next();
     if (!oldest.done) {
-      this.stop(oldest.value);
+      // Making room has to actually free the voice, even under the pedal.
+      this.heldByPedal.delete(oldest.value);
+      this.releaseNow(oldest.value);
     }
   }
 

@@ -11,8 +11,25 @@ export interface IPitchPlayer {
   stopAll(): void;
 }
 
+/**
+ * An instrument whose dampers can be lifted.
+ *
+ * Its own interface: a player that cannot sustain is still a perfectly good
+ * player, and the practice session never asks for either.
+ */
+export interface ISustainPedal {
+  readonly sustained: boolean;
+  setSustain(down: boolean): void;
+}
+
 /** Null object used when audio feedback is disabled or unavailable. */
-export class SilentPitchPlayer implements IPitchPlayer {
+export class SilentPitchPlayer implements IPitchPlayer, ISustainPedal {
+  readonly sustained = false;
+
+  setSustain(): void {
+    // Intentionally silent.
+  }
+
   play(): void {
     // Intentionally silent.
   }

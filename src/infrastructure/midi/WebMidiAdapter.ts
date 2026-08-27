@@ -159,22 +159,37 @@ export class WebMidiAdapter implements IMidiSource, IMidiConnection, IMidiDevice
     // Some drivers report a zero timestamp; the clock is the reliable fallback.
     const timestampMs = timeStamp > 0 ? timeStamp : this.clock.now();
 
-    if (message.kind === 'noteon') {
-      this.emitter.emit('midi', {
-        type: 'noteon',
-        midi: message.midi,
-        velocity: message.velocity,
-        timestampMs,
-        sourceId,
-      });
-      return;
+    switch (message.kind) {
+      case 'noteon':
+        this.emitter.emit('midi', {
+          type: 'noteon',
+          midi: message.midi,
+          velocity: message.velocity,
+          timestampMs,
+          sourceId,
+        });
+        return;
+      case 'noteoff':
+        this.emitter.emit('midi', {
+          type: 'noteoff',
+          midi: message.midi,
+          timestampMs,
+          sourceId,
+        });
+        return;
+      case 'sustain':
+        this.emitter.emit('midi', {
+          type: 'pedal',
+          pedal: 'sustain',
+          down: message.down,
+          value: message.value,
+          timestampMs,
+          sourceId,
+        });
+        return;
+      default:
+        return;
     }
-    this.emitter.emit('midi', {
-      type: 'noteoff',
-      midi: message.midi,
-      timestampMs,
-      sourceId,
-    });
   }
 
   private setStatus(status: MidiConnectionStatus): MidiConnectionStatus {

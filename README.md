@@ -49,7 +49,9 @@ The notes in between are covered by resampling the nearest recording, never
 more than a semitone away.
 
 They load in the background on the first key press, and a synthesised tone
-covers the notes until they arrive. See
+covers the notes until they arrive. The sustain pedal is followed too: a
+released key keeps ringing while the pedal is down, and is damped when it
+comes up. See
 [public/samples/piano/CREDITS.md](public/samples/piano/CREDITS.md).
 
 ### Practising on a tablet
@@ -250,7 +252,7 @@ is asserted in `tests/application/session-state.test.ts`.
 | `IExerciseProvider`  | `GeneratedExerciseProvider`                     | any stub               |
 | `ISettingsStore`     | `LocalStorageSettingsStore`                     | `InMemorySettingsStore` |
 | `IVolumeControl`     | `WebAudioMetronome`, `WebAudioPitchPlayer`      | any stub               |
-| `IPitchPlayer`       | `SampledPitchPlayer` (falls back to `WebAudioPitchPlayer`) | `SilentPitchPlayer` |
+| `IPitchPlayer` / `ISustainPedal` | `SampledPitchPlayer` (falls back to `WebAudioPitchPlayer`) | `SilentPitchPlayer` |
 | `IScoringStrategy`   | `AccuracyScoringStrategy`, `TimingWeightedScoringStrategy` | any stub    |
 
 Everything is wired in one place, `src/composition/createApp.ts`. Nothing else
@@ -259,7 +261,7 @@ in the code base constructs an adapter.
 ## Testing
 
 ```bash
-npm test           # ~370 tests
+npm test           # ~380 tests
 npm run coverage   # ~92% of statements in src/
 ```
 

@@ -80,6 +80,7 @@ One-way JSON frames over a WebSocket at `/midi`:
 {"v":1,"type":"device","device":null}
 {"v":1,"type":"noteon","note":60,"velocity":0.79}
 {"v":1,"type":"noteoff","note":60}
+{"v":1,"type":"pedal","down":true,"value":1}
 ```
 
 No timestamps are sent, deliberately: the two computers' clocks share no

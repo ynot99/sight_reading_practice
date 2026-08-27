@@ -119,6 +119,19 @@ describe('parseBridgeMessage', () => {
     });
   });
 
+  it('decodes the sustain pedal', () => {
+    expect(parseBridgeMessage('{"v":1,"type":"pedal","down":true,"value":1}')).toEqual({
+      type: 'pedal',
+      down: true,
+      value: 1,
+    });
+    expect(parseBridgeMessage('{"v":1,"type":"pedal","down":false,"value":0}')).toEqual({
+      type: 'pedal',
+      down: false,
+      value: 0,
+    });
+  });
+
   it('falls back to a usable velocity when the bridge omits or mangles it', () => {
     expect(parseBridgeMessage('{"type":"noteon","note":60}')).toEqual({
       type: 'noteon',
@@ -132,7 +145,7 @@ describe('parseBridgeMessage', () => {
     expect(parseBridgeMessage('not json')).toBeNull();
     expect(parseBridgeMessage('null')).toBeNull();
     expect(parseBridgeMessage('[1,2,3]')).toBeNull();
-    expect(parseBridgeMessage('{"type":"pedal","value":127}')).toBeNull();
+    expect(parseBridgeMessage('{"type":"aftertouch","value":30}')).toBeNull();
     expect(parseBridgeMessage('{"type":"noteon","note":900}')).toBeNull();
     expect(parseBridgeMessage('{"type":"noteon","note":"C4"}')).toBeNull();
     expect(parseBridgeMessage(new ArrayBuffer(4))).toBeNull();
@@ -230,6 +243,26 @@ describe('WebSocketMidiSource', () => {
     expect(rig.events.map((event) => event.timestampMs)).toEqual([1_000, 1_250]);
   });
 
+  it('relays the pedal as well as the notes', async () => {
+    const rig = createRig();
+    const connecting = rig.source.connect();
+    latest(rig.sockets).open();
+    await connecting;
+
+    latest(rig.sockets).deliver({ type: 'pedal', down: true, value: 1 });
+
+    expect(rig.events).toEqual([
+      {
+        type: 'pedal',
+        pedal: 'sustain',
+        down: true,
+        value: 1,
+        timestampMs: 1_000,
+        sourceId: 'bridge',
+      },
+    ]);
+  });
+
   it('survives frames it cannot parse', async () => {
     const rig = createRig();
     const connecting = rig.source.connect();
@@ -241,7 +274,8 @@ describe('WebSocketMidiSource', () => {
     latest(rig.sockets).deliver({ type: 'noteon', note: 62, velocity: 0.5 });
 
     expect(rig.events).toHaveLength(1);
-    expect(rig.events[0]?.midi).toBe(62);
+    const first = rig.events[0];
+    expect(first !== undefined && 'midi' in first ? first.midi : null).toBe(62);
   });
 
   it('reconnects with a backoff when the bridge goes away', async () => {

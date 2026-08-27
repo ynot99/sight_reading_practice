@@ -16,7 +16,24 @@ export interface MidiNoteOffEvent {
   readonly sourceId: string;
 }
 
-export type MidiEvent = MidiNoteOnEvent | MidiNoteOffEvent;
+/**
+ * The sustain pedal, which a keyboard reports as a continuous controller.
+ *
+ * Carried as its own event rather than folded into note events because it
+ * changes how the *instrument* behaves, not what was played: the practice
+ * session is entirely uninterested in it.
+ */
+export interface MidiPedalEvent {
+  readonly type: 'pedal';
+  readonly pedal: 'sustain';
+  readonly down: boolean;
+  /** Raw controller value, `0..1`; half-pedalling lives in here. */
+  readonly value: number;
+  readonly timestampMs: number;
+  readonly sourceId: string;
+}
+
+export type MidiEvent = MidiNoteOnEvent | MidiNoteOffEvent | MidiPedalEvent;
 
 /**
  * A stream of note events.

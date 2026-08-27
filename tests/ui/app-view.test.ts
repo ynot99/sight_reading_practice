@@ -37,6 +37,15 @@ function mountRealMarkup(): void {
   document.body.innerHTML = body.replace(/<script[\s\S]*?<\/script>/g, '');
 }
 
+/** Records the pedal, so the view's routing can be checked. */
+class FakeSustain {
+  sustained = false;
+
+  setSustain(down: boolean): void {
+    this.sustained = down;
+  }
+}
+
 /** Records what the sliders asked for. */
 class FakeVolume implements IVolumeControl {
   volume = 1;
@@ -56,6 +65,7 @@ interface Rig {
   readonly settings: SettingsRepository;
   readonly metronomeVolume: FakeVolume;
   readonly instrumentVolume: FakeVolume;
+  readonly sustain: FakeSustain;
 }
 
 function createRig(
@@ -78,6 +88,7 @@ function createRig(
   const restored = settings.load();
   const metronomeVolume = new FakeVolume();
   const instrumentVolume = new FakeVolume();
+  const sustain = new FakeSustain();
 
   const controller = new PracticeController({
     presets,
@@ -113,6 +124,7 @@ function createRig(
       clock,
     ),
     pitchPlayer: new SilentPitchPlayer(),
+    sustain,
     renderer,
     settings,
     metronomeVolume,
@@ -130,6 +142,7 @@ function createRig(
     settings,
     metronomeVolume,
     instrumentVolume,
+    sustain,
   };
 }
 
@@ -395,6 +408,22 @@ describe('AppView', () => {
       expect(element<HTMLInputElement>('metronome-volume').value).toBe('60');
       expect(rig.metronomeVolume.volume).toBeCloseTo(0.6, 10);
     });
+  });
+
+  it('sends the sustain pedal to the instrument and shows it', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+
+    rig.midi.pedal(true);
+
+    expect(rig.sustain.sustained).toBe(true);
+    expect(element('pedal-status').hidden).toBe(false);
+    expect(element('pedal-status').textContent).toContain('down');
+
+    rig.midi.pedal(false);
+
+    expect(rig.sustain.sustained).toBe(false);
+    expect(element('pedal-status').textContent).toBe('Ped.');
   });
 
   it('reports the MIDI connection state', async () => {

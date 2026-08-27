@@ -310,11 +310,17 @@ export class PracticeSession {
     if (this.status !== 'running') {
       return;
     }
-    if (event.type === 'noteon') {
-      this.mode.onNoteOn(this.context, event);
-      return;
+    switch (event.type) {
+      case 'noteon':
+        this.mode.onNoteOn(this.context, event);
+        return;
+      case 'noteoff':
+        this.mode.onNoteOff(this.context, event);
+        return;
+      default:
+        // The pedal changes how the instrument sounds, never what was played.
+        return;
     }
-    this.mode.onNoteOff(this.context, event);
   }
 
   private handleTick(tick: MetronomeTick): void {

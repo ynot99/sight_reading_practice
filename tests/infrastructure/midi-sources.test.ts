@@ -137,7 +137,8 @@ describe('ComputerKeyboardMidiSource', () => {
     source.enable();
 
     target.press('KeyZ');
-    expect(events[0]?.midi).toBe(60);
+    const first = events[0];
+    expect(first !== undefined && 'midi' in first ? first.midi : null).toBe(60);
   });
 
   it('detaches its listeners when disabled', () => {

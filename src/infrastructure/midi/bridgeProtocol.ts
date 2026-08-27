@@ -33,11 +33,19 @@ export interface BridgeNoteOffMessage {
   readonly note: number;
 }
 
+export interface BridgePedalMessage {
+  readonly type: 'pedal';
+  readonly down: boolean;
+  /** Raw controller value, `0..1`. */
+  readonly value: number;
+}
+
 export type BridgeMessage =
   | BridgeHelloMessage
   | BridgeDeviceMessage
   | BridgeNoteOnMessage
-  | BridgeNoteOffMessage;
+  | BridgeNoteOffMessage
+  | BridgePedalMessage;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -96,6 +104,14 @@ export function parseBridgeMessage(raw: unknown): BridgeMessage | null {
     case 'noteoff': {
       const note = toMidiNote(parsed['note']);
       return note === null ? null : { type: 'noteoff', note };
+    }
+    case 'pedal': {
+      const value = parsed['value'];
+      return {
+        type: 'pedal',
+        down: parsed['down'] === true,
+        value: typeof value === 'number' && value >= 0 && value <= 1 ? value : 0,
+      };
     }
     default:
       return null;

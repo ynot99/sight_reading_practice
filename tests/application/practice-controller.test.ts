@@ -14,6 +14,7 @@ import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRen
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
+import { twoBarExercise } from '../support/fixtures.js';
 
 /** Strips the printed tempo so two renderings can be compared note for note. */
 function withoutTempoMark(xml: string): string {
@@ -23,7 +24,14 @@ function withoutTempoMark(xml: string): string {
     .join(' ');
 }
 
-function createController(): {
+/**
+ * @param fixedExercise Serve one known exercise instead of generating.
+ *
+ * Generated material is random by design, so any test that asserts *which*
+ * step is which has to pin it down - otherwise a bar that happens to start
+ * with a rest makes the test fail once in a while.
+ */
+function createController(fixedExercise = false): {
   controller: PracticeController;
   renderer: FakeScoreRenderer;
   midi: MockMidiAdapter;
@@ -49,6 +57,9 @@ function createController(): {
     metronome,
     clock,
     scoringFor: (modeId) => (modeId === FLOW_MODE_ID ? timing : accuracy),
+    ...(fixedExercise
+      ? { providerFor: () => ({ provide: () => Promise.resolve(twoBarExercise()) }) }
+      : {}),
     initialSettings: {
       countInBeats: 0,
       metronomeMuted: true,
@@ -168,7 +179,7 @@ describe('PracticeController', () => {
   });
 
   it('creates a session and drives the cursor from it', async () => {
-    const { controller, renderer, midi } = createController();
+    const { controller, renderer, midi } = createController(true);
     await controller.loadNewExercise();
     const created = vi.fn();
     controller.events.on('sessionCreated', created);
@@ -298,7 +309,7 @@ describe('highlightFor', () => {
 
 describe('note highlighting', () => {
   it('colours each step as it is judged', async () => {
-    const { controller, renderer, midi } = createController();
+    const { controller, renderer, midi } = createController(true);
     await controller.loadNewExercise();
     const session = controller.start();
     const step = session?.currentStep;
@@ -314,7 +325,7 @@ describe('note highlighting', () => {
   });
 
   it('marks a step where a wrong note crept in', async () => {
-    const { controller, renderer, midi } = createController();
+    const { controller, renderer, midi } = createController(true);
     await controller.loadNewExercise();
     const session = controller.start();
     const step = session?.currentStep;
@@ -331,7 +342,7 @@ describe('note highlighting', () => {
   });
 
   it('stays out of the way when the reader turns it off', async () => {
-    const { controller, renderer, midi } = createController();
+    const { controller, renderer, midi } = createController(true);
     controller.updateSettings({ highlightNotes: false });
     await controller.loadNewExercise();
     const session = controller.start();
@@ -348,7 +359,7 @@ describe('note highlighting', () => {
   });
 
   it('wipes the colours when the run restarts or the music changes', async () => {
-    const { controller, renderer, midi } = createController();
+    const { controller, renderer, midi } = createController(true);
     await controller.loadNewExercise();
     const session = controller.start();
     const step = session?.currentStep;
@@ -368,7 +379,7 @@ describe('note highlighting', () => {
   });
 
   it('clears the page when the setting is switched off mid-run', async () => {
-    const { controller, renderer, midi } = createController();
+    const { controller, renderer, midi } = createController(true);
     await controller.loadNewExercise();
     const session = controller.start();
     const step = session?.currentStep;
@@ -437,7 +448,7 @@ describe('cursor visibility', () => {
   });
 
   it('still follows the music while hidden', async () => {
-    const { controller, renderer, midi } = createController();
+    const { controller, renderer, midi } = createController(true);
     controller.updateSettings({ showCursor: false });
     await controller.loadNewExercise();
 
@@ -466,7 +477,7 @@ describe('cursor visibility', () => {
   });
 
   it('puts the cursor back after the score is re-engraved', async () => {
-    const { controller, renderer, midi } = createController();
+    const { controller, renderer, midi } = createController(true);
     await controller.loadNewExercise();
     const session = controller.start();
     const step = session?.currentStep;

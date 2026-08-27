@@ -4,6 +4,9 @@
  */
 const NOTE_ON = 0x90;
 const NOTE_OFF = 0x80;
+const CONTROL_CHANGE = 0xb0;
+/** Controller number of the damper (sustain) pedal. */
+const SUSTAIN_CONTROLLER = 64;
 
 /**
  * Turns a raw MIDI packet into the message the browser expects, or `null` for
@@ -13,7 +16,7 @@ const NOTE_OFF = 0x80;
  * so it is normalised here rather than being left to the client.
  *
  * @param {ArrayLike<number>} message
- * @returns {{type: 'noteon', note: number, velocity: number} | {type: 'noteoff', note: number} | null}
+ * @returns {{type: 'noteon', note: number, velocity: number} | {type: 'noteoff', note: number} | {type: 'pedal', down: boolean, value: number} | null}
  */
 export function midiMessageToBridgeEvent(message) {
   if (message === null || message === undefined || message.length < 3) {
@@ -32,6 +35,10 @@ export function midiMessageToBridgeEvent(message) {
   }
   if (command === NOTE_OFF || (command === NOTE_ON && velocity === 0)) {
     return { type: 'noteoff', note };
+  }
+  // The sustain pedal, which the trainer sounds but never judges.
+  if (command === CONTROL_CHANGE && note === SUSTAIN_CONTROLLER) {
+    return { type: 'pedal', down: velocity >= 64, value: velocity / 127 };
   }
   return null;
 }

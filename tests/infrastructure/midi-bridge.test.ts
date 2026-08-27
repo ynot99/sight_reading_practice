@@ -34,8 +34,17 @@ describe('bridge MIDI decoding', () => {
     }
   });
 
-  it('ignores everything that is not a note', () => {
-    expect(midiMessageToBridgeEvent([0xb0, 64, 127])).toBeNull(); // sustain pedal
+  it('decodes the sustain pedal', () => {
+    expect(midiMessageToBridgeEvent([0xb0, 64, 127])).toEqual({
+      type: 'pedal',
+      down: true,
+      value: 1,
+    });
+    expect(midiMessageToBridgeEvent([0xb0, 64, 0])).toMatchObject({ down: false });
+  });
+
+  it('ignores everything that is not a note or the damper', () => {
+    expect(midiMessageToBridgeEvent([0xb0, 7, 127])).toBeNull(); // channel volume
     expect(midiMessageToBridgeEvent([0xe0, 0, 64])).toBeNull(); // pitch bend
     expect(midiMessageToBridgeEvent([0xf8])).toBeNull(); // clock
     expect(midiMessageToBridgeEvent([0x90, 60])).toBeNull(); // truncated

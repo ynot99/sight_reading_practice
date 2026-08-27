@@ -87,6 +87,7 @@ export class AppView {
     exerciseTitle: HTMLElement;
     midiStatus: HTMLElement;
     bridgeStatus: HTMLElement;
+    pedalStatus: HTMLElement;
     connectMidi: HTMLButtonElement;
     midiInput: HTMLSelectElement;
     midiHint: HTMLElement;
@@ -143,6 +144,7 @@ export class AppView {
       exerciseTitle: requireElement(doc, 'exercise-title'),
       midiStatus: requireElement(doc, 'midi-status'),
       bridgeStatus: requireElement(doc, 'bridge-status'),
+      pedalStatus: requireElement(doc, 'pedal-status'),
       connectMidi: requireElement(doc, 'connect-midi'),
       midiInput: requireElement(doc, 'midi-input'),
       midiHint: requireElement(doc, 'midi-hint'),
@@ -583,18 +585,36 @@ export class AppView {
       if (!this.audioFeedbackEnabled) {
         return;
       }
-      if (event.type === 'noteon') {
-        this.runtime.pitchPlayer.play(event.midi, event.velocity);
-      } else {
-        this.runtime.pitchPlayer.stop(event.midi);
+      switch (event.type) {
+        case 'noteon':
+          this.runtime.pitchPlayer.play(event.midi, event.velocity);
+          return;
+        case 'noteoff':
+          this.runtime.pitchPlayer.stop(event.midi);
+          return;
+        case 'pedal':
+          this.runtime.sustain?.setSustain(event.down);
+          this.renderPedal(event.down);
+          return;
+        default:
+          return;
       }
     };
     const fromHardware = this.runtime.webMidi.subscribe(handler);
     const fromKeyboard = this.runtime.computerKeyboard.subscribe(handler);
+    const fromBridge = this.runtime.bridge?.subscribe(handler) ?? (() => undefined);
     return () => {
       fromHardware();
       fromKeyboard();
+      fromBridge();
     };
+  }
+
+  /** Shows that the pedal was seen, which is half of trusting that it works. */
+  private renderPedal(down: boolean): void {
+    this.el.pedalStatus.hidden = false;
+    this.el.pedalStatus.textContent = down ? 'Ped. down' : 'Ped.';
+    this.el.pedalStatus.className = down ? 'pill pill--connected' : 'pill pill--idle';
   }
 
   private refreshInputs(): void {

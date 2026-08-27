@@ -217,6 +217,16 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
           sourceId: 'bridge',
         });
         return;
+      case 'pedal':
+        this.emitter.emit('midi', {
+          type: 'pedal',
+          pedal: 'sustain',
+          down: message.down,
+          value: message.value,
+          timestampMs: this.clock.now(),
+          sourceId: 'bridge',
+        });
+        return;
       default:
         return;
     }

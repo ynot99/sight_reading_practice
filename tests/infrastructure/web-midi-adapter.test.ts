@@ -9,6 +9,11 @@ import {
 } from '../../src/infrastructure/midi/webmidi-dom.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 
+/** Narrows to the events that carry a pitch. */
+function noteOf(event: MidiEvent | undefined): number | null {
+  return event !== undefined && 'midi' in event ? event.midi : null;
+}
+
 class FakeInput implements MidiInputLike {
   onmidimessage: ((event: MidiMessageEventLike) => void) | null = null;
   readonly state = 'connected';
@@ -74,8 +79,25 @@ describe('parseMidiMessage', () => {
     expect(parseMidiMessage(new Uint8Array([0x92, 64, 0]))?.kind).toBe('noteoff');
   });
 
-  it('ignores channel messages that are not notes, and truncated packets', () => {
-    expect(parseMidiMessage(new Uint8Array([0xb0, 64, 127]))).toBeNull();
+  it('decodes the sustain pedal, which is a controller rather than a note', () => {
+    expect(parseMidiMessage(new Uint8Array([0xb0, 64, 127]))).toEqual({
+      kind: 'sustain',
+      down: true,
+      value: 1,
+    });
+    expect(parseMidiMessage(new Uint8Array([0xb0, 64, 0]))).toEqual({
+      kind: 'sustain',
+      down: false,
+      value: 0,
+    });
+    // Half way is the convention for "down"; a real pedal sweeps through it.
+    expect(parseMidiMessage(new Uint8Array([0xb3, 64, 64]))?.kind).toBe('sustain');
+    expect(parseMidiMessage(new Uint8Array([0xb0, 64, 63]))).toMatchObject({ down: false });
+  });
+
+  it('ignores other controllers, and truncated packets', () => {
+    expect(parseMidiMessage(new Uint8Array([0xb0, 7, 127]))).toBeNull(); // channel volume
+    expect(parseMidiMessage(new Uint8Array([0xb0, 66, 127]))).toBeNull(); // sostenuto
     expect(parseMidiMessage(new Uint8Array([0x90, 60]))).toBeNull();
     expect(parseMidiMessage(null)).toBeNull();
   });
@@ -131,6 +153,20 @@ describe('WebMidiAdapter', () => {
     ]);
   });
 
+  it('publishes the sustain pedal as its own event', async () => {
+    const first = new FakeInput('a', 'Piano A');
+    const { adapter, received } = createAdapter([first]);
+    await adapter.connect();
+
+    first.send([0xb0, 64, 127], 100);
+    first.send([0xb0, 64, 0], 200);
+
+    expect(received).toEqual([
+      { type: 'pedal', pedal: 'sustain', down: true, value: 1, timestampMs: 100, sourceId: 'a' },
+      { type: 'pedal', pedal: 'sustain', down: false, value: 0, timestampMs: 200, sourceId: 'a' },
+    ]);
+  });
+
   it('falls back to the clock when a driver reports no timestamp', async () => {
     const first = new FakeInput('a', 'Piano A');
     const { adapter, received, clock } = createAdapter([first]);
@@ -154,7 +190,7 @@ describe('WebMidiAdapter', () => {
 
     expect(adapter.selectedInputId).toBe('b');
     expect(received).toHaveLength(1);
-    expect(received[0]?.midi).toBe(62);
+    expect(noteOf(received[0])).toBe(62);
   });
 
   it('picks up devices plugged in after connecting', async () => {

@@ -48,12 +48,16 @@ export function browserMidiAccessProvider(): MidiAccessProvider | null {
 
 export const NOTE_ON = 0x90;
 export const NOTE_OFF = 0x80;
+export const CONTROL_CHANGE = 0xb0;
+/** Controller number of the damper (sustain) pedal. */
+export const SUSTAIN_CONTROLLER = 64;
+/** A damper value of 64 or more counts as down, by convention. */
+export const SUSTAIN_THRESHOLD = 64;
 
-export interface ParsedMidiMessage {
-  readonly kind: 'noteon' | 'noteoff';
-  readonly midi: number;
-  readonly velocity: number;
-}
+export type ParsedMidiMessage =
+  | { readonly kind: 'noteon'; readonly midi: number; readonly velocity: number }
+  | { readonly kind: 'noteoff'; readonly midi: number; readonly velocity: number }
+  | { readonly kind: 'sustain'; readonly down: boolean; readonly value: number };
 
 /**
  * Decodes a raw MIDI packet.
@@ -74,6 +78,13 @@ export function parseMidiMessage(data: Uint8Array | null): ParsedMidiMessage | n
   }
   if (status === NOTE_OFF || (status === NOTE_ON && rawVelocity === 0)) {
     return { kind: 'noteoff', midi, velocity: 0 };
+  }
+  if (status === CONTROL_CHANGE && midi === SUSTAIN_CONTROLLER) {
+    return {
+      kind: 'sustain',
+      down: rawVelocity >= SUSTAIN_THRESHOLD,
+      value: rawVelocity / 127,
+    };
   }
   return null;
 }

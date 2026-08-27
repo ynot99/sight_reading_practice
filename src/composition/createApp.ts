@@ -4,7 +4,7 @@ import { FlowMode, FLOW_MODE_ID } from '../application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../application/modes/WaitMode.js';
 import type { IScoringStrategy } from '../domain/scoring/IScoringStrategy.js';
-import type { IPitchPlayer } from '../application/ports/IPitchPlayer.js';
+import type { IPitchPlayer, ISustainPedal } from '../application/ports/IPitchPlayer.js';
 import type {
   IMidiConnection,
   IMidiDeviceDirectory,
@@ -75,6 +75,8 @@ export interface AppRuntime {
   readonly bridge: IMidiBridge | null;
   readonly computerKeyboard: IMidiSource & IToggleableInput;
   readonly pitchPlayer: IPitchPlayer;
+  /** `null` when the instrument has no dampers to lift. */
+  readonly sustain: ISustainPedal | null;
   readonly renderer: IScoreRenderer;
   readonly settings: SettingsRepository;
   readonly metronomeVolume: IVolumeControl;
@@ -172,6 +174,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     bridge,
     computerKeyboard,
     pitchPlayer,
+    sustain: pitchPlayer,
     renderer,
     settings,
     metronomeVolume: metronome,

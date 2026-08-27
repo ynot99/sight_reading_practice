@@ -13,6 +13,10 @@ import { FocusMode } from './FocusMode.js';
 
 const TIME_SIGNATURES = ['4/4', '3/4', '2/4', '6/8'] as const;
 
+/** Matches what the stored-settings codec will accept back. */
+const MIN_BARS = 1;
+const MAX_BARS = 32;
+
 const STATUS_LABELS: Readonly<Record<SessionStatus, string>> = {
   idle: 'Idle',
   'counting-in': 'Counting in…',
@@ -104,7 +108,7 @@ export class AppView {
     key: HTMLSelectElement;
     timeSignature: HTMLSelectElement;
     measures: HTMLInputElement;
-    measuresValue: HTMLOutputElement;
+    measuresValue: HTMLInputElement;
     tempo: HTMLInputElement;
     tempoValue: HTMLOutputElement;
     countIn: HTMLInputElement;
@@ -258,13 +262,17 @@ export class AppView {
       void this.reload(true);
     });
 
-    this.listen(this.el.measures, 'change', () => {
-      controller.updateSettings({ measures: Number.parseInt(this.el.measures.value, 10) });
-      void this.reload(true);
-    });
-
     this.listen(this.el.measures, 'input', () => {
       this.el.measuresValue.value = this.el.measures.value;
+    });
+
+    this.listen(this.el.measures, 'change', () => {
+      this.applyMeasures(Number.parseInt(this.el.measures.value, 10));
+    });
+
+    // Typing a number reaches lengths that are tedious to drag to.
+    this.listen(this.el.measuresValue, 'change', () => {
+      this.applyMeasures(Number.parseInt(this.el.measuresValue.value, 10));
     });
 
     this.listen(this.el.tempo, 'input', () => {
@@ -647,6 +655,27 @@ export class AppView {
       this.el.result.textContent =
         error instanceof Error ? error.message : 'Failed to build an exercise.';
     }
+  }
+
+  /**
+   * Accepts a bar count from either the slider or the box.
+   *
+   * Typed input can be empty, negative or absurd, so it is clamped to what the
+   * generator will actually accept and both controls are put back in step.
+   */
+  private applyMeasures(requested: number): void {
+    const bounded = Number.isFinite(requested)
+      ? Math.min(MAX_BARS, Math.max(MIN_BARS, Math.round(requested)))
+      : this.runtime.controller.settings.measures;
+
+    this.el.measures.value = String(bounded);
+    this.el.measuresValue.value = String(bounded);
+
+    if (bounded === this.runtime.controller.settings.measures) {
+      return;
+    }
+    this.runtime.controller.updateSettings({ measures: bounded });
+    void this.reload(true);
   }
 
   /**

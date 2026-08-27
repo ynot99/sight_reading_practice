@@ -83,8 +83,20 @@
         </div>
 
         <div class="control-group">
-          <label for="measures">Bars: <output id="measures-value">4</output></label>
-          <input id="measures" type="range" min="2" max="16" step="1" value="4" />
+          <label for="measures">
+            Bars:
+            <input
+              id="measures-value"
+              class="number-input"
+              type="number"
+              min="1"
+              max="32"
+              step="1"
+              value="4"
+              aria-label="Number of bars"
+            />
+          </label>
+          <input id="measures" type="range" min="1" max="32" step="1" value="4" />
         </div>
 
         <div class="control-group">

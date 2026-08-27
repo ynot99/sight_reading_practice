@@ -297,6 +297,56 @@ describe('AppView', () => {
       }
     });
 
+    it('sets the bar count by typing as well as by dragging', async () => {
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      const loadsBefore = renderer.loadCount;
+
+      const box = element<HTMLInputElement>('measures-value');
+      box.value = '24';
+      box.dispatchEvent(new Event('change'));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(runtime.controller.settings.measures).toBe(24);
+      expect(element<HTMLInputElement>('measures').value).toBe('24');
+      expect(renderer.loadCount).toBe(loadsBefore + 1);
+    });
+
+    it('keeps the slider and the box in step', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      const slider = element<HTMLInputElement>('measures');
+      slider.value = '12';
+      slider.dispatchEvent(new Event('input'));
+      expect(element<HTMLInputElement>('measures-value').value).toBe('12');
+
+      slider.dispatchEvent(new Event('change'));
+      expect(runtime.controller.settings.measures).toBe(12);
+    });
+
+    it('refuses a typed value the generator could not use', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const box = element<HTMLInputElement>('measures-value');
+
+      box.value = '900';
+      box.dispatchEvent(new Event('change'));
+      expect(runtime.controller.settings.measures).toBe(32);
+      expect(box.value).toBe('32');
+
+      box.value = '0';
+      box.dispatchEvent(new Event('change'));
+      expect(runtime.controller.settings.measures).toBe(1);
+
+      box.value = '';
+      box.dispatchEvent(new Event('change'));
+      // Nonsense leaves the setting where it was, and the box is put back.
+      expect(runtime.controller.settings.measures).toBe(1);
+      expect(box.value).toBe('1');
+    });
+
     it('gives the engraver a container of its own', () => {
       // OSMD sizes the sheet from container.offsetWidth, which counts padding
       // and border. Drawing into the framed element would make the sheet wider

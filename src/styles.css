@@ -279,6 +279,18 @@ input[type='range'] {
   width: 100%;
 }
 
+/* Sits inside its label, so it must not stretch like the other controls. */
+.number-input {
+  width: 4.5em;
+  background: var(--surface-strong);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 4px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
 select {
   background: var(--surface-strong);
   color: var(--text);

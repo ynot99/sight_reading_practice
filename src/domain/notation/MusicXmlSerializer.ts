@@ -2,7 +2,7 @@ import { assertNever } from '../../shared/asserts.js';
 import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
 import type { Duration } from '../model/Duration.js';
-import type { Exercise, MusicalEntry, StaffPart } from '../model/Exercise.js';
+import type { Exercise, MusicalEntry, PedalMark, StaffPart } from '../model/Exercise.js';
 import type { KeySignature } from '../model/KeySignature.js';
 import { keyAtMeasure, tupletPositions, validateExercise } from '../model/Exercise.js';
 import type { TupletPosition } from '../model/Exercise.js';
@@ -121,13 +121,25 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         const present = exercise.staves.filter(
           (staff) => (staff.measures[measureIndex]?.entries.length ?? 0) > 0,
         );
+        // Pedal marks belong to the part, not to a voice, so they are written
+        // once - alongside whichever voice happens to be written first.
+        const pedal = exercise.pedalMarks.filter(
+          (mark) => mark.measureIndex === measureIndex,
+        );
         present.forEach((staff, index) => {
           if (index > 0) {
             writer.element('backup', undefined, () => {
               writer.leaf('duration', exercise.timeSignature.ticksPerMeasure);
             });
           }
-          this.writeStaffMeasure(writer, exercise, staff, measureIndex, heldByStaff);
+          this.writeStaffMeasure(
+            writer,
+            exercise,
+            staff,
+            measureIndex,
+            heldByStaff,
+            index === 0 ? pedal : [],
+          );
         });
       });
     }
@@ -225,6 +237,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     staff: StaffPart,
     measureIndex: number,
     heldByStaff: Map<number, Set<number>>,
+    pedal: readonly PedalMark[],
   ): void {
     const measure = staff.measures[measureIndex];
     if (measure === undefined) {
@@ -239,7 +252,14 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     const activeAccidentals = new Map<string, Alteration>();
     const tuplets = tupletPositions(measure.entries);
     let held = heldByStaff.get(staff.staffNumber) ?? new Set<number>();
+    let offset = 0;
+    let nextMark = 0;
     measure.entries.forEach((entry, entryIndex) => {
+      while (nextMark < pedal.length && (pedal[nextMark]?.offsetTicks ?? 0) <= offset) {
+        this.writePedal(writer, pedal[nextMark], staff.staffNumber);
+        nextMark += 1;
+      }
+      offset += entry.duration.ticks;
       this.writeEntry(
         writer,
         exercise,
@@ -252,6 +272,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       );
       held = entry.kind === 'note' ? new Set(entry.tiedForward) : new Set<number>();
     });
+    while (nextMark < pedal.length) {
+      this.writePedal(writer, pedal[nextMark], staff.staffNumber);
+      nextMark += 1;
+    }
     heldByStaff.set(staff.staffNumber, held);
   }
 
@@ -336,7 +360,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             }
             // One `<notations>` per note: the tie's slur and the tuplet's
             // bracket are separate marks that share the element.
-            if (stopping || starting || tuplet !== null) {
+            if (stopping || starting || tuplet !== null || entry.arpeggiated) {
               writer.element('notations', undefined, () => {
                 if (stopping) {
                   writer.leaf('tied', undefined, { type: 'stop' });
@@ -345,6 +369,9 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
                   writer.leaf('tied', undefined, { type: 'start' });
                 }
                 this.writeTupletMarks(writer, tuplet);
+                if (entry.arpeggiated) {
+                  writer.leaf('arpeggiate');
+                }
               });
             }
           });
@@ -387,6 +414,22 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     if (tuplet.stops) {
       writer.leaf('tuplet', undefined, { type: 'stop', number: 1 });
     }
+  }
+
+  private writePedal(
+    writer: XmlWriter,
+    mark: PedalMark | undefined,
+    staffNumber: number,
+  ): void {
+    if (mark === undefined) {
+      return;
+    }
+    writer.element('direction', { placement: 'below' }, () => {
+      writer.element('direction-type', undefined, () => {
+        writer.leaf('pedal', undefined, { type: mark.type, line: 'no', sign: 'yes' });
+      });
+      writer.leaf('staff', staffNumber);
+    });
   }
 
   private accidentalFor(

@@ -184,6 +184,7 @@ describe('MusicXmlSerializer', () => {
       title: 'Accidentals',
       key: dMajor,
       keyChanges: [],
+      pedalMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 72,
       metadata: { generatorId: 'fixture', seed: 3 },

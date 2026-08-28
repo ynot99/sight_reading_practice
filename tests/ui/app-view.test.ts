@@ -35,6 +35,7 @@ import type { SampleLoading } from '../../src/application/ports/IPitchPlayer.js'
 import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
 import { AppView, describeTendency } from '../../src/ui/AppView.js';
 import { twoBarExercise } from '../support/fixtures.js';
+import { midiToLabel } from '../../src/domain/model/Pitch.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -337,11 +338,21 @@ describe('AppView', () => {
     element<HTMLButtonElement>('start').click();
 
     expect(runtime.controller.settings.handStaff).toBe(2);
-    const expected = runtime.controller.session?.currentStep?.expectedMidi ?? [];
-    // The step itself still knows about both hands...
-    expect(expected.length).toBeGreaterThan(1);
-    // ...but what the run is waiting for is the left hand alone.
-    expect(element('expected').textContent).not.toContain('C4');
+
+    const step = runtime.controller.session?.currentStep;
+    const bass = new Set(
+      (step?.notes ?? []).filter((note) => note.staffNumber === 2).map((note) => note.midi),
+    );
+    const shown = element('expected').textContent ?? '';
+    // Whatever the step holds, the panel names the left hand and only it.
+    expect(shown).not.toBe('—');
+    for (const note of step?.notes ?? []) {
+      const named = midiToLabel(note.midi);
+      expect({ note: named, shown: shown.includes(named) }).toEqual({
+        note: named,
+        shown: bass.has(note.midi),
+      });
+    }
   });
 
   it('gives up the pulse when a run starts', async () => {

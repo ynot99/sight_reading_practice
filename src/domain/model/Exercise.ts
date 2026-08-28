@@ -58,6 +58,14 @@ export interface NoteEntry {
    * lines tangle.
    */
   readonly stem: StemDirection | null;
+  /**
+   * Whether the chord is rolled rather than struck together.
+   *
+   * A reading instruction as much as a sound: the squiggle tells the hand to
+   * spread the chord, and a page that drops it asks for something the writer
+   * did not.
+   */
+  readonly arpeggiated: boolean;
 }
 
 /** Silence occupying a rhythmic value. */
@@ -108,6 +116,29 @@ export interface StaffPart {
   readonly measures: readonly Measure[];
 }
 
+/** Absolute spans, in divisions, during which the damper pedal is down. */
+export function pedalSpans(exercise: Exercise): readonly (readonly [number, number])[] {
+  const ticksPerMeasure = exercise.timeSignature.ticksPerMeasure;
+  const spans: [number, number][] = [];
+  let down: number | null = null;
+  for (const mark of exercise.pedalMarks) {
+    const at = mark.measureIndex * ticksPerMeasure + mark.offsetTicks;
+    if (mark.type === 'start') {
+      down ??= at;
+      continue;
+    }
+    if (down !== null) {
+      spans.push([down, at]);
+      down = null;
+    }
+  }
+  if (down !== null) {
+    // A pedal the writer never lifted holds to the last bar line.
+    spans.push([down, exerciseTicks(exercise)]);
+  }
+  return spans;
+}
+
 /** The key in force at a given measure. */
 export function keyAtMeasure(exercise: Exercise, measureIndex: number): KeySignature {
   let current = exercise.key;
@@ -142,6 +173,14 @@ export interface ExerciseMetadata {
  * renders, and the expected-event timeline that MIDI input is judged against.
  * Because both derivations start here they can never drift apart.
  */
+/** Where the damper pedal goes down or comes up. */
+export interface PedalMark {
+  readonly measureIndex: number;
+  /** Offset from the start of that measure, in divisions. */
+  readonly offsetTicks: number;
+  readonly type: 'start' | 'stop';
+}
+
 /** A key the score changes to, from the given measure onwards. */
 export interface KeyChange {
   readonly measureIndex: number;
@@ -161,6 +200,14 @@ export interface Exercise {
    * spelled out as an accidental. Empty for anything this program generates.
    */
   readonly keyChanges: readonly KeyChange[];
+  /**
+   * Damper pedal marks, in the order they occur.
+   *
+   * They change nothing about which keys are pressed and everything about what
+   * is heard, which is why they matter to playback and to the page but never
+   * to the matcher.
+   */
+  readonly pedalMarks: readonly PedalMark[];
   readonly timeSignature: TimeSignature;
   readonly tempoBpm: number;
   readonly staves: readonly StaffPart[];
@@ -173,6 +220,7 @@ export function noteEntry(
   tiedForward: readonly number[] = [],
   beams: readonly Beam[] = [],
   stem: StemDirection | null = null,
+  arpeggiated = false,
 ): NoteEntry {
   const list = Array.isArray(pitches) ? [...(pitches as readonly Pitch[])] : [pitches as Pitch];
   return {
@@ -182,6 +230,7 @@ export function noteEntry(
     tiedForward: [...tiedForward],
     beams: [...beams],
     stem,
+    arpeggiated,
   };
 }
 

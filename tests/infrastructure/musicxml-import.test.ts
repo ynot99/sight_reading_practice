@@ -329,6 +329,40 @@ describe('files written by other programs', () => {
     expect(secondBar).not.toContain('<accidental>');
   });
 
+  it('keeps a rolled chord rolled', () => {
+    const rolled =
+      '<note><pitch><step>C</step><octave>4</octave></pitch><duration>96</duration>' +
+      '<voice>1</voice><type>whole</type><notations><arpeggiate/></notations></note>' +
+      '<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>96</duration>' +
+      '<voice>1</voice><type>whole</type><notations><arpeggiate/></notations></note>';
+    const { exercise } = importer.read(scoreXml(rolled));
+
+    const entry = exercise.staves[0]?.measures[0]?.entries[0];
+    expect(entry?.kind === 'note' ? entry.arpeggiated : false).toBe(true);
+    // The squiggle is a reading instruction, so it has to reach the page.
+    expect(serializer.serialize(exercise)).toContain('<arpeggiate/>');
+  });
+
+  it('follows the damper pedal', () => {
+    const pedalled =
+      '<direction placement="below"><direction-type>' +
+      '<pedal type="start" line="no" sign="yes"/></direction-type><staff>1</staff></direction>' +
+      note('C', 4, 48, 'half') +
+      '<direction placement="below"><direction-type>' +
+      '<pedal type="stop" line="no" sign="yes"/></direction-type><staff>1</staff></direction>' +
+      note('D', 4, 48, 'half');
+    const { exercise } = importer.read(scoreXml(pedalled));
+
+    expect(exercise.pedalMarks).toEqual([
+      { measureIndex: 0, offsetTicks: 0, type: 'start' },
+      { measureIndex: 0, offsetTicks: 960, type: 'stop' },
+    ]);
+
+    const printed = serializer.serialize(exercise);
+    expect(printed).toContain('<pedal type="start"');
+    expect(printed).toContain('<pedal type="stop"');
+  });
+
   it('keeps the stems that tell two voices apart', () => {
     // Which way a voice points is the writer's decision, not a rule: left to
     // the engraver each note follows its own pitch and the lines tangle.

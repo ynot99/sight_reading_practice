@@ -3,7 +3,14 @@ import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '../model/Duration.js';
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
 import { BEAM_TYPES, measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
-import type { Beam, BeamType, ClefChange, KeyChange, StemDirection } from '../model/Exercise.js';
+import type {
+  Beam,
+  BeamType,
+  ClefChange,
+  KeyChange,
+  PedalMark,
+  StemDirection,
+} from '../model/Exercise.js';
 import { KeySignature, type KeyMode } from '../model/KeySignature.js';
 import { Pitch, type Alteration } from '../model/Pitch.js';
 import { splitIntoRests } from '../generation/RhythmFiller.js';
@@ -55,6 +62,7 @@ interface RawNote {
   readonly isChord: boolean;
   readonly beams: readonly Beam[];
   readonly stem: StemDirection | null;
+  readonly arpeggiated: boolean;
 }
 
 const XML_TYPE_NAMES: Readonly<Record<string, NoteTypeName>> = {
@@ -106,13 +114,14 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   }
 
   const header = readHeader(measures, warnings);
-  const staves = buildStaves(measures, header, warnings);
+  const { staves, pedalMarks } = buildStaves(measures, header, warnings);
 
   const exercise: Exercise = {
     id: `import-${Date.now().toString(36)}`,
     title: readTitle(score),
     key: header.key,
     keyChanges: header.keyChanges,
+    pedalMarks,
     timeSignature: header.timeSignature,
     tempoBpm: header.tempoBpm,
     staves,
@@ -367,6 +376,7 @@ function readMeasureNotes(
   measureIndex: number,
   header: ScoreHeader,
   warnings: ImportWarning[],
+  pedalMarks: PedalMark[] = [],
 ): RawNote[] {
   const notes: RawNote[] = [];
   let cursor = 0;
@@ -378,6 +388,16 @@ function readMeasureNotes(
       const amount = childNumber(node, 'duration') ?? 0;
       const ticks = toTicks(amount, header.divisions, `Bar ${measureIndex + 1}`);
       cursor += node.name === 'backup' ? -ticks : ticks;
+      continue;
+    }
+    if (node.name === 'direction') {
+      // Directions sit between notes, so the cursor is already where the mark
+      // belongs - which is the only way to place a pedal at all.
+      const pedal = child(child(node, 'direction-type'), 'pedal');
+      const type = attribute(pedal, 'type');
+      if (type === 'start' || type === 'stop') {
+        pedalMarks.push({ measureIndex, offsetTicks: cursor, type });
+      }
       continue;
     }
     if (node.name !== 'note') {
@@ -419,6 +439,7 @@ function readMeasureNotes(
       isChord,
       beams: isChord ? [] : readBeams(node),
       stem: readStem(node),
+      arpeggiated: hasChild(child(node, 'notations'), 'arpeggiate'),
     });
 
     if (!isChord) {
@@ -467,7 +488,11 @@ function buildMeasure(
       const tied = group
         .filter((note) => note.tieStart && note.pitch !== null)
         .map((note) => note.pitch?.midi ?? 0);
-      entries.push(noteEntry(pitches, first.duration, tied, first.beams, first.stem));
+      // The roll belongs to the chord, so any note carrying the mark rolls it.
+      const rolled = group.some((note) => note.arpeggiated);
+      entries.push(
+        noteEntry(pitches, first.duration, tied, first.beams, first.stem, rolled),
+      );
     }
     cursor += first.duration.ticks;
   }
@@ -493,9 +518,10 @@ function buildStaves(
   measures: readonly XmlNode[],
   header: ScoreHeader,
   warnings: ImportWarning[],
-): readonly StaffPart[] {
+): { readonly staves: readonly StaffPart[]; readonly pedalMarks: readonly PedalMark[] } {
+  const pedalMarks: PedalMark[] = [];
   const perMeasure = measures.map((measure, index) =>
-    readMeasureNotes(measure, index, header, warnings),
+    readMeasureNotes(measure, index, header, warnings, pedalMarks),
   );
 
   // One part per voice of each staff, rather than one per staff. Two voices on
@@ -553,7 +579,10 @@ function buildStaves(
     } satisfies StaffPart;
   });
 
-  return restStaffThatFallsSilent(parts, header.timeSignature.ticksPerMeasure);
+  return {
+    staves: restStaffThatFallsSilent(parts, header.timeSignature.ticksPerMeasure),
+    pedalMarks,
+  };
 }
 
 /**
@@ -634,7 +663,14 @@ function dropTiesThatLeadNowhere(
         dropped += entry.tiedForward.length - kept.length;
         return kept.length === entry.tiedForward.length
           ? entry
-          : noteEntry(entry.pitches, entry.duration, kept, entry.beams, entry.stem);
+          : noteEntry(
+              entry.pitches,
+              entry.duration,
+              kept,
+              entry.beams,
+              entry.stem,
+              entry.arpeggiated,
+            );
       }),
     ),
   );

@@ -88,6 +88,28 @@ describe('listening to an exercise', () => {
     expect(new Set(struck).size).toBe(struck.length);
   });
 
+  it('lets the pedal hold a note past its written length', () => {
+    // A quarter struck under the pedal rings until the pedal comes up, which
+    // is the only way a schedule of starts and stops can say "damper down".
+    const base = twoBarExercise({ tempoBpm: 60 });
+    const pedalled = {
+      ...base,
+      pedalMarks: [
+        { measureIndex: 0, offsetTicks: 0, type: 'start' as const },
+        { measureIndex: 1, offsetTicks: 0, type: 'stop' as const },
+      ],
+    };
+    const { player, metronome, instrument } = rig(pedalled);
+    player.start(buildTimeline(pedalled), { staffNumber: null, clickAudible: false });
+    metronome.advanceSubdivisions(12);
+
+    // The first note is written as a quarter and released at the bar line.
+    const struck = instrument.played.find((note) => note.midi === MIDI.C4);
+    const release = instrument.stopped.find((note) => note.midi === MIDI.C4);
+    expect(struck?.atMs).toBe(0);
+    expect(release?.atMs).toBe(4_000);
+  });
+
   it('can sound one hand alone', () => {
     const { player, metronome, instrument, timeline } = rig();
     player.start(timeline, { staffNumber: 2, clickAudible: false });

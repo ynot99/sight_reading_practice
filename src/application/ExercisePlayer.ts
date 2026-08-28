@@ -1,4 +1,5 @@
 import { ticksToMilliseconds } from '../domain/model/Duration.js';
+import { pedalSpans } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import type { IMetronome, MetronomeTick } from './ports/IMetronome.js';
@@ -127,12 +128,18 @@ export class ExercisePlayer {
    * `durationTicks` on a timeline note already follows any ties out of it, so
    * a note held across a bar line is one sound of the right length rather than
    * two of the wrong one.
+   *
+   * The damper pedal is applied here rather than through the instrument's own
+   * pedal, which belongs to the player's feet: a note struck under the pedal
+   * simply rings until the pedal comes up, which is the same thing said in the
+   * only terms this schedule has.
    */
   private collectNotes(
     timeline: ExerciseTimeline,
     staffNumber: ListeningHand,
   ): ScheduledNote[] {
     const tempo = timeline.exercise.tempoBpm;
+    const spans = pedalSpans(timeline.exercise);
     const longest = new Map<string, ScheduledNote>();
     for (const step of timeline.steps) {
       for (const note of step.notes) {
@@ -144,7 +151,14 @@ export class ExercisePlayer {
         // it twice doubles the attack into an audible knock. The longer of the
         // two wins, since the key stays down until the last of them lets go.
         const at = ticksToMilliseconds(step.onsetTicks, tempo);
-        const until = ticksToMilliseconds(step.onsetTicks + note.durationTicks, tempo);
+        const heldUntil = spans.find(
+          ([from, to]) => step.onsetTicks >= from && step.onsetTicks < to,
+        )?.[1];
+        const endTicks = Math.max(
+          step.onsetTicks + note.durationTicks,
+          heldUntil ?? 0,
+        );
+        const until = ticksToMilliseconds(endTicks, tempo);
         const seen = `${note.midi}@${step.onsetTicks}`;
         const previous = longest.get(seen);
         if (previous === undefined || previous.untilMs < until) {

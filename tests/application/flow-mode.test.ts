@@ -287,6 +287,72 @@ describe('Flow mode', () => {
       expect(judged?.verdict).toBe('wrong');
     });
 
+    it('counts a press that beat the very first beat', () => {
+      const harness = flowHarness();
+      harness.session.start();
+      // Stop one tick short: the count-in is over but the music has not begun.
+      harness.metronome.advanceSubdivisions(TICKS_TO_START - 1);
+      expect(harness.session.status).toBe('counting-in');
+
+      harness.clock.set(RUN_STARTS_AT_MS - 40);
+      harness.midi.noteOn(MIDI.C4);
+      // Nothing to judge it against yet.
+      expect(harness.of('noteJudged')).toHaveLength(0);
+
+      harness.metronome.advanceSubdivisions(1);
+
+      const [judged] = harness.of('noteJudged');
+      expect(judged?.verdict).toBe('correct');
+      expect(judged?.stepIndex).toBe(0);
+      expect(judged?.deviationMs).toBe(-40);
+    });
+
+    it('takes a whole chord anticipated at the downbeat', () => {
+      const harness = flowHarness();
+      harness.session.start();
+      harness.metronome.advanceSubdivisions(TICKS_TO_START - 1);
+
+      harness.clock.set(RUN_STARTS_AT_MS - 30);
+      harness.midi.noteOn(MIDI.C3);
+      harness.clock.set(RUN_STARTS_AT_MS - 20);
+      harness.midi.noteOn(MIDI.C4);
+      harness.metronome.advanceSubdivisions(1);
+
+      expect(harness.of('noteJudged').map((event) => event.verdict)).toEqual([
+        'correct',
+        'correct',
+      ]);
+      expect(harness.of('stepCompleted')).toHaveLength(0);
+      expect(harness.session.currentIndex).toBe(0);
+    });
+
+    it('throws away noodling from the middle of the count-in', () => {
+      const harness = flowHarness();
+      harness.session.start();
+      harness.metronome.advanceSubdivisions(TICKS_TO_START - 1);
+
+      // Half a second before the music: not an anticipated downbeat.
+      harness.clock.set(RUN_STARTS_AT_MS - 500);
+      harness.midi.noteOn(MIDI.C4);
+      harness.metronome.advanceSubdivisions(1);
+
+      expect(harness.of('noteJudged')).toHaveLength(0);
+    });
+
+    it('does not carry a count-in press into a later run', () => {
+      const harness = flowHarness();
+      harness.session.start();
+      harness.metronome.advanceSubdivisions(TICKS_TO_START - 1);
+      harness.clock.set(RUN_STARTS_AT_MS - 40);
+      harness.midi.noteOn(MIDI.C4);
+
+      harness.session.abort();
+      harness.session.start();
+      harness.metronome.advanceSubdivisions(TICKS_TO_START);
+
+      expect(harness.of('noteJudged')).toHaveLength(0);
+    });
+
     it('forgets anything held back when the run ends', () => {
       const harness = flowHarness();
       startAndCountIn(harness);

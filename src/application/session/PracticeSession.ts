@@ -12,7 +12,7 @@ import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../../sh
 import type { IPracticeMode } from '../modes/IPracticeMode.js';
 import type { IClock } from '../ports/IClock.js';
 import type { IMetronome, MetronomeTick } from '../ports/IMetronome.js';
-import type { IMidiSource, MidiEvent } from '../ports/IMidiSource.js';
+import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from '../ports/IMidiSource.js';
 import { subdivisionsPerPulseFor } from './metronomePlan.js';
 import { DEFAULT_SESSION_OPTIONS, type PracticeContext, type SessionOptions } from './PracticeContext.js';
 import type { SessionEventMap } from './SessionEvents.js';
@@ -62,6 +62,8 @@ export class PracticeSession {
   private runStartedAt = 0;
   private positionOffsetTicks = 0;
   private countInRemaining = 0;
+  /** Note-ons that landed during the count-in, kept until the music starts. */
+  private beforeTheMusic: MidiNoteOnEvent[] = [];
   private lastReport: PerformanceReport | null = null;
   private lastScore: SessionScore | null = null;
 
@@ -212,6 +214,7 @@ export class PracticeSession {
     this.runStartedAt = 0;
     this.positionOffsetTicks = 0;
     this.countInRemaining = 0;
+    this.beforeTheMusic = [];
     this.lastReport = null;
     this.lastScore = null;
   }
@@ -222,6 +225,30 @@ export class PracticeSession {
     this.dispatch('countInComplete');
     this.mode.onSessionStart(this.context);
     this.enterStep(0);
+    this.replayPressesAimedAtTheFirstBeat(atMs);
+  }
+
+  /**
+   * Hands the mode any press that arrived just before the music did.
+   *
+   * The early-press window already covers every other step, but the first one
+   * had nothing in front of it: the run had not started, so the press was not
+   * held back, it was discarded. The session decides only *whether the input
+   * survives*; what it is worth is still the mode's call, so these go through
+   * the ordinary note-on path with their real timestamps and are graded as
+   * early exactly like any other anticipated beat.
+   */
+  private replayPressesAimedAtTheFirstBeat(runStartedAtMs: number): void {
+    const held = this.beforeTheMusic;
+    this.beforeTheMusic = [];
+    if (this.status !== 'running') {
+      return;
+    }
+    for (const event of held) {
+      if (runStartedAtMs - event.timestampMs <= this.options.earlyWindowMs) {
+        this.mode.onNoteOn(this.context, event);
+      }
+    }
   }
 
   private enterStep(index: number): void {
@@ -324,6 +351,16 @@ export class PracticeSession {
   }
 
   private handleMidi(event: MidiEvent): void {
+    if (this.status === 'counting-in') {
+      // Nobody lands exactly on the first beat, and a press a few
+      // milliseconds ahead of it is an attempt at the first note, not noise.
+      // Dropping it here made the first chord of a run vanish without even a
+      // wrong-note verdict to show for it.
+      if (event.type === 'noteon') {
+        this.beforeTheMusic.push(event);
+      }
+      return;
+    }
     if (this.status !== 'running') {
       return;
     }

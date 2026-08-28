@@ -27,6 +27,28 @@ describe('Wait mode', () => {
     expect(harness.of('stepEntered')[0]?.step.expectedMidi).toEqual([MIDI.C3, MIDI.C4]);
   });
 
+  it('keeps a press that beat the first beat of the count-in', () => {
+    // Not a Flow-mode concern: the session was dropping the input before any
+    // mode saw it, so waiting for the notes did not help either.
+    const harness = waitHarness({
+      options: {
+        countInBars: 1,
+        metronomeMuted: true,
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+      },
+    });
+    harness.session.start();
+    // One bar of 4/4, one tick per beat: four ticks of count-in.
+    harness.metronome.advanceSubdivisions(4);
+    expect(harness.session.status).toBe('counting-in');
+
+    harness.clock.set(harness.clock.now() + 960);
+    harness.midi.noteOn(MIDI.C4);
+    harness.metronome.advanceSubdivisions(1);
+
+    expect(harness.of('noteJudged').map((event) => event.verdict)).toEqual(['correct']);
+  });
+
   it('does not advance until every notated pitch has sounded', () => {
     const harness = waitHarness();
     harness.session.start();

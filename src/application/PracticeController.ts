@@ -86,6 +86,14 @@ export interface PracticeSettings {
   readonly matchToleranceMs: number;
   readonly pitchClassOnly: boolean;
   /**
+   * Judge the timing and not the notes.
+   *
+   * Reading a rhythm before playing it is standard practice, and it is the
+   * half beginners drop first. Composes with either mode rather than being
+   * one of its own, since nothing about *when the cursor moves* changes.
+   */
+  readonly rhythmOnly: boolean;
+  /**
    * Draw the position marker on the score.
    *
    * Turning it off is a practice aid in its own right: it forces you to keep
@@ -193,6 +201,7 @@ export class PracticeController {
       dropoutBars: 0,
       matchToleranceMs: 250,
       pitchClassOnly: false,
+      rhythmOnly: false,
       showCursor: true,
       showPlayedNotes: true,
       fadePassedNotes: false,
@@ -519,6 +528,7 @@ export class PracticeController {
         matchPolicy: {
           toleranceMs: this.currentSettings.matchToleranceMs,
           pitchClassOnly: this.currentSettings.pitchClassOnly,
+          anyPitch: this.currentSettings.rhythmOnly,
         },
         countInBars: this.currentSettings.countInBars,
         expectedStaff: this.currentSettings.handStaff,

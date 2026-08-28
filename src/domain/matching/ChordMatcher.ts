@@ -12,6 +12,16 @@ export interface MatchPolicy {
   readonly toleranceMs: number;
   /** Ignore octaves. Handy for beginners drilling note names. */
   readonly pitchClassOnly: boolean;
+  /**
+   * Judge only *when*, never *what*.
+   *
+   * Reading the rhythm before playing the notes is standard practice, and it
+   * is the half beginners drop first. One press satisfies a step whatever the
+   * pitch and however many notes the step holds - a chord is one gesture of
+   * the hand, so counting it as three wrong notes would punish the reader for
+   * doing the thing correctly.
+   */
+  readonly anyPitch?: boolean;
 }
 
 export const DEFAULT_MATCH_POLICY: MatchPolicy = {
@@ -55,6 +65,8 @@ export class ChordMatcher {
   private readonly expectedList: readonly number[];
   private readonly expectedByKey: ReadonlyMap<number, number>;
   private pending: Set<number>;
+  /** Rhythm-only: whether this step has had its one press yet. */
+  private tapped = false;
   private matchedNotes: number[] = [];
   private wrongPresses: number[] = [];
   private windowStart: number | null = null;
@@ -86,11 +98,19 @@ export class ChordMatcher {
   }
 
   get completed(): boolean {
-    return this.pending.size === 0;
+    return this.policy.anyPitch === true ? this.tapped : this.pending.size === 0;
   }
 
-  /** Expected pitches not yet played, ascending. */
+  /**
+   * Expected pitches not yet played, ascending.
+   *
+   * Rhythm-only still reports the whole chord until the step is tapped: the
+   * reader is reading those notes even while only the timing is judged.
+   */
   get remaining(): readonly number[] {
+    if (this.policy.anyPitch === true) {
+      return this.tapped ? [] : this.expectedList;
+    }
     return [...this.pending]
       .map((key) => this.expectedByKey.get(key) ?? key)
       .sort((left, right) => left - right);
@@ -112,6 +132,17 @@ export class ChordMatcher {
   }
 
   accept(midi: number, timestampMs: number): MatchOutcome {
+    if (this.policy.anyPitch === true) {
+      if (this.tapped) {
+        // The rest of a chord is the same gesture, not extra notes.
+        return this.outcome('duplicate', false);
+      }
+      this.tapped = true;
+      this.matchedNotes.push(midi);
+      this.windowStart ??= timestampMs;
+      return this.outcome('correct', false);
+    }
+
     const key = this.keyOf(midi);
     let windowRestarted = false;
 
@@ -142,7 +173,9 @@ export class ChordMatcher {
     return {
       expected: this.expectedList,
       matched: [...this.matchedNotes],
-      missing: this.remaining,
+      // A tapped step counts its notes as played: the reader did what was
+      // asked, and accuracy would otherwise read as though nothing sounded.
+      missing: this.policy.anyPitch === true && this.tapped ? [] : this.remaining,
       wrong: [...this.wrongPresses],
       completed: this.completed,
     };
@@ -153,6 +186,7 @@ export class ChordMatcher {
     this.pending = new Set(this.expectedByKey.keys());
     this.matchedNotes = [];
     this.windowStart = null;
+    this.tapped = false;
   }
 
   /** Full reset, including the wrong-note history. */

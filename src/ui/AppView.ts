@@ -273,6 +273,7 @@ export class AppView {
     instrumentVolumeValue: HTMLOutputElement;
     metronomeMuted: HTMLInputElement;
     pitchClass: HTMLInputElement;
+    rhythmOnly: HTMLInputElement;
     audioFeedback: HTMLInputElement;
     computerKeyboard: HTMLInputElement;
     newExercise: HTMLButtonElement;
@@ -350,6 +351,7 @@ export class AppView {
       instrumentVolumeValue: requireElement(doc, 'instrument-volume-value'),
       metronomeMuted: requireElement(doc, 'metronome-muted'),
       pitchClass: requireElement(doc, 'pitch-class'),
+      rhythmOnly: requireElement(doc, 'rhythm-only'),
       audioFeedback: requireElement(doc, 'audio-feedback'),
       computerKeyboard: requireElement(doc, 'computer-keyboard'),
       newExercise: requireElement(doc, 'new-exercise'),
@@ -648,6 +650,10 @@ export class AppView {
 
     this.listen(this.el.metronomeMuted, 'change', () => {
       controller.updateSettings({ metronomeMuted: this.el.metronomeMuted.checked });
+    });
+
+    this.listen(this.el.rhythmOnly, 'change', () => {
+      controller.updateSettings({ rhythmOnly: this.el.rhythmOnly.checked });
     });
 
     this.listen(this.el.pitchClass, 'change', () => {
@@ -1129,6 +1135,7 @@ export class AppView {
     this.el.showCursor.checked = settings.showCursor;
     this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;
+    this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.presetDescription.textContent = this.runtime.presets.get(settings.presetId).description;
     this.el.rhythmDescription.textContent = this.runtime.rhythms.get(
       settings.rhythmProfileId,

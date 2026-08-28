@@ -139,6 +139,7 @@ export function decodePracticeSettings(
     metronomeMuted: readBoolean(value['metronomeMuted']),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
     pitchClassOnly: readBoolean(value['pitchClassOnly']),
+    rhythmOnly: readBoolean(value['rhythmOnly']),
     showCursor: readBoolean(value['showCursor']),
     showPlayedNotes: readBoolean(value['showPlayedNotes']),
     fadePassedNotes: readBoolean(value['fadePassedNotes']),
@@ -169,6 +170,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
       ? settings.matchToleranceMs
       : undefined,
     pitchClassOnly: settings.pitchClassOnly,
+    rhythmOnly: settings.rhythmOnly,
     showCursor: settings.showCursor,
     showPlayedNotes: settings.showPlayedNotes,
     fadePassedNotes: settings.fadePassedNotes,

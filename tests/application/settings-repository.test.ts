@@ -39,6 +39,7 @@ const SETTINGS: PracticeSettings = {
   metronomeMuted: true,
   matchToleranceMs: 180,
   pitchClassOnly: true,
+  rhythmOnly: true,
   showCursor: false,
   showPlayedNotes: false,
   fadePassedNotes: true,

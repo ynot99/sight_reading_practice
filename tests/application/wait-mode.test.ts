@@ -68,6 +68,24 @@ describe('Wait mode', () => {
     expect(harness.session.currentIndex).toBe(1);
   });
 
+  it('advances on any note at all when only the rhythm is being read', () => {
+    const harness = waitHarness({
+      options: {
+        countInBars: 0,
+        metronomeMuted: true,
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false, anyPitch: true },
+      },
+    });
+    harness.session.start();
+
+    // The step wants C3 and C4; one wrong note carries it, because what is
+    // being read here is the rhythm.
+    harness.midi.noteOn(MIDI.G4);
+
+    expect(harness.session.currentIndex).toBe(1);
+    expect(harness.of('stepCompleted')[0]?.result.status).toBe('correct');
+  });
+
   it('does not advance until every notated pitch has sounded', () => {
     const harness = waitHarness();
     harness.session.start();

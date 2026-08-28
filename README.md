@@ -40,6 +40,12 @@ its own service driven by the same pulse. Notes are handed to the instrument
 *ahead* of when they sound, because a tick arrives after the moment it stands
 for and a melody placed on delivery is audibly uneven.
 
+**Rhythm only** judges when and never what: one press satisfies a step
+whatever the pitch, because reading a rhythm before playing the notes is
+standard practice and it is the half beginners drop first. It is a match rule
+rather than a mode of its own, so it composes with either — nothing about when
+the cursor moves changes.
+
 The click is a practice setting of its own: it can sound every beat, halve or
 third it, or give only the downbeat and leave the pulse inside the bar to you.
 It is deliberately separate from the rate the practice loop runs at, which is

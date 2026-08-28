@@ -270,6 +270,7 @@ export class AppView {
     focusStatus: HTMLElement;
     focusPlay: HTMLButtonElement;
     focusStop: HTMLButtonElement;
+    focusListen: HTMLButtonElement;
     focusNext: HTMLButtonElement;
     focusExit: HTMLButtonElement;
     exerciseTitle: HTMLElement;
@@ -353,6 +354,7 @@ export class AppView {
       focusStatus: requireElement(doc, 'focus-status'),
       focusPlay: requireElement(doc, 'focus-play'),
       focusStop: requireElement(doc, 'focus-stop'),
+      focusListen: requireElement(doc, 'focus-listen'),
       focusNext: requireElement(doc, 'focus-next'),
       focusExit: requireElement(doc, 'focus-exit'),
       exerciseTitle: requireElement(doc, 'exercise-title'),
@@ -507,7 +509,11 @@ export class AppView {
   }
 
   private describeListening(): void {
-    this.el.listen.textContent = this.runtime.controller.isListening ? 'Stop listening' : 'Listen';
+    // The same words in both bars: "Stop" alone would read as the run's Stop,
+    // which sits right beside it in the pill.
+    const label = this.runtime.controller.isListening ? 'Stop listening' : 'Listen';
+    this.el.listen.textContent = label;
+    this.el.focusListen.textContent = label;
   }
 
   private populateSelects(): void {
@@ -837,6 +843,10 @@ export class AppView {
 
     this.listen(this.el.focusStop, 'click', () => {
       controller.stop();
+    });
+
+    this.listen(this.el.focusListen, 'click', () => {
+      void this.toggleListening();
     });
 
     this.listen(this.el.focusNext, 'click', () => {

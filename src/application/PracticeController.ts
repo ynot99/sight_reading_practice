@@ -467,13 +467,12 @@ export class PracticeController {
       return;
     }
     this.disposeSession();
-    this.player ??= new ExercisePlayer({
-      metronome: this.deps.metronome,
-      instrument: this.deps.instrument,
-      cursor: this.deps.cursor,
-    });
+    const player = this.ensurePlayer();
+    // Following along is most of the value of hearing it, so the marker is
+    // shown whatever the reader set - and put back the way they had it when
+    // the performance ends.
     this.deps.cursor.show();
-    this.player.start(timeline, {
+    player.start(timeline, {
       staffNumber: this.currentSettings.handStaff,
       clickAudible: !this.currentSettings.metronomeMuted,
     });
@@ -531,7 +530,11 @@ export class PracticeController {
   }
 
   stopListening(): void {
-    this.player?.stop();
+    if (this.player?.isPlaying !== true) {
+      return;
+    }
+    this.player.stop();
+    this.applyCursorVisibility();
   }
 
   get isListening(): boolean {
@@ -540,12 +543,19 @@ export class PracticeController {
 
   /** Fires when a playback reaches the end on its own. */
   get playbackEvents(): IEventSource<{ started: Record<string, never>; finished: Record<string, never> }> {
-    this.player ??= new ExercisePlayer({
-      metronome: this.deps.metronome,
-      instrument: this.deps.instrument,
-      cursor: this.deps.cursor,
-    });
-    return this.player.events;
+    return this.ensurePlayer().events;
+  }
+
+  private ensurePlayer(): ExercisePlayer {
+    if (this.player === null) {
+      this.player = new ExercisePlayer({
+        metronome: this.deps.metronome,
+        instrument: this.deps.instrument,
+        cursor: this.deps.cursor,
+      });
+      this.player.events.on('finished', () => this.applyCursorVisibility());
+    }
+    return this.player;
   }
 
   start(): PracticeSession | null {

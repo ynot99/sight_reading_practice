@@ -1234,6 +1234,28 @@ describe('AppView', () => {
       expect(runtime.controller.session?.status).toBe('aborted');
     });
 
+    it('hears the exercise without leaving fullscreen', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      element<HTMLButtonElement>('focus-listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.isListening).toBe(true);
+      // Both bars say the same thing, so leaving fullscreen mid-playback
+      // cannot show a button that disagrees with the one just pressed.
+      expect(element('focus-listen').textContent).toBe('Stop listening');
+      expect(element('listen').textContent).toBe('Stop listening');
+
+      element<HTMLButtonElement>('focus-listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.isListening).toBe(false);
+      expect(element('focus-listen').textContent).toBe('Listen');
+    });
+
     it('shows where you are, then the grade, without the side panel', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();

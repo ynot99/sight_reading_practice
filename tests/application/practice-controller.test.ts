@@ -875,6 +875,32 @@ describe('cursor visibility', () => {
     expect(renderer.cursor.visible).toBe(false);
   });
 
+  it('shows it for a playback and then puts it back as it was', async () => {
+    const { controller, renderer } = createController(true);
+    controller.updateSettings({ showCursor: false });
+    await controller.loadNewExercise();
+
+    controller.listen();
+    // Following along is most of the value of hearing it played.
+    expect(renderer.cursor.visible).toBe(true);
+
+    controller.stopListening();
+
+    // A performance is not a decision about the reader's own settings; one
+    // listen must not undo the aid they turned off.
+    expect(renderer.cursor.visible).toBe(false);
+  });
+
+  it('leaves the cursor alone when there was nothing to stop', async () => {
+    const { controller, renderer } = createController(true);
+    await controller.loadNewExercise();
+    controller.updateSettings({ showCursor: false });
+
+    controller.stopListening();
+
+    expect(renderer.cursor.visible).toBe(false);
+  });
+
   it('brings it back when the setting is turned on again', async () => {
     const { controller, renderer } = createController();
     await controller.loadNewExercise();

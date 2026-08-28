@@ -29,7 +29,7 @@ function layout(key = KeySignature.major(0)): OverlayLayout {
       [1, 200],
     ]),
     clefAt: (staffNumber: number) => (staffNumber === 1 ? 'treble' : 'bass'),
-    key,
+    keyAt: () => key,
   };
 }
 
@@ -217,7 +217,7 @@ describe('buildOverlayShapes', () => {
       geometry: zoomed,
       stepX: new Map([[0, 240]]),
       clefAt: () => 'treble' as const,
-      key: KeySignature.major(0),
+      keyAt: () => KeySignature.major(0),
     });
 
     const [head] = noteheads(shapes);

@@ -23,7 +23,7 @@ export interface OverlayLayout {
   /** Horizontal centre of each timeline step, in drawing units. */
   readonly stepX: ReadonlyMap<number, number>;
   readonly clefAt: (staffNumber: number, stepIndex: number) => ClefKind;
-  readonly key: KeySignature;
+  readonly keyAt: (stepIndex: number) => KeySignature;
 }
 
 export interface NoteheadShape {
@@ -132,7 +132,8 @@ export function buildOverlayShapes(
     // Displaced means it missed the beat: the offset already carries the
     // dead zone, so nothing here has to re-decide what counts as on time.
     const looseTiming = mark.offset !== 0;
-    const pitch = spellPlayed(mark.midi, layout.key);
+    const key = layout.keyAt(mark.stepIndex);
+    const pitch = spellPlayed(mark.midi, key);
     const staffNumber = staffForDiatonic(layout.geometry, mark.stepIndex, pitch.diatonicIndex);
     if (staffNumber === null) {
       continue;
@@ -158,7 +159,7 @@ export function buildOverlayShapes(
       }
     }
 
-    if (pitch.alter !== layout.key.alterationFor(pitch.step)) {
+    if (pitch.alter !== key.alterationFor(pitch.step)) {
       shapes.push({
         kind: 'accidental',
         x: x - radiusX * 2.4,

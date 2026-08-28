@@ -46,7 +46,8 @@ export interface PlayedNote {
 
 /** What the overlay needs in order to spell and place a press. */
 export interface OverlayContext {
-  readonly key: KeySignature;
+  /** The key in force at a step, which a modulation moves. */
+  readonly keyAt: (stepIndex: number) => KeySignature;
   /**
    * The clef a staff is reading in at a given step.
    *

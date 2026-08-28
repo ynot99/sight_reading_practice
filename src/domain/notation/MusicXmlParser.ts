@@ -3,7 +3,7 @@ import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '../model/Duration.js';
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
 import { BEAM_TYPES, measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
-import type { Beam, BeamType, ClefChange, StemDirection } from '../model/Exercise.js';
+import type { Beam, BeamType, ClefChange, KeyChange, StemDirection } from '../model/Exercise.js';
 import { KeySignature, type KeyMode } from '../model/KeySignature.js';
 import { Pitch, type Alteration } from '../model/Pitch.js';
 import { splitIntoRests } from '../generation/RhythmFiller.js';
@@ -22,7 +22,6 @@ import {
 export interface ImportWarning {
   readonly kind:
     | 'extra-parts'
-    | 'merged-voices'
     | 'extra-voices'
     | 'grace-notes'
     | 'changing-attributes'
@@ -113,6 +112,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     id: `import-${Date.now().toString(36)}`,
     title: readTitle(score),
     key: header.key,
+    keyChanges: header.keyChanges,
     timeSignature: header.timeSignature,
     tempoBpm: header.tempoBpm,
     staves,
@@ -155,6 +155,7 @@ interface ScoreHeader {
   readonly clefByStaff: ReadonlyMap<number, ClefKind>;
   /** Clefs a staff switches to later, keyed by the file's own staff number. */
   readonly clefChangesByStaff: ReadonlyMap<number, readonly ClefChange[]>;
+  readonly keyChanges: readonly KeyChange[];
   readonly staffCount: number;
 }
 
@@ -206,7 +207,8 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
   // the treble is written in the treble clef, and reading it on five ledger
   // lines instead is exactly the difficulty the change exists to remove.
   const clefChangesByStaff = new Map<number, ClefChange[]>();
-  let changedOther = false;
+  const keyChanges: KeyChange[] = [];
+  let changedMetre = false;
   measures.forEach((measure, measureIndex) => {
     if (measureIndex === 0) {
       return;
@@ -221,15 +223,27 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
         { measureIndex, clef },
       ]);
     }
-    if (hasChild(later, 'key') || hasChild(later, 'time')) {
-      changedOther = true;
+    // A modulation has to be followed as well. Held to one key, a piece that
+    // changes key comes out correct and unreadable: every note of the new key
+    // spelled with an accidental it should not need.
+    const laterKey = child(later, 'key');
+    const laterFifths = childNumber(laterKey, 'fifths');
+    if (laterFifths !== null) {
+      const laterMode = childText(laterKey, 'mode') === 'minor' ? 'minor' : 'major';
+      keyChanges.push({
+        measureIndex,
+        key: new KeySignature(laterFifths, laterMode satisfies KeyMode),
+      });
+    }
+    if (hasChild(later, 'time')) {
+      changedMetre = true;
     }
   });
 
-  if (changedOther) {
+  if (changedMetre) {
     warnings.push({
       kind: 'changing-attributes',
-      detail: 'Key or metre changes partway through were ignored; the first of each is used.',
+      detail: 'A metre change partway through was ignored; the first is used throughout.',
     });
   }
 
@@ -240,6 +254,7 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
     tempoBpm: readTempo(measures),
     clefByStaff,
     clefChangesByStaff,
+    keyChanges,
     staffCount: Math.max(1, staffCount),
   };
 }
@@ -507,7 +522,7 @@ function buildStaves(
   const extra = ordered.length - staffNumbers.length;
   if (extra > 0) {
     warnings.push({
-      kind: 'merged-voices',
+      kind: 'extra-voices',
       detail: `${extra} extra voice${extra === 1 ? '' : 's'} were kept as their own lines.`,
     });
   }

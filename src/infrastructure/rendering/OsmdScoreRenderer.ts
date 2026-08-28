@@ -240,7 +240,7 @@ export class OsmdScoreRenderer
       geometry,
       stepX: this.stepX,
       clefAt: context.clefAt,
-      key: context.key,
+      keyAt: context.keyAt,
     });
     for (const shape of shapes) {
       group.append(this.createShape(shape, group.ownerDocument));

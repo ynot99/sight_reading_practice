@@ -47,7 +47,10 @@ describe('played notes drawn over a real engraving', () => {
     container = createScoreContainer();
     renderer = new OsmdScoreRenderer(container, { zoom: 1 });
     await renderer.load(new MusicXmlSerializer().serialize(twoBarExercise()));
-    renderer.configureOverlay({ key: KeySignature.major(0), clefAt: (staffNumber) => CLEFS.get(staffNumber) ?? 'treble' });
+    renderer.configureOverlay({
+      keyAt: () => KeySignature.major(0),
+      clefAt: (staffNumber) => CLEFS.get(staffNumber) ?? 'treble',
+    });
   });
 
   it('draws a correct press exactly on the note the engraver printed', () => {
@@ -231,7 +234,10 @@ describe('played notes on a page of several systems', () => {
       seed: 7,
     });
     await renderer.load(new MusicXmlSerializer().serialize(exercise));
-    renderer.configureOverlay({ key: KeySignature.major(0), clefAt: (staffNumber) => CLEFS.get(staffNumber) ?? 'treble' });
+    renderer.configureOverlay({
+      keyAt: () => KeySignature.major(0),
+      clefAt: (staffNumber) => CLEFS.get(staffNumber) ?? 'treble',
+    });
 
     const lines = staffLineYs(container);
     const firstSystemBottom = lines[10] ?? 0;

@@ -86,6 +86,7 @@ describe('buildTimeline', () => {
       id: 'silent',
       title: 'silent',
       key: KeySignature.major(0),
+      keyChanges: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 60,
       metadata: { generatorId: 'fixture', seed: 0 },

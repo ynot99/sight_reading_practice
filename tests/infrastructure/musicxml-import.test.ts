@@ -134,7 +134,7 @@ describe('files written by other programs', () => {
       '<voice>2</voice><type>whole</type></note>';
     const { exercise, warnings } = importer.read(scoreXml(note('C', 4, 96, 'whole') + second));
 
-    expect(warnings.map((warning) => warning.kind)).toContain('merged-voices');
+    expect(warnings.map((warning) => warning.kind)).toContain('extra-voices');
     // Two parts, one staff: that is what a second voice is.
     expect(exercise.staves).toHaveLength(2);
     expect(exercise.staves.map((staff) => staff.staffNumber)).toEqual([1, 1]);
@@ -291,6 +291,42 @@ describe('files written by other programs', () => {
     const printed = serializer.serialize(exercise);
     const secondBar = printed.slice(printed.indexOf('<measure number="2"'));
     expect(secondBar).toMatch(/<attributes>\s*<clef number="1">\s*<sign>G<\/sign>/);
+  });
+
+  it('follows a modulation instead of spelling it out', () => {
+    // Held to the opening key, a piece that modulates comes out correct and
+    // unreadable: every note of the new key carrying an accidental it should
+    // not need.
+    const modulating = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>24</divisions><key><fifths>0</fifths></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time><staves>1</staves>
+      <clef number="1"><sign>G</sign><line>2</line></clef></attributes>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>96</duration>
+      <voice>1</voice><type>whole</type><staff>1</staff></note>
+    </measure>
+    <measure number="2">
+      <attributes><key><fifths>-2</fifths></key></attributes>
+      <note><pitch><step>B</step><alter>-1</alter><octave>4</octave></pitch>
+      <duration>96</duration><voice>1</voice><type>whole</type><staff>1</staff></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const { exercise } = importer.read(modulating);
+
+    expect(exercise.key.fifths).toBe(0);
+    expect(exercise.keyChanges).toHaveLength(1);
+    expect(exercise.keyChanges[0]?.measureIndex).toBe(1);
+    expect(exercise.keyChanges[0]?.key.fifths).toBe(-2);
+
+    const printed = serializer.serialize(exercise);
+    const secondBar = printed.slice(printed.indexOf('<measure number="2"'));
+    expect(secondBar).toContain('<fifths>-2</fifths>');
+    // B flat belongs to the new key, so it is not spelled with an accidental.
+    expect(secondBar).not.toContain('<accidental>');
   });
 
   it('keeps the stems that tell two voices apart', () => {

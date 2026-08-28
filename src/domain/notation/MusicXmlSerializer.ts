@@ -3,7 +3,8 @@ import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
 import type { Duration } from '../model/Duration.js';
 import type { Exercise, MusicalEntry, StaffPart } from '../model/Exercise.js';
-import { tupletPositions, validateExercise } from '../model/Exercise.js';
+import type { KeySignature } from '../model/KeySignature.js';
+import { keyAtMeasure, tupletPositions, validateExercise } from '../model/Exercise.js';
 import type { TupletPosition } from '../model/Exercise.js';
 import type { Alteration, Pitch } from '../model/Pitch.js';
 import { XmlWriter } from './XmlWriter.js';
@@ -113,7 +114,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             this.writeTempo(writer, exercise.tempoBpm);
           }
         } else {
-          this.writeClefChanges(writer, exercise, measureIndex);
+          this.writeMidScoreAttributes(writer, exercise, measureIndex);
         }
         // A voice with nothing in this bar is simply not written into it -
         // MusicXML has no need to mention it, and a rest would be drawn.
@@ -165,13 +166,18 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
   }
 
   /**
-   * Clefs a staff switches to here.
+   * Key and clef changes that take effect here.
    *
-   * Written as its own `<attributes>` at the head of the measure, which is
-   * where a reader expects to meet a new clef: on the bar line, before the
-   * notes it governs.
+   * Written as their own `<attributes>` at the head of the measure, which is
+   * where a reader expects to meet them: on the bar line, before the notes
+   * they govern.
    */
-  private writeClefChanges(writer: XmlWriter, exercise: Exercise, measureIndex: number): void {
+  private writeMidScoreAttributes(
+    writer: XmlWriter,
+    exercise: Exercise,
+    measureIndex: number,
+  ): void {
+    const key = exercise.keyChanges.find((change) => change.measureIndex === measureIndex);
     const changing = new Map<number, ClefKind>();
     for (const staff of exercise.staves) {
       for (const change of staff.clefChanges) {
@@ -180,10 +186,17 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         }
       }
     }
-    if (changing.size === 0) {
+    if (key === undefined && changing.size === 0) {
       return;
     }
     writer.element('attributes', undefined, () => {
+      // Key first, which is the order the schema asks for.
+      if (key !== undefined) {
+        writer.element('key', undefined, () => {
+          writer.leaf('fifths', key.key.fifths);
+          writer.leaf('mode', key.key.mode);
+        });
+      }
       for (const [staffNumber, clef] of [...changing].sort((left, right) => left[0] - right[0])) {
         const definition = CLEF_DEFINITIONS[clef];
         writer.element('clef', { number: staffNumber }, () => {
@@ -219,6 +232,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     }
     // Accidentals are only printed when they change what the reader already
     // knows: the key signature at the bar line, then any accidental so far.
+    // Accidentals are read against the key in force here, not the one the
+    // piece opened in - otherwise a modulation prints every note of its new
+    // key as an accidental.
+    const key = keyAtMeasure(exercise, measureIndex);
     const activeAccidentals = new Map<string, Alteration>();
     const tuplets = tupletPositions(measure.entries);
     let held = heldByStaff.get(staff.staffNumber) ?? new Set<number>();
@@ -228,6 +245,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         exercise,
         staff,
         entry,
+        key,
         activeAccidentals,
         held,
         tuplets[entryIndex] ?? null,
@@ -242,6 +260,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     exercise: Exercise,
     staff: StaffPart,
     entry: MusicalEntry,
+    key: KeySignature,
     activeAccidentals: Map<string, Alteration>,
     held: ReadonlySet<number>,
     tuplet: TupletPosition | null,
@@ -299,7 +318,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             // told at the start of the tie and the note never stopped.
             const accidental = stopping
               ? undefined
-              : this.accidentalFor(exercise, pitch, activeAccidentals);
+              : this.accidentalFor(key, pitch, activeAccidentals);
             if (accidental !== undefined) {
               writer.leaf('accidental', accidental);
             }
@@ -371,16 +390,16 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
   }
 
   private accidentalFor(
-    exercise: Exercise,
+    key: KeySignature,
     pitch: Pitch,
     activeAccidentals: Map<string, Alteration>,
   ): string | undefined {
-    const key = accidentalKey(pitch);
-    const expected = activeAccidentals.get(key) ?? exercise.key.alterationFor(pitch.step);
+    const seen = accidentalKey(pitch);
+    const expected = activeAccidentals.get(seen) ?? key.alterationFor(pitch.step);
     if (pitch.alter === expected) {
       return undefined;
     }
-    activeAccidentals.set(key, pitch.alter);
+    activeAccidentals.set(seen, pitch.alter);
     return ACCIDENTAL_NAMES.get(pitch.alter);
   }
 }

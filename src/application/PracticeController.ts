@@ -22,7 +22,7 @@ import type {
   IScoreRenderer,
   IScoreZoom,
 } from './ports/IScoreRenderer.js';
-import { clefAtMeasure } from '../domain/model/Exercise.js';
+import { clefAtMeasure, keyAtMeasure } from '../domain/model/Exercise.js';
 import { PracticeSession } from './session/PracticeSession.js';
 
 /** Everything the user can dial in before pressing start. */
@@ -330,7 +330,8 @@ export class PracticeController {
     await this.deps.renderer.load(musicXml);
     const timeline = this.timeline;
     this.deps.overlay.configureOverlay({
-      key: exercise.key,
+      keyAt: (stepIndex) =>
+        keyAtMeasure(exercise, timeline.at(stepIndex)?.measureIndex ?? 0),
       clefAt: (staffNumber, stepIndex) => {
         const measureIndex = timeline.at(stepIndex)?.measureIndex ?? 0;
         const staff = exercise.staves.find((part) => part.staffNumber === staffNumber);

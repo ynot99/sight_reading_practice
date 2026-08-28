@@ -108,6 +108,17 @@ export interface StaffPart {
   readonly measures: readonly Measure[];
 }
 
+/** The key in force at a given measure. */
+export function keyAtMeasure(exercise: Exercise, measureIndex: number): KeySignature {
+  let current = exercise.key;
+  for (const change of exercise.keyChanges) {
+    if (change.measureIndex <= measureIndex) {
+      current = change.key;
+    }
+  }
+  return current;
+}
+
 /** The clef in force on a staff at a given measure. */
 export function clefAtMeasure(staff: StaffPart, measureIndex: number): ClefKind {
   let current = staff.clef;
@@ -131,10 +142,25 @@ export interface ExerciseMetadata {
  * renders, and the expected-event timeline that MIDI input is judged against.
  * Because both derivations start here they can never drift apart.
  */
+/** A key the score changes to, from the given measure onwards. */
+export interface KeyChange {
+  readonly measureIndex: number;
+  readonly key: KeySignature;
+}
+
 export interface Exercise {
   readonly id: string;
   readonly title: string;
   readonly key: KeySignature;
+  /**
+   * Keys the score changes to partway through.
+   *
+   * The pitches themselves never depend on this - a `Pitch` carries its own
+   * alteration - but what has to be *printed* does. Held to one key, a piece
+   * that modulates comes out correct and unreadable, every note of the new key
+   * spelled out as an accidental. Empty for anything this program generates.
+   */
+  readonly keyChanges: readonly KeyChange[];
   readonly timeSignature: TimeSignature;
   readonly tempoBpm: number;
   readonly staves: readonly StaffPart[];

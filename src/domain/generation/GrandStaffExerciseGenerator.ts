@@ -61,6 +61,7 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
       id: `${this.id}-${seed.toString(16)}`,
       title: `${request.key.name} · ${request.timeSignature.toString()} · ${request.measures} bars`,
       key: request.key,
+      keyChanges: [],
       timeSignature: request.timeSignature,
       tempoBpm: request.tempoBpm,
       staves,

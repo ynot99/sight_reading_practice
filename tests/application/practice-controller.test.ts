@@ -426,7 +426,7 @@ describe('what you played, drawn over the score', () => {
     const { controller, renderer } = createController(true);
     await controller.loadNewExercise();
 
-    expect(renderer.overlayContext?.key.name).toBe('C major');
+    expect(renderer.overlayContext?.keyAt(0).name).toBe('C major');
     expect(renderer.overlayContext?.clefAt(1, 0)).toBe('treble');
     expect(renderer.overlayContext?.clefAt(2, 0)).toBe('bass');
   });

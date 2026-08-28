@@ -12,6 +12,7 @@ import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
+import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { FocusMode } from './FocusMode.js';
@@ -204,6 +205,7 @@ export class AppView {
     progress: HTMLProgressElement;
     log: HTMLUListElement;
     result: HTMLElement;
+    drill: HTMLButtonElement;
     listen: HTMLButtonElement;
     listenHand: HTMLSelectElement;
     openScore: HTMLButtonElement;
@@ -280,6 +282,7 @@ export class AppView {
       progress: requireElement(doc, 'progress'),
       log: requireElement(doc, 'log'),
       result: requireElement(doc, 'result'),
+      drill: requireElement(doc, 'drill'),
       listen: requireElement(doc, 'listen'),
       listenHand: requireElement(doc, 'listen-hand'),
       openScore: requireElement(doc, 'open-score'),
@@ -559,6 +562,16 @@ export class AppView {
         void this.reload(false);
       });
     }
+
+    this.listen(this.el.drill, 'click', () => {
+      const passage = controller.drillWorstPassage();
+      if (passage === null) {
+        this.el.drill.hidden = true;
+        return;
+      }
+      this.syncControlsFromSettings();
+      void this.reload(false);
+    });
 
     this.listen(this.el.repeatRange, 'change', () => {
       controller.updateSettings({ repeatRange: this.el.repeatRange.checked });
@@ -1163,6 +1176,9 @@ export class AppView {
 
   private renderResult(score: SessionScore, report: PerformanceReport): void {
     this.el.result.hidden = false;
+    // Offered only when the run actually left something to work on; a clean
+    // reading has no worst bars, and a button that says otherwise is noise.
+    this.el.drill.hidden = worstPassage(report) === null;
     this.el.result.replaceChildren();
 
     const gradeElement = this.doc.createElement('div');

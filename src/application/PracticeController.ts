@@ -26,6 +26,7 @@ import type {
 } from './ports/IScoreRenderer.js';
 import { clefAtMeasure, keyAtMeasure, measureCount } from '../domain/model/Exercise.js';
 import { sliceExercise } from '../domain/model/exerciseSlice.js';
+import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
 
 /** Everything the user can dial in before pressing start. */
@@ -419,6 +420,31 @@ export class PracticeController {
       staffNumber: this.currentSettings.handStaff,
       clickAudible: !this.currentSettings.metronomeMuted,
     });
+  }
+
+  /**
+   * Narrows practice to wherever the last run went worst.
+   *
+   * Reported bars are counted from whatever was being practised, which may
+   * already be a passage - so they are put back onto the whole piece before
+   * becoming the new range, or a second drill would walk backwards through the
+   * score.
+   *
+   * Returns the passage chosen, or `null` when the run gave nothing to work on.
+   */
+  drillWorstPassage(bars = 4): Passage | null {
+    const report = this.currentSession?.report;
+    if (report === undefined || report === null) {
+      return null;
+    }
+    const found = worstPassage(report, { bars });
+    if (found === null) {
+      return null;
+    }
+    const offset = (this.currentSettings.rangeFromBar ?? 1) - 1;
+    const passage = { fromBar: found.fromBar + offset, toBar: found.toBar + offset };
+    this.updateSettings({ rangeFromBar: passage.fromBar, rangeToBar: passage.toBar });
+    return passage;
   }
 
   stopListening(): void {

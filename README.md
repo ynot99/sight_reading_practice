@@ -19,7 +19,11 @@ to start and stop in the middle of a longer one, so the timeline, the page, the
 cursor, the report and the playback all carry on unaware a longer piece exists.
 The seams are the work: an inherited clef or key is stated at the head, a tie
 leading out of the last bar is cut, and a pedal already down is pressed again.
-**Repeat when it ends** starts the passage over as soon as it finishes.
+**Repeat when it ends** starts the passage over as soon as it finishes, and
+**Drill the worst bars** picks the passage for you from the run you just
+played — weighing steps the music took away above untidy ones, and ignoring
+timing entirely, since being a little late throughout is a matter for the
+tempo rather than a place to work.
 
 **Listen** plays the exercise instead of judging it. The hand selector beside it
 governs both listening and practice, because they are the same question asked
@@ -203,6 +207,7 @@ src/
 │       ├── PerformanceReport.ts    #   StepResult ➜ aggregated report
 │       ├── IScoringStrategy.ts
 │       ├── ScoringStrategyRegistry.ts
+│       ├── troubleSpots.ts           #   report ➜ the bars worth drilling
 │       └── strategies.ts           #   Accuracy | TimingWeighted | Continuity
 │
 ├── application/                    # orchestration; depends only on interfaces

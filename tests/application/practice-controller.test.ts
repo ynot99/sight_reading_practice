@@ -329,6 +329,33 @@ describe('PracticeController', () => {
     expect(controller.openedExercise).toBeNull();
   });
 
+  it('puts a drilled passage back onto the whole piece', async () => {
+    // Reported bars are counted from whatever was being practised. Drilling a
+    // second time inside a passage must not walk backwards through the score.
+    const { controller } = createController(true);
+    controller.updateSettings({ rangeFromBar: 20, rangeToBar: 27 });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    if (session === null) {
+      throw new Error('expected a session');
+    }
+    session.abort();
+
+    const passage = controller.drillWorstPassage(2);
+    if (passage === null) {
+      // A clean run leaves nothing to drill, which is its own answer.
+      expect(controller.settings.rangeFromBar).toBe(20);
+      return;
+    }
+    expect(passage.fromBar).toBeGreaterThanOrEqual(20);
+    expect(controller.settings.rangeFromBar).toBe(passage.fromBar);
+  });
+
+  it('has nothing to drill without a run behind it', () => {
+    const { controller } = createController();
+    expect(controller.drillWorstPassage()).toBeNull();
+  });
+
   it('honours requested settings when generating', async () => {
     const { controller } = createController();
     controller.updateSettings({

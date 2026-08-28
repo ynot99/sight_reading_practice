@@ -383,14 +383,19 @@ export class AppView {
    * makes them mutually exclusive; the button only has to say which of the two
    * it is offering.
    */
-  private toggleListening(): void {
+  private async toggleListening(): Promise<void> {
     const { controller } = this.runtime;
     if (controller.isListening) {
       controller.stopListening();
-    } else {
-      const hand = this.el.listenHand.value;
-      controller.listen(hand === '' ? null : Number.parseInt(hand, 10));
+      this.describeListening();
+      return;
     }
+    // The recordings download on first use, and playback fires a whole piece
+    // at once: without waiting, its opening seconds come out on the synthesised
+    // fallback and the instrument appears to change halfway through.
+    await this.runtime.samples?.load();
+    const hand = this.el.listenHand.value;
+    controller.listen(hand === '' ? null : Number.parseInt(hand, 10));
     this.describeListening();
   }
 
@@ -449,7 +454,7 @@ export class AppView {
     const { controller } = this.runtime;
 
     this.listen(this.el.listen, 'click', () => {
-      this.toggleListening();
+      void this.toggleListening();
     });
 
     this.listen(this.el.openScore, 'click', () => {

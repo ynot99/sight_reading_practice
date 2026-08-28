@@ -8,6 +8,7 @@ class FakeParam {
   value = 0;
   readonly ramps: { value: number; time: number }[] = [];
   cancelled = 0;
+  readonly held: number[] = [];
 
   setValueAtTime(value: number, time: number): FakeParam {
     this.value = value;
@@ -22,6 +23,11 @@ class FakeParam {
 
   cancelScheduledValues(): FakeParam {
     this.cancelled += 1;
+    return this;
+  }
+
+  cancelAndHoldAtTime(time: number): FakeParam {
+    this.held.push(time);
     return this;
   }
 }
@@ -258,7 +264,26 @@ describe('WebAudioPitchPlayer', () => {
     player.stop(60);
 
     expect(context.oscillators[0]?.stoppedAt).toBeCloseTo(1.22, 6);
-    expect(context.gains[0]?.gain.cancelled).toBe(1);
+    // Held at whatever the envelope had reached, then faded from there.
+    expect(context.gains[0]?.gain.held).toEqual([1]);
+  });
+
+  it('releases a scheduled note without a step in its envelope', () => {
+    // A note handed over before it sounds has a gain of nothing yet, so pinning
+    // "the current value" at the release moment drops it from full volume to
+    // silence in one sample - a click on every note of a playback.
+    const context = new FakeAudioContext();
+    const player = new WebAudioPitchPlayer(contextFactory(context), { releaseSec: 0.2 });
+    const now = performance.now();
+
+    player.play(60, 0.5, now + 500);
+    player.stop(60, now + 1500);
+
+    const gain = context.gains[0]?.gain;
+    expect(gain?.held).toHaveLength(1);
+    expect(gain?.held[0]).toBeCloseTo(1.5, 1);
+    // The last thing scheduled is the fade to silence, not a jump to it.
+    expect(gain?.ramps.at(-1)?.value).toBeCloseTo(0.0001, 6);
   });
 
   it('retriggers a repeated note instead of stacking voices', () => {

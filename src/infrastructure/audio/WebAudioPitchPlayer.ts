@@ -1,6 +1,6 @@
 import type { IPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
-import { audioTimeFor } from './audioTime.js';
+import { audioTimeFor, beginRelease } from './audioTime.js';
 
 export interface WebAudioPitchPlayerOptions {
   readonly gain?: number;
@@ -88,9 +88,7 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
 
     const now = audioTimeFor(this.context, atMs);
     const release = this.options.releaseSec;
-    voice.envelope.gain.cancelScheduledValues(now);
-    voice.envelope.gain.setValueAtTime(Math.max(0.0001, voice.envelope.gain.value), now);
-    voice.envelope.gain.exponentialRampToValueAtTime(0.0001, now + release);
+    beginRelease(voice.envelope.gain, now, release);
     voice.oscillator.stop(now + release + 0.02);
   }
 

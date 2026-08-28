@@ -289,11 +289,15 @@ describe('AppView', () => {
     const { view, runtime } = createRig();
     await view.initialize();
 
+    // The recordings are awaited before a note sounds, so the click resolves a
+    // moment later than it is made.
     element<HTMLButtonElement>('listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.controller.isListening).toBe(true);
     expect(element('listen').textContent).toBe('Stop listening');
 
     element<HTMLButtonElement>('listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.controller.isListening).toBe(false);
     expect(element('listen').textContent).toBe('Listen');
   });
@@ -304,6 +308,7 @@ describe('AppView', () => {
     const { view, runtime } = createRig();
     await view.initialize();
     element<HTMLButtonElement>('listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.controller.isListening).toBe(true);
 
     element<HTMLButtonElement>('start').click();

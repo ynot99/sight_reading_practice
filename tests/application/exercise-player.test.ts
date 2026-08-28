@@ -67,6 +67,27 @@ describe('listening to an exercise', () => {
     expect((release?.atMs ?? 0) - (held[0]?.atMs ?? 0)).toBe(5_000);
   });
 
+  it('strikes a unison once, however many voices notate it', () => {
+    // Two hands may write the same sounding pitch at the same instant. That is
+    // one key on the keyboard, and striking it twice doubles the attack into a
+    // knock.
+    const base = twoBarExercise({ tempoBpm: 60 });
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    const doubled = {
+      ...base,
+      staves: [treble, { ...bass, staffNumber: 1, voice: 3, measures: treble.measures }, bass],
+    };
+    const { player, metronome, instrument } = rig(doubled);
+    player.start(buildTimeline(doubled), { staffNumber: null, clickAudible: false });
+    metronome.advanceSubdivisions(8);
+
+    const struck = instrument.played.map((note) => `${note.midi}@${note.atMs}`);
+    expect(new Set(struck).size).toBe(struck.length);
+  });
+
   it('can sound one hand alone', () => {
     const { player, metronome, instrument, timeline } = rig();
     player.start(timeline, { staffNumber: 2, clickAudible: false });

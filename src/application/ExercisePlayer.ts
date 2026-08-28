@@ -133,20 +133,26 @@ export class ExercisePlayer {
     staffNumber: ListeningHand,
   ): ScheduledNote[] {
     const tempo = timeline.exercise.tempoBpm;
-    const notes: ScheduledNote[] = [];
+    const longest = new Map<string, ScheduledNote>();
     for (const step of timeline.steps) {
       for (const note of step.notes) {
         if (staffNumber !== null && note.staffNumber !== staffNumber) {
           continue;
         }
-        notes.push({
-          midi: note.midi,
-          atMs: ticksToMilliseconds(step.onsetTicks, tempo),
-          untilMs: ticksToMilliseconds(step.onsetTicks + note.durationTicks, tempo),
-        });
+        // Two voices may notate the same sounding pitch at the same instant.
+        // That is one key on the keyboard and must be one sound here: striking
+        // it twice doubles the attack into an audible knock. The longer of the
+        // two wins, since the key stays down until the last of them lets go.
+        const at = ticksToMilliseconds(step.onsetTicks, tempo);
+        const until = ticksToMilliseconds(step.onsetTicks + note.durationTicks, tempo);
+        const seen = `${note.midi}@${step.onsetTicks}`;
+        const previous = longest.get(seen);
+        if (previous === undefined || previous.untilMs < until) {
+          longest.set(seen, { midi: note.midi, atMs: at, untilMs: until });
+        }
       }
     }
-    return notes.sort((left, right) => left.atMs - right.atMs);
+    return [...longest.values()].sort((left, right) => left.atMs - right.atMs);
   }
 
   private handleTick(tick: MetronomeTick): void {

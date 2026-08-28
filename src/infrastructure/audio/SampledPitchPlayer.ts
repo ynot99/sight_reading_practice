@@ -7,7 +7,7 @@ import type {
 import { SilentPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { PIANO_SAMPLES, nearestSample, playbackRateFor } from './pianoSampleMap.js';
-import { audioTimeFor } from './audioTime.js';
+import { audioTimeFor, beginRelease } from './audioTime.js';
 
 export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
 
@@ -288,9 +288,7 @@ export class SampledPitchPlayer
   private release(voice: Voice, now: number): void {
     const release = this.options.releaseSec;
     try {
-      voice.envelope.gain.cancelScheduledValues(now);
-      voice.envelope.gain.setValueAtTime(Math.max(0.0001, voice.envelope.gain.value), now);
-      voice.envelope.gain.exponentialRampToValueAtTime(0.0001, now + release);
+      beginRelease(voice.envelope.gain, now, release);
       voice.source.stop(now + release + 0.02);
     } catch {
       // The source had already finished on its own.

@@ -59,11 +59,16 @@ not at the desk. The cursor is shown for the performance whatever the reader
 set, since following along is most of the value — and put back the way they
 had it when the performance ends.
 
-**Look before playing** holds the page for a few seconds and then begins on its
-own. Real sight-reading starts with a scan — key, metre, range, where the hard
-bar is — and nothing else here enforces it: the score is already on screen, so
-a reader may study it for an hour or press Start at once. A phase that ends by
-itself is what makes the look deliberate.
+**Look before playing** is the only time you get with the music. Set it above
+zero and the page is kept face down until you press Start; then you have those
+seconds with it, and the run begins on its own.
+
+Covering it is the whole feature, not decoration. A countdown alone enforces
+nothing, because the unlimited staring happens *before* Start rather than
+during the phase — the score is engraved the moment it is generated and sits
+there until you are ready. Keeping it back is what turns the number into the
+whole look, the way a scan before an audition is bounded by someone taking the
+music away again. Asking to hear it played counts as spending the look.
 
 **Blind mode** stops the panel spelling out the step that is due. Hiding the
 cursor alone never quite worked, because the notes were still written in

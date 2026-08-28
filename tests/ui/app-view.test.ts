@@ -317,6 +317,92 @@ describe('AppView', () => {
     }
   });
 
+  describe('keeping the page back until the look', () => {
+    /** Drives the slider the way a reader does, not the setting behind it. */
+    function setPreview(seconds: number): void {
+      const slider = element<HTMLInputElement>('preview');
+      slider.value = String(seconds);
+      slider.dispatchEvent(new Event('input'));
+    }
+
+    it('covers the music while a look is asked for', async () => {
+      const { view } = createRig();
+      await view.initialize();
+
+      // Without a look there is nothing to keep back: the page is the page.
+      expect(element('score-cover').hidden).toBe(true);
+
+      setPreview(8);
+
+      expect(element('score-cover').hidden).toBe(false);
+      expect(element('score').classList.contains('is-covered')).toBe(true);
+      expect(element('score-cover-text').textContent).toContain('8 seconds');
+    });
+
+    it('hands it over when the look begins, and not before', async () => {
+      vi.useFakeTimers();
+      try {
+        const { view, runtime } = createRig();
+        await view.initialize();
+        setPreview(5);
+        expect(element('score-cover').hidden).toBe(false);
+
+        element<HTMLButtonElement>('start').click();
+
+        // The five seconds are now the whole time the reader gets with it,
+        // which is the point: staring at it beforehand was the hole.
+        expect(element('score-cover').hidden).toBe(true);
+        expect(runtime.controller.session).toBeNull();
+
+        vi.advanceTimersByTime(5000);
+        expect(runtime.controller.session).not.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('puts the next exercise back under', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      setPreview(5);
+      element<HTMLButtonElement>('start').click();
+      expect(element('score-cover').hidden).toBe(true);
+
+      await runtime.controller.loadNewExercise();
+
+      // A fresh page is a fresh page; the look already taken was for the last.
+      expect(element('score-cover').hidden).toBe(false);
+    });
+
+    it('leaves it visible for the report once it has been read', async () => {
+      vi.useFakeTimers();
+      try {
+        const { view, runtime } = createRig();
+        await view.initialize();
+        setPreview(2);
+        element<HTMLButtonElement>('start').click();
+        vi.advanceTimersByTime(2000);
+        runtime.controller.session?.abort();
+
+        expect(element('score-cover').hidden).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('hands it over to hear it played', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      setPreview(6);
+
+      element<HTMLButtonElement>('listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // The cursor would otherwise walk across a blank page.
+      expect(element('score-cover').hidden).toBe(true);
+    });
+  });
+
   it('lets the reader cut the look short', async () => {
     vi.useFakeTimers();
     try {

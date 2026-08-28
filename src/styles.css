@@ -102,6 +102,7 @@ body {
 }
 
 .score {
+  position: relative;
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -112,6 +113,41 @@ body {
   scrollbar-gutter: stable;
   padding: 8px 0;
   min-height: 340px;
+}
+
+/*
+ * The page kept back until the look begins.
+ *
+ * `visibility` rather than `display`: the engraver sizes the sheet from the
+ * surface's `offsetWidth`, and a surface with no box measures zero, so a zoom
+ * change while the page is covered would re-engrave it to nothing.
+ */
+.score.is-covered .score__surface {
+  visibility: hidden;
+}
+
+.score__cover {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--surface);
+  border-radius: inherit;
+}
+
+.score__cover[hidden] {
+  display: none;
+}
+
+.score__cover-text {
+  margin: 0;
+  max-width: 34ch;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 15px;
 }
 
 /*

@@ -263,6 +263,8 @@ export class AppView {
   private lastPosition = '';
   /** The step now due, kept so blind mode can be turned off mid-run. */
   private lastExpected: readonly number[] = [];
+  /** Whether the reader has already been given this page. */
+  private hasLooked = false;
   /** A promotion waiting to be reported alongside the run that earned it. */
   private lastLadderMove: { readonly to: LadderStep; readonly direction: 'up' | 'down' } | null =
     null;
@@ -272,6 +274,9 @@ export class AppView {
     focus: HTMLButtonElement;
     focusBar: HTMLElement;
     focusStatus: HTMLElement;
+    score: HTMLElement;
+    scoreCover: HTMLElement;
+    scoreCoverText: HTMLElement;
     focusPlay: HTMLButtonElement;
     focusStop: HTMLButtonElement;
     focusListen: HTMLButtonElement;
@@ -360,6 +365,9 @@ export class AppView {
       focus: requireElement(doc, 'focus'),
       focusBar: requireElement(doc, 'focus-bar'),
       focusStatus: requireElement(doc, 'focus-status'),
+      score: requireElement(doc, 'score'),
+      scoreCover: requireElement(doc, 'score-cover'),
+      scoreCoverText: requireElement(doc, 'score-cover-text'),
       focusPlay: requireElement(doc, 'focus-play'),
       focusStop: requireElement(doc, 'focus-stop'),
       focusListen: requireElement(doc, 'focus-listen'),
@@ -516,6 +524,11 @@ export class AppView {
     // at once: without waiting, its opening seconds come out on the synthesised
     // fallback and the instrument appears to change halfway through.
     await this.runtime.samples?.load();
+    // Hearing it played is studying it, and the cursor would otherwise walk
+    // across a blank page. Asking to hear it is the reader spending their
+    // look, not a way around it.
+    this.hasLooked = true;
+    this.applyScoreCover();
     controller.listen();
     this.describeListening();
   }
@@ -794,6 +807,9 @@ export class AppView {
     this.listen(this.el.preview, 'input', () => {
       this.el.previewValue.value = this.el.preview.value;
       controller.updateSettings({ previewSeconds: Number.parseInt(this.el.preview.value, 10) });
+      // Asking for a look while staring at the page would be asking for
+      // nothing, so the page goes back under until the look is taken.
+      this.applyScoreCover();
     });
 
     this.listen(this.el.pause, 'click', () => {
@@ -906,6 +922,8 @@ export class AppView {
     this.clearLog();
     this.el.result.hidden = true;
     this.cancelPreview();
+    this.hasLooked = true;
+    this.applyScoreCover();
 
     const seconds = this.runtime.controller.settings.previewSeconds;
     if (seconds <= 0) {
@@ -934,6 +952,24 @@ export class AppView {
       this.cancelPreview();
       this.runtime.controller.start();
     }, 1000);
+  }
+
+  /**
+   * Keeps the page back until the reader has actually asked for their look.
+   *
+   * Without this the look enforces nothing: the score sits on screen from the
+   * moment it is generated, so the unlimited staring happens *before* Start
+   * and the countdown only delays the beginning. Covering it is what makes
+   * the number the whole time the reader gets with the music.
+   */
+  private applyScoreCover(): void {
+    const seconds = this.runtime.controller.settings.previewSeconds;
+    const covered = seconds > 0 && !this.hasLooked;
+    this.el.scoreCover.hidden = !covered;
+    this.el.score.classList.toggle('is-covered', covered);
+    this.el.scoreCoverText.textContent = covered
+      ? `The music is face down. Press Start and you have ${seconds} second${seconds === 1 ? '' : 's'} with it before the run begins.`
+      : '';
   }
 
   /** Ends a look in progress, whether it ran out or the reader stopped it. */
@@ -1003,6 +1039,8 @@ export class AppView {
         this.el.exerciseTitle.textContent = `${exercise.title} · ${timeline.noteCount} notes · seed ${exercise.metadata.seed.toString(16)}`;
         this.el.progress.max = this.totalSteps;
         this.el.progress.value = 0;
+        this.hasLooked = false;
+        this.applyScoreCover();
         this.lastExpected = [];
         this.renderExpected();
         this.el.position.textContent = '—';
@@ -1341,6 +1379,7 @@ export class AppView {
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.describeLadder();
+    this.applyScoreCover();
     this.el.presetDescription.textContent = this.runtime.presets.get(settings.presetId).description;
     this.el.rhythmDescription.textContent = this.runtime.rhythms.get(
       settings.rhythmProfileId,

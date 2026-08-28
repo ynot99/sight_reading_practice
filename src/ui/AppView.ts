@@ -207,6 +207,8 @@ export class AppView {
   private focusMode: FocusMode | null = null;
   private lastStatus: SessionStatus = 'idle';
   private lastPosition = '';
+  /** The step now due, kept so blind mode can be turned off mid-run. */
+  private lastExpected: readonly number[] = [];
 
   private readonly el: {
     app: HTMLElement;
@@ -225,6 +227,7 @@ export class AppView {
     midiInput: HTMLSelectElement;
     midiHint: HTMLElement;
     sessionStatus: HTMLElement;
+    expectedRow: HTMLElement;
     expected: HTMLElement;
     position: HTMLElement;
     progress: HTMLProgressElement;
@@ -268,6 +271,7 @@ export class AppView {
     showPlayed: HTMLInputElement;
     fadePassed: HTMLInputElement;
     showCursor: HTMLInputElement;
+    blindMode: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
     sampleLoadingHint: HTMLElement;
     metronomeVolume: HTMLInputElement;
@@ -305,6 +309,7 @@ export class AppView {
       midiInput: requireElement(doc, 'midi-input'),
       midiHint: requireElement(doc, 'midi-hint'),
       sessionStatus: requireElement(doc, 'session-status'),
+      expectedRow: requireElement(doc, 'expected-row'),
       expected: requireElement(doc, 'expected'),
       position: requireElement(doc, 'position'),
       progress: requireElement(doc, 'progress'),
@@ -348,6 +353,7 @@ export class AppView {
       showPlayed: requireElement(doc, 'show-played'),
       fadePassed: requireElement(doc, 'fade-passed'),
       showCursor: requireElement(doc, 'show-cursor'),
+      blindMode: requireElement(doc, 'blind-mode'),
       sampleLoading: requireElement(doc, 'sample-loading'),
       sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
       metronomeVolume: requireElement(doc, 'metronome-volume'),
@@ -642,6 +648,13 @@ export class AppView {
       controller.updateSettings({ showCursor: this.el.showCursor.checked });
     });
 
+    this.listen(this.el.blindMode, 'change', () => {
+      controller.updateSettings({ blindMode: this.el.blindMode.checked });
+      // Mid-run the panel would otherwise hold the last answer until the next
+      // step arrives, which in Wait mode may be never.
+      this.renderExpected();
+    });
+
     this.listen(this.el.sampleLoading, 'change', () => {
       this.applySampleLoading(readSampleLoading(this.el.sampleLoading.value));
     });
@@ -873,6 +886,21 @@ export class AppView {
     this.el.focusStatus.textContent = text;
   }
 
+  /**
+   * Writes the "Play now" row, or takes it away entirely.
+   *
+   * Blank text is not enough on its own: a row headed "Play now" showing a
+   * dash reads as *nothing is due*, and the count of notes left standing
+   * would still be half an answer. Blind mode removes the row and the text
+   * both, so there is nothing to glance at and nothing left in the document
+   * for a screen reader to find.
+   */
+  private renderExpected(): void {
+    const blind = this.runtime.controller.settings.blindMode;
+    this.el.expectedRow.hidden = blind;
+    this.el.expected.textContent = blind ? '' : formatNotes(this.lastExpected);
+  }
+
   private bindControllerEvents(): void {
     const { controller } = this.runtime;
 
@@ -882,7 +910,8 @@ export class AppView {
         this.el.exerciseTitle.textContent = `${exercise.title} · ${timeline.noteCount} notes · seed ${exercise.metadata.seed.toString(16)}`;
         this.el.progress.max = this.totalSteps;
         this.el.progress.value = 0;
-        this.el.expected.textContent = '—';
+        this.lastExpected = [];
+        this.renderExpected();
         this.el.position.textContent = '—';
       }),
     );
@@ -942,8 +971,9 @@ export class AppView {
         }
       }),
       session.events.on('stepEntered', ({ step, expectedMidi }) => {
-        this.el.expected.textContent = formatNotes(expectedMidi);
-        this.lastPosition = `bar ${step.measureIndex + 1} · beat ${step.beat.toFixed(2).replace(/\.00$/, '')}`;
+        this.lastExpected = expectedMidi;
+        this.renderExpected();
+        this.lastPosition =`bar ${step.measureIndex + 1} · beat ${step.beat.toFixed(2).replace(/\.00$/, '')}`;
         this.el.position.textContent = this.lastPosition;
         this.el.progress.value = step.index;
         this.renderFocusStatus(this.lastPosition);
@@ -953,7 +983,8 @@ export class AppView {
       }),
       session.events.on('finished', ({ report, score }) => {
         this.el.progress.value = this.totalSteps;
-        this.el.expected.textContent = '—';
+        this.lastExpected = [];
+        this.renderExpected();
         this.lastPosition = '';
         // In fullscreen the result panel is hidden, so the pill carries it.
         this.renderFocusStatus(`${score.grade} · ${percent(score.overall)}`);
@@ -1200,6 +1231,8 @@ export class AppView {
     this.el.showPlayed.checked = settings.showPlayedNotes;
     this.el.fadePassed.checked = settings.fadePassedNotes;
     this.el.showCursor.checked = settings.showCursor;
+    this.el.blindMode.checked = settings.blindMode;
+    this.renderExpected();
     this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
@@ -1253,7 +1286,12 @@ export class AppView {
     const left = this.doc.createElement('span');
     left.textContent = `${midiToLabel(midi)} ${verdict}`;
     const right = this.doc.createElement('span');
-    right.textContent = remaining.length > 0 ? `still: ${formatNotes(remaining)}` : '';
+    // "still: C4 E4" names the rest of the chord, which is the same answer the
+    // panel was hiding; the note the reader themselves played may stay.
+    right.textContent =
+      remaining.length > 0 && !this.runtime.controller.settings.blindMode
+        ? `still: ${formatNotes(remaining)}`
+        : '';
     item.append(left, right);
 
     // Newest first, and the view follows it - unless the reader has scrolled

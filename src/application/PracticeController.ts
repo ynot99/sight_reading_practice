@@ -110,6 +110,16 @@ export interface PracticeSettings {
    * your place by reading rather than by following the highlight.
    */
   readonly showCursor: boolean;
+  /**
+   * Stop spelling out the notes of the step that is due.
+   *
+   * The panel naming them is the crutch that makes hiding the cursor only
+   * half a measure: the reader who loses their place reads the letters
+   * instead of the stave. With this on, the page is the only thing that says
+   * what to play - the bar and beat still show, because knowing *where* you
+   * are is orientation, not an answer.
+   */
+  readonly blindMode: boolean;
   /** Draw what was actually played over the engraving. */
   readonly showPlayedNotes: boolean;
   /** Dim each note once it has been passed, to push the eye forward. */
@@ -214,6 +224,7 @@ export class PracticeController {
       rhythmOnly: false,
       previewSeconds: 0,
       showCursor: true,
+      blindMode: false,
       showPlayedNotes: true,
       fadePassedNotes: false,
       zoom: 0.85,

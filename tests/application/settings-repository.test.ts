@@ -42,6 +42,7 @@ const SETTINGS: PracticeSettings = {
   rhythmOnly: true,
   previewSeconds: 8,
   showCursor: false,
+  blindMode: true,
   showPlayedNotes: false,
   fadePassedNotes: true,
   zoom: 1.2,
@@ -62,6 +63,7 @@ describe('practice settings codec', () => {
     expect(restored.matchToleranceMs).toBe(180);
     expect(restored.pitchClassOnly).toBe(true);
     expect(restored.showCursor).toBe(false);
+    expect(restored.blindMode).toBe(true);
   });
 
   it('drops a preset or mode that no longer exists', () => {

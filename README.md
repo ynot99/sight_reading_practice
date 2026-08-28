@@ -46,6 +46,15 @@ bar is — and nothing else here enforces it: the score is already on screen, so
 a reader may study it for an hour or press Start at once. A phase that ends by
 itself is what makes the look deliberate.
 
+**Blind mode** stops the panel spelling out the step that is due. Hiding the
+cursor alone never quite worked, because the notes were still written in
+letters beside the score and a reader who loses their place reads those instead
+of the stave. The whole row goes rather than its text: "Play now —" reads as
+*nothing is due*, and the count of notes left standing would still be half an
+answer. The note log stops naming the rest of an unfinished chord for the same
+reason. Bar and beat stay — knowing where you are is orientation, not an
+answer.
+
 **Rhythm only** judges when and never what: one press satisfies a step
 whatever the pitch, because reading a rhythm before playing the notes is
 standard practice and it is the half beginners drop first. It is a match rule

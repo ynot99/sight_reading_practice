@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PracticeController } from '../../src/application/PracticeController.js';
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
@@ -289,6 +289,44 @@ describe('AppView', () => {
 
     expect(runtime.controller.settings.scoringId).toBe('scoring.continuity');
     expect(element('scoring-description').textContent).toContain('without the music leaving you');
+  });
+
+  it('gives the reader a look at the page before it starts', async () => {
+    vi.useFakeTimers();
+    try {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ previewSeconds: 3 });
+
+      element<HTMLButtonElement>('start').click();
+
+      // Nothing is running yet: the look is the point, and it ends by itself.
+      expect(runtime.controller.session).toBeNull();
+      expect(element('session-status').textContent).toContain('Look at it');
+
+      vi.advanceTimersByTime(3000);
+      expect(runtime.controller.session).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets the reader cut the look short', async () => {
+    vi.useFakeTimers();
+    try {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ previewSeconds: 10 });
+      element<HTMLButtonElement>('start').click();
+
+      element<HTMLButtonElement>('stop').click();
+      vi.advanceTimersByTime(20_000);
+
+      // Stopping during the look means seen enough, not start in ten seconds.
+      expect(runtime.controller.session).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('plays the exercise back, and stops when asked', async () => {

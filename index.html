@@ -140,6 +140,12 @@
         </div>
 
         <div class="control-group">
+          <label for="preview">Look before playing: <output id="preview-value">0</output> s</label>
+          <input id="preview" type="range" min="0" max="20" step="1" value="0" />
+          <p class="hint">A scan the run starts itself after, so the look is deliberate.</p>
+        </div>
+
+        <div class="control-group">
           <label for="range-from">Practise bars</label>
           <div class="range-row">
             <input id="range-from" type="number" min="1" max="999" placeholder="first" />

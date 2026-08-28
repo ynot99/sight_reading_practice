@@ -40,6 +40,7 @@ const SETTINGS: PracticeSettings = {
   matchToleranceMs: 180,
   pitchClassOnly: true,
   rhythmOnly: true,
+  previewSeconds: 8,
   showCursor: false,
   showPlayedNotes: false,
   fadePassedNotes: true,

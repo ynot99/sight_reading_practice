@@ -94,6 +94,16 @@ export interface PracticeSettings {
    */
   readonly rhythmOnly: boolean;
   /**
+   * Seconds to look at the music before it begins. `0` is off.
+   *
+   * Real sight-reading starts with a scan - key, metre, range, where the hard
+   * bar is - and the habit transfers to any page. Nothing here enforces it
+   * today: the score is on screen and the reader may study it for an hour or
+   * press Start immediately. A phase that ends on its own is what makes the
+   * look deliberate.
+   */
+  readonly previewSeconds: number;
+  /**
    * Draw the position marker on the score.
    *
    * Turning it off is a practice aid in its own right: it forces you to keep
@@ -202,6 +212,7 @@ export class PracticeController {
       matchToleranceMs: 250,
       pitchClassOnly: false,
       rhythmOnly: false,
+      previewSeconds: 0,
       showCursor: true,
       showPlayedNotes: true,
       fadePassedNotes: false,

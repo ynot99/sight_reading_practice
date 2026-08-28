@@ -203,6 +203,7 @@ export class AppView {
   private sessionSubscriptions: Unsubscribe[] = [];
   private audioFeedbackEnabled = true;
   private totalSteps = 1;
+  private previewTimer: ReturnType<typeof setInterval> | null = null;
   private focusMode: FocusMode | null = null;
   private lastStatus: SessionStatus = 'idle';
   private lastPosition = '';
@@ -256,6 +257,8 @@ export class AppView {
     rangeFrom: HTMLInputElement;
     rangeTo: HTMLInputElement;
     repeatRange: HTMLInputElement;
+    preview: HTMLInputElement;
+    previewValue: HTMLOutputElement;
     countIn: HTMLInputElement;
     countInValue: HTMLOutputElement;
     tolerance: HTMLInputElement;
@@ -334,6 +337,8 @@ export class AppView {
       rangeFrom: requireElement(doc, 'range-from'),
       rangeTo: requireElement(doc, 'range-to'),
       repeatRange: requireElement(doc, 'repeat-range'),
+      preview: requireElement(doc, 'preview'),
+      previewValue: requireElement(doc, 'preview-value'),
       countIn: requireElement(doc, 'count-in'),
       countInValue: requireElement(doc, 'count-in-value'),
       tolerance: requireElement(doc, 'tolerance'),
@@ -374,6 +379,7 @@ export class AppView {
   }
 
   dispose(): void {
+    this.cancelPreview();
     this.focusMode?.dispose();
     this.focusMode = null;
     for (const unsubscribe of [...this.subscriptions, ...this.sessionSubscriptions]) {
@@ -680,9 +686,12 @@ export class AppView {
     });
 
     this.listen(this.el.start, 'click', () => {
-      this.clearLog();
-      this.el.result.hidden = true;
-      controller.start();
+      this.beginRun();
+    });
+
+    this.listen(this.el.preview, 'input', () => {
+      this.el.previewValue.value = this.el.preview.value;
+      controller.updateSettings({ previewSeconds: Number.parseInt(this.el.preview.value, 10) });
     });
 
     this.listen(this.el.pause, 'click', () => {
@@ -695,6 +704,8 @@ export class AppView {
     });
 
     this.listen(this.el.stop, 'click', () => {
+      // Stopping during the look means the reader has seen enough of it.
+      this.cancelPreview();
       controller.stop();
     });
 
@@ -775,9 +786,63 @@ export class AppView {
       controller.resume();
       return;
     }
+    this.beginRun();
+  }
+
+  /**
+   * Starts a run, after the look if one was asked for.
+   *
+   * The wait lives here rather than in the session for the same reason the
+   * repeat does: the application layer has no timer, and a phase that only
+   * shows a number and then gets out of the way is a view's business.
+   */
+  private beginRun(): void {
     this.clearLog();
     this.el.result.hidden = true;
-    controller.start();
+    this.cancelPreview();
+
+    const seconds = this.runtime.controller.settings.previewSeconds;
+    if (seconds <= 0) {
+      this.runtime.controller.start();
+      return;
+    }
+
+    let left = seconds;
+    const show = (): void => {
+      const message = `Look at it… ${left}`;
+      this.el.sessionStatus.textContent = message;
+      this.renderFocusStatus(message);
+    };
+    show();
+    // Stop is how the reader says they have seen enough, so it has to be
+    // reachable during the look - a phase they cannot leave is a trap.
+    this.el.start.disabled = true;
+    this.el.stop.disabled = false;
+    this.el.focusStop.disabled = false;
+    this.previewTimer = setInterval(() => {
+      left -= 1;
+      if (left > 0) {
+        show();
+        return;
+      }
+      this.cancelPreview();
+      this.runtime.controller.start();
+    }, 1000);
+  }
+
+  /** Ends a look in progress, whether it ran out or the reader stopped it. */
+  private cancelPreview(): void {
+    if (this.previewTimer === null) {
+      return;
+    }
+    clearInterval(this.previewTimer);
+    this.previewTimer = null;
+    this.updateButtons(this.runtime.controller.session?.status ?? 'idle');
+  }
+
+  /** True while the reader is being given their look at the page. */
+  get isPreviewing(): boolean {
+    return this.previewTimer !== null;
   }
 
   /**
@@ -1124,6 +1189,8 @@ export class AppView {
     this.el.rangeFrom.value = settings.rangeFromBar === null ? '' : String(settings.rangeFromBar);
     this.el.rangeTo.value = settings.rangeToBar === null ? '' : String(settings.rangeToBar);
     this.el.repeatRange.checked = settings.repeatRange;
+    this.el.preview.value = String(settings.previewSeconds);
+    this.el.previewValue.value = String(settings.previewSeconds);
     this.el.countIn.value = String(settings.countInBars);
     this.el.countInValue.value = String(settings.countInBars);
     this.el.tolerance.value = String(settings.matchToleranceMs);

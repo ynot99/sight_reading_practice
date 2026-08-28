@@ -40,6 +40,12 @@ its own service driven by the same pulse. Notes are handed to the instrument
 *ahead* of when they sound, because a tick arrives after the moment it stands
 for and a melody placed on delivery is audibly uneven.
 
+**Look before playing** holds the page for a few seconds and then begins on its
+own. Real sight-reading starts with a scan — key, metre, range, where the hard
+bar is — and nothing else here enforces it: the score is already on screen, so
+a reader may study it for an hour or press Start at once. A phase that ends by
+itself is what makes the look deliberate.
+
 **Rhythm only** judges when and never what: one press satisfies a step
 whatever the pitch, because reading a rhythm before playing the notes is
 standard practice and it is the half beginners drop first. It is a match rule

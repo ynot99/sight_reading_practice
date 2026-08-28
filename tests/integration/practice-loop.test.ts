@@ -23,6 +23,7 @@ import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRen
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
+import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
 
 interface Rig {
   readonly controller: PracticeController;
@@ -50,6 +51,7 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
     zoom: renderer,
     midi,
     metronome,
+    instrument: new RecordingPitchPlayer(),
     clock,
     scorings: new ScoringStrategyRegistry().registerAll([
       new AccuracyScoringStrategy(),

@@ -14,6 +14,8 @@ import type { IClock } from './ports/IClock.js';
 import { GeneratedExerciseProvider, type IExerciseProvider } from './ports/IExerciseProvider.js';
 import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource } from './ports/IMidiSource.js';
+import type { IPitchPlayer } from './ports/IPitchPlayer.js';
+import { ExercisePlayer, type ListeningHand } from './ExercisePlayer.js';
 import type { ClickPattern } from './ports/IMetronome.js';
 import type {
   IPlayedNoteOverlay,
@@ -103,6 +105,8 @@ export interface PracticeControllerDependencies {
   readonly zoom: IScoreZoom;
   readonly midi: IMidiSource;
   readonly metronome: IMetronome;
+  /** Sounds an exercise back when the reader asks to hear it. */
+  readonly instrument: IPitchPlayer;
   readonly clock: IClock;
   readonly scorings: ScoringStrategyRegistry;
   /** Seam for alternative exercise sources (files, network, ear training). */
@@ -130,6 +134,7 @@ export class PracticeController {
   private sessionSubscriptions: Unsubscribe[] = [];
   private lastSeed: number | null = null;
   private openedScore: Exercise | null = null;
+  private player: ExercisePlayer | null = null;
 
   constructor(dependencies: PracticeControllerDependencies) {
     this.deps = dependencies;
@@ -265,6 +270,9 @@ export class PracticeController {
    */
   async openScore(exercise: Exercise): Promise<Exercise> {
     this.openedScore = exercise;
+    // The file brought its own tempo; adopting it is what makes the slider
+    // show the truth, and what lets the reader slow the piece down.
+    this.updateSettings({ tempoBpm: exercise.tempoBpm });
     return this.load(undefined);
   }
 
@@ -320,7 +328,13 @@ export class PracticeController {
   }
 
   /** Engraves an exercise and makes it the one being practised. */
-  private async present(exercise: Exercise): Promise<Exercise> {
+  private async present(source: Exercise): Promise<Exercise> {
+    // An opened score keeps its own notes but takes the reader's tempo, so the
+    // slider works on a file exactly as it works on generated material.
+    const exercise =
+      this.openedScore === null
+        ? source
+        : { ...source, tempoBpm: this.currentSettings.tempoBpm };
     const musicXml = this.deps.serializer.serialize(exercise);
 
     this.exercise = exercise;
@@ -351,7 +365,51 @@ export class PracticeController {
    * Creates a session for the loaded exercise and starts it.
    * Returns `null` when there is nothing loaded yet.
    */
+  /**
+   * Plays the exercise back instead of judging it.
+   *
+   * Mutually exclusive with a run: the same pulse and the same cursor cannot
+   * serve two masters, and nobody wants to be graded on a performance the
+   * machine is giving.
+   */
+  listen(staffNumber: ListeningHand = null): void {
+    const timeline = this.timeline;
+    if (timeline === null) {
+      return;
+    }
+    this.disposeSession();
+    this.player ??= new ExercisePlayer({
+      metronome: this.deps.metronome,
+      instrument: this.deps.instrument,
+      cursor: this.deps.cursor,
+    });
+    this.deps.cursor.show();
+    this.player.start(timeline, {
+      staffNumber,
+      clickAudible: !this.currentSettings.metronomeMuted,
+    });
+  }
+
+  stopListening(): void {
+    this.player?.stop();
+  }
+
+  get isListening(): boolean {
+    return this.player?.isPlaying ?? false;
+  }
+
+  /** Fires when a playback reaches the end on its own. */
+  get playbackEvents(): IEventSource<{ started: Record<string, never>; finished: Record<string, never> }> {
+    this.player ??= new ExercisePlayer({
+      metronome: this.deps.metronome,
+      instrument: this.deps.instrument,
+      cursor: this.deps.cursor,
+    });
+    return this.player.events;
+  }
+
   start(): PracticeSession | null {
+    this.stopListening();
     const timeline = this.timeline;
     if (timeline === null) {
       this.emitter.emit('error', {
@@ -443,6 +501,8 @@ export class PracticeController {
   }
 
   dispose(): void {
+    this.player?.dispose();
+    this.player = null;
     this.disposeSession();
     this.deps.renderer.clear();
     this.emitter.removeAllListeners();

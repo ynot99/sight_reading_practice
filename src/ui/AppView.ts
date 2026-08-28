@@ -198,6 +198,8 @@ export class AppView {
     progress: HTMLProgressElement;
     log: HTMLUListElement;
     result: HTMLElement;
+    listen: HTMLButtonElement;
+    listenHand: HTMLSelectElement;
     openScore: HTMLButtonElement;
     scoreFile: HTMLInputElement;
     importNotice: HTMLElement;
@@ -269,6 +271,8 @@ export class AppView {
       progress: requireElement(doc, 'progress'),
       log: requireElement(doc, 'log'),
       result: requireElement(doc, 'result'),
+      listen: requireElement(doc, 'listen'),
+      listenHand: requireElement(doc, 'listen-hand'),
       openScore: requireElement(doc, 'open-score'),
       scoreFile: requireElement(doc, 'score-file'),
       importNotice: requireElement(doc, 'import-notice'),
@@ -372,6 +376,28 @@ export class AppView {
     this.el.importNotice.hidden = false;
   }
 
+  /**
+   * Plays the exercise, or stops it if it is already playing.
+   *
+   * Listening and a run share the pulse and the cursor, so the controller
+   * makes them mutually exclusive; the button only has to say which of the two
+   * it is offering.
+   */
+  private toggleListening(): void {
+    const { controller } = this.runtime;
+    if (controller.isListening) {
+      controller.stopListening();
+    } else {
+      const hand = this.el.listenHand.value;
+      controller.listen(hand === '' ? null : Number.parseInt(hand, 10));
+    }
+    this.describeListening();
+  }
+
+  private describeListening(): void {
+    this.el.listen.textContent = this.runtime.controller.isListening ? 'Stop listening' : 'Listen';
+  }
+
   private populateSelects(): void {
     fillSelect(
       this.el.preset,
@@ -421,6 +447,10 @@ export class AppView {
 
   private bindControls(): void {
     const { controller } = this.runtime;
+
+    this.listen(this.el.listen, 'click', () => {
+      this.toggleListening();
+    });
 
     this.listen(this.el.openScore, 'click', () => {
       this.el.scoreFile.click();
@@ -717,6 +747,14 @@ export class AppView {
     this.subscriptions.push(
       controller.events.on('sessionCreated', ({ session }) => {
         this.bindSession(session);
+        // A run takes the pulse from a playback, so the button has to admit it.
+        this.describeListening();
+      }),
+    );
+
+    this.subscriptions.push(
+      controller.playbackEvents.on('finished', () => {
+        this.describeListening();
       }),
     );
 

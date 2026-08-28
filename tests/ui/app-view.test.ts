@@ -27,6 +27,7 @@ import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRen
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
+import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../../src/application/SettingsRepository.js';
 import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.js';
@@ -134,6 +135,7 @@ function createRig(
     zoom: renderer,
     midi,
     metronome,
+    instrument: new RecordingPitchPlayer(),
     clock,
     scorings,
     initialSettings: {
@@ -281,6 +283,33 @@ describe('AppView', () => {
 
     expect(runtime.controller.settings.scoringId).toBe('scoring.continuity');
     expect(element('scoring-description').textContent).toContain('without the music leaving you');
+  });
+
+  it('plays the exercise back, and stops when asked', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    element<HTMLButtonElement>('listen').click();
+    expect(runtime.controller.isListening).toBe(true);
+    expect(element('listen').textContent).toBe('Stop listening');
+
+    element<HTMLButtonElement>('listen').click();
+    expect(runtime.controller.isListening).toBe(false);
+    expect(element('listen').textContent).toBe('Listen');
+  });
+
+  it('gives up the pulse when a run starts', async () => {
+    // Listening and practising share the metronome and the cursor, so one has
+    // to yield rather than both driving.
+    const { view, runtime } = createRig();
+    await view.initialize();
+    element<HTMLButtonElement>('listen').click();
+    expect(runtime.controller.isListening).toBe(true);
+
+    element<HTMLButtonElement>('start').click();
+
+    expect(runtime.controller.isListening).toBe(false);
+    expect(element('listen').textContent).toBe('Listen');
   });
 
   it('opens a MusicXML file and says what it lost', async () => {

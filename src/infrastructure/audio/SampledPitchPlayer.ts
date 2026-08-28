@@ -7,6 +7,7 @@ import type {
 import { SilentPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { PIANO_SAMPLES, nearestSample, playbackRateFor } from './pianoSampleMap.js';
+import { audioTimeFor } from './audioTime.js';
 
 export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
 
@@ -186,7 +187,7 @@ export class SampledPitchPlayer
     return this.loadPromise;
   }
 
-  play(midi: number, velocity: number): void {
+  play(midi: number, velocity: number, atMs?: number): void {
     const level = volumeToGain(this.currentVolume, this.options.gain);
     if (level <= 0) {
       return;
@@ -200,7 +201,7 @@ export class SampledPitchPlayer
     const buffer = this.buffers.get(choice.sample.midi);
     if (buffer === undefined) {
       this.onFallback.add(midi);
-      this.fallback.play(midi, velocity);
+      this.fallback.play(midi, velocity, atMs);
       return;
     }
 
@@ -210,7 +211,7 @@ export class SampledPitchPlayer
     this.releaseNow(midi);
     this.evictOldestIfFull();
 
-    const now = context.currentTime;
+    const now = audioTimeFor(context, atMs);
     const source = context.createBufferSource();
     const envelope = context.createGain();
     source.buffer = buffer;
@@ -240,21 +241,21 @@ export class SampledPitchPlayer
     this.voices.set(midi, { source, envelope });
   }
 
-  stop(midi: number): void {
+  stop(midi: number, atMs?: number): void {
     if (this.pedalDown) {
       // The key is up but the damper is not: remember it for the pedal lift.
       this.heldByPedal.add(midi);
       if (this.onFallback.has(midi)) {
-        this.fallback.stop(midi);
+        this.fallback.stop(midi, atMs);
       }
       return;
     }
-    this.releaseNow(midi);
+    this.releaseNow(midi, atMs);
   }
 
-  private releaseNow(midi: number): void {
+  private releaseNow(midi: number, atMs?: number): void {
     if (this.onFallback.delete(midi)) {
-      this.fallback.stop(midi);
+      this.fallback.stop(midi, atMs);
       return;
     }
     const voice = this.voices.get(midi);
@@ -262,7 +263,7 @@ export class SampledPitchPlayer
       return;
     }
     this.voices.delete(midi);
-    this.release(voice, this.context.currentTime);
+    this.release(voice, audioTimeFor(this.context, atMs));
   }
 
   stopAll(): void {

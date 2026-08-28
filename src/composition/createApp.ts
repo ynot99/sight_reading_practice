@@ -181,6 +181,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     zoom: renderer,
     midi,
     metronome,
+    instrument: pitchPlayer,
     clock,
     scorings,
     initialSettings: restored.practice,

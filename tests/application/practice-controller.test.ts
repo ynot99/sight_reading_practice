@@ -26,6 +26,7 @@ import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRen
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
+import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
 import { DomainError } from '../../src/shared/errors.js';
 import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
 
@@ -72,6 +73,7 @@ function createController(
     zoom: renderer,
     midi,
     metronome,
+    instrument: new RecordingPitchPlayer(),
     clock,
     scorings: new ScoringStrategyRegistry().registerAll([
       new AccuracyScoringStrategy(),
@@ -277,13 +279,29 @@ describe('PracticeController', () => {
 
     const loaded = await controller.openScore(opened);
 
-    expect(loaded).toBe(opened);
-    expect(controller.currentExercise).toBe(opened);
+    expect(loaded.title).toBe('Something Borrowed');
     expect(controller.openedExercise).toBe(opened);
+    // The file's own tempo is adopted, so the slider shows the truth about it.
+    expect(controller.settings.tempoBpm).toBe(opened.tempoBpm);
+    expect(loaded.tempoBpm).toBe(opened.tempoBpm);
     expect(renderer.loadedXml).toContain('Something Borrowed');
     // The timeline is derived from it like any other exercise, which is the
     // whole reason an import has to become one.
     expect(controller.currentTimeline?.length).toBe(4);
+  });
+
+  it('lets the reader slow an opened score down', async () => {
+    const { controller, renderer } = createController();
+    await controller.openScore(tiedExercise({ tempoBpm: 120 }));
+    expect(controller.settings.tempoBpm).toBe(120);
+
+    controller.updateSettings({ tempoBpm: 60 });
+    await controller.reloadExercise();
+
+    // Same notes, read at half the speed the file asked for.
+    expect(controller.currentExercise?.tempoBpm).toBe(60);
+    expect(controller.openedExercise?.tempoBpm).toBe(120);
+    expect(renderer.loadedXml).toContain('<per-minute>60</per-minute>');
   });
 
   it('keeps the opened score until something says otherwise', async () => {

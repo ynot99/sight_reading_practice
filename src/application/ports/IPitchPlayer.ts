@@ -6,8 +6,15 @@
  * session treats this port as fire-and-forget.
  */
 export interface IPitchPlayer {
-  play(midi: number, velocity: number): void;
-  stop(midi: number): void;
+  /**
+   * @param atMs When the note should sound, on the same clock the metronome's
+   *   ticks carry. Omitted means now, which is right for a key press; playback
+   *   schedules ahead instead, because a tick is delivered up to a scheduler
+   *   interval after it was due and a melody placed on delivery is audibly
+   *   uneven.
+   */
+  play(midi: number, velocity: number, atMs?: number): void;
+  stop(midi: number, atMs?: number): void;
   stopAll(): void;
 }
 

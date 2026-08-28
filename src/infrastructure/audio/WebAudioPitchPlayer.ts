@@ -1,5 +1,6 @@
 import type { IPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
+import { audioTimeFor } from './audioTime.js';
 
 export interface WebAudioPitchPlayerOptions {
   readonly gain?: number;
@@ -48,7 +49,7 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
     this.currentVolume = Math.min(1, Math.max(0, volume));
   }
 
-  play(midi: number, velocity: number): void {
+  play(midi: number, velocity: number, atMs?: number): void {
     const level = volumeToGain(this.currentVolume, this.options.gain);
     if (level <= 0) {
       return;
@@ -62,7 +63,7 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
       }
     }
 
-    const now = context.currentTime;
+    const now = audioTimeFor(context, atMs);
     const oscillator = context.createOscillator();
     const envelope = context.createGain();
     oscillator.type = 'triangle';
@@ -78,14 +79,14 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
     this.voices.set(midi, { oscillator, envelope });
   }
 
-  stop(midi: number): void {
+  stop(midi: number, atMs?: number): void {
     const voice = this.voices.get(midi);
     if (voice === undefined || this.context === null) {
       return;
     }
     this.voices.delete(midi);
 
-    const now = this.context.currentTime;
+    const now = audioTimeFor(this.context, atMs);
     const release = this.options.releaseSec;
     voice.envelope.gain.cancelScheduledValues(now);
     voice.envelope.gain.setValueAtTime(Math.max(0.0001, voice.envelope.gain.value), now);

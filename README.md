@@ -13,6 +13,13 @@ Two practice modes:
 - **Flow mode** — the cursor walks with the metronome and grades how close each
   press was to its beat. For building fluency.
 
+**Listen** plays the exercise instead of judging it — the whole texture or one
+hand alone, which is how you learn a part while playing the other. It is not a
+practice mode: a mode exists to judge input and this judges nothing, so it is
+its own service driven by the same pulse. Notes are handed to the instrument
+*ahead* of when they sound, because a tick arrives after the moment it stands
+for and a melody placed on delivery is audibly uneven.
+
 The click is a practice setting of its own: it can sound every beat, halve or
 third it, or give only the downbeat and leave the pulse inside the bar to you.
 It is deliberately separate from the rate the practice loop runs at, which is
@@ -189,6 +196,7 @@ src/
 │
 ├── application/                    # orchestration; depends only on interfaces
 │   ├── PracticeController.ts       # settings ➜ exercise ➜ render ➜ session ➜ cursor
+│   ├── ExercisePlayer.ts           # plays a score back, cursor and all
 │   ├── SettingsRepository.ts       # what you chose last time, validated on the way in
 │   ├── ports/                      # IMidiSource, IMetronome, IClock,
 │   │                               # IScoreRenderer, IScoreCursor,

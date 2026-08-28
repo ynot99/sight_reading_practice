@@ -50,6 +50,9 @@ export class PatternVoiceGenerator implements IVoiceGenerator {
 
     const rhythm = context.rhythm.byRole[this.options.role];
     const measures: Measure[] = [];
+    // A tie crosses bar lines, so what is being held outlives the measure loop.
+    let holding = false;
+    let current = 0;
 
     for (let measureIndex = 0; measureIndex < context.measures; measureIndex += 1) {
       const entries: MusicalEntry[] = [];
@@ -58,7 +61,14 @@ export class PatternVoiceGenerator implements IVoiceGenerator {
           entries.push(restEntry(slot.duration));
           continue;
         }
-        entries.push(noteEntry(context.key.pitchAt(walker.next()), slot.duration));
+        // A held note keeps its pitch, so the walker only moves on once the
+        // tie has let go. Every other note draws exactly as it always did.
+        if (!holding) {
+          current = walker.next();
+        }
+        const pitch = context.key.pitchAt(current);
+        entries.push(noteEntry(pitch, slot.duration, slot.tiedForward ? [pitch.midi] : []));
+        holding = slot.tiedForward;
       }
       measures.push(measureOf(entries));
     }

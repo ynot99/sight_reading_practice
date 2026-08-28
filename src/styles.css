@@ -486,6 +486,15 @@ select {
   box-shadow: var(--shadow);
 }
 
+/*
+ * Controls in the toolbar sit beside the buttons rather than under a label,
+ * so they take the width of their content - the full-width rule the settings
+ * panel needs would stretch this one across the bar.
+ */
+.toolbar select {
+  width: auto;
+}
+
 .toolbar__gap {
   flex: 1;
 }

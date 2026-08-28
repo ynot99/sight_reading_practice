@@ -423,9 +423,9 @@ MuseScore hands you unless you ask otherwise.
 - Rhythms stop at sixteenth notes, one dot and triplets; no pickup bars.
   Sixteenths arrive in beamed pairs and triplets in complete threes, never
   singly and never straddling a beat.
-- Ties exist in the model, the notation and the timeline, but no generator
-  emits one yet: writing tied rhythms means splitting values across bar lines,
-  which belongs with the syncopation work rather than with ties themselves.
+- Values may cross a beat under the `syncopated` level, split at the boundary
+  and tied. Everything else stays inside its beat, which is what keeps the
+  other levels readable.
 - Generated music is deliberately simple — diatonic, no accidentals outside the
   key — though the notation layer already handles accidentals correctly.
 - The side panel still names the notes you owe, so hiding the cursor is not yet

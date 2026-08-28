@@ -28,6 +28,8 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
 - Musical time is integer divisions (`DIVISIONS_PER_QUARTER = 480`). Do not
   introduce floating-point positions; convert to milliseconds only at the edge.
   `Duration.of` refuses a tuplet ratio that would not land on a whole division.
+- A generated tie holds one pitch: the voice must stop moving for the length
+  of the held note, or `validateExercise` will refuse the bar.
 - Practising a passage is `sliceExercise`, not a range inside the session.
   Everything downstream stays unaware a longer piece exists; the seams (clef,
   key, ties, pedal) are where the care goes.

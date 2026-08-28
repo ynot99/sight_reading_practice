@@ -61,6 +61,25 @@ const TRIPLET_RHYTHM: RhythmOptions = {
   keepInsideBeats: true,
 };
 
+/**
+ * Eighth-note motion that is allowed to begin off the beat and hold across it.
+ *
+ * Everything else here sits inside its beat, which is what makes the material
+ * readable and also its ceiling. A note that starts off the beat is the
+ * commonest place a reader loses their count, and it cannot be practised on
+ * music that never writes one.
+ */
+const SYNCOPATED_RHYTHM: RhythmOptions = {
+  durations: [
+    { value: Duration.QUARTER, weight: 5 },
+    { value: Duration.EIGHTH, weight: 4 },
+    { value: Duration.HALF, weight: 2 },
+  ],
+  restProbability: 0.06,
+  keepInsideBeats: true,
+  syncopation: 0.45,
+};
+
 /** Long accompaniment values that leave the reading effort to the other hand. */
 const SUSTAINED_RHYTHM: RhythmOptions = {
   durations: [
@@ -115,6 +134,16 @@ export const BUILT_IN_RHYTHM_PROFILES: readonly RhythmProfile[] = [
     description: 'Sixteenths in beamed pairs. Start slower than the tempo you can play.',
     byRole: {
       lead: SIXTEENTH_RHYTHM,
+      inner: FLOWING_RHYTHM,
+      accompaniment: HALF_NOTE_RHYTHM,
+    },
+  },
+  {
+    id: 'syncopated',
+    label: 'Across the beat',
+    description: 'Notes that begin off the beat and hold across it, written as ties.',
+    byRole: {
+      lead: SYNCOPATED_RHYTHM,
       inner: FLOWING_RHYTHM,
       accompaniment: HALF_NOTE_RHYTHM,
     },

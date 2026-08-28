@@ -37,6 +37,8 @@ export class MelodyVoiceGenerator implements IVoiceGenerator {
 
     const measures: Measure[] = [];
     let isFirstNote = true;
+    // A tie crosses bar lines, so what is being held outlives the measure loop.
+    let holding = false;
 
     for (let measureIndex = 0; measureIndex < context.measures; measureIndex += 1) {
       const entries: MusicalEntry[] = [];
@@ -45,11 +47,14 @@ export class MelodyVoiceGenerator implements IVoiceGenerator {
           entries.push(restEntry(slot.duration));
           continue;
         }
-        if (!isFirstNote) {
+        // A held note keeps its pitch: the tie is one sound, not two.
+        if (!isFirstNote && !holding) {
           current = this.nextIndex(context, current, low, high);
         }
         isFirstNote = false;
-        entries.push(noteEntry(context.key.pitchAt(current), slot.duration));
+        const pitch = context.key.pitchAt(current);
+        entries.push(noteEntry(pitch, slot.duration, slot.tiedForward ? [pitch.midi] : []));
+        holding = slot.tiedForward;
       }
       measures.push(measureOf(entries));
     }

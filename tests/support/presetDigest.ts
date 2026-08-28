@@ -22,7 +22,9 @@ function describeMeasure(measure: Measure): string {
       if (entry.kind === 'rest') {
         return `R/${value}`;
       }
-      return `${entry.pitches.map((pitch) => pitch.toString()).join('+')}/${value}`;
+      // A tie is a held note rather than two, so the digest has to say so.
+      const held = entry.tiedForward.length > 0 ? '~' : '';
+      return `${entry.pitches.map((pitch) => pitch.toString()).join('+')}/${value}${held}`;
     })
     .join(' ');
 }

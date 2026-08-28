@@ -29,6 +29,27 @@ import { clefAtMeasure, keyAtMeasure, measureCount } from '../domain/model/Exerc
 import { sliceExercise } from '../domain/model/exerciseSlice.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
+import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
+
+/** The fields a rung governs, and so the ones that leaving it is made of. */
+function touchesTheRoute(changes: Partial<PracticeSettings>): boolean {
+  return (
+    changes.presetId !== undefined ||
+    changes.rhythmProfileId !== undefined ||
+    changes.key !== undefined ||
+    changes.timeSignature !== undefined
+  );
+}
+
+/**
+ * A reading clean enough to be worth repeating, and one that came apart.
+ *
+ * Two of either in a row moves the reader, which is slow enough that one
+ * lucky or one ruined page decides nothing.
+ */
+const LADDER_PROMOTE_AT = 0.9;
+const LADDER_DEMOTE_AT = 0.6;
+const LADDER_RUNS_TO_MOVE = 2;
 
 /** Everything the user can dial in before pressing start. */
 export interface PracticeSettings {
@@ -81,6 +102,15 @@ export interface PracticeSettings {
   readonly rangeToBar: number | null;
   /** Start the passage again as soon as it ends. */
   readonly repeatRange: boolean;
+  /**
+   * Which rung of the practice ladder is being read, or `null` for none.
+   *
+   * `null` is not "no level" but *off the route*: the axes were set by hand,
+   * and nothing should move them afterwards. Setting any of the four fields a
+   * rung governs steps off it, which is why leaving is never a decision the
+   * reader has to make separately.
+   */
+  readonly ladderStepId: string | null;
   /**
    * How much of the run the click sits out.
    *
@@ -156,6 +186,11 @@ export interface ControllerEventMap {
   settingsChanged: { readonly settings: PracticeSettings };
   exerciseLoaded: ExerciseLoadedEvent;
   sessionCreated: { readonly session: PracticeSession };
+  ladderMoved: {
+    readonly from: LadderStep;
+    readonly to: LadderStep;
+    readonly direction: 'up' | 'down';
+  };
   error: { readonly error: Error; readonly context: string };
 }
 
@@ -175,6 +210,8 @@ export interface PracticeControllerDependencies {
   readonly instrument: IPitchPlayer;
   readonly clock: IClock;
   readonly scorings: ScoringStrategyRegistry;
+  /** The route through the settings the reader can follow, if there is one. */
+  readonly ladder?: PracticeLadder;
   /** Remembers how earlier readings of the same passage went. */
   readonly history?: PracticeHistory;
   /** Seam for alternative exercise sources (files, network, ear training). */
@@ -205,6 +242,8 @@ export class PracticeController {
   private player: ExercisePlayer | null = null;
   /** Highest step already dimmed, so the veil is drawn once per step. */
   private fadedThrough = -1;
+  private cleanReadings = 0;
+  private poorReadings = 0;
 
   constructor(dependencies: PracticeControllerDependencies) {
     this.deps = dependencies;
@@ -238,6 +277,7 @@ export class PracticeController {
       rangeFromBar: null,
       rangeToBar: null,
       repeatRange: false,
+      ladderStepId: null,
       clickDropout: 'never',
       matchToleranceMs: 250,
       pitchClassOnly: false,
@@ -282,6 +322,16 @@ export class PracticeController {
    */
   updateSettings(changes: Partial<PracticeSettings>): PracticeSettings {
     let next: PracticeSettings = { ...this.currentSettings, ...changes };
+
+    if (changes.ladderStepId === undefined && touchesTheRoute(changes)) {
+      // Setting by hand what a rung sets is how a reader leaves the ladder.
+      // Making it a separate decision would let the arrows and the selectors
+      // disagree about what is being practised, and one of them would be
+      // lying. Tempo and bar count are deliberately not on the list: slowing
+      // a rung down is how it is meant to be met.
+      next = { ...next, ladderStepId: null };
+      this.resetLadderStreaks();
+    }
 
     if (changes.modeId !== undefined && changes.modeId !== this.currentSettings.modeId) {
       // Same idea as the preset ladder: a mode brings the grading it is
@@ -637,6 +687,7 @@ export class PracticeController {
           grade: score.grade,
           completed: report.completed,
         });
+        this.considerLadderMove(score.overall, report.completed);
       }),
     );
     this.sessionSubscriptions.push(
@@ -737,6 +788,121 @@ export class PracticeController {
     if (stepIndex !== undefined) {
       this.fadeAhead(stepIndex);
     }
+  }
+
+  /**
+   * Moves the reader a rung after two consecutive readings say so.
+   *
+   * Only whole readings of fresh material count. Repeating a passage until
+   * it is right is practice, but it is not *sight*-reading, and a page read
+   * for the fourth time says nothing about whether the next unseen one is
+   * within reach.
+   */
+  private considerLadderMove(overall: number, completed: boolean): void {
+    const ladder = this.deps.ladder;
+    const stepId = this.currentSettings.ladderStepId;
+    if (ladder === undefined || stepId === null || !this.isFreshReading()) {
+      return;
+    }
+    // A run that was stopped is not a reading, in either direction. It also
+    // scores a flat 100% under accuracy grading, which counts the notes that
+    // were due rather than the ones in the exercise - so a reader who pressed
+    // Stop twice would climb.
+    if (!completed) {
+      return;
+    }
+
+    if (overall >= LADDER_PROMOTE_AT) {
+      this.cleanReadings += 1;
+      this.poorReadings = 0;
+    } else if (overall <= LADDER_DEMOTE_AT) {
+      this.poorReadings += 1;
+      this.cleanReadings = 0;
+    } else {
+      this.cleanReadings = 0;
+      this.poorReadings = 0;
+    }
+
+    const offset =
+      this.cleanReadings >= LADDER_RUNS_TO_MOVE
+        ? 1
+        : this.poorReadings >= LADDER_RUNS_TO_MOVE
+          ? -1
+          : 0;
+    if (offset === 0) {
+      return;
+    }
+    this.moveLadder(offset, offset > 0 ? 'up' : 'down');
+  }
+
+  /** Whether this reading was of something the reader had not seen before. */
+  private isFreshReading(): boolean {
+    const { rangeFromBar, rangeToBar, repeatRange } = this.currentSettings;
+    return (
+      this.openedScore === null &&
+      rangeFromBar === null &&
+      rangeToBar === null &&
+      !repeatRange
+    );
+  }
+
+  /**
+   * Puts the reader on a neighbouring rung, or leaves them where they are.
+   *
+   * The move arms the next exercise rather than replacing the one on screen:
+   * a run has just finished and its report is what the reader is looking at,
+   * so pulling the page out from under them would hide the very thing that
+   * explains the move.
+   */
+  moveLadder(offset: number, direction: 'up' | 'down' = offset > 0 ? 'up' : 'down'): LadderStep | null {
+    const ladder = this.deps.ladder;
+    const stepId = this.currentSettings.ladderStepId;
+    if (ladder === undefined) {
+      return null;
+    }
+    const from = stepId === null ? ladder.first() : ladder.get(stepId);
+    // Coming back from a hand-set page starts at the rung, not past it.
+    const to = stepId === null ? from : ladder.step(stepId, offset);
+    if (to.id === from.id && stepId !== null) {
+      return null;
+    }
+    this.selectLadderStep(to.id);
+    this.emitter.emit('ladderMoved', { from, to, direction });
+    return to;
+  }
+
+  /** Puts the reader on a named rung, adopting everything it stands for. */
+  selectLadderStep(id: string): LadderStep | null {
+    const step = this.deps.ladder?.find(id) ?? null;
+    if (step === null) {
+      return null;
+    }
+    this.resetLadderStreaks();
+    // Resolved, not the rung's own delta: a rung says the one thing it moves,
+    // and arriving at it has to bring everything the route had already set.
+    this.updateSettings({
+      ...this.deps.ladder?.resolve(step.id),
+      ladderStepId: step.id,
+    });
+    return step;
+  }
+
+  /** The rung being read, or `null` when the axes were set by hand. */
+  get ladderStep(): LadderStep | null {
+    const stepId = this.currentSettings.ladderStepId;
+    return stepId === null ? null : (this.deps.ladder?.find(stepId) ?? null);
+  }
+
+  /**
+   * Forgets how the last readings went.
+   *
+   * A streak is about consecutive readings *at one rung*, so arriving at one
+   * has to start it over - otherwise a reader sent down would be sent
+   * straight back up by the two clean runs that came before the fall.
+   */
+  private resetLadderStreaks(): void {
+    this.cleanReadings = 0;
+    this.poorReadings = 0;
   }
 
   private applyCursorVisibility(): void {

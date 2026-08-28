@@ -18,6 +18,8 @@ import type { IVolumeControl } from '../application/ports/IVolumeControl.js';
 import type { ISettingsStore } from '../application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../application/SettingsRepository.js';
 import { PracticeHistory } from '../application/PracticeHistory.js';
+import { PracticeLadder } from '../application/ladder/PracticeLadder.js';
+import { BUILT_IN_LADDER } from '../application/ladder/ladderSteps.js';
 import {
   HISTORY_STORAGE_KEY,
   LocalStorageSettingsStore,
@@ -83,6 +85,7 @@ export interface AppRuntime {
   readonly controller: PracticeController;
   readonly presets: ExercisePresetRegistry;
   readonly rhythms: RhythmProfileRegistry;
+  readonly ladder: PracticeLadder;
   readonly importer: IScoreImporter;
   readonly scorings: ScoringStrategyRegistry;
   readonly modes: PracticeModeRegistry;
@@ -157,6 +160,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     new ContinuityScoringStrategy(),
   ]);
   const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
+  const ladder = new PracticeLadder(BUILT_IN_LADDER);
 
   const settings = new SettingsRepository(
     options.settingsStore ?? new LocalStorageSettingsStore(browserStorage()),
@@ -165,6 +169,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       modeIds: modes.list().map((mode) => mode.id),
       rhythmProfileIds: rhythms.list().map((profile) => profile.id),
       scoringIds: scorings.list().map((strategy) => strategy.id),
+      ladderStepIds: ladder.list().map((step) => step.id),
     },
   );
   const history = new PracticeHistory(
@@ -182,6 +187,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     presets,
     rhythms,
     modes,
+    ladder,
     serializer,
     renderer,
     cursor: renderer.cursor,
@@ -206,6 +212,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     controller,
     presets,
     rhythms,
+    ladder,
     importer,
     scorings,
     modes,

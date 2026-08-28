@@ -18,6 +18,7 @@ const KNOWN: KnownIds = {
   modeIds: ['mode.wait', 'mode.flow'],
   rhythmProfileIds: ['calm', 'flowing', 'sixteenths'],
   scoringIds: ['scoring.accuracy', 'scoring.continuity'],
+  ladderStepIds: ['rung.1a', 'rung.2b'],
 };
 
 const SETTINGS: PracticeSettings = {
@@ -35,6 +36,7 @@ const SETTINGS: PracticeSettings = {
   rangeFromBar: 3,
   rangeToBar: 6,
   repeatRange: true,
+  ladderStepId: 'rung.2b',
   clickDropout: 'cycle-2',
   metronomeMuted: true,
   matchToleranceMs: 180,

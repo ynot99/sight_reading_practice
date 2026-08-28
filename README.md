@@ -13,6 +13,21 @@ Two practice modes:
 - **Flow mode** — the cursor walks with the metronome and grades how close each
   press was to its beat. For building fluency.
 
+**The ladder** is a route through those settings rather than a replacement for
+them: twenty-four named rungs from a five-finger position in C to sequences in
+E flat, moved along with the arrows. Each rung changes exactly one thing —
+the material, the rhythm, the key or the metre — so a reader who comes unstuck
+can say which of the four undid them; a rung arriving at new material states
+all four, and a test holds the ladder to that. Two clean readings in a row
+move you up, two that come apart move you down, and the streak restarts on
+arrival so a fall cannot bounce straight back off the readings that preceded
+it. Only whole readings of fresh material count: a repeated passage is
+practice but not sight-reading, and an abandoned run is not a reading at all —
+it also scores a flat 100% under accuracy grading, which counts the notes that
+fell due rather than the ones in the exercise. Setting the material, rhythm,
+key or metre by hand steps off the route and says so; tempo and bar count do
+not, because slowing a rung down is how it is meant to be met.
+
 **Practise bars** narrows the exercise to a passage. It is done by cutting
 those bars out as a score in their own right rather than by teaching the session
 to start and stop in the middle of a longer one, so the timeline, the page, the

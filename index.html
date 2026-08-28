@@ -72,6 +72,16 @@
 
       <footer class="controls">
         <div class="control-group">
+          <label for="ladder-down">Ladder</label>
+          <div class="ladder-row">
+            <button id="ladder-down" type="button" class="button" aria-label="Down a rung">◀</button>
+            <strong id="ladder-step" class="ladder-row__step">—</strong>
+            <button id="ladder-up" type="button" class="button" aria-label="Up a rung">▶</button>
+          </div>
+          <p id="ladder-description" class="hint"></p>
+        </div>
+
+        <div class="control-group">
           <label for="preset">Level</label>
           <select id="preset"></select>
           <p id="preset-description" class="hint"></p>

@@ -20,6 +20,7 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
+import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { FocusMode } from './FocusMode.js';
@@ -262,6 +263,9 @@ export class AppView {
   private lastPosition = '';
   /** The step now due, kept so blind mode can be turned off mid-run. */
   private lastExpected: readonly number[] = [];
+  /** A promotion waiting to be reported alongside the run that earned it. */
+  private lastLadderMove: { readonly to: LadderStep; readonly direction: 'up' | 'down' } | null =
+    null;
 
   private readonly el: {
     app: HTMLElement;
@@ -293,6 +297,10 @@ export class AppView {
     openScore: HTMLButtonElement;
     scoreFile: HTMLInputElement;
     importNotice: HTMLElement;
+    ladderDown: HTMLButtonElement;
+    ladderUp: HTMLButtonElement;
+    ladderStep: HTMLElement;
+    ladderDescription: HTMLElement;
     preset: HTMLSelectElement;
     presetDescription: HTMLElement;
     rhythm: HTMLSelectElement;
@@ -377,6 +385,10 @@ export class AppView {
       openScore: requireElement(doc, 'open-score'),
       scoreFile: requireElement(doc, 'score-file'),
       importNotice: requireElement(doc, 'import-notice'),
+      ladderDown: requireElement(doc, 'ladder-down'),
+      ladderUp: requireElement(doc, 'ladder-up'),
+      ladderStep: requireElement(doc, 'ladder-step'),
+      ladderDescription: requireElement(doc, 'ladder-description'),
       preset: requireElement(doc, 'preset'),
       presetDescription: requireElement(doc, 'preset-description'),
       rhythm: requireElement(doc, 'rhythm'),
@@ -704,6 +716,14 @@ export class AppView {
       controller.updateSettings({ zoom: Number.parseInt(this.el.zoom.value, 10) / 100 });
     });
 
+    this.listen(this.el.ladderDown, 'click', () => {
+      this.moveLadder(-1);
+    });
+
+    this.listen(this.el.ladderUp, 'click', () => {
+      this.moveLadder(1);
+    });
+
     this.listen(this.el.showPlayed, 'change', () => {
       controller.updateSettings({ showPlayedNotes: this.el.showPlayed.checked });
     });
@@ -1000,6 +1020,15 @@ export class AppView {
     this.subscriptions.push(
       controller.playbackEvents.on('finished', () => {
         this.describeListening();
+      }),
+    );
+
+    this.subscriptions.push(
+      // Fired from inside the run's own `finished`, so it lands before the
+      // report is drawn and the report can carry it.
+      controller.events.on('ladderMoved', ({ to, direction }) => {
+        this.lastLadderMove = { to, direction };
+        this.syncControlsFromSettings();
       }),
     );
 
@@ -1311,6 +1340,7 @@ export class AppView {
     this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
+    this.describeLadder();
     this.el.presetDescription.textContent = this.runtime.presets.get(settings.presetId).description;
     this.el.rhythmDescription.textContent = this.runtime.rhythms.get(
       settings.rhythmProfileId,
@@ -1343,6 +1373,38 @@ export class AppView {
       settings.clickDropout,
       settings.countInBars,
     );
+  }
+
+  /**
+   * Steps the reader along the route and loads what the new rung asks for.
+   *
+   * The arrows are a decision to read something else *now*, unlike a
+   * promotion, which arrives with a report the reader is still looking at.
+   */
+  private moveLadder(offset: number): void {
+    if (this.runtime.controller.moveLadder(offset) === null) {
+      return;
+    }
+    this.syncControlsFromSettings();
+    void this.reload(true);
+  }
+
+  /** Names the rung, or says plainly that the reader has left the route. */
+  private describeLadder(): void {
+    const { controller, ladder } = this.runtime;
+    const step = controller.ladderStep;
+    if (step === null) {
+      this.el.ladderStep.textContent = 'Off the ladder';
+      this.el.ladderDescription.textContent =
+        'The settings below were chosen by hand. The arrows put you back on.';
+      this.el.ladderDown.disabled = false;
+      this.el.ladderUp.disabled = false;
+      return;
+    }
+    this.el.ladderStep.textContent = `${step.label} · ${ladder.positionOf(step.id)} of ${ladder.list().length}`;
+    this.el.ladderDescription.textContent = step.description;
+    this.el.ladderDown.disabled = !ladder.canStep(step.id, -1);
+    this.el.ladderUp.disabled = !ladder.canStep(step.id, 1);
   }
 
   private describeMode(): void {
@@ -1424,7 +1486,17 @@ export class AppView {
       ],
       ['Tendency', describeTendency(report.timing.meanDeviationMs)],
       ...historyRow(this.runtime.controller.passageHistory()),
+      ...(this.lastLadderMove === null
+        ? []
+        : ([
+            [
+              this.lastLadderMove.direction === 'up' ? 'Moved up' : 'Moved down',
+              `${this.lastLadderMove.to.label} · ${this.lastLadderMove.to.description}`,
+            ],
+          ] as const)),
     ];
+    // Said once, about the run that caused it.
+    this.lastLadderMove = null;
     for (const [label, value] of rows) {
       const row = this.doc.createElement('div');
       row.className = 'result__row';

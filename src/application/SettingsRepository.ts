@@ -33,6 +33,8 @@ export interface KnownIds {
   readonly modeIds: readonly string[];
   readonly scoringIds: readonly string[];
   readonly rhythmProfileIds: readonly string[];
+  /** Omitted where there is no ladder; a stored rung is then simply dropped. */
+  readonly ladderStepIds?: readonly string[];
 }
 
 const STORAGE_VERSION = 1;
@@ -181,6 +183,12 @@ export function decodePracticeSettings(
     rangeFromBar: readBar(value['rangeFromBar']),
     rangeToBar: readBar(value['rangeToBar']),
     repeatRange: readBoolean(value['repeatRange']),
+    // `null` is a real answer here - off the route - so it has to survive a
+    // reload; an id that no longer exists is not, and is dropped.
+    ladderStepId:
+      value['ladderStepId'] === null
+        ? null
+        : readId(value['ladderStepId'], known.ladderStepIds ?? []),
     clickDropout: readClickDropout(value['clickDropout'], value['dropoutBars']),
     metronomeMuted: readBoolean(value['metronomeMuted']),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
@@ -211,6 +219,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     rangeFromBar: settings.rangeFromBar,
     rangeToBar: settings.rangeToBar,
     repeatRange: settings.repeatRange,
+    ladderStepId: settings.ladderStepId,
     clickDropout: settings.clickDropout,
     metronomeMuted: settings.metronomeMuted,
     // `Infinity` has no JSON representation; the slider cannot reach it anyway.

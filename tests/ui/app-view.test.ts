@@ -12,6 +12,8 @@ import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePres
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
 import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
 import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
+import { PracticeLadder } from '../../src/application/ladder/PracticeLadder.js';
+import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import {
@@ -109,6 +111,7 @@ function createRig(
   const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const instrument = new RecordingPitchPlayer();
+  const ladder = new PracticeLadder(BUILT_IN_LADDER);
   const scorings = new ScoringStrategyRegistry().registerAll([
     new AccuracyScoringStrategy(),
     new TimingWeightedScoringStrategy(),
@@ -120,6 +123,7 @@ function createRig(
     modeIds: modes.list().map((mode) => mode.id),
     rhythmProfileIds: rhythms.list().map((profile) => profile.id),
     scoringIds: scorings.list().map((strategy) => strategy.id),
+    ladderStepIds: ladder.list().map((step) => step.id),
   });
   const restored = settings.load();
   const metronomeVolume = new FakeVolume();
@@ -142,6 +146,7 @@ function createRig(
     instrument,
     clock,
     scorings,
+    ladder,
     initialSettings: {
       countInBars: 0,
       metronomeMuted: true,
@@ -157,6 +162,7 @@ function createRig(
     controller,
     presets,
     rhythms,
+    ladder,
     importer: new DomMusicXmlImporter(),
     scorings,
     modes,
@@ -594,6 +600,56 @@ describe('AppView', () => {
     mode.dispatchEvent(new Event('change'));
     expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
     expect(element('mode-description').textContent).toContain('with the beat');
+  });
+
+  describe('the ladder arrows', () => {
+    it('starts at the first rung and names it', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      element<HTMLButtonElement>('ladder-up').click();
+      await Promise.resolve();
+
+      expect(runtime.controller.ladderStep?.label).toBe('1a');
+      expect(element('ladder-step').textContent).toContain('1a');
+      expect(element('ladder-step').textContent).toContain('1 of');
+      expect(element('ladder-description').textContent).toContain('Five-finger');
+      // Nowhere below the bottom to go.
+      expect(element<HTMLButtonElement>('ladder-down').disabled).toBe(true);
+    });
+
+    it('brings the selectors with it', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      element<HTMLButtonElement>('ladder-up').click();
+      await Promise.resolve();
+      element<HTMLButtonElement>('ladder-up').click();
+      await Promise.resolve();
+
+      expect(runtime.controller.ladderStep?.label).toBe('1b');
+      // The rung is what is being practised, so the controls have to agree.
+      expect(element<HTMLSelectElement>('rhythm').value).toBe('flowing');
+      expect(element<HTMLSelectElement>('preset').value).toBe('five-finger-c');
+    });
+
+    it('says plainly when the reader has left the route', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('ladder-up').click();
+      await Promise.resolve();
+
+      const rhythm = element<HTMLSelectElement>('rhythm');
+      rhythm.value = 'triplets';
+      rhythm.dispatchEvent(new Event('change'));
+      await Promise.resolve();
+
+      expect(element('ladder-step').textContent).toBe('Off the ladder');
+      expect(element('ladder-description').textContent).toContain('by hand');
+      // Both arrows stay live: leaving is not a trap.
+      expect(element<HTMLButtonElement>('ladder-down').disabled).toBe(false);
+      expect(element<HTMLButtonElement>('ladder-up').disabled).toBe(false);
+    });
   });
 
   it('hides the score cursor from the checkbox', async () => {

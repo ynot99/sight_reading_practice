@@ -10,6 +10,8 @@ import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
 import type { ExerciseRequest } from '../../src/domain/generation/IExerciseGenerator.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
+import { PracticeLadder } from '../../src/application/ladder/PracticeLadder.js';
+import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
 import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
 
@@ -84,6 +86,7 @@ function createController(
       new TimingWeightedScoringStrategy(),
       new ContinuityScoringStrategy(),
     ]),
+    ladder: new PracticeLadder(BUILT_IN_LADDER),
     ...(fixedExercise
       ? { providerFor: () => ({ provide: () => Promise.resolve(twoBarExercise()) }) }
       : {}),
@@ -951,5 +954,194 @@ describe('cursor visibility', () => {
     controller.updateSettings({ tempoBpm: 90 });
 
     expect(renderer.cursor.visible).toBe(false);
+  });
+});
+
+describe('climbing the ladder', () => {
+  /** Plays every step of the fixed exercise correctly, to the end. */
+  function readCleanly(rig: ReturnType<typeof createController>): void {
+    const session = rig.controller.start();
+    let guard = 200;
+    while (session?.status === 'running' && guard > 0) {
+      guard -= 1;
+      const step = session.currentStep;
+      if (step === null) {
+        break;
+      }
+      for (const midi of step.expectedMidi) {
+        rig.midi.noteOn(midi, 0);
+      }
+    }
+  }
+
+  /**
+   * Reads the whole exercise, but fumbles two extra notes at every step.
+   *
+   * The run has to *finish* to be evidence: an abandoned one is not a reading
+   * at all, and under accuracy grading it scores a flat 100%.
+   */
+  function readBadly(rig: ReturnType<typeof createController>): void {
+    const session = rig.controller.start();
+    let guard = 200;
+    while (session?.status === 'running' && guard > 0) {
+      guard -= 1;
+      const step = session.currentStep;
+      if (step === null) {
+        break;
+      }
+      rig.midi.noteOn(21, 0);
+      rig.midi.noteOn(22, 0);
+      for (const midi of step.expectedMidi) {
+        rig.midi.noteOn(midi, 0);
+      }
+    }
+  }
+
+  async function onTheLadder(stepId = 'rung.2b') {
+    const rig = createController(true);
+    rig.controller.selectLadderStep(stepId);
+    await rig.controller.loadNewExercise();
+    return rig;
+  }
+
+  it('adopts everything a rung stands for', async () => {
+    const rig = await onTheLadder('rung.8b');
+
+    expect(rig.controller.settings.presetId).toBe('sequences');
+    expect(rig.controller.settings.rhythmProfileId).toBe('syncopated');
+    expect(rig.controller.ladderStep?.label).toBe('8b');
+  });
+
+  it('moves up after two clean readings, and not after one', async () => {
+    const rig = await onTheLadder();
+
+    readCleanly(rig);
+    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+
+    readCleanly(rig);
+    expect(rig.controller.ladderStep?.id).toBe('rung.2c');
+  });
+
+  it('moves down after two readings that came apart', async () => {
+    const rig = await onTheLadder();
+
+    readBadly(rig);
+    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+
+    readBadly(rig);
+    expect(rig.controller.ladderStep?.id).toBe('rung.2a');
+  });
+
+  it('ignores a run that was stopped, however it was scored', async () => {
+    const rig = await onTheLadder();
+
+    // Accuracy grades the notes that fell due, so a run abandoned at the
+    // first step is a flawless 100%. Twice would be a promotion earned by
+    // pressing Stop.
+    rig.controller.start()?.abort();
+    rig.controller.start()?.abort();
+
+    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+  });
+
+  it('starts the count again on arriving, so it cannot bounce', async () => {
+    const rig = await onTheLadder();
+    readCleanly(rig);
+    readCleanly(rig);
+    expect(rig.controller.ladderStep?.id).toBe('rung.2c');
+
+    // Two clean readings got the reader here. Falling straight back must not
+    // hand those same two readings back as a reason to climb again.
+    readBadly(rig);
+    readBadly(rig);
+    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+
+    readBadly(rig);
+    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+  });
+
+  it('says so when it moves', async () => {
+    const rig = await onTheLadder();
+    const moved = vi.fn();
+    rig.controller.events.on('ladderMoved', moved);
+
+    readCleanly(rig);
+    readCleanly(rig);
+
+    expect(moved).toHaveBeenCalledTimes(1);
+    expect(moved.mock.calls[0]?.[0]).toMatchObject({ direction: 'up' });
+  });
+
+  it('stays at the ends instead of falling off them', async () => {
+    const top = await onTheLadder('rung.8d');
+    readCleanly(top);
+    readCleanly(top);
+    expect(top.controller.ladderStep?.id).toBe('rung.8d');
+
+    const bottom = await onTheLadder('rung.1a');
+    readBadly(bottom);
+    readBadly(bottom);
+    expect(bottom.controller.ladderStep?.id).toBe('rung.1a');
+  });
+
+  it('does not count a passage being drilled', async () => {
+    const rig = await onTheLadder();
+    rig.controller.updateSettings({ rangeFromBar: 1, rangeToBar: 2 });
+    await rig.controller.loadNewExercise();
+
+    readCleanly(rig);
+    readCleanly(rig);
+
+    // Reading the same two bars until they are right is practice, but it is
+    // not evidence about the next unseen page.
+    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+  });
+
+  it('does not count a run that repeats itself', async () => {
+    const rig = await onTheLadder();
+    rig.controller.updateSettings({ repeatRange: true });
+
+    readCleanly(rig);
+    readCleanly(rig);
+
+    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+  });
+
+  it('steps off the ladder when the axes are set by hand', async () => {
+    const rig = await onTheLadder();
+
+    rig.controller.updateSettings({ rhythmProfileId: 'triplets' });
+
+    expect(rig.controller.ladderStep).toBeNull();
+    expect(rig.controller.settings.ladderStepId).toBeNull();
+  });
+
+  it('stays on it when only the tempo or the bar count moves', async () => {
+    const rig = await onTheLadder();
+
+    rig.controller.updateSettings({ tempoBpm: 48, measures: 8 });
+
+    // Slowing a rung down is how it is meant to be met, not a way off it.
+    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+  });
+
+  it('never moves a reader who is off the ladder', async () => {
+    const rig = createController(true);
+    await rig.controller.loadNewExercise();
+    expect(rig.controller.ladderStep).toBeNull();
+
+    readCleanly(rig);
+    readCleanly(rig);
+
+    expect(rig.controller.ladderStep).toBeNull();
+  });
+
+  it('puts a reader who left back on at the rung, not past it', async () => {
+    const rig = createController(true);
+    await rig.controller.loadNewExercise();
+
+    const step = rig.controller.moveLadder(1);
+
+    expect(step?.id).toBe('rung.1a');
   });
 });

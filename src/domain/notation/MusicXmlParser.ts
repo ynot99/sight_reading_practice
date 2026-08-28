@@ -22,6 +22,7 @@ import {
 export interface ImportWarning {
   readonly kind:
     | 'extra-parts'
+    | 'merged-voices'
     | 'extra-voices'
     | 'grace-notes'
     | 'changing-attributes'
@@ -372,6 +373,92 @@ function readMeasureNotes(
   return notes;
 }
 
+/** One pitch and the span it occupies, once voices stop mattering. */
+interface Sounding {
+  readonly pitch: Pitch;
+  readonly midi: number;
+  readonly start: number;
+  readonly end: number;
+  readonly tieStart: boolean;
+  readonly voice: number;
+  readonly beams: readonly Beam[];
+}
+
+/**
+ * Flattens the voices of one staff into a single line of chords.
+ *
+ * A staff holds one sequence of entries, and real piano writing holds two or
+ * three voices in it. Dropping the extra ones loses whole passages - an inner
+ * line, or the left hand entirely where the writer happened to number it
+ * differently. Merging keeps every note, at the moment it is struck, which is
+ * exactly what a reader has to play.
+ *
+ * Held notes survive as ties. Where one voice moves under another's long note,
+ * that note is cut at the moment the other moves and tied across the join, so
+ * the page still shows its full length and the timeline still demands it only
+ * once. That is what ties are for, and why they had to exist first.
+ *
+ * Returns `null` when the voices cross-rhythm into spans this project cannot
+ * notate - triplets against duples, most often - so the caller can fall back
+ * rather than emit a bar that does not add up.
+ */
+function mergeVoices(notes: readonly Sounding[], ticksPerMeasure: number): MusicalEntry[] | null {
+  const boundaries = new Set<number>([0, ticksPerMeasure]);
+  for (const note of notes) {
+    boundaries.add(note.start);
+    boundaries.add(Math.min(note.end, ticksPerMeasure));
+  }
+  const points = [...boundaries]
+    .filter((point) => point >= 0 && point <= ticksPerMeasure)
+    .sort((left, right) => left - right);
+
+  const primary = notes.length === 0 ? 1 : Math.min(...notes.map((note) => note.voice));
+  const entries: MusicalEntry[] = [];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const from = points[index] ?? 0;
+    const to = points[index + 1] ?? ticksPerMeasure;
+    const span = to - from;
+    if (span <= 0) {
+      continue;
+    }
+    if (!Duration.isNotatable(span)) {
+      return null;
+    }
+    const duration = Duration.fromTicks(span);
+    const active = notes.filter((note) => note.start <= from && note.end > from);
+    if (active.length === 0) {
+      entries.push(restEntry(duration));
+      continue;
+    }
+
+    const pitches: Pitch[] = [];
+    const tied: number[] = [];
+    // Low to high, which is how a chord is written and how the voices
+    // themselves are numbered often enough to be a coincidence otherwise.
+    for (const note of [...active].sort((left, right) => left.midi - right.midi)) {
+      if (pitches.some((pitch) => pitch.midi === note.midi)) {
+        continue;
+      }
+      pitches.push(note.pitch);
+      // Still sounding after this segment, or tied on by the source itself.
+      if (note.end > to || (note.tieStart && note.end <= to)) {
+        tied.push(note.midi);
+      }
+    }
+
+    // Beaming only survives where a segment still *is* one of the writer's
+    // notes; once a note has been cut in two, its beams describe something
+    // that is no longer on the page.
+    const whole = active.filter(
+      (note) => note.voice === primary && note.start === from && note.end === to,
+    );
+    entries.push(noteEntry(pitches, duration, tied, whole.length === 1 ? (whole[0]?.beams ?? []) : []));
+  }
+
+  return entries;
+}
+
 /** Turns the notes of one staff and measure into entries that fill the bar. */
 function buildMeasure(
   notes: readonly RawNote[],
@@ -461,21 +548,50 @@ function buildStaves(
     // which would always be 1 and would silently empty a staff whose voice is
     // numbered 2, as the grand staff we write ourselves is.
     const primary = voices.size > 0 ? Math.min(...voices) : 1;
-    if (voices.size > 1) {
-      warnings.push({
-        kind: 'extra-voices',
-        detail: `Staff ${staffNumber} has ${voices.size} voices; only the first was read.`,
-      });
-    }
+    let fellBack = 0;
 
-    const built = perMeasure.map((notes, measureIndex) =>
-      buildMeasure(
-        notes.filter((note) => note.staff === staffNumber && note.voice === primary),
+    const built = perMeasure.map((notes, measureIndex) => {
+      const mine = notes.filter((note) => note.staff === staffNumber);
+      // One voice needs no merging, and skipping it keeps the writer's own
+      // note values and beaming exactly as they were.
+      if (voices.size > 1) {
+        const merged = mergeVoices(
+          mine
+            .filter((note) => note.pitch !== null)
+            .map((note) => ({
+              pitch: note.pitch as Pitch,
+              midi: (note.pitch as Pitch).midi,
+              start: note.onsetTicks,
+              end: note.onsetTicks + note.ticks,
+              tieStart: note.tieStart,
+              voice: note.voice,
+              beams: note.beams,
+            })),
+          header.timeSignature.ticksPerMeasure,
+        );
+        if (merged !== null) {
+          return measureOf(merged);
+        }
+        fellBack += 1;
+      }
+      return buildMeasure(
+        mine.filter((note) => note.voice === primary),
         measureIndex,
         header.timeSignature.ticksPerMeasure,
         warnings,
-      ),
-    );
+      );
+    });
+
+    if (voices.size > 1) {
+      warnings.push({
+        kind: 'merged-voices',
+        detail:
+          `Staff ${staffNumber} has ${voices.size} voices; they were merged into one line` +
+          (fellBack === 0
+            ? '.'
+            : `, except ${fellBack} bar${fellBack === 1 ? '' : 's'} whose voices cross-rhythm, where only the first voice was read.`),
+      });
+    }
 
     return {
       staffNumber: index + 1,

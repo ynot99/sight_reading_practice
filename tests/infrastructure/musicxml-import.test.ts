@@ -126,18 +126,69 @@ describe('files written by other programs', () => {
     expect(exercise.key.fifths).toBe(1);
   });
 
-  it('keeps the first voice of a staff and says it dropped the rest', () => {
+  it('merges the voices of a staff into one line', () => {
+    // Two whole notes struck together in different voices are one chord to
+    // the hand that has to play them.
     const second =
       '<backup><duration>96</duration></backup>' +
       '<note><pitch><step>G</step><octave>3</octave></pitch><duration>96</duration>' +
       '<voice>2</voice><type>whole</type></note>';
-    const { exercise, warnings } = importer.read(
-      scoreXml(note('C', 4, 96, 'whole') + second),
+    const { exercise, warnings } = importer.read(scoreXml(note('C', 4, 96, 'whole') + second));
+
+    expect(warnings.map((warning) => warning.kind)).toContain('merged-voices');
+    const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.kind === 'note' ? entries[0].pitches.map((p) => p.toString()) : []).toEqual([
+      'G3',
+      'C4',
+    ]);
+  });
+
+  it('ties a held voice across the notes moving under it', () => {
+    // The left hand holds a whole note while the right plays two halves. The
+    // held note is cut at the join and tied, so the page keeps its length and
+    // the hand still presses it once.
+    const held =
+      '<backup><duration>96</duration></backup>' +
+      '<note><pitch><step>G</step><octave>3</octave></pitch><duration>96</duration>' +
+      '<voice>2</voice><type>whole</type></note>';
+    const { exercise } = importer.read(
+      scoreXml(note('C', 5, 48, 'half') + note('D', 5, 48, 'half') + held),
     );
 
-    expect(exercise.staves).toHaveLength(1);
-    expect(warnings.map((warning) => warning.kind)).toContain('extra-voices');
-    expect(exercise.staves[0]?.measures[0]?.entries).toHaveLength(1);
+    const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
+    expect(entries).toHaveLength(2);
+    expect(entries[0]?.kind === 'note' ? entries[0].tiedForward : []).toEqual([55]);
+    expect(entries[1]?.kind === 'note' ? entries[1].tiedForward : []).toEqual([]);
+
+    // Demanded once, on the beat it was struck - which is the whole point.
+    const steps = buildTimeline(exercise).steps;
+    expect(steps.map((step) => step.expectedMidi)).toEqual([[55, 72], [74]]);
+  });
+
+  it('falls back on a bar whose voices cross-rhythm, and says which', () => {
+    // Triplet quarters against plain eighths cut the bar into spans no plain
+    // value can write, so that bar keeps the first voice only.
+    const triplet = (step: string) =>
+      `<note><pitch><step>${step}</step><octave>3</octave></pitch><duration>16</duration>` +
+      '<voice>2</voice><type>quarter</type>' +
+      '<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes>' +
+      '</time-modification></note>';
+    const against =
+      '<backup><duration>96</duration></backup>' +
+      triplet('E') + triplet('F') + triplet('G') +
+      '<note><rest/><duration>48</duration><voice>2</voice><type>half</type></note>';
+    const eighths =
+      note('C', 5, 12, 'eighth') + note('D', 5, 12, 'eighth') +
+      note('E', 5, 12, 'eighth') + note('F', 5, 12, 'eighth') +
+      note('G', 5, 48, 'half');
+    const { exercise, warnings } = importer.read(scoreXml(eighths + against));
+
+    const merged = warnings.find((warning) => warning.kind === 'merged-voices');
+    expect(merged?.detail).toContain('cross-rhythm');
+    // The bar still adds up, which is what the fallback is protecting.
+    const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
+    expect(entries.reduce((total, entry) => total + entry.duration.ticks, 0)).toBe(1920);
   });
 
   it('keeps the beaming the writer chose', () => {

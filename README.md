@@ -19,6 +19,11 @@ to start and stop in the middle of a longer one, so the timeline, the page, the
 cursor, the report and the playback all carry on unaware a longer piece exists.
 The seams are the work: an inherited clef or key is stated at the head, a tie
 leading out of the last bar is cut, and a pedal already down is pressed again.
+Readings are remembered between visits, so the report can say whether a
+passage is steadier than last time — a passage being the piece and the bars,
+or the level when the material is generated, since one random exercise has no
+lasting identity to improve on.
+
 **Repeat when it ends** starts the passage over as soon as it finishes, and
 **Drill the worst bars** picks the passage for you from the run you just
 played — weighing steps the music took away above untidy ones, and ignoring
@@ -213,6 +218,7 @@ src/
 ├── application/                    # orchestration; depends only on interfaces
 │   ├── PracticeController.ts       # settings ➜ exercise ➜ render ➜ session ➜ cursor
 │   ├── ExercisePlayer.ts           # plays a score back, cursor and all
+│   ├── PracticeHistory.ts          # how earlier readings of a passage went
 │   ├── SettingsRepository.ts       # what you chose last time, validated on the way in
 │   ├── ports/                      # IMidiSource, IMetronome, IClock,
 │   │                               # IScoreRenderer, IScoreCursor,

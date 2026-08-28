@@ -8,6 +8,8 @@ export interface StorageLike {
 }
 
 export const DEFAULT_STORAGE_KEY = 'sight-reading-practice/settings';
+/** Kept apart from the settings so clearing one never takes the other. */
+export const HISTORY_STORAGE_KEY = 'sight-reading-practice/history';
 
 /**
  * Settings kept in the browser, on this device only.

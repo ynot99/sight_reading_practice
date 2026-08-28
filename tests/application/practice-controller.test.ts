@@ -27,6 +27,8 @@ import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
 import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
+import { PracticeHistory } from '../../src/application/PracticeHistory.js';
+import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { DomainError } from '../../src/shared/errors.js';
 import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
 
@@ -49,6 +51,7 @@ function createController(
   fixedExercise = false,
   providerFor?: PracticeControllerDependencies['providerFor'],
   extraSettings: Partial<PracticeSettings> = {},
+  history?: PracticeHistory,
 ): {
   controller: PracticeController;
   renderer: FakeScoreRenderer;
@@ -74,6 +77,7 @@ function createController(
     midi,
     metronome,
     instrument: new RecordingPitchPlayer(),
+    ...(history === undefined ? {} : { history }),
     clock,
     scorings: new ScoringStrategyRegistry().registerAll([
       new AccuracyScoringStrategy(),
@@ -349,6 +353,35 @@ describe('PracticeController', () => {
     }
     expect(passage.fromBar).toBeGreaterThanOrEqual(20);
     expect(controller.settings.rangeFromBar).toBe(passage.fromBar);
+  });
+
+  it('names the passage the way a reader would', async () => {
+    const { controller } = createController();
+    // Generated material has no lasting identity, so the level stands in: the
+    // question is whether *this level* is getting easier.
+    expect(controller.practiceKey()).toContain('level:');
+
+    await controller.openScore(tiedExercise({ title: 'Something Borrowed' }));
+    expect(controller.practiceKey()).toContain('score:Something Borrowed');
+
+    controller.updateSettings({ rangeFromBar: 2, rangeToBar: 4 });
+    expect(controller.practiceKey()).toContain('bars:2-4');
+  });
+
+  it('remembers how a reading went, and compares it with the last', async () => {
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller } = createController(true, undefined, {}, history);
+    await controller.loadNewExercise();
+    expect(controller.passageHistory()).toBeNull();
+
+    for (let run = 0; run < 2; run += 1) {
+      const session = controller.start();
+      session?.abort();
+    }
+
+    const summary = controller.passageHistory();
+    expect(summary?.attempts).toBe(2);
+    expect(summary?.previous).not.toBeNull();
   });
 
   it('has nothing to drill without a run behind it', () => {

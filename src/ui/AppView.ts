@@ -13,6 +13,7 @@ import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
+import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { FocusMode } from './FocusMode.js';
@@ -25,6 +26,29 @@ const SCORING_DESCRIPTIONS: Readonly<Record<string, string>> = {
     'little; stopping costs everything. Says nothing in Wait mode, where nothing ' +
     'moves without you.',
 };
+
+/**
+ * How this reading compares with the ones before it.
+ *
+ * The single question a returning reader has - is this getting better - and
+ * one the score alone cannot answer, because a number means nothing without
+ * the number before it.
+ */
+function historyRow(
+  history: PassageHistory | null,
+): readonly (readonly [string, string])[] {
+  if (history === null || history.attempts < 2) {
+    return [];
+  }
+  const move = history.previous === null ? 0 : history.last - history.previous;
+  const direction = Math.abs(move) < 0.02 ? 'about the same' : move > 0 ? 'better' : 'worse';
+  return [
+    [
+      `Reading ${history.attempts}`,
+      `${direction} · best ${Math.round(history.best * 100)}%`,
+    ],
+  ];
+}
 
 /**
  * The signed average, which says something the absolute one cannot.
@@ -1198,6 +1222,7 @@ export class AppView {
         `${percent(score.timing)} · ${Math.round(report.timing.meanAbsoluteDeviationMs)} ms avg`,
       ],
       ['Tendency', describeTendency(report.timing.meanDeviationMs)],
+      ...historyRow(this.runtime.controller.passageHistory()),
     ];
     for (const [label, value] of rows) {
       const row = this.doc.createElement('div');

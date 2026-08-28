@@ -17,7 +17,9 @@ import type { IScoreRenderer } from '../application/ports/IScoreRenderer.js';
 import type { IVolumeControl } from '../application/ports/IVolumeControl.js';
 import type { ISettingsStore } from '../application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../application/SettingsRepository.js';
+import { PracticeHistory } from '../application/PracticeHistory.js';
 import {
+  HISTORY_STORAGE_KEY,
   LocalStorageSettingsStore,
   browserStorage,
 } from '../infrastructure/storage/LocalStorageSettingsStore.js';
@@ -56,6 +58,8 @@ export interface AppRuntimeOptions {
   readonly location: LocationLike;
   /** Defaults to this device's browser storage. */
   readonly settingsStore?: ISettingsStore;
+  /** Where past readings are kept; browser storage by default. */
+  readonly historyStore?: ISettingsStore;
   /** Where the piano samples live; resolved against the page by default. */
   readonly sampleBaseUrl?: string;
 }
@@ -163,6 +167,11 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       scoringIds: scorings.list().map((strategy) => strategy.id),
     },
   );
+  const history = new PracticeHistory(
+    options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY),
+  );
+  history.load();
+
   const restored = settings.load();
   metronome.setVolume(restored.audio.metronomeVolume);
   pitchPlayer.setVolume(restored.audio.instrumentVolume);
@@ -182,6 +191,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     midi,
     metronome,
     instrument: pitchPlayer,
+    history,
     clock,
     scorings,
     initialSettings: restored.practice,

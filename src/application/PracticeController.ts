@@ -16,6 +16,7 @@ import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
+import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type { ClickPattern } from './ports/IMetronome.js';
 import type {
   IPlayedNoteOverlay,
@@ -128,6 +129,8 @@ export interface PracticeControllerDependencies {
   readonly instrument: IPitchPlayer;
   readonly clock: IClock;
   readonly scorings: ScoringStrategyRegistry;
+  /** Remembers how earlier readings of the same passage went. */
+  readonly history?: PracticeHistory;
   /** Seam for alternative exercise sources (files, network, ear training). */
   readonly providerFor?: (generator: IExerciseGenerator) => IExerciseProvider;
   readonly initialSettings?: Partial<PracticeSettings>;
@@ -447,6 +450,32 @@ export class PracticeController {
     return passage;
   }
 
+  /**
+   * What the reader would call the thing being practised.
+   *
+   * An imported score is known by its title, since its id is minted afresh on
+   * every open; generated material has no lasting identity of its own, so the
+   * level stands in - the question there is whether *this level* is getting
+   * easier, not whether one random exercise did.
+   */
+  practiceKey(): string {
+    const { rangeFromBar, rangeToBar, presetId, rhythmProfileId } = this.currentSettings;
+    const what =
+      this.openedScore === null
+        ? `level:${presetId}/${rhythmProfileId}`
+        : `score:${this.openedScore.title}`;
+    const bars =
+      rangeFromBar === null && rangeToBar === null
+        ? ''
+        : ` bars:${rangeFromBar ?? 1}-${rangeToBar ?? ''}`;
+    return `${what}${bars}`;
+  }
+
+  /** How earlier readings of this passage went, or `null` on a first visit. */
+  passageHistory(): PassageHistory | null {
+    return this.deps.history?.summary(this.practiceKey()) ?? null;
+  }
+
   stopListening(): void {
     this.player?.stop();
   }
@@ -531,6 +560,16 @@ export class PracticeController {
     this.sessionSubscriptions.push(
       session.events.on('stepEntered', ({ step }) => {
         this.deps.cursor.moveTo(step.index);
+      }),
+    );
+    this.sessionSubscriptions.push(
+      session.events.on('finished', ({ report, score }) => {
+        this.deps.history?.record(this.practiceKey(), {
+          atMs: this.deps.clock.now(),
+          overall: score.overall,
+          grade: score.grade,
+          completed: report.completed,
+        });
       }),
     );
     this.sessionSubscriptions.push(

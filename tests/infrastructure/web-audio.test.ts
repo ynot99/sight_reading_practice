@@ -8,7 +8,6 @@ class FakeParam {
   value = 0;
   readonly ramps: { value: number; time: number }[] = [];
   cancelled = 0;
-  readonly held: number[] = [];
 
   setValueAtTime(value: number, time: number): FakeParam {
     this.value = value;
@@ -23,11 +22,6 @@ class FakeParam {
 
   cancelScheduledValues(): FakeParam {
     this.cancelled += 1;
-    return this;
-  }
-
-  cancelAndHoldAtTime(time: number): FakeParam {
-    this.held.push(time);
     return this;
   }
 }
@@ -264,8 +258,10 @@ describe('WebAudioPitchPlayer', () => {
     player.stop(60);
 
     expect(context.oscillators[0]?.stoppedAt).toBeCloseTo(1.22, 6);
-    // Held at whatever the envelope had reached, then faded from there.
-    expect(context.gains[0]?.gain.held).toEqual([1]);
+    // Anchored at the level it had, then faded from there to silence.
+    const gain = context.gains[0]?.gain;
+    expect(gain?.ramps.at(-1)).toEqual({ value: 0.0001, time: 1.2 });
+    expect(gain?.ramps.at(-2)?.time).toBe(1);
   });
 
   it('releases a scheduled note without a step in its envelope', () => {
@@ -280,10 +276,17 @@ describe('WebAudioPitchPlayer', () => {
     player.stop(60, now + 1500);
 
     const gain = context.gains[0]?.gain;
-    expect(gain?.held).toHaveLength(1);
-    expect(gain?.held[0]).toBeCloseTo(1.5, 1);
-    // The last thing scheduled is the fade to silence, not a jump to it.
-    expect(gain?.ramps.at(-1)?.value).toBeCloseTo(0.0001, 6);
+    const anchor = gain?.ramps.at(-2);
+    const fade = gain?.ramps.at(-1);
+    // The fade begins at the release moment and ends a release later. A
+    // fraction of a millisecond passes between reading the clock here and
+    // inside the player, which is what real scheduling looks like.
+    expect(anchor?.time ?? 0).toBeCloseTo(1.5, 3);
+    expect(fade?.value).toBe(0.0001);
+    expect(fade?.time ?? 0).toBeCloseTo(1.7, 3);
+    // And it begins from a real level. Anchoring at what the envelope holds
+    // *now* would read silence, and the note would cut instead of fading.
+    expect(anchor?.value ?? 0).toBeGreaterThan(0.01);
   });
 
   it('retriggers a repeated note instead of stacking voices', () => {

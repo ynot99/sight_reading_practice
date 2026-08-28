@@ -17,27 +17,26 @@ export function audioTimeFor(context: BaseAudioContext, atMs: number | undefined
 /**
  * Starts a note's release at `at`, without a step in the envelope.
  *
- * Reading `gain.value` and pinning it is only right when the release is
- * happening now: for one scheduled ahead, the value read is whatever the
- * envelope holds *today* - silence, for a note that has not sounded yet - and
- * pinning that at the release moment drops the note from full volume to
- * nothing in a single sample. That discontinuity is a click, and with every
- * note of a playback scheduled ahead it is a click on every note.
+ * The value to fade *from* has to be the one the envelope will really hold
+ * there. Reading `gain.value` gives the amplitude the note has right now,
+ * which is correct for a key coming up and wrong for a release scheduled
+ * ahead: a note that has not sounded yet reads as silence, and pinning that at
+ * the release moment drops it from full volume to nothing in a single sample.
+ * With every note of a playback scheduled ahead, that is a click on every one.
  *
- * `cancelAndHoldAtTime` asks for the value the curve will actually have there,
- * which is the whole point of it. Where it is missing, holding the current
- * value is still right for an immediate release, which is the only kind such a
- * browser will be asked for in practice.
+ * So a release in the future is anchored at the peak the note was given, which
+ * is what its envelope holds between the attack and here. The floor matters as
+ * much: an exponential ramp starting from zero has nowhere to travel and
+ * collapses into an instant cut, which is a release of no length at all.
  */
-export function beginRelease(gain: AudioParam, at: number, releaseSec: number): void {
-  const holdable = gain as AudioParam & {
-    cancelAndHoldAtTime?: (time: number) => AudioParam;
-  };
-  if (typeof holdable.cancelAndHoldAtTime === 'function') {
-    holdable.cancelAndHoldAtTime(at);
-  } else {
-    gain.cancelScheduledValues(at);
-    gain.setValueAtTime(Math.max(0.0001, gain.value), at);
-  }
+export function beginRelease(
+  gain: AudioParam,
+  at: number,
+  releaseSec: number,
+  options: { readonly now: number; readonly peak: number },
+): void {
+  const from = at > options.now ? options.peak : gain.value;
+  gain.cancelScheduledValues(at);
+  gain.setValueAtTime(Math.max(0.0001, from), at);
   gain.exponentialRampToValueAtTime(0.0001, at + releaseSec);
 }

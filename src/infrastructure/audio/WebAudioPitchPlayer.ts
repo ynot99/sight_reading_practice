@@ -11,6 +11,8 @@ export interface WebAudioPitchPlayerOptions {
 interface Voice {
   readonly oscillator: OscillatorNode;
   readonly envelope: GainNode;
+  /** Level the envelope holds between attack and release. */
+  readonly peak: number;
 }
 
 function frequencyOf(midi: number): number {
@@ -76,7 +78,7 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
 
     oscillator.connect(envelope).connect(context.destination);
     oscillator.start(now);
-    this.voices.set(midi, { oscillator, envelope });
+    this.voices.set(midi, { oscillator, envelope, peak });
   }
 
   stop(midi: number, atMs?: number): void {
@@ -88,7 +90,10 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
 
     const now = audioTimeFor(this.context, atMs);
     const release = this.options.releaseSec;
-    beginRelease(voice.envelope.gain, now, release);
+    beginRelease(voice.envelope.gain, now, release, {
+      now: this.context.currentTime,
+      peak: voice.peak,
+    });
     voice.oscillator.stop(now + release + 0.02);
   }
 

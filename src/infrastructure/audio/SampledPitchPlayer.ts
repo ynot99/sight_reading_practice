@@ -46,6 +46,8 @@ const END_FADE_SEC = 0.4;
 interface Voice {
   readonly source: AudioBufferSourceNode;
   readonly envelope: GainNode;
+  /** Level the envelope holds between attack and release. */
+  readonly peak: number;
 }
 
 /**
@@ -238,7 +240,7 @@ export class SampledPitchPlayer
         this.voices.delete(midi);
       }
     };
-    this.voices.set(midi, { source, envelope });
+    this.voices.set(midi, { source, envelope, peak });
   }
 
   stop(midi: number, atMs?: number): void {
@@ -288,7 +290,10 @@ export class SampledPitchPlayer
   private release(voice: Voice, now: number): void {
     const release = this.options.releaseSec;
     try {
-      beginRelease(voice.envelope.gain, now, release);
+      beginRelease(voice.envelope.gain, now, release, {
+        now: this.context?.currentTime ?? now,
+        peak: voice.peak,
+      });
       voice.source.stop(now + release + 0.02);
     } catch {
       // The source had already finished on its own.

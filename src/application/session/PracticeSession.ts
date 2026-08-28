@@ -11,7 +11,7 @@ import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timel
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../../shared/EventEmitter.js';
 import type { IPracticeMode } from '../modes/IPracticeMode.js';
 import type { IClock } from '../ports/IClock.js';
-import type { IMetronome, MetronomeTick } from '../ports/IMetronome.js';
+import { resolveDropout, type IMetronome, type MetronomeTick } from '../ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from '../ports/IMidiSource.js';
 import { subdivisionsPerPulseFor } from './metronomePlan.js';
 import { DEFAULT_SESSION_OPTIONS, type PracticeContext, type SessionOptions } from './PracticeContext.js';
@@ -127,10 +127,10 @@ export class PracticeSession {
         this.options.click,
       ),
       click: this.options.click,
-      dropout:
-        this.options.dropoutBars > 0
-          ? { bars: this.options.dropoutBars, fromBar: Math.max(0, this.options.countInBars) }
-          : null,
+      dropout: resolveDropout(
+        this.options.clickDropout,
+        Math.max(0, this.options.countInBars),
+      ),
       muted: this.options.metronomeMuted,
     });
 

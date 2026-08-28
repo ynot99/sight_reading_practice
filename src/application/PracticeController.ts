@@ -17,7 +17,7 @@ import type { IMidiSource } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
-import type { ClickPattern } from './ports/IMetronome.js';
+import type { ClickDropout, ClickPattern } from './ports/IMetronome.js';
 import type {
   IPlayedNoteOverlay,
   IScoreCursor,
@@ -81,8 +81,15 @@ export interface PracticeSettings {
   readonly rangeToBar: number | null;
   /** Start the passage again as soon as it ends. */
   readonly repeatRange: boolean;
-  /** Bars of click, then as many silent ones. 0 clicks throughout. */
-  readonly dropoutBars: number;
+  /**
+   * How much of the run the click sits out.
+   *
+   * Its own axis rather than a fifth {@link ClickPattern}: the pattern says
+   * what a click marks and applies to the count-in as well, so "only the
+   * count-in" cannot be one of its values without leaving the count-in's own
+   * pattern unsaid.
+   */
+  readonly clickDropout: ClickDropout;
   readonly matchToleranceMs: number;
   readonly pitchClassOnly: boolean;
   /**
@@ -218,7 +225,7 @@ export class PracticeController {
       rangeFromBar: null,
       rangeToBar: null,
       repeatRange: false,
-      dropoutBars: 0,
+      clickDropout: 'never',
       matchToleranceMs: 250,
       pitchClassOnly: false,
       rhythmOnly: false,
@@ -555,7 +562,7 @@ export class PracticeController {
         countInBars: this.currentSettings.countInBars,
         expectedStaff: this.currentSettings.handStaff,
         click: this.currentSettings.clickPattern,
-        dropoutBars: this.currentSettings.dropoutBars,
+        clickDropout: this.currentSettings.clickDropout,
         metronomeMuted: this.currentSettings.metronomeMuted,
       },
     });

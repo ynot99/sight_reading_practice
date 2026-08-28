@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { clicksPerPulse, type ClickPattern } from '../../src/application/ports/IMetronome.js';
+import {
+  clicksPerPulse,
+  type ClickDropout,
+  type ClickPattern,
+} from '../../src/application/ports/IMetronome.js';
 import {
   musicalResolutionTicks,
   subdivisionsPerPulseFor,
@@ -105,23 +109,29 @@ describe('subdivisionsPerPulseFor', () => {
 });
 
 describe('dropping the click', () => {
-  function configFor(bars: number, countInBars: number) {
+  function configFor(clickDropout: ClickDropout, countInBars: number) {
     const harness = createHarness({
       exercise: twoBarExercise(),
       mode: new FlowMode(),
-      options: { countInBars, metronomeMuted: false, click: 'pulse', dropoutBars: bars },
+      options: { countInBars, metronomeMuted: false, click: 'pulse', clickDropout },
     });
     harness.session.start();
     return harness.metronome.currentConfig;
   }
 
   it('starts the cycle where the music does, not where the metronome did', () => {
-    expect(configFor(2, 1).dropout).toEqual({ bars: 2, fromBar: 1 });
-    expect(configFor(2, 0).dropout).toEqual({ bars: 2, fromBar: 0 });
+    expect(configFor('cycle-2', 1).dropout).toEqual({ kind: 'cycle', bars: 2, fromBar: 1 });
+    expect(configFor('cycle-2', 0).dropout).toEqual({ kind: 'cycle', bars: 2, fromBar: 0 });
   });
 
   it('asks for nothing when it is switched off', () => {
-    expect(configFor(0, 1).dropout).toBeNull();
+    expect(configFor('never', 1).dropout).toBeNull();
+  });
+
+  it('lets the click give the tempo and then leave', () => {
+    // Silence from where the music starts, so the count-in is still heard.
+    expect(configFor('count-in-only', 1).dropout).toEqual({ kind: 'silent-from', fromBar: 1 });
+    expect(configFor('count-in-only', 0).dropout).toEqual({ kind: 'silent-from', fromBar: 0 });
   });
 });
 

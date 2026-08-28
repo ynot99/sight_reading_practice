@@ -224,7 +224,7 @@ describe('AppView', () => {
     expect(element('rhythm-description').textContent).not.toBe('');
     expect(element<HTMLSelectElement>('click').options).toHaveLength(4);
     expect(element('click-description').textContent).not.toBe('');
-    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(4);
+    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(5);
     expect(element('dropout-description').textContent).not.toBe('');
     expect(element('mode-description').textContent).toContain('waits');
     expect(element<HTMLSelectElement>('scoring').options).toHaveLength(3);
@@ -473,13 +473,34 @@ describe('AppView', () => {
     const before = renderer.loadCount;
 
     const select = element<HTMLSelectElement>('dropout');
-    select.value = '2';
+    select.value = 'cycle-2';
     select.dispatchEvent(new Event('change'));
     await Promise.resolve();
 
-    expect(runtime.controller.settings.dropoutBars).toBe(2);
+    expect(runtime.controller.settings.clickDropout).toBe('cycle-2');
     expect(element('dropout-description').textContent).toContain('2 bars');
     expect(renderer.loadCount).toBe(before);
+  });
+
+  it('offers a click that stops once the count-in is over', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    const select = element<HTMLSelectElement>('dropout');
+    select.value = 'count-in-only';
+    select.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+
+    expect(runtime.controller.settings.clickDropout).toBe('count-in-only');
+    // This rig starts with no count-in, so the choice asks for pure silence.
+    expect(element('dropout-description').textContent).toContain('nothing will sound');
+
+    const countIn = element<HTMLInputElement>('count-in');
+    countIn.value = '1';
+    countIn.dispatchEvent(new Event('input'));
+
+    // The other control changes what the line means, so it has to follow.
+    expect(element('dropout-description').textContent).toContain('left with it');
   });
 
   it('regenerates when the rhythm changes', async () => {

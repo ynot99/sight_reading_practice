@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { MetronomeConfig, MetronomeTick } from '../../src/application/ports/IMetronome.js';
+import type {
+  MetronomeConfig,
+  MetronomeDropout,
+  MetronomeTick,
+} from '../../src/application/ports/IMetronome.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import {
   buildMetronomeTick,
@@ -59,6 +63,12 @@ describe('bars the click sits out', () => {
   // One tick per beat keeps the arithmetic readable: index 4 starts bar 2.
   const PULSED: MetronomeConfig = { ...COMMON, subdivisionsPerPulse: 1, click: 'pulse' };
 
+  const CYCLE = (bars: number, fromBar: number): MetronomeDropout => ({
+    kind: 'cycle',
+    bars,
+    fromBar,
+  });
+
   function barsHeard(config: MetronomeConfig, bars: number): number[] {
     return Array.from({ length: bars * 4 }, (_, index) => index)
       .filter((index) => isAudibleClick(buildMetronomeTick(index, config, 0), config))
@@ -67,12 +77,12 @@ describe('bars the click sits out', () => {
   }
 
   it('alternates equal runs of click and silence', () => {
-    const config = { ...PULSED, dropout: { bars: 2, fromBar: 0 } };
+    const config = { ...PULSED, dropout: CYCLE(2, 0) };
     expect(barsHeard(config, 8)).toEqual([1, 2, 5, 6]);
   });
 
   it('leaves the reader completely alone, downbeat included', () => {
-    const config: MetronomeConfig = { ...PULSED, dropout: { bars: 1, fromBar: 0 } };
+    const config: MetronomeConfig = { ...PULSED, dropout: CYCLE(1, 0) };
     const secondBar = [4, 5, 6, 7].map((index) => buildMetronomeTick(index, config, 0));
     expect(secondBar[0]?.isDownbeat).toBe(true);
     for (const tick of secondBar) {
@@ -82,20 +92,48 @@ describe('bars the click sits out', () => {
 
   it('never drops the count-in, which is the reference being given', () => {
     // One bar of count-in, then two on and two off from the music onwards.
-    const config = { ...PULSED, dropout: { bars: 2, fromBar: 1 } };
+    const config = { ...PULSED, dropout: CYCLE(2, 1) };
     expect(barsHeard(config, 8)).toEqual([1, 2, 3, 6, 7]);
+  });
+
+  describe('a click that gives the tempo and leaves', () => {
+    it('sounds the count-in and nothing after it', () => {
+      const config: MetronomeConfig = {
+        ...PULSED,
+        dropout: { kind: 'silent-from', fromBar: 1 },
+      };
+      // The reader is handed one bar of pulse and carries the rest alone.
+      expect(barsHeard(config, 12)).toEqual([1]);
+    });
+
+    it('never comes back, however long the run is', () => {
+      const config: MetronomeConfig = {
+        ...PULSED,
+        dropout: { kind: 'silent-from', fromBar: 2 },
+      };
+      // The cycle rule would have let it return; this one must not.
+      expect(barsHeard(config, 40)).toEqual([1, 2]);
+    });
+
+    it('is silent from the very first bar when there is no count-in', () => {
+      const config: MetronomeConfig = {
+        ...PULSED,
+        dropout: { kind: 'silent-from', fromBar: 0 },
+      };
+      expect(barsHeard(config, 4)).toEqual([]);
+    });
   });
 
   it('is off when no cycle is set', () => {
     expect(barsHeard({ ...PULSED, dropout: null }, 4)).toEqual([1, 2, 3, 4]);
-    expect(barsHeard({ ...PULSED, dropout: { bars: 0, fromBar: 0 } }, 4)).toEqual([1, 2, 3, 4]);
+    expect(barsHeard({ ...PULSED, dropout: CYCLE(0, 0) }, 4)).toEqual([1, 2, 3, 4]);
   });
 
   it('drops whatever the click pattern would have sounded', () => {
     const config: MetronomeConfig = {
       ...COMMON,
       click: 'subdivision',
-      dropout: { bars: 1, fromBar: 0 },
+      dropout: CYCLE(1, 0),
     };
     // Bar one keeps all sixteen sixteenths; bar two keeps none.
     const heard = Array.from({ length: 32 }, (_, index) => index).filter((index) =>

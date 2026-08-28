@@ -45,13 +45,20 @@ export function buildMetronomeTick(
 /**
  * Whether a tick falls in one of the bars the click sits out.
  *
- * The cycle is a run of sounding bars followed by an equally long run of
- * silent ones, counted from where the music starts rather than from where the
- * metronome did, so the count-in always sounds.
+ * A cycle is a run of sounding bars followed by an equally long run of silent
+ * ones; the other kind never returns at all. Both are counted from where the
+ * music starts rather than from where the metronome did, so the count-in
+ * always sounds.
  */
 function isInSilentBar(tick: MetronomeTick, config: MetronomeConfig): boolean {
   const dropout = config.dropout;
-  if (dropout === null || dropout.bars <= 0 || tick.measure < dropout.fromBar) {
+  if (dropout === null || tick.measure < dropout.fromBar) {
+    return false;
+  }
+  if (dropout.kind === 'silent-from') {
+    return true;
+  }
+  if (dropout.bars <= 0) {
     return false;
   }
   const cycle = Math.floor((tick.measure - dropout.fromBar) / dropout.bars);

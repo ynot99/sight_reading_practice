@@ -3,7 +3,12 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { PracticeSettings } from './PracticeController.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { SAMPLE_LOADING_MODES, type SampleLoading } from './ports/IPitchPlayer.js';
-import { CLICK_PATTERNS, type ClickPattern } from './ports/IMetronome.js';
+import {
+  CLICK_DROPOUTS,
+  CLICK_PATTERNS,
+  type ClickDropout,
+  type ClickPattern,
+} from './ports/IMetronome.js';
 
 /** Loudness of each sound source, `0..1`. Not a practice rule, so kept apart. */
 export interface AudioSettings {
@@ -72,6 +77,29 @@ function readClickPattern(value: unknown): ClickPattern | undefined {
   return CLICK_PATTERNS.includes(value as ClickPattern) ? (value as ClickPattern) : undefined;
 }
 
+/**
+ * The dropout choice, accepting the bar count this setting used to be.
+ *
+ * A stored `dropoutBars: 2` predates the count-in-only option and means the
+ * same thing it always did; dropping it would quietly reset the click of
+ * anyone who had set one.
+ */
+function readClickDropout(value: unknown, legacyBars: unknown): ClickDropout | undefined {
+  if (CLICK_DROPOUTS.includes(value as ClickDropout)) {
+    return value as ClickDropout;
+  }
+  const bars = readInteger(legacyBars, 0, 8);
+  if (bars === undefined) {
+    return undefined;
+  }
+  const migrated = `cycle-${bars}`;
+  return bars === 0
+    ? 'never'
+    : CLICK_DROPOUTS.includes(migrated as ClickDropout)
+      ? (migrated as ClickDropout)
+      : undefined;
+}
+
 function readKey(value: unknown): KeySignature | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -135,7 +163,7 @@ export function decodePracticeSettings(
     rangeFromBar: readBar(value['rangeFromBar']),
     rangeToBar: readBar(value['rangeToBar']),
     repeatRange: readBoolean(value['repeatRange']),
-    dropoutBars: readInteger(value['dropoutBars'], 0, 8),
+    clickDropout: readClickDropout(value['clickDropout'], value['dropoutBars']),
     metronomeMuted: readBoolean(value['metronomeMuted']),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
     pitchClassOnly: readBoolean(value['pitchClassOnly']),
@@ -165,7 +193,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     rangeFromBar: settings.rangeFromBar,
     rangeToBar: settings.rangeToBar,
     repeatRange: settings.repeatRange,
-    dropoutBars: settings.dropoutBars,
+    clickDropout: settings.clickDropout,
     metronomeMuted: settings.metronomeMuted,
     // `Infinity` has no JSON representation; the slider cannot reach it anyway.
     matchToleranceMs: Number.isFinite(settings.matchToleranceMs)

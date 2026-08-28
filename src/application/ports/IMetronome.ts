@@ -49,14 +49,15 @@ export function clicksPerPulse(pattern: ClickPattern, timeSignature: TimeSignatu
 }
 
 /**
- * Bars where the click falls silent and the reader carries the pulse alone.
+ * Bars of click and bars of silence, alternating.
  *
  * The strongest timekeeping exercise there is, and the one closest to what
  * sight-reading actually asks for: keeping going when nothing is holding you
  * up. Silence is total, downbeat included - a click on the first beat would
  * answer the only question the exercise asks, which is whether you drifted.
  */
-export interface MetronomeDropout {
+export interface MetronomeCycleDropout {
+  readonly kind: 'cycle';
   /** Bars of click, then the same number of bars of silence. */
   readonly bars: number;
   /**
@@ -66,6 +67,71 @@ export interface MetronomeDropout {
    * so the cycle begins where the music does.
    */
   readonly fromBar: number;
+}
+
+/**
+ * The click gives a tempo and then leaves for good.
+ *
+ * The limit of the cycle above rather than a different idea: silence that
+ * never ends. Stated as a bar the metronome falls silent at, not as "after
+ * the count-in" - the metronome counts bars and has no notion of why that
+ * one matters.
+ */
+export interface MetronomeSilenceFrom {
+  readonly kind: 'silent-from';
+  readonly fromBar: number;
+}
+
+export type MetronomeDropout = MetronomeCycleDropout | MetronomeSilenceFrom;
+
+/**
+ * The reader-facing menu of the above.
+ *
+ * Its own axis, separate from {@link ClickPattern}: the pattern says *what a
+ * click marks* and governs the count-in too, while this says *when clicks
+ * sound at all*. Folding "only the count-in" into the pattern list would
+ * leave the count-in's own pattern undefined, which is the tell that they are
+ * two questions.
+ */
+export const CLICK_DROPOUTS = [
+  'never',
+  'cycle-1',
+  'cycle-2',
+  'cycle-4',
+  'count-in-only',
+] as const;
+
+export type ClickDropout = (typeof CLICK_DROPOUTS)[number];
+
+/** Bars in one sounding half of a cycle, or `null` when there is no cycle. */
+export function dropoutCycleBars(dropout: ClickDropout): number | null {
+  switch (dropout) {
+    case 'cycle-1':
+      return 1;
+    case 'cycle-2':
+      return 2;
+    case 'cycle-4':
+      return 4;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Resolves the reader's choice against the bar the music starts at.
+ *
+ * `null` means the click sounds throughout, which is what the metronome
+ * expects for "no dropout at all".
+ */
+export function resolveDropout(dropout: ClickDropout, fromBar: number): MetronomeDropout | null {
+  if (dropout === 'never') {
+    return null;
+  }
+  if (dropout === 'count-in-only') {
+    return { kind: 'silent-from', fromBar };
+  }
+  const bars = dropoutCycleBars(dropout);
+  return bars === null ? null : { kind: 'cycle', bars, fromBar };
 }
 
 export interface MetronomeConfig {

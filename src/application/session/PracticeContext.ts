@@ -2,7 +2,7 @@ import type { ChordMatcher, MatchPolicy, NoteVerdict } from '../../domain/matchi
 import type { StepStatus } from '../../domain/scoring/PerformanceReport.js';
 import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timeline.js';
 import type { IClock } from '../ports/IClock.js';
-import type { ClickPattern, MetronomeTick } from '../ports/IMetronome.js';
+import type { ClickDropout, ClickPattern, MetronomeTick } from '../ports/IMetronome.js';
 
 export interface SessionOptions {
   /** How simultaneous presses are collected into chords. */
@@ -26,14 +26,13 @@ export interface SessionOptions {
   /** How much of the pulse the reader hears. */
   readonly click: ClickPattern;
   /**
-   * Bars of click followed by as many bars of silence; 0 keeps it throughout.
+   * How much of the run the click sits out.
    *
-   * Not a comfort setting: carrying the pulse alone for a bar or two and
-   * finding out on the way back whether you drifted is the timekeeping
-   * exercise, and it is the one thing a metronome cannot teach while it is
-   * playing.
+   * Not a comfort setting: carrying the pulse alone and finding out whether
+   * you drifted is the timekeeping exercise, and it is the one thing a
+   * metronome cannot teach while it is playing.
    */
-  readonly dropoutBars: number;
+  readonly clickDropout: ClickDropout;
   /** Run the pulse without sounding it. */
   readonly metronomeMuted: boolean;
   /**
@@ -51,7 +50,7 @@ export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   countInBars: 1,
   expectedStaff: null,
   click: 'pulse',
-  dropoutBars: 0,
+  clickDropout: 'never',
   metronomeMuted: false,
   earlyWindowMs: 120,
 };

@@ -2,7 +2,13 @@ import type { AppRuntime } from '../composition/createApp.js';
 import type { PracticeSession } from '../application/session/PracticeSession.js';
 import type { SessionStatus } from '../application/session/SessionState.js';
 import type { MidiConnectionStatus, MidiEvent } from '../application/ports/IMidiSource.js';
-import { CLICK_PATTERNS, type ClickPattern } from '../application/ports/IMetronome.js';
+import {
+  CLICK_DROPOUTS,
+  CLICK_PATTERNS,
+  dropoutCycleBars,
+  type ClickDropout,
+  type ClickPattern,
+} from '../application/ports/IMetronome.js';
 import type { SessionScore } from '../domain/scoring/IScoringStrategy.js';
 import {
   SAMPLE_LOADING_MODES,
@@ -85,18 +91,30 @@ const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
  * Symmetric on purpose: an equal stretch of silence is the standard exercise,
  * and it makes the setting one number the reader can reason about.
  */
-const DROPOUT_CHOICES: readonly { readonly bars: number; readonly label: string }[] = [
-  { bars: 0, label: 'Never' },
-  { bars: 1, label: '1 bar on, 1 off' },
-  { bars: 2, label: '2 bars on, 2 off' },
-  { bars: 4, label: '4 bars on, 4 off' },
-];
+const DROPOUT_LABELS: Readonly<Record<ClickDropout, string>> = {
+  never: 'Never',
+  'cycle-1': '1 bar on, 1 off',
+  'cycle-2': '2 bars on, 2 off',
+  'cycle-4': '4 bars on, 4 off',
+  'count-in-only': 'Only the count-in',
+};
 
-function dropoutDescription(bars: number): string {
-  return bars <= 0
-    ? 'The click plays all the way through.'
-    : `The click leaves you alone for ${bars} bar${bars === 1 ? '' : 's'} at a time. ` +
-      'You find out on its return whether you drifted.';
+function dropoutDescription(dropout: ClickDropout, countInBars: number): string {
+  if (dropout === 'never') {
+    return 'The click plays all the way through.';
+  }
+  if (dropout === 'count-in-only') {
+    // Chosen together with no count-in, this asks for silence and nothing
+    // else, which is worth saying rather than leaving to be discovered.
+    return countInBars > 0
+      ? 'You are given the tempo and then left with it for the whole run.'
+      : 'There is no count-in to give you the tempo, so nothing will sound at all.';
+  }
+  const bars = dropoutCycleBars(dropout) ?? 0;
+  return (
+    `The click leaves you alone for ${bars} bar${bars === 1 ? '' : 's'} at a time. ` +
+    'You find out on its return whether you drifted.'
+  );
 }
 
 const CLICK_DESCRIPTIONS: Readonly<Record<ClickPattern, string>> = {
@@ -127,6 +145,10 @@ function isFormControl(element: Element | null): boolean {
     tag === 'BUTTON' ||
     element.hasAttribute('contenteditable')
   );
+}
+
+function readClickDropout(value: string): ClickDropout {
+  return CLICK_DROPOUTS.includes(value as ClickDropout) ? (value as ClickDropout) : 'never';
 }
 
 function readSampleLoading(value: string): SampleLoading {
@@ -482,8 +504,8 @@ export class AppView {
     );
     fillSelect(
       this.el.dropout,
-      DROPOUT_CHOICES.map((choice) => ({ value: String(choice.bars), label: choice.label })),
-      String(this.runtime.controller.settings.dropoutBars),
+      CLICK_DROPOUTS.map((choice) => ({ value: choice, label: DROPOUT_LABELS[choice] })),
+      this.runtime.controller.settings.clickDropout,
     );
     fillSelect(
       this.el.mode,
@@ -545,7 +567,7 @@ export class AppView {
     });
 
     this.listen(this.el.dropout, 'change', () => {
-      controller.updateSettings({ dropoutBars: Number.parseInt(this.el.dropout.value, 10) });
+      controller.updateSettings({ clickDropout: readClickDropout(this.el.dropout.value) });
       this.syncControlsFromSettings();
     });
 
@@ -618,6 +640,8 @@ export class AppView {
     this.listen(this.el.countIn, 'input', () => {
       this.el.countInValue.value = this.el.countIn.value;
       controller.updateSettings({ countInBars: Number.parseInt(this.el.countIn.value, 10) });
+      // "Only the count-in" means something different once there is not one.
+      this.describeDropout();
     });
 
     this.listen(this.el.tolerance, 'input', () => {
@@ -1215,8 +1239,8 @@ export class AppView {
     this.el.listenHand.value = settings.handStaff === null ? '' : String(settings.handStaff);
     this.el.click.value = settings.clickPattern;
     this.el.clickDescription.textContent = CLICK_DESCRIPTIONS[settings.clickPattern];
-    this.el.dropout.value = String(settings.dropoutBars);
-    this.el.dropoutDescription.textContent = dropoutDescription(settings.dropoutBars);
+    this.el.dropout.value = settings.clickDropout;
+    this.describeDropout();
     this.el.rangeFrom.value = settings.rangeFromBar === null ? '' : String(settings.rangeFromBar);
     this.el.rangeTo.value = settings.rangeToBar === null ? '' : String(settings.rangeToBar);
     this.el.repeatRange.checked = settings.repeatRange;
@@ -1254,6 +1278,20 @@ export class AppView {
     this.runtime.samples?.setLoading(mode);
 
     this.describeMode();
+  }
+
+  /**
+   * Restates what the dropout choice means for the count-in now set.
+   *
+   * Its own method because two controls change the answer: the dropout menu
+   * and the count-in slider, which would otherwise leave the line lying.
+   */
+  private describeDropout(): void {
+    const settings = this.runtime.controller.settings;
+    this.el.dropoutDescription.textContent = dropoutDescription(
+      settings.clickDropout,
+      settings.countInBars,
+    );
   }
 
   private describeMode(): void {

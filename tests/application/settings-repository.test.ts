@@ -35,7 +35,7 @@ const SETTINGS: PracticeSettings = {
   rangeFromBar: 3,
   rangeToBar: 6,
   repeatRange: true,
-  dropoutBars: 2,
+  clickDropout: 'cycle-2',
   metronomeMuted: true,
   matchToleranceMs: 180,
   pitchClassOnly: true,
@@ -64,6 +64,19 @@ describe('practice settings codec', () => {
     expect(restored.pitchClassOnly).toBe(true);
     expect(restored.showCursor).toBe(false);
     expect(restored.blindMode).toBe(true);
+    expect(restored.clickDropout).toBe('cycle-2');
+  });
+
+  it('reads the bar count the dropout setting used to be', () => {
+    // Stored before "only the count-in" existed; it still means what it did.
+    const legacy = { ...encodePracticeSettings(SETTINGS), clickDropout: undefined };
+
+    expect(decodePracticeSettings({ ...legacy, dropoutBars: 4 }, KNOWN).clickDropout).toBe(
+      'cycle-4',
+    );
+    expect(decodePracticeSettings({ ...legacy, dropoutBars: 0 }, KNOWN).clickDropout).toBe('never');
+    // A cycle length the menu never offered is dropped rather than invented.
+    expect(decodePracticeSettings({ ...legacy, dropoutBars: 3 }, KNOWN).clickDropout).toBeUndefined();
   });
 
   it('drops a preset or mode that no longer exists', () => {

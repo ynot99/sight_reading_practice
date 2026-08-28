@@ -74,6 +74,12 @@ carry it alone, and you find out on its return whether you drifted. The
 count-in is never dropped, and a silent bar is silent to its downbeat — a click
 on the first beat would answer the only question the exercise asks.
 
+**Only the count-in** is the same setting taken to its limit: you are given the
+tempo and then left with it for the whole run, with no return to check against.
+It is the dropout axis rather than a fifth click pattern, because a pattern
+says *what a click marks* and governs the count-in too — "only the count-in"
+as a pattern would leave the count-in's own pattern unsaid.
+
 ## Quick start
 
 ```bash

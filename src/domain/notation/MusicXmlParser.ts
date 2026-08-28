@@ -373,92 +373,6 @@ function readMeasureNotes(
   return notes;
 }
 
-/** One pitch and the span it occupies, once voices stop mattering. */
-interface Sounding {
-  readonly pitch: Pitch;
-  readonly midi: number;
-  readonly start: number;
-  readonly end: number;
-  readonly tieStart: boolean;
-  readonly voice: number;
-  readonly beams: readonly Beam[];
-}
-
-/**
- * Flattens the voices of one staff into a single line of chords.
- *
- * A staff holds one sequence of entries, and real piano writing holds two or
- * three voices in it. Dropping the extra ones loses whole passages - an inner
- * line, or the left hand entirely where the writer happened to number it
- * differently. Merging keeps every note, at the moment it is struck, which is
- * exactly what a reader has to play.
- *
- * Held notes survive as ties. Where one voice moves under another's long note,
- * that note is cut at the moment the other moves and tied across the join, so
- * the page still shows its full length and the timeline still demands it only
- * once. That is what ties are for, and why they had to exist first.
- *
- * Returns `null` when the voices cross-rhythm into spans this project cannot
- * notate - triplets against duples, most often - so the caller can fall back
- * rather than emit a bar that does not add up.
- */
-function mergeVoices(notes: readonly Sounding[], ticksPerMeasure: number): MusicalEntry[] | null {
-  const boundaries = new Set<number>([0, ticksPerMeasure]);
-  for (const note of notes) {
-    boundaries.add(note.start);
-    boundaries.add(Math.min(note.end, ticksPerMeasure));
-  }
-  const points = [...boundaries]
-    .filter((point) => point >= 0 && point <= ticksPerMeasure)
-    .sort((left, right) => left - right);
-
-  const primary = notes.length === 0 ? 1 : Math.min(...notes.map((note) => note.voice));
-  const entries: MusicalEntry[] = [];
-
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const from = points[index] ?? 0;
-    const to = points[index + 1] ?? ticksPerMeasure;
-    const span = to - from;
-    if (span <= 0) {
-      continue;
-    }
-    if (!Duration.isNotatable(span)) {
-      return null;
-    }
-    const duration = Duration.fromTicks(span);
-    const active = notes.filter((note) => note.start <= from && note.end > from);
-    if (active.length === 0) {
-      entries.push(restEntry(duration));
-      continue;
-    }
-
-    const pitches: Pitch[] = [];
-    const tied: number[] = [];
-    // Low to high, which is how a chord is written and how the voices
-    // themselves are numbered often enough to be a coincidence otherwise.
-    for (const note of [...active].sort((left, right) => left.midi - right.midi)) {
-      if (pitches.some((pitch) => pitch.midi === note.midi)) {
-        continue;
-      }
-      pitches.push(note.pitch);
-      // Still sounding after this segment, or tied on by the source itself.
-      if (note.end > to || (note.tieStart && note.end <= to)) {
-        tied.push(note.midi);
-      }
-    }
-
-    // Beaming only survives where a segment still *is* one of the writer's
-    // notes; once a note has been cut in two, its beams describe something
-    // that is no longer on the page.
-    const whole = active.filter(
-      (note) => note.voice === primary && note.start === from && note.end === to,
-    );
-    entries.push(noteEntry(pitches, duration, tied, whole.length === 1 ? (whole[0]?.beams ?? []) : []));
-  }
-
-  return entries;
-}
-
 /** Turns the notes of one staff and measure into entries that fill the bar. */
 function buildMeasure(
   notes: readonly RawNote[],
@@ -503,10 +417,13 @@ function buildMeasure(
 
   if (cursor < ticksPerMeasure) {
     const padding = splitIntoRests(ticksPerMeasure - cursor).map((rest) => restEntry(rest));
-    warnings.push({
-      kind: 'padded-measure',
-      detail: `Bar ${measureIndex + 1} was short and was padded with rests.`,
-    });
+    if (cursor > 0) {
+      // A voice that said nothing at all in this bar is resting, not short.
+      warnings.push({
+        kind: 'padded-measure',
+        detail: `Bar ${measureIndex + 1} was short and was padded with rests.`,
+      });
+    }
     // A short *first* bar is a pickup, and its notes belong at the end of it -
     // padding the tail instead would move every downbeat that follows.
     entries.splice(measureIndex === 0 ? 0 : entries.length, 0, ...padding);
@@ -524,84 +441,56 @@ function buildStaves(
     readMeasureNotes(measure, index, header, warnings),
   );
 
-  const staffNumbers = new Set<number>();
+  // One part per voice of each staff, rather than one per staff. Two voices on
+  // a staff is how piano writing puts an inner line under a melody, and saying
+  // so directly beats flattening them: a held note stays a held note instead of
+  // becoming a chain of tied fragments, and two voices in different rhythms -
+  // triplets against duples - simply keep their own.
+  const pairs = new Map<string, { readonly staff: number; readonly voice: number }>();
   for (const notes of perMeasure) {
     for (const note of notes) {
-      staffNumbers.add(note.staff);
+      pairs.set(`${note.staff}:${note.voice}`, { staff: note.staff, voice: note.voice });
     }
   }
-  if (staffNumbers.size === 0) {
-    staffNumbers.add(1);
+  if (pairs.size === 0) {
+    pairs.set('1:1', { staff: 1, voice: 1 });
   }
-  const ordered = [...staffNumbers].sort((left, right) => left - right);
 
-  const staves = ordered.map((staffNumber, index) => {
-    const voices = new Set<number>();
-    for (const notes of perMeasure) {
-      for (const note of notes) {
-        if (note.staff === staffNumber) {
-          voices.add(note.voice);
-        }
-      }
-    }
-    // The lowest voice number *this staff actually uses* - not `min(..., 1)`,
-    // which would always be 1 and would silently empty a staff whose voice is
-    // numbered 2, as the grand staff we write ourselves is.
-    const primary = voices.size > 0 ? Math.min(...voices) : 1;
-    let fellBack = 0;
+  const ordered = [...pairs.values()].sort(
+    (left, right) => left.staff - right.staff || left.voice - right.voice,
+  );
+  const staffNumbers = [...new Set(ordered.map((pair) => pair.staff))].sort(
+    (left, right) => left - right,
+  );
+  const extra = ordered.length - staffNumbers.length;
+  if (extra > 0) {
+    warnings.push({
+      kind: 'merged-voices',
+      detail: `${extra} extra voice${extra === 1 ? '' : 's'} were kept as their own lines.`,
+    });
+  }
 
-    const built = perMeasure.map((notes, measureIndex) => {
-      const mine = notes.filter((note) => note.staff === staffNumber);
-      // One voice needs no merging, and skipping it keeps the writer's own
-      // note values and beaming exactly as they were.
-      if (voices.size > 1) {
-        const merged = mergeVoices(
-          mine
-            .filter((note) => note.pitch !== null)
-            .map((note) => ({
-              pitch: note.pitch as Pitch,
-              midi: (note.pitch as Pitch).midi,
-              start: note.onsetTicks,
-              end: note.onsetTicks + note.ticks,
-              tieStart: note.tieStart,
-              voice: note.voice,
-              beams: note.beams,
-            })),
-          header.timeSignature.ticksPerMeasure,
-        );
-        if (merged !== null) {
-          return measureOf(merged);
-        }
-        fellBack += 1;
-      }
-      return buildMeasure(
-        mine.filter((note) => note.voice === primary),
+  return ordered.map((pair, index) => {
+    const built = perMeasure.map((notes, measureIndex) =>
+      buildMeasure(
+        notes.filter((note) => note.staff === pair.staff && note.voice === pair.voice),
         measureIndex,
         header.timeSignature.ticksPerMeasure,
         warnings,
-      );
-    });
-
-    if (voices.size > 1) {
-      warnings.push({
-        kind: 'merged-voices',
-        detail:
-          `Staff ${staffNumber} has ${voices.size} voices; they were merged into one line` +
-          (fellBack === 0
-            ? '.'
-            : `, except ${fellBack} bar${fellBack === 1 ? '' : 's'} whose voices cross-rhythm, where only the first voice was read.`),
-      });
-    }
+      ),
+    );
 
     return {
-      staffNumber: index + 1,
+      // Voice numbers only have to tell the parts apart, and the file's own
+      // may repeat across staves.
+      staffNumber: staffNumbers.indexOf(pair.staff) + 1,
       voice: index + 1,
-      clef: header.clefByStaff.get(staffNumber) ?? (index === 0 ? 'treble' : 'bass'),
+      clef:
+        header.clefByStaff.get(pair.staff) ??
+        (staffNumbers.indexOf(pair.staff) === 0 ? 'treble' : 'bass'),
       measures: dropTiesThatLeadNowhere(built, warnings),
     } satisfies StaffPart;
   });
-
-  return staves;
 }
 
 /**

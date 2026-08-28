@@ -64,18 +64,31 @@ describe('exercise validation', () => {
     expect(() => validateExercise({ ...twoBarExercise(), tempoBpm: 0 })).toThrow(/Tempo/);
   });
 
-  it('rejects duplicate staff numbers and voices', () => {
+  it('rejects two parts claiming the same voice', () => {
     const exercise = twoBarExercise();
     const [treble, bass] = exercise.staves;
     if (treble === undefined || bass === undefined) {
       throw new Error('fixture has two staves');
     }
     expect(() =>
-      validateExercise({ ...exercise, staves: [treble, { ...bass, staffNumber: 1 }] }),
-    ).toThrow(/Duplicate staff number/);
-    expect(() =>
       validateExercise({ ...exercise, staves: [treble, { ...bass, voice: 1 }] }),
     ).toThrow(/Duplicate voice/);
+  });
+
+  it('allows two voices to share a staff', () => {
+    // Which is how an inner line sits under a melody on one staff, and the
+    // reason a held note need not be chopped into tied fragments.
+    const exercise = twoBarExercise();
+    const [treble, bass] = exercise.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('fixture has two staves');
+    }
+    expect(() =>
+      validateExercise({
+        ...exercise,
+        staves: [treble, { ...bass, staffNumber: 1, clef: 'treble' }],
+      }),
+    ).not.toThrow();
   });
 
   it('measures the notated length of a bar', () => {

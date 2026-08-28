@@ -137,6 +137,36 @@ describe('OSMD accepts the MusicXML we produce', () => {
     expect(positions).toBe(timeline.length);
   });
 
+  it('agrees on the cursor when two voices share a staff', async () => {
+    // An imported score puts an inner line on the same staff as the melody.
+    // The engraver stops wherever either voice moves, and so must we.
+    const base = twoBarExercise();
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    const exercise = {
+      ...base,
+      staves: [treble, { ...bass, staffNumber: 1, voice: 3, clef: 'treble' as const }, bass],
+    };
+    const timeline = buildTimeline(exercise);
+    const osmd = createDisplay();
+
+    await osmd.load(serializer.serialize(exercise));
+
+    expect(osmd.Sheet.Instruments[0]?.Staves).toHaveLength(2);
+    const iterator = osmd.Sheet.MusicPartManager.getIterator();
+    let positions = 0;
+    let guard = timeline.length * 4 + 10;
+    while (!iterator.EndReached && guard > 0) {
+      guard -= 1;
+      positions += 1;
+      iterator.moveToNext();
+    }
+
+    expect(positions).toBe(timeline.length);
+  });
+
   it('reads a tie as one held note and still stops the cursor on it', async () => {
     const exercise = tiedExercise();
     const timeline = buildTimeline(exercise);

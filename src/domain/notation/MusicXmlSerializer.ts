@@ -136,8 +136,18 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         writer.leaf('beats', exercise.timeSignature.beats);
         writer.leaf('beat-type', exercise.timeSignature.beatType);
       });
-      writer.leaf('staves', exercise.staves.length);
-      for (const staff of exercise.staves) {
+      // Parts sharing a staff number are voices on one staff, so the count and
+      // the clefs follow the distinct staves rather than the parts.
+      const seen = new Set<number>();
+      const staves = exercise.staves.filter((staff) => {
+        if (seen.has(staff.staffNumber)) {
+          return false;
+        }
+        seen.add(staff.staffNumber);
+        return true;
+      });
+      writer.leaf('staves', staves.length);
+      for (const staff of staves) {
         const definition = CLEF_DEFINITIONS[staff.clef];
         writer.element('clef', { number: staff.staffNumber }, () => {
           writer.leaf('sign', definition.sign);

@@ -65,8 +65,13 @@ export interface Measure {
 }
 
 /**
- * One staff of the grand staff: its own clef, its own MusicXML voice and one
- * entry list per measure.
+ * One voice of one staff: its own clef, its own MusicXML voice and one entry
+ * list per measure.
+ *
+ * Several parts may share a `staffNumber`. That is how real piano writing puts
+ * an inner line under a melody on the same staff, and expressing it directly
+ * beats flattening the two into one line - a held note under moving notes
+ * stays a held note instead of becoming a chain of tied fragments.
  */
 export interface StaffPart {
   readonly staffNumber: number;
@@ -172,9 +177,8 @@ export function validateExercise(exercise: Exercise): void {
 
   exercise.staves.forEach((staff, staffIndex) => {
     const path = `staves[${staffIndex}]`;
-    if (staffNumbers.has(staff.staffNumber)) {
-      throw new ExerciseValidationError(`Duplicate staff number ${staff.staffNumber}.`, path);
-    }
+    // Staff numbers may repeat - that is a second voice on the same staff -
+    // but a voice number may not, since it is what tells them apart.
     staffNumbers.add(staff.staffNumber);
 
     if (voices.has(staff.voice)) {

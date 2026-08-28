@@ -258,6 +258,13 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             }
             this.writeTimeModification(writer, entry.duration);
             writer.leaf('staff', staff.staffNumber);
+            // Beaming belongs to the first note of a chord; the others share
+            // its stem and would otherwise repeat the same beam.
+            if (pitchIndex === 0) {
+              for (const beam of entry.beams) {
+                writer.leaf('beam', beam.type, { number: beam.level });
+              }
+            }
             // One `<notations>` per note: the tie's slur and the tuplet's
             // bracket are separate marks that share the element.
             if (stopping || starting || tuplet !== null) {

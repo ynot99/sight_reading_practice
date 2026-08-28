@@ -2,7 +2,8 @@ import { DomainError } from '../../shared/errors.js';
 import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '../model/Duration.js';
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
-import { measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
+import { BEAM_TYPES, measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
+import type { Beam, BeamType } from '../model/Exercise.js';
 import { KeySignature, type KeyMode } from '../model/KeySignature.js';
 import { Pitch, type Alteration } from '../model/Pitch.js';
 import { splitIntoRests } from '../generation/RhythmFiller.js';
@@ -52,6 +53,7 @@ interface RawNote {
   readonly pitch: Pitch | null;
   readonly tieStart: boolean;
   readonly isChord: boolean;
+  readonly beams: readonly Beam[];
 }
 
 const XML_TYPE_NAMES: Readonly<Record<string, NoteTypeName>> = {
@@ -278,6 +280,20 @@ function readPitch(note: XmlNode): Pitch | null {
   return new Pitch(step as Pitch['step'], octave, alter as Alteration);
 }
 
+/** Beaming exactly as the file wrote it, so the engraver need not guess. */
+function readBeams(note: XmlNode): readonly Beam[] {
+  const beams: Beam[] = [];
+  for (const element of childrenNamed(note, 'beam')) {
+    const type = element.text.trim() as BeamType;
+    if (!BEAM_TYPES.includes(type)) {
+      continue;
+    }
+    const level = Number(attribute(element, 'number') ?? '1');
+    beams.push({ level: Number.isFinite(level) && level > 0 ? level : 1, type });
+  }
+  return beams;
+}
+
 function hasTie(note: XmlNode, type: 'start' | 'stop'): boolean {
   const ties = childrenNamed(note, 'tie');
   if (ties.some((tie) => attribute(tie, 'type') === type)) {
@@ -344,6 +360,7 @@ function readMeasureNotes(
       pitch: readPitch(node),
       tieStart: hasTie(node, 'start'),
       isChord,
+      beams: isChord ? [] : readBeams(node),
     });
 
     if (!isChord) {
@@ -392,7 +409,7 @@ function buildMeasure(
       const tied = group
         .filter((note) => note.tieStart && note.pitch !== null)
         .map((note) => note.pitch?.midi ?? 0);
-      entries.push(noteEntry(pitches, first.duration, tied));
+      entries.push(noteEntry(pitches, first.duration, tied, first.beams));
     }
     cursor += first.duration.ticks;
   }
@@ -502,7 +519,7 @@ function dropTiesThatLeadNowhere(
         dropped += entry.tiedForward.length - kept.length;
         return kept.length === entry.tiedForward.length
           ? entry
-          : noteEntry(entry.pitches, entry.duration, kept);
+          : noteEntry(entry.pitches, entry.duration, kept, entry.beams);
       }),
     ),
   );

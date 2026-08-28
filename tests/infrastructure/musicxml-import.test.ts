@@ -140,6 +140,42 @@ describe('files written by other programs', () => {
     expect(exercise.staves[0]?.measures[0]?.entries).toHaveLength(1);
   });
 
+  it('keeps the beaming the writer chose', () => {
+    // Two eighths beamed as a pair, a quarter, then another pair - which is
+    // what this bar means, and not what an engraver left to guess would draw.
+    const beamed =
+      note('G', 4, 12, 'eighth', '<beam number="1">begin</beam>') +
+      note('D', 5, 12, 'eighth', '<beam number="1">end</beam>') +
+      note('G', 5, 24, 'quarter') +
+      note('G', 5, 12, 'eighth', '<beam number="1">begin</beam>') +
+      note('D', 5, 12, 'eighth', '<beam number="1">end</beam>') +
+      note('B', 4, 24, 'quarter');
+    const { exercise } = importer.read(scoreXml(beamed));
+
+    const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
+    expect(entries.map((entry) => (entry.kind === 'note' ? entry.beams : []))).toEqual([
+      [{ level: 1, type: 'begin' }],
+      [{ level: 1, type: 'end' }],
+      [],
+      [{ level: 1, type: 'begin' }],
+      [{ level: 1, type: 'end' }],
+      [],
+    ]);
+
+    // And it survives back out, or the engraver would beam it its own way -
+    // `autoBeam` only fills in for notes the XML says nothing about.
+    const printed = serializer.serialize(exercise);
+    expect([...printed.matchAll(/<beam number="1">/g)]).toHaveLength(4);
+    expect(printed).toContain('<beam number="1">begin</beam>');
+  });
+
+  it('leaves generated music for the engraver to beam', () => {
+    // Nothing we write ourselves carries beams, so `autoBeam` still decides -
+    // which is what has always drawn the exercises.
+    const generated = serializer.serialize(twoBarExercise());
+    expect(generated).not.toContain('<beam');
+  });
+
   it('drops grace notes rather than mistaking them for beats', () => {
     const grace =
       '<note><grace/><pitch><step>B</step><octave>3</octave></pitch>' +

@@ -6,6 +6,23 @@ import type { KeySignature } from './KeySignature.js';
 import type { Pitch } from './Pitch.js';
 import type { TimeSignature } from './TimeSignature.js';
 
+export const BEAM_TYPES = ['begin', 'continue', 'end', 'forward hook', 'backward hook'] as const;
+
+export type BeamType = (typeof BEAM_TYPES)[number];
+
+/**
+ * One level of beaming on a note: eighths use level 1, sixteenths add level 2.
+ *
+ * Carried rather than computed. Beaming is a reading aid the writer chose -
+ * two eighths beamed around a quarter say something different from six beamed
+ * across the bar - and an importer that dropped it would be handing the engraver
+ * a decision the composer had already made.
+ */
+export interface Beam {
+  readonly level: number;
+  readonly type: BeamType;
+}
+
 /** One or more simultaneous pitches sharing a rhythmic value. */
 export interface NoteEntry {
   readonly kind: 'note';
@@ -25,6 +42,8 @@ export interface NoteEntry {
    * be tied.
    */
   readonly tiedForward: readonly number[];
+  /** Beaming as the source wrote it; empty lets the engraver decide. */
+  readonly beams: readonly Beam[];
 }
 
 /** Silence occupying a rhythmic value. */
@@ -82,9 +101,16 @@ export function noteEntry(
   pitches: Pitch | readonly Pitch[],
   duration: Duration,
   tiedForward: readonly number[] = [],
+  beams: readonly Beam[] = [],
 ): NoteEntry {
   const list = Array.isArray(pitches) ? [...(pitches as readonly Pitch[])] : [pitches as Pitch];
-  return { kind: 'note', pitches: list, duration, tiedForward: [...tiedForward] };
+  return {
+    kind: 'note',
+    pitches: list,
+    duration,
+    tiedForward: [...tiedForward],
+    beams: [...beams],
+  };
 }
 
 /** The same entry with every one of its pitches held into the next. */

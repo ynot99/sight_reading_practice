@@ -113,8 +113,13 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             this.writeTempo(writer, exercise.tempoBpm);
           }
         }
-        exercise.staves.forEach((staff, staffIndex) => {
-          if (staffIndex > 0) {
+        // A voice with nothing in this bar is simply not written into it -
+        // MusicXML has no need to mention it, and a rest would be drawn.
+        const present = exercise.staves.filter(
+          (staff) => (staff.measures[measureIndex]?.entries.length ?? 0) > 0,
+        );
+        present.forEach((staff, index) => {
+          if (index > 0) {
             writer.element('backup', undefined, () => {
               writer.leaf('duration', exercise.timeSignature.ticksPerMeasure);
             });

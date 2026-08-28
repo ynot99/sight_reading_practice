@@ -5,6 +5,7 @@ import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProf
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
+import { validateExercise } from '../../src/domain/model/Exercise.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { DomMusicXmlImporter } from '../../src/infrastructure/notation/DomMusicXmlImporter.js';
@@ -193,6 +194,73 @@ describe('files written by other programs', () => {
         staff.measures[0]?.entries.reduce((total, entry) => total + entry.duration.ticks, 0),
       ).toBe(1920);
     }
+  });
+
+  it('leaves a voice out of the bars it sits out', () => {
+    // A second voice that appears in one bar must not put a rest in every
+    // other one - MuseScore hides an empty voice and so must the page here.
+    const twoBars = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>24</divisions><key><fifths>0</fifths></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time>
+      <clef><sign>G</sign><line>2</line></clef></attributes>
+      ${note('C', 5, 96, 'whole')}
+      <backup><duration>96</duration></backup>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>96</duration>
+      <voice>2</voice><type>whole</type></note>
+    </measure>
+    <measure number="2">${note('D', 5, 96, 'whole')}</measure>
+  </part>
+</score-partwise>`;
+    const { exercise } = importer.read(twoBars);
+
+    expect(exercise.staves).toHaveLength(2);
+    // The second voice is present in bar one and simply absent from bar two.
+    expect(exercise.staves[1]?.measures[0]?.entries).toHaveLength(1);
+    expect(exercise.staves[1]?.measures[1]?.entries).toHaveLength(0);
+
+    // And nothing is written for it there, so no rest is drawn.
+    const printed = serializer.serialize(exercise);
+    const secondBar = printed.slice(printed.indexOf('<measure number="2"'));
+    expect(secondBar).not.toContain('<rest');
+    expect(secondBar).not.toContain('<backup>');
+  });
+
+  it('still draws a rest when a whole staff falls silent', () => {
+    // Sparse voices vanish from the bars they sit out, but a staff where every
+    // voice is absent is not sparse - it is resting, and a resting staff is
+    // drawn with a rest. Exactly one, on the first voice.
+    const twoStaves = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>24</divisions><key><fifths>0</fifths></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time><staves>2</staves>
+      <clef number="1"><sign>G</sign><line>2</line></clef>
+      <clef number="2"><sign>F</sign><line>4</line></clef></attributes>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>96</duration>
+      <voice>1</voice><type>whole</type><staff>1</staff></note>
+      <backup><duration>96</duration></backup>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>96</duration>
+      <voice>2</voice><type>whole</type><staff>2</staff></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>96</duration>
+      <voice>1</voice><type>whole</type><staff>1</staff></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const { exercise } = importer.read(twoStaves);
+
+    // The bass says nothing in bar two, so it rests rather than disappearing.
+    const bass = exercise.staves[1]?.measures[1]?.entries ?? [];
+    expect(bass).toHaveLength(1);
+    expect(bass[0]?.kind).toBe('rest');
+    expect(() => validateExercise(exercise)).not.toThrow();
   });
 
   it('keeps the beaming the writer chose', () => {

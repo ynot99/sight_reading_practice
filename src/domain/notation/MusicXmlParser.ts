@@ -470,15 +470,18 @@ function buildStaves(
     });
   }
 
-  return ordered.map((pair, index) => {
-    const built = perMeasure.map((notes, measureIndex) =>
-      buildMeasure(
-        notes.filter((note) => note.staff === pair.staff && note.voice === pair.voice),
-        measureIndex,
-        header.timeSignature.ticksPerMeasure,
-        warnings,
-      ),
-    );
+  const parts = ordered.map((pair, index) => {
+    const built = perMeasure.map((notes, measureIndex) => {
+      const mine = notes.filter(
+        (note) => note.staff === pair.staff && note.voice === pair.voice,
+      );
+      // Absent, not resting: a voice that says nothing in a bar is left out of
+      // it, so the page does not carry a rest for every bar it sits out.
+      if (mine.length === 0) {
+        return measureOf([]);
+      }
+      return buildMeasure(mine, measureIndex, header.timeSignature.ticksPerMeasure, warnings);
+    });
 
     return {
       // Voice numbers only have to tell the parts apart, and the file's own
@@ -490,6 +493,55 @@ function buildStaves(
         (staffNumbers.indexOf(pair.staff) === 0 ? 'treble' : 'bass'),
       measures: dropTiesThatLeadNowhere(built, warnings),
     } satisfies StaffPart;
+  });
+
+  return restStaffThatFallsSilent(parts, header.timeSignature.ticksPerMeasure);
+}
+
+/**
+ * Gives a resting staff its rest back.
+ *
+ * A voice absent from a bar is left out of it, which is what keeps a sparse
+ * inner line from littering the page. But when *every* voice of a staff is
+ * absent, the staff is not sparse - it is resting, and a resting staff is
+ * drawn with a rest. Only the first voice carries it, or the bar would show
+ * one rest per voice.
+ */
+function restStaffThatFallsSilent(
+  parts: readonly StaffPart[],
+  ticksPerMeasure: number,
+): readonly StaffPart[] {
+  const bars = parts[0]?.measures.length ?? 0;
+  const silent = new Map<number, Set<number>>();
+
+  for (let bar = 0; bar < bars; bar += 1) {
+    for (const staffNumber of new Set(parts.map((part) => part.staffNumber))) {
+      const onStaff = parts.filter((part) => part.staffNumber === staffNumber);
+      if (onStaff.every((part) => (part.measures[bar]?.entries.length ?? 0) === 0)) {
+        const first = onStaff[0];
+        if (first !== undefined) {
+          silent.set(first.voice, (silent.get(first.voice) ?? new Set()).add(bar));
+        }
+      }
+    }
+  }
+
+  if (silent.size === 0) {
+    return parts;
+  }
+  return parts.map((part) => {
+    const bars = silent.get(part.voice);
+    if (bars === undefined) {
+      return part;
+    }
+    return {
+      ...part,
+      measures: part.measures.map((measure, index) =>
+        bars.has(index)
+          ? measureOf(splitIntoRests(ticksPerMeasure).map((rest) => restEntry(rest)))
+          : measure,
+      ),
+    };
   });
 }
 

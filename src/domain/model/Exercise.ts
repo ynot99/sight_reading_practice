@@ -195,6 +195,27 @@ export function validateExercise(exercise: Exercise): void {
 
     staff.measures.forEach((measure, measureIndex) => {
       const measurePath = `${path}.measures[${measureIndex}]`;
+
+      // An empty measure means this voice is not present in that bar at all,
+      // which is different from resting through it: a rest is drawn and a
+      // silence is not. Only a voice sharing its staff with one that does fill
+      // the bar may vanish, or the staff would have a hole in it.
+      if (measure.entries.length === 0) {
+        const covered = exercise.staves.some(
+          (other) =>
+            other !== staff &&
+            other.staffNumber === staff.staffNumber &&
+            (other.measures[measureIndex]?.entries.length ?? 0) > 0,
+        );
+        if (!covered) {
+          throw new ExerciseValidationError(
+            'Measure has no entries, and no other voice fills it.',
+            measurePath,
+          );
+        }
+        return;
+      }
+
       // This also catches an unfinished tuplet: two thirds of a beat leaves a
       // remainder no plain value can fill, so a group that never closes always
       // shows up here as a bar that does not add up. There is deliberately no
@@ -206,9 +227,6 @@ export function validateExercise(exercise: Exercise): void {
           `Measure holds ${actual} divisions but ${exercise.timeSignature.toString()} requires ${expectedTicks}.`,
           measurePath,
         );
-      }
-      if (measure.entries.length === 0) {
-        throw new ExerciseValidationError('Measure has no entries.', measurePath);
       }
       measure.entries.forEach((entry, entryIndex) => {
         validateEntry(entry, `${measurePath}.entries[${entryIndex}]`);

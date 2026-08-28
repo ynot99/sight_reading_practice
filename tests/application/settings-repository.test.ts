@@ -44,7 +44,7 @@ const SETTINGS: PracticeSettings = {
   showCursor: false,
   blindMode: true,
   showPlayedNotes: false,
-  fadePassedNotes: true,
+  readAheadSteps: 2,
   zoom: 1.2,
 };
 

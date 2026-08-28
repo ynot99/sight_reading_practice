@@ -86,10 +86,11 @@ const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
 };
 
 /**
- * Dropout cycles offered, as bars of click followed by as many silent ones.
+ * How much of the run the click sits out, from none of it to all of it.
  *
- * Symmetric on purpose: an equal stretch of silence is the standard exercise,
- * and it makes the setting one number the reader can reason about.
+ * The cycles are symmetric on purpose: an equal stretch of silence is the
+ * standard exercise, and it makes each one a number the reader can reason
+ * about.
  */
 const DROPOUT_LABELS: Readonly<Record<ClickDropout, string>> = {
   never: 'Never',
@@ -123,6 +124,36 @@ const CLICK_DESCRIPTIONS: Readonly<Record<ClickPattern, string>> = {
   division: 'Halves the beat, or thirds it in compound time.',
   subdivision: 'The finest click. Useful for sixteenths, busy everywhere else.',
 };
+
+/**
+ * Where the veil sits, as one ordered menu from tidying to demanding.
+ *
+ * Dimming what is behind and hiding what is under the fingers are the same
+ * act at different distances, so they are one control: two checkboxes would
+ * let the reader ask for both and mean nothing by it.
+ */
+const READ_AHEAD_CHOICES: readonly { readonly value: string; readonly label: string }[] = [
+  { value: 'off', label: 'Never' },
+  { value: '0', label: 'Once I have played them' },
+  { value: '1', label: 'As I reach them' },
+  { value: '2', label: 'One step before I reach them' },
+];
+
+const READ_AHEAD_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  off: 'The whole page stays on screen.',
+  '0': 'The page empties behind you. Nothing is demanded; there is just less to look at.',
+  '1': 'The note under your fingers is already gone, so it has to have been read first.',
+  '2': 'Two steps of reading ahead. Harsh, and the fastest way to stop reading note by note.',
+};
+
+function readAheadValue(steps: number | null): string {
+  return steps === null ? 'off' : String(steps);
+}
+
+function parseReadAhead(value: string): number | null {
+  const steps = Number.parseInt(value, 10);
+  return Number.isFinite(steps) ? steps : null;
+}
 
 const TIME_SIGNATURES = ['4/4', '3/4', '2/4', '6/8'] as const;
 
@@ -291,7 +322,8 @@ export class AppView {
     zoom: HTMLInputElement;
     zoomValue: HTMLOutputElement;
     showPlayed: HTMLInputElement;
-    fadePassed: HTMLInputElement;
+    readAhead: HTMLSelectElement;
+    readAheadDescription: HTMLElement;
     showCursor: HTMLInputElement;
     blindMode: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
@@ -373,7 +405,8 @@ export class AppView {
       zoom: requireElement(doc, 'zoom'),
       zoomValue: requireElement(doc, 'zoom-value'),
       showPlayed: requireElement(doc, 'show-played'),
-      fadePassed: requireElement(doc, 'fade-passed'),
+      readAhead: requireElement(doc, 'read-ahead'),
+      readAheadDescription: requireElement(doc, 'read-ahead-description'),
       showCursor: requireElement(doc, 'show-cursor'),
       blindMode: requireElement(doc, 'blind-mode'),
       sampleLoading: requireElement(doc, 'sample-loading'),
@@ -506,6 +539,11 @@ export class AppView {
       this.el.dropout,
       CLICK_DROPOUTS.map((choice) => ({ value: choice, label: DROPOUT_LABELS[choice] })),
       this.runtime.controller.settings.clickDropout,
+    );
+    fillSelect(
+      this.el.readAhead,
+      READ_AHEAD_CHOICES.map((choice) => ({ value: choice.value, label: choice.label })),
+      readAheadValue(this.runtime.controller.settings.readAheadSteps),
     );
     fillSelect(
       this.el.mode,
@@ -664,8 +702,9 @@ export class AppView {
       controller.updateSettings({ showPlayedNotes: this.el.showPlayed.checked });
     });
 
-    this.listen(this.el.fadePassed, 'change', () => {
-      controller.updateSettings({ fadePassedNotes: this.el.fadePassed.checked });
+    this.listen(this.el.readAhead, 'change', () => {
+      controller.updateSettings({ readAheadSteps: parseReadAhead(this.el.readAhead.value) });
+      this.el.readAheadDescription.textContent = READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';
     });
 
     this.listen(this.el.showCursor, 'change', () => {
@@ -1253,7 +1292,9 @@ export class AppView {
     this.el.zoom.value = String(Math.round(settings.zoom * 100));
     this.el.zoomValue.value = this.el.zoom.value;
     this.el.showPlayed.checked = settings.showPlayedNotes;
-    this.el.fadePassed.checked = settings.fadePassedNotes;
+    this.el.readAhead.value = readAheadValue(settings.readAheadSteps);
+    this.el.readAheadDescription.textContent =
+      READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';
     this.el.showCursor.checked = settings.showCursor;
     this.el.blindMode.checked = settings.blindMode;
     this.renderExpected();

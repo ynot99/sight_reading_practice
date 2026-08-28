@@ -996,23 +996,39 @@ describe('AppView', () => {
       expect(runtime.controller.settings.showPlayedNotes).toBe(false);
     });
 
-    it('turns fading on from the checkbox, and remembers it', async () => {
+    it('sets where the notes disappear, and remembers it', async () => {
       const store = new InMemorySettingsStore();
       const first = createRig(undefined, store);
       await first.view.initialize();
-      expect(first.runtime.controller.settings.fadePassedNotes).toBe(false);
+      expect(first.runtime.controller.settings.readAheadSteps).toBeNull();
 
-      const toggle = element<HTMLInputElement>('fade-passed');
-      toggle.checked = true;
-      toggle.dispatchEvent(new Event('change'));
-      expect(first.runtime.controller.settings.fadePassedNotes).toBe(true);
+      const select = element<HTMLSelectElement>('read-ahead');
+      select.value = '1';
+      select.dispatchEvent(new Event('change'));
+      expect(first.runtime.controller.settings.readAheadSteps).toBe(1);
+      expect(element('read-ahead-description').textContent).toContain('under your fingers');
 
       mountRealMarkup();
       const second = createRig(undefined, store);
       await second.view.initialize();
 
-      expect(element<HTMLInputElement>('fade-passed').checked).toBe(true);
-      expect(second.runtime.controller.settings.fadePassedNotes).toBe(true);
+      expect(element<HTMLSelectElement>('read-ahead').value).toBe('1');
+      expect(second.runtime.controller.settings.readAheadSteps).toBe(1);
+    });
+
+    it('keeps "never" apart from "once I have played them"', async () => {
+      // Both are the quiet end of one scale, and 0 is not off.
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      const select = element<HTMLSelectElement>('read-ahead');
+      select.value = '0';
+      select.dispatchEvent(new Event('change'));
+      expect(runtime.controller.settings.readAheadSteps).toBe(0);
+
+      select.value = 'off';
+      select.dispatchEvent(new Event('change'));
+      expect(runtime.controller.settings.readAheadSteps).toBeNull();
     });
 
     it('remembers the note size on this device', async () => {

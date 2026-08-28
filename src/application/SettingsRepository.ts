@@ -100,6 +100,24 @@ function readClickDropout(value: unknown, legacyBars: unknown): ClickDropout | u
       : undefined;
 }
 
+/**
+ * The veil distance, accepting the checkbox this setting used to be.
+ *
+ * `fadePassedNotes: true` asked for exactly what `0` now means - dim a step
+ * once it is done with - so an older device keeps the page it had.
+ */
+function readReadAhead(value: unknown, legacyFade: unknown): number | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  const steps = readInteger(value, 0, 4);
+  if (steps !== undefined) {
+    return steps;
+  }
+  const faded = readBoolean(legacyFade);
+  return faded === undefined ? undefined : faded ? 0 : null;
+}
+
 function readKey(value: unknown): KeySignature | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -172,7 +190,7 @@ export function decodePracticeSettings(
     showCursor: readBoolean(value['showCursor']),
     blindMode: readBoolean(value['blindMode']),
     showPlayedNotes: readBoolean(value['showPlayedNotes']),
-    fadePassedNotes: readBoolean(value['fadePassedNotes']),
+    readAheadSteps: readReadAhead(value['readAheadSteps'], value['fadePassedNotes']),
     zoom: readNumber(value['zoom'], 0.3, 3),
   } as PracticeSettings);
 }
@@ -205,7 +223,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     showCursor: settings.showCursor,
     blindMode: settings.blindMode,
     showPlayedNotes: settings.showPlayedNotes,
-    fadePassedNotes: settings.fadePassedNotes,
+    readAheadSteps: settings.readAheadSteps,
     zoom: settings.zoom,
   };
 }

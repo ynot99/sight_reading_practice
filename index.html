@@ -189,6 +189,12 @@
         </div>
 
         <div class="control-group">
+          <label for="read-ahead">Notes disappear</label>
+          <select id="read-ahead"></select>
+          <p id="read-ahead-description" class="hint"></p>
+        </div>
+
+        <div class="control-group">
           <label for="sample-loading">Piano samples</label>
           <select id="sample-loading">
             <option value="eager">Download on open</option>
@@ -200,7 +206,6 @@
 
         <div class="control-group control-group--checks">
           <label><input id="show-played" type="checkbox" checked /> Show what I played</label>
-          <label><input id="fade-passed" type="checkbox" /> Fade notes once passed</label>
           <label><input id="show-cursor" type="checkbox" checked /> Show cursor</label>
           <label><input id="blind-mode" type="checkbox" /> Blind mode: do not name the notes</label>
           <label><input id="metronome-muted" type="checkbox" /> Mute metronome</label>

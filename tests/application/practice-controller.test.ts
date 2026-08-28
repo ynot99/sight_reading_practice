@@ -672,7 +672,7 @@ describe('what you played, drawn over the score', () => {
 describe('notes fading behind the reader', () => {
   async function playFirstStep(): Promise<ReturnType<typeof createController>> {
     const rig = createController(true);
-    rig.controller.updateSettings({ fadePassedNotes: true });
+    rig.controller.updateSettings({ readAheadSteps: 0 });
     await rig.controller.loadNewExercise();
     const session = rig.controller.start();
     const step = session?.currentStep;
@@ -692,7 +692,7 @@ describe('notes fading behind the reader', () => {
 
   it('dims a step that went by unplayed just the same', async () => {
     const rig = createController(true);
-    rig.controller.updateSettings({ fadePassedNotes: true });
+    rig.controller.updateSettings({ readAheadSteps: 0 });
     await rig.controller.loadNewExercise();
     const session = rig.controller.start();
 
@@ -721,7 +721,7 @@ describe('notes fading behind the reader', () => {
   it('brings the notes back when the setting is switched off', async () => {
     const rig = await playFirstStep();
 
-    rig.controller.updateSettings({ fadePassedNotes: false });
+    rig.controller.updateSettings({ readAheadSteps: null });
 
     expect(rig.renderer.faded.size).toBe(0);
   });
@@ -736,6 +736,72 @@ describe('notes fading behind the reader', () => {
     rig.renderer.fadePassed(0);
     await rig.controller.loadNewExercise();
     expect(rig.renderer.faded.size).toBe(0);
+  });
+});
+
+describe('the veil moved in front of the reader', () => {
+  async function startWith(readAheadSteps: number | null) {
+    const rig = createController(true);
+    rig.controller.updateSettings({ readAheadSteps });
+    await rig.controller.loadNewExercise();
+    rig.controller.start();
+    return rig;
+  }
+
+  it('leaves the step under the fingers alone when it is only tidying', async () => {
+    const { renderer } = await startWith(0);
+
+    // The distinction the whole setting turns on: dimming what is done never
+    // takes the note being played, so nothing is demanded of the reader.
+    expect(renderer.faded.has(0)).toBe(false);
+  });
+
+  it('takes the step being played, so it has to have been read already', async () => {
+    const { renderer } = await startWith(1);
+
+    expect(renderer.faded.has(0)).toBe(true);
+    expect(renderer.faded.has(1)).toBe(false);
+  });
+
+  it('takes the one after it as well at two steps', async () => {
+    const { renderer } = await startWith(2);
+
+    expect(renderer.faded.has(0)).toBe(true);
+    expect(renderer.faded.has(1)).toBe(true);
+    expect(renderer.faded.has(2)).toBe(false);
+  });
+
+  it('keeps the veil ahead as the cursor moves', async () => {
+    const rig = await startWith(1);
+    const session = rig.controller.session;
+    const step = session?.currentStep;
+    if (step === undefined || step === null) {
+      throw new Error('expected a first step');
+    }
+    for (const note of step.expectedMidi) {
+      rig.midi.noteOn(note, 0);
+    }
+
+    // The second step is now the one being played, and now the one gone.
+    expect(rig.renderer.faded.has(1)).toBe(true);
+    expect(rig.renderer.faded.has(2)).toBe(false);
+  });
+
+  it('gives the notes back when the veil is moved nearer mid-run', async () => {
+    const rig = await startWith(2);
+    expect(rig.renderer.faded.has(1)).toBe(true);
+
+    rig.controller.updateSettings({ readAheadSteps: 0 });
+
+    // Moving it away must take more; moving it nearer has to give back, or
+    // the reader can only ever make the page emptier.
+    expect(rig.renderer.faded.has(0)).toBe(false);
+    expect(rig.renderer.faded.has(1)).toBe(false);
+  });
+
+  it('hides nothing at all when it is switched off', async () => {
+    const { renderer } = await startWith(null);
+    expect(renderer.faded.size).toBe(0);
   });
 });
 

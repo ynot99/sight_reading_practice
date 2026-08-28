@@ -129,8 +129,19 @@ export interface PracticeSettings {
   readonly blindMode: boolean;
   /** Draw what was actually played over the engraving. */
   readonly showPlayedNotes: boolean;
-  /** Dim each note once it has been passed, to push the eye forward. */
-  readonly fadePassedNotes: boolean;
+  /**
+   * Where the veil sits relative to the cursor, in steps, or `null` for none.
+   *
+   * One axis, because dimming what is behind and hiding what is under your
+   * fingers are the same act at different distances - only the distance says
+   * whether the page is being tidied or the reader is being made to look
+   * ahead.
+   *
+   * - `0` dims a step once it is done with. Declutter; nothing is demanded.
+   * - `1` takes the step you are on, so it must already have been read.
+   * - `2` takes the one after it as well.
+   */
+  readonly readAheadSteps: number | null;
   /** Note size on the page, as a multiplier. */
   readonly zoom: number;
 }
@@ -192,6 +203,8 @@ export class PracticeController {
   private lastSeed: number | null = null;
   private openedScore: Exercise | null = null;
   private player: ExercisePlayer | null = null;
+  /** Highest step already dimmed, so the veil is drawn once per step. */
+  private fadedThrough = -1;
 
   constructor(dependencies: PracticeControllerDependencies) {
     this.deps = dependencies;
@@ -233,7 +246,7 @@ export class PracticeController {
       showCursor: true,
       blindMode: false,
       showPlayedNotes: true,
-      fadePassedNotes: false,
+      readAheadSteps: null,
       zoom: 0.85,
       ...dependencies.initialSettings,
     };
@@ -310,8 +323,11 @@ export class PracticeController {
       this.deps.overlay.clearPlayed();
     }
 
-    if (changes.fadePassedNotes === false) {
-      this.deps.fade.clearFaded();
+    if (changes.readAheadSteps !== undefined) {
+      // Re-drawn from where the run actually is rather than left as it was:
+      // moving the veil nearer must give the notes back, not only further
+      // away take more.
+      this.repaintFade();
     }
 
     this.emitter.emit('settingsChanged', { settings: next });
@@ -570,13 +586,14 @@ export class PracticeController {
     this.currentSession = session;
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
+    this.fadedThrough = -1;
 
     this.sessionSubscriptions.push(
       // A step is dimmed the moment it is done with, whether it was played
       // well, badly or not at all: the page empties as the music passes.
       session.events.on('stepCompleted', ({ result }) => {
-        if (this.currentSettings.fadePassedNotes) {
-          this.deps.fade.fadePassed(result.index);
+        if (this.currentSettings.readAheadSteps !== null) {
+          this.fadeThrough(result.index);
         }
       }),
     );
@@ -599,6 +616,7 @@ export class PracticeController {
     this.sessionSubscriptions.push(
       session.events.on('stepEntered', ({ step }) => {
         this.deps.cursor.moveTo(step.index);
+        this.fadeAhead(step.index);
       }),
     );
     this.sessionSubscriptions.push(
@@ -670,6 +688,45 @@ export class PracticeController {
       return 0;
     }
     return playedNoteOffset(timeline, stepIndex, deviationMs, tempoBpm);
+  }
+
+  /**
+   * Dims every step up to `limit`, remembering how far it has got.
+   *
+   * The renderer is happy to be told twice, but the run would then re-walk
+   * the whole prefix on every step; keeping the high-water mark makes the
+   * whole reading cost one pass.
+   */
+  private fadeThrough(limit: number): void {
+    for (let index = this.fadedThrough + 1; index <= limit; index += 1) {
+      this.deps.fade.fadePassed(index);
+    }
+    this.fadedThrough = Math.max(this.fadedThrough, limit);
+  }
+
+  /**
+   * Draws the veil for a cursor now sitting at `stepIndex`.
+   *
+   * A lead of 0 reaches only as far as the step before, which is what "dim
+   * what is done" means; each step further takes the note under the fingers
+   * and then the one after it.
+   */
+  private fadeAhead(stepIndex: number): void {
+    const lead = this.currentSettings.readAheadSteps;
+    if (lead === null) {
+      return;
+    }
+    this.fadeThrough(stepIndex + lead - 1);
+  }
+
+  /** Puts the veil back where the current setting says it belongs. */
+  private repaintFade(): void {
+    this.deps.fade.clearFaded();
+    this.fadedThrough = -1;
+    const stepIndex = this.currentSession?.currentStep?.index;
+    if (stepIndex !== undefined) {
+      this.fadeAhead(stepIndex);
+    }
   }
 
   private applyCursorVisibility(): void {

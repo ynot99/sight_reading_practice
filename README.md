@@ -115,9 +115,18 @@ assumed, so zoom, engraving rules, or a different engraver cannot silently
 slide the marks off their notes. A test renders a real score and checks the
 marks land on the printed staff lines.
 
-**Fade notes once passed** empties the page behind you as the music goes by,
-which pushes the eye forward instead of letting it rest on what has already
-been read. Off by default.
+**Notes disappear** empties the page as the music goes by, and *where* it
+empties is the setting. Once you have played them tidies up behind you and
+demands nothing. Moved forward, it stops being tidying: at *as I reach them*
+the note under your fingers is already gone, so it can only be played if it
+was read a step earlier, and one step further makes that two.
+
+That is one control rather than two, because dimming what is behind and
+hiding what is under the hands are the same act at different distances — only
+the distance decides whether the page is being decluttered or the reader is
+being made to look ahead. Reading ahead is the skill the whole exercise is
+for, which is also why the veil is never put in *front* of the reader: hiding
+what is coming would train the opposite. Off by default.
 
 ### The piano sound
 

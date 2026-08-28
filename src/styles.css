@@ -541,6 +541,16 @@ select {
   fill: #15803d;
 }
 
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.range-row input {
+  width: 5rem;
+}
+
 /* Right note, but it missed the beat: the same green, worn thinner. */
 .played--loose {
   stroke: #22c55e;

@@ -13,6 +13,14 @@ Two practice modes:
 - **Flow mode** — the cursor walks with the metronome and grades how close each
   press was to its beat. For building fluency.
 
+**Practise bars** narrows the exercise to a passage. It is done by cutting
+those bars out as a score in their own right rather than by teaching the session
+to start and stop in the middle of a longer one, so the timeline, the page, the
+cursor, the report and the playback all carry on unaware a longer piece exists.
+The seams are the work: an inherited clef or key is stated at the head, a tie
+leading out of the last bar is cut, and a pedal already down is pressed again.
+**Repeat when it ends** starts the passage over as soon as it finishes.
+
 **Listen** plays the exercise instead of judging it. The hand selector beside it
 governs both listening and practice, because they are the same question asked
 twice: which hand am I working on. Practising one hand is not practising half

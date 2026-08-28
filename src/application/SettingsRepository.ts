@@ -55,6 +55,11 @@ function readId(value: unknown, known: readonly string[]): string | undefined {
   return typeof value === 'string' && known.includes(value) ? value : undefined;
 }
 
+/** `null` means "no limit", which is as real a choice as any bar number. */
+function readBar(value: unknown): number | null | undefined {
+  return value === null ? null : readInteger(value, 1, 999);
+}
+
 /** `null` is a real choice here - both hands - so it has to survive a reload. */
 function readHand(value: unknown): number | null | undefined {
   if (value === null) {
@@ -127,6 +132,9 @@ export function decodePracticeSettings(
     countInBars: readInteger(value['countInBars'], 0, 4),
     clickPattern: readClickPattern(value['clickPattern']),
     handStaff: readHand(value['handStaff']),
+    rangeFromBar: readBar(value['rangeFromBar']),
+    rangeToBar: readBar(value['rangeToBar']),
+    repeatRange: readBoolean(value['repeatRange']),
     dropoutBars: readInteger(value['dropoutBars'], 0, 8),
     metronomeMuted: readBoolean(value['metronomeMuted']),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
@@ -151,6 +159,9 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     countInBars: settings.countInBars,
     clickPattern: settings.clickPattern,
     handStaff: settings.handStaff,
+    rangeFromBar: settings.rangeFromBar,
+    rangeToBar: settings.rangeToBar,
+    repeatRange: settings.repeatRange,
     dropoutBars: settings.dropoutBars,
     metronomeMuted: settings.metronomeMuted,
     // `Infinity` has no JSON representation; the slider cannot reach it anyway.

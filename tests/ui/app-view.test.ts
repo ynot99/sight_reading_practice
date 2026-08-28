@@ -370,6 +370,26 @@ describe('AppView', () => {
     expect(element('listen').textContent).toBe('Listen');
   });
 
+  it('narrows practice to a passage, and says which', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+    const wholePiece = runtime.controller.currentTimeline?.length ?? 0;
+
+    const from = element<HTMLInputElement>('range-from');
+    from.value = '2';
+    from.dispatchEvent(new Event('change'));
+    const to = element<HTMLInputElement>('range-to');
+    to.value = '2';
+    to.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(runtime.controller.settings.rangeFromBar).toBe(2);
+    // One bar of the piece is a shorter exercise than the piece.
+    expect(runtime.controller.currentTimeline?.length ?? 0).toBeLessThan(wholePiece);
+    expect(element('exercise-title').textContent).toContain('bars 2');
+  });
+
   it('opens a MusicXML file and says what it lost', async () => {
     const { view, runtime } = createRig();
     await view.initialize();

@@ -24,7 +24,8 @@ import type {
   IScoreRenderer,
   IScoreZoom,
 } from './ports/IScoreRenderer.js';
-import { clefAtMeasure, keyAtMeasure } from '../domain/model/Exercise.js';
+import { clefAtMeasure, keyAtMeasure, measureCount } from '../domain/model/Exercise.js';
+import { sliceExercise } from '../domain/model/exerciseSlice.js';
 import { PracticeSession } from './session/PracticeSession.js';
 
 /** Everything the user can dial in before pressing start. */
@@ -68,6 +69,16 @@ export interface PracticeSettings {
    * question asked twice: which hand am I working on.
    */
   readonly handStaff: number | null;
+  /**
+   * Bars to practise, one-based and inclusive, or `null` for the whole thing.
+   *
+   * Applied by cutting the passage out as an exercise in its own right, so
+   * everything downstream carries on unaware that a longer piece exists.
+   */
+  readonly rangeFromBar: number | null;
+  readonly rangeToBar: number | null;
+  /** Start the passage again as soon as it ends. */
+  readonly repeatRange: boolean;
   /** Bars of click, then as many silent ones. 0 clicks throughout. */
   readonly dropoutBars: number;
   readonly matchToleranceMs: number;
@@ -172,6 +183,9 @@ export class PracticeController {
       metronomeMuted: false,
       clickPattern: 'pulse',
       handStaff: null,
+      rangeFromBar: null,
+      rangeToBar: null,
+      repeatRange: false,
       dropoutBars: 0,
       matchToleranceMs: 250,
       pitchClassOnly: false,
@@ -339,10 +353,19 @@ export class PracticeController {
   private async present(source: Exercise): Promise<Exercise> {
     // An opened score keeps its own notes but takes the reader's tempo, so the
     // slider works on a file exactly as it works on generated material.
-    const exercise =
+    const retimed =
       this.openedScore === null
         ? source
         : { ...source, tempoBpm: this.currentSettings.tempoBpm };
+    const { rangeFromBar, rangeToBar } = this.currentSettings;
+    const exercise =
+      rangeFromBar === null && rangeToBar === null
+        ? retimed
+        : sliceExercise(
+            retimed,
+            rangeFromBar ?? 1,
+            rangeToBar ?? measureCount(retimed),
+          );
     const musicXml = this.deps.serializer.serialize(exercise);
 
     this.exercise = exercise;

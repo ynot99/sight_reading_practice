@@ -41,6 +41,12 @@ export function describeTendency(meanDeviationMs: number): string {
   return rounded < 0 ? `${Math.abs(rounded)} ms early` : `${rounded} ms late`;
 }
 
+/** An empty box means "no limit", which is a choice and not a missing value. */
+function barValue(input: HTMLInputElement): number | null {
+  const parsed = Number.parseInt(input.value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
   downbeat: 'First beat of the bar',
   pulse: 'Every beat',
@@ -221,6 +227,9 @@ export class AppView {
     clickDescription: HTMLElement;
     dropout: HTMLSelectElement;
     dropoutDescription: HTMLElement;
+    rangeFrom: HTMLInputElement;
+    rangeTo: HTMLInputElement;
+    repeatRange: HTMLInputElement;
     countIn: HTMLInputElement;
     countInValue: HTMLOutputElement;
     tolerance: HTMLInputElement;
@@ -294,6 +303,9 @@ export class AppView {
       clickDescription: requireElement(doc, 'click-description'),
       dropout: requireElement(doc, 'dropout'),
       dropoutDescription: requireElement(doc, 'dropout-description'),
+      rangeFrom: requireElement(doc, 'range-from'),
+      rangeTo: requireElement(doc, 'range-to'),
+      repeatRange: requireElement(doc, 'repeat-range'),
       countIn: requireElement(doc, 'count-in'),
       countInValue: requireElement(doc, 'count-in-value'),
       tolerance: requireElement(doc, 'tolerance'),
@@ -536,6 +548,20 @@ export class AppView {
       controller.updateSettings({ tempoBpm: Number.parseInt(this.el.tempo.value, 10) });
       // Same seed: identical notes, only the printed tempo mark changes.
       void this.reload(false);
+    });
+
+    for (const input of [this.el.rangeFrom, this.el.rangeTo]) {
+      this.listen(input, 'change', () => {
+        controller.updateSettings({
+          rangeFromBar: barValue(this.el.rangeFrom),
+          rangeToBar: barValue(this.el.rangeTo),
+        });
+        void this.reload(false);
+      });
+    }
+
+    this.listen(this.el.repeatRange, 'change', () => {
+      controller.updateSettings({ repeatRange: this.el.repeatRange.checked });
     });
 
     this.listen(this.el.countIn, 'input', () => {
@@ -795,6 +821,18 @@ export class AppView {
         this.el.sessionStatus.textContent = `Counting in… ${beatsRemaining}`;
         this.renderFocusStatus(`Counting in… ${beatsRemaining}`);
       }),
+      session.events.on('statusChanged', ({ status }) => {
+        // Restarting is the view's job, not the controller's: tearing a
+        // session down from inside its own event is how re-entrancy bugs are
+        // made, and the application layer has no timer to defer with.
+        if (status === 'completed' && this.runtime.controller.settings.repeatRange) {
+          setTimeout(() => {
+            if (this.runtime.controller.settings.repeatRange) {
+              this.runtime.controller.start();
+            }
+          }, 0);
+        }
+      }),
       session.events.on('stepEntered', ({ step, expectedMidi }) => {
         this.el.expected.textContent = formatNotes(expectedMidi);
         this.lastPosition = `bar ${step.measureIndex + 1} · beat ${step.beat.toFixed(2).replace(/\.00$/, '')}`;
@@ -1040,6 +1078,9 @@ export class AppView {
     this.el.clickDescription.textContent = CLICK_DESCRIPTIONS[settings.clickPattern];
     this.el.dropout.value = String(settings.dropoutBars);
     this.el.dropoutDescription.textContent = dropoutDescription(settings.dropoutBars);
+    this.el.rangeFrom.value = settings.rangeFromBar === null ? '' : String(settings.rangeFromBar);
+    this.el.rangeTo.value = settings.rangeToBar === null ? '' : String(settings.rangeToBar);
+    this.el.repeatRange.checked = settings.repeatRange;
     this.el.countIn.value = String(settings.countInBars);
     this.el.countInValue.value = String(settings.countInBars);
     this.el.tolerance.value = String(settings.matchToleranceMs);

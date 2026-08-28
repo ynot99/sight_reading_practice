@@ -139,6 +139,20 @@
         </div>
 
         <div class="control-group">
+          <label for="range-from">Practise bars</label>
+          <div class="range-row">
+            <input id="range-from" type="number" min="1" max="999" placeholder="first" />
+            <span>–</span>
+            <input id="range-to" type="number" min="1" max="999" placeholder="last" />
+          </div>
+          <label class="switch">
+            <input id="repeat-range" type="checkbox" />
+            <span>Repeat when it ends</span>
+          </label>
+          <p class="hint">Leave empty for the whole piece. The passage becomes the exercise.</p>
+        </div>
+
+        <div class="control-group">
           <label for="count-in">Count-in: <output id="count-in-value">1</output> bars</label>
           <input id="count-in" type="range" min="0" max="4" step="1" value="1" />
         </div>

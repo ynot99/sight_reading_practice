@@ -64,6 +64,20 @@ describe('played notes drawn over a real engraving', () => {
     expect(head?.getAttribute('class')).toContain('played--correct');
   });
 
+  it('paints a right note played off the beat in its own tone', () => {
+    renderer.showPlayed({
+      stepIndex: 1,
+      midi: Pitch.parse('D4').midi,
+      correct: true,
+      offset: -0.4,
+    });
+
+    const [head] = noteheads(container);
+    const className = head?.getAttribute('class') ?? '';
+    expect(className).toContain('played--loose');
+    expect(className).not.toContain('played--correct');
+  });
+
   it('puts a bass note on the bass stave', () => {
     renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C3').midi, correct: true, offset: 0 });
 

@@ -248,7 +248,11 @@ export class OsmdScoreRenderer
   }
 
   private createShape(shape: OverlayShape, doc: Document): SVGElement {
-    const colourClass = shape.correct ? 'played--correct' : 'played--wrong';
+    const colourClass = !shape.correct
+      ? 'played--wrong'
+      : shape.looseTiming
+        ? 'played--loose'
+        : 'played--correct';
     switch (shape.kind) {
       case 'notehead': {
         const element = doc.createElementNS(SVG_NAMESPACE, 'ellipse');

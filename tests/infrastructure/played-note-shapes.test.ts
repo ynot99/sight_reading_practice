@@ -89,6 +89,44 @@ describe('where a press is drawn in time', () => {
   });
 });
 
+describe('how a mark is toned', () => {
+  function toneOf(offset: number, correct = true) {
+    const [head] = noteheads(
+      buildOverlayShapes([{ stepIndex: 1, midi: 60, correct, offset }], layout()),
+    );
+    if (head === undefined) {
+      throw new Error('expected a notehead');
+    }
+    return { correct: head.correct, looseTiming: head.looseTiming };
+  }
+
+  it('marks a right note played off the beat as loosely timed', () => {
+    expect(toneOf(-0.3)).toEqual({ correct: true, looseTiming: true });
+    expect(toneOf(0.4)).toEqual({ correct: true, looseTiming: true });
+  });
+
+  it('leaves a right note played on the beat alone', () => {
+    expect(toneOf(0)).toEqual({ correct: true, looseTiming: false });
+  });
+
+  it('says nothing new about a wrong note', () => {
+    // Wrong is wrong; how late it was does not soften it.
+    expect(toneOf(0.4, false).correct).toBe(false);
+  });
+
+  it('tones the whole mark, not just its notehead', () => {
+    // A ledger line or an accidental in a different colour from the notehead
+    // it belongs to would read as two separate marks.
+    const shapes = buildOverlayShapes(
+      // C#6: high enough for ledger lines, and sharp in C major.
+      [{ stepIndex: 1, midi: 85, correct: true, offset: -0.3 }],
+      layout(),
+    );
+    expect(shapes.length).toBeGreaterThan(2);
+    expect(shapes.every((shape) => shape.looseTiming)).toBe(true);
+  });
+});
+
 describe('buildOverlayShapes', () => {
   it('draws a played note exactly where that pitch is engraved', () => {
     const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 60, correct: true, offset: 0 }], layout());

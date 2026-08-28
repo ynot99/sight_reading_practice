@@ -541,6 +541,16 @@ select {
   fill: #15803d;
 }
 
+/* Right note, but it missed the beat: the same green, worn thinner. */
+.played--loose {
+  stroke: #22c55e;
+  fill: none;
+}
+
+.played-accidental.played--loose {
+  fill: #22c55e;
+}
+
 .played--wrong {
   stroke: #b91c1c;
   fill: none;

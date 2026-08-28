@@ -31,7 +31,7 @@ import { SettingsRepository } from '../../src/application/SettingsRepository.js'
 import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.js';
 import type { SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
-import { AppView } from '../../src/ui/AppView.js';
+import { AppView, describeTendency } from '../../src/ui/AppView.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -356,6 +356,15 @@ describe('AppView', () => {
     expect(result.hidden).toBe(false);
     expect(result.textContent).toContain('Overall');
     expect(element('session-status').textContent).toBe('Stopped');
+  });
+
+  it('reports which way a run leaned, not only how far off it was', async () => {
+    const { view } = createRig();
+    await view.initialize();
+    element<HTMLButtonElement>('start').click();
+    element<HTMLButtonElement>('stop').click();
+
+    expect(element('result').textContent).toContain('Tendency');
   });
 
   it('pushes control changes into the settings', async () => {
@@ -948,5 +957,21 @@ describe('AppView', () => {
     element<HTMLButtonElement>('start').click();
 
     expect(runtime.controller.session).toBeNull();
+  });
+});
+
+describe('describeTendency', () => {
+  it('names a systematic lean, which the absolute average hides', () => {
+    // Scatter either side of the beat averages to nothing signed; a run that
+    // sits consistently ahead of it does not, and that is the difference
+    // between a precision problem and a habit.
+    expect(describeTendency(-45)).toBe('45 ms early');
+    expect(describeTendency(60)).toBe('60 ms late');
+  });
+
+  it('does not make a habit out of being human', () => {
+    expect(describeTendency(0)).toBe('even');
+    expect(describeTendency(-14)).toBe('even');
+    expect(describeTendency(14)).toBe('even');
   });
 });

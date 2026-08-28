@@ -33,6 +33,15 @@ export interface NoteheadShape {
   readonly radiusX: number;
   readonly radiusY: number;
   readonly correct: boolean;
+  /**
+   * True when the press had to lean towards a neighbour to be drawn.
+   *
+   * A right note played well out of time is not the same achievement as one
+   * played on the beat, and the page should not congratulate both the same
+   * way. Derived from the offset rather than carried beside it, so a mark is
+   * pale exactly when it is displaced: the two can never disagree.
+   */
+  readonly looseTiming: boolean;
 }
 
 export interface LedgerShape {
@@ -41,6 +50,7 @@ export interface LedgerShape {
   readonly x1: number;
   readonly x2: number;
   readonly correct: boolean;
+  readonly looseTiming: boolean;
 }
 
 export interface AccidentalShape {
@@ -50,6 +60,7 @@ export interface AccidentalShape {
   readonly text: string;
   readonly size: number;
   readonly correct: boolean;
+  readonly looseTiming: boolean;
 }
 
 export type OverlayShape = NoteheadShape | LedgerShape | AccidentalShape;
@@ -118,6 +129,9 @@ export function buildOverlayShapes(
       continue;
     }
 
+    // Displaced means it missed the beat: the offset already carries the
+    // dead zone, so nothing here has to re-decide what counts as on time.
+    const looseTiming = mark.offset !== 0;
     const pitch = spellPlayed(mark.midi, layout.key);
     const staffNumber = staffForDiatonic(layout.geometry, mark.stepIndex, pitch.diatonicIndex);
     if (staffNumber === null) {
@@ -139,6 +153,7 @@ export function buildOverlayShapes(
           x1: x - radiusX * 1.6,
           x2: x + radiusX * 1.6,
           correct: mark.correct,
+          looseTiming,
         });
       }
     }
@@ -151,10 +166,19 @@ export function buildOverlayShapes(
         text: ACCIDENTAL_GLYPHS[pitch.alter] ?? '',
         size: step * 3.2,
         correct: mark.correct,
+        looseTiming,
       });
     }
 
-    shapes.push({ kind: 'notehead', x, y, radiusX, radiusY, correct: mark.correct });
+    shapes.push({
+      kind: 'notehead',
+      x,
+      y,
+      radiusX,
+      radiusY,
+      correct: mark.correct,
+      looseTiming,
+    });
   }
 
   return shapes;

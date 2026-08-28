@@ -25,6 +25,22 @@ const SCORING_DESCRIPTIONS: Readonly<Record<string, string>> = {
     'moves without you.',
 };
 
+/**
+ * The signed average, which says something the absolute one cannot.
+ *
+ * Scatter either side of the beat is a precision problem and takes practice;
+ * a whole run sitting consistently ahead of it is a habit, and knowing which
+ * of the two you have is worth more than any amount of scatter detail. Small
+ * enough and it is neither - just being human.
+ */
+export function describeTendency(meanDeviationMs: number): string {
+  const rounded = Math.round(meanDeviationMs);
+  if (Math.abs(rounded) < 15) {
+    return 'even';
+  }
+  return rounded < 0 ? `${Math.abs(rounded)} ms early` : `${rounded} ms late`;
+}
+
 const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
   downbeat: 'First beat of the bar',
   pulse: 'Every beat',
@@ -1028,6 +1044,7 @@ export class AppView {
         'Timing',
         `${percent(score.timing)} · ${Math.round(report.timing.meanAbsoluteDeviationMs)} ms avg`,
       ],
+      ['Tendency', describeTendency(report.timing.meanDeviationMs)],
     ];
     for (const [label, value] of rows) {
       const row = this.doc.createElement('div');

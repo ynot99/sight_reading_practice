@@ -20,6 +20,7 @@ import {
   TimingWeightedScoringStrategy,
 } from '../../src/domain/scoring/strategies.js';
 import { ScoringStrategyRegistry } from '../../src/domain/scoring/ScoringStrategyRegistry.js';
+import { DomMusicXmlImporter } from '../../src/infrastructure/notation/DomMusicXmlImporter.js';
 import type { KeyboardTarget } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { ComputerKeyboardMidiSource } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
@@ -32,6 +33,7 @@ import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.
 import type { SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
 import { AppView, describeTendency } from '../../src/ui/AppView.js';
+import { twoBarExercise } from '../support/fixtures.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -149,6 +151,7 @@ function createRig(
     controller,
     presets,
     rhythms,
+    importer: new DomMusicXmlImporter(),
     scorings,
     modes,
     webMidi: webMidiOverride ?? midi,
@@ -278,6 +281,40 @@ describe('AppView', () => {
 
     expect(runtime.controller.settings.scoringId).toBe('scoring.continuity');
     expect(element('scoring-description').textContent).toContain('without the music leaving you');
+  });
+
+  it('opens a MusicXML file and says what it lost', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    const xml = new MusicXmlSerializer().serialize(twoBarExercise({ title: 'Borrowed' }));
+    const input = element<HTMLInputElement>('score-file');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [{ text: () => Promise.resolve(xml) }],
+    });
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(runtime.controller.openedExercise?.title).toBe('Borrowed');
+    expect(element('import-notice').hidden).toBe(false);
+    expect(element('import-notice').textContent).toContain('Borrowed');
+  });
+
+  it('explains a file it cannot read instead of going quiet', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    const input = element<HTMLInputElement>('score-file');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [{ text: () => Promise.resolve('<shopping><item>milk</item></shopping>') }],
+    });
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(runtime.controller.openedExercise).toBeNull();
+    expect(element('import-notice').textContent).toContain('Could not open');
   });
 
   it('lets the click drop out for whole bars', async () => {

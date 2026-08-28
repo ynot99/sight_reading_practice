@@ -129,6 +129,7 @@ export class PracticeController {
   private currentSession: PracticeSession | null = null;
   private sessionSubscriptions: Unsubscribe[] = [];
   private lastSeed: number | null = null;
+  private openedScore: Exercise | null = null;
 
   constructor(dependencies: PracticeControllerDependencies) {
     this.deps = dependencies;
@@ -220,6 +221,8 @@ export class PracticeController {
         tempoBpm: changes.tempoBpm ?? defaults.tempoBpm,
       };
       this.currentSettings = next;
+      // Changing what would be generated is a decision to generate again.
+      this.openedScore = null;
       this.provider = this.createProvider();
     } else {
       this.currentSettings = next;
@@ -248,7 +251,26 @@ export class PracticeController {
 
   /** Generates fresh material and renders it. */
   async loadNewExercise(): Promise<Exercise> {
+    // Asking for a new exercise is asking the generator for one, so an opened
+    // file steps aside rather than being handed back unchanged.
+    this.openedScore = null;
     return this.load(undefined);
+  }
+
+  /**
+   * Practises a score that came from outside instead of from the generator.
+   *
+   * It stays until the reader asks for a new exercise or changes what would be
+   * generated, so the two sources never quietly swap places underneath them.
+   */
+  async openScore(exercise: Exercise): Promise<Exercise> {
+    this.openedScore = exercise;
+    return this.load(undefined);
+  }
+
+  /** The opened score, or `null` when the material is being generated. */
+  get openedExercise(): Exercise | null {
+    return this.openedScore;
   }
 
   /**
@@ -280,6 +302,11 @@ export class PracticeController {
   private async load(seed: number | undefined): Promise<Exercise> {
     this.disposeSession();
 
+    const opened = this.openedScore;
+    if (opened !== null) {
+      return this.present(opened);
+    }
+
     const request: ExerciseRequest = {
       measures: this.currentSettings.measures,
       timeSignature: this.currentSettings.timeSignature,
@@ -289,7 +316,11 @@ export class PracticeController {
       ...(seed === undefined ? {} : { seed }),
     };
 
-    const exercise = await this.provider.provide(request);
+    return this.present(await this.provider.provide(request));
+  }
+
+  /** Engraves an exercise and makes it the one being practised. */
+  private async present(exercise: Exercise): Promise<Exercise> {
     const musicXml = this.deps.serializer.serialize(exercise);
 
     this.exercise = exercise;

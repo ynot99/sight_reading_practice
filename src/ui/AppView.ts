@@ -198,6 +198,9 @@ export class AppView {
     progress: HTMLProgressElement;
     log: HTMLUListElement;
     result: HTMLElement;
+    openScore: HTMLButtonElement;
+    scoreFile: HTMLInputElement;
+    importNotice: HTMLElement;
     preset: HTMLSelectElement;
     presetDescription: HTMLElement;
     rhythm: HTMLSelectElement;
@@ -266,6 +269,9 @@ export class AppView {
       progress: requireElement(doc, 'progress'),
       log: requireElement(doc, 'log'),
       result: requireElement(doc, 'result'),
+      openScore: requireElement(doc, 'open-score'),
+      scoreFile: requireElement(doc, 'score-file'),
+      importNotice: requireElement(doc, 'import-notice'),
       preset: requireElement(doc, 'preset'),
       presetDescription: requireElement(doc, 'preset-description'),
       rhythm: requireElement(doc, 'rhythm'),
@@ -332,6 +338,40 @@ export class AppView {
     this.sessionSubscriptions = [];
   }
 
+  /**
+   * Reads the chosen file and practises it.
+   *
+   * Whatever the importer had to drop is shown rather than swallowed: the
+   * model is narrower than MusicXML, and a reader who is not told what was
+   * lost will blame the trainer for the difference.
+   */
+  private async openChosenScore(): Promise<void> {
+    const file = this.el.scoreFile.files?.[0];
+    // Cleared so that choosing the same file twice still fires a change.
+    this.el.scoreFile.value = '';
+    if (file === undefined) {
+      return;
+    }
+
+    try {
+      const { exercise, warnings } = this.runtime.importer.read(await file.text());
+      await this.runtime.controller.openScore(exercise);
+      const dropped = warnings.map((warning) => warning.detail).join(' ');
+      this.showImportNotice(
+        dropped === '' ? `Opened ${exercise.title}.` : `Opened ${exercise.title}. ${dropped}`,
+      );
+    } catch (error) {
+      this.showImportNotice(
+        error instanceof Error ? `Could not open that file. ${error.message}` : 'Could not open that file.',
+      );
+    }
+  }
+
+  private showImportNotice(message: string): void {
+    this.el.importNotice.textContent = message;
+    this.el.importNotice.hidden = false;
+  }
+
   private populateSelects(): void {
     fillSelect(
       this.el.preset,
@@ -381,6 +421,14 @@ export class AppView {
 
   private bindControls(): void {
     const { controller } = this.runtime;
+
+    this.listen(this.el.openScore, 'click', () => {
+      this.el.scoreFile.click();
+    });
+
+    this.listen(this.el.scoreFile, 'change', () => {
+      void this.openChosenScore();
+    });
 
     this.listen(this.el.preset, 'change', () => {
       controller.updateSettings({ presetId: this.el.preset.value });

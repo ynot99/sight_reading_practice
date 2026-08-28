@@ -163,6 +163,8 @@ src/
 │   ├── matching/ChordMatcher.ts    # note-ons ➜ verdicts, with a tolerance window
 │   ├── notation/
 │   │   ├── MusicXmlSerializer.ts   # Exercise ➜ MusicXML 4.0 (IMusicXmlSerializer)
+│   │   ├── MusicXmlParser.ts       # MusicXML ➜ Exercise, with a dropped-feature report
+│   │   ├── XmlNode.ts              #   DOM-free tree the parser reads
 │   │   └── XmlWriter.ts
 │   ├── generation/
 │   │   ├── IExerciseGenerator.ts   # the generation port
@@ -377,10 +379,14 @@ beat holds in `clicksPerPulse`. `subdivisionsPerPulseFor` takes the lowest
 common multiple of that and what the music needs, so the loop automatically
 ticks often enough to sound it.
 
-**Load MusicXML files instead of generating.** Implement `IExerciseProvider`.
-The one piece of work is parsing MusicXML back into an `Exercise`, since the
-timeline (and therefore the matcher) is derived from the domain model rather
-than from the engraver's internals.
+**Open a MusicXML file.** Already built: `Open MusicXML…` reads a score into an
+`Exercise`, which is then practised like any other. It has to become one -
+the timeline the player is judged against is derived from the exercise, and
+building it from the engraver's parse of the same file instead would be the
+drift the single source of truth exists to prevent. The model is narrower than
+the format, so the import either refuses a file or reports what it dropped;
+`MusicXmlParser` lists the cases. Extra voices, grace notes, mid-piece key
+changes and anything shorter than a sixteenth are the main limits.
 
 ## Known limits and next steps
 

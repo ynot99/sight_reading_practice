@@ -27,7 +27,7 @@ import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
 import { DomainError } from '../../src/shared/errors.js';
-import { twoBarExercise } from '../support/fixtures.js';
+import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
 
 /** Strips the printed tempo so two renderings can be compared note for note. */
 function withoutTempoMark(xml: string): string {
@@ -269,6 +269,46 @@ describe('PracticeController', () => {
     controller.updateSettings({ rhythmProfileId: 'no-such-profile' });
 
     return expect(controller.loadNewExercise()).rejects.toThrow(DomainError);
+  });
+
+  it('practises a score that came from outside', async () => {
+    const { controller, renderer } = createController();
+    const opened = tiedExercise({ title: 'Something Borrowed' });
+
+    const loaded = await controller.openScore(opened);
+
+    expect(loaded).toBe(opened);
+    expect(controller.currentExercise).toBe(opened);
+    expect(controller.openedExercise).toBe(opened);
+    expect(renderer.loadedXml).toContain('Something Borrowed');
+    // The timeline is derived from it like any other exercise, which is the
+    // whole reason an import has to become one.
+    expect(controller.currentTimeline?.length).toBe(4);
+  });
+
+  it('keeps the opened score until something says otherwise', async () => {
+    const { controller } = createController();
+    await controller.openScore(tiedExercise());
+
+    await controller.reloadExercise();
+    expect(controller.openedExercise).not.toBeNull();
+
+    // Asking for a new exercise is asking the generator for one.
+    await controller.loadNewExercise();
+    expect(controller.openedExercise).toBeNull();
+  });
+
+  it('goes back to generating when the material settings change', async () => {
+    const { controller } = createController();
+    await controller.openScore(tiedExercise());
+
+    const target = BUILT_IN_PRESETS[2];
+    if (target === undefined) {
+      throw new Error('expected several presets');
+    }
+    controller.updateSettings({ presetId: target.id });
+
+    expect(controller.openedExercise).toBeNull();
   });
 
   it('honours requested settings when generating', async () => {

@@ -24,12 +24,16 @@
         </div>
       </header>
 
+      <p id="import-notice" class="hint" hidden></p>
+
       <div class="toolbar">
         <button id="start" type="button" class="button button--primary" title="Space">Start</button>
         <button id="pause" type="button" class="button" title="Space" disabled>Pause</button>
         <button id="stop" type="button" class="button button--ghost" disabled>Stop</button>
         <span class="toolbar__gap"></span>
         <button id="new-exercise" type="button" class="button">New exercise</button>
+        <button id="open-score" type="button" class="button">Open MusicXML…</button>
+        <input id="score-file" type="file" accept=".musicxml,.xml,application/vnd.recordare.musicxml+xml,text/xml" hidden />
         <button id="focus" type="button" class="button">Fullscreen</button>
       </div>
 

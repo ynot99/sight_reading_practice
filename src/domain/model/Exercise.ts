@@ -11,6 +11,20 @@ export interface NoteEntry {
   readonly kind: 'note';
   readonly pitches: readonly Pitch[];
   readonly duration: Duration;
+  /**
+   * MIDI numbers of this entry whose sound continues into the next one.
+   *
+   * A tie is not a second note: the key is struck once and held, which is why
+   * this belongs to the *sounding* model rather than to the notation. The
+   * timeline reads it and refuses to demand the note again, so a value held
+   * across a bar line is one press, exactly as it is at the keyboard.
+   *
+   * Identified by MIDI number because a chord may never contain the same pitch
+   * twice - {@link validateExercise} guarantees it - so the number names one
+   * note of this entry without ambiguity, and only some of a chord's notes may
+   * be tied.
+   */
+  readonly tiedForward: readonly number[];
 }
 
 /** Silence occupying a rhythmic value. */
@@ -58,9 +72,22 @@ export interface Exercise {
   readonly metadata: ExerciseMetadata;
 }
 
-export function noteEntry(pitches: Pitch | readonly Pitch[], duration: Duration): NoteEntry {
+export function noteEntry(
+  pitches: Pitch | readonly Pitch[],
+  duration: Duration,
+  tiedForward: readonly number[] = [],
+): NoteEntry {
   const list = Array.isArray(pitches) ? [...(pitches as readonly Pitch[])] : [pitches as Pitch];
-  return { kind: 'note', pitches: list, duration };
+  return { kind: 'note', pitches: list, duration, tiedForward: [...tiedForward] };
+}
+
+/** The same entry with every one of its pitches held into the next. */
+export function tiedNoteEntry(
+  pitches: Pitch | readonly Pitch[],
+  duration: Duration,
+): NoteEntry {
+  const entry = noteEntry(pitches, duration);
+  return { ...entry, tiedForward: entry.pitches.map((pitch) => pitch.midi) };
 }
 
 export function restEntry(duration: Duration): RestEntry {
@@ -146,6 +173,51 @@ export function validateExercise(exercise: Exercise): void {
         validateEntry(entry, `${measurePath}.entries[${entryIndex}]`);
       });
     });
+
+    validateTies(staff, path);
+  });
+}
+
+/**
+ * Checks that every tie lands somewhere.
+ *
+ * A tie that leads into a rest, into a different pitch or off the end of the
+ * piece is not a held note - it is a note the player would be waiting to
+ * release forever, and a timeline that quietly never demands it again. Ties
+ * cross bar lines by design, which is most of what they are for, so this walks
+ * the staff rather than each measure.
+ */
+function validateTies(staff: StaffPart, path: string): void {
+  const entries = staff.measures.flatMap((measure, measureIndex) =>
+    measure.entries.map((entry, entryIndex) => ({
+      entry,
+      where: `${path}.measures[${measureIndex}].entries[${entryIndex}]`,
+    })),
+  );
+
+  entries.forEach((current, index) => {
+    const { entry, where } = current;
+    if (entry.kind !== 'note' || entry.tiedForward.length === 0) {
+      return;
+    }
+    const next = entries[index + 1]?.entry;
+    for (const midi of entry.tiedForward) {
+      if (next === undefined) {
+        throw new ExerciseValidationError(
+          `A tie on MIDI ${midi} runs off the end of the staff.`,
+          where,
+        );
+      }
+      if (next.kind !== 'note') {
+        throw new ExerciseValidationError(`A tie on MIDI ${midi} leads into a rest.`, where);
+      }
+      if (!next.pitches.some((pitch) => pitch.midi === midi)) {
+        throw new ExerciseValidationError(
+          `A tie on MIDI ${midi} leads into an entry that does not contain it.`,
+          where,
+        );
+      }
+    }
   });
 }
 
@@ -166,6 +238,14 @@ function validateEntry(entry: MusicalEntry, path: string): void {
           );
         }
         seen.add(pitch.midi);
+      }
+      for (const midi of entry.tiedForward) {
+        if (!seen.has(midi)) {
+          throw new ExerciseValidationError(
+            `A tie names MIDI ${midi}, which this entry does not play.`,
+            path,
+          );
+        }
       }
       return;
     }

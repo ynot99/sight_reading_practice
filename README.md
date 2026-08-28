@@ -384,8 +384,11 @@ than from the engraver's internals.
 
 ## Known limits and next steps
 
-- Rhythms stop at sixteenth notes and one dot; no tuplets, ties or pickup bars.
+- Rhythms stop at sixteenth notes and one dot; no tuplets or pickup bars.
   Sixteenths arrive in beamed pairs, never singly.
+- Ties exist in the model, the notation and the timeline, but no generator
+  emits one yet: writing tied rhythms means splitting values across bar lines,
+  which belongs with the syncopation work rather than with ties themselves.
 - Generated music is deliberately simple — diatonic, no accidentals outside the
   key — though the notation layer already handles accidentals correctly.
 - The side panel still names the notes you owe, so hiding the cursor is not yet

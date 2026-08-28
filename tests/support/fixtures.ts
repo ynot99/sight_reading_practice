@@ -129,6 +129,52 @@ export function compoundBarExercise(overrides: ExerciseOverrides = {}): Exercise
   };
 }
 
+/**
+ * Two bars of 4/4 with a note held across the bar line.
+ *
+ *   treble: C4 (half) D4 E4 ~ | E4 (whole)
+ *   bass:   C3 (whole)        | C3 (whole)
+ *
+ * The tied E4 is struck once and held, so the downbeat of bar two demands the
+ * left hand's C3 and nothing else - which is the whole point of the tie and
+ * the one thing a timeline can get wrong about it.
+ */
+export function tiedExercise(overrides: ExerciseOverrides = {}): Exercise {
+  const held = p('E4');
+  return {
+    id: overrides.id ?? 'fixture-tied',
+    title: overrides.title ?? 'Tied fixture',
+    key: overrides.key ?? KeySignature.major(0),
+    timeSignature: overrides.timeSignature ?? new TimeSignature(4, 4),
+    tempoBpm: overrides.tempoBpm ?? 60,
+    metadata: { generatorId: 'fixture', seed: 3 },
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        measures: [
+          bar(
+            noteEntry(p('C4'), Duration.HALF),
+            noteEntry(p('D4'), Duration.QUARTER),
+            noteEntry(held, Duration.QUARTER, [held.midi]),
+          ),
+          bar(noteEntry(held, Duration.WHOLE)),
+        ],
+      },
+      {
+        staffNumber: 2,
+        voice: 2,
+        clef: 'bass',
+        measures: [
+          bar(noteEntry(p('C3'), Duration.WHOLE)),
+          bar(noteEntry(p('C3'), Duration.WHOLE)),
+        ],
+      },
+    ],
+  };
+}
+
 export const MIDI = {
   G2: p('G2').midi,
   C3: p('C3').midi,

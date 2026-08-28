@@ -100,6 +100,9 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
 
   private writeMeasures(writer: XmlWriter, exercise: Exercise): void {
     const bars = exercise.staves[0]?.measures.length ?? 0;
+    // Ties cross bar lines - that is most of what they are for - so what each
+    // staff is still holding has to outlive the measure loop.
+    const heldByStaff = new Map<number, Set<number>>();
     for (let measureIndex = 0; measureIndex < bars; measureIndex += 1) {
       writer.element('measure', { number: measureIndex + 1 }, () => {
         if (measureIndex === 0) {
@@ -114,7 +117,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
               writer.leaf('duration', exercise.timeSignature.ticksPerMeasure);
             });
           }
-          this.writeStaffMeasure(writer, exercise, staff, measureIndex);
+          this.writeStaffMeasure(writer, exercise, staff, measureIndex, heldByStaff);
         });
       });
     }
@@ -159,6 +162,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     exercise: Exercise,
     staff: StaffPart,
     measureIndex: number,
+    heldByStaff: Map<number, Set<number>>,
   ): void {
     const measure = staff.measures[measureIndex];
     if (measure === undefined) {
@@ -167,9 +171,12 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     // Accidentals are only printed when they change what the reader already
     // knows: the key signature at the bar line, then any accidental so far.
     const activeAccidentals = new Map<string, Alteration>();
+    let held = heldByStaff.get(staff.staffNumber) ?? new Set<number>();
     for (const entry of measure.entries) {
-      this.writeEntry(writer, exercise, staff, entry, activeAccidentals);
+      this.writeEntry(writer, exercise, staff, entry, activeAccidentals, held);
+      held = entry.kind === 'note' ? new Set(entry.tiedForward) : new Set<number>();
     }
+    heldByStaff.set(staff.staffNumber, held);
   }
 
   private writeEntry(
@@ -178,6 +185,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     staff: StaffPart,
     entry: MusicalEntry,
     activeAccidentals: Map<string, Alteration>,
+    held: ReadonlySet<number>,
   ): void {
     switch (entry.kind) {
       case 'rest': {
@@ -198,6 +206,8 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       }
       case 'note': {
         entry.pitches.forEach((pitch, pitchIndex) => {
+          const stopping = held.has(pitch.midi);
+          const starting = entry.tiedForward.includes(pitch.midi);
           writer.element('note', undefined, () => {
             if (pitchIndex > 0) {
               writer.leaf('chord');
@@ -210,16 +220,39 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
               writer.leaf('octave', pitch.octave);
             });
             writer.leaf('duration', entry.duration.ticks);
+            // `<tie>` is the sound - one press held - and `<tied>` below is the
+            // slur the reader sees. MusicXML keeps them apart, and a note that
+            // ends one tie and begins another writes the stop first.
+            if (stopping) {
+              writer.leaf('tie', undefined, { type: 'stop' });
+            }
+            if (starting) {
+              writer.leaf('tie', undefined, { type: 'start' });
+            }
             writer.leaf('voice', staff.voice);
             writer.leaf('type', entry.duration.type);
             if (entry.duration.dots === 1) {
               writer.leaf('dot');
             }
-            const accidental = this.accidentalFor(exercise, pitch, activeAccidentals);
+            // A continuation never reprints the accidental: the reader was
+            // told at the start of the tie and the note never stopped.
+            const accidental = stopping
+              ? undefined
+              : this.accidentalFor(exercise, pitch, activeAccidentals);
             if (accidental !== undefined) {
               writer.leaf('accidental', accidental);
             }
             writer.leaf('staff', staff.staffNumber);
+            if (stopping || starting) {
+              writer.element('notations', undefined, () => {
+                if (stopping) {
+                  writer.leaf('tied', undefined, { type: 'stop' });
+                }
+                if (starting) {
+                  writer.leaf('tied', undefined, { type: 'start' });
+                }
+              });
+            }
           });
         });
         return;

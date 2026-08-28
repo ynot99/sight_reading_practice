@@ -1,5 +1,5 @@
 import { elementAt } from '../../shared/asserts.js';
-import type { Exercise } from '../model/Exercise.js';
+import type { Exercise, MusicalEntry } from '../model/Exercise.js';
 import { exerciseTicks } from '../model/Exercise.js';
 import type { Pitch } from '../model/Pitch.js';
 
@@ -85,6 +85,32 @@ export class ExerciseTimeline {
 }
 
 /**
+ * How long a press actually lasts, following any ties out of this entry.
+ *
+ * The notated value is only half the story once a note is tied: the key stays
+ * down for the whole chain, and that is what a listener hears and what
+ * playback would have to schedule.
+ */
+function soundingTicks(
+  entries: readonly { readonly entry: MusicalEntry; readonly onsetTicks: number }[],
+  index: number,
+  midi: number,
+): number {
+  let total = 0;
+  for (let at = index; at < entries.length; at += 1) {
+    const current = entries[at]?.entry;
+    if (current === undefined) {
+      break;
+    }
+    total += current.duration.ticks;
+    if (current.kind !== 'note' || !current.tiedForward.includes(midi)) {
+      break;
+    }
+  }
+  return total;
+}
+
+/**
  * Flattens an exercise into its timeline.
  *
  * Notes from different staves that share an onset are merged into one step,
@@ -98,24 +124,37 @@ export function buildTimeline(exercise: Exercise): ExerciseTimeline {
   const ticksPerMeasure = exercise.timeSignature.ticksPerMeasure;
 
   for (const staff of exercise.staves) {
-    staff.measures.forEach((measure, measureIndex) => {
+    const entries = staff.measures.flatMap((measure, measureIndex) => {
       let cursor = measureIndex * ticksPerMeasure;
-      for (const entry of measure.entries) {
-        onsets.add(cursor);
-        if (entry.kind === 'note') {
-          const bucket = notesByOnset.get(cursor) ?? [];
-          for (const pitch of entry.pitches) {
-            bucket.push({
-              pitch,
-              midi: pitch.midi,
-              staffNumber: staff.staffNumber,
-              durationTicks: entry.duration.ticks,
-            });
-          }
-          notesByOnset.set(cursor, bucket);
-        }
+      return measure.entries.map((entry) => {
+        const onsetTicks = cursor;
         cursor += entry.duration.ticks;
+        return { entry, onsetTicks };
+      });
+    });
+
+    // Pitches the previous entry is still holding. A tied note is a
+    // continuation of one press, so it must not be demanded a second time.
+    let held = new Set<number>();
+
+    entries.forEach(({ entry, onsetTicks }, index) => {
+      onsets.add(onsetTicks);
+      if (entry.kind === 'note') {
+        const bucket = notesByOnset.get(onsetTicks) ?? [];
+        for (const pitch of entry.pitches) {
+          if (held.has(pitch.midi)) {
+            continue;
+          }
+          bucket.push({
+            pitch,
+            midi: pitch.midi,
+            staffNumber: staff.staffNumber,
+            durationTicks: soundingTicks(entries, index, pitch.midi),
+          });
+        }
+        notesByOnset.set(onsetTicks, bucket);
       }
+      held = entry.kind === 'note' ? new Set(entry.tiedForward) : new Set();
     });
   }
 

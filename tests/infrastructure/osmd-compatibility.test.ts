@@ -9,7 +9,8 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
-import { twoBarExercise } from '../support/fixtures.js';
+import { Pitch } from '../../src/domain/model/Pitch.js';
+import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
 
 const RHYTHMS = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
 
@@ -97,6 +98,29 @@ describe('OSMD accepts the MusicXML we produce', () => {
 
       expect(osmd.Sheet.SourceMeasures).toHaveLength(4);
     }
+  });
+
+  it('reads a tie as one held note and still stops the cursor on it', async () => {
+    const exercise = tiedExercise();
+    const timeline = buildTimeline(exercise);
+    const osmd = createDisplay();
+
+    await osmd.load(serializer.serialize(exercise));
+
+    const iterator = osmd.Sheet.MusicPartManager.getIterator();
+    let positions = 0;
+    let guard = 50;
+    while (!iterator.EndReached && guard > 0) {
+      guard -= 1;
+      positions += 1;
+      iterator.moveToNext();
+    }
+
+    // The engraver draws the continuation, so it has a cursor position; the
+    // timeline has the step but demands nothing new there. Those are different
+    // facts, and both derivations have to agree on the first one.
+    expect(positions).toBe(timeline.length);
+    expect(timeline.steps.at(-1)?.expectedMidi).toEqual([Pitch.parse('C3').midi]);
   });
 
   // Sixteenths halve the distance between onsets and bring beaming with them,

@@ -27,6 +27,9 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
   asserts that OSMD's cursor and our timeline agree on the number of positions.
 - Musical time is integer divisions (`DIVISIONS_PER_QUARTER = 480`). Do not
   introduce floating-point positions; convert to milliseconds only at the edge.
+- A tie is one press, not two. `buildTimeline` must never demand a tied note
+  again, and must still create the step the engraver draws there - the cursor
+  and the timeline agree on *positions*, not on what is expected at them.
 - Generators must produce exercises that pass `validateExercise` for every key
   and time signature offered in the UI. There is a sweep test for this.
 - Exercise generation is seeded and must stay reproducible: same seed and

@@ -1,21 +1,21 @@
 # five-finger-c
 staff 1 (treble)
   1: C4/half D4/half
-  2: E4/quarter D4/quarter F4/half
-  3: E4/quarter R/quarter R/quarter D4/quarter
-  4: F4/quarter G4/half F4/quarter
+  2: E4/half F4/half
+  3: E4/half F4/quarter G4/quarter
+  4: F4/quarter G4/quarter F4/quarter R/quarter
 staff 2 (bass)
-  1: C3/half D3/half
-  2: E3/whole
+  1: G3/half E3/half
+  2: C3/whole
   3: G3/half E3/half
-  4: G3/half F3/half
+  4: C3/whole
 
 # treble-only
 staff 1 (treble)
-  1: C5/eighth B4/eighth C5/half A4/quarter
-  2: B4/quarter C5/eighth B4/eighth A4/eighth G4/eighth F4/quarter
-  3: G4/half F4/eighth E4/eighth D4/eighth F4/eighth
-  4: A4/quarter E4/eighth F4/eighth G4/eighth C5/eighth B4/quarter
+  1: B4/eighth A4/eighth G4/half B4/quarter
+  2: A4/quarter G4/quarter E4/eighth F4/eighth G4/eighth A4/eighth
+  3: R/quarter B4/quarter A4/quarter G4/quarter
+  4: F4/eighth E4/eighth F4/half E4/quarter
 staff 2 (bass)
   1: R/whole
   2: R/whole
@@ -29,54 +29,54 @@ staff 1 (treble)
   3: R/whole
   4: R/whole
 staff 2 (bass)
-  1: C3/half B2/half
-  2: C3/quarter B2/quarter E3/half
-  3: D3/quarter R/quarter R/quarter C3/quarter
-  4: F3/quarter G3/half F3/quarter
+  1: B2/half C3/half
+  2: D3/half E3/half
+  3: D3/half E3/quarter F3/quarter
+  4: G3/quarter E3/quarter C3/quarter R/quarter
 
 # melody-and-intervals
 staff 1 (treble)
-  1: G4/eighth A4/eighth B4/half F#4/quarter
-  2: G4/quarter A4/eighth G4/eighth F#4/eighth E4/eighth D4/quarter
-  3: E4/half D4/eighth C4/eighth B3/eighth D4/eighth
-  4: G4/quarter C4/eighth F#4/eighth E4/eighth C4/eighth E4/quarter
+  1: F#4/eighth E4/eighth D4/half G4/quarter
+  2: F#4/quarter E4/eighth B3/eighth C4/eighth D4/eighth G4/quarter
+  3: A4/quarter B4/quarter C5/half
+  4: D5/eighth C5/eighth B4/half A4/quarter
 staff 2 (bass)
-  1: C3+A3/half C3+A3/half
-  2: G2+D3/whole
-  3: R/quarter C3+A3/half D3+F#3/quarter
-  4: G2+E3/half G2+D3/half
+  1: E3+G3/whole
+  2: C3+E3/half C3+A3/quarter C3+G3/quarter
+  3: C3+A3/quarter E3+G3/half D3+B3/quarter
+  4: G2+D3/half C3+A3/half
 
 # triads-left-hand
 staff 1 (treble)
-  1: C5/eighth D5/eighth E5/half B4/quarter
-  2: C5/quarter D5/eighth C5/eighth B4/eighth A4/eighth G4/quarter
-  3: A4/half G4/eighth D4/eighth A4/eighth B4/eighth
-  4: A4/half B4/quarter E4/quarter
+  1: B4/eighth A4/eighth G4/half A4/quarter
+  2: B4/quarter A4/eighth G4/eighth D4/eighth E4/eighth F4/quarter
+  3: G4/quarter F4/quarter G4/quarter A4/quarter
+  4: E5/quarter G5/eighth C5/eighth F5/quarter E5/eighth D5/eighth
 staff 2 (bass)
-  1: F3+A3+C4/whole
-  2: C3+E3+G3/half C3+E3+G3/quarter C3+E3+G3/quarter
-  3: F3+A3+C4/half R/half
-  4: F3+A3+C4/half F3+A3+C4/half
+  1: G2+B2+D3/whole
+  2: F3+A3+C4/half F3+A3+C4/half
+  3: F3+A3+C4/half F3+A3+C4/quarter F3+A3+C4/quarter
+  4: C3+E3+G3/half C3+E3+G3/quarter C3+E3+G3/quarter
 
 # wide-grand-staff
 staff 1 (treble)
-  1: F4/eighth G4/eighth D4/half C4/quarter
-  2: D4/quarter E4/eighth D4/eighth C4/eighth Bb3/eighth A3/quarter
-  3: Bb3/half A3/eighth E4/eighth C5/eighth D5/eighth
-  4: C5/half D5/quarter F4/quarter
-  5: Bb4/eighth A4/eighth G4/quarter F4/eighth E4/eighth A4/quarter
-  6: E5/eighth D5/eighth C5/quarter Bb4/quarter C5/eighth A5/eighth
-  7: D5/quarter Bb4/eighth G4/eighth A4/half
-  8: E5/eighth A5/eighth G5/quarter F5/quarter Bb4/eighth C5/eighth
+  1: E4/eighth D4/eighth C4/half E4/quarter
+  2: D4/quarter C4/quarter F4/eighth G4/eighth A4/eighth Bb4/eighth
+  3: R/quarter D5/quarter C5/quarter Bb4/quarter
+  4: A4/eighth G4/eighth A4/half G4/quarter
+  5: F4/eighth E4/eighth A4/half G4/quarter
+  6: F4/eighth E4/eighth E5/eighth C5/eighth A4/quarter F4/eighth F5/eighth
+  7: D5/quarter Bb4/half G4/quarter
+  8: A4/quarter C5/quarter F4/quarter Bb3/quarter
 staff 2 (bass)
-  1: F3/whole
-  2: R/half C3/half
-  3: D3/quarter Bb2/quarter A2/half
-  4: Bb2/quarter D3/quarter C3/quarter A2/quarter
-  5: F3/quarter E3/quarter D3/half
-  6: R/quarter E3/quarter F3/quarter R/quarter
-  7: Bb2/half A2/quarter G2/quarter
-  8: D3/quarter Bb3/quarter C4/quarter Bb3/quarter
+  1: F3/quarter G3/quarter A3/quarter R/quarter
+  2: Bb3/quarter C3/quarter E3/half
+  3: G3/half E3/quarter C3/quarter
+  4: E3/quarter R/half G3/quarter
+  5: E3/quarter C3/half E3/quarter
+  6: G3/whole
+  7: E3/whole
+  8: C3/quarter E3/quarter G3/quarter E3/quarter
 
 # figures
 staff 1 (treble)

@@ -383,11 +383,11 @@ other's units. Only Flow mode offsets anything: in Wait mode the music holds
 still until you play, so a slow answer is not lateness.
 
 **A new melodic figure.** Add a kind to `FIGURE_KINDS` and a shape to
-`FigureWalker`. Figures are why `PatternVoiceGenerator` exists: fluent reading
-is mostly recognising groups — a scale fragment, a broken chord, a motif
-answered a step higher — and a line made of independent random steps offers
-nothing to recognise. Everything is in scale degrees, so a figure is in key and
-correctly spelled for free.
+`FigureWalker`. Figures are why `PatternVoiceGenerator` exists, and every level
+is built from them: fluent reading is mostly recognising groups — a scale
+fragment, a broken chord, a motif answered a step higher — and a line made of
+independent random steps offers nothing to recognise. Everything is in scale
+degrees, so a figure is in key and correctly spelled for free.
 
 **A new practice mode.** Extend `BasePracticeMode`, override the hooks you care
 about, register it. Adding a hook to the interface later cannot break existing

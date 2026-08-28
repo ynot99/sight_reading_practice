@@ -4,7 +4,6 @@ import { TimeSignature } from '../model/TimeSignature.js';
 import type { ExercisePreset } from './ExercisePresetRegistry.js';
 import { GrandStaffExerciseGenerator } from './GrandStaffExerciseGenerator.js';
 import { HarmonyVoiceGenerator } from './voices/HarmonyVoiceGenerator.js';
-import { MelodyVoiceGenerator } from './voices/MelodyVoiceGenerator.js';
 import { PatternVoiceGenerator } from './voices/PatternVoiceGenerator.js';
 import { SilentVoiceGenerator } from './voices/SilentVoiceGenerator.js';
 import type { PitchRange } from './voices/IVoiceGenerator.js';
@@ -20,7 +19,9 @@ function range(lowest: string, highest: string): PitchRange {
  * registering one from anywhere else) rather than editing a switch statement.
  *
  * Presets describe *material* only - which pitches, how far they leap, how
- * many notes at once. Rhythm is the other axis and lives in
+ * many notes at once, and which melodic figures the line is built from. Every
+ * level is built from figures rather than from single steps, because fluent
+ * reading is recognising groups and a random walk has none to recognise. Rhythm is the other axis and lives in
  * {@link ../rhythmProfiles.js}; `defaults.rhythmProfileId` merely says which
  * rhythmic level a preset was tuned for.
  */
@@ -35,20 +36,28 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
       staves: [
         {
           clef: 'treble',
-          voice: new MelodyVoiceGenerator({
+          voice: new PatternVoiceGenerator({
             range: range('C4', 'G4'),
             role: 'lead',
-            maxLeap: 2,
-            stepProbability: 0.75,
+            figures: [
+              { value: 'scale', weight: 6 },
+              { value: 'neighbour', weight: 3 },
+              { value: 'repeat', weight: 2 },
+            ],
+            maxLeap: 1,
           }),
         },
         {
           clef: 'bass',
-          voice: new MelodyVoiceGenerator({
+          voice: new PatternVoiceGenerator({
             range: range('C3', 'G3'),
             role: 'accompaniment',
+            figures: [
+              { value: 'scale', weight: 4 },
+              { value: 'arpeggio', weight: 3 },
+              { value: 'repeat', weight: 2 },
+            ],
             maxLeap: 2,
-            stepProbability: 0.7,
           }),
         },
       ],
@@ -71,11 +80,16 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
       staves: [
         {
           clef: 'treble',
-          voice: new MelodyVoiceGenerator({
+          voice: new PatternVoiceGenerator({
             range: range('C4', 'C5'),
             role: 'lead',
-            maxLeap: 3,
-            stepProbability: 0.7,
+            figures: [
+              { value: 'scale', weight: 6 },
+              { value: 'neighbour', weight: 3 },
+              { value: 'arpeggio', weight: 2 },
+              { value: 'repeat', weight: 1 },
+            ],
+            maxLeap: 2,
           }),
         },
         { clef: 'bass', voice: new SilentVoiceGenerator() },
@@ -100,11 +114,16 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
         { clef: 'treble', voice: new SilentVoiceGenerator() },
         {
           clef: 'bass',
-          voice: new MelodyVoiceGenerator({
+          voice: new PatternVoiceGenerator({
             range: range('F2', 'C4'),
             role: 'lead',
+            figures: [
+              { value: 'scale', weight: 5 },
+              { value: 'arpeggio', weight: 3 },
+              { value: 'neighbour', weight: 2 },
+              { value: 'repeat', weight: 1 },
+            ],
             maxLeap: 3,
-            stepProbability: 0.7,
           }),
         },
       ],
@@ -127,11 +146,16 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
       staves: [
         {
           clef: 'treble',
-          voice: new MelodyVoiceGenerator({
+          voice: new PatternVoiceGenerator({
             range: range('B3', 'E5'),
             role: 'lead',
-            maxLeap: 4,
-            stepProbability: 0.65,
+            figures: [
+              { value: 'scale', weight: 5 },
+              { value: 'arpeggio', weight: 3 },
+              { value: 'neighbour', weight: 2 },
+              { value: 'sequence', weight: 2 },
+            ],
+            maxLeap: 3,
           }),
         },
         {
@@ -165,11 +189,16 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
       staves: [
         {
           clef: 'treble',
-          voice: new MelodyVoiceGenerator({
+          voice: new PatternVoiceGenerator({
             range: range('C4', 'G5'),
             role: 'lead',
-            maxLeap: 4,
-            stepProbability: 0.6,
+            figures: [
+              { value: 'scale', weight: 4 },
+              { value: 'arpeggio', weight: 4 },
+              { value: 'sequence', weight: 2 },
+              { value: 'neighbour', weight: 2 },
+            ],
+            maxLeap: 3,
           }),
         },
         {
@@ -203,20 +232,30 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
       staves: [
         {
           clef: 'treble',
-          voice: new MelodyVoiceGenerator({
+          voice: new PatternVoiceGenerator({
             range: range('G3', 'A5'),
             role: 'lead',
-            maxLeap: 5,
-            stepProbability: 0.55,
+            figures: [
+              { value: 'scale', weight: 4 },
+              { value: 'arpeggio', weight: 4 },
+              { value: 'sequence', weight: 3 },
+              { value: 'neighbour', weight: 2 },
+              { value: 'repeat', weight: 1 },
+            ],
+            maxLeap: 4,
           }),
         },
         {
           clef: 'bass',
-          voice: new MelodyVoiceGenerator({
+          voice: new PatternVoiceGenerator({
             range: range('E2', 'D4'),
             role: 'inner',
-            maxLeap: 5,
-            stepProbability: 0.55,
+            figures: [
+              { value: 'scale', weight: 3 },
+              { value: 'arpeggio', weight: 3 },
+              { value: 'repeat', weight: 2 },
+            ],
+            maxLeap: 3,
           }),
         },
       ],
@@ -231,8 +270,8 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   },
   {
     id: 'figures',
-    label: '7 · Scales and broken chords',
-    description: 'Built from melodic figures rather than single steps: runs, turns and arpeggios.',
+    label: '7 · Broken chords in both hands',
+    description: 'Arpeggios under arpeggios: chord shapes read as shapes, not as stacks.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.figures',
       label: 'Melodic figures',

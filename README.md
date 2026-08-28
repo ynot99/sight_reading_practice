@@ -349,6 +349,13 @@ carry `repeat` in their pool; the group is all-or-nothing against the beat.
 counterpoint, chromatic passing notes, walking bass — and hand it to
 `GrandStaffExerciseGenerator`. Nothing else changes.
 
+**Marks that show *when*, not just *what*.** A played note is drawn at its
+step's notehead, shifted by how early or late the press was as a fraction of
+the gap to the neighbouring note. The application works out the fraction from
+the timeline, the renderer turns it into pixels, and neither has to know the
+other's units. Only Flow mode offsets anything: in Wait mode the music holds
+still until you play, so a slow answer is not lateness.
+
 **A new melodic figure.** Add a kind to `FIGURE_KINDS` and a shape to
 `FigureWalker`. Figures are why `PatternVoiceGenerator` exists: fluent reading
 is mostly recognising groups — a scale fragment, a broken chord, a motif

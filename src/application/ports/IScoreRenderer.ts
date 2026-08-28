@@ -33,6 +33,15 @@ export interface PlayedNote {
   readonly stepIndex: number;
   readonly midi: number;
   readonly correct: boolean;
+  /**
+   * How far from its note the press landed, as a fraction of the gap to the
+   * neighbouring one: negative is early, positive late, `0` dead on.
+   *
+   * Kept as a fraction rather than pixels because only the renderer knows how
+   * far apart two noteheads ended up, and only it knows when the neighbour is
+   * on the next system and therefore no scale at all.
+   */
+  readonly offset: number;
 }
 
 /** What the overlay needs in order to spell and place a press. */

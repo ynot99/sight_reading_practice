@@ -40,9 +40,58 @@ function noteheads(shapes: readonly OverlayShape[]): NoteheadShape[] {
   return shapes.filter((shape): shape is NoteheadShape => shape.kind === 'notehead');
 }
 
+describe('where a press is drawn in time', () => {
+  function xOf(stepIndex: number, offset: number, stepX?: ReadonlyMap<number, number>): number {
+    const base = layout();
+    const shapes = buildOverlayShapes(
+      [{ stepIndex, midi: 60, correct: true, offset }],
+      stepX === undefined ? base : { ...base, stepX },
+    );
+    const [head] = noteheads(shapes);
+    if (head === undefined) {
+      throw new Error('expected a notehead');
+    }
+    return head.x;
+  }
+
+  it('leans back towards the note before it when the press was early', () => {
+    // Steps sit at 120 and 200, so the gap behind step 1 is 80.
+    expect(xOf(1, -0.5)).toBe(160);
+    expect(xOf(1, -0.25)).toBe(180);
+  });
+
+  it('leans forward when the press was late', () => {
+    // Three quarters of the way from step 0 to step 1: nearly the next note,
+    // which is exactly how a press that missed its beat should read.
+    expect(xOf(0, 0.75)).toBe(180);
+  });
+
+  it('sits exactly on the note when it was on the beat', () => {
+    expect(xOf(0, 0)).toBe(120);
+    expect(xOf(1, 0)).toBe(200);
+  });
+
+  it('stays put when the neighbour it leans on was never drawn', () => {
+    // Nothing before step 0 to measure against.
+    expect(xOf(0, -0.5)).toBe(120);
+    // And nothing after the last step.
+    expect(xOf(1, 0.5)).toBe(200);
+  });
+
+  it('stays put when the neighbour is on the next system', () => {
+    // The x axis restarts at a system break, so the note after this one sits
+    // to its left and offers no scale to lean by.
+    const wrapped = new Map([
+      [0, 120],
+      [1, 40],
+    ]);
+    expect(xOf(0, 0.5, wrapped)).toBe(120);
+  });
+});
+
 describe('buildOverlayShapes', () => {
   it('draws a played note exactly where that pitch is engraved', () => {
-    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 60, correct: true }], layout());
+    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 60, correct: true, offset: 0 }], layout());
 
     const [head] = noteheads(shapes);
     expect(head?.x).toBe(120);
@@ -52,7 +101,7 @@ describe('buildOverlayShapes', () => {
   });
 
   it('places a note the engraver never drew, by counting positions', () => {
-    const shapes = buildOverlayShapes([{ stepIndex: 1, midi: 67, correct: false }], layout());
+    const shapes = buildOverlayShapes([{ stepIndex: 1, midi: 67, correct: false, offset: 0 }], layout());
 
     // G4 is four staff positions above C4: four steps of five units.
     expect(noteheads(shapes)[0]?.y).toBeCloseTo(135.5, 10);
@@ -60,7 +109,7 @@ describe('buildOverlayShapes', () => {
   });
 
   it('puts a low note on the bass staff, not far below the treble', () => {
-    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 43, correct: false }], layout());
+    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 43, correct: false, offset: 0 }], layout());
 
     // G2 is the bottom line of the bass stave.
     expect(noteheads(shapes)[0]?.y).toBeCloseTo(225.5, 10);
@@ -68,7 +117,7 @@ describe('buildOverlayShapes', () => {
   });
 
   it('adds a ledger line through middle C', () => {
-    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 60, correct: true }], layout());
+    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 60, correct: true, offset: 0 }], layout());
 
     const ledgers = shapes.filter((shape) => shape.kind === 'ledger');
     expect(ledgers).toHaveLength(1);
@@ -77,12 +126,12 @@ describe('buildOverlayShapes', () => {
 
   it('stacks ledger lines for a note further out', () => {
     // A3 needs lines at C4 and at itself.
-    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 57, correct: false }], layout());
+    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 57, correct: false, offset: 0 }], layout());
     expect(shapes.filter((shape) => shape.kind === 'ledger')).toHaveLength(2);
   });
 
   it('spells a black key and draws the accidental, so the mark cannot lie', () => {
-    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 61, correct: false }], layout());
+    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 61, correct: false, offset: 0 }], layout());
 
     const accidentals = shapes.filter((shape) => shape.kind === 'accidental');
     expect(accidentals).toHaveLength(1);
@@ -93,7 +142,7 @@ describe('buildOverlayShapes', () => {
 
   it('follows the key when choosing how to spell a black key', () => {
     const flatKey = buildOverlayShapes(
-      [{ stepIndex: 0, midi: 61, correct: false }],
+      [{ stepIndex: 0, midi: 61, correct: false, offset: 0 }],
       layout(KeySignature.major(-3)),
     );
     const accidental = flatKey.find((shape) => shape.kind === 'accidental');
@@ -105,7 +154,7 @@ describe('buildOverlayShapes', () => {
   it('draws no accidental for a note the key signature already alters', () => {
     // F# is in the key of G, so its notehead needs no sign of its own.
     const shapes = buildOverlayShapes(
-      [{ stepIndex: 0, midi: 66, correct: true }],
+      [{ stepIndex: 0, midi: 66, correct: true, offset: 0 }],
       layout(KeySignature.major(1)),
     );
     expect(shapes.filter((shape) => shape.kind === 'accidental')).toHaveLength(0);
@@ -113,7 +162,7 @@ describe('buildOverlayShapes', () => {
 
   it('draws a natural where the key expects an alteration', () => {
     const shapes = buildOverlayShapes(
-      [{ stepIndex: 0, midi: 65, correct: false }],
+      [{ stepIndex: 0, midi: 65, correct: false, offset: 0 }],
       layout(KeySignature.major(1)),
     );
     const accidental = shapes.find((shape) => shape.kind === 'accidental');
@@ -129,7 +178,7 @@ describe('buildOverlayShapes', () => {
       throw new Error('expected geometry');
     }
 
-    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 67, correct: true }], {
+    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 67, correct: true, offset: 0 }], {
       geometry: zoomed,
       stepX: new Map([[0, 240]]),
       clefByStaff: new Map([[1, 'treble']]),
@@ -142,16 +191,16 @@ describe('buildOverlayShapes', () => {
   });
 
   it('skips a press on a step that was never drawn', () => {
-    const shapes = buildOverlayShapes([{ stepIndex: 99, midi: 60, correct: false }], layout());
+    const shapes = buildOverlayShapes([{ stepIndex: 99, midi: 60, correct: false, offset: 0 }], layout());
     expect(shapes).toEqual([]);
   });
 
   it('keeps every press, including several on one step', () => {
     const shapes = buildOverlayShapes(
       [
-        { stepIndex: 0, midi: 60, correct: true },
-        { stepIndex: 0, midi: 64, correct: true },
-        { stepIndex: 0, midi: 62, correct: false },
+        { stepIndex: 0, midi: 60, correct: true, offset: 0 },
+        { stepIndex: 0, midi: 64, correct: true, offset: 0 },
+        { stepIndex: 0, midi: 62, correct: false, offset: 0 },
       ],
       layout(),
     );

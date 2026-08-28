@@ -116,10 +116,12 @@ export class FlowMode extends BasePracticeMode {
     }
 
     const outcome = matcher.accept(event.midi, event.timestampMs);
-    const deviationMs =
-      outcome.verdict === 'correct'
-        ? event.timestampMs - context.scheduledTimeMs(step.onsetTicks)
-        : null;
+    // Measured for every verdict, not just the right notes: *when* a press
+    // landed is a fact about the press, and a wrong one is exactly where the
+    // page needs to show that the beat was nearly reached. The report only
+    // takes deviations from correct notes, so the timing statistics are
+    // untouched by this.
+    const deviationMs = event.timestampMs - context.scheduledTimeMs(step.onsetTicks);
     context.judgeNote(event.midi, outcome.verdict, deviationMs);
   }
 }

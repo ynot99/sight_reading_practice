@@ -405,7 +405,12 @@ describe('what you played, drawn over the score', () => {
     }
 
     expect(renderer.played).toEqual(
-      step.expectedMidi.map((midiNote) => ({ stepIndex: 0, midi: midiNote, correct: true })),
+      step.expectedMidi.map((midiNote) => ({
+        stepIndex: 0,
+        midi: midiNote,
+        correct: true,
+        offset: 0,
+      })),
     );
   });
 
@@ -422,7 +427,42 @@ describe('what you played, drawn over the score', () => {
     midi.noteOn(wrong, 0);
 
     // Not "something was wrong here" - the note he actually hit.
-    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false }]);
+    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false, offset: 0 }]);
+  });
+
+  it('draws a mistimed press just before the note it was reaching for', async () => {
+    // The complaint this exists for: a press too early to count for the beat
+    // it was aimed at is judged against the beat before, which used to put the
+    // mark a whole note to the left of where it felt like it had been played.
+    const { controller, renderer, midi, clock, metronome } = createController(true);
+    controller.updateSettings({ modeId: FLOW_MODE_ID });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    // Flow mode runs on the pulse, so the music starts on the first tick.
+    metronome.advanceSubdivisions(1);
+    const wrong = (session?.currentStep?.expectedMidi[0] ?? 60) + 1;
+
+    // Seven tenths of the way through a one-second step at 60 bpm.
+    clock.set(700);
+    midi.noteOn(wrong, 700);
+
+    expect(renderer.played).toEqual([
+      { stepIndex: 0, midi: wrong, correct: false, offset: 0.7 },
+    ]);
+  });
+
+  it('leaves marks on their notes when nothing is keeping time', async () => {
+    // Wait mode holds still until the reader plays, so a slow answer is not
+    // lateness and must not be drawn as though it were.
+    const { controller, renderer, midi, clock } = createController(true);
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const expected = session?.currentStep?.expectedMidi[0] ?? 60;
+
+    clock.set(900);
+    midi.noteOn(expected, 900);
+
+    expect(renderer.played).toEqual([{ stepIndex: 0, midi: expected, correct: true, offset: 0 }]);
   });
 
   it('does not draw the same note twice for one press', async () => {

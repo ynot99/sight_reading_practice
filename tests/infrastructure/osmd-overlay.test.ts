@@ -52,7 +52,7 @@ describe('played notes drawn over a real engraving', () => {
 
   it('draws a correct press exactly on the note the engraver printed', () => {
     // Step 0 of the fixture is C4 over C3.
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
 
     const [head] = noteheads(container);
     expect(head).toBeDefined();
@@ -65,7 +65,7 @@ describe('played notes drawn over a real engraving', () => {
   });
 
   it('puts a bass note on the bass stave', () => {
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C3').midi, correct: true });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C3').midi, correct: true, offset: 0 });
 
     const lines = staffLineYs(container);
     const trebleBottom = lines[4] ?? 0;
@@ -74,8 +74,8 @@ describe('played notes drawn over a real engraving', () => {
   });
 
   it('separates two pitches by the printed line spacing', () => {
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('E4').midi, correct: false });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('E4').midi, correct: false, offset: 0 });
 
     const lines = staffLineYs(container);
     const spacing = (lines[1] ?? 0) - (lines[0] ?? 0);
@@ -85,7 +85,7 @@ describe('played notes drawn over a real engraving', () => {
   });
 
   it('marks a wrong press differently, at the pitch actually struck', () => {
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('F4').midi, correct: false });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('F4').midi, correct: false, offset: 0 });
 
     const [head] = noteheads(container);
     expect(head?.getAttribute('class')).toContain('played--wrong');
@@ -95,7 +95,7 @@ describe('played notes drawn over a real engraving', () => {
   });
 
   it('draws a ledger line through middle C', () => {
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
 
     const ledgers = container.querySelectorAll('line.played-ledger');
     expect(ledgers).toHaveLength(1);
@@ -106,7 +106,7 @@ describe('played notes drawn over a real engraving', () => {
   });
 
   it('writes an accidental for a black key, so the mark cannot lie', () => {
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C#4').midi, correct: false });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C#4').midi, correct: false, offset: 0 });
 
     const accidental = container.querySelector('text.played-accidental');
     expect(accidental?.textContent).toBe('♯');
@@ -118,8 +118,8 @@ describe('played notes drawn over a real engraving', () => {
   });
 
   it('places marks along the page, one step after another', () => {
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
-    renderer.showPlayed({ stepIndex: 1, midi: Pitch.parse('D4').midi, correct: true });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
+    renderer.showPlayed({ stepIndex: 1, midi: Pitch.parse('D4').midi, correct: true, offset: 0 });
 
     const heads = noteheads(container);
     const first = Number.parseFloat(heads[0]?.getAttribute('cx') ?? 'NaN');
@@ -128,7 +128,7 @@ describe('played notes drawn over a real engraving', () => {
   });
 
   it('survives being re-engraved, and comes back in the same place', () => {
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
     const before = centreY(noteheads(container)[0]);
 
     renderer.refresh();
@@ -138,7 +138,7 @@ describe('played notes drawn over a real engraving', () => {
   });
 
   it('keeps its place when the notes are made larger', () => {
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
 
     renderer.setZoom(1.5);
     renderer.refresh();
@@ -150,8 +150,8 @@ describe('played notes drawn over a real engraving', () => {
   });
 
   it('wipes every mark on demand', () => {
-    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true });
-    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: false });
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0 });
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: false, offset: 0 });
 
     renderer.clearPlayed();
 
@@ -186,7 +186,7 @@ describe('played notes drawn over a real engraving', () => {
   });
 
   it('draws nothing for a step that was never engraved', () => {
-    renderer.showPlayed({ stepIndex: 99, midi: 60, correct: false });
+    renderer.showPlayed({ stepIndex: 99, midi: 60, correct: false, offset: 0 });
     expect(noteheads(container)).toHaveLength(0);
   });
 });
@@ -223,11 +223,11 @@ describe('played notes on a page of several systems', () => {
     const firstSystemBottom = lines[10] ?? 0;
     expect(lines.length).toBeGreaterThan(20);
 
-    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true });
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
     const early = centreY(noteheads(container)[0]);
     renderer.clearPlayed();
 
-    renderer.showPlayed({ stepIndex: 40, midi: Pitch.parse('C4').midi, correct: false });
+    renderer.showPlayed({ stepIndex: 40, midi: Pitch.parse('C4').midi, correct: false, offset: 0 });
     const late = centreY(noteheads(container)[0]);
 
     // A page-wide anchor put every mark in the first system; a late step

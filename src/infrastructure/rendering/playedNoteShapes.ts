@@ -14,6 +14,8 @@ export interface PlayedMark {
   readonly stepIndex: number;
   readonly midi: number;
   readonly correct: boolean;
+  /** Signed fraction of the gap to the neighbouring note; `0` is dead on. */
+  readonly offset: number;
 }
 
 export interface OverlayLayout {
@@ -75,6 +77,31 @@ export function spellPlayed(midi: number, key: KeySignature): Pitch {
  * whole point, since it says *what* was played rather than merely that
  * something was wrong.
  */
+/**
+ * Horizontal centre of a mark, shifted by how early or late it was.
+ *
+ * The shift is scaled by the distance to the neighbour it is leaning towards,
+ * so it means the same thing at any tempo, zoom or note spacing. When that
+ * neighbour is on the next system there is no distance to scale by - the x
+ * axis restarts - so the mark simply stays on its own note.
+ */
+function markX(
+  stepX: ReadonlyMap<number, number>,
+  stepIndex: number,
+  offset: number,
+): number | undefined {
+  const base = stepX.get(stepIndex);
+  if (base === undefined || offset === 0) {
+    return base;
+  }
+  const neighbour = stepX.get(offset < 0 ? stepIndex - 1 : stepIndex + 1);
+  if (neighbour === undefined) {
+    return base;
+  }
+  const gap = offset < 0 ? base - neighbour : neighbour - base;
+  return gap > 0 ? base + offset * gap : base;
+}
+
 export function buildOverlayShapes(
   marks: readonly PlayedMark[],
   layout: OverlayLayout,
@@ -85,7 +112,7 @@ export function buildOverlayShapes(
   const radiusY = step * 0.95;
 
   for (const mark of marks) {
-    const x = layout.stepX.get(mark.stepIndex);
+    const x = markX(layout.stepX, mark.stepIndex, mark.offset);
     if (x === undefined) {
       // A step the engraver never drew, such as a bar of rests.
       continue;

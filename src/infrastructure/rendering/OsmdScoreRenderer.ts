@@ -181,7 +181,12 @@ export class OsmdScoreRenderer
   }
 
   showPlayed(note: PlayedNote): void {
-    this.marks.push({ stepIndex: note.stepIndex, midi: note.midi, correct: note.correct });
+    this.marks.push({
+      stepIndex: note.stepIndex,
+      midi: note.midi,
+      correct: note.correct,
+      offset: note.offset,
+    });
     this.paintOverlay();
   }
 

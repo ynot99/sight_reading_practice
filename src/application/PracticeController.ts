@@ -7,6 +7,7 @@ import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
 import { buildTimeline, type ExerciseTimeline } from '../domain/timeline/Timeline.js';
+import { playedNoteOffset } from './playedNoteOffset.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
 import type { IClock } from './ports/IClock.js';
@@ -364,11 +365,16 @@ export class PracticeController {
     this.sessionSubscriptions.push(
       // Every press is drawn where it was actually struck, right or wrong. A
       // repeat of a note already collected adds nothing to look at.
-      session.events.on('noteJudged', ({ midi, verdict, stepIndex }) => {
+      session.events.on('noteJudged', ({ midi, verdict, stepIndex, deviationMs }) => {
         if (!this.currentSettings.showPlayedNotes || verdict === 'duplicate') {
           return;
         }
-        this.deps.overlay.showPlayed({ stepIndex, midi, correct: verdict === 'correct' });
+        this.deps.overlay.showPlayed({
+          stepIndex,
+          midi,
+          correct: verdict === 'correct',
+          offset: this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm),
+        });
       }),
     );
     this.sessionSubscriptions.push(
@@ -414,6 +420,25 @@ export class PracticeController {
     this.sessionSubscriptions = [];
     this.currentSession?.dispose();
     this.currentSession = null;
+  }
+
+  /**
+   * How far from its note a press is drawn, as a fraction of the gap.
+   *
+   * Only meaningful when the pulse is what moves the cursor: in Wait mode the
+   * music holds still until the reader plays, so taking a moment to find the
+   * note is not lateness and drawing it as such would be a lie.
+   */
+  private timingOffsetFor(
+    stepIndex: number,
+    deviationMs: number | null,
+    tempoBpm: number,
+  ): number {
+    const timeline = this.timeline;
+    if (timeline === null || !this.deps.modes.get(this.currentSettings.modeId).requiresMetronome) {
+      return 0;
+    }
+    return playedNoteOffset(timeline, stepIndex, deviationMs, tempoBpm);
   }
 
   private applyCursorVisibility(): void {

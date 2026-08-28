@@ -100,6 +100,43 @@ describe('OSMD accepts the MusicXML we produce', () => {
     }
   });
 
+  it('reads a triplet as three positions in the time of two', async () => {
+    const preset = BUILT_IN_PRESETS[1];
+    const profile = BUILT_IN_RHYTHM_PROFILES.find((candidate) => candidate.id === 'triplets');
+    if (preset === undefined || profile === undefined) {
+      throw new Error('expected a preset and the triplets profile');
+    }
+    const exercise = preset.generator.generate({
+      measures: 4,
+      timeSignature: new TimeSignature(4, 4),
+      key: KeySignature.major(0),
+      tempoBpm: 60,
+      rhythm: profile,
+      seed: 11,
+    });
+    // The seed has to actually produce some, or this proves nothing.
+    const hasTriplets = exercise.staves.some((staff) =>
+      staff.measures.some((measure) => measure.entries.some((entry) => entry.duration.isTuplet)),
+    );
+    expect(hasTriplets).toBe(true);
+
+    const timeline = buildTimeline(exercise);
+    const osmd = createDisplay();
+
+    await osmd.load(serializer.serialize(exercise));
+
+    const iterator = osmd.Sheet.MusicPartManager.getIterator();
+    let positions = 0;
+    let guard = timeline.length * 4 + 10;
+    while (!iterator.EndReached && guard > 0) {
+      guard -= 1;
+      positions += 1;
+      iterator.moveToNext();
+    }
+
+    expect(positions).toBe(timeline.length);
+  });
+
   it('reads a tie as one held note and still stops the cursor on it', async () => {
     const exercise = tiedExercise();
     const timeline = buildTimeline(exercise);

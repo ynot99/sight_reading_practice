@@ -27,6 +27,10 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
   asserts that OSMD's cursor and our timeline agree on the number of positions.
 - Musical time is integer divisions (`DIVISIONS_PER_QUARTER = 480`). Do not
   introduce floating-point positions; convert to milliseconds only at the edge.
+  `Duration.of` refuses a tuplet ratio that would not land on a whole division.
+- Tuplet groups are *inferred*, not stored: a group closes when its accumulated
+  span becomes a plain notatable value. Values shorter than a group's share of
+  the beat must never reach `largestThatFits`, which knows only plain values.
 - A tie is one press, not two. `buildTimeline` must never demand a tied note
   again, and must still create the step the engraver draws there - the cursor
   and the timeline agree on *positions*, not on what is expected at them.

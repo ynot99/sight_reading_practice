@@ -42,6 +42,25 @@ const SIXTEENTH_RHYTHM: RhythmOptions = {
   keepInsideBeats: true,
 };
 
+/**
+ * Adds triplets, drawn as complete groups of three.
+ *
+ * `repeat: 3` is the same mechanism the sixteenth pairs use, and it is what
+ * makes the group atomic: a triplet is only ever offered where all three of
+ * its notes fit inside one beat, so a third of a beat can never be left over
+ * for the filler to choke on.
+ */
+const TRIPLET_RHYTHM: RhythmOptions = {
+  durations: [
+    { value: Duration.QUARTER, weight: 5 },
+    { value: Duration.TRIPLET_EIGHTH, weight: 4, repeat: 3 },
+    { value: Duration.EIGHTH, weight: 3 },
+    { value: Duration.HALF, weight: 1 },
+  ],
+  restProbability: 0.05,
+  keepInsideBeats: true,
+};
+
 /** Long accompaniment values that leave the reading effort to the other hand. */
 const SUSTAINED_RHYTHM: RhythmOptions = {
   durations: [
@@ -96,6 +115,16 @@ export const BUILT_IN_RHYTHM_PROFILES: readonly RhythmProfile[] = [
     description: 'Sixteenths in beamed pairs. Start slower than the tempo you can play.',
     byRole: {
       lead: SIXTEENTH_RHYTHM,
+      inner: FLOWING_RHYTHM,
+      accompaniment: HALF_NOTE_RHYTHM,
+    },
+  },
+  {
+    id: 'triplets',
+    label: 'With triplets',
+    description: 'Three notes to a beat where two would normally go. Count them out loud.',
+    byRole: {
+      lead: TRIPLET_RHYTHM,
       inner: FLOWING_RHYTHM,
       accompaniment: HALF_NOTE_RHYTHM,
     },

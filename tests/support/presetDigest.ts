@@ -12,7 +12,13 @@ const SEED = 0x5eed;
 function describeMeasure(measure: Measure): string {
   return measure.entries
     .map((entry) => {
-      const value = entry.duration.dots === 1 ? `${entry.duration.type}.` : entry.duration.type;
+      const dotted =
+        entry.duration.dots === 1 ? `${entry.duration.type}.` : entry.duration.type;
+      // A triplet eighth is still written as an eighth, so the ratio has to be
+      // spelled out or the digest cannot tell one from the other.
+      const value = entry.duration.isTuplet
+        ? `${dotted}*${entry.duration.tuplet.actual}:${entry.duration.tuplet.normal}`
+        : dotted;
       if (entry.kind === 'rest') {
         return `R/${value}`;
       }

@@ -1,8 +1,10 @@
 import { assertNever } from '../../shared/asserts.js';
 import { CLEF_DEFINITIONS } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
+import type { Duration } from '../model/Duration.js';
 import type { Exercise, MusicalEntry, StaffPart } from '../model/Exercise.js';
-import { validateExercise } from '../model/Exercise.js';
+import { tupletPositions, validateExercise } from '../model/Exercise.js';
+import type { TupletPosition } from '../model/Exercise.js';
 import type { Alteration, Pitch } from '../model/Pitch.js';
 import { XmlWriter } from './XmlWriter.js';
 
@@ -171,11 +173,20 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     // Accidentals are only printed when they change what the reader already
     // knows: the key signature at the bar line, then any accidental so far.
     const activeAccidentals = new Map<string, Alteration>();
+    const tuplets = tupletPositions(measure.entries);
     let held = heldByStaff.get(staff.staffNumber) ?? new Set<number>();
-    for (const entry of measure.entries) {
-      this.writeEntry(writer, exercise, staff, entry, activeAccidentals, held);
+    measure.entries.forEach((entry, entryIndex) => {
+      this.writeEntry(
+        writer,
+        exercise,
+        staff,
+        entry,
+        activeAccidentals,
+        held,
+        tuplets[entryIndex] ?? null,
+      );
       held = entry.kind === 'note' ? new Set(entry.tiedForward) : new Set<number>();
-    }
+    });
     heldByStaff.set(staff.staffNumber, held);
   }
 
@@ -186,6 +197,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     entry: MusicalEntry,
     activeAccidentals: Map<string, Alteration>,
     held: ReadonlySet<number>,
+    tuplet: TupletPosition | null,
   ): void {
     switch (entry.kind) {
       case 'rest': {
@@ -200,7 +212,9 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
               writer.leaf('dot');
             }
           }
+          this.writeTimeModification(writer, entry.duration);
           writer.leaf('staff', staff.staffNumber);
+          this.writeTupletNotations(writer, tuplet);
         });
         return;
       }
@@ -242,8 +256,11 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             if (accidental !== undefined) {
               writer.leaf('accidental', accidental);
             }
+            this.writeTimeModification(writer, entry.duration);
             writer.leaf('staff', staff.staffNumber);
-            if (stopping || starting) {
+            // One `<notations>` per note: the tie's slur and the tuplet's
+            // bracket are separate marks that share the element.
+            if (stopping || starting || tuplet !== null) {
               writer.element('notations', undefined, () => {
                 if (stopping) {
                   writer.leaf('tied', undefined, { type: 'stop' });
@@ -251,6 +268,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
                 if (starting) {
                   writer.leaf('tied', undefined, { type: 'start' });
                 }
+                this.writeTupletMarks(writer, tuplet);
               });
             }
           });
@@ -259,6 +277,39 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       }
       default:
         assertNever(entry, 'Unknown musical entry');
+    }
+  }
+
+  /** The ratio itself: three notes played in the time of two. */
+  private writeTimeModification(writer: XmlWriter, duration: Duration): void {
+    if (!duration.isTuplet) {
+      return;
+    }
+    writer.element('time-modification', undefined, () => {
+      writer.leaf('actual-notes', duration.tuplet.actual);
+      writer.leaf('normal-notes', duration.tuplet.normal);
+    });
+  }
+
+  /** The bracket, which only the ends of a group carry. Used by rests. */
+  private writeTupletNotations(writer: XmlWriter, tuplet: TupletPosition | null): void {
+    if (tuplet === null || (!tuplet.starts && !tuplet.stops)) {
+      return;
+    }
+    writer.element('notations', undefined, () => {
+      this.writeTupletMarks(writer, tuplet);
+    });
+  }
+
+  private writeTupletMarks(writer: XmlWriter, tuplet: TupletPosition | null): void {
+    if (tuplet === null) {
+      return;
+    }
+    if (tuplet.starts) {
+      writer.leaf('tuplet', undefined, { type: 'start', number: 1 });
+    }
+    if (tuplet.stops) {
+      writer.leaf('tuplet', undefined, { type: 'stop', number: 1 });
     }
   }
 

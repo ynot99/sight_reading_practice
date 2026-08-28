@@ -154,7 +154,7 @@ src/
 ├── domain/                         # pure music logic — no DOM, no I/O, no time
 │   ├── model/
 │   │   ├── Pitch.ts                #   spelled pitch  ⇄ MIDI ⇄ staff position
-│   │   ├── Duration.ts             #   interned rhythmic values, 480 divisions/quarter
+│   │   ├── Duration.ts             #   interned rhythmic values incl. tuplets, 480/quarter
 │   │   ├── TimeSignature.ts        #   beat/measure tick arithmetic
 │   │   ├── KeySignature.ts         #   accidentals + "spell this staff position"
 │   │   ├── Clef.ts
@@ -384,8 +384,9 @@ than from the engraver's internals.
 
 ## Known limits and next steps
 
-- Rhythms stop at sixteenth notes and one dot; no tuplets or pickup bars.
-  Sixteenths arrive in beamed pairs, never singly.
+- Rhythms stop at sixteenth notes, one dot and triplets; no pickup bars.
+  Sixteenths arrive in beamed pairs and triplets in complete threes, never
+  singly and never straddling a beat.
 - Ties exist in the model, the notation and the timeline, but no generator
   emits one yet: writing tied rhythms means splitting values across bar lines,
   which belongs with the syncopation work rather than with ties themselves.

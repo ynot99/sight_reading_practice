@@ -1,7 +1,7 @@
 import { ExerciseValidationError } from '../../shared/errors.js';
 import { assertNever } from '../../shared/asserts.js';
 import type { ClefKind } from './Clef.js';
-import type { Duration } from './Duration.js';
+import { Duration } from './Duration.js';
 import type { KeySignature } from './KeySignature.js';
 import type { Pitch } from './Pitch.js';
 import type { TimeSignature } from './TimeSignature.js';
@@ -34,6 +34,12 @@ export interface RestEntry {
 }
 
 export type MusicalEntry = NoteEntry | RestEntry;
+
+/** Whether an entry opens or closes the tuplet group it belongs to. */
+export interface TupletPosition {
+  readonly starts: boolean;
+  readonly stops: boolean;
+}
 
 export interface Measure {
   readonly entries: readonly MusicalEntry[];
@@ -159,6 +165,11 @@ export function validateExercise(exercise: Exercise): void {
 
     staff.measures.forEach((measure, measureIndex) => {
       const measurePath = `${path}.measures[${measureIndex}]`;
+      // This also catches an unfinished tuplet: two thirds of a beat leaves a
+      // remainder no plain value can fill, so a group that never closes always
+      // shows up here as a bar that does not add up. There is deliberately no
+      // separate check for it - one that could never fire would be worse than
+      // none.
       const actual = measureTicks(measure);
       if (actual !== expectedTicks) {
         throw new ExerciseValidationError(
@@ -176,6 +187,55 @@ export function validateExercise(exercise: Exercise): void {
 
     validateTies(staff, path);
   });
+}
+
+/**
+ * Where each entry sits in its tuplet group; plain values get `null`.
+ *
+ * A group has to be *found* rather than stored, because nothing in the music
+ * marks its boundaries: three triplet eighths are simply three entries in a
+ * row. The rule that finds them is that a complete group always spans a plain
+ * notated value - three triplet eighths make a quarter - while no part of one
+ * ever does, since a third or two thirds of a quarter is not a value anyone
+ * can write. Accumulating until the span becomes notatable therefore closes a
+ * group exactly where it ends, and handles two groups in a row as well as a
+ * group of mixed values.
+ */
+export function tupletPositions(
+  entries: readonly MusicalEntry[],
+): readonly (TupletPosition | null)[] {
+  const positions: (TupletPosition | null)[] = [];
+  let span = 0;
+  let openedAt = -1;
+
+  entries.forEach((entry, index) => {
+    if (!entry.duration.isTuplet) {
+      positions.push(null);
+      span = 0;
+      openedAt = -1;
+      return;
+    }
+    const previous = openedAt >= 0 ? entries[openedAt]?.duration : undefined;
+    if (previous !== undefined && !previous.sameTuplet(entry.duration)) {
+      // A ratio can only change between groups; close the old one rather than
+      // emit nonsense. `validateTuplets` refuses this shape outright.
+      span = 0;
+      openedAt = -1;
+    }
+    const starts = span === 0;
+    if (starts) {
+      openedAt = index;
+    }
+    span += entry.duration.ticks;
+    const stops = Duration.isNotatable(span);
+    if (stops) {
+      span = 0;
+      openedAt = -1;
+    }
+    positions.push({ starts, stops });
+  });
+
+  return positions;
 }
 
 /**

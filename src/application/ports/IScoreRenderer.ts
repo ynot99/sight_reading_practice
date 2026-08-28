@@ -47,7 +47,14 @@ export interface PlayedNote {
 /** What the overlay needs in order to spell and place a press. */
 export interface OverlayContext {
   readonly key: KeySignature;
-  readonly clefByStaff: ReadonlyMap<number, ClefKind>;
+  /**
+   * The clef a staff is reading in at a given step.
+   *
+   * A function rather than a map because a staff may change clef partway
+   * through, and a mark's ledger lines are counted from the clef in force
+   * where it sits - not from the one the staff opened with.
+   */
+  readonly clefAt: (staffNumber: number, stepIndex: number) => ClefKind;
 }
 
 /**

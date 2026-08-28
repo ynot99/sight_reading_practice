@@ -138,6 +138,7 @@ describe('MusicXmlSerializer', () => {
           staffNumber: 1,
           voice: 1,
           clef: 'treble',
+          clefChanges: [],
           measures: [
             bar({ kind: 'rest', duration: Duration.WHOLE }),
             bar(noteEntry(p('G4'), Duration.WHOLE)),
@@ -190,6 +191,7 @@ describe('MusicXmlSerializer', () => {
           staffNumber: 1,
           voice: 1,
           clef: 'treble',
+          clefChanges: [],
           measures: [
             bar(
               noteEntry(new Pitch('F', 4, 1), Duration.QUARTER),

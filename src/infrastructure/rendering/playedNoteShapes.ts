@@ -22,7 +22,7 @@ export interface OverlayLayout {
   readonly geometry: StaffGeometry;
   /** Horizontal centre of each timeline step, in drawing units. */
   readonly stepX: ReadonlyMap<number, number>;
-  readonly clefByStaff: ReadonlyMap<number, ClefKind>;
+  readonly clefAt: (staffNumber: number, stepIndex: number) => ClefKind;
   readonly key: KeySignature;
 }
 
@@ -142,7 +142,7 @@ export function buildOverlayShapes(
       continue;
     }
 
-    const clef = layout.clefByStaff.get(staffNumber) ?? 'treble';
+    const clef = layout.clefAt(staffNumber, mark.stepIndex);
     const [bottomLine, topLine] = CLEF_LINE_RANGE[clef];
     for (const ledgerIndex of ledgerIndicesFor(bottomLine, topLine, pitch.diatonicIndex)) {
       const ledgerY = yForDiatonic(layout.geometry, staffNumber, mark.stepIndex, ledgerIndex);

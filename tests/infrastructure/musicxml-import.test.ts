@@ -263,6 +263,58 @@ describe('files written by other programs', () => {
     expect(() => validateExercise(exercise)).not.toThrow();
   });
 
+  it('follows a clef change instead of piling up ledger lines', () => {
+    const changing = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>24</divisions><key><fifths>0</fifths></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time><staves>1</staves>
+      <clef number="1"><sign>F</sign><line>4</line></clef></attributes>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>96</duration>
+      <voice>1</voice><type>whole</type><staff>1</staff></note>
+    </measure>
+    <measure number="2">
+      <attributes><clef number="1"><sign>G</sign><line>2</line></clef></attributes>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>96</duration>
+      <voice>1</voice><type>whole</type><staff>1</staff></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const { exercise } = importer.read(changing);
+
+    expect(exercise.staves[0]?.clef).toBe('bass');
+    expect(exercise.staves[0]?.clefChanges).toEqual([{ measureIndex: 1, clef: 'treble' }]);
+
+    // And it is written back at the head of the bar it takes effect in.
+    const printed = serializer.serialize(exercise);
+    const secondBar = printed.slice(printed.indexOf('<measure number="2"'));
+    expect(secondBar).toMatch(/<attributes>\s*<clef number="1">\s*<sign>G<\/sign>/);
+  });
+
+  it('keeps the stems that tell two voices apart', () => {
+    // Which way a voice points is the writer's decision, not a rule: left to
+    // the engraver each note follows its own pitch and the lines tangle.
+    const upper =
+      '<note><pitch><step>C</step><octave>5</octave></pitch><duration>96</duration>' +
+      '<voice>1</voice><type>whole</type><stem>down</stem></note>';
+    const lower =
+      '<backup><duration>96</duration></backup>' +
+      '<note><pitch><step>E</step><octave>4</octave></pitch><duration>96</duration>' +
+      '<voice>2</voice><type>whole</type><stem>up</stem></note>';
+    const { exercise } = importer.read(scoreXml(upper + lower));
+
+    const first = exercise.staves[0]?.measures[0]?.entries[0];
+    const second = exercise.staves[1]?.measures[0]?.entries[0];
+    expect(first?.kind === 'note' ? first.stem : null).toBe('down');
+    expect(second?.kind === 'note' ? second.stem : null).toBe('up');
+
+    const printed = serializer.serialize(exercise);
+    expect(printed).toContain('<stem>down</stem>');
+    expect(printed).toContain('<stem>up</stem>');
+  });
+
   it('keeps the beaming the writer chose', () => {
     // Two eighths beamed as a pair, a quarter, then another pair - which is
     // what this bar means, and not what an engraver left to guess would draw.

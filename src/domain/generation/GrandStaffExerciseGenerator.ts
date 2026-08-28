@@ -53,6 +53,7 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
       staffNumber: index + 1,
       voice: index + 1,
       clef: plan.clef,
+      clefChanges: [],
       measures: plan.voice.generate(context),
     }));
 

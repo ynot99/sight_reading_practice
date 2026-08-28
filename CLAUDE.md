@@ -28,6 +28,9 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
 - Musical time is integer divisions (`DIVISIONS_PER_QUARTER = 480`). Do not
   introduce floating-point positions; convert to milliseconds only at the edge.
   `Duration.of` refuses a tuplet ratio that would not land on a whole division.
+- Notation the writer chose is carried, not recomputed: beams, stem directions
+  and clef changes all round-trip. Dropping one hands the engraver a decision
+  that had already been made, and it will make a different one.
 - A `StaffPart` is one *voice*, not one staff: several may share a
   `staffNumber`, which is how an inner line sits under a melody. Voice numbers
   are what must stay unique.

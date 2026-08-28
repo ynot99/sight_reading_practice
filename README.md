@@ -387,8 +387,10 @@ drift the single source of truth exists to prevent. The model is narrower than
 the format, so the import either refuses a file or reports what it dropped;
 `MusicXmlParser` lists the cases. Several voices on a staff are kept as several
 parts sharing a staff number, so a held note under a moving line stays a held
-note. Grace notes, mid-piece key and clef changes and anything shorter than a
-sixteenth are the remaining limits.
+note; a voice absent from a bar is left out of it rather than resting through
+it. Clef changes, stem directions and beaming are followed as written. Grace
+notes, mid-piece key changes and anything shorter than a sixteenth are the
+remaining limits.
 Compressed `.mxl` files are unpacked on the way in, since that is what
 MuseScore hands you unless you ask otherwise.
 

@@ -427,8 +427,27 @@ describe('what you played, drawn over the score', () => {
     await controller.loadNewExercise();
 
     expect(renderer.overlayContext?.key.name).toBe('C major');
-    expect(renderer.overlayContext?.clefByStaff.get(1)).toBe('treble');
-    expect(renderer.overlayContext?.clefByStaff.get(2)).toBe('bass');
+    expect(renderer.overlayContext?.clefAt(1, 0)).toBe('treble');
+    expect(renderer.overlayContext?.clefAt(2, 0)).toBe('bass');
+  });
+
+  it('follows a staff that changes clef partway through', async () => {
+    // A left hand climbing into the treble is written in the treble clef, and
+    // a mark's ledger lines are counted from the clef it actually sits under.
+    const { controller, renderer } = createController();
+    const base = tiedExercise();
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    await controller.openScore({
+      ...base,
+      staves: [treble, { ...bass, clefChanges: [{ measureIndex: 1, clef: 'treble' as const }] }],
+    });
+
+    const lastStep = (controller.currentTimeline?.length ?? 1) - 1;
+    expect(renderer.overlayContext?.clefAt(2, 0)).toBe('bass');
+    expect(renderer.overlayContext?.clefAt(2, lastStep)).toBe('treble');
   });
 
   it('draws the notes that belonged there as correct', async () => {

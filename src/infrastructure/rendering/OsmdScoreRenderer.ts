@@ -239,7 +239,7 @@ export class OsmdScoreRenderer
     const shapes = buildOverlayShapes(this.marks, {
       geometry,
       stepX: this.stepX,
-      clefByStaff: context.clefByStaff,
+      clefAt: context.clefAt,
       key: context.key,
     });
     for (const shape of shapes) {

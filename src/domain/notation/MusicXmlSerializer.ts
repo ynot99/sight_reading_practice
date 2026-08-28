@@ -1,5 +1,5 @@
 import { assertNever } from '../../shared/asserts.js';
-import { CLEF_DEFINITIONS } from '../model/Clef.js';
+import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
 import type { Duration } from '../model/Duration.js';
 import type { Exercise, MusicalEntry, StaffPart } from '../model/Exercise.js';
@@ -112,6 +112,8 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
           if (this.options.includeMetronomeMark) {
             this.writeTempo(writer, exercise.tempoBpm);
           }
+        } else {
+          this.writeClefChanges(writer, exercise, measureIndex);
         }
         // A voice with nothing in this bar is simply not written into it -
         // MusicXML has no need to mention it, and a rest would be drawn.
@@ -155,6 +157,36 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       for (const staff of staves) {
         const definition = CLEF_DEFINITIONS[staff.clef];
         writer.element('clef', { number: staff.staffNumber }, () => {
+          writer.leaf('sign', definition.sign);
+          writer.leaf('line', definition.line);
+        });
+      }
+    });
+  }
+
+  /**
+   * Clefs a staff switches to here.
+   *
+   * Written as its own `<attributes>` at the head of the measure, which is
+   * where a reader expects to meet a new clef: on the bar line, before the
+   * notes it governs.
+   */
+  private writeClefChanges(writer: XmlWriter, exercise: Exercise, measureIndex: number): void {
+    const changing = new Map<number, ClefKind>();
+    for (const staff of exercise.staves) {
+      for (const change of staff.clefChanges) {
+        if (change.measureIndex === measureIndex) {
+          changing.set(staff.staffNumber, change.clef);
+        }
+      }
+    }
+    if (changing.size === 0) {
+      return;
+    }
+    writer.element('attributes', undefined, () => {
+      for (const [staffNumber, clef] of [...changing].sort((left, right) => left[0] - right[0])) {
+        const definition = CLEF_DEFINITIONS[clef];
+        writer.element('clef', { number: staffNumber }, () => {
           writer.leaf('sign', definition.sign);
           writer.leaf('line', definition.line);
         });
@@ -272,6 +304,9 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
               writer.leaf('accidental', accidental);
             }
             this.writeTimeModification(writer, entry.duration);
+            if (entry.stem !== null) {
+              writer.leaf('stem', entry.stem);
+            }
             writer.leaf('staff', staff.staffNumber);
             // Beaming belongs to the first note of a chord; the others share
             // its stem and would otherwise repeat the same beam.

@@ -6,6 +6,10 @@ import type { KeySignature } from './KeySignature.js';
 import type { Pitch } from './Pitch.js';
 import type { TimeSignature } from './TimeSignature.js';
 
+export const STEM_DIRECTIONS = ['up', 'down'] as const;
+
+export type StemDirection = (typeof STEM_DIRECTIONS)[number];
+
 export const BEAM_TYPES = ['begin', 'continue', 'end', 'forward hook', 'backward hook'] as const;
 
 export type BeamType = (typeof BEAM_TYPES)[number];
@@ -44,6 +48,16 @@ export interface NoteEntry {
   readonly tiedForward: readonly number[];
   /** Beaming as the source wrote it; empty lets the engraver decide. */
   readonly beams: readonly Beam[];
+  /**
+   * Stem direction as the source wrote it, or `null` to let the engraver
+   * choose by pitch.
+   *
+   * Two voices on a staff are told apart by their stems - one up, one down -
+   * and which way round is the writer's decision, not a rule. Left to the
+   * engraver, each note points wherever its own pitch suggests and the two
+   * lines tangle.
+   */
+  readonly stem: StemDirection | null;
 }
 
 /** Silence occupying a rhythmic value. */
@@ -73,11 +87,36 @@ export interface Measure {
  * beats flattening the two into one line - a held note under moving notes
  * stays a held note instead of becoming a chain of tied fragments.
  */
+/** A clef the staff changes to, from the given measure onwards. */
+export interface ClefChange {
+  readonly measureIndex: number;
+  readonly clef: ClefKind;
+}
+
 export interface StaffPart {
   readonly staffNumber: number;
   readonly voice: number;
   readonly clef: ClefKind;
+  /**
+   * Clefs the staff switches to partway through.
+   *
+   * A left hand climbing into the treble is written in the treble clef rather
+   * than on five ledger lines, and that is a reading decision: the same notes
+   * are far easier to take in. Empty for anything this program generates.
+   */
+  readonly clefChanges: readonly ClefChange[];
   readonly measures: readonly Measure[];
+}
+
+/** The clef in force on a staff at a given measure. */
+export function clefAtMeasure(staff: StaffPart, measureIndex: number): ClefKind {
+  let current = staff.clef;
+  for (const change of staff.clefChanges) {
+    if (change.measureIndex <= measureIndex) {
+      current = change.clef;
+    }
+  }
+  return current;
 }
 
 export interface ExerciseMetadata {
@@ -107,6 +146,7 @@ export function noteEntry(
   duration: Duration,
   tiedForward: readonly number[] = [],
   beams: readonly Beam[] = [],
+  stem: StemDirection | null = null,
 ): NoteEntry {
   const list = Array.isArray(pitches) ? [...(pitches as readonly Pitch[])] : [pitches as Pitch];
   return {
@@ -115,6 +155,7 @@ export function noteEntry(
     duration,
     tiedForward: [...tiedForward],
     beams: [...beams],
+    stem,
   };
 }
 

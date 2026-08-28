@@ -23,7 +23,7 @@ function evenBar(timeSignature: TimeSignature, duration: Duration): Exercise {
   return {
     ...twoBarExercise({ timeSignature }),
     staves: [
-      { staffNumber: 1, voice: 1, clef: 'treble', measures: [measureOf(entries)] },
+      { staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: [measureOf(entries)] },
     ],
   };
 }

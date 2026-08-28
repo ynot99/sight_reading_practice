@@ -3,7 +3,7 @@ import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '../model/Duration.js';
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
 import { BEAM_TYPES, measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
-import type { Beam, BeamType } from '../model/Exercise.js';
+import type { Beam, BeamType, ClefChange, StemDirection } from '../model/Exercise.js';
 import { KeySignature, type KeyMode } from '../model/KeySignature.js';
 import { Pitch, type Alteration } from '../model/Pitch.js';
 import { splitIntoRests } from '../generation/RhythmFiller.js';
@@ -55,6 +55,7 @@ interface RawNote {
   readonly tieStart: boolean;
   readonly isChord: boolean;
   readonly beams: readonly Beam[];
+  readonly stem: StemDirection | null;
 }
 
 const XML_TYPE_NAMES: Readonly<Record<string, NoteTypeName>> = {
@@ -152,7 +153,31 @@ interface ScoreHeader {
   readonly timeSignature: TimeSignature;
   readonly tempoBpm: number;
   readonly clefByStaff: ReadonlyMap<number, ClefKind>;
+  /** Clefs a staff switches to later, keyed by the file's own staff number. */
+  readonly clefChangesByStaff: ReadonlyMap<number, readonly ClefChange[]>;
   readonly staffCount: number;
+}
+
+/** Reads `<clef>` elements into our own kinds, warning about the rest. */
+function readClefs(
+  attributes: XmlNode | null,
+  warnings: ImportWarning[],
+): ReadonlyMap<number, ClefKind> {
+  const clefs = new Map<number, ClefKind>();
+  for (const clef of childrenNamed(attributes, 'clef')) {
+    const number = Number(attribute(clef, 'number') ?? '1');
+    const sign = childText(clef, 'sign') ?? 'G';
+    const line = childText(clef, 'line') ?? '2';
+    const kind = CLEF_BY_SIGN_AND_LINE.get(`${sign}${line}`);
+    if (kind === undefined) {
+      warnings.push({
+        kind: 'unsupported-clef',
+        detail: `Staff ${number} uses a ${sign}${line} clef, which was read as treble.`,
+      });
+    }
+    clefs.set(Number.isFinite(number) ? number : 1, kind ?? 'treble');
+  }
+  return clefs;
 }
 
 function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): ScoreHeader {
@@ -175,27 +200,36 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
   }
 
   const staffCount = childNumber(attributes, 'staves') ?? 1;
-  const clefByStaff = new Map<number, ClefKind>();
-  for (const clef of childrenNamed(attributes, 'clef')) {
-    const number = Number(attribute(clef, 'number') ?? '1');
-    const sign = childText(clef, 'sign') ?? 'G';
-    const line = childText(clef, 'line') ?? '2';
-    const kind = CLEF_BY_SIGN_AND_LINE.get(`${sign}${line}`);
-    if (kind === undefined) {
-      warnings.push({
-        kind: 'unsupported-clef',
-        detail: `Staff ${number} uses a ${sign}${line} clef, which was read as treble.`,
-      });
-    }
-    clefByStaff.set(Number.isFinite(number) ? number : 1, kind ?? 'treble');
-  }
+  const clefByStaff = readClefs(attributes, warnings);
 
-  // An attributes block after the first would change key, metre or clef
-  // partway through, and the exercise carries only one of each.
-  if (measures.slice(1).some((measure) => hasChild(measure, 'attributes'))) {
+  // A clef change is followed rather than ignored: a left hand climbing into
+  // the treble is written in the treble clef, and reading it on five ledger
+  // lines instead is exactly the difficulty the change exists to remove.
+  const clefChangesByStaff = new Map<number, ClefChange[]>();
+  let changedOther = false;
+  measures.forEach((measure, measureIndex) => {
+    if (measureIndex === 0) {
+      return;
+    }
+    const later = child(measure, 'attributes');
+    if (later === null) {
+      return;
+    }
+    for (const [staffNumber, clef] of readClefs(later, warnings)) {
+      clefChangesByStaff.set(staffNumber, [
+        ...(clefChangesByStaff.get(staffNumber) ?? []),
+        { measureIndex, clef },
+      ]);
+    }
+    if (hasChild(later, 'key') || hasChild(later, 'time')) {
+      changedOther = true;
+    }
+  });
+
+  if (changedOther) {
     warnings.push({
       kind: 'changing-attributes',
-      detail: 'Key, metre or clef changes partway through were ignored.',
+      detail: 'Key or metre changes partway through were ignored; the first of each is used.',
     });
   }
 
@@ -205,6 +239,7 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
     timeSignature: new TimeSignature(beats, beatType),
     tempoBpm: readTempo(measures),
     clefByStaff,
+    clefChangesByStaff,
     staffCount: Math.max(1, staffCount),
   };
 }
@@ -279,6 +314,12 @@ function readPitch(note: XmlNode): Pitch | null {
   const octave = childNumber(pitchNode, 'octave') ?? 4;
   const alter = childNumber(pitchNode, 'alter') ?? 0;
   return new Pitch(step as Pitch['step'], octave, alter as Alteration);
+}
+
+/** Stem direction as written, which is how two voices are told apart. */
+function readStem(note: XmlNode): StemDirection | null {
+  const text = childText(note, 'stem');
+  return text === 'up' || text === 'down' ? text : null;
 }
 
 /** Beaming exactly as the file wrote it, so the engraver need not guess. */
@@ -362,6 +403,7 @@ function readMeasureNotes(
       tieStart: hasTie(node, 'start'),
       isChord,
       beams: isChord ? [] : readBeams(node),
+      stem: readStem(node),
     });
 
     if (!isChord) {
@@ -410,7 +452,7 @@ function buildMeasure(
       const tied = group
         .filter((note) => note.tieStart && note.pitch !== null)
         .map((note) => note.pitch?.midi ?? 0);
-      entries.push(noteEntry(pitches, first.duration, tied, first.beams));
+      entries.push(noteEntry(pitches, first.duration, tied, first.beams, first.stem));
     }
     cursor += first.duration.ticks;
   }
@@ -491,6 +533,7 @@ function buildStaves(
       clef:
         header.clefByStaff.get(pair.staff) ??
         (staffNumbers.indexOf(pair.staff) === 0 ? 'treble' : 'bass'),
+      clefChanges: header.clefChangesByStaff.get(pair.staff) ?? [],
       measures: dropTiesThatLeadNowhere(built, warnings),
     } satisfies StaffPart;
   });
@@ -576,7 +619,7 @@ function dropTiesThatLeadNowhere(
         dropped += entry.tiedForward.length - kept.length;
         return kept.length === entry.tiedForward.length
           ? entry
-          : noteEntry(entry.pitches, entry.duration, kept, entry.beams);
+          : noteEntry(entry.pitches, entry.duration, kept, entry.beams, entry.stem);
       }),
     ),
   );

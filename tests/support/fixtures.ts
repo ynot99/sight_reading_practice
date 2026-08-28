@@ -42,6 +42,7 @@ export function twoBarExercise(overrides: ExerciseOverrides = {}): Exercise {
         staffNumber: 1,
         voice: 1,
         clef: 'treble',
+        clefChanges: [],
         measures: [
           bar(
             noteEntry(p('C4'), Duration.QUARTER),
@@ -56,6 +57,7 @@ export function twoBarExercise(overrides: ExerciseOverrides = {}): Exercise {
         staffNumber: 2,
         voice: 2,
         clef: 'bass',
+        clefChanges: [],
         measures: [
           bar(noteEntry(p('C3'), Duration.WHOLE)),
           bar(noteEntry([p('G2'), p('D3')], Duration.HALF), restEntry(Duration.HALF)),
@@ -79,6 +81,7 @@ export function singleBarExercise(overrides: ExerciseOverrides = {}): Exercise {
         staffNumber: 1,
         voice: 1,
         clef: 'treble',
+        clefChanges: [],
         measures: [
           bar(
             noteEntry(p('C4'), Duration.QUARTER),
@@ -112,11 +115,12 @@ export function compoundBarExercise(overrides: ExerciseOverrides = {}): Exercise
     tempoBpm: overrides.tempoBpm ?? 60,
     metadata: { generatorId: 'fixture', seed: 2 },
     staves: [
-      { staffNumber: 1, voice: 1, clef: 'treble', measures: [bar(...melody)] },
+      { staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: [bar(...melody)] },
       {
         staffNumber: 2,
         voice: 2,
         clef: 'bass',
+        clefChanges: [],
         measures: [
           bar(
             noteEntry(p('C3'), Duration.QUARTER),
@@ -153,6 +157,7 @@ export function tiedExercise(overrides: ExerciseOverrides = {}): Exercise {
         staffNumber: 1,
         voice: 1,
         clef: 'treble',
+        clefChanges: [],
         measures: [
           bar(
             noteEntry(p('C4'), Duration.HALF),
@@ -166,6 +171,7 @@ export function tiedExercise(overrides: ExerciseOverrides = {}): Exercise {
         staffNumber: 2,
         voice: 2,
         clef: 'bass',
+        clefChanges: [],
         measures: [
           bar(noteEntry(p('C3'), Duration.WHOLE)),
           bar(noteEntry(p('C3'), Duration.WHOLE)),

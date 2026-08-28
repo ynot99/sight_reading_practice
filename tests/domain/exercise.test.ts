@@ -51,7 +51,14 @@ describe('exercise validation', () => {
 
   it('rejects note entries without pitches and empty measures', () => {
     const noPitches = withTrebleMeasures(twoBarExercise(), [
-      bar({ kind: 'note', pitches: [], duration: Duration.WHOLE, tiedForward: [], beams: [] }),
+      bar({
+        kind: 'note',
+        pitches: [],
+        duration: Duration.WHOLE,
+        tiedForward: [],
+        beams: [],
+        stem: null,
+      }),
       bar(noteEntry(p('G4'), Duration.WHOLE)),
     ]);
     expect(() => validateExercise(noPitches)).toThrow(/no pitches/);

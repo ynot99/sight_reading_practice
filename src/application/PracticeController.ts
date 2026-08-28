@@ -22,7 +22,7 @@ import type {
   IScoreRenderer,
   IScoreZoom,
 } from './ports/IScoreRenderer.js';
-import type { ClefKind } from '../domain/model/Clef.js';
+import { clefAtMeasure } from '../domain/model/Exercise.js';
 import { PracticeSession } from './session/PracticeSession.js';
 
 /** Everything the user can dial in before pressing start. */
@@ -328,11 +328,14 @@ export class PracticeController {
     this.lastSeed = exercise.metadata.seed;
 
     await this.deps.renderer.load(musicXml);
+    const timeline = this.timeline;
     this.deps.overlay.configureOverlay({
       key: exercise.key,
-      clefByStaff: new Map<number, ClefKind>(
-        exercise.staves.map((staff) => [staff.staffNumber, staff.clef]),
-      ),
+      clefAt: (staffNumber, stepIndex) => {
+        const measureIndex = timeline.at(stepIndex)?.measureIndex ?? 0;
+        const staff = exercise.staves.find((part) => part.staffNumber === staffNumber);
+        return staff === undefined ? 'treble' : clefAtMeasure(staff, measureIndex);
+      },
     });
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();

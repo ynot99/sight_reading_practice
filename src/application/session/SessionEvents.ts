@@ -16,6 +16,12 @@ export interface CountInEvent {
 
 export interface StepEnteredEvent {
   readonly step: TimelineStep;
+  /**
+   * What *this run* asks for here, which is not always what the step holds:
+   * practising one hand narrows it. The page shows the step; the panel that
+   * says what to play has to say what is actually being waited for.
+   */
+  readonly expectedMidi: readonly number[];
 }
 
 export interface StepCompletedEvent {

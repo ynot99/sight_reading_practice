@@ -15,6 +15,14 @@ export interface SessionOptions {
    * gives two thirds of a bar and leaves the reader out of phase.
    */
   readonly countInBars: number;
+  /**
+   * Staff whose notes are expected, or `null` for the whole texture.
+   *
+   * Practising one hand is not the same as practising half the music: the
+   * page still shows both, and the reader still has to keep their place in
+   * both. Only what is demanded narrows.
+   */
+  readonly expectedStaff: number | null;
   /** How much of the pulse the reader hears. */
   readonly click: ClickPattern;
   /**
@@ -41,6 +49,7 @@ export interface SessionOptions {
 export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
   countInBars: 1,
+  expectedStaff: null,
   click: 'pulse',
   dropoutBars: 0,
   metronomeMuted: false,

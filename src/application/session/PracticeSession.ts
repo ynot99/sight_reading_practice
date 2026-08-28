@@ -191,6 +191,23 @@ export class PracticeSession {
   }
 
   /** Count-in length in felt beats: one bar of 6/8 is two, not six. */
+  /**
+   * The pitches this run asks for at a step.
+   *
+   * A step where the chosen hand has nothing to play is a rest for this run,
+   * even though the other hand is busy - the cursor still stops there, because
+   * the reader is still reading it.
+   */
+  private expectedAt(step: TimelineStep): readonly number[] {
+    const staff = this.options.expectedStaff;
+    if (staff === null) {
+      return step.expectedMidi;
+    }
+    return [
+      ...new Set(step.notes.filter((note) => note.staffNumber === staff).map((note) => note.midi)),
+    ];
+  }
+
   private countInPulses(): number {
     const pulses = this.timeline.exercise.timeSignature.pulsesPerMeasure;
     return Math.max(0, Math.round(this.options.countInBars * pulses));
@@ -259,15 +276,14 @@ export class PracticeSession {
     }
 
     this.stepIndex = index;
+    const expected = this.expectedAt(step);
     this.matcher =
-      step.expectedMidi.length > 0
-        ? new ChordMatcher(step.expectedMidi, this.options.matchPolicy)
-        : null;
+      expected.length > 0 ? new ChordMatcher(expected, this.options.matchPolicy) : null;
     this.stepEnteredAt = this.clock.now();
     this.stepDeviationMs = null;
     this.stepWrongNotes = [];
 
-    this.emitter.emit('stepEntered', { step });
+    this.emitter.emit('stepEntered', { step, expectedMidi: expected });
     this.mode.onStepEntered(this.context, step);
   }
 
@@ -331,7 +347,8 @@ export class PracticeSession {
       startedAtMs: this.runStartedAt,
       endedAtMs: this.clock.now(),
       completed,
-      playableSteps: this.timeline.playableSteps.length,
+      playableSteps: this.timeline.steps.filter((step) => this.expectedAt(step).length > 0)
+        .length,
       steps: this.results,
     });
     const score = this.scoring.score(report);

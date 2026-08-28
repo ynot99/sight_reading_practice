@@ -15,7 +15,7 @@ import { GeneratedExerciseProvider, type IExerciseProvider } from './ports/IExer
 import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
-import { ExercisePlayer, type ListeningHand } from './ExercisePlayer.js';
+import { ExercisePlayer } from './ExercisePlayer.js';
 import type { ClickPattern } from './ports/IMetronome.js';
 import type {
   IPlayedNoteOverlay,
@@ -61,6 +61,13 @@ export interface PracticeSettings {
    * leaning on it.
    */
   readonly clickPattern: ClickPattern;
+  /**
+   * Staff to practise and to hear, or `null` for both hands.
+   *
+   * One setting for reading and for listening, because they are the same
+   * question asked twice: which hand am I working on.
+   */
+  readonly handStaff: number | null;
   /** Bars of click, then as many silent ones. 0 clicks throughout. */
   readonly dropoutBars: number;
   readonly matchToleranceMs: number;
@@ -164,6 +171,7 @@ export class PracticeController {
       countInBars: 1,
       metronomeMuted: false,
       clickPattern: 'pulse',
+      handStaff: null,
       dropoutBars: 0,
       matchToleranceMs: 250,
       pitchClassOnly: false,
@@ -372,7 +380,7 @@ export class PracticeController {
    * serve two masters, and nobody wants to be graded on a performance the
    * machine is giving.
    */
-  listen(staffNumber: ListeningHand = null): void {
+  listen(): void {
     const timeline = this.timeline;
     if (timeline === null) {
       return;
@@ -385,7 +393,7 @@ export class PracticeController {
     });
     this.deps.cursor.show();
     this.player.start(timeline, {
-      staffNumber,
+      staffNumber: this.currentSettings.handStaff,
       clickAudible: !this.currentSettings.metronomeMuted,
     });
   }
@@ -435,6 +443,7 @@ export class PracticeController {
           pitchClassOnly: this.currentSettings.pitchClassOnly,
         },
         countInBars: this.currentSettings.countInBars,
+        expectedStaff: this.currentSettings.handStaff,
         click: this.currentSettings.clickPattern,
         dropoutBars: this.currentSettings.dropoutBars,
         metronomeMuted: this.currentSettings.metronomeMuted,

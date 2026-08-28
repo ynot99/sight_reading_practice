@@ -49,6 +49,25 @@ describe('Wait mode', () => {
     expect(harness.of('noteJudged').map((event) => event.verdict)).toEqual(['correct']);
   });
 
+  it('asks for one hand alone when the reader is working on one', () => {
+    // The page still shows both staves and the cursor still visits every step;
+    // only what is demanded narrows.
+    const harness = waitHarness({
+      options: {
+        countInBars: 0,
+        metronomeMuted: true,
+        expectedStaff: 2,
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+      },
+    });
+    harness.session.start();
+
+    expect(harness.of('stepEntered')[0]?.expectedMidi).toEqual([MIDI.C3]);
+    // The bass note alone completes the step the right hand also plays in.
+    harness.midi.noteOn(MIDI.C3);
+    expect(harness.session.currentIndex).toBe(1);
+  });
+
   it('does not advance until every notated pitch has sounded', () => {
     const harness = waitHarness();
     harness.session.start();

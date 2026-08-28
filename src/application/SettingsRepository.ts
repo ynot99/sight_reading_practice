@@ -55,6 +55,14 @@ function readId(value: unknown, known: readonly string[]): string | undefined {
   return typeof value === 'string' && known.includes(value) ? value : undefined;
 }
 
+/** `null` is a real choice here - both hands - so it has to survive a reload. */
+function readHand(value: unknown): number | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  return readInteger(value, 1, 4);
+}
+
 function readClickPattern(value: unknown): ClickPattern | undefined {
   return CLICK_PATTERNS.includes(value as ClickPattern) ? (value as ClickPattern) : undefined;
 }
@@ -118,6 +126,7 @@ export function decodePracticeSettings(
     tempoBpm: readInteger(value['tempoBpm'], 20, 300),
     countInBars: readInteger(value['countInBars'], 0, 4),
     clickPattern: readClickPattern(value['clickPattern']),
+    handStaff: readHand(value['handStaff']),
     dropoutBars: readInteger(value['dropoutBars'], 0, 8),
     metronomeMuted: readBoolean(value['metronomeMuted']),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
@@ -141,6 +150,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     tempoBpm: settings.tempoBpm,
     countInBars: settings.countInBars,
     clickPattern: settings.clickPattern,
+    handStaff: settings.handStaff,
     dropoutBars: settings.dropoutBars,
     metronomeMuted: settings.metronomeMuted,
     // `Infinity` has no JSON representation; the slider cannot reach it anyway.

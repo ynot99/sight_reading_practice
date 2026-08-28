@@ -83,6 +83,8 @@ class FakeVolume implements IVolumeControl {
 interface Rig {
   readonly runtime: AppRuntime;
   readonly view: AppView;
+  readonly instrument: RecordingPitchPlayer;
+  readonly metronome: ManualMetronome;
   readonly midi: MockMidiAdapter;
   readonly renderer: FakeScoreRenderer;
   readonly clock: ManualClock;
@@ -105,6 +107,7 @@ function createRig(
   const presets = new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS);
   const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
+  const instrument = new RecordingPitchPlayer();
   const scorings = new ScoringStrategyRegistry().registerAll([
     new AccuracyScoringStrategy(),
     new TimingWeightedScoringStrategy(),
@@ -135,7 +138,7 @@ function createRig(
     zoom: renderer,
     midi,
     metronome,
-    instrument: new RecordingPitchPlayer(),
+    instrument,
     clock,
     scorings,
     initialSettings: {
@@ -175,6 +178,8 @@ function createRig(
   return {
     runtime,
     view: new AppView(runtime, document),
+    instrument,
+    metronome,
     midi,
     renderer,
     clock,
@@ -300,6 +305,43 @@ describe('AppView', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.controller.isListening).toBe(false);
     expect(element('listen').textContent).toBe('Listen');
+  });
+
+  it('sounds only the hand that was chosen', async () => {
+    const { view, instrument, metronome } = createRig();
+    await view.initialize();
+
+    const hand = element<HTMLSelectElement>('listen-hand');
+    hand.value = '2';
+    hand.dispatchEvent(new Event('change'));
+    element<HTMLButtonElement>('listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    metronome.advanceSubdivisions(8);
+
+    // The bass staff of the fixture holds C3 and the chord under it; the
+    // treble's C4 and the melody above it must stay silent.
+    const sounded = new Set(instrument.played.map((note) => note.midi));
+    expect(sounded.size).toBeGreaterThan(0);
+    expect([...sounded].every((midi) => midi < 60)).toBe(true);
+  });
+
+  it('asks for only the chosen hand in a run too', async () => {
+    // The same question asked twice: which hand am I working on. The page
+    // still shows both, and the cursor still visits every step.
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    const hand = element<HTMLSelectElement>('listen-hand');
+    hand.value = '2';
+    hand.dispatchEvent(new Event('change'));
+    element<HTMLButtonElement>('start').click();
+
+    expect(runtime.controller.settings.handStaff).toBe(2);
+    const expected = runtime.controller.session?.currentStep?.expectedMidi ?? [];
+    // The step itself still knows about both hands...
+    expect(expected.length).toBeGreaterThan(1);
+    // ...but what the run is waiting for is the left hand alone.
+    expect(element('expected').textContent).not.toContain('C4');
   });
 
   it('gives up the pulse when a run starts', async () => {

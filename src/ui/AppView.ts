@@ -394,8 +394,7 @@ export class AppView {
     // at once: without waiting, its opening seconds come out on the synthesised
     // fallback and the instrument appears to change halfway through.
     await this.runtime.samples?.load();
-    const hand = this.el.listenHand.value;
-    controller.listen(hand === '' ? null : Number.parseInt(hand, 10));
+    controller.listen();
     this.describeListening();
   }
 
@@ -455,6 +454,11 @@ export class AppView {
 
     this.listen(this.el.listen, 'click', () => {
       void this.toggleListening();
+    });
+
+    this.listen(this.el.listenHand, 'change', () => {
+      const hand = this.el.listenHand.value;
+      controller.updateSettings({ handStaff: hand === '' ? null : Number.parseInt(hand, 10) });
     });
 
     this.listen(this.el.openScore, 'click', () => {
@@ -791,8 +795,8 @@ export class AppView {
         this.el.sessionStatus.textContent = `Counting in… ${beatsRemaining}`;
         this.renderFocusStatus(`Counting in… ${beatsRemaining}`);
       }),
-      session.events.on('stepEntered', ({ step }) => {
-        this.el.expected.textContent = formatNotes(step.expectedMidi);
+      session.events.on('stepEntered', ({ step, expectedMidi }) => {
+        this.el.expected.textContent = formatNotes(expectedMidi);
         this.lastPosition = `bar ${step.measureIndex + 1} · beat ${step.beat.toFixed(2).replace(/\.00$/, '')}`;
         this.el.position.textContent = this.lastPosition;
         this.el.progress.value = step.index;
@@ -1031,6 +1035,7 @@ export class AppView {
     this.el.measuresValue.value = String(settings.measures);
     this.el.tempo.value = String(settings.tempoBpm);
     this.el.tempoValue.value = String(settings.tempoBpm);
+    this.el.listenHand.value = settings.handStaff === null ? '' : String(settings.handStaff);
     this.el.click.value = settings.clickPattern;
     this.el.clickDescription.textContent = CLICK_DESCRIPTIONS[settings.clickPattern];
     this.el.dropout.value = String(settings.dropoutBars);

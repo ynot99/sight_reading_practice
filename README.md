@@ -13,8 +13,11 @@ Two practice modes:
 - **Flow mode** — the cursor walks with the metronome and grades how close each
   press was to its beat. For building fluency.
 
-**Listen** plays the exercise instead of judging it — the whole texture or one
-hand alone, which is how you learn a part while playing the other. It is not a
+**Listen** plays the exercise instead of judging it. The hand selector beside it
+governs both listening and practice, because they are the same question asked
+twice: which hand am I working on. Practising one hand is not practising half
+the music — the page still shows both staves and the cursor still visits every
+step; only what is demanded narrows. It is not a
 practice mode: a mode exists to judge input and this judges nothing, so it is
 its own service driven by the same pulse. Notes are handed to the instrument
 *ahead* of when they sound, because a tick arrives after the moment it stands

@@ -291,7 +291,7 @@ describe('AppView', () => {
     const input = element<HTMLInputElement>('score-file');
     Object.defineProperty(input, 'files', {
       configurable: true,
-      value: [{ text: () => Promise.resolve(xml) }],
+      value: [{ arrayBuffer: () => Promise.resolve(new TextEncoder().encode(xml).buffer) }],
     });
     input.dispatchEvent(new Event('change'));
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -308,7 +308,12 @@ describe('AppView', () => {
     const input = element<HTMLInputElement>('score-file');
     Object.defineProperty(input, 'files', {
       configurable: true,
-      value: [{ text: () => Promise.resolve('<shopping><item>milk</item></shopping>') }],
+      value: [
+        {
+          arrayBuffer: () =>
+            Promise.resolve(new TextEncoder().encode('<shopping><item>milk</item></shopping>').buffer),
+        },
+      ],
     });
     input.dispatchEvent(new Event('change'));
     await new Promise((resolve) => setTimeout(resolve, 0));

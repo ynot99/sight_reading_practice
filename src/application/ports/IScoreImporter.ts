@@ -9,4 +9,12 @@ import type { ImportedScore } from '../../domain/notation/MusicXmlParser.js';
  */
 export interface IScoreImporter {
   read(musicXml: string): ImportedScore;
+  /**
+   * Reads a chosen file, unpacking a compressed `.mxl` container first.
+   *
+   * Compressed is what MuseScore hands you unless you ask otherwise, so this
+   * is the path a reader actually takes; the string form stays for scores that
+   * are already text.
+   */
+  readFile(bytes: ArrayBuffer): Promise<ImportedScore>;
 }

@@ -354,7 +354,7 @@ export class AppView {
     }
 
     try {
-      const { exercise, warnings } = this.runtime.importer.read(await file.text());
+      const { exercise, warnings } = await this.runtime.importer.readFile(await file.arrayBuffer());
       await this.runtime.controller.openScore(exercise);
       const dropped = warnings.map((warning) => warning.detail).join(' ');
       this.showImportNotice(

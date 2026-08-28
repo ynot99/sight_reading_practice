@@ -385,8 +385,10 @@ the timeline the player is judged against is derived from the exercise, and
 building it from the engraver's parse of the same file instead would be the
 drift the single source of truth exists to prevent. The model is narrower than
 the format, so the import either refuses a file or reports what it dropped;
-`MusicXmlParser` lists the cases. Extra voices, grace notes, mid-piece key
-changes and anything shorter than a sixteenth are the main limits.
+`MusicXmlParser` lists the cases. Extra voices, grace notes, mid-piece key and
+clef changes and anything shorter than a sixteenth are the main limits.
+Compressed `.mxl` files are unpacked on the way in, since that is what
+MuseScore hands you unless you ask otherwise.
 
 ## Known limits and next steps
 

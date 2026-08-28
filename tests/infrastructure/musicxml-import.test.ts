@@ -6,7 +6,9 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { DomMusicXmlImporter } from '../../src/infrastructure/notation/DomMusicXmlImporter.js';
+import { looksZipped } from '../../src/infrastructure/notation/zip.js';
 import { DomainError } from '../../src/shared/errors.js';
 import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
 
@@ -166,5 +168,122 @@ describe('files written by other programs', () => {
     expect(() => importer.read(scoreXml(note('C', 4, 3, '32nd') + note('D', 4, 93, 'whole')))).toThrow(
       /sixteenth notes/,
     );
+  });
+});
+
+/** Builds a `.mxl` the way an exporter would: a ZIP with a named root file. */
+function packMxl(files: readonly { readonly name: string; readonly body: string }[]): ArrayBuffer {
+  const encoder = new TextEncoder();
+  const locals: Uint8Array[] = [];
+  const centrals: Uint8Array[] = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const name = encoder.encode(file.name);
+    const raw = encoder.encode(file.body);
+    const packed = new Uint8Array(deflateRawSync(raw));
+
+    const local = new Uint8Array(30 + name.length + packed.length);
+    const localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(8, 8, true);
+    localView.setUint32(18, packed.length, true);
+    localView.setUint32(22, raw.length, true);
+    localView.setUint16(26, name.length, true);
+    local.set(name, 30);
+    local.set(packed, 30 + name.length);
+    locals.push(local);
+
+    const central = new Uint8Array(46 + name.length);
+    const centralView = new DataView(central.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(10, 8, true);
+    centralView.setUint32(20, packed.length, true);
+    centralView.setUint32(24, raw.length, true);
+    centralView.setUint16(28, name.length, true);
+    centralView.setUint32(42, offset, true);
+    central.set(name, 46);
+    centrals.push(central);
+
+    offset += local.length;
+  }
+
+  const directorySize = centrals.reduce((total, entry) => total + entry.length, 0);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, files.length, true);
+  endView.setUint16(10, files.length, true);
+  endView.setUint32(12, directorySize, true);
+  endView.setUint32(16, offset, true);
+
+  const total = offset + directorySize + end.length;
+  const archive = new Uint8Array(total);
+  let at = 0;
+  for (const part of [...locals, ...centrals, end]) {
+    archive.set(part, at);
+    at += part.length;
+  }
+  return archive.buffer;
+}
+
+describe('compressed scores', () => {
+  // Node's inflater stands in for the browser's, so the archive reading is
+  // tested rather than the platform's decompressor.
+  const zipped = new DomMusicXmlImporter(undefined, async (bytes) =>
+    new Uint8Array(inflateRawSync(bytes)),
+  );
+
+  const container =
+    '<?xml version="1.0" encoding="UTF-8"?><container><rootfiles>' +
+    '<rootfile full-path="Score/score.xml"/></rootfiles></container>';
+
+  it('opens the score inside a .mxl', async () => {
+    const original = twoBarExercise({ title: 'Packed Away' });
+    const archive = packMxl([
+      { name: 'META-INF/container.xml', body: container },
+      { name: 'Score/score.xml', body: serializer.serialize(original) },
+    ]);
+
+    expect(looksZipped(new Uint8Array(archive))).toBe(true);
+    const { exercise } = await zipped.readFile(archive);
+
+    expect(exercise.title).toBe('Packed Away');
+    expect(demands(exercise)).toEqual(demands(original));
+  });
+
+  it('ignores everything the exporter packed alongside it', async () => {
+    const original = twoBarExercise({ title: 'Packed Away' });
+    const archive = packMxl([
+      { name: 'META-INF/container.xml', body: container },
+      { name: 'sleeve.txt', body: 'cover art goes here' },
+      { name: 'Score/score.xml', body: serializer.serialize(original) },
+    ]);
+
+    const { exercise } = await zipped.readFile(archive);
+    expect(exercise.title).toBe('Packed Away');
+  });
+
+  it('finds the score even without a container manifest', async () => {
+    const archive = packMxl([
+      { name: 'score.musicxml', body: serializer.serialize(twoBarExercise({ title: 'Bare' })) },
+    ]);
+
+    const { exercise } = await zipped.readFile(archive);
+    expect(exercise.title).toBe('Bare');
+  });
+
+  it('still reads a plain, uncompressed file', async () => {
+    const xml = serializer.serialize(twoBarExercise({ title: 'Plain' }));
+    const bytes = new TextEncoder().encode(xml);
+
+    expect(looksZipped(bytes)).toBe(false);
+    const { exercise } = await zipped.readFile(bytes.buffer as ArrayBuffer);
+    expect(exercise.title).toBe('Plain');
+  });
+
+  it('says so when the archive holds no score at all', async () => {
+    const archive = packMxl([{ name: 'notes.txt', body: 'nothing musical here' }]);
+    await expect(zipped.readFile(archive)).rejects.toThrow(/no score in it/);
   });
 });

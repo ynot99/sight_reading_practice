@@ -6,7 +6,7 @@ import type { KeySignature } from '../domain/model/KeySignature.js';
 import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
-import { buildTimeline, type ExerciseTimeline } from '../domain/timeline/Timeline.js';
+import { buildTimeline, type ExerciseTimeline, type TimelineStep } from '../domain/timeline/Timeline.js';
 import { playedNoteOffset } from './playedNoteOffset.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
@@ -834,7 +834,12 @@ export class PracticeController {
           this.fadeThrough(result.index);
         }
         if (this.survivalRuns) {
-          this.publishHealth(this.meter.settle(result.status), 'settle');
+          // What the step was worth is how long it lasted, so that a bar
+          // carries the same weight however many notes are in it.
+          this.publishHealth(
+            this.meter.settle(result.status, this.beatsIn(this.timeline?.at(result.index))),
+            'settle',
+          );
         }
       }),
     );
@@ -869,9 +874,7 @@ export class PracticeController {
         if (!this.survivalRuns) {
           return;
         }
-        const beats =
-          (tick.positionTicks - this.lastBeatTicks) /
-          this.currentSettings.timeSignature.ticksPerPulse;
+        const beats = this.beatsFor(tick.positionTicks - this.lastBeatTicks);
         this.lastBeatTicks = tick.positionTicks;
         this.publishHealth(this.meter.drainForBeats(beats), 'drain');
       }),
@@ -1140,6 +1143,24 @@ export class PracticeController {
   /** Where the bar stands, `0..1`. */
   get health(): number {
     return this.meter.health;
+  }
+
+  /**
+   * Divisions as felt beats, in the metre the music is actually written in.
+   *
+   * The exercise's own signature and not the one in the settings: an opened
+   * score keeps the metre it was written in, and the settings go on saying
+   * whatever the generator was last asked for. Read from there, a 6/8 file
+   * under a 4/4 setting drained half as fast again as it should.
+   */
+  private beatsFor(ticks: number): number {
+    const signature = this.exercise?.timeSignature ?? this.currentSettings.timeSignature;
+    return ticks / signature.ticksPerPulse;
+  }
+
+  /** How long a step lasts, in felt beats. */
+  private beatsIn(step: TimelineStep | null | undefined): number {
+    return step == null ? 0 : this.beatsFor(step.durationTicks);
   }
 
   /**

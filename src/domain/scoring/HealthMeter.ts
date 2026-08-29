@@ -11,9 +11,18 @@ export interface HealthMeterOptions {
    * fast one trivial.
    */
   readonly drainPerBeat?: number;
-  /** Given back for a step played correctly. Must exceed the drain, or
-   * perfect playing still ends in failure. */
-  readonly rewardPerStep?: number;
+  /**
+   * Given back, per beat, for keeping up with the music.
+   *
+   * Per beat and not per step, which is the difference between a game and a
+   * lottery about note density. A step repays the time it occupies, so a bar
+   * is worth the same whether it holds one whole note or sixteen sixteenths -
+   * and a reader practising one hand through a passage where that hand has
+   * four notes is not asked to earn what sixteen would have earned.
+   *
+   * Must exceed the drain, or perfect playing still ends in failure.
+   */
+  readonly rewardPerBeat?: number;
   /** Taken for a step the music took away. */
   readonly missPenalty?: number;
   /** Taken for a step that was played, but with wrong notes mixed in. */
@@ -22,9 +31,10 @@ export interface HealthMeterOptions {
 
 const DEFAULTS = {
   drainPerBeat: 0.035,
-  rewardPerStep: 0.06,
+  rewardPerBeat: 0.06,
   missPenalty: 0.12,
-  wrongPenalty: 0.04,
+  // Set so that at the beat, a wrong note loses what a right one gains.
+  wrongPenalty: 0.05,
 } as const;
 
 /**
@@ -41,14 +51,14 @@ const DEFAULTS = {
  */
 export class HealthMeter {
   private readonly drainPerBeat: number;
-  private readonly rewardPerStep: number;
+  private readonly rewardPerBeat: number;
   private readonly missPenalty: number;
   private readonly wrongPenalty: number;
   private value = 1;
 
   constructor(options: HealthMeterOptions = {}) {
     this.drainPerBeat = options.drainPerBeat ?? DEFAULTS.drainPerBeat;
-    this.rewardPerStep = options.rewardPerStep ?? DEFAULTS.rewardPerStep;
+    this.rewardPerBeat = options.rewardPerBeat ?? DEFAULTS.rewardPerBeat;
     this.missPenalty = options.missPenalty ?? DEFAULTS.missPenalty;
     this.wrongPenalty = options.wrongPenalty ?? DEFAULTS.wrongPenalty;
   }
@@ -71,23 +81,36 @@ export class HealthMeter {
   }
 
   /**
-   * A step that has been decided, one way or the other.
+   * A step that has been decided, one way or the other, and the beats of
+   * music it occupied.
    *
-   * A rest is neither rewarded nor punished: nothing was asked for, and
-   * paying the reader for silence would let a piece full of them carry them.
-   * The drain still runs through it, which is what keeps a long rest from
-   * being a place to stand still.
+   * Keeping up repays the time; getting it wrong costs on top of it. Repaid
+   * per beat so that a bar is worth what a bar is worth however it happens to
+   * be divided - it is the difference between a game and a lottery about how
+   * many notes the writer put in it.
+   *
+   * A step nothing was asked at - a rest, or a bar belonging to the hand that
+   * is not being practised - repays exactly what it drained, so the bar holds
+   * level through it. It used to repay nothing, on the reasoning that paying
+   * for silence would let a piece full of rests carry the reader. That reads
+   * as fair and is not: practising one hand, whole passages belong to the
+   * other, and the reader was being drained for a rest they were correctly
+   * observing, with no note in reach to earn it back. Nothing was asked, so
+   * nothing can be failed.
    */
-  settle(status: 'correct' | 'incorrect' | 'missed' | 'skipped'): number {
+  settle(status: 'correct' | 'incorrect' | 'missed' | 'skipped', beats = 0): number {
+    const held = Math.max(0, beats);
     switch (status) {
       case 'correct':
-        return this.set(this.value + this.rewardPerStep);
+        return this.set(this.value + this.rewardPerBeat * held);
       case 'incorrect':
-        return this.set(this.value - this.wrongPenalty);
+        // Played, and kept up with, but not cleanly.
+        return this.set(this.value + this.rewardPerBeat * held - this.wrongPenalty);
       case 'missed':
+        // The music went past: nothing is repaid, and the miss costs as well.
         return this.set(this.value - this.missPenalty);
       default:
-        return this.value;
+        return this.set(this.value + this.drainPerBeat * held);
     }
   }
 

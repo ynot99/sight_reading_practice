@@ -32,7 +32,9 @@ import { RecordingPitchPlayer } from '../../src/infrastructure/testing/Recording
 import { PracticeHistory } from '../../src/application/PracticeHistory.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { DomainError } from '../../src/shared/errors.js';
-import { beamedSixteenths, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import { bar, beamedSixteenths, p, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { noteEntry } from '../../src/domain/model/Exercise.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
 
 /** Strips the printed tempo so two renderings can be compared note for note. */
@@ -1420,7 +1422,7 @@ describe('surviving a piece you already know', () => {
         () => ({ provide: () => Promise.resolve(exercise) }),
         { modeId: FLOW_MODE_ID, survival: true },
         undefined,
-        { rewardPerStep: 0, missPenalty: 0, wrongPenalty: 0 },
+        { rewardPerBeat: 0, missPenalty: 0, wrongPenalty: 0 },
       );
       await rig.controller.loadNewExercise();
       rig.controller.start();
@@ -1429,11 +1431,53 @@ describe('surviving a piece you already know', () => {
       return 1 - rig.controller.health;
     }
 
-    // A bar of 2/4 in sixteenths is two beats; two bars of 4/4 in quarters
-    // are eight. The sixteenths tick four times as often, and must still cost
-    // a quarter as much.
+    // A bar of 2/4 in sixteenths is two beats and every one of them is played.
     expect(await drainOverWholePiece(beamedSixteenths())).toBeCloseTo(2 * 0.035, 3);
-    expect(await drainOverWholePiece(twoBarExercise())).toBeCloseTo(8 * 0.035, 3);
+    // Two bars of 4/4 are eight beats, of which the last two ask for nothing:
+    // the second bar's whole note is being held over a rest in the bass, and
+    // time the reader cannot be asked anything at costs them nothing.
+    expect(await drainOverWholePiece(twoBarExercise())).toBeCloseTo(6 * 0.035, 3);
+  });
+
+  it('counts the beat the music is written in, not the one the settings say', async () => {
+    // An opened score keeps the metre it was written in while the settings go
+    // on saying whatever the generator was last asked for. Read from the
+    // settings, a bar of 6/8 was counted as three beats instead of two, and
+    // the bar fell half as fast again as it should for the whole piece.
+    const sixEight: Exercise = {
+      ...twoBarExercise(),
+      timeSignature: new TimeSignature(6, 8),
+      staves: [
+        {
+          staffNumber: 1,
+          voice: 1,
+          clef: 'treble',
+          clefChanges: [],
+          measures: [
+            bar(
+              ...['C4', 'D4', 'E4', 'F4', 'G4', 'A4'].map((name) =>
+                noteEntry(p(name), Duration.EIGHTH),
+              ),
+            ),
+          ],
+        },
+      ],
+    };
+
+    const rig = createController(
+      false,
+      () => ({ provide: () => Promise.resolve(sixEight) }),
+      // The settings disagree with the file, which is the ordinary case.
+      { modeId: FLOW_MODE_ID, survival: true, timeSignature: new TimeSignature(4, 4) },
+      undefined,
+      { rewardPerBeat: 0, missPenalty: 0, wrongPenalty: 0 },
+    );
+    await rig.controller.loadNewExercise();
+    rig.controller.start();
+    rig.metronome.advanceSubdivisions(400);
+
+    // Two dotted quarters, because that is what a bar of 6/8 is felt as.
+    expect(1 - rig.controller.health).toBeCloseTo(2 * 0.035, 3);
   });
 
   it('falls at the same rate per bar however slow the piece is', async () => {
@@ -1472,6 +1516,43 @@ describe('surviving a piece you already know', () => {
     }
 
     expect(await healthAfter(true)).toBeGreaterThan(await healthAfter(false));
+  });
+
+  it('does not charge a hand for the bars that belong to the other one', async () => {
+    // The complaint this answers: practising one hand, whole stretches ask
+    // nothing of it, and the bar used to fall straight through them with no
+    // note in reach to earn anything back. Whether the reader survived was
+    // then decided by how many notes their hand happened to have, which is a
+    // property of the music and not of the playing.
+    //
+    // Staff 2 is the left hand. It has two notes across eight beats here.
+    // Played
+    // perfectly, that has to be enough - and a perfect run must never fall.
+    async function healthAfterAPerfectRunOf(handStaff: number | null): Promise<number> {
+      const rig = await survivalRun({ handStaff });
+      let due: readonly number[] = [];
+      rig.controller.events.on('sessionCreated', ({ session }) => {
+        // What *this run* asks for here, which practising one hand narrows.
+        session.events.on('stepEntered', ({ expectedMidi }) => {
+          due = expectedMidi;
+        });
+      });
+      const session = rig.controller.start();
+
+      for (let at = 0; at < 40; at += 1) {
+        for (const midi of due) {
+          rig.midi.noteOn(midi, rig.clock.now());
+        }
+        due = [];
+        rig.metronome.advanceSubdivisions(1);
+      }
+      expect(session?.status).toBe('completed');
+      return rig.controller.health;
+    }
+
+    expect(await healthAfterAPerfectRunOf(2)).toBe(1);
+    // And not because one hand is special: reading both is the same rule.
+    expect(await healthAfterAPerfectRunOf(null)).toBe(1);
   });
 
   it('ends the run when the bar empties', async () => {

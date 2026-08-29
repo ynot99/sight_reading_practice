@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { FlowMode } from '../../src/application/modes/FlowMode.js';
 import { TimingWeightedScoringStrategy } from '../../src/domain/scoring/strategies.js';
-import { MIDI, twoBarExercise } from '../support/fixtures.js';
+import { MIDI, bar, p, twoBarExercise } from '../support/fixtures.js';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { noteEntry } from '../../src/domain/model/Exercise.js';
+import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { createHarness, type Harness } from '../support/harness.js';
 
 /** Bar of 4/4 at 60 bpm: one quarter note lasts 1000 ms, one subdivision 250 ms. */
@@ -29,6 +32,36 @@ function flowHarness(): Harness {
       matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
     },
   });
+}
+
+/**
+ * One bar of 6/8: a dotted quarter, then three eighths.
+ *
+ * Written in six and felt in two, and deliberately without a step on every
+ * beat - a bar of straight eighths would have the cursor announcing beats 2
+ * and 3 by itself, and the reading taken from the pulse would never be tested.
+ */
+function sixEightExercise() {
+  return {
+    ...twoBarExercise({ tempoBpm: 60 }),
+    timeSignature: new TimeSignature(6, 8),
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble' as const,
+        clefChanges: [],
+        measures: [
+          bar(
+            noteEntry(p('C4'), Duration.DOTTED_QUARTER),
+            noteEntry(p('D4'), Duration.EIGHTH),
+            noteEntry(p('E4'), Duration.EIGHTH),
+            noteEntry(p('F4'), Duration.EIGHTH),
+          ),
+        ],
+      },
+    ],
+  };
 }
 
 /** Starts the session and plays through the count-in. */
@@ -410,6 +443,30 @@ describe('Flow mode', () => {
       // The fourth completes the beat, which is what a reader is counting.
       harness.metronome.advanceSubdivisions(1);
       expect(harness.of('positionChanged')).toHaveLength(atTheBar + 1);
+    });
+
+    it('counts the beats the metre is written in, not the ones it is felt in', () => {
+      // 6/8 is written in eighths and felt in two dotted quarters. The
+      // position is reported in notated beats - the timeline counts them that
+      // way and always has - so a reading taken once per felt pulse went 1, 4,
+      // 1, 4 and looked exactly like a display dropping beats.
+      const harness = createHarness({
+        exercise: sixEightExercise(),
+        mode: new FlowMode(),
+        options: {
+          countInBars: 0,
+          clickWhen: 'never',
+          click: 'pulse',
+          matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+        },
+      });
+      harness.session.start();
+      // A whole bar, which is six notated beats however few notes fill it.
+      harness.metronome.advanceSubdivisions(6);
+
+      expect(harness.of('positionChanged').map((event) => event.beat)).toEqual([
+        1, 2, 3, 4, 5, 6,
+      ]);
     });
 
     it('picks the count back up where the music resumes, not at bar one', () => {

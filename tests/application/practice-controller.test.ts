@@ -487,8 +487,7 @@ describe('PracticeController', () => {
       midi.noteOn(midiNote, 0);
     }
 
-    expect(renderer.cursor.moves.length).toBeGreaterThan(1);
-    expect(renderer.cursor.moves[1]).toBe(1);
+    expect(renderer.cursor.moves.at(-1)).toBe(1);
   });
 
   it('resets the cursor when a run ends', async () => {
@@ -1007,6 +1006,28 @@ describe('cursor visibility', () => {
     await controller.loadNewExercise();
 
     expect(renderer.cursor.visible).toBe(false);
+  });
+
+  it('is back at the first note before the count-in is heard', async () => {
+    // The count-in exists to prepare the reader for the first bar, and the
+    // cursor used to sit wherever the last run abandoned it for the whole of
+    // it - so they spent it looking at the wrong end of the piece.
+    const { controller, renderer, metronome } = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      countInBars: 1,
+    });
+    await controller.loadNewExercise();
+
+    // A run carried some way in, then paused: nothing has put the cursor back.
+    controller.start();
+    metronome.advanceSubdivisions(6);
+    controller.pause();
+    expect(renderer.cursor.position).toBeGreaterThan(0);
+
+    const session = controller.start();
+
+    expect(session?.status).toBe('counting-in');
+    expect(renderer.cursor.position).toBe(0);
   });
 
   it('still follows the music while hidden', async () => {

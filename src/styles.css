@@ -773,6 +773,23 @@ select {
   opacity: 0.35;
 }
 
+/*
+ * Three answers on one button, shown rather than named.
+ *
+ * The pendulum is always drawn; what changes is how loudly. Sounding all the
+ * way through takes the same lit treatment as a switch that is on, the
+ * count-in only sits plain, and silence is dimmed the way an unpressed toggle
+ * is. `title` carries the exact answer, which is the half a picture cannot.
+ */
+.focus-bar__click[data-click='always'] {
+  color: var(--wrong);
+  border-color: currentcolor;
+}
+
+.focus-bar__click[data-click='never'] svg {
+  opacity: 0.35;
+}
+
 .focus-bar__hands {
   display: inline-flex;
   align-items: center;

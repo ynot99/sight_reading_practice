@@ -27,6 +27,7 @@ import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/Pra
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { ChosenPassage } from '../application/PracticeController.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
+import { elementAt } from '../shared/asserts.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { FocusMode } from './FocusMode.js';
@@ -118,6 +119,21 @@ const CLICK_WHEN_LABELS: Readonly<Record<ClickWhen, string>> = {
   'cycle-4': '4 bars on, 4 off',
   never: 'Never',
 };
+
+/**
+ * The three answers the fullscreen button cycles through.
+ *
+ * Not all six: a cycle of bars on and bars off is chosen deliberately before a
+ * run, and a thumb between two runs wants "all the way", "just count me in" or
+ * "leave me alone". Landing on the list from a cycle gives the first of them,
+ * which is the one a reader reaching for the button is most likely to want.
+ */
+const CLICK_WHEN_BY_THUMB: readonly ClickWhen[] = ['always', 'count-in-only', 'never'];
+
+function nextClickWhen(current: ClickWhen): ClickWhen {
+  const at = CLICK_WHEN_BY_THUMB.indexOf(current);
+  return elementAt(CLICK_WHEN_BY_THUMB, (at + 1) % CLICK_WHEN_BY_THUMB.length);
+}
 
 function dropoutDescription(when: ClickWhen, countInBars: number): string {
   if (when === 'always') {
@@ -410,6 +426,7 @@ export class AppView {
     focusListenIcon: SVGPathElement;
     focusHands: HTMLButtonElement;
     focusSurvival: HTMLButtonElement;
+    focusClick: HTMLButtonElement;
     focusCursor: HTMLButtonElement;
     focusWait: HTMLButtonElement;
     focusMarks: HTMLButtonElement;
@@ -534,6 +551,7 @@ export class AppView {
       focusListenIcon: requireElement(doc, 'focus-listen-icon'),
       focusHands: requireElement(doc, 'focus-hands'),
       focusSurvival: requireElement(doc, 'focus-survival'),
+      focusClick: requireElement(doc, 'focus-click'),
       focusCursor: requireElement(doc, 'focus-cursor'),
       focusWait: requireElement(doc, 'focus-wait'),
       focusMarks: requireElement(doc, 'focus-marks'),
@@ -1231,6 +1249,11 @@ export class AppView {
       this.renderHealth(controller.health);
     });
 
+    this.listen(this.el.focusClick, 'click', () => {
+      controller.updateSettings({ clickWhen: nextClickWhen(controller.settings.clickWhen) });
+      this.syncControlsFromSettings();
+    });
+
     this.listen(this.el.focusSmaller, 'click', () => {
       this.nudgeZoom(-ZOOM_STEP_PERCENT);
     });
@@ -1506,6 +1529,21 @@ export class AppView {
     this.el.focusHealthFill.style.transitionDuration = `${duration}ms`;
     this.el.focusHealthFill.style.width = `${Math.round(health * 100)}%`;
     this.el.focusHealthFill.dataset['low'] = String(health <= 0.25);
+  }
+
+  /**
+   * Shows how much of the run the click sounds for, on the button itself.
+   *
+   * A name as well as a picture: an icon that has to be guessed at is not a
+   * label, and this one has three answers rather than two.
+   */
+  private describeClickButton(when: ClickWhen): void {
+    const label = `Metronome: ${CLICK_WHEN_LABELS[when].toLowerCase()}`;
+    // Cycles have no state of their own here; the button shows them as the
+    // sounding answer, which is what its next press would make true.
+    this.el.focusClick.dataset['click'] = CLICK_WHEN_BY_THUMB.includes(when) ? when : 'always';
+    this.el.focusClick.title = label;
+    this.el.focusClick.setAttribute('aria-label', label);
   }
 
   /**
@@ -2024,6 +2062,7 @@ export class AppView {
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.survival.checked = settings.survival;
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
+    this.describeClickButton(settings.clickWhen);
     this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
     this.applyScoreCover();

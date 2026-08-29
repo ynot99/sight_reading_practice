@@ -1787,6 +1787,49 @@ describe('AppView', () => {
       expect(runtime.controller.session?.status).toBe('aborted');
     });
 
+    /** Through the settings control, so the view hears about it as it would. */
+    function setClickWhen(value: string): void {
+      const select = element<HTMLSelectElement>('dropout');
+      select.value = value;
+      select.dispatchEvent(new Event('change'));
+    }
+
+    it('cycles the click through the three answers a thumb wants', async () => {
+      const { runtime, view } = createRig();
+      await view.initialize();
+      setClickWhen('always');
+
+      const button = element<HTMLButtonElement>('focus-click');
+      expect(button.dataset['click']).toBe('always');
+
+      button.click();
+      expect(runtime.controller.settings.clickWhen).toBe('count-in-only');
+      // The name as well as the picture: three states cannot be guessed at.
+      expect(button.title).toBe('Metronome: only the count-in');
+
+      button.click();
+      expect(runtime.controller.settings.clickWhen).toBe('never');
+      expect(button.dataset['click']).toBe('never');
+
+      button.click();
+      expect(runtime.controller.settings.clickWhen).toBe('always');
+    });
+
+    it('leaves the cycles to the settings, and steps out of one', async () => {
+      // A bar on and a bar off is chosen deliberately before a run. The button
+      // shows it as sounding, which is what its next press makes true.
+      const { runtime, view } = createRig();
+      await view.initialize();
+      setClickWhen('cycle-2');
+
+      const button = element<HTMLButtonElement>('focus-click');
+      expect(button.dataset['click']).toBe('always');
+
+      button.click();
+
+      expect(runtime.controller.settings.clickWhen).toBe('always');
+    });
+
     describe('saying which bars are being read', () => {
       it('writes the passage into the drawer and marks the handle', async () => {
         // Fullscreen has no panel, so without this a hundred-bar piece cut

@@ -66,6 +66,8 @@ export class PracticeSession {
 
   private runStartedAt = 0;
   private positionOffsetTicks = 0;
+  /** Musical position last published, so an unchanged one is not republished. */
+  private publishedPositionTicks: number | null = null;
   private countInRemaining = 0;
   /** Whether the pause landed before the music had begun. */
   private pausedInCountIn = false;
@@ -250,6 +252,7 @@ export class PracticeSession {
     this.stepWrongNotes = [];
     this.runStartedAt = 0;
     this.positionOffsetTicks = 0;
+    this.publishedPositionTicks = null;
     this.countInRemaining = 0;
     this.beforeTheMusic = [];
     this.lastReport = null;
@@ -304,7 +307,7 @@ export class PracticeSession {
     this.stepWrongNotes = [];
 
     this.emitter.emit('stepEntered', { step, expectedMidi: expected });
-    this.emitter.emit('positionChanged', { measureIndex: step.measureIndex, beat: step.beat });
+    this.publishPosition(step.onsetTicks);
     this.mode.onStepEntered(this.context, step);
   }
 
@@ -444,19 +447,41 @@ export class PracticeSession {
    * but the piece stops when they stop, so a position taken from the pulse
    * would walk off into bars nobody has played yet.
    *
-   * Felt beats only. Ticks arrive as often as the shortest note in the
-   * exercise demands, which on a busy page is four to the beat, and a readout
-   * that counted those would be reporting resolution rather than time.
+   * On notated beats, which is what the position is counted in. Not the felt
+   * pulse: those are the same thing only in simple time, and in 6/8 a pulse
+   * is a dotted quarter while the beat reported is the eighth the metre is
+   * written in - so a reading taken at the pulse went 1, 4, 1, 4 and looked
+   * like it was dropping beats. Nor every tick: they arrive as often as the
+   * shortest note in the exercise demands, and counting those would report
+   * resolution rather than time.
    *
    * Published after the mode has had the tick, so that when a step ends here
    * the pulse's reading is the one left standing - it is never behind the
    * step, and the two never disagree by more than the step that just opened.
    */
   private publishPulsePosition(tick: MetronomeTick): void {
-    if (!tick.isPulse || !this.mode.requiresMetronome || this.status !== 'running') {
+    if (!this.mode.requiresMetronome || this.status !== 'running') {
       return;
     }
     const ticks = this.context.positionTicks(tick);
+    if (ticks % this.timeline.exercise.timeSignature.ticksPerBeat !== 0) {
+      return;
+    }
+    this.publishPosition(ticks);
+  }
+
+  /**
+   * Announces where the music has reached, if it has moved.
+   *
+   * Both callers land on the same tick whenever a step opens on the beat -
+   * which, on most music, is most of them - and an event named for a change
+   * has no business firing when nothing changed.
+   */
+  private publishPosition(ticks: number): void {
+    if (ticks === this.publishedPositionTicks) {
+      return;
+    }
+    this.publishedPositionTicks = ticks;
     const signature = this.timeline.exercise.timeSignature;
     this.emitter.emit('positionChanged', {
       measureIndex: signature.measureOf(ticks),

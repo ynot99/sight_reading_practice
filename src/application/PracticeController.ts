@@ -814,6 +814,15 @@ export class PracticeController {
     });
 
     this.currentSession = session;
+    // Back to the first note before a beat of the count-in is heard. The
+    // cursor used to be left wherever the run before it was paused until the
+    // music began, so the reader spent the count-in looking at the wrong bar
+    // - which is exactly the stretch the count-in exists to prepare them for.
+    //
+    // `reset`, not `moveTo(0)`: moving to a position the navigator believes it
+    // is already at asks the engraver for nothing, so nothing is redrawn and
+    // nothing is scrolled to.
+    this.deps.cursor.reset();
     // The page a long piece was left scrolled to is not where bar one is.
     this.deps.renderer.scrollToStart();
     this.meter.reset();

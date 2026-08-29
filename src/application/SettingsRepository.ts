@@ -246,7 +246,7 @@ export function decodePracticeSettings(
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
     // Bounded either way: a relay can only add delay, but a keyboard stamped
     // at the source can arrive fractionally ahead of when the page notices.
-    inputLatencyMs: readInteger(value['inputLatencyMs'], -200, 400),
+    inputLatencyMs: readInteger(value['inputLatencyMs'], -200, 800),
     startInFocus: readBoolean(value['startInFocus']),
     pitchClassOnly: readBoolean(value['pitchClassOnly']),
     rhythmOnly: readBoolean(value['rhythmOnly']),

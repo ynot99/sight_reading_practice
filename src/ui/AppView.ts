@@ -29,6 +29,7 @@ import type { ChosenPassage } from '../application/PracticeController.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { elementAt } from '../shared/asserts.js';
 import { readBackup } from '../application/Backup.js';
+import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
 
 /**
  * How long the page waits after the last tempo press before re-engraving.
@@ -45,6 +46,15 @@ const TEMPO_REDRAW_DELAY_MS = 350;
  * playing averages to a habit.
  */
 const MIN_PRESSES_TO_MEASURE = 8;
+
+/**
+ * The largest delay the slider can hold.
+ *
+ * Three hundred was the first ceiling and a reader measured exactly that,
+ * which is what a ceiling looks like from underneath - a relay over a
+ * wireless network can cost more than a third of a second on its own.
+ */
+const MAX_LATENCY_MS = 600;
 
 /**
  * Whether an average is a tendency rather than an accident of the scatter.
@@ -514,7 +524,6 @@ export class AppView {
     focusSurvival: HTMLButtonElement;
     focusClick: HTMLButtonElement;
     focusPattern: HTMLButtonElement;
-    focusCalibrate: HTMLButtonElement;
     focusCursor: HTMLButtonElement;
     focusWait: HTMLButtonElement;
     focusMarks: HTMLButtonElement;
@@ -621,6 +630,7 @@ export class AppView {
     latency: HTMLInputElement;
     latencyValue: HTMLOutputElement;
     latencyMeasure: HTMLButtonElement;
+    latencyTest: HTMLButtonElement;
     latencyDescription: HTMLElement;
     saveBackup: HTMLButtonElement;
     openBackup: HTMLButtonElement;
@@ -674,7 +684,6 @@ export class AppView {
       focusSurvival: requireElement(doc, 'focus-survival'),
       focusClick: requireElement(doc, 'focus-click'),
       focusPattern: requireElement(doc, 'focus-pattern'),
-      focusCalibrate: requireElement(doc, 'focus-calibrate'),
       focusCursor: requireElement(doc, 'focus-cursor'),
       focusWait: requireElement(doc, 'focus-wait'),
       focusMarks: requireElement(doc, 'focus-marks'),
@@ -781,6 +790,7 @@ export class AppView {
       latency: requireElement(doc, 'latency'),
       latencyValue: requireElement(doc, 'latency-value'),
       latencyMeasure: requireElement(doc, 'latency-measure'),
+      latencyTest: requireElement(doc, 'latency-test'),
       latencyDescription: requireElement(doc, 'latency-description'),
       saveBackup: requireElement(doc, 'save-backup'),
       openBackup: requireElement(doc, 'open-backup'),
@@ -1254,15 +1264,8 @@ export class AppView {
       controller.updateSettings({ startInFocus: this.el.startFocus.checked });
     });
 
-    this.listen(this.el.focusCalibrate, 'click', () => {
-      const measured = this.measuredLatencyMs();
-      if (measured === null) {
-        return;
-      }
-      controller.updateSettings({ inputLatencyMs: measured });
-      this.syncControlsFromSettings();
-      this.showNotice(`Input delay: ${measured > 0 ? '+' : ''}${measured} ms`);
-      this.restoreNoticeSoon();
+    this.listen(this.el.latencyTest, 'click', () => {
+      void this.loadCalibration();
     });
 
     this.listen(this.el.latencyMeasure, 'click', () => {
@@ -1769,6 +1772,37 @@ export class AppView {
   }
 
   /**
+   * Loads the piece that exists only to be measured against.
+   *
+   * One note, on every beat, one hand, at a walking pace: whatever is left
+   * between the click and the press is the journey, because the reader has
+   * been given nothing else to get wrong.
+   *
+   * The run has to be one the beat drives and the reader can hear, so the
+   * mode, the count-in and the click are set to what the measurement needs.
+   * Said out loud rather than done quietly - they are the reader's settings
+   * and they will find them changed.
+   */
+  private async loadCalibration(): Promise<void> {
+    const { controller } = this.runtime;
+    controller.updateSettings({
+      modeId: FLOW_MODE_ID,
+      clickWhen: 'always',
+      clickPattern: 'pulse',
+      countInBars: Math.max(1, controller.settings.countInBars),
+      handStaff: null,
+      rangeFromBar: null,
+      rangeToBar: null,
+      survival: false,
+    });
+    await controller.openScore(calibrationExercise());
+    this.syncControlsFromSettings();
+    this.el.latencyDescription.textContent =
+      'Press Start and play middle C on every click, as squarely as you can. ' +
+      'The mode, count-in and click were set to what the measurement needs.';
+  }
+
+  /**
    * What the last run measured, rounded to what the slider can hold.
    *
    * The *tendency*, not the scatter: a steady hand forty milliseconds behind
@@ -1788,7 +1822,7 @@ export class AppView {
     }
     const step = 5;
     const wanted = Math.round(timing.meanDeviationMs / step) * step;
-    return Math.min(300, Math.max(-100, wanted));
+    return Math.min(MAX_LATENCY_MS, Math.max(-100, wanted));
   }
 
   /**
@@ -1813,18 +1847,16 @@ export class AppView {
         `Every press is judged ${Math.abs(set)} ms ${set > 0 ? 'earlier' : 'later'} than it arrived.`;
     }
 
-    // The same offer at the stand, where the run that measured it was played.
-    this.el.focusCalibrate.disabled = measured === null;
-    const offer =
-      measured === null
-        ? 'Input delay: play a run and this can measure it'
-        : `Input delay: take ${measured > 0 ? '+' : ''}${measured} ms from the last run`;
-    this.el.focusCalibrate.title = offer;
-    this.el.focusCalibrate.setAttribute('aria-label', offer);
-
-    if (measured !== null) {
+    if (measured !== null && timing !== undefined) {
+      const raw = Math.round(timing.meanDeviationMs);
       this.el.latencyDescription.textContent +=
         ` The last run ran ${Math.abs(measured)} ms ${measured > 0 ? 'late' : 'early'}, steadily.`;
+      if (Math.abs(raw) > MAX_LATENCY_MS) {
+        // A ceiling read as a measurement is the worst of both: the reader
+        // believes the number and it is not the one their device produced.
+        this.el.latencyDescription.textContent +=
+          ` It actually measured ${raw} ms, which is past what this can hold.`;
+      }
       return;
     }
     if (timing !== undefined && timing.deviations.length >= MIN_PRESSES_TO_MEASURE) {

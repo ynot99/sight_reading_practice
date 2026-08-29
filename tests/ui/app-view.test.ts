@@ -2018,19 +2018,6 @@ describe('AppView', () => {
       expect(element('focus-bar').hidden).toBe(false);
     });
 
-    it('offers the delay it measured where the run was played', async () => {
-      // The run that measured it was played at the stand, and leaving the
-      // page to act on it is leaving the thing that was measured.
-      const { view } = createRig();
-      await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
-
-      // Nothing has been played, so there is nothing to take.
-      expect(element<HTMLButtonElement>('focus-calibrate').disabled).toBe(true);
-      expect(element('focus-calibrate').title).toContain('play a run');
-    });
-
     it('raises the kept lists without leaving the stand', async () => {
       // Leaving fullscreen to look at a list and coming back is a re-engraving
       // each way, which on a long piece is most of a second twice over.
@@ -2680,5 +2667,83 @@ describe('pacing the survival bar', () => {
     // A pulse once every four seconds is a piece slow enough that a faithful
     // glide would look like nothing happening at all.
     expect(healthGlideMs(120, 5_000, 1_000)).toBe(2_000);
+  });
+});
+
+describe('measuring how long a press takes to arrive', () => {
+  // Its own mount: this block sits outside the one the rest of the file
+  // shares, and a rig with no page under it fails on the first element.
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  it('loads a piece with nothing in it but the beat', async () => {
+    // One note, on every beat, one hand: whatever is left between the click
+    // and the press is the journey, because the reader has been given
+    // nothing else to get wrong.
+    const rig = createRig();
+    await rig.view.initialize();
+
+    element<HTMLButtonElement>('latency-test').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const exercise = rig.runtime.controller.currentExercise;
+    expect(exercise?.title).toBe('Measuring the delay');
+    expect(exercise?.staves).toHaveLength(1);
+    const pitches = (exercise?.staves[0]?.measures ?? []).flatMap((measure) =>
+      measure.entries.flatMap((entry) => (entry.kind === 'note' ? entry.pitches : [])),
+    );
+    expect(pitches).toHaveLength(16);
+    expect(new Set(pitches.map((pitch) => pitch.toString()))).toEqual(new Set(['C4']));
+  });
+
+  it('sets what the measurement needs, and says that it did', async () => {
+    // They are the reader's settings and they will find them changed.
+    const rig = createRig();
+    await rig.view.initialize();
+    rig.runtime.controller.updateSettings({
+      modeId: new WaitMode().id,
+      clickWhen: 'never',
+      countInBars: 0,
+    });
+
+    element<HTMLButtonElement>('latency-test').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rig.runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
+    expect(rig.runtime.controller.settings.clickWhen).toBe('always');
+    expect(rig.runtime.controller.settings.countInBars).toBeGreaterThan(0);
+    expect(element('latency-description').textContent).toContain('every click');
+  });
+
+  it('remembers the delay across a visit, which is the point of measuring it', async () => {
+    const store = new InMemorySettingsStore();
+    const first = createRig(undefined, store);
+    await first.view.initialize();
+    first.runtime.controller.updateSettings({ inputLatencyMs: 300 });
+    await Promise.resolve();
+
+    mountRealMarkup();
+    const second = createRig(undefined, store);
+    await second.view.initialize();
+
+    expect(second.runtime.controller.settings.inputLatencyMs).toBe(300);
+    expect(element<HTMLInputElement>('latency').value).toBe('300');
+  });
+
+  it('holds a delay past the old ceiling, since a relay can cost that much', async () => {
+    // Three hundred was the first ceiling and a reader measured exactly that,
+    // which is what a ceiling looks like from underneath.
+    const store = new InMemorySettingsStore();
+    const first = createRig(undefined, store);
+    await first.view.initialize();
+    first.runtime.controller.updateSettings({ inputLatencyMs: 480 });
+    await Promise.resolve();
+
+    mountRealMarkup();
+    const second = createRig(undefined, store);
+    await second.view.initialize();
+
+    expect(second.runtime.controller.settings.inputLatencyMs).toBe(480);
   });
 });

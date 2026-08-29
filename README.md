@@ -82,11 +82,20 @@ not at the desk. The cursor is shown for the performance whatever the reader
 set, since following along is most of the value — and put back the way they
 had it when the performance ends.
 
-The fullscreen bar holds one row: play/pause as a single icon button, where
-you are, and the pace. Everything reached for *between* runs — stop, listen,
-a new exercise, the way out — waits in a drawer under it, opened by its handle
-or by dragging up. That is what keeps it to a single line on a tablet held
-upright, where it used to wrap onto two.
+The fullscreen bar holds the whole transport on one row, as icons: play/pause
+as a single button, stop, listen, a new exercise, the way out, where you are,
+and the pace. A drawer under it — opened by its handle or by dragging up —
+holds what you *change* rather than what you press mid-run: note size, which
+hand, survival.
+
+Which hand is one button carrying all three answers, cycling both → left →
+right. Both hands are always drawn and the one not being read is dimmed, so
+the control shows its own state instead of naming it.
+
+The count-in gets a pill of its own, above the bar and outside its flow.
+"Counting in… 3" is the widest thing the transport ever says, and centred on
+itself its width cannot move the buttons a thumb is already aiming at — a
+lesson three separate indicators taught the hard way.
 
 In fullscreen the pace is a **percentage of the written tempo**, moved five
 points at a time. A percentage rather than a number of beats because the

@@ -639,6 +639,32 @@ select {
  * reach for between runs lives in the drawer, which is what keeps the bar to
  * a single line on a tablet held upright.
  */
+/*
+ * Sits above the bar and belongs to nothing: `position: fixed` and centred on
+ * itself, so however wide "Counting in... 3" turns out to be, the transport
+ * below it does not move by a pixel.
+ */
+.focus-countin {
+  position: fixed;
+  left: 50%;
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 21;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 24px rgb(16 24 40 / 18%);
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .focus-bar__handle {
   appearance: none;
   border: 0;
@@ -715,14 +741,51 @@ select {
   align-items: center;
   justify-content: center;
   padding: 0;
-  width: 44px;
+  width: 48px;
   flex: none;
 }
 
 .focus-bar__button--icon svg {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   fill: currentcolor;
+}
+
+/*
+ * One button for which hand, cycling through the three answers.
+ *
+ * Both hands are always drawn and the one that is not being read is dimmed,
+ * so the control shows its own state rather than naming it - and there is
+ * only ever one thing to press, which is what a bar under a thumb wants.
+ */
+/*
+ * A switch drawn as a button: pressed is the state, not a second label.
+ */
+.focus-bar__toggle[aria-pressed='true'] {
+  color: var(--wrong);
+  border-color: currentcolor;
+}
+
+.focus-bar__toggle[aria-pressed='false'] svg {
+  opacity: 0.35;
+}
+
+.focus-bar__hands {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px;
+}
+
+.focus-bar__hand {
+  width: 24px;
+  height: 24px;
+  fill: currentcolor;
+  transition: opacity 140ms linear;
+}
+
+.focus-bar__hand[data-reading='false'] {
+  opacity: 0.22;
 }
 
 .focus-bar__tempo {

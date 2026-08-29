@@ -1754,20 +1754,99 @@ describe('AppView', () => {
       expect(runtime.controller.session?.status).toBe('aborted');
     });
 
-    it('holds the transport to one row, with the rest underneath', async () => {
+    it('keeps the transport on one row and the settings underneath', async () => {
       const { view } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus').click();
       await Promise.resolve();
 
-      // What is used *during* a run stays out; what is reached for between
-      // runs waits in the drawer, which is what keeps the bar to one line on
-      // a tablet held upright.
+      // Icons small enough that the whole transport fits a single line; the
+      // drawer is for what you change rather than what you press mid-run.
       const row = element('focus-play').parentElement;
       expect(row?.className).toContain('focus-bar__row');
-      expect(element('focus-status').parentElement).toBe(row);
-      expect(element('focus-stop').parentElement?.id).toBe('focus-drawer');
-      expect(element('focus-exit').parentElement?.id).toBe('focus-drawer');
+      for (const id of ['focus-stop', 'focus-listen', 'focus-next', 'focus-exit']) {
+        expect(element(id).parentElement).toBe(row);
+        // Named for a screen reader, since the label is a picture now.
+        expect(element(id).getAttribute('aria-label')).toBeTruthy();
+      }
+      expect(element('focus-hands').parentElement?.id).toBe('focus-drawer');
+      expect(element('focus-zoom').closest('#focus-drawer')).not.toBeNull();
+    });
+
+    it('cycles which hand through all three answers from one button', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const hands = element<HTMLButtonElement>('focus-hands');
+      const dimmed = (id: string): string => element(id).dataset['reading'] ?? '';
+
+      expect(runtime.controller.settings.handStaff).toBeNull();
+      expect(dimmed('focus-hand-left')).toBe('true');
+      expect(dimmed('focus-hand-right')).toBe('true');
+
+      hands.click();
+      expect(runtime.controller.settings.handStaff).toBe(2);
+      // The hand that is not being read fades, so the control shows its own
+      // state rather than naming it.
+      expect(dimmed('focus-hand-right')).toBe('false');
+      expect(hands.getAttribute('aria-label')).toContain('Left');
+
+      hands.click();
+      expect(runtime.controller.settings.handStaff).toBe(1);
+      expect(dimmed('focus-hand-left')).toBe('false');
+
+      hands.click();
+      expect(runtime.controller.settings.handStaff).toBeNull();
+    });
+
+    it('turns survival on from the drawer, and shows that it is on', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
+      const toggle = element<HTMLButtonElement>('focus-survival');
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+      expect(element('focus-health').hidden).toBe(true);
+
+      toggle.click();
+
+      expect(runtime.controller.settings.survival).toBe(true);
+      // Pressed is the state rather than a second label beside it.
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+      expect(element('focus-health').hidden).toBe(false);
+      // The switch in the settings footer is the same value seen elsewhere.
+      expect(element<HTMLInputElement>('survival').checked).toBe(true);
+    });
+
+    it('sizes the notes from the drawer', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const before = runtime.controller.settings.zoom;
+
+      element<HTMLButtonElement>('focus-bigger').click();
+
+      expect(runtime.controller.settings.zoom).toBeGreaterThan(before);
+      expect(element('focus-zoom').textContent).toBe(
+        `${Math.round(runtime.controller.settings.zoom * 100)}%`,
+      );
+      // The desk slider is the same value seen another way.
+      expect(element<HTMLInputElement>('zoom').value).toBe(
+        String(Math.round(runtime.controller.settings.zoom * 100)),
+      );
+    });
+
+    it('counts in on a pill of its own', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ countInBars: 1, modeId: FLOW_MODE_ID });
+      await runtime.controller.reloadExercise();
+      expect(element('focus-countin').hidden).toBe(true);
+
+      runtime.controller.start();
+
+      // The widest thing the transport ever says, kept out of the row a thumb
+      // is aiming at: its width cannot move the buttons.
+      expect(element('focus-countin').hidden).toBe(false);
+      expect(element('focus-countin').textContent).toContain('Counting in');
+      expect(element('focus-countin').parentElement?.id).not.toBe('focus-bar');
     });
 
     it('opens and closes the drawer from its handle', async () => {

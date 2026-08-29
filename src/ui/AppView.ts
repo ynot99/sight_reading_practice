@@ -204,6 +204,29 @@ function readPlayedNotes(value: string): PlayedNoteDisplay {
 const PLAY_ICON = 'M8 5l11 7-11 7z';
 const PAUSE_ICON = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
 
+/** Note size, in the same steps the slider offers. */
+const ZOOM_STEP_PERCENT = 5;
+const MIN_ZOOM_PERCENT = 40;
+const MAX_ZOOM_PERCENT = 220;
+
+/** Which stave is which hand, as the score numbers them. */
+const RIGHT_HAND_STAFF = 1;
+const LEFT_HAND_STAFF = 2;
+
+/**
+ * The next answer to "which hand", cycling through all three.
+ *
+ * Both, then the left alone, then the right alone: one press narrows, and a
+ * third gives the music back. A single button can carry that where three
+ * would take a row the bar does not have.
+ */
+function nextHand(current: number | null): number | null {
+  if (current === null) {
+    return LEFT_HAND_STAFF;
+  }
+  return current === LEFT_HAND_STAFF ? RIGHT_HAND_STAFF : null;
+}
+
 /** How far the handle must travel before a drag is a drag and not a tap. */
 const DRAWER_DRAG_PX = 24;
 
@@ -333,6 +356,14 @@ export class AppView {
     focusPlayIcon: SVGPathElement;
     focusHandle: HTMLButtonElement;
     focusHealth: HTMLElement;
+    focusCountIn: HTMLElement;
+    focusHands: HTMLButtonElement;
+    focusSurvival: HTMLButtonElement;
+    focusSmaller: HTMLButtonElement;
+    focusBigger: HTMLButtonElement;
+    focusZoom: HTMLOutputElement;
+    focusHandLeft: SVGElement;
+    focusHandRight: SVGElement;
     focusHealthFill: HTMLElement;
     survival: HTMLInputElement;
     focusDrawer: HTMLElement;
@@ -443,6 +474,14 @@ export class AppView {
       focusPlayIcon: requireElement(doc, 'focus-play-icon'),
       focusHandle: requireElement(doc, 'focus-handle'),
       focusHealth: requireElement(doc, 'focus-health'),
+      focusCountIn: requireElement(doc, 'focus-countin'),
+      focusHands: requireElement(doc, 'focus-hands'),
+      focusSurvival: requireElement(doc, 'focus-survival'),
+      focusSmaller: requireElement(doc, 'focus-smaller'),
+      focusBigger: requireElement(doc, 'focus-bigger'),
+      focusZoom: requireElement(doc, 'focus-zoom'),
+      focusHandLeft: requireElement(doc, 'focus-hand-left'),
+      focusHandRight: requireElement(doc, 'focus-hand-right'),
       focusHealthFill: requireElement(doc, 'focus-health-fill'),
       survival: requireElement(doc, 'survival'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
@@ -1065,6 +1104,25 @@ export class AppView {
       controller.stop();
     });
 
+    this.listen(this.el.focusSurvival, 'click', () => {
+      controller.updateSettings({ survival: !controller.settings.survival });
+      this.syncControlsFromSettings();
+      this.renderHealth(controller.health);
+    });
+
+    this.listen(this.el.focusSmaller, 'click', () => {
+      this.nudgeZoom(-ZOOM_STEP_PERCENT);
+    });
+
+    this.listen(this.el.focusBigger, 'click', () => {
+      this.nudgeZoom(ZOOM_STEP_PERCENT);
+    });
+
+    this.listen(this.el.focusHands, 'click', () => {
+      controller.updateSettings({ handStaff: nextHand(controller.settings.handStaff) });
+      this.syncControlsFromSettings();
+    });
+
     this.listen(this.el.focusHandle, 'click', () => {
       this.setDrawerOpen(!this.isDrawerOpen);
     });
@@ -1223,6 +1281,25 @@ export class AppView {
     void this.reload(false);
   }
 
+  /**
+   * Note size from the stand, in the same steps the slider uses.
+   *
+   * Re-engraved rather than scaled: the engraver decides how many bars fit a
+   * system from the size it is drawing at, so a page merely stretched would
+   * be the old layout at the wrong size.
+   */
+  private nudgeZoom(deltaPercent: number): void {
+    const from = Math.round((this.runtime.controller.settings.zoom * 100) / ZOOM_STEP_PERCENT) *
+      ZOOM_STEP_PERCENT;
+    const wanted = Math.min(MAX_ZOOM_PERCENT, Math.max(MIN_ZOOM_PERCENT, from + deltaPercent));
+    this.runtime.controller.updateSettings({ zoom: wanted / 100 });
+    this.syncControlsFromSettings();
+  }
+
+  private describeZoom(): void {
+    this.el.focusZoom.value = `${Math.round(this.runtime.controller.settings.zoom * 100)}%`;
+  }
+
   private describeTempo(): void {
     const percent = this.runtime.controller.tempoPercent;
     this.el.focusTempo.value = `${percent}%`;
@@ -1299,6 +1376,23 @@ export class AppView {
     this.el.focusHealthFill.style.transitionDuration = `${Math.min(2000, Math.max(80, since))}ms`;
     this.el.focusHealthFill.style.width = `${Math.round(health * 100)}%`;
     this.el.focusHealthFill.dataset['low'] = String(health <= 0.25);
+  }
+
+  /**
+   * Shows which hands are being read, by dimming the one that is not.
+   *
+   * The control is its own state rather than a label about it, which is what
+   * lets one button carry all three answers.
+   */
+  private describeHands(handStaff: number | null): void {
+    const readsRight = handStaff === null || handStaff === RIGHT_HAND_STAFF;
+    const readsLeft = handStaff === null || handStaff === LEFT_HAND_STAFF;
+    this.el.focusHandRight.dataset['reading'] = String(readsRight);
+    this.el.focusHandLeft.dataset['reading'] = String(readsLeft);
+    this.el.focusHands.setAttribute(
+      'aria-label',
+      handStaff === null ? 'Both hands' : readsLeft ? 'Left hand only' : 'Right hand only',
+    );
   }
 
   private renderFocusStatus(text: string): void {
@@ -1383,6 +1477,13 @@ export class AppView {
     this.sessionSubscriptions.push(
       session.events.on('statusChanged', ({ status }) => {
         this.el.sessionStatus.textContent = STATUS_LABELS[status];
+        const counting = status === 'counting-in';
+        this.el.focusCountIn.hidden = !counting;
+        if (counting) {
+          // The first beat is a tick away, and an empty pill in the meantime
+          // reads as something broken rather than as something about to start.
+          this.el.focusCountIn.textContent = 'Counting in…';
+        }
         this.renderFocusStatus(
           status === 'running' && this.lastPosition !== ''
             ? this.lastPosition
@@ -1392,7 +1493,10 @@ export class AppView {
       }),
       session.events.on('countIn', ({ beatsRemaining }) => {
         this.el.sessionStatus.textContent = `Counting in… ${beatsRemaining}`;
-        this.renderFocusStatus(`Counting in… ${beatsRemaining}`);
+        // Its own pill, so the widest thing the transport ever says cannot
+        // move the buttons a thumb is already aiming at.
+        this.el.focusCountIn.hidden = false;
+        this.el.focusCountIn.textContent = `Counting in… ${beatsRemaining}`;
       }),
       session.events.on('statusChanged', ({ status }) => {
         // Restarting is the view's job, not the controller's: tearing a
@@ -1698,6 +1802,7 @@ export class AppView {
     this.describeTempo();
     this.el.tempoValue.value = String(settings.tempoBpm);
     this.el.listenHand.value = settings.handStaff === null ? '' : String(settings.handStaff);
+    this.describeHands(settings.handStaff);
     this.el.click.value = settings.clickPattern;
     this.el.clickDescription.textContent = CLICK_DESCRIPTIONS[settings.clickPattern];
     this.el.dropout.value = settings.clickDropout;
@@ -1712,6 +1817,7 @@ export class AppView {
     this.el.tolerance.value = String(settings.matchToleranceMs);
     this.el.toleranceValue.value = String(settings.matchToleranceMs);
     this.el.zoom.value = String(Math.round(settings.zoom * 100));
+    this.describeZoom();
     this.el.zoomValue.value = this.el.zoom.value;
     this.el.showPlayed.value = settings.playedNotes;
     this.el.showPlayedDescription.textContent = PLAYED_NOTE_DESCRIPTIONS[settings.playedNotes];
@@ -1725,6 +1831,7 @@ export class AppView {
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.survival.checked = settings.survival;
+    this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
     this.applyScoreCover();

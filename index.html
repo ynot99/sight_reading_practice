@@ -2,8 +2,33 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      `viewport-fit=cover` is what makes `env(safe-area-inset-*)` mean
+      anything: without it the transport pill sits under the home indicator on
+      a tablet, and the insets the stylesheet already asks for resolve to zero.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <title>Piano Sight-Reading Trainer</title>
+
+    <!--
+      Added to the Home Screen, iPadOS runs this without Safari's chrome at
+      all - which is the only way to be rid of the floating close button and
+      the swipe-down gesture that fullscreen brings. Neither can be turned off
+      from a page, deliberately: a browser has to leave the reader a way out
+      of fullscreen. Standalone is not fullscreen, so there is nothing to
+      leave.
+    -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#14181f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sight Reading" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png" />
   </head>
   <body>
     <div class="app" id="app">

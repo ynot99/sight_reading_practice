@@ -89,6 +89,24 @@ describe('the stylesheet', () => {
     expect(rules().some((rule) => rule.selector === '.focus-bar__status')).toBe(false);
   });
 
+  it('asks the viewport to reach under the safe areas', () => {
+    // The stylesheet already offsets by `env(safe-area-inset-*)`, and without
+    // `viewport-fit=cover` those resolve to zero - so the transport pill sits
+    // under a tablet's home indicator and the offsets do nothing.
+    const viewport = /<meta[^>]*name="viewport"[^>]*>/.exec(HTML)?.[0] ?? '';
+
+    expect(viewport).toContain('viewport-fit=cover');
+  });
+
+  it('can be installed, which is the only way off the fullscreen chrome', () => {
+    // Safari's floating close button and its swipe-down cannot be turned off
+    // from a page - a browser has to leave a way out of fullscreen. Added to
+    // a Home Screen there is no fullscreen to leave.
+    expect(HTML).toMatch(/<link[^>]*rel="manifest"/);
+    expect(HTML).toMatch(/name="apple-mobile-web-app-capable"[^>]*content="yes"/);
+    expect(HTML).toMatch(/<link[^>]*rel="apple-touch-icon"/);
+  });
+
   it('does not name file types the reader may be unable to choose', () => {
     // iOS resolves `accept` to its own file types, and `.mxl` is not one it
     // knows - a picker that named it greyed out every score on the device.

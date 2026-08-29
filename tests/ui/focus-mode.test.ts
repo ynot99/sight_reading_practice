@@ -41,7 +41,9 @@ interface Rig {
   readonly requestFullscreen: ReturnType<typeof vi.fn>;
 }
 
-function createRig(options: { fullscreen?: 'ok' | 'rejects' | 'missing' } = {}): Rig {
+function createRig(
+  options: { fullscreen?: 'ok' | 'rejects' | 'missing'; standalone?: boolean } = {},
+): Rig {
   const behaviour = options.fullscreen ?? 'ok';
   const root = document.createElement('div');
   document.body.append(root);
@@ -64,6 +66,7 @@ function createRig(options: { fullscreen?: 'ok' | 'rejects' | 'missing' } = {}):
     root,
     doc,
     onChange: (active) => changes.push(active),
+    isStandalone: () => options.standalone ?? false,
   });
 
   return { root, doc, focus, changes, requestFullscreen };
@@ -181,5 +184,30 @@ describe('FocusMode', () => {
     expect(rig.doc.listenerCount('fullscreenchange')).toBe(0);
     expect(rig.doc.listenerCount('webkitfullscreenchange')).toBe(0);
     expect(rig.doc.listenerCount('keydown')).toBe(0);
+  });
+});
+
+describe('installed to a Home Screen', () => {
+  it('does not ask for fullscreen it already has', async () => {
+    const rig = createRig({ standalone: true });
+
+    await rig.focus.enter();
+
+    // Asking would hand back the very chrome the reader installed the app to
+    // be rid of: a floating close button and a swipe-down that leaves.
+    expect(rig.requestFullscreen).not.toHaveBeenCalled();
+    // The layout is the part that matters, and it still happens.
+    expect(rig.focus.isActive).toBe(true);
+    expect(rig.root.classList.contains('is-focus')).toBe(true);
+  });
+
+  it('still leaves focus mode when asked', async () => {
+    const rig = createRig({ standalone: true });
+    await rig.focus.enter();
+
+    await rig.focus.exit();
+
+    expect(rig.focus.isActive).toBe(false);
+    expect(rig.root.classList.contains('is-focus')).toBe(false);
   });
 });

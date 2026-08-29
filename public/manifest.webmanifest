@@ -1,0 +1,21 @@
+{
+  "name": "Piano Sight-Reading Trainer",
+  "short_name": "Sight Reading",
+  "description": "Generates grand-staff exercises, engraves them, and judges what you play on a MIDI keyboard.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#14181f",
+  "theme_color": "#14181f",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

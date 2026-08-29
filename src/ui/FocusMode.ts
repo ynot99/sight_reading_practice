@@ -21,6 +21,28 @@ export interface FocusModeOptions {
   /** Called whenever focus mode turns on or off, for any reason. */
   readonly onChange: (active: boolean) => void;
   readonly className?: string;
+  /**
+   * Whether the page is already running without browser chrome.
+   *
+   * Installed to a Home Screen there is nothing to ask for: the window is the
+   * screen. Asking anyway would put the browser's own fullscreen furniture -
+   * a floating close button, a swipe-down gesture - onto a reader who had
+   * gone to the trouble of getting rid of it.
+   */
+  readonly isStandalone?: () => boolean;
+}
+
+/** True when the page was launched from a Home Screen or as an installed app. */
+export function launchedStandalone(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  // iOS answers the first, everything else the second.
+  const legacy = (window.navigator as { standalone?: boolean }).standalone === true;
+  const display =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(display-mode: standalone)').matches;
+  return legacy || display;
 }
 
 const DEFAULT_CLASS = 'is-focus';
@@ -40,6 +62,7 @@ export class FocusMode {
   private readonly doc: FullscreenDocumentLike;
   private readonly onChange: (active: boolean) => void;
   private readonly className: string;
+  private readonly isStandalone: () => boolean;
   private active = false;
 
   private readonly onFullscreenChange = (): void => {
@@ -61,6 +84,7 @@ export class FocusMode {
     this.doc = options.doc;
     this.onChange = options.onChange;
     this.className = options.className ?? DEFAULT_CLASS;
+    this.isStandalone = options.isStandalone ?? launchedStandalone;
 
     for (const type of ['fullscreenchange', 'webkitfullscreenchange']) {
       this.doc.addEventListener(type, this.onFullscreenChange);
@@ -112,6 +136,10 @@ export class FocusMode {
   }
 
   private async requestNativeFullscreen(): Promise<void> {
+    if (this.isStandalone()) {
+      // Already the whole screen, and asking would hand back the chrome.
+      return;
+    }
     const target = this.root as unknown as FullscreenTarget;
     try {
       if (typeof target.requestFullscreen === 'function') {

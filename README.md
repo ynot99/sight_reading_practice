@@ -228,6 +228,15 @@ npm run dev        # http://localhost:5173
 | `npm run coverage`  | Vitest with a V8 coverage report                  |
 | `npm run bridge`    | Build, then serve the app + relay MIDI to a tablet |
 
+### On an iPad
+
+Add it to the Home Screen. Launched from there, iPadOS runs it without any of
+Safari's chrome — which is the only way to be rid of the floating close button
+and the swipe-down that fullscreen brings. Neither can be turned off from a
+page, deliberately: a browser has to leave the reader a way out of fullscreen.
+Standalone is not fullscreen, so there is nothing to leave, and the app skips
+asking for it rather than handing the furniture back.
+
 Web MIDI needs Chrome, Edge or Opera and a secure context (`localhost` counts).
 No keyboard to hand? The computer keyboard is wired up as a second MIDI source:
 `z s x d c v g b h n j m` is the lower octave, `q 2 w 3 e r 5 t 6 y 7 u` the

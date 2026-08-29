@@ -476,10 +476,26 @@ export class AppView {
     listen: HTMLButtonElement;
     listenHand: HTMLSelectElement;
     keepTake: HTMLButtonElement;
-    scores: HTMLElement;
+    focusKeep: HTMLButtonElement;
+    focusKeepText: HTMLElement;
+    focusRecord: HTMLElement;
+    focusRecordEye: HTMLButtonElement;
+    focusTakes: HTMLButtonElement;
+    focusScores: HTMLButtonElement;
+    openTakes: HTMLButtonElement;
+    openScores: HTMLButtonElement;
+    sheetTakes: HTMLElement;
+    sheetScores: HTMLElement;
+    takesClose: HTMLButtonElement;
+    scoresClose: HTMLButtonElement;
+    takesEmpty: HTMLElement;
+    scoresEmpty: HTMLElement;
+    sheetConfirm: HTMLElement;
+    confirmText: HTMLElement;
+    confirmYes: HTMLButtonElement;
+    confirmNo: HTMLButtonElement;
     scoresList: HTMLUListElement;
     scoresClear: HTMLButtonElement;
-    takes: HTMLElement;
     takesList: HTMLUListElement;
     takesClear: HTMLButtonElement;
     openScore: HTMLButtonElement;
@@ -604,10 +620,26 @@ export class AppView {
       listen: requireElement(doc, 'listen'),
       listenHand: requireElement(doc, 'listen-hand'),
       keepTake: requireElement(doc, 'keep-take'),
-      scores: requireElement(doc, 'scores'),
+      focusKeep: requireElement(doc, 'focus-keep'),
+      focusKeepText: requireElement(doc, 'focus-keep-text'),
+      focusRecord: requireElement(doc, 'focus-record'),
+      focusRecordEye: requireElement(doc, 'focus-record-eye'),
+      focusTakes: requireElement(doc, 'focus-takes'),
+      focusScores: requireElement(doc, 'focus-scores'),
+      openTakes: requireElement(doc, 'open-takes'),
+      openScores: requireElement(doc, 'open-scores'),
+      sheetTakes: requireElement(doc, 'sheet-takes'),
+      sheetScores: requireElement(doc, 'sheet-scores'),
+      takesClose: requireElement(doc, 'takes-close'),
+      scoresClose: requireElement(doc, 'scores-close'),
+      takesEmpty: requireElement(doc, 'takes-empty'),
+      scoresEmpty: requireElement(doc, 'scores-empty'),
+      sheetConfirm: requireElement(doc, 'sheet-confirm'),
+      confirmText: requireElement(doc, 'confirm-text'),
+      confirmYes: requireElement(doc, 'confirm-yes'),
+      confirmNo: requireElement(doc, 'confirm-no'),
       scoresList: requireElement(doc, 'scores-list'),
       scoresClear: requireElement(doc, 'scores-clear'),
-      takes: requireElement(doc, 'takes'),
       takesList: requireElement(doc, 'takes-list'),
       takesClear: requireElement(doc, 'takes-clear'),
       openScore: requireElement(doc, 'open-score'),
@@ -744,7 +776,9 @@ export class AppView {
   /** Lists the kept scores, each openable and each removable. */
   private renderScores(): void {
     const scores = this.runtime.scores.list();
-    this.el.scores.hidden = scores.length === 0;
+    this.el.scoresEmpty.hidden = scores.length > 0;
+    this.el.scoresClear.disabled = scores.length === 0;
+    this.el.openScores.textContent = scores.length === 0 ? 'Scores' : `Scores (${scores.length})`;
     this.el.scoresList.replaceChildren();
 
     for (const score of scores) {
@@ -767,7 +801,11 @@ export class AppView {
       remove.title = 'Forget this score';
       remove.setAttribute('aria-label', `Forget ${score.title}`);
       this.listen(remove, 'click', () => {
-        void this.runtime.scores.remove(score.id).then(() => this.renderScores());
+        void this.askToDelete(`Forget ${score.title}?`).then((yes) => {
+          if (yes) {
+            void this.runtime.scores.remove(score.id).then(() => this.renderScores());
+          }
+        });
       });
 
       row.append(name, open, remove);
@@ -1142,18 +1180,39 @@ export class AppView {
       this.applyInputSettings(true);
     });
 
-    this.listen(this.el.keepTake, 'click', () => {
-      this.keepTake();
+    for (const button of [this.el.keepTake, this.el.focusKeep]) {
+      this.listen(button, 'click', () => {
+        this.keepTake();
+      });
+    }
+
+    this.listen(this.el.focusRecordEye, 'click', () => {
+      const open = this.el.focusRecord.dataset['open'] !== 'true';
+      this.el.focusRecord.dataset['open'] = String(open);
+      this.el.focusRecordEye.setAttribute('aria-expanded', String(open));
+      const label = open ? 'Hide what can be kept' : 'Show what can be kept';
+      this.el.focusRecordEye.title = label;
+      this.el.focusRecordEye.setAttribute('aria-label', label);
     });
 
     this.listen(this.el.scoresClear, 'click', () => {
-      void this.runtime.scores.forget().then(() => this.renderScores());
+      void this.askToDelete('Delete every kept score?').then((yes) => {
+        if (yes) {
+          void this.runtime.scores.forget().then(() => this.renderScores());
+        }
+      });
     });
 
     this.listen(this.el.takesClear, 'click', () => {
-      this.runtime.takes.forget();
-      this.renderTakes();
+      void this.askToDelete('Delete every kept take?').then((yes) => {
+        if (yes) {
+          this.runtime.takes.forget();
+          this.renderTakes();
+        }
+      });
     });
+
+    this.bindSheets();
 
     this.listen(this.el.newExercise, 'click', () => {
       void this.reload(true);
@@ -2239,24 +2298,134 @@ export class AppView {
     this.describeTake();
   }
 
-  /** How much playing the button is offering to keep, if any. */
+  /**
+   * How much playing the buttons are offering to keep, if any.
+   *
+   * Two buttons, one recorder: the desk one and the one beside the fullscreen
+   * bar say the same number because they are reading the same thing, not
+   * because someone remembered to update both.
+   */
   private describeTake(): void {
     const ms = this.runtime.recorder.takeDurationMs;
     const playing = this.runtime.recorder.pendingEvents > 0;
+    const title = playing
+      ? 'Keeps what you have just played, back to the last pause.'
+      : 'Play something and this keeps it.';
+
     this.el.keepTake.disabled = !playing;
     this.el.keepTake.textContent = '';
     const dot = this.doc.createElement('span');
     dot.className = 'button__dot';
     dot.setAttribute('aria-hidden', 'true');
     this.el.keepTake.append(dot, this.doc.createTextNode(playing ? `Keep ${clockTime(ms)}` : 'Keep take'));
-    this.el.keepTake.title = playing
-      ? 'Keeps what you have just played, back to the last pause.'
-      : 'Play something and this keeps it.';
+    this.el.keepTake.title = title;
+
+    this.el.focusKeep.disabled = !playing;
+    this.el.focusKeepText.textContent = playing ? clockTime(ms) : 'Keep';
+    this.el.focusKeep.title = title;
+  }
+
+  /**
+   * Raises and drops the sheets, from either place that can reach them.
+   *
+   * The lists live in one place and are opened from two, which is the whole
+   * reason they are sheets: in fullscreen the panel is not on the page, and
+   * leaving fullscreen to look at a list and coming back is a re-engraving
+   * each way.
+   */
+  private bindSheets(): void {
+    const pairs: readonly [HTMLElement, readonly HTMLButtonElement[], () => void][] = [
+      [
+        this.el.sheetTakes,
+        [this.el.openTakes, this.el.focusTakes],
+        () => this.renderTakes(),
+      ],
+      [
+        this.el.sheetScores,
+        [this.el.openScores, this.el.focusScores],
+        () => this.renderScores(),
+      ],
+    ];
+
+    for (const [sheet, openers, render] of pairs) {
+      for (const opener of openers) {
+        this.listen(opener, 'click', () => {
+          render();
+          sheet.hidden = false;
+        });
+      }
+      // The dimmed area outside the panel is a way out that a thumb finds
+      // without aiming; the × is for anyone who does aim.
+      this.listen(sheet, 'click', (event) => {
+        if (event.target === sheet) {
+          sheet.hidden = true;
+        }
+      });
+    }
+
+    this.listen(this.el.takesClose, 'click', () => {
+      this.el.sheetTakes.hidden = true;
+    });
+    this.listen(this.el.scoresClose, 'click', () => {
+      this.el.sheetScores.hidden = true;
+    });
+
+    this.listen(this.doc, 'keydown', (event) => {
+      if ((event as KeyboardEvent).key !== 'Escape') {
+        return;
+      }
+      // Before focus mode sees it: a sheet is the innermost thing open, and
+      // Escape should shut that rather than the layout underneath it.
+      for (const sheet of [this.el.sheetConfirm, this.el.sheetTakes, this.el.sheetScores]) {
+        if (!sheet.hidden) {
+          sheet.hidden = true;
+          event.stopPropagation();
+          return;
+        }
+      }
+    });
+  }
+
+  /**
+   * Asks before something cannot be undone.
+   *
+   * Every one of these lists is on a tablet, where the delete sits a few
+   * millimetres from the thing it deletes and there is no undo behind it.
+   * Answered in the page rather than by `window.confirm`, which is
+   * unimplemented in the environment the UI tests run in - and a deletion no
+   * test can take is the wrong one to leave untested.
+   */
+  private askToDelete(question: string): Promise<boolean> {
+    this.el.confirmText.textContent = question;
+    this.el.sheetConfirm.hidden = false;
+
+    return new Promise<boolean>((resolve) => {
+      const answer = (yes: boolean): void => {
+        this.el.sheetConfirm.hidden = true;
+        this.el.confirmYes.removeEventListener('click', onYes);
+        this.el.confirmNo.removeEventListener('click', onNo);
+        this.el.sheetConfirm.removeEventListener('click', onOutside);
+        resolve(yes);
+      };
+      const onYes = (): void => answer(true);
+      const onNo = (): void => answer(false);
+      const onOutside = (event: Event): void => {
+        if (event.target === this.el.sheetConfirm) {
+          answer(false);
+        }
+      };
+
+      this.el.confirmYes.addEventListener('click', onYes);
+      this.el.confirmNo.addEventListener('click', onNo);
+      this.el.sheetConfirm.addEventListener('click', onOutside);
+    });
   }
 
   private renderTakes(): void {
     const takes = this.runtime.takes.list();
-    this.el.takes.hidden = takes.length === 0;
+    this.el.takesEmpty.hidden = takes.length > 0;
+    this.el.takesClear.disabled = takes.length === 0;
+    this.el.openTakes.textContent = takes.length === 0 ? 'Takes' : `Takes (${takes.length})`;
     this.el.takesList.replaceChildren();
 
     for (const take of takes) {
@@ -2277,8 +2446,12 @@ export class AppView {
       remove.title = 'Delete this take';
       remove.setAttribute('aria-label', `Delete the take from ${takeName(take.savedAtMs)}`);
       this.listen(remove, 'click', () => {
-        this.runtime.takes.remove(take.id);
-        this.renderTakes();
+        void this.askToDelete(`Delete the take from ${takeName(take.savedAtMs)}?`).then((yes) => {
+          if (yes) {
+            this.runtime.takes.remove(take.id);
+            this.renderTakes();
+          }
+        });
       });
 
       row.append(name, save, remove);
@@ -2469,13 +2642,13 @@ export class AppView {
   }
 
   private listen<K extends keyof HTMLElementEventMap>(
-    element: HTMLElement,
+    element: HTMLElement | Document,
     type: K,
     handler: (event: HTMLElementEventMap[K]) => void,
   ): void {
-    element.addEventListener(type, handler);
+    element.addEventListener(type, handler as EventListener);
     this.subscriptions.push(() => {
-      element.removeEventListener(type, handler);
+      element.removeEventListener(type, handler as EventListener);
     });
   }
 }

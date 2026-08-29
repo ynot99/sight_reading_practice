@@ -244,6 +244,13 @@ function element<T extends HTMLElement>(id: string): T {
   return found as T;
 }
 
+/** Answers the delete question the page now asks before anything goes. */
+async function confirmDeletion(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  element<HTMLButtonElement>('confirm-yes').click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe('AppView', () => {
   beforeEach(() => {
     mountRealMarkup();
@@ -810,14 +817,16 @@ describe('AppView', () => {
       await view.initialize();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(element('scores').hidden).toBe(true);
+      // The opener names the count, since the list itself is behind it now.
+      expect(element('open-scores').textContent).toBe('Scores');
+      expect(element('scores-empty').hidden).toBe(false);
     });
 
     it('lists what an earlier visit kept', async () => {
       const rig = createRig();
       await keepOne(rig);
 
-      expect(element('scores').hidden).toBe(false);
+      expect(element('open-scores').textContent).toBe('Scores (1)');
       expect(element('scores-list').childElementCount).toBe(1);
       expect(element('scores-list').textContent).toContain('Something Borrowed');
       expect(element('scores-list').textContent).toContain('2 bars');
@@ -842,10 +851,26 @@ describe('AppView', () => {
 
       const buttons = element('scores-list').querySelectorAll('button');
       (buttons[1] as HTMLButtonElement | undefined)?.click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await confirmDeletion();
 
       expect(rig.runtime.scores.isEmpty).toBe(true);
-      expect(element('scores').hidden).toBe(true);
+      expect(element('open-scores').textContent).toBe('Scores');
+    });
+
+    it('asks before forgetting one, because the row is a thumb wide', async () => {
+      const rig = createRig();
+      await keepOne(rig);
+
+      const buttons = element('scores-list').querySelectorAll('button');
+      (buttons[1] as HTMLButtonElement | undefined)?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(element('sheet-confirm').hidden).toBe(false);
+
+      element<HTMLButtonElement>('confirm-no').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(element('sheet-confirm').hidden).toBe(true);
+      expect(rig.runtime.scores.isEmpty).toBe(false);
     });
 
     it('empties the shelf when asked', async () => {
@@ -853,7 +878,7 @@ describe('AppView', () => {
       await keepOne(rig);
 
       element<HTMLButtonElement>('scores-clear').click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await confirmDeletion();
 
       expect(rig.runtime.scores.isEmpty).toBe(true);
     });
@@ -871,7 +896,8 @@ describe('AppView', () => {
       await view.initialize();
 
       expect(element<HTMLButtonElement>('keep-take').disabled).toBe(true);
-      expect(element('takes').hidden).toBe(true);
+      expect(element<HTMLButtonElement>('focus-keep').disabled).toBe(true);
+      expect(element('open-takes').textContent).toBe('Takes');
     });
 
     it('wakes up as soon as the keyboard is touched', async () => {
@@ -894,7 +920,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('keep-take').click();
 
       expect(rig.takes.list()).toHaveLength(1);
-      expect(element('takes').hidden).toBe(false);
+      expect(element('open-takes').textContent).toBe('Takes (1)');
       expect(element('takes-list').childElementCount).toBe(1);
     });
 
@@ -935,9 +961,10 @@ describe('AppView', () => {
 
       const buttons = element('takes-list').querySelectorAll('button');
       (buttons[1] as HTMLButtonElement | undefined)?.click();
+      await confirmDeletion();
 
       expect(rig.takes.list()).toHaveLength(0);
-      expect(element('takes').hidden).toBe(true);
+      expect(element('open-takes').textContent).toBe('Takes');
     });
 
     it('empties the whole list when asked', async () => {
@@ -951,9 +978,10 @@ describe('AppView', () => {
       expect(rig.takes.list()).toHaveLength(2);
 
       element<HTMLButtonElement>('takes-clear').click();
+      await confirmDeletion();
 
       expect(rig.takes.list()).toHaveLength(0);
-      expect(element('takes').hidden).toBe(true);
+      expect(element('open-takes').textContent).toBe('Takes');
     });
 
     it('keeps capturing while the monitor is muted', async () => {
@@ -1793,6 +1821,53 @@ describe('AppView', () => {
       select.value = value;
       select.dispatchEvent(new Event('change'));
     }
+
+    it('raises the kept lists without leaving the stand', async () => {
+      // Leaving fullscreen to look at a list and coming back is a re-engraving
+      // each way, which on a long piece is most of a second twice over.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+      expect(element('sheet-takes').hidden).toBe(true);
+
+      element<HTMLButtonElement>('focus-takes').click();
+      expect(element('sheet-takes').hidden).toBe(false);
+
+      element<HTMLButtonElement>('takes-close').click();
+      expect(element('sheet-takes').hidden).toBe(true);
+
+      element<HTMLButtonElement>('focus-scores').click();
+      expect(element('sheet-scores').hidden).toBe(false);
+      // The dimmed area outside the panel is the way out a thumb finds
+      // without aiming.
+      element('sheet-scores').dispatchEvent(new Event('click'));
+      expect(element('sheet-scores').hidden).toBe(true);
+    });
+
+    it('keeps a take from the bar, and hides its clock when asked', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+      rig.midi.noteOn(60, rig.clock.now());
+      rig.clock.advance(200);
+      rig.midi.noteOff(60, rig.clock.now());
+
+      const keep = element<HTMLButtonElement>('focus-keep');
+      expect(keep.disabled).toBe(false);
+      expect(element('focus-keep-text').textContent).toBe('0:00');
+
+      keep.click();
+      expect(rig.takes.list()).toHaveLength(1);
+
+      // A clock ticking in the corner is a thing to watch instead of the music.
+      const eye = element<HTMLButtonElement>('focus-record-eye');
+      expect(element('focus-record').dataset['open']).toBe('false');
+      eye.click();
+      expect(element('focus-record').dataset['open']).toBe('true');
+      expect(eye.getAttribute('aria-expanded')).toBe('true');
+    });
 
     it('cycles the click through the three answers a thumb wants', async () => {
       const { runtime, view } = createRig();

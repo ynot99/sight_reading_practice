@@ -115,30 +115,72 @@
 
           <ul id="log" class="log" aria-label="Recent notes"></ul>
 
-          <section id="scores" class="takes" hidden aria-label="Kept scores">
-            <div class="panel__row panel__row--compact">
-              <span class="label">Scores</span>
-              <button id="scores-clear" type="button" class="button button--ghost takes__clear">
-                Delete all
-              </button>
-            </div>
-            <ul id="scores-list" class="takes__list"></ul>
-          </section>
-
-          <section id="takes" class="takes" hidden aria-label="Kept takes">
-            <div class="panel__row panel__row--compact">
-              <span class="label">Takes</span>
-              <button id="takes-clear" type="button" class="button button--ghost takes__clear">
-                Delete all
-              </button>
-            </div>
-            <ul id="takes-list" class="takes__list"></ul>
-          </section>
+          <!--
+            Openers rather than the lists themselves. Both grow without limit
+            and both are looked at rarely, and in fullscreen the panel is not
+            on the page at all - so they live in sheets that either place can
+            raise, and there is one of each rather than one per place.
+          -->
+          <div class="panel__row panel__row--compact">
+            <button id="open-scores" type="button" class="button button--ghost">Scores</button>
+            <button id="open-takes" type="button" class="button button--ghost">Takes</button>
+          </div>
 
           <div id="result" class="result" hidden></div>
         <button id="drill" type="button" class="button" hidden>Drill the worst bars</button>
         </aside>
       </main>
+
+      <!--
+        Sheets, not `<dialog>`: the element's `showModal` is unimplemented in
+        the environment the UI tests run in, so a real dialog would be a
+        control no test could open. These are ordinary elements the stylesheet
+        makes modal, and the attribute that hides them is one every test can
+        read.
+      -->
+      <div id="sheet-scores" class="sheet" hidden>
+        <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Kept scores">
+          <div class="sheet__head">
+            <strong class="sheet__title">Scores</strong>
+            <button id="scores-clear" type="button" class="button button--ghost">Delete all</button>
+            <button id="scores-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+          <ul id="scores-list" class="takes__list"></ul>
+          <p id="scores-empty" class="hint">Nothing kept yet. Open a score and it is remembered here.</p>
+        </div>
+      </div>
+
+      <!--
+        One question, asked the same way everywhere. `window.confirm` was the
+        alternative and it is not usable here: it is unimplemented in the
+        environment the UI tests run in, so every deletion would be a path no
+        test could take - and a mis-tap on "Delete all" is exactly the thing
+        that has to be caught.
+      -->
+      <div id="sheet-confirm" class="sheet" hidden>
+        <div class="sheet__panel sheet__panel--narrow" role="alertdialog" aria-modal="true"
+          aria-labelledby="confirm-text">
+          <p id="confirm-text" class="sheet__text"></p>
+          <div class="sheet__actions">
+            <button id="confirm-no" type="button" class="button button--ghost">Cancel</button>
+            <button id="confirm-yes" type="button" class="button button--danger">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="sheet-takes" class="sheet" hidden>
+        <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Kept takes">
+          <div class="sheet__head">
+            <strong class="sheet__title">Takes</strong>
+            <button id="takes-clear" type="button" class="button button--ghost">Delete all</button>
+            <button id="takes-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+          <ul id="takes-list" class="takes__list"></ul>
+          <p id="takes-empty" class="hint">Nothing kept yet. Play something and keep it from the bar.</p>
+        </div>
+      </div>
 
       <footer class="controls">
         <div class="control-group">
@@ -304,6 +346,27 @@
         -->
         <div id="focus-notice" class="focus-notice">Idle</div>
 
+        <!--
+          The other side of the bar, and out of its flow for the same reason
+          the notice is: what it says is a clock, and a clock changes width.
+          Shut, it is an eye and nothing else - a running timer in the corner
+          of the page is a thing to watch instead of the music.
+        -->
+        <div id="focus-record" class="focus-record" data-open="false">
+          <button id="focus-record-eye" type="button"
+            class="focus-bar__button focus-bar__button--icon focus-record__eye"
+            title="Show what can be kept" aria-label="Show what can be kept" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path id="focus-record-eye-icon"
+                d="M12 5c5 0 9 4.4 10 7-1 2.6-5 7-10 7S3 14.6 2 12c1-2.6 5-7 10-7zm0 2c-3.4 0-6.4 2.9-7.8 5 1.4 2.1 4.4 5 7.8 5s6.4-2.9 7.8-5C18.4 9.9 15.4 7 12 7zm0 1.8a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z" />
+            </svg>
+          </button>
+          <button id="focus-keep" type="button" class="focus-bar__button focus-record__keep"
+            title="Keep what you have just played" aria-label="Keep what you have just played" disabled>
+            <span class="button__dot" aria-hidden="true"></span><span id="focus-keep-text">Keep</span>
+          </button>
+        </div>
+
         <button id="focus-handle" type="button" class="focus-bar__handle"
           aria-controls="focus-drawer" aria-expanded="false" title="More controls" aria-label="More controls"></button>
 
@@ -465,6 +528,27 @@
             aria-pressed="false" title="Survival: keep the bar up" aria-label="Survival: keep the bar up">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 21s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.6a4.4 4.4 0 0 1 7.5 3.3C19.5 16.4 12 21 12 21z" />
+            </svg>
+          </button>
+
+          <!--
+            The kept lists, reachable without leaving the stand. Leaving
+            fullscreen to look at them and coming back is a re-engraving each
+            way, which on a long piece is most of a second twice over.
+          -->
+          <button id="focus-takes" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Kept takes" aria-label="Kept takes">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zm0 2a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6z" />
+            </svg>
+          </button>
+
+          <button id="focus-scores" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Kept scores" aria-label="Kept scores">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 4h7a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4V4zm16 0h-4a3 3 0 0 0-3 3v13a3 3 0 0 1 3-3h4V4z" />
             </svg>
           </button>
 

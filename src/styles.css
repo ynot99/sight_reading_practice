@@ -694,6 +694,133 @@ select {
 }
 
 /*
+ * The keep-a-take pill, on the far side of the bar.
+ *
+ * Out of the row's flow like the notice opposite it, and for the same reason:
+ * what it says is a running clock, and a clock changes width every second.
+ * Shut it is an eye and nothing else - a timer ticking in the corner of the
+ * page is a thing to watch instead of the music, which is the opposite of
+ * what fullscreen is for.
+ */
+.focus-record {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 10px;
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.focus-record[data-open='false'] .focus-record__keep {
+  display: none;
+}
+
+.focus-record__keep {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.focus-record[data-open='true'] .focus-record__eye {
+  color: var(--accent);
+}
+
+@media (max-width: 560px) {
+  .focus-record {
+    left: auto;
+    right: 0;
+    top: auto;
+    bottom: 100%;
+    transform: none;
+    margin-left: 0;
+    margin-bottom: 8px;
+  }
+}
+
+/*
+ * A sheet over the page: the kept lists, raised from either the panel or the
+ * fullscreen drawer.
+ *
+ * Not a `<dialog>`. That element's `showModal` is unimplemented in the
+ * environment the UI tests run in, so a real dialog would be a control no
+ * test could open - and these lists are exactly where a delete goes wrong
+ * unwatched.
+ */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgb(16 24 40 / 45%);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.sheet__panel {
+  width: min(520px, 100%);
+  max-height: min(70vh, 640px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.sheet__panel--narrow {
+  width: min(380px, 100%);
+}
+
+.sheet__text {
+  margin: 0;
+  font-size: 15px;
+}
+
+.sheet__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.button--danger {
+  border-color: var(--wrong);
+  color: var(--wrong);
+}
+
+.sheet__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet__title {
+  flex: 1;
+  min-width: 0;
+}
+
+.sheet__close {
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 12px;
+}
+
+.sheet .takes__list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+
+/*
  * On a narrow screen the pill is put above the bar instead of beside it.
  *
  * Hiding it was the other option and it is the wrong one: this is where the

@@ -9,6 +9,7 @@ import {
   type ClickDropout,
   type ClickPattern,
 } from './ports/IMetronome.js';
+import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from './PracticeController.js';
 
 /** Loudness of each sound source, `0..1`. Not a practice rule, so kept apart. */
 export interface AudioSettings {
@@ -130,6 +131,20 @@ function readReadAhead(value: unknown, legacyFade: unknown): number | null | und
   return faded === undefined ? undefined : faded ? 0 : null;
 }
 
+/**
+ * When the marks appear, accepting the checkbox this setting used to be.
+ *
+ * `showPlayedNotes: true` asked for what `live` now means, and `false` for
+ * `hidden`; a stored device keeps the page it had.
+ */
+function readPlayedNotes(value: unknown, legacyShow: unknown): PlayedNoteDisplay | undefined {
+  if (PLAYED_NOTE_DISPLAYS.includes(value as PlayedNoteDisplay)) {
+    return value as PlayedNoteDisplay;
+  }
+  const shown = readBoolean(legacyShow);
+  return shown === undefined ? undefined : shown ? 'live' : 'hidden';
+}
+
 function readKey(value: unknown): KeySignature | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -207,7 +222,7 @@ export function decodePracticeSettings(
     previewSeconds: readInteger(value['previewSeconds'], 0, 30),
     showCursor: readBoolean(value['showCursor']),
     blindMode: readBoolean(value['blindMode']),
-    showPlayedNotes: readBoolean(value['showPlayedNotes']),
+    playedNotes: readPlayedNotes(value['playedNotes'], value['showPlayedNotes']),
     readAheadSteps: readReadAhead(value['readAheadSteps'], value['fadePassedNotes']),
     zoom: readNumber(value['zoom'], 0.3, 3),
   } as PracticeSettings);
@@ -241,7 +256,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     previewSeconds: settings.previewSeconds,
     showCursor: settings.showCursor,
     blindMode: settings.blindMode,
-    showPlayedNotes: settings.showPlayedNotes,
+    playedNotes: settings.playedNotes,
     readAheadSteps: settings.readAheadSteps,
     zoom: settings.zoom,
   };

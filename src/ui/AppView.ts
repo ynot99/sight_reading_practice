@@ -20,6 +20,7 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
 import { writeMidiFile } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
+import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
@@ -177,6 +178,25 @@ function takeFileName(savedAtMs: number): string {
     `take-${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}` +
     `-${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}`
   );
+}
+
+const PLAYED_NOTE_LABELS: Readonly<Record<PlayedNoteDisplay, string>> = {
+  live: 'As I play them',
+  'at-end': 'Only when the run ends',
+  hidden: 'Never',
+};
+
+const PLAYED_NOTE_DESCRIPTIONS: Readonly<Record<PlayedNoteDisplay, string>> = {
+  live: 'Each press appears on the page the moment it lands.',
+  'at-end':
+    'The page stays as the engraver drew it, and the whole reading appears at once when you stop.',
+  hidden: 'Your presses are judged and scored, but never drawn.',
+};
+
+function readPlayedNotes(value: string): PlayedNoteDisplay {
+  return PLAYED_NOTE_DISPLAYS.includes(value as PlayedNoteDisplay)
+    ? (value as PlayedNoteDisplay)
+    : 'live';
 }
 
 const TIME_SIGNATURES = ['4/4', '3/4', '2/4', '6/8'] as const;
@@ -362,7 +382,8 @@ export class AppView {
     toleranceValue: HTMLOutputElement;
     zoom: HTMLInputElement;
     zoomValue: HTMLOutputElement;
-    showPlayed: HTMLInputElement;
+    showPlayed: HTMLSelectElement;
+    showPlayedDescription: HTMLElement;
     readAhead: HTMLSelectElement;
     readAheadDescription: HTMLElement;
     showCursor: HTMLInputElement;
@@ -460,6 +481,7 @@ export class AppView {
       zoom: requireElement(doc, 'zoom'),
       zoomValue: requireElement(doc, 'zoom-value'),
       showPlayed: requireElement(doc, 'show-played'),
+      showPlayedDescription: requireElement(doc, 'show-played-description'),
       readAhead: requireElement(doc, 'read-ahead'),
       readAheadDescription: requireElement(doc, 'read-ahead-description'),
       showCursor: requireElement(doc, 'show-cursor'),
@@ -608,6 +630,11 @@ export class AppView {
       this.el.dropout,
       CLICK_DROPOUTS.map((choice) => ({ value: choice, label: DROPOUT_LABELS[choice] })),
       this.runtime.controller.settings.clickDropout,
+    );
+    fillSelect(
+      this.el.showPlayed,
+      PLAYED_NOTE_DISPLAYS.map((choice) => ({ value: choice, label: PLAYED_NOTE_LABELS[choice] })),
+      this.runtime.controller.settings.playedNotes,
     );
     fillSelect(
       this.el.readAhead,
@@ -776,7 +803,9 @@ export class AppView {
     });
 
     this.listen(this.el.showPlayed, 'change', () => {
-      controller.updateSettings({ showPlayedNotes: this.el.showPlayed.checked });
+      controller.updateSettings({ playedNotes: readPlayedNotes(this.el.showPlayed.value) });
+      this.el.showPlayedDescription.textContent =
+        PLAYED_NOTE_DESCRIPTIONS[readPlayedNotes(this.el.showPlayed.value)];
     });
 
     this.listen(this.el.readAhead, 'change', () => {
@@ -1435,7 +1464,8 @@ export class AppView {
     this.el.toleranceValue.value = String(settings.matchToleranceMs);
     this.el.zoom.value = String(Math.round(settings.zoom * 100));
     this.el.zoomValue.value = this.el.zoom.value;
-    this.el.showPlayed.checked = settings.showPlayedNotes;
+    this.el.showPlayed.value = settings.playedNotes;
+    this.el.showPlayedDescription.textContent = PLAYED_NOTE_DESCRIPTIONS[settings.playedNotes];
     this.el.readAhead.value = readAheadValue(settings.readAheadSteps);
     this.el.readAheadDescription.textContent =
       READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';

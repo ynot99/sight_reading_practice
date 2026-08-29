@@ -182,6 +182,18 @@ and ledger lines so a mark can never claim a pitch that was not played. The
 printed notes are never recoloured - reading black noteheads is the point of
 the exercise.
 
+**When** they appear is a setting of its own: as you play them, only when the
+run ends, or never. Holding them back leaves the page exactly as the engraver
+drew it for the whole reading, which matters because reading is the task — a
+mark arriving under your eyes is an answer to a question you have already
+answered. The whole reading then goes up at once, including when you stop
+part-way, since stopping is a decision to look at what happened.
+
+One axis rather than two switches: "draw them" and "draw them now" are the
+same question at different moments, and two controls would let a reader ask
+for marks that are hidden. What is drawn is identical either way — the timing
+offset is measured while the run still knows its tempo, not at the end.
+
 The geometry is measured from notes the engraver has already drawn rather than
 assumed, so zoom, engraving rules, or a different engraver cannot silently
 slide the marks off their notes. A test renders a real score and checks the

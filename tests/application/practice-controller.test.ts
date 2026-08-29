@@ -664,9 +664,111 @@ describe('what you played, drawn over the score', () => {
     expect(renderer.played).toHaveLength(1);
   });
 
+  describe('holding the marks back until the run ends', () => {
+    async function playAllOf(rig: ReturnType<typeof createController>) {
+      const session = rig.controller.start();
+      let guard = 200;
+      while (session?.status === 'running' && guard > 0) {
+        guard -= 1;
+        const step = session.currentStep;
+        if (step === null) {
+          break;
+        }
+        for (const midi of step.expectedMidi) {
+          rig.midi.noteOn(midi, 0);
+        }
+      }
+      return session;
+    }
+
+    it('draws nothing while the reader is still reading', async () => {
+      const rig = createController(true);
+      rig.controller.updateSettings({ playedNotes: 'at-end' });
+      await rig.controller.loadNewExercise();
+      const session = rig.controller.start();
+      const note = session?.currentStep?.expectedMidi[0] ?? 60;
+
+      rig.midi.noteOn(note, 0);
+
+      // Reading is the task, and a mark appearing under the eyes is an answer
+      // to a question the reader has already answered.
+      expect(rig.renderer.played).toHaveLength(0);
+    });
+
+    it('puts the whole reading up at once when it ends', async () => {
+      const rig = createController(true);
+      rig.controller.updateSettings({ playedNotes: 'at-end' });
+      await rig.controller.loadNewExercise();
+
+      await playAllOf(rig);
+
+      expect(rig.renderer.played.length).toBeGreaterThan(0);
+    });
+
+    it('shows them for a run that was stopped, too', async () => {
+      const rig = createController(true);
+      rig.controller.updateSettings({ playedNotes: 'at-end' });
+      await rig.controller.loadNewExercise();
+      const session = rig.controller.start();
+      rig.midi.noteOn(session?.currentStep?.expectedMidi[0] ?? 60, 0);
+
+      session?.abort();
+
+      // Stopping is a decision to look at what happened; a blank page gives
+      // the reader nothing for it.
+      expect(rig.renderer.played).toHaveLength(1);
+    });
+
+    it('draws exactly what a live run would have drawn', async () => {
+      async function marksWith(playedNotes: 'live' | 'at-end') {
+        const rig = createController(true);
+        rig.controller.updateSettings({ playedNotes });
+        await rig.controller.loadNewExercise();
+        const session = rig.controller.start();
+        const step = session?.currentStep;
+        rig.midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+        rig.midi.noteOn(21, 5);
+        session?.abort();
+        return rig.renderer.played;
+      }
+
+      // Only *when* they are drawn changes. In particular the offset is a
+      // fraction of the gap to the neighbouring note, and is measured while
+      // the session still knows the tempo rather than at the end.
+      expect(await marksWith('at-end')).toEqual(await marksWith('live'));
+    });
+
+    it('starts each run with a clean page', async () => {
+      const rig = createController(true);
+      rig.controller.updateSettings({ playedNotes: 'at-end' });
+      await rig.controller.loadNewExercise();
+      const first = rig.controller.start();
+      rig.midi.noteOn(first?.currentStep?.expectedMidi[0] ?? 60, 0);
+      first?.abort();
+      expect(rig.renderer.played).toHaveLength(1);
+
+      rig.controller.start();
+
+      // The marks held from the last reading must not arrive on this one.
+      expect(rig.renderer.played).toHaveLength(0);
+    });
+
+    it('clears the page when the reader moves the marks off live', async () => {
+      const rig = createController(true);
+      await rig.controller.loadNewExercise();
+      const session = rig.controller.start();
+      rig.midi.noteOn(session?.currentStep?.expectedMidi[0] ?? 60, 0);
+      expect(rig.renderer.played).toHaveLength(1);
+
+      rig.controller.updateSettings({ playedNotes: 'at-end' });
+
+      expect(rig.renderer.played).toHaveLength(0);
+    });
+  });
+
   it('stays out of the way when the reader turns it off', async () => {
     const { controller, renderer, midi } = createController(true);
-    controller.updateSettings({ showPlayedNotes: false });
+    controller.updateSettings({ playedNotes: 'hidden' });
     await controller.loadNewExercise();
     const session = controller.start();
     const step = session?.currentStep;
@@ -709,7 +811,7 @@ describe('what you played, drawn over the score', () => {
     }
     midi.noteOn(step.expectedMidi[0] ?? 60, 0);
 
-    controller.updateSettings({ showPlayedNotes: false });
+    controller.updateSettings({ playedNotes: 'hidden' });
 
     expect(renderer.played).toHaveLength(0);
   });

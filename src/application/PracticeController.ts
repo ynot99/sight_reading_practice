@@ -19,6 +19,7 @@ import { ExercisePlayer } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type { ClickDropout, ClickPattern } from './ports/IMetronome.js';
 import type {
+  PlayedNote,
   IPlayedNoteOverlay,
   IScoreCursor,
   IScoreFade,
@@ -30,6 +31,11 @@ import { sliceExercise } from '../domain/model/exerciseSlice.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
 import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
+
+/** When the marks for what was played are put on the page. */
+export const PLAYED_NOTE_DISPLAYS = ['live', 'at-end', 'hidden'] as const;
+
+export type PlayedNoteDisplay = (typeof PLAYED_NOTE_DISPLAYS)[number];
 
 /** The fields a rung governs, and so the ones that leaving it is made of. */
 function touchesTheRoute(changes: Partial<PracticeSettings>): boolean {
@@ -157,8 +163,21 @@ export interface PracticeSettings {
    * are is orientation, not an answer.
    */
   readonly blindMode: boolean;
-  /** Draw what was actually played over the engraving. */
-  readonly showPlayedNotes: boolean;
+  /**
+   * When the marks for what you played appear.
+   *
+   * One axis rather than a switch plus a switch: "draw them" and "draw them
+   * now" are the same question at different moments, and two controls would
+   * let a reader ask for marks that are hidden.
+   *
+   * - `live` draws each press as it lands. Immediate, and busy.
+   * - `at-end` keeps them back until the run finishes, so the page you are
+   *   reading stays the page the engraver drew. Reading is the task; a mark
+   *   appearing under your eyes as you play is an answer to a question you
+   *   have already answered.
+   * - `hidden` never draws them at all.
+   */
+  readonly playedNotes: PlayedNoteDisplay;
   /**
    * Where the veil sits relative to the cursor, in steps, or `null` for none.
    *
@@ -242,6 +261,8 @@ export class PracticeController {
   private player: ExercisePlayer | null = null;
   /** Highest step already dimmed, so the veil is drawn once per step. */
   private fadedThrough = -1;
+  /** Marks waiting for the run to end, when that is when they are drawn. */
+  private heldMarks: PlayedNote[] = [];
   private cleanReadings = 0;
   private poorReadings = 0;
 
@@ -285,7 +306,7 @@ export class PracticeController {
       previewSeconds: 0,
       showCursor: true,
       blindMode: false,
-      showPlayedNotes: true,
+      playedNotes: 'live',
       readAheadSteps: null,
       zoom: 0.85,
       ...dependencies.initialSettings,
@@ -369,8 +390,11 @@ export class PracticeController {
       this.refreshScore();
     }
 
-    if (changes.showPlayedNotes === false) {
+    if (changes.playedNotes !== undefined && changes.playedNotes !== 'live') {
+      // Turning them off, or moving them to the end, both mean the page in
+      // front of the reader should be clean again now.
       this.deps.overlay.clearPlayed();
+      this.heldMarks = [];
     }
 
     if (changes.readAheadSteps !== undefined) {
@@ -650,6 +674,7 @@ export class PracticeController {
     });
 
     this.currentSession = session;
+    this.heldMarks = [];
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
     this.fadedThrough = -1;
@@ -668,15 +693,23 @@ export class PracticeController {
       // Every press is drawn where it was actually struck, right or wrong. A
       // repeat of a note already collected adds nothing to look at.
       session.events.on('noteJudged', ({ midi, verdict, stepIndex, deviationMs }) => {
-        if (!this.currentSettings.showPlayedNotes || verdict === 'duplicate') {
+        if (this.currentSettings.playedNotes === 'hidden' || verdict === 'duplicate') {
           return;
         }
-        this.deps.overlay.showPlayed({
+        const mark = {
           stepIndex,
           midi,
           correct: verdict === 'correct',
+          // Measured now, not at the end: the offset is a fraction of the gap
+          // to the neighbouring note, and it is only known while the run
+          // still knows the tempo it was played at.
           offset: this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm),
-        });
+        };
+        if (this.currentSettings.playedNotes === 'live') {
+          this.deps.overlay.showPlayed(mark);
+        } else {
+          this.heldMarks.push(mark);
+        }
       }),
     );
     this.sessionSubscriptions.push(
@@ -687,6 +720,7 @@ export class PracticeController {
     );
     this.sessionSubscriptions.push(
       session.events.on('finished', ({ report, score }) => {
+        this.drawHeldMarks();
         this.deps.history?.record(this.practiceKey(), {
           atMs: this.deps.clock.now(),
           overall: score.overall,
@@ -909,6 +943,20 @@ export class PracticeController {
   private resetLadderStreaks(): void {
     this.cleanReadings = 0;
     this.poorReadings = 0;
+  }
+
+  /**
+   * Puts up the marks a finished run was holding back.
+   *
+   * Drawn on `finished`, which an abandoned run fires too: stopping is a
+   * decision to look at what happened, and a reader who stops halfway and
+   * sees a blank page has been given nothing for it.
+   */
+  private drawHeldMarks(): void {
+    for (const mark of this.heldMarks) {
+      this.deps.overlay.showPlayed(mark);
+    }
+    this.heldMarks = [];
   }
 
   private applyCursorVisibility(): void {

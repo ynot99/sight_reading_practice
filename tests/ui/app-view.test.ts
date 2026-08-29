@@ -1369,15 +1369,19 @@ describe('AppView', () => {
       expect(renderer.zoom).toBe(1.5);
     });
 
-    it('turns the played-note overlay off from the checkbox', async () => {
+    it('chooses when the played notes appear', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
 
-      const toggle = element<HTMLInputElement>('show-played');
-      toggle.checked = false;
-      toggle.dispatchEvent(new Event('change'));
+      const select = element<HTMLSelectElement>('show-played');
+      select.value = 'hidden';
+      select.dispatchEvent(new Event('change'));
+      expect(runtime.controller.settings.playedNotes).toBe('hidden');
 
-      expect(runtime.controller.settings.showPlayedNotes).toBe(false);
+      select.value = 'at-end';
+      select.dispatchEvent(new Event('change'));
+      expect(runtime.controller.settings.playedNotes).toBe('at-end');
+      expect(element('show-played-description').textContent).toContain('when you stop');
     });
 
     it('sets where the notes disappear, and remembers it', async () => {

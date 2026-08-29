@@ -101,18 +101,34 @@ body {
   }
 }
 
+/*
+ * The frame: border, corners and nothing that moves.
+ *
+ * The scrolling happens one level in, so the cover can sit over the whole
+ * page rather than inside the box that scrolls. Inside it, the cover was
+ * measured against the padding box and drifted with the scroll - a sliver of
+ * notation showed past its right edge and its corners missed the border by
+ * the width of that border.
+ */
 .score {
   position: relative;
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  overflow: hidden;
+  min-height: 340px;
+  display: flex;
+}
+
+.score__scroll {
+  flex: 1;
+  min-width: 0;
   overflow: auto;
   /* Reserved up front: a scrollbar that appears later would shrink the width
      the engraver already measured, and push the notation off the right edge. */
   scrollbar-gutter: stable;
   padding: 8px 0;
-  min-height: 340px;
 }
 
 /*
@@ -126,6 +142,11 @@ body {
   visibility: hidden;
 }
 
+/*
+ * Over the frame, not inside the scroll: `inset: 0` then means the whole
+ * page, whatever the reader has scrolled to, and the corners are the frame's
+ * own because `overflow: hidden` above already clips them.
+ */
 .score__cover {
   position: absolute;
   inset: 0;
@@ -135,7 +156,6 @@ body {
   justify-content: center;
   padding: 24px;
   background: var(--surface);
-  border-radius: inherit;
 }
 
 .score__cover[hidden] {
@@ -523,7 +543,10 @@ select {
   box-shadow: none;
   min-height: 100vh;
   min-height: 100dvh;
-  /* Room for the pill, so the last system is never hidden behind it. */
+}
+
+/* Room for the pill, so the last system is never hidden behind it. */
+.app.is-focus .score__scroll {
   padding-bottom: 92px;
 }
 

@@ -343,6 +343,9 @@ export class AppView {
     listen: HTMLButtonElement;
     listenHand: HTMLSelectElement;
     keepTake: HTMLButtonElement;
+    scores: HTMLElement;
+    scoresList: HTMLUListElement;
+    scoresClear: HTMLButtonElement;
     takes: HTMLElement;
     takesList: HTMLUListElement;
     takesClear: HTMLButtonElement;
@@ -441,6 +444,9 @@ export class AppView {
       listen: requireElement(doc, 'listen'),
       listenHand: requireElement(doc, 'listen-hand'),
       keepTake: requireElement(doc, 'keep-take'),
+      scores: requireElement(doc, 'scores'),
+      scoresList: requireElement(doc, 'scores-list'),
+      scoresClear: requireElement(doc, 'scores-clear'),
       takes: requireElement(doc, 'takes'),
       takesList: requireElement(doc, 'takes-list'),
       takesClear: requireElement(doc, 'takes-clear'),
@@ -517,6 +523,9 @@ export class AppView {
     this.describeTake();
     this.renderTakes();
     this.bindVolumeKnob();
+    // The database answers later than the page draws, so the list arrives
+    // when it arrives rather than holding the trainer up for it.
+    void this.runtime.scores.load().then(() => this.renderScores());
     await this.runtime.controller.loadNewExercise();
     void this.runtime.webMidi.connect();
   }
@@ -550,6 +559,10 @@ export class AppView {
     try {
       const { exercise, warnings } = await this.runtime.importer.readFile(await file.arrayBuffer());
       await this.runtime.controller.openScore(exercise);
+      // Kept on the way in, so the file is chosen from the disk once and
+      // afterwards the piece is simply there.
+      await this.runtime.scores.keep(exercise, Date.now());
+      this.renderScores();
       const dropped = warnings.map((warning) => warning.detail).join(' ');
       this.showImportNotice(
         dropped === '' ? `Opened ${exercise.title}.` : `Opened ${exercise.title}. ${dropped}`,
@@ -557,6 +570,58 @@ export class AppView {
     } catch (error) {
       this.showImportNotice(
         error instanceof Error ? `Could not open that file. ${error.message}` : 'Could not open that file.',
+      );
+    }
+  }
+
+  /** Lists the kept scores, each openable and each removable. */
+  private renderScores(): void {
+    const scores = this.runtime.scores.list();
+    this.el.scores.hidden = scores.length === 0;
+    this.el.scoresList.replaceChildren();
+
+    for (const score of scores) {
+      const row = this.doc.createElement('li');
+      const name = this.doc.createElement('span');
+      name.className = 'takes__name';
+      name.textContent = `${score.title} · ${score.bars} bars`;
+      name.title = score.title;
+
+      const open = this.doc.createElement('button');
+      open.type = 'button';
+      open.textContent = 'Open';
+      this.listen(open, 'click', () => {
+        void this.openKeptScore(score.id, score.title);
+      });
+
+      const remove = this.doc.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.title = 'Forget this score';
+      remove.setAttribute('aria-label', `Forget ${score.title}`);
+      this.listen(remove, 'click', () => {
+        void this.runtime.scores.remove(score.id).then(() => this.renderScores());
+      });
+
+      row.append(name, open, remove);
+      this.el.scoresList.append(row);
+    }
+  }
+
+  private async openKeptScore(id: string, title: string): Promise<void> {
+    try {
+      const exercise = await this.runtime.scores.open(id);
+      if (exercise === null) {
+        this.showImportNotice(`${title} is no longer stored on this device.`);
+        this.renderScores();
+        return;
+      }
+      await this.runtime.controller.openScore(exercise);
+      this.syncControlsFromSettings();
+      this.showImportNotice(`Opened ${exercise.title}.`);
+    } catch (error) {
+      this.showImportNotice(
+        error instanceof Error ? `Could not open ${title}. ${error.message}` : `Could not open ${title}.`,
       );
     }
   }
@@ -872,6 +937,10 @@ export class AppView {
 
     this.listen(this.el.keepTake, 'click', () => {
       this.keepTake();
+    });
+
+    this.listen(this.el.scoresClear, 'click', () => {
+      void this.runtime.scores.forget().then(() => this.renderScores());
     });
 
     this.listen(this.el.takesClear, 'click', () => {

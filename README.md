@@ -28,6 +28,16 @@ fell due rather than the ones in the exercise. Setting the material, rhythm,
 key or metre by hand steps off the route and says so; tempo and bar count do
 not, because slowing a rung down is how it is meant to be met.
 
+A score opened from disk is **kept**, and appears in a list beside the page:
+the file is chosen once and afterwards the piece is simply there. What is
+stored is the MusicXML this project's own serializer produces, in the
+browser's database rather than beside the settings — a hundred bars is about
+320 kB, which would fill key-value storage in a handful of pieces. The
+document rather than a serialised `Exercise` because the round trip through
+the serializer and the parser is exact, measured on the real test file and
+byte for byte, so there is one representation to keep correct instead of two
+— and what is on disk stays a format other programs can read.
+
 **Bars**, in the transport bar rather than among the settings, narrows the
 exercise to a passage: which bars to read is changed between attempts, not
 dialled in once, and it is the one control a reader reaches for with the music

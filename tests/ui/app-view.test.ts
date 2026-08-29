@@ -16,6 +16,8 @@ import { PracticeLadder } from '../../src/application/ladder/PracticeLadder.js';
 import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.js';
 import { ControlBinding } from '../../src/application/ControlBinding.js';
 import { TakeLibrary } from '../../src/application/TakeLibrary.js';
+import { ScoreLibrary } from '../../src/application/ScoreLibrary.js';
+import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 
@@ -104,12 +106,15 @@ interface Rig {
   readonly recorder: PerformanceRecorder;
   readonly volumeKnob: ControlBinding;
   readonly takes: TakeLibrary;
+  readonly scores: ScoreLibrary;
+  readonly scoreStore: InMemoryScoreStore;
   readonly files: RecordingFileSink;
 }
 
 function createRig(
   webMidiOverride?: AppRuntime['webMidi'],
   store: InMemorySettingsStore = new InMemorySettingsStore(),
+  scoreStore: InMemoryScoreStore = new InMemoryScoreStore(),
 ): Rig {
   const clock = new ManualClock();
   const midi = new MockMidiAdapter({ clock });
@@ -126,6 +131,13 @@ function createRig(
   volumeKnob.listenTo(midi);
   const takes = new TakeLibrary(new InMemorySettingsStore());
   const files = new RecordingFileSink();
+  const importer = new DomMusicXmlImporter();
+  const serializer = new MusicXmlSerializer();
+  const scores = new ScoreLibrary({
+    store: scoreStore,
+    serializer,
+    importer,
+  });
   const scorings = new ScoringStrategyRegistry().registerAll([
     new AccuracyScoringStrategy(),
     new TimingWeightedScoringStrategy(),
@@ -149,7 +161,7 @@ function createRig(
     presets,
     rhythms,
     modes,
-    serializer: new MusicXmlSerializer(),
+    serializer,
     renderer,
     cursor: renderer.cursor,
     overlay: renderer,
@@ -180,8 +192,9 @@ function createRig(
     recorder,
     volumeKnob,
     takes,
+    scores,
     files,
-    importer: new DomMusicXmlImporter(),
+    importer,
     scorings,
     modes,
     webMidi: webMidiOverride ?? midi,
@@ -217,6 +230,8 @@ function createRig(
     recorder,
     volumeKnob,
     takes,
+    scores,
+    scoreStore,
     files,
   };
 }
@@ -781,6 +796,67 @@ describe('AppView', () => {
     expect(runtime.controller.settings.rangeFromBar).toBeNull();
     expect(element<HTMLInputElement>('range-from').value).toBe('');
     expect(element<HTMLInputElement>('range-to').value).toBe('');
+  });
+
+  describe('the scores kept between visits', () => {
+    async function keepOne(rig: Rig, title = 'Something Borrowed'): Promise<void> {
+      await rig.runtime.scores.keep(twoBarExercise({ title }), 1_000);
+      await rig.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    it('says nothing when the library is empty', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(element('scores').hidden).toBe(true);
+    });
+
+    it('lists what an earlier visit kept', async () => {
+      const rig = createRig();
+      await keepOne(rig);
+
+      expect(element('scores').hidden).toBe(false);
+      expect(element('scores-list').childElementCount).toBe(1);
+      expect(element('scores-list').textContent).toContain('Something Borrowed');
+      expect(element('scores-list').textContent).toContain('2 bars');
+    });
+
+    it('opens one without going back to the disk', async () => {
+      const rig = createRig();
+      await keepOne(rig);
+
+      const open = element('scores-list').querySelector('button');
+      (open as HTMLButtonElement | null)?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Which is the whole point: the file is chosen once and the piece is
+      // afterwards simply there.
+      expect(rig.runtime.controller.openedExercise?.title).toBe('Something Borrowed');
+    });
+
+    it('forgets one from its row', async () => {
+      const rig = createRig();
+      await keepOne(rig);
+
+      const buttons = element('scores-list').querySelectorAll('button');
+      (buttons[1] as HTMLButtonElement | undefined)?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(rig.runtime.scores.isEmpty).toBe(true);
+      expect(element('scores').hidden).toBe(true);
+    });
+
+    it('empties the shelf when asked', async () => {
+      const rig = createRig();
+      await keepOne(rig);
+
+      element<HTMLButtonElement>('scores-clear').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(rig.runtime.scores.isEmpty).toBe(true);
+    });
   });
 
   describe('keeping a take', () => {
@@ -1348,8 +1424,14 @@ describe('AppView', () => {
       // than the space it has, and put a horizontal scrollbar under it.
       const surface = document.getElementById('score-surface');
       expect(surface).not.toBeNull();
-      expect(surface?.parentElement?.classList.contains('score')).toBe(true);
+      expect(surface?.id).not.toBe('score');
       expect(surface?.children).toHaveLength(0);
+      // Inside the box that scrolls, which is inside the framed one. The
+      // cover sits over the frame instead, so it cannot drift with the
+      // scroll or miss the border at the corners.
+      expect(surface?.parentElement?.id).toBe('score-scroll');
+      expect(surface?.parentElement?.parentElement?.id).toBe('score');
+      expect(document.getElementById('score-cover')?.parentElement?.id).toBe('score');
     });
 
     it('resizes the notes on release, not on every drag step', async () => {

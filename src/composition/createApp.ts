@@ -21,6 +21,9 @@ import { PracticeHistory } from '../application/PracticeHistory.js';
 import { PerformanceRecorder } from '../application/PerformanceRecorder.js';
 import { ControlBinding } from '../application/ControlBinding.js';
 import { TakeLibrary, TAKES_STORAGE_KEY } from '../application/TakeLibrary.js';
+import { ScoreLibrary } from '../application/ScoreLibrary.js';
+import { IndexedDbScoreStore } from '../infrastructure/storage/IndexedDbScoreStore.js';
+import type { IScoreStore } from '../application/ports/IScoreStore.js';
 import { DownloadFileSink } from '../infrastructure/files/DownloadFileSink.js';
 import type { IFileSink } from '../application/ports/IFileSink.js';
 import { PracticeLadder } from '../application/ladder/PracticeLadder.js';
@@ -69,6 +72,8 @@ export interface AppRuntimeOptions {
   readonly historyStore?: ISettingsStore;
   /** Where kept takes live; browser storage by default. */
   readonly takeStore?: ISettingsStore;
+  /** Where kept scores live; the browser's database by default. */
+  readonly scoreStore?: IScoreStore;
   /** Where a finished file is handed over; a download by default. */
   readonly fileSink?: IFileSink;
   /** Where the piano samples live; resolved against the page by default. */
@@ -100,6 +105,8 @@ export interface AppRuntime {
   /** The knob the reader taught to drive the note volume, if they have. */
   readonly volumeKnob: ControlBinding;
   readonly takes: TakeLibrary;
+  /** Scores kept between visits, so a file is chosen from the disk once. */
+  readonly scores: ScoreLibrary;
   readonly files: IFileSink;
   readonly importer: IScoreImporter;
   readonly scorings: ScoringStrategyRegistry;
@@ -200,6 +207,12 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   );
   takes.load();
 
+  const scores = new ScoreLibrary({
+    store: options.scoreStore ?? new IndexedDbScoreStore(),
+    serializer,
+    importer,
+  });
+
   const history = new PracticeHistory(
     options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY),
   );
@@ -245,6 +258,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     recorder,
     volumeKnob,
     takes,
+    scores,
     files: options.fileSink ?? new DownloadFileSink(document),
     importer,
     scorings,

@@ -58,10 +58,12 @@
 
       <main class="layout">
         <section id="score" class="score" aria-label="Score">
+          <div id="score-scroll" class="score__scroll">
+            <div id="score-surface" class="score__surface"></div>
+          </div>
           <div id="score-cover" class="score__cover" hidden>
             <p id="score-cover-text" class="score__cover-text"></p>
           </div>
-          <div id="score-surface" class="score__surface"></div>
         </section>
 
         <aside class="panel">
@@ -80,6 +82,16 @@
           </div>
 
           <ul id="log" class="log" aria-label="Recent notes"></ul>
+
+          <section id="scores" class="takes" hidden aria-label="Kept scores">
+            <div class="panel__row panel__row--compact">
+              <span class="label">Scores</span>
+              <button id="scores-clear" type="button" class="button button--ghost takes__clear">
+                Delete all
+              </button>
+            </div>
+            <ul id="scores-list" class="takes__list"></ul>
+          </section>
 
           <section id="takes" class="takes" hidden aria-label="Kept takes">
             <div class="panel__row panel__row--compact">

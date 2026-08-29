@@ -693,6 +693,25 @@ select {
   pointer-events: none;
 }
 
+/*
+ * On a narrow screen the pill is put above the bar instead of beside it.
+ *
+ * Hiding it was the other option and it is the wrong one: this is where the
+ * count-in is counted and where the grade is given, and fullscreen has nowhere
+ * else to say either. Above the bar there is empty page, and the pill still
+ * takes no part in the row's width.
+ */
+@media (max-width: 560px) {
+  .focus-notice {
+    right: 0;
+    top: auto;
+    bottom: 100%;
+    transform: none;
+    margin-right: 0;
+    margin-bottom: 8px;
+  }
+}
+
 .focus-bar__handle {
   appearance: none;
   border: 0;
@@ -961,6 +980,24 @@ select {
 .focus-bar__button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/*
+ * The press itself, answered instantly.
+ *
+ * A touch device has no hover to fall back on, so without this the only sign
+ * a button was hit is whatever the press eventually causes - and where that
+ * is a re-engraving, the reader is left pressing again in the meantime. The
+ * highlight is drawn by the compositor and owes nothing to the work.
+ */
+.focus-bar__button:active:not(:disabled) {
+  background: var(--accent-soft);
+  transform: scale(0.94);
+}
+
+.focus-bar__button {
+  transition: transform 90ms ease, background-color 90ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .focus-bar__button--primary {

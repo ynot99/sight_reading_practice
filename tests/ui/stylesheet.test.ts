@@ -106,6 +106,40 @@ describe('the stylesheet', () => {
     ).toMatch(/position\s*:\s*relative/);
   });
 
+  it('answers a press before the work it starts finishes', () => {
+    // A touch device has no hover, so without an active state the only sign a
+    // button was hit is whatever it eventually causes. The tempo buttons
+    // re-engrave the page, which on a long piece is most of a second, and the
+    // reader pressed again in the meantime.
+    const pressed = rules().find(
+      (rule) => rule.selector === '.focus-bar__button:active:not(:disabled)',
+    );
+
+    expect(pressed).toBeDefined();
+    expect(pressed?.body).toMatch(/transform\s*:/);
+  });
+
+  it('keeps a caret out of the range iOS magnifies the page for', () => {
+    // Anything under 16px makes iOS zoom the whole page in on focus and never
+    // undo it - which is a score left magnified because a bar number was
+    // tapped. Said once, by element, so a new field cannot miss it.
+    const fields = rules().find((rule) => rule.selector === 'input, select, textarea');
+
+    expect(fields).toBeDefined();
+    expect(fields?.body).toMatch(/font-size\s*:\s*max\(16px/);
+  });
+
+  it('stops a scroll at the edge of the score instead of handing it on', () => {
+    // Past the top of a long piece the drag used to chain out to the page,
+    // where a tablet reads the overscroll as a gesture of its own.
+    const scroll = rules().find((rule) => rule.selector === '.score__scroll');
+
+    expect(scroll?.body).toMatch(/overscroll-behavior\s*:\s*contain/);
+    expect(rules().find((rule) => rule.selector === 'body')?.body).toMatch(
+      /overscroll-behavior\s*:\s*none/,
+    );
+  });
+
   it('asks the viewport to reach under the safe areas', () => {
     // The stylesheet already offsets by `env(safe-area-inset-*)`, and without
     // `viewport-fit=cover` those resolve to zero - so the transport pill sits

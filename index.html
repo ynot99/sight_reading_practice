@@ -311,7 +311,7 @@
           <div id="focus-health-fill" class="focus-bar__health-fill"></div>
         </div>
 
-        <div class="focus-bar__row">
+        <div id="focus-row" class="focus-bar__row">
           <button id="focus-play" type="button"
             class="focus-bar__button focus-bar__button--primary focus-bar__button--icon"
             title="Start" aria-label="Start">
@@ -332,7 +332,13 @@
             </svg>
           </button>
 
-          <span class="focus-bar__tempo">
+          <!--
+            Moved into the drawer on a narrow screen, where the row has room
+            for five buttons and no more. One element with two homes rather
+            than two copies: a second pair of buttons would be a second
+            control answering the same question.
+          -->
+          <span id="focus-speed" class="focus-bar__tempo">
             <button id="focus-slower" type="button"
               class="focus-bar__button focus-bar__button--step" title="Slower" aria-label="Slower">−</button>
             <output id="focus-tempo" class="focus-bar__percent">100%</output>

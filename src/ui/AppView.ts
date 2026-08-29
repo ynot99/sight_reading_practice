@@ -28,6 +28,14 @@ import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { ChosenPassage } from '../application/PracticeController.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { elementAt } from '../shared/asserts.js';
+
+/**
+ * How long the page waits after the last tempo press before re-engraving.
+ *
+ * Long enough that a run of presses costs one redraw rather than one each,
+ * short enough that a single press still looks immediate.
+ */
+const TEMPO_REDRAW_DELAY_MS = 350;
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { FocusMode } from './FocusMode.js';
@@ -401,6 +409,8 @@ export class AppView {
   private focusMode: FocusMode | null = null;
   private lastStatus: SessionStatus = 'idle';
   private lastPosition = '';
+  /** Pending re-engraving after the tempo buttons stop being pressed. */
+  private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
   /** The step now due, kept so blind mode can be turned off mid-run. */
   private lastExpected: readonly number[] = [];
   private lastDrainAtMs: number | null = null;
@@ -439,6 +449,8 @@ export class AppView {
     focusHealthFill: HTMLElement;
     survival: HTMLInputElement;
     focusDrawer: HTMLElement;
+    focusRow: HTMLElement;
+    focusSpeed: HTMLElement;
     focusStop: HTMLButtonElement;
     focusListen: HTMLButtonElement;
     focusSlower: HTMLButtonElement;
@@ -565,6 +577,8 @@ export class AppView {
       focusHealthFill: requireElement(doc, 'focus-health-fill'),
       survival: requireElement(doc, 'survival'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
+      focusRow: requireElement(doc, 'focus-row'),
+      focusSpeed: requireElement(doc, 'focus-speed'),
       focusStop: requireElement(doc, 'focus-stop'),
       focusListen: requireElement(doc, 'focus-listen'),
       focusSlower: requireElement(doc, 'focus-slower'),
@@ -681,6 +695,10 @@ export class AppView {
 
   dispose(): void {
     this.cancelPreview();
+    if (this.tempoRedraw !== null) {
+      clearTimeout(this.tempoRedraw);
+      this.tempoRedraw = null;
+    }
     this.focusMode?.dispose();
     this.focusMode = null;
     for (const unsubscribe of [...this.subscriptions, ...this.sessionSubscriptions]) {
@@ -1191,8 +1209,36 @@ export class AppView {
    * once the page is gone - start or pause, stop, next exercise, and the way
    * out - and it drives exactly the same controller calls as the main buttons.
    */
+  /**
+   * Gives the speed control its second home.
+   *
+   * The transport row holds five buttons on a phone and no more, and the two
+   * that go are the ones reached for least often. Moved rather than copied:
+   * a second pair of buttons in the drawer would be a second control
+   * answering the same question, and they would disagree the moment one of
+   * them was wired up wrong.
+   */
+  private bindNarrowLayout(): void {
+    const view = this.doc.defaultView;
+    if (view === null || typeof view.matchMedia !== 'function') {
+      return;
+    }
+    const narrow = view.matchMedia('(max-width: 560px)');
+    const place = (): void => {
+      if (narrow.matches) {
+        this.el.focusDrawer.prepend(this.el.focusSpeed);
+      } else {
+        this.el.focusRow.insertBefore(this.el.focusSpeed, this.el.focusNext);
+      }
+    };
+    place();
+    narrow.addEventListener('change', place);
+    this.subscriptions.push(() => narrow.removeEventListener('change', place));
+  }
+
   private bindFocusMode(): void {
     const { controller } = this.runtime;
+    this.bindNarrowLayout();
 
     this.focusMode = new FocusMode({
       root: this.el.app,
@@ -1424,15 +1470,27 @@ export class AppView {
   /**
    * Changes the pace without leaving the stand.
    *
-   * Re-engraved because the tempo mark is printed on the page: leaving it
-   * saying 88 while the run goes at 70 is a page that lies about itself.
-   * Generation is seeded, so the notes are the same ones.
+   * The reading moves at once and the page follows when the pressing stops.
+   * Re-engraving is what makes this expensive - the tempo mark is printed, so
+   * leaving it saying 88 while the run goes at 70 is a page that lies about
+   * itself - and on a long piece it is most of a second. Done on every press
+   * it swallowed the next one, so a reader holding the button watched a
+   * number that moved in jerks and wondered whether it had heard them.
+   *
+   * Generation is seeded, so the notes are the same ones either way.
    */
   private nudgeTempo(deltaPercent: number): void {
     this.runtime.controller.nudgeTempoPercent(deltaPercent);
     this.describeTempo();
     this.syncControlsFromSettings();
-    void this.reload(false);
+
+    if (this.tempoRedraw !== null) {
+      clearTimeout(this.tempoRedraw);
+    }
+    this.tempoRedraw = setTimeout(() => {
+      this.tempoRedraw = null;
+      void this.reload(false);
+    }, TEMPO_REDRAW_DELAY_MS);
   }
 
   /**

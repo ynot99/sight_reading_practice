@@ -2164,19 +2164,28 @@ describe('AppView', () => {
       );
     });
 
-    it('re-engraves, so the printed tempo is not a lie', async () => {
+    it('re-engraves once the pressing stops, not on every press', async () => {
       const { view, renderer } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus').click();
       await Promise.resolve();
       const before = renderer.loadCount;
 
-      element<HTMLButtonElement>('focus-faster').click();
+      for (let press = 0; press < 4; press += 1) {
+        element<HTMLButtonElement>('focus-faster').click();
+      }
       await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Re-engraving a long piece is most of a second, and doing it under
+      // every press swallowed the next one.
+      expect(element('focus-tempo').textContent).toBe('120%');
+      expect(renderer.loadCount).toBe(before);
+
+      await new Promise((resolve) => setTimeout(resolve, 400));
 
       // The mark is printed on the page; leaving it saying 88 while the run
       // goes at 92 is a page that lies about itself.
-      expect(renderer.loadCount).toBeGreaterThan(before);
+      expect(renderer.loadCount).toBe(before + 1);
     });
 
     it('hears the exercise without leaving fullscreen', async () => {

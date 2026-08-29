@@ -193,6 +193,10 @@ describe('the stylesheet', () => {
     // Two lines of pill are free: it is out of the row's flow, so its height
     // moves nothing a thumb is aiming at.
     expect(notice?.body).not.toMatch(/white-space\s*:\s*nowrap/);
+    // And it must be given a width of its own. Anchored at `right: 100%` the
+    // room to its right is zero, so a box left to shrink to fit collapses to
+    // its longest word - which wrapped "Counting in... 3" onto three lines.
+    expect(notice?.body).toMatch(/width\s*:\s*max-content/);
   });
 
   it('asks the viewport to reach under the safe areas', () => {

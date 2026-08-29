@@ -734,15 +734,22 @@ select {
   font-variant-numeric: tabular-nums;
   pointer-events: none;
   /*
-   * Bounded, and allowed to wrap inside those bounds.
+   * As wide as its text wants, up to a limit, and only then wrapping.
    *
-   * It grows leftwards from the bar, so a single unbroken line ran off the
-   * side of the screen and took its beginning with it - which is where a
-   * message like "Opened Bone Bottom Hollow Knight Silksong OST." starts.
-   * Two lines of pill are free: it is out of the row's flow, so its height
-   * moves nothing.
+   * `width: max-content` is doing the real work and is not decoration. This
+   * box is anchored at `right: 100%`, so the room to its right is zero by
+   * construction - and an absolutely positioned box with no width of its own
+   * shrinks to fit *that*, which collapses it to its longest word and wraps
+   * everything else. It was `nowrap` before, which hid the problem by letting
+   * the box overflow the screen instead; taking that away to stop "Opened <a
+   * long piece's name>." running off the side broke "Counting in... 3", which
+   * had always fitted.
+   *
+   * Two lines of pill cost nothing when a message really is that long: it is
+   * out of the transport row's flow, so its height moves nothing.
    */
-  max-width: min(42ch, 38vw);
+  width: max-content;
+  max-width: min(52ch, 46vw);
   overflow-wrap: break-word;
 }
 
@@ -938,7 +945,7 @@ select {
     margin-right: 0;
     margin-bottom: 8px;
     /* Above the bar there is the whole width, less the take pill beside it. */
-    max-width: 68vw;
+    max-width: 66vw;
   }
 }
 

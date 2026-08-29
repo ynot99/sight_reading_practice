@@ -36,6 +36,21 @@
   box-sizing: border-box;
 }
 
+/*
+ * `hidden` means hidden, whatever a component says.
+ *
+ * The browser's own rule for it is `display: none`, and any author rule that
+ * sets a display beats it - so a component made into a flex box quietly
+ * became visible while still carrying the attribute. That has happened three
+ * times here, each time as a layout that shifted for no visible reason, and
+ * each time it was invisible to the tests because they read the attribute
+ * rather than the paint. Said once, and `tests/ui/stylesheet.test.ts` keeps
+ * it that way.
+ */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -158,10 +173,6 @@ body {
   background: var(--surface);
 }
 
-.score__cover[hidden] {
-  display: none;
-}
-
 .score__cover-text {
   margin: 0;
   max-width: 34ch;
@@ -194,11 +205,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-/* `display: flex` above would otherwise beat the browser's rule for [hidden]. */
-.panel__row[hidden] {
-  display: none;
 }
 
 .panel__row--compact {
@@ -431,10 +437,6 @@ select {
   padding-top: 10px;
 }
 
-.takes[hidden] {
-  display: none;
-}
-
 .takes__clear {
   padding: 2px 8px;
   font-size: 12px;
@@ -605,10 +607,6 @@ select {
   backdrop-filter: blur(12px);
   box-shadow: 0 6px 24px rgb(16 24 40 / 18%);
   max-width: calc(100vw - 24px);
-}
-
-.focus-bar[hidden] {
-  display: none;
 }
 
 .focus-bar__status {

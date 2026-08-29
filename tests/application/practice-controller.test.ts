@@ -1582,3 +1582,81 @@ describe('starting from the top of the page', () => {
     expect(renderer.scrollToStartCount).toBe(before + 1);
   });
 });
+
+describe('choosing a passage by touching a note', () => {
+  async function opened() {
+    const rig = createController();
+    await rig.controller.openScore(twoBarExercise({ title: 'Two Bars' }));
+    return rig;
+  }
+
+  function stepInBar(rig: Awaited<ReturnType<typeof opened>>, bar: number): number {
+    const found = rig.controller.currentTimeline?.steps.find(
+      (step) => step.measureIndex === bar - 1,
+    );
+    if (found === undefined) {
+      throw new Error(`no step in bar ${bar}`);
+    }
+    return found.index;
+  }
+
+  it('starts the passage at the touched note’s bar, open at the end', async () => {
+    const rig = await opened();
+
+    expect(rig.controller.chooseFromStep(stepInBar(rig, 2))).toEqual({
+      fromBar: 2,
+      toBar: null,
+    });
+    // One touch means "from here on"; saying which bar is last would be
+    // counting bars nobody asked about.
+    expect(rig.controller.settings.rangeFromBar).toBe(2);
+    expect(rig.controller.settings.rangeToBar).toBeNull();
+  });
+
+  it('closes the passage on a touch further into the piece', async () => {
+    const rig = await opened();
+    rig.controller.chooseFromStep(stepInBar(rig, 1));
+    await rig.controller.reloadExercise();
+
+    // Bars are reported against what is on screen, which is now a passage of
+    // its own, so they have to be put back onto the whole piece first.
+    const second = rig.controller.chooseFromStep(stepInBar(rig, 2));
+
+    expect(second).toEqual({ fromBar: 1, toBar: 2 });
+    expect(rig.controller.settings.rangeToBar).toBe(2);
+  });
+
+  it('gives the whole piece back on touching the first note again', async () => {
+    const rig = await opened();
+    rig.controller.chooseFromStep(stepInBar(rig, 2));
+    await rig.controller.reloadExercise();
+
+    // The page is now that passage, so its first bar is the one that opened
+    // it - touching there is the way back.
+    const cleared = rig.controller.chooseFromStep(stepInBar(rig, 1));
+
+    expect(cleared).toEqual({ fromBar: null, toBar: null });
+    expect(rig.controller.settings.rangeFromBar).toBeNull();
+  });
+
+  it('starts over rather than growing backwards', async () => {
+    const rig = await opened();
+    rig.controller.chooseFromStep(stepInBar(rig, 2));
+    await rig.controller.reloadExercise();
+    rig.controller.updateSettings({ rangeToBar: 2 });
+
+    // A touch when the passage is already closed begins a new one, which is
+    // the only reading that does not need a rule the reader has to remember.
+    expect(rig.controller.chooseFromStep(stepInBar(rig, 1))).toEqual({
+      fromBar: 2,
+      toBar: null,
+    });
+  });
+
+  it('ignores a touch on nothing', async () => {
+    const rig = await opened();
+    rig.controller.chooseFromStep(9_999);
+
+    expect(rig.controller.settings.rangeFromBar).toBeNull();
+  });
+});

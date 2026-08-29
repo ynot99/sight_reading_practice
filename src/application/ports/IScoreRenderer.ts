@@ -19,6 +19,15 @@ export interface IScoreRenderer {
    * looking at bar forty.
    */
   scrollToStart(): void;
+  /**
+   * Reports which timeline step a note the reader touched belongs to.
+   *
+   * The renderer already knows which drawn elements are which step - it is
+   * how a passed note is dimmed - so this asks nothing new of it. The
+   * application decides what a touch *means*; the renderer only says where
+   * it landed.
+   */
+  onNoteTapped(listener: (stepIndex: number) => void): () => void;
   clear(): void;
 }
 

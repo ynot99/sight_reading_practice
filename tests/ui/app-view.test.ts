@@ -1056,6 +1056,39 @@ describe('AppView', () => {
     });
   });
 
+  describe('touching a note to choose a passage', () => {
+    it('narrows to the touched bar and says so', async () => {
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      const step = runtime.controller.currentTimeline?.steps.find(
+        (each) => each.measureIndex === 1,
+      );
+      if (step === undefined) {
+        throw new Error('expected a second bar');
+      }
+
+      renderer.tapStep(step.index);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.settings.rangeFromBar).toBe(2);
+      // The boxes are the same value seen at the desk, so they follow.
+      expect(element<HTMLInputElement>('range-from').value).toBe('2');
+      expect(element('import-notice').textContent).toContain('from bar 2');
+    });
+
+    it('leaves the page alone while a run is going', async () => {
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('start').click();
+
+      renderer.tapStep(1);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // A stray touch mid-piece never meant "re-engrave under me".
+      expect(runtime.controller.settings.rangeFromBar).toBeNull();
+    });
+  });
+
   it('hides the score cursor from the checkbox', async () => {
     const { view, runtime, renderer } = createRig();
     await view.initialize();

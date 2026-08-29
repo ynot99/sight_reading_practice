@@ -38,6 +38,18 @@ the serializer and the parser is exact, measured on the real test file and
 byte for byte, so there is one representation to keep correct instead of two
 — and what is on disk stays a format other programs can read.
 
+**Touch a note** to choose the passage. The first touch says where to begin
+and leaves the end alone, so one tap means "from here on"; a touch further
+into the piece closes it, and a touch on what is already the first bar gives
+the whole piece back. Whole bars, because that is what a passage is made of
+and where a musician starts — cutting partway through one would leave a
+pickup and make every seam harder for nothing gained.
+
+The bar boxes stay as the same value seen at the desk, the way the tempo
+slider and the fullscreen percentage are one setting with two editors. At the
+stand the boxes are out of reach, and reading bar numbers off the page is work
+in itself.
+
 **Bars**, in the transport bar rather than among the settings, narrows the
 exercise to a passage: which bars to read is changed between attempts, not
 dialled in once, and it is the one control a reader reaches for with the music

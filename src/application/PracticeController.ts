@@ -50,6 +50,12 @@ function clampPercent(percent: number): number {
   return Math.min(MAX_TEMPO_PERCENT, Math.max(MIN_TEMPO_PERCENT, percent));
 }
 
+/** A passage as the reader has it: an open end is a real answer, not a gap. */
+export interface ChosenPassage {
+  readonly fromBar: number | null;
+  readonly toBar: number | null;
+}
+
 /** The fields a rung governs, and so the ones that leaving it is made of. */
 function touchesTheRoute(changes: Partial<PracticeSettings>): boolean {
   return (
@@ -657,6 +663,46 @@ export class PracticeController {
     const passage = { fromBar: found.fromBar + offset, toBar: found.toBar + offset };
     this.updateSettings({ rangeFromBar: passage.fromBar, rangeToBar: passage.toBar });
     return passage;
+  }
+
+  /**
+   * Sets the passage from a note the reader touched.
+   *
+   * Whole bars, because that is what `sliceExercise` cuts and what a musician
+   * means: a passage begins at a bar line, not partway through one. Cutting
+   * mid-bar would leave a pickup and make every seam - the restated clef, the
+   * tie let go of, the pedal pressed again - harder for nothing gained.
+   *
+   * The gesture reads as a selection. The first touch says where to begin and
+   * leaves the end alone, so one tap means "from here on". A touch later in
+   * the piece closes the passage; a touch on what is already the start opens
+   * the whole piece again, which is the way back.
+   *
+   * Returns the passage now being practised. `toBar` is `null` when it runs
+   * to the end of the piece, which is what one tap leaves behind - saying
+   * "the last bar" would mean counting bars nobody asked about.
+   */
+  chooseFromStep(stepIndex: number): ChosenPassage {
+    const step = this.timeline?.at(stepIndex);
+    if (step === null || step === undefined) {
+      return { fromBar: this.currentSettings.rangeFromBar, toBar: this.currentSettings.rangeToBar };
+    }
+    // Bars are reported against whatever is on screen, which may already be a
+    // passage; put them back onto the whole piece before they become one.
+    const offset = (this.currentSettings.rangeFromBar ?? 1) - 1;
+    const bar = step.measureIndex + 1 + offset;
+    const from = this.currentSettings.rangeFromBar;
+
+    if (from === bar && this.currentSettings.rangeToBar === null) {
+      this.updateSettings({ rangeFromBar: null, rangeToBar: null });
+      return { fromBar: null, toBar: null };
+    }
+    if (from !== null && bar > from && this.currentSettings.rangeToBar === null) {
+      this.updateSettings({ rangeToBar: bar });
+      return { fromBar: from, toBar: bar };
+    }
+    this.updateSettings({ rangeFromBar: bar, rangeToBar: null });
+    return { fromBar: bar, toBar: null };
   }
 
   /**

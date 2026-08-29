@@ -207,6 +207,40 @@ export class OsmdScoreRenderer
     this.paintFaded();
   }
 
+  /**
+   * Tells the application which step a touch landed on.
+   *
+   * One listener on the container rather than one per notehead: the page is
+   * re-engraved often - a zoom, a resize, a tempo change - and handlers bound
+   * to elements would have to be rebound each time, or quietly stop working
+   * after the first redraw. Which element belongs to which step is already
+   * known, so the lookup walks up from whatever was touched.
+   */
+  onNoteTapped(listener: (stepIndex: number) => void): () => void {
+    const handle = (event: Event): void => {
+      const step = this.stepOf(event.target);
+      if (step !== null) {
+        listener(step);
+      }
+    };
+    this.container.addEventListener('pointerup', handle);
+    return () => this.container.removeEventListener('pointerup', handle);
+  }
+
+  /** The step a drawn element belongs to, looking outwards from it. */
+  private stepOf(target: EventTarget | null): number | null {
+    let node = target instanceof Element ? target : null;
+    while (node !== null && node !== this.container) {
+      for (const [stepIndex, elements] of this.stepElements) {
+        if (elements.includes(node as SVGGElement)) {
+          return stepIndex;
+        }
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   scrollToStart(): void {
     // The scrolling box, not the framed one: the frame holds the cover and
     // does not move. Whichever ancestor actually scrolls is the one to ask.

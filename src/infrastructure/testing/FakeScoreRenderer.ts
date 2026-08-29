@@ -101,6 +101,21 @@ export class FakeScoreRenderer
   }
 
   scrollToStartCount = 0;
+  private tapListeners: ((stepIndex: number) => void)[] = [];
+
+  onNoteTapped(listener: (stepIndex: number) => void): () => void {
+    this.tapListeners.push(listener);
+    return () => {
+      this.tapListeners = this.tapListeners.filter((each) => each !== listener);
+    };
+  }
+
+  /** Stands in for a reader touching a note of that step. */
+  tapStep(stepIndex: number): void {
+    for (const listener of [...this.tapListeners]) {
+      listener(stepIndex);
+    }
+  }
 
   scrollToStart(): void {
     this.scrollToStartCount += 1;

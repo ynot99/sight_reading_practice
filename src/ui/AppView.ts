@@ -25,6 +25,7 @@ import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
+import type { ChosenPassage } from '../application/PracticeController.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
@@ -76,6 +77,17 @@ export function describeTendency(meanDeviationMs: number): string {
     return 'even';
   }
   return rounded < 0 ? `${Math.abs(rounded)} ms early` : `${rounded} ms late`;
+}
+
+/** What a touch just did, in the reader's terms rather than in settings. */
+function describePassage(passage: ChosenPassage): string {
+  if (passage.fromBar === null) {
+    return 'Practising the whole piece.';
+  }
+  if (passage.toBar === null) {
+    return `Practising from bar ${passage.fromBar}. Touch a later note to close the passage.`;
+  }
+  return `Practising bars ${passage.fromBar}-${passage.toBar}. Touch the first note again for the whole piece.`;
 }
 
 /** An empty box means "no limit", which is a choice and not a missing value. */
@@ -731,6 +743,23 @@ export class AppView {
         error instanceof Error ? `Could not open ${title}. ${error.message}` : `Could not open ${title}.`,
       );
     }
+  }
+
+  /**
+   * Narrows to the passage a touch names, and re-engraves for it.
+   *
+   * Not while a run is going: the page changing under a reader mid-piece is
+   * never what a stray touch meant.
+   */
+  private async choosePassageFrom(stepIndex: number): Promise<void> {
+    const status = this.runtime.controller.session?.status;
+    if (status === 'running' || status === 'counting-in' || status === 'paused') {
+      return;
+    }
+    const passage = this.runtime.controller.chooseFromStep(stepIndex);
+    this.syncControlsFromSettings();
+    this.showImportNotice(describePassage(passage));
+    await this.reload(false);
   }
 
   private showImportNotice(message: string): void {
@@ -1646,6 +1675,14 @@ export class AppView {
     this.bindBridge();
 
     this.subscriptions.push(this.subscribeAudioFeedback());
+    this.subscriptions.push(
+      // Touching a note is how a passage is chosen at the stand, where the
+      // bar boxes are out of reach and reading their numbers off the page is
+      // work in itself.
+      this.runtime.renderer.onNoteTapped((stepIndex) => {
+        void this.choosePassageFrom(stepIndex);
+      }),
+    );
   }
 
   /**

@@ -150,6 +150,37 @@ describe('teaching the app which knob to follow', () => {
     expect(harness.binding.controller).toBeNull();
   });
 
+  it('reports what it hears while learning, learned or not', () => {
+    const harness = rig();
+    const heard: { controller: number; positions: number }[] = [];
+    harness.binding.events.on('heard', ({ controller, positions }) =>
+      heard.push({ controller, positions }),
+    );
+
+    harness.binding.learn();
+    harness.midi.control(1, 0.1);
+    harness.midi.control(1, 0.2);
+
+    // Without this the reader cannot tell "I turned the wrong thing" from
+    // "this knob sends nothing", and some knobs really are analogue.
+    expect(heard).toEqual([
+      { controller: 1, positions: 1 },
+      { controller: 1, positions: 2 },
+    ]);
+  });
+
+  it('says nothing when nothing is arriving', () => {
+    const harness = rig();
+    const heard = vi.fn();
+    harness.binding.events.on('heard', heard);
+
+    harness.binding.learn();
+    harness.midi.noteOn(60, 0);
+
+    // Silence on the status line is the answer: the keyboard is not sending.
+    expect(heard).not.toHaveBeenCalled();
+  });
+
   it('stops listening when disposed', () => {
     const harness = rig();
     harness.binding.bindTo(7);

@@ -922,6 +922,20 @@ describe('AppView', () => {
       expect(element('knob-status').textContent).toContain('CC 11');
     });
 
+    it('shows what is arriving, even from the wrong control', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('learn-knob').click();
+
+      rig.midi.control(1, 0.42);
+
+      // A screen that only waits cannot tell the reader whether their knob
+      // sends anything at all.
+      expect(element('knob-status').textContent).toContain('CC 1');
+      expect(element('knob-status').textContent).toContain('42%');
+      expect(rig.runtime.volumeKnob.controller).toBeNull();
+    });
+
     it('drives the slider rather than a hidden second volume', async () => {
       const rig = createRig();
       await rig.view.initialize();

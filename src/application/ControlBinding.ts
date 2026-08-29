@@ -8,6 +8,14 @@ export interface ControlBindingEventMap {
   learned: { readonly controller: number | null };
   /** Whether the binding is waiting for a knob to be turned. */
   listeningChanged: { readonly listening: boolean };
+  /**
+   * Something arrived while learning, learned or not.
+   *
+   * Reported so the reader can tell "I turned the wrong thing" from "this
+   * knob sends nothing at all" - a distinction they cannot make from a
+   * screen that simply waits, and some knobs really are analogue.
+   */
+  heard: { readonly controller: number; readonly value: number; readonly positions: number };
 }
 
 /**
@@ -112,6 +120,7 @@ export class ControlBinding {
     const positions = this.seen.get(controller) ?? new Set<number>();
     positions.add(Math.round(value * 127));
     this.seen.set(controller, positions);
+    this.emitter.emit('heard', { controller, value, positions: positions.size });
     if (positions.size < MOVES_TO_LEARN) {
       return;
     }

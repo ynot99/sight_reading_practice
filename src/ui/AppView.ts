@@ -1619,6 +1619,17 @@ export class AppView {
       }),
     );
 
+    this.subscriptions.push(
+      knob.events.on('heard', ({ controller, value, positions }) => {
+        // Says what arrived even when it is the wrong control, so silence
+        // here means the keyboard sent nothing rather than that the app did.
+        this.el.knobStatus.textContent =
+          positions < 2
+            ? `Heard CC ${controller} at ${Math.round(value * 100)}% — keep turning.`
+            : `Heard CC ${controller} at ${Math.round(value * 100)}% — nearly there.`;
+      }),
+    );
+
     this.subscriptions.push(knob.events.on('listeningChanged', () => this.describeKnob()));
     this.describeKnob();
   }
@@ -1628,7 +1639,8 @@ export class AppView {
     this.el.learnKnob.dataset['listening'] = String(knob.isLearning);
     if (knob.isLearning) {
       this.el.learnKnob.textContent = 'Cancel';
-      this.el.knobStatus.textContent = 'Turn the knob you want to use.';
+      this.el.knobStatus.textContent =
+        'Turn the knob you want to use. Nothing here means it sends no MIDI.';
       return;
     }
     if (knob.controller !== null) {

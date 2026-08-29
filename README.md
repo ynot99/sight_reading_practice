@@ -124,6 +124,11 @@ manufacturer may choose anything, so a table of guesses would be wrong for
 somebody. Turning the knob is the one description that is always accurate, and
 it works for a keyboard nobody has tested.
 
+While it waits, it says what is arriving — `Heard CC 1 at 42%` — even from a
+control you did not mean. A screen that only waits cannot tell you whether the
+knob sends anything at all, and some knobs really are analogue; silence on that
+line is itself the answer.
+
 Learning waits for a few *distinct positions* rather than one message, because
 a keyboard announces bank selects and modes on connect and any of those would
 otherwise be learned instantly and then never move again. The knob writes

@@ -228,8 +228,15 @@ export interface ControllerEventMap {
   settingsChanged: { readonly settings: PracticeSettings };
   exerciseLoaded: ExerciseLoadedEvent;
   sessionCreated: { readonly session: PracticeSession };
-  /** Where the survival bar stands, `0..1`. Only while survival is on. */
-  healthChanged: { readonly health: number };
+  /**
+   * Where the survival bar stands, `0..1`, and why it moved.
+   *
+   * The two causes look different and must be drawn differently: a drain is a
+   * glide paced by the pulse, a settlement is a step landing at once. Told
+   * apart here rather than guessed at from the clock, which is what a view
+   * timing itself against "the last update of any kind" ends up doing.
+   */
+  healthChanged: { readonly health: number; readonly cause: 'drain' | 'settle' };
   ladderMoved: {
     readonly from: LadderStep;
     readonly to: LadderStep;
@@ -746,7 +753,7 @@ export class PracticeController {
     this.meter.reset();
     this.lastBeatTicks = 0;
     if (this.survivalRuns) {
-      this.emitter.emit('healthChanged', { health: this.meter.health });
+      this.emitter.emit('healthChanged', { health: this.meter.health, cause: 'settle' });
     }
     this.heldMarks = [];
     this.deps.overlay.clearPlayed();
@@ -761,7 +768,7 @@ export class PracticeController {
           this.fadeThrough(result.index);
         }
         if (this.survivalRuns) {
-          this.publishHealth(this.meter.settle(result.status));
+          this.publishHealth(this.meter.settle(result.status), 'settle');
         }
       }),
     );
@@ -800,7 +807,7 @@ export class PracticeController {
           (tick.positionTicks - this.lastBeatTicks) /
           this.currentSettings.timeSignature.ticksPerPulse;
         this.lastBeatTicks = tick.positionTicks;
-        this.publishHealth(this.meter.drainForBeats(beats));
+        this.publishHealth(this.meter.drainForBeats(beats), 'drain');
       }),
     );
 
@@ -1075,8 +1082,8 @@ export class PracticeController {
    * Aborted rather than finished: the reader did not reach the end, and a
    * report that said otherwise would be the one lie this feature could tell.
    */
-  private publishHealth(health: number): void {
-    this.emitter.emit('healthChanged', { health });
+  private publishHealth(health: number, cause: 'drain' | 'settle'): void {
+    this.emitter.emit('healthChanged', { health, cause });
     if (health <= 0) {
       this.currentSession?.abort();
     }

@@ -92,11 +92,13 @@ Which hand is one button carrying all three answers, cycling both → left →
 right. Both hands are always drawn and the one not being read is dimmed, so
 the control shows its own state instead of naming it.
 
-A pill beside the bar carries what just happened or what is about to:
-"Counting in… 3", then the grade when the run ends. Those are the widest
-things the transport ever says, and absolutely positioned outside the bar's
-flow their width cannot move a button a thumb is aiming at, nor shift the bar
-off centre — a lesson three separate indicators taught the hard way.
+A pill beside the bar carries everything fullscreen has to say — where the run
+is, what it is counting, how it ended — and it is always there. All of that
+changes while the reader plays and all of it is wider than a button, so it is
+absolutely positioned outside the bar's flow: its width can neither move a
+button a thumb is aiming at nor shift the bar off centre. The transport row
+holds only things that do not change size, a lesson four separate indicators
+taught the hard way.
 
 In fullscreen the pace is a **percentage of the written tempo**, moved five
 points at a time. A percentage rather than a number of beats because the

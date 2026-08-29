@@ -74,19 +74,19 @@ describe('the stylesheet', () => {
     expect(perComponent.map((rule) => rule.selector)).toEqual([]);
   });
 
-  it('gives the fullscreen status a box that does not follow its text', () => {
-    // It cycles through "Idle", "Counting in... 3", "bar 12 . beat 2.5" and a
-    // grade. With only a max-width the pill grew and shrank around them, so
-    // the buttons moved under the reader's thumb as a run began.
-    const status = rules().find((rule) => rule.selector === '.focus-bar__status');
+  it('keeps everything that changes out of the transport row', () => {
+    // What fullscreen says - "Idle", "Counting in... 3", "bar 12 . beat 2.5",
+    // a grade - all changes while the reader plays and all of it is wider
+    // than a button. It is one pill, taken out of the flow, so no width it
+    // takes can move what a thumb is aiming at.
+    const notice = rules().find((rule) => rule.selector === '.focus-notice');
 
-    expect(status).toBeDefined();
-    // A width, not merely a cap: a cap alone still lets the box follow the
-    // text everywhere below it.
-    expect(status?.body).toMatch(/(^|[\s;])width\s*:/);
-    expect(status?.body).toMatch(/max-width\s*:/);
-    // Neither of them may depend on what is written in it.
-    expect(status?.body).not.toMatch(/width\s*:\s*(auto|fit-content|max-content|min-content)/);
+    expect(notice).toBeDefined();
+    expect(notice?.body).toMatch(/position\s*:\s*absolute/);
+    // Anchored past the bar's left edge, so it grows away from it.
+    expect(notice?.body).toMatch(/right\s*:\s*100%/);
+    // Nothing left inside the row that sizes itself to changing text.
+    expect(rules().some((rule) => rule.selector === '.focus-bar__status')).toBe(false);
   });
 
   it('does not name file types the reader may be unable to choose', () => {

@@ -41,7 +41,7 @@ import { SettingsRepository } from '../../src/application/SettingsRepository.js'
 import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.js';
 import type { SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
-import { AppView, describeTendency } from '../../src/ui/AppView.js';
+import { AppView, describeTendency, healthGlideMs } from '../../src/ui/AppView.js';
 import { twoBarExercise } from '../support/fixtures.js';
 import { midiToLabel } from '../../src/domain/model/Pitch.js';
 
@@ -1121,7 +1121,7 @@ describe('AppView', () => {
 
       // Orientation is not an answer: bar and beat stay.
       expect(element('position').textContent).toMatch(/^bar 1 · beat /);
-      expect(element('focus-status').textContent).toMatch(/^bar 1 · beat /);
+      expect(element('focus-notice').textContent).toMatch(/^bar 1 · beat /);
     });
 
     /**
@@ -1838,14 +1838,13 @@ describe('AppView', () => {
       await view.initialize();
       runtime.controller.updateSettings({ countInBars: 1, modeId: FLOW_MODE_ID });
       await runtime.controller.reloadExercise();
-      expect(element('focus-notice').hidden).toBe(true);
+      expect(element('focus-notice').textContent).not.toContain('Counting in');
 
       runtime.controller.start();
 
       // The widest thing the transport ever says, kept out of the row a thumb
       // is aiming at: absolutely positioned beside the bar, its width cannot
       // move the buttons nor shift the bar off centre.
-      expect(element('focus-notice').hidden).toBe(false);
       expect(element('focus-notice').textContent).toContain('Counting in');
       expect(element('focus-notice').parentElement?.id).toBe('focus-bar');
     });
@@ -1977,7 +1976,7 @@ describe('AppView', () => {
       await Promise.resolve();
       element<HTMLButtonElement>('focus-play').click();
 
-      expect(element('focus-status').textContent).toContain('bar 1');
+      expect(element('focus-notice').textContent).toContain('bar 1');
 
       const session = runtime.controller.session;
       let guard = 400;
@@ -1996,7 +1995,6 @@ describe('AppView', () => {
       // The verdict goes to the pill beside the bar, where its width is
       // nobody's business; the status says only where the run got to.
       expect(element('focus-notice').textContent).toMatch(/^[A-F] · \d+%$/);
-      expect(element('focus-notice').hidden).toBe(false);
     });
 
     it('loads a new exercise from the pill', async () => {
@@ -2051,5 +2049,78 @@ describe('describeTendency', () => {
     expect(describeTendency(0)).toBe('even');
     expect(describeTendency(-14)).toBe('even');
     expect(describeTendency(14)).toBe('even');
+  });
+});
+
+describe('pacing the survival bar', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  it('takes its pace from the gap between pulses', () => {
+    expect(healthGlideMs(120, 1_500, 1_000)).toBe(500);
+  });
+
+  it('keeps the last pace when there is nothing to measure yet', () => {
+    expect(healthGlideMs(400, 1_000, null)).toBe(400);
+  });
+
+  it('never glides so briefly that it reads as a jump', () => {
+    expect(healthGlideMs(500, 1_010, 1_000)).toBe(120);
+  });
+
+  it('is not re-timed by a step landing in the same turn as a pulse', () => {
+    // The reported fault. A pulse fires and the bar starts a glide; the step
+    // it just passed settles in the same turn. Timed from "just now" that
+    // second write is a snap, and it overwrites the glide - so the bar was
+    // smooth until steps began completing and jumped ever after.
+    //
+    // The pace is a property of the pulse, so a settlement cannot touch it:
+    // there is no call to make here, which is the point.
+    const paceFromPulses = healthGlideMs(120, 1_500, 1_000);
+
+    expect(paceFromPulses).toBe(500);
+    // And the next pulse measures from the pulse before it, not from the step.
+    expect(healthGlideMs(paceFromPulses, 2_000, 1_500)).toBe(500);
+  });
+
+  it('keeps gliding once steps start completing', async () => {
+    // The reported fault, end to end. A pulse fires and the bar starts a
+    // glide; the step it just passed settles in the same turn. Re-timed from
+    // "just now", that second write is a snap that overwrites the glide - so
+    // the bar was smooth until steps began completing and jumped ever after.
+    const rig = createRig();
+    await rig.view.initialize();
+    rig.runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, survival: true });
+    const glide = (): string => element('focus-health-fill').style.transitionDuration;
+
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000);
+      rig.runtime.controller.start();
+
+      vi.setSystemTime(2_000);
+      rig.metronome.advanceSubdivisions(1);
+      vi.setSystemTime(3_000);
+      rig.metronome.advanceSubdivisions(1);
+      expect(glide()).toBe('1000ms');
+
+      // By here the cursor has passed steps, so settlements arrive in the
+      // same turn as the pulses. The pace is the pulse's business either way.
+      for (let at = 4; at <= 8; at += 1) {
+        vi.setSystemTime(at * 1_000);
+        rig.metronome.advanceSubdivisions(1);
+      }
+
+      expect(glide()).toBe('1000ms');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never waits so long that the bar looks frozen', () => {
+    // A pulse once every four seconds is a piece slow enough that a faithful
+    // glide would look like nothing happening at all.
+    expect(healthGlideMs(120, 5_000, 1_000)).toBe(2_000);
   });
 });

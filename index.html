@@ -273,11 +273,12 @@
       <div id="focus-bar" class="focus-bar" hidden data-open="false">
         <!--
           Beside the bar rather than in it, and taken out of the flow: the
-          count-in and the grade are the widest things this ever says, and
-          absolutely positioned they cannot change the bar's size or shift it
-          off centre however long they turn out to be.
+          where the run is, what it is counting and how it ended - everything
+          fullscreen has to say. All of it changes while the reader plays and
+          all of it is wider than a button, so absolutely positioned it can
+          neither change the bar's size nor shift it off centre.
         -->
-        <div id="focus-notice" class="focus-notice" hidden></div>
+        <div id="focus-notice" class="focus-notice">Idle</div>
 
         <button id="focus-handle" type="button" class="focus-bar__handle"
           aria-controls="focus-drawer" aria-expanded="false" aria-label="More controls"></button>
@@ -306,8 +307,6 @@
               <path id="focus-listen-icon" d="M4 9v6h4l5 4V5L8 9H4zm12-.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z" />
             </svg>
           </button>
-
-          <span id="focus-status" class="focus-bar__status">Idle</span>
 
           <span class="focus-bar__tempo">
             <button id="focus-slower" type="button"

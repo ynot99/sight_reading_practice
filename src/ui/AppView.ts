@@ -229,6 +229,36 @@ function nextHand(current: number | null): number | null {
   return current === LEFT_HAND_STAFF ? RIGHT_HAND_STAFF : null;
 }
 
+/**
+ * How a step landing is drawn, and the longest a drain may take to glide.
+ *
+ * A settlement is a thing that happened, so it arrives; a drain is time
+ * passing, so it slides. The cap catches a pulse so slow that the bar would
+ * appear frozen between beats.
+ */
+const SETTLE_MS = 120;
+const MAX_GLIDE_MS = 2000;
+
+/**
+ * How fast the survival bar should be gliding, given the pulse it is on.
+ *
+ * A *pace*, not the time since the last thing happened, and that distinction
+ * is the whole bug. The pulse fires and the bar begins a glide; a step lands
+ * in the same turn and, timed from "just now", overwrote it with a snap. So
+ * the bar glided until steps started completing - which is most beats - and
+ * then jumped for the rest of the piece. What a reader sees as "smooth, then
+ * a sharp fall, then never smooth again".
+ *
+ * Everything is drawn at the drain's pace instead. A step landing only moves
+ * where the bar is heading; how fast it travels is the music's business.
+ */
+export function healthGlideMs(previousPaceMs: number, nowMs: number, lastDrainAtMs: number | null): number {
+  if (lastDrainAtMs === null) {
+    return previousPaceMs;
+  }
+  return Math.min(MAX_GLIDE_MS, Math.max(SETTLE_MS, nowMs - lastDrainAtMs));
+}
+
 /** How far the handle must travel before a drag is a drag and not a tap. */
 const DRAWER_DRAG_PX = 24;
 
@@ -339,7 +369,8 @@ export class AppView {
   private lastPosition = '';
   /** The step now due, kept so blind mode can be turned off mid-run. */
   private lastExpected: readonly number[] = [];
-  private lastHealthAtMs: number | null = null;
+  private lastDrainAtMs: number | null = null;
+  private healthPaceMs = SETTLE_MS;
   /** Whether the reader has already been given this page. */
   private hasLooked = false;
   /** A promotion waiting to be reported alongside the run that earned it. */
@@ -350,7 +381,6 @@ export class AppView {
     app: HTMLElement;
     focus: HTMLButtonElement;
     focusBar: HTMLElement;
-    focusStatus: HTMLElement;
     score: HTMLElement;
     scoreCover: HTMLElement;
     scoreCoverText: HTMLElement;
@@ -469,7 +499,6 @@ export class AppView {
       app: requireElement(doc, 'app'),
       focus: requireElement(doc, 'focus'),
       focusBar: requireElement(doc, 'focus-bar'),
-      focusStatus: requireElement(doc, 'focus-status'),
       score: requireElement(doc, 'score'),
       scoreCover: requireElement(doc, 'score-cover'),
       scoreCoverText: requireElement(doc, 'score-cover-text'),
@@ -1372,16 +1401,25 @@ export class AppView {
    * behind on the fast one. Which is the same reasoning as the drain itself -
    * everything here is measured against the music, not the clock.
    */
-  private renderHealth(health: number): void {
+  private renderHealth(health: number, cause: 'drain' | 'settle' = 'settle'): void {
     const running = this.runtime.controller.survivalRuns;
     this.el.focusHealth.hidden = !running;
     if (!running) {
       return;
     }
-    const now = Date.now();
-    const since = this.lastHealthAtMs === null ? 0 : now - this.lastHealthAtMs;
-    this.lastHealthAtMs = now;
-    this.el.focusHealthFill.style.transitionDuration = `${Math.min(2000, Math.max(80, since))}ms`;
+    // Only a drain paces a drain. Timed against "the last update of any
+    // kind", a step landing between two pulses left the next glide with
+    // almost no time to run, so the bar jumped and went on jumping until the
+    // two happened to fall apart again.
+    if (cause === 'drain') {
+      // Only a drain re-times the glide, and only a drain moves the mark: a
+      // step landing changes where the bar is going, never how fast.
+      const now = Date.now();
+      this.healthPaceMs = healthGlideMs(this.healthPaceMs, now, this.lastDrainAtMs);
+      this.lastDrainAtMs = now;
+    }
+    const duration = this.healthPaceMs;
+    this.el.focusHealthFill.style.transitionDuration = `${duration}ms`;
     this.el.focusHealthFill.style.width = `${Math.round(health * 100)}%`;
     this.el.focusHealthFill.dataset['low'] = String(health <= 0.25);
   }
@@ -1410,13 +1448,20 @@ export class AppView {
    * the widest things this ever says, and out of the bar's flow their width
    * cannot move a button a thumb is aiming at, nor shift the bar off centre.
    */
-  private showNotice(text: string | null): void {
-    this.el.focusNotice.hidden = text === null;
-    this.el.focusNotice.textContent = text ?? '';
+  private showNotice(text: string): void {
+    this.el.focusNotice.textContent = text;
   }
 
+  /**
+   * The pill beside the bar, which is the whole of what fullscreen says.
+   *
+   * Where the run is, what it is counting, how it ended: all of it changes
+   * while the reader plays, and all of it is wider than a button. Kept out of
+   * the transport row entirely, so nothing it says can move what they are
+   * reaching for.
+   */
   private renderFocusStatus(text: string): void {
-    this.el.focusStatus.textContent = text;
+    this.el.focusNotice.textContent = text;
   }
 
   /**
@@ -1466,8 +1511,8 @@ export class AppView {
     );
 
     this.subscriptions.push(
-      controller.events.on('healthChanged', ({ health }) => {
-        this.renderHealth(health);
+      controller.events.on('healthChanged', ({ health, cause }) => {
+        this.renderHealth(health, cause);
       }),
     );
 
@@ -1501,8 +1546,6 @@ export class AppView {
           // The first beat is a tick away, and an empty pill in the meantime
           // reads as something broken rather than as something about to start.
           this.showNotice('Counting in…');
-        } else if (status === 'running') {
-          this.showNotice(null);
         }
         this.renderFocusStatus(
           status === 'running' && this.lastPosition !== ''

@@ -37,8 +37,7 @@ const SETTINGS: PracticeSettings = {
   rangeToBar: 6,
   repeatRange: true,
   ladderStepId: 'rung.2b',
-  clickDropout: 'cycle-2',
-  metronomeMuted: true,
+  clickWhen: 'cycle-2',
   matchToleranceMs: 180,
   pitchClassOnly: true,
   rhythmOnly: true,
@@ -62,24 +61,36 @@ describe('practice settings codec', () => {
     expect(restored.measures).toBe(6);
     expect(restored.tempoBpm).toBe(84);
     expect(restored.countInBars).toBe(2);
-    expect(restored.metronomeMuted).toBe(true);
+    expect(restored.clickWhen).toBe('cycle-2');
     expect(restored.matchToleranceMs).toBe(180);
     expect(restored.pitchClassOnly).toBe(true);
     expect(restored.showCursor).toBe(false);
     expect(restored.blindMode).toBe(true);
-    expect(restored.clickDropout).toBe('cycle-2');
+    expect(restored.clickWhen).toBe('cycle-2');
   });
 
-  it('reads the bar count the dropout setting used to be', () => {
-    // Stored before "only the count-in" existed; it still means what it did.
-    const legacy = { ...encodePracticeSettings(SETTINGS), clickDropout: undefined };
+  it('reads the two settings this one used to be', () => {
+    const legacy = { ...encodePracticeSettings(SETTINGS), clickWhen: undefined };
+    const when = (stored: Record<string, unknown>): string | undefined =>
+      decodePracticeSettings({ ...legacy, ...stored }, KNOWN).clickWhen;
 
-    expect(decodePracticeSettings({ ...legacy, dropoutBars: 4 }, KNOWN).clickDropout).toBe(
-      'cycle-4',
-    );
-    expect(decodePracticeSettings({ ...legacy, dropoutBars: 0 }, KNOWN).clickDropout).toBe('never');
+    // The trap in the old names: `clickDropout: 'never'` meant the click never
+    // *drops out* - it always sounds - while the new `never` means it never
+    // sounds. Reading them by their old field name keeps the two apart.
+    expect(when({ clickDropout: 'never' })).toBe('always');
+    expect(when({ clickDropout: 'count-in-only' })).toBe('count-in-only');
+    expect(when({ clickDropout: 'cycle-2' })).toBe('cycle-2');
+
+    // Mute wins where both are set: someone who silenced the metronome meant
+    // silence, whatever they had chosen about dropping out.
+    expect(when({ clickDropout: 'cycle-2', metronomeMuted: true })).toBe('never');
+    expect(when({ metronomeMuted: false, clickDropout: 'never' })).toBe('always');
+
+    // And the bar count the dropout was before either of them.
+    expect(when({ dropoutBars: 4 })).toBe('cycle-4');
+    expect(when({ dropoutBars: 0 })).toBe('always');
     // A cycle length the menu never offered is dropped rather than invented.
-    expect(decodePracticeSettings({ ...legacy, dropoutBars: 3 }, KNOWN).clickDropout).toBeUndefined();
+    expect(when({ dropoutBars: 3 })).toBeUndefined();
   });
 
   it('drops a preset or mode that no longer exists', () => {
@@ -103,7 +114,7 @@ describe('practice settings codec', () => {
         countInBars: -1,
         key: { fifths: 99, mode: 'major' },
         timeSignature: '4/7',
-        metronomeMuted: 'yes',
+        clickWhen: 'whenever',
       },
       KNOWN,
     );
@@ -113,7 +124,7 @@ describe('practice settings codec', () => {
     expect(restored.countInBars).toBeUndefined();
     expect(restored.key).toBeUndefined();
     expect(restored.timeSignature).toBeUndefined();
-    expect(restored.metronomeMuted).toBeUndefined();
+    expect(restored.clickWhen).toBeUndefined();
     expect(restored.presetId).toBe('triads-left-hand');
   });
 

@@ -175,7 +175,7 @@ function createRig(
     ladder,
     initialSettings: {
       countInBars: 0,
-      metronomeMuted: true,
+      clickWhen: 'never',
       matchToleranceMs: Number.POSITIVE_INFINITY,
       ...restored.practice,
     },
@@ -267,7 +267,7 @@ describe('AppView', () => {
     expect(element('rhythm-description').textContent).not.toBe('');
     expect(element<HTMLSelectElement>('click').options).toHaveLength(4);
     expect(element('click-description').textContent).not.toBe('');
-    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(5);
+    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(6);
     expect(element('dropout-description').textContent).not.toBe('');
     expect(element('mode-description').textContent).toContain('waits');
     expect(element<HTMLSelectElement>('scoring').options).toHaveLength(3);
@@ -606,7 +606,7 @@ describe('AppView', () => {
     select.dispatchEvent(new Event('change'));
     await Promise.resolve();
 
-    expect(runtime.controller.settings.clickDropout).toBe('cycle-2');
+    expect(runtime.controller.settings.clickWhen).toBe('cycle-2');
     expect(element('dropout-description').textContent).toContain('2 bars');
     expect(renderer.loadCount).toBe(before);
   });
@@ -620,7 +620,7 @@ describe('AppView', () => {
     select.dispatchEvent(new Event('change'));
     await Promise.resolve();
 
-    expect(runtime.controller.settings.clickDropout).toBe('count-in-only');
+    expect(runtime.controller.settings.clickWhen).toBe('count-in-only');
     // This rig starts with no count-in, so the choice asks for pure silence.
     expect(element('dropout-description').textContent).toContain('nothing will sound');
 

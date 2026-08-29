@@ -85,27 +85,39 @@ export interface MetronomeSilenceFrom {
 export type MetronomeDropout = MetronomeCycleDropout | MetronomeSilenceFrom;
 
 /**
- * The reader-facing menu of the above.
+ * When the reader hears the click at all.
+ *
+ * One question, one answer. It used to be two settings - a "mute" switch and
+ * a "drop the click" menu - in different parts of the page, both named for
+ * what they take away. A reader looking for "play it only while counting me
+ * in" had to find the second option of the second one, and reasonably
+ * concluded it did not exist.
  *
  * Its own axis, separate from {@link ClickPattern}: the pattern says *what a
  * click marks* and governs the count-in too, while this says *when clicks
- * sound at all*. Folding "only the count-in" into the pattern list would
- * leave the count-in's own pattern undefined, which is the tell that they are
- * two questions.
+ * sound*. Folding "only the count-in" into the pattern list would leave the
+ * count-in's own pattern undefined, which is the tell that they are two
+ * questions.
  */
-export const CLICK_DROPOUTS = [
-  'never',
+export const CLICK_WHEN = [
+  'always',
+  'count-in-only',
   'cycle-1',
   'cycle-2',
   'cycle-4',
-  'count-in-only',
+  'never',
 ] as const;
 
-export type ClickDropout = (typeof CLICK_DROPOUTS)[number];
+export type ClickWhen = (typeof CLICK_WHEN)[number];
+
+/** Silent throughout - the pulse still runs, since the loop rides on it. */
+export function clickIsSilent(when: ClickWhen): boolean {
+  return when === 'never';
+}
 
 /** Bars in one sounding half of a cycle, or `null` when there is no cycle. */
-export function dropoutCycleBars(dropout: ClickDropout): number | null {
-  switch (dropout) {
+export function dropoutCycleBars(when: ClickWhen): number | null {
+  switch (when) {
     case 'cycle-1':
       return 1;
     case 'cycle-2':
@@ -123,14 +135,17 @@ export function dropoutCycleBars(dropout: ClickDropout): number | null {
  * `null` means the click sounds throughout, which is what the metronome
  * expects for "no dropout at all".
  */
-export function resolveDropout(dropout: ClickDropout, fromBar: number): MetronomeDropout | null {
-  if (dropout === 'never') {
+export function resolveDropout(when: ClickWhen, fromBar: number): MetronomeDropout | null {
+  // `always` has nothing to drop, and `never` is answered by muting rather
+  // than by a dropout - a metronome told to fall silent everywhere would be
+  // a cycle with no sounding half.
+  if (when === 'always' || when === 'never') {
     return null;
   }
-  if (dropout === 'count-in-only') {
+  if (when === 'count-in-only') {
     return { kind: 'silent-from', fromBar };
   }
-  const bars = dropoutCycleBars(dropout);
+  const bars = dropoutCycleBars(when);
   return bars === null ? null : { kind: 'cycle', bars, fromBar };
 }
 

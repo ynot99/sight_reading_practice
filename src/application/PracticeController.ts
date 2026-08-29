@@ -17,7 +17,7 @@ import type { IMidiSource } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
-import type { ClickDropout, ClickPattern } from './ports/IMetronome.js';
+import { clickIsSilent, type ClickWhen, type ClickPattern } from './ports/IMetronome.js';
 import type {
   PlayedNote,
   IPlayedNoteOverlay,
@@ -101,7 +101,6 @@ export interface PracticeSettings {
   readonly tempoBpm: number;
   /** Bars of click before the first note. */
   readonly countInBars: number;
-  readonly metronomeMuted: boolean;
   /**
    * How much of the pulse is sounded.
    *
@@ -144,7 +143,7 @@ export interface PracticeSettings {
    * count-in" cannot be one of its values without leaving the count-in's own
    * pattern unsaid.
    */
-  readonly clickDropout: ClickDropout;
+  readonly clickWhen: ClickWhen;
   readonly matchToleranceMs: number;
   readonly pitchClassOnly: boolean;
   /**
@@ -335,14 +334,13 @@ export class PracticeController {
       measures: preset.defaults.measures,
       tempoBpm: preset.defaults.tempoBpm,
       countInBars: 1,
-      metronomeMuted: false,
       clickPattern: 'pulse',
       handStaff: null,
       rangeFromBar: null,
       rangeToBar: null,
       repeatRange: false,
       ladderStepId: null,
-      clickDropout: 'never',
+      clickWhen: 'always',
       matchToleranceMs: 250,
       pitchClassOnly: false,
       rhythmOnly: false,
@@ -636,7 +634,7 @@ export class PracticeController {
     this.deps.cursor.show();
     player.start(timeline, {
       staffNumber: this.currentSettings.handStaff,
-      clickAudible: !this.currentSettings.metronomeMuted,
+      clickAudible: !clickIsSilent(this.currentSettings.clickWhen),
     });
   }
 
@@ -790,8 +788,7 @@ export class PracticeController {
         countInBars: this.currentSettings.countInBars,
         expectedStaff: this.currentSettings.handStaff,
         click: this.currentSettings.clickPattern,
-        clickDropout: this.currentSettings.clickDropout,
-        metronomeMuted: this.currentSettings.metronomeMuted,
+        clickWhen: this.currentSettings.clickWhen,
       },
     });
 

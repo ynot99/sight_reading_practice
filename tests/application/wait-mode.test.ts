@@ -14,7 +14,7 @@ function waitHarness(overrides: Partial<Parameters<typeof createHarness>[0]> = {
     mode: new WaitMode(),
     options: {
       countInBars: 0,
-      metronomeMuted: true,
+      clickWhen: 'never',
       matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
     },
     ...overrides,
@@ -38,7 +38,7 @@ describe('Wait mode', () => {
     const harness = waitHarness({
       options: {
         countInBars: 1,
-        metronomeMuted: true,
+        clickWhen: 'never',
         matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
       },
     });
@@ -60,7 +60,7 @@ describe('Wait mode', () => {
     const harness = waitHarness({
       options: {
         countInBars: 0,
-        metronomeMuted: true,
+        clickWhen: 'never',
         expectedStaff: 2,
         matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
       },
@@ -80,7 +80,7 @@ describe('Wait mode', () => {
     const harness = waitHarness({
       options: {
         countInBars: 0,
-        metronomeMuted: true,
+        clickWhen: 'never',
         matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false, anyPitch: true },
       },
     });
@@ -208,7 +208,7 @@ describe('Wait mode', () => {
         mode: new WaitMode(),
         options: {
           countInBars: 0,
-          metronomeMuted: true,
+          clickWhen: 'never',
           matchPolicy: { toleranceMs: 200, pitchClassOnly: false },
         },
       });
@@ -231,7 +231,7 @@ describe('Wait mode', () => {
         mode: new WaitMode(),
         options: {
           countInBars: 0,
-          metronomeMuted: true,
+          clickWhen: 'never',
           matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: true },
         },
       });
@@ -359,7 +359,7 @@ describe('waiting while practising one hand', () => {
       mode: new WaitMode(),
       options: {
         countInBars: 0,
-        metronomeMuted: true,
+        clickWhen: 'never',
         expectedStaff: 1,
         matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
       },

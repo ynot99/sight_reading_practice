@@ -65,7 +65,7 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
       // can compare exact numbers instead of chasing floating-point dust.
       tempoBpm: 60,
       countInBars: 0,
-      metronomeMuted: true,
+      clickWhen: 'never',
       matchToleranceMs: Number.POSITIVE_INFINITY,
       ...initial,
     },

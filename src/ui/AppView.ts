@@ -5,10 +5,10 @@ import type { PracticeSession } from '../application/session/PracticeSession.js'
 import type { SessionStatus } from '../application/session/SessionState.js';
 import type { MidiConnectionStatus, MidiEvent } from '../application/ports/IMidiSource.js';
 import {
-  CLICK_DROPOUTS,
+  CLICK_WHEN,
   CLICK_PATTERNS,
   dropoutCycleBars,
-  type ClickDropout,
+  type ClickWhen,
   type ClickPattern,
 } from '../application/ports/IMetronome.js';
 import type { SessionScore } from '../domain/scoring/IScoringStrategy.js';
@@ -110,26 +110,30 @@ const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
  * standard exercise, and it makes each one a number the reader can reason
  * about.
  */
-const DROPOUT_LABELS: Readonly<Record<ClickDropout, string>> = {
-  never: 'Never',
+const CLICK_WHEN_LABELS: Readonly<Record<ClickWhen, string>> = {
+  always: 'All the way through',
+  'count-in-only': 'Only the count-in',
   'cycle-1': '1 bar on, 1 off',
   'cycle-2': '2 bars on, 2 off',
   'cycle-4': '4 bars on, 4 off',
-  'count-in-only': 'Only the count-in',
+  never: 'Never',
 };
 
-function dropoutDescription(dropout: ClickDropout, countInBars: number): string {
-  if (dropout === 'never') {
+function dropoutDescription(when: ClickWhen, countInBars: number): string {
+  if (when === 'always') {
     return 'The click plays all the way through.';
   }
-  if (dropout === 'count-in-only') {
+  if (when === 'never') {
+    return 'No click at all. The beat still runs the page; you simply do not hear it.';
+  }
+  if (when === 'count-in-only') {
     // Chosen together with no count-in, this asks for silence and nothing
     // else, which is worth saying rather than leaving to be discovered.
     return countInBars > 0
       ? 'You are given the tempo and then left with it for the whole run.'
       : 'There is no count-in to give you the tempo, so nothing will sound at all.';
   }
-  const bars = dropoutCycleBars(dropout) ?? 0;
+  const bars = dropoutCycleBars(when) ?? 0;
   return (
     `The click leaves you alone for ${bars} bar${bars === 1 ? '' : 's'} at a time. ` +
     'You find out on its return whether you drifted.'
@@ -299,8 +303,8 @@ function isFormControl(element: Element | null): boolean {
   );
 }
 
-function readClickDropout(value: string): ClickDropout {
-  return CLICK_DROPOUTS.includes(value as ClickDropout) ? (value as ClickDropout) : 'never';
+function readClickWhen(value: string): ClickWhen {
+  return CLICK_WHEN.includes(value as ClickWhen) ? (value as ClickWhen) : 'always';
 }
 
 function readSampleLoading(value: string): SampleLoading {
@@ -498,7 +502,6 @@ export class AppView {
     instrumentVolumeValue: HTMLOutputElement;
     learnKnob: HTMLButtonElement;
     knobStatus: HTMLElement;
-    metronomeMuted: HTMLInputElement;
     pitchClass: HTMLInputElement;
     rhythmOnly: HTMLInputElement;
     audioFeedback: HTMLInputElement;
@@ -619,7 +622,6 @@ export class AppView {
       instrumentVolumeValue: requireElement(doc, 'instrument-volume-value'),
       learnKnob: requireElement(doc, 'learn-knob'),
       knobStatus: requireElement(doc, 'knob-status'),
-      metronomeMuted: requireElement(doc, 'metronome-muted'),
       pitchClass: requireElement(doc, 'pitch-class'),
       rhythmOnly: requireElement(doc, 'rhythm-only'),
       audioFeedback: requireElement(doc, 'audio-feedback'),
@@ -833,8 +835,8 @@ export class AppView {
     );
     fillSelect(
       this.el.dropout,
-      CLICK_DROPOUTS.map((choice) => ({ value: choice, label: DROPOUT_LABELS[choice] })),
-      this.runtime.controller.settings.clickDropout,
+      CLICK_WHEN.map((choice) => ({ value: choice, label: CLICK_WHEN_LABELS[choice] })),
+      this.runtime.controller.settings.clickWhen,
     );
     fillSelect(
       this.el.showPlayed,
@@ -906,7 +908,7 @@ export class AppView {
     });
 
     this.listen(this.el.dropout, 'change', () => {
-      controller.updateSettings({ clickDropout: readClickDropout(this.el.dropout.value) });
+      controller.updateSettings({ clickWhen: readClickWhen(this.el.dropout.value) });
       this.syncControlsFromSettings();
     });
 
@@ -1055,10 +1057,6 @@ export class AppView {
         knob.learn();
       }
       this.describeKnob();
-    });
-
-    this.listen(this.el.metronomeMuted, 'change', () => {
-      controller.updateSettings({ metronomeMuted: this.el.metronomeMuted.checked });
     });
 
     this.listen(this.el.survival, 'change', () => {
@@ -1937,7 +1935,7 @@ export class AppView {
     this.describeHands(settings.handStaff);
     this.el.click.value = settings.clickPattern;
     this.el.clickDescription.textContent = CLICK_DESCRIPTIONS[settings.clickPattern];
-    this.el.dropout.value = settings.clickDropout;
+    this.el.dropout.value = settings.clickWhen;
     this.describeDropout();
     this.el.rangeFrom.value = settings.rangeFromBar === null ? '' : String(settings.rangeFromBar);
     this.el.rangeTo.value = settings.rangeToBar === null ? '' : String(settings.rangeToBar);
@@ -1961,7 +1959,6 @@ export class AppView {
     this.el.focusMarks.setAttribute('aria-pressed', String(settings.playedNotes !== 'hidden'));
     this.el.blindMode.checked = settings.blindMode;
     this.renderExpected();
-    this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.survival.checked = settings.survival;
@@ -2001,7 +1998,7 @@ export class AppView {
   private describeDropout(): void {
     const settings = this.runtime.controller.settings;
     this.el.dropoutDescription.textContent = dropoutDescription(
-      settings.clickDropout,
+      settings.clickWhen,
       settings.countInBars,
     );
   }

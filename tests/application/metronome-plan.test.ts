@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   clicksPerPulse,
-  type ClickDropout,
+  type ClickWhen,
   type ClickPattern,
 } from '../../src/application/ports/IMetronome.js';
 import {
@@ -109,11 +109,11 @@ describe('subdivisionsPerPulseFor', () => {
 });
 
 describe('dropping the click', () => {
-  function configFor(clickDropout: ClickDropout, countInBars: number) {
+  function configFor(clickWhen: ClickWhen, countInBars: number) {
     const harness = createHarness({
       exercise: twoBarExercise(),
       mode: new FlowMode(),
-      options: { countInBars, metronomeMuted: false, click: 'pulse', clickDropout },
+      options: { countInBars, click: 'pulse', clickWhen },
     });
     harness.session.start();
     return harness.metronome.currentConfig;
@@ -140,7 +140,7 @@ describe('count-in', () => {
     const harness = createHarness({
       exercise,
       mode: new FlowMode(),
-      options: { countInBars: bars, metronomeMuted: true, click: 'pulse' },
+      options: { countInBars: bars, clickWhen: 'never', click: 'pulse' },
     });
     harness.session.start();
     harness.metronome.advanceSubdivisions(32);
@@ -160,7 +160,7 @@ describe('count-in', () => {
     const harness = createHarness({
       exercise: twoBarExercise(),
       mode: new WaitMode(),
-      options: { countInBars: 0, metronomeMuted: true, click: 'pulse' },
+      options: { countInBars: 0, clickWhen: 'never', click: 'pulse' },
     });
     harness.session.start();
     expect(harness.session.status).toBe('running');

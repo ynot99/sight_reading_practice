@@ -96,7 +96,7 @@ function createController(
     ...(providerFor === undefined ? {} : { providerFor }),
     initialSettings: {
       countInBars: 0,
-      metronomeMuted: true,
+      clickWhen: 'never',
       matchToleranceMs: Number.POSITIVE_INFINITY,
       ...extraSettings,
     },
@@ -525,7 +525,7 @@ describe('PracticeController', () => {
 
   it('passes the practice settings through to the session', async () => {
     const { controller, metronome } = createController();
-    controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 1, metronomeMuted: true });
+    controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 1, clickWhen: 'never' });
     await controller.loadNewExercise();
 
     const session = controller.start();

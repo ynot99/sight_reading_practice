@@ -21,7 +21,7 @@ function flowHarness(): Harness {
     scoring: new TimingWeightedScoringStrategy(),
     options: {
       countInBars: COUNT_IN_BARS,
-      metronomeMuted: true,
+      clickWhen: 'never',
       // Sixteenth-note resolution: the loop ticks at least as often as the
       // chosen click, and this exercise's quarters would otherwise need only
       // one tick per beat.
@@ -267,7 +267,7 @@ describe('Flow mode', () => {
         mode: new FlowMode(),
         options: {
           countInBars: COUNT_IN_BARS,
-          metronomeMuted: true,
+          clickWhen: 'never',
           click: 'subdivision',
           matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
         },

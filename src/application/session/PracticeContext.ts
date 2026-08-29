@@ -2,7 +2,7 @@ import type { ChordMatcher, MatchPolicy, NoteVerdict } from '../../domain/matchi
 import type { StepStatus } from '../../domain/scoring/PerformanceReport.js';
 import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timeline.js';
 import type { IClock } from '../ports/IClock.js';
-import type { ClickDropout, ClickPattern, MetronomeTick } from '../ports/IMetronome.js';
+import type { ClickWhen, ClickPattern, MetronomeTick } from '../ports/IMetronome.js';
 
 export interface SessionOptions {
   /** How simultaneous presses are collected into chords. */
@@ -32,9 +32,7 @@ export interface SessionOptions {
    * you drifted is the timekeeping exercise, and it is the one thing a
    * metronome cannot teach while it is playing.
    */
-  readonly clickDropout: ClickDropout;
-  /** Run the pulse without sounding it. */
-  readonly metronomeMuted: boolean;
+  readonly clickWhen: ClickWhen;
   /**
    * How far before a beat a press still counts as aimed at it.
    *
@@ -50,8 +48,7 @@ export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   countInBars: 1,
   expectedStaff: null,
   click: 'pulse',
-  clickDropout: 'never',
-  metronomeMuted: false,
+  clickWhen: 'always',
   earlyWindowMs: 120,
 };
 

@@ -4,9 +4,9 @@ import type { PracticeSettings } from './PracticeController.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { SAMPLE_LOADING_MODES, type SampleLoading } from './ports/IPitchPlayer.js';
 import {
-  CLICK_DROPOUTS,
+  CLICK_WHEN,
   CLICK_PATTERNS,
-  type ClickDropout,
+  type ClickWhen,
   type ClickPattern,
 } from './ports/IMetronome.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from './PracticeController.js';
@@ -104,25 +104,40 @@ function readClickPattern(value: unknown): ClickPattern | undefined {
 }
 
 /**
- * The dropout choice, accepting the bar count this setting used to be.
+ * When the click sounds, accepting the two settings this used to be.
  *
- * A stored `dropoutBars: 2` predates the count-in-only option and means the
- * same thing it always did; dropping it would quietly reset the click of
- * anyone who had set one.
+ * A mute switch and a dropout menu answered one question between them, so a
+ * stored device carries either, both, or the bar count the dropout was before
+ * that. Mute wins where both are set: someone who silenced the metronome
+ * meant silence, whatever they had chosen about dropping out.
+ *
+ * Note the trap in the old names. `clickDropout: 'never'` meant the click
+ * never *drops out* - it always sounds - while the new `never` means it never
+ * sounds. Reading them by their old field name is what keeps the two apart.
  */
-function readClickDropout(value: unknown, legacyBars: unknown): ClickDropout | undefined {
-  if (CLICK_DROPOUTS.includes(value as ClickDropout)) {
-    return value as ClickDropout;
+function readClickWhen(value: unknown, stored: Record<string, unknown>): ClickWhen | undefined {
+  if (CLICK_WHEN.includes(value as ClickWhen)) {
+    return value as ClickWhen;
   }
-  const bars = readInteger(legacyBars, 0, 8);
+  if (readBoolean(stored['metronomeMuted']) === true) {
+    return 'never';
+  }
+  const dropout = stored['clickDropout'];
+  if (dropout === 'never') {
+    return 'always';
+  }
+  if (dropout === 'count-in-only' || CLICK_WHEN.includes(dropout as ClickWhen)) {
+    return dropout as ClickWhen;
+  }
+  const bars = readInteger(stored['dropoutBars'], 0, 8);
   if (bars === undefined) {
     return undefined;
   }
   const migrated = `cycle-${bars}`;
   return bars === 0
-    ? 'never'
-    : CLICK_DROPOUTS.includes(migrated as ClickDropout)
-      ? (migrated as ClickDropout)
+    ? 'always'
+    : CLICK_WHEN.includes(migrated as ClickWhen)
+      ? (migrated as ClickWhen)
       : undefined;
 }
 
@@ -227,8 +242,7 @@ export function decodePracticeSettings(
       value['ladderStepId'] === null
         ? null
         : readId(value['ladderStepId'], known.ladderStepIds ?? []),
-    clickDropout: readClickDropout(value['clickDropout'], value['dropoutBars']),
-    metronomeMuted: readBoolean(value['metronomeMuted']),
+    clickWhen: readClickWhen(value['clickWhen'], value),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
     pitchClassOnly: readBoolean(value['pitchClassOnly']),
     rhythmOnly: readBoolean(value['rhythmOnly']),
@@ -259,8 +273,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     rangeToBar: settings.rangeToBar,
     repeatRange: settings.repeatRange,
     ladderStepId: settings.ladderStepId,
-    clickDropout: settings.clickDropout,
-    metronomeMuted: settings.metronomeMuted,
+    clickWhen: settings.clickWhen,
     // `Infinity` has no JSON representation; the slider cannot reach it anyway.
     matchToleranceMs: Number.isFinite(settings.matchToleranceMs)
       ? settings.matchToleranceMs

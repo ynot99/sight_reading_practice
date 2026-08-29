@@ -492,3 +492,89 @@ describe('a chord the writer marked to be rolled', () => {
     expect(harness.of('noteJudged').at(-1)?.remaining).toEqual([MIDI.C3]);
   });
 });
+
+describe('a note the other hand was going to play', () => {
+  it('is neither right nor wrong, because the page does print it', () => {
+    // Practising one hand narrows what is demanded but not what is printed,
+    // and the two staves are the engraver's division of the music rather than
+    // the player's. An inner voice written on the lower staff is ordinary,
+    // and taking it with the right hand is reading the page correctly - yet
+    // it was marked in red for playing what was in front of the reader.
+    const harness = createHarness({
+      exercise: twoBarExercise(),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        expectedStaff: 1,
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+      },
+    });
+    harness.session.start();
+
+    // C3 is the left hand's note in this step; C4 is the right hand's.
+    harness.midi.noteOn(MIDI.C3, 0);
+
+    expect(harness.of('noteJudged').at(-1)?.verdict).toBe('other-hand');
+    // Still waiting for the note it did ask for.
+    expect(harness.session.currentIndex).toBe(0);
+  });
+
+  it('costs the reader nothing in the report', () => {
+    const harness = createHarness({
+      exercise: twoBarExercise(),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        expectedStaff: 1,
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+      },
+    });
+    harness.session.start();
+
+    harness.midi.noteOn(MIDI.C3, 0);
+    harness.midi.noteOn(MIDI.C4, 10);
+
+    const [first] = harness.of('stepCompleted');
+    expect(first?.result.status).toBe('correct');
+    expect(first?.result.wrong).toEqual([]);
+  });
+
+  it('still calls a note that is not on the page wrong', () => {
+    // The freedom is about the printed page, not about accuracy: a note
+    // nobody wrote is still a note nobody wrote.
+    const harness = createHarness({
+      exercise: twoBarExercise(),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        expectedStaff: 1,
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+      },
+    });
+    harness.session.start();
+
+    harness.midi.noteOn(MIDI.F5, 0);
+
+    expect(harness.of('noteJudged').at(-1)?.verdict).toBe('wrong');
+  });
+
+  it('leaves both hands alone, where everything printed is asked for', () => {
+    const harness = createHarness({
+      exercise: twoBarExercise(),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+      },
+    });
+    harness.session.start();
+
+    harness.midi.noteOn(MIDI.C3, 0);
+
+    expect(harness.of('noteJudged').at(-1)?.verdict).toBe('correct');
+  });
+});

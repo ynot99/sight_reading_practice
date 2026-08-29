@@ -560,7 +560,30 @@ export class PracticeSession {
     this.emitter.emit('countIn', { beatsRemaining });
   }
 
-  private judgeNote(midi: number, verdict: NoteVerdict, deviationMs: number | null): void {
+  /**
+   * Whether a press the run did not ask for is on the page all the same.
+   *
+   * Practising one hand narrows what is demanded but not what is *printed*,
+   * and the two staves are the engraver's division of the music rather than
+   * the player's. An inner voice written on the lower staff is ordinary, and
+   * a reader taking it with the right hand is reading the page correctly -
+   * yet it was marked as a wrong note, in red, for playing what was in front
+   * of them.
+   *
+   * Only this step's notes: re-striking something the other hand is already
+   * holding is a different act, and the page is not asking for it.
+   */
+  private belongsToTheOtherHand(midi: number): boolean {
+    const step = this.currentStep;
+    if (step === null || this.options.expectedStaff === null) {
+      return false;
+    }
+    return step.expectedMidi.includes(midi) && !this.expectedAt(step).includes(midi);
+  }
+
+  private judgeNote(midi: number, rawVerdict: NoteVerdict, deviationMs: number | null): void {
+    const verdict: NoteVerdict =
+      rawVerdict === 'wrong' && this.belongsToTheOtherHand(midi) ? 'other-hand' : rawVerdict;
     if (verdict === 'wrong') {
       this.stepWrongNotes.push(midi);
     }

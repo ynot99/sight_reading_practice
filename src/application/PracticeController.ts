@@ -902,7 +902,9 @@ export class PracticeController {
         const mark = {
           stepIndex,
           midi,
-          correct: verdict === 'correct',
+          // Right against the page, which is what the mark is about: a note
+          // the other hand was going to play was read correctly.
+          correct: verdict !== 'wrong',
           // Measured now, not at the end: the offset is a fraction of the gap
           // to the neighbouring note, and it is only known while the run
           // still knows the tempo it was played at.

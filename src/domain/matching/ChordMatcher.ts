@@ -29,7 +29,15 @@ export const DEFAULT_MATCH_POLICY: MatchPolicy = {
   pitchClassOnly: false,
 };
 
-export type NoteVerdict = 'correct' | 'duplicate' | 'wrong';
+/**
+ * What became of one press.
+ *
+ * `other-hand` is never returned by the matcher, which is only ever told what
+ * *this* run expects and cannot know the rest of the page. The session, which
+ * narrowed that set in the first place, is the only thing that can tell a
+ * note the reader invented from a note the other hand was going to play.
+ */
+export type NoteVerdict = 'correct' | 'duplicate' | 'wrong' | 'other-hand';
 
 export interface MatchOutcome {
   readonly verdict: NoteVerdict;

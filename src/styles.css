@@ -319,6 +319,15 @@ progress {
   color: var(--text-muted);
 }
 
+/*
+ * On the page, but not this hand's to play. Neither right nor wrong: the
+ * reader read the printed music correctly, and this run simply was not asking
+ * for that half of it.
+ */
+.log li[data-verdict='other-hand'] {
+  color: var(--pending);
+}
+
 .result {
   border-top: 1px solid var(--border);
   padding-top: 10px;

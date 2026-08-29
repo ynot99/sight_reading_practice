@@ -357,6 +357,39 @@ describe('PracticeController', () => {
     expect(controller.settings.tempoBpm).not.toBe(32);
   });
 
+  it('draws a note taken early as right, and as displaced', async () => {
+    // The whole chain, which is where it was broken: an early press has to
+    // reach the page as *correct* before the paler green it is drawn in can
+    // mean anything. Called a wrong note it went to the page in red, and the
+    // reader was told they had played something they had not.
+    const { controller, renderer, midi, metronome, clock } = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      countInBars: 0,
+      matchToleranceMs: 250,
+    });
+    await controller.loadNewExercise();
+    controller.start();
+    // The music starts here; the first beat is open and the second is not.
+    metronome.advanceSubdivisions(1);
+    const secondBeat = controller.currentTimeline?.at(1)?.expectedMidi ?? [];
+    expect(secondBeat.length).toBeGreaterThan(0);
+
+    // Its note, taken three tenths of a second before it is due - nearer to
+    // its own beat than to the one still open.
+    clock.set(clock.now() + 700);
+    for (const midiNote of secondBeat) {
+      midi.noteOn(midiNote, clock.now());
+    }
+    metronome.advanceSubdivisions(1);
+
+    const early = renderer.played.at(-1);
+    expect(early?.midi).toBe(secondBeat[0]);
+    expect(early?.correct).toBe(true);
+    // Displaced is what makes it paler: the offset is the only thing the
+    // drawing reads, so the colour and the position can never disagree.
+    expect(early?.offset).toBeLessThan(0);
+  });
+
   it('puts a drilled passage back onto the whole piece', async () => {
     // Reported bars are counted from whatever was being practised. Drilling a
     // second time inside a passage must not walk backwards through the score.

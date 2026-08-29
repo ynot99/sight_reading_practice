@@ -74,6 +74,21 @@ describe('the stylesheet', () => {
     expect(perComponent.map((rule) => rule.selector)).toEqual([]);
   });
 
+  it('gives the fullscreen status a box that does not follow its text', () => {
+    // It cycles through "Idle", "Counting in... 3", "bar 12 . beat 2.5" and a
+    // grade. With only a max-width the pill grew and shrank around them, so
+    // the buttons moved under the reader's thumb as a run began.
+    const status = rules().find((rule) => rule.selector === '.focus-bar__status');
+
+    expect(status).toBeDefined();
+    // A width, not merely a cap: a cap alone still lets the box follow the
+    // text everywhere below it.
+    expect(status?.body).toMatch(/(^|[\s;])width\s*:/);
+    expect(status?.body).toMatch(/max-width\s*:/);
+    // Neither of them may depend on what is written in it.
+    expect(status?.body).not.toMatch(/width\s*:\s*(auto|fit-content|max-content|min-content)/);
+  });
+
   it('covers every element the markup starts hidden', () => {
     // A list, so that adding a hidden element to the page cannot silently
     // rely on a guard that only some components have.

@@ -613,14 +613,25 @@ select {
   max-width: calc(100vw - 24px);
 }
 
+/*
+ * A fixed box, because what it says changes and the bar must not.
+ *
+ * It cycles through "Idle", "Counting in... 3", "bar 12 . beat 2.5" and a
+ * grade, and with only a `max-width` the pill grew and shrank around them -
+ * the buttons moving under the reader's thumb at the very moment a run
+ * begins. Both of these widths are content-independent, so the used width is
+ * too, and anything longer is clipped rather than allowed to push.
+ */
 .focus-bar__status {
   padding: 0 10px;
   color: var(--text-muted);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 20ch;
   max-width: 42vw;
 }
 

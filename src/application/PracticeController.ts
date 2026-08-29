@@ -26,7 +26,7 @@ import type {
   IScoreRenderer,
   IScoreZoom,
 } from './ports/IScoreRenderer.js';
-import { clefAtMeasure, keyAtMeasure, measureCount } from '../domain/model/Exercise.js';
+import { barNumberOf, clefAtMeasure, keyAtMeasure, measureCount } from '../domain/model/Exercise.js';
 import { sliceExercise } from '../domain/model/exerciseSlice.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
@@ -377,6 +377,31 @@ export class PracticeController {
   }
 
   /**
+   * What a bar of the loaded exercise is called in the score it came from.
+   *
+   * Everything derived from the exercise counts bars from zero, including the
+   * timeline and the report, so anything that shows a bar to the reader has to
+   * come back through here. Read from the exercise rather than from the range
+   * in the settings: the two disagree from the moment the reader edits the
+   * range until the reload, and the page is showing the exercise.
+   */
+  barNumber(measureIndex: number): number {
+    return this.exercise === null ? measureIndex + 1 : barNumberOf(this.exercise, measureIndex);
+  }
+
+  /**
+   * How many bars there are to choose a passage from.
+   *
+   * The opened score's own length, or - with nothing opened - the number of
+   * bars the settings ask for, since that is the whole of what there will be.
+   */
+  get wholePieceBars(): number {
+    return this.openedScore === null
+      ? this.currentSettings.measures
+      : measureCount(this.openedScore);
+  }
+
+  /**
    * Applies settings.
    *
    * Changing the preset adopts that preset's defaults for anything the caller
@@ -657,8 +682,7 @@ export class PracticeController {
     if (found === null) {
       return null;
     }
-    const offset = (this.currentSettings.rangeFromBar ?? 1) - 1;
-    const passage = { fromBar: found.fromBar + offset, toBar: found.toBar + offset };
+    const passage = { fromBar: this.barNumber(found.fromBar - 1), toBar: this.barNumber(found.toBar - 1) };
     this.updateSettings({ rangeFromBar: passage.fromBar, rangeToBar: passage.toBar });
     return passage;
   }
@@ -685,10 +709,7 @@ export class PracticeController {
     if (step === null || step === undefined) {
       return { fromBar: this.currentSettings.rangeFromBar, toBar: this.currentSettings.rangeToBar };
     }
-    // Bars are reported against whatever is on screen, which may already be a
-    // passage; put them back onto the whole piece before they become one.
-    const offset = (this.currentSettings.rangeFromBar ?? 1) - 1;
-    const bar = step.measureIndex + 1 + offset;
+    const bar = this.barNumber(step.measureIndex);
     const from = this.currentSettings.rangeFromBar;
 
     if (from === bar && this.currentSettings.rangeToBar === null) {

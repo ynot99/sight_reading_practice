@@ -66,6 +66,7 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
       timeSignature: request.timeSignature,
       tempoBpm: request.tempoBpm,
       staves,
+      firstBarNumber: 1,
       metadata: { generatorId: this.id, seed },
     };
 

@@ -4,7 +4,7 @@ import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
 import type { Duration } from '../model/Duration.js';
 import type { Exercise, MusicalEntry, PedalMark, StaffPart } from '../model/Exercise.js';
 import type { KeySignature } from '../model/KeySignature.js';
-import { keyAtMeasure, tupletPositions, validateExercise } from '../model/Exercise.js';
+import { barNumberOf, keyAtMeasure, tupletPositions, validateExercise } from '../model/Exercise.js';
 import type { TupletPosition } from '../model/Exercise.js';
 import type { Alteration, Pitch } from '../model/Pitch.js';
 import { XmlWriter } from './XmlWriter.js';
@@ -113,7 +113,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     // one bar and never closes, which is a tie the engraver cannot draw.
     const heldByVoice = new Map<number, Set<number>>();
     for (let measureIndex = 0; measureIndex < bars; measureIndex += 1) {
-      writer.element('measure', { number: measureIndex + 1 }, () => {
+      // The bar's own number, which a passage carries over from the score it
+      // was cut out of - so the page itself says that it is bars 20 to 27 and
+      // not a piece that happens to be eight bars long.
+      writer.element('measure', { number: barNumberOf(exercise, measureIndex) }, () => {
         if (measureIndex === 0) {
           this.writeAttributes(writer, exercise);
           if (this.options.includeMetronomeMark) {

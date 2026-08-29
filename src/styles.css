@@ -660,6 +660,23 @@ select {
   touch-action: none;
   display: flex;
   justify-content: center;
+  position: relative;
+}
+
+/*
+ * A mark on the handle while a passage is cut, because the drawer that says
+ * which bars is shut most of the time. Absolutely positioned so that gaining
+ * it cannot move the grab bar it sits beside.
+ */
+.focus-bar__handle[data-passage='true']::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: calc(50% + 26px);
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 .focus-bar__handle::before {
@@ -778,6 +795,49 @@ select {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* Which bars are being practised, and the way back to all of them. */
+.focus-bar__passage {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/*
+ * Wide enough for three digits and no wider. The spinner is taken off because
+ * a thumb cannot hit it anyway, and it steals the room the digits need.
+ */
+.focus-bar__bar {
+  width: 5ch;
+  padding: 6px 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  appearance: textfield;
+}
+
+.focus-bar__bar::-webkit-outer-spin-button,
+.focus-bar__bar::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.focus-bar__dash {
+  color: var(--text-muted);
+}
+
+/* Fixed, like the zoom reading: "of 7" and "of 128" must take the same room. */
+.focus-bar__total {
+  width: 6.5ch;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 /*

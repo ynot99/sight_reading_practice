@@ -125,6 +125,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     timeSignature: header.timeSignature,
     tempoBpm: header.tempoBpm,
     staves,
+    firstBarNumber: readFirstBarNumber(measures),
     metadata: { generatorId: 'import.musicxml', seed: 0 },
   };
 
@@ -266,6 +267,20 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
     keyChanges,
     staffCount: Math.max(1, staffCount),
   };
+}
+
+/**
+ * What the file calls its first bar.
+ *
+ * Kept so that the numbers printed here are the numbers the reader sees in
+ * whatever they engraved the file with, and so that a passage cut out of it
+ * can go on counting from the right place. Anything that is not a plain
+ * number - `X1` on a repeated bar, an implicit pickup written as `0` - falls
+ * back to 1, which is what a reader counts from when nothing says otherwise.
+ */
+function readFirstBarNumber(measures: readonly XmlNode[]): number {
+  const declared = Number(attribute(measures[0] ?? null, 'number') ?? '');
+  return Number.isInteger(declared) && declared >= 1 ? declared : 1;
 }
 
 function readTempo(measures: readonly XmlNode[]): number {

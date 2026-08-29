@@ -304,6 +304,7 @@ describe('rolling a chord the writer marked', () => {
       pedalMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 240,
+      firstBarNumber: 1,
       metadata: { generatorId: 'fixture', seed: 1 },
       staves: [
         { staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: [bar(rolled, ...rest)] },

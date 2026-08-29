@@ -90,6 +90,22 @@ describe('the stylesheet', () => {
     expect(rules().some((rule) => rule.selector === '.focus-bar__status')).toBe(false);
   });
 
+  it('marks a cut passage without moving anything to do it', () => {
+    // The drawer says which bars, and it is shut most of the time - so the
+    // handle carries a mark while a passage is cut. Taken out of the flow,
+    // like everything else that appears and disappears up here: in it, the
+    // grab bar would shift sideways the moment the reader narrowed the piece.
+    const mark = rules().find(
+      (rule) => rule.selector === ".focus-bar__handle[data-passage='true']::after",
+    );
+
+    expect(mark).toBeDefined();
+    expect(mark?.body).toMatch(/position\s*:\s*absolute/);
+    expect(
+      rules().find((rule) => rule.selector === '.focus-bar__handle')?.body,
+    ).toMatch(/position\s*:\s*relative/);
+  });
+
   it('asks the viewport to reach under the safe areas', () => {
     // The stylesheet already offsets by `env(safe-area-inset-*)`, and without
     // `viewport-fit=cover` those resolve to zero - so the transport pill sits

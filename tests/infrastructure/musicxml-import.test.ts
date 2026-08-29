@@ -127,6 +127,27 @@ describe('files written by other programs', () => {
     expect(exercise.key.fifths).toBe(1);
   });
 
+  it('counts bars from wherever the file says it starts', () => {
+    // A movement exported on its own still numbers its bars against the work
+    // it belongs to. Renumbering to 1 would have the reader looking for bar 3
+    // of something the score they are holding calls bar 42.
+    const { exercise } = importer.read(
+      scoreXml(note('C', 4, 96, 'whole')).replace('measure number="1"', 'measure number="40"'),
+    );
+
+    expect(exercise.firstBarNumber).toBe(40);
+  });
+
+  it('falls back to bar one when the number is not one', () => {
+    // Repeated bars are numbered "X1" and a pickup is often "0". Neither is a
+    // bar number a reader counts from.
+    const { exercise } = importer.read(
+      scoreXml(note('C', 4, 96, 'whole')).replace('measure number="1"', 'measure number="0"'),
+    );
+
+    expect(exercise.firstBarNumber).toBe(1);
+  });
+
   it('keeps each voice of a staff as its own line', () => {
     const second =
       '<backup><duration>96</duration></backup>' +

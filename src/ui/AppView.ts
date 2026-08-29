@@ -479,6 +479,10 @@ export class AppView {
     dropoutDescription: HTMLElement;
     rangeFrom: HTMLInputElement;
     rangeTo: HTMLInputElement;
+    focusFrom: HTMLInputElement;
+    focusTo: HTMLInputElement;
+    focusBars: HTMLOutputElement;
+    focusWhole: HTMLButtonElement;
     repeatRange: HTMLInputElement;
     preview: HTMLInputElement;
     previewValue: HTMLOutputElement;
@@ -599,6 +603,10 @@ export class AppView {
       dropoutDescription: requireElement(doc, 'dropout-description'),
       rangeFrom: requireElement(doc, 'range-from'),
       rangeTo: requireElement(doc, 'range-to'),
+      focusFrom: requireElement(doc, 'focus-from'),
+      focusTo: requireElement(doc, 'focus-to'),
+      focusBars: requireElement(doc, 'focus-bars'),
+      focusWhole: requireElement(doc, 'focus-whole'),
       repeatRange: requireElement(doc, 'repeat-range'),
       preview: requireElement(doc, 'preview'),
       previewValue: requireElement(doc, 'preview-value'),
@@ -954,15 +962,31 @@ export class AppView {
       void this.reload(false);
     });
 
-    for (const input of [this.el.rangeFrom, this.el.rangeTo]) {
-      this.listen(input, 'change', () => {
-        controller.updateSettings({
-          rangeFromBar: barValue(this.el.rangeFrom),
-          rangeToBar: barValue(this.el.rangeTo),
+    // Two pairs of boxes, one setting: the panel is not on the page in
+    // fullscreen, which is where the reader actually is. Each pair writes the
+    // range and `syncControlsFromSettings` writes both back, so they cannot
+    // come to hold different answers.
+    for (const [from, to] of [
+      [this.el.rangeFrom, this.el.rangeTo],
+      [this.el.focusFrom, this.el.focusTo],
+    ] as const) {
+      for (const input of [from, to]) {
+        this.listen(input, 'change', () => {
+          controller.updateSettings({
+            rangeFromBar: barValue(from),
+            rangeToBar: barValue(to),
+          });
+          this.syncControlsFromSettings();
+          void this.reload(false);
         });
-        void this.reload(false);
-      });
+      }
     }
+
+    this.listen(this.el.focusWhole, 'click', () => {
+      controller.updateSettings({ rangeFromBar: null, rangeToBar: null });
+      this.syncControlsFromSettings();
+      void this.reload(false);
+    });
 
     this.listen(this.el.drill, 'click', () => {
       const passage = controller.drillWorstPassage();
@@ -1502,6 +1526,35 @@ export class AppView {
   }
 
   /**
+   * Says which bars are being read, in fullscreen, where nothing else does.
+   *
+   * A passage is cut out as an exercise in its own right, so by the time it
+   * reaches the page there is nothing left in it that remembers a longer piece
+   * exists. That is what makes everything downstream simple and it is also how
+   * a reader ends up practising eight bars with no idea they are bars 20 to 27
+   * - the page now prints their real numbers, and this says the same thing in
+   * words that can be typed over.
+   *
+   * The mark on the handle is for when the drawer is shut, which is most of
+   * the time: a narrowed piece should not look like a short one.
+   */
+  private describePassageRange(): void {
+    const { controller } = this.runtime;
+    const { rangeFromBar, rangeToBar } = controller.settings;
+    const total = controller.wholePieceBars;
+
+    this.el.focusFrom.value = rangeFromBar === null ? '' : String(rangeFromBar);
+    this.el.focusTo.value = rangeToBar === null ? '' : String(rangeToBar);
+    this.el.focusFrom.max = String(total);
+    this.el.focusTo.max = String(total);
+    this.el.focusBars.value = `of ${total}`;
+
+    const narrowed = rangeFromBar !== null || rangeToBar !== null;
+    this.el.focusHandle.dataset['passage'] = String(narrowed);
+    this.el.focusWhole.disabled = !narrowed;
+  }
+
+  /**
    * The pill beside the bar: what just happened, or what is about to.
    *
    * Kept off the transport row on purpose. "Counting in… 3" and "B · 84%" are
@@ -1633,9 +1686,16 @@ export class AppView {
       session.events.on('stepEntered', ({ step, expectedMidi }) => {
         this.lastExpected = expectedMidi;
         this.renderExpected();
-        this.lastPosition =`bar ${step.measureIndex + 1} · beat ${step.beat.toFixed(2).replace(/\.00$/, '')}`;
-        this.el.position.textContent = this.lastPosition;
         this.el.progress.value = step.index;
+      }),
+      // Where the music is, which under the metronome goes on moving through a
+      // held note - the step is what the reader has to play, not where the
+      // count has got to, and the pill was asked the second question.
+      session.events.on('positionChanged', ({ measureIndex, beat }) => {
+        this.lastPosition = `bar ${this.runtime.controller.barNumber(measureIndex)} · beat ${beat
+          .toFixed(2)
+          .replace(/\.00$/, '')}`;
+        this.el.position.textContent = this.lastPosition;
         this.renderFocusStatus(this.lastPosition);
       }),
       session.events.on('noteJudged', ({ midi, verdict, remaining }) => {
@@ -1939,6 +1999,7 @@ export class AppView {
     this.describeDropout();
     this.el.rangeFrom.value = settings.rangeFromBar === null ? '' : String(settings.rangeFromBar);
     this.el.rangeTo.value = settings.rangeToBar === null ? '' : String(settings.rangeToBar);
+    this.describePassageRange();
     this.el.repeatRange.checked = settings.repeatRange;
     this.el.preview.value = String(settings.previewSeconds);
     this.el.previewValue.value = String(settings.previewSeconds);

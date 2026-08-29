@@ -48,6 +48,39 @@ describe('taking a passage out of a score', () => {
     expect(() => validateExercise(passage)).not.toThrow();
   });
 
+  describe('what the bars are called', () => {
+    it('goes on calling them what the score called them', () => {
+      // The one thing a passage must not lose. Renumbered from 1 it reads as a
+      // short piece, and nothing on the page or in the application can tell
+      // the reader that ninety bars were cut away.
+      const passage = sliceExercise(fourBars(), 3, 4);
+
+      expect(passage.firstBarNumber).toBe(3);
+      expect(passage.title).toContain('bars 3–4');
+    });
+
+    it('composes, so a passage of a passage still knows where it came from', () => {
+      // The reader narrows twice - the drill button does exactly this - and
+      // the second cut is counted against the first, not against the score.
+      const passage = sliceExercise(sliceExercise(fourBars(), 2, 4), 2, 3);
+
+      expect(passage.firstBarNumber).toBe(3);
+      expect(buildTimeline(passage).steps.map((step) => step.expectedMidi)).toEqual([
+        [p('E4').midi],
+        [p('F4').midi],
+      ]);
+    });
+
+    it('numbers only: nothing derived counts bars from anywhere but zero', () => {
+      // The timeline, the matcher and the report all count from the start of
+      // what is being played. Letting the printed number leak into them would
+      // put every reported bar out by the length of the cut.
+      const passage = sliceExercise(fourBars(), 3, 4);
+
+      expect(buildTimeline(passage).steps.map((step) => step.measureIndex)).toEqual([0, 1]);
+    });
+  });
+
   it('states the clef and key the passage inherits', () => {
     const base = fourBars();
     const [treble] = base.staves;

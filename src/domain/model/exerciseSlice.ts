@@ -37,10 +37,17 @@ export function sliceExercise(exercise: Exercise, fromBar: number, toBar: number
     throw new DomainError(`Bars ${first + 1} to ${last + 1} have nothing in them.`);
   }
 
+  // What the reader calls these bars, which is what the passage keeps calling
+  // them. `first` counts from the exercise handed in, and that may itself be a
+  // passage - so the numbering composes rather than restarting.
+  const firstBarNumber = exercise.firstBarNumber + first;
+  const lastBarNumber = exercise.firstBarNumber + last;
+
   return {
     ...exercise,
-    id: `${exercise.id}-bars-${first + 1}-${last + 1}`,
-    title: `${exercise.title} · bars ${first + 1}–${last + 1}`,
+    id: `${exercise.id}-bars-${firstBarNumber}-${lastBarNumber}`,
+    title: `${exercise.title} · bars ${firstBarNumber}–${lastBarNumber}`,
+    firstBarNumber,
     key: keyAtMeasure(exercise, first),
     keyChanges: shift(exercise.keyChanges, first, last),
     pedalMarks: slicePedal(exercise, first, last),

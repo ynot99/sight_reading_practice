@@ -1787,6 +1787,77 @@ describe('AppView', () => {
       expect(runtime.controller.session?.status).toBe('aborted');
     });
 
+    describe('saying which bars are being read', () => {
+      it('writes the passage into the drawer and marks the handle', async () => {
+        // Fullscreen has no panel, so without this a hundred-bar piece cut
+        // down to two looks exactly like a two-bar piece - and the handle is
+        // what says so while the drawer is shut, which is most of the time.
+        const { view, runtime } = createRig();
+        await view.initialize();
+        expect(element('focus-handle').dataset['passage']).toBe('false');
+        expect(element<HTMLButtonElement>('focus-whole').disabled).toBe(true);
+
+        const from = element<HTMLInputElement>('range-from');
+        from.value = '2';
+        from.dispatchEvent(new Event('change'));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(element<HTMLInputElement>('focus-from').value).toBe('2');
+        expect(element('focus-handle').dataset['passage']).toBe('true');
+        expect(element<HTMLButtonElement>('focus-whole').disabled).toBe(false);
+        expect(runtime.controller.settings.rangeFromBar).toBe(2);
+      });
+
+      it('takes the passage from the drawer and puts it in the panel too', async () => {
+        // One setting, two pairs of boxes: the panel is out of reach in
+        // fullscreen, and boxes that could disagree would be two settings.
+        const { view, runtime } = createRig();
+        await view.initialize();
+
+        const from = element<HTMLInputElement>('focus-from');
+        from.value = '2';
+        from.dispatchEvent(new Event('change'));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(runtime.controller.settings.rangeFromBar).toBe(2);
+        expect(element<HTMLInputElement>('range-from').value).toBe('2');
+      });
+
+      it('counts by the score\'s own bar numbers, not from one again', async () => {
+        // The complaint this answers: a passage is a score in its own right by
+        // the time it reaches the page, so the reader was told they were at
+        // bar 1 of a piece whose bar 1 they had cut away.
+        const { view } = createRig();
+        await view.initialize();
+        const from = element<HTMLInputElement>('focus-from');
+        from.value = '2';
+        from.dispatchEvent(new Event('change'));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        element<HTMLButtonElement>('start').click();
+
+        expect(element('focus-notice').textContent).toMatch(/^bar 2 · beat /);
+        expect(element('position').textContent).toMatch(/^bar 2 · beat /);
+      });
+
+      it('gives the whole piece back', async () => {
+        const { view, runtime } = createRig();
+        await view.initialize();
+        const from = element<HTMLInputElement>('focus-from');
+        from.value = '2';
+        from.dispatchEvent(new Event('change'));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        element<HTMLButtonElement>('focus-whole').click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(runtime.controller.settings.rangeFromBar).toBeNull();
+        expect(element<HTMLInputElement>('focus-from').value).toBe('');
+        expect(element<HTMLInputElement>('range-from').value).toBe('');
+        expect(element('focus-handle').dataset['passage']).toBe('false');
+      });
+    });
+
     it('keeps the transport on one row and the settings underneath', async () => {
       const { view } = createRig();
       await view.initialize();

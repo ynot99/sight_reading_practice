@@ -96,6 +96,17 @@ describe('MusicXmlSerializer', () => {
     expect(text(backups[0] as ElementLike, 'duration')).toBe('1920');
   });
 
+  it('prints the bar numbers the passage carries, not a fresh count from one', () => {
+    // The strongest indication there is that a passage is a passage: it is on
+    // the page, over the first bar, without anything having to say it in
+    // words. Renumbered from 1 the page insists it is a whole short piece.
+    const passage = serializer.serialize({ ...twoBarExercise(), firstBarNumber: 20 });
+
+    expect(all(parse(passage), 'measure').map((measure) => measure.getAttribute('number'))).toEqual(
+      ['20', '21'],
+    );
+  });
+
   it('assigns every note to its staff and voice', () => {
     const [firstMeasure] = all(root, 'measure');
     if (firstMeasure === undefined) {
@@ -187,6 +198,7 @@ describe('MusicXmlSerializer', () => {
       pedalMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 72,
+      firstBarNumber: 1,
       metadata: { generatorId: 'fixture', seed: 3 },
       staves: [
         {
@@ -273,6 +285,7 @@ describe('a tie in one voice of a shared staff', () => {
       pedalMarks: [],
       timeSignature: new TimeSignature(2, 4),
       tempoBpm: 60,
+      firstBarNumber: 1,
       metadata: { generatorId: 'fixture', seed: 1 },
       staves: [
         {

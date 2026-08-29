@@ -210,8 +210,28 @@ export interface Exercise {
   readonly pedalMarks: readonly PedalMark[];
   readonly timeSignature: TimeSignature;
   readonly tempoBpm: number;
+  /**
+   * What the first bar is *called*, which is not always 1.
+   *
+   * A passage cut out of a longer score is a score in its own right - that is
+   * the whole point of {@link sliceExercise} - but it is still bars 20 to 27
+   * of something, and printing them as 1 to 8 makes a photocopy that lies
+   * about where it came from. The reader then has no way of telling a passage
+   * from a whole piece, and every consumer that wants a real bar number has to
+   * remember to add an offset back on.
+   *
+   * Numbering only: nothing derived from the exercise - the timeline, the
+   * matcher, the report - counts bars from here. They count from zero, as they
+   * always have.
+   */
+  readonly firstBarNumber: number;
   readonly staves: readonly StaffPart[];
   readonly metadata: ExerciseMetadata;
+}
+
+/** What the reader should see printed over a bar, one-based. */
+export function barNumberOf(exercise: Exercise, measureIndex: number): number {
+  return exercise.firstBarNumber + measureIndex;
 }
 
 export function noteEntry(

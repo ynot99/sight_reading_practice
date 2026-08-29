@@ -90,6 +90,7 @@ describe('buildTimeline', () => {
       pedalMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 60,
+      firstBarNumber: 1,
       metadata: { generatorId: 'fixture', seed: 0 },
       staves: [
         {

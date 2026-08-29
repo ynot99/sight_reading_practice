@@ -562,6 +562,11 @@ export class OsmdScoreRenderer
       drawComposer: false,
       drawPartNames: false,
       drawMetronomeMarks: true,
+      // The numbers the file states, which for a passage are the numbers of
+      // the score it was cut out of. Drawn from 1 they would say "an eight-bar
+      // piece" about bars 20 to 27, and nothing else on the page corrects it.
+      drawMeasureNumbers: true,
+      useXMLMeasureNumbers: true,
       autoBeam: true,
       followCursor: true,
       disableCursor: false,

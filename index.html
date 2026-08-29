@@ -356,6 +356,32 @@
         </div>
 
         <div id="focus-drawer" class="focus-bar__drawer">
+          <!--
+            The passage, written out. A slice is a score in its own right by
+            the time it reaches the page, so without this the only thing that
+            says a hundred-bar piece has been cut down to eight is the bar
+            numbers printed over the staves. Here it is a number that can be
+            read and typed over, and the button beside it is the way back.
+          -->
+          <span class="focus-bar__passage">
+            <input id="focus-from" class="focus-bar__bar" type="number" min="1" max="999"
+              inputmode="numeric" placeholder="first" title="First bar of the passage"
+              aria-label="First bar of the passage" />
+            <span class="focus-bar__dash" aria-hidden="true">–</span>
+            <input id="focus-to" class="focus-bar__bar" type="number" min="1" max="999"
+              inputmode="numeric" placeholder="last" title="Last bar of the passage"
+              aria-label="Last bar of the passage" />
+            <output id="focus-bars" class="focus-bar__total">—</output>
+            <button id="focus-whole" type="button"
+              class="focus-bar__button focus-bar__button--icon" title="Practise the whole piece"
+              aria-label="Practise the whole piece">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 4h2v16H4zM18 4h2v16h-2zM8 11h8v2H8z" />
+                <path d="M11 8l-3 4 3 4zM13 8l3 4-3 4z" />
+              </svg>
+            </button>
+          </span>
+
           <span class="focus-bar__tempo">
             <button id="focus-smaller" type="button"
               class="focus-bar__button focus-bar__button--icon" title="Smaller notes" aria-label="Smaller notes">

@@ -596,13 +596,10 @@ select {
   z-index: 20;
 
   display: flex;
-  align-items: center;
-  justify-content: center;
-  /* One more button than the bar was drawn for; a tablet held upright runs
-     out of room before a laptop does, and wrapping beats clipping Exit. */
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 6px 10px 8px;
 
   border: 1px solid var(--border);
   border-radius: 24px;
@@ -633,6 +630,75 @@ select {
   text-overflow: ellipsis;
   width: 20ch;
   max-width: 42vw;
+}
+
+/*
+ * The grab handle, and the whole of what says there is more underneath.
+ *
+ * One row of transport is all a reader needs at the stand; everything they
+ * reach for between runs lives in the drawer, which is what keeps the bar to
+ * a single line on a tablet held upright.
+ */
+.focus-bar__handle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 6px 0 2px;
+  cursor: grab;
+  touch-action: none;
+  display: flex;
+  justify-content: center;
+}
+
+.focus-bar__handle::before {
+  content: '';
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  opacity: 0.45;
+}
+
+.focus-bar[data-open='true'] .focus-bar__handle::before {
+  opacity: 0.8;
+}
+
+.focus-bar__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*
+ * Closed by default and opened by the handle, so the bar is one line until
+ * the reader asks for more.
+ */
+.focus-bar__drawer {
+  display: none;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 2px;
+  border-top: 1px solid var(--border);
+}
+
+.focus-bar[data-open='true'] .focus-bar__drawer {
+  display: flex;
+}
+
+.focus-bar__button--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 44px;
+  flex: none;
+}
+
+.focus-bar__button--icon svg {
+  width: 22px;
+  height: 22px;
+  fill: currentcolor;
 }
 
 .focus-bar__tempo {

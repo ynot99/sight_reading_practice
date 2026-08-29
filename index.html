@@ -53,7 +53,13 @@
         <span class="toolbar__gap"></span>
         <button id="new-exercise" type="button" class="button">New exercise</button>
         <button id="open-score" type="button" class="button">Open score…</button>
-        <input id="score-file" type="file" accept=".mxl,.musicxml,.xml,application/vnd.recordare.musicxml+xml,text/xml" hidden />
+        <!--
+          No `accept`: iOS resolves it to its own file types, and `.mxl` is not
+          one it knows - so a picker that named it greyed out every score the
+          reader owns. What the file actually is gets decided on opening, where
+          it can be answered honestly.
+        -->
+        <input id="score-file" type="file" hidden />
         <button id="focus" type="button" class="button">Fullscreen</button>
       </div>
 
@@ -263,24 +269,36 @@
 
       </footer>
 
-      <div id="focus-bar" class="focus-bar" hidden>
-        <span id="focus-status" class="focus-bar__status">Idle</span>
-        <button id="focus-play" type="button" class="focus-bar__button focus-bar__button--primary">
-          Start
-        </button>
-        <button id="focus-stop" type="button" class="focus-bar__button" disabled>Stop</button>
-        <span class="focus-bar__tempo">
-          <button id="focus-slower" type="button" class="focus-bar__button focus-bar__button--step"
-            aria-label="Slower">−</button>
-          <output id="focus-tempo" class="focus-bar__percent">100%</output>
-          <button id="focus-faster" type="button" class="focus-bar__button focus-bar__button--step"
-            aria-label="Faster">+</button>
-        </span>
-        <button id="focus-listen" type="button" class="focus-bar__button">Listen</button>
-        <button id="focus-next" type="button" class="focus-bar__button">New</button>
-        <button id="focus-exit" type="button" class="focus-bar__button focus-bar__button--exit">
-          Exit
-        </button>
+      <div id="focus-bar" class="focus-bar" hidden data-open="false">
+        <button id="focus-handle" type="button" class="focus-bar__handle"
+          aria-controls="focus-drawer" aria-expanded="false" aria-label="More controls"></button>
+
+        <div class="focus-bar__row">
+          <button id="focus-play" type="button"
+            class="focus-bar__button focus-bar__button--primary focus-bar__button--icon"
+            aria-label="Start">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path id="focus-play-icon" d="M8 5l11 7-11 7z" />
+            </svg>
+          </button>
+          <span id="focus-status" class="focus-bar__status">Idle</span>
+          <span class="focus-bar__tempo">
+            <button id="focus-slower" type="button"
+              class="focus-bar__button focus-bar__button--step" aria-label="Slower">−</button>
+            <output id="focus-tempo" class="focus-bar__percent">100%</output>
+            <button id="focus-faster" type="button"
+              class="focus-bar__button focus-bar__button--step" aria-label="Faster">+</button>
+          </span>
+        </div>
+
+        <div id="focus-drawer" class="focus-bar__drawer">
+          <button id="focus-stop" type="button" class="focus-bar__button" disabled>Stop</button>
+          <button id="focus-listen" type="button" class="focus-bar__button">Listen</button>
+          <button id="focus-next" type="button" class="focus-bar__button">New</button>
+          <button id="focus-exit" type="button" class="focus-bar__button focus-bar__button--exit">
+            Exit
+          </button>
+        </div>
       </div>
     </div>
 

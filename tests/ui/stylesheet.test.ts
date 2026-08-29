@@ -89,6 +89,17 @@ describe('the stylesheet', () => {
     expect(status?.body).not.toMatch(/width\s*:\s*(auto|fit-content|max-content|min-content)/);
   });
 
+  it('does not name file types the reader may be unable to choose', () => {
+    // iOS resolves `accept` to its own file types, and `.mxl` is not one it
+    // knows - a picker that named it greyed out every score on the device.
+    // Opening the file is where its kind gets decided, and it already says so
+    // when the answer is no.
+    const picker = /<input[^>]*id="score-file"[^>]*>/.exec(HTML)?.[0] ?? '';
+
+    expect(picker).not.toBe('');
+    expect(picker).not.toMatch(/accept=/);
+  });
+
   it('covers every element the markup starts hidden', () => {
     // A list, so that adding a hidden element to the page cannot silently
     // rely on a guard that only some components have.

@@ -82,6 +82,12 @@ not at the desk. The cursor is shown for the performance whatever the reader
 set, since following along is most of the value — and put back the way they
 had it when the performance ends.
 
+The fullscreen bar holds one row: play/pause as a single icon button, where
+you are, and the pace. Everything reached for *between* runs — stop, listen,
+a new exercise, the way out — waits in a drawer under it, opened by its handle
+or by dragging up. That is what keeps it to a single line on a tablet held
+upright, where it used to wrap onto two.
+
 In fullscreen the pace is a **percentage of the written tempo**, moved five
 points at a time. A percentage rather than a number of beats because the
 written tempo changes from piece to piece: "a bit slower" is the same gesture

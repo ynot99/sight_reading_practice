@@ -1272,7 +1272,7 @@ describe('AppView', () => {
 
       pressSpace();
       expect(runtime.controller.session?.status).toBe('paused');
-      expect(element<HTMLButtonElement>('focus-play').textContent).toBe('Resume');
+      expect(element('focus-play').getAttribute('aria-label')).toBe('Resume');
     });
 
     it('lets go when the view does', async () => {
@@ -1740,18 +1740,94 @@ describe('AppView', () => {
 
       element<HTMLButtonElement>('focus-play').click();
       expect(runtime.controller.session?.status).toBe('running');
-      expect(element<HTMLButtonElement>('focus-play').textContent).toBe('Pause');
+      expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
       expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
 
       element<HTMLButtonElement>('focus-play').click();
       expect(runtime.controller.session?.status).toBe('paused');
-      expect(element<HTMLButtonElement>('focus-play').textContent).toBe('Resume');
+      expect(element('focus-play').getAttribute('aria-label')).toBe('Resume');
 
       element<HTMLButtonElement>('focus-play').click();
       expect(runtime.controller.session?.status).toBe('running');
 
       element<HTMLButtonElement>('focus-stop').click();
       expect(runtime.controller.session?.status).toBe('aborted');
+    });
+
+    it('holds the transport to one row, with the rest underneath', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      // What is used *during* a run stays out; what is reached for between
+      // runs waits in the drawer, which is what keeps the bar to one line on
+      // a tablet held upright.
+      const row = element('focus-play').parentElement;
+      expect(row?.className).toContain('focus-bar__row');
+      expect(element('focus-status').parentElement).toBe(row);
+      expect(element('focus-stop').parentElement?.id).toBe('focus-drawer');
+      expect(element('focus-exit').parentElement?.id).toBe('focus-drawer');
+    });
+
+    it('opens and closes the drawer from its handle', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      expect(element('focus-bar').dataset['open']).toBe('false');
+      expect(element('focus-handle').getAttribute('aria-expanded')).toBe('false');
+
+      element<HTMLButtonElement>('focus-handle').click();
+
+      expect(element('focus-bar').dataset['open']).toBe('true');
+      expect(element('focus-handle').getAttribute('aria-expanded')).toBe('true');
+
+      element<HTMLButtonElement>('focus-handle').click();
+      expect(element('focus-bar').dataset['open']).toBe('false');
+    });
+
+    it('opens on a drag up and closes on a drag down', async () => {
+      const { view } = createRig();
+      await view.initialize();
+
+      view.handleDragged(-60);
+      expect(view.isDrawerOpen).toBe(true);
+
+      view.handleDragged(60);
+      expect(view.isDrawerOpen).toBe(false);
+    });
+
+    it('treats a small movement as a tap, not a drag', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      view.setDrawerOpen(true);
+
+      // A thumb never lands perfectly still; a few pixels must not decide
+      // the opposite of what the tap meant.
+      view.handleDragged(-4);
+      view.handleDragged(4);
+
+      expect(view.isDrawerOpen).toBe(true);
+    });
+
+    it('says which of the three the one button is', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+      const icon = (): string => element('focus-play-icon').getAttribute('d') ?? '';
+
+      expect(element('focus-play').getAttribute('aria-label')).toBe('Start');
+      const idle = icon();
+
+      element<HTMLButtonElement>('focus-play').click();
+
+      // An icon for the eye and a name for everything else; one button for
+      // all three states, as a transport has.
+      expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
+      expect(icon()).not.toBe(idle);
     });
 
     it('changes the pace without leaving the stand', async () => {

@@ -1,5 +1,10 @@
 /** Thin, typed helpers over the DOM. Keeps `AppView` free of casts. */
-export function requireElement<T extends HTMLElement>(
+/**
+ * `Element`, not `HTMLElement`: the transport's icons are SVG paths, and a
+ * constraint that excluded them would send the view back to `querySelector`
+ * and lose the "missing id fails loudly" that this exists for.
+ */
+export function requireElement<T extends Element>(
   root: Document | HTMLElement,
   id: string,
 ): T {

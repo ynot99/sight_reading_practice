@@ -200,6 +200,13 @@ function readPlayedNotes(value: string): PlayedNoteDisplay {
     : 'live';
 }
 
+/** The transport icons, as one path each so only the `d` has to change. */
+const PLAY_ICON = 'M8 5l11 7-11 7z';
+const PAUSE_ICON = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
+
+/** How far the handle must travel before a drag is a drag and not a tap. */
+const DRAWER_DRAG_PX = 24;
+
 const TIME_SIGNATURES = ['4/4', '3/4', '2/4', '6/8'] as const;
 
 const SAMPLE_LOADING_HINTS: Readonly<Record<SampleLoading, string>> = {
@@ -322,6 +329,9 @@ export class AppView {
     scoreCover: HTMLElement;
     scoreCoverText: HTMLElement;
     focusPlay: HTMLButtonElement;
+    focusPlayIcon: SVGPathElement;
+    focusHandle: HTMLButtonElement;
+    focusDrawer: HTMLElement;
     focusStop: HTMLButtonElement;
     focusListen: HTMLButtonElement;
     focusSlower: HTMLButtonElement;
@@ -426,6 +436,9 @@ export class AppView {
       scoreCover: requireElement(doc, 'score-cover'),
       scoreCoverText: requireElement(doc, 'score-cover-text'),
       focusPlay: requireElement(doc, 'focus-play'),
+      focusPlayIcon: requireElement(doc, 'focus-play-icon'),
+      focusHandle: requireElement(doc, 'focus-handle'),
+      focusDrawer: requireElement(doc, 'focus-drawer'),
       focusStop: requireElement(doc, 'focus-stop'),
       focusListen: requireElement(doc, 'focus-listen'),
       focusSlower: requireElement(doc, 'focus-slower'),
@@ -1040,6 +1053,12 @@ export class AppView {
       controller.stop();
     });
 
+    this.listen(this.el.focusHandle, 'click', () => {
+      this.setDrawerOpen(!this.isDrawerOpen);
+    });
+
+    this.bindDrawerDrag();
+
     this.listen(this.el.focusSlower, 'click', () => {
       this.nudgeTempo(-TEMPO_STEP_PERCENT);
     });
@@ -1196,6 +1215,55 @@ export class AppView {
     const percent = this.runtime.controller.tempoPercent;
     this.el.focusTempo.value = `${percent}%`;
     this.el.focusTempo.title = `${this.runtime.controller.settings.tempoBpm} bpm`;
+  }
+
+  get isDrawerOpen(): boolean {
+    return this.el.focusBar.dataset['open'] === 'true';
+  }
+
+  /**
+   * Opens or closes the drawer under the transport row.
+   *
+   * The bar holds one line of what is used *during* a run - play, where you
+   * are, how fast - and everything reached for between runs waits underneath.
+   * That is what keeps it to a single row on a tablet held upright, where it
+   * used to wrap onto two.
+   */
+  setDrawerOpen(open: boolean): void {
+    this.el.focusBar.dataset['open'] = String(open);
+    this.el.focusHandle.setAttribute('aria-expanded', String(open));
+  }
+
+  /**
+   * A drag on the handle, in pixels, negative being upwards.
+   *
+   * Taken as a number rather than as events so the rule - far enough up opens
+   * it, far enough down closes it, a small movement is a tap - can be read
+   * and tested without a pointer.
+   */
+  handleDragged(deltaY: number): void {
+    if (Math.abs(deltaY) < DRAWER_DRAG_PX) {
+      return;
+    }
+    this.setDrawerOpen(deltaY < 0);
+  }
+
+  private bindDrawerDrag(): void {
+    let from: number | null = null;
+    const start = (event: PointerEvent): void => {
+      from = event.clientY;
+    };
+    const end = (event: PointerEvent): void => {
+      if (from !== null) {
+        this.handleDragged(event.clientY - from);
+      }
+      from = null;
+    };
+    this.listen(this.el.focusHandle, 'pointerdown', start as (event: Event) => void);
+    this.listen(this.el.focusHandle, 'pointerup', end as (event: Event) => void);
+    this.listen(this.el.focusHandle, 'pointercancel', () => {
+      from = null;
+    });
   }
 
   private renderFocusStatus(text: string): void {
@@ -1843,7 +1911,12 @@ export class AppView {
     this.el.stop.disabled = !running && !paused;
     this.el.newExercise.disabled = running || paused;
 
-    this.el.focusPlay.textContent = running ? 'Pause' : paused ? 'Resume' : 'Start';
+    // One button for all three, as a transport has: an icon says which of
+    // them it is now, and the accessible name says it in words.
+    const label = running ? 'Pause' : paused ? 'Resume' : 'Start';
+    this.el.focusPlay.setAttribute('aria-label', label);
+    this.el.focusPlay.title = label;
+    this.el.focusPlayIcon.setAttribute('d', running ? PAUSE_ICON : PLAY_ICON);
     this.el.focusStop.disabled = !running && !paused;
     this.el.focusNext.disabled = running || paused;
     this.el.focus.disabled = false;

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ScoreLibrary } from '../../src/application/ScoreLibrary.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { DomMusicXmlImporter } from '../../src/infrastructure/notation/DomMusicXmlImporter.js';
+import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
 
@@ -13,7 +13,7 @@ function library(store = new InMemoryScoreStore()) {
     scores: new ScoreLibrary({
       store,
       serializer: new MusicXmlSerializer(),
-      importer: new DomMusicXmlImporter(),
+      importer: new DomScoreImporter(),
     }),
   };
 }

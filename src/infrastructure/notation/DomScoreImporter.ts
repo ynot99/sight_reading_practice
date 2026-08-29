@@ -1,5 +1,7 @@
 import type { IScoreImporter } from '../../application/ports/IScoreImporter.js';
 import { parseMusicXml, type ImportedScore } from '../../domain/notation/MusicXmlParser.js';
+import { looksLikeMidi, readMidiFile } from '../../domain/midi/readMidiFile.js';
+import { midiToExercise } from '../../domain/notation/midiToExercise.js';
 import { xmlNode, type XmlNode } from '../../domain/notation/XmlNode.js';
 import { DomainError } from '../../shared/errors.js';
 import {
@@ -25,7 +27,7 @@ const CDATA_NODE = 4;
  * is not parsing but *shape*: a plain tree with no DOM in it, so the MusicXML
  * rules stay testable without a browser.
  */
-export class DomMusicXmlImporter implements IScoreImporter {
+export class DomScoreImporter implements IScoreImporter {
   private readonly parser: XmlDocumentParser;
   private readonly inflate: Inflate;
 
@@ -34,8 +36,20 @@ export class DomMusicXmlImporter implements IScoreImporter {
     this.inflate = inflate;
   }
 
-  async readFile(bytes: ArrayBuffer): Promise<ImportedScore> {
+  /**
+   * Reads whatever the reader chose, by looking at it rather than at its name.
+   *
+   * Three kinds arrive here and a file picker on a tablet will not tell them
+   * apart: a zipped `.mxl`, plain MusicXML, and a `.mid`. The first four bytes
+   * settle it in every case, which is better than trusting an extension - iOS
+   * renames files freely, and a score shared through a chat app often arrives
+   * with no extension at all.
+   */
+  async readFile(bytes: ArrayBuffer, name = ''): Promise<ImportedScore> {
     const raw = new Uint8Array(bytes);
+    if (looksLikeMidi(raw)) {
+      return midiToExercise(readMidiFile(raw), titleFrom(name));
+    }
     return this.read(looksZipped(raw) ? await this.unpack(raw) : decodeUtf8(raw));
   }
 
@@ -113,4 +127,16 @@ export function toXmlNode(element: Element): XmlNode {
   }
 
   return xmlNode(element.nodeName, attributes, children, text);
+}
+
+/**
+ * A name for a file that carries no title of its own.
+ *
+ * MIDI has a track name and often nothing better, and what the reader called
+ * the file is usually the piece - so the file name is the honest fallback,
+ * with the extension and the tidying-up taken off.
+ */
+function titleFrom(name: string): string {
+  const stem = name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  return stem === '' ? 'Imported performance' : stem;
 }

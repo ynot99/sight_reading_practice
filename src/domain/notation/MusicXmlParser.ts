@@ -34,7 +34,14 @@ export interface ImportWarning {
     | 'changing-attributes'
     | 'unsupported-clef'
     | 'dropped-tie'
-    | 'padded-measure';
+    | 'padded-measure'
+    // What reading a *performance* has to decide rather than read. Kept in one
+    // list because the reader meets them the same way: as the page they got
+    // differing from the page they expected.
+    | 'quantised'
+    | 'split-by-pitch'
+    | 'voices-merged'
+    | 'dropped-notes';
   readonly detail: string;
 }
 

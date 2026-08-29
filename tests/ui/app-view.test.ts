@@ -28,7 +28,7 @@ import {
   TimingWeightedScoringStrategy,
 } from '../../src/domain/scoring/strategies.js';
 import { ScoringStrategyRegistry } from '../../src/domain/scoring/ScoringStrategyRegistry.js';
-import { DomMusicXmlImporter } from '../../src/infrastructure/notation/DomMusicXmlImporter.js';
+import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
 import type { KeyboardTarget } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { ComputerKeyboardMidiSource } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
@@ -131,7 +131,7 @@ function createRig(
   volumeKnob.listenTo(midi);
   const takes = new TakeLibrary(new InMemorySettingsStore());
   const files = new RecordingFileSink();
-  const importer = new DomMusicXmlImporter();
+  const importer = new DomScoreImporter();
   const serializer = new MusicXmlSerializer();
   const scores = new ScoreLibrary({
     store: scoreStore,

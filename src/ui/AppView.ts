@@ -772,7 +772,10 @@ export class AppView {
     }
 
     try {
-      const { exercise, warnings } = await this.runtime.importer.readFile(await file.arrayBuffer());
+      const { exercise, warnings } = await this.runtime.importer.readFile(
+        await file.arrayBuffer(),
+        file.name,
+      );
       await this.runtime.controller.openScore(exercise);
       // Kept on the way in, so the file is chosen from the disk once and
       // afterwards the piece is simply there.

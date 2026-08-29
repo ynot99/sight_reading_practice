@@ -283,6 +283,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       void bridge?.disconnect();
       metronome.stop();
       pitchPlayer.stopAll();
+      renderer.dispose();
     },
   };
 }

@@ -116,6 +116,9 @@ export class OsmdScoreRenderer
   private osmd: OpenSheetMusicDisplay | null = null;
   private loaded = false;
   private currentZoom: number;
+  private observer: ResizeObserver | null = null;
+  /** Width the sheet was last engraved for; a height change is not one. */
+  private engravedWidth = 0;
 
   constructor(container: HTMLElement, options: OsmdRendererOptions = {}) {
     this.container = container;
@@ -146,10 +149,48 @@ export class OsmdScoreRenderer
     osmd.zoom = this.currentZoom;
     osmd.render();
     this.loaded = true;
+    this.engravedWidth = this.container.offsetWidth;
     this.navigator.reset();
     this.indexDrawnNotes();
     this.paintOverlay();
     this.paintFaded();
+    this.watchContainer();
+  }
+
+  /**
+   * Re-engraves when the space the sheet has to fill actually changed.
+   *
+   * OSMD's own `autoResize` listens to the window, and on iOS the window
+   * changes height whenever the browser's toolbar collapses - which is on
+   * every scroll. Each of those re-engraved the page and threw away the
+   * overlay drawn on it, so the marks from a finished run vanished the moment
+   * the reader scrolled to look at them.
+   *
+   * Width is the only thing the engraver's decisions depend on: a page that
+   * got taller holds the same systems in the same places.
+   */
+  handleContainerResize(width: number): void {
+    if (!this.loaded || width <= 0 || Math.abs(width - this.engravedWidth) < 1) {
+      return;
+    }
+    this.refresh();
+  }
+
+  private watchContainer(): void {
+    if (this.observer !== null || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    this.observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      this.handleContainerResize(width);
+    });
+    this.observer.observe(this.container);
+  }
+
+  /** Stops watching. Called when the renderer is thrown away with the page. */
+  dispose(): void {
+    this.observer?.disconnect();
+    this.observer = null;
   }
 
   refresh(): void {
@@ -158,6 +199,7 @@ export class OsmdScoreRenderer
     }
     this.osmd.zoom = this.currentZoom;
     this.osmd.render();
+    this.engravedWidth = this.container.offsetWidth;
     this.navigator.reset();
     // Re-engraving throws the old SVG away, and everything drawn on it.
     this.indexDrawnNotes();
@@ -472,7 +514,7 @@ export class OsmdScoreRenderer
     }
     const { OpenSheetMusicDisplay: Engraver } = await import('opensheetmusicdisplay');
     const osmd = new Engraver(this.container, {
-      autoResize: true,
+      autoResize: false,
       backend: 'svg',
       drawTitle: this.options.drawTitle ?? false,
       drawSubtitle: false,

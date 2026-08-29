@@ -275,6 +275,54 @@ describe('played notes drawn over a real engraving', () => {
     });
   });
 
+  describe('the page being re-measured', () => {
+    it('does not re-engrave when only the height changed', () => {
+      renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
+      const engraved = container.querySelector('svg');
+
+      // iOS collapses its toolbar on every scroll, which changes the window's
+      // height. OSMD's own autoResize re-engraved for that and threw the
+      // overlay away with the old SVG, so a finished run lost its marks the
+      // moment the reader scrolled to look at them.
+      renderer.handleContainerResize(container.offsetWidth);
+
+      // The same drawing, not a redrawn one: re-engraving is what costs the
+      // marks, so the test has to say it did not happen rather than that they
+      // survived - they survive a redraw too.
+      expect(container.querySelector('svg')).toBe(engraved);
+      expect(noteheads(container)).toHaveLength(1);
+    });
+
+    it('re-engraves when the width changed, and redraws what was on it', () => {
+      renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
+      renderer.fadePassed(0);
+
+      const engraved = container.querySelector('svg');
+      Object.defineProperty(container, 'offsetWidth', { value: 600, configurable: true });
+      renderer.handleContainerResize(600);
+
+      expect(container.querySelector('svg')).not.toBe(engraved);
+
+      // Width is the only thing the engraver's decisions depend on, so this
+      // one is a real re-engraving - and everything drawn on the old SVG has
+      // to arrive on the new one.
+      expect(noteheads(container)).toHaveLength(1);
+      expect(container.querySelectorAll('.note--passed').length).toBeGreaterThan(0);
+    });
+
+    it('ignores a measurement of nothing', () => {
+      renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
+
+      // A container that is display:none measures zero, and re-engraving for
+      // that would lay the whole page out for no width at all.
+      const engraved = container.querySelector('svg');
+      renderer.handleContainerResize(0);
+
+      expect(container.querySelector('svg')).toBe(engraved);
+      expect(noteheads(container)).toHaveLength(1);
+    });
+  });
+
   it('draws nothing for a step that was never engraved', () => {
     renderer.showPlayed({ stepIndex: 99, midi: 60, correct: false, offset: 0 });
     expect(noteheads(container)).toHaveLength(0);

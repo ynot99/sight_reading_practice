@@ -256,3 +256,82 @@ describe('XmlWriter', () => {
     expect(writer.toString()).toBe('<rest/>\n');
   });
 });
+
+describe('a tie in one voice of a shared staff', () => {
+  /**
+   * Two voices on one staff, the lower one holding a chord across the bar.
+   *
+   *   voice 1 (staff 2): C3 half, C3 half        - moving, ties nothing
+   *   voice 2 (staff 2): [G3 B3] half, tied over - held across the bar line
+   */
+  function twoVoicesOnOneStaff(): Exercise {
+    return {
+      id: 'tie-across-voices',
+      title: 'Tie across voices',
+      key: KeySignature.major(0),
+      keyChanges: [],
+      pedalMarks: [],
+      timeSignature: new TimeSignature(2, 4),
+      tempoBpm: 60,
+      metadata: { generatorId: 'fixture', seed: 1 },
+      staves: [
+        {
+          staffNumber: 2,
+          voice: 1,
+          clef: 'bass',
+          clefChanges: [],
+          measures: [
+            bar(noteEntry(p('C3'), Duration.HALF)),
+            bar(noteEntry(p('C3'), Duration.HALF)),
+          ],
+        },
+        {
+          staffNumber: 2,
+          voice: 2,
+          clef: 'bass',
+          clefChanges: [],
+          measures: [
+            bar(noteEntry([p('G3'), p('B3')], Duration.HALF, [p('G3').midi, p('B3').midi])),
+            bar(noteEntry([p('G3'), p('B3')], Duration.HALF)),
+          ],
+        },
+      ],
+    };
+  }
+
+  function tiesOf(xml: string, type: 'start' | 'stop'): ElementLike[] {
+    return all(parse(xml), 'tie').filter((tie) => tie.getAttribute('type') === type);
+  }
+
+  it('is closed in the next bar, not left hanging', () => {
+    const xml = serializer.serialize(twoVoicesOnOneStaff());
+
+    // A held note belongs to the *voice* holding it. Tracked per staff, the
+    // moving voice wipes what the held one is carrying, and the tie opens in
+    // one bar and never closes - which OSMD cannot draw, so the reader sees
+    // a fresh chord and presses notes the music never asked for again.
+    expect(tiesOf(xml, 'start')).toHaveLength(2);
+    expect(tiesOf(xml, 'stop')).toHaveLength(2);
+  });
+
+  it('draws the slur at both ends too', () => {
+    const xml = serializer.serialize(twoVoicesOnOneStaff());
+    const tied = all(parse(xml), 'tied');
+
+    // `<tie>` is the sound and `<tied>` is the arc; a missing stop on either
+    // leaves the reader without the mark that says "do not play this again".
+    expect(tied.filter((mark) => mark.getAttribute('type') === 'start')).toHaveLength(2);
+    expect(tied.filter((mark) => mark.getAttribute('type') === 'stop')).toHaveLength(2);
+  });
+
+  it('leaves the voice that ties nothing alone', () => {
+    const xml = serializer.serialize(twoVoicesOnOneStaff());
+    const notes = all(parse(xml), 'note').filter(
+      (note) => text(note, 'voice') === '1',
+    );
+
+    for (const note of notes) {
+      expect(all(note, 'tie')).toHaveLength(0);
+    }
+  });
+});

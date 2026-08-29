@@ -103,9 +103,15 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
 
   private writeMeasures(writer: XmlWriter, exercise: Exercise): void {
     const bars = exercise.staves[0]?.measures.length ?? 0;
-    // Ties cross bar lines - that is most of what they are for - so what each
-    // staff is still holding has to outlive the measure loop.
-    const heldByStaff = new Map<number, Set<number>>();
+    // Ties cross bar lines - that is most of what they are for - so what is
+    // still being held has to outlive the measure loop.
+    //
+    // Keyed by *voice*, not by staff. A held note belongs to the line that is
+    // holding it, and two voices share a staff whenever an inner line sits
+    // under a melody: keyed by staff they overwrite each other, and whichever
+    // wrote last decides what the other one is holding. The tie then opens in
+    // one bar and never closes, which is a tie the engraver cannot draw.
+    const heldByVoice = new Map<number, Set<number>>();
     for (let measureIndex = 0; measureIndex < bars; measureIndex += 1) {
       writer.element('measure', { number: measureIndex + 1 }, () => {
         if (measureIndex === 0) {
@@ -137,7 +143,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             exercise,
             staff,
             measureIndex,
-            heldByStaff,
+            heldByVoice,
             index === 0 ? pedal : [],
           );
         });
@@ -236,7 +242,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     exercise: Exercise,
     staff: StaffPart,
     measureIndex: number,
-    heldByStaff: Map<number, Set<number>>,
+    heldByVoice: Map<number, Set<number>>,
     pedal: readonly PedalMark[],
   ): void {
     const measure = staff.measures[measureIndex];
@@ -251,7 +257,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     const key = keyAtMeasure(exercise, measureIndex);
     const activeAccidentals = new Map<string, Alteration>();
     const tuplets = tupletPositions(measure.entries);
-    let held = heldByStaff.get(staff.staffNumber) ?? new Set<number>();
+    let held = heldByVoice.get(staff.voice) ?? new Set<number>();
     let offset = 0;
     let nextMark = 0;
     measure.entries.forEach((entry, entryIndex) => {
@@ -276,7 +282,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       this.writePedal(writer, pedal[nextMark], staff.staffNumber);
       nextMark += 1;
     }
-    heldByStaff.set(staff.staffNumber, held);
+    heldByVoice.set(staff.voice, held);
   }
 
   private writeEntry(

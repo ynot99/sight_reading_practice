@@ -14,14 +14,18 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Majors that exist. The ones here before were v7 and v5, which no version of
+# these actions has ever been published as, so the runner failed to resolve
+# them before a single step ran - and the job is called "Typecheck, test,
+# build", so it read as all three of those failing.
 jobs:
   verify:
     name: Typecheck, test, build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
@@ -39,7 +43,7 @@ jobs:
 
       - name: Package the site for Pages
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
@@ -56,4 +60,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@v4

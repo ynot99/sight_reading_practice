@@ -325,6 +325,7 @@ describe('waiting while practising one hand', () => {
       pedalMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 60,
+      firstBarNumber: 1,
       metadata: { generatorId: 'fixture', seed: 1 },
       staves: [
         {
@@ -388,6 +389,28 @@ describe('waiting while practising one hand', () => {
     // The bug: the session waited for notes it would never demand, and no
     // key could move it on again.
     expect(harness.session.status).toBe('completed');
+  });
+
+  it('leaves the position where the reader is, however long the click runs on', () => {
+    // The metronome is still going - it counted them in, and the reader may
+    // have asked to hear it - but here the reader is what moves the piece. A
+    // position taken from the pulse would walk off into bars nobody has
+    // played, several of them ahead of the cursor still waiting for a chord.
+    const harness = waitHarness({
+      options: {
+        countInBars: 1,
+        clickWhen: 'always',
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+      },
+    });
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(5);
+    expect(harness.session.status).toBe('running');
+
+    harness.metronome.advanceSubdivisions(40);
+
+    expect(harness.metronome.isRunning).toBe(true);
+    expect(harness.of('positionChanged')).toEqual([{ measureIndex: 0, beat: 1 }]);
   });
 
   it('does not count the other hand against the reader', () => {

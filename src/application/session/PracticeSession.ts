@@ -304,6 +304,7 @@ export class PracticeSession {
     this.stepWrongNotes = [];
 
     this.emitter.emit('stepEntered', { step, expectedMidi: expected });
+    this.emitter.emit('positionChanged', { measureIndex: step.measureIndex, beat: step.beat });
     this.mode.onStepEntered(this.context, step);
   }
 
@@ -432,6 +433,35 @@ export class PracticeSession {
     }
     this.emitter.emit('beat', tick);
     this.mode.onBeat(this.context, tick);
+    this.publishPulsePosition(tick);
+  }
+
+  /**
+   * Moves the position on with the count, not with the cursor.
+   *
+   * Only where the pulse is what carries the music. Wait mode runs a
+   * metronome too - for the count-in, or because the reader asked to hear it -
+   * but the piece stops when they stop, so a position taken from the pulse
+   * would walk off into bars nobody has played yet.
+   *
+   * Felt beats only. Ticks arrive as often as the shortest note in the
+   * exercise demands, which on a busy page is four to the beat, and a readout
+   * that counted those would be reporting resolution rather than time.
+   *
+   * Published after the mode has had the tick, so that when a step ends here
+   * the pulse's reading is the one left standing - it is never behind the
+   * step, and the two never disagree by more than the step that just opened.
+   */
+  private publishPulsePosition(tick: MetronomeTick): void {
+    if (!tick.isPulse || !this.mode.requiresMetronome || this.status !== 'running') {
+      return;
+    }
+    const ticks = this.context.positionTicks(tick);
+    const signature = this.timeline.exercise.timeSignature;
+    this.emitter.emit('positionChanged', {
+      measureIndex: signature.measureOf(ticks),
+      beat: signature.beatOf(ticks),
+    });
   }
 
   private emitCountIn(beatsRemaining: number): void {

@@ -380,6 +380,57 @@ describe('Flow mode', () => {
     expect(harness.of('beat')[0]?.positionTicks).toBe(1920);
   });
 
+  describe('where the music has got to', () => {
+    it('goes on counting through a note the cursor is holding', () => {
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      // The second bar: one whole note in the treble, so the cursor has
+      // nothing to do for four beats.
+      harness.metronome.advanceSubdivisions(16);
+      const held = harness.of('stepEntered').length;
+      expect(harness.of('positionChanged').at(-1)).toEqual({ measureIndex: 1, beat: 1 });
+
+      harness.metronome.advanceSubdivisions(4);
+
+      expect(harness.of('stepEntered')).toHaveLength(held);
+      expect(harness.of('positionChanged').at(-1)).toEqual({ measureIndex: 1, beat: 2 });
+    });
+
+    it('reports felt beats and not the resolution the loop happens to run at', () => {
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      // Into the held note, where nothing but the pulse is publishing.
+      harness.metronome.advanceSubdivisions(16);
+      const atTheBar = harness.of('positionChanged').length;
+
+      // Three sixteenths: the loop needs them, and nobody counts them.
+      harness.metronome.advanceSubdivisions(3);
+      expect(harness.of('positionChanged')).toHaveLength(atTheBar);
+
+      // The fourth completes the beat, which is what a reader is counting.
+      harness.metronome.advanceSubdivisions(1);
+      expect(harness.of('positionChanged')).toHaveLength(atTheBar + 1);
+    });
+
+    it('picks the count back up where the music resumes, not at bar one', () => {
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      harness.metronome.advanceSubdivisions(20);
+
+      harness.session.pause();
+      harness.session.resume();
+      // The bar is replayed from its head, so the count restarts there - at
+      // bar two, which is the whole of what the offset is for.
+      expect(harness.of('positionChanged').at(-1)).toEqual({ measureIndex: 1, beat: 1 });
+
+      // The metronome starts its count again from zero, so the first tick is
+      // the downbeat itself and a beat is four more after it.
+      harness.metronome.advanceSubdivisions(5);
+
+      expect(harness.of('positionChanged').at(-1)).toEqual({ measureIndex: 1, beat: 2 });
+    });
+  });
+
   it('stops the pulse when the run ends', () => {
     const harness = flowHarness();
     startAndCountIn(harness);

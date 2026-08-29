@@ -65,6 +65,7 @@ export function createHarness(config: HarnessOptions): Harness {
   record('countIn');
   record('stepEntered');
   record('stepCompleted');
+  record('positionChanged');
   record('noteJudged');
   record('beat');
   record('finished');

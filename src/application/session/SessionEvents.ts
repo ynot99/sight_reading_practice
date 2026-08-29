@@ -28,6 +28,22 @@ export interface StepCompletedEvent {
   readonly result: StepResult;
 }
 
+/**
+ * Where the music has reached.
+ *
+ * Deliberately not the same question as {@link StepEnteredEvent}, which asks
+ * which cursor position is open. The two answers coincide only while the
+ * reader is what moves the piece: under the metronome the beat goes on
+ * counting through a held note, and a display taken from the step stood still
+ * for the whole of it.
+ */
+export interface PositionEvent {
+  /** Zero-based, as the timeline counts; the page numbers it from the score. */
+  readonly measureIndex: number;
+  /** One-based notated beat, possibly fractional. */
+  readonly beat: number;
+}
+
 export interface NoteJudgedEvent {
   readonly midi: number;
   readonly verdict: NoteVerdict;
@@ -48,6 +64,7 @@ export interface SessionEventMap {
   countIn: CountInEvent;
   stepEntered: StepEnteredEvent;
   stepCompleted: StepCompletedEvent;
+  positionChanged: PositionEvent;
   noteJudged: NoteJudgedEvent;
   beat: MetronomeTick;
   finished: SessionFinishedEvent;

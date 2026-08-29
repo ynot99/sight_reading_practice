@@ -262,15 +262,36 @@ describe('Flow mode', () => {
       expect(results[1]?.played).toEqual([MIDI.D4]);
     });
 
-    it('still belongs where it fell when it is nowhere near the beat', () => {
+    it('belongs to the beat it was nearer to, when that beat wants it', () => {
+      // Three hundred milliseconds before the second beat of a slow bar is
+      // nearer to that beat than to the one behind it, and the second beat is
+      // the one asking for this note. Read as a wrong note at the first beat
+      // instead, the page marked in red a reader who had played the right
+      // note slightly ahead of it.
       const harness = flowHarness();
       startAndCountIn(harness);
       harness.metronome.advanceSubdivisions(2);
 
-      // Three hundred milliseconds early is not a mis-timed beat, it is a
-      // different note.
       harness.clock.set(RUN_STARTS_AT_MS + 700);
       harness.midi.noteOn(MIDI.D4);
+      harness.metronome.advanceSubdivisions(2);
+
+      const judged = harness.of('noteJudged').at(-1);
+      expect(judged?.verdict).toBe('correct');
+      expect(judged?.stepIndex).toBe(1);
+      // Early, and by how much: the page draws it just before its own note.
+      expect(judged?.deviationMs).toBe(-300);
+    });
+
+    it('still belongs where it fell when the beat ahead does not want it', () => {
+      // A note nobody is expecting yet has to be very close indeed before it
+      // is read as an early anything.
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      harness.metronome.advanceSubdivisions(2);
+
+      harness.clock.set(RUN_STARTS_AT_MS + 700);
+      harness.midi.noteOn(MIDI.F5);
 
       const [judged] = harness.of('noteJudged');
       expect(judged?.verdict).toBe('wrong');

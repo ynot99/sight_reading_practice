@@ -2731,6 +2731,40 @@ describe('measuring how long a press takes to arrive', () => {
     expect(element<HTMLInputElement>('latency').value).toBe('300');
   });
 
+  it('judges a press by the delay a previous visit measured', async () => {
+    // The whole point of keeping it: the number is no use unless the run that
+    // comes after the reload is the one it corrects.
+    const store = new InMemorySettingsStore();
+    const first = createRig(undefined, store);
+    await first.view.initialize();
+    const slider = element<HTMLInputElement>('latency');
+    slider.value = '300';
+    slider.dispatchEvent(new Event('input'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    mountRealMarkup();
+    const rig = createRig(undefined, store);
+    await rig.view.initialize();
+    rig.runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+    const session = rig.runtime.controller.start();
+    const judged: (number | null)[] = [];
+    session?.events.on('noteJudged', (event) => judged.push(event.deviationMs));
+    rig.metronome.advanceSubdivisions(1);
+    const due = session?.currentStep?.expectedMidi ?? [];
+    expect(due.length).toBeGreaterThan(0);
+
+    // Played three hundred milliseconds after the beat, which is exactly how
+    // long this reader's keyboard takes to be heard about.
+    rig.clock.set(rig.clock.now() + 300);
+    for (const midi of due) {
+      rig.midi.noteOn(midi, rig.clock.now());
+    }
+
+    expect(rig.runtime.controller.settings.inputLatencyMs).toBe(300);
+    // Judged as dead on the beat, which is where the key actually went down.
+    expect(judged[0]).toBe(0);
+  });
+
   it('holds a delay past the old ceiling, since a relay can cost that much', async () => {
     // Three hundred was the first ceiling and a reader measured exactly that,
     // which is what a ceiling looks like from underneath.

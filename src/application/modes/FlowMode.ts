@@ -79,8 +79,21 @@ export class FlowMode extends BasePracticeMode {
    * arriving late is still that chord's, and handing it to the next step would
    * turn one well-played bar into two badly played ones.
    *
-   * The window never runs past halfway to the next beat, so at a brisk tempo
-   * it shrinks with the music instead of swallowing whole steps.
+   * Two windows, because two different questions are being asked.
+   *
+   * For a pitch the next step *wants*, the answer is simply which beat the
+   * press was nearer to. Nothing else on the page is asking for that key, so
+   * there is no doubt about what was played - only about when - and a press
+   * past the halfway mark was reaching forward. Held to a tenth of a second
+   * instead, which is what used to happen, a reader who was a fifth of a beat
+   * early got a red mark for playing the right note slightly ahead of it. A
+   * wrong note is a *different* note, not a note at a different time.
+   *
+   * For any other pitch there is doubt about both, so it keeps the narrow
+   * window: a note nobody is expecting yet has to be very close indeed before
+   * it is read as an early anything. That window never runs past halfway
+   * either, so at a brisk tempo it shrinks with the music instead of
+   * swallowing whole steps.
    */
   private isAimedAtTheNextStep(context: PracticeContext, event: MidiNoteOnEvent): boolean {
     const step = context.currentStep;
@@ -103,6 +116,9 @@ export class FlowMode extends BasePracticeMode {
       return false;
     }
     const gap = dueAt - context.scheduledTimeMs(step.onsetTicks);
+    if (next.expectedMidi.includes(event.midi)) {
+      return untilDue <= gap / 2;
+    }
     return untilDue <= Math.min(context.options.earlyWindowMs, gap / 2);
   }
 

@@ -72,6 +72,15 @@ export class PerformanceRecorder {
   private readonly captured: Captured[] = [];
   private readonly emitter = new TypedEventEmitter<RecorderEventMap>();
   private subscription: Unsubscribe | null = null;
+  /**
+   * How much had been captured when the last take was closed.
+   *
+   * A stretch of playing ends once. Anything at all can wake the recorder
+   * afterwards - a knob being turned sends a stream of messages, and none of
+   * them is playing - and each one arrived after the same silence and closed
+   * the same take again. `-1` because no length can equal it.
+   */
+  private closedAtLength = -1;
   /** Keys still down, so a take can release what it cut through. */
   private readonly holding = new Map<number, number>();
 
@@ -134,6 +143,10 @@ export class PerformanceRecorder {
     if (last === undefined || atMs - last.atMs < this.silenceMs) {
       return;
     }
+    if (this.captured.length === this.closedAtLength) {
+      return;
+    }
+    this.closedAtLength = this.captured.length;
     const closing = this.take();
     if (closing !== null) {
       this.emitter.emit('takeClosed', { take: closing });
@@ -203,6 +216,7 @@ export class PerformanceRecorder {
   clear(): void {
     this.captured.length = 0;
     this.holding.clear();
+    this.closedAtLength = -1;
   }
 
   /** Releases every listener. */

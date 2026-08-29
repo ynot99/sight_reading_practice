@@ -22,6 +22,7 @@ import { PerformanceRecorder } from '../application/PerformanceRecorder.js';
 import { ControlBinding } from '../application/ControlBinding.js';
 import { TakeLibrary, TAKES_STORAGE_KEY } from '../application/TakeLibrary.js';
 import { TakePlayer } from '../application/TakePlayer.js';
+import { BackupService } from '../application/Backup.js';
 import { ScoreLibrary } from '../application/ScoreLibrary.js';
 import { IndexedDbScoreStore } from '../infrastructure/storage/IndexedDbScoreStore.js';
 import type { IScoreStore } from '../application/ports/IScoreStore.js';
@@ -30,6 +31,7 @@ import type { IFileSink } from '../application/ports/IFileSink.js';
 import { PracticeLadder } from '../application/ladder/PracticeLadder.js';
 import { BUILT_IN_LADDER } from '../application/ladder/ladderSteps.js';
 import {
+  DEFAULT_STORAGE_KEY,
   HISTORY_STORAGE_KEY,
   LocalStorageSettingsStore,
   browserStorage,
@@ -108,6 +110,8 @@ export interface AppRuntime {
   readonly takes: TakeLibrary;
   /** Plays a kept take back, so an idea can be heard rather than only listed. */
   readonly takePlayer: TakePlayer;
+  /** Carries everything off this device, since an installed app cannot see the tab's. */
+  readonly backup: BackupService;
   /** Scores kept between visits, so a file is chosen from the disk once. */
   readonly scores: ScoreLibrary;
   readonly files: IFileSink;
@@ -187,8 +191,10 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
   const ladder = new PracticeLadder(BUILT_IN_LADDER);
 
+  const settingsStore =
+    options.settingsStore ?? new LocalStorageSettingsStore(browserStorage());
   const settings = new SettingsRepository(
-    options.settingsStore ?? new LocalStorageSettingsStore(browserStorage()),
+    settingsStore,
     {
       presetIds: presets.list().map((preset) => preset.id),
       modeIds: modes.list().map((mode) => mode.id),
@@ -206,21 +212,30 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   // work without the reader teaching it again.
   const volumeKnob = new ControlBinding();
   const disposeKnob = volumeKnob.listenTo(midi);
-  const takes = new TakeLibrary(
-    options.takeStore ?? new LocalStorageSettingsStore(browserStorage(), TAKES_STORAGE_KEY),
-  );
+  const takeStore =
+    options.takeStore ?? new LocalStorageSettingsStore(browserStorage(), TAKES_STORAGE_KEY);
+  const takes = new TakeLibrary(takeStore);
   takes.load();
 
-  const scores = new ScoreLibrary({
-    store: options.scoreStore ?? new IndexedDbScoreStore(),
-    serializer,
-    importer,
-  });
+  const scoreStore = options.scoreStore ?? new IndexedDbScoreStore();
+  const scores = new ScoreLibrary({ store: scoreStore, serializer, importer });
 
-  const history = new PracticeHistory(
-    options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY),
-  );
+  const historyStore =
+    options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY);
+  const history = new PracticeHistory(historyStore);
   history.load();
+
+  // Everything kept between visits, so one file can carry all of it. Keyed by
+  // where each blob lives, which is what a restore has to put it back under.
+  const backup = new BackupService({
+    stores: new Map([
+      [DEFAULT_STORAGE_KEY, settingsStore],
+      [TAKES_STORAGE_KEY, takeStore],
+      [HISTORY_STORAGE_KEY, historyStore],
+    ]),
+    scoreStore,
+    clock,
+  });
 
   const restored = settings.load();
   metronome.setVolume(restored.audio.metronomeVolume);
@@ -261,6 +276,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     ladder,
     recorder,
     takePlayer,
+    backup,
     volumeKnob,
     takes,
     scores,

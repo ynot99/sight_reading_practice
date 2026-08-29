@@ -28,6 +28,7 @@ import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { ChosenPassage } from '../application/PracticeController.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { elementAt } from '../shared/asserts.js';
+import { readBackup } from '../application/Backup.js';
 
 /**
  * How long the page waits after the last tempo press before re-engraving.
@@ -251,6 +252,16 @@ function takeName(savedAtMs: number): string {
   const at = new Date(savedAtMs);
   const pad = (value: number): string => String(value).padStart(2, '0');
   return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
+/** Named by the day it was taken, so two of them sort themselves. */
+function backupFileName(savedAtMs: number): string {
+  const at = new Date(savedAtMs);
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return (
+    `sight-reading-${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}` +
+    `-${pad(at.getHours())}${pad(at.getMinutes())}.json`
+  );
 }
 
 function takeFileName(savedAtMs: number): string {
@@ -590,6 +601,10 @@ export class AppView {
     latencyValue: HTMLOutputElement;
     latencyMeasure: HTMLButtonElement;
     latencyDescription: HTMLElement;
+    saveBackup: HTMLButtonElement;
+    openBackup: HTMLButtonElement;
+    backupFile: HTMLInputElement;
+    backupDescription: HTMLElement;
     toleranceValue: HTMLOutputElement;
     zoom: HTMLInputElement;
     zoomValue: HTMLOutputElement;
@@ -744,6 +759,10 @@ export class AppView {
       latencyValue: requireElement(doc, 'latency-value'),
       latencyMeasure: requireElement(doc, 'latency-measure'),
       latencyDescription: requireElement(doc, 'latency-description'),
+      saveBackup: requireElement(doc, 'save-backup'),
+      openBackup: requireElement(doc, 'open-backup'),
+      backupFile: requireElement(doc, 'backup-file'),
+      backupDescription: requireElement(doc, 'backup-description'),
       toleranceValue: requireElement(doc, 'tolerance-value'),
       zoom: requireElement(doc, 'zoom'),
       zoomValue: requireElement(doc, 'zoom-value'),
@@ -1338,6 +1357,7 @@ export class AppView {
     });
 
     this.bindSheets();
+    this.bindBackup();
     this.bindTakeTransport();
 
     this.subscriptions.push(
@@ -2523,6 +2543,82 @@ export class AppView {
   }
 
   /**
+   * Carries everything off this device, and back onto another one.
+   *
+   * The reason it exists: installing this page to a Home Screen gives it a
+   * store of its own, separate from the tab it was installed from, and a
+   * reader who had been practising in the tab opened the app to find their
+   * levels, scores and takes gone. Not lost - somewhere the new window cannot
+   * reach. Nothing in a browser bridges that; a file does.
+   */
+  private bindBackup(): void {
+    this.listen(this.el.saveBackup, 'click', () => {
+      void this.saveBackup();
+    });
+
+    this.listen(this.el.openBackup, 'click', () => {
+      this.el.backupFile.click();
+    });
+
+    this.listen(this.el.backupFile, 'change', () => {
+      void this.restoreBackup();
+    });
+  }
+
+  private async saveBackup(): Promise<void> {
+    try {
+      const document = await this.runtime.backup.create();
+      const bytes = new TextEncoder().encode(JSON.stringify(document));
+      this.runtime.files.save(backupFileName(document.savedAtMs), bytes, 'application/json');
+      this.el.backupDescription.textContent =
+        `Saved: ${document.scores.length} score${document.scores.length === 1 ? '' : 's'}, ` +
+        'and everything this device remembers.';
+    } catch (error) {
+      this.el.backupDescription.textContent =
+        error instanceof Error ? `Could not save a backup. ${error.message}` : 'Could not save a backup.';
+    }
+  }
+
+  /**
+   * Reads a backup back in, and puts the page into what it says.
+   *
+   * Everything is reloaded from its store rather than the page being thrown
+   * away and reopened: the reader chose a file, and answering that by
+   * restarting the application would look like something had gone wrong.
+   */
+  private async restoreBackup(): Promise<void> {
+    const file = this.el.backupFile.files?.[0];
+    // Cleared first, so choosing the same file twice is two restores.
+    this.el.backupFile.value = '';
+    if (file === undefined) {
+      return;
+    }
+
+    try {
+      const document = readBackup(JSON.parse(await file.text()));
+      const summary = await this.runtime.backup.restore(document);
+
+      const restored = this.runtime.settings.load();
+      this.runtime.controller.updateSettings(restored.practice);
+      this.runtime.takes.load();
+      await this.runtime.scores.load();
+      this.syncControlsFromSettings();
+      this.renderTakes();
+      this.renderScores();
+
+      const already =
+        summary.scoresAlreadyHere === 0
+          ? ''
+          : ` ${summary.scoresAlreadyHere} were already here and were left alone.`;
+      this.el.backupDescription.textContent =
+        `Restored ${summary.stores} kept things and ${summary.scoresAdded} score${summary.scoresAdded === 1 ? '' : 's'}.${already}`;
+    } catch (error) {
+      this.el.backupDescription.textContent =
+        error instanceof Error ? `Could not restore that file. ${error.message}` : 'Could not restore that file.';
+    }
+  }
+
+  /**
    * Raises and drops the sheets, from either place that can reach them.
    *
    * The lists live in one place and are opened from two, which is the whole
@@ -2633,7 +2729,11 @@ export class AppView {
       if (player.playing !== null) {
         player.pause();
       } else if (this.selectedTakeId !== null) {
-        this.playTake(this.selectedTakeId, player.positionMs);
+        // From the top when it is already at the end. Pressing play on a
+        // finished take otherwise plays the nothing that is left of it, so
+        // the reader had to drag the slider back before it would do anything.
+        const from = player.positionMs >= player.durationMs ? 0 : player.positionMs;
+        this.playTake(this.selectedTakeId, from);
       }
       this.describeTakeTransport();
     });

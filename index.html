@@ -297,6 +297,25 @@
         </div>
 
         <div class="control-group">
+          <label for="save-backup">Everything on this device</label>
+          <div class="ladder-row">
+            <button id="save-backup" type="button" class="button">Save a backup</button>
+            <button id="open-backup" type="button" class="button">Restore…</button>
+          </div>
+          <!--
+            No `accept`: the same reason the score picker has none. iOS
+            resolves it to its own file kinds and greys out everything it does
+            not recognise, which for a file we invented is everything.
+          -->
+          <input id="backup-file" type="file" hidden />
+          <p id="backup-description" class="hint">
+            Settings, kept scores, takes and history, in one file. Installing this
+            page to the Home Screen gives it a store of its own, separate from the
+            browser tab — nothing in a browser can carry them across, but a file can.
+          </p>
+        </div>
+
+        <div class="control-group">
           <label for="latency">Input delay: <output id="latency-value">0</output> ms</label>
           <input id="latency" type="range" min="-100" max="300" step="5" value="0" />
           <button id="latency-measure" type="button" class="button button--ghost" disabled>

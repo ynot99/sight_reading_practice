@@ -17,6 +17,7 @@ import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.j
 import { ControlBinding } from '../../src/application/ControlBinding.js';
 import { TakeLibrary } from '../../src/application/TakeLibrary.js';
 import { TakePlayer } from '../../src/application/TakePlayer.js';
+import { BackupService } from '../../src/application/Backup.js';
 import { ScoreLibrary } from '../../src/application/ScoreLibrary.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
@@ -186,6 +187,11 @@ function createRig(
   });
 
   const takePlayer = new TakePlayer({ instrument, clock });
+  const backup = new BackupService({
+    stores: new Map([['settings', store]]),
+    scoreStore,
+    clock,
+  });
 
   const runtime: AppRuntime = {
     controller,
@@ -194,6 +200,7 @@ function createRig(
     ladder,
     recorder,
     takePlayer,
+    backup,
     volumeKnob,
     takes,
     scores,
@@ -1017,6 +1024,54 @@ describe('AppView', () => {
 
       expect(rig.runtime.takePlayer.positionMs).toBe(1_000);
       expect(element('take-position').textContent).toBe('0:01');
+    });
+
+    it('starts a finished take again from the top', async () => {
+      // Pressing play on a take already at its end plays the nothing that is
+      // left of it, so the reader had to drag the slider back by hand before
+      // the button would do anything at all.
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      element<HTMLButtonElement>('keep-take').click();
+      rowButton('takes-list', 'Play this take').click();
+
+      // Played out, and stopped by the follower.
+      rig.clock.advance(60_000);
+      rig.runtime.takePlayer.pause();
+      expect(rig.runtime.takePlayer.positionMs).toBe(rig.runtime.takePlayer.durationMs);
+
+      const before = rig.instrument.played.length;
+      element<HTMLButtonElement>('take-play').click();
+
+      expect(rig.runtime.takePlayer.positionMs).toBe(0);
+      expect(rig.instrument.played.length).toBeGreaterThan(before);
+    });
+
+    it('carries everything off the device and back onto it', async () => {
+      // Installing the page to a Home Screen gives it a store of its own,
+      // separate from the tab it was installed from - so the reader opened
+      // the app and found their levels, scores and takes gone. Not lost;
+      // somewhere the new window cannot reach.
+      const rig = createRig();
+      await rig.view.initialize();
+      const tempo = element<HTMLInputElement>('tempo');
+      tempo.value = '84';
+      tempo.dispatchEvent(new Event('change'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      element<HTMLButtonElement>('save-backup').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const [file] = rig.files.saved;
+      expect(file?.fileName).toMatch(/^sight-reading-\d{8}-\d{4}\.json$/);
+      expect(file?.mimeType).toBe('application/json');
+      const document = JSON.parse(new TextDecoder().decode(file?.bytes)) as {
+        kind: string;
+        stores: Record<string, unknown>;
+      };
+      expect(document.kind).toBe('sight-reading-practice.backup');
+      expect(Object.keys(document.stores)).toContain('settings');
     });
 
     it('stops the sound when the list is shut on it', async () => {

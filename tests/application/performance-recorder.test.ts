@@ -26,6 +26,40 @@ function playNote(harness: Rig, midi: number, holdMs = 100): void {
   harness.midi.noteOff(midi, harness.clock.now());
 }
 
+describe('a stretch of playing ending', () => {
+  it('is announced once, however many messages arrive after the silence', () => {
+    // The bug: a knob being turned sends a stream of control messages, none
+    // of which is playing and none of which the recorder keeps - so each one
+    // arrived after the same silence and closed the same take again. The
+    // reader found the same recording in the list two or three times.
+    const harness = rig({ silenceMs: 1_000 });
+    const closed: number[] = [];
+    harness.recorder.events.on('takeClosed', ({ take }) => closed.push(take.noteCount));
+
+    playNote(harness, 60);
+    harness.clock.advance(5_000);
+    for (let message = 0; message < 4; message += 1) {
+      harness.midi.control(7, message / 4, harness.clock.now());
+    }
+
+    expect(closed).toEqual([1]);
+  });
+
+  it('is announced again once there is something new to end', () => {
+    const harness = rig({ silenceMs: 1_000 });
+    const closed: number[] = [];
+    harness.recorder.events.on('takeClosed', ({ take }) => closed.push(take.noteCount));
+
+    playNote(harness, 60);
+    harness.clock.advance(5_000);
+    playNote(harness, 62);
+    harness.clock.advance(5_000);
+    playNote(harness, 64);
+
+    expect(closed).toEqual([1, 1]);
+  });
+});
+
 describe('keeping what was just played', () => {
   it('is already recording, with nothing switched on', () => {
     // The whole design: an idea worth keeping is noticed after it is played,

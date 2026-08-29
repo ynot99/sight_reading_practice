@@ -30,6 +30,7 @@ import { clefAtMeasure, keyAtMeasure, measureCount } from '../domain/model/Exerc
 import { sliceExercise } from '../domain/model/exerciseSlice.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
+import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMeter.js';
 import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
 
 /** When the marks for what was played are put on the page. */
@@ -191,6 +192,16 @@ export interface PracticeSettings {
    */
   readonly playedNotes: PlayedNoteDisplay;
   /**
+   * A bar that drains while the music runs and fills when you get it right.
+   *
+   * Not a way of grading sight-reading: coming apart on a page never seen
+   * before is the material working, not the reader failing. This is for music
+   * already known, where the question is whether it holds together at tempo.
+   * It needs a pulse to drain against, so it says nothing in Wait mode -
+   * where the music waits for the reader, there is nothing to survive.
+   */
+  readonly survival: boolean;
+  /**
    * Where the veil sits relative to the cursor, in steps, or `null` for none.
    *
    * One axis, because dimming what is behind and hiding what is under your
@@ -217,6 +228,8 @@ export interface ControllerEventMap {
   settingsChanged: { readonly settings: PracticeSettings };
   exerciseLoaded: ExerciseLoadedEvent;
   sessionCreated: { readonly session: PracticeSession };
+  /** Where the survival bar stands, `0..1`. Only while survival is on. */
+  healthChanged: { readonly health: number };
   ladderMoved: {
     readonly from: LadderStep;
     readonly to: LadderStep;
@@ -245,6 +258,8 @@ export interface PracticeControllerDependencies {
   readonly ladder?: PracticeLadder;
   /** Remembers how earlier readings of the same passage went. */
   readonly history?: PracticeHistory;
+  /** How hard the survival bar is, for tuning and for tests. */
+  readonly health?: HealthMeterOptions;
   /** Seam for alternative exercise sources (files, network, ear training). */
   readonly providerFor?: (generator: IExerciseGenerator) => IExerciseProvider;
   readonly initialSettings?: Partial<PracticeSettings>;
@@ -275,11 +290,14 @@ export class PracticeController {
   private fadedThrough = -1;
   /** Marks waiting for the run to end, when that is when they are drawn. */
   private heldMarks: PlayedNote[] = [];
+  private readonly meter: HealthMeter;
+  private lastBeatTicks = 0;
   private cleanReadings = 0;
   private poorReadings = 0;
 
   constructor(dependencies: PracticeControllerDependencies) {
     this.deps = dependencies;
+    this.meter = new HealthMeter(dependencies.health);
     // Defaults come from the preset that is actually about to be used, not
     // from the first one registered: restored settings name a preset but may
     // predate a field, and that field has to default to something coherent
@@ -319,6 +337,7 @@ export class PracticeController {
       showCursor: true,
       blindMode: false,
       playedNotes: 'live',
+      survival: false,
       readAheadSteps: null,
       zoom: 0.85,
       ...dependencies.initialSettings,
@@ -724,6 +743,11 @@ export class PracticeController {
     });
 
     this.currentSession = session;
+    this.meter.reset();
+    this.lastBeatTicks = 0;
+    if (this.survivalRuns) {
+      this.emitter.emit('healthChanged', { health: this.meter.health });
+    }
     this.heldMarks = [];
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
@@ -735,6 +759,9 @@ export class PracticeController {
       session.events.on('stepCompleted', ({ result }) => {
         if (this.currentSettings.readAheadSteps !== null) {
           this.fadeThrough(result.index);
+        }
+        if (this.survivalRuns) {
+          this.publishHealth(this.meter.settle(result.status));
         }
       }),
     );
@@ -762,6 +789,21 @@ export class PracticeController {
         }
       }),
     );
+    this.sessionSubscriptions.push(
+      // The pulse the run already keeps, so the bar needs no clock of its own
+      // and a whole game replays headlessly.
+      session.events.on('beat', (tick) => {
+        if (!this.survivalRuns) {
+          return;
+        }
+        const beats =
+          (tick.positionTicks - this.lastBeatTicks) /
+          this.currentSettings.timeSignature.ticksPerPulse;
+        this.lastBeatTicks = tick.positionTicks;
+        this.publishHealth(this.meter.drainForBeats(beats));
+      }),
+    );
+
     this.sessionSubscriptions.push(
       session.events.on('stepEntered', ({ step }) => {
         this.deps.cursor.moveTo(step.index);
@@ -1007,6 +1049,37 @@ export class PracticeController {
       this.deps.overlay.showPlayed(mark);
     }
     this.heldMarks = [];
+  }
+
+  /**
+   * Whether the bar is running for this exercise.
+   *
+   * Needs a pulse to drain against: in Wait mode nothing moves without the
+   * reader, so there is nothing to survive and the bar would sit still.
+   */
+  get survivalRuns(): boolean {
+    return (
+      this.currentSettings.survival &&
+      this.deps.modes.get(this.currentSettings.modeId).requiresMetronome
+    );
+  }
+
+  /** Where the bar stands, `0..1`. */
+  get health(): number {
+    return this.meter.health;
+  }
+
+  /**
+   * Announces the bar, and ends the run when it empties.
+   *
+   * Aborted rather than finished: the reader did not reach the end, and a
+   * report that said otherwise would be the one lie this feature could tell.
+   */
+  private publishHealth(health: number): void {
+    this.emitter.emit('healthChanged', { health });
+    if (health <= 0) {
+      this.currentSession?.abort();
+    }
   }
 
   private applyCursorVisibility(): void {

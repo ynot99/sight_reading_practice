@@ -314,6 +314,7 @@ export class AppView {
   private lastPosition = '';
   /** The step now due, kept so blind mode can be turned off mid-run. */
   private lastExpected: readonly number[] = [];
+  private lastHealthAtMs: number | null = null;
   /** Whether the reader has already been given this page. */
   private hasLooked = false;
   /** A promotion waiting to be reported alongside the run that earned it. */
@@ -331,6 +332,9 @@ export class AppView {
     focusPlay: HTMLButtonElement;
     focusPlayIcon: SVGPathElement;
     focusHandle: HTMLButtonElement;
+    focusHealth: HTMLElement;
+    focusHealthFill: HTMLElement;
+    survival: HTMLInputElement;
     focusDrawer: HTMLElement;
     focusStop: HTMLButtonElement;
     focusListen: HTMLButtonElement;
@@ -438,6 +442,9 @@ export class AppView {
       focusPlay: requireElement(doc, 'focus-play'),
       focusPlayIcon: requireElement(doc, 'focus-play-icon'),
       focusHandle: requireElement(doc, 'focus-handle'),
+      focusHealth: requireElement(doc, 'focus-health'),
+      focusHealthFill: requireElement(doc, 'focus-health-fill'),
+      survival: requireElement(doc, 'survival'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
       focusStop: requireElement(doc, 'focus-stop'),
       focusListen: requireElement(doc, 'focus-listen'),
@@ -939,6 +946,11 @@ export class AppView {
       controller.updateSettings({ metronomeMuted: this.el.metronomeMuted.checked });
     });
 
+    this.listen(this.el.survival, 'change', () => {
+      controller.updateSettings({ survival: this.el.survival.checked });
+      this.renderHealth(controller.health);
+    });
+
     this.listen(this.el.rhythmOnly, 'change', () => {
       controller.updateSettings({ rhythmOnly: this.el.rhythmOnly.checked });
     });
@@ -1266,6 +1278,29 @@ export class AppView {
     });
   }
 
+  /**
+   * Draws the survival bar, gliding rather than stepping.
+   *
+   * The pulse arrives once a beat on a calm exercise and four times as often
+   * on a busy one, so the glide is timed from the gap between updates rather
+   * than fixed: a constant duration would stutter on the slow piece and lag
+   * behind on the fast one. Which is the same reasoning as the drain itself -
+   * everything here is measured against the music, not the clock.
+   */
+  private renderHealth(health: number): void {
+    const running = this.runtime.controller.survivalRuns;
+    this.el.focusHealth.hidden = !running;
+    if (!running) {
+      return;
+    }
+    const now = Date.now();
+    const since = this.lastHealthAtMs === null ? 0 : now - this.lastHealthAtMs;
+    this.lastHealthAtMs = now;
+    this.el.focusHealthFill.style.transitionDuration = `${Math.min(2000, Math.max(80, since))}ms`;
+    this.el.focusHealthFill.style.width = `${Math.round(health * 100)}%`;
+    this.el.focusHealthFill.dataset['low'] = String(health <= 0.25);
+  }
+
   private renderFocusStatus(text: string): void {
     this.el.focusStatus.textContent = text;
   }
@@ -1313,6 +1348,12 @@ export class AppView {
     this.subscriptions.push(
       controller.playbackEvents.on('finished', () => {
         this.describeListening();
+      }),
+    );
+
+    this.subscriptions.push(
+      controller.events.on('healthChanged', ({ health }) => {
+        this.renderHealth(health);
       }),
     );
 
@@ -1683,6 +1724,8 @@ export class AppView {
     this.el.metronomeMuted.checked = settings.metronomeMuted;
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
+    this.el.survival.checked = settings.survival;
+    this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
     this.applyScoreCover();
     this.el.presetDescription.textContent = this.runtime.presets.get(settings.presetId).description;

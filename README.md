@@ -117,6 +117,26 @@ answer. The note log stops naming the rest of an unfinished chord for the same
 reason. Bar and beat stay — knowing where you are is orientation, not an
 answer.
 
+**Survival** is the game mode: a bar drains while the music runs and fills
+when you get a step right, and running out ends the run. It is deliberately
+not a way of grading sight-reading — coming apart on a page you have never
+seen is the material working, not you failing — it is for music you already
+know, where the question is whether it holds together at tempo.
+
+The drain is measured in *beats of musical time*, not in seconds, and that is
+the whole of how a slow melody stays playable: a beat at 50 bpm lasts more
+than twice as long as one at 120, so the bar falls at half the speed on screen
+without anything being told the tempo. Per beat rather than per pulse, too —
+sixteenths tick four times as often as quarters and must not cost four times
+as much for a reason no player could name. Busy music is still harder, because
+there are more notes to miss, which is the point rather than an accident.
+
+It needs a pulse to drain against, so it says nothing in Wait mode: where the
+music waits for you, there is nothing to survive. The bar is driven by the run's
+own metronome, so a whole game replays headlessly in a test, and the glide is
+timed from the gap between pulses — a fixed one would stutter on a slow piece
+and lag behind on a fast one.
+
 **Rhythm only** judges when and never what: one press satisfies a step
 whatever the pitch, because reading a rhythm before playing the notes is
 standard practice and it is the half beginners drop first. It is a match rule

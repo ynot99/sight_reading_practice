@@ -32,7 +32,8 @@ import { RecordingPitchPlayer } from '../../src/infrastructure/testing/Recording
 import { PracticeHistory } from '../../src/application/PracticeHistory.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { DomainError } from '../../src/shared/errors.js';
-import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import { beamedSixteenths, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import type { Exercise } from '../../src/domain/model/Exercise.js';
 
 /** Strips the printed tempo so two renderings can be compared note for note. */
 function withoutTempoMark(xml: string): string {
@@ -54,6 +55,7 @@ function createController(
   providerFor?: PracticeControllerDependencies['providerFor'],
   extraSettings: Partial<PracticeSettings> = {},
   history?: PracticeHistory,
+  health?: PracticeControllerDependencies['health'],
 ): {
   controller: PracticeController;
   renderer: FakeScoreRenderer;
@@ -87,6 +89,7 @@ function createController(
       new ContinuityScoringStrategy(),
     ]),
     ladder: new PracticeLadder(BUILT_IN_LADDER),
+    ...(health === undefined ? {} : { health }),
     ...(fixedExercise
       ? { providerFor: () => ({ provide: () => Promise.resolve(twoBarExercise()) }) }
       : {}),
@@ -1347,5 +1350,153 @@ describe('the pace, as a share of the written tempo', () => {
       controller.nudgeTempoPercent(5);
     }
     expect(controller.tempoPercent).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('surviving a piece you already know', () => {
+  async function survivalRun(
+    overrides: Partial<PracticeSettings> = {},
+    health?: PracticeControllerDependencies['health'],
+  ) {
+    const rig = createController(
+      true,
+      undefined,
+      { modeId: FLOW_MODE_ID, survival: true, ...overrides },
+      undefined,
+      health,
+    );
+    await rig.controller.loadNewExercise();
+    const readings: number[] = [];
+    rig.controller.events.on('healthChanged', ({ health: value }) => readings.push(value));
+    return { ...rig, readings };
+  }
+
+  it('says nothing in Wait mode, where nothing moves without you', async () => {
+    const rig = await survivalRun({ modeId: undefined });
+    rig.controller.updateSettings({ modeId: new WaitMode().id });
+
+    expect(rig.controller.survivalRuns).toBe(false);
+  });
+
+  it('drains as the music goes by', async () => {
+    const rig = await survivalRun();
+    rig.controller.start();
+
+    rig.metronome.advanceSubdivisions(8);
+
+    expect(rig.controller.health).toBeLessThan(1);
+    expect(rig.readings.length).toBeGreaterThan(1);
+  });
+
+  it('falls at the same rate per beat however busy the music is', async () => {
+    // The pulse ticks at the resolution the shortest note needs, so a piece
+    // of sixteenths ticks four times as often as one of quarters. Draining
+    // per tick would make busy music four times as harsh for no reason a
+    // player could name; per beat, a beat of music costs a beat's worth.
+    //
+    // Only the drain: the penalties for missing are left out because busy
+    // music genuinely *is* harder - there are more notes to miss - and that
+    // is the design rather than the thing under test.
+    async function drainOverWholePiece(exercise: Exercise) {
+      const rig = createController(
+        false,
+        () => ({ provide: () => Promise.resolve(exercise) }),
+        { modeId: FLOW_MODE_ID, survival: true },
+        undefined,
+        { rewardPerStep: 0, missPenalty: 0, wrongPenalty: 0 },
+      );
+      await rig.controller.loadNewExercise();
+      rig.controller.start();
+      // Generously past the end; the pulse stops when the music does.
+      rig.metronome.advanceSubdivisions(400);
+      return 1 - rig.controller.health;
+    }
+
+    // A bar of 2/4 in sixteenths is two beats; two bars of 4/4 in quarters
+    // are eight. The sixteenths tick four times as often, and must still cost
+    // a quarter as much.
+    expect(await drainOverWholePiece(beamedSixteenths())).toBeCloseTo(2 * 0.035, 3);
+    expect(await drainOverWholePiece(twoBarExercise())).toBeCloseTo(8 * 0.035, 3);
+  });
+
+  it('falls at the same rate per bar however slow the piece is', async () => {
+    // Measured in beats rather than seconds, so the tempo does not decide how
+    // hard the game is - which is the whole reason a slow melody is playable.
+    const slow = await survivalRun();
+    slow.controller.updateSettings({ tempoBpm: 40 });
+    await slow.controller.reloadExercise();
+    slow.controller.start();
+    slow.metronome.advanceSubdivisions(8);
+
+    const fast = await survivalRun();
+    fast.controller.updateSettings({ tempoBpm: 160 });
+    await fast.controller.reloadExercise();
+    fast.controller.start();
+    fast.metronome.advanceSubdivisions(8);
+
+    expect(slow.controller.health).toBeCloseTo(fast.controller.health, 10);
+  });
+
+  it('climbs while the reader keeps up', async () => {
+    // The same music twice, played and unplayed: only the playing differs, so
+    // only the playing can explain the gap.
+    async function healthAfter(play: boolean): Promise<number> {
+      const rig = await survivalRun();
+      const session = rig.controller.start();
+      for (let at = 0; at < 8; at += 1) {
+        if (play) {
+          for (const midi of session?.currentStep?.expectedMidi ?? []) {
+            rig.midi.noteOn(midi, rig.clock.now());
+          }
+        }
+        rig.metronome.advanceSubdivisions(1);
+      }
+      return rig.controller.health;
+    }
+
+    expect(await healthAfter(true)).toBeGreaterThan(await healthAfter(false));
+  });
+
+  it('ends the run when the bar empties', async () => {
+    // A drain the two-bar fixture cannot outlast, so the bar empties before
+    // the music runs out and it is the bar that stops the run.
+    const rig = await survivalRun({}, { drainPerBeat: 0.5 });
+    const session = rig.controller.start();
+
+    // Nothing played at all: every step is one the music took away.
+    rig.metronome.advanceSubdivisions(8);
+
+    expect(rig.controller.health).toBe(0);
+    expect(session?.status).toBe('aborted');
+  });
+
+  it('reports the run as unfinished, because it was', async () => {
+    const rig = await survivalRun({}, { drainPerBeat: 0.5 });
+    const session = rig.controller.start();
+    rig.metronome.advanceSubdivisions(8);
+
+    // The one lie this feature could tell would be a report saying the reader
+    // reached the end.
+    expect(session?.report?.completed).toBe(false);
+  });
+
+  it('starts each run with a full bar', async () => {
+    const rig = await survivalRun();
+    rig.controller.start();
+    rig.metronome.advanceSubdivisions(6);
+    expect(rig.controller.health).toBeLessThan(1);
+
+    rig.controller.start();
+
+    expect(rig.controller.health).toBe(1);
+  });
+
+  it('leaves the bar alone when it is switched off', async () => {
+    const rig = await survivalRun({ survival: false });
+    rig.controller.start();
+    rig.metronome.advanceSubdivisions(20);
+
+    expect(rig.controller.health).toBe(1);
+    expect(rig.readings).toEqual([]);
   });
 });

@@ -46,6 +46,7 @@ const SETTINGS: PracticeSettings = {
   showCursor: false,
   blindMode: true,
   playedNotes: 'at-end',
+  survival: true,
   readAheadSteps: 2,
   zoom: 1.2,
 };

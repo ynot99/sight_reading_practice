@@ -263,6 +263,7 @@
           <label><input id="metronome-muted" type="checkbox" /> Mute metronome</label>
           <label><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
           <label><input id="rhythm-only" type="checkbox" /> Rhythm only: any note counts</label>
+          <label><input id="survival" type="checkbox" /> Survival: keep the bar up</label>
           <label><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
           <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
         </div>
@@ -272,6 +273,10 @@
       <div id="focus-bar" class="focus-bar" hidden data-open="false">
         <button id="focus-handle" type="button" class="focus-bar__handle"
           aria-controls="focus-drawer" aria-expanded="false" aria-label="More controls"></button>
+
+        <div id="focus-health" class="focus-bar__health" hidden>
+          <div id="focus-health-fill" class="focus-bar__health-fill"></div>
+        </div>
 
         <div class="focus-bar__row">
           <button id="focus-play" type="button"

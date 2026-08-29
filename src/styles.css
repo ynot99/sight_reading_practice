@@ -663,6 +663,30 @@ select {
   opacity: 0.8;
 }
 
+/*
+ * The survival bar. Its width is the health and nothing else, so the fill can
+ * be animated from the view at whatever rate the pulse is arriving - a slow
+ * piece ticks rarely, and a fixed transition would stutter between them.
+ */
+.focus-bar__health {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+
+.focus-bar__health-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  background: var(--correct);
+  transition: width 400ms linear, background-color 200ms linear;
+}
+
+.focus-bar__health-fill[data-low='true'] {
+  background: var(--wrong);
+}
+
 .focus-bar__row {
   display: flex;
   align-items: center;

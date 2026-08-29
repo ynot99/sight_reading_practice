@@ -236,6 +236,7 @@ export function decodePracticeSettings(
     showCursor: readBoolean(value['showCursor']),
     blindMode: readBoolean(value['blindMode']),
     playedNotes: readPlayedNotes(value['playedNotes'], value['showPlayedNotes']),
+    survival: readBoolean(value['survival']),
     readAheadSteps: readReadAhead(value['readAheadSteps'], value['fadePassedNotes']),
     zoom: readNumber(value['zoom'], 0.3, 3),
   } as PracticeSettings);
@@ -270,6 +271,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     showCursor: settings.showCursor,
     blindMode: settings.blindMode,
     playedNotes: settings.playedNotes,
+    survival: settings.survival,
     readAheadSteps: settings.readAheadSteps,
     zoom: settings.zoom,
   };

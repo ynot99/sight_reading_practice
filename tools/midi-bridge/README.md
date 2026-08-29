@@ -81,7 +81,13 @@ One-way JSON frames over a WebSocket at `/midi`:
 {"v":1,"type":"noteon","note":60,"velocity":0.79}
 {"v":1,"type":"noteoff","note":60}
 {"v":1,"type":"pedal","down":true,"value":1}
+{"v":1,"type":"control","controller":7,"value":0.62}
 ```
+
+A `control` frame is any knob, slider or wheel other than the damper, sent by
+the number it uses. The bridge decides nothing about what it means: which
+control is a volume knob differs per keyboard, and the tablet is where the
+reader teaches the app theirs — so it can only learn what reaches it.
 
 No timestamps are sent, deliberately: the two computers' clocks share no
 origin, so the browser stamps each note as it arrives and keeps every timing

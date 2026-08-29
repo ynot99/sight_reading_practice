@@ -40,12 +40,20 @@ export interface BridgePedalMessage {
   readonly value: number;
 }
 
+/** Any other knob, by the number it sends. See {@link MidiControlEvent}. */
+export interface BridgeControlMessage {
+  readonly type: 'control';
+  readonly controller: number;
+  readonly value: number;
+}
+
 export type BridgeMessage =
   | BridgeHelloMessage
   | BridgeDeviceMessage
   | BridgeNoteOnMessage
   | BridgeNoteOffMessage
-  | BridgePedalMessage;
+  | BridgePedalMessage
+  | BridgeControlMessage;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -112,6 +120,14 @@ export function parseBridgeMessage(raw: unknown): BridgeMessage | null {
         down: parsed['down'] === true,
         value: typeof value === 'number' && value >= 0 && value <= 1 ? value : 0,
       };
+    }
+    case 'control': {
+      const controller = toMidiNote(parsed['controller']);
+      const value = parsed['value'];
+      if (controller === null || typeof value !== 'number' || value < 0 || value > 1) {
+        return null;
+      }
+      return { type: 'control', controller, value };
     }
     default:
       return null;

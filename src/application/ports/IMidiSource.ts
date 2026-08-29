@@ -33,7 +33,29 @@ export interface MidiPedalEvent {
   readonly sourceId: string;
 }
 
-export type MidiEvent = MidiNoteOnEvent | MidiNoteOffEvent | MidiPedalEvent;
+/**
+ * A knob, slider or wheel, as the controller number it actually sends.
+ *
+ * Unnamed on purpose. There is no standard for which controller a volume knob
+ * uses - it might be 7, or 11, or whatever the manufacturer chose - so the
+ * number travels intact and what it *means* is decided where the reader can
+ * teach it.
+ */
+export interface MidiControlEvent {
+  readonly type: 'control';
+  /** `0..127`, the controller number the keyboard sent. */
+  readonly controller: number;
+  /** Its position, normalised to `0..1`. */
+  readonly value: number;
+  readonly timestampMs: number;
+  readonly sourceId: string;
+}
+
+export type MidiEvent =
+  | MidiNoteOnEvent
+  | MidiNoteOffEvent
+  | MidiPedalEvent
+  | MidiControlEvent;
 
 /**
  * A stream of note events.

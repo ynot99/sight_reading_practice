@@ -15,12 +15,22 @@ export interface AudioSettings {
   readonly metronomeVolume: number;
   readonly instrumentVolume: number;
   readonly sampleLoading: SampleLoading;
+  /**
+   * The knob taught to drive the note volume, or `null` for none.
+   *
+   * Kept with the volumes rather than with the practice settings because it
+   * *is* one: which physical control reaches the same value the slider does.
+   * It is a property of the keyboard on this desk, so it belongs on the
+   * device alongside them.
+   */
+  readonly volumeController: number | null;
 }
 
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   metronomeVolume: 0.6,
   instrumentVolume: 0.6,
   sampleLoading: 'lazy',
+  volumeController: null,
 };
 
 export interface RestoredSettings {
@@ -250,6 +260,9 @@ export function decodeAudioSettings(value: unknown): AudioSettings {
     sampleLoading: SAMPLE_LOADING_MODES.includes(mode as SampleLoading)
       ? (mode as SampleLoading)
       : DEFAULT_AUDIO_SETTINGS.sampleLoading,
+    // `null` is the real answer for "no knob taught", so it has to survive a
+    // reload rather than falling back to a default that means the same thing.
+    volumeController: readInteger(value['volumeController'], 0, 127) ?? null,
   };
 }
 

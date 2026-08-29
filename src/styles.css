@@ -740,6 +740,30 @@ select {
   font-size: 13px;
 }
 
+.knob-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 2.4em;
+}
+
+.knob-row__learn {
+  padding: 4px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.knob-row__learn[data-listening='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.knob-row__status {
+  min-height: 0;
+  flex: 1;
+  min-width: 0;
+}
+
 .range-row {
   display: flex;
   align-items: center;

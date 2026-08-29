@@ -373,6 +373,8 @@ export class AppView {
     metronomeVolumeValue: HTMLOutputElement;
     instrumentVolume: HTMLInputElement;
     instrumentVolumeValue: HTMLOutputElement;
+    learnKnob: HTMLButtonElement;
+    knobStatus: HTMLElement;
     metronomeMuted: HTMLInputElement;
     pitchClass: HTMLInputElement;
     rhythmOnly: HTMLInputElement;
@@ -468,6 +470,8 @@ export class AppView {
       metronomeVolumeValue: requireElement(doc, 'metronome-volume-value'),
       instrumentVolume: requireElement(doc, 'instrument-volume'),
       instrumentVolumeValue: requireElement(doc, 'instrument-volume-value'),
+      learnKnob: requireElement(doc, 'learn-knob'),
+      knobStatus: requireElement(doc, 'knob-status'),
       metronomeMuted: requireElement(doc, 'metronome-muted'),
       pitchClass: requireElement(doc, 'pitch-class'),
       rhythmOnly: requireElement(doc, 'rhythm-only'),
@@ -490,6 +494,7 @@ export class AppView {
     this.updateButtons('idle');
     this.describeTake();
     this.renderTakes();
+    this.bindVolumeKnob();
     await this.runtime.controller.loadNewExercise();
     void this.runtime.webMidi.connect();
   }
@@ -800,6 +805,20 @@ export class AppView {
 
     this.listen(this.el.instrumentVolume, 'input', () => {
       this.applyVolumes(true);
+    });
+
+    this.listen(this.el.learnKnob, 'click', () => {
+      const knob = this.runtime.volumeKnob;
+      if (knob.isLearning) {
+        knob.cancelLearning();
+      } else if (knob.controller !== null) {
+        // A bound knob's button gives it back, since teaching a second one
+        // over the top would leave the reader unable to say which is in use.
+        knob.forget();
+      } else {
+        knob.learn();
+      }
+      this.describeKnob();
     });
 
     this.listen(this.el.metronomeMuted, 'change', () => {
@@ -1571,6 +1590,54 @@ export class AppView {
     // MusicXML is derived from an `Exercise`.
     const bytes = writeMidiFile(take.events, { trackName: takeName(take.savedAtMs) });
     this.runtime.files.save(`${takeFileName(take.savedAtMs)}.mid`, bytes, 'audio/midi');
+  }
+
+  /**
+   * Follows the knob the reader taught, and says what it is doing.
+   *
+   * The knob writes through the slider rather than past it, so the two can
+   * never disagree about how loud the piano is - a hidden second volume is
+   * how a reader ends up turning something that changes nothing.
+   */
+  private bindVolumeKnob(): void {
+    const knob = this.runtime.volumeKnob;
+
+    this.subscriptions.push(
+      knob.events.on('moved', ({ value }) => {
+        this.el.instrumentVolume.value = String(Math.round(value * 100));
+        this.applyVolumes(true);
+      }),
+    );
+
+    this.subscriptions.push(
+      knob.events.on('learned', ({ controller }) => {
+        this.runtime.settings.saveAudio({
+          ...this.runtime.settings.currentAudio,
+          volumeController: controller,
+        });
+        this.describeKnob();
+      }),
+    );
+
+    this.subscriptions.push(knob.events.on('listeningChanged', () => this.describeKnob()));
+    this.describeKnob();
+  }
+
+  private describeKnob(): void {
+    const knob = this.runtime.volumeKnob;
+    this.el.learnKnob.dataset['listening'] = String(knob.isLearning);
+    if (knob.isLearning) {
+      this.el.learnKnob.textContent = 'Cancel';
+      this.el.knobStatus.textContent = 'Turn the knob you want to use.';
+      return;
+    }
+    if (knob.controller !== null) {
+      this.el.learnKnob.textContent = 'Forget';
+      this.el.knobStatus.textContent = `Knob CC ${knob.controller} sets the note volume.`;
+      return;
+    }
+    this.el.learnKnob.textContent = 'Use a knob';
+    this.el.knobStatus.textContent = 'Teach the app which control on your keyboard to follow.';
   }
 
   private describeMode(): void {

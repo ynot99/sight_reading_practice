@@ -43,8 +43,18 @@ describe('bridge MIDI decoding', () => {
     expect(midiMessageToBridgeEvent([0xb0, 64, 0])).toMatchObject({ down: false });
   });
 
-  it('ignores everything that is not a note or the damper', () => {
-    expect(midiMessageToBridgeEvent([0xb0, 7, 127])).toBeNull(); // channel volume
+  it('forwards any other knob by number', () => {
+    // The tablet is where a reader teaches the app their knob, and it can
+    // only learn what reaches it: a bridge that dropped this would make the
+    // feature work at the desk and nowhere else.
+    expect(midiMessageToBridgeEvent([0xb0, 7, 127])).toEqual({
+      type: 'control',
+      controller: 7,
+      value: 1,
+    });
+  });
+
+  it('ignores everything that is not a note, the damper or a knob', () => {
     expect(midiMessageToBridgeEvent([0xe0, 0, 64])).toBeNull(); // pitch bend
     expect(midiMessageToBridgeEvent([0xf8])).toBeNull(); // clock
     expect(midiMessageToBridgeEvent([0x90, 60])).toBeNull(); // truncated

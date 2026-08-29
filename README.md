@@ -115,6 +115,22 @@ It is the dropout axis rather than a fifth click pattern, because a pattern
 says *what a click marks* and governs the count-in too — "only the count-in"
 as a pattern would leave the count-in's own pattern unsaid.
 
+### A knob on the keyboard
+
+Any knob, slider or wheel can be taught to drive the note volume: press **Use a
+knob** beside the volume slider and turn it. Nothing is guessed — there is no
+standard controller number for a volume knob, 7 and 11 are both common and a
+manufacturer may choose anything, so a table of guesses would be wrong for
+somebody. Turning the knob is the one description that is always accurate, and
+it works for a keyboard nobody has tested.
+
+Learning waits for a few *distinct positions* rather than one message, because
+a keyboard announces bank selects and modes on connect and any of those would
+otherwise be learned instantly and then never move again. The knob writes
+through the volume slider rather than past it, so the two can never disagree
+about how loud the piano is. Knobs travel over the desktop bridge too — the
+tablet is where the reader is, and it can only learn what reaches it.
+
 ### Keeping what you played
 
 The recorder runs from the moment the page opens, and the red **Keep** button

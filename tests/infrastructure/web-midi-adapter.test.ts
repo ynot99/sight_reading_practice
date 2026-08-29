@@ -95,9 +95,29 @@ describe('parseMidiMessage', () => {
     expect(parseMidiMessage(new Uint8Array([0xb0, 64, 63]))).toMatchObject({ down: false });
   });
 
-  it('ignores other controllers, and truncated packets', () => {
-    expect(parseMidiMessage(new Uint8Array([0xb0, 7, 127]))).toBeNull(); // channel volume
-    expect(parseMidiMessage(new Uint8Array([0xb0, 66, 127]))).toBeNull(); // sostenuto
+  it('passes other controllers through by number, unnamed', () => {
+    // No table can say which controller a volume knob uses - it might be 7,
+    // or 11, or whatever the maker chose - so the number travels intact and
+    // the meaning is assigned where a reader can teach it.
+    expect(parseMidiMessage(new Uint8Array([0xb0, 7, 127]))).toEqual({
+      kind: 'control',
+      controller: 7,
+      value: 1,
+    });
+    expect(parseMidiMessage(new Uint8Array([0xb0, 11, 0]))).toEqual({
+      kind: 'control',
+      controller: 11,
+      value: 0,
+    });
+  });
+
+  it('still keeps the damper apart from the rest', () => {
+    // Sustain is not a knob to be taught: it is a pedal the app already
+    // sounds, and folding it in would let it be learned as a volume control.
+    expect(parseMidiMessage(new Uint8Array([0xb0, 64, 127]))).toMatchObject({ kind: 'sustain' });
+  });
+
+  it('ignores what is not a message at all', () => {
     expect(parseMidiMessage(new Uint8Array([0x90, 60]))).toBeNull();
     expect(parseMidiMessage(null)).toBeNull();
   });

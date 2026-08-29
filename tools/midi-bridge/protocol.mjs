@@ -16,7 +16,7 @@ const SUSTAIN_CONTROLLER = 64;
  * so it is normalised here rather than being left to the client.
  *
  * @param {ArrayLike<number>} message
- * @returns {{type: 'noteon', note: number, velocity: number} | {type: 'noteoff', note: number} | {type: 'pedal', down: boolean, value: number} | null}
+ * @returns {{type: 'noteon', note: number, velocity: number} | {type: 'noteoff', note: number} | {type: 'pedal', down: boolean, value: number} | {type: 'control', controller: number, value: number} | null}
  */
 export function midiMessageToBridgeEvent(message) {
   if (message === null || message === undefined || message.length < 3) {
@@ -39,6 +39,12 @@ export function midiMessageToBridgeEvent(message) {
   // The sustain pedal, which the trainer sounds but never judges.
   if (command === CONTROL_CHANGE && note === SUSTAIN_CONTROLLER) {
     return { type: 'pedal', down: velocity >= 64, value: velocity / 127 };
+  }
+  // Any other knob, forwarded by number. The bridge decides nothing about
+  // what it means; the tablet is where a reader teaches the app their knob,
+  // and it can only learn what reaches it.
+  if (command === CONTROL_CHANGE) {
+    return { type: 'control', controller: note, value: velocity / 127 };
   }
   return null;
 }

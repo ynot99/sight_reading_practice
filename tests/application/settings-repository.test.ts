@@ -137,7 +137,16 @@ describe('audio settings codec', () => {
   it('reads volumes and falls back per field', () => {
     expect(
       decodeAudioSettings({ metronomeVolume: 0.25, instrumentVolume: 0, sampleLoading: 'eager' }),
-    ).toEqual({ metronomeVolume: 0.25, instrumentVolume: 0, sampleLoading: 'eager' });
+    ).toEqual({
+      metronomeVolume: 0.25,
+      instrumentVolume: 0,
+      sampleLoading: 'eager',
+      volumeController: null,
+    });
+    // A knob taught on this device outlives the visit that taught it.
+    expect(decodeAudioSettings({ volumeController: 11 }).volumeController).toBe(11);
+    // A controller number no keyboard can send is dropped, not trusted.
+    expect(decodeAudioSettings({ volumeController: 900 }).volumeController).toBeNull();
     // An unknown mode falls back rather than reaching the player.
     expect(decodeAudioSettings({ sampleLoading: 'whenever' }).sampleLoading).toBe('lazy');
     expect(decodeAudioSettings({ metronomeVolume: 4 })).toEqual(DEFAULT_AUDIO_SETTINGS);
@@ -160,7 +169,12 @@ describe('SettingsRepository', () => {
     const first = new SettingsRepository(store, KNOWN);
     first.load();
     first.savePractice(SETTINGS);
-    first.saveAudio({ metronomeVolume: 0.2, instrumentVolume: 0.9, sampleLoading: 'off' });
+    first.saveAudio({
+      metronomeVolume: 0.2,
+      instrumentVolume: 0.9,
+      sampleLoading: 'off',
+      volumeController: 7,
+    });
 
     const second = new SettingsRepository(store, KNOWN);
     const restored = second.load();
@@ -171,6 +185,7 @@ describe('SettingsRepository', () => {
       metronomeVolume: 0.2,
       instrumentVolume: 0.9,
       sampleLoading: 'off',
+      volumeController: 7,
     });
   });
 
@@ -180,7 +195,12 @@ describe('SettingsRepository', () => {
     repository.load();
     repository.savePractice(SETTINGS);
 
-    repository.saveAudio({ metronomeVolume: 0, instrumentVolume: 0, sampleLoading: 'eager' });
+    repository.saveAudio({
+      metronomeVolume: 0,
+      instrumentVolume: 0,
+      sampleLoading: 'eager',
+      volumeController: null,
+    });
 
     const restored = new SettingsRepository(store, KNOWN).load();
     expect(restored.practice.tempoBpm).toBe(84);

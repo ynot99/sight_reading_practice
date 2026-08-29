@@ -57,7 +57,8 @@ export const SUSTAIN_THRESHOLD = 64;
 export type ParsedMidiMessage =
   | { readonly kind: 'noteon'; readonly midi: number; readonly velocity: number }
   | { readonly kind: 'noteoff'; readonly midi: number; readonly velocity: number }
-  | { readonly kind: 'sustain'; readonly down: boolean; readonly value: number };
+  | { readonly kind: 'sustain'; readonly down: boolean; readonly value: number }
+  | { readonly kind: 'control'; readonly controller: number; readonly value: number };
 
 /**
  * Decodes a raw MIDI packet.
@@ -85,6 +86,13 @@ export function parseMidiMessage(data: Uint8Array | null): ParsedMidiMessage | n
       down: rawVelocity >= SUSTAIN_THRESHOLD,
       value: rawVelocity / 127,
     };
+  }
+  // Every other controller is passed through rather than named. Which knob is
+  // which is a decision no table can make for every keyboard - the reader
+  // teaches the app theirs by turning it - so the wire stays honest about
+  // what arrived and the meaning is assigned above.
+  if (status === CONTROL_CHANGE) {
+    return { kind: 'control', controller: midi, value: rawVelocity / 127 };
   }
   return null;
 }

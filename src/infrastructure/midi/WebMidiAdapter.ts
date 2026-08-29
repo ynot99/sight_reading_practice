@@ -187,6 +187,15 @@ export class WebMidiAdapter implements IMidiSource, IMidiConnection, IMidiDevice
           sourceId,
         });
         return;
+      case 'control':
+        this.emitter.emit('midi', {
+          type: 'control',
+          controller: message.controller,
+          value: message.value,
+          timestampMs,
+          sourceId,
+        });
+        return;
       default:
         return;
     }

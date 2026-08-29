@@ -131,6 +131,19 @@ export class MockMidiAdapter implements IMidiSource, IMidiConnection, IMidiDevic
     return event;
   }
 
+  /** A knob, slider or wheel at `value` (`0..1`). */
+  control(controller: number, value: number, timestampMs?: number): MidiEvent {
+    const event: MidiEvent = {
+      type: 'control',
+      controller,
+      value,
+      timestampMs: timestampMs ?? this.timestamp(),
+      sourceId: this.sourceId,
+    };
+    this.dispatch(event);
+    return event;
+  }
+
   /** Presses and releases a single note. */
   play(midi: number, timestampMs?: number, velocity = 0.8): void {
     const at = timestampMs ?? this.timestamp();

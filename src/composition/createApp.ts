@@ -19,6 +19,7 @@ import type { ISettingsStore } from '../application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../application/SettingsRepository.js';
 import { PracticeHistory } from '../application/PracticeHistory.js';
 import { PerformanceRecorder } from '../application/PerformanceRecorder.js';
+import { ControlBinding } from '../application/ControlBinding.js';
 import { TakeLibrary, TAKES_STORAGE_KEY } from '../application/TakeLibrary.js';
 import { DownloadFileSink } from '../infrastructure/files/DownloadFileSink.js';
 import type { IFileSink } from '../application/ports/IFileSink.js';
@@ -96,6 +97,8 @@ export interface AppRuntime {
   readonly ladder: PracticeLadder;
   /** Always capturing, so what was just played can still be kept. */
   readonly recorder: PerformanceRecorder;
+  /** The knob the reader taught to drive the note volume, if they have. */
+  readonly volumeKnob: ControlBinding;
   readonly takes: TakeLibrary;
   readonly files: IFileSink;
   readonly importer: IScoreImporter;
@@ -188,6 +191,10 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   // is one the player notices after playing it.
   const recorder = new PerformanceRecorder(clock);
   const disposeRecorder = recorder.listenTo(midi);
+  // Listening from the start too: a knob taught on an earlier visit has to
+  // work without the reader teaching it again.
+  const volumeKnob = new ControlBinding();
+  const disposeKnob = volumeKnob.listenTo(midi);
   const takes = new TakeLibrary(
     options.takeStore ?? new LocalStorageSettingsStore(browserStorage(), TAKES_STORAGE_KEY),
   );
@@ -202,6 +209,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   metronome.setVolume(restored.audio.metronomeVolume);
   pitchPlayer.setVolume(restored.audio.instrumentVolume);
   pitchPlayer.setLoading(restored.audio.sampleLoading);
+  volumeKnob.bindTo(restored.audio.volumeController);
 
 
   const controller = new PracticeController({
@@ -235,6 +243,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     rhythms,
     ladder,
     recorder,
+    volumeKnob,
     takes,
     files: options.fileSink ?? new DownloadFileSink(document),
     importer,
@@ -253,6 +262,8 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     dispose(): void {
       controller.dispose();
       disposeRecorder();
+      disposeKnob();
+      volumeKnob.dispose();
       computerKeyboard.disable();
       void webMidi.disconnect();
       void bridge?.disconnect();

@@ -14,6 +14,7 @@ import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProf
 import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
 import { PracticeLadder } from '../../src/application/ladder/PracticeLadder.js';
 import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.js';
+import { ControlBinding } from '../../src/application/ControlBinding.js';
 import { TakeLibrary } from '../../src/application/TakeLibrary.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
@@ -101,6 +102,7 @@ interface Rig {
   readonly sustain: FakeSustain;
   readonly samples: FakeSampleLibrary;
   readonly recorder: PerformanceRecorder;
+  readonly volumeKnob: ControlBinding;
   readonly takes: TakeLibrary;
   readonly files: RecordingFileSink;
 }
@@ -120,6 +122,8 @@ function createRig(
   const ladder = new PracticeLadder(BUILT_IN_LADDER);
   const recorder = new PerformanceRecorder(clock);
   recorder.listenTo(midi);
+  const volumeKnob = new ControlBinding();
+  volumeKnob.listenTo(midi);
   const takes = new TakeLibrary(new InMemorySettingsStore());
   const files = new RecordingFileSink();
   const scorings = new ScoringStrategyRegistry().registerAll([
@@ -174,6 +178,7 @@ function createRig(
     rhythms,
     ladder,
     recorder,
+    volumeKnob,
     takes,
     files,
     importer: new DomMusicXmlImporter(),
@@ -210,6 +215,7 @@ function createRig(
     sustain,
     samples,
     recorder,
+    volumeKnob,
     takes,
     files,
   };
@@ -885,6 +891,78 @@ describe('AppView', () => {
 
       // Silencing what you hear is not a decision to stop capturing.
       expect(element<HTMLButtonElement>('keep-take').disabled).toBe(false);
+    });
+  });
+
+  describe('a knob on the keyboard', () => {
+    function turn(rig: Rig, controller: number, count = 3): void {
+      for (let at = 0; at < count; at += 1) {
+        rig.midi.control(controller, 0.2 + at / 10);
+      }
+    }
+
+    it('offers to learn one, and says nothing is bound', async () => {
+      const { view } = createRig();
+      await view.initialize();
+
+      expect(element('learn-knob').textContent?.trim()).toBe('Use a knob');
+      expect(element('knob-status').textContent).toContain('Teach the app');
+    });
+
+    it('learns the knob the reader turns', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+
+      element<HTMLButtonElement>('learn-knob').click();
+      expect(element('knob-status').textContent).toContain('Turn the knob');
+
+      turn(rig, 11);
+
+      expect(rig.runtime.volumeKnob.controller).toBe(11);
+      expect(element('knob-status').textContent).toContain('CC 11');
+    });
+
+    it('drives the slider rather than a hidden second volume', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('learn-knob').click();
+      turn(rig, 7);
+
+      rig.midi.control(7, 0.25);
+
+      // Written through the slider, so the two can never disagree about how
+      // loud the piano is.
+      expect(element<HTMLInputElement>('instrument-volume').value).toBe('25');
+      expect(rig.instrumentVolume.volume).toBeCloseTo(0.25, 5);
+    });
+
+    it('remembers the knob for the next visit', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      element<HTMLButtonElement>('learn-knob').click();
+      turn(first, 7);
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      second.runtime.volumeKnob.bindTo(second.settings.currentAudio.volumeController);
+      await second.view.initialize();
+
+      expect(second.runtime.volumeKnob.controller).toBe(7);
+      expect(element('knob-status').textContent).toContain('CC 7');
+    });
+
+    it('gives it back when asked', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('learn-knob').click();
+      turn(rig, 7);
+
+      element<HTMLButtonElement>('learn-knob').click();
+
+      expect(rig.runtime.volumeKnob.controller).toBeNull();
+      expect(rig.settings.currentAudio.volumeController).toBeNull();
+      expect(element('learn-knob').textContent?.trim()).toBe('Use a knob');
     });
   });
 

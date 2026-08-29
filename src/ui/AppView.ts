@@ -524,6 +524,7 @@ export class AppView {
     focusSurvival: HTMLButtonElement;
     focusClick: HTMLButtonElement;
     focusPattern: HTMLButtonElement;
+    focusRepeat: HTMLButtonElement;
     focusCursor: HTMLButtonElement;
     focusWait: HTMLButtonElement;
     focusMarks: HTMLButtonElement;
@@ -684,6 +685,7 @@ export class AppView {
       focusSurvival: requireElement(doc, 'focus-survival'),
       focusClick: requireElement(doc, 'focus-click'),
       focusPattern: requireElement(doc, 'focus-pattern'),
+      focusRepeat: requireElement(doc, 'focus-repeat'),
       focusCursor: requireElement(doc, 'focus-cursor'),
       focusWait: requireElement(doc, 'focus-wait'),
       focusMarks: requireElement(doc, 'focus-marks'),
@@ -1244,6 +1246,12 @@ export class AppView {
 
     this.listen(this.el.repeatRange, 'change', () => {
       controller.updateSettings({ repeatRange: this.el.repeatRange.checked });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.focusRepeat, 'click', () => {
+      controller.updateSettings({ repeatRange: !controller.settings.repeatRange });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.countIn, 'input', () => {
@@ -2483,6 +2491,7 @@ export class AppView {
     this.el.rangeTo.value = settings.rangeToBar === null ? '' : String(settings.rangeToBar);
     this.describePassageRange();
     this.el.repeatRange.checked = settings.repeatRange;
+    this.el.focusRepeat.setAttribute('aria-pressed', String(settings.repeatRange));
     this.el.preview.value = String(settings.previewSeconds);
     this.el.previewValue.value = String(settings.previewSeconds);
     this.el.countIn.value = String(settings.countInBars);

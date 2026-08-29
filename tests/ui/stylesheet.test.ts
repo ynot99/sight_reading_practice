@@ -183,6 +183,18 @@ describe('the stylesheet', () => {
     expect(HTML).toMatch(/id="sheet-confirm"[^>]*class="[^"]*sheet--over/);
   });
 
+  it('keeps the notice inside the screen it grows away from', () => {
+    // It is anchored past the bar's left edge and grows leftwards, so an
+    // unbroken line ran off the side and took its own beginning with it -
+    // which is exactly where "Opened <a long piece's name>." starts.
+    const notice = rules().find((rule) => rule.selector === '.focus-notice');
+
+    expect(notice?.body).toMatch(/max-width\s*:/);
+    // Two lines of pill are free: it is out of the row's flow, so its height
+    // moves nothing a thumb is aiming at.
+    expect(notice?.body).not.toMatch(/white-space\s*:\s*nowrap/);
+  });
+
   it('asks the viewport to reach under the safe areas', () => {
     // The stylesheet already offsets by `env(safe-area-inset-*)`, and without
     // `viewport-fit=cover` those resolve to zero - so the transport pill sits

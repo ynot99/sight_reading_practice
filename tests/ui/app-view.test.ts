@@ -2018,6 +2018,40 @@ describe('AppView', () => {
       expect(element('focus-bar').hidden).toBe(false);
     });
 
+    it('turns the passage round again from the drawer', async () => {
+      // A passage learned by heart is learned by playing it over, and
+      // reaching for Start between each time is the one part of that which
+      // is not practice.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      const repeat = element<HTMLButtonElement>('focus-repeat');
+      expect(repeat.getAttribute('aria-pressed')).toBe('false');
+
+      repeat.click();
+
+      expect(runtime.controller.settings.repeatRange).toBe(true);
+      expect(repeat.getAttribute('aria-pressed')).toBe('true');
+      // One setting, two places to reach it, and they cannot disagree.
+      expect(element<HTMLInputElement>('repeat-range').checked).toBe(true);
+    });
+
+    it('starts the passage again when it ends, without being asked', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+      element<HTMLButtonElement>('focus-repeat').click();
+
+      const first = runtime.controller.start();
+      first?.abort();
+      // Aborting is not finishing; only a run that reached the end comes back.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runtime.controller.session).toBe(first);
+    });
+
     it('raises the kept lists without leaving the stand', async () => {
       // Leaving fullscreen to look at a list and coming back is a re-engraving
       // each way, which on a long piece is most of a second twice over.

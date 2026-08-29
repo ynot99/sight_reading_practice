@@ -732,8 +732,18 @@ select {
   font-size: 15px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
   pointer-events: none;
+  /*
+   * Bounded, and allowed to wrap inside those bounds.
+   *
+   * It grows leftwards from the bar, so a single unbroken line ran off the
+   * side of the screen and took its beginning with it - which is where a
+   * message like "Opened Bone Bottom Hollow Knight Silksong OST." starts.
+   * Two lines of pill are free: it is out of the row's flow, so its height
+   * moves nothing.
+   */
+  max-width: min(42ch, 38vw);
+  overflow-wrap: break-word;
 }
 
 /*
@@ -927,6 +937,8 @@ select {
     transform: none;
     margin-right: 0;
     margin-bottom: 8px;
+    /* Above the bar there is the whole width, less the take pill beside it. */
+    max-width: 68vw;
   }
 }
 

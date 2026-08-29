@@ -37,6 +37,18 @@ export const PLAYED_NOTE_DISPLAYS = ['live', 'at-end', 'hidden'] as const;
 
 export type PlayedNoteDisplay = (typeof PLAYED_NOTE_DISPLAYS)[number];
 
+/** How far one press of the tempo buttons moves, as a percentage. */
+export const TEMPO_STEP_PERCENT = 5;
+/** Matches what the stored-settings codec will accept back. */
+const MIN_TEMPO_BPM = 20;
+const MAX_TEMPO_BPM = 300;
+const MIN_TEMPO_PERCENT = 25;
+const MAX_TEMPO_PERCENT = 200;
+
+function clampPercent(percent: number): number {
+  return Math.min(MAX_TEMPO_PERCENT, Math.max(MIN_TEMPO_PERCENT, percent));
+}
+
 /** The fields a rung governs, and so the ones that leaving it is made of. */
 function touchesTheRoute(changes: Partial<PracticeSettings>): boolean {
   return (
@@ -434,6 +446,44 @@ export class PracticeController {
     // show the truth, and what lets the reader slow the piece down.
     this.updateSettings({ tempoBpm: exercise.tempoBpm });
     return this.load(undefined);
+  }
+
+  /**
+   * The tempo the material itself declares, which is what 100% means.
+   *
+   * Derived rather than stored: an opened score brought its own tempo and a
+   * generated one takes its preset's, so there is nothing here that could
+   * drift out of step with the music on screen.
+   */
+  get baseTempoBpm(): number {
+    return (
+      this.openedScore?.tempoBpm ??
+      this.deps.presets.get(this.currentSettings.presetId).defaults.tempoBpm
+    );
+  }
+
+  /** How fast the run goes against the written tempo, as a percentage. */
+  get tempoPercent(): number {
+    const base = this.baseTempoBpm;
+    return base <= 0 ? 100 : Math.round((this.currentSettings.tempoBpm / base) * 100);
+  }
+
+  /**
+   * Moves the tempo by whole steps of the written one.
+   *
+   * A percentage rather than a number of beats because the written tempo
+   * changes from piece to piece: "a bit slower" is the same gesture at 60 and
+   * at 132, and the reader should not have to work out what number that is.
+   * Steps land on multiples of the step size, so repeated presses do not
+   * wander off the grid.
+   */
+  nudgeTempoPercent(deltaPercent: number, step = TEMPO_STEP_PERCENT): number {
+    const base = this.baseTempoBpm;
+    const from = Math.round(this.tempoPercent / step) * step;
+    const wanted = clampPercent(from + deltaPercent);
+    const bpm = Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, Math.round((base * wanted) / 100)));
+    this.updateSettings({ tempoBpm: bpm });
+    return this.tempoPercent;
   }
 
   /** The opened score, or `null` when the material is being generated. */

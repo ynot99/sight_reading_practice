@@ -20,6 +20,7 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
 import { writeMidiFile } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
+import { TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
@@ -323,6 +324,9 @@ export class AppView {
     focusPlay: HTMLButtonElement;
     focusStop: HTMLButtonElement;
     focusListen: HTMLButtonElement;
+    focusSlower: HTMLButtonElement;
+    focusFaster: HTMLButtonElement;
+    focusTempo: HTMLOutputElement;
     focusNext: HTMLButtonElement;
     focusExit: HTMLButtonElement;
     exerciseTitle: HTMLElement;
@@ -424,6 +428,9 @@ export class AppView {
       focusPlay: requireElement(doc, 'focus-play'),
       focusStop: requireElement(doc, 'focus-stop'),
       focusListen: requireElement(doc, 'focus-listen'),
+      focusSlower: requireElement(doc, 'focus-slower'),
+      focusFaster: requireElement(doc, 'focus-faster'),
+      focusTempo: requireElement(doc, 'focus-tempo'),
       focusNext: requireElement(doc, 'focus-next'),
       focusExit: requireElement(doc, 'focus-exit'),
       exerciseTitle: requireElement(doc, 'exercise-title'),
@@ -1033,6 +1040,14 @@ export class AppView {
       controller.stop();
     });
 
+    this.listen(this.el.focusSlower, 'click', () => {
+      this.nudgeTempo(-TEMPO_STEP_PERCENT);
+    });
+
+    this.listen(this.el.focusFaster, 'click', () => {
+      this.nudgeTempo(TEMPO_STEP_PERCENT);
+    });
+
     this.listen(this.el.focusListen, 'click', () => {
       void this.toggleListening();
     });
@@ -1161,6 +1176,26 @@ export class AppView {
     this.subscriptions.push(() => {
       this.doc.removeEventListener('keydown', handler);
     });
+  }
+
+  /**
+   * Changes the pace without leaving the stand.
+   *
+   * Re-engraved because the tempo mark is printed on the page: leaving it
+   * saying 88 while the run goes at 70 is a page that lies about itself.
+   * Generation is seeded, so the notes are the same ones.
+   */
+  private nudgeTempo(deltaPercent: number): void {
+    this.runtime.controller.nudgeTempoPercent(deltaPercent);
+    this.describeTempo();
+    this.syncControlsFromSettings();
+    void this.reload(false);
+  }
+
+  private describeTempo(): void {
+    const percent = this.runtime.controller.tempoPercent;
+    this.el.focusTempo.value = `${percent}%`;
+    this.el.focusTempo.title = `${this.runtime.controller.settings.tempoBpm} bpm`;
   }
 
   private renderFocusStatus(text: string): void {
@@ -1551,6 +1586,7 @@ export class AppView {
     this.el.measures.value = String(settings.measures);
     this.el.measuresValue.value = String(settings.measures);
     this.el.tempo.value = String(settings.tempoBpm);
+    this.describeTempo();
     this.el.tempoValue.value = String(settings.tempoBpm);
     this.el.listenHand.value = settings.handStaff === null ? '' : String(settings.handStaff);
     this.el.click.value = settings.clickPattern;

@@ -1754,6 +1754,39 @@ describe('AppView', () => {
       expect(runtime.controller.session?.status).toBe('aborted');
     });
 
+    it('changes the pace without leaving the stand', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+      expect(element('focus-tempo').textContent).toBe('100%');
+
+      element<HTMLButtonElement>('focus-slower').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.tempoPercent).toBe(95);
+      expect(element('focus-tempo').textContent).toBe('95%');
+      // The desk slider is the same value seen another way, so it follows.
+      expect(element<HTMLInputElement>('tempo').value).toBe(
+        String(runtime.controller.settings.tempoBpm),
+      );
+    });
+
+    it('re-engraves, so the printed tempo is not a lie', async () => {
+      const { view, renderer } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+      const before = renderer.loadCount;
+
+      element<HTMLButtonElement>('focus-faster').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // The mark is printed on the page; leaving it saying 88 while the run
+      // goes at 92 is a page that lies about itself.
+      expect(renderer.loadCount).toBeGreaterThan(before);
+    });
+
     it('hears the exercise without leaving fullscreen', async () => {
       const { view, runtime } = createRig();
       await view.initialize();

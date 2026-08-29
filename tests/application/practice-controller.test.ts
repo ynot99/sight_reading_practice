@@ -1290,3 +1290,62 @@ describe('climbing the ladder', () => {
     expect(step?.id).toBe('rung.1a');
   });
 });
+
+describe('the pace, as a share of the written tempo', () => {
+  it('starts at what the music says', async () => {
+    const { controller } = createController();
+    await controller.loadNewExercise();
+
+    expect(controller.tempoPercent).toBe(100);
+    expect(controller.settings.tempoBpm).toBe(controller.baseTempoBpm);
+  });
+
+  it('moves in whole steps of the written tempo', () => {
+    const { controller } = createController();
+    const base = controller.baseTempoBpm;
+
+    expect(controller.nudgeTempoPercent(-5)).toBe(95);
+    expect(controller.settings.tempoBpm).toBe(Math.round(base * 0.95));
+
+    controller.nudgeTempoPercent(-5);
+    expect(controller.tempoPercent).toBe(90);
+  });
+
+  it('stays on the grid however the tempo was reached', () => {
+    const { controller } = createController();
+    // Set by hand from the slider, to something no step would land on.
+    controller.updateSettings({ tempoBpm: Math.round(controller.baseTempoBpm * 0.83) });
+
+    expect(controller.nudgeTempoPercent(-5)).toBe(80);
+  });
+
+  it('is a share of the piece, not a number of beats', async () => {
+    const { controller } = createController(true);
+    await controller.loadNewExercise();
+    const generated = controller.baseTempoBpm;
+    controller.nudgeTempoPercent(-20);
+    expect(controller.tempoPercent).toBe(80);
+
+    // A file brings its own tempo, and 80% has to mean 80% of that one -
+    // "a bit slower" is the same gesture at 60 and at 132.
+    await controller.openScore(twoBarExercise({ tempoBpm: 132 }));
+
+    expect(controller.baseTempoBpm).toBe(132);
+    expect(controller.baseTempoBpm).not.toBe(generated);
+    expect(controller.nudgeTempoPercent(-20)).toBe(80);
+    expect(controller.settings.tempoBpm).toBe(Math.round(132 * 0.8));
+  });
+
+  it('will not run away in either direction', () => {
+    const { controller } = createController();
+    for (let press = 0; press < 60; press += 1) {
+      controller.nudgeTempoPercent(-5);
+    }
+    expect(controller.tempoPercent).toBeGreaterThanOrEqual(25);
+
+    for (let press = 0; press < 80; press += 1) {
+      controller.nudgeTempoPercent(5);
+    }
+    expect(controller.tempoPercent).toBeLessThanOrEqual(200);
+  });
+});

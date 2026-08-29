@@ -82,6 +82,15 @@ not at the desk. The cursor is shown for the performance whatever the reader
 set, since following along is most of the value — and put back the way they
 had it when the performance ends.
 
+In fullscreen the pace is a **percentage of the written tempo**, moved five
+points at a time. A percentage rather than a number of beats because the
+written tempo changes from piece to piece: "a bit slower" is the same gesture
+at 60 and at 132, and 100% always means as written. It is derived from the
+material rather than stored, so it cannot drift out of step with the music on
+screen — an opened score brings its own tempo, a generated one takes its
+level's. Changing it re-engraves, since the tempo mark is printed on the page
+and a page that says 88 while the run goes at 70 lies about itself.
+
 **Look before playing** is the only time you get with the music. Set it above
 zero and the page is kept face down until you press Start; then you have those
 seconds with it, and the run begins on its own.

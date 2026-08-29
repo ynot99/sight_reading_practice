@@ -115,6 +115,22 @@ It is the dropout axis rather than a fifth click pattern, because a pattern
 says *what a click marks* and governs the count-in too — "only the count-in"
 as a pattern would leave the count-in's own pattern unsaid.
 
+### Keeping what you played
+
+The recorder runs from the moment the page opens, and the red **Keep** button
+in the toolbar does not start it — it keeps what already happened. That is the
+whole design: an idea worth saving is one you notice *after* playing it, so a
+Record button would arrive after the thing it was for. The button says how much
+it is offering, and a take is cut at the last pause longer than four seconds,
+which is where a musician would cut it anyway.
+
+Kept takes appear in a list beside the score, each exportable as a Standard
+MIDI File or deletable. What is stored is the *performance* — the note-ons,
+note-offs and pedal, with their real timings — and the file is written from it
+on export, for the same reason an `Exercise` and not its MusicXML is what this
+project keeps. Nothing is quantised: free playing has no tempo to discover, and
+a guess that moved the notes would not be a capture.
+
 ## Quick start
 
 ```bash

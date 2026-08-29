@@ -46,6 +46,9 @@
             <span>Repeat</span>
           </label>
         </span>
+        <button id="keep-take" type="button" class="button button--record" disabled>
+          <span class="button__dot" aria-hidden="true"></span>Keep take
+        </button>
         <span class="toolbar__gap"></span>
         <button id="new-exercise" type="button" class="button">New exercise</button>
         <button id="open-score" type="button" class="button">Open score…</button>
@@ -77,6 +80,16 @@
           </div>
 
           <ul id="log" class="log" aria-label="Recent notes"></ul>
+
+          <section id="takes" class="takes" hidden aria-label="Kept takes">
+            <div class="panel__row panel__row--compact">
+              <span class="label">Takes</span>
+              <button id="takes-clear" type="button" class="button button--ghost takes__clear">
+                Delete all
+              </button>
+            </div>
+            <ul id="takes-list" class="takes__list"></ul>
+          </section>
 
           <div id="result" class="result" hidden></div>
         <button id="drill" type="button" class="button" hidden>Drill the worst bars</button>

@@ -18,6 +18,10 @@ import type { IVolumeControl } from '../application/ports/IVolumeControl.js';
 import type { ISettingsStore } from '../application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../application/SettingsRepository.js';
 import { PracticeHistory } from '../application/PracticeHistory.js';
+import { PerformanceRecorder } from '../application/PerformanceRecorder.js';
+import { TakeLibrary, TAKES_STORAGE_KEY } from '../application/TakeLibrary.js';
+import { DownloadFileSink } from '../infrastructure/files/DownloadFileSink.js';
+import type { IFileSink } from '../application/ports/IFileSink.js';
 import { PracticeLadder } from '../application/ladder/PracticeLadder.js';
 import { BUILT_IN_LADDER } from '../application/ladder/ladderSteps.js';
 import {
@@ -62,6 +66,10 @@ export interface AppRuntimeOptions {
   readonly settingsStore?: ISettingsStore;
   /** Where past readings are kept; browser storage by default. */
   readonly historyStore?: ISettingsStore;
+  /** Where kept takes live; browser storage by default. */
+  readonly takeStore?: ISettingsStore;
+  /** Where a finished file is handed over; a download by default. */
+  readonly fileSink?: IFileSink;
   /** Where the piano samples live; resolved against the page by default. */
   readonly sampleBaseUrl?: string;
 }
@@ -86,6 +94,10 @@ export interface AppRuntime {
   readonly presets: ExercisePresetRegistry;
   readonly rhythms: RhythmProfileRegistry;
   readonly ladder: PracticeLadder;
+  /** Always capturing, so what was just played can still be kept. */
+  readonly recorder: PerformanceRecorder;
+  readonly takes: TakeLibrary;
+  readonly files: IFileSink;
   readonly importer: IScoreImporter;
   readonly scorings: ScoringStrategyRegistry;
   readonly modes: PracticeModeRegistry;
@@ -172,6 +184,15 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       ladderStepIds: ladder.list().map((step) => step.id),
     },
   );
+  // Recording from the moment the page opens, because an idea worth keeping
+  // is one the player notices after playing it.
+  const recorder = new PerformanceRecorder(clock);
+  const disposeRecorder = recorder.listenTo(midi);
+  const takes = new TakeLibrary(
+    options.takeStore ?? new LocalStorageSettingsStore(browserStorage(), TAKES_STORAGE_KEY),
+  );
+  takes.load();
+
   const history = new PracticeHistory(
     options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY),
   );
@@ -213,6 +234,9 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     presets,
     rhythms,
     ladder,
+    recorder,
+    takes,
+    files: options.fileSink ?? new DownloadFileSink(document),
     importer,
     scorings,
     modes,
@@ -228,6 +252,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     instrumentVolume: pitchPlayer,
     dispose(): void {
       controller.dispose();
+      disposeRecorder();
       computerKeyboard.disable();
       void webMidi.disconnect();
       void bridge?.disconnect();

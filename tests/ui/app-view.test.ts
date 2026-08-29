@@ -13,6 +13,9 @@ import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
 import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
 import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
 import { PracticeLadder } from '../../src/application/ladder/PracticeLadder.js';
+import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.js';
+import { TakeLibrary } from '../../src/application/TakeLibrary.js';
+import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
@@ -97,6 +100,9 @@ interface Rig {
   readonly instrumentVolume: FakeVolume;
   readonly sustain: FakeSustain;
   readonly samples: FakeSampleLibrary;
+  readonly recorder: PerformanceRecorder;
+  readonly takes: TakeLibrary;
+  readonly files: RecordingFileSink;
 }
 
 function createRig(
@@ -112,6 +118,10 @@ function createRig(
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const instrument = new RecordingPitchPlayer();
   const ladder = new PracticeLadder(BUILT_IN_LADDER);
+  const recorder = new PerformanceRecorder(clock);
+  recorder.listenTo(midi);
+  const takes = new TakeLibrary(new InMemorySettingsStore());
+  const files = new RecordingFileSink();
   const scorings = new ScoringStrategyRegistry().registerAll([
     new AccuracyScoringStrategy(),
     new TimingWeightedScoringStrategy(),
@@ -163,6 +173,9 @@ function createRig(
     presets,
     rhythms,
     ladder,
+    recorder,
+    takes,
+    files,
     importer: new DomMusicXmlImporter(),
     scorings,
     modes,
@@ -196,6 +209,9 @@ function createRig(
     instrumentVolume,
     sustain,
     samples,
+    recorder,
+    takes,
+    files,
   };
 }
 
@@ -759,6 +775,117 @@ describe('AppView', () => {
     expect(runtime.controller.settings.rangeFromBar).toBeNull();
     expect(element<HTMLInputElement>('range-from').value).toBe('');
     expect(element<HTMLInputElement>('range-to').value).toBe('');
+  });
+
+  describe('keeping a take', () => {
+    function playSomething(rig: Rig): void {
+      rig.midi.noteOn(60, rig.clock.now());
+      rig.clock.advance(200);
+      rig.midi.noteOff(60, rig.clock.now());
+    }
+
+    it('offers nothing until something has been played', async () => {
+      const { view } = createRig();
+      await view.initialize();
+
+      expect(element<HTMLButtonElement>('keep-take').disabled).toBe(true);
+      expect(element('takes').hidden).toBe(true);
+    });
+
+    it('wakes up as soon as the keyboard is touched', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+
+      const button = element<HTMLButtonElement>('keep-take');
+      expect(button.disabled).toBe(false);
+      // Says what it is offering, so a take cut at the wrong pause shows.
+      expect(button.textContent).toContain('0:00');
+    });
+
+    it('captures without being asked to start', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      // Nothing was pressed before playing: an idea is noticed afterwards.
+      playSomething(rig);
+
+      element<HTMLButtonElement>('keep-take').click();
+
+      expect(rig.takes.list()).toHaveLength(1);
+      expect(element('takes').hidden).toBe(false);
+      expect(element('takes-list').childElementCount).toBe(1);
+    });
+
+    it('will not keep the same playing twice', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+
+      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('keep-take').click();
+
+      expect(rig.takes.list()).toHaveLength(1);
+      expect(element<HTMLButtonElement>('keep-take').disabled).toBe(true);
+    });
+
+    it('writes a MIDI file from the row', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      element<HTMLButtonElement>('keep-take').click();
+
+      const save = element('takes-list').querySelector('button');
+      (save as HTMLButtonElement | null)?.click();
+
+      expect(rig.files.saved).toHaveLength(1);
+      const [file] = rig.files.saved;
+      expect(file?.fileName).toMatch(/^take-\d{8}-\d{6}\.mid$/);
+      expect(file?.mimeType).toBe('audio/midi');
+      // A real header, not an empty blob with a hopeful name.
+      expect([...(file?.bytes ?? []).slice(0, 4)]).toEqual([0x4d, 0x54, 0x68, 0x64]);
+    });
+
+    it('deletes one from its row', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      element<HTMLButtonElement>('keep-take').click();
+
+      const buttons = element('takes-list').querySelectorAll('button');
+      (buttons[1] as HTMLButtonElement | undefined)?.click();
+
+      expect(rig.takes.list()).toHaveLength(0);
+      expect(element('takes').hidden).toBe(true);
+    });
+
+    it('empties the whole list when asked', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      element<HTMLButtonElement>('keep-take').click();
+      rig.clock.advance(10_000);
+      playSomething(rig);
+      element<HTMLButtonElement>('keep-take').click();
+      expect(rig.takes.list()).toHaveLength(2);
+
+      element<HTMLButtonElement>('takes-clear').click();
+
+      expect(rig.takes.list()).toHaveLength(0);
+      expect(element('takes').hidden).toBe(true);
+    });
+
+    it('keeps capturing while the monitor is muted', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const monitor = element<HTMLInputElement>('audio-feedback');
+      monitor.checked = false;
+      monitor.dispatchEvent(new Event('change'));
+
+      playSomething(rig);
+
+      // Silencing what you hear is not a decision to stop capturing.
+      expect(element<HTMLButtonElement>('keep-take').disabled).toBe(false);
+    });
   });
 
   it('hides the score cursor from the checkbox', async () => {

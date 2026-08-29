@@ -379,6 +379,96 @@ select {
   background: transparent;
 }
 
+/*
+ * Always armed, because the recorder always is. Red says what it does - this
+ * one keeps what you played - without pretending it starts anything.
+ */
+.button--record {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-color: color-mix(in srgb, var(--wrong) 45%, var(--border));
+  color: var(--wrong);
+}
+
+.button--record:disabled .button__dot {
+  background: var(--text-muted);
+}
+
+.button__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--wrong);
+  flex: none;
+}
+
+.takes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.takes[hidden] {
+  display: none;
+}
+
+.takes__clear {
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.takes__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 190px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.takes__list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--surface-strong);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.takes__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.takes__list button {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font: inherit;
+  cursor: pointer;
+  flex: none;
+}
+
+.takes__list button:hover {
+  filter: brightness(1.08);
+}
+
 .pill {
   border-radius: 999px;
   padding: 5px 11px;

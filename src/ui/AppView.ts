@@ -18,6 +18,7 @@ import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
+import { writeMidiFile } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
@@ -154,6 +155,28 @@ function readAheadValue(steps: number | null): string {
 function parseReadAhead(value: string): number | null {
   const steps = Number.parseInt(value, 10);
   return Number.isFinite(steps) ? steps : null;
+}
+
+/** `m:ss`, which is how long a take feels rather than how long it is. */
+function clockTime(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** The moment it was kept, which is the only name a take has until it earns one. */
+function takeName(savedAtMs: number): string {
+  const at = new Date(savedAtMs);
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
+function takeFileName(savedAtMs: number): string {
+  const at = new Date(savedAtMs);
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return (
+    `take-${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}` +
+    `-${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}`
+  );
 }
 
 const TIME_SIGNATURES = ['4/4', '3/4', '2/4', '6/8'] as const;
@@ -299,6 +322,10 @@ export class AppView {
     drill: HTMLButtonElement;
     listen: HTMLButtonElement;
     listenHand: HTMLSelectElement;
+    keepTake: HTMLButtonElement;
+    takes: HTMLElement;
+    takesList: HTMLUListElement;
+    takesClear: HTMLButtonElement;
     openScore: HTMLButtonElement;
     scoreFile: HTMLInputElement;
     importNotice: HTMLElement;
@@ -390,6 +417,10 @@ export class AppView {
       drill: requireElement(doc, 'drill'),
       listen: requireElement(doc, 'listen'),
       listenHand: requireElement(doc, 'listen-hand'),
+      keepTake: requireElement(doc, 'keep-take'),
+      takes: requireElement(doc, 'takes'),
+      takesList: requireElement(doc, 'takes-list'),
+      takesClear: requireElement(doc, 'takes-clear'),
       openScore: requireElement(doc, 'open-score'),
       scoreFile: requireElement(doc, 'score-file'),
       importNotice: requireElement(doc, 'import-notice'),
@@ -457,6 +488,8 @@ export class AppView {
     this.bindMidi();
     this.syncControlsFromSettings();
     this.updateButtons('idle');
+    this.describeTake();
+    this.renderTakes();
     await this.runtime.controller.loadNewExercise();
     void this.runtime.webMidi.connect();
   }
@@ -794,6 +827,15 @@ export class AppView {
       } else {
         this.runtime.computerKeyboard.disable();
       }
+    });
+
+    this.listen(this.el.keepTake, 'click', () => {
+      this.keepTake();
+    });
+
+    this.listen(this.el.takesClear, 'click', () => {
+      this.runtime.takes.forget();
+      this.renderTakes();
     });
 
     this.listen(this.el.newExercise, 'click', () => {
@@ -1214,6 +1256,9 @@ export class AppView {
   /** Sounds the player's own keys for controllers without built-in audio. */
   private subscribeAudioFeedback(): Unsubscribe {
     const handler = (event: MidiEvent): void => {
+      // Before the mute check: the recorder hears everything the keyboard
+      // does, and silencing the monitor is not a decision to stop capturing.
+      this.describeTake();
       if (!this.audioFeedbackEnabled) {
         return;
       }
@@ -1447,6 +1492,85 @@ export class AppView {
     this.el.ladderDescription.textContent = step.description;
     this.el.ladderDown.disabled = !ladder.canStep(step.id, -1);
     this.el.ladderUp.disabled = !ladder.canStep(step.id, 1);
+  }
+
+  /**
+   * Keeps what was just played, and offers it in the list.
+   *
+   * The recorder has been running since the page opened, so this button is
+   * not a start: by the time an idea is worth keeping it has already been
+   * played, and a Record button would arrive after the thing it was for.
+   */
+  private keepTake(): void {
+    const take = this.runtime.recorder.take();
+    if (take === null) {
+      return;
+    }
+    this.runtime.takes.keepTake(take, Date.now());
+    // The take is cut at silences, so leaving it in the buffer would let the
+    // next press keep it a second time.
+    this.runtime.recorder.clear();
+    this.renderTakes();
+    this.describeTake();
+  }
+
+  /** How much playing the button is offering to keep, if any. */
+  private describeTake(): void {
+    const ms = this.runtime.recorder.takeDurationMs;
+    const playing = this.runtime.recorder.pendingEvents > 0;
+    this.el.keepTake.disabled = !playing;
+    this.el.keepTake.textContent = '';
+    const dot = this.doc.createElement('span');
+    dot.className = 'button__dot';
+    dot.setAttribute('aria-hidden', 'true');
+    this.el.keepTake.append(dot, this.doc.createTextNode(playing ? `Keep ${clockTime(ms)}` : 'Keep take'));
+    this.el.keepTake.title = playing
+      ? 'Keeps what you have just played, back to the last pause.'
+      : 'Play something and this keeps it.';
+  }
+
+  private renderTakes(): void {
+    const takes = this.runtime.takes.list();
+    this.el.takes.hidden = takes.length === 0;
+    this.el.takesList.replaceChildren();
+
+    for (const take of takes) {
+      const row = this.doc.createElement('li');
+      const name = this.doc.createElement('span');
+      name.className = 'takes__name';
+      name.textContent = `${takeName(take.savedAtMs)} · ${clockTime(take.durationMs)} · ${take.noteCount} notes`;
+
+      const save = this.doc.createElement('button');
+      save.type = 'button';
+      save.textContent = 'MIDI';
+      save.title = 'Save this take as a MIDI file';
+      this.listen(save, 'click', () => this.exportTake(take.id));
+
+      const remove = this.doc.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.title = 'Delete this take';
+      remove.setAttribute('aria-label', `Delete the take from ${takeName(take.savedAtMs)}`);
+      this.listen(remove, 'click', () => {
+        this.runtime.takes.remove(take.id);
+        this.renderTakes();
+      });
+
+      row.append(name, save, remove);
+      this.el.takesList.append(row);
+    }
+  }
+
+  private exportTake(id: string): void {
+    const take = this.runtime.takes.find(id);
+    if (take === null) {
+      return;
+    }
+    // Written from the events, never stored as bytes: the performance is the
+    // kept thing and the file is derived from it, the same way the printed
+    // MusicXML is derived from an `Exercise`.
+    const bytes = writeMidiFile(take.events, { trackName: takeName(take.savedAtMs) });
+    this.runtime.files.save(`${takeFileName(take.savedAtMs)}.mid`, bytes, 'audio/midi');
   }
 
   private describeMode(): void {

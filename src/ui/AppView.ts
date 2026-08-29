@@ -47,6 +47,26 @@ const TEMPO_REDRAW_DELAY_MS = 350;
 const MIN_PRESSES_TO_MEASURE = 8;
 
 /**
+ * Whether an average is a tendency rather than an accident of the scatter.
+ *
+ * The first rule here asked for the scatter to be smaller than the average,
+ * which is far too strict for reading at sight: pressing within a tenth of a
+ * second either side is a good performance, and it hid a real ninety
+ * milliseconds of delay behind ordinary human unevenness. What matters is not
+ * how wide the presses were spread but how well *their average* is pinned
+ * down, and averaging many of them pins it down better - which is the whole
+ * reason a run is worth more than one press. Two standard errors is the
+ * ordinary line for "this is not nothing".
+ */
+export function isRealTendency(meanMs: number, spreadMs: number, presses: number): boolean {
+  if (presses < 2) {
+    return false;
+  }
+  const standardError = spreadMs / Math.sqrt(presses);
+  return Math.abs(meanMs) > 2 * standardError;
+}
+
+/**
  * How long the pill holds a message that is not about the run.
  *
  * Long enough to read a sentence about which bars are being practised, short
@@ -69,7 +89,7 @@ function timingTail(report: PerformanceReport): string {
     return '';
   }
   const drift = Math.round(meanDeviationMs);
-  const steady = deviationSpreadMs <= Math.abs(meanDeviationMs);
+  const steady = isRealTendency(meanDeviationMs, deviationSpreadMs, deviations.length);
   return ` · ${drift > 0 ? '+' : ''}${drift} ms${steady ? '' : ' ±'}`;
 }
 
@@ -494,6 +514,7 @@ export class AppView {
     focusSurvival: HTMLButtonElement;
     focusClick: HTMLButtonElement;
     focusPattern: HTMLButtonElement;
+    focusCalibrate: HTMLButtonElement;
     focusCursor: HTMLButtonElement;
     focusWait: HTMLButtonElement;
     focusMarks: HTMLButtonElement;
@@ -613,6 +634,7 @@ export class AppView {
     readAhead: HTMLSelectElement;
     readAheadDescription: HTMLElement;
     showCursor: HTMLInputElement;
+    startFocus: HTMLInputElement;
     blindMode: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
     sampleLoadingHint: HTMLElement;
@@ -652,6 +674,7 @@ export class AppView {
       focusSurvival: requireElement(doc, 'focus-survival'),
       focusClick: requireElement(doc, 'focus-click'),
       focusPattern: requireElement(doc, 'focus-pattern'),
+      focusCalibrate: requireElement(doc, 'focus-calibrate'),
       focusCursor: requireElement(doc, 'focus-cursor'),
       focusWait: requireElement(doc, 'focus-wait'),
       focusMarks: requireElement(doc, 'focus-marks'),
@@ -771,6 +794,7 @@ export class AppView {
       readAhead: requireElement(doc, 'read-ahead'),
       readAheadDescription: requireElement(doc, 'read-ahead-description'),
       showCursor: requireElement(doc, 'show-cursor'),
+      startFocus: requireElement(doc, 'start-focus'),
       blindMode: requireElement(doc, 'blind-mode'),
       sampleLoading: requireElement(doc, 'sample-loading'),
       sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
@@ -806,6 +830,12 @@ export class AppView {
     // when it arrives rather than holding the trainer up for it.
     void this.runtime.scores.load().then(() => this.renderScores());
     await this.runtime.controller.loadNewExercise();
+    // After the first engraving rather than before it: entering the layout
+    // re-engraves for the new width, and doing that to an empty page would
+    // mean drawing the piece twice for nothing.
+    if (this.runtime.controller.settings.startInFocus) {
+      this.focusMode?.enter();
+    }
     void this.runtime.webMidi.connect();
   }
 
@@ -1218,6 +1248,21 @@ export class AppView {
         inputLatencyMs: Number.parseInt(this.el.latency.value, 10),
       });
       this.describeLatency();
+    });
+
+    this.listen(this.el.startFocus, 'change', () => {
+      controller.updateSettings({ startInFocus: this.el.startFocus.checked });
+    });
+
+    this.listen(this.el.focusCalibrate, 'click', () => {
+      const measured = this.measuredLatencyMs();
+      if (measured === null) {
+        return;
+      }
+      controller.updateSettings({ inputLatencyMs: measured });
+      this.syncControlsFromSettings();
+      this.showNotice(`Input delay: ${measured > 0 ? '+' : ''}${measured} ms`);
+      this.restoreNoticeSoon();
     });
 
     this.listen(this.el.latencyMeasure, 'click', () => {
@@ -1738,7 +1783,7 @@ export class AppView {
     if (timing === undefined || timing.deviations.length < MIN_PRESSES_TO_MEASURE) {
       return null;
     }
-    if (timing.deviationSpreadMs > Math.abs(timing.meanDeviationMs)) {
+    if (!isRealTendency(timing.meanDeviationMs, timing.deviationSpreadMs, timing.deviations.length)) {
       return null;
     }
     const step = 5;
@@ -1768,6 +1813,15 @@ export class AppView {
         `Every press is judged ${Math.abs(set)} ms ${set > 0 ? 'earlier' : 'later'} than it arrived.`;
     }
 
+    // The same offer at the stand, where the run that measured it was played.
+    this.el.focusCalibrate.disabled = measured === null;
+    const offer =
+      measured === null
+        ? 'Input delay: play a run and this can measure it'
+        : `Input delay: take ${measured > 0 ? '+' : ''}${measured} ms from the last run`;
+    this.el.focusCalibrate.title = offer;
+    this.el.focusCalibrate.setAttribute('aria-label', offer);
+
     if (measured !== null) {
       this.el.latencyDescription.textContent +=
         ` The last run ran ${Math.abs(measured)} ms ${measured > 0 ? 'late' : 'early'}, steadily.`;
@@ -1775,7 +1829,8 @@ export class AppView {
     }
     if (timing !== undefined && timing.deviations.length >= MIN_PRESSES_TO_MEASURE) {
       this.el.latencyDescription.textContent +=
-        ' The last run was scattered either side of the beat rather than steadily off it, which no single number can correct.';
+        ` The last run averaged ${Math.round(timing.meanDeviationMs)} ms with a spread of ` +
+        `${Math.round(timing.deviationSpreadMs)} ms, which is too scattered to call a tendency.`;
     }
   }
 
@@ -2412,6 +2467,7 @@ export class AppView {
     this.el.readAhead.value = readAheadValue(settings.readAheadSteps);
     this.el.readAheadDescription.textContent =
       READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';
+    this.el.startFocus.checked = settings.startInFocus;
     this.el.showCursor.checked = settings.showCursor;
     this.el.focusCursor.setAttribute('aria-pressed', String(settings.showCursor));
     this.el.focusMarks.setAttribute('aria-pressed', String(settings.playedNotes !== 'hidden'));

@@ -372,6 +372,7 @@
         </div>
 
         <div class="control-group control-group--checks">
+          <label><input id="start-focus" type="checkbox" /> Open straight into fullscreen</label>
           <label><input id="show-cursor" type="checkbox" checked /> Show cursor</label>
           <label><input id="blind-mode" type="checkbox" /> Blind mode: do not name the notes</label>
           <label><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
@@ -541,6 +542,22 @@
               <rect class="focus-bar__beat" data-at="2" x="8" y="6" width="3" height="12" />
               <rect class="focus-bar__beat" data-at="3" x="14" y="6" width="3" height="12" />
               <rect class="focus-bar__beat" data-at="4" x="20" y="6" width="3" height="12" />
+            </svg>
+          </button>
+
+          <!--
+            The delay on the way in, taken from the run just played. It lives
+            here as well as in the settings because the reader is here: the
+            run that measured it was played at the stand, and leaving the
+            page to act on it is leaving the thing that was measured.
+          -->
+          <button id="focus-calibrate" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Input delay" aria-label="Input delay" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16z" />
+              <path d="M11 6h2v6.6l4.3 2.5-1 1.7L11 13.8V6z" />
+              <path d="M18.5 2.2 22 5.7l-1.4 1.4-3.5-3.5 1.4-1.4z" />
             </svg>
           </button>
 

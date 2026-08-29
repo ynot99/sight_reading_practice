@@ -43,7 +43,7 @@ import { SettingsRepository } from '../../src/application/SettingsRepository.js'
 import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.js';
 import type { SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
-import { AppView, describeTendency, healthGlideMs } from '../../src/ui/AppView.js';
+import { AppView, describeTendency, healthGlideMs, isRealTendency } from '../../src/ui/AppView.js';
 import { twoBarExercise } from '../support/fixtures.js';
 import { midiToLabel } from '../../src/domain/model/Pitch.js';
 
@@ -2000,6 +2000,37 @@ describe('AppView', () => {
       select.dispatchEvent(new Event('change'));
     }
 
+    it('opens straight into fullscreen when the reader asked it to', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      const startFocus = element<HTMLInputElement>('start-focus');
+      startFocus.checked = true;
+      startFocus.dispatchEvent(new Event('change'));
+      await Promise.resolve();
+      expect(element('app').classList.contains('is-focus')).toBe(false);
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      await second.view.initialize();
+
+      expect(element('app').classList.contains('is-focus')).toBe(true);
+      expect(element('focus-bar').hidden).toBe(false);
+    });
+
+    it('offers the delay it measured where the run was played', async () => {
+      // The run that measured it was played at the stand, and leaving the
+      // page to act on it is leaving the thing that was measured.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      // Nothing has been played, so there is nothing to take.
+      expect(element<HTMLButtonElement>('focus-calibrate').disabled).toBe(true);
+      expect(element('focus-calibrate').title).toContain('play a run');
+    });
+
     it('raises the kept lists without leaving the stand', async () => {
       // Leaving fullscreen to look at a list and coming back is a re-engraving
       // each way, which on a long piece is most of a second twice over.
@@ -2535,6 +2566,31 @@ describe('AppView', () => {
     element<HTMLButtonElement>('start').click();
 
     expect(runtime.controller.session).toBeNull();
+  });
+});
+
+describe('telling a tendency from a scatter', () => {
+  it('calls a steady offset real, however wide the presses were spread', () => {
+    // The rule this replaces asked for the scatter to be smaller than the
+    // average, which is far too strict for reading at sight: a tenth of a
+    // second either side is a good performance, and it hid a real ninety
+    // milliseconds of delay behind ordinary human unevenness.
+    expect(isRealTendency(90, 95, 16)).toBe(true);
+  });
+
+  it('is surer of an average the more presses went into it', () => {
+    // The whole reason a run is worth more than one press.
+    expect(isRealTendency(30, 90, 4)).toBe(false);
+    expect(isRealTendency(30, 90, 64)).toBe(true);
+  });
+
+  it('will not call nothing something', () => {
+    expect(isRealTendency(2, 90, 32)).toBe(false);
+    expect(isRealTendency(90, 95, 1)).toBe(false);
+  });
+
+  it('answers a run that was simply on time with a no', () => {
+    expect(isRealTendency(0, 40, 32)).toBe(false);
   });
 });
 

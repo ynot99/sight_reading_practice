@@ -21,6 +21,7 @@ import { PracticeHistory } from '../application/PracticeHistory.js';
 import { PerformanceRecorder } from '../application/PerformanceRecorder.js';
 import { ControlBinding } from '../application/ControlBinding.js';
 import { TakeLibrary, TAKES_STORAGE_KEY } from '../application/TakeLibrary.js';
+import { TakePlayer } from '../application/TakePlayer.js';
 import { ScoreLibrary } from '../application/ScoreLibrary.js';
 import { IndexedDbScoreStore } from '../infrastructure/storage/IndexedDbScoreStore.js';
 import type { IScoreStore } from '../application/ports/IScoreStore.js';
@@ -105,6 +106,8 @@ export interface AppRuntime {
   /** The knob the reader taught to drive the note volume, if they have. */
   readonly volumeKnob: ControlBinding;
   readonly takes: TakeLibrary;
+  /** Plays a kept take back, so an idea can be heard rather than only listed. */
+  readonly takePlayer: TakePlayer;
   /** Scores kept between visits, so a file is chosen from the disk once. */
   readonly scores: ScoreLibrary;
   readonly files: IFileSink;
@@ -197,6 +200,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   // Recording from the moment the page opens, because an idea worth keeping
   // is one the player notices after playing it.
   const recorder = new PerformanceRecorder(clock);
+  const takePlayer = new TakePlayer({ instrument: pitchPlayer, clock, sustain: pitchPlayer });
   const disposeRecorder = recorder.listenTo(midi);
   // Listening from the start too: a knob taught on an earlier visit has to
   // work without the reader teaching it again.
@@ -256,6 +260,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     rhythms,
     ladder,
     recorder,
+    takePlayer,
     volumeKnob,
     takes,
     scores,

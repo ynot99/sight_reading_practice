@@ -44,6 +44,10 @@ const TEMPO_REDRAW_DELAY_MS = 350;
  * playing averages to a habit.
  */
 const MIN_PRESSES_TO_MEASURE = 8;
+
+/** How often the take slider is moved while something is sounding. */
+const TAKE_TICK_MS = 80;
+
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { FocusMode } from './FocusMode.js';
@@ -419,6 +423,10 @@ export class AppView {
   private lastPosition = '';
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
+  /** Which take the transport is showing, playing or not. */
+  private selectedTakeId: string | null = null;
+  /** Follows a sounding take, so the slider says where it has got to. */
+  private takeTick: ReturnType<typeof setInterval> | null = null;
   /** The step now due, kept so blind mode can be turned off mid-run. */
   private lastExpected: readonly number[] = [];
   private lastDrainAtMs: number | null = null;
@@ -497,6 +505,12 @@ export class AppView {
     takesClose: HTMLButtonElement;
     scoresClose: HTMLButtonElement;
     takesEmpty: HTMLElement;
+    takeTransport: HTMLElement;
+    takePlay: HTMLButtonElement;
+    takePlayIcon: SVGPathElement;
+    takePosition: HTMLOutputElement;
+    takeDuration: HTMLOutputElement;
+    takeScrub: HTMLInputElement;
     scoresEmpty: HTMLElement;
     sheetConfirm: HTMLElement;
     confirmText: HTMLElement;
@@ -645,6 +659,12 @@ export class AppView {
       takesClose: requireElement(doc, 'takes-close'),
       scoresClose: requireElement(doc, 'scores-close'),
       takesEmpty: requireElement(doc, 'takes-empty'),
+      takeTransport: requireElement(doc, 'take-transport'),
+      takePlay: requireElement(doc, 'take-play'),
+      takePlayIcon: requireElement(doc, 'take-play-icon'),
+      takePosition: requireElement(doc, 'take-position'),
+      takeDuration: requireElement(doc, 'take-duration'),
+      takeScrub: requireElement(doc, 'take-scrub'),
       scoresEmpty: requireElement(doc, 'scores-empty'),
       sheetConfirm: requireElement(doc, 'sheet-confirm'),
       confirmText: requireElement(doc, 'confirm-text'),
@@ -747,6 +767,11 @@ export class AppView {
       clearTimeout(this.tempoRedraw);
       this.tempoRedraw = null;
     }
+    if (this.takeTick !== null) {
+      clearInterval(this.takeTick);
+      this.takeTick = null;
+    }
+    this.runtime.takePlayer.stop();
     this.focusMode?.dispose();
     this.focusMode = null;
     for (const unsubscribe of [...this.subscriptions, ...this.sessionSubscriptions]) {
@@ -1248,6 +1273,7 @@ export class AppView {
     });
 
     this.bindSheets();
+    this.bindTakeTransport();
 
     this.subscriptions.push(
       // Everything that was played is filed, whether or not the reader
@@ -2527,6 +2553,87 @@ export class AppView {
     });
   }
 
+  /**
+   * The transport under the kept list: play, where we are, and how long.
+   *
+   * The reading is polled while something is sounding, because the player
+   * keeps no counter to be told about - it works out where it is from the
+   * clock, so that what is shown cannot drift from what is heard. Polling is
+   * the price of that and it is the cheaper half of the bargain.
+   */
+  private bindTakeTransport(): void {
+    const player = this.runtime.takePlayer;
+
+    this.listen(this.el.takePlay, 'click', () => {
+      if (player.playing !== null) {
+        player.pause();
+      } else if (this.selectedTakeId !== null) {
+        this.playTake(this.selectedTakeId, player.positionMs);
+      }
+      this.describeTakeTransport();
+    });
+
+    this.listen(this.el.takeScrub, 'input', () => {
+      const wanted = (Number(this.el.takeScrub.value) / 1_000) * player.durationMs;
+      player.seek(wanted);
+      this.describeTakeTransport();
+    });
+
+    // Shut with the sheet: a take going on playing behind a closed list is a
+    // sound with nothing on the page to stop it.
+    this.listen(this.el.takesClose, 'click', () => {
+      player.stop();
+      this.describeTakeTransport();
+    });
+  }
+
+  /** Starts a take and follows it until it stops. */
+  private playTake(id: string, fromMs = 0): void {
+    const take = this.runtime.takes.find(id);
+    if (take === null) {
+      return;
+    }
+    this.selectedTakeId = id;
+    this.runtime.takePlayer.play(id, take.events, fromMs);
+    if (this.takeTick === null) {
+      this.takeTick = setInterval(() => this.followTake(), TAKE_TICK_MS);
+    }
+    this.describeTakeTransport();
+  }
+
+  private followTake(): void {
+    const player = this.runtime.takePlayer;
+    if (player.finished) {
+      player.pause();
+    }
+    if (player.playing === null && this.takeTick !== null) {
+      clearInterval(this.takeTick);
+      this.takeTick = null;
+    }
+    this.describeTakeTransport();
+  }
+
+  private describeTakeTransport(): void {
+    const player = this.runtime.takePlayer;
+    const take = this.selectedTakeId === null ? null : this.runtime.takes.find(this.selectedTakeId);
+    this.el.takeTransport.hidden = take === null;
+    if (take === null) {
+      return;
+    }
+
+    const total = player.durationMs > 0 ? player.durationMs : take.durationMs;
+    const at = player.positionMs;
+    this.el.takePosition.value = clockTime(at);
+    this.el.takeDuration.value = clockTime(total);
+    this.el.takeScrub.value = String(total > 0 ? Math.round((at / total) * 1_000) : 0);
+
+    const sounding = player.playing !== null;
+    this.el.takePlayIcon.setAttribute('d', sounding ? PAUSE_ICON : PLAY_ICON);
+    const label = sounding ? 'Pause' : 'Play';
+    this.el.takePlay.title = label;
+    this.el.takePlay.setAttribute('aria-label', label);
+  }
+
   private renderTakes(): void {
     const takes = this.runtime.takes.list();
     this.el.takesEmpty.hidden = takes.length > 0;
@@ -2543,6 +2650,13 @@ export class AppView {
       if (take.shelf === 'recent') {
         name.classList.add('takes__name--recent');
       }
+
+      const hear = this.doc.createElement('button');
+      hear.type = 'button';
+      hear.textContent = '▶';
+      hear.title = 'Play this take';
+      hear.setAttribute('aria-label', `Play the take from ${takeName(take.savedAtMs)}`);
+      this.listen(hear, 'click', () => this.playTake(take.id));
 
       const save = this.doc.createElement('button');
       save.type = 'button';
@@ -2581,7 +2695,7 @@ export class AppView {
         });
       });
 
-      row.append(name, promote, save, remove);
+      row.append(name, hear, promote, save, remove);
       this.el.takesList.append(row);
     }
   }

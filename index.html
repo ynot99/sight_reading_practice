@@ -179,6 +179,17 @@
           </div>
           <ul id="takes-list" class="takes__list"></ul>
           <p id="takes-empty" class="hint">Nothing kept yet. Play something and keep it from the bar.</p>
+          <div id="take-transport" class="take-transport" hidden>
+            <button id="take-play" type="button" class="button" title="Play" aria-label="Play">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="take-transport__icon">
+                <path id="take-play-icon" d="M8 5l11 7-11 7z" />
+              </svg>
+            </button>
+            <output id="take-position" class="take-transport__time">0:00</output>
+            <input id="take-scrub" type="range" min="0" max="1000" step="1" value="0"
+              aria-label="Position in the take" />
+            <output id="take-duration" class="take-transport__time">0:00</output>
+          </div>
         </div>
       </div>
 

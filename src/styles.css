@@ -831,6 +831,36 @@ select {
   color: var(--wrong);
 }
 
+/* The transport under the list: what is playing, and where in it we are. */
+.take-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.take-transport__icon {
+  width: 18px;
+  height: 18px;
+  fill: currentcolor;
+  display: block;
+}
+
+/* Fixed, so a reading that counts up cannot shuffle the slider under a thumb. */
+.take-transport__time {
+  width: 4.5ch;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.take-transport input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+
 .sheet__head {
   display: flex;
   align-items: center;

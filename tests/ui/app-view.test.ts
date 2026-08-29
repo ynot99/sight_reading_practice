@@ -16,6 +16,7 @@ import { PracticeLadder } from '../../src/application/ladder/PracticeLadder.js';
 import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.js';
 import { ControlBinding } from '../../src/application/ControlBinding.js';
 import { TakeLibrary } from '../../src/application/TakeLibrary.js';
+import { TakePlayer } from '../../src/application/TakePlayer.js';
 import { ScoreLibrary } from '../../src/application/ScoreLibrary.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
@@ -184,12 +185,15 @@ function createRig(
     settings.savePractice(current);
   });
 
+  const takePlayer = new TakePlayer({ instrument, clock });
+
   const runtime: AppRuntime = {
     controller,
     presets,
     rhythms,
     ladder,
     recorder,
+    takePlayer,
     volumeKnob,
     takes,
     scores,
@@ -982,6 +986,52 @@ describe('AppView', () => {
       rowButton('takes-list', 'Keep this one for good, out of reach of the tidying.').click();
 
       expect(rig.takes.list()[0]?.shelf).toBe('kept');
+    });
+
+    it('plays a kept take back, and says where in it we are', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      element<HTMLButtonElement>('keep-take').click();
+      expect(element('take-transport').hidden).toBe(true);
+
+      rowButton('takes-list', 'Play this take').click();
+
+      expect(element('take-transport').hidden).toBe(false);
+      expect(rig.instrument.played.map((note) => note.midi)).toContain(60);
+      expect(element<HTMLButtonElement>('take-play').title).toBe('Pause');
+    });
+
+    it('moves the take to where the slider was dragged', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.midi.noteOn(60, rig.clock.now());
+      rig.clock.advance(2_000);
+      rig.midi.noteOff(60, rig.clock.now());
+      element<HTMLButtonElement>('keep-take').click();
+      rowButton('takes-list', 'Play this take').click();
+
+      const scrub = element<HTMLInputElement>('take-scrub');
+      scrub.value = '500';
+      scrub.dispatchEvent(new Event('input'));
+
+      expect(rig.runtime.takePlayer.positionMs).toBe(1_000);
+      expect(element('take-position').textContent).toBe('0:01');
+    });
+
+    it('stops the sound when the list is shut on it', async () => {
+      // A take going on playing behind a closed list is a sound with nothing
+      // on the page to stop it.
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      element<HTMLButtonElement>('keep-take').click();
+      rowButton('takes-list', 'Play this take').click();
+      expect(rig.runtime.takePlayer.playing).not.toBeNull();
+
+      element<HTMLButtonElement>('takes-close').click();
+
+      expect(rig.runtime.takePlayer.playing).toBeNull();
     });
 
     it('will not keep the same playing twice', async () => {

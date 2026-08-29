@@ -69,6 +69,46 @@ export function twoBarExercise(overrides: ExerciseOverrides = {}): Exercise {
   };
 }
 
+/**
+ * One bar of 4/4 holding a chord the writer marked to be rolled.
+ *
+ *   treble: [C4 E4 G4] (whole, arpeggiated)
+ *   bass:   [C3 G3]    (whole, arpeggiated)
+ *
+ * Written across both staves on purpose: a roll notated that way is one
+ * gesture from the lowest note to the highest, not two rolls at once.
+ */
+export function arpeggiatedExercise(overrides: ExerciseOverrides = {}): Exercise {
+  return {
+    id: overrides.id ?? 'fixture-arpeggiated',
+    title: overrides.title ?? 'Arpeggiated fixture',
+    key: overrides.key ?? KeySignature.major(0),
+    keyChanges: [],
+    pedalMarks: [],
+    timeSignature: overrides.timeSignature ?? new TimeSignature(4, 4),
+    tempoBpm: overrides.tempoBpm ?? 60,
+    metadata: { generatorId: 'fixture', seed: 1 },
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        clefChanges: [],
+        measures: [
+          bar(noteEntry([p('C4'), p('E4'), p('G4')], Duration.WHOLE, [], [], null, true)),
+        ],
+      },
+      {
+        staffNumber: 2,
+        voice: 2,
+        clef: 'bass',
+        clefChanges: [],
+        measures: [bar(noteEntry([p('C3'), p('G3')], Duration.WHOLE, [], [], null, true))],
+      },
+    ],
+  };
+}
+
 /** One bar of 4/4, treble only, four quarter notes: the simplest useful case. */
 export function singleBarExercise(overrides: ExerciseOverrides = {}): Exercise {
   return {
@@ -193,6 +233,7 @@ export const MIDI = {
   G2: p('G2').midi,
   C3: p('C3').midi,
   D3: p('D3').midi,
+  G3: p('G3').midi,
   C4: p('C4').midi,
   D4: p('D4').midi,
   E4: p('E4').midi,

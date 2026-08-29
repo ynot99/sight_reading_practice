@@ -41,6 +41,42 @@ const DEFAULT_HORIZON_MS = 250;
 const LISTENING_VELOCITY = 0.7;
 
 /**
+ * Delay between consecutive notes of a rolled chord.
+ *
+ * A hand rolls a chord in roughly the time it takes to say it - fast enough
+ * to be one gesture, slow enough that the notes are separately heard. Below
+ * about 25 ms it is a flam rather than an arpeggio; above about 60 it is a
+ * broken chord the writer would have notated as one.
+ */
+const ROLL_STEP_MS = 38;
+
+/**
+ * How much of a step a roll may occupy.
+ *
+ * Without a cap the same 38 ms per note that sounds right at 60 bpm runs a
+ * five-note chord into the one after it at 160. Half the step keeps the roll
+ * inside the beat it belongs to, whatever the tempo.
+ */
+const ROLL_SHARE_OF_STEP = 0.5;
+
+/**
+ * When each note of a rolled chord sounds, relative to the chord's onset.
+ *
+ * The roll *starts* on the beat rather than arriving on it: the cursor is at
+ * that step and the click sounds there, so a roll that finished on the beat
+ * would leave the lowest note - the one carrying the harmony - audibly early
+ * against both. Notes are already sorted low to high, which is the direction
+ * a hand rolls unless told otherwise.
+ */
+function rollOffsets(rolled: number, stepMs: number): number[] {
+  if (rolled <= 1) {
+    return [0];
+  }
+  const perNote = Math.min(ROLL_STEP_MS, (stepMs * ROLL_SHARE_OF_STEP) / (rolled - 1));
+  return Array.from({ length: rolled }, (_, at) => at * perNote);
+}
+
+/**
  * Plays an exercise through, so the reader can hear it rather than read it.
  *
  * Deliberately not a practice mode: a mode exists to judge input, and this
@@ -142,15 +178,23 @@ export class ExercisePlayer {
     const spans = pedalSpans(timeline.exercise);
     const longest = new Map<string, ScheduledNote>();
     for (const step of timeline.steps) {
-      for (const note of step.notes) {
-        if (staffNumber !== null && note.staffNumber !== staffNumber) {
-          continue;
+      const sounding = step.notes.filter(
+        (note) => staffNumber === null || note.staffNumber === staffNumber,
+      );
+      // Counted after the hand filter: listening to one hand of a roll
+      // written across both is listening to that hand alone, and it starts
+      // where the reader's own would.
+      const offsets = rollOffsets(
+        sounding.filter((note) => note.arpeggiated).length,
+        ticksToMilliseconds(step.durationTicks, tempo),
+      );
+      let rolled = 0;
+      for (const note of sounding) {
+        const offset = note.arpeggiated ? (offsets[rolled] ?? 0) : 0;
+        if (note.arpeggiated) {
+          rolled += 1;
         }
-        // Two voices may notate the same sounding pitch at the same instant.
-        // That is one key on the keyboard and must be one sound here: striking
-        // it twice doubles the attack into an audible knock. The longer of the
-        // two wins, since the key stays down until the last of them lets go.
-        const at = ticksToMilliseconds(step.onsetTicks, tempo);
+        const at = ticksToMilliseconds(step.onsetTicks, tempo) + offset;
         const heldUntil = spans.find(
           ([from, to]) => step.onsetTicks >= from && step.onsetTicks < to,
         )?.[1];
@@ -159,10 +203,17 @@ export class ExercisePlayer {
           heldUntil ?? 0,
         );
         const until = ticksToMilliseconds(endTicks, tempo);
+        // Two voices may notate the same sounding pitch at the same instant.
+        // That is one key on the keyboard and must be one sound here: striking
+        // it twice doubles the attack into an audible knock. The longer of the
+        // two wins, since the key stays down until the last of them lets go.
         const seen = `${note.midi}@${step.onsetTicks}`;
         const previous = longest.get(seen);
         if (previous === undefined || previous.untilMs < until) {
-          longest.set(seen, { midi: note.midi, atMs: at, untilMs: until });
+          // A rolled note is released with the rest of the chord - the hand
+          // lifts once - so only the attack moves. `Math.max` is the guard
+          // for a roll that a very short step has squeezed to nothing.
+          longest.set(seen, { midi: note.midi, atMs: at, untilMs: Math.max(until, at) });
         }
       }
     }

@@ -5,7 +5,19 @@ import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRen
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
-import { MIDI, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import {
+  MIDI,
+  arpeggiatedExercise,
+  bar,
+  p,
+  tiedExercise,
+  twoBarExercise,
+} from '../support/fixtures.js';
+import type { Exercise } from '../../src/domain/model/Exercise.js';
+import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { KeySignature } from '../../src/domain/model/KeySignature.js';
+import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 
 function rig(exercise = twoBarExercise({ tempoBpm: 60 })) {
   const clock = new ManualClock();
@@ -167,4 +179,143 @@ describe('listening to an exercise', () => {
 
     expect(instrument.played.length).toBeGreaterThan(0);
   });
+});
+
+describe('rolling a chord the writer marked', () => {
+  /** Attack times of one chord, low note first. */
+  function attacks(instrument: RecordingPitchPlayer): { midi: number; atMs: number }[] {
+    return instrument.played
+      .map((note) => ({ midi: note.midi, atMs: note.atMs ?? 0 }))
+      .sort((left, right) => left.midi - right.midi);
+  }
+
+  function playArpeggio(options: { tempoBpm?: number; staffNumber?: number | null } = {}) {
+    const harness = rig(arpeggiatedExercise({ tempoBpm: options.tempoBpm ?? 60 }));
+    harness.player.start(harness.timeline, {
+      staffNumber: options.staffNumber ?? null,
+      clickAudible: false,
+    });
+    harness.metronome.advanceSubdivisions(4);
+    return harness;
+  }
+
+  it('spreads the notes instead of striking them together', () => {
+    const { instrument } = playArpeggio();
+    const times = attacks(instrument).map((note) => note.atMs);
+
+    expect(new Set(times).size).toBe(times.length);
+  });
+
+  it('rolls from the bottom up, as a hand does', () => {
+    const { instrument } = playArpeggio();
+    const played = attacks(instrument);
+
+    // C3 G3 C4 E4 G4: sorted by pitch, the times must also be ascending.
+    expect(played.map((note) => note.midi)).toEqual([MIDI.C3, MIDI.G3, MIDI.C4, MIDI.E4, MIDI.G4]);
+    for (let at = 1; at < played.length; at += 1) {
+      const previous = played[at - 1]?.atMs ?? 0;
+      expect((played[at]?.atMs ?? 0) > previous).toBe(true);
+    }
+  });
+
+  it('starts on the beat rather than arriving on it', () => {
+    const { instrument } = playArpeggio();
+
+    // The click sounds here and the cursor sits here, so the lowest note -
+    // the one carrying the harmony - lands with them.
+    expect(attacks(instrument)[0]?.atMs).toBe(0);
+  });
+
+  it('rolls across both staves as one gesture', () => {
+    const { instrument } = playArpeggio();
+    const played = attacks(instrument);
+    const gaps = played
+      .slice(1)
+      .map((note, at) => note.atMs - (played[at]?.atMs ?? 0));
+
+    // Two separate rolls would restart at zero for the treble, leaving one
+    // gap of zero and the hands struck together.
+    for (const gap of gaps) {
+      expect(gap).toBeGreaterThan(0);
+    }
+    expect(new Set(gaps.map((gap) => Math.round(gap))).size).toBe(1);
+  });
+
+  it('releases the chord together, however late a note began', () => {
+    const { instrument } = playArpeggio();
+
+    // The hand lifts once: only the attack moves.
+    const releases = new Set(instrument.stopped.map((note) => note.atMs));
+    expect(releases.size).toBe(1);
+  });
+
+  it('keeps the roll inside its own beat at speed', () => {
+    // A whole-note chord has room to spare, so the cap only shows itself on a
+    // short one: an eighth at 240 bpm lasts 125 ms, and the delay that sounds
+    // right slowly would spread five notes over 152.
+    const harness = rig(shortArpeggio());
+    harness.player.start(harness.timeline, { staffNumber: null, clickAudible: false });
+    harness.metronome.advanceSubdivisions(8);
+
+    const played = attacks(harness.instrument);
+    const spread = (played[played.length - 1]?.atMs ?? 0) - (played[0]?.atMs ?? 0);
+
+    expect(played).toHaveLength(5);
+    expect(spread).toBeGreaterThan(0);
+    expect(spread).toBeLessThanOrEqual(125 / 2);
+  });
+
+  it('starts on the beat when only one hand is being heard', () => {
+    const { instrument } = playArpeggio({ staffNumber: 1 });
+    const played = attacks(instrument);
+
+    // The bass is not sounding at all, so waiting for its share of the roll
+    // would open a gap with nothing in it.
+    expect(played.map((note) => note.midi)).toEqual([MIDI.C4, MIDI.E4, MIDI.G4]);
+    expect(played[0]?.atMs).toBe(0);
+  });
+
+  it('leaves an unmarked chord struck together', () => {
+    const { instrument } = rigAndPlay();
+
+    // The fixture's bass chord carries no roll, so both notes land at once.
+    const chord = instrument.played.filter(
+      (note) => note.midi === MIDI.G2 || note.midi === MIDI.D3,
+    );
+    expect(new Set(chord.map((note) => note.atMs)).size).toBe(1);
+  });
+
+  /**
+   * The same rolled chord, but on an eighth note at 240 bpm.
+   *
+   * Written by hand rather than from the shared fixture because the point is
+   * the *step being short*: the cap it exercises is invisible at any duration
+   * with room to spare.
+   */
+  function shortArpeggio(): Exercise {
+    const rolled = noteEntry([p('C4'), p('E4'), p('G4')], Duration.EIGHTH, [], [], null, true);
+    const bass = noteEntry([p('C3'), p('G3')], Duration.EIGHTH, [], [], null, true);
+    const rest = [restEntry(Duration.HALF), restEntry(Duration.QUARTER), restEntry(Duration.EIGHTH)];
+    return {
+      id: 'fixture-short-arpeggio',
+      title: 'Short arpeggio',
+      key: KeySignature.major(0),
+      keyChanges: [],
+      pedalMarks: [],
+      timeSignature: new TimeSignature(4, 4),
+      tempoBpm: 240,
+      metadata: { generatorId: 'fixture', seed: 1 },
+      staves: [
+        { staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: [bar(rolled, ...rest)] },
+        { staffNumber: 2, voice: 2, clef: 'bass', clefChanges: [], measures: [bar(bass, ...rest)] },
+      ],
+    };
+  }
+
+  function rigAndPlay() {
+    const harness = rig();
+    harness.player.start(harness.timeline, { staffNumber: null, clickAudible: false });
+    harness.metronome.advanceSubdivisions(8);
+    return harness;
+  }
 });

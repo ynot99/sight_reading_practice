@@ -10,6 +10,15 @@ export interface TimelineNote {
   readonly staffNumber: number;
   /** Notated length of the note itself (not of the step). */
   readonly durationTicks: number;
+  /**
+   * Part of a chord the writer marked to be rolled rather than struck.
+   *
+   * Carried per *note* and not per step, because one hand may roll while the
+   * other strikes - and because a roll written across both staves is a single
+   * gesture from the lowest note to the highest, which only a per-note flag
+   * can express once the staves have been merged into one step.
+   */
+  readonly arpeggiated: boolean;
 }
 
 /**
@@ -150,6 +159,7 @@ export function buildTimeline(exercise: Exercise): ExerciseTimeline {
             midi: pitch.midi,
             staffNumber: staff.staffNumber,
             durationTicks: soundingTicks(entries, index, pitch.midi),
+            arpeggiated: entry.arpeggiated,
           });
         }
         notesByOnset.set(onsetTicks, bucket);

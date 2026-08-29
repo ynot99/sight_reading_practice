@@ -53,7 +53,14 @@ step; only what is demanded narrows. It is not a
 practice mode: a mode exists to judge input and this judges nothing, so it is
 its own service driven by the same pulse. Notes are handed to the instrument
 *ahead* of when they sound, because a tick arrives after the moment it stands
-for and a melody placed on delivery is audibly uneven. It is in the fullscreen
+for and a melody placed on delivery is audibly uneven. A chord the writer
+marked to be rolled is rolled, low note to high, and a roll written across
+both staves is one gesture rather than two at once. It *starts* on the beat
+instead of arriving there — the cursor and the click are both at that step, so
+a roll finishing on the beat would put the lowest note, the one carrying the
+harmony, audibly early against both. The spread is capped at half the step, or
+the delay that sounds right at a walking tempo would run a five-note chord
+into the chord after it at speed. It is in the fullscreen
 bar too: "how is this meant to go" is a question that comes up at the stand,
 not at the desk. The cursor is shown for the performance whatever the reader
 set, since following along is most of the value — and put back the way they

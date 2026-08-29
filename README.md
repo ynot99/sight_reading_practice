@@ -86,7 +86,7 @@ The fullscreen bar holds the whole transport on one row, as icons: play/pause
 as a single button, stop, listen, a new exercise, the way out, where you are,
 and the pace. A drawer under it — opened by its handle or by dragging up —
 holds what you *change* rather than what you press mid-run: note size, which
-hand, survival.
+hand, the cursor, the marks for what you played, survival.
 
 Which hand is one button carrying all three answers, cycling both → left →
 right. Both hands are always drawn and the one not being read is dimmed, so

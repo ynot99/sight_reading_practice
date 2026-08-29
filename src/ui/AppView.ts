@@ -392,6 +392,8 @@ export class AppView {
     focusListenIcon: SVGPathElement;
     focusHands: HTMLButtonElement;
     focusSurvival: HTMLButtonElement;
+    focusCursor: HTMLButtonElement;
+    focusMarks: HTMLButtonElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
     focusZoom: HTMLOutputElement;
@@ -510,6 +512,8 @@ export class AppView {
       focusListenIcon: requireElement(doc, 'focus-listen-icon'),
       focusHands: requireElement(doc, 'focus-hands'),
       focusSurvival: requireElement(doc, 'focus-survival'),
+      focusCursor: requireElement(doc, 'focus-cursor'),
+      focusMarks: requireElement(doc, 'focus-marks'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
       focusZoom: requireElement(doc, 'focus-zoom'),
@@ -972,8 +976,10 @@ export class AppView {
 
     this.listen(this.el.showPlayed, 'change', () => {
       controller.updateSettings({ playedNotes: readPlayedNotes(this.el.showPlayed.value) });
-      this.el.showPlayedDescription.textContent =
-        PLAYED_NOTE_DESCRIPTIONS[readPlayedNotes(this.el.showPlayed.value)];
+      // Everything that shows this setting has to be told: the switch in the
+      // fullscreen drawer is the same value seen from the stand, and two
+      // controls that disagree about one setting is worse than either.
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.readAhead, 'change', () => {
@@ -1139,6 +1145,20 @@ export class AppView {
 
     this.listen(this.el.focusStop, 'click', () => {
       controller.stop();
+    });
+
+    this.listen(this.el.focusCursor, 'click', () => {
+      controller.updateSettings({ showCursor: !controller.settings.showCursor });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.focusMarks, 'click', () => {
+      // Two of the three values, because a third state on a switch has no way
+      // to show itself: the drawer opens between runs, and "when they appear"
+      // is a question for the settings, not for a thumb mid-piece.
+      const shown = controller.settings.playedNotes !== 'hidden';
+      controller.updateSettings({ playedNotes: shown ? 'hidden' : 'live' });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.focusSurvival, 'click', () => {
@@ -1886,6 +1906,8 @@ export class AppView {
     this.el.readAheadDescription.textContent =
       READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';
     this.el.showCursor.checked = settings.showCursor;
+    this.el.focusCursor.setAttribute('aria-pressed', String(settings.showCursor));
+    this.el.focusMarks.setAttribute('aria-pressed', String(settings.playedNotes !== 'hidden'));
     this.el.blindMode.checked = settings.blindMode;
     this.renderExpected();
     this.el.metronomeMuted.checked = settings.metronomeMuted;

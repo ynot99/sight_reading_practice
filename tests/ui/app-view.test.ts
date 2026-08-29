@@ -1816,6 +1816,57 @@ describe('AppView', () => {
       expect(element<HTMLInputElement>('survival').checked).toBe(true);
     });
 
+    it('shows and hides the cursor from the drawer', async () => {
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      const toggle = element<HTMLButtonElement>('focus-cursor');
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+      toggle.click();
+
+      expect(runtime.controller.settings.showCursor).toBe(false);
+      expect(renderer.cursor.visible).toBe(false);
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+      // The checkbox at the desk is the same value seen elsewhere.
+      expect(element<HTMLInputElement>('show-cursor').checked).toBe(false);
+
+      toggle.click();
+      expect(renderer.cursor.visible).toBe(true);
+    });
+
+    it('shows and hides the played notes from the drawer', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const toggle = element<HTMLButtonElement>('focus-marks');
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+      toggle.click();
+
+      expect(runtime.controller.settings.playedNotes).toBe('hidden');
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+
+      toggle.click();
+      expect(runtime.controller.settings.playedNotes).toBe('live');
+    });
+
+    it('reads as on for marks that are merely being held back', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const select = element<HTMLSelectElement>('show-played');
+      select.value = 'at-end';
+      select.dispatchEvent(new Event('change'));
+
+      // Waiting for the run to end is still showing them, so a switch that
+      // read "off" here would be lying about the setting behind it - and the
+      // switch has to hear about a change made from the desk at all.
+      expect(runtime.controller.settings.playedNotes).toBe('at-end');
+      expect(element('focus-marks').getAttribute('aria-pressed')).toBe('true');
+
+      element<HTMLButtonElement>('focus-marks').click();
+
+      expect(runtime.controller.settings.playedNotes).toBe('hidden');
+    });
+
     it('sizes the notes from the drawer', async () => {
       const { view, runtime } = createRig();
       await view.initialize();

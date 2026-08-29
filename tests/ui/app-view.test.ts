@@ -244,6 +244,20 @@ function element<T extends HTMLElement>(id: string): T {
   return found as T;
 }
 
+/**
+ * A button in a list row, found by what it says it does.
+ *
+ * By title rather than by position: the rows gained a button and every test
+ * that had counted along the row started clicking the wrong one.
+ */
+function rowButton(listId: string, title: string): HTMLButtonElement {
+  const found = element(listId).querySelector<HTMLButtonElement>(`button[title="${title}"]`);
+  if (found === null) {
+    throw new Error(`No "${title}" button in #${listId}.`);
+  }
+  return found;
+}
+
 /** Answers the delete question the page now asks before anything goes. */
 async function confirmDeletion(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -849,8 +863,7 @@ describe('AppView', () => {
       const rig = createRig();
       await keepOne(rig);
 
-      const buttons = element('scores-list').querySelectorAll('button');
-      (buttons[1] as HTMLButtonElement | undefined)?.click();
+      rowButton('scores-list', 'Forget this score').click();
       await confirmDeletion();
 
       expect(rig.runtime.scores.isEmpty).toBe(true);
@@ -861,8 +874,7 @@ describe('AppView', () => {
       const rig = createRig();
       await keepOne(rig);
 
-      const buttons = element('scores-list').querySelectorAll('button');
-      (buttons[1] as HTMLButtonElement | undefined)?.click();
+      rowButton('scores-list', 'Forget this score').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(element('sheet-confirm').hidden).toBe(false);
 
@@ -924,6 +936,37 @@ describe('AppView', () => {
       expect(element('takes-list').childElementCount).toBe(1);
     });
 
+    it('files what was played even when nothing was pressed', async () => {
+      // The complaint this answers: an idea is noticed after it is played, and
+      // a reader who touched the keys again before reaching for the button
+      // lost the one before it with nothing to say so.
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      expect(rig.takes.list()).toHaveLength(0);
+
+      // Long enough to end the take; the next note is what notices.
+      rig.clock.advance(10_000);
+      playSomething(rig);
+
+      expect(rig.takes.list()).toHaveLength(1);
+      expect(rig.takes.list()[0]?.shelf).toBe('recent');
+      expect(element('open-takes').textContent).toBe('Takes (1)');
+    });
+
+    it('moves one off the shelf that gets tidied', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      rig.clock.advance(10_000);
+      playSomething(rig);
+      expect(rig.takes.list()[0]?.shelf).toBe('recent');
+
+      rowButton('takes-list', 'Keep this one for good, out of reach of the tidying.').click();
+
+      expect(rig.takes.list()[0]?.shelf).toBe('kept');
+    });
+
     it('will not keep the same playing twice', async () => {
       const rig = createRig();
       await rig.view.initialize();
@@ -942,8 +985,7 @@ describe('AppView', () => {
       playSomething(rig);
       element<HTMLButtonElement>('keep-take').click();
 
-      const save = element('takes-list').querySelector('button');
-      (save as HTMLButtonElement | null)?.click();
+      rowButton('takes-list', 'Save this take as a MIDI file').click();
 
       expect(rig.files.saved).toHaveLength(1);
       const [file] = rig.files.saved;
@@ -959,8 +1001,7 @@ describe('AppView', () => {
       playSomething(rig);
       element<HTMLButtonElement>('keep-take').click();
 
-      const buttons = element('takes-list').querySelectorAll('button');
-      (buttons[1] as HTMLButtonElement | undefined)?.click();
+      rowButton('takes-list', 'Delete this take').click();
       await confirmDeletion();
 
       expect(rig.takes.list()).toHaveLength(0);

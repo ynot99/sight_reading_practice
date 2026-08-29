@@ -1214,6 +1214,16 @@ export class AppView {
 
     this.bindSheets();
 
+    this.subscriptions.push(
+      // Everything that was played is filed, whether or not the reader
+      // reached for a button. They notice the idea afterwards, and the take
+      // before this one used to be gone by then with nothing to say so.
+      this.runtime.recorder.events.on('takeClosed', ({ take }) => {
+        this.runtime.takes.file(take, Date.now(), 'recent');
+        this.renderTakes();
+      }),
+    );
+
     this.listen(this.el.newExercise, 'click', () => {
       void this.reload(true);
     });
@@ -2434,11 +2444,32 @@ export class AppView {
       name.className = 'takes__name';
       name.textContent = `${takeName(take.savedAtMs)} · ${clockTime(take.durationMs)} · ${take.noteCount} notes`;
 
+      if (take.shelf === 'recent') {
+        name.classList.add('takes__name--recent');
+      }
+
       const save = this.doc.createElement('button');
       save.type = 'button';
       save.textContent = 'MIDI';
       save.title = 'Save this take as a MIDI file';
       this.listen(save, 'click', () => this.exportTake(take.id));
+
+      const promote = this.doc.createElement('button');
+      promote.type = 'button';
+      promote.textContent = take.shelf === 'kept' ? '★' : '☆';
+      promote.disabled = take.shelf === 'kept';
+      promote.title =
+        take.shelf === 'kept'
+          ? 'Kept for good; only the recent ones are ever thrown away.'
+          : 'Keep this one for good, out of reach of the tidying.';
+      promote.setAttribute(
+        'aria-label',
+        take.shelf === 'kept' ? 'Already kept for good' : 'Keep this take for good',
+      );
+      this.listen(promote, 'click', () => {
+        this.runtime.takes.promote(take.id);
+        this.renderTakes();
+      });
 
       const remove = this.doc.createElement('button');
       remove.type = 'button';
@@ -2454,7 +2485,7 @@ export class AppView {
         });
       });
 
-      row.append(name, save, remove);
+      row.append(name, promote, save, remove);
       this.el.takesList.append(row);
     }
   }

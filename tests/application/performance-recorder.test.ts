@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.js';
-import { TakeLibrary } from '../../src/application/TakeLibrary.js';
+import { type TakeShelf, TakeLibrary } from '../../src/application/TakeLibrary.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
@@ -125,13 +125,17 @@ describe('keeping what was just played', () => {
 
 describe('the takes that were kept', () => {
   function keptTake(library: TakeLibrary, at = 1_000) {
+    return fileTake(library, at, 'kept');
+  }
+
+  function fileTake(library: TakeLibrary, at = 1_000, shelf: TakeShelf = 'kept') {
     const harness = rig();
     playNote(harness, 60);
     const take = harness.recorder.take();
     if (take === null) {
       throw new Error('expected a take');
     }
-    return library.keepTake(take, at);
+    return library.file(take, at, shelf);
   }
 
   it('survives the visit that kept them', () => {
@@ -183,13 +187,38 @@ describe('the takes that were kept', () => {
     expect(library.find(first.id)).toBeNull();
   });
 
-  it('drops the oldest rather than filling the browser', () => {
+  it('drops the oldest of what it filed by itself', () => {
     const library = new TakeLibrary(new InMemorySettingsStore(), 2);
-    keptTake(library, 1_000);
-    keptTake(library, 2_000);
-    keptTake(library, 3_000);
+    fileTake(library, 1_000, 'recent');
+    fileTake(library, 2_000, 'recent');
+    fileTake(library, 3_000, 'recent');
 
     expect(library.list().map((take) => take.savedAtMs)).toEqual([3_000, 2_000]);
+  });
+
+  it('never drops what the reader asked to keep', () => {
+    // The one thing here that was chosen. A library that quietly threw those
+    // away would be worse than no library: the reader finds out by looking
+    // for something that has gone.
+    const library = new TakeLibrary(new InMemorySettingsStore(), 1);
+    keptTake(library, 1_000);
+    keptTake(library, 2_000);
+    fileTake(library, 3_000, 'recent');
+    fileTake(library, 4_000, 'recent');
+
+    expect(library.list().map((take) => take.savedAtMs)).toEqual([4_000, 2_000, 1_000]);
+  });
+
+  it('moves one off the shelf that prunes', () => {
+    const library = new TakeLibrary(new InMemorySettingsStore(), 1);
+    const filed = fileTake(library, 1_000, 'recent');
+
+    library.promote(filed.id);
+    fileTake(library, 2_000, 'recent');
+    fileTake(library, 3_000, 'recent');
+
+    expect(library.find(filed.id)?.shelf).toBe('kept');
+    expect(library.list().map((take) => take.savedAtMs)).toEqual([3_000, 1_000]);
   });
 
   it('forgets everything when asked', () => {

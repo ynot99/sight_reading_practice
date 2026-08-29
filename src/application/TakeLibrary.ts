@@ -4,18 +4,35 @@ import type { Take } from './PerformanceRecorder.js';
 
 export const TAKES_STORAGE_KEY = 'sight-reading-practice.takes.v1';
 
+/**
+ * Which shelf a take is on.
+ *
+ * `recent` is everything that was played, filed without being asked for and
+ * thrown away oldest-first once the shelf is full. `kept` is what the reader
+ * said to keep, and nothing takes those away.
+ *
+ * The two exist because the decision and the playing happen at different
+ * times. An idea is noticed after it has been played, and the reader who
+ * plays the next thing before reaching for a button used to lose the first
+ * one with no sign that anything had gone.
+ */
+export const TAKE_SHELVES = ['recent', 'kept'] as const;
+
+export type TakeShelf = (typeof TAKE_SHELVES)[number];
+
 export interface StoredTake {
   readonly id: string;
   /** Wall-clock moment the take was kept, for naming and ordering. */
   readonly savedAtMs: number;
   readonly durationMs: number;
   readonly noteCount: number;
+  readonly shelf: TakeShelf;
   readonly events: readonly MidiFileEvent[];
 }
 
 const STORAGE_VERSION = 1;
-/** Takes kept before the oldest is dropped. */
-const KEEP_TAKES = 24;
+/** Takes on the recent shelf before the oldest is dropped. */
+const KEEP_TAKES = 100;
 /**
  * Events kept across the whole library.
  *
@@ -75,7 +92,7 @@ function readTake(value: unknown): StoredTake | null {
   if (!isRecord(value)) {
     return null;
   }
-  const { id, savedAtMs, durationMs, noteCount, events } = value;
+  const { id, savedAtMs, durationMs, noteCount, events, shelf } = value;
   if (typeof id !== 'string' || typeof savedAtMs !== 'number' || typeof durationMs !== 'number') {
     return null;
   }
@@ -91,6 +108,9 @@ function readTake(value: unknown): StoredTake | null {
     savedAtMs,
     durationMs,
     noteCount: typeof noteCount === 'number' ? noteCount : 0,
+    // Anything written before there were two shelves was kept on purpose,
+    // since keeping was the only way a take got here at all.
+    shelf: shelf === 'recent' ? 'recent' : 'kept',
     events: unpacked,
   };
 }
@@ -138,18 +158,42 @@ export class TakeLibrary {
     return this.takes.find((take) => take.id === id) ?? null;
   }
 
-  keepTake(take: Take, savedAtMs: number, id = `take-${savedAtMs.toString(36)}`): StoredTake {
+  /** Files a take on the shelf the reader asked for. */
+  file(
+    take: Take,
+    savedAtMs: number,
+    shelf: TakeShelf,
+    id = `take-${savedAtMs.toString(36)}`,
+  ): StoredTake {
     const stored: StoredTake = {
       id,
       savedAtMs,
       durationMs: take.durationMs,
       noteCount: take.noteCount,
+      shelf,
       events: take.events,
     };
-    this.takes = [...this.takes, stored];
+    this.takes = [...this.takes.filter((each) => each.id !== id), stored];
     this.prune();
     this.persist();
     return stored;
+  }
+
+  /** What the reader's button does: this one is not to be thrown away. */
+  keepTake(take: Take, savedAtMs: number, id = `take-${savedAtMs.toString(36)}`): StoredTake {
+    return this.file(take, savedAtMs, 'kept', id);
+  }
+
+  /** Moves a take off the shelf that prunes, onto the one that does not. */
+  promote(id: string): StoredTake | null {
+    const found = this.takes.find((take) => take.id === id);
+    if (found === undefined || found.shelf === 'kept') {
+      return found ?? null;
+    }
+    const promoted: StoredTake = { ...found, shelf: 'kept' };
+    this.takes = this.takes.map((take) => (take.id === id ? promoted : take));
+    this.persist();
+    return promoted;
   }
 
   remove(id: string): void {
@@ -165,17 +209,28 @@ export class TakeLibrary {
     this.store.clear();
   }
 
-  /** Oldest out first, by count and by the events they hold between them. */
+  /**
+   * Oldest out first, by count and by the events they hold between them.
+   *
+   * Only ever off the recent shelf. A take the reader asked to keep is the one
+   * thing here that was chosen, and a library that quietly threw those away
+   * would be worse than no library - the reader would find out by looking for
+   * something that is gone.
+   */
   private prune(): void {
-    const byAge = [...this.takes].sort((left, right) => left.savedAtMs - right.savedAtMs);
-    while (byAge.length > this.keep) {
-      byAge.shift();
+    const kept = this.takes.filter((take) => take.shelf === 'kept');
+    const recent = this.takes
+      .filter((take) => take.shelf === 'recent')
+      .sort((left, right) => left.savedAtMs - right.savedAtMs);
+
+    while (recent.length > this.keep) {
+      recent.shift();
     }
-    let total = byAge.reduce((sum, take) => sum + take.events.length, 0);
-    while (total > KEEP_EVENTS && byAge.length > 1) {
-      total -= byAge.shift()?.events.length ?? 0;
+    let total = [...kept, ...recent].reduce((sum, take) => sum + take.events.length, 0);
+    while (total > KEEP_EVENTS && recent.length > 0) {
+      total -= recent.shift()?.events.length ?? 0;
     }
-    this.takes = byAge;
+    this.takes = [...kept, ...recent];
   }
 
   private persist(): void {
@@ -186,6 +241,7 @@ export class TakeLibrary {
         savedAtMs: take.savedAtMs,
         durationMs: take.durationMs,
         noteCount: take.noteCount,
+        shelf: take.shelf,
         events: take.events.map(pack),
       })),
     });

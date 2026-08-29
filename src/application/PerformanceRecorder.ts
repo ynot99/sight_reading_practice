@@ -1,7 +1,7 @@
 import type { MidiFileEvent } from '../domain/midi/MidiFile.js';
 import type { IClock } from './ports/IClock.js';
 import type { IMidiSource, MidiEvent } from './ports/IMidiSource.js';
-import type { Unsubscribe } from '../shared/EventEmitter.js';
+import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 
 export interface PerformanceRecorderOptions {
   /**
@@ -34,6 +34,20 @@ export interface Take {
   readonly noteCount: number;
 }
 
+/** What a recorder publishes. */
+export interface RecorderEventMap {
+  /**
+   * A stretch of playing that has ended, because a new one has begun.
+   *
+   * Noticed on the next event rather than announced by a timer: the recorder
+   * has no clock of its own to fire, which is what lets a whole session be
+   * replayed instantly in a test. The consequence is that a take is closed
+   * when the reader plays again, not the moment they stop - which is the
+   * moment anything could act on it anyway.
+   */
+  takeClosed: { readonly take: Take };
+}
+
 interface Captured {
   readonly event: MidiFileEvent;
   /** Wall-clock arrival, kept apart so the take can be rebased on take-out. */
@@ -56,6 +70,7 @@ export class PerformanceRecorder {
   private readonly capacity: number;
   private readonly silenceMs: number;
   private readonly captured: Captured[] = [];
+  private readonly emitter = new TypedEventEmitter<RecorderEventMap>();
   private subscription: Unsubscribe | null = null;
   /** Keys still down, so a take can release what it cut through. */
   private readonly holding = new Map<number, number>();
@@ -64,6 +79,10 @@ export class PerformanceRecorder {
     this.clock = clock;
     this.capacity = options.capacity ?? DEFAULT_CAPACITY;
     this.silenceMs = options.silenceMs ?? DEFAULT_SILENCE_MS;
+  }
+
+  get events(): IEventSource<RecorderEventMap> {
+    return this.emitter.asSource();
   }
 
   listenTo(source: IMidiSource): Unsubscribe {
@@ -84,6 +103,7 @@ export class PerformanceRecorder {
 
   private accept(event: MidiEvent): void {
     const atMs = this.clock.now();
+    this.closeTakeBefore(atMs);
     switch (event.type) {
       case 'noteon':
         this.holding.set(event.midi, atMs);
@@ -98,6 +118,25 @@ export class PerformanceRecorder {
         return;
       default:
         return;
+    }
+  }
+
+  /**
+   * Publishes the stretch just ended, when this event opens a new one.
+   *
+   * The reader who plays an idea and then plays another has lost the first
+   * one unless something files it - and they have no way of knowing that
+   * until they look for it. So every take that ends is kept; deciding which
+   * ones are worth keeping *for good* stays a separate act.
+   */
+  private closeTakeBefore(atMs: number): void {
+    const last = this.captured[this.captured.length - 1];
+    if (last === undefined || atMs - last.atMs < this.silenceMs) {
+      return;
+    }
+    const closing = this.take();
+    if (closing !== null) {
+      this.emitter.emit('takeClosed', { take: closing });
     }
   }
 
@@ -164,6 +203,12 @@ export class PerformanceRecorder {
   clear(): void {
     this.captured.length = 0;
     this.holding.clear();
+  }
+
+  /** Releases every listener. */
+  dispose(): void {
+    this.stop();
+    this.emitter.removeAllListeners();
   }
 
   /** Index of the first event after the last long silence. */

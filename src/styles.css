@@ -494,6 +494,12 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+/* Filed without being asked for, and first to go when the shelf fills. */
+.takes__name--recent {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .takes__name {
   flex: 1;
   min-width: 0;

@@ -645,11 +645,18 @@ select {
 /* ---- Notes already passed ----------------------------------------------- */
 
 /*
- * Dimmed rather than removed: the staff, the bar lines and the spacing all
- * stay put, so the page empties without shifting under the reader's eye.
+ * Gone, not merely faint.
+ *
+ * A notehead's *position* is the whole of what it says, and a ghost at a
+ * tenth still says it plainly: reading a pale note off its line is no harder
+ * than reading a black one. Anything short of invisible makes the demanding
+ * settings a pretence.
+ *
+ * Hidden rather than removed, though: the staff, the bar lines and the
+ * spacing all stay put, so the page empties without shifting under the eye.
  */
 .note--passed {
-  opacity: 0.1;
+  opacity: 0;
   transition: opacity 400ms ease-out;
 }
 

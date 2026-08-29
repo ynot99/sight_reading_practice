@@ -207,6 +207,13 @@ demands nothing. Moved forward, it stops being tidying: at *as I reach them*
 the note under your fingers is already gone, so it can only be played if it
 was read a step earlier, and one step further makes that two.
 
+Gone means gone, not faint. A notehead's *position* is the whole of what it
+says, and a ghost at a tenth of an opacity still says it plainly — reading a
+pale note off its line is no harder than reading a black one, so anything
+short of invisible makes the demanding settings a pretence. The staff, the
+bar lines and the spacing stay, so the page empties without shifting under
+the eye.
+
 A note leaves with everything the engraver drew for it — its stem, its ledger
 lines, and the beams joining it to its neighbours. Beams are the awkward part,
 because a beam belongs to a *group* rather than to one note: it goes when the

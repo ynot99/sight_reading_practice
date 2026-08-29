@@ -142,7 +142,12 @@ describe('audio settings codec', () => {
       instrumentVolume: 0,
       sampleLoading: 'eager',
       volumeController: null,
+      audioFeedback: true,
+      computerKeyboard: true,
     });
+    // Switched off on this device, and still off on the next visit.
+    expect(decodeAudioSettings({ computerKeyboard: false }).computerKeyboard).toBe(false);
+    expect(decodeAudioSettings({ audioFeedback: false }).audioFeedback).toBe(false);
     // A knob taught on this device outlives the visit that taught it.
     expect(decodeAudioSettings({ volumeController: 11 }).volumeController).toBe(11);
     // A controller number no keyboard can send is dropped, not trusted.
@@ -174,6 +179,8 @@ describe('SettingsRepository', () => {
       instrumentVolume: 0.9,
       sampleLoading: 'off',
       volumeController: 7,
+      audioFeedback: false,
+      computerKeyboard: false,
     });
 
     const second = new SettingsRepository(store, KNOWN);
@@ -186,6 +193,8 @@ describe('SettingsRepository', () => {
       instrumentVolume: 0.9,
       sampleLoading: 'off',
       volumeController: 7,
+      audioFeedback: false,
+      computerKeyboard: false,
     });
   });
 
@@ -200,6 +209,8 @@ describe('SettingsRepository', () => {
       instrumentVolume: 0,
       sampleLoading: 'eager',
       volumeController: null,
+      audioFeedback: true,
+      computerKeyboard: true,
     });
 
     const restored = new SettingsRepository(store, KNOWN).load();

@@ -863,18 +863,11 @@ export class AppView {
     });
 
     this.listen(this.el.audioFeedback, 'change', () => {
-      this.audioFeedbackEnabled = this.el.audioFeedback.checked;
-      if (!this.audioFeedbackEnabled) {
-        this.runtime.pitchPlayer.stopAll();
-      }
+      this.applyInputSettings(true);
     });
 
     this.listen(this.el.computerKeyboard, 'change', () => {
-      if (this.el.computerKeyboard.checked) {
-        this.runtime.computerKeyboard.enable();
-      } else {
-        this.runtime.computerKeyboard.disable();
-      }
+      this.applyInputSettings(true);
     });
 
     this.listen(this.el.keepTake, 'click', () => {
@@ -1416,6 +1409,32 @@ export class AppView {
    * the sliders show - reading the stored value into the DOM alone would
    * leave the audio at its construction default.
    */
+  /**
+   * Applies the two input switches, and remembers them.
+   *
+   * Both were view state and nothing else, so every reload silently turned
+   * the computer keyboard back on and the monitor with it. They describe the
+   * desk rather than the exercise, which is why they live beside the volumes.
+   */
+  private applyInputSettings(persist: boolean): void {
+    this.audioFeedbackEnabled = this.el.audioFeedback.checked;
+    if (!this.audioFeedbackEnabled) {
+      this.runtime.pitchPlayer.stopAll();
+    }
+    if (this.el.computerKeyboard.checked) {
+      this.runtime.computerKeyboard.enable();
+    } else {
+      this.runtime.computerKeyboard.disable();
+    }
+    if (persist) {
+      this.runtime.settings.saveAudio({
+        ...this.runtime.settings.currentAudio,
+        audioFeedback: this.el.audioFeedback.checked,
+        computerKeyboard: this.el.computerKeyboard.checked,
+      });
+    }
+  }
+
   private applyVolumes(persist: boolean): void {
     const metronome = Number.parseInt(this.el.metronomeVolume.value, 10) / 100;
     const instrument = Number.parseInt(this.el.instrumentVolume.value, 10) / 100;
@@ -1483,6 +1502,9 @@ export class AppView {
     ).description;
 
     const audio = this.runtime.settings.currentAudio;
+    this.el.audioFeedback.checked = audio.audioFeedback;
+    this.el.computerKeyboard.checked = audio.computerKeyboard;
+    this.applyInputSettings(false);
     this.el.metronomeVolume.value = String(Math.round(audio.metronomeVolume * 100));
     this.el.metronomeVolumeValue.value = this.el.metronomeVolume.value;
     this.el.instrumentVolume.value = String(Math.round(audio.instrumentVolume * 100));

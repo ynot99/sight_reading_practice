@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
-import { MIDI, twoBarExercise } from '../support/fixtures.js';
+import { MIDI, bar, p, twoBarExercise } from '../support/fixtures.js';
+import type { Exercise } from '../../src/domain/model/Exercise.js';
+import { noteEntry } from '../../src/domain/model/Exercise.js';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { KeySignature } from '../../src/domain/model/KeySignature.js';
+import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { createHarness, type Harness } from '../support/harness.js';
 
 function waitHarness(overrides: Partial<Parameters<typeof createHarness>[0]> = {}): Harness {
@@ -63,9 +68,12 @@ describe('Wait mode', () => {
     harness.session.start();
 
     expect(harness.of('stepEntered')[0]?.expectedMidi).toEqual([MIDI.C3]);
-    // The bass note alone completes the step the right hand also plays in.
+    // The bass note alone completes the step the right hand also plays in,
+    // and the run then walks past the three the right hand plays alone: they
+    // are no more this reader's to play than a rest is. Landing on the first
+    // of them was where the session used to stop dead.
     harness.midi.noteOn(MIDI.C3);
-    expect(harness.session.currentIndex).toBe(1);
+    expect(harness.session.currentIndex).toBe(4);
   });
 
   it('advances on any note at all when only the rhythm is being read', () => {
@@ -294,5 +302,104 @@ describe('Wait mode', () => {
         'aborted',
       ]);
     });
+  });
+});
+
+describe('waiting while practising one hand', () => {
+  /**
+   * A right hand holding a whole note while the left keeps moving.
+   *
+   *   treble: C4 (whole)          | C4 (whole)
+   *   bass:   C3 D3 E3 F3 quarters| C3 (whole)
+   *
+   * Reading the right hand alone, bars one's second, third and fourth beats
+   * have nothing for that hand to play - which is exactly where the run used
+   * to stop dead.
+   */
+  function heldRightHand(): Exercise {
+    return {
+      id: 'held-right-hand',
+      title: 'Held right hand',
+      key: KeySignature.major(0),
+      keyChanges: [],
+      pedalMarks: [],
+      timeSignature: new TimeSignature(4, 4),
+      tempoBpm: 60,
+      metadata: { generatorId: 'fixture', seed: 1 },
+      staves: [
+        {
+          staffNumber: 1,
+          voice: 1,
+          clef: 'treble',
+          clefChanges: [],
+          measures: [bar(noteEntry(p('C4'), Duration.WHOLE)), bar(noteEntry(p('C4'), Duration.WHOLE))],
+        },
+        {
+          staffNumber: 2,
+          voice: 2,
+          clef: 'bass',
+          clefChanges: [],
+          measures: [
+            bar(
+              noteEntry(p('C3'), Duration.QUARTER),
+              noteEntry(p('D3'), Duration.QUARTER),
+              noteEntry(p('E3'), Duration.QUARTER),
+              noteEntry(p('F3'), Duration.QUARTER),
+            ),
+            bar(noteEntry(p('C3'), Duration.WHOLE)),
+          ],
+        },
+      ],
+    };
+  }
+
+  function rightHandOnly(): Harness {
+    return createHarness({
+      exercise: heldRightHand(),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        metronomeMuted: true,
+        expectedStaff: 1,
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+      },
+    });
+  }
+
+  it('walks past the steps that hand has nothing in', () => {
+    const harness = rightHandOnly();
+    harness.session.start();
+
+    // One press of C4 satisfies the whole first bar: the three beats where
+    // only the left hand moves are not this hand's to play.
+    harness.midi.noteOn(MIDI.C4, 0);
+
+    expect(harness.session.currentIndex).toBe(4);
+    expect(harness.session.status).toBe('running');
+  });
+
+  it('finishes rather than stopping dead partway', () => {
+    const harness = rightHandOnly();
+    harness.session.start();
+
+    harness.midi.noteOn(MIDI.C4, 0);
+    harness.midi.noteOn(MIDI.C4, 10);
+
+    // The bug: the session waited for notes it would never demand, and no
+    // key could move it on again.
+    expect(harness.session.status).toBe('completed');
+  });
+
+  it('does not count the other hand against the reader', () => {
+    const harness = rightHandOnly();
+    harness.session.start();
+    harness.midi.noteOn(MIDI.C4, 0);
+    harness.midi.noteOn(MIDI.C4, 10);
+
+    const report = harness.session.report;
+    // Those steps were never this hand's to play, so they are skipped in the
+    // sense a rest is - not missed.
+    expect(report?.totals.missed).toBe(0);
+    expect(report?.totals.expectedNotes).toBe(2);
   });
 });

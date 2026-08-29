@@ -1369,6 +1369,30 @@ describe('AppView', () => {
       expect(renderer.zoom).toBe(1.5);
     });
 
+    it('remembers the input switches, which used to reset every reload', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      expect(first.runtime.computerKeyboard.isEnabled).toBe(true);
+
+      const keyboard = element<HTMLInputElement>('computer-keyboard');
+      keyboard.checked = false;
+      keyboard.dispatchEvent(new Event('change'));
+      const monitor = element<HTMLInputElement>('audio-feedback');
+      monitor.checked = false;
+      monitor.dispatchEvent(new Event('change'));
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      await second.view.initialize();
+
+      // Both were view state and nothing else, so every reload turned the
+      // computer keyboard back on underneath the reader.
+      expect(element<HTMLInputElement>('computer-keyboard').checked).toBe(false);
+      expect(element<HTMLInputElement>('audio-feedback').checked).toBe(false);
+      expect(second.runtime.computerKeyboard.isEnabled).toBe(false);
+    });
+
     it('chooses when the played notes appear', async () => {
       const { view, runtime } = createRig();
       await view.initialize();

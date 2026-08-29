@@ -53,7 +53,9 @@ tempo rather than a place to work.
 governs both listening and practice, because they are the same question asked
 twice: which hand am I working on. Practising one hand is not practising half
 the music — the page still shows both staves and the cursor still visits every
-step; only what is demanded narrows. It is not a
+step; only what is demanded narrows. In Wait mode the run walks past the steps
+that hand has nothing in — a held right hand while the left keeps moving is no
+more this reader's to play than a rest is. It is not a
 practice mode: a mode exists to judge input and this judges nothing, so it is
 its own service driven by the same pulse. Notes are handed to the instrument
 *ahead* of when they sound, because a tick arrives after the moment it stands

@@ -17,9 +17,15 @@ export class WaitMode extends BasePracticeMode {
   readonly label = 'Wait for the notes';
   readonly requiresMetronome = false;
 
-  override onStepEntered(context: PracticeContext, step: PracticeStep): void {
-    if (step.notes.length === 0) {
-      // A rest position: nothing to wait for.
+  override onStepEntered(context: PracticeContext, _step: PracticeStep): void {
+    // The matcher, not the step's own notes. A step can hold notes this
+    // reader is not being asked for - the other hand keeps moving under a
+    // held one - and waiting on those is waiting for a press that will never
+    // be demanded, with no key able to move the run on again. The session has
+    // already decided what is expected here; asking it is the only way the
+    // two cannot drift apart.
+    if (context.matcher === null) {
+      // Nothing to wait for: a rest, or a bar belonging to the other hand.
       context.completeStep('skipped');
     }
   }

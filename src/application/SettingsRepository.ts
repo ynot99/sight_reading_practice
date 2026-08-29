@@ -11,7 +11,14 @@ import {
 } from './ports/IMetronome.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from './PracticeController.js';
 
-/** Loudness of each sound source, `0..1`. Not a practice rule, so kept apart. */
+/**
+ * What belongs to this device rather than to the practice.
+ *
+ * Loudness, which knob drives it, where the samples come from and which
+ * inputs are live: none of these describe the exercise, and all of them are
+ * true of the desk the reader is sitting at. Kept apart from the practice
+ * settings for that reason, and restored the same way.
+ */
 export interface AudioSettings {
   readonly metronomeVolume: number;
   readonly instrumentVolume: number;
@@ -25,6 +32,10 @@ export interface AudioSettings {
    * device alongside them.
    */
   readonly volumeController: number | null;
+  /** Sound the reader's own presses back to them. */
+  readonly audioFeedback: boolean;
+  /** Accept the computer keyboard as a second MIDI source. */
+  readonly computerKeyboard: boolean;
 }
 
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
@@ -32,6 +43,8 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   instrumentVolume: 0.6,
   sampleLoading: 'lazy',
   volumeController: null,
+  audioFeedback: true,
+  computerKeyboard: true,
 };
 
 export interface RestoredSettings {
@@ -278,6 +291,9 @@ export function decodeAudioSettings(value: unknown): AudioSettings {
     // `null` is the real answer for "no knob taught", so it has to survive a
     // reload rather than falling back to a default that means the same thing.
     volumeController: readInteger(value['volumeController'], 0, 127) ?? null,
+    audioFeedback: readBoolean(value['audioFeedback']) ?? DEFAULT_AUDIO_SETTINGS.audioFeedback,
+    computerKeyboard:
+      readBoolean(value['computerKeyboard']) ?? DEFAULT_AUDIO_SETTINGS.computerKeyboard,
   };
 }
 

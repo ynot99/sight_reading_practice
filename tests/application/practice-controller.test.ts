@@ -340,8 +340,11 @@ describe('PracticeController', () => {
     // Reported bars are counted from whatever was being practised. Drilling a
     // second time inside a passage must not walk backwards through the score.
     const { controller } = createController(true);
-    controller.updateSettings({ rangeFromBar: 20, rangeToBar: 27 });
+    // The range is narrowed *after* the page is loaded: asking for new
+    // material is what clears one, so setting it first would be undone.
     await controller.loadNewExercise();
+    controller.updateSettings({ rangeFromBar: 20, rangeToBar: 27 });
+    await controller.reloadExercise();
     const session = controller.start();
     if (session === null) {
       throw new Error('expected a session');
@@ -356,6 +359,46 @@ describe('PracticeController', () => {
     }
     expect(passage.fromBar).toBeGreaterThanOrEqual(20);
     expect(controller.settings.rangeFromBar).toBe(passage.fromBar);
+  });
+
+  it('forgets the practised bars when new material is asked for', async () => {
+    const { controller } = createController();
+    await controller.loadNewExercise();
+    controller.updateSettings({ rangeFromBar: 12, rangeToBar: 16 });
+
+    await controller.loadNewExercise();
+
+    // Bars 12-16 of the piece just closed mean nothing in the one opening,
+    // and applying them silently hands back a passage of something the reader
+    // never asked to narrow.
+    expect(controller.settings.rangeFromBar).toBeNull();
+    expect(controller.settings.rangeToBar).toBeNull();
+  });
+
+  it('keeps them when the same material is drawn again', async () => {
+    const { controller } = createController();
+    await controller.loadNewExercise();
+    controller.updateSettings({ rangeFromBar: 3, rangeToBar: 4 });
+
+    await controller.reloadExercise();
+
+    // Re-engraving what is already there is not asking for a new piece; the
+    // drill and the range boxes both depend on the passage surviving it.
+    expect(controller.settings.rangeFromBar).toBe(3);
+    expect(controller.settings.rangeToBar).toBe(4);
+  });
+
+  it('says so once, rather than on every fresh page', async () => {
+    const { controller } = createController();
+    const changed = vi.fn();
+    await controller.loadNewExercise();
+    controller.events.on('settingsChanged', changed);
+
+    await controller.loadNewExercise();
+
+    // Nothing was narrowed, so nothing was cleared: an event here would save
+    // the same settings and redraw the panel for no reason.
+    expect(changed).not.toHaveBeenCalled();
   });
 
   it('names the passage the way a reader would', async () => {
@@ -1087,7 +1130,7 @@ describe('climbing the ladder', () => {
   it('does not count a passage being drilled', async () => {
     const rig = await onTheLadder();
     rig.controller.updateSettings({ rangeFromBar: 1, rangeToBar: 2 });
-    await rig.controller.loadNewExercise();
+    await rig.controller.reloadExercise();
 
     readCleanly(rig);
     readCleanly(rig);

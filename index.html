@@ -36,6 +36,16 @@
           <option value="1">Right hand only</option>
           <option value="2">Left hand only</option>
         </select>
+        <span class="toolbar__bars">
+          <label for="range-from">Bars</label>
+          <input id="range-from" type="number" min="1" max="999" placeholder="first" />
+          <span aria-hidden="true">–</span>
+          <input id="range-to" type="number" min="1" max="999" placeholder="last" />
+          <label class="toolbar__repeat">
+            <input id="repeat-range" type="checkbox" />
+            <span>Repeat</span>
+          </label>
+        </span>
         <span class="toolbar__gap"></span>
         <button id="new-exercise" type="button" class="button">New exercise</button>
         <button id="open-score" type="button" class="button">Open score…</button>
@@ -156,20 +166,6 @@
           <label for="preview">Look before playing: <output id="preview-value">0</output> s</label>
           <input id="preview" type="range" min="0" max="20" step="1" value="0" />
           <p class="hint">A scan the run starts itself after, so the look is deliberate.</p>
-        </div>
-
-        <div class="control-group">
-          <label for="range-from">Practise bars</label>
-          <div class="range-row">
-            <input id="range-from" type="number" min="1" max="999" placeholder="first" />
-            <span>–</span>
-            <input id="range-to" type="number" min="1" max="999" placeholder="last" />
-          </div>
-          <label class="switch">
-            <input id="repeat-range" type="checkbox" />
-            <span>Repeat when it ends</span>
-          </label>
-          <p class="hint">Leave empty for the whole piece. The passage becomes the exercise.</p>
         </div>
 
         <div class="control-group">

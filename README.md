@@ -28,7 +28,11 @@ fell due rather than the ones in the exercise. Setting the material, rhythm,
 key or metre by hand steps off the route and says so; tempo and bar count do
 not, because slowing a rung down is how it is meant to be met.
 
-**Practise bars** narrows the exercise to a passage. It is done by cutting
+**Bars**, in the transport bar rather than among the settings, narrows the
+exercise to a passage: which bars to read is changed between attempts, not
+dialled in once, and it is the one control a reader reaches for with the music
+already in front of them. Asking for a new exercise empties it — bars 12-16 of
+the piece just closed mean nothing in the one opening. It is done by cutting
 those bars out as a score in their own right rather than by teaching the session
 to start and stop in the middle of a longer one, so the timeline, the page, the
 cursor, the report and the playback all carry on unaware a longer piece exists.

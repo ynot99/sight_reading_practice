@@ -389,6 +389,12 @@ export class PracticeController {
     // Asking for a new exercise is asking the generator for one, so an opened
     // file steps aside rather than being handed back unchanged.
     this.openedScore = null;
+    // Bars 12-16 of the piece just closed mean nothing in the piece about to
+    // open, and silently applying them would hand back a passage of something
+    // the reader never asked to narrow. A range is about *this* music.
+    if (this.currentSettings.rangeFromBar !== null || this.currentSettings.rangeToBar !== null) {
+      this.updateSettings({ rangeFromBar: null, rangeToBar: null });
+    }
     return this.load(undefined);
   }
 

@@ -1272,6 +1272,9 @@ export class AppView {
       await (fresh
         ? this.runtime.controller.loadNewExercise()
         : this.runtime.controller.reloadExercise());
+      // New material clears the practised bars, and a box still showing the
+      // old ones would name a passage of a piece that is no longer open.
+      this.syncControlsFromSettings();
       this.clearLog();
       this.el.result.hidden = true;
     } catch (error) {

@@ -611,6 +611,45 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The passage under practice, beside the transport it governs.
+ *
+ * It belongs with Start rather than among the settings: which bars to read is
+ * changed between attempts, not dialled in once, and it is the one control a
+ * reader reaches for with the music already in front of them.
+ */
+.toolbar__bars {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.toolbar__bars > label[for='range-from'] {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.toolbar__bars input[type='number'] {
+  width: 5em;
+  background: var(--surface-strong);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 8px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar__repeat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+}
+
 .range-row {
   display: flex;
   align-items: center;

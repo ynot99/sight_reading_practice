@@ -738,6 +738,29 @@ describe('AppView', () => {
     });
   });
 
+  it('empties the bar boxes when a new exercise is asked for', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    const from = element<HTMLInputElement>('range-from');
+    const to = element<HTMLInputElement>('range-to');
+    from.value = '2';
+    from.dispatchEvent(new Event('change'));
+    to.value = '3';
+    to.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+    expect(runtime.controller.settings.rangeFromBar).toBe(2);
+
+    element<HTMLButtonElement>('new-exercise').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // The boxes have to follow the setting, or they would name a passage of
+    // the last piece over the top of a new one.
+    expect(runtime.controller.settings.rangeFromBar).toBeNull();
+    expect(element<HTMLInputElement>('range-from').value).toBe('');
+    expect(element<HTMLInputElement>('range-to').value).toBe('');
+  });
+
   it('hides the score cursor from the checkbox', async () => {
     const { view, runtime, renderer } = createRig();
     await view.initialize();

@@ -505,7 +505,11 @@ select {
  * The pedal, whose state is a colour and never a width.
  *
  * It changes many times a minute while playing, and the header it sits in
- * wraps: a label that grew by a word each press pushed the row below it down.
+ * wraps. Two goes at this were not enough: the label used to grow by a word
+ * when the pedal went down, and then the pill itself was revealed on the
+ * first press. Each widened the cluster and dropped it below the title,
+ * mid-practice. It is now always there and always the same size, so the wrap
+ * is decided once and never again.
  */
 .pill--pedal {
   display: inline-flex;

@@ -1400,14 +1400,19 @@ export class AppView {
   /**
    * Shows that the pedal was seen, which is half of trusting that it works.
    *
-   * The label never changes width. It used to read "Ped. down" while the
-   * pedal was held, and the header wraps: every press widened the pill by a
-   * word and dropped the row beneath it, several times a minute. State is the
-   * dot's colour, and the word for it goes to the accessible name where it
-   * costs no space.
+   * Nothing about it may change the layout, because it changes many times a
+   * minute and the header it sits in wraps. Two goes at this were not enough:
+   * the label used to gain a word when the pedal went down, and then the pill
+   * itself was revealed on the first press - each widened the header and
+   * dropped the row beneath it, mid-practice.
+   *
+   * So it is always present and always the same size, from the first paint.
+   * The wrap is decided once, when the page loads, and never again; the state
+   * is a dot's colour, and the word for it goes to the accessible name where
+   * it costs no width. A reader with no pedal sees a dim one, which is true -
+   * the app is listening for one and has not heard it.
    */
   private renderPedal(down: boolean): void {
-    this.el.pedalStatus.hidden = false;
     this.el.pedalStatus.dataset['down'] = String(down);
     this.el.pedalStatus.setAttribute(
       'aria-label',

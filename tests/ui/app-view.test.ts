@@ -1646,6 +1646,27 @@ describe('AppView', () => {
     });
   });
 
+  it('holds the pedal indicator still, whatever the pedal does', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    const pill = element('pedal-status');
+    // Present from the first paint, so the header's wrap is decided once. It
+    // used to be revealed on the first press, which widened the cluster and
+    // dropped it below the title in the middle of playing.
+    expect(pill.hidden).toBe(false);
+    const shape = (): string => `${pill.textContent}|${pill.className}|${pill.hidden}`;
+    const before = shape();
+
+    rig.midi.pedal(true);
+    // While it is *held*, not merely after: a class swapped down and back
+    // would look unchanged from the far side of the press.
+    const held = shape();
+    rig.midi.pedal(false);
+
+    expect(held).toBe(before);
+    expect(shape()).toBe(before);
+  });
+
   it('sends the sustain pedal to the instrument and shows it', async () => {
     const rig = createRig();
     await rig.view.initialize();
@@ -1653,7 +1674,6 @@ describe('AppView', () => {
     rig.midi.pedal(true);
 
     expect(rig.sustain.sustained).toBe(true);
-    expect(element('pedal-status').hidden).toBe(false);
     expect(element('pedal-status').dataset['down']).toBe('true');
     expect(element('pedal-status').getAttribute('aria-label')).toContain('down');
     const held = element('pedal-status').textContent;

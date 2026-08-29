@@ -1654,12 +1654,18 @@ describe('AppView', () => {
 
     expect(rig.sustain.sustained).toBe(true);
     expect(element('pedal-status').hidden).toBe(false);
-    expect(element('pedal-status').textContent).toContain('down');
+    expect(element('pedal-status').dataset['down']).toBe('true');
+    expect(element('pedal-status').getAttribute('aria-label')).toContain('down');
+    const held = element('pedal-status').textContent;
 
     rig.midi.pedal(false);
 
     expect(rig.sustain.sustained).toBe(false);
-    expect(element('pedal-status').textContent).toBe('Ped.');
+    expect(element('pedal-status').dataset['down']).toBe('false');
+    // The label is the same either way. It used to gain a word while the
+    // pedal was held, and the header wraps: every press dropped the row
+    // beneath it, several times a minute.
+    expect(element('pedal-status').textContent).toBe(held);
   });
 
   it('reports the MIDI connection state', async () => {

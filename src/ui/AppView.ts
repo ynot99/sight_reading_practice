@@ -1397,11 +1397,22 @@ export class AppView {
     };
   }
 
-  /** Shows that the pedal was seen, which is half of trusting that it works. */
+  /**
+   * Shows that the pedal was seen, which is half of trusting that it works.
+   *
+   * The label never changes width. It used to read "Ped. down" while the
+   * pedal was held, and the header wraps: every press widened the pill by a
+   * word and dropped the row beneath it, several times a minute. State is the
+   * dot's colour, and the word for it goes to the accessible name where it
+   * costs no space.
+   */
   private renderPedal(down: boolean): void {
     this.el.pedalStatus.hidden = false;
-    this.el.pedalStatus.textContent = down ? 'Ped. down' : 'Ped.';
-    this.el.pedalStatus.className = down ? 'pill pill--connected' : 'pill pill--idle';
+    this.el.pedalStatus.dataset['down'] = String(down);
+    this.el.pedalStatus.setAttribute(
+      'aria-label',
+      down ? 'Sustain pedal down' : 'Sustain pedal up',
+    );
   }
 
   private refreshInputs(): void {

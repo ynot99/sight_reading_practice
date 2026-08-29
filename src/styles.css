@@ -499,6 +499,38 @@ select {
   white-space: nowrap;
 }
 
+/*
+ * The pedal, whose state is a colour and never a width.
+ *
+ * It changes many times a minute while playing, and the header it sits in
+ * wraps: a label that grew by a word each press pushed the row below it down.
+ */
+.pill--pedal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+
+.pill__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentcolor;
+  opacity: 0.4;
+  flex: none;
+  transition: opacity 80ms linear;
+}
+
+.pill--pedal[data-down='true'] {
+  color: var(--correct);
+  border-color: currentcolor;
+}
+
+.pill--pedal[data-down='true'] .pill__dot {
+  opacity: 1;
+}
+
 .pill--connected {
   color: var(--correct);
   border-color: currentcolor;

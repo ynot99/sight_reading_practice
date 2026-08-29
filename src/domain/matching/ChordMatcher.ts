@@ -32,12 +32,12 @@ export const DEFAULT_MATCH_POLICY: MatchPolicy = {
 /**
  * What became of one press.
  *
- * `other-hand` is never returned by the matcher, which is only ever told what
- * *this* run expects and cannot know the rest of the page. The session, which
- * narrowed that set in the first place, is the only thing that can tell a
- * note the reader invented from a note the other hand was going to play.
+ * `other-hand` and `late` are never returned by the matcher. It is told only
+ * what *this* step expects, and cannot know the rest of the page or the step
+ * before. The session knows both, and they are the difference between a note
+ * the reader invented and a note that was there to be played.
  */
-export type NoteVerdict = 'correct' | 'duplicate' | 'wrong' | 'other-hand';
+export type NoteVerdict = 'correct' | 'duplicate' | 'wrong' | 'other-hand' | 'late';
 
 export interface MatchOutcome {
   readonly verdict: NoteVerdict;

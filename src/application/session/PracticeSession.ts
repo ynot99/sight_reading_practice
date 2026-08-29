@@ -581,9 +581,43 @@ export class PracticeSession {
     return step.expectedMidi.includes(midi) && !this.expectedAt(step).includes(midi);
   }
 
+  /**
+   * The step just finished, if this press was still owed to it.
+   *
+   * The mirror of the early rule, and the half that was missing. A press
+   * ahead of its beat is held back for the beat it was reaching towards; a
+   * press behind one had nothing at all, because by then the cursor has moved
+   * and the step it belonged to is finished. Judged against the step now open
+   * - which is not asking for that note - it came out as a wrong note, in
+   * red, for playing the right note slightly late.
+   *
+   * Which step a press belonged to is answered by *pitch* first and time
+   * second: the note itself says which beat was meant, and time only bounds
+   * how far it may reach back. One step, no further.
+   */
+  private oweingStepBefore(midi: number): StepResult | null {
+    const step = this.currentStep;
+    if (step === null || this.expectedAt(step).includes(midi)) {
+      return null;
+    }
+    const previous = this.results.at(-1);
+    if (previous === undefined || previous.index !== step.index - 1) {
+      return null;
+    }
+    return previous.missing.includes(midi) ? previous : null;
+  }
+
   private judgeNote(midi: number, rawVerdict: NoteVerdict, deviationMs: number | null): void {
+    const owed = rawVerdict === 'wrong' ? this.oweingStepBefore(midi) : null;
     const verdict: NoteVerdict =
-      rawVerdict === 'wrong' && this.belongsToTheOtherHand(midi) ? 'other-hand' : rawVerdict;
+      rawVerdict !== 'wrong'
+        ? rawVerdict
+        : owed !== null
+          ? 'late'
+          : this.belongsToTheOtherHand(midi)
+            ? 'other-hand'
+            : 'wrong';
+
     if (verdict === 'wrong') {
       this.stepWrongNotes.push(midi);
     }
@@ -593,10 +627,22 @@ export class PracticeSession {
     this.emitter.emit('noteJudged', {
       midi,
       verdict,
-      stepIndex: this.stepIndex,
-      deviationMs,
+      // Drawn on the note it was owed to, not on the one that happened to be
+      // open: the mark says which note was played, and this one was that.
+      stepIndex: owed === null ? this.stepIndex : owed.index,
+      deviationMs: owed === null ? deviationMs : this.lateBy(owed, deviationMs),
       remaining: this.matcher?.remaining ?? [],
     });
+  }
+
+  /** How late against the step it was owed to, rather than the one now open. */
+  private lateBy(owed: StepResult, deviationMs: number | null): number | null {
+    const from = this.timeline.at(owed.index);
+    const now = this.currentStep;
+    if (deviationMs === null || from === null || now === null) {
+      return deviationMs;
+    }
+    return deviationMs + ticksToMilliseconds(now.onsetTicks - from.onsetTicks, this.tempoBpm);
   }
 
   /** First step of the measure the given step belongs to. */

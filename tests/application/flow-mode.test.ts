@@ -542,3 +542,64 @@ describe('Flow mode', () => {
     expect(harness.metronome.isRunning).toBe(false);
   });
 });
+
+describe('a note played just behind its beat', () => {
+  it('is late, not wrong: the cursor moved, the reader did not miss the note', () => {
+    // The half that was missing. A press ahead of its beat is held back for
+    // the beat it was reaching towards; a press behind one had nothing at
+    // all, because by then the cursor has moved and the step it belonged to
+    // is finished. Judged against the step now open - which is not asking for
+    // that note - it came out red, for playing the right note slightly late.
+    const harness = flowHarness();
+    startAndCountIn(harness);
+
+    // The first beat goes by unplayed, so the second is open and the first is
+    // still owed its chord.
+    harness.metronome.advanceSubdivisions(4);
+    harness.clock.set(harness.clock.now() + 40);
+    harness.midi.noteOn(MIDI.C4);
+
+    const judged = harness.of('noteJudged').at(-1);
+    expect(judged?.verdict).toBe('late');
+    // Drawn on the note it was owed to, not on the one that happened to be
+    // open: the mark says which note was played, and this one was that.
+    expect(judged?.stepIndex).toBe(0);
+  });
+
+  it('costs nothing on top, and earns nothing either', () => {
+    const harness = flowHarness();
+    startAndCountIn(harness);
+    harness.metronome.advanceSubdivisions(4);
+    harness.clock.set(harness.clock.now() + 40);
+    harness.midi.noteOn(MIDI.C4);
+    harness.metronome.advanceSubdivisions(4);
+
+    const second = harness.of('stepCompleted')[1]?.result;
+    // The step it was owed to was already missed - Flow mode is strict about
+    // time and that is what it is for. What it is not is a wrong note.
+    expect(harness.of('stepCompleted')[0]?.result.status).toBe('missed');
+    expect(second?.wrong).toEqual([]);
+  });
+
+  it('reaches back one step and no further', () => {
+    const harness = flowHarness();
+    startAndCountIn(harness);
+
+    // Two beats gone by: the note is owed to the step before last.
+    harness.metronome.advanceSubdivisions(8);
+    harness.midi.noteOn(MIDI.C4);
+
+    expect(harness.of('noteJudged').at(-1)?.verdict).toBe('wrong');
+  });
+
+  it('leaves a note the open step wants alone', () => {
+    const harness = flowHarness();
+    startAndCountIn(harness);
+    harness.metronome.advanceSubdivisions(4);
+
+    // D4 is what the second beat asks for; it is not late for anything.
+    harness.midi.noteOn(MIDI.D4);
+
+    expect(harness.of('noteJudged').at(-1)?.verdict).toBe('correct');
+  });
+});

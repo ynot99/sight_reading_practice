@@ -45,6 +45,14 @@ const TEMPO_REDRAW_DELAY_MS = 350;
  */
 const MIN_PRESSES_TO_MEASURE = 8;
 
+/**
+ * How long the pill holds a message that is not about the run.
+ *
+ * Long enough to read a sentence about which bars are being practised, short
+ * enough that a glance during the next run finds the bar and not the sentence.
+ */
+const NOTICE_HOLD_MS = 6_000;
+
 /** How often the take slider is moved while something is sounding. */
 const TAKE_TICK_MS = 80;
 
@@ -423,6 +431,8 @@ export class AppView {
   private lastPosition = '';
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
+  /** Pending return of the pill to what the run is saying. */
+  private noticeRestore: ReturnType<typeof setTimeout> | null = null;
   /** Which take the transport is showing, playing or not. */
   private selectedTakeId: string | null = null;
   /** Follows a sounding take, so the slider says where it has got to. */
@@ -771,6 +781,10 @@ export class AppView {
       clearInterval(this.takeTick);
       this.takeTick = null;
     }
+    if (this.noticeRestore !== null) {
+      clearTimeout(this.noticeRestore);
+      this.noticeRestore = null;
+    }
     this.runtime.takePlayer.stop();
     this.focusMode?.dispose();
     this.focusMode = null;
@@ -892,9 +906,41 @@ export class AppView {
     await this.reload(false);
   }
 
+  /**
+   * Says something that is not about the run itself.
+   *
+   * In both places, because the notice lives outside the header and
+   * fullscreen hides it - so choosing a passage by touching a note, which is
+   * a fullscreen gesture above all, was answered on a line of the page the
+   * reader could not see. The pill says it there instead, and gives it back
+   * to the run's own status afterwards.
+   */
   private showImportNotice(message: string): void {
     this.el.importNotice.textContent = message;
     this.el.importNotice.hidden = false;
+    if (this.focusMode?.isActive === true) {
+      this.showNotice(message);
+      this.restoreNoticeSoon();
+    }
+  }
+
+  /**
+   * Hands the pill back to whatever it was saying.
+   *
+   * A passage is chosen between runs, so the pill is idle and the message can
+   * sit there; but leaving it would mean the next glance mid-run read a
+   * sentence about bars instead of the bar being played.
+   */
+  private restoreNoticeSoon(): void {
+    if (this.noticeRestore !== null) {
+      clearTimeout(this.noticeRestore);
+    }
+    this.noticeRestore = setTimeout(() => {
+      this.noticeRestore = null;
+      this.renderFocusStatus(
+        this.lastPosition === '' ? STATUS_LABELS[this.lastStatus] : this.lastPosition,
+      );
+    }, NOTICE_HOLD_MS);
   }
 
   /**

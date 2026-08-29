@@ -7,9 +7,17 @@
       anything: without it the transport pill sits under the home indicator on
       a tablet, and the insets the stylesheet already asks for resolve to zero.
     -->
+    <!--
+      `maximum-scale` and `user-scalable` do half a job, and it is worth saying
+      which half. Safari has ignored both since iOS 10 on purpose, so pinching
+      in a browser tab still zooms; installed to a Home Screen they are
+      honoured, which is where the reader actually plays. The zoom that
+      arrived uninvited was never a pinch anyway - it was iOS magnifying the
+      page for a text field under 16px, and the stylesheet answers that.
+    -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
     <title>Piano Sight-Reading Trainer</title>
 

@@ -1,4 +1,4 @@
-import { ChordMatcher, type NoteVerdict } from '../../domain/matching/ChordMatcher.js';
+import { ChordMatcher, type MatchPolicy, type NoteVerdict } from '../../domain/matching/ChordMatcher.js';
 import { ticksToMilliseconds } from '../../domain/model/Duration.js';
 import type { IScoringStrategy, SessionScore } from '../../domain/scoring/IScoringStrategy.js';
 import {
@@ -250,6 +250,29 @@ export class PracticeSession {
     ];
   }
 
+  /**
+   * How this step's presses are collected into a chord.
+   *
+   * A chord the writer marked to be rolled is not held to the chord window,
+   * and this is the whole of that rule. The window exists to tell one chord
+   * from the next by how close together its notes are - which is exactly the
+   * question a roll answers differently, on purpose. Held to it, a spread
+   * that took longer than the window had its later notes throw the attempt
+   * away and start it again, so the chord never completed and no key the
+   * reader pressed could finish it. The instruction on the page said "spread
+   * these", and the reader spreading them was what broke it.
+   *
+   * The step still bounds the wait: under the metronome it ends when its own
+   * musical time runs out, and in Wait mode nothing was timing the reader
+   * anyway.
+   */
+  private policyFor(step: TimelineStep): MatchPolicy {
+    const rolled = step.notes.some((note) => note.arpeggiated);
+    return rolled
+      ? { ...this.options.matchPolicy, toleranceMs: Number.POSITIVE_INFINITY }
+      : this.options.matchPolicy;
+  }
+
   private countInPulses(): number {
     const pulses = this.timeline.exercise.timeSignature.pulsesPerMeasure;
     return Math.max(0, Math.round(this.options.countInBars * pulses));
@@ -331,8 +354,7 @@ export class PracticeSession {
 
     this.stepIndex = index;
     const expected = this.expectedAt(step);
-    this.matcher =
-      expected.length > 0 ? new ChordMatcher(expected, this.options.matchPolicy) : null;
+    this.matcher = expected.length > 0 ? new ChordMatcher(expected, this.policyFor(step)) : null;
     this.stepEnteredAt = this.clock.now();
     this.stepDeviationMs = null;
     this.stepWrongNotes = [];

@@ -1212,6 +1212,21 @@ describe('AppView', () => {
       expect(element('import-notice').textContent).toContain('from bar 2');
     });
 
+    it('says which bars it chose in fullscreen, where the notice is hidden', async () => {
+      // Touching a note is a fullscreen gesture above all - the bar boxes are
+      // out of reach at the stand. The answer went to a line of the page that
+      // fullscreen hides, so the gesture appeared to do nothing at all.
+      const { view, renderer } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus').click();
+      await Promise.resolve();
+
+      renderer.tapStep(1);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(element('focus-notice').textContent).toContain('bar');
+    });
+
     it('leaves the page alone while a run is going', async () => {
       const { view, runtime, renderer } = createRig();
       await view.initialize();

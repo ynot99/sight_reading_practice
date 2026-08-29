@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
-import { MIDI, bar, p, twoBarExercise } from '../support/fixtures.js';
+import { MIDI, arpeggiatedExercise, bar, p, twoBarExercise } from '../support/fixtures.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
 import { noteEntry } from '../../src/domain/model/Exercise.js';
 import { Duration } from '../../src/domain/model/Duration.js';
@@ -424,5 +424,71 @@ describe('waiting while practising one hand', () => {
     // sense a rest is - not missed.
     expect(report?.totals.missed).toBe(0);
     expect(report?.totals.expectedNotes).toBe(2);
+  });
+});
+
+describe('a chord the writer marked to be rolled', () => {
+  /** The fixture's rolled chord: C4 E4 G4 over C3 G3, all at one onset. */
+  function rolledHarness(): Harness {
+    return createHarness({
+      exercise: arpeggiatedExercise(),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        // The window a reader actually practises with, rather than one opened
+        // wide to make the test pass.
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+  }
+
+  it('is not thrown away for being spread out, which is what a roll is', () => {
+    // The bug this answers: the window exists to tell one chord from the next
+    // by how close its notes are, and a roll answers that question
+    // differently on purpose. Held to it, the later notes of a spread threw
+    // the attempt away and started it again - so the chord never completed
+    // and no key the reader pressed could finish it.
+    const harness = rolledHarness();
+    harness.session.start();
+
+    // Rolled from the bottom, over most of a second: slower than the window,
+    // which is an ordinary speed for five notes under one hand.
+    for (const midi of [MIDI.C3, MIDI.G3, MIDI.C4, MIDI.E4, MIDI.G4]) {
+      harness.midi.noteOn(midi, harness.clock.now());
+      harness.clock.advance(200);
+    }
+
+    expect(harness.of('noteJudged').map((event) => event.verdict)).toEqual([
+      'correct',
+      'correct',
+      'correct',
+      'correct',
+      'correct',
+    ]);
+    expect(harness.session.status).toBe('completed');
+  });
+
+  it('still holds an ordinary chord to the window', () => {
+    // The freedom is the writer's instruction, not a general loosening: two
+    // chords a beat apart must still be two chords.
+    const harness = createHarness({
+      exercise: twoBarExercise(),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+    harness.session.start();
+
+    harness.midi.noteOn(MIDI.C3, harness.clock.now());
+    harness.clock.advance(600);
+    harness.midi.noteOn(MIDI.C4, harness.clock.now());
+
+    // The second press opened a fresh attempt rather than completing the
+    // first, so the step is still waiting for its other note.
+    expect(harness.of('noteJudged').at(-1)?.remaining).toEqual([MIDI.C3]);
   });
 });

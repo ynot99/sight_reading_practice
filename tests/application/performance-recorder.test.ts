@@ -187,6 +187,19 @@ describe('the takes that were kept', () => {
     expect(library.find(first.id)).toBeNull();
   });
 
+  it('keeps two takes filed in the same millisecond as two takes', () => {
+    // Ids are minted from the clock and the clock is coarser than the reader:
+    // a keep followed at once by the take that closed behind it lands on the
+    // same millisecond, and the second used to replace the first. It failed
+    // where it matters least - on a loaded machine rather than at the desk.
+    const library = new TakeLibrary(new InMemorySettingsStore());
+    keptTake(library, 1_000);
+    keptTake(library, 1_000);
+
+    expect(library.list()).toHaveLength(2);
+    expect(new Set(library.list().map((take) => take.id)).size).toBe(2);
+  });
+
   it('drops the oldest of what it filed by itself', () => {
     const library = new TakeLibrary(new InMemorySettingsStore(), 2);
     fileTake(library, 1_000, 'recent');

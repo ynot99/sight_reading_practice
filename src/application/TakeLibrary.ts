@@ -166,14 +166,14 @@ export class TakeLibrary {
     id = `take-${savedAtMs.toString(36)}`,
   ): StoredTake {
     const stored: StoredTake = {
-      id,
+      id: this.unusedId(id),
       savedAtMs,
       durationMs: take.durationMs,
       noteCount: take.noteCount,
       shelf,
       events: take.events,
     };
-    this.takes = [...this.takes.filter((each) => each.id !== id), stored];
+    this.takes = [...this.takes, stored];
     this.prune();
     this.persist();
     return stored;
@@ -182,6 +182,27 @@ export class TakeLibrary {
   /** What the reader's button does: this one is not to be thrown away. */
   keepTake(take: Take, savedAtMs: number, id = `take-${savedAtMs.toString(36)}`): StoredTake {
     return this.file(take, savedAtMs, 'kept', id);
+  }
+
+  /**
+   * The wanted id, or the nearest one nobody is using.
+   *
+   * Ids are minted from the clock, and the clock is coarser than the reader.
+   * Two takes kept in the same millisecond - a keep followed at once by the
+   * one that closed behind it - are still two takes, and the second used to
+   * land on the first's id and quietly replace it.
+   */
+  private unusedId(wanted: string): string {
+    if (!this.takes.some((take) => take.id === wanted)) {
+      return wanted;
+    }
+    for (let suffix = 2; suffix < 1_000; suffix += 1) {
+      const candidate = `${wanted}-${suffix}`;
+      if (!this.takes.some((take) => take.id === candidate)) {
+        return candidate;
+      }
+    }
+    return `${wanted}-${this.takes.length}`;
   }
 
   /** Moves a take off the shelf that prunes, onto the one that does not. */

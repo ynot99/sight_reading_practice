@@ -258,6 +258,23 @@ function rowButton(listId: string, title: string): HTMLButtonElement {
   return found;
 }
 
+/**
+ * Waits for something to become true, rather than for a length of time.
+ *
+ * A fixed pause is a race with whatever else the machine happens to be doing,
+ * and it fails where it matters least - on a loaded continuous-integration
+ * runner rather than on the desk where it was written.
+ */
+async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const startedAt = Date.now();
+  while (!condition()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error('Timed out waiting for the page to catch up.');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 /** Answers the delete question the page now asks before anything goes. */
 async function confirmDeletion(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -2290,17 +2307,20 @@ describe('AppView', () => {
       for (let press = 0; press < 4; press += 1) {
         element<HTMLButtonElement>('focus-faster').click();
       }
-      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Re-engraving a long piece is most of a second, and doing it under
-      // every press swallowed the next one.
+      // every press swallowed the next one. The reading is immediate; the
+      // page is not, and that is the whole point.
       expect(element('focus-tempo').textContent).toBe('120%');
       expect(renderer.loadCount).toBe(before);
 
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      // Waited for rather than slept through: a fixed pause is a race with
+      // whatever else the machine is doing, and it is the machine that
+      // decides how long these four presses took.
+      await waitFor(() => renderer.loadCount > before);
 
       // The mark is printed on the page; leaving it saying 88 while the run
-      // goes at 92 is a page that lies about itself.
+      // goes at 92 is a page that lies about itself. Once, not four times.
       expect(renderer.loadCount).toBe(before + 1);
     });
 

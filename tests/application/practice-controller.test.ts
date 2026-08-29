@@ -341,6 +341,22 @@ describe('PracticeController', () => {
     expect(controller.openedExercise).toBeNull();
   });
 
+  it('keeps the percentage, not the number, when the written tempo changes', async () => {
+    // 100% means the tempo the material declares, and a file declares its own.
+    // Asking for generated material afterwards changes what 100% is; the bpm
+    // used to be carried straight across, so 80% of a slow piece came back as
+    // some number well past full speed on the next one.
+    const { controller } = createController();
+    await controller.openScore({ ...twoBarExercise(), tempoBpm: 40 });
+    controller.nudgeTempoPercent(-20);
+    expect(controller.tempoPercent).toBe(80);
+
+    await controller.loadNewExercise();
+
+    expect(controller.tempoPercent).toBe(80);
+    expect(controller.settings.tempoBpm).not.toBe(32);
+  });
+
   it('puts a drilled passage back onto the whole piece', async () => {
     // Reported bars are counted from whatever was being practised. Drilling a
     // second time inside a passage must not walk backwards through the score.

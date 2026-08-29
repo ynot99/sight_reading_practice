@@ -71,6 +71,10 @@ export class PracticeSession {
   private countInRemaining = 0;
   /** Whether the pause landed before the music had begun. */
   private pausedInCountIn = false;
+  /** Musical position the run is about to pick up from, in divisions. */
+  private resumeAtTicks = 0;
+  /** Step the run is about to pick up from. */
+  private resumeAtIndex = 0;
   /** Note-ons that landed during the count-in, kept until the music starts. */
   private beforeTheMusic: MidiNoteOnEvent[] = [];
   private lastReport: PerformanceReport | null = null;
@@ -182,20 +186,36 @@ export class PracticeSession {
       this.metronome.start();
       return;
     }
+    const target = this.measureStartStep(this.currentStep);
+    this.resumeAtTicks = target?.onsetTicks ?? 0;
+    this.resumeAtIndex = target?.index ?? 0;
+
+    // Counted back in, exactly as at the start. A run that simply resumed left
+    // the reader with their hands off the keys and the music already moving,
+    // which is the same problem the count-in exists to solve - it is not about
+    // the beginning of a piece, it is about the moment before playing.
+    if (this.countInPulses() > 0 && this.usesPulse()) {
+      if (!this.dispatch('resumeCountIn')) {
+        return;
+      }
+      this.results = this.results.filter((result) => result.index < this.resumeAtIndex);
+      this.countInRemaining = this.countInPulses();
+      this.metronome.start();
+      return;
+    }
+
     if (!this.dispatch('resume')) {
       return;
     }
 
-    const target = this.measureStartStep(this.currentStep);
-    const measureStartTicks = target?.onsetTicks ?? 0;
-    this.results = this.results.filter((result) => result.index < (target?.index ?? 0));
-    this.positionOffsetTicks = -measureStartTicks;
-    this.runStartedAt = this.clock.now() - ticksToMilliseconds(measureStartTicks, this.tempoBpm);
+    this.results = this.results.filter((result) => result.index < this.resumeAtIndex);
+    this.positionOffsetTicks = -this.resumeAtTicks;
+    this.runStartedAt = this.clock.now() - ticksToMilliseconds(this.resumeAtTicks, this.tempoBpm);
 
     if (this.usesPulse()) {
       this.metronome.start();
     }
-    this.enterStep(target?.index ?? 0);
+    this.enterStep(this.resumeAtIndex);
   }
 
   /** Stops the run and publishes the report gathered so far. */
@@ -253,18 +273,29 @@ export class PracticeSession {
     this.runStartedAt = 0;
     this.positionOffsetTicks = 0;
     this.publishedPositionTicks = null;
+    this.resumeAtTicks = 0;
+    this.resumeAtIndex = 0;
     this.countInRemaining = 0;
     this.beforeTheMusic = [];
     this.lastReport = null;
     this.lastScore = null;
   }
 
-  private beginRunning(atMs: number, offsetTicks: number): void {
-    this.runStartedAt = atMs;
-    this.positionOffsetTicks = offsetTicks;
+  /**
+   * Starts the music at the tick the count-in ran out on.
+   *
+   * `tickPositionTicks` is where the *metronome* has got to, which is not
+   * where the *music* is: after a pause the run picks up at the head of a bar
+   * partway through the piece. The two are reconciled here, once, so that
+   * everything downstream - the timeline, the scheduled onsets, the position
+   * shown - goes on counting from the start of the piece.
+   */
+  private beginRunning(atMs: number, tickPositionTicks: number): void {
+    this.runStartedAt = atMs - ticksToMilliseconds(this.resumeAtTicks, this.tempoBpm);
+    this.positionOffsetTicks = tickPositionTicks - this.resumeAtTicks;
     this.dispatch('countInComplete');
     this.mode.onSessionStart(this.context);
-    this.enterStep(0);
+    this.enterStep(this.resumeAtIndex);
     this.replayPressesAimedAtTheFirstBeat(atMs);
   }
 

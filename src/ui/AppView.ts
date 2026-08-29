@@ -427,6 +427,7 @@ export class AppView {
     focusHands: HTMLButtonElement;
     focusSurvival: HTMLButtonElement;
     focusClick: HTMLButtonElement;
+    focusPattern: HTMLButtonElement;
     focusCursor: HTMLButtonElement;
     focusWait: HTMLButtonElement;
     focusMarks: HTMLButtonElement;
@@ -552,6 +553,7 @@ export class AppView {
       focusHands: requireElement(doc, 'focus-hands'),
       focusSurvival: requireElement(doc, 'focus-survival'),
       focusClick: requireElement(doc, 'focus-click'),
+      focusPattern: requireElement(doc, 'focus-pattern'),
       focusCursor: requireElement(doc, 'focus-cursor'),
       focusWait: requireElement(doc, 'focus-wait'),
       focusMarks: requireElement(doc, 'focus-marks'),
@@ -1254,6 +1256,14 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    this.listen(this.el.focusPattern, 'click', () => {
+      const at = CLICK_PATTERNS.indexOf(controller.settings.clickPattern);
+      controller.updateSettings({
+        clickPattern: elementAt(CLICK_PATTERNS, (at + 1) % CLICK_PATTERNS.length),
+      });
+      this.syncControlsFromSettings();
+    });
+
     this.listen(this.el.focusSmaller, 'click', () => {
       this.nudgeZoom(-ZOOM_STEP_PERCENT);
     });
@@ -1544,6 +1554,21 @@ export class AppView {
     this.el.focusClick.dataset['click'] = CLICK_WHEN_BY_THUMB.includes(when) ? when : 'always';
     this.el.focusClick.title = label;
     this.el.focusClick.setAttribute('aria-label', label);
+  }
+
+  /**
+   * Shows how much of the pulse is clicked, by how many marks are lit.
+   *
+   * Its own control rather than more states on the one beside it: how often
+   * the click falls and how much of the run it sounds for are two questions,
+   * and a reader who wants two clicks a bar instead of six is asking the
+   * first.
+   */
+  private describePatternButton(pattern: ClickPattern): void {
+    const label = `Click: ${CLICK_LABELS[pattern].toLowerCase()}`;
+    this.el.focusPattern.dataset['pattern'] = pattern;
+    this.el.focusPattern.title = label;
+    this.el.focusPattern.setAttribute('aria-label', label);
   }
 
   /**
@@ -2063,6 +2088,7 @@ export class AppView {
     this.el.survival.checked = settings.survival;
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.describeClickButton(settings.clickWhen);
+    this.describePatternButton(settings.clickPattern);
     this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
     this.applyScoreCover();

@@ -476,15 +476,39 @@ describe('Flow mode', () => {
 
       harness.session.pause();
       harness.session.resume();
-      // The bar is replayed from its head, so the count restarts there - at
+      // Counted back in first, so the reader can get their hands back to the
+      // keys before the music moves again.
+      expect(harness.session.status).toBe('counting-in');
+      harness.metronome.advanceSubdivisions(TICKS_TO_START);
+
+      // The bar is replayed from its head, so the count picks up there - at
       // bar two, which is the whole of what the offset is for.
       expect(harness.of('positionChanged').at(-1)).toEqual({ measureIndex: 1, beat: 1 });
 
-      // The metronome starts its count again from zero, so the first tick is
-      // the downbeat itself and a beat is four more after it.
-      harness.metronome.advanceSubdivisions(5);
+      harness.metronome.advanceSubdivisions(4);
 
       expect(harness.of('positionChanged').at(-1)).toEqual({ measureIndex: 1, beat: 2 });
+    });
+
+    it('scores the bar it picks up from against the beat it really is', () => {
+      // The count-in runs the metronome from zero again while the music picks
+      // up at bar two, so the two clocks have to be reconciled or every press
+      // after a pause is judged against the wrong onset.
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      harness.metronome.advanceSubdivisions(20);
+      harness.session.pause();
+      harness.session.resume();
+      harness.metronome.advanceSubdivisions(TICKS_TO_START);
+
+      harness.midi.playChord([MIDI.G2, MIDI.D3, MIDI.G4]);
+      // The half note this bar opens with, played out to its end.
+      harness.metronome.advanceSubdivisions(8);
+
+      const landed = harness.of('stepCompleted').at(-1)?.result;
+      expect(landed?.measureIndex).toBe(1);
+      expect(landed?.status).toBe('correct');
+      expect(landed?.deviationMs).toBe(0);
     });
   });
 

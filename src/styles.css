@@ -56,6 +56,27 @@ body {
   background: var(--bg);
   color: var(--text);
   font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /*
+   * No rubber-band at the edges of the document. A drag that runs past the top
+   * of the score used to chain out to the page, and on a tablet that is the
+   * gesture the browser reads as "leave".
+   */
+  overscroll-behavior: none;
+}
+
+/*
+ * Sixteen pixels, everywhere a caret can go.
+ *
+ * iOS zooms the whole page in when a field smaller than that takes focus, and
+ * it does not zoom back out. Every one of these inherited the body's 15px, so
+ * tapping a bar number magnified the score and left it magnified. This is a
+ * platform rule rather than a design choice, which is why it is stated once
+ * here instead of being remembered at each control.
+ */
+input,
+select,
+textarea {
+  font-size: max(16px, 1em);
 }
 
 .app {
@@ -140,6 +161,12 @@ body {
   flex: 1;
   min-width: 0;
   overflow: auto;
+  /*
+   * Scrolling stops at the edges of the score rather than handing the drag on
+   * to the page. Past the top of a long piece it used to chain outwards, and
+   * the browser took that for a gesture of its own.
+   */
+  overscroll-behavior: contain;
   /* Reserved up front: a scrollbar that appears later would shrink the width
      the engraver already measured, and push the notation off the right edge. */
   scrollbar-gutter: stable;
@@ -562,6 +589,21 @@ select {
   padding: 0;
   gap: 0;
   background: #ffffff;
+  /*
+   * Nothing here is text to be read as text. A long press on a tablet used to
+   * raise a selection handle and a Copy bubble over the score, which is a menu
+   * about nothing offered in the middle of playing. The bar boxes opt back in
+   * below, since a number does have to be selectable to be replaced.
+   */
+  user-select: none;
+  -webkit-user-select: none;
+  /* Double-tap zoom has no business here either, and it costs every tap 300ms. */
+  touch-action: manipulation;
+}
+
+.app.is-focus input {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /*
@@ -790,6 +832,33 @@ select {
   opacity: 0.35;
 }
 
+/*
+ * How much of the pulse is clicked, drawn as how many marks are lit.
+ *
+ * Four answers cannot be a switch and cannot be guessed from one picture, so
+ * the button counts: one mark for a click on the bar, two for the beat, three
+ * or four for its divisions. `title` says which in words.
+ */
+.focus-bar__beat {
+  fill: currentcolor;
+  opacity: 0.2;
+}
+
+.focus-bar__click,
+.focus-bar__pattern {
+  flex: none;
+}
+
+.focus-bar__pattern[data-pattern='downbeat'] .focus-bar__beat[data-at='1'],
+.focus-bar__pattern[data-pattern='pulse'] .focus-bar__beat[data-at='1'],
+.focus-bar__pattern[data-pattern='pulse'] .focus-bar__beat[data-at='2'],
+.focus-bar__pattern[data-pattern='division'] .focus-bar__beat[data-at='1'],
+.focus-bar__pattern[data-pattern='division'] .focus-bar__beat[data-at='2'],
+.focus-bar__pattern[data-pattern='division'] .focus-bar__beat[data-at='3'],
+.focus-bar__pattern[data-pattern='subdivision'] .focus-bar__beat {
+  opacity: 1;
+}
+
 .focus-bar__hands {
   display: inline-flex;
   align-items: center;
@@ -830,7 +899,6 @@ select {
   padding: 6px 4px;
   text-align: center;
   font-variant-numeric: tabular-nums;
-  font-size: 15px;
   color: var(--text);
   background: var(--surface-strong);
   border: 1px solid var(--border);

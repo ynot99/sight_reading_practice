@@ -1815,6 +1815,27 @@ describe('AppView', () => {
       expect(runtime.controller.settings.clickWhen).toBe('always');
     });
 
+    it('cycles how much of the pulse is clicked', async () => {
+      // A different question from when the click sounds at all: two clicks a
+      // bar is a metre, not a volume, and a piece that gives only those is
+      // exactly when a reader wants more of them.
+      const { runtime, view } = createRig();
+      await view.initialize();
+      const select = element<HTMLSelectElement>('click');
+      select.value = 'downbeat';
+      select.dispatchEvent(new Event('change'));
+
+      const button = element<HTMLButtonElement>('focus-pattern');
+      button.click();
+
+      expect(runtime.controller.settings.clickPattern).toBe('pulse');
+      expect(button.dataset['pattern']).toBe('pulse');
+      expect(button.title).toBe('Click: every beat');
+
+      button.click();
+      expect(runtime.controller.settings.clickPattern).toBe('division');
+    });
+
     it('leaves the cycles to the settings, and steps out of one', async () => {
       // A bar on and a bar off is chosen deliberately before a run. The button
       // shows it as sounding, which is what its next press makes true.

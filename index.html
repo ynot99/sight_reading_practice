@@ -413,6 +413,21 @@
             </svg>
           </button>
 
+          <!--
+            How much of the pulse is clicked. Its own question from when the
+            click sounds at all: two clicks a bar is a metre, not a volume.
+          -->
+          <button id="focus-pattern" type="button"
+            class="focus-bar__button focus-bar__button--icon focus-bar__pattern"
+            data-pattern="pulse" title="Click: every beat" aria-label="Click: every beat">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect class="focus-bar__beat" data-at="1" x="2" y="6" width="3" height="12" />
+              <rect class="focus-bar__beat" data-at="2" x="8" y="6" width="3" height="12" />
+              <rect class="focus-bar__beat" data-at="3" x="14" y="6" width="3" height="12" />
+              <rect class="focus-bar__beat" data-at="4" x="20" y="6" width="3" height="12" />
+            </svg>
+          </button>
+
           <button id="focus-wait" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
             aria-pressed="false" title="Wait for the notes" aria-label="Wait for the notes">

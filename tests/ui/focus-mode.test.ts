@@ -2,14 +2,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FocusMode, type FullscreenDocumentLike } from '../../src/ui/FocusMode.js';
 
-/** Stands in for `document`, so fullscreen events can be fired on demand. */
+/** Stands in for `document`, so key events can be fired on demand. */
 class FakeDocument implements FullscreenDocumentLike {
-  fullscreenElement: unknown = null;
-  exitFullscreen = vi.fn(() => {
-    this.fullscreenElement = null;
-    return Promise.resolve();
-  });
-
   private readonly listeners = new Map<string, Set<() => void>>();
 
   addEventListener(type: string, listener: () => void): void {
@@ -41,138 +35,95 @@ interface Rig {
   readonly requestFullscreen: ReturnType<typeof vi.fn>;
 }
 
-function createRig(
-  options: { fullscreen?: 'ok' | 'rejects' | 'missing'; standalone?: boolean } = {},
-): Rig {
-  const behaviour = options.fullscreen ?? 'ok';
+function createRig(): Rig {
   const root = document.createElement('div');
   document.body.append(root);
   const doc = new FakeDocument();
   const changes: boolean[] = [];
-
-  const requestFullscreen = vi.fn(() => {
-    if (behaviour === 'rejects') {
-      return Promise.reject(new Error('refused'));
-    }
-    doc.fullscreenElement = root;
-    return Promise.resolve();
-  });
-
-  if (behaviour !== 'missing') {
-    Object.assign(root, { requestFullscreen });
-  }
+  const requestFullscreen = vi.fn(() => Promise.resolve());
+  Object.assign(root, { requestFullscreen });
 
   const focus = new FocusMode({
     root,
     doc,
     onChange: (active) => changes.push(active),
-    isStandalone: () => options.standalone ?? false,
   });
 
   return { root, doc, focus, changes, requestFullscreen };
 }
 
 describe('FocusMode', () => {
-  it('puts the page into focus layout and asks for real fullscreen', async () => {
+  it('puts the page into focus layout', () => {
     const rig = createRig();
 
-    await rig.focus.enter();
+    rig.focus.enter();
 
     expect(rig.focus.isActive).toBe(true);
     expect(rig.root.classList.contains('is-focus')).toBe(true);
-    expect(rig.requestFullscreen).toHaveBeenCalledTimes(1);
     expect(rig.changes).toEqual([true]);
   });
 
-  it('still gives the full page when the browser has no fullscreen API', async () => {
-    const rig = createRig({ fullscreen: 'missing' });
-
-    await rig.focus.enter();
-
-    // The layout is the promise we can keep; browser chrome is a bonus.
-    expect(rig.focus.isActive).toBe(true);
-    expect(rig.root.classList.contains('is-focus')).toBe(true);
-  });
-
-  it('stays in focus layout when fullscreen is refused', async () => {
-    const rig = createRig({ fullscreen: 'rejects' });
-
-    await expect(rig.focus.enter()).resolves.toBeUndefined();
-
-    expect(rig.focus.isActive).toBe(true);
-    expect(rig.root.classList.contains('is-focus')).toBe(true);
-  });
-
-  it('leaves focus layout and real fullscreen together', async () => {
+  it('never asks the browser for its own fullscreen', () => {
+    // It cannot be kept. The device's fullscreen brings a swipe-down and a
+    // floating close button that no page can turn off, and it leaves the
+    // moment an on-screen keyboard opens - which is what tapping a bar number
+    // does. Every one of those dropped the reader out of the layout while
+    // they were playing.
     const rig = createRig();
-    await rig.focus.enter();
 
-    await rig.focus.exit();
+    rig.focus.enter();
+    rig.focus.exit();
+
+    expect(rig.requestFullscreen).not.toHaveBeenCalled();
+  });
+
+  it('leaves focus layout when asked', () => {
+    const rig = createRig();
+    rig.focus.enter();
+
+    rig.focus.exit();
 
     expect(rig.focus.isActive).toBe(false);
     expect(rig.root.classList.contains('is-focus')).toBe(false);
-    expect(rig.doc.exitFullscreen).toHaveBeenCalledTimes(1);
     expect(rig.changes).toEqual([true, false]);
   });
 
-  it('follows the browser out of fullscreen', async () => {
+  it('exits on Escape', () => {
     const rig = createRig();
-    await rig.focus.enter();
-
-    // The reader pressed Escape, or swiped the system gesture.
-    rig.doc.fullscreenElement = null;
-    rig.doc.fire('fullscreenchange');
-
-    expect(rig.focus.isActive).toBe(false);
-    expect(rig.root.classList.contains('is-focus')).toBe(false);
-  });
-
-  it('ignores fullscreen changes it did not cause', async () => {
-    const rig = createRig();
-    await rig.focus.enter();
-
-    rig.doc.fire('fullscreenchange');
-
-    expect(rig.focus.isActive).toBe(true);
-  });
-
-  it('exits on Escape even without real fullscreen', async () => {
-    const rig = createRig({ fullscreen: 'missing' });
-    await rig.focus.enter();
+    rig.focus.enter();
 
     rig.doc.fire('keydown', { key: 'Escape' });
 
     expect(rig.focus.isActive).toBe(false);
   });
 
-  it('leaves other keys alone', async () => {
+  it('leaves other keys alone', () => {
     const rig = createRig();
-    await rig.focus.enter();
+    rig.focus.enter();
 
     rig.doc.fire('keydown', { key: 'a' });
 
     expect(rig.focus.isActive).toBe(true);
   });
 
-  it('toggles', async () => {
+  it('toggles', () => {
     const rig = createRig();
 
-    await rig.focus.toggle();
+    rig.focus.toggle();
     expect(rig.focus.isActive).toBe(true);
 
-    await rig.focus.toggle();
+    rig.focus.toggle();
     expect(rig.focus.isActive).toBe(false);
   });
 
-  it('does nothing when asked to enter or exit twice', async () => {
+  it('does nothing when asked to enter or exit twice', () => {
     const rig = createRig();
 
-    await rig.focus.enter();
-    await rig.focus.enter();
-    expect(rig.requestFullscreen).toHaveBeenCalledTimes(1);
+    rig.focus.enter();
+    rig.focus.enter();
+    rig.focus.exit();
+    rig.focus.exit();
 
-    await rig.focus.exit();
-    await rig.focus.exit();
     expect(rig.changes).toEqual([true, false]);
   });
 
@@ -181,33 +132,6 @@ describe('FocusMode', () => {
 
     rig.focus.dispose();
 
-    expect(rig.doc.listenerCount('fullscreenchange')).toBe(0);
-    expect(rig.doc.listenerCount('webkitfullscreenchange')).toBe(0);
     expect(rig.doc.listenerCount('keydown')).toBe(0);
-  });
-});
-
-describe('installed to a Home Screen', () => {
-  it('does not ask for fullscreen it already has', async () => {
-    const rig = createRig({ standalone: true });
-
-    await rig.focus.enter();
-
-    // Asking would hand back the very chrome the reader installed the app to
-    // be rid of: a floating close button and a swipe-down that leaves.
-    expect(rig.requestFullscreen).not.toHaveBeenCalled();
-    // The layout is the part that matters, and it still happens.
-    expect(rig.focus.isActive).toBe(true);
-    expect(rig.root.classList.contains('is-focus')).toBe(true);
-  });
-
-  it('still leaves focus mode when asked', async () => {
-    const rig = createRig({ standalone: true });
-    await rig.focus.enter();
-
-    await rig.focus.exit();
-
-    expect(rig.focus.isActive).toBe(false);
-    expect(rig.root.classList.contains('is-focus')).toBe(false);
   });
 });

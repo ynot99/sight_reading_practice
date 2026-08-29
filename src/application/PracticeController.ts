@@ -477,9 +477,23 @@ export class PracticeController {
 
   /** Generates fresh material and renders it. */
   async loadNewExercise(): Promise<Exercise> {
+    // The percentage is what the reader chose; the bpm is worked out from it.
+    // Closing an opened score changes what 100% means, so the bpm has to be
+    // worked out again or "80% of a slow piece" silently becomes "115% of a
+    // brisk one" - which is the reading jumping past full speed for no reason
+    // anyone touched.
+    const percent = this.tempoPercent;
+    const hadScore = this.openedScore !== null;
     // Asking for a new exercise is asking the generator for one, so an opened
     // file steps aside rather than being handed back unchanged.
     this.openedScore = null;
+    // Only where the base moved, which is only where a file just stepped
+    // aside. Generated material follows generated material at the same written
+    // tempo, and putting an unchanged bpm through the percentage would round
+    // and clamp a number the reader had set exactly.
+    if (hadScore) {
+      this.updateSettings({ tempoBpm: this.tempoBpmForPercent(percent) });
+    }
     // Bars 12-16 of the piece just closed mean nothing in the piece about to
     // open, and silently applying them would hand back a passage of something
     // the reader never asked to narrow. A range is about *this* music.
@@ -533,12 +547,16 @@ export class PracticeController {
    * wander off the grid.
    */
   nudgeTempoPercent(deltaPercent: number, step = TEMPO_STEP_PERCENT): number {
-    const base = this.baseTempoBpm;
     const from = Math.round(this.tempoPercent / step) * step;
-    const wanted = clampPercent(from + deltaPercent);
-    const bpm = Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, Math.round((base * wanted) / 100)));
-    this.updateSettings({ tempoBpm: bpm });
+    this.updateSettings({ tempoBpm: this.tempoBpmForPercent(from + deltaPercent) });
     return this.tempoPercent;
+  }
+
+  /** The written tempo taken at a percentage, within what the codec accepts. */
+  private tempoBpmForPercent(percent: number): number {
+    const wanted = clampPercent(percent);
+    const bpm = Math.round((this.baseTempoBpm * wanted) / 100);
+    return Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, bpm));
   }
 
   /** The opened score, or `null` when the material is being generated. */

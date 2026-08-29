@@ -31,6 +31,10 @@ const MIME_TYPES = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  // Safari ignores a manifest it is not handed as one, and "Add to Home
+  // Screen" then makes a bookmark that opens the browser instead of an app.
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.ico': 'image/x-icon',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',

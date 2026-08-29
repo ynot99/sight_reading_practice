@@ -100,6 +100,12 @@ export class FakeScoreRenderer
     this.refreshCount += 1;
   }
 
+  scrollToStartCount = 0;
+
+  scrollToStart(): void {
+    this.scrollToStartCount += 1;
+  }
+
   clear(): void {
     this.loadedXml = null;
     this.clearCount += 1;

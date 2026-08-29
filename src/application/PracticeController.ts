@@ -750,6 +750,8 @@ export class PracticeController {
     });
 
     this.currentSession = session;
+    // The page a long piece was left scrolled to is not where bar one is.
+    this.deps.renderer.scrollToStart();
     this.meter.reset();
     this.lastBeatTicks = 0;
     if (this.survivalRuns) {

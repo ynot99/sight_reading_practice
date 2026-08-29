@@ -23,9 +23,10 @@ const CSS = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8').repla
  */
 function rules(): { selector: string; body: string; at: number }[] {
   return [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({
-    // The last line of what precedes the brace: anything above it belongs to
-    // the rule before, or is blank.
-    selector: (match[1] ?? '').trim().split(/\r?\n/).pop()?.trim() ?? '',
+    // The whole selector, newlines and all - a grouped rule lists several,
+    // one per line, and keeping only the last quietly checked one of them.
+    // Comments are gone already, so nothing else can be in here.
+    selector: (match[1] ?? '').trim().replace(/\s*\n\s*/g, ' '),
     body: match[2] ?? '',
     at: match.index ?? 0,
   }));
@@ -105,6 +106,26 @@ describe('the stylesheet', () => {
     expect(HTML).toMatch(/<link[^>]*rel="manifest"/);
     expect(HTML).toMatch(/name="apple-mobile-web-app-capable"[^>]*content="yes"/);
     expect(HTML).toMatch(/<link[^>]*rel="apple-touch-icon"/);
+  });
+
+  it('hides everything that is not the music in fullscreen', () => {
+    // The import notice sits outside the header, so it was left printing
+    // "Opened Bone Bottom." across the page the reader had gone fullscreen to
+    // look at.
+    const hidden = rules().filter(
+      (rule) => rule.selector.startsWith('.app.is-focus') && /display\s*:\s*none/.test(rule.body),
+    );
+    const selectors = hidden.flatMap((rule) => rule.selector.split(','))
+      .concat(
+        rules()
+          .filter((rule) => /display\s*:\s*none/.test(rule.body))
+          .flatMap((rule) => rule.selector.split(',')),
+      )
+      .map((part) => part.trim());
+
+    for (const part of ['.app.is-focus .import-notice', '.app.is-focus .panel']) {
+      expect(selectors).toContain(part);
+    }
   });
 
   it('does not name file types the reader may be unable to choose', () => {

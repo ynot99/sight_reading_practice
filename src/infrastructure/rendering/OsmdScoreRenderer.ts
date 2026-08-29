@@ -207,6 +207,13 @@ export class OsmdScoreRenderer
     this.paintFaded();
   }
 
+  scrollToStart(): void {
+    // The scrolling box, not the framed one: the frame holds the cover and
+    // does not move. Whichever ancestor actually scrolls is the one to ask.
+    const scroller = this.container.closest('.score__scroll') ?? this.container.parentElement;
+    scroller?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+  }
+
   clear(): void {
     this.osmd?.clear();
     this.marks = [];

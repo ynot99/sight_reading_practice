@@ -1,4 +1,6 @@
 import type { AppRuntime } from '../composition/createApp.js';
+import { FLOW_MODE_ID } from '../application/modes/FlowMode.js';
+import { WAIT_MODE_ID } from '../application/modes/WaitMode.js';
 import type { PracticeSession } from '../application/session/PracticeSession.js';
 import type { SessionStatus } from '../application/session/SessionState.js';
 import type { MidiConnectionStatus, MidiEvent } from '../application/ports/IMidiSource.js';
@@ -393,6 +395,7 @@ export class AppView {
     focusHands: HTMLButtonElement;
     focusSurvival: HTMLButtonElement;
     focusCursor: HTMLButtonElement;
+    focusWait: HTMLButtonElement;
     focusMarks: HTMLButtonElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
@@ -513,6 +516,7 @@ export class AppView {
       focusHands: requireElement(doc, 'focus-hands'),
       focusSurvival: requireElement(doc, 'focus-survival'),
       focusCursor: requireElement(doc, 'focus-cursor'),
+      focusWait: requireElement(doc, 'focus-wait'),
       focusMarks: requireElement(doc, 'focus-marks'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
@@ -1145,6 +1149,15 @@ export class AppView {
 
     this.listen(this.el.focusStop, 'click', () => {
       controller.stop();
+    });
+
+    this.listen(this.el.focusWait, 'click', () => {
+      // The mode, from the stand: whether the music waits for the reader or
+      // walks on without them is the choice they most often want to change
+      // with the instrument already in front of them.
+      const waiting = controller.settings.modeId === WAIT_MODE_ID;
+      controller.updateSettings({ modeId: waiting ? FLOW_MODE_ID : WAIT_MODE_ID });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.focusCursor, 'click', () => {
@@ -1873,6 +1886,7 @@ export class AppView {
     this.el.preset.value = settings.presetId;
     this.el.rhythm.value = settings.rhythmProfileId;
     this.el.mode.value = settings.modeId;
+    this.el.focusWait.setAttribute('aria-pressed', String(settings.modeId === WAIT_MODE_ID));
     this.el.scoring.value = settings.scoringId;
     this.el.scoringDescription.textContent = SCORING_DESCRIPTIONS[settings.scoringId] ?? '';
     this.el.key.value = keyValue(settings.key);

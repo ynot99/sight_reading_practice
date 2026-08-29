@@ -1517,3 +1517,68 @@ describe('surviving a piece you already know', () => {
     expect(rig.readings).toEqual([]);
   });
 });
+
+describe('pausing before the music has begun', () => {
+  it('takes a pause during the count-in, rather than ignoring it', async () => {
+    const { controller } = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      countInBars: 1,
+    });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    expect(session?.status).toBe('counting-in');
+
+    controller.pause();
+
+    // The button is right there and says Pause; refusing silently was the
+    // control lying about what it does.
+    expect(session?.status).toBe('paused');
+  });
+
+  it('gives the whole count back on resuming', async () => {
+    const rig = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      countInBars: 1,
+    });
+    await rig.controller.loadNewExercise();
+    const session = rig.controller.start();
+    rig.metronome.advanceSubdivisions(2);
+    rig.controller.pause();
+
+    rig.controller.resume();
+
+    // Back to the count and to the whole of it: half a count-in gives the
+    // reader no tempo, which is the only thing it is for.
+    expect(session?.status).toBe('counting-in');
+  });
+
+  it('resumes into the music when the pause came after the count', async () => {
+    const rig = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      countInBars: 0,
+    });
+    await rig.controller.loadNewExercise();
+    const session = rig.controller.start();
+    rig.metronome.advanceSubdivisions(2);
+    expect(session?.status).toBe('running');
+
+    rig.controller.pause();
+    rig.controller.resume();
+
+    expect(session?.status).toBe('running');
+  });
+});
+
+describe('starting from the top of the page', () => {
+  it('brings the page back before the run begins', async () => {
+    const { controller, renderer } = createController(true);
+    await controller.loadNewExercise();
+    const before = renderer.scrollToStartCount;
+
+    controller.start();
+
+    // A long piece is scrolled through as it is read and stays where it was
+    // left; the cursor goes to bar one and the reader was looking at bar 40.
+    expect(renderer.scrollToStartCount).toBe(before + 1);
+  });
+});

@@ -11,6 +11,14 @@ export interface IScoreRenderer {
   load(musicXml: string): Promise<void>;
   /** Re-layout after a container resize. */
   refresh(): void;
+  /**
+   * Brings the top of the page back into view.
+   *
+   * A long piece is scrolled through as it is read, and it stays where it was
+   * left. Starting a run put the cursor at bar one and left the reader
+   * looking at bar forty.
+   */
+  scrollToStart(): void;
   clear(): void;
 }
 

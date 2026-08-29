@@ -1816,6 +1816,24 @@ describe('AppView', () => {
       expect(element<HTMLInputElement>('survival').checked).toBe(true);
     });
 
+    it('switches between waiting and flowing from the drawer', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const toggle = element<HTMLButtonElement>('focus-wait');
+      // The rig starts in Wait mode, which the switch has to show.
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+      toggle.click();
+
+      expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+      // The selector at the desk is the same value seen from the stand.
+      expect(element<HTMLSelectElement>('mode').value).toBe(FLOW_MODE_ID);
+
+      toggle.click();
+      expect(runtime.controller.settings.modeId).toBe(new WaitMode().id);
+    });
+
     it('shows and hides the cursor from the drawer', async () => {
       const { view, runtime, renderer } = createRig();
       await view.initialize();

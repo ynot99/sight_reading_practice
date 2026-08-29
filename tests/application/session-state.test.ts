@@ -5,22 +5,15 @@ import {
   createSessionMachine,
   isActive,
   type SessionStatus,
+  SESSION_TRIGGERS,
   type SessionTrigger,
 } from '../../src/application/session/SessionState.js';
 import { InvalidTransitionError } from '../../src/shared/errors.js';
 
-const ALL_TRIGGERS: readonly SessionTrigger[] = [
-  'start',
-  'countInComplete',
-  'pause',
-  'resume',
-  'complete',
-  'abort',
-  'reset',
-];
-
 function legalTriggers(status: SessionStatus): SessionTrigger[] {
-  return ALL_TRIGGERS.filter((trigger) => SESSION_TRANSITIONS[status][trigger] !== undefined);
+  // From the source's own list: a copy kept here would check less and less as
+  // triggers were added, and say nothing about it.
+  return SESSION_TRIGGERS.filter((trigger) => SESSION_TRANSITIONS[status][trigger] !== undefined);
 }
 
 describe('session state machine', () => {
@@ -35,12 +28,16 @@ describe('session state machine', () => {
     expect(machine.dispatch('complete')).toBe('completed');
   });
 
-  it('allows pausing and resuming only while running', () => {
+  it('allows pausing once a run has begun, count-in included', () => {
     const machine = createSessionMachine();
     expect(machine.can('pause')).toBe(false);
 
+    // A count-in looks like part of the run to the reader - the button is
+    // right there and says Pause - so refusing it silently was the control
+    // lying about what it does.
     machine.dispatch('start');
-    expect(machine.can('pause')).toBe(false);
+    expect(machine.dispatch('pause')).toBe('paused');
+    expect(machine.dispatch('resumeCountIn')).toBe('counting-in');
 
     machine.dispatch('countInComplete');
     expect(machine.dispatch('pause')).toBe('paused');
@@ -73,9 +70,11 @@ describe('session state machine', () => {
 
   it('exposes exactly the intended transitions', () => {
     expect(legalTriggers('idle')).toEqual(['start']);
-    expect(legalTriggers('counting-in')).toEqual(['countInComplete', 'abort']);
+    expect(legalTriggers('counting-in')).toEqual(['countInComplete', 'pause', 'abort']);
     expect(legalTriggers('running')).toEqual(['pause', 'complete', 'abort']);
-    expect(legalTriggers('paused')).toEqual(['resume', 'abort']);
+    // Two ways out of a pause: back to the music, or back to the count that
+    // had not finished giving the reader a tempo.
+    expect(legalTriggers('paused')).toEqual(['resume', 'resumeCountIn', 'abort']);
     expect(legalTriggers('completed')).toEqual(['start', 'reset']);
     expect(legalTriggers('aborted')).toEqual(['start', 'reset']);
   });

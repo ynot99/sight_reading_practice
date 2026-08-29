@@ -62,6 +62,8 @@ export class PracticeSession {
   private runStartedAt = 0;
   private positionOffsetTicks = 0;
   private countInRemaining = 0;
+  /** Whether the pause landed before the music had begun. */
+  private pausedInCountIn = false;
   /** Note-ons that landed during the count-in, kept until the music starts. */
   private beforeTheMusic: MidiNoteOnEvent[] = [];
   private lastReport: PerformanceReport | null = null;
@@ -147,9 +149,11 @@ export class PracticeSession {
   }
 
   pause(): void {
+    const wasCountingIn = this.machine.state === 'counting-in';
     if (!this.dispatch('pause')) {
       return;
     }
+    this.pausedInCountIn = wasCountingIn;
     this.metronome.stop();
   }
 
@@ -160,6 +164,17 @@ export class PracticeSession {
    * and would score half-played chords twice, so the bar is replayed instead.
    */
   resume(): void {
+    if (this.pausedInCountIn) {
+      // Back to the count, and to the whole of it: a count-in half heard
+      // gives the reader no tempo, which is the only thing it is for.
+      if (!this.dispatch('resumeCountIn')) {
+        return;
+      }
+      this.pausedInCountIn = false;
+      this.countInRemaining = Math.max(0, this.countInPulses());
+      this.metronome.start();
+      return;
+    }
     if (!this.dispatch('resume')) {
       return;
     }

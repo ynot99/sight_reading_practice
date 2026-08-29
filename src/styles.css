@@ -564,7 +564,13 @@ select {
   background: #ffffff;
 }
 
+/*
+ * Everything that is not the music. The import notice belongs here too: it
+ * sits outside the header, so fullscreen left "Opened Bone Bottom." printed
+ * over the page the reader had gone fullscreen to look at.
+ */
 .app.is-focus .app-header,
+.app.is-focus .import-notice,
 .app.is-focus .controls,
 .app.is-focus .panel {
   display: none;

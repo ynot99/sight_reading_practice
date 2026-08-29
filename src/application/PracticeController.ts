@@ -145,6 +145,16 @@ export interface PracticeSettings {
    */
   readonly clickWhen: ClickWhen;
   readonly matchToleranceMs: number;
+  /**
+   * How long a press takes to reach the page, in milliseconds.
+   *
+   * Taken off every timestamp before it is judged. A key struck on the beat is
+   * not heard about on the beat - the keyboard scans, a relay forwards, the
+   * tablet wakes - and without this the reader who plays perfectly reads
+   * "late" on every note with no way to tell their own habit from the path
+   * their notes travelled.
+   */
+  readonly inputLatencyMs: number;
   readonly pitchClassOnly: boolean;
   /**
    * Judge the timing and not the notes.
@@ -342,6 +352,7 @@ export class PracticeController {
       ladderStepId: null,
       clickWhen: 'always',
       matchToleranceMs: 250,
+      inputLatencyMs: 0,
       pitchClassOnly: false,
       rhythmOnly: false,
       previewSeconds: 0,
@@ -826,6 +837,7 @@ export class PracticeController {
         },
         countInBars: this.currentSettings.countInBars,
         expectedStaff: this.currentSettings.handStaff,
+        inputLatencyMs: this.currentSettings.inputLatencyMs,
         click: this.currentSettings.clickPattern,
         clickWhen: this.currentSettings.clickWhen,
       },

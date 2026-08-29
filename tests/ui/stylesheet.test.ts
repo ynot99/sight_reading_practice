@@ -140,6 +140,18 @@ describe('the stylesheet', () => {
     );
   });
 
+  it('stretches a control only inside the column meant for it', () => {
+    // Unscoped, `select { width: 100% }` caught the MIDI picker in the header
+    // too. It then asked for the whole row and pushed the connection controls
+    // onto a second line under the title, for no reason a reader could see.
+    const stretched = rules().filter((rule) => /^\s*width\s*:\s*100%/m.test(rule.body));
+    const bare = stretched.filter((rule) =>
+      rule.selector.split(',').some((part) => /^(select|input)/.test(part.trim())),
+    );
+
+    expect(bare.map((rule) => rule.selector)).toEqual([]);
+  });
+
   it('asks the viewport to reach under the safe areas', () => {
     // The stylesheet already offsets by `env(safe-area-inset-*)`, and without
     // `viewport-fit=cover` those resolve to zero - so the transport pill sits

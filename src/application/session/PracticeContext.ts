@@ -41,6 +41,22 @@ export interface SessionOptions {
    * one going out. Beyond this it is treated as belonging where it fell.
    */
   readonly earlyWindowMs: number;
+  /**
+   * How long a press takes to arrive, in milliseconds.
+   *
+   * Taken off every timestamp before anything is judged by it. A key struck
+   * exactly on the beat is not *heard about* on the beat: the keyboard scans,
+   * the relay forwards, the tablet wakes, and by then the beat has gone. The
+   * reader who is playing perfectly then reads "late" on every note and has no
+   * way to tell their habit from the path their notes travelled.
+   *
+   * A single number because that is what this is: a constant delay on the way
+   * in. Scatter about it is a different measurement and belongs to the reader,
+   * which is why the report gives the spread beside the tendency - a large
+   * mean with a small spread is exactly this, and correcting it here is the
+   * only honest place.
+   */
+  readonly inputLatencyMs: number;
 }
 
 export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
@@ -50,6 +66,7 @@ export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   click: 'pulse',
   clickWhen: 'always',
   earlyWindowMs: 120,
+  inputLatencyMs: 0,
 };
 
 /**

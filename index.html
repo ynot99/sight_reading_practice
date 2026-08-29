@@ -278,6 +278,15 @@
         </div>
 
         <div class="control-group">
+          <label for="latency">Input delay: <output id="latency-value">0</output> ms</label>
+          <input id="latency" type="range" min="-100" max="300" step="5" value="0" />
+          <button id="latency-measure" type="button" class="button button--ghost" disabled>
+            Take it from the last run
+          </button>
+          <p id="latency-description" class="hint"></p>
+        </div>
+
+        <div class="control-group">
           <label for="metronome-volume">
             Metronome: <output id="metronome-volume-value">60</output>%
           </label>

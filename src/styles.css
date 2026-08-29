@@ -95,6 +95,26 @@ textarea {
   justify-content: space-between;
 }
 
+/*
+ * The title gives way before the controls do. Its subtitle is a piece's name
+ * and can be any length at all, and without this a long one pushed the
+ * connection controls onto their own line.
+ */
+.brand {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.brand .subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.midi-cluster {
+  flex: 0 1 auto;
+}
+
 .app-header h1 {
   margin: 0;
   font-size: 20px;
@@ -374,8 +394,16 @@ progress {
   min-height: 2.4em;
 }
 
-select,
-input[type='range'] {
+/*
+ * Full width inside a settings column and nowhere else.
+ *
+ * Unscoped, this caught the MIDI input picker in the header too, which then
+ * asked for the whole row and pushed the whole cluster onto a second line
+ * under the title - for no reason a reader could see, since what was in it
+ * plainly fitted.
+ */
+.control-group > select,
+.control-group > input[type='range'] {
   width: 100%;
 }
 

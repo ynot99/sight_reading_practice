@@ -36,6 +36,14 @@ import { elementAt } from '../shared/asserts.js';
  * short enough that a single press still looks immediate.
  */
 const TEMPO_REDRAW_DELAY_MS = 350;
+
+/**
+ * Presses a run needs before its tendency means anything.
+ *
+ * Two or three notes average to whatever they happened to be; a bar or two of
+ * playing averages to a habit.
+ */
+const MIN_PRESSES_TO_MEASURE = 8;
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { FocusMode } from './FocusMode.js';
@@ -535,6 +543,10 @@ export class AppView {
     countIn: HTMLInputElement;
     countInValue: HTMLOutputElement;
     tolerance: HTMLInputElement;
+    latency: HTMLInputElement;
+    latencyValue: HTMLOutputElement;
+    latencyMeasure: HTMLButtonElement;
+    latencyDescription: HTMLElement;
     toleranceValue: HTMLOutputElement;
     zoom: HTMLInputElement;
     zoomValue: HTMLOutputElement;
@@ -679,6 +691,10 @@ export class AppView {
       countIn: requireElement(doc, 'count-in'),
       countInValue: requireElement(doc, 'count-in-value'),
       tolerance: requireElement(doc, 'tolerance'),
+      latency: requireElement(doc, 'latency'),
+      latencyValue: requireElement(doc, 'latency-value'),
+      latencyMeasure: requireElement(doc, 'latency-measure'),
+      latencyDescription: requireElement(doc, 'latency-description'),
       toleranceValue: requireElement(doc, 'tolerance-value'),
       zoom: requireElement(doc, 'zoom'),
       zoomValue: requireElement(doc, 'zoom-value'),
@@ -1083,6 +1099,22 @@ export class AppView {
       controller.updateSettings({ countInBars: Number.parseInt(this.el.countIn.value, 10) });
       // "Only the count-in" means something different once there is not one.
       this.describeDropout();
+    });
+
+    this.listen(this.el.latency, 'input', () => {
+      controller.updateSettings({
+        inputLatencyMs: Number.parseInt(this.el.latency.value, 10),
+      });
+      this.describeLatency();
+    });
+
+    this.listen(this.el.latencyMeasure, 'click', () => {
+      const measured = this.measuredLatencyMs();
+      if (measured === null) {
+        return;
+      }
+      controller.updateSettings({ inputLatencyMs: measured });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.tolerance, 'input', () => {
@@ -1577,6 +1609,62 @@ export class AppView {
     this.syncControlsFromSettings();
   }
 
+  /**
+   * What the last run measured, rounded to what the slider can hold.
+   *
+   * The *tendency*, not the scatter: a steady hand forty milliseconds behind
+   * the beat is a delay on the way in, and correcting it is honest. Landing
+   * wildly either side of the beat averages to the same number and is not
+   * something a constant can fix, so a run whose spread is larger than its
+   * tendency is refused rather than quietly turned into a correction that
+   * would only move the mess.
+   */
+  private measuredLatencyMs(): number | null {
+    const timing = this.runtime.controller.session?.report?.timing;
+    if (timing === undefined || timing.deviations.length < MIN_PRESSES_TO_MEASURE) {
+      return null;
+    }
+    if (timing.deviationSpreadMs > Math.abs(timing.meanDeviationMs)) {
+      return null;
+    }
+    const step = 5;
+    const wanted = Math.round(timing.meanDeviationMs / step) * step;
+    return Math.min(300, Math.max(-100, wanted));
+  }
+
+  /**
+   * Says what the delay is for, and whether the last run can settle it.
+   *
+   * A number nobody can explain is a number nobody will touch, and this one
+   * is the difference between "I am late" and "I am told I am late".
+   */
+  private describeLatency(): void {
+    const set = this.runtime.controller.settings.inputLatencyMs;
+    this.el.latencyValue.value = String(set);
+
+    const timing = this.runtime.controller.session?.report?.timing;
+    const measured = this.measuredLatencyMs();
+    this.el.latencyMeasure.disabled = measured === null;
+
+    if (set === 0) {
+      this.el.latencyDescription.textContent =
+        'Taken off every press before it is judged. A key struck on the beat is not heard about on the beat.';
+    } else {
+      this.el.latencyDescription.textContent =
+        `Every press is judged ${Math.abs(set)} ms ${set > 0 ? 'earlier' : 'later'} than it arrived.`;
+    }
+
+    if (measured !== null) {
+      this.el.latencyDescription.textContent +=
+        ` The last run ran ${Math.abs(measured)} ms ${measured > 0 ? 'late' : 'early'}, steadily.`;
+      return;
+    }
+    if (timing !== undefined && timing.deviations.length >= MIN_PRESSES_TO_MEASURE) {
+      this.el.latencyDescription.textContent +=
+        ' The last run was scattered either side of the beat rather than steadily off it, which no single number can correct.';
+    }
+  }
+
   private describeZoom(): void {
     this.el.focusZoom.value = `${Math.round(this.runtime.controller.settings.zoom * 100)}%`;
   }
@@ -1900,6 +1988,9 @@ export class AppView {
         // the verdict - beside the bar, where its width is nobody's business.
         this.showNotice(`${score.grade} · ${percent(score.overall)}`);
         this.renderResult(score, report);
+        // The run just measured what it measured; the delay control can say
+        // so, and offer to settle itself from it.
+        this.describeLatency();
       }),
     );
   }
@@ -2197,6 +2288,8 @@ export class AppView {
     this.el.countInValue.value = String(settings.countInBars);
     this.el.tolerance.value = String(settings.matchToleranceMs);
     this.el.toleranceValue.value = String(settings.matchToleranceMs);
+    this.el.latency.value = String(settings.inputLatencyMs);
+    this.describeLatency();
     this.el.zoom.value = String(Math.round(settings.zoom * 100));
     this.describeZoom();
     this.el.zoomValue.value = this.el.zoom.value;

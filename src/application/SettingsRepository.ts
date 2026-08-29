@@ -244,6 +244,9 @@ export function decodePracticeSettings(
         : readId(value['ladderStepId'], known.ladderStepIds ?? []),
     clickWhen: readClickWhen(value['clickWhen'], value),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
+    // Bounded either way: a relay can only add delay, but a keyboard stamped
+    // at the source can arrive fractionally ahead of when the page notices.
+    inputLatencyMs: readInteger(value['inputLatencyMs'], -200, 400),
     pitchClassOnly: readBoolean(value['pitchClassOnly']),
     rhythmOnly: readBoolean(value['rhythmOnly']),
     previewSeconds: readInteger(value['previewSeconds'], 0, 30),
@@ -278,6 +281,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     matchToleranceMs: Number.isFinite(settings.matchToleranceMs)
       ? settings.matchToleranceMs
       : undefined,
+    inputLatencyMs: settings.inputLatencyMs,
     pitchClassOnly: settings.pitchClassOnly,
     rhythmOnly: settings.rhythmOnly,
     previewSeconds: settings.previewSeconds,

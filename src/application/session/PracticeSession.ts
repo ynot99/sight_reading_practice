@@ -422,7 +422,21 @@ export class PracticeSession {
     }
   }
 
-  private handleMidi(event: MidiEvent): void {
+  /**
+   * The moment a press was *made*, from the moment it was heard about.
+   *
+   * Everything downstream judges by this: the early window, the deviation, the
+   * mark drawn on the page. Corrected once, at the door, so that no part of
+   * the run can be working from a different idea of when the note happened.
+   */
+  private struckAt(event: MidiNoteOnEvent): MidiNoteOnEvent {
+    const latency = this.options.inputLatencyMs;
+    return latency === 0 ? event : { ...event, timestampMs: event.timestampMs - latency };
+  }
+
+  private handleMidi(rawEvent: MidiEvent): void {
+    const event =
+      rawEvent.type === 'noteon' ? this.struckAt(rawEvent) : rawEvent;
     if (this.status === 'counting-in') {
       // Nobody lands exactly on the first beat, and a press a few
       // milliseconds ahead of it is an attempt at the first note, not noise.

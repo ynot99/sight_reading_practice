@@ -306,7 +306,7 @@
         <div id="focus-notice" class="focus-notice">Idle</div>
 
         <button id="focus-handle" type="button" class="focus-bar__handle"
-          aria-controls="focus-drawer" aria-expanded="false" aria-label="More controls"></button>
+          aria-controls="focus-drawer" aria-expanded="false" title="More controls" aria-label="More controls"></button>
 
         <div id="focus-health" class="focus-bar__health" hidden>
           <div id="focus-health-fill" class="focus-bar__health-fill"></div>
@@ -315,19 +315,19 @@
         <div class="focus-bar__row">
           <button id="focus-play" type="button"
             class="focus-bar__button focus-bar__button--primary focus-bar__button--icon"
-            aria-label="Start">
+            title="Start" aria-label="Start">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path id="focus-play-icon" d="M8 5l11 7-11 7z" />
             </svg>
           </button>
           <button id="focus-stop" type="button" class="focus-bar__button focus-bar__button--icon"
-            aria-label="Stop" disabled>
+            title="Stop" aria-label="Stop" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M6 6h12v12H6z" />
             </svg>
           </button>
           <button id="focus-listen" type="button" class="focus-bar__button focus-bar__button--icon"
-            aria-label="Listen">
+            title="Listen" aria-label="Listen">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path id="focus-listen-icon" d="M4 9v6h4l5 4V5L8 9H4zm12-.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z" />
             </svg>
@@ -335,21 +335,21 @@
 
           <span class="focus-bar__tempo">
             <button id="focus-slower" type="button"
-              class="focus-bar__button focus-bar__button--step" aria-label="Slower">−</button>
+              class="focus-bar__button focus-bar__button--step" title="Slower" aria-label="Slower">−</button>
             <output id="focus-tempo" class="focus-bar__percent">100%</output>
             <button id="focus-faster" type="button"
-              class="focus-bar__button focus-bar__button--step" aria-label="Faster">+</button>
+              class="focus-bar__button focus-bar__button--step" title="Faster" aria-label="Faster">+</button>
           </span>
 
           <button id="focus-next" type="button" class="focus-bar__button focus-bar__button--icon"
-            aria-label="New exercise">
+            title="New exercise" aria-label="New exercise">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" />
             </svg>
           </button>
           <button id="focus-exit" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__button--exit"
-            aria-label="Leave fullscreen">
+            title="Leave fullscreen" aria-label="Leave fullscreen">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M9 4H7v3H4v2h5V4zm6 0h-2v5h5V7h-3V4zM4 15v2h3v3h2v-5H4zm11 0v5h2v-3h3v-2h-5z" />
             </svg>
@@ -359,14 +359,14 @@
         <div id="focus-drawer" class="focus-bar__drawer">
           <span class="focus-bar__tempo">
             <button id="focus-smaller" type="button"
-              class="focus-bar__button focus-bar__button--icon" aria-label="Smaller notes">
+              class="focus-bar__button focus-bar__button--icon" title="Smaller notes" aria-label="Smaller notes">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M10.5 3a7.5 7.5 0 1 1-4.6 13.4l-3.2 3.3-1.4-1.4 3.3-3.2A7.5 7.5 0 0 1 10.5 3zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM7 9.5h7v2H7v-2z" />
               </svg>
             </button>
             <output id="focus-zoom" class="focus-bar__percent">85%</output>
             <button id="focus-bigger" type="button"
-              class="focus-bar__button focus-bar__button--icon" aria-label="Bigger notes">
+              class="focus-bar__button focus-bar__button--icon" title="Bigger notes" aria-label="Bigger notes">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M10.5 3a7.5 7.5 0 1 1-4.6 13.4l-3.2 3.3-1.4-1.4 3.3-3.2A7.5 7.5 0 0 1 10.5 3zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM9.5 7h2v2.5H14v2h-2.5V14h-2v-2.5H7v-2h2.5V7z" />
               </svg>
@@ -375,15 +375,7 @@
 
           <button id="focus-wait" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="false" aria-label="Wait for the notes">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.3l3.6 2.1-1 1.7L11 13.5V7h2z" />
-            </svg>
-          </button>
-
-          <button id="focus-wait" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="false" aria-label="Wait for the notes">
+            aria-pressed="false" title="Wait for the notes" aria-label="Wait for the notes">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.3l3.6 2.1-1 1.7L11 13.5V7h2z" />
             </svg>
@@ -391,7 +383,7 @@
 
           <button id="focus-cursor" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="true" aria-label="Show the cursor">
+            aria-pressed="true" title="Show the cursor" aria-label="Show the cursor">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M11 3h2v18h-2z" />
               <path d="M8 3h8v2H8zM8 19h8v2H8z" />
@@ -400,7 +392,7 @@
 
           <button id="focus-marks" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="true" aria-label="Show what I played">
+            aria-pressed="true" title="Show what I played" aria-label="Show what I played">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M15 4h2v10.2a3.8 3.8 0 1 1-2-3.3V4z" />
               <path d="M4 7h8v2H4zM4 12h6v2H4zM4 17h6v2H4z" />
@@ -409,14 +401,14 @@
 
           <button id="focus-survival" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="false" aria-label="Survival: keep the bar up">
+            aria-pressed="false" title="Survival: keep the bar up" aria-label="Survival: keep the bar up">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 21s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.6a4.4 4.4 0 0 1 7.5 3.3C19.5 16.4 12 21 12 21z" />
             </svg>
           </button>
 
           <button id="focus-hands" type="button" class="focus-bar__button focus-bar__hands"
-            aria-label="Both hands">
+            title="Both hands" aria-label="Both hands">
             <svg id="focus-hand-left" class="focus-bar__hand" viewBox="0 0 24 24"
               aria-hidden="true" focusable="false">
               <path d="M16 11V5.5a1.5 1.5 0 0 0-3 0V10h-.5V4.5a1.5 1.5 0 0 0-3 0V10H9V6a1.5 1.5 0 0 0-3 0v8a6 6 0 0 0 6 6h1a5 5 0 0 0 4.1-2.1L20 14.5a1.5 1.5 0 0 0-2.2-2L16 14.5z" />

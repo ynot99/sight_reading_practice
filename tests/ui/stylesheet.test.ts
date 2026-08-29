@@ -128,6 +128,33 @@ describe('the stylesheet', () => {
     }
   });
 
+  it('gives every fullscreen control a name on hover', () => {
+    // The bar is icons now, and an icon that has to be guessed at is not a
+    // label. `aria-label` says it to a screen reader and nothing else; `title`
+    // is what a mouse gets.
+    const bar = HTML.slice(HTML.indexOf('id="focus-bar"'));
+    const buttons = [...bar.matchAll(/<button[\s\S]*?>/g)].map((match) => match[0]);
+
+    expect(buttons.length).toBeGreaterThan(10);
+    for (const button of buttons) {
+      const named = /aria-label="([^"]+)"/.exec(button)?.[1];
+      expect({ button: named ?? button.slice(0, 40), titled: button.includes('title="') }).toEqual({
+        button: named ?? button.slice(0, 40),
+        titled: true,
+      });
+    }
+  });
+
+  it('gives every control in the bar an id of its own', () => {
+    // Two buttons shared an id once, and only the first was ever wired up:
+    // the other sat in the drawer looking like a control and doing nothing.
+    const bar = HTML.slice(HTML.indexOf('id="focus-bar"'));
+    const ids = [...bar.matchAll(/id="(focus-[a-z-]+)"/g)].map((match) => match[1]);
+
+    expect(ids.length).toBeGreaterThan(10);
+    expect([...new Set(ids)]).toHaveLength(ids.length);
+  });
+
   it('does not name file types the reader may be unable to choose', () => {
     // iOS resolves `accept` to its own file types, and `.mxl` is not one it
     // knows - a picker that named it greyed out every score on the device.

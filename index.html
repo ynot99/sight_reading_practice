@@ -270,16 +270,15 @@
 
       </footer>
 
-      <!--
-        Its own pill, outside the bar's flow: the count-in is the widest thing
-        the transport ever says, and centred on itself its width cannot move
-        anything else. Three tries at this on other indicators taught the
-        lesson - nothing that changes during a run may share a row with
-        something a thumb is aiming at.
-      -->
-      <div id="focus-countin" class="focus-countin" hidden></div>
-
       <div id="focus-bar" class="focus-bar" hidden data-open="false">
+        <!--
+          Beside the bar rather than in it, and taken out of the flow: the
+          count-in and the grade are the widest things this ever says, and
+          absolutely positioned they cannot change the bar's size or shift it
+          off centre however long they turn out to be.
+        -->
+        <div id="focus-notice" class="focus-notice" hidden></div>
+
         <button id="focus-handle" type="button" class="focus-bar__handle"
           aria-controls="focus-drawer" aria-expanded="false" aria-label="More controls"></button>
 
@@ -301,6 +300,12 @@
               <path d="M6 6h12v12H6z" />
             </svg>
           </button>
+          <button id="focus-listen" type="button" class="focus-bar__button focus-bar__button--icon"
+            aria-label="Listen">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path id="focus-listen-icon" d="M4 9v6h4l5 4V5L8 9H4zm12-.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z" />
+            </svg>
+          </button>
 
           <span id="focus-status" class="focus-bar__status">Idle</span>
 
@@ -312,13 +317,6 @@
               class="focus-bar__button focus-bar__button--step" aria-label="Faster">+</button>
           </span>
 
-          <button id="focus-listen" type="button" class="focus-bar__button focus-bar__button--icon"
-            aria-label="Listen">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 9v6h4l5 4V5L8 9H4z" />
-              <path d="M16 8.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z" />
-            </svg>
-          </button>
           <button id="focus-next" type="button" class="focus-bar__button focus-bar__button--icon"
             aria-label="New exercise">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

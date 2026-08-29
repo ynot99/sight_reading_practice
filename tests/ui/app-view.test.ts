@@ -1833,20 +1833,21 @@ describe('AppView', () => {
       );
     });
 
-    it('counts in on a pill of its own', async () => {
+    it('says the count-in and the verdict on a pill of its own', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
       runtime.controller.updateSettings({ countInBars: 1, modeId: FLOW_MODE_ID });
       await runtime.controller.reloadExercise();
-      expect(element('focus-countin').hidden).toBe(true);
+      expect(element('focus-notice').hidden).toBe(true);
 
       runtime.controller.start();
 
       // The widest thing the transport ever says, kept out of the row a thumb
-      // is aiming at: its width cannot move the buttons.
-      expect(element('focus-countin').hidden).toBe(false);
-      expect(element('focus-countin').textContent).toContain('Counting in');
-      expect(element('focus-countin').parentElement?.id).not.toBe('focus-bar');
+      // is aiming at: absolutely positioned beside the bar, its width cannot
+      // move the buttons nor shift the bar off centre.
+      expect(element('focus-notice').hidden).toBe(false);
+      expect(element('focus-notice').textContent).toContain('Counting in');
+      expect(element('focus-notice').parentElement?.id).toBe('focus-bar');
     });
 
     it('opens and closes the drawer from its handle', async () => {
@@ -1953,15 +1954,20 @@ describe('AppView', () => {
 
       expect(runtime.controller.isListening).toBe(true);
       // Both bars say the same thing, so leaving fullscreen mid-playback
-      // cannot show a button that disagrees with the one just pressed.
-      expect(element('focus-listen').textContent).toBe('Stop listening');
+      // cannot show a button that disagrees with the one just pressed. The
+      // fullscreen one says it in its name: writing the label into the button
+      // would throw the icon away, which is what it used to do.
+      const speaking = element('focus-listen-icon').getAttribute('d');
+      expect(element('focus-listen').getAttribute('aria-label')).toBe('Stop listening');
       expect(element('listen').textContent).toBe('Stop listening');
+      expect(element('focus-listen').querySelector('svg')).not.toBeNull();
 
       element<HTMLButtonElement>('focus-listen').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(runtime.controller.isListening).toBe(false);
-      expect(element('focus-listen').textContent).toBe('Listen');
+      expect(element('focus-listen').getAttribute('aria-label')).toBe('Listen');
+      expect(element('focus-listen-icon').getAttribute('d')).not.toBe(speaking);
     });
 
     it('shows where you are, then the grade, without the side panel', async () => {
@@ -1987,7 +1993,10 @@ describe('AppView', () => {
       }
 
       expect(session?.status).toBe('completed');
-      expect(element('focus-status').textContent).toMatch(/^[A-F] · \d+%$/);
+      // The verdict goes to the pill beside the bar, where its width is
+      // nobody's business; the status says only where the run got to.
+      expect(element('focus-notice').textContent).toMatch(/^[A-F] · \d+%$/);
+      expect(element('focus-notice').hidden).toBe(false);
     });
 
     it('loads a new exercise from the pill', async () => {

@@ -201,6 +201,8 @@ function readPlayedNotes(value: string): PlayedNoteDisplay {
 }
 
 /** The transport icons, as one path each so only the `d` has to change. */
+const LISTEN_ICON = 'M4 9v6h4l5 4V5L8 9H4zm12-.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z';
+const HUSH_ICON = 'M4 9v6h4l5 4V5L8 9H4zm12.2 1.3 1.4-1.4L20 11.3l2.4-2.4 1.4 1.4-2.4 2.4 2.4 2.4-1.4 1.4-2.4-2.4-2.4 2.4-1.4-1.4 2.4-2.4-2.4-2.4z';
 const PLAY_ICON = 'M8 5l11 7-11 7z';
 const PAUSE_ICON = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
 
@@ -356,7 +358,8 @@ export class AppView {
     focusPlayIcon: SVGPathElement;
     focusHandle: HTMLButtonElement;
     focusHealth: HTMLElement;
-    focusCountIn: HTMLElement;
+    focusNotice: HTMLElement;
+    focusListenIcon: SVGPathElement;
     focusHands: HTMLButtonElement;
     focusSurvival: HTMLButtonElement;
     focusSmaller: HTMLButtonElement;
@@ -474,7 +477,8 @@ export class AppView {
       focusPlayIcon: requireElement(doc, 'focus-play-icon'),
       focusHandle: requireElement(doc, 'focus-handle'),
       focusHealth: requireElement(doc, 'focus-health'),
-      focusCountIn: requireElement(doc, 'focus-countin'),
+      focusNotice: requireElement(doc, 'focus-notice'),
+      focusListenIcon: requireElement(doc, 'focus-listen-icon'),
       focusHands: requireElement(doc, 'focus-hands'),
       focusSurvival: requireElement(doc, 'focus-survival'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
@@ -725,11 +729,15 @@ export class AppView {
   }
 
   private describeListening(): void {
-    // The same words in both bars: "Stop" alone would read as the run's Stop,
-    // which sits right beside it in the pill.
-    const label = this.runtime.controller.isListening ? 'Stop listening' : 'Listen';
+    const listening = this.runtime.controller.isListening;
+    // "Stop" alone would read as the run's Stop, which sits beside it.
+    const label = listening ? 'Stop listening' : 'Listen';
     this.el.listen.textContent = label;
-    this.el.focusListen.textContent = label;
+    // The fullscreen one is a picture: writing the label into it would throw
+    // the icon away, which is exactly what it used to do.
+    this.el.focusListen.setAttribute('aria-label', label);
+    this.el.focusListen.title = label;
+    this.el.focusListenIcon.setAttribute('d', listening ? HUSH_ICON : LISTEN_ICON);
   }
 
   private populateSelects(): void {
@@ -1395,6 +1403,18 @@ export class AppView {
     );
   }
 
+  /**
+   * The pill beside the bar: what just happened, or what is about to.
+   *
+   * Kept off the transport row on purpose. "Counting in… 3" and "B · 84%" are
+   * the widest things this ever says, and out of the bar's flow their width
+   * cannot move a button a thumb is aiming at, nor shift the bar off centre.
+   */
+  private showNotice(text: string | null): void {
+    this.el.focusNotice.hidden = text === null;
+    this.el.focusNotice.textContent = text ?? '';
+  }
+
   private renderFocusStatus(text: string): void {
     this.el.focusStatus.textContent = text;
   }
@@ -1477,12 +1497,12 @@ export class AppView {
     this.sessionSubscriptions.push(
       session.events.on('statusChanged', ({ status }) => {
         this.el.sessionStatus.textContent = STATUS_LABELS[status];
-        const counting = status === 'counting-in';
-        this.el.focusCountIn.hidden = !counting;
-        if (counting) {
+        if (status === 'counting-in') {
           // The first beat is a tick away, and an empty pill in the meantime
           // reads as something broken rather than as something about to start.
-          this.el.focusCountIn.textContent = 'Counting in…';
+          this.showNotice('Counting in…');
+        } else if (status === 'running') {
+          this.showNotice(null);
         }
         this.renderFocusStatus(
           status === 'running' && this.lastPosition !== ''
@@ -1493,10 +1513,7 @@ export class AppView {
       }),
       session.events.on('countIn', ({ beatsRemaining }) => {
         this.el.sessionStatus.textContent = `Counting in… ${beatsRemaining}`;
-        // Its own pill, so the widest thing the transport ever says cannot
-        // move the buttons a thumb is already aiming at.
-        this.el.focusCountIn.hidden = false;
-        this.el.focusCountIn.textContent = `Counting in… ${beatsRemaining}`;
+        this.showNotice(`Counting in… ${beatsRemaining}`);
       }),
       session.events.on('statusChanged', ({ status }) => {
         // Restarting is the view's job, not the controller's: tearing a
@@ -1526,8 +1543,9 @@ export class AppView {
         this.lastExpected = [];
         this.renderExpected();
         this.lastPosition = '';
-        // In fullscreen the result panel is hidden, so the pill carries it.
-        this.renderFocusStatus(`${score.grade} · ${percent(score.overall)}`);
+        // In fullscreen the result panel is hidden, so the notice carries
+        // the verdict - beside the bar, where its width is nobody's business.
+        this.showNotice(`${score.grade} · ${percent(score.overall)}`);
         this.renderResult(score, report);
       }),
     );

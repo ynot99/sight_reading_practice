@@ -640,15 +640,17 @@ select {
  * a single line on a tablet held upright.
  */
 /*
- * Sits above the bar and belongs to nothing: `position: fixed` and centred on
- * itself, so however wide "Counting in... 3" turns out to be, the transport
- * below it does not move by a pixel.
+ * Beside the bar and out of its flow, which is what lets the bar stay centred
+ * on the screen while this grows leftwards. `right: 100%` puts it just past
+ * the bar's left edge; absolutely positioned, its width is not the bar's
+ * business at all.
  */
-.focus-countin {
-  position: fixed;
-  left: 50%;
-  bottom: calc(104px + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
+.focus-notice {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: 10px;
   z-index: 21;
   padding: 6px 16px;
   border-radius: 999px;

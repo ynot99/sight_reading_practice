@@ -1082,8 +1082,16 @@ export class PracticeController {
     }
   }
 
+  /**
+   * Puts the marker where the reader's setting says it belongs.
+   *
+   * Except while the exercise is playing itself: a performance shows the
+   * cursor whatever they chose, because following along is most of the value.
+   * Re-engraving used to run this and take the marker away mid-playback -
+   * which is what changing the tempo from the stand does.
+   */
   private applyCursorVisibility(): void {
-    if (this.currentSettings.showCursor) {
+    if (this.currentSettings.showCursor || this.isListening) {
       this.deps.cursor.show();
     } else {
       this.deps.cursor.hide();

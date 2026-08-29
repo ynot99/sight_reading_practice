@@ -1042,6 +1042,23 @@ describe('cursor visibility', () => {
     expect(renderer.cursor.visible).toBe(false);
   });
 
+  it('keeps it through a re-engraving while the exercise plays itself', async () => {
+    const { controller, renderer } = createController(true);
+    controller.updateSettings({ showCursor: false });
+    await controller.loadNewExercise();
+    controller.listen();
+    expect(renderer.cursor.visible).toBe(true);
+
+    // Which is what changing the tempo from the stand does, and it used to
+    // take the marker away in the middle of the performance.
+    await controller.reloadExercise();
+
+    expect(renderer.cursor.visible).toBe(true);
+
+    controller.stopListening();
+    expect(renderer.cursor.visible).toBe(false);
+  });
+
   it('leaves the cursor alone when there was nothing to stop', async () => {
     const { controller, renderer } = createController(true);
     await controller.loadNewExercise();

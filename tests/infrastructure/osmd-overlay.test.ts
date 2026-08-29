@@ -10,7 +10,7 @@ import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProf
 import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
 
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
-import { twoBarExercise } from '../support/fixtures.js';
+import { beamedSixteenths, twoBarExercise } from '../support/fixtures.js';
 import { createScoreContainer, installCanvasStub, staffLineYs } from '../support/osmdHarness.js';
 
 const RHYTHMS = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
@@ -178,10 +178,21 @@ describe('played notes drawn over a real engraving', () => {
   it('dims the notes of a step once it is passed, and only those', () => {
     renderer.fadePassed(0);
 
-    const dimmed = container.querySelectorAll('.note--passed');
-    expect(dimmed.length).toBeGreaterThan(0);
-    // Step 0 of the fixture is C4 over C3: one note on each stave.
-    expect(dimmed).toHaveLength(2);
+    const dimmed = [...container.querySelectorAll('.note--passed')];
+    // Step 0 of the fixture is C4 over C3: one note on each stave, plus the
+    // furniture the engraver drew for them - a stem, a ledger line for middle
+    // C - which belongs to those notes and has to leave with them.
+    const noteGroups = dimmed.filter((element) =>
+      element.classList.contains('vf-stavenote'),
+    );
+    expect(noteGroups).toHaveLength(2);
+    for (const element of dimmed) {
+      expect(
+        ['vf-stavenote', 'vf-stem', 'vf-ledgers', 'vf-beam'].some((kind) =>
+          element.classList.contains(kind),
+        ),
+      ).toBe(true);
+    }
   });
 
   it('keeps the dimming through a re-engraving', () => {
@@ -200,6 +211,68 @@ describe('played notes drawn over a real engraving', () => {
     renderer.clearFaded();
 
     expect(container.querySelectorAll('.note--passed')).toHaveLength(0);
+  });
+
+  describe('the beams over a fading group', () => {
+    async function beamed(): Promise<HTMLElement> {
+      document.body.replaceChildren();
+      const own = createScoreContainer();
+      const engraver = new OsmdScoreRenderer(own, { zoom: 1 });
+      await engraver.load(new MusicXmlSerializer().serialize(beamedSixteenths()));
+      renderer = engraver;
+      return own;
+    }
+
+    function beamsDimmed(scope: HTMLElement): number {
+      return scope.querySelectorAll('g.vf-beam.note--passed').length;
+    }
+
+    it('keeps a beam while it still joins a note that is showing', async () => {
+      const scope = await beamed();
+
+      renderer.fadePassed(0);
+      renderer.fadePassed(1);
+      renderer.fadePassed(2);
+
+      // Three of the four sixteenths are gone; the beam still joins the
+      // fourth, and a beam that left with the note it starts on would strand
+      // the notes it is still holding together.
+      expect(beamsDimmed(scope)).toBe(0);
+    });
+
+    it('takes the beams once the whole group has gone', async () => {
+      const scope = await beamed();
+
+      for (const step of [0, 1, 2, 3]) {
+        renderer.fadePassed(step);
+      }
+
+      // Two beams for sixteenths: the eighth beam and the sixteenth beam.
+      expect(beamsDimmed(scope)).toBe(2);
+      // The second group is untouched, so its notes keep theirs.
+      expect(scope.querySelectorAll('g.vf-beam')).toHaveLength(4);
+    });
+
+    it('leaves nothing of a note behind when it goes', async () => {
+      const scope = await beamed();
+
+      renderer.fadePassed(0);
+
+      // The stem stood on alone before, which reads as a sixteenth that lost
+      // its flag rather than as a page emptying.
+      expect(scope.querySelectorAll('g.vf-stem.note--passed')).toHaveLength(1);
+    });
+
+    it('brings the beams back with everything else', async () => {
+      const scope = await beamed();
+      for (const step of [0, 1, 2, 3]) {
+        renderer.fadePassed(step);
+      }
+
+      renderer.clearFaded();
+
+      expect(scope.querySelectorAll('.note--passed')).toHaveLength(0);
+    });
   });
 
   it('draws nothing for a step that was never engraved', () => {

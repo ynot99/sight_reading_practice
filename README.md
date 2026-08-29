@@ -207,6 +207,13 @@ demands nothing. Moved forward, it stops being tidying: at *as I reach them*
 the note under your fingers is already gone, so it can only be played if it
 was read a step earlier, and one step further makes that two.
 
+A note leaves with everything the engraver drew for it — its stem, its ledger
+lines, and the beams joining it to its neighbours. Beams are the awkward part,
+because a beam belongs to a *group* rather than to one note: it goes when the
+last note under it goes, since a beam that left with the note it starts on
+would strand the ones it is still holding together. VexFlow's own ids are what
+link them (`vf-auto1003`, `vf-auto1003-stem`, `vf-auto1003-beam0`).
+
 That is one control rather than two, because dimming what is behind and
 hiding what is under the hands are the same act at different distances — only
 the distance decides whether the page is being decluttered or the reader is

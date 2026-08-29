@@ -334,8 +334,94 @@ export class OsmdScoreRenderer
 
     this.stepX = stepX;
     this.samples = samples;
+    this.attachNoteFurniture();
     this.navigator.reset();
     this.navigator.moveTo(restoreTo);
+  }
+
+  /**
+   * Gives each step the stems, ledger lines and beams that belong to it.
+   *
+   * The cursor hands back a notehead's own group and nothing else, so fading
+   * a step left its stem standing and its beam floating over the gap - which
+   * reads as sixteenths that lost their flags rather than as a page emptying.
+   *
+   * VexFlow's ids are the link: a note drawn as `vf-auto1003` owns
+   * `vf-auto1003-stem` and `vf-auto1003ledgers`, and any beam beginning at it
+   * is `vf-auto1003-beam0`.
+   */
+  private attachNoteFurniture(): void {
+    const svg = this.container.querySelector('svg');
+    if (svg === null) {
+      return;
+    }
+
+    const stepOfNote = new Map<string, number>();
+    for (const [stepIndex, elements] of this.stepElements) {
+      for (const element of elements) {
+        if (element.id !== '') {
+          stepOfNote.set(element.id, stepIndex);
+        }
+      }
+    }
+
+    const add = (stepIndex: number, element: SVGGElement | null): void => {
+      if (element === null) {
+        return;
+      }
+      const bucket = this.stepElements.get(stepIndex) ?? [];
+      bucket.push(element);
+      this.stepElements.set(stepIndex, bucket);
+    };
+
+    for (const [id, stepIndex] of stepOfNote) {
+      add(stepIndex, svg.querySelector<SVGGElement>(`g.vf-stem[id="${id}-stem"]`));
+      add(stepIndex, svg.querySelector<SVGGElement>(`g.vf-ledgers[id="${id}ledgers"]`));
+    }
+
+    for (const beam of svg.querySelectorAll<SVGGElement>('g.vf-beam')) {
+      const owner = beam.id.replace(/-beam\d+$/, '');
+      const lastStep = this.lastStepOfBeam(owner, stepOfNote);
+      if (lastStep !== null) {
+        // The *last* note of the group, not its first: a beam that left with
+        // the note it starts on would strand the notes it still joins.
+        add(lastStep, beam);
+      }
+    }
+  }
+
+  /**
+   * The step the last note under a beam belongs to.
+   *
+   * The group runs from its owning note up to the next note that owns a beam,
+   * or to the end of that measure. A group followed by unbeamed notes reaches
+   * one note too far and the beam fades a moment late, which is the safe
+   * direction to be wrong in: a note keeping its beam still reads correctly,
+   * while a beam without notes does not.
+   */
+  private lastStepOfBeam(owner: string, stepOfNote: ReadonlyMap<string, number>): number | null {
+    const start = this.container.querySelector(`g.vf-stavenote[id="${owner}"]`);
+    const measure = start?.parentElement ?? null;
+    if (start === null || measure === null) {
+      return null;
+    }
+    const notes = [...measure.querySelectorAll('g.vf-stavenote')];
+    const owners = new Set(
+      [...measure.querySelectorAll('g.vf-beam')].map((beam) => beam.id.replace(/-beam\d+$/, '')),
+    );
+
+    let last: number | null = null;
+    for (let at = notes.indexOf(start); at < notes.length; at += 1) {
+      const note = notes[at];
+      if (note === undefined || (at > notes.indexOf(start) && owners.has(note.id))) {
+        break;
+      }
+      const step = stepOfNote.get(note.id);
+      if (step !== undefined) {
+        last = last === null ? step : Math.max(last, step);
+      }
+    }
+    return last;
   }
 
   private readStep(

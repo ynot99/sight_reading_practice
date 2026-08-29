@@ -109,6 +109,53 @@ export function arpeggiatedExercise(overrides: ExerciseOverrides = {}): Exercise
   };
 }
 
+/**
+ * Two beamed groups of sixteenths, treble only.
+ *
+ *   C4 D4 E4 F4 | G4 A4 B4 C5   - four to a beam, two beams to a group
+ *
+ * Beams belong to a *group* of notes rather than to one, so this is what a
+ * page-emptying feature has to be measured against: fade the notes and the
+ * beams are what is left floating over the gap.
+ */
+export function beamedSixteenths(overrides: ExerciseOverrides = {}): Exercise {
+  const beamed = (name: string, at: 'begin' | 'continue' | 'end'): MusicalEntry =>
+    noteEntry(p(name), Duration.SIXTEENTH, [], [
+      { level: 1, type: at },
+      { level: 2, type: at },
+    ]);
+  return {
+    id: overrides.id ?? 'fixture-beamed-sixteenths',
+    title: overrides.title ?? 'Beamed sixteenths',
+    key: overrides.key ?? KeySignature.major(0),
+    keyChanges: [],
+    pedalMarks: [],
+    timeSignature: overrides.timeSignature ?? new TimeSignature(2, 4),
+    tempoBpm: overrides.tempoBpm ?? 60,
+    metadata: { generatorId: 'fixture', seed: 1 },
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        clefChanges: [],
+        measures: [
+          bar(
+            beamed('C4', 'begin'),
+            beamed('D4', 'continue'),
+            beamed('E4', 'continue'),
+            beamed('F4', 'end'),
+            beamed('G4', 'begin'),
+            beamed('A4', 'continue'),
+            beamed('B4', 'continue'),
+            beamed('C5', 'end'),
+          ),
+        ],
+      },
+    ],
+  };
+}
+
 /** One bar of 4/4, treble only, four quarter notes: the simplest useful case. */
 export function singleBarExercise(overrides: ExerciseOverrides = {}): Exercise {
   return {

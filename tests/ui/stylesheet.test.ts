@@ -152,6 +152,23 @@ describe('the stylesheet', () => {
     expect(bare.map((rule) => rule.selector)).toEqual([]);
   });
 
+  it('keeps the two pills off each other where the bar is narrow', () => {
+    // Both are taken out of the row's flow, and on a phone both move above
+    // the bar. Sent to the same corner they are one pill drawn over the
+    // other: the two things fullscreen has to say, and neither readable.
+    const narrow = rules().filter((rule) => /bottom\s*:\s*100%/.test(rule.body));
+    const corners = new Map(
+      narrow.map((rule) => [
+        rule.selector,
+        /left\s*:\s*0/.test(rule.body) ? 'left' : 'right',
+      ]),
+    );
+
+    expect(corners.get('.focus-record')).toBeDefined();
+    expect(corners.get('.focus-notice')).toBeDefined();
+    expect(corners.get('.focus-record')).not.toBe(corners.get('.focus-notice'));
+  });
+
   it('asks the viewport to reach under the safe areas', () => {
     // The stylesheet already offsets by `env(safe-area-inset-*)`, and without
     // `viewport-fit=cover` those resolve to zero - so the transport pill sits

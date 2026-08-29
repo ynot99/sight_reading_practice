@@ -763,10 +763,17 @@ select {
   color: var(--accent);
 }
 
+/*
+ * Above the bar on a narrow screen, and on the left of it.
+ *
+ * The notice goes above the bar too, on the right. Both were put in the same
+ * corner at first, which is one pill drawn over the other: the two things
+ * fullscreen has to say, and neither readable.
+ */
 @media (max-width: 560px) {
   .focus-record {
-    left: auto;
-    right: 0;
+    left: 0;
+    right: auto;
     top: auto;
     bottom: 100%;
     transform: none;

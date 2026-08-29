@@ -19,18 +19,50 @@ function rig(startAtMs = 0) {
 }
 
 describe('playing a take back', () => {
-  it('schedules every note where it belongs rather than when it is asked for', () => {
+  it('places each note at its own moment, not at the moment it is handed over', () => {
     // The instrument already takes a time, because a melody placed on
-    // delivery rather than on schedule is audibly uneven. A player built on
-    // repeated wake-ups would have inherited that unevenness.
-    const { instrument, player } = rig(5_000);
+    // delivery rather than on schedule is audibly uneven.
+    const { clock, instrument, player } = rig(5_000);
 
     player.play('take-1', TAKE);
+    // Only what is nearly due: the rest is not the instrument's business yet.
+    expect(instrument.played.map((note) => [note.midi, note.atMs])).toEqual([[60, 5_000]]);
+
+    clock.advance(900);
+    player.pump();
 
     expect(instrument.played.map((note) => [note.midi, note.atMs])).toEqual([
       [60, 5_000],
       [64, 6_000],
     ]);
+  });
+
+  it('hands over only what is nearly due, so stopping can take it back', () => {
+    // Handing the whole take over at once was the first attempt and it was
+    // wrong twice: the instrument keeps one voice per pitch, so a repeated
+    // note released the earlier one before it had sounded, and stopping could
+    // only silence what was already sounding - everything scheduled beyond
+    // that played on with nothing left to stop it.
+    const { clock, instrument, player } = rig();
+    const long: MidiFileEvent[] = [];
+    for (let at = 0; at < 10; at += 1) {
+      long.push({ kind: 'noteOn', atMs: at * 1_000, midi: 60, velocity: 0.8 });
+      long.push({ kind: 'noteOff', atMs: at * 1_000 + 500, midi: 60 });
+    }
+
+    player.play('take-1', long);
+    expect(instrument.played).toHaveLength(1);
+
+    clock.advance(1_000);
+    player.pump();
+    expect(instrument.played).toHaveLength(2);
+
+    player.stop();
+    clock.advance(60_000);
+    player.pump();
+
+    // Nothing more was handed over after the stop.
+    expect(instrument.played).toHaveLength(2);
   });
 
   it('knows how far in it is, from the clock rather than from a counter', () => {
@@ -76,7 +108,7 @@ describe('playing a take back', () => {
 
     player.play('take-1', TAKE, 500);
 
-    expect(instrument.played.map((note) => note.midi)).toEqual([60, 64]);
+    expect(instrument.played.map((note) => note.midi)).toEqual([60]);
     // Struck at the seek, not half a second before it.
     expect(instrument.played[0]?.atMs).toBe(1_000);
   });

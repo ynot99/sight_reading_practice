@@ -818,6 +818,17 @@ select {
   overflow: hidden;
 }
 
+/*
+ * The one sheet that is raised from another, so it has to sit over it.
+ *
+ * Sharing a stacking level with the list it was opened from put the question
+ * behind the thing it was asking about - visible only as a page that had
+ * dimmed twice and stopped responding.
+ */
+.sheet--over {
+  z-index: 41;
+}
+
 .sheet__panel--narrow {
   width: min(380px, 100%);
 }

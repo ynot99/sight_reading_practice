@@ -49,6 +49,8 @@ class FakeNode {
 class FakeAudioContext {
   currentTime = 0;
   resumeCalls = 0;
+  /** Seconds between a sound being scheduled and leaving the device. */
+  outputLatency = 0;
   readonly destination = new FakeNode();
   readonly oscillators: FakeNode[] = [];
   readonly gains: FakeNode[] = [];
@@ -356,5 +358,72 @@ describe('WebAudioPitchPlayer', () => {
     player.stopAll();
 
     expect(context.oscillators.every((node) => node.stoppedAt !== null)).toBe(true);
+  });
+});
+
+describe('when the click is actually heard', () => {
+  it('stamps a tick with that moment, not with the moment it was queued', () => {
+    // What `MetronomeTick.scheduledTimeMs` has always promised, and what it
+    // never delivered: `currentTime` is the frame the context is processing,
+    // and a buffer's worth of audio still lies between it and the speaker.
+    //
+    // It matters because a reader plays to the click. Judged against a beat
+    // that had not been heard yet, playing perfectly in time reads as playing
+    // late - by exactly this much, on every note.
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const context = new FakeAudioContext();
+    context.outputLatency = 0.08;
+    const metronome = new WebAudioMetronome(contextFactory(context), {
+      schedulerIntervalMs: 20,
+      scheduleAheadSec: 0.12,
+    });
+    metronome.configure({
+      bpm: 60,
+      timeSignature: new TimeSignature(4, 4),
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      dropout: null,
+      muted: true,
+    });
+    const heard: MetronomeTick[] = [];
+    metronome.onTick((tick) => heard.push(tick));
+
+    metronome.start();
+    context.advance(0.1);
+    vi.advanceTimersByTime(120);
+
+    const [first] = heard;
+    expect(first).toBeDefined();
+    // Queued 60 ms in, heard 80 ms after that.
+    expect(first?.scheduledTimeMs).toBeCloseTo(60 + 80, 3);
+    vi.useRealTimers();
+  });
+
+  it('says nothing extra when the device reports no delay', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const context = new FakeAudioContext();
+    const metronome = new WebAudioMetronome(contextFactory(context), {
+      schedulerIntervalMs: 20,
+      scheduleAheadSec: 0.12,
+    });
+    metronome.configure({
+      bpm: 60,
+      timeSignature: new TimeSignature(4, 4),
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      dropout: null,
+      muted: true,
+    });
+    const heard: MetronomeTick[] = [];
+    metronome.onTick((tick) => heard.push(tick));
+
+    metronome.start();
+    context.advance(0.1);
+    vi.advanceTimersByTime(120);
+
+    expect(heard[0]?.scheduledTimeMs).toBeCloseTo(60, 3);
+    vi.useRealTimers();
   });
 });

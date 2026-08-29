@@ -53,6 +53,25 @@ const MIN_PRESSES_TO_MEASURE = 8;
  */
 const NOTICE_HOLD_MS = 6_000;
 
+/**
+ * The run's timing tendency, for the pill, or nothing worth saying.
+ *
+ * In fullscreen the report is not on the page, so a reader who feels they are
+ * being marked late has no number to point at - and a feeling is the one
+ * thing that cannot be acted on. Shown only when it is large enough to be a
+ * habit rather than noise, and only when the presses were steady enough for a
+ * single number to describe them.
+ */
+function timingTail(report: PerformanceReport): string {
+  const { deviations, meanDeviationMs, deviationSpreadMs } = report.timing;
+  if (deviations.length < MIN_PRESSES_TO_MEASURE || Math.abs(meanDeviationMs) < 15) {
+    return '';
+  }
+  const drift = Math.round(meanDeviationMs);
+  const steady = deviationSpreadMs <= Math.abs(meanDeviationMs);
+  return ` · ${drift > 0 ? '+' : ''}${drift} ms${steady ? '' : ' ±'}`;
+}
+
 /** How often the take slider is moved while something is sounding. */
 const TAKE_TICK_MS = 80;
 
@@ -2061,7 +2080,7 @@ export class AppView {
         this.lastPosition = '';
         // In fullscreen the result panel is hidden, so the notice carries
         // the verdict - beside the bar, where its width is nobody's business.
-        this.showNotice(`${score.grade} · ${percent(score.overall)}`);
+        this.showNotice(`${score.grade} · ${percent(score.overall)}${timingTail(report)}`);
         this.renderResult(score, report);
         // The run just measured what it measured; the delay control can say
         // so, and offer to settle itself from it.
@@ -2649,6 +2668,9 @@ export class AppView {
 
   private followTake(): void {
     const player = this.runtime.takePlayer;
+    // Hands over the next slice of the take before drawing where it has got
+    // to: the drawing can wait a frame, the sound cannot.
+    player.pump();
     if (player.finished) {
       player.pause();
     }

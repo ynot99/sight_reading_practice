@@ -9,26 +9,37 @@ export interface TakePlayerDependencies {
   readonly sustain?: ISustainPedal | null;
 }
 
+/** How far ahead of the moment notes are handed to the instrument. */
+const LOOK_AHEAD_MS = 250;
+
 /**
  * Plays a kept take back.
  *
- * Every note is handed to the instrument at once, scheduled for the moment it
- * is due. That is the whole reason there is no timer here: {@link IPitchPlayer}
- * already takes a time, because a melody placed on delivery rather than on
- * schedule is audibly uneven - and a player built on repeated wake-ups would
- * have inherited exactly that unevenness while also being untestable without
- * one.
+ * Notes are handed to the instrument a little ahead of when they are due, and
+ * no further. Handing over the whole take at once was the first attempt and
+ * it was wrong twice: the instrument keeps one voice per pitch, so a repeated
+ * note released the earlier one before it had sounded, and stopping could
+ * only silence what was already sounding - everything scheduled beyond that
+ * played on with nothing left to stop it. A quarter of a second of look-ahead
+ * is enough that no note is placed late and little enough that stopping is
+ * immediate.
  *
- * Where it is up to is therefore arithmetic on the clock rather than a
- * counter something has to keep, which means it cannot drift from what is
- * being heard.
+ * The pumping is the caller's, not a timer of this class's own: whoever is
+ * drawing the slider is already waking up, and a second clock here would be
+ * one more thing to keep in step with the first.
+ *
+ * Where it has got to is arithmetic on the clock rather than a counter
+ * something keeps, so it cannot drift from what is being heard.
  */
 export class TakePlayer {
   private readonly instrument: IPitchPlayer;
   private readonly clock: IClock;
   private readonly sustain: ISustainPedal | null;
 
-  private events: readonly MidiFileEvent[] = [];
+  private notes: readonly PairedNote[] = [];
+  private sustains: readonly MidiFileEvent[] = [];
+  /** How many notes have been handed to the instrument already. */
+  private handedOver = 0;
   private lengthMs = 0;
   private startedAtMs: number | null = null;
   private offsetMs = 0;
@@ -79,14 +90,35 @@ export class TakePlayer {
    */
   play(id: string, events: readonly MidiFileEvent[], fromMs = 0): void {
     this.stop();
-    this.events = events;
+    this.notes = pairUp(events);
+    this.sustains = events.filter((event) => event.kind === 'sustain');
     this.lengthMs = events.reduce((longest, event) => Math.max(longest, event.atMs), 0);
     this.playingId = id;
     this.offsetMs = Math.max(0, Math.min(this.lengthMs, fromMs));
     this.startedAtMs = this.clock.now();
+    this.handedOver = 0;
+    this.pump();
+  }
 
+  /**
+   * Hands over whatever is due within the look-ahead.
+   *
+   * Called by whoever is following the playback. Notes are kept in order, so
+   * this only ever walks forward from where it stopped last time.
+   */
+  pump(): void {
+    if (this.startedAtMs === null) {
+      return;
+    }
     const origin = this.startedAtMs - this.offsetMs;
-    for (const note of pairUp(events)) {
+    const until = this.positionMs + LOOK_AHEAD_MS;
+
+    while (this.handedOver < this.notes.length) {
+      const note = this.notes[this.handedOver];
+      if (note === undefined || note.startMs > until) {
+        break;
+      }
+      this.handedOver += 1;
       // Only what the seek has wholly passed. A note left unreleased at the
       // very end of a take has no length at all, and a plain "ends before
       // here" test would drop it rather than sound it.
@@ -101,10 +133,11 @@ export class TakePlayer {
       this.instrument.stop(note.midi, origin + note.endMs);
     }
 
-    for (const event of events) {
-      if (event.kind === 'sustain' && event.atMs >= this.offsetMs) {
-        this.sustain?.setSustain(event.value >= 0.5);
+    for (const event of this.sustains) {
+      if (event.kind !== 'sustain' || event.atMs < this.offsetMs || event.atMs > until) {
+        continue;
       }
+      this.sustain?.setSustain(event.value >= 0.5);
     }
   }
 
@@ -128,15 +161,22 @@ export class TakePlayer {
 
   /** Moves the position without deciding whether to go on playing. */
   seek(toMs: number): void {
-    const wasPlaying = this.startedAtMs !== null;
-    const id = this.playingId;
-    const events = this.events;
     const at = Math.max(0, Math.min(this.lengthMs, toMs));
-    if (wasPlaying && id !== null) {
-      this.play(id, events, at);
+    if (this.startedAtMs === null) {
+      this.offsetMs = at;
       return;
     }
+    // Everything already handed over is silenced and the walk restarts from
+    // the new place: a seek that left the old notes scheduled would play two
+    // parts of the take over each other.
+    this.silence();
     this.offsetMs = at;
+    this.startedAtMs = this.clock.now();
+    this.handedOver = this.notes.findIndex((note) => note.endMs > at);
+    if (this.handedOver < 0) {
+      this.handedOver = this.notes.length;
+    }
+    this.pump();
   }
 
   private silence(): void {

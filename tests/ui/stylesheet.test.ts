@@ -169,6 +169,20 @@ describe('the stylesheet', () => {
     expect(corners.get('.focus-record')).not.toBe(corners.get('.focus-notice'));
   });
 
+  it('puts the question above the thing it is asking about', () => {
+    // The confirm sheet is the only one raised from another. Sharing a
+    // stacking level with the list it was opened from put it behind that
+    // list: visible only as a page that had dimmed twice and stopped
+    // responding to anything.
+    const base = rules().find((rule) => rule.selector === '.sheet')?.body ?? '';
+    const over = rules().find((rule) => rule.selector === '.sheet--over')?.body ?? '';
+    const level = (body: string): number =>
+      Number(/z-index\s*:\s*(\d+)/.exec(body)?.[1] ?? '0');
+
+    expect(level(over)).toBeGreaterThan(level(base));
+    expect(HTML).toMatch(/id="sheet-confirm"[^>]*class="[^"]*sheet--over/);
+  });
+
   it('asks the viewport to reach under the safe areas', () => {
     // The stylesheet already offsets by `env(safe-area-inset-*)`, and without
     // `viewport-fit=cover` those resolve to zero - so the transport pill sits

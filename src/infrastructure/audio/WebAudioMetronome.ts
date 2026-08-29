@@ -143,7 +143,44 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   }
 
   private buildTick(index: number, audioTime: number): MetronomeTick {
-    return buildMetronomeTick(index, this.config, this.audioEpochMs + audioTime * 1000);
+    return buildMetronomeTick(
+      index,
+      this.config,
+      this.audioEpochMs + audioTime * 1000 + this.outputLatencyMs(),
+    );
+  }
+
+  /**
+   * How long after being scheduled a sound actually leaves the device.
+   *
+   * `currentTime` is the frame the context is *processing*, not the one
+   * anybody has heard: a buffer's worth of audio, and on a tablet several,
+   * still lie between it and the speaker. Without this the tick claimed to be
+   * the moment the click was heard while being the moment it was queued -
+   * which is what `MetronomeTick.scheduledTimeMs` has always promised and
+   * this has never delivered.
+   *
+   * It matters because a reader plays to the click. Every press was then
+   * judged against a beat that had not been heard yet, so playing perfectly
+   * in time read as playing late, by exactly this much, on every note. The
+   * browser knows the number; it was simply never asked.
+   *
+   * Read at each tick rather than once: plugging in headphones or waking a
+   * Bluetooth speaker changes it mid-run.
+   */
+  private outputLatencyMs(): number {
+    const context = this.context as (AudioContext & {
+      outputLatency?: number;
+      baseLatency?: number;
+    }) | null;
+    if (context === null) {
+      return 0;
+    }
+    // `outputLatency` is the whole path and the right answer; `baseLatency`
+    // is only the graph's own buffering, and stands in where the first is not
+    // implemented. Neither is guaranteed, hence the floor at zero.
+    const seconds = context.outputLatency ?? context.baseLatency ?? 0;
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
   }
 
   private playClick(context: AudioContext, tick: MetronomeTick, at: number): void {

@@ -1,4 +1,4 @@
-import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
+import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES } from '../model/Duration.js';
 import { DomainError } from '../../shared/errors.js';
 import type { Exercise, MusicalEntry, PedalMark, StaffPart } from '../model/Exercise.js';
 import { measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
@@ -19,21 +19,23 @@ export interface MidiImportOptions {
    * could.
    */
   readonly splitAtMidi?: number;
-  /**
-   * Finest grid onsets are pulled onto, in divisions.
-   *
-   * A twenty-fourth of a quarter, which divides both the ordinary values and
-   * the triplet ones - a grid of thirty-seconds alone would quietly destroy
-   * every triplet in the piece by rounding it to something notatable and
-   * wrong.
-   */
-  readonly gridTicks?: number;
 }
 
 const DEFAULT_SPLIT_MIDI = 60;
-const DEFAULT_GRID_TICKS = 20;
 const RIGHT_HAND = 1;
 const LEFT_HAND = 2;
+
+/**
+ * The finest ordinary value, in divisions: a sixteenth.
+ *
+ * Everything a plain-valued bar is made of is a whole number of these, and
+ * nothing shorter can be written at all - so this is where the grid has to
+ * stop whatever the file was played at.
+ */
+const PLAIN_GRID = 120;
+
+/** How a beat is divided: into halves, or into thirds. */
+type BeatGrid = 'plain' | 'triplet';
 
 /** A chord: everything struck at one instant on one staff, and how long for. */
 interface Segment {
@@ -42,8 +44,82 @@ interface Segment {
   readonly midis: readonly number[];
 }
 
-function quantise(ticks: number, grid: number): number {
+function snap(ticks: number, grid: number): number {
   return Math.round(ticks / grid) * grid;
+}
+
+/**
+ * The finest triplet division of a beat, in divisions.
+ *
+ * The *finest*, not a third: a beat played in sixes is as much a triplet beat
+ * as one played in threes, and measuring it against thirds alone made it look
+ * no better than the ordinary grid - so a beat of six lost the tie and was
+ * written as sixteenths, which is a different piece of music.
+ */
+function tripletGridFor(ticksPerBeat: number): number | null {
+  const units = NOTE_TYPES.map((type) => Duration.triplet(type).ticks)
+    .filter((ticks) => ticks > 0 && ticksPerBeat % ticks === 0)
+    .sort((left, right) => left - right);
+  return units[0] ?? null;
+}
+
+/** Every triplet value that can sit inside one beat, longest first. */
+function tripletVocabulary(ticksPerBeat: number): Duration[] {
+  return NOTE_TYPES.map((type) => Duration.triplet(type))
+    .filter((value) => value.ticks <= ticksPerBeat)
+    .sort((left, right) => right.ticks - left.ticks);
+}
+
+/**
+ * Which grid each beat of the piece was played on.
+ *
+ * A performance lands near a grid rather than on one, and *which* grid is the
+ * question a notation program answers before any other: three notes in a beat
+ * are a triplet, four are sixteenths, and the difference is not recoverable
+ * afterwards. Asked beat by beat because a piece changes its mind - a bar of
+ * triplets sits happily beside a bar of sixteenths, and one answer for the
+ * whole piece would wreck whichever half it got wrong.
+ *
+ * The measure is total distance: whichever grid the beat's own attacks sit
+ * closer to is the one it was written on. A beat with nothing in it is plain,
+ * because nothing is asking otherwise.
+ */
+function gridsByBeat(
+  ticks: readonly number[],
+  ticksPerBeat: number,
+  beats: number,
+): BeatGrid[] {
+  const triplet = tripletGridFor(ticksPerBeat);
+  const byBeat = new Map<number, number[]>();
+  for (const tick of ticks) {
+    const beat = Math.floor(tick / ticksPerBeat);
+    const bucket = byBeat.get(beat) ?? [];
+    bucket.push(tick - beat * ticksPerBeat);
+    byBeat.set(beat, bucket);
+  }
+
+  return Array.from({ length: beats }, (_, beat) => {
+    const offsets = byBeat.get(beat) ?? [];
+    if (triplet === null || offsets.length === 0) {
+      return 'plain' as BeatGrid;
+    }
+    const cost = (grid: number): number =>
+      offsets.reduce((total, offset) => total + Math.abs(offset - snap(offset, grid)), 0);
+    return cost(triplet) < cost(PLAIN_GRID) ? 'triplet' : 'plain';
+  });
+}
+
+/** Pulls one tick onto the grid the beat it falls in was written on. */
+function snapToBeat(
+  tick: number,
+  grids: readonly BeatGrid[],
+  ticksPerBeat: number,
+  tripletTicks: number,
+): number {
+  const beat = Math.min(grids.length - 1, Math.max(0, Math.floor(tick / ticksPerBeat)));
+  const grid = grids[beat] === 'triplet' ? tripletTicks : PLAIN_GRID;
+  const within = snap(tick - beat * ticksPerBeat, grid);
+  return beat * ticksPerBeat + within;
 }
 
 /**
@@ -146,76 +222,114 @@ function segmentsFor(notes: readonly MidiFileNote[]): Segment[] {
 }
 
 /**
- * Cuts a span at bar lines and at values that can actually be written.
+ * The values one span of a beat is written as.
  *
- * Both cuts make ties: a note held over a bar line is one press, and so is a
- * five-eighth span that no single notehead can say. What comes back is
- * already grouped by measure, because where the bar lines fall is the whole
- * reason some of the cuts exist.
+ * A triplet beat is filled from the triplet vocabulary and a plain one from
+ * the ordinary values. They may not be mixed inside a beat: a tuplet group is
+ * *inferred* from the run of tuplet values that adds up to a plain one, so a
+ * lone triplet eighth beside a sixteenth is a group that never closes and a
+ * bar the engraver cannot draw.
  */
-function tileSegment(
-  segment: Segment,
-  ticksPerMeasure: number,
-  preferFlats: boolean,
-): { readonly measureIndex: number; readonly entry: MusicalEntry }[] {
-  const pitches = segment.midis.map((midi) => Pitch.fromMidi(midi, preferFlats));
-  const out: { measureIndex: number; entry: MusicalEntry }[] = [];
-  let at = segment.startTicks;
-
-  while (at < segment.endTicks) {
-    const measureIndex = Math.floor(at / ticksPerMeasure);
-    const measureEnd = (measureIndex + 1) * ticksPerMeasure;
-    const until = Math.min(segment.endTicks, measureEnd);
-    for (const value of splitIntoRests(until - at)) {
-      const last = at + value.ticks >= segment.endTicks;
-      out.push({
-        measureIndex,
-        entry: noteEntry(pitches, value, last ? [] : segment.midis),
-      });
-      at += value.ticks;
-    }
+function valuesFor(lengthTicks: number, grid: BeatGrid, ticksPerBeat: number): Duration[] {
+  if (grid !== 'triplet') {
+    return splitIntoRests(lengthTicks);
   }
-  return out;
+  const values: Duration[] = [];
+  let remaining = lengthTicks;
+  const vocabulary = tripletVocabulary(ticksPerBeat);
+
+  while (remaining > 0) {
+    const found = vocabulary.find((value) => value.ticks <= remaining);
+    if (found === undefined) {
+      throw new DomainError(`${remaining} divisions do not fit this beat's triplet.`);
+    }
+    values.push(found);
+    remaining -= found.ticks;
+  }
+  return values;
 }
 
-/** Rests filling a silence, cut at bar lines the same way. */
-function tileSilence(
-  fromTicks: number,
-  toTicks: number,
-  ticksPerMeasure: number,
-): { readonly measureIndex: number; readonly entry: MusicalEntry }[] {
-  const out: { measureIndex: number; entry: MusicalEntry }[] = [];
-  let at = fromTicks;
-  while (at < toTicks) {
-    const measureIndex = Math.floor(at / ticksPerMeasure);
-    const measureEnd = (measureIndex + 1) * ticksPerMeasure;
-    const until = Math.min(toTicks, measureEnd);
-    for (const value of splitIntoRests(until - at)) {
-      out.push({ measureIndex, entry: restEntry(value) });
+/**
+ * Cuts a span at bar lines, at beats written as triplets, and at values that
+ * can actually be written.
+ *
+ * Every cut makes a tie: a note held over a bar line is one press, and so is
+ * a five-eighth span that no single notehead can say. Triplet beats are cut
+ * at their edges as well, so that whatever fills one adds up to the whole
+ * beat and the group the engraver infers is complete.
+ */
+function tileSpan(
+  startTicks: number,
+  endTicks: number,
+  layout: Layout,
+  emit: (measureIndex: number, value: Duration, last: boolean) => void,
+): void {
+  let at = startTicks;
+  while (at < endTicks) {
+    const measureIndex = Math.floor(at / layout.ticksPerMeasure);
+    const beat = Math.floor(at / layout.ticksPerBeat);
+    const grid = layout.grids[beat] ?? 'plain';
+    const measureEnd = (measureIndex + 1) * layout.ticksPerMeasure;
+    let until = Math.min(endTicks, measureEnd);
+    if (grid === 'triplet') {
+      until = Math.min(until, (beat + 1) * layout.ticksPerBeat);
+    } else {
+      // A plain span runs on past its own beat - cutting a half note into
+      // four tied quarters would be correct and unreadable - but it stops
+      // dead at the first beat written as triplets. Running into one was the
+      // bug: a span of four triplet eighths that began on a plain beat was
+      // handed to the plain values, which get within forty divisions of it
+      // and can go no further.
+      for (let next = beat + 1; next * layout.ticksPerBeat < until; next += 1) {
+        if ((layout.grids[next] ?? 'plain') === 'triplet') {
+          until = next * layout.ticksPerBeat;
+          break;
+        }
+      }
+    }
+    for (const value of valuesFor(until - at, grid, layout.ticksPerBeat)) {
       at += value.ticks;
+      emit(measureIndex, value, at >= endTicks);
     }
   }
-  return out;
+}
+
+interface Layout {
+  readonly ticksPerMeasure: number;
+  readonly ticksPerBeat: number;
+  readonly grids: readonly BeatGrid[];
 }
 
 function buildStaff(
   segments: readonly Segment[],
   bars: number,
-  ticksPerMeasure: number,
+  layout: Layout,
   staffNumber: number,
   voice: number,
   preferFlats: boolean,
 ): StaffPart {
   const placed: { measureIndex: number; entry: MusicalEntry }[] = [];
+  const silence = (from: number, to: number): void => {
+    tileSpan(from, to, layout, (measureIndex, value) => {
+      placed.push({ measureIndex, entry: restEntry(value) });
+    });
+  };
+
   let at = 0;
   for (const segment of segments) {
     if (segment.startTicks > at) {
-      placed.push(...tileSilence(at, segment.startTicks, ticksPerMeasure));
+      silence(at, segment.startTicks);
     }
-    placed.push(...tileSegment(segment, ticksPerMeasure, preferFlats));
+    const pitches = segment.midis.map((midi) => Pitch.fromMidi(midi, preferFlats));
+    tileSpan(segment.startTicks, segment.endTicks, layout, (measureIndex, value, last) => {
+      placed.push({
+        measureIndex,
+        entry: noteEntry(pitches, value, last ? [] : segment.midis),
+      });
+    });
     at = segment.endTicks;
   }
-  placed.push(...tileSilence(at, bars * ticksPerMeasure, ticksPerMeasure));
+  silence(at, bars * layout.ticksPerMeasure);
 
   const measures = Array.from({ length: bars }, (_, index) =>
     measureOf(placed.filter((each) => each.measureIndex === index).map((each) => each.entry)),
@@ -246,17 +360,28 @@ export function midiToExercise(
   title: string,
   options: MidiImportOptions = {},
 ): ImportedScore {
-  const grid = options.gridTicks ?? DEFAULT_GRID_TICKS;
   const splitAtMidi = options.splitAtMidi ?? DEFAULT_SPLIT_MIDI;
   const warnings: ImportWarning[] = [];
   const scale = DIVISIONS_PER_QUARTER / document.division;
+  const signature = new TimeSignature(document.beats, document.beatType);
+  const ticksPerBeat = signature.ticksPerBeat;
+  const triplet = tripletGridFor(ticksPerBeat);
+
+  // Which grid each beat was played on has to be settled before anything is
+  // pulled onto one: three notes in a beat are a triplet and four are
+  // sixteenths, and once a note has been moved the difference is gone.
+  const rough = document.notes.flatMap((note) => [note.startTicks * scale, note.endTicks * scale]);
+  const roughLast = rough.length === 0 ? 0 : Math.max(...rough);
+  const grids = gridsByBeat(rough, ticksPerBeat, Math.ceil(roughLast / ticksPerBeat) + 1);
+  const pull = (ticks: number): number =>
+    snapToBeat(ticks, grids, ticksPerBeat, triplet ?? PLAIN_GRID);
 
   let moved = 0;
   let dropped = 0;
   const notes: MidiFileNote[] = [];
   for (const note of document.notes) {
-    const startTicks = quantise(note.startTicks * scale, grid);
-    const endTicks = quantise(note.endTicks * scale, grid);
+    const startTicks = pull(note.startTicks * scale);
+    const endTicks = pull(note.endTicks * scale);
     if (endTicks <= startTicks) {
       dropped += 1;
       continue;
@@ -271,7 +396,7 @@ export function midiToExercise(
     throw new DomainError('Every note in this file was too short to write down.');
   }
 
-  const timeSignature = new TimeSignature(document.beats, document.beatType);
+  const timeSignature = signature;
   const ticksPerMeasure = timeSignature.ticksPerMeasure;
   const lastTick = Math.max(...notes.map((note) => note.endTicks));
   const bars = Math.max(1, Math.ceil(lastTick / ticksPerMeasure));
@@ -305,13 +430,22 @@ export function midiToExercise(
       'A MIDI file records key presses, not lines of music, so each staff is written as one voice: a note held under a moving line ends where the line moves.',
   });
 
+  const layout: Layout = { ticksPerMeasure, ticksPerBeat, grids };
   const staves = [
-    buildStaff(segmentsFor(right), bars, ticksPerMeasure, RIGHT_HAND, 1, preferFlats),
-    buildStaff(segmentsFor(left), bars, ticksPerMeasure, LEFT_HAND, 2, preferFlats),
+    buildStaff(segmentsFor(right), bars, layout, RIGHT_HAND, 1, preferFlats),
+    buildStaff(segmentsFor(left), bars, layout, LEFT_HAND, 2, preferFlats),
   ];
 
+  const tripletBeats = grids.filter((each) => each === 'triplet').length;
+  if (tripletBeats > 0) {
+    warnings.push({
+      kind: 'quantised',
+      detail: `${tripletBeats} beat${tripletBeats === 1 ? ' was' : 's were'} written as triplets.`,
+    });
+  }
+
   const pedalMarks: PedalMark[] = document.pedal.map((mark) => {
-    const ticks = quantise(mark.atTicks * scale, grid);
+    const ticks = pull(mark.atTicks * scale);
     return {
       measureIndex: Math.min(bars - 1, Math.floor(ticks / ticksPerMeasure)),
       offsetTicks: ticks % ticksPerMeasure,

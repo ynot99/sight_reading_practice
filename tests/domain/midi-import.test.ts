@@ -226,6 +226,90 @@ describe('turning a MIDI file into a page', () => {
   });
 });
 
+describe('a beat played in threes', () => {
+  /** A delta time, as MIDI writes one: seven bits a byte, high bit for more. */
+  function delta(ticks: number): number[] {
+    if (ticks < 128) {
+      return [ticks];
+    }
+    const out: number[] = [ticks & 0x7f];
+    let left = ticks >> 7;
+    while (left > 0) {
+      out.unshift((left & 0x7f) | 0x80);
+      left >>= 7;
+    }
+    return out;
+  }
+
+  /** One note, from `atTicks` for `lengthTicks`, at 480 to the quarter. */
+  function note(midi: number, atTicks: number, lengthTicks: number, from: number): number[] {
+    return [
+      ...delta(atTicks - from), 0x90, midi, 0x40,
+      ...delta(lengthTicks), 0x80, midi, 0x40,
+    ];
+  }
+
+  it('writes it as triplets rather than refusing the file', () => {
+    // A third of a beat is 160 divisions, and the ordinary values get within
+    // forty of it and can go no further - so the import used to fail outright
+    // with "40 divisions cannot be notated". Three notes in a beat are a
+    // triplet; that is a decision about the music, and it has to be made
+    // before anything is moved, because afterwards the difference is gone.
+    const track = [
+      ...note(60, 0, 160, 0),
+      ...note(62, 160, 160, 160),
+      ...note(64, 320, 160, 320),
+      ...note(65, 480, 480, 480),
+    ];
+    const { exercise, warnings } = midiToExercise(
+      readMidiFile(handWritten(track)),
+      'Threes',
+    );
+
+    expect(() => validateExercise(exercise)).not.toThrow();
+    expect(warnings.map((each) => each.detail).join(' ')).toContain('written as triplets');
+    const first = exercise.staves[0]?.measures[0]?.entries.slice(0, 3) ?? [];
+    expect(first.map((entry) => entry.duration.ticks)).toEqual([160, 160, 160]);
+    expect(first.every((entry) => entry.duration.isTuplet)).toBe(true);
+    // The plain beat after it is written plainly: the decision is per beat,
+    // because a piece puts a bar of triplets beside a bar of sixteenths.
+    expect(exercise.staves[0]?.measures[0]?.entries[3]?.duration.isTuplet).toBe(false);
+  });
+
+  it('cuts a note that runs from a plain beat into a triplet one', () => {
+    // The failure in the real file: a span of four thirds began on a plain
+    // beat, so it was handed whole to the ordinary values, which cannot say
+    // it. It has to stop at the beat that is written differently.
+    const track = [
+      ...note(60, 0, 640, 0),
+      ...note(62, 640, 160, 640),
+      ...note(64, 800, 160, 800),
+    ];
+    const { exercise } = midiToExercise(readMidiFile(handWritten(track)), 'Across');
+
+    expect(() => validateExercise(exercise)).not.toThrow();
+    const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
+    // A quarter, tied into a third of the next beat, then the rest of it.
+    expect(entries[0]?.duration.ticks).toBe(480);
+    expect(entries[0]?.kind === 'note' ? entries[0].tiedForward : []).toEqual([60]);
+    expect(entries[1]?.duration.ticks).toBe(160);
+  });
+
+  it('subdivides a triplet when the playing did', () => {
+    const track = [
+      ...note(60, 0, 80, 0),
+      ...note(62, 80, 80, 80),
+      ...note(64, 160, 320, 160),
+    ];
+    const { exercise } = midiToExercise(readMidiFile(handWritten(track)), 'Sixths');
+
+    expect(() => validateExercise(exercise)).not.toThrow();
+    expect(
+      (exercise.staves[0]?.measures[0]?.entries ?? []).slice(0, 3).map((e) => e.duration.ticks),
+    ).toEqual([80, 80, 320]);
+  });
+});
+
 describe('a file that separates the hands itself', () => {
   it('reads the tracks rather than remaking the decision from pitch', () => {
     // A left hand that climbs above middle C is ordinary, and splitting there

@@ -50,6 +50,17 @@ export interface PerformanceTiming {
   readonly meanDeviationMs: number;
   readonly meanAbsoluteDeviationMs: number;
   readonly maxAbsoluteDeviationMs: number;
+  /**
+   * How widely the presses were scattered about their own average.
+   *
+   * The mean says whether the reader runs early or late; this says whether
+   * they are *consistent*, and the two answer different questions. A steady
+   * hand ten milliseconds behind the beat is a habit to correct and shows as
+   * a large mean with a small spread. The same average reached by landing
+   * wildly either side is a precision problem - and if it appears only on the
+   * tablet, it is not the reader at all but the path the notes travelled.
+   */
+  readonly deviationSpreadMs: number;
 }
 
 /**
@@ -109,6 +120,11 @@ export function buildPerformanceReport(input: PerformanceReportInput): Performan
     .map((step) => step.deviationMs)
     .filter((deviation): deviation is number => deviation !== null);
   const absolute = deviations.map(Math.abs);
+  const centre = mean(deviations);
+  const spread =
+    deviations.length < 2
+      ? 0
+      : Math.sqrt(mean(deviations.map((value) => (value - centre) ** 2)));
 
   return {
     exerciseId: input.exerciseId,
@@ -121,9 +137,10 @@ export function buildPerformanceReport(input: PerformanceReportInput): Performan
     totals,
     timing: {
       deviations,
-      meanDeviationMs: mean(deviations),
+      meanDeviationMs: centre,
       meanAbsoluteDeviationMs: mean(absolute),
       maxAbsoluteDeviationMs: absolute.length === 0 ? 0 : Math.max(...absolute),
+      deviationSpreadMs: spread,
     },
   };
 }

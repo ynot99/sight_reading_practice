@@ -45,7 +45,7 @@ interface Rig {
   readonly pendingDelays: number[];
 }
 
-function createRig(url = 'ws://192.168.1.5:8080/midi'): Rig {
+function createRig(url = 'ws://192.168.1.5:8080/midi', timeOriginMs?: number): Rig {
   const clock = new ManualClock(1_000);
   const sockets: FakeSocket[] = [];
   const events: MidiEvent[] = [];
@@ -55,6 +55,7 @@ function createRig(url = 'ws://192.168.1.5:8080/midi'): Rig {
   const source = new WebSocketMidiSource({
     url,
     clock,
+    ...(timeOriginMs === undefined ? {} : { timeOriginMs }),
     socketFactory: (target) => {
       const socket = new FakeSocket(target);
       sockets.push(socket);
@@ -378,5 +379,51 @@ describe('WebSocketMidiSource', () => {
   it('exposes where it is pointing', () => {
     const rig = createRig('ws://10.0.0.2:8080/midi');
     expect(rig.source.endpoint).toBe('ws://10.0.0.2:8080/midi');
+  });
+});
+
+describe('when the bridge says a key was struck', () => {
+  const ORIGIN = 1_700_000_000_000;
+
+  function noteFrom(rig: Rig, payload: Record<string, unknown>): MidiEvent | undefined {
+    rig.source.connect();
+    rig.sockets[0]?.open();
+    rig.sockets[0]?.deliver({ v: 1, type: 'noteon', note: 60, velocity: 0.8, ...payload });
+    return rig.events.at(-1);
+  }
+
+  it('prefers the reading taken at the source', () => {
+    // The page's clock is monotonic from `timeOrigin`; the bridge's is the
+    // wall clock. That constant is exactly what joins them, and it does not
+    // drift the way repeated sampling would.
+    const rig = createRig(undefined, ORIGIN);
+
+    const event = noteFrom(rig, { at: ORIGIN + 1_250 });
+
+    expect(event?.timestampMs).toBe(1_250);
+  });
+
+  it('stamps on arrival when the bridge sent no reading', () => {
+    // An older bridge, and a tablet that insisted would simply stop working.
+    const rig = createRig(undefined, ORIGIN);
+
+    expect(noteFrom(rig, {})?.timestampMs).toBe(1_000);
+  });
+
+  it('refuses a reading no reader could have played', () => {
+    // A bridge whose clock is set to the wrong minute: using it would place
+    // every note far outside the run, which is worse than a slightly late
+    // stamp because it looks like an answer.
+    const rig = createRig(undefined, ORIGIN);
+
+    expect(noteFrom(rig, { at: ORIGIN + 600_000 })?.timestampMs).toBe(1_000);
+  });
+
+  it('keeps a disagreement small enough to be worth seeing', () => {
+    // The whole point is to show a few milliseconds of clock difference, not
+    // to hide it, so a small gap is passed through rather than clamped away.
+    const rig = createRig(undefined, ORIGIN);
+
+    expect(noteFrom(rig, { at: ORIGIN + 1_040 })?.timestampMs).toBe(1_040);
   });
 });

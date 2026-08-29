@@ -98,3 +98,28 @@ describe('the two ends of the wire agree', () => {
     }
   });
 });
+
+describe('stamping a press where it happened', () => {
+  it('carries the bridge’s own reading when it is given one', () => {
+    // Taken at the source, the LAN hop and the tablet's scheduling fall
+    // outside the measurement - and neither of those is steady, which is why
+    // a press exactly on the beat could read as late by a different amount
+    // each time.
+    expect(midiMessageToBridgeEvent([0x90, 60, 100], 1_700_000_000_000)).toMatchObject({
+      type: 'noteon',
+      at: 1_700_000_000_000,
+    });
+    expect(midiMessageToBridgeEvent([0x80, 60, 0], 1_700_000_000_001)).toMatchObject({
+      type: 'noteoff',
+      at: 1_700_000_000_001,
+    });
+  });
+
+  it('says nothing about when, rather than guessing', () => {
+    // An older bridge sends no reading, and the tablet has to be able to tell
+    // that apart from a reading of zero.
+    const event = midiMessageToBridgeEvent([0x90, 60, 100]);
+    expect(event).not.toBeNull();
+    expect(event === null ? true : 'at' in event).toBe(false);
+  });
+});

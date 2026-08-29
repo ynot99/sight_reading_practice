@@ -274,6 +274,13 @@ same question at different moments, and two controls would let a reader ask
 for marks that are hidden. What is drawn is identical either way — the timing
 offset is measured while the run still knows its tempo, not at the end.
 
+The report says **how scattered** the presses were as well as how late: "12 ms
+late · ± 9 ms" is a habit to correct, while "12 ms late · ± 40 ms" is a
+precision problem. The two are different faults and the average alone cannot
+tell them apart — and if the scatter appears only on the tablet, it is not the
+reader at all but the path the notes travelled. Which is why the bridge now
+stamps a press at the source: see `tools/midi-bridge/README.md`.
+
 The geometry is measured from notes the engraver has already drawn rather than
 assumed, so zoom, engraving rules, or a different engraver cannot silently
 slide the marks off their notes. A test renders a real score and checks the

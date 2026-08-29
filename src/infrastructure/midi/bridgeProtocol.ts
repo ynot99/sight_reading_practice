@@ -26,11 +26,19 @@ export interface BridgeNoteOnMessage {
   readonly note: number;
   /** Normalised to `0..1` by the bridge. */
   readonly velocity: number;
+  /**
+   * Wall clock at the bridge when the key was struck, if it was taken.
+   *
+   * Optional because an older bridge does not send it, and a tablet that
+   * insisted would stop working the moment the two were out of step.
+   */
+  readonly at?: number;
 }
 
 export interface BridgeNoteOffMessage {
   readonly type: 'noteoff';
   readonly note: number;
+  readonly at?: number;
 }
 
 export interface BridgePedalMessage {
@@ -61,6 +69,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function toMidiNote(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 127
+    ? value
+    : null;
+}
+
+/**
+ * A wall-clock reading from the bridge, or `null` for one not worth trusting.
+ *
+ * Only a plausible epoch time is taken. A bridge whose clock is unset reports
+ * something near zero, and using it would place every note decades before the
+ * run began - which is worse than having no stamp at all, since it looks like
+ * an answer.
+ */
+function toStamp(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 1_000_000_000_000
     ? value
     : null;
 }
@@ -103,15 +125,21 @@ export function parseBridgeMessage(raw: unknown): BridgeMessage | null {
         return null;
       }
       const velocity = parsed['velocity'];
+      const at = toStamp(parsed['at']);
       return {
         type: 'noteon',
         note,
         velocity: typeof velocity === 'number' && velocity >= 0 && velocity <= 1 ? velocity : 0.8,
+        ...(at === null ? {} : { at }),
       };
     }
     case 'noteoff': {
       const note = toMidiNote(parsed['note']);
-      return note === null ? null : { type: 'noteoff', note };
+      const at = toStamp(parsed['at']);
+      if (note === null) {
+        return null;
+      }
+      return at === null ? { type: 'noteoff', note } : { type: 'noteoff', note, at };
     }
     case 'pedal': {
       const value = parsed['value'];

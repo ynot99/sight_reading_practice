@@ -290,3 +290,37 @@ describe('ScoringStrategyRegistry', () => {
     expect(() => new ScoringStrategyRegistry().first()).toThrow(DomainError);
   });
 });
+
+describe('how scattered the presses were', () => {
+  function timingOf(deviations: readonly number[]) {
+    return reportOf(
+      deviations.map((deviationMs, index) => step({ index, status: 'correct', deviationMs })),
+    ).timing;
+  }
+
+  it('tells a steady habit apart from an unsteady hand', () => {
+    // Both average ten milliseconds late, and they are not the same fault: one
+    // is a habit to correct, the other is precision - or, if it only appears
+    // on the tablet, the path the notes travelled rather than the reader.
+    const steady = timingOf([10, 10, 10, 10]);
+    const scattered = timingOf([-40, 60, -30, 50]);
+
+    expect(steady.meanDeviationMs).toBeCloseTo(10, 6);
+    expect(steady.deviationSpreadMs).toBeCloseTo(0, 6);
+    expect(scattered.meanDeviationMs).toBeCloseTo(10, 6);
+    expect(scattered.deviationSpreadMs).toBeGreaterThan(40);
+  });
+
+  it('says nothing about the spread of a single press', () => {
+    // One reading has no scatter to report, and inventing a number would let
+    // the first note of a run look like a verdict on the reader.
+    expect(timingOf([25]).deviationSpreadMs).toBe(0);
+    expect(timingOf([]).deviationSpreadMs).toBe(0);
+  });
+
+  it('is measured about the average, not about the beat', () => {
+    // A hand that is consistently 100 ms behind is perfectly consistent; the
+    // lateness is the mean's business and belongs to a different question.
+    expect(timingOf([100, 100, 100]).deviationSpreadMs).toBeCloseTo(0, 6);
+  });
+});

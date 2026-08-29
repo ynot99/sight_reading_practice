@@ -186,7 +186,8 @@ function main() {
   // is of no interest here.
   input.ignoreTypes(true, true, true);
   input.on('message', (_deltaTime, message) => {
-    const event = midiMessageToBridgeEvent(message);
+    // Read first, before anything else can take a millisecond.
+    const event = midiMessageToBridgeEvent(message, Date.now());
     if (event !== null) {
       broadcast(event);
     }

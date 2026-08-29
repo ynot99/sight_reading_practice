@@ -2259,7 +2259,10 @@ export class AppView {
         'Timing',
         `${percent(score.timing)} · ${Math.round(report.timing.meanAbsoluteDeviationMs)} ms avg`,
       ],
-      ['Tendency', describeTendency(report.timing.meanDeviationMs)],
+      [
+        'Tendency',
+        `${describeTendency(report.timing.meanDeviationMs)} · ± ${Math.round(report.timing.deviationSpreadMs)} ms`,
+      ],
       ...historyRow(this.runtime.controller.passageHistory()),
       ...(this.lastLadderMove === null
         ? []

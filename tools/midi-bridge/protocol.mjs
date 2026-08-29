@@ -16,9 +16,10 @@ const SUSTAIN_CONTROLLER = 64;
  * so it is normalised here rather than being left to the client.
  *
  * @param {ArrayLike<number>} message
- * @returns {{type: 'noteon', note: number, velocity: number} | {type: 'noteoff', note: number} | {type: 'pedal', down: boolean, value: number} | {type: 'control', controller: number, value: number} | null}
+ * @param {number} [atMs] wall-clock reading taken as the packet arrived
+ * @returns {{type: 'noteon', note: number, velocity: number, at?: number} | {type: 'noteoff', note: number, at?: number} | {type: 'pedal', down: boolean, value: number} | {type: 'control', controller: number, value: number} | null}
  */
-export function midiMessageToBridgeEvent(message) {
+export function midiMessageToBridgeEvent(message, atMs) {
   if (message === null || message === undefined || message.length < 3) {
     return null;
   }
@@ -29,12 +30,21 @@ export function midiMessageToBridgeEvent(message) {
     return null;
   }
 
+  // Stamped here, at the source, when the caller supplies a reading.
+  //
+  // The browser used to stamp on arrival, which put the LAN hop and the
+  // tablet's own scheduling inside every measurement - and neither is
+  // constant, so a press that was on the beat could read as late by a
+  // different amount each time. Taken here, that jitter is gone and only the
+  // difference between the two machines' clocks is left, which is steady
+  // enough to be seen and subtracted.
+  const at = typeof atMs === 'number' ? { at: atMs } : {};
   const command = status & 0xf0;
   if (command === NOTE_ON && velocity > 0) {
-    return { type: 'noteon', note, velocity: velocity / 127 };
+    return { type: 'noteon', note, velocity: velocity / 127, ...at };
   }
   if (command === NOTE_OFF || (command === NOTE_ON && velocity === 0)) {
-    return { type: 'noteoff', note };
+    return { type: 'noteoff', note, ...at };
   }
   // The sustain pedal, which the trainer sounds but never judges.
   if (command === CONTROL_CHANGE && note === SUSTAIN_CONTROLLER) {

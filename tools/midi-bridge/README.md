@@ -78,8 +78,8 @@ One-way JSON frames over a WebSocket at `/midi`:
 ```json
 {"v":1,"type":"hello","device":"CASIO USB-MIDI"}
 {"v":1,"type":"device","device":null}
-{"v":1,"type":"noteon","note":60,"velocity":0.79}
-{"v":1,"type":"noteoff","note":60}
+{"v":1,"type":"noteon","note":60,"velocity":0.79,"at":1700000000000}
+{"v":1,"type":"noteoff","note":60,"at":1700000000001}
 {"v":1,"type":"pedal","down":true,"value":1}
 {"v":1,"type":"control","controller":7,"value":0.62}
 ```
@@ -89,6 +89,18 @@ the number it uses. The bridge decides nothing about what it means: which
 control is a volume knob differs per keyboard, and the tablet is where the
 reader teaches the app theirs — so it can only learn what reaches it.
 
-No timestamps are sent, deliberately: the two computers' clocks share no
-origin, so the browser stamps each note as it arrives and keeps every timing
-comparison on a single clock.
+Notes carry `at`: the bridge's own wall clock, read the instant the packet
+arrived. Everything else still carries none.
+
+That is a change of mind, and the reason is worth keeping. Stamping on arrival
+put the LAN hop and the tablet's own scheduling *inside* every measurement,
+and neither is steady - so a press exactly on the beat read as late by a
+different amount each time. Taken at the source, that jitter is outside the
+measurement and what remains is the difference between two clocks: steady,
+and therefore something a reader can see and a developer can subtract.
+
+It rests on both machines keeping time from the network, which is the default
+on both. The tablet converts with `performance.timeOrigin`, and falls back to
+stamping on arrival when there is no `at` or when the two clocks disagree by
+more than five seconds - a clock set to the wrong minute is not a better
+measurement than a slightly late one, it is an unusable app.

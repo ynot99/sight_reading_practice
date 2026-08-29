@@ -41,7 +41,24 @@ export interface WebSocketMidiOptions {
   readonly schedule?: Scheduler;
   /** Backoff steps; the last one repeats for as long as the bridge is away. */
   readonly reconnectDelaysMs?: readonly number[];
+  /**
+   * Wall-clock moment this page's monotonic clock started from.
+   *
+   * The bridge stamps a key press with its own `Date.now()`, and everything
+   * here is measured on `performance.now()`. This constant is exactly what
+   * joins the two, and it does not drift the way repeated sampling would.
+   */
+  readonly timeOriginMs?: number;
 }
+
+/**
+ * How far apart the two clocks may be before the bridge's stamp is dropped.
+ *
+ * Generous on purpose: the whole point is to *see* a disagreement of a few
+ * milliseconds rather than to hide it, so only a difference no reader could
+ * have played - a clock set to the wrong minute - is refused.
+ */
+const CLOCKS_DISAGREE_MS = 5_000;
 
 interface AdapterEvents {
   midi: MidiEvent;
@@ -77,6 +94,7 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
   private cancelRetry: CancelScheduled | null = null;
   private wantsConnection = false;
   private settle: ((status: MidiConnectionStatus) => void) | null = null;
+  private readonly timeOriginMs: number | null;
 
   constructor(options: WebSocketMidiOptions) {
     this.url = options.url;
@@ -87,6 +105,8 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
       options.reconnectDelaysMs === undefined || options.reconnectDelaysMs.length === 0
         ? DEFAULT_RECONNECT_DELAYS
         : options.reconnectDelaysMs;
+    this.timeOriginMs =
+      options.timeOriginMs ?? (typeof performance === 'undefined' ? null : performance.timeOrigin);
   }
 
   get status(): MidiConnectionStatus {
@@ -205,7 +225,7 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
           type: 'noteon',
           midi: message.note,
           velocity: message.velocity,
-          timestampMs: this.clock.now(),
+          timestampMs: this.stampFor(message.at),
           sourceId: 'bridge',
         });
         return;
@@ -213,7 +233,7 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
         this.emitter.emit('midi', {
           type: 'noteoff',
           midi: message.note,
-          timestampMs: this.clock.now(),
+          timestampMs: this.stampFor(message.at),
           sourceId: 'bridge',
         });
         return;
@@ -265,6 +285,30 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
     }
     this.currentStatus = status;
     this.emitter.emit('status', status);
+  }
+
+  /**
+   * When the key was struck, in this page's own time.
+   *
+   * The bridge's stamp is preferred because it was taken at the source: the
+   * LAN hop and the tablet's scheduling both land between the press and its
+   * arrival here, and neither is steady, so a press exactly on the beat could
+   * read as late by a different amount each time. Taken at the bridge, that
+   * jitter is gone and what remains is the difference between two clocks -
+   * steady, and therefore visible.
+   *
+   * It rests on both machines agreeing about the wall clock, which they do
+   * when both keep time from the network. When they plainly do not, arrival
+   * is used instead: a stamp minutes adrift is not a better measurement than
+   * a slightly late one, it is an unusable app.
+   */
+  private stampFor(bridgeAtMs: number | undefined): number {
+    const arrived = this.clock.now();
+    if (bridgeAtMs === undefined || this.timeOriginMs === null) {
+      return arrived;
+    }
+    const converted = bridgeAtMs - this.timeOriginMs;
+    return Math.abs(converted - arrived) > CLOCKS_DISAGREE_MS ? arrived : converted;
   }
 
   private setDevice(device: string | null): void {

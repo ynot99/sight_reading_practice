@@ -587,6 +587,17 @@ export class PracticeController {
     this.beginAt = 0;
   }
 
+  /**
+   * Puts the marker back on the first note, and the page with it.
+   *
+   * `reset` rather than `moveTo(0)`: moving to a position the navigator
+   * believes it is already at asks the engraver for nothing, so nothing is
+   * redrawn and the page does not follow.
+   */
+  cursorToStart(): void {
+    this.deps.cursor.reset();
+  }
+
   /** Which step the next run begins at; nought is the top of the piece. */
   get beginsAt(): number {
     return this.beginAt;
@@ -838,9 +849,16 @@ export class PracticeController {
     // shown whatever the reader set - and put back the way they had it when
     // the performance ends.
     this.deps.cursor.show();
+    const passage = this.passageSteps;
     player.start(timeline, {
       staffNumber: this.currentSettings.handStaff,
       clickWhen: this.currentSettings.clickWhen,
+      // Where the reader put their place, kept inside the passage they chose.
+      // Hearing the music is part of learning the passage, so a playback that
+      // always began at bar one made them listen through everything they were
+      // not working on.
+      fromIndex: Math.min(Math.max(this.beginAt, passage.from), passage.to),
+      toIndex: passage.to,
     });
   }
 

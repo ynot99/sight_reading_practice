@@ -483,6 +483,21 @@
               <path id="focus-play-icon" d="M8 5l11 7-11 7z" />
             </svg>
           </button>
+          <!--
+            Back to the top. The place can be put anywhere by holding a
+            finger on a bar, so there has to be a way back that does not mean
+            finding the first bar and holding a finger on that.
+          -->
+          <button id="focus-rewind" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Back to the beginning" aria-label="Back to the beginning">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M6 5h2v14H6z" />
+              <path d="M20 5v14l-9-7z" />
+              <path d="M13 5v14l-4-7z" />
+            </svg>
+          </button>
+
           <button id="focus-stop" type="button" class="focus-bar__button focus-bar__button--icon"
             title="Stop" aria-label="Stop" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

@@ -77,6 +77,23 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     expect(renderer.pages.count).toBe(0);
   });
 
+  it('opens in pages when that is how the reader left it', async () => {
+    // The setting is restored before anything is engraved, so there is
+    // nothing on the page to turn pages *on*. Asked for only at the moment
+    // the reader flips the switch, a visit that opens in pages got one
+    // endless column and had to be switched off and on again.
+    document.body.replaceChildren();
+    const fresh = createScoreContainer();
+    const opening = new OsmdScoreRenderer(fresh, { zoom: 1 });
+    opening.setPaged(true);
+    withLayout(fresh, 260);
+
+    await opening.load(new MusicXmlSerializer().serialize(longExercise({ bars: 16 })));
+
+    expect(sheets(fresh).length).toBeGreaterThan(1);
+    expect(opening.pages.count).toBe(sheets(fresh).length);
+  });
+
   it('has the engraver break the music into several pages', () => {
     renderer.setPaged(true);
 

@@ -1402,6 +1402,38 @@ describe('AppView', () => {
       expect(rig.runtime.controller.session?.currentStep?.measureIndex).toBe(2);
     });
 
+    it('takes the place back to the top from the transport bar', async () => {
+      // A place can be set anywhere by holding a finger on a bar, so the way
+      // back must not be "find bar one and hold a finger on that".
+      const rig = createRig();
+      await rig.view.initialize();
+      const timeline = rig.runtime.controller.currentTimeline;
+      const later = timeline?.steps.find((step) => step.measureIndex === 2);
+      if (later === undefined) {
+        throw new Error('expected a third bar');
+      }
+      rig.renderer.holdNote(later.index);
+      expect(rig.runtime.controller.beginsAt).toBeGreaterThan(0);
+
+      element<HTMLButtonElement>('focus-rewind').click();
+
+      expect(rig.runtime.controller.beginsAt).toBe(0);
+      expect(rig.renderer.cursor.position).toBe(0);
+    });
+
+    it('stops a run before taking the place back', async () => {
+      // Otherwise the marker would go to bar one while the music went on
+      // playing from wherever it had got to.
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('start').click();
+
+      element<HTMLButtonElement>('focus-rewind').click();
+
+      expect(rig.runtime.controller.session?.status).not.toBe('running');
+      expect(rig.runtime.controller.beginsAt).toBe(0);
+    });
+
     it('leaves the place alone while a run is going', async () => {
       const rig = createRig();
       await rig.view.initialize();

@@ -638,6 +638,7 @@ export class AppView {
     focusRow: HTMLElement;
     focusSpeed: HTMLElement;
     focusStop: HTMLButtonElement;
+    focusRewind: HTMLButtonElement;
     focusListen: HTMLButtonElement;
     focusSlower: HTMLButtonElement;
     focusFaster: HTMLButtonElement;
@@ -805,6 +806,7 @@ export class AppView {
       focusRow: requireElement(doc, 'focus-row'),
       focusSpeed: requireElement(doc, 'focus-speed'),
       focusStop: requireElement(doc, 'focus-stop'),
+      focusRewind: requireElement(doc, 'focus-rewind'),
       focusListen: requireElement(doc, 'focus-listen'),
       focusSlower: requireElement(doc, 'focus-slower'),
       focusFaster: requireElement(doc, 'focus-faster'),
@@ -1724,6 +1726,20 @@ export class AppView {
 
     this.listen(this.el.focusStop, 'click', () => {
       controller.stop();
+    });
+
+    this.listen(this.el.focusRewind, 'click', () => {
+      // Where a run would begin, put back at the top. A place can be set
+      // anywhere by holding a finger on a bar, so the way back must not be
+      // "find bar one and hold a finger on that".
+      const status = controller.session?.status;
+      if (status === 'running' || status === 'counting-in' || status === 'paused') {
+        controller.stop();
+      }
+      controller.beginAtTheStart();
+      controller.cursorToStart();
+      this.showNotice('Back to the beginning');
+      this.restoreNoticeSoon();
     });
 
     this.listen(this.el.focusWait, 'click', () => {

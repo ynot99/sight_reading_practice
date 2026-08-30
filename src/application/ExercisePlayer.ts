@@ -30,6 +30,16 @@ export interface ListeningOptions {
    * in.
    */
   readonly clickWhen: ClickWhen;
+  /**
+   * The stretch to play, as the first and last step of it.
+   *
+   * The whole piece when left out. A reader who has chosen a passage, or put
+   * their place somewhere by hand, means it for hearing the music as much as
+   * for playing it - a playback that always began at bar one made them listen
+   * through everything they were not working on.
+   */
+  readonly fromIndex?: number;
+  readonly toIndex?: number;
 }
 
 export interface ExercisePlayerDependencies {
@@ -113,6 +123,9 @@ export class ExercisePlayer {
   private startedAtMs: number | null = null;
   private pending: ScheduledNote[] = [];
   private nextToSchedule = 0;
+  /** The stretch being played, in the timeline's own ticks. */
+  private fromTicks = 0;
+  private untilTicks = 0;
   private playing = false;
 
   /** Changes what is heard over a performance, without interrupting it. */
@@ -150,6 +163,13 @@ export class ExercisePlayer {
     }
 
     this.timeline = timeline;
+    const first = timeline.at(Math.max(0, Math.round(options.fromIndex ?? 0)));
+    const last = timeline.at(
+      Math.min(timeline.length - 1, Math.round(options.toIndex ?? timeline.length - 1)),
+    );
+    this.fromTicks = first?.onsetTicks ?? 0;
+    this.untilTicks =
+      last === null ? timeline.totalTicks : last.onsetTicks + last.durationTicks;
     this.pending = this.collectNotes(timeline, options.staffNumber);
     this.nextToSchedule = 0;
     this.startedAtMs = null;
@@ -167,7 +187,7 @@ export class ExercisePlayer {
     });
 
     this.subscription = this.deps.metronome.onTick((tick) => this.handleTick(tick));
-    this.deps.cursor.reset();
+    this.deps.cursor.moveTo(first?.index ?? 0);
     this.deps.metronome.start();
     this.emitter.emit('started', {});
   }
@@ -210,6 +230,10 @@ export class ExercisePlayer {
     const spans = pedalSpans(timeline.exercise);
     const longest = new Map<string, ScheduledNote>();
     for (const step of timeline.steps) {
+      // Only the stretch being played, and timed from its own beginning.
+      if (step.onsetTicks < this.fromTicks || step.onsetTicks >= this.untilTicks) {
+        continue;
+      }
       const sounding = step.notes.filter(
         (note) => staffNumber === null || note.staffNumber === staffNumber,
       );
@@ -226,7 +250,7 @@ export class ExercisePlayer {
         if (note.arpeggiated) {
           rolled += 1;
         }
-        const at = ticksToMilliseconds(step.onsetTicks, tempo) + offset;
+        const at = ticksToMilliseconds(step.onsetTicks - this.fromTicks, tempo) + offset;
         const heldUntil = spans.find(
           ([from, to]) => step.onsetTicks >= from && step.onsetTicks < to,
         )?.[1];
@@ -234,7 +258,7 @@ export class ExercisePlayer {
           step.onsetTicks + note.durationTicks,
           heldUntil ?? 0,
         );
-        const until = ticksToMilliseconds(endTicks, tempo);
+        const until = ticksToMilliseconds(endTicks - this.fromTicks, tempo);
         // Two voices may notate the same sounding pitch at the same instant.
         // That is one key on the keyboard and must be one sound here: striking
         // it twice doubles the attack into an audible knock. The longer of the
@@ -271,12 +295,14 @@ export class ExercisePlayer {
       this.deps.instrument.stop(note.midi, from + note.untilMs);
     }
 
-    const position = tick.positionTicks;
+    // The metronome counts from nought whatever the music does, so where the
+    // playback began is added back on before asking the timeline anything.
+    const position = tick.positionTicks + this.fromTicks;
     const step = this.timeline.stepAtTick(position);
     if (step !== null) {
       this.deps.cursor.moveTo(step.index);
     }
-    if (position >= this.timeline.totalTicks) {
+    if (position >= this.untilTicks) {
       this.finish();
     }
   }

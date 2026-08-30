@@ -315,6 +315,12 @@ export class OsmdScoreRenderer
     this.marks = [];
     await osmd.load(musicXml);
     osmd.zoom = this.currentZoom;
+    // Before the first engraving, not only when the reader turns pages on.
+    // A visit that opens already in pages - because that is how the reader
+    // left it - has nothing to turn them on, so the page was laid out as one
+    // endless column and only switching the setting off and on again fixed
+    // it. Asked here, the first engraving is already the right shape.
+    this.applyPageFormat();
     osmd.render();
     this.loaded = true;
     this.engravedWidth = this.container.offsetWidth;
@@ -371,6 +377,9 @@ export class OsmdScoreRenderer
       return;
     }
     this.osmd.zoom = this.currentZoom;
+    // The window may be a different size than it was - a rotation, a resize,
+    // the transport bar appearing - and a page is cut to the window.
+    this.applyPageFormat();
     this.osmd.render();
     this.engravedWidth = this.container.offsetWidth;
     this.walking = true;
@@ -411,6 +420,12 @@ export class OsmdScoreRenderer
       return;
     }
     this.paged = paged;
+    if (!this.loaded) {
+      // Nothing engraved yet. The setting is kept and the first engraving
+      // will be asked for in pages, which is what a visit that opens in
+      // pages needs.
+      return;
+    }
     const engraver = this.osmd as unknown as { FollowCursor?: boolean } | null;
     if (engraver !== null) {
       engraver.FollowCursor = !paged;

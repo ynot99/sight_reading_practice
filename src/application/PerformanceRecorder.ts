@@ -249,6 +249,29 @@ export class PerformanceRecorder {
     return first === undefined || last === undefined ? 0 : last.atMs - first.atMs;
   }
 
+  /**
+   * How long this stretch of playing has been running, read from the clock.
+   *
+   * Not the same as {@link takeDurationMs}, and deliberately. That one is the
+   * length of what would be *kept* - the last event minus the first - so it
+   * cannot move while nothing is arriving. Shown on a counter that is
+   * supposed to be running, it stands still through every small pause and
+   * then jumps forward by the length of it, which reads as a fault in the
+   * recording rather than as the reader having stopped for a moment.
+   *
+   * This is what a recorder's counter counts: time since the take opened,
+   * still going while the reader thinks. Once the silence has sealed the
+   * take the two are the same thing, and it is the kept length that stands.
+   */
+  get takeRunningMs(): number {
+    if (this.takeIsSealed) {
+      return this.takeDurationMs;
+    }
+    const from = this.startOfLastTake();
+    const first = from === null ? undefined : this.captured[from];
+    return first === undefined ? 0 : Math.max(0, this.clock.now() - first.atMs);
+  }
+
   /** Throws away everything held, once the reader has what they wanted. */
   clear(): void {
     this.captured.length = 0;

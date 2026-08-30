@@ -372,6 +372,18 @@
         </div>
 
         <div class="control-group">
+          <label class="checkbox">
+            <input id="strict-timing" type="checkbox" />
+            <span>A note off the beat counts as wrong</span>
+          </label>
+          <p class="hint">
+            Strict marking, the way Piano Marvel does it: only a note struck on
+            its beat is drawn as right. Off, a right note played off the beat is
+            drawn in outline instead - still right, visibly not in time.
+          </p>
+        </div>
+
+        <div class="control-group">
           <label for="read-ahead">Notes disappear</label>
           <select id="read-ahead"></select>
           <p id="read-ahead-description" class="hint"></p>

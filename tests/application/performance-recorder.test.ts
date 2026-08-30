@@ -322,6 +322,41 @@ describe('a take that begins under the pedal', () => {
   });
 });
 
+describe('the counter on the keep button', () => {
+  it('keeps running while the reader pauses for a moment', () => {
+    // The length of what would be *kept* cannot move while nothing is
+    // arriving, so on a counter that is supposed to be running it stood
+    // still through every small pause and then jumped forward by the length
+    // of it - which reads as a fault in the recording rather than as the
+    // reader having stopped to think.
+    const harness = rig({ silenceMs: 4_000 });
+    playNote(harness, 60);
+    const kept = harness.recorder.takeDurationMs;
+
+    harness.clock.advance(1_500);
+
+    expect(harness.recorder.takeDurationMs).toBe(kept);
+    expect(harness.recorder.takeRunningMs).toBe(kept + 1_500);
+  });
+
+  it('settles on the length that would be kept once the take is closed', () => {
+    // Past the silence there is nothing left to run: the take ended at its
+    // last note, and a counter still climbing would be counting silence that
+    // is not in the recording.
+    const harness = rig({ silenceMs: 1_000 });
+    playNote(harness, 60);
+    const kept = harness.recorder.takeDurationMs;
+
+    harness.clock.advance(5_000);
+
+    expect(harness.recorder.takeRunningMs).toBe(kept);
+  });
+
+  it('counts nothing before anything has been played', () => {
+    expect(rig().recorder.takeRunningMs).toBe(0);
+  });
+});
+
 describe('showing when the next press would start a new take', () => {
   it('says nothing has been played until something has', () => {
     const harness = rig({ silenceMs: 1_000 });

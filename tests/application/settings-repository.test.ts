@@ -45,6 +45,7 @@ const SETTINGS: PracticeSettings = {
   rhythmOnly: true,
   previewSeconds: 8,
   showCursor: false,
+  strictTiming: true,
   blindMode: true,
   playedNotes: 'at-end',
   survival: true,
@@ -67,6 +68,7 @@ describe('practice settings codec', () => {
     expect(restored.matchToleranceMs).toBe(180);
     expect(restored.pitchClassOnly).toBe(true);
     expect(restored.showCursor).toBe(false);
+    expect(restored.strictTiming).toBe(true);
     expect(restored.blindMode).toBe(true);
     expect(restored.clickWhen).toBe('cycle-2');
   });

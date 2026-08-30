@@ -106,6 +106,21 @@ describe('the stylesheet', () => {
     }
   });
 
+  it('answers strict marking in colour alone', () => {
+    // A note struck off its beat is measured the same either way; only what
+    // the page paints it changes. Kept here so it cannot quietly grow into a
+    // second answer to "how much does timing count", which is the scoring
+    // strategy's question and already has one.
+    const strict = rules().filter((rule) => rule.selector.includes("[data-strict='true']"));
+
+    expect(strict.length).toBeGreaterThan(0);
+    for (const rule of strict) {
+      expect(rule.selector).toContain('played--loose');
+      expect(rule.body).toMatch(/stroke|fill/);
+      expect(rule.body).not.toMatch(/display|visibility|opacity|transform/);
+    }
+  });
+
   it('marks a cut passage without moving anything to do it', () => {
     // The drawer says which bars, and it is shut most of the time - so the
     // handle carries a mark while a passage is cut. Taken out of the flow,

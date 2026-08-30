@@ -147,6 +147,14 @@ function timingTail(report: PerformanceReport): string {
 
 /** How often the take slider is moved while something is sounding. */
 const TAKE_TICK_MS = 80;
+/**
+ * How often the keep pill's counter is redrawn while a take is open.
+ *
+ * It counts in whole seconds, so half of one is close enough that the number
+ * is never visibly stale, and it costs nothing: the timer only exists between
+ * the first thing the keyboard does and the silence that closes the take.
+ */
+const TAKE_COUNTER_MS = 500;
 
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
@@ -568,7 +576,7 @@ export class AppView {
   private selectedTakeId: string | null = null;
   /** Follows a sounding take, so the slider says where it has got to. */
   private takeTick: ReturnType<typeof setInterval> | null = null;
-  /** Pending redraw of the keep pill, for when the take's silence runs out. */
+  /** Pending redraw of the keep pill: the counter, and the silence closing. */
   private silenceWatch: ReturnType<typeof setTimeout> | null = null;
   /** The step now due, kept so blind mode can be turned off mid-run. */
   private lastExpected: readonly number[] = [];
@@ -722,6 +730,7 @@ export class AppView {
     readAhead: HTMLSelectElement;
     readAheadDescription: HTMLElement;
     showCursor: HTMLInputElement;
+    strictTiming: HTMLInputElement;
     startFocus: HTMLInputElement;
     blindMode: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
@@ -887,6 +896,7 @@ export class AppView {
       readAhead: requireElement(doc, 'read-ahead'),
       readAheadDescription: requireElement(doc, 'read-ahead-description'),
       showCursor: requireElement(doc, 'show-cursor'),
+      strictTiming: requireElement(doc, 'strict-timing'),
       startFocus: requireElement(doc, 'start-focus'),
       blindMode: requireElement(doc, 'blind-mode'),
       sampleLoading: requireElement(doc, 'sample-loading'),
@@ -1458,6 +1468,11 @@ export class AppView {
 
     this.listen(this.el.showCursor, 'change', () => {
       controller.updateSettings({ showCursor: this.el.showCursor.checked });
+    });
+
+    this.listen(this.el.strictTiming, 'change', () => {
+      controller.updateSettings({ strictTiming: this.el.strictTiming.checked });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.blindMode, 'change', () => {
@@ -2670,6 +2685,11 @@ export class AppView {
       READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';
     this.el.startFocus.checked = settings.startInFocus;
     this.el.showCursor.checked = settings.showCursor;
+    this.el.strictTiming.checked = settings.strictTiming;
+    // A display decision, so it is answered in the stylesheet: the marks
+    // themselves are the same either way, and what was measured about a press
+    // does not change because the reader wants stricter colours.
+    this.el.score.dataset['strict'] = String(settings.strictTiming);
     this.el.focusCursor.setAttribute('aria-pressed', String(settings.showCursor));
     this.el.focusMarks.dataset['marks'] = settings.playedNotes;
     this.el.focusMarks.title = MARKS_TITLES[settings.playedNotes];
@@ -2783,7 +2803,7 @@ export class AppView {
    */
   private describeTake(): void {
     const recorder = this.runtime.recorder;
-    const ms = recorder.takeDurationMs;
+    const ms = recorder.takeRunningMs;
     const playing = recorder.pendingEvents > 0;
     // Whether the next key press would go on with this take or begin the
     // next one. Shown rather than left to be learnt: the reader who wanted a
@@ -2832,10 +2852,15 @@ export class AppView {
     if (quiet === null || quiet >= recorder.silenceMs) {
       return;
     }
+    // Whichever comes first: the next second of the counter, or the moment
+    // the silence seals the take. One timer answers both, and neither is a
+    // heartbeat that goes on asking all day - it stops the moment the take
+    // is closed and starts again on the next thing the keyboard does.
+    const until = Math.min(TAKE_COUNTER_MS, recorder.silenceMs - quiet + 50);
     this.silenceWatch = setTimeout(() => {
       this.silenceWatch = null;
       this.describeTake();
-    }, recorder.silenceMs - quiet + 50);
+    }, until);
   }
 
   /**

@@ -1007,6 +1007,27 @@ describe('AppView', () => {
       }
     });
 
+    it('keeps the counter running through a pause instead of jumping', async () => {
+      // Read from the clock rather than from the last thing that arrived, so
+      // a moment's thought does not look like a fault in the recording.
+      const rig = createRig();
+      await rig.view.initialize();
+      const desk = element<HTMLButtonElement>('keep-take');
+
+      vi.useFakeTimers();
+      try {
+        playSomething(rig);
+        expect(desk.textContent).toContain('0:00');
+
+        rig.clock.advance(2_000);
+        vi.advanceTimersByTime(600);
+
+        expect(desk.textContent).toContain('0:02');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('captures without being asked to start', async () => {
       const rig = createRig();
       await rig.view.initialize();

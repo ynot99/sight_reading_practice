@@ -221,6 +221,18 @@ export interface PracticeSettings {
    */
   readonly showCursor: boolean;
   /**
+   * Whether missing the beat makes a right note count as a wrong one.
+   *
+   * A display decision and only that: what was played and how far off the
+   * beat it was are measured the same either way, and how much timing counts
+   * towards the grade is the scoring strategy's question, not this one. This
+   * says what the *page* should show, and there are two honest answers - the
+   * colour can mean "the right note", with the outline saying it was late, or
+   * it can mean "the right note, in time", which is stricter and is how a
+   * reader used to Piano Marvel expects to be marked.
+   */
+  readonly strictTiming: boolean;
+  /**
    * Stop spelling out the notes of the step that is due.
    *
    * The panel naming them is the crutch that makes hiding the cursor only
@@ -399,6 +411,7 @@ export class PracticeController {
       rhythmOnly: false,
       previewSeconds: 0,
       showCursor: true,
+      strictTiming: false,
       blindMode: false,
       playedNotes: 'live',
       survival: false,

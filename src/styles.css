@@ -1541,6 +1541,23 @@ select {
   fill: #22c55e;
 }
 
+/*
+ * Strict marking: only a note struck on its beat is drawn as right.
+ *
+ * Answered here and nowhere else, because it is a decision about colour and
+ * nothing more. What was played and how far off the beat it was are measured
+ * the same either way, and how much timing counts towards the grade belongs
+ * to the scoring strategy - two questions that would otherwise end up
+ * answered by one switch, which is how a page starts disagreeing with itself.
+ */
+[data-strict='true'] .played--loose {
+  stroke: #b91c1c;
+}
+
+[data-strict='true'] .played-accidental.played--loose {
+  fill: #b91c1c;
+}
+
 .played--wrong {
   stroke: #b91c1c;
   fill: none;

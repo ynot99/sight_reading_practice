@@ -544,16 +544,21 @@ describe('PracticeController', () => {
     expect(renderer.cursor.moves.at(-1)).toBe(1);
   });
 
-  it('resets the cursor when a run ends', async () => {
+  it('puts the marker back at the beginning when a run is stopped', async () => {
+    // At the beginning of what is being practised, and said as a move rather
+    // than as a reset: a reset is bookkeeping and the page does not follow
+    // one, which left a reader who stopped on page three with the marker at
+    // bar one and page three still in front of them.
     const { controller, renderer } = createController();
     await controller.loadNewExercise();
     controller.start();
-    const resetsBefore = renderer.cursor.resetCount;
+    renderer.cursor.moveTo(3);
 
     controller.stop();
 
     expect(controller.session?.status).toBe('aborted');
-    expect(renderer.cursor.resetCount).toBeGreaterThan(resetsBefore);
+    expect(renderer.cursor.position).toBe(0);
+    expect(renderer.cursor.moves.at(-1)).toBe(0);
   });
 
   it('replaces the previous session when a new run starts', async () => {

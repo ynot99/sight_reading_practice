@@ -243,6 +243,23 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     expect(renderer.pages.at).toBeGreaterThan(0);
   });
 
+  it('turns back to the first page when the marker is sent to the top', () => {
+    // The button for going back to the beginning asks for a position the
+    // marker may already hold. Asking moves nothing and still says so, which
+    // is what turns the page - without it the reader pressed the button on
+    // page three and stayed there while the marker went to bar one.
+    renderer.setPaged(true);
+    renderer.cursor.moveTo(4 * 15);
+    expect(renderer.pages.at).toBeGreaterThan(0);
+    renderer.cursor.moveTo(0);
+    expect(renderer.pages.at).toBe(0);
+
+    renderer.turnPages(1);
+    renderer.cursor.moveTo(0);
+
+    expect(renderer.pages.at).toBe(0);
+  });
+
   it('stays where it is when the marker is only being put back', () => {
     // A finished run and a re-engraving both put the marker on the first
     // note. A page that followed that threw the reader onto page one every

@@ -608,14 +608,13 @@ export class PracticeController {
    * the two disagree about where the beginning is.
    */
   cursorToStart(): void {
-    const from = this.passageSteps.from;
-    if (from === 0) {
-      // `reset` rather than `moveTo(0)`: moving to a position the navigator
-      // believes it is already at asks the engraver for nothing.
-      this.deps.cursor.reset();
-      return;
-    }
-    this.deps.cursor.moveTo(from);
+    // `moveTo` and never `reset`, even for the top of the piece. A reset is
+    // bookkeeping and the page deliberately does not follow one - which left
+    // a reader who pressed the button on page three with the marker back at
+    // bar one and page three still in front of them. Asking for a position
+    // the marker already holds moves nothing and still says so, which is
+    // exactly what is wanted here.
+    this.deps.cursor.moveTo(this.passageSteps.from);
   }
 
   /** Which step the next run begins at; nought is the top of the piece. */

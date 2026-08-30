@@ -84,6 +84,9 @@ export function isRealTendency(meanMs: number, spreadMs: number, presses: number
  */
 const NOTICE_HOLD_MS = 6_000;
 
+/** Written out rather than escaped inline, where it has been mangled before. */
+const NEWLINE = String.fromCharCode(10);
+
 /**
  * The run's timing tendency, for the pill, or nothing worth saying.
  *
@@ -282,6 +285,11 @@ function takeName(savedAtMs: number): string {
   const at = new Date(savedAtMs);
   const pad = (value: number): string => String(value).padStart(2, '0');
   return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
+/** Named the same way as a backup, so a pair of them stay together. */
+function judgingFileName(savedAtMs: number): string {
+  return backupFileName(savedAtMs).replace(/^sight-reading-/, 'judging-').replace(/\.json$/, '.txt');
 }
 
 /** Named by the day it was taken, so two of them sort themselves. */
@@ -639,6 +647,8 @@ export class AppView {
     openBackup: HTMLButtonElement;
     backupFile: HTMLInputElement;
     backupDescription: HTMLElement;
+    saveJudging: HTMLButtonElement;
+    copyJudging: HTMLButtonElement;
     toleranceValue: HTMLOutputElement;
     zoom: HTMLInputElement;
     zoomValue: HTMLOutputElement;
@@ -802,6 +812,8 @@ export class AppView {
       openBackup: requireElement(doc, 'open-backup'),
       backupFile: requireElement(doc, 'backup-file'),
       backupDescription: requireElement(doc, 'backup-description'),
+      saveJudging: requireElement(doc, 'save-judging'),
+      copyJudging: requireElement(doc, 'copy-judging'),
       toleranceValue: requireElement(doc, 'tolerance-value'),
       zoom: requireElement(doc, 'zoom'),
       zoomValue: requireElement(doc, 'zoom-value'),
@@ -2664,6 +2676,89 @@ export class AppView {
     this.listen(this.el.backupFile, 'change', () => {
       void this.restoreBackup();
     });
+
+    this.listen(this.el.saveJudging, 'click', () => {
+      const text = this.judgingLogText();
+      this.runtime.files.save(judgingFileName(Date.now()), new TextEncoder().encode(text), 'text/plain');
+      this.el.backupDescription.textContent = this.judgingWrote('Wrote');
+    });
+
+    this.listen(this.el.copyJudging, 'click', () => {
+      void this.copyJudgingLog();
+    });
+  }
+
+  /**
+   * Writes down what was decided about each press, for someone to read.
+   *
+   * Every fault in the judging has been invisible from outside it: a mark in
+   * the wrong colour, in the wrong place, or missing altogether all look the
+   * same on a page - like nothing happening. Guessing from a description of
+   * that costs more than writing the decisions down, so they are written
+   * down, and the settings that shaped them go at the top because half of
+   * these questions have turned out to be a setting.
+   */
+  /**
+   * Straight to the clipboard, which is the short way to hand it over.
+   *
+   * Saving a file and finding it again is several steps on a tablet, and the
+   * thing being handed over is a few dozen lines of text. The file is still
+   * there for a log too long to paste, or for a browser that will not give a
+   * page the clipboard - and one that refuses says so rather than appearing
+   * to have worked.
+   */
+  private async copyJudgingLog(): Promise<void> {
+    const clipboard = this.doc.defaultView?.navigator?.clipboard;
+    if (clipboard === undefined) {
+      this.el.backupDescription.textContent =
+        'This browser will not let a page write to the clipboard. Save it as a file instead.';
+      return;
+    }
+    try {
+      await clipboard.writeText(this.judgingLogText());
+      this.el.backupDescription.textContent = this.judgingWrote('Copied');
+    } catch {
+      this.el.backupDescription.textContent =
+        'The clipboard was refused. Save it as a file instead.';
+    }
+  }
+
+  private judgingWrote(verb: string): string {
+    const count = this.runtime.controller.judgingLog.length;
+    return `${verb} ${count} press${count === 1 ? '' : 'es'}, and the settings that judged them.`;
+  }
+
+  private judgingLogText(): string {
+    const { controller } = this.runtime;
+    const settings = controller.settings;
+    const report = controller.session?.report;
+    const lines = [
+      `exercise: ${controller.currentExercise?.title ?? 'none'}`,
+      `mode: ${settings.modeId}   tempo: ${settings.tempoBpm} bpm (${controller.tempoPercent}%)`,
+      `input delay: ${settings.inputLatencyMs} ms   chord window: ${settings.matchToleranceMs} ms`,
+      `marks: ${settings.playedNotes}   hand: ${settings.handStaff ?? 'both'}   count-in: ${settings.countInBars}`,
+      `click: ${settings.clickPattern} / ${settings.clickWhen}`,
+      report === undefined || report === null
+        ? 'last run: none'
+        : `last run: mean ${Math.round(report.timing.meanDeviationMs)} ms, spread ${Math.round(report.timing.deviationSpreadMs)} ms, over ${report.timing.deviations.length} presses`,
+      '',
+      'note      verdict     step  onset  deviation  offset  drawn',
+    ];
+    for (const press of controller.judgingLog) {
+      lines.push(
+        [
+          midiToLabel(press.midi).padEnd(9),
+          press.verdict.padEnd(11),
+          String(press.stepIndex).padStart(4),
+          String(press.onsetTicks).padStart(6),
+          (press.deviationMs === null ? '-' : `${Math.round(press.deviationMs)}`).padStart(10),
+          press.offset.toFixed(2).padStart(7),
+          press.drawn ? '  yes' : `  no (${press.why})`,
+        ].join(' '),
+      );
+    }
+
+    return lines.join(NEWLINE) + NEWLINE;
   }
 
   private async saveBackup(): Promise<void> {

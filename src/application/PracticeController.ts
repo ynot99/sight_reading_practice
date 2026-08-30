@@ -30,6 +30,7 @@ import { barNumberOf, clefAtMeasure, keyAtMeasure, measureCount } from '../domai
 import { sliceExercise } from '../domain/model/exerciseSlice.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
+import type { NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMeter.js';
 import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
 
@@ -37,6 +38,25 @@ import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
 export const PLAYED_NOTE_DISPLAYS = ['live', 'at-end', 'hidden'] as const;
 
 export type PlayedNoteDisplay = (typeof PLAYED_NOTE_DISPLAYS)[number];
+
+/** Presses kept for the judging log; a bounded ring, not a history. */
+const JUDGING_LOG_LENGTH = 300;
+
+/** One press, and everything that decided what became of it. */
+export interface JudgedPress {
+  readonly midi: number;
+  readonly verdict: NoteVerdict;
+  /** The step it was given to, which is where its mark is drawn. */
+  readonly stepIndex: number;
+  /** That step's place in the music, in divisions. */
+  readonly onsetTicks: number;
+  readonly deviationMs: number | null;
+  /** Where the mark sits, as a fraction of the gap to its neighbour. */
+  readonly offset: number;
+  readonly drawn: boolean;
+  /** Why no mark was drawn, or empty when one was. */
+  readonly why: string;
+}
 
 /** How far one press of the tempo buttons moves, as a percentage. */
 export const TEMPO_STEP_PERCENT = 5;
@@ -322,6 +342,7 @@ export class PracticeController {
   private heldMarks: PlayedNote[] = [];
   private readonly meter: HealthMeter;
   private lastBeatTicks = 0;
+  private readonly judged: JudgedPress[] = [];
   private cleanReadings = 0;
   private poorReadings = 0;
 
@@ -791,6 +812,30 @@ export class PracticeController {
     return `${what}${bars}`;
   }
 
+  /**
+   * What was decided about the last few presses, in order.
+   *
+   * Kept because every fault in this part of the program has been invisible
+   * from outside it: a mark in the wrong colour, or in the wrong place, or
+   * missing altogether, all look the same on a page - like nothing happening.
+   * The reader can hand this back, and it says which step a press was given
+   * to, how far from that step's beat it was, and if no mark was drawn, why
+   * not.
+   *
+   * A bounded ring, because it costs nothing to keep and a session that grew
+   * one all day would be a leak in aid of a diagnosis nobody asked for.
+   */
+  get judgingLog(): readonly JudgedPress[] {
+    return this.judged;
+  }
+
+  private remember(press: JudgedPress): void {
+    this.judged.push(press);
+    while (this.judged.length > JUDGING_LOG_LENGTH) {
+      this.judged.shift();
+    }
+  }
+
   /** How earlier readings of this passage went, or `null` on a first visit. */
   passageHistory(): PassageHistory | null {
     return this.deps.history?.summary(this.practiceKey()) ?? null;
@@ -904,6 +949,25 @@ export class PracticeController {
       // Every press is drawn where it was actually struck, right or wrong. A
       // repeat of a note already collected adds nothing to look at.
       session.events.on('noteJudged', ({ midi, verdict, stepIndex, deviationMs }) => {
+        const held = this.currentSettings.playedNotes === 'at-end';
+        const why =
+          this.currentSettings.playedNotes === 'hidden'
+            ? 'marks are turned off'
+            : verdict === 'duplicate'
+              ? 'a note of this chord already collected'
+              : held
+                ? 'held back until the run ends'
+                : '';
+        this.remember({
+          midi,
+          verdict,
+          stepIndex,
+          onsetTicks: this.timeline?.at(stepIndex)?.onsetTicks ?? -1,
+          deviationMs,
+          offset: this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm),
+          drawn: why === '',
+          why,
+        });
         if (this.currentSettings.playedNotes === 'hidden' || verdict === 'duplicate') {
           return;
         }

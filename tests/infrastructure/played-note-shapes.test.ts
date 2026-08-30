@@ -243,3 +243,27 @@ describe('buildOverlayShapes', () => {
     expect(noteheads(shapes).map((head) => head.correct)).toEqual([true, true, false]);
   });
 });
+
+describe('a page with only one staff', () => {
+  // What the calibration piece is: one note, one hand, nothing to read. It
+  // has to draw what was played like any other page.
+  const single = fitStaffGeometry([
+    { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
+    { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
+  ]);
+
+  it('still puts a mark on the note that was played', () => {
+    if (single === null) {
+      throw new Error('expected geometry');
+    }
+    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 60, correct: true, offset: 0 }], {
+      geometry: single,
+      stepX: new Map([[0, 120]]),
+      clefAt: () => 'treble',
+      keyAt: () => KeySignature.major(0),
+    });
+
+    expect(noteheads(shapes)).toHaveLength(1);
+    expect(noteheads(shapes)[0]?.x).toBe(120);
+  });
+});

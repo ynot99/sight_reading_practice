@@ -62,7 +62,19 @@ export function diatonicIndexOf(fundamentalSemitone: number, engraverOctave: num
  * The median of those measurements is used because a single odd pair - two
  * notes of a chord sharing a position, say - must not skew it.
  */
+/**
+ * Half a staff line gap, as engravers of this size draw it.
+ *
+ * Used only where a page gave nothing to measure, and only for notes on a
+ * position the page never showed. It is a guess and is meant to be: the
+ * alternative was drawing nothing.
+ */
+const DEFAULT_STEP_HEIGHT = 5;
+
 export function fitStaffGeometry(samples: readonly DrawnNoteSample[]): StaffGeometry | null {
+  if (samples.length === 0) {
+    return null;
+  }
   const byStaff = new Map<number, DrawnNoteSample[]>();
   for (const sample of samples) {
     const bucket = byStaff.get(sample.staffNumber) ?? [];
@@ -90,14 +102,17 @@ export function fitStaffGeometry(samples: readonly DrawnNoteSample[]): StaffGeom
     }
   }
 
-  if (heights.length === 0) {
-    return null;
-  }
   heights.sort((left, right) => left - right);
-  const stepHeight = heights[Math.floor(heights.length / 2)];
-  if (stepHeight === undefined || stepHeight <= 0) {
-    return null;
-  }
+  const measured = heights[Math.floor(heights.length / 2)];
+  // A page that never changes note gives nothing to measure - every pair of
+  // neighbours is the same position, so no distance can be read off it. That
+  // is not a page nothing can be drawn on: where each note *is* was still
+  // seen, and a mark on a position already seen is exact whatever the scale
+  // says. Only a note somewhere else needs the scale, and for those a
+  // sensible one beats refusing to draw at all, which is what used to happen
+  // - the calibration piece is sixteen middle Cs, and nothing the reader
+  // played on it appeared anywhere.
+  const stepHeight = measured !== undefined && measured > 0 ? measured : DEFAULT_STEP_HEIGHT;
 
   const sorted = new Map<number, readonly DrawnNoteSample[]>();
   for (const [staffNumber, bucket] of byStaff) {

@@ -1811,3 +1811,61 @@ describe('choosing a passage by touching a note', () => {
     expect(rig.controller.settings.rangeFromBar).toBeNull();
   });
 });
+
+describe('what was decided about each press', () => {
+  it('is written down, including when no mark was drawn and why', async () => {
+    // Every fault here has been invisible from outside: a mark in the wrong
+    // colour, in the wrong place, or missing altogether all look the same on
+    // a page - like nothing happening. Guessing from a description of that
+    // costs more than writing the decisions down.
+    const { controller, midi, metronome, clock } = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      countInBars: 0,
+      playedNotes: 'hidden',
+    });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    metronome.advanceSubdivisions(1);
+
+    for (const midiNote of session?.currentStep?.expectedMidi ?? []) {
+      midi.noteOn(midiNote, clock.now());
+    }
+
+    const log = controller.judgingLog;
+    expect(log.length).toBeGreaterThan(0);
+    expect(log[0]?.drawn).toBe(false);
+    expect(log[0]?.why).toBe('marks are turned off');
+    expect(log[0]?.stepIndex).toBe(0);
+  });
+
+  it('says a mark was drawn when one was', async () => {
+    const { controller, midi, metronome, clock } = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      countInBars: 0,
+    });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    metronome.advanceSubdivisions(1);
+    for (const midiNote of session?.currentStep?.expectedMidi ?? []) {
+      midi.noteOn(midiNote, clock.now());
+    }
+
+    expect(controller.judgingLog.every((press) => press.drawn)).toBe(true);
+    expect(controller.judgingLog[0]?.verdict).toBe('correct');
+  });
+
+  it('keeps a bounded ring rather than a session-long history', async () => {
+    const { controller, midi, metronome, clock } = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      countInBars: 0,
+    });
+    await controller.loadNewExercise();
+    controller.start();
+    metronome.advanceSubdivisions(1);
+    for (let press = 0; press < 400; press += 1) {
+      midi.noteOn(60 + (press % 12), clock.now());
+    }
+
+    expect(controller.judgingLog.length).toBeLessThanOrEqual(300);
+  });
+});

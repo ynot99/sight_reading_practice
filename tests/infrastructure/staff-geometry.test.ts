@@ -55,11 +55,24 @@ describe('fitStaffGeometry', () => {
     expect(fitStaffGeometry(zoomed)?.stepHeight).toBeCloseTo(7.5, 10);
   });
 
-  it('gives up when there is nothing to measure from', () => {
+  it('gives up only when it was shown nothing at all', () => {
     expect(fitStaffGeometry([])).toBeNull();
-    expect(
-      fitStaffGeometry([{ stepIndex: 0, staffNumber: 1, diatonicIndex: 28, y: 155.5 }]),
-    ).toBeNull();
+  });
+
+  it('still places what it did see, on a page that never changes note', () => {
+    // Sixteen middle Cs give no pair of different positions, so no distance
+    // can be read off them - but where that note *is* was still seen. Refusing
+    // the whole page meant nothing the reader played on the calibration piece
+    // appeared anywhere at all.
+    const geometry = fitStaffGeometry([
+      { stepIndex: 0, staffNumber: 1, diatonicIndex: 28, y: 155.5 },
+      { stepIndex: 1, staffNumber: 1, diatonicIndex: 28, y: 155.5 },
+    ]);
+
+    expect(geometry).not.toBeNull();
+    // Exact on the position it was shown, whatever scale it guessed for the
+    // rest: that is the only position this page has.
+    expect(yForDiatonic(geometry as NonNullable<typeof geometry>, 1, 0, 28)).toBe(155.5);
   });
 });
 

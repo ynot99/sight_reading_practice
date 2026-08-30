@@ -79,15 +79,17 @@ export class FlowMode extends BasePracticeMode {
    * arriving late is still that chord's, and handing it to the next step would
    * turn one well-played bar into two badly played ones.
    *
-   * Two windows, because two different questions are being asked.
+   * Two questions, and only the second needs a window.
    *
-   * For a pitch the next step *wants*, the answer is simply which beat the
-   * press was nearer to. Nothing else on the page is asking for that key, so
-   * there is no doubt about what was played - only about when - and a press
-   * past the halfway mark was reaching forward. Held to a tenth of a second
-   * instead, which is what used to happen, a reader who was a fifth of a beat
-   * early got a red mark for playing the right note slightly ahead of it. A
-   * wrong note is a *different* note, not a note at a different time.
+   * For a pitch the next step *wants* there is no doubt about what was
+   * played - nothing else on the page is asking for that key - so the only
+   * question is which beat the press was nearer to. Asked that way it is
+   * asked the same way on both sides of the beat, which is what the rule
+   * before it got wrong: it refused anything at or past the beat outright, so
+   * a press landing exactly on the beat fell through to the step behind,
+   * which is not asking for that note, and came back a wrong note drawn most
+   * of a beat away. Dead on the beat was the one moment the reader was aiming
+   * for and the one moment the page called wrong.
    *
    * For any other pitch there is doubt about both, so it keeps the narrow
    * window: a note nobody is expecting yet has to be very close indeed before
@@ -111,15 +113,16 @@ export class FlowMode extends BasePracticeMode {
     }
 
     const dueAt = context.scheduledTimeMs(next.onsetTicks);
+    const openedAt = context.scheduledTimeMs(step.onsetTicks);
+    if (next.expectedMidi.includes(event.midi)) {
+      return Math.abs(event.timestampMs - dueAt) < Math.abs(event.timestampMs - openedAt);
+    }
+
     const untilDue = dueAt - event.timestampMs;
     if (untilDue <= 0) {
       return false;
     }
-    const gap = dueAt - context.scheduledTimeMs(step.onsetTicks);
-    if (next.expectedMidi.includes(event.midi)) {
-      return untilDue <= gap / 2;
-    }
-    return untilDue <= Math.min(context.options.earlyWindowMs, gap / 2);
+    return untilDue <= Math.min(context.options.earlyWindowMs, (dueAt - openedAt) / 2);
   }
 
   private judge(context: PracticeContext, event: MidiNoteOnEvent): void {

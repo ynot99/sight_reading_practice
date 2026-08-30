@@ -291,7 +291,7 @@ export class OsmdScoreRenderer
     // listening, a take played back. Told by the page's own driver instead,
     // it would follow only where somebody had remembered to say so - and
     // during playback nobody had.
-    this.navigator.onMoved((stepIndex) => this.followCursor(stepIndex));
+    this.navigator.onMoved((stepIndex, byTheMusic) => this.followCursor(stepIndex, byTheMusic));
     this.watchForDrags();
   }
 
@@ -602,7 +602,7 @@ export class OsmdScoreRenderer
    * happen to fall - which is a cursor hanging over unrelated music, and is
    * what the reader saw after turning a page by hand.
    */
-  private followCursor(stepIndex: number): void {
+  private followCursor(stepIndex: number, byTheMusic: boolean): void {
     // Not while the renderer is walking the cursor for its own bookkeeping.
     // Reading where every step was drawn means running the cursor from the
     // top and putting it back, and a page that followed that would end the
@@ -611,10 +611,12 @@ export class OsmdScoreRenderer
       return;
     }
     const page = this.pageOfStep(stepIndex);
-    if (this.paged && page !== this.pageAt) {
+    if (byTheMusic && this.paged && page !== this.pageAt) {
       this.turnToPage(page);
       return;
     }
+    // The marker still has to be taken off a page it is no longer on, even
+    // when the page is staying where it is.
     this.placeCursor();
   }
 

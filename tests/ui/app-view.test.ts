@@ -1545,13 +1545,17 @@ describe('AppView', () => {
       });
     });
 
-    it('does not re-engrave for a drag that changed nothing', async () => {
-      // A tap on a marker, or a drag that came back where it started. A
-      // re-engraving is most of a second of blank staves on a long piece.
+    it('does not re-engrave for choosing a passage at all', async () => {
+      // A passage used to cut the music down, so choosing one meant laying
+      // the piece out again. Now it only says where the run begins and ends,
+      // and the notes on the page are the same notes - so engraving them
+      // again would blank the staves and put the reader back on page one.
       const { view, renderer } = createRig();
       await view.initialize();
       const before = renderer.loadCount;
 
+      renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
       renderer.dragPassage({ fromMeasureIndex: 0, toMeasureIndex: 3 });
       await new Promise((resolve) => setTimeout(resolve, 0));
 

@@ -27,7 +27,7 @@ export class CursorNavigator implements IScoreCursor {
   private index = 0;
   /** Whether the reader asked for a cursor at all. */
   private wanted = true;
-  private moved: ((stepIndex: number) => void) | null = null;
+  private moved: ((stepIndex: number, byTheMusic: boolean) => void) | null = null;
 
   constructor(primitive: ICursorPrimitive) {
     this.primitive = primitive;
@@ -50,7 +50,7 @@ export class CursorNavigator implements IScoreCursor {
    * whatever is driving it. A page that follows the cursor therefore follows
    * it in all of them, rather than only where somebody remembered to say so.
    */
-  onMoved(listener: (stepIndex: number) => void): void {
+  onMoved(listener: (stepIndex: number, byTheMusic: boolean) => void): void {
     this.moved = listener;
   }
 
@@ -64,10 +64,24 @@ export class CursorNavigator implements IScoreCursor {
     this.primitive.hide();
   }
 
+  /**
+   * Puts the marker back on the first note, and tells nobody.
+   *
+   * The difference between this and `moveTo(0)` is who asked. A reset is
+   * bookkeeping - the page has been re-engraved, a run is being set up - and
+   * a page that followed it threw the reader onto page one every time they
+   * touched a setting. `moveTo` is the music actually going somewhere, and
+   * the page follows that.
+   */
   reset(): void {
     this.primitive.reset();
     this.index = 0;
-    this.moved?.(this.index);
+    // Said, but not as the music moving. Whoever is listening still has to
+    // know the marker is somewhere else - a marker left showing on a page it
+    // is no longer on is a cursor hanging over unrelated music - but the page
+    // must not follow, or every re-engraving and every finished run would
+    // throw the reader back to the first one.
+    this.moved?.(this.index, false);
   }
 
   moveTo(stepIndex: number): void {
@@ -82,6 +96,6 @@ export class CursorNavigator implements IScoreCursor {
       this.primitive.next();
       this.index += 1;
     }
-    this.moved?.(this.index);
+    this.moved?.(this.index, true);
   }
 }

@@ -1120,14 +1120,18 @@ export class AppView {
       passage.fromBar === before.rangeFromBar &&
       passage.toBar === before.rangeToBar
     ) {
-      // A tap on a marker, or a drag that came back where it started. Nothing
-      // changed, and re-engraving for nothing is a second of blank staves.
+      // A tap on a marker, or a drag that came back where it started.
       this.showPassageMarkers();
       return;
     }
+    // Nothing is re-engraved. A passage used to cut the music down, so
+    // choosing one meant laying the piece out again; now it only says where
+    // the run begins and ends, and the notes on the page are the same notes.
+    // Engraving them again would blank the staves for a moment and put the
+    // reader back on the first page - which is what dragging a marker on
+    // page three felt like.
     this.syncControlsFromSettings();
     this.showImportNotice(describePassage(passage));
-    await this.reload(false);
   }
 
   /**
@@ -1413,8 +1417,9 @@ export class AppView {
             rangeFromBar: barValue(from),
             rangeToBar: barValue(to),
           });
+          // No re-engraving: a passage says where the run begins and ends,
+          // and the notes on the page are the same notes either way.
           this.syncControlsFromSettings();
-          void this.reload(false);
         });
       }
     }
@@ -1422,7 +1427,6 @@ export class AppView {
     this.listen(this.el.focusWhole, 'click', () => {
       controller.updateSettings({ rangeFromBar: null, rangeToBar: null });
       this.syncControlsFromSettings();
-      void this.reload(false);
     });
 
     this.listen(this.el.drill, 'click', () => {

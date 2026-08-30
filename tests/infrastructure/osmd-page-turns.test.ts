@@ -243,6 +243,20 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     expect(renderer.pages.at).toBeGreaterThan(0);
   });
 
+  it('stays where it is when the marker is only being put back', () => {
+    // A finished run and a re-engraving both put the marker on the first
+    // note. A page that followed that threw the reader onto page one every
+    // time - after every run, and every time they touched a setting.
+    renderer.setPaged(true);
+    renderer.cursor.moveTo(4 * 15);
+    const reading = renderer.pages.at;
+    expect(reading).toBeGreaterThan(0);
+
+    renderer.cursor.reset();
+
+    expect(renderer.pages.at).toBe(reading);
+  });
+
   it('does not let its own bookkeeping turn the page', () => {
     // Reading where every step was drawn means running the cursor from the
     // top and putting it back. A page that followed that would end every

@@ -11,6 +11,14 @@
 /** Where the engraver put one bar, in the drawing's own pixels. */
 export interface DrawnMeasure {
   readonly measureIndex: number;
+  /**
+   * Which page of the engraving this bar was drawn on.
+   *
+   * The engraver breaks a score into pages itself and draws each one into an
+   * SVG of its own, so a bar's coordinates mean nothing without saying which
+   * page they are coordinates *in* - every page starts again at nought.
+   */
+  readonly page: number;
   readonly left: number;
   readonly right: number;
   /**

@@ -128,29 +128,6 @@ describe('the stylesheet', () => {
     }
   });
 
-  it('stops the document itself scrolling while pages are turned', () => {
-    // The score frame was not the only box that could move: the document was
-    // taller than the display, so a swipe across the music panned the whole
-    // page under it. jsdom applies no stylesheet, so nothing else in the
-    // suite can see this rule.
-    const locked = rules().filter((rule) => rule.selector.includes(":root[data-paged='true']"));
-
-    expect(locked.length).toBeGreaterThan(0);
-    expect(locked.some((rule) => /overflow\s*:\s*hidden/.test(rule.body))).toBe(true);
-    expect(locked.some((rule) => /min-height\s*:\s*0/.test(rule.body))).toBe(true);
-  });
-
-  it('holds the frame to one screen while pages are turned', () => {
-    // A score frame is given a minimum of one screen and then grows to
-    // whatever is engraved in it, so on a long piece it runs far past the
-    // bottom of the display - a page whose end nobody can see and cannot
-    // scroll to, which is the thing a page turn exists to prevent.
-    const frame = rules().find((rule) => rule.selector === ".score[data-paged='true']");
-
-    expect(frame?.body).toMatch(/height\s*:\s*100dvh/);
-    expect(frame?.body).toMatch(/min-height\s*:\s*0/);
-  });
-
   it('takes the scrollbar away from a score that is turned', () => {
     // A page that can also be nudged upward by half a system is not a page,
     // and the reader who nudged it has no way back to where the turn had put

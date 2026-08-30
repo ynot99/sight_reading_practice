@@ -27,14 +27,8 @@ import {
   type PassageEdge,
 } from './passageBrackets.js';
 import {
-  pageContaining,
-  pagesOf,
-  scrollTopFor,
-  tileSystems,
   visibleHeightOf,
   swipeDirection,
-  systemsOf,
-  type ScorePage,
 } from './pageTurns.js';
 import { CursorNavigator, type ICursorPrimitive } from './CursorNavigator.js';
 import {
@@ -259,7 +253,6 @@ export class OsmdScoreRenderer
 
   /** The column cut into pages, and which one is being read. */
   private paged = false;
-  private pageBands: ScorePage[] = [];
   private pageAt = 0;
   private pageListeners: ((state: ScorePageState) => void)[] = [];
   private swipe: PageSwipe | null = null;
@@ -309,7 +302,7 @@ export class OsmdScoreRenderer
     this.navigator.reset();
     this.indexDrawnNotes();
     this.measures = this.readMeasures();
-    this.layOutPages();
+    this.showOnlyCurrentPage();
     this.paintOverlay();
     this.paintFaded();
     this.paintPassage();
@@ -363,25 +356,32 @@ export class OsmdScoreRenderer
     // Re-engraving throws the old SVG away, and everything drawn on it.
     this.indexDrawnNotes();
     this.measures = this.readMeasures();
-    // A new engraving is a new column, so the pages are cut again - and the
-    // reader is put back on the page they were reading rather than at the
-    // front, since a re-engraving is a zoom or a turn of the tablet and not
-    // a request to start over.
-    const wasOn = this.pageAt;
-    this.layOutPages();
-    this.turnToPage(wasOn);
+    // The reader is put back on the page they were reading rather than at the
+    // front: a re-engraving is a zoom or a turn of the tablet, not a request
+    // to start over. It is clamped, because there may be fewer pages now.
+    this.turnToPage(this.pageAt);
     this.paintOverlay();
     this.paintFaded();
     this.paintPassage();
   }
 
   /**
-   * Reads the score by turning pages, or goes back to scrolling it.
+   * Reads the score in pages instead of one endless column.
    *
-   * The engraver's own cursor-following is turned off with it: it creeps the
-   * column upwards a system at a time, which is the opposite of a page that
-   * stays still until it turns. Left on, the two would fight over the
-   * scrollbar every beat.
+   * The engraver does the breaking. Given a page size it lays the music out
+   * as separate pages and draws each into an SVG of its own, so a page turn
+   * is showing one element and hiding the others - no measuring of ink, no
+   * arithmetic about what fits, and nothing that can cut a system in half.
+   *
+   * That was worth going back for. Doing the breaking ourselves meant
+   * measuring systems, guessing at beams that hang below the staves, working
+   * out which box on the page was the one that scrolled, and fighting a
+   * stylesheet for the height of the frame - four attempts, and every one of
+   * them had another edge to it.
+   *
+   * The engraver's own cursor-following goes off with it: it scrolls the
+   * column to keep the cursor in view, which is the opposite of a page that
+   * stays still until it is turned.
    */
   setPaged(paged: boolean): void {
     if (this.paged === paged) {
@@ -392,44 +392,63 @@ export class OsmdScoreRenderer
     if (engraver !== null) {
       engraver.FollowCursor = !paged;
     }
-    // Both boxes, because both have to change: the scrolling one stops
-    // scrolling and the frame around it stops growing to the length of the
-    // piece. A frame taller than the screen is a page nobody can see the
-    // bottom of, which is what a page turn exists to prevent.
-    for (const box of [this.scroller(), this.frame()]) {
-      if (box instanceof HTMLElement) {
-        box.dataset['paged'] = String(paged);
-      }
+    const scroller = this.scroller();
+    if (scroller instanceof HTMLElement) {
+      scroller.dataset['paged'] = String(paged);
     }
-    // And the document, which is the box that was actually scrolling: a
-    // swipe across the score moved the whole page under it.
-    this.container.ownerDocument.documentElement.dataset['paged'] = String(paged);
-    this.layOutPages();
-    if (paged) {
-      // Onto the page holding whatever was on screen, rather than back to the
-      // beginning: turning pages on is not a request to start again.
-      this.turnToPage(pageContaining(this.pageBands, this.scrolledToDrawingY()));
-      return;
-    }
-    this.showPageOffset();
-    this.announcePages();
+    // A new page size is a new engraving; there is no way to page a layout
+    // that was made without pages in mind.
+    this.applyPageFormat();
+    this.refresh();
   }
 
   /**
-   * Where the reader is, or nothing at all when the score is being scrolled.
+   * Tells the engraver how big a page is, in its own units.
+   *
+   * Ten of them to the pixel, whatever the zoom: the page keeps the size it
+   * is given on screen and the music inside it grows or shrinks instead,
+   * which is what makes zooming change how many pages there are rather than
+   * how big they look.
+   */
+  private applyPageFormat(): void {
+    const osmd = this.osmd as unknown as {
+      setCustomPageFormat?: (width: number, height: number) => void;
+      setPageFormat?: (format: string) => void;
+    } | null;
+    if (osmd === null) {
+      return;
+    }
+    if (!this.paged) {
+      osmd.setPageFormat?.('Endless');
+      return;
+    }
+    const width = this.container.offsetWidth;
+    const height = this.windowHeight();
+    if (width > 0 && height > 0) {
+      osmd.setCustomPageFormat?.(width / UNITS_TO_PIXELS, height / UNITS_TO_PIXELS);
+    }
+  }
+
+  /** Every page the engraver drew, in reading order. */
+  private get sheets(): SVGSVGElement[] {
+    return [...this.container.querySelectorAll('svg')];
+  }
+
+  /**
+   * Where the reader is, or nothing at all when the score is one column.
    *
    * A scrolling score has no pages to be on rather than one long page: the
    * difference matters to anything that would say "page 1 of 1" at a reader
    * who never asked for pages.
    */
   get pages(): ScorePageState {
-    const measured = {
+    const count = this.paged ? this.sheets.length : 0;
+    return {
+      at: Math.min(this.pageAt, Math.max(0, count - 1)),
+      count,
       windowPx: Math.round(this.windowHeight()),
-      contentPx: Math.round(this.container.querySelector('svg')?.getBoundingClientRect().height ?? 0),
+      contentPx: Math.round(this.sheets[0]?.getBoundingClientRect().height ?? 0),
     };
-    return this.paged
-      ? { at: this.pageAt, count: this.pageBands.length, ...measured }
-      : { at: 0, count: 0, ...measured };
   }
 
   turnPages(delta: number): void {
@@ -440,15 +459,11 @@ export class OsmdScoreRenderer
     if (!this.paged) {
       return;
     }
-    const band = this.measures.find((measure) => measure.measureIndex === measureIndex);
-    if (band === undefined) {
-      return;
-    }
-    // Only when it has actually left the page. Scrolling to the same place on
-    // every step would fight a reader who has looked ahead.
-    const wanted = pageContaining(this.pageBands, band.top);
-    if (wanted !== this.pageAt) {
-      this.turnToPage(wanted);
+    const drawn = this.measures.find((measure) => measure.measureIndex === measureIndex);
+    // Only when the music has actually left the page: turning to the page it
+    // is already on would fight a reader who has looked ahead.
+    if (drawn !== undefined && drawn.page !== this.pageAt) {
+      this.turnToPage(drawn.page);
     }
   }
 
@@ -459,50 +474,20 @@ export class OsmdScoreRenderer
     };
   }
 
-  /** Cuts the column up again, for a new engraving or a new window. */
-  private layOutPages(): void {
-    const scale = this.drawingScale();
-    const height = this.windowHeight();
-    const drawn = this.drawingHeight();
-    this.pageBands = pagesOf(
-      tileSystems(systemsOf(this.measures), scale > 0 ? drawn / scale : 0),
-      scale > 0 ? height / scale : 0,
-    );
-    this.pageAt = Math.min(this.pageAt, Math.max(0, this.pageBands.length - 1));
-  }
-
-  /**
-   * The height a page has to fit into, in screen pixels.
-   *
-   * Measured on the frame that *clips* the score rather than on the box that
-   * scrolls inside it. Those are not the same element and need not be the
-   * same height: a scrolling box grows to its content, and asked how tall it
-   * was it answered with the length of the whole piece - which pages a
-   * hundred bars into one page and made every turn a no-op.
-   */
+  /** How tall a page may be, in the pixels the reader can actually see. */
   private windowHeight(): number {
     const box = this.frame()?.getBoundingClientRect();
-    // From the top of the frame to the bottom of the screen, and not the
-    // frame's own height: while pages are on, the frame is cut down to the
-    // page it is showing, so measuring it would shrink the window to the
-    // page and then the page to the window, over and over.
     const screen = this.viewportHeight();
     const height =
       box === undefined ? 0 : visibleHeightOf({ top: box.top, bottom: screen }, screen);
     const scroller = this.scroller();
-    // The room kept for the pill in fullscreen, which is padding on the
-    // scrolling box: a page that used it would put its last system behind
-    // the transport bar.
+    // The room kept for the transport bar, which is padding on the scrolling
+    // box: a page that used it would put its last system behind the bar.
     const reserved =
       scroller instanceof HTMLElement
         ? Number.parseFloat(getComputedStyle(scroller).paddingBottom) || 0
         : 0;
     return Math.max(0, height - reserved);
-  }
-
-  /** How tall the engraving is on screen, in the pixels it is shown at. */
-  private drawingHeight(): number {
-    return this.container.querySelector('svg')?.getBoundingClientRect().height ?? 0;
   }
 
   /** How tall the screen is, as far as this document can tell. */
@@ -512,69 +497,18 @@ export class OsmdScoreRenderer
     return inner > 0 ? inner : (this.container.ownerDocument.documentElement.clientHeight ?? 0);
   }
 
-  /**
-   * Puts a page in front of the reader by moving the engraving, not the
-   * scrollbar.
-   *
-   * Scrolling was the first attempt and it did nothing at all: which element
-   * actually scrolls depends on the layout the score happens to be in, and
-   * on this page it was not the one being asked. Moving the drawing itself
-   * cannot miss - the frame around it already clips - and it leaves the
-   * marker arithmetic alone, because that asks the browser for its mapping
-   * and the browser knows about transforms.
-   */
+  /** Puts one page in front of the reader and takes the others away. */
   private turnToPage(index: number): void {
-    const at = Math.min(Math.max(index, 0), Math.max(0, this.pageBands.length - 1));
-    this.pageAt = at;
-    this.showPageOffset();
+    const sheets = this.sheets;
+    this.pageAt = Math.min(Math.max(index, 0), Math.max(0, sheets.length - 1));
+    this.showOnlyCurrentPage();
     this.announcePages();
   }
 
-  private showPageOffset(): void {
-    const frame = this.frame();
-    if (!(this.container instanceof HTMLElement)) {
-      return;
+  private showOnlyCurrentPage(): void {
+    for (const [at, sheet] of this.sheets.entries()) {
+      sheet.style.display = !this.paged || at === this.pageAt ? '' : 'none';
     }
-    if (!this.paged) {
-      this.container.style.transform = '';
-      if (frame instanceof HTMLElement) {
-        frame.style.height = '';
-        frame.style.minHeight = '';
-      }
-      return;
-    }
-
-    // The frame is cut down to the page it is showing, which is what makes
-    // this a page rather than a view onto a scroll: without it the screen
-    // goes on past the last system of the page and the first system of the
-    // next one peers in at the bottom - visible, unreadable, and exactly the
-    // thing a page turn is for getting rid of.
-    if (frame instanceof HTMLElement) {
-      const page = this.pageBands[this.pageAt];
-      const tall = page === undefined ? 0 : (page.bottom - page.top) * this.drawingScale();
-      const room = this.windowHeight();
-      // The tiles already carry their own breathing room - each runs from
-      // halfway up the gap before its system to halfway up the gap after.
-      frame.style.height = tall > 0 ? `${Math.min(tall, room)}px` : '';
-      // The minimum has to go with it. Fullscreen gives the frame a floor of
-      // one screen, through a selector more specific than anything a
-      // stylesheet of ours can answer with - and a floor beats a height, so
-      // the frame stayed a screen tall and the next page went on showing
-      // underneath the one being read.
-      frame.style.minHeight = tall > 0 ? '0px' : '';
-    }
-
-    // Nothing but the page moves. A document that can still be scrolled -
-    // and in fullscreen it could, by a few pixels - leaves the reader who
-    // turns back to page one looking at something short of the top of it,
-    // because the turn puts the music back and the scroll stays where their
-    // thumb left it.
-    this.container.ownerDocument.defaultView?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
-    // No clamp against the end of the music any more: the frame is cut to
-    // the page below, so a page cannot show anything past its own last
-    // system, and clamping only stopped the last page from being reached.
-    const top = scrollTopFor(this.pageBands[this.pageAt], this.drawingScale(), 0);
-    this.container.style.transform = top === 0 ? '' : `translateY(${-top}px)`;
   }
 
   private announcePages(): void {
@@ -582,22 +516,6 @@ export class OsmdScoreRenderer
     for (const listener of [...this.pageListeners]) {
       listener(state);
     }
-  }
-
-  /** How many screen pixels one of the engraving's own pixels takes up. */
-  private drawingScale(): number {
-    const svg = this.container.querySelector('svg');
-    const drawn = svg === null ? 0 : intrinsicSize(svg).height;
-    const shown = svg?.getBoundingClientRect().height ?? 0;
-    return drawn > 0 && shown > 0 ? shown / drawn : 0;
-  }
-
-  /** Where the top of the window is, in the engraving's own pixels. */
-  private scrolledToDrawingY(): number {
-    const scroller = this.scroller();
-    const scale = this.drawingScale();
-    const top = scroller instanceof HTMLElement ? scroller.scrollTop : 0;
-    return scale > 0 ? top / scale : 0;
   }
 
   /**
@@ -913,7 +831,6 @@ export class OsmdScoreRenderer
 
   clear(): void {
     this.osmd?.clear();
-    this.pageBands = [];
     this.pageAt = 0;
     this.swipe = null;
     this.measures = [];
@@ -1052,7 +969,7 @@ export class OsmdScoreRenderer
   private readMeasures(): DrawnMeasure[] {
     const sheet = (this.osmd as unknown as { GraphicSheet?: DrawnSheet } | null)?.GraphicSheet;
     const byIndex = new Map<number, DrawnMeasure>();
-    for (const page of sheet?.MusicPages ?? []) {
+    for (const [pageAt, page] of (sheet?.MusicPages ?? []).entries()) {
       for (const system of page.MusicSystems ?? []) {
         const extent = systemExtent(system);
         if (extent === null) {
@@ -1073,6 +990,7 @@ export class OsmdScoreRenderer
             const known = byIndex.get(at);
             byIndex.set(at, {
               measureIndex: at,
+              page: pageAt,
               left: known === undefined ? left : Math.min(known.left, left),
               right: known === undefined ? right : Math.max(known.right, right),
               top: extent.top,

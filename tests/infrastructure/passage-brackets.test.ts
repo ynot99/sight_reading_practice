@@ -20,6 +20,7 @@ function page(): DrawnMeasure[] {
     for (let at = 0; at < 4; at += 1) {
       measures.push({
         measureIndex: system * 4 + at,
+        page: 0,
         left: 40 + at * 100,
         right: 140 + at * 100,
         top: 20 + system * 200,

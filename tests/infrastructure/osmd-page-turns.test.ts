@@ -8,14 +8,11 @@ import { createScoreContainer, installCanvasStub } from '../support/osmdHarness.
 /**
  * A window with a real size, which jsdom does not otherwise provide.
  *
- * Everything about how the column is cut into pages is arithmetic and tested
- * as such. What cannot be checked any other way is whether the arithmetic is
- * being fed the sizes it needs: an engraving whose height is read as zero
- * pages into a single page and the feature quietly does nothing at all.
+ * The frame and the box that scrolls inside it, arranged the way the real
+ * page has them - the frame taller than the screen, because it is given a
+ * minimum of one screen and then grows to what is engraved in it.
  */
 function withLayout(container: HTMLElement, windowHeight: number): HTMLElement {
-  // The frame that clips and the box that scrolls inside it, which is the
-  // arrangement the real page has - and they are not the same height.
   const frame = document.createElement('div');
   frame.className = 'score';
   const scroller = document.createElement('div');
@@ -23,42 +20,41 @@ function withLayout(container: HTMLElement, windowHeight: number): HTMLElement {
   container.replaceWith(frame);
   frame.append(scroller);
   scroller.append(container);
-  // Taller than the screen, which is what a score frame does: it is given a
-  // minimum of one screen and then grows to whatever is engraved in it. The
-  // screen is `windowHeight`; the frame runs well past the bottom of it.
-  frame.getBoundingClientRect = (() => {
-    // Follows what the renderer writes on it, so a test can see the frame
-    // being cut down to the page it is showing.
-    const written = Number.parseFloat(frame.style.height);
-    const height = Number.isFinite(written) ? written : 99_999;
-    return { left: 0, top: 0, bottom: height, width: 900, height };
-  }) as Element['getBoundingClientRect'];
-  scroller.getBoundingClientRect = (() =>
-    ({ left: 0, top: 0, bottom: 99_999, width: 900, height: 99_999 })) as Element['getBoundingClientRect'];
+  frame.getBoundingClientRect = (() => ({
+    left: 0,
+    top: 0,
+    bottom: 99_999,
+    width: 900,
+    height: 99_999,
+  })) as Element['getBoundingClientRect'];
   Object.defineProperty(window, 'innerHeight', { value: windowHeight, configurable: true });
-
-  const svg = container.querySelector('svg');
-  const height = Number.parseFloat(svg?.getAttribute('height') ?? '0');
-  if (svg !== null) {
-    // Shown at exactly the size it was drawn at, so the scale is one and the
-    // numbers in the test are the engraver's own.
-    svg.getBoundingClientRect = (() =>
-      ({ left: 0, top: 0, width: 900, height })) as Element['getBoundingClientRect'];
-  }
   return scroller;
 }
 
-/** How far up the engraving has been moved, in pixels. */
-function movedBy(container: HTMLElement): number {
-  const match = /translateY\((-?[\d.]+)px\)/.exec(container.style.transform);
-  return match === null ? 0 : -Number.parseFloat(match[1] ?? '0');
+/** The pages the engraver drew. */
+function sheets(container: HTMLElement): SVGSVGElement[] {
+  return [...container.querySelectorAll('svg')];
 }
 
-describe('reading a real engraving as pages', () => {
+/** Which of them the reader can see. */
+function showing(container: HTMLElement): number[] {
+  return sheets(container)
+    .map((sheet, at) => (sheet.style.display === 'none' ? -1 : at))
+    .filter((at) => at >= 0);
+}
+
+/**
+ * Reading a real engraving as pages.
+ *
+ * The engraver does the breaking: given a page size it lays the music out as
+ * separate pages and draws each into an SVG of its own. That is the whole of
+ * the feature, and it is why there is so little arithmetic left to test - a
+ * turn is showing one element and hiding the others, and nothing here can cut
+ * a system in half because nothing here decides where a system goes.
+ */
+describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
   let container: HTMLElement;
   let renderer: OsmdScoreRenderer;
-  let scroller: HTMLElement;
-  let frame: HTMLElement;
 
   beforeAll(() => {
     installCanvasStub();
@@ -68,50 +64,35 @@ describe('reading a real engraving as pages', () => {
     document.body.replaceChildren();
     container = createScoreContainer();
     renderer = new OsmdScoreRenderer(container, { zoom: 1 });
-    // Sixteen bars is several systems at this width, and a short window makes
-    // several pages of them.
+    // Small enough that the engraver can be run several times in a test and
+    // still long enough to need more than one page.
     await renderer.load(new MusicXmlSerializer().serialize(longExercise({ bars: 16 })));
-    scroller = withLayout(container, 200);
-    frame = scroller.parentElement as HTMLElement;
+    withLayout(container, 260);
   });
 
-  it('has no pages at all until it is asked for them', () => {
-    // Not "one long page": the difference matters to anything that would
-    // otherwise say "page 1 of 1" at a reader who never asked for pages.
+  it('is one endless column until it is asked for pages', () => {
+    expect(sheets(container)).toHaveLength(1);
     expect(renderer.pages.count).toBe(0);
   });
 
-  it('cuts the column into more than one page', () => {
+  it('has the engraver break the music into several pages', () => {
     renderer.setPaged(true);
 
-    expect(renderer.pages.count).toBeGreaterThan(1);
+    expect(sheets(container).length).toBeGreaterThan(1);
+    expect(renderer.pages.count).toBe(sheets(container).length);
     expect(renderer.pages.at).toBe(0);
   });
 
-  it('moves the engraving rather than re-engraving anything', () => {
-    // Scrolling was the first attempt and it did nothing at all: which
-    // element actually scrolls depends on the layout the score is in, and it
-    // was not the one being asked. Moving the drawing cannot miss.
+  it('shows one page and hides the rest', () => {
+    // Which is the whole of a page turn. No scrolling, no transform and
+    // nothing measured: the page that is not being read is not displayed.
     renderer.setPaged(true);
-    const engravings = container.querySelectorAll('svg').length;
+    expect(showing(container)).toEqual([0]);
 
     renderer.turnPages(1);
 
+    expect(showing(container)).toEqual([1]);
     expect(renderer.pages.at).toBe(1);
-    expect(movedBy(container)).toBeGreaterThan(0);
-    // The column is untouched: a page is a window onto it, which is what
-    // keeps the cursor, the marks and the markers all still true.
-    expect(container.querySelectorAll('svg')).toHaveLength(engravings);
-  });
-
-  it('puts the engraving back when pages are turned off', () => {
-    renderer.setPaged(true);
-    renderer.turnPages(1);
-    expect(movedBy(container)).toBeGreaterThan(0);
-
-    renderer.setPaged(false);
-
-    expect(movedBy(container)).toBe(0);
   });
 
   it('stops at either end instead of running off', () => {
@@ -121,6 +102,7 @@ describe('reading a real engraving as pages', () => {
 
     renderer.turnPages(999);
     expect(renderer.pages.at).toBe(renderer.pages.count - 1);
+    expect(showing(container)).toEqual([renderer.pages.count - 1]);
   });
 
   it('turns to the page a bar is on, and stays put when it is already there', () => {
@@ -133,98 +115,52 @@ describe('reading a real engraving as pages', () => {
     expect(reached).toBeGreaterThan(0);
 
     renderer.showMeasure(15);
-    // Told twice about the same bar, it turns once: a page turn is for
+    // Told twice about the same bar it turns once: a page turn is for
     // looking at one thing until it is finished with.
     expect(turns).toEqual([reached]);
-  });
-
-  it('shows a page and nothing of the next one', () => {
-    // The difference between a page and a view onto a scroll. Left at the
-    // height of the screen, the frame goes on past the last system of the
-    // page and the first system of the next peers in at the bottom -
-    // visible, unreadable, and the thing a page turn is for getting rid of.
-    renderer.setPaged(true);
-    expect(renderer.pages.count).toBeGreaterThan(1);
-
-    const shown = frame.getBoundingClientRect().height;
-
-    expect(shown).toBeGreaterThan(0);
-    // Cut down to its own systems rather than left at the screen's height.
-    expect(shown).toBeLessThanOrEqual(200);
-  });
-
-  it('takes the floor off the frame as well as the ceiling', () => {
-    // Fullscreen gives the frame a minimum of one screen, through a selector
-    // more specific than anything a stylesheet of ours can answer with - and
-    // a floor beats a height, so the frame stayed a screen tall and the next
-    // page went on showing underneath the one being read.
-    renderer.setPaged(true);
-
-    expect(frame.style.minHeight).toBe('0px');
-    expect(frame.style.height).not.toBe('');
-  });
-
-  it('stops the document scrolling, and puts it back to the top', () => {
-    // The document was the box that was actually moving: a swipe across the
-    // music panned the whole page under it, and turning back to page one
-    // left the reader short of the top - the music had gone back and the
-    // scroll had not.
-    renderer.setPaged(true);
-
-    expect(document.documentElement.dataset['paged']).toBe('true');
-
-    renderer.setPaged(false);
-    expect(document.documentElement.dataset['paged']).toBe('false');
-  });
-
-  it('gives the frame back its height when pages are turned off', () => {
-    renderer.setPaged(true);
-    renderer.setPaged(false);
-
-    expect(frame.style.height).toBe('');
-    expect(frame.style.minHeight).toBe('');
-  });
-
-  it('fits its pages to the window at a zoom the reader has chosen', async () => {
-    // The engraver's own units and the pixels a drawing is shown at part
-    // company the moment the reader zooms: at 85% the box is 818 units tall
-    // while the attribute says 696 pixels. Read the attribute as the unit
-    // count - which is what this did - and every position comes out eighteen
-    // per cent too far down, which packs a system too many onto each page
-    // and slices the last one through the middle. Which is what the reader
-    // photographed.
-    document.body.replaceChildren();
-    const zoomed = createScoreContainer();
-    const renderer85 = new OsmdScoreRenderer(zoomed, { zoom: 0.85 });
-    await renderer85.load(new MusicXmlSerializer().serialize(longExercise({ bars: 40 })));
-    const frame85 = withLayout(zoomed, 400).parentElement as HTMLElement;
-    renderer85.setPaged(true);
-
-    expect(renderer85.pages.count).toBeGreaterThan(1);
-
-    // The pages have to cover the drawing exactly. Read the shown height as
-    // the unit count and they cover a tenth more than there is, so the last
-    // page hangs past the end of the music and every page before it is
-    // packed a system too tightly.
-    renderer85.turnPages(renderer85.pages.count);
-    const covered = movedBy(zoomed) + frame85.getBoundingClientRect().height;
-
-    expect(covered).toBeCloseTo(renderer85.pages.contentPx, 0);
   });
 
   it('does nothing to a scrolling score', () => {
     renderer.showMeasure(15);
 
-    expect(movedBy(container)).toBe(0);
+    expect(sheets(container)).toHaveLength(1);
+    expect(showing(container)).toEqual([0]);
   });
 
-  it('gives the scroll back when pages are turned off', () => {
+  it('gives back the endless column when pages are turned off', () => {
     renderer.setPaged(true);
     renderer.turnPages(1);
 
     renderer.setPaged(false);
 
-    expect(scroller.dataset['paged']).toBe('false');
+    expect(sheets(container)).toHaveLength(1);
+    expect(showing(container)).toEqual([0]);
     expect(renderer.pages.count).toBe(0);
+  });
+
+  it('makes more pages of the same music when the reader zooms in', () => {
+    // The page keeps the size it is given on screen and the music inside it
+    // grows instead, so a reader who has made the notes bigger has more
+    // pages of them - which is what a book does.
+    renderer.setPaged(true);
+    const before = renderer.pages.count;
+
+    renderer.setZoom(1.6);
+    // The reader's zoom is applied and then the page is engraved again,
+    // which is what the controller does with it.
+    renderer.refresh();
+
+    expect(renderer.pages.count).toBeGreaterThan(before);
+    expect(showing(container)).toHaveLength(1);
+  });
+
+  it('keeps the reader on their page across a re-engraving', () => {
+    renderer.setPaged(true);
+    renderer.turnPages(1);
+
+    renderer.refresh();
+
+    expect(renderer.pages.at).toBe(1);
+    expect(showing(container)).toEqual([1]);
   });
 });

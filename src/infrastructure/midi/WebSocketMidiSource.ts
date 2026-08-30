@@ -260,7 +260,10 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
           pedal: 'sustain',
           down: message.down,
           value: message.value,
-          timestampMs: this.clock.now(),
+          // Stamped where it happened, like a note: a recording keeps these
+          // moments, and the pedal is what decides how long every note in it
+          // goes on sounding.
+          timestampMs: this.stampFor(message.at),
           sourceId: 'bridge',
         });
         return;
@@ -269,7 +272,7 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
           type: 'control',
           controller: message.controller,
           value: message.value,
-          timestampMs: this.clock.now(),
+          timestampMs: this.stampFor(message.at),
           sourceId: 'bridge',
         });
         return;

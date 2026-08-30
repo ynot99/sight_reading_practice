@@ -43,6 +43,14 @@ describe('bridge MIDI decoding', () => {
     expect(midiMessageToBridgeEvent([0xb0, 64, 0])).toMatchObject({ down: false });
   });
 
+  it('stamps the pedal where it happened, like a note', () => {
+    // A recording keeps these moments, and the pedal is what decides how
+    // long every note in it goes on sounding. Left unstamped, it arrived
+    // carrying the moment the message reached the tablet.
+    expect(midiMessageToBridgeEvent([0xb0, 64, 127], 1_234)).toMatchObject({ at: 1_234 });
+    expect(midiMessageToBridgeEvent([0xb0, 7, 100], 1_234)).toMatchObject({ at: 1_234 });
+  });
+
   it('reads the halfway point as the dampers touching, not as still down', () => {
     // A pedal that reports how far it has travelled says 64 on the way
     // through in both directions, so a foot that comes up and goes straight

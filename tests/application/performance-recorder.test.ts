@@ -291,6 +291,53 @@ describe('the takes that were kept', () => {
   });
 });
 
+describe('a take captured over a relay', () => {
+  it('keeps the moments the keys were struck, not the moments they arrived', () => {
+    // The reader's report: the same playing recorded at the desk came back
+    // clean and recorded through the relay came back uneven. A relay stamps
+    // each event at the keyboard and then sends it, and neither the sending
+    // nor the tablet's waking is steady - so what arrives is the right notes
+    // at slightly wrong moments, every note. Inaudible as a number,
+    // unmistakable as a sound.
+    const clock = new ManualClock();
+    const midi = new MockMidiAdapter({ clock });
+    const recorder = new PerformanceRecorder(clock);
+    recorder.listenTo(midi);
+
+    // Four notes struck exactly half a second apart, each delivered after a
+    // different delay.
+    for (const [at, late] of [
+      [0, 30],
+      [500, 5],
+      [1_000, 45],
+      [1_500, 12],
+    ]) {
+      clock.set((at ?? 0) + (late ?? 0));
+      midi.noteOn(60, at);
+      midi.noteOff(60, (at ?? 0) + 100);
+    }
+
+    const take = recorder.take();
+    const struck = take?.events.filter((event) => event.kind === 'noteOn').map((e) => e.atMs);
+
+    expect(struck).toEqual([0, 500, 1_000, 1_500]);
+  });
+
+  it('falls back to the clock for a source that stamps nothing', () => {
+    const clock = new ManualClock();
+    const midi = new MockMidiAdapter({ clock });
+    const recorder = new PerformanceRecorder(clock);
+    recorder.listenTo(midi);
+
+    clock.set(400);
+    midi.noteOn(60, Number.NaN);
+    clock.set(700);
+    midi.noteOff(60, Number.NaN);
+
+    expect(recorder.take()?.durationMs).toBe(300);
+  });
+});
+
 describe('a take that begins under the pedal', () => {
   it('says at its start that the pedal was already down', () => {
     // Same reason the held keys are released at its end: a take has to carry

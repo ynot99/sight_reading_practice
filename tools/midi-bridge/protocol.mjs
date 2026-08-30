@@ -60,13 +60,13 @@ export function midiMessageToBridgeEvent(message, atMs) {
   }
   // The sustain pedal, which the trainer sounds but never judges.
   if (command === CONTROL_CHANGE && note === SUSTAIN_CONTROLLER) {
-    return { type: 'pedal', down: velocity > DAMPER_HALFWAY, value: velocity / 127 };
+    return { type: 'pedal', down: velocity > DAMPER_HALFWAY, value: velocity / 127, ...at };
   }
   // Any other knob, forwarded by number. The bridge decides nothing about
   // what it means; the tablet is where a reader teaches the app their knob,
   // and it can only learn what reaches it.
   if (command === CONTROL_CHANGE) {
-    return { type: 'control', controller: note, value: velocity / 127 };
+    return { type: 'control', controller: note, value: velocity / 127, ...at };
   }
   return null;
 }

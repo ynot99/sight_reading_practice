@@ -61,6 +61,8 @@ export interface BridgePedalMessage {
   readonly down: boolean;
   /** Raw controller value, `0..1`. */
   readonly value: number;
+  /** Stamped at the keyboard, like a note; see {@link BridgeNoteOnMessage}. */
+  readonly at?: number;
 }
 
 /** Any other knob, by the number it sends. See {@link MidiControlEvent}. */
@@ -68,6 +70,7 @@ export interface BridgeControlMessage {
   readonly type: 'control';
   readonly controller: number;
   readonly value: number;
+  readonly at?: number;
 }
 
 export type BridgeMessage =
@@ -169,19 +172,22 @@ export function parseBridgeMessage(raw: unknown): BridgeMessage | null {
     }
     case 'pedal': {
       const value = parsed['value'];
+      const at = toStamp(parsed['at']);
       return {
         type: 'pedal',
         down: parsed['down'] === true,
         value: typeof value === 'number' && value >= 0 && value <= 1 ? value : 0,
+        ...(at === null ? {} : { at }),
       };
     }
     case 'control': {
       const controller = toMidiNote(parsed['controller']);
       const value = parsed['value'];
+      const at = toStamp(parsed['at']);
       if (controller === null || typeof value !== 'number' || value < 0 || value > 1) {
         return null;
       }
-      return { type: 'control', controller, value };
+      return at === null ? { type: 'control', controller, value } : { type: 'control', controller, value, at };
     }
     default:
       return null;

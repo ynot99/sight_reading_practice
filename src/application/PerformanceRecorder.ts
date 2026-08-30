@@ -138,7 +138,7 @@ export class PerformanceRecorder {
   }
 
   private accept(event: MidiEvent): void {
-    const atMs = this.clock.now();
+    const atMs = this.struckAt(event);
     this.closeTakeBefore(atMs);
     switch (event.type) {
       case 'noteon':
@@ -155,6 +155,29 @@ export class PerformanceRecorder {
       default:
         return;
     }
+  }
+
+  /**
+   * When the key was struck, rather than when the message got here.
+   *
+   * These are the same thing at the desk and they are not over a network. A
+   * relay stamps each event at the keyboard and then sends it; the sending
+   * is not steady, and a tablet does not wake at a steady rate either, so
+   * what arrives is the right notes at slightly wrong moments - a few tens
+   * of milliseconds either way, every note. That is inaudible as a number
+   * and unmistakable as a sound: the recording comes back uneven, and the
+   * same playing captured at the desk comes back clean. Which is exactly
+   * how the reader described it.
+   *
+   * The stamp is already the honest answer - it is what every judgement is
+   * measured against, and the whole clock-skew estimate exists to make it
+   * so. This was simply never told.
+   *
+   * The clock stays as the fallback, for a source that stamps nothing.
+   */
+  private struckAt(event: MidiEvent): number {
+    const stamped = event.timestampMs;
+    return typeof stamped === 'number' && Number.isFinite(stamped) ? stamped : this.clock.now();
   }
 
   /**

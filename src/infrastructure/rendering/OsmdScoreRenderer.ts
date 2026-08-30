@@ -76,6 +76,8 @@ const TAP_SLACK_PX = 8;
  * rather than a wait.
  */
 const HOLD_MS = 450;
+/** How far the page number sits from the corner of the page, in pixels. */
+const PAGE_NUMBER_INSET = 18;
 /** Half the width of the arrow drawn inside a handle. */
 const ARROW_REACH = 3.5;
 
@@ -455,6 +457,19 @@ export class OsmdScoreRenderer
     return [...this.container.querySelectorAll('svg')];
   }
 
+  /** The page the reader is looking at. */
+  private currentSheet(): SVGSVGElement | null {
+    const sheets = this.sheets;
+    return sheets[this.paged ? this.pageAt : 0] ?? sheets[0] ?? null;
+  }
+
+  /** The bars on it, which are the only ones a touch can be aimed at. */
+  private measuresHere(): DrawnMeasure[] {
+    return this.paged
+      ? this.measures.filter((measure) => measure.page === this.pageAt)
+      : this.measures;
+  }
+
   /**
    * Where the reader is, or nothing at all when the score is one column.
    *
@@ -527,10 +542,40 @@ export class OsmdScoreRenderer
   }
 
   private showOnlyCurrentPage(): void {
-    for (const [at, sheet] of this.sheets.entries()) {
+    const sheets = this.sheets;
+    for (const [at, sheet] of sheets.entries()) {
       sheet.style.display = !this.paged || at === this.pageAt ? '' : 'none';
+      this.numberPage(sheet, at, this.paged ? sheets.length : 0);
     }
     this.placeCursor();
+  }
+
+  /**
+   * Writes the page number onto the page, the way a printed score has it.
+   *
+   * Drawn into the sheet rather than floated over it, because that is what
+   * it is: part of this page and not part of the screen. It stays put, it is
+   * there before anything has been turned, and it goes wherever the page
+   * goes - none of which a pill announcing a turn can do, since it says its
+   * piece and disappears.
+   *
+   * The engraver keeps a page number in its model and draws nothing with it,
+   * so this is ours to draw.
+   */
+  private numberPage(sheet: SVGSVGElement, at: number, count: number): void {
+    const existing = sheet.querySelector('text.page-number');
+    if (count < 2) {
+      existing?.remove();
+      return;
+    }
+    const text = existing ?? sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'text');
+    text.setAttribute('class', 'page-number');
+    text.setAttribute('x', String(PAGE_NUMBER_INSET));
+    text.setAttribute('y', String(PAGE_NUMBER_INSET));
+    text.textContent = `Page ${at + 1} of ${count}`;
+    if (existing === null) {
+      sheet.append(text);
+    }
   }
 
   /**
@@ -750,7 +795,7 @@ export class OsmdScoreRenderer
       (passage === null || point === null
         ? null
         : gripAt(
-            bracketShapes(this.measures, passage.fromMeasureIndex, passage.toMeasureIndex),
+            bracketShapes(this.measuresHere(), passage.fromMeasureIndex, passage.toMeasureIndex),
             point,
           ));
     if (edge === null || passage === null) {
@@ -780,6 +825,7 @@ export class OsmdScoreRenderer
   }
 
   private continueDrag(event: PointerEvent): void {
+    this.turnIfDraggedOffThePage(event);
     const began = this.tapFrom;
     if (
       began !== null &&
@@ -857,7 +903,7 @@ export class OsmdScoreRenderer
       return null;
     }
     const shapes = bracketShapes(
-      this.measures,
+      this.measuresHere(),
       drag.passage.fromMeasureIndex,
       drag.passage.toMeasureIndex,
     );
@@ -880,6 +926,38 @@ export class OsmdScoreRenderer
     return { fromMeasureIndex: next.fromIndex, toMeasureIndex: next.toIndex };
   }
 
+  /**
+   * Turns the page when a marker is dragged off the side of it.
+   *
+   * A passage that runs onto the next page cannot be chosen otherwise: the
+   * marker reaches the edge and stops, because the bar it is being taken to
+   * is not on the page. Dragging past the edge is the reader saying "further
+   * than this", and it is the same gesture as carrying a finger off the side
+   * of a list.
+   *
+   * The turn does not repeat while the finger stays out there: the new page
+   * occupies the same part of the screen, so the pointer is inside it again
+   * the moment it arrives.
+   */
+  private turnIfDraggedOffThePage(event: PointerEvent): void {
+    const sheet = this.currentSheet();
+    if (!this.paged || this.dragging === null || sheet === null) {
+      return;
+    }
+    const point = this.drawingPointOf(event);
+    const width = intrinsicSize(sheet).width;
+    if (point === null || width <= 0) {
+      return;
+    }
+    if (point.x > width) {
+      this.turnPages(1);
+      return;
+    }
+    if (point.x < 0) {
+      this.turnPages(-1);
+    }
+  }
+
   /** Where this event puts the passage, or `null` when nothing is held. */
   private draggedTo(event: PointerEvent): DrawnPassage | null {
     const drag = this.dragging;
@@ -890,7 +968,7 @@ export class OsmdScoreRenderer
     if (point === null) {
       return null;
     }
-    const landedOn = measureForDrag(this.measures, point, drag.edge);
+    const landedOn = measureForDrag(this.measuresHere(), point, drag.edge);
     if (landedOn === null) {
       return null;
     }
@@ -904,7 +982,10 @@ export class OsmdScoreRenderer
 
   /** A touch, in the pixels the engraving was measured in. */
   private drawingPointOf(event: PointerEvent): { x: number; y: number } | null {
-    const svg = this.container.querySelector('svg');
+    // The sheet being read, not the first one. Every page is an SVG of its
+    // own with its own coordinates, so mapping a touch through a page that
+    // is hidden gives an answer about music nobody is looking at.
+    const svg = this.currentSheet();
     if (svg === null) {
       return null;
     }

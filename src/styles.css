@@ -1130,6 +1130,22 @@ select {
  * nudged sideways with great care and not moved down the page at all. This
  * is a fingertip's worth of area that says so in advance.
  */
+/*
+ * The page number, printed on the page rather than floated over it.
+ *
+ * Engraved music has this in the corner and so does this: the same grey as
+ * the bar numbers the engraver draws, small, and out of the way of the top
+ * stave. It is part of the page, so it turns with it and is there before
+ * anything has been turned at all.
+ */
+.page-number {
+  font: 12px/1 ui-serif, Georgia, 'Times New Roman', serif;
+  fill: #6b7280;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
 .passage-marker__hit {
   fill: transparent;
   touch-action: none;

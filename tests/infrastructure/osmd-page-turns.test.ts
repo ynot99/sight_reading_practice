@@ -190,6 +190,29 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     expect(markers[renderer.pages.count - 1]).toBe(1);
   });
 
+  it('prints the page number on the page, the way a score has it', () => {
+    // Part of the page and not part of the screen: it stays put, it is there
+    // before anything is turned, and it goes wherever the page goes - which
+    // is what a pill announcing a turn cannot do.
+    renderer.setPaged(true);
+    const count = renderer.pages.count;
+
+    const numbers = sheets(container).map(
+      (sheet) => sheet.querySelector('text.page-number')?.textContent ?? '',
+    );
+
+    expect(numbers[0]).toBe(`Page 1 of ${count}`);
+    expect(numbers[count - 1]).toBe(`Page ${count} of ${count}`);
+  });
+
+  it('says nothing about pages on a score that is one column', () => {
+    // "Page 1 of 1" at a reader who never asked for pages is furniture.
+    renderer.setPaged(true);
+    renderer.setPaged(false);
+
+    expect(container.querySelector('text.page-number')).toBeNull();
+  });
+
   it('turns the page itself when the cursor moves onto another one', () => {
     // The cursor is what every mode moves - practising, listening, a take
     // played back - so following it is what makes the page turn itself in

@@ -128,6 +128,16 @@ describe('the stylesheet', () => {
     }
   });
 
+  it('keeps the page number out of the way of a finger', () => {
+    // It is printed on the page, so it sits over the music: a label that
+    // swallowed a touch would put a dead patch in the corner of every page,
+    // which is exactly where a marker at bar one stands.
+    const number = rules().find((rule) => rule.selector === '.page-number');
+
+    expect(number?.body).toMatch(/pointer-events\s*:\s*none/);
+    expect(number?.body).toMatch(/fill\s*:/);
+  });
+
   it('takes the scrollbar away from a score that is turned', () => {
     // A page that can also be nudged upward by half a system is not a page,
     // and the reader who nudged it has no way back to where the turn had put

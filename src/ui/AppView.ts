@@ -2468,17 +2468,6 @@ export class AppView {
       }),
     );
 
-    this.subscriptions.push(
-      // Which page, said only when it changes. A page turned by a swipe has
-      // nothing else to confirm it happened, and in fullscreen there is no
-      // scrollbar left to say where in the piece the reader is.
-      this.runtime.renderer.onPagesChanged(({ at, count }) => {
-        if (count > 1) {
-          this.showNotice(`Page ${at + 1} of ${count}`);
-          this.restoreNoticeSoon();
-        }
-      }),
-    );
   }
 
   /**

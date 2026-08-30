@@ -60,6 +60,15 @@ export interface WebSocketMidiOptions {
  */
 const CLOCKS_DISAGREE_MS = 5_000;
 
+/**
+ * Presses kept while working out how far apart the two clocks are.
+ *
+ * Enough that one of them will have arrived on a quiet network, few enough
+ * that a machine waking from sleep is forgotten within a bar or two.
+ */
+const CLOCK_SAMPLES = 64;
+const MIN_CLOCK_SAMPLES = 8;
+
 interface AdapterEvents {
   midi: MidiEvent;
   status: MidiConnectionStatus;
@@ -87,6 +96,7 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
   private readonly schedule: Scheduler;
   private readonly reconnectDelays: readonly number[];
 
+  private readonly gaps: number[] = [];
   private socket: SocketLike | null = null;
   private currentStatus: MidiConnectionStatus = 'idle';
   private device: string | null = null;
@@ -302,13 +312,56 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
    * is used instead: a stamp minutes adrift is not a better measurement than
    * a slightly late one, it is an unusable app.
    */
+  /**
+   * When the key actually went down, on this page's clock.
+   *
+   * The bridge stamps a press with its own wall clock and the page counts in
+   * its own, and joining them by the time origin assumes the two machines
+   * agree about what time it is. They need not: a desktop whose clock has
+   * drifted by half a second hands over presses half a second wrong, every
+   * one of them, with no sign that anything is amiss - and a reader correcting
+   * that with the input-delay slider is treating a clock fault as a keyboard
+   * one.
+   *
+   * So the difference is measured instead of assumed. Over many presses the
+   * *smallest* gap between a stamp and its arrival is the least contaminated
+   * one: transport delay is always positive and only ever adds, so the
+   * minimum approaches the disagreement between the clocks alone. Subtracting
+   * it leaves the moment the key went down.
+   */
   private stampFor(bridgeAtMs: number | undefined): number {
     const arrived = this.clock.now();
     if (bridgeAtMs === undefined || this.timeOriginMs === null) {
       return arrived;
     }
     const converted = bridgeAtMs - this.timeOriginMs;
-    return Math.abs(converted - arrived) > CLOCKS_DISAGREE_MS ? arrived : converted;
+    if (Math.abs(converted - arrived) > CLOCKS_DISAGREE_MS) {
+      return arrived;
+    }
+
+    this.gaps.push(arrived - converted);
+    while (this.gaps.length > CLOCK_SAMPLES) {
+      this.gaps.shift();
+    }
+    // Not until there are enough to have seen a quiet moment; before that the
+    // one sample in hand may be the slowest rather than the fastest.
+    if (this.gaps.length < MIN_CLOCK_SAMPLES) {
+      return converted;
+    }
+    return converted + Math.min(...this.gaps);
+  }
+
+  /**
+   * How far the bridge's clock is from this page's, in milliseconds.
+   *
+   * Positive means the bridge is behind. `null` until enough presses have
+   * arrived to say. Reported rather than only corrected, because a reader
+   * looking at a hundred milliseconds of lateness deserves to know whether it
+   * came from their keyboard or from a computer that thinks it is a different
+   * time.
+   */
+  get clockSkewMs(): number | null {
+    return this.gaps.length < MIN_CLOCK_SAMPLES ? null : Math.min(...this.gaps);
   }
 
   private setDevice(device: string | null): void {

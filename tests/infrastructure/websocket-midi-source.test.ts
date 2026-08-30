@@ -427,3 +427,86 @@ describe('when the bridge says a key was struck', () => {
     expect(noteFrom(rig, { at: ORIGIN + 1_040 })?.timestampMs).toBe(1_040);
   });
 });
+
+describe('when the two computers disagree about the time', () => {
+  const ORIGIN = 1_700_000_000_000;
+
+  /** Delivers `count` presses, each stamped `skewMs` behind the page's clock. */
+  function play(rig: Rig, count: number, skewMs: number): MidiEvent | undefined {
+    rig.source.connect();
+    rig.sockets[0]?.open();
+    for (let press = 0; press < count; press += 1) {
+      const now = rig.clock.now();
+      rig.sockets[0]?.deliver({
+        v: 1,
+        type: 'noteon',
+        note: 60,
+        velocity: 0.8,
+        at: ORIGIN + now - skewMs,
+      });
+      rig.clock.advance(500);
+    }
+    return rig.events.at(-1);
+  }
+
+  it('measures the difference rather than assuming there is none', () => {
+    // A desktop whose clock has drifted hands over every press wrong by the
+    // same amount, with nothing to show for it - and a reader correcting that
+    // with the input-delay slider is treating a clock fault as a keyboard one.
+    const rig = createRig(undefined, ORIGIN);
+
+    play(rig, 12, 900);
+
+    expect(rig.source.clockSkewMs).toBe(900);
+  });
+
+  it('takes it off the presses that follow', () => {
+    const rig = createRig(undefined, ORIGIN);
+    play(rig, 12, 900);
+    const at = rig.clock.now();
+
+    rig.sockets[0]?.deliver({ v: 1, type: 'noteon', note: 62, velocity: 0.8, at: ORIGIN + at - 900 });
+
+    // Struck now, and said to have been struck now.
+    expect(rig.events.at(-1)?.timestampMs).toBe(at);
+  });
+
+  it('waits for enough presses to have seen a quiet moment', () => {
+    // One sample may be the slowest rather than the fastest, and a correction
+    // built on it would be a guess wearing a measurement's clothes.
+    const rig = createRig(undefined, ORIGIN);
+
+    play(rig, 3, 900);
+
+    expect(rig.source.clockSkewMs).toBeNull();
+  });
+
+  it('takes the smallest gap, which is the one least delayed on the way', () => {
+    // Transport delay only ever adds, so the quietest press is the one that
+    // shows the clocks alone.
+    const rig = createRig(undefined, ORIGIN);
+    rig.source.connect();
+    rig.sockets[0]?.open();
+    for (const extra of [40, 12, 90, 0, 30, 55, 20, 70, 25, 60]) {
+      const now = rig.clock.now();
+      rig.sockets[0]?.deliver({
+        v: 1,
+        type: 'noteon',
+        note: 60,
+        velocity: 0.8,
+        at: ORIGIN + now - 300 - extra,
+      });
+      rig.clock.advance(500);
+    }
+
+    expect(rig.source.clockSkewMs).toBe(300);
+  });
+
+  it('says nothing when the clocks already agree', () => {
+    const rig = createRig(undefined, ORIGIN);
+
+    play(rig, 12, 0);
+
+    expect(rig.source.clockSkewMs).toBe(0);
+  });
+});

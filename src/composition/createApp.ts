@@ -89,6 +89,15 @@ export interface AppRuntimeOptions {
 export interface IMidiBridge extends IMidiSource, IMidiConnection {
   readonly deviceName: string | null;
   readonly endpoint: string;
+  /**
+   * How far the relay's clock is from this page's, or `null` until it can say.
+   *
+   * Worth having where a reader can see it: a hundred milliseconds of
+   * lateness looks the same whether it came from their keyboard or from a
+   * computer that thinks it is a different time, and only one of those is
+   * theirs to fix.
+   */
+  readonly clockSkewMs: number | null;
   onDeviceChange(listener: (device: string | null) => void): Unsubscribe;
 }
 

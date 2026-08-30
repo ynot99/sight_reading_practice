@@ -287,6 +287,23 @@ function takeName(savedAtMs: number): string {
   return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
 
+/**
+ * What the relay's clock is doing, in words.
+ *
+ * The number matters most when it is large: a reader looking at a third of a
+ * second of lateness has no way of telling a slow keyboard from a computer
+ * that thinks it is a different time, and only one of those is theirs.
+ */
+function describeSkew(skewMs: number | null): string {
+  if (skewMs === null) {
+    return 'not measured (no relay, or too few presses yet)';
+  }
+  const rounded = Math.round(skewMs);
+  return Math.abs(rounded) < 20
+    ? `agrees with this page (${rounded} ms)`
+    : `${Math.abs(rounded)} ms ${rounded > 0 ? 'behind' : 'ahead of'} this page, and taken off every press`;
+}
+
 /** Named the same way as a backup, so a pair of them stay together. */
 function judgingFileName(savedAtMs: number): string {
   return backupFileName(savedAtMs).replace(/^sight-reading-/, 'judging-').replace(/\.json$/, '.txt');
@@ -2738,6 +2755,7 @@ export class AppView {
       `input delay: ${settings.inputLatencyMs} ms   chord window: ${settings.matchToleranceMs} ms`,
       `marks: ${settings.playedNotes}   hand: ${settings.handStaff ?? 'both'}   count-in: ${settings.countInBars}`,
       `click: ${settings.clickPattern} / ${settings.clickWhen}`,
+      `bridge clock: ${describeSkew(this.runtime.bridge?.clockSkewMs ?? null)}`,
       report === undefined || report === null
         ? 'last run: none'
         : `last run: mean ${Math.round(report.timing.meanDeviationMs)} ms, spread ${Math.round(report.timing.deviationSpreadMs)} ms, over ${report.timing.deviations.length} presses`,

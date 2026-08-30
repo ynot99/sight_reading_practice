@@ -290,3 +290,79 @@ describe('the takes that were kept', () => {
     expect(library.list()).toHaveLength(0);
   });
 });
+
+describe('a take that begins under the pedal', () => {
+  it('says at its start that the pedal was already down', () => {
+    // Same reason the held keys are released at its end: a take has to carry
+    // everything needed to hear it. A foot that went down before the cut is
+    // a foot nothing downstream can know about, and the opening of the take
+    // came out dry - which on a pedalled instrument is most of the sound.
+    const harness = rig({ silenceMs: 1_000 });
+    harness.midi.pedal(true, harness.clock.now());
+    playNote(harness, 60);
+    harness.clock.advance(2_000);
+    playNote(harness, 62);
+
+    const take = harness.recorder.take();
+
+    expect(take?.events[0]).toEqual({ kind: 'sustain', atMs: 0, value: 1 });
+  });
+
+  it('says nothing when the pedal was up', () => {
+    const harness = rig({ silenceMs: 1_000 });
+    harness.midi.pedal(true, harness.clock.now());
+    harness.midi.pedal(false, harness.clock.now());
+    playNote(harness, 60);
+    harness.clock.advance(2_000);
+    playNote(harness, 62);
+
+    const take = harness.recorder.take();
+
+    expect(take?.events[0]?.kind).toBe('noteOn');
+  });
+});
+
+describe('showing when the next press would start a new take', () => {
+  it('says nothing has been played until something has', () => {
+    const harness = rig({ silenceMs: 1_000 });
+
+    expect(harness.recorder.silenceSoFarMs).toBeNull();
+    expect(harness.recorder.takeIsSealed).toBe(false);
+  });
+
+  it('counts the silence from the last thing the keyboard did', () => {
+    // Read from the clock on being asked, so this needs no timer of its own -
+    // which is what lets a whole session be replayed in a test.
+    const harness = rig({ silenceMs: 1_000 });
+    playNote(harness, 60);
+
+    harness.clock.advance(400);
+    expect(harness.recorder.silenceSoFarMs).toBe(400);
+    expect(harness.recorder.takeIsSealed).toBe(false);
+
+    harness.clock.advance(600);
+    expect(harness.recorder.takeIsSealed).toBe(true);
+  });
+
+  it('opens again the moment the reader plays on', () => {
+    // The reader who waited out the silence and then changed their mind is
+    // going on with one take, not starting two.
+    const harness = rig({ silenceMs: 1_000 });
+    playNote(harness, 60);
+    harness.clock.advance(2_000);
+    expect(harness.recorder.takeIsSealed).toBe(true);
+
+    playNote(harness, 62);
+
+    expect(harness.recorder.takeIsSealed).toBe(false);
+  });
+
+  it('has nothing to seal once the take has been kept', () => {
+    const harness = rig({ silenceMs: 1_000 });
+    playNote(harness, 60);
+    harness.recorder.clear();
+
+    expect(harness.recorder.silenceSoFarMs).toBeNull();
+    expect(harness.recorder.takeIsSealed).toBe(false);
+  });
+});

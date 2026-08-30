@@ -68,7 +68,12 @@ interface Captured {
 export class PerformanceRecorder {
   private readonly clock: IClock;
   private readonly capacity: number;
-  private readonly silenceMs: number;
+  /**
+   * Public because the reader is entitled to see this rule, not only live
+   * under it: the page counts the same silence out so that the moment a
+   * press would start a fresh take is shown rather than learnt by feel.
+   */
+  readonly silenceMs: number;
   private readonly captured: Captured[] = [];
   private readonly emitter = new TypedEventEmitter<RecorderEventMap>();
   private subscription: Unsubscribe | null = null;
@@ -108,6 +113,28 @@ export class PerformanceRecorder {
   /** Everything still held, for tests and for the take's closing releases. */
   get pendingEvents(): number {
     return this.captured.length;
+  }
+
+  /**
+   * How long the keyboard has been quiet, or `null` when nothing is held.
+   *
+   * Read from the clock on being asked, like everything else here, so it
+   * needs no timer of its own. What it is for is the page: a reader waiting
+   * to start a fresh take had no way of knowing when the last one had ended,
+   * and was left counting seconds under their breath.
+   */
+  get silenceSoFarMs(): number | null {
+    const last = this.captured[this.captured.length - 1];
+    return last === undefined ? null : Math.max(0, this.clock.now() - last.atMs);
+  }
+
+  /**
+   * True once the silence has run long enough that the next press begins a
+   * new take rather than continuing this one.
+   */
+  get takeIsSealed(): boolean {
+    const quiet = this.silenceSoFarMs;
+    return quiet !== null && quiet >= this.silenceMs;
   }
 
   private accept(event: MidiEvent): void {
@@ -187,6 +214,16 @@ export class PerformanceRecorder {
       atMs: atMs - origin,
     }));
 
+    // A pedal already down when the take begins, said at its beginning.
+    // Same reason the held keys are released at its end: a take has to carry
+    // everything needed to hear it, and a foot that went down before the cut
+    // is a foot nothing downstream can know about. Without this the opening
+    // of a take taken out of the middle of a session comes out dry.
+    const pedal = this.pedalBefore(from);
+    if (pedal !== null) {
+      events.unshift({ kind: 'sustain', atMs: 0, value: pedal });
+    }
+
     const endMs = last.atMs - origin;
     for (const [midi, downAt] of this.holding) {
       if (downAt >= origin) {
@@ -223,6 +260,22 @@ export class PerformanceRecorder {
   dispose(): void {
     this.stop();
     this.emitter.removeAllListeners();
+  }
+
+  /**
+   * How far the pedal was down just before `from`, or `null` when it was up.
+   *
+   * Only a pedal that is *down* is news: an up one is what a take is assumed
+   * to start with, and saying so would be a mark on the page for nothing.
+   */
+  private pedalBefore(from: number): number | null {
+    for (let at = from - 1; at >= 0; at -= 1) {
+      const event = this.captured[at]?.event;
+      if (event?.kind === 'sustain') {
+        return event.value >= 0.5 ? event.value : null;
+      }
+    }
+    return null;
   }
 
   /** Index of the first event after the last long silence. */

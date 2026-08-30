@@ -974,6 +974,39 @@ describe('AppView', () => {
       expect(button.textContent).toContain('0:00');
     });
 
+    it('shows whether the next key would go on with this take or start a new one', async () => {
+      // The complaint this answers: waiting for the recorder to let go of one
+      // take before starting the next meant counting a silence nobody could
+      // see, and learning by feel how long it was.
+      const rig = createRig();
+      await rig.view.initialize();
+      const desk = element<HTMLButtonElement>('keep-take');
+      const bar = element<HTMLButtonElement>('focus-keep');
+
+      vi.useFakeTimers();
+      try {
+        playSomething(rig);
+        expect(desk.dataset['recording']).toBe('true');
+        expect(bar.dataset['recording']).toBe('true');
+
+        // Nothing more is played; the page counts the silence out on its own,
+        // which is the whole point - there is nothing else to notice.
+        rig.clock.advance(rig.recorder.silenceMs + 1);
+        vi.advanceTimersByTime(rig.recorder.silenceMs + 100);
+
+        expect(desk.dataset['recording']).toBe('false');
+        expect(bar.dataset['recording']).toBe('false');
+        // Still there to be kept: sealed is not gone.
+        expect(desk.disabled).toBe(false);
+        expect(desk.title).toContain('starts a new take');
+
+        playSomething(rig);
+        expect(desk.dataset['recording']).toBe('true');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('captures without being asked to start', async () => {
       const rig = createRig();
       await rig.view.initialize();
@@ -1892,7 +1925,7 @@ describe('AppView', () => {
       const second = createRig(undefined, store);
       await second.view.initialize();
 
-      expect(second.runtime.controller.settings.tempoBpm).toBe(128);
+      expect(second.runtime.controller.tempoBpm).toBe(128);
       expect(second.runtime.controller.settings.showCursor).toBe(false);
       expect(element<HTMLInputElement>('tempo').value).toBe('128');
       expect(element<HTMLInputElement>('show-cursor').checked).toBe(false);
@@ -2523,7 +2556,7 @@ describe('AppView', () => {
       expect(element('focus-tempo').textContent).toBe('95%');
       // The desk slider is the same value seen another way, so it follows.
       expect(element<HTMLInputElement>('tempo').value).toBe(
-        String(runtime.controller.settings.tempoBpm),
+        String(runtime.controller.tempoBpm),
       );
     });
 

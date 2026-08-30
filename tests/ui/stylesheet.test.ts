@@ -90,6 +90,22 @@ describe('the stylesheet', () => {
     expect(rules().some((rule) => rule.selector === '.focus-bar__status')).toBe(false);
   });
 
+  it('says whether a take is still open without moving anything', () => {
+    // The dot beats while the take is still open and goes quiet once the
+    // silence has sealed it, which is what saves the reader counting that
+    // silence out under their breath. In the fullscreen bar it has to cost
+    // no width at all: a control that changes size is a control a thumb
+    // aims at and misses.
+    const live = rules().find((rule) => rule.selector === "[data-recording='true'] .button__dot");
+    const sealed = rules().find((rule) => rule.selector === "[data-recording='false'] .button__dot");
+
+    expect(live?.body).toMatch(/animation\s*:/);
+    expect(sealed?.body).toMatch(/background\s*:/);
+    for (const rule of [live, sealed]) {
+      expect(rule?.body).not.toMatch(/width|height|padding|margin|font-size|border/);
+    }
+  });
+
   it('marks a cut passage without moving anything to do it', () => {
     // The drawer says which bars, and it is shut most of the time - so the
     // handle carries a mark while a passage is cut. Taken out of the flow,

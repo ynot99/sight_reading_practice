@@ -29,7 +29,7 @@ const SETTINGS: PracticeSettings = {
   key: KeySignature.major(-2),
   timeSignature: new TimeSignature(3, 4),
   measures: 6,
-  tempoBpm: 84,
+  tempoPercent: 84,
   countInBars: 2,
   clickPattern: 'downbeat',
   handStaff: 2,
@@ -61,7 +61,7 @@ describe('practice settings codec', () => {
     expect(restored.key?.equals(KeySignature.major(-2))).toBe(true);
     expect(restored.timeSignature?.toString()).toBe('3/4');
     expect(restored.measures).toBe(6);
-    expect(restored.tempoBpm).toBe(84);
+    expect(restored.tempoPercent).toBe(84);
     expect(restored.countInBars).toBe(2);
     expect(restored.clickWhen).toBe('cycle-2');
     expect(restored.matchToleranceMs).toBe(180);
@@ -104,7 +104,7 @@ describe('practice settings codec', () => {
     // Dropped rather than kept, so start-up cannot fail on a stale id.
     expect(restored.presetId).toBeUndefined();
     expect(restored.modeId).toBeUndefined();
-    expect(restored.tempoBpm).toBe(84);
+    expect(restored.tempoPercent).toBe(84);
   });
 
   it('drops individual values that make no sense, keeping the rest', () => {
@@ -112,7 +112,7 @@ describe('practice settings codec', () => {
       {
         ...encodePracticeSettings(SETTINGS),
         measures: 0,
-        tempoBpm: 5_000,
+        tempoPercent: 5_000,
         countInBars: -1,
         key: { fifths: 99, mode: 'major' },
         timeSignature: '4/7',
@@ -122,7 +122,7 @@ describe('practice settings codec', () => {
     );
 
     expect(restored.measures).toBeUndefined();
-    expect(restored.tempoBpm).toBeUndefined();
+    expect(restored.tempoPercent).toBeUndefined();
     expect(restored.countInBars).toBeUndefined();
     expect(restored.key).toBeUndefined();
     expect(restored.timeSignature).toBeUndefined();
@@ -200,7 +200,7 @@ describe('SettingsRepository', () => {
     const second = new SettingsRepository(store, KNOWN);
     const restored = second.load();
 
-    expect(restored.practice.tempoBpm).toBe(84);
+    expect(restored.practice.tempoPercent).toBe(84);
     expect(restored.practice.presetId).toBe('triads-left-hand');
     expect(restored.audio).toEqual({
       metronomeVolume: 0.2,
@@ -228,7 +228,7 @@ describe('SettingsRepository', () => {
     });
 
     const restored = new SettingsRepository(store, KNOWN).load();
-    expect(restored.practice.tempoBpm).toBe(84);
+    expect(restored.practice.tempoPercent).toBe(84);
     expect(restored.audio.metronomeVolume).toBe(0);
   });
 

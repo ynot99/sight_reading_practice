@@ -210,7 +210,10 @@ export class SampledPitchPlayer
     const context = this.ensureContext();
     // Striking the key again re-hits the string, pedal or no pedal, so this
     // must not go through stop(), which would hand the voice to the pedal.
-    this.releaseNow(midi);
+    // It happens when the new note sounds, not when it was handed over: a
+    // playback hands notes a quarter of a second early, and damping the
+    // ringing note *there* is a hole in the sound before every repeat.
+    this.releaseNow(midi, atMs);
     this.evictOldestIfFull();
 
     const now = audioTimeFor(context, atMs);

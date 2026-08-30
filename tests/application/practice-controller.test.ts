@@ -114,7 +114,8 @@ describe('PracticeController', () => {
 
     expect(controller.settings.presetId).toBe(firstPreset?.id);
     expect(controller.settings.modeId).toBe(new WaitMode().id);
-    expect(controller.settings.tempoBpm).toBe(firstPreset?.defaults.tempoBpm);
+    expect(controller.settings.tempoPercent).toBe(100);
+    expect(controller.tempoBpm).toBe(firstPreset?.defaults.tempoBpm);
   });
 
   it('generates, serialises and renders an exercise', async () => {
@@ -138,7 +139,7 @@ describe('PracticeController', () => {
     await controller.loadNewExercise();
     const original = renderer.loadedXml ?? '';
 
-    controller.updateSettings({ tempoBpm: 96 });
+    controller.setTempoBpm(96);
     await controller.reloadExercise();
 
     expect(renderer.loadedXml).not.toBe(original);
@@ -168,7 +169,9 @@ describe('PracticeController', () => {
     const settings = controller.updateSettings({ presetId: target.id });
 
     expect(settings.key.equals(target.defaults.key)).toBe(true);
-    expect(settings.tempoBpm).toBe(target.defaults.tempoBpm);
+    // The percentage is the reader's and stays theirs; what it is a
+    // percentage *of* is the new preset's.
+    expect(controller.tempoBpm).toBe(target.defaults.tempoBpm);
     expect(settings.measures).toBe(target.defaults.measures);
   });
 
@@ -260,7 +263,7 @@ describe('PracticeController', () => {
 
     expect(controller.settings.presetId).toBe(target.id);
     expect(controller.settings.rhythmProfileId).toBe(target.defaults.rhythmProfileId);
-    expect(controller.settings.tempoBpm).toBe(target.defaults.tempoBpm);
+    expect(controller.tempoBpm).toBe(target.defaults.tempoBpm);
   });
 
   it('hands the chosen rhythm profile to the generator', async () => {
@@ -293,8 +296,9 @@ describe('PracticeController', () => {
 
     expect(loaded.title).toBe('Something Borrowed');
     expect(controller.openedExercise).toBe(opened);
-    // The file's own tempo is adopted, so the slider shows the truth about it.
-    expect(controller.settings.tempoBpm).toBe(opened.tempoBpm);
+    // The file's own tempo is what 100% means, so at 100% it is read as
+    // written and the slider shows the truth about it.
+    expect(controller.tempoBpm).toBe(opened.tempoBpm);
     expect(loaded.tempoBpm).toBe(opened.tempoBpm);
     expect(renderer.loadedXml).toContain('Something Borrowed');
     // The timeline is derived from it like any other exercise, which is the
@@ -305,9 +309,9 @@ describe('PracticeController', () => {
   it('lets the reader slow an opened score down', async () => {
     const { controller, renderer } = createController();
     await controller.openScore(tiedExercise({ tempoBpm: 120 }));
-    expect(controller.settings.tempoBpm).toBe(120);
+    expect(controller.tempoBpm).toBe(120);
 
-    controller.updateSettings({ tempoBpm: 60 });
+    controller.setTempoBpm(60);
     await controller.reloadExercise();
 
     // Same notes, read at half the speed the file asked for.
@@ -354,7 +358,7 @@ describe('PracticeController', () => {
     await controller.loadNewExercise();
 
     expect(controller.tempoPercent).toBe(80);
-    expect(controller.settings.tempoBpm).not.toBe(32);
+    expect(controller.tempoBpm).not.toBe(32);
   });
 
   it('draws a note taken early as right, and as displaced', async () => {
@@ -495,8 +499,8 @@ describe('PracticeController', () => {
       measures: 3,
       timeSignature: new TimeSignature(3, 4),
       key: KeySignature.major(-1),
-      tempoBpm: 84,
     });
+    controller.setTempoBpm(84);
 
     const exercise = await controller.loadNewExercise();
 
@@ -583,7 +587,7 @@ describe('PracticeController', () => {
     expect(session?.status).toBe('counting-in');
     expect(metronome.isRunning).toBe(true);
     expect(metronome.currentConfig.muted).toBe(true);
-    expect(metronome.currentConfig.bpm).toBe(controller.settings.tempoBpm);
+    expect(metronome.currentConfig.bpm).toBe(controller.tempoBpm);
   });
 
   it('clears everything on dispose', async () => {
@@ -1188,7 +1192,7 @@ describe('cursor visibility', () => {
     await controller.loadNewExercise();
     controller.updateSettings({ showCursor: false });
 
-    controller.updateSettings({ tempoBpm: 90 });
+    controller.setTempoBpm(90);
 
     expect(renderer.cursor.visible).toBe(false);
   });
@@ -1356,7 +1360,8 @@ describe('climbing the ladder', () => {
   it('stays on it when only the tempo or the bar count moves', async () => {
     const rig = await onTheLadder();
 
-    rig.controller.updateSettings({ tempoBpm: 48, measures: 8 });
+    rig.controller.setTempoBpm(48);
+    rig.controller.updateSettings({ measures: 8 });
 
     // Slowing a rung down is how it is meant to be met, not a way off it.
     expect(rig.controller.ladderStep?.id).toBe('rung.2b');
@@ -1389,7 +1394,7 @@ describe('the pace, as a share of the written tempo', () => {
     await controller.loadNewExercise();
 
     expect(controller.tempoPercent).toBe(100);
-    expect(controller.settings.tempoBpm).toBe(controller.baseTempoBpm);
+    expect(controller.tempoBpm).toBe(controller.baseTempoBpm);
   });
 
   it('moves in whole steps of the written tempo', () => {
@@ -1397,7 +1402,7 @@ describe('the pace, as a share of the written tempo', () => {
     const base = controller.baseTempoBpm;
 
     expect(controller.nudgeTempoPercent(-5)).toBe(95);
-    expect(controller.settings.tempoBpm).toBe(Math.round(base * 0.95));
+    expect(controller.tempoBpm).toBe(Math.round(base * 0.95));
 
     controller.nudgeTempoPercent(-5);
     expect(controller.tempoPercent).toBe(90);
@@ -1406,7 +1411,7 @@ describe('the pace, as a share of the written tempo', () => {
   it('stays on the grid however the tempo was reached', () => {
     const { controller } = createController();
     // Set by hand from the slider, to something no step would land on.
-    controller.updateSettings({ tempoBpm: Math.round(controller.baseTempoBpm * 0.83) });
+    controller.setTempoBpm(Math.round(controller.baseTempoBpm * 0.83));
 
     expect(controller.nudgeTempoPercent(-5)).toBe(80);
   });
@@ -1424,8 +1429,54 @@ describe('the pace, as a share of the written tempo', () => {
 
     expect(controller.baseTempoBpm).toBe(132);
     expect(controller.baseTempoBpm).not.toBe(generated);
-    expect(controller.nudgeTempoPercent(-20)).toBe(80);
-    expect(controller.settings.tempoBpm).toBe(Math.round(132 * 0.8));
+    // The reader's share travels with them onto the new piece.
+    expect(controller.tempoPercent).toBe(80);
+    expect(controller.tempoBpm).toBe(Math.round(132 * 0.8));
+  });
+
+  it('does not carry an opened score off the stand and onto the next visit', async () => {
+    // The report: the page was opened and the tempo already read past 100%,
+    // with nobody having touched it. A file's tempo used to be written into
+    // the settings - the calibration piece is a file, and so is every score
+    // - and the next visit, with nothing on the stand, read those beats
+    // against the preset's own written tempo. A percentage means the same
+    // thing whatever is in front of the reader, so there is nothing left to
+    // read wrongly.
+    const first = createController();
+    await first.controller.openScore(twoBarExercise({ tempoBpm: 80 }));
+    expect(first.controller.tempoBpm).toBe(80);
+    expect(first.controller.tempoPercent).toBe(100);
+
+    const next = createController(false, undefined, first.controller.settings);
+
+    expect(next.controller.tempoPercent).toBe(100);
+    expect(next.controller.tempoBpm).toBe(next.controller.baseTempoBpm);
+  });
+
+  it('keeps the share the reader chose across the visit, not the beats', async () => {
+    const first = createController();
+    first.controller.nudgeTempoPercent(-20);
+    await first.controller.openScore(twoBarExercise({ tempoBpm: 132 }));
+
+    const next = createController(false, undefined, first.controller.settings);
+
+    expect(next.controller.tempoPercent).toBe(80);
+    expect(next.controller.tempoBpm).toBe(Math.round(next.controller.baseTempoBpm * 0.8));
+  });
+
+  it('honours a tempo given in beats, even past what the buttons reach', () => {
+    // The box promises a range of beats and has to keep that promise. The
+    // quarter-to-double bound belongs to the buttons, where a runaway press
+    // could actually happen.
+    const { controller } = createController();
+    const base = controller.baseTempoBpm;
+
+    controller.setTempoBpm(base * 3);
+
+    expect(controller.tempoBpm).toBe(base * 3);
+    expect(controller.tempoPercent).toBe(300);
+    // And the buttons take it back inside their own bounds at the first press.
+    expect(controller.nudgeTempoPercent(5)).toBe(200);
   });
 
   it('will not run away in either direction', () => {
@@ -1554,13 +1605,13 @@ describe('surviving a piece you already know', () => {
     // Measured in beats rather than seconds, so the tempo does not decide how
     // hard the game is - which is the whole reason a slow melody is playable.
     const slow = await survivalRun();
-    slow.controller.updateSettings({ tempoBpm: 40 });
+    slow.controller.setTempoBpm(40);
     await slow.controller.reloadExercise();
     slow.controller.start();
     slow.metronome.advanceSubdivisions(8);
 
     const fast = await survivalRun();
-    fast.controller.updateSettings({ tempoBpm: 160 });
+    fast.controller.setTempoBpm(160);
     await fast.controller.reloadExercise();
     fast.controller.start();
     fast.metronome.advanceSubdivisions(8);

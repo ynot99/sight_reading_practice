@@ -197,32 +197,120 @@ describe('a take with the same key struck twice in quick succession', () => {
     expect(instrument.played.map((note) => note.midi)).toEqual([60, 64, 67]);
   });
 
-  it('obeys a pedal mark once, and when the music reaches it', () => {
-    // Read from the whole list on every wake-up, an early "down" was pressed
-    // again each time and an "up" a quarter of a second ahead was obeyed
-    // before the notes it was meant to release.
-    const pedal = { sustained: false, calls: [] as boolean[],
-      setSustain(down: boolean) { this.sustained = down; this.calls.push(down); } };
-    const clock = new ManualClock();
-    const instrument = new RecordingPitchPlayer();
-    const player = new TakePlayer({ instrument, clock, sustain: pedal });
+});
+
+describe('a take played with the sustain pedal down', () => {
+  /** The pedal goes down at once and comes up after two seconds. */
+  function pedalled(...notes: readonly MidiFileEvent[]): MidiFileEvent[] {
+    return [
+      { kind: 'sustain', atMs: 0, value: 1 },
+      ...notes,
+      { kind: 'sustain', atMs: 2_000, value: 0 },
+    ];
+  }
+
+  /** When the instrument was told to end the note it was given at `startMs`. */
+  function endOf(instrument: RecordingPitchPlayer, midi: number, nth = 0): number | undefined {
+    return instrument.stopped.filter((note) => note.midi === midi)[nth]?.atMs;
+  }
+
+  it('lets a released key ring until the dampers come down', () => {
+    // Letting a key up under the pedal does nothing at all: the string goes
+    // on ringing until the pedal comes up. That is the whole reason a
+    // pedalled passage sounds joined up rather than as a row of short notes.
+    const { instrument, player } = rig();
+
+    player.play('take-1', pedalled(
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 200, midi: 60 },
+    ));
+
+    expect(endOf(instrument, 60)).toBe(2_000);
+  });
+
+  it('rings a repeated note right up to the moment it is struck again', () => {
+    // The bug this is here for: the note was ended when the *next* one was
+    // handed to the instrument, which is a quarter of a second before it
+    // sounds. Under a pedal held down through a whole piece that is a hole
+    // punched in the sound ahead of every repeat - which is what it sounded
+    // like.
+    const { clock, instrument, player } = rig();
+
+    player.play('take-1', pedalled(
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 200, midi: 60 },
+      { kind: 'noteOn', atMs: 900, midi: 60, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 1_100, midi: 60 },
+    ));
+    clock.advance(700);
+    player.pump();
+
+    expect(instrument.played.map((note) => note.atMs)).toEqual([0, 900]);
+    // Not 650, which is where it was handed over.
+    expect(endOf(instrument, 60)).toBe(900);
+    expect(endOf(instrument, 60, 1)).toBe(2_000);
+  });
+
+  it('rings to the end of the take when the pedal was never lifted', () => {
+    const { instrument, player } = rig();
 
     player.play('take-1', [
       { kind: 'sustain', atMs: 0, value: 1 },
       { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
-      { kind: 'noteOff', atMs: 400, midi: 60 },
-      { kind: 'sustain', atMs: 400, value: 0 },
+      { kind: 'noteOff', atMs: 200, midi: 60 },
+      { kind: 'noteOn', atMs: 900, midi: 64, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 1_500, midi: 64 },
     ]);
-    // Lifted first, because starting anything clears what was held before.
-    expect(pedal.calls).toEqual([false, true]);
 
-    player.pump();
-    player.pump();
-    expect(pedal.calls).toEqual([false, true]);
+    expect(endOf(instrument, 60)).toBe(1_500);
+  });
 
-    clock.advance(400);
-    player.pump();
+  it('ends a note at the key when the pedal was up under it', () => {
+    // A pedal pressed *after* the key came up catches nothing, exactly as on
+    // the instrument.
+    const { instrument, player } = rig();
 
-    expect(pedal.calls).toEqual([false, true, false]);
+    player.play('take-1', [
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 200, midi: 60 },
+      { kind: 'sustain', atMs: 300, value: 1 },
+      { kind: 'sustain', atMs: 900, value: 0 },
+    ]);
+
+    expect(endOf(instrument, 60)).toBe(200);
+  });
+
+  it('reads a pedal that reports itself twice on every press', () => {
+    // This keyboard sends the damper twice on each press and again halfway.
+    // Only the crossings mean anything, and a half-press is still a press.
+    const { instrument, player } = rig();
+
+    player.play('take-1', [
+      { kind: 'sustain', atMs: 0, value: 0.504 },
+      { kind: 'sustain', atMs: 0, value: 0.504 },
+      { kind: 'sustain', atMs: 20, value: 1 },
+      { kind: 'sustain', atMs: 20, value: 1 },
+      { kind: 'noteOn', atMs: 100, midi: 60, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 300, midi: 60 },
+      { kind: 'sustain', atMs: 800, value: 0.504 },
+      { kind: 'sustain', atMs: 810, value: 0 },
+    ]);
+
+    expect(endOf(instrument, 60)).toBe(810);
+  });
+
+  it('does not strike everything still ringing when the reader seeks', () => {
+    // Under a long pedal half the take is ringing at any moment, and
+    // striking all of it again at the seek would be a chord nobody played.
+    const { instrument, player } = rig();
+
+    player.play('take-1', pedalled(
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 200, midi: 60 },
+      { kind: 'noteOn', atMs: 1_000, midi: 64, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 1_200, midi: 64 },
+    ), 900);
+
+    expect(instrument.played.map((note) => note.midi)).toEqual([64]);
   });
 });

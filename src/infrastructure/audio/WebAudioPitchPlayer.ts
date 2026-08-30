@@ -57,7 +57,10 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
       return;
     }
     const context = this.ensureContext();
-    this.stop(midi);
+    // At the moment the new note sounds, not at the moment it was handed
+    // over: a playback schedules notes ahead, and ending the ringing one
+    // early leaves a hole before every repeated note.
+    this.stop(midi, atMs);
     if (this.voices.size >= this.options.maxVoices) {
       const oldest = this.voices.keys().next();
       if (!oldest.done) {

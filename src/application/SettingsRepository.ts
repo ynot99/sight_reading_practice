@@ -229,7 +229,17 @@ export function decodePracticeSettings(
     key: readKey(value['key']),
     timeSignature: readTimeSignature(value['timeSignature']),
     measures: readInteger(value['measures'], 1, 32),
-    tempoBpm: readInteger(value['tempoBpm'], 20, 300),
+    // What the reader chose, not the beats it came to on the last piece.
+    // Anything written before this held a bpm, and a bpm cannot be read back
+    // without knowing what it was a percentage *of* - which is exactly the
+    // thing that had gone. Dropping it puts that visit at the written tempo,
+    // which is where the reader would have started anyway.
+    // Wide because it is a ratio and not a dial: the buttons step within a
+    // quarter and double speed, but a tempo typed in beats is honoured as
+    // typed, and the slowest piece taken at the fastest reading is a large
+    // number. What actually holds the run in bounds is the bpm it works out
+    // to, which is clamped to what the metronome can play.
+    tempoPercent: readNumber(value['tempoPercent'], 5, 1_500),
     countInBars: readInteger(value['countInBars'], 0, 4),
     clickPattern: readClickPattern(value['clickPattern']),
     handStaff: readHand(value['handStaff']),
@@ -269,7 +279,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     key: { fifths: settings.key.fifths, mode: settings.key.mode },
     timeSignature: settings.timeSignature.toString(),
     measures: settings.measures,
-    tempoBpm: settings.tempoBpm,
+    tempoPercent: settings.tempoPercent,
     countInBars: settings.countInBars,
     clickPattern: settings.clickPattern,
     handStaff: settings.handStaff,

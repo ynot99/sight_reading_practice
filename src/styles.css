@@ -494,6 +494,34 @@ select {
   flex: none;
 }
 
+/*
+ * Whether the next key press goes on with this take or starts the next one.
+ *
+ * The recorder cuts a take at a long silence, and until this the only way to
+ * know the silence had run out was to wait longer than it and hope. A dot
+ * that beats while the take is still open and goes quiet when it is sealed
+ * says the same thing without asking anyone to count.
+ */
+[data-recording='true'] .button__dot {
+  animation: take-open 1.5s ease-in-out infinite;
+}
+
+[data-recording='false'] .button__dot {
+  background: var(--text-muted);
+}
+
+@keyframes take-open {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-recording='true'] .button__dot {
+    animation: none;
+  }
+}
+
 .takes {
   display: flex;
   flex-direction: column;

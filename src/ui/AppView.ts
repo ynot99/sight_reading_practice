@@ -559,6 +559,8 @@ export class AppView {
   private selectedTakeId: string | null = null;
   /** Follows a sounding take, so the slider says where it has got to. */
   private takeTick: ReturnType<typeof setInterval> | null = null;
+  /** Pending redraw of the keep pill, for when the take's silence runs out. */
+  private silenceWatch: ReturnType<typeof setTimeout> | null = null;
   /** The step now due, kept so blind mode can be turned off mid-run. */
   private lastExpected: readonly number[] = [];
   private lastDrainAtMs: number | null = null;
@@ -931,6 +933,10 @@ export class AppView {
       clearInterval(this.takeTick);
       this.takeTick = null;
     }
+    if (this.silenceWatch !== null) {
+      clearTimeout(this.silenceWatch);
+      this.silenceWatch = null;
+    }
     if (this.noticeRestore !== null) {
       clearTimeout(this.noticeRestore);
       this.noticeRestore = null;
@@ -1273,7 +1279,7 @@ export class AppView {
     });
 
     this.listen(this.el.tempo, 'change', () => {
-      controller.updateSettings({ tempoBpm: Number.parseInt(this.el.tempo.value, 10) });
+      controller.setTempoBpm(Number.parseInt(this.el.tempo.value, 10));
       // Same seed: identical notes, only the printed tempo mark changes.
       void this.reload(false);
     });
@@ -1966,7 +1972,7 @@ export class AppView {
   private describeTempo(): void {
     const percent = this.runtime.controller.tempoPercent;
     this.el.focusTempo.value = `${percent}%`;
-    this.el.focusTempo.title = `${this.runtime.controller.settings.tempoBpm} bpm`;
+    this.el.focusTempo.title = `${this.runtime.controller.tempoBpm} bpm`;
   }
 
   get isDrawerOpen(): boolean {
@@ -2563,9 +2569,9 @@ export class AppView {
     this.el.timeSignature.value = settings.timeSignature.toString();
     this.el.measures.value = String(settings.measures);
     this.el.measuresValue.value = String(settings.measures);
-    this.el.tempo.value = String(settings.tempoBpm);
+    this.el.tempo.value = String(this.runtime.controller.tempoBpm);
     this.describeTempo();
-    this.el.tempoValue.value = String(settings.tempoBpm);
+    this.el.tempoValue.value = String(this.runtime.controller.tempoBpm);
     this.el.listenHand.value = settings.handStaff === null ? '' : String(settings.handStaff);
     this.describeHands(settings.handStaff);
     this.el.click.value = settings.clickPattern;
@@ -2705,11 +2711,19 @@ export class AppView {
    * because someone remembered to update both.
    */
   private describeTake(): void {
-    const ms = this.runtime.recorder.takeDurationMs;
-    const playing = this.runtime.recorder.pendingEvents > 0;
-    const title = playing
-      ? 'Keeps what you have just played, back to the last pause.'
-      : 'Play something and this keeps it.';
+    const recorder = this.runtime.recorder;
+    const ms = recorder.takeDurationMs;
+    const playing = recorder.pendingEvents > 0;
+    // Whether the next key press would go on with this take or begin the
+    // next one. Shown rather than left to be learnt: the reader who wanted a
+    // clean take was waiting out a silence they could not see, and counting
+    // seconds under their breath is not a thing a page should ask of anyone.
+    const open = playing && !recorder.takeIsSealed;
+    const title = !playing
+      ? 'Play something and this keeps it.'
+      : open
+        ? 'Keeps what you have just played, back to the last pause. Playing on adds to it.'
+        : 'Keeps what you have just played. The next key you press starts a new take.';
 
     this.el.keepTake.disabled = !playing;
     this.el.keepTake.textContent = '';
@@ -2718,10 +2732,39 @@ export class AppView {
     dot.setAttribute('aria-hidden', 'true');
     this.el.keepTake.append(dot, this.doc.createTextNode(playing ? `Keep ${clockTime(ms)}` : 'Keep take'));
     this.el.keepTake.title = title;
+    this.el.keepTake.dataset['recording'] = String(open);
 
     this.el.focusKeep.disabled = !playing;
     this.el.focusKeepText.textContent = playing ? clockTime(ms) : 'Keep';
     this.el.focusKeep.title = title;
+    this.el.focusKeep.dataset['recording'] = String(open);
+
+    this.watchForTheSilence();
+  }
+
+  /**
+   * Redraws the pill once the silence that ends a take has run out.
+   *
+   * One timer, set for the moment it matters rather than a heartbeat that
+   * asks four times a second all day. The recorder keeps no clock of its own
+   * - that is what lets a whole session be replayed in a test - so counting
+   * the silence out is the page's job, and it only has to be done once per
+   * stretch of playing.
+   */
+  private watchForTheSilence(): void {
+    if (this.silenceWatch !== null) {
+      clearTimeout(this.silenceWatch);
+      this.silenceWatch = null;
+    }
+    const recorder = this.runtime.recorder;
+    const quiet = recorder.silenceSoFarMs;
+    if (quiet === null || quiet >= recorder.silenceMs) {
+      return;
+    }
+    this.silenceWatch = setTimeout(() => {
+      this.silenceWatch = null;
+      this.describeTake();
+    }, recorder.silenceMs - quiet + 50);
   }
 
   /**
@@ -2803,7 +2846,7 @@ export class AppView {
     const report = controller.lastReport;
     const lines = [
       `exercise: ${controller.currentExercise?.title ?? 'none'}`,
-      `mode: ${settings.modeId}   tempo: ${settings.tempoBpm} bpm (${controller.tempoPercent}%)`,
+      `mode: ${settings.modeId}   tempo: ${controller.tempoBpm} bpm (${controller.tempoPercent}%)`,
       `input delay: ${settings.inputLatencyMs} ms   chord window: ${settings.matchToleranceMs} ms`,
       `marks: ${settings.playedNotes}   hand: ${settings.handStaff ?? 'both'}   count-in: ${settings.countInBars}`,
       `click: ${settings.clickPattern} / ${settings.clickWhen}`,

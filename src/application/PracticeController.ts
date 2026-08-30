@@ -119,7 +119,17 @@ export interface PracticeSettings {
   readonly key: KeySignature;
   readonly timeSignature: TimeSignature;
   readonly measures: number;
-  readonly tempoBpm: number;
+  /**
+   * How fast the run goes against the tempo the music itself declares.
+   *
+   * A percentage and not a number of beats, because it is the reader's
+   * choice and the beats are the material's. Stored this way for the same
+   * reason: a bpm outlives the piece it was set against, so a tempo chosen
+   * for a slow score came back on the next visit as "140%" of generated
+   * material nobody had chosen it for. A percentage means the same thing
+   * whatever is on the stand.
+   */
+  readonly tempoPercent: number;
   /** Bars of click before the first note. */
   readonly countInBars: number;
   /**
@@ -373,7 +383,7 @@ export class PracticeController {
       key: preset.defaults.key,
       timeSignature: preset.defaults.timeSignature,
       measures: preset.defaults.measures,
-      tempoBpm: preset.defaults.tempoBpm,
+      tempoPercent: 100,
       countInBars: 1,
       clickPattern: 'pulse',
       handStaff: null,
@@ -481,7 +491,6 @@ export class PracticeController {
         key: changes.key ?? defaults.key,
         timeSignature: changes.timeSignature ?? defaults.timeSignature,
         measures: changes.measures ?? defaults.measures,
-        tempoBpm: changes.tempoBpm ?? defaults.tempoBpm,
       };
       this.currentSettings = next;
       // Changing what would be generated is a decision to generate again.
@@ -528,23 +537,11 @@ export class PracticeController {
 
   /** Generates fresh material and renders it. */
   async loadNewExercise(): Promise<Exercise> {
-    // The percentage is what the reader chose; the bpm is worked out from it.
-    // Closing an opened score changes what 100% means, so the bpm has to be
-    // worked out again or "80% of a slow piece" silently becomes "115% of a
-    // brisk one" - which is the reading jumping past full speed for no reason
-    // anyone touched.
-    const percent = this.tempoPercent;
-    const hadScore = this.openedScore !== null;
     // Asking for a new exercise is asking the generator for one, so an opened
-    // file steps aside rather than being handed back unchanged.
+    // file steps aside rather than being handed back unchanged. The tempo
+    // needs no attention: the reader chose a percentage, and it means the
+    // same thing against whatever is on the stand next.
     this.openedScore = null;
-    // Only where the base moved, which is only where a file just stepped
-    // aside. Generated material follows generated material at the same written
-    // tempo, and putting an unchanged bpm through the percentage would round
-    // and clamp a number the reader had set exactly.
-    if (hadScore) {
-      this.updateSettings({ tempoBpm: this.tempoBpmForPercent(percent) });
-    }
     // Bars 12-16 of the piece just closed mean nothing in the piece about to
     // open, and silently applying them would hand back a passage of something
     // the reader never asked to narrow. A range is about *this* music.
@@ -562,9 +559,10 @@ export class PracticeController {
    */
   async openScore(exercise: Exercise): Promise<Exercise> {
     this.openedScore = exercise;
-    // The file brought its own tempo; adopting it is what makes the slider
-    // show the truth, and what lets the reader slow the piece down.
-    this.updateSettings({ tempoBpm: exercise.tempoBpm });
+    // Nothing to adopt: the file brings the tempo it is written at, which is
+    // what 100% now means, and the reader's percentage of it travels with
+    // them. Someone who reads at 80% is reading at 80% of this piece too,
+    // without having to work out what number that is.
     return this.load(undefined);
   }
 
@@ -584,8 +582,31 @@ export class PracticeController {
 
   /** How fast the run goes against the written tempo, as a percentage. */
   get tempoPercent(): number {
+    return Math.round(this.currentSettings.tempoPercent);
+  }
+
+  /**
+   * The tempo the run is actually taken at.
+   *
+   * Worked out from the reader's percentage and whatever is on the stand, so
+   * there is one number to keep and nothing that can fall out of step with
+   * the music. Kept inside what the metronome and the codec will accept: a
+   * quarter of a very slow piece is slower than a metronome can go.
+   */
+  get tempoBpm(): number {
+    return this.tempoBpmForPercent(this.currentSettings.tempoPercent);
+  }
+
+  /**
+   * Sets the tempo by naming the beats, which is what the bpm box does.
+   *
+   * The percentage keeps its fraction rather than being rounded here: the
+   * box and the percentage are two views of one setting, and a value rounded
+   * on the way in would come back as a different number of beats.
+   */
+  setTempoBpm(bpm: number): PracticeSettings {
     const base = this.baseTempoBpm;
-    return base <= 0 ? 100 : Math.round((this.currentSettings.tempoBpm / base) * 100);
+    return this.updateSettings({ tempoPercent: base <= 0 ? 100 : (bpm / base) * 100 });
   }
 
   /**
@@ -599,14 +620,21 @@ export class PracticeController {
    */
   nudgeTempoPercent(deltaPercent: number, step = TEMPO_STEP_PERCENT): number {
     const from = Math.round(this.tempoPercent / step) * step;
-    this.updateSettings({ tempoBpm: this.tempoBpmForPercent(from + deltaPercent) });
+    this.updateSettings({ tempoPercent: clampPercent(from + deltaPercent) });
     return this.tempoPercent;
   }
 
-  /** The written tempo taken at a percentage, within what the codec accepts. */
+  /**
+   * The written tempo taken at a share of itself, in beats.
+   *
+   * Held to what a metronome can play and nothing narrower. The quarter-to-
+   * double range belongs to the buttons, which is where a runaway press could
+   * happen; a tempo typed in beats is a number the reader meant, and snapping
+   * it back to a share of a preset they were not thinking about would be the
+   * page arguing with them.
+   */
   private tempoBpmForPercent(percent: number): number {
-    const wanted = clampPercent(percent);
-    const bpm = Math.round((this.baseTempoBpm * wanted) / 100);
+    const bpm = Math.round((this.baseTempoBpm * percent) / 100);
     return Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, bpm));
   }
 
@@ -653,7 +681,7 @@ export class PracticeController {
       measures: this.currentSettings.measures,
       timeSignature: this.currentSettings.timeSignature,
       key: this.currentSettings.key,
-      tempoBpm: this.currentSettings.tempoBpm,
+      tempoBpm: this.tempoBpm,
       rhythm: this.deps.rhythms.get(this.currentSettings.rhythmProfileId),
       ...(seed === undefined ? {} : { seed }),
     };
@@ -668,7 +696,7 @@ export class PracticeController {
     const retimed =
       this.openedScore === null
         ? source
-        : { ...source, tempoBpm: this.currentSettings.tempoBpm };
+        : { ...source, tempoBpm: this.tempoBpm };
     const { rangeFromBar, rangeToBar } = this.currentSettings;
     const exercise =
       rangeFromBar === null && rangeToBar === null

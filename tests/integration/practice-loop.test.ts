@@ -61,15 +61,18 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
     initialSettings: {
       presetId: 'melody-and-intervals',
       measures: 4,
-      // A quarter note is exactly 1000 ms here, so the timing assertions below
-      // can compare exact numbers instead of chasing floating-point dust.
-      tempoBpm: 60,
       countInBars: 0,
       clickWhen: 'never',
       matchToleranceMs: Number.POSITIVE_INFINITY,
       ...initial,
     },
   });
+
+  // A quarter note is exactly 1000 ms, so the timing assertions below can
+  // compare exact numbers instead of chasing floating-point dust. Said in
+  // beats rather than as a share of this preset's written tempo, because it
+  // is the beats the assertions are about.
+  controller.setTempoBpm(60);
 
   return { controller, renderer, midi, metronome, clock };
 }

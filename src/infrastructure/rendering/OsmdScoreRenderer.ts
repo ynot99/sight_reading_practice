@@ -30,6 +30,7 @@ import {
   pageContaining,
   pageOffsetFor,
   pagesOf,
+  visibleHeightOf,
   swipeDirection,
   systemsOf,
   type ScorePage,
@@ -383,9 +384,14 @@ export class OsmdScoreRenderer
     if (engraver !== null) {
       engraver.FollowCursor = !paged;
     }
-    const scroller = this.scroller();
-    if (scroller instanceof HTMLElement) {
-      scroller.dataset['paged'] = String(paged);
+    // Both boxes, because both have to change: the scrolling one stops
+    // scrolling and the frame around it stops growing to the length of the
+    // piece. A frame taller than the screen is a page nobody can see the
+    // bottom of, which is what a page turn exists to prevent.
+    for (const box of [this.scroller(), this.container.closest('.score')]) {
+      if (box instanceof HTMLElement) {
+        box.dataset['paged'] = String(paged);
+      }
     }
     this.layOutPages();
     if (paged) {
@@ -461,7 +467,11 @@ export class OsmdScoreRenderer
    */
   private windowHeight(): number {
     const frame = this.container.closest('.score') ?? this.scroller();
-    const height = frame?.getBoundingClientRect().height ?? 0;
+    const box = frame?.getBoundingClientRect();
+    const height =
+      box === undefined
+        ? 0
+        : visibleHeightOf({ top: box.top, bottom: box.bottom }, this.viewportHeight());
     const scroller = this.scroller();
     // The room kept for the pill in fullscreen, which is padding on the
     // scrolling box: a page that used it would put its last system behind
@@ -471,6 +481,13 @@ export class OsmdScoreRenderer
         ? Number.parseFloat(getComputedStyle(scroller).paddingBottom) || 0
         : 0;
     return Math.max(0, height - reserved);
+  }
+
+  /** How tall the screen is, as far as this document can tell. */
+  private viewportHeight(): number {
+    const view = this.container.ownerDocument.defaultView;
+    const inner = view?.innerHeight ?? 0;
+    return inner > 0 ? inner : (this.container.ownerDocument.documentElement.clientHeight ?? 0);
   }
 
   /**

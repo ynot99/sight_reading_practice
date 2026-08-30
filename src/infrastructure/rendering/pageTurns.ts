@@ -164,6 +164,30 @@ export function pageOffsetFor(
 }
 
 /**
+ * How much of a frame the reader can actually see.
+ *
+ * Not the frame's own height. A score frame is given a minimum of one screen
+ * and then grows to whatever is engraved in it, so on a long piece its height
+ * *is* the length of the piece - and asked how tall the window was it
+ * answered with the whole thing. Pages were then cut to the size of the
+ * score, which is one page, and the little that was left over was the only
+ * distance a turn could move: the pill counted pages while the music stayed
+ * where it was.
+ *
+ * What the reader sees is the part of that frame inside the screen, which is
+ * what this measures.
+ */
+export function visibleHeightOf(
+  frame: { readonly top: number; readonly bottom: number },
+  viewportHeight: number,
+): number {
+  if (!Number.isFinite(viewportHeight) || viewportHeight <= 0) {
+    return Math.max(0, frame.bottom - frame.top);
+  }
+  return Math.max(0, Math.min(frame.bottom, viewportHeight) - Math.max(frame.top, 0));
+}
+
+/**
  * Which way a finger went, once it has gone far enough to have meant it.
  *
  * A page turn and a scroll are the same gesture until one of them commits, so

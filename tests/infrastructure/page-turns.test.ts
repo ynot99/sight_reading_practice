@@ -7,6 +7,7 @@ import {
   scrollTopFor,
   swipeDirection,
   systemsOf,
+  visibleHeightOf,
   type SystemBand,
 } from '../../src/infrastructure/rendering/pageTurns.js';
 
@@ -157,6 +158,34 @@ describe('moving the engraving for a page', () => {
 
   it('says what it can when the window has not been measured', () => {
     expect(pageOffsetFor(last, 1, 1_400, 0, 0)).toBe(900);
+  });
+});
+
+describe('how much of the frame the reader can see', () => {
+  it('takes the part inside the screen rather than the whole frame', () => {
+    // A score frame is given a minimum of one screen and then grows to
+    // whatever is engraved in it, so on a long piece its height *is* the
+    // length of the piece. Asked how tall the window was, it answered with
+    // the whole thing - which cuts the column into one page and leaves a
+    // turn nowhere to go.
+    expect(visibleHeightOf({ top: 0, bottom: 4_000 }, 800)).toBe(800);
+  });
+
+  it('stops at the top of the screen for a frame scrolled partly off it', () => {
+    expect(visibleHeightOf({ top: -300, bottom: 4_000 }, 800)).toBe(800);
+    expect(visibleHeightOf({ top: 200, bottom: 4_000 }, 800)).toBe(600);
+  });
+
+  it('takes a frame that fits at its own height', () => {
+    expect(visibleHeightOf({ top: 100, bottom: 500 }, 800)).toBe(400);
+  });
+
+  it('falls back to the frame when there is no screen to measure', () => {
+    expect(visibleHeightOf({ top: 0, bottom: 400 }, 0)).toBe(400);
+  });
+
+  it('is nothing at all for a frame scrolled right off the screen', () => {
+    expect(visibleHeightOf({ top: 900, bottom: 1_200 }, 800)).toBe(0);
   });
 });
 

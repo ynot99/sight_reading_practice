@@ -23,12 +23,14 @@ function withLayout(container: HTMLElement, windowHeight: number): HTMLElement {
   container.replaceWith(frame);
   frame.append(scroller);
   scroller.append(container);
+  // Taller than the screen, which is what a score frame does: it is given a
+  // minimum of one screen and then grows to whatever is engraved in it. The
+  // screen is `windowHeight`; the frame runs well past the bottom of it.
   frame.getBoundingClientRect = (() =>
-    ({ left: 0, top: 0, width: 900, height: windowHeight })) as Element['getBoundingClientRect'];
-  // As tall as everything in it, which is what a scrolling box does and what
-  // made asking it for the window's height give back the whole piece.
+    ({ left: 0, top: 0, bottom: 99_999, width: 900, height: 99_999 })) as Element['getBoundingClientRect'];
   scroller.getBoundingClientRect = (() =>
-    ({ left: 0, top: 0, width: 900, height: 99_999 })) as Element['getBoundingClientRect'];
+    ({ left: 0, top: 0, bottom: 99_999, width: 900, height: 99_999 })) as Element['getBoundingClientRect'];
+  Object.defineProperty(window, 'innerHeight', { value: windowHeight, configurable: true });
 
   const svg = container.querySelector('svg');
   const height = Number.parseFloat(svg?.getAttribute('height') ?? '0');

@@ -1184,6 +1184,21 @@ select {
 }
 
 /*
+ * One screen, and no taller.
+ *
+ * A score frame is given a minimum of one screen and then grows to whatever
+ * is engraved in it, so on a long piece it runs far past the bottom of the
+ * display - which is a page whose end nobody can see and cannot scroll to.
+ * That is the thing a page turn exists to prevent, so while pages are on the
+ * frame is exactly what the reader can look at.
+ */
+.score[data-paged='true'] {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+
+/*
  * When what was played appears, drawn as the state it is in.
  *
  * Three answers, so the same idiom as the click: the picture says which one

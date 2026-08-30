@@ -36,6 +36,8 @@ export interface DrawnMeasure {
 /** One of the two markers, drawn as a bar with a grip at each end. */
 export interface BracketShape {
   readonly edge: PassageEdge;
+  /** The bar it stands on, so it can be drawn on that bar's own page. */
+  readonly measureIndex: number;
   /** Centre of the marker, which is the bar line it stands on. */
   readonly x: number;
   readonly top: number;
@@ -77,8 +79,20 @@ export function bracketShapes(
     return [];
   }
   return [
-    { edge: 'start', x: first.left, top: first.top, bottom: first.bottom },
-    { edge: 'end', x: last.right, top: last.top, bottom: last.bottom },
+    {
+      edge: 'start',
+      measureIndex: first.measureIndex,
+      x: first.left,
+      top: first.top,
+      bottom: first.bottom,
+    },
+    {
+      edge: 'end',
+      measureIndex: last.measureIndex,
+      x: last.right,
+      top: last.top,
+      bottom: last.bottom,
+    },
   ];
 }
 

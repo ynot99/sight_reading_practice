@@ -12,10 +12,10 @@ import { fitStaffGeometry } from '../../src/infrastructure/rendering/staffGeomet
 
 /** Built from the numbers a real engraving produced: 5 units per position. */
 const geometry = fitStaffGeometry([
-  { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
-  { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
-  { stepIndex: 0, staffNumber: 2, diatonicIndex: Pitch.parse('C3').diatonicIndex, y: 210.5 },
-  { stepIndex: 0, staffNumber: 2, diatonicIndex: Pitch.parse('G2').diatonicIndex, y: 225.5 },
+  { stepIndex: 0, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
+  { stepIndex: 0, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
+  { stepIndex: 0, page: 0, staffNumber: 2, diatonicIndex: Pitch.parse('C3').diatonicIndex, y: 210.5 },
+  { stepIndex: 0, page: 0, staffNumber: 2, diatonicIndex: Pitch.parse('G2').diatonicIndex, y: 225.5 },
 ]);
 
 function layout(key = KeySignature.major(0)): OverlayLayout {
@@ -206,8 +206,8 @@ describe('buildOverlayShapes', () => {
 
   it('scales with the drawing, so zoom moves nothing out of place', () => {
     const zoomed = fitStaffGeometry([
-      { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 311 },
-      { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 291 },
+      { stepIndex: 0, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 311 },
+      { stepIndex: 0, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 291 },
     ]);
     if (zoomed === null) {
       throw new Error('expected geometry');
@@ -248,8 +248,8 @@ describe('a page with only one staff', () => {
   // What the calibration piece is: one note, one hand, nothing to read. It
   // has to draw what was played like any other page.
   const single = fitStaffGeometry([
-    { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
-    { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
+    { stepIndex: 0, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
+    { stepIndex: 0, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
   ]);
 
   it('still puts a mark on the note that was played', () => {

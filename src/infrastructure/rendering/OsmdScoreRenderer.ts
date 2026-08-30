@@ -238,16 +238,16 @@ export class OsmdScoreRenderer
   /** Where each timeline step sits, and the notes drawn there. */
   private stepX = new Map<number, number>();
   private stepElements = new Map<number, SVGGElement[]>();
+  /** Which sheet each step was drawn on; every page is an SVG of its own. */
+  private stepPage = new Map<number, number>();
   private faded = new Set<number>();
   private samples: DrawnNoteSample[] = [];
   private marks: PlayedMark[] = [];
   private overlayContext: OverlayContext | null = null;
-  private overlayGroup: SVGGElement | null = null;
 
   /** Where the engraver put each bar, and the markers standing on them. */
   private measures: DrawnMeasure[] = [];
   private passage: DrawnPassage | null = null;
-  private passageGroup: SVGGElement | null = null;
   private passageListeners: ((passage: DrawnPassage) => void)[] = [];
   private dragging: PassageDrag | null = null;
 
@@ -835,14 +835,12 @@ export class OsmdScoreRenderer
     this.swipe = null;
     this.measures = [];
     this.passage = null;
-    this.passageGroup = null;
     this.dragging = null;
     this.marks = [];
     this.stepX = new Map();
     this.stepElements = new Map();
     this.faded = new Set();
     this.samples = [];
-    this.overlayGroup = null;
     this.loaded = false;
   }
 
@@ -891,30 +889,51 @@ export class OsmdScoreRenderer
   }
 
   /** Everything drawn over the engraving, rebuilt from the marks. */
+  /**
+   * Draws what was played, page by page.
+   *
+   * Per page and not once over the whole score, because every page is an SVG
+   * of its own whose coordinates start again at nought. A mark for a note on
+   * the second page, drawn into the first page's sheet, is a mark on the
+   * wrong music - and on the page nobody is looking at.
+   */
   private paintOverlay(): void {
-    const group = this.ensureOverlayGroup();
-    if (group === null) {
-      return;
-    }
-    while (group.firstChild !== null) {
-      group.firstChild.remove();
-    }
-
     const context = this.overlayContext;
-    const geometry = fitStaffGeometry(this.samples);
-    if (context === null || geometry === null || this.marks.length === 0) {
-      return;
+    for (const [at, sheet] of this.sheets.entries()) {
+      const group = this.overlayGroupFor(sheet);
+      while (group.firstChild !== null) {
+        group.firstChild.remove();
+      }
+      const marks = this.marks.filter((mark) => this.pageOfStep(mark.stepIndex) === at);
+      // The heights this page was measured at, and no other: at a page break
+      // the nearest note in the same step is on the sheet before, and taking
+      // its height would put the mark a page out.
+      const geometry = fitStaffGeometry(this.samples.filter((sample) => sample.page === at));
+      if (context === null || geometry === null || marks.length === 0) {
+        continue;
+      }
+      const shapes = buildOverlayShapes(marks, {
+        geometry,
+        stepX: this.stepX,
+        clefAt: context.clefAt,
+        keyAt: context.keyAt,
+      });
+      for (const shape of shapes) {
+        group.append(this.createShape(shape, group.ownerDocument));
+      }
     }
+  }
 
-    const shapes = buildOverlayShapes(this.marks, {
-      geometry,
-      stepX: this.stepX,
-      clefAt: context.clefAt,
-      keyAt: context.keyAt,
-    });
-    for (const shape of shapes) {
-      group.append(this.createShape(shape, group.ownerDocument));
-    }
+  /** The page a step's notes were drawn on. */
+  private pageOfStep(stepIndex: number): number {
+    return this.stepPage.get(stepIndex) ?? 0;
+  }
+
+  /** The page an element belongs to, by the sheet it is drawn in. */
+  private pageOfElement(element: Element): number {
+    const sheet = element.closest('svg');
+    const at = sheet === null ? -1 : this.sheets.indexOf(sheet as SVGSVGElement);
+    return at < 0 ? 0 : at;
   }
 
   private createShape(shape: OverlayShape, doc: Document): SVGElement {
@@ -1010,21 +1029,27 @@ export class OsmdScoreRenderer
    * is cleared at the start of every run, and the passage is not.
    */
   private paintPassage(): void {
-    const group = this.ensurePassageGroup();
-    if (group === null) {
-      return;
+    for (const sheet of this.sheets) {
+      this.passageGroupFor(sheet).replaceChildren();
     }
-    group.replaceChildren();
     const showing = this.dragging?.passage ?? this.passage;
     if (showing === null) {
       return;
     }
-    const doc = group.ownerDocument;
     for (const bracket of bracketShapes(
       this.measures,
       showing.fromMeasureIndex,
       showing.toMeasureIndex,
     )) {
+      // Each marker on the page its own bar is drawn on: a passage can run
+      // across a page break, and then the two markers are not on the same
+      // sheet at all.
+      const sheet = this.sheets[this.pageOfMeasure(bracket.measureIndex)];
+      if (sheet === undefined) {
+        continue;
+      }
+      const group = this.passageGroupFor(sheet);
+      const doc = sheet.ownerDocument;
       const shape = doc.createElementNS(SVG_NAMESPACE, 'g');
       shape.setAttribute('class', `passage-marker passage-marker--${bracket.edge}`);
       // Which control this is, written on the control. The browser has
@@ -1101,36 +1126,42 @@ export class OsmdScoreRenderer
     }
   }
 
-  private ensurePassageGroup(): SVGGElement | null {
-    if (this.passageGroup !== null && this.passageGroup.isConnected) {
-      return this.passageGroup;
+  /** The marker layer inside one page's sheet, made if it is not there yet. */
+  private passageGroupFor(sheet: SVGSVGElement): SVGGElement {
+    const found = sheet.querySelector('g.passage-markers');
+    if (found !== null) {
+      return found as SVGGElement;
     }
-    const svg = this.container.querySelector('svg');
-    if (svg === null) {
-      return null;
-    }
-    const group = svg.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
+    const group = sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
     group.setAttribute('class', 'passage-markers');
-    svg.append(group);
-    this.passageGroup = group;
+    sheet.append(group);
     return group;
   }
 
-  private ensureOverlayGroup(): SVGGElement | null {
-    if (this.overlayGroup !== null && this.overlayGroup.isConnected) {
-      return this.overlayGroup;
+  /** The page a bar was drawn on. */
+  private pageOfMeasure(measureIndex: number): number {
+    return this.measures.find((measure) => measure.measureIndex === measureIndex)?.page ?? 0;
+  }
+
+
+  /**
+   * The overlay layer inside one page's sheet, made if it is not there yet.
+   *
+   * One per page rather than one for the score: what is drawn on a page has
+   * to live in that page's SVG or it is drawn in the wrong coordinates on
+   * the wrong sheet.
+   */
+  private overlayGroupFor(sheet: SVGSVGElement): SVGGElement {
+    const found = sheet.querySelector('g.played-overlay');
+    if (found !== null) {
+      return found as SVGGElement;
     }
-    const svg = this.container.querySelector('svg');
-    if (svg === null) {
-      return null;
-    }
-    const doc = svg.ownerDocument;
-    const group = doc.createElementNS(SVG_NAMESPACE, 'g');
+    const group = sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
     group.setAttribute('class', 'played-overlay');
-    svg.append(group);
-    this.overlayGroup = group;
+    sheet.append(group);
     return group;
   }
+
 
   /**
    * Records where the engraver put each step, and the pitches it drew there.
@@ -1277,6 +1308,9 @@ export class OsmdScoreRenderer
           const bucket = this.stepElements.get(stepIndex) ?? [];
           bucket.push(drawn);
           this.stepElements.set(stepIndex, bucket);
+          // Which sheet the engraver put it on, read off the drawing rather
+          // than worked out: a step's page is the page its notes are on.
+          this.stepPage.set(stepIndex, this.pageOfElement(drawn));
         }
 
         const diatonicIndex = diatonicIndexOf(pitch.FundamentalNote ?? -1, pitch.Octave ?? 0);
@@ -1285,6 +1319,7 @@ export class OsmdScoreRenderer
         }
         samples.push({
           stepIndex,
+          page: this.stepPage.get(stepIndex) ?? 0,
           staffNumber: note.sourceNote?.parentStaffEntry?.parentStaff?.id ?? 1,
           diatonicIndex,
           y: position.y * UNITS_TO_PIXELS,

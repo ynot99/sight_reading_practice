@@ -2,6 +2,8 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
+import { KeySignature } from '../../src/domain/model/KeySignature.js';
+import { Pitch } from '../../src/domain/model/Pitch.js';
 import { longExercise } from '../support/fixtures.js';
 import { createScoreContainer, installCanvasStub } from '../support/osmdHarness.js';
 
@@ -152,6 +154,40 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
 
     expect(renderer.pages.count).toBeGreaterThan(before);
     expect(showing(container)).toHaveLength(1);
+  });
+
+  it('draws what was played on the page it was played on', () => {
+    // Every page is an SVG of its own whose coordinates start again at
+    // nought, so a mark drawn into the first sheet for a note on the second
+    // is a mark on the wrong music - and on the page nobody is looking at.
+    renderer.setPaged(true);
+    renderer.configureOverlay({
+      keyAt: () => KeySignature.major(0),
+      clefAt: () => 'treble',
+    });
+    const last = renderer.pages.count - 1;
+    expect(last).toBeGreaterThan(0);
+    // A bar on the last page, and the step the cursor reaches there.
+    const step = 4 * 15;
+
+    renderer.showPlayed({ stepIndex: step, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
+
+    const drawn = sheets(container).map((sheet) => sheet.querySelectorAll('.played-note').length);
+    expect(drawn[0]).toBe(0);
+    expect(drawn[last]).toBeGreaterThan(0);
+  });
+
+  it('puts each passage marker on the page its own bar is drawn on', () => {
+    // A passage can run across a page break, and then the two markers are
+    // not on the same sheet at all.
+    renderer.setPaged(true);
+    renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 15 });
+
+    const markers = sheets(container).map(
+      (sheet) => sheet.querySelectorAll('g.passage-marker').length,
+    );
+    expect(markers[0]).toBe(1);
+    expect(markers[renderer.pages.count - 1]).toBe(1);
   });
 
   it('keeps the reader on their page across a re-engraving', () => {

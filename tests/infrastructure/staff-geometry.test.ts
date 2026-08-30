@@ -16,9 +16,9 @@ import { Pitch } from '../../src/domain/model/Pitch.js';
  * whose bottom line sits at 145.5.
  */
 const TREBLE: DrawnNoteSample[] = [
-  { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
-  { stepIndex: 1, staffNumber: 1, diatonicIndex: Pitch.parse('D4').diatonicIndex, y: 150.5 },
-  { stepIndex: 2, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
+  { stepIndex: 0, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
+  { stepIndex: 1, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('D4').diatonicIndex, y: 150.5 },
+  { stepIndex: 2, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
 ];
 
 describe('diatonicIndexOf', () => {
@@ -45,7 +45,7 @@ describe('fitStaffGeometry', () => {
   it('is not fooled by two notes sharing a position', () => {
     const geometry = fitStaffGeometry([
       ...TREBLE,
-      { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
+      { stepIndex: 0, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
     ]);
     expect(geometry?.stepHeight).toBeCloseTo(5, 10);
   });
@@ -65,8 +65,8 @@ describe('fitStaffGeometry', () => {
     // the whole page meant nothing the reader played on the calibration piece
     // appeared anywhere at all.
     const geometry = fitStaffGeometry([
-      { stepIndex: 0, staffNumber: 1, diatonicIndex: 28, y: 155.5 },
-      { stepIndex: 1, staffNumber: 1, diatonicIndex: 28, y: 155.5 },
+      { stepIndex: 0, page: 0, staffNumber: 1, diatonicIndex: 28, y: 155.5 },
+      { stepIndex: 1, page: 0, staffNumber: 1, diatonicIndex: 28, y: 155.5 },
     ]);
 
     expect(geometry).not.toBeNull();
@@ -100,8 +100,8 @@ describe('yForDiatonic', () => {
 describe('staffForDiatonic', () => {
   const geometry = fitStaffGeometry([
     ...TREBLE,
-    { stepIndex: 0, staffNumber: 2, diatonicIndex: Pitch.parse('C3').diatonicIndex, y: 210.5 },
-    { stepIndex: 1, staffNumber: 2, diatonicIndex: Pitch.parse('G2').diatonicIndex, y: 225.5 },
+    { stepIndex: 0, page: 0, staffNumber: 2, diatonicIndex: Pitch.parse('C3').diatonicIndex, y: 210.5 },
+    { stepIndex: 1, page: 0, staffNumber: 2, diatonicIndex: Pitch.parse('G2').diatonicIndex, y: 225.5 },
   ]);
 
   it('puts a note on the staff it is nearest', () => {
@@ -118,10 +118,10 @@ describe('staffForDiatonic', () => {
 describe('systems stacked down the page', () => {
   /** Two systems: the same staff, four hundred units apart. */
   const geometry = fitStaffGeometry([
-    { stepIndex: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
-    { stepIndex: 1, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
-    { stepIndex: 8, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 555.5 },
-    { stepIndex: 9, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 545.5 },
+    { stepIndex: 0, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5 },
+    { stepIndex: 1, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
+    { stepIndex: 8, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 555.5 },
+    { stepIndex: 9, page: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 545.5 },
   ]);
 
   it('places a mark on the system its step belongs to', () => {

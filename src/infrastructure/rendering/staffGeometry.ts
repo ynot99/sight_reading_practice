@@ -7,6 +7,15 @@ import { floorMod } from '../../shared/asserts.js';
 export interface DrawnNoteSample {
   /** Timeline step this note was drawn for. */
   readonly stepIndex: number;
+  /**
+   * Which page of the engraving this note was drawn on.
+   *
+   * Every page is an SVG of its own and starts again at nought, so a height
+   * measured on one page means nothing on another. Marks are placed against
+   * the nearest note in the same step, and at a page break the nearest step
+   * is on the sheet before - which would put the mark a page's height out.
+   */
+  readonly page: number;
   readonly staffNumber: number;
   /** Absolute staff position: `C4` is 28, `D4` is 29. */
   readonly diatonicIndex: number;

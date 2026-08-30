@@ -35,8 +35,8 @@ describe('where the markers stand', () => {
   it('puts one at the front of the first bar and one at the back of the last', () => {
     const [start, end] = bracketShapes(page(), 1, 2);
 
-    expect(start).toEqual({ edge: 'start', x: 140, top: 20, bottom: 120 });
-    expect(end).toEqual({ edge: 'end', x: 340, top: 20, bottom: 120 });
+    expect(start).toEqual({ edge: 'start', measureIndex: 1, x: 140, top: 20, bottom: 120 });
+    expect(end).toEqual({ edge: 'end', measureIndex: 2, x: 340, top: 20, bottom: 120 });
   });
 
   it('gives each marker the height of the system it stands in', () => {

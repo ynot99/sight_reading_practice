@@ -1181,11 +1181,14 @@ export class AppView {
       toMeasureIndex: rangeToBar === null ? last : Math.min(Math.max(rangeToBar - first, 0), last),
       repeating: controller.settings.repeatRange,
     });
-    // Only when the reader has moved it. From the top is where a piece
-    // starts anyway, and a mark saying so on every page would be furniture.
+    // Only where the reader has actually moved it. A place at the beginning
+    // of the passage is where a run starts anyway, and a mark saying so
+    // would be furniture standing on top of the marker that already says it.
     const begins = controller.currentTimeline?.at(controller.beginsAt) ?? null;
+    const atThePassageStart =
+      begins === null || begins.measureIndex <= (rangeFromBar === null ? 0 : rangeFromBar - first);
     this.runtime.renderer.showStart(
-      controller.beginsAt > 0 && begins !== null ? begins.measureIndex : null,
+      controller.beginsAt > 0 && !atThePassageStart ? begins.measureIndex : null,
     );
   }
 
@@ -1751,7 +1754,11 @@ export class AppView {
       controller.beginAtTheStart();
       controller.cursorToStart();
       this.showPassageMarkers();
-      this.showNotice('Back to the beginning');
+      this.showNotice(
+        controller.settings.rangeFromBar === null
+          ? 'Back to the beginning'
+          : `Back to bar ${controller.settings.rangeFromBar}`,
+      );
       this.restoreNoticeSoon();
     });
 

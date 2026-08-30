@@ -1461,6 +1461,41 @@ describe('AppView', () => {
       expect(rig.renderer.startMeasure).toBeNull();
     });
 
+    it('takes the place back to the passage, not to the top of the piece', async () => {
+      // A reader who has bracketed bars 2 to 3 is working on bars 2 to 3,
+      // and "the beginning" means the beginning of that. MuseScore
+      // disagrees with itself here - its rewind goes to the top of the score
+      // while its playback starts at the selection - and that is the
+      // disagreement being avoided.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const passageStart = rig.runtime.controller.currentTimeline?.steps.find(
+        (step) => step.measureIndex === 1,
+      );
+
+      element<HTMLButtonElement>('focus-rewind').click();
+
+      expect(rig.renderer.cursor.position).toBe(passageStart?.index);
+      expect(rig.renderer.cursor.position).toBeGreaterThan(0);
+      expect(rig.runtime.controller.beginsAt).toBe(0);
+    });
+
+    it('leaves a finished run where it finished', async () => {
+      // The reader has just played to the end; putting the marker somewhere
+      // else answers a question they did not ask, and on a paged score it
+      // takes the page out from under the last thing they played.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.controller.updateSettings({ countInBars: 0, modeId: 'mode.flow' });
+      rig.runtime.controller.start();
+      rig.metronome.advanceBeats(40);
+      expect(rig.runtime.controller.session?.status).toBe('completed');
+
+      expect(rig.renderer.cursor.position).toBeGreaterThan(0);
+    });
+
     it('stops a run before taking the place back', async () => {
       // Otherwise the marker would go to bar one while the music went on
       // playing from wherever it had got to.

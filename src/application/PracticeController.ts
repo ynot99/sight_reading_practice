@@ -582,20 +582,40 @@ export class PracticeController {
     return this.beginAt;
   }
 
-  /** Sends the next run back to the top. */
+  /**
+   * Forgets a place the reader had pointed at.
+   *
+   * Nought means "no place of my own", and a run then begins where the
+   * passage does. It is not the same as pointing at bar one: pointing is a
+   * one-off, and this is putting the one-off away.
+   */
   beginAtTheStart(): void {
     this.beginAt = 0;
   }
 
   /**
-   * Puts the marker back on the first note, and the page with it.
+   * Puts the marker back at the beginning of what is being practised.
    *
-   * `reset` rather than `moveTo(0)`: moving to a position the navigator
-   * believes it is already at asks the engraver for nothing, so nothing is
-   * redrawn and the page does not follow.
+   * Which is the passage, not the top of the piece. A reader who has
+   * bracketed bars 20 to 27 is working on bars 20 to 27, and "the beginning"
+   * means the beginning of that - anywhere else is a place they did not ask
+   * for and, on a long piece, a page they were not looking at. The way back
+   * to bar one is to widen the passage, which is one button and is itself
+   * saying "the whole piece is what I am working on now".
+   *
+   * MuseScore is inconsistent here in a way worth avoiding: its rewind goes
+   * to the top of the score while its playback starts at the selection, so
+   * the two disagree about where the beginning is.
    */
   cursorToStart(): void {
-    this.deps.cursor.reset();
+    const from = this.passageSteps.from;
+    if (from === 0) {
+      // `reset` rather than `moveTo(0)`: moving to a position the navigator
+      // believes it is already at asks the engraver for nothing.
+      this.deps.cursor.reset();
+      return;
+    }
+    this.deps.cursor.moveTo(from);
   }
 
   /** Which step the next run begins at; nought is the top of the piece. */
@@ -1179,8 +1199,14 @@ export class PracticeController {
     );
     this.sessionSubscriptions.push(
       session.events.on('statusChanged', ({ status }) => {
-        if (status === 'completed' || status === 'aborted') {
-          this.deps.cursor.reset();
+        // Stopped, so back to the beginning of what is being practised -
+        // which is the passage, not the top of the piece. A run that
+        // *finished* is left where it finished: the reader has just played
+        // to the end and putting the marker somewhere else is answering a
+        // question they did not ask, and on a paged score it takes the page
+        // out from under the last thing they played.
+        if (status === 'aborted') {
+          this.cursorToStart();
         }
       }),
     );

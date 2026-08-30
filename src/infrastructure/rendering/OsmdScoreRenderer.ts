@@ -15,7 +15,10 @@ import type {
 import {
   bracketShapes,
   gripAt,
+  gripsOf,
+  gripUnderPointer,
   GRIP_RADIUS_PX,
+  passageAfterTap,
   measureForDrag,
   passageAfterDrag,
   toDrawingPoint,
@@ -68,6 +71,8 @@ const MARKER_GRIP_RADIUS = 9;
 const REPEAT_DOT_GAP = 9;
 /** How far a finger may wander and still have meant a tap, in screen pixels. */
 const TAP_SLACK_PX = 8;
+/** Half the width of the arrow drawn inside a handle. */
+const ARROW_REACH = 3.5;
 
 /** As much of the engraver's own model as the markers need to read. */
 interface DrawnSheet {
@@ -201,6 +206,8 @@ interface PassageDrag {
   readonly edge: PassageEdge;
   readonly pointerId: number;
   readonly passage: DrawnPassage;
+  /** Where the finger landed, so a tap can be told from a drag. */
+  readonly from: { readonly x: number; readonly y: number };
 }
 
 /** A finger that may be turning a page, and where it started. */
@@ -553,7 +560,12 @@ export class OsmdScoreRenderer
     // For the mouse. A touch screen has already decided, from the
     // `touch-action` of the shape the finger landed on.
     event.preventDefault();
-    this.dragging = { edge, pointerId: event.pointerId, passage };
+    this.dragging = {
+      edge,
+      pointerId: event.pointerId,
+      passage,
+      from: { x: event.clientX, y: event.clientY },
+    };
   }
 
   private continueDrag(event: PointerEvent): void {
@@ -592,8 +604,9 @@ export class OsmdScoreRenderer
       return;
     }
 
-    const moved = this.draggedTo(event);
     const drag = this.dragging;
+    const tapped = this.tappedGrip(event, drag);
+    const moved = tapped ?? this.draggedTo(event);
     this.dragging = null;
     if (moved === null || drag === undefined || drag === null) {
       return;
@@ -604,6 +617,44 @@ export class OsmdScoreRenderer
     for (const listener of [...this.passageListeners]) {
       listener(moved);
     }
+  }
+
+  /**
+   * The passage one bar out or in, when a handle was tapped rather than
+   * dragged.
+   *
+   * A finger that stayed put on a handle meant the button; anything that
+   * travelled meant the handle, even if it did not travel far. Which is why
+   * this is asked before the drag: at nought pixels of movement a drag says
+   * "put it back where it already was", and that is not what was meant.
+   */
+  private tappedGrip(event: PointerEvent, drag: PassageDrag | null): DrawnPassage | null {
+    const point = this.drawingPointOf(event);
+    if (drag === null || point === null) {
+      return null;
+    }
+    const wandered = Math.hypot(event.clientX - drag.from.x, event.clientY - drag.from.y);
+    if (wandered > TAP_SLACK_PX) {
+      return null;
+    }
+    const grip = gripUnderPointer(
+      gripsOf(
+        bracketShapes(
+          this.measures,
+          drag.passage.fromMeasureIndex,
+          drag.passage.toMeasureIndex,
+        ),
+      ),
+      point,
+    );
+    if (grip === null) {
+      return null;
+    }
+    const next = passageAfterTap(
+      { fromIndex: drag.passage.fromMeasureIndex, toIndex: drag.passage.toMeasureIndex },
+      grip,
+    );
+    return { fromMeasureIndex: next.fromIndex, toMeasureIndex: next.toIndex };
   }
 
   /** Where this event puts the passage, or `null` when nothing is held. */
@@ -893,15 +944,30 @@ export class OsmdScoreRenderer
           shape.append(dot);
         }
       }
-      // A grip at each end, because the middle of the marker is over the
+      // A handle at each end, because the middle of the marker is over the
       // music and a finger there would be covering what it is choosing.
-      for (const y of [bracket.top, bracket.bottom]) {
-        const grip = doc.createElementNS(SVG_NAMESPACE, 'circle');
-        grip.setAttribute('class', 'passage-marker__grip');
-        grip.setAttribute('cx', String(bracket.x));
-        grip.setAttribute('cy', String(y));
-        grip.setAttribute('r', String(MARKER_GRIP_RADIUS));
-        shape.append(grip);
+      //
+      // They are buttons as well as handles: a tap moves the passage exactly
+      // one bar, which is most of what is actually wanted - it was nearly
+      // right and wants a bar more at the front. The arrow says which way,
+      // so the rule behind it does not have to be remembered.
+      for (const grip of gripsOf([bracket])) {
+        const circle = doc.createElementNS(SVG_NAMESPACE, 'circle');
+        circle.setAttribute('class', `passage-marker__grip passage-marker__grip--${grip.end}`);
+        circle.setAttribute('cx', String(grip.x));
+        circle.setAttribute('cy', String(grip.y));
+        circle.setAttribute('r', String(MARKER_GRIP_RADIUS));
+        shape.append(circle);
+
+        const arrow = doc.createElementNS(SVG_NAMESPACE, 'path');
+        arrow.setAttribute('class', 'passage-marker__arrow');
+        const tip = grip.towards * ARROW_REACH;
+        arrow.setAttribute(
+          'd',
+          `M ${grip.x - tip} ${grip.y - ARROW_REACH} L ${grip.x + tip} ${grip.y}` +
+            ` L ${grip.x - tip} ${grip.y + ARROW_REACH}`,
+        );
+        shape.append(arrow);
       }
       group.append(shape);
     }

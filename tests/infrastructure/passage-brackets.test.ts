@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   bracketShapes,
   gripAt,
+  gripsOf,
+  gripUnderPointer,
   measureForDrag,
+  passageAfterTap,
   measureUnderPointer,
   passageAfterDrag,
   toDrawingPoint,
   type DrawnMeasure,
+  type Grip,
 } from '../../src/infrastructure/rendering/passageBrackets.js';
 
 /** Four bars on one line, then four on the next. */
@@ -143,6 +147,61 @@ describe('taking hold of a marker', () => {
 
     expect(gripAt(together, { x: 142, y: 70 })).toBe('start');
     expect(gripAt(together, { x: 238, y: 70 })).toBe('end');
+  });
+});
+
+describe('the four round handles', () => {
+  const brackets = bracketShapes(page(), 1, 3);
+
+  it('puts one at each end of each marker', () => {
+    const grips = gripsOf(brackets);
+
+    expect(grips.map((grip) => `${grip.edge}-${grip.end}`)).toEqual([
+      'start-top',
+      'start-bottom',
+      'end-top',
+      'end-bottom',
+    ]);
+  });
+
+  it('widens from the top of either marker and narrows from the bottom', () => {
+    // One rule for all four, so there is nothing to remember - and each one
+    // carries an arrow pointing the way it will actually move.
+    const grips = gripsOf(brackets);
+    const by = (edge: string, end: string) =>
+      grips.find((grip) => grip.edge === edge && grip.end === end);
+
+    expect(by('start', 'top')).toMatchObject({ widens: true, towards: -1 });
+    expect(by('start', 'bottom')).toMatchObject({ widens: false, towards: 1 });
+    expect(by('end', 'top')).toMatchObject({ widens: true, towards: 1 });
+    expect(by('end', 'bottom')).toMatchObject({ widens: false, towards: -1 });
+  });
+
+  it('answers a tap on itself and not on the line between', () => {
+    const grips = gripsOf(brackets);
+
+    expect(gripUnderPointer(grips, { x: 140, y: 22 })).toMatchObject({ end: 'top' });
+    expect(gripUnderPointer(grips, { x: 140, y: 118 })).toMatchObject({ end: 'bottom' });
+    // Halfway down the marker is the part you drag, not a button.
+    expect(gripUnderPointer(grips, { x: 140, y: 70 })).toBeNull();
+  });
+
+  it('moves the passage one bar', () => {
+    const grips = gripsOf(brackets);
+    const at = { fromIndex: 1, toIndex: 3 };
+
+    expect(passageAfterTap(at, grips[0] as Grip)).toEqual({ fromIndex: 0, toIndex: 3 });
+    expect(passageAfterTap(at, grips[1] as Grip)).toEqual({ fromIndex: 2, toIndex: 3 });
+    expect(passageAfterTap(at, grips[2] as Grip)).toEqual({ fromIndex: 1, toIndex: 4 });
+    expect(passageAfterTap(at, grips[3] as Grip)).toEqual({ fromIndex: 1, toIndex: 2 });
+  });
+
+  it('will not narrow a passage of one bar out of existence', () => {
+    const one = gripsOf(bracketShapes(page(), 2, 2));
+    const at = { fromIndex: 2, toIndex: 2 };
+
+    expect(passageAfterTap(at, one[1] as Grip)).toEqual({ fromIndex: 2, toIndex: 2 });
+    expect(passageAfterTap(at, one[3] as Grip)).toEqual({ fromIndex: 2, toIndex: 2 });
   });
 });
 

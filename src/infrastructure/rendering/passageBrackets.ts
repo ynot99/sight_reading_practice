@@ -215,6 +215,88 @@ export function gripAt(
   return best;
 }
 
+/** Which end of a marker a grip sits on. */
+export type GripEnd = 'top' | 'bottom';
+
+/**
+ * One of the four round handles, and what tapping it does.
+ *
+ * Two per marker, and they are not the same button. Dragging a marker is the
+ * quick way to move it a long way; a tap is the exact way to move it one bar,
+ * which is most of what a reader actually wants - the passage was nearly
+ * right and needs a bar more at the front. Without that, a bar's worth of
+ * adjustment meant taking hold of a line a few pixels wide and letting go of
+ * it in exactly the right place.
+ *
+ * The top handle of either marker widens the passage and the bottom one
+ * narrows it, which is one rule for all four; and each carries an arrow
+ * pointing the way it will actually move, so the rule does not have to be
+ * remembered.
+ */
+export interface Grip {
+  readonly edge: PassageEdge;
+  readonly end: GripEnd;
+  readonly x: number;
+  readonly y: number;
+  /** True when tapping it takes in another bar rather than giving one up. */
+  readonly widens: boolean;
+  /** Which way the marker moves: -1 towards the front of the piece. */
+  readonly towards: -1 | 1;
+}
+
+export function gripsOf(brackets: readonly BracketShape[]): Grip[] {
+  const grips: Grip[] = [];
+  for (const bracket of brackets) {
+    // Widening moves the start marker back and the end marker on, so the
+    // arrows on one marker are the mirror of the arrows on the other.
+    const out = bracket.edge === 'start' ? -1 : 1;
+    grips.push(
+      { edge: bracket.edge, end: 'top', x: bracket.x, y: bracket.top, widens: true, towards: out },
+      {
+        edge: bracket.edge,
+        end: 'bottom',
+        x: bracket.x,
+        y: bracket.bottom,
+        widens: false,
+        towards: out === 1 ? -1 : 1,
+      },
+    );
+  }
+  return grips;
+}
+
+/** The handle a tap landed on, or `null` for the line between them. */
+export function gripUnderPointer(
+  grips: readonly Grip[],
+  point: { readonly x: number; readonly y: number },
+): Grip | null {
+  let best: Grip | null = null;
+  let bestDistance = GRIP_RADIUS_PX;
+  for (const grip of grips) {
+    const distance = Math.hypot(point.x - grip.x, point.y - grip.y);
+    if (distance <= bestDistance) {
+      bestDistance = distance;
+      best = grip;
+    }
+  }
+  return best;
+}
+
+/**
+ * The passage one bar out or one bar in, from a tap on a handle.
+ *
+ * Clamped against the other marker the same way a drag is, so tapping
+ * "narrower" on a passage of one bar leaves it at one bar rather than
+ * turning it inside out.
+ */
+export function passageAfterTap(
+  current: { readonly fromIndex: number; readonly toIndex: number },
+  grip: Grip,
+): { readonly fromIndex: number; readonly toIndex: number } {
+  const at = grip.edge === 'start' ? current.fromIndex : current.toIndex;
+  return passageAfterDrag(current, grip.edge, at + grip.towards);
+}
+
 /**
  * The passage a drag leaves behind, in bar indices.
  *

@@ -1168,6 +1168,23 @@ select {
 }
 
 /*
+ * Which way the handle under it moves the passage.
+ *
+ * The two handles on a marker are not the same button - the top one takes in
+ * another bar and the bottom one gives one up - and an arrow is the shortest
+ * way to say so. Drawn on top of the circle, in the colour of the page
+ * behind it.
+ */
+.passage-marker__arrow {
+  fill: none;
+  stroke: var(--surface);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/*
  * Nothing scrolls while a marker is being moved.
  *
  * On a touch screen a drag is a scroll until something says otherwise, and

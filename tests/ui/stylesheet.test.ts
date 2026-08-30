@@ -103,6 +103,15 @@ describe('the stylesheet', () => {
     expect(hit?.body).toMatch(/fill\s*:\s*transparent/);
   });
 
+  it('draws the arrow on a handle over it rather than in front of it', () => {
+    // The handles are buttons and the arrow is a label on one. A label that
+    // swallowed the touch would leave the button working everywhere except
+    // in the middle, which is where a thumb lands.
+    const arrow = rules().find((rule) => rule.selector === '.passage-marker__arrow');
+
+    expect(arrow?.body).toMatch(/pointer-events\s*:\s*none/);
+  });
+
   it('says whether a take is still open without moving anything', () => {
     // The dot beats while the take is still open and goes quiet once the
     // silence has sealed it, which is what saves the reader counting that

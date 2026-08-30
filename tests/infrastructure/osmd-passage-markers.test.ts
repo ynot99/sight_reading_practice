@@ -9,6 +9,36 @@ function markers(container: HTMLElement): SVGGElement[] {
   return [...container.querySelectorAll('g.passage-marker')] as SVGGElement[];
 }
 
+/**
+ * A pointer that landed and lifted without moving, in the drawing's own
+ * pixels - which the stub below makes the same as the screen's.
+ */
+function tap(container: HTMLElement, x: number, y: number): void {
+  for (const type of ['pointerdown', 'pointerup']) {
+    container.dispatchEvent(
+      new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, bubbles: true }),
+    );
+  }
+}
+
+/** Shows the engraving at exactly the size it was drawn, which jsdom will not. */
+function showAt(renderer: OsmdScoreRenderer, container: HTMLElement): void {
+  void renderer;
+  const svg = container.querySelector('svg');
+  const height = Number.parseFloat(svg?.getAttribute('height') ?? '0');
+  const width = Number.parseFloat(svg?.getAttribute('width') ?? '0');
+  if (svg !== null) {
+    svg.getBoundingClientRect = (() =>
+      ({ left: 0, top: 0, width, height })) as Element['getBoundingClientRect'];
+  }
+}
+
+/** Where an arrow points, as the x of the middle point of its path. */
+function tipOf(path: string): number {
+  const points = [...path.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)];
+  return Number.parseFloat(points[1]?.[1] ?? 'NaN');
+}
+
 /** The bar of a marker, as the numbers it was actually drawn with. */
 function barOf(marker: SVGGElement | undefined): { x: number; top: number; bottom: number } {
   // The drawn bar, not the invisible area a fingertip is allowed to land on.
@@ -118,10 +148,62 @@ describe('passage markers over a real engraving', () => {
     expect(left + width).toBeGreaterThan(bar.x);
   });
 
+  it('draws an arrow on each handle saying which way it moves', () => {
+    // The two handles on a marker are not the same button: the top takes in
+    // another bar and the bottom gives one up. An arrow is the shortest way
+    // to say so, and without it they are two identical circles.
+    renderer.showPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
+
+    const [start, end] = markers(container);
+    const arrows = (marker: SVGGElement | undefined): string[] =>
+      [...(marker?.querySelectorAll('path.passage-marker__arrow') ?? [])].map(
+        (path) => path.getAttribute('d') ?? '',
+      );
+
+    expect(arrows(start)).toHaveLength(2);
+    expect(arrows(end)).toHaveLength(2);
+    // The top of the start marker points back towards the front of the
+    // piece, which is the way it will move; the bottom points the other way.
+    const [outward, inward] = arrows(start).map((d) => tipOf(d) - barOf(start).x);
+    expect(outward).toBeLessThan(0);
+    expect(inward).toBeGreaterThan(0);
+  });
+
   it('leaves the dots off a passage that is played once', () => {
     renderer.showPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
 
     expect(container.querySelectorAll('circle.passage-marker__dot')).toHaveLength(0);
+  });
+
+  it('moves the passage a bar when a handle is tapped', () => {
+    // The gesture nothing else in the suite can see: a tap on a handle is a
+    // button and a drag from it is a handle, and telling them apart is the
+    // whole of it. Dragging was the only way to move a marker, which meant
+    // taking hold of a line a few pixels wide to change one bar.
+    showAt(renderer, container);
+    renderer.showPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
+    const chosen: { fromMeasureIndex: number; toMeasureIndex: number }[] = [];
+    renderer.onPassageDragged((passage) => chosen.push(passage));
+
+    const [start] = markers(container);
+    const top = start?.querySelector('circle.passage-marker__grip--top');
+    tap(container, Number(top?.getAttribute('cx')), Number(top?.getAttribute('cy')));
+
+    // The top handle of the start marker takes in the bar before it.
+    expect(chosen).toEqual([{ fromMeasureIndex: 0, toMeasureIndex: 2 }]);
+  });
+
+  it('gives up a bar from the handle at the other end of the marker', () => {
+    showAt(renderer, container);
+    renderer.showPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
+    const chosen: { fromMeasureIndex: number; toMeasureIndex: number }[] = [];
+    renderer.onPassageDragged((passage) => chosen.push(passage));
+
+    const [start] = markers(container);
+    const bottom = start?.querySelector('circle.passage-marker__grip--bottom');
+    tap(container, Number(bottom?.getAttribute('cx')), Number(bottom?.getAttribute('cy')));
+
+    expect(chosen).toEqual([{ fromMeasureIndex: 2, toMeasureIndex: 2 }]);
   });
 
   it('takes them away again', () => {

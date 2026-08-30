@@ -1620,6 +1620,41 @@ describe('AppView', () => {
     expect(renderer.cursor.visible).toBe(true);
   });
 
+  describe('repeating a passage', () => {
+    it('plays it round again when a playback reaches its end', async () => {
+      // A repeat sign on the page means the music repeats, whoever is
+      // playing it - and hearing a hard passage over and over is most of
+      // what listening to one is for.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.controller.updateSettings({ repeatRange: true });
+
+      element<HTMLButtonElement>('listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(rig.runtime.controller.isListening).toBe(true);
+
+      // Past the end of the four bars the preset writes.
+      rig.metronome.advanceBeats(20);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(rig.runtime.controller.isListening).toBe(true);
+    });
+
+    it('leaves a playback the reader stopped alone', async () => {
+      // Pressing the button to stop is not the music reaching its end.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.controller.updateSettings({ repeatRange: true });
+      element<HTMLButtonElement>('listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      element<HTMLButtonElement>('listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(rig.runtime.controller.isListening).toBe(false);
+    });
+  });
+
   describe('the arrow keys', () => {
     function pressArrow(key: 'ArrowLeft' | 'ArrowRight', target: Element = document.body): boolean {
       const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });

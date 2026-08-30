@@ -43,7 +43,14 @@ import { SettingsRepository } from '../../src/application/SettingsRepository.js'
 import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.js';
 import type { SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { WebMidiAdapter } from '../../src/infrastructure/midi/WebMidiAdapter.js';
-import { AppView, describeTendency, healthGlideMs, isRealTendency } from '../../src/ui/AppView.js';
+import {
+  AppView,
+  describeTendency,
+  healthGlideMs,
+  isRealTendency,
+  middle,
+  spreadAround,
+} from '../../src/ui/AppView.js';
 import { twoBarExercise } from '../support/fixtures.js';
 import { midiToLabel } from '../../src/domain/model/Pitch.js';
 
@@ -2638,6 +2645,35 @@ describe('AppView', () => {
     element<HTMLButtonElement>('start').click();
 
     expect(runtime.controller.session).toBeNull();
+  });
+});
+
+describe('the middle of a run, rather than its average', () => {
+  it('ignores a handful of readings that were a second out', () => {
+    // Exactly what happened: the opening presses of a run arrived before the
+    // relay's clock had been measured and were a whole second wrong.
+    // Averaged with the rest they gave three hundred and seventy against a
+    // truth of a hundred and twenty.
+    const run = [1149, 1144, 1133, 1122, 128, 120, 119, 122, 104, 124, 153, 129, 122, 96, 109, 68];
+
+    expect(Math.round(middle(run))).toBe(123);
+    const average = run.reduce((sum, each) => sum + each, 0) / run.length;
+    expect(Math.round(average)).toBe(371);
+  });
+
+  it('measures the scatter the same way, so a few wild ones cannot hide it', () => {
+    const steady = [118, 120, 122, 119, 121, 123, 117, 120];
+    const withWildOnes = [...steady, 1149, 1144];
+
+    // A standard deviation would be hundreds here; this stays near the truth.
+    expect(spreadAround(withWildOnes)).toBeLessThan(20);
+    expect(isRealTendency(middle(withWildOnes), spreadAround(withWildOnes), 10)).toBe(true);
+  });
+
+  it('is the plain middle when nothing is wild', () => {
+    expect(middle([1, 2, 3])).toBe(2);
+    expect(middle([1, 2, 3, 4])).toBe(2.5);
+    expect(middle([])).toBe(0);
   });
 });
 

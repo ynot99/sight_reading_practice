@@ -61,13 +61,12 @@ export interface WebSocketMidiOptions {
 const CLOCKS_DISAGREE_MS = 5_000;
 
 /**
- * Presses kept while working out how far apart the two clocks are.
+ * Readings kept while working out how far apart the two clocks are.
  *
  * Enough that one of them will have arrived on a quiet network, few enough
  * that a machine waking from sleep is forgotten within a bar or two.
  */
 const CLOCK_SAMPLES = 64;
-const MIN_CLOCK_SAMPLES = 8;
 
 interface AdapterEvents {
   midi: MidiEvent;
@@ -226,7 +225,15 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
     }
 
     switch (message.type) {
+      case 'ping':
+        // Nothing but the time, and the only moment at which comparing the
+        // two clocks cannot spoil anything: nobody is playing.
+        this.noteClock(message.at);
+        return;
       case 'hello':
+        this.noteClock(message.at);
+        this.setDevice(message.device);
+        return;
       case 'device':
         this.setDevice(message.device);
         return;
@@ -339,16 +346,39 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
       return arrived;
     }
 
-    this.gaps.push(arrived - converted);
+    this.sampleClock(bridgeAtMs, arrived, this.timeOriginMs);
+    // From the first sample, not from the eighth. Waiting traded a small
+    // error for an enormous one: the first sample may be the slowest rather
+    // than the fastest, which is worth a few milliseconds, while waiting let
+    // the opening notes of a run through with a whole second of clock fault
+    // on them - and a reader calibrating from that run averaged the two
+    // together and came away with a number belonging to neither.
+    return converted + (this.gaps.length === 0 ? 0 : Math.min(...this.gaps));
+  }
+
+  /**
+   * Notes how far apart the clocks looked this time.
+   *
+   * Fed by anything the bridge stamps, not only by playing: the disagreement
+   * is a property of the connection rather than of the music, and knowing it
+   * before a note is struck is the difference between a run that measures the
+   * reader and one that measures a clock.
+   */
+  private noteClock(bridgeAtMs: number | undefined): void {
+    if (bridgeAtMs !== undefined && this.timeOriginMs !== null) {
+      this.sampleClock(bridgeAtMs, this.clock.now(), this.timeOriginMs);
+    }
+  }
+
+  private sampleClock(bridgeAtMs: number, arrivedMs: number, timeOriginMs: number): void {
+    const converted = bridgeAtMs - timeOriginMs;
+    if (Math.abs(converted - arrivedMs) > CLOCKS_DISAGREE_MS) {
+      return;
+    }
+    this.gaps.push(arrivedMs - converted);
     while (this.gaps.length > CLOCK_SAMPLES) {
       this.gaps.shift();
     }
-    // Not until there are enough to have seen a quiet moment; before that the
-    // one sample in hand may be the slowest rather than the fastest.
-    if (this.gaps.length < MIN_CLOCK_SAMPLES) {
-      return converted;
-    }
-    return converted + Math.min(...this.gaps);
   }
 
   /**
@@ -361,7 +391,7 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
    * time.
    */
   get clockSkewMs(): number | null {
-    return this.gaps.length < MIN_CLOCK_SAMPLES ? null : Math.min(...this.gaps);
+    return this.gaps.length === 0 ? null : Math.min(...this.gaps);
   }
 
   private setDevice(device: string | null): void {

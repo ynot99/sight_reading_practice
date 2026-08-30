@@ -229,7 +229,7 @@ function main() {
   };
 
   sockets.on('connection', (client) => {
-    client.send(JSON.stringify({ v: 1, type: 'hello', device: openPortName }));
+    client.send(JSON.stringify({ v: 1, type: 'hello', device: openPortName, at: Date.now() }));
     console.log(`Screen connected (${sockets.clients.size} total).`);
     client.on('close', () => {
       console.log(`Screen disconnected (${sockets.clients.size} left).`);
@@ -237,7 +237,14 @@ function main() {
   });
 
   syncDevice();
-  const poll = setInterval(syncDevice, DEVICE_POLL_MS);
+  const poll = setInterval(() => {
+    syncDevice();
+    // Nothing but the time. The page joins our clock to its own by it, and
+    // doing that while nobody is playing is the only way it cannot spoil the
+    // playing: worked out from the opening bar instead, a clock a second out
+    // put that bar a second out with it.
+    broadcast({ type: 'ping', at: Date.now() });
+  }, DEVICE_POLL_MS);
 
   server.listen(options.port, () => {
     console.log('');

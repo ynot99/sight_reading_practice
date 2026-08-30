@@ -392,15 +392,16 @@ describe('when the bridge says a key was struck', () => {
     return rig.events.at(-1);
   }
 
-  it('prefers the reading taken at the source', () => {
-    // The page's clock is monotonic from `timeOrigin`; the bridge's is the
-    // wall clock. That constant is exactly what joins them, and it does not
-    // drift the way repeated sampling would.
+  it('will not date a press into the future, however the bridge stamps it', () => {
+    // A stamp 250 ms after the message carrying it arrived is not a fast
+    // relay, it is a clock that disagrees - and with nothing else to go on
+    // the honest reading is the moment it got here. Once a few readings have
+    // arrived the disagreement is known and the stamp means something again.
     const rig = createRig(undefined, ORIGIN);
 
     const event = noteFrom(rig, { at: ORIGIN + 1_250 });
 
-    expect(event?.timestampMs).toBe(1_250);
+    expect(event?.timestampMs).toBe(1_000);
   });
 
   it('stamps on arrival when the bridge sent no reading', () => {
@@ -419,12 +420,15 @@ describe('when the bridge says a key was struck', () => {
     expect(noteFrom(rig, { at: ORIGIN + 600_000 })?.timestampMs).toBe(1_000);
   });
 
-  it('keeps a disagreement small enough to be worth seeing', () => {
-    // The whole point is to show a few milliseconds of clock difference, not
-    // to hide it, so a small gap is passed through rather than clamped away.
+  it('reports a disagreement rather than leaving it in the timing', () => {
+    // It used to be passed through so that a few milliseconds of clock
+    // difference could be seen. Seen it was - as a third of a second of
+    // lateness a reader spent an evening trying to correct by hand, because
+    // nothing said which of the two machines was wrong.
     const rig = createRig(undefined, ORIGIN);
 
-    expect(noteFrom(rig, { at: ORIGIN + 1_040 })?.timestampMs).toBe(1_040);
+    expect(noteFrom(rig, { at: ORIGIN + 1_040 })?.timestampMs).toBe(1_000);
+    expect(rig.source.clockSkewMs).toBe(-40);
   });
 });
 
@@ -471,14 +475,34 @@ describe('when the two computers disagree about the time', () => {
     expect(rig.events.at(-1)?.timestampMs).toBe(at);
   });
 
-  it('waits for enough presses to have seen a quiet moment', () => {
-    // One sample may be the slowest rather than the fastest, and a correction
-    // built on it would be a guess wearing a measurement's clothes.
+  it('corrects from the first reading rather than waiting for a quiet one', () => {
+    // Waiting traded a small error for an enormous one. The first reading may
+    // be the slowest rather than the fastest, which is worth a few
+    // milliseconds - while waiting let the opening notes of a run through
+    // with a whole second of clock fault on them, and a reader calibrating
+    // from that run averaged the two together and got a number belonging to
+    // neither.
     const rig = createRig(undefined, ORIGIN);
 
-    play(rig, 3, 900);
+    play(rig, 1, 900);
 
-    expect(rig.source.clockSkewMs).toBeNull();
+    expect(rig.source.clockSkewMs).toBe(900);
+  });
+
+  it('knows the difference before a note is played, from the relay saying so', () => {
+    // A ping carries nothing but the time, and while nobody is playing is the
+    // only moment at which comparing the two clocks cannot spoil anything.
+    const rig = createRig(undefined, ORIGIN);
+    rig.source.connect();
+    rig.sockets[0]?.open();
+    rig.sockets[0]?.deliver({ v: 1, type: 'ping', at: ORIGIN + rig.clock.now() - 900 });
+
+    expect(rig.source.clockSkewMs).toBe(900);
+
+    const at = rig.clock.now();
+    rig.sockets[0]?.deliver({ v: 1, type: 'noteon', note: 60, velocity: 0.8, at: ORIGIN + at - 900 });
+
+    expect(rig.events.at(-1)?.timestampMs).toBe(at);
   });
 
   it('takes the smallest gap, which is the one least delayed on the way', () => {

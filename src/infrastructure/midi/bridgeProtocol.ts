@@ -1,12 +1,13 @@
 /**
  * Wire format between the desktop MIDI bridge and the browser.
  *
- * Deliberately tiny, one-way and timestamp-free. Timestamps are *not* sent:
- * the bridge's clock and the browser's clock share no origin, and Flow mode
- * grades a press against a beat computed from the browser's clock. Stamping
- * on arrival keeps every comparison on one timeline, and the only error that
- * introduces is the LAN hop - a couple of milliseconds against a tolerance
- * measured in hundreds.
+ * Deliberately tiny and one-way. A press carries the moment it was struck,
+ * because stamping on arrival buries the relay's own delay in the reader's
+ * playing - but the two machines' clocks share no origin, so the difference
+ * between them has to be measured before a stamp means anything. That is what
+ * the ping is for: it costs a few bytes a second and it means the difference
+ * is known before a note is played, rather than being worked out from the
+ * opening bar and spoiling it. One was found a whole second out.
  */
 export const BRIDGE_PROTOCOL_VERSION = 1;
 
@@ -14,6 +15,20 @@ export interface BridgeHelloMessage {
   readonly type: 'hello';
   /** Name of the MIDI port the bridge is listening to, if any. */
   readonly device: string | null;
+  /** Wall clock at the bridge, if it sends one. */
+  readonly at?: number;
+}
+
+/**
+ * Nothing but the time, sent every so often.
+ *
+ * Carries no music at all: it exists so the two clocks can be compared while
+ * nobody is playing, which is the only moment at which comparing them cannot
+ * spoil anything.
+ */
+export interface BridgePingMessage {
+  readonly type: 'ping';
+  readonly at: number;
 }
 
 export interface BridgeDeviceMessage {
@@ -56,6 +71,7 @@ export interface BridgeControlMessage {
 }
 
 export type BridgeMessage =
+  | BridgePingMessage
   | BridgeHelloMessage
   | BridgeDeviceMessage
   | BridgeNoteOnMessage
@@ -115,8 +131,18 @@ export function parseBridgeMessage(raw: unknown): BridgeMessage | null {
   }
 
   switch (parsed['type']) {
-    case 'hello':
-      return { type: 'hello', device: toDeviceName(parsed['device']) };
+    case 'ping': {
+      const at = toStamp(parsed['at']);
+      return at === null ? null : { type: 'ping', at };
+    }
+    case 'hello': {
+      const at = toStamp(parsed['at']);
+      return {
+        type: 'hello',
+        device: toDeviceName(parsed['device']),
+        ...(at === null ? {} : { at }),
+      };
+    }
     case 'device':
       return { type: 'device', device: toDeviceName(parsed['device']) };
     case 'noteon': {

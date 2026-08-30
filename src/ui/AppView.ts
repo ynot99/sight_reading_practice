@@ -68,6 +68,43 @@ const MAX_LATENCY_MS = 600;
  * reason a run is worth more than one press. Two standard errors is the
  * ordinary line for "this is not nothing".
  */
+/**
+ * The middle value, which is what a run's tendency really is.
+ *
+ * An average is pulled about by a handful of wild readings, and a run has
+ * them: the opening presses of one arrived before the relay's clock had been
+ * measured and were a whole second out, and averaged with the rest they gave
+ * a number belonging to neither - three hundred and seventy against a truth
+ * of a hundred and twenty. The middle value does not care how wrong the worst
+ * few were.
+ */
+export function middle(values: readonly number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const at = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? (sorted[at] ?? 0)
+    : ((sorted[at - 1] ?? 0) + (sorted[at] ?? 0)) / 2;
+}
+
+/**
+ * How far the readings sit from their middle, in the same units as a spread.
+ *
+ * The robust twin of a standard deviation: the middle distance from the
+ * middle, scaled so that on ordinary scatter the two agree. Used for the same
+ * reason as {@link middle} - a few readings a second out must not be able to
+ * decide whether the rest of them say anything.
+ */
+export function spreadAround(values: readonly number[]): number {
+  if (values.length < 2) {
+    return 0;
+  }
+  const centre = middle(values);
+  return middle(values.map((value) => Math.abs(value - centre))) * 1.4826;
+}
+
 export function isRealTendency(meanMs: number, spreadMs: number, presses: number): boolean {
   if (presses < 2) {
     return false;
@@ -1854,16 +1891,16 @@ export class AppView {
    * would only move the mess.
    */
   private measuredLatencyMs(): number | null {
-    const timing = this.runtime.controller.lastReport?.timing;
-    if (timing === undefined || timing.deviations.length < MIN_PRESSES_TO_MEASURE) {
+    const deviations = this.runtime.controller.lastReport?.timing.deviations;
+    if (deviations === undefined || deviations.length < MIN_PRESSES_TO_MEASURE) {
       return null;
     }
-    if (!isRealTendency(timing.meanDeviationMs, timing.deviationSpreadMs, timing.deviations.length)) {
+    const centre = middle(deviations);
+    if (!isRealTendency(centre, spreadAround(deviations), deviations.length)) {
       return null;
     }
     const step = 5;
-    const wanted = Math.round(timing.meanDeviationMs / step) * step;
-    return Math.min(MAX_LATENCY_MS, Math.max(-100, wanted));
+    return Math.min(MAX_LATENCY_MS, Math.max(-100, Math.round(centre / step) * step));
   }
 
   /**

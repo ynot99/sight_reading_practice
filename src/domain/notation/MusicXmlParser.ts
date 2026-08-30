@@ -398,28 +398,13 @@ function hasTie(note: XmlNode, type: 'start' | 'stop'): boolean {
  *
  * An acciaccatura is meant to be shorter than anything notated, which cannot
  * be said in a vocabulary that stops at the sixteenth. A sixteenth is the
- * nearest true thing to it, and it is still one press at roughly the right
- * moment - which is the whole of what a reader has to do with it.
+ * nearest true thing to it, and it is still one press just before the beat -
+ * which is the whole of what a reader has to do with it.
  */
 const GRACE_TICKS = 120;
 
-/**
- * Places grace notes in front of the note they lean on, out of its time.
- *
- * Returns `null` when there is not enough to take: a grace before a sixteenth
- * would leave that sixteenth nothing at all, and a note of no length is not
- * something the page can show or the reader can play.
- *
- * Graces marked as a chord join the one before them rather than following it,
- * because that is what the mark means - two keys struck together, once.
- */
-function takeTimeForGraces(
-  graces: readonly XmlNode[],
-  cursorTicks: number,
-  hostTicks: number,
-  at: { readonly staff: number; readonly voice: number; readonly where: string },
-): { readonly notes: RawNote[]; readonly stolenTicks: number } | null {
-  // Each run of chorded graces is one press, and one press needs one slot.
+/** Each run of chorded graces is one press, and one press needs one slot. */
+function graceSlots(graces: readonly XmlNode[]): XmlNode[][] {
   const slots: XmlNode[][] = [];
   for (const grace of graces) {
     const last = slots[slots.length - 1];
@@ -429,17 +414,50 @@ function takeTimeForGraces(
       slots.push([grace]);
     }
   }
+  return slots;
+}
 
-  const stolenTicks = slots.length * GRACE_TICKS;
-  const left = hostTicks - stolenTicks;
-  if (left < GRACE_TICKS || !Duration.isNotatable(left)) {
+/**
+ * Fits grace notes into the time in front of the note they lean on.
+ *
+ * *In front of*, not out of it. A grace note is played before the beat and
+ * the note it leans on stays on the beat - which is exactly what a reader is
+ * being asked to do, and what taking the time from the host got wrong: every
+ * note after the ornament arrived late, and the beat is the one thing a
+ * sight-reading trainer must not move.
+ *
+ * So the time comes from whatever was sounding before, which is where a
+ * performer takes it from too. Returns `null` when it cannot be had - nothing
+ * before it in the bar, too little of it, or a tuplet whose group would come
+ * apart - and then the ornament is dropped rather than the beat.
+ */
+function fitGracesBefore(
+  graces: readonly XmlNode[],
+  hostOnsetTicks: number,
+  before: readonly RawNote[],
+  at: { readonly staff: number; readonly voice: number },
+): { readonly notes: RawNote[]; readonly shortened: readonly RawNote[] } | null {
+  const slots = graceSlots(graces);
+  const wanted = slots.length * GRACE_TICKS;
+  const host = before[0];
+  if (host === undefined || host.staff !== at.staff || host.voice !== at.voice) {
+    return null;
+  }
+  const left = host.ticks - wanted;
+  if (left < GRACE_TICKS || host.duration.isTuplet || !Duration.isNotatable(left)) {
     return null;
   }
 
+  const shortened = before.map((note) => ({
+    ...note,
+    ticks: left,
+    duration: Duration.fromTicks(left),
+  }));
+
   const notes: RawNote[] = [];
   slots.forEach((slot, index) => {
-    const onsetTicks = cursorTicks + index * GRACE_TICKS;
-    for (const grace of slot) {
+    const onsetTicks = hostOnsetTicks - wanted + index * GRACE_TICKS;
+    slot.forEach((grace, inChord) => {
       notes.push({
         staff: childNumber(grace, 'staff') ?? at.staff,
         voice: childNumber(grace, 'voice') ?? at.voice,
@@ -448,15 +466,15 @@ function takeTimeForGraces(
         duration: Duration.of('16th'),
         pitch: readPitch(grace),
         tieStart: false,
-        isChord: slot.indexOf(grace) > 0,
+        isChord: inChord > 0,
         beams: [],
         stem: readStem(grace),
         arpeggiated: false,
       });
-    }
+    });
   });
 
-  return { notes, stolenTicks };
+  return { notes, shortened };
 }
 
 function readMeasureNotes(
@@ -470,6 +488,8 @@ function readMeasureNotes(
   let cursor = 0;
   let previousOnset = 0;
   const pendingGraces: XmlNode[] = [];
+  /** The notes sounding immediately before here: one, or a chord of them. */
+  let lastNotes: RawNote[] = [];
   const sayOnce = (detail: string): void => {
     if (!warnings.some((warning) => warning.kind === 'grace-notes')) {
       warnings.push({ kind: 'grace-notes', detail });
@@ -481,6 +501,8 @@ function readMeasureNotes(
       const amount = childNumber(node, 'duration') ?? 0;
       const ticks = toTicks(amount, header.divisions, `Bar ${measureIndex + 1}`);
       cursor += node.name === 'backup' ? -ticks : ticks;
+      // Somewhere else entirely: nothing is sounding immediately before here.
+      lastNotes = [];
       continue;
     }
     if (node.name === 'direction') {
@@ -513,36 +535,39 @@ function readMeasureNotes(
         ? header.timeSignature.ticksPerMeasure
         : toTicks(rawDuration ?? 0, header.divisions, where);
 
-    // A grace note is played, so it needs time, and the only time there is
-    // belongs to the note it leans on - which is exactly where a performer
-    // takes it from. Dropped instead, as they were, the reader plays a key
-    // the page never asked for and is told it was wrong.
-    let ownTicks = ticks;
+    const staff = childNumber(node, 'staff') ?? 1;
+    const voice = childNumber(node, 'voice') ?? 1;
+
+    // A grace note is played, so it needs time - and it takes it from what was
+    // sounding *before*, not from the note it leans on. The note it leans on
+    // has to stay on its beat, which is the one thing a sight-reading trainer
+    // must not move.
     if (pendingGraces.length > 0 && !isChord) {
-      const taken = takeTimeForGraces(pendingGraces, cursor, ticks, {
-        staff: childNumber(node, 'staff') ?? 1,
-        voice: childNumber(node, 'voice') ?? 1,
-        where: `Bar ${measureIndex + 1}`,
-      });
-      if (taken === null) {
+      const fitted = fitGracesBefore(pendingGraces, cursor, lastNotes, { staff, voice });
+      if (fitted === null) {
         sayOnce(
-          `A grace note was dropped, first in bar ${measureIndex + 1}: the note it leans on is too short to give it any time.`,
+          `A grace note was dropped, first in bar ${measureIndex + 1}: there was nothing before it to take its time from, and an ornament missing is a smaller loss than every note after it being off the beat.`,
         );
       } else {
-        notes.push(...taken.notes);
-        cursor += taken.stolenTicks;
-        ownTicks = ticks - taken.stolenTicks;
+        for (const shortened of fitted.shortened) {
+          const at = notes.indexOf(lastNotes[fitted.shortened.indexOf(shortened)] as RawNote);
+          if (at >= 0) {
+            notes[at] = shortened;
+          }
+        }
+        notes.push(...fitted.notes);
         sayOnce(
-          'Grace notes were written as sixteenths, taking their time from the note they lean on.',
+          'Grace notes were written as sixteenths, taking their time from the note before them so the note they lean on keeps its beat.',
         );
       }
       pendingGraces.length = 0;
     }
 
+    const ownTicks = ticks;
     const onsetTicks = isChord ? previousOnset : cursor;
-    notes.push({
-      staff: childNumber(node, 'staff') ?? 1,
-      voice: childNumber(node, 'voice') ?? 1,
+    const pushed: RawNote = {
+      staff,
+      voice,
       onsetTicks,
       ticks: ownTicks,
       duration:
@@ -555,9 +580,15 @@ function readMeasureNotes(
       beams: isChord ? [] : readBeams(node),
       stem: readStem(node),
       arpeggiated: hasChild(child(node, 'notations'), 'arpeggiate'),
-    });
+    };
+    notes.push(pushed);
 
-    if (!isChord) {
+    if (isChord) {
+      lastNotes.push(pushed);
+    } else {
+      // What a grace note arriving next would take its time from.
+      lastNotes.length = 0;
+      lastNotes.push(pushed);
       previousOnset = cursor;
       cursor += ownTicks;
     }

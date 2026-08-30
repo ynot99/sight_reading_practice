@@ -598,74 +598,96 @@ describe('a grace note', () => {
       `<voice>1</voice><type>eighth</type>${extra}</note>`;
   }
 
-  it('is played, so it is given time out of the note it leans on', () => {
-    // Dropped instead, as they were, the reader plays a key the page never
-    // asked for and is told it was wrong.
-    const { exercise, warnings } = importer.read(
-      scoreXml(grace('G', 4) + note('A', 4, 24, 'quarter') + note('B', 4, 72, 'half', '<dot/>')),
+  /** A quarter, a grace, the quarter it leans on, then the rest of the bar. */
+  function bar(graces: string): string {
+    return scoreXml(
+      note('C', 4, 24, 'quarter') +
+        graces +
+        note('A', 4, 24, 'quarter') +
+        note('B', 4, 48, 'half'),
     );
+  }
+
+  it('leaves the note it leans on exactly where it was', () => {
+    // The whole point. Taking the time from the host instead put every note
+    // after the ornament late, and the beat is the one thing a sight-reading
+    // trainer must not move.
+    const { exercise } = importer.read(bar(grace('G', 4)));
 
     expect(() => validateExercise(exercise)).not.toThrow();
+    const onsets = buildTimeline(exercise).steps.map((step) => step.onsetTicks);
+    // Beat one, the grace just before beat two, beat two itself, beat three.
+    expect(onsets).toEqual([0, 360, 480, 960]);
+  });
+
+  it('takes its time from whatever was sounding before it', () => {
+    const { exercise, warnings } = importer.read(bar(grace('G', 4)));
+
     const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
-    // A sixteenth of the quarter's own time, and the quarter keeps the rest.
-    expect(entries.slice(0, 2).map((entry) => entry.duration.ticks)).toEqual([120, 360]);
+    // The quarter before gives up a sixteenth and becomes a dotted eighth.
+    expect(entries.map((entry) => entry.duration.ticks)).toEqual([360, 120, 480, 960]);
     expect(warnings.map((warning) => warning.kind)).toContain('grace-notes');
   });
 
   it('is asked for, which is the whole point of keeping it', () => {
-    const { exercise } = importer.read(
-      scoreXml(grace('G', 4) + note('A', 4, 24, 'quarter') + note('B', 4, 72, 'half', '<dot/>')),
-    );
+    const { exercise } = importer.read(bar(grace('G', 4)));
 
-    expect(demands(exercise)[0]).toEqual([Pitch.parse('G4').midi]);
-  });
-
-  it('goes before the note rather than with it', () => {
-    const { exercise } = importer.read(
-      scoreXml(grace('G', 4) + note('A', 4, 24, 'quarter') + note('B', 4, 72, 'half', '<dot/>')),
-    );
-
-    // Two presses in order, not one chord: that is what a grace note is.
-    expect(demands(exercise).slice(0, 2)).toEqual([
+    expect(demands(exercise)).toEqual([
+      [Pitch.parse('C4').midi],
       [Pitch.parse('G4').midi],
       [Pitch.parse('A4').midi],
+      [Pitch.parse('B4').midi],
     ]);
   });
 
-  it('is dropped when the note it leans on has nothing to give', () => {
-    // A sixteenth cannot hand over a sixteenth and still exist, and a note of
-    // no length is not something the page can show or a reader can play.
+  it('is dropped when there is nothing in front of it to take from', () => {
+    // An ornament missing is a smaller loss than every note after it being
+    // off the beat.
+    const { exercise, warnings } = importer.read(
+      scoreXml(grace('G', 4) + note('A', 4, 24, 'quarter') + note('B', 4, 72, 'half', '<dot/>')),
+    );
+
+    expect(() => validateExercise(exercise)).not.toThrow();
+    expect(warnings.map((warning) => warning.detail).join(' ')).toContain('nothing before it');
+    // And the note it leaned on is still on beat one.
+    expect(buildTimeline(exercise).steps[0]?.onsetTicks).toBe(0);
+    expect(demands(exercise)[0]).toEqual([Pitch.parse('A4').midi]);
+  });
+
+  it('is dropped when what is before it is too short to give any', () => {
     const { exercise, warnings } = importer.read(
       scoreXml(
-        grace('G', 4) +
-          note('A', 4, 6, '16th') +
-          note('B', 4, 18, 'eighth', '<dot/>') +
-          note('C', 5, 72, 'half', '<dot/>'),
+        note('C', 4, 6, '16th') +
+          grace('G', 4) +
+          note('A', 4, 18, 'eighth', '<dot/>') +
+          note('B', 4, 72, 'half', '<dot/>'),
       ),
     );
 
     expect(() => validateExercise(exercise)).not.toThrow();
-    expect(warnings.map((warning) => warning.detail).join(' ')).toContain('too short');
-    expect(demands(exercise)[0]).toEqual([Pitch.parse('A4').midi]);
+    expect(warnings.map((warning) => warning.kind)).toContain('grace-notes');
+    expect(demands(exercise)).toHaveLength(3);
   });
 
   it('strikes two grace notes together when they are marked as a chord', () => {
-    const { exercise } = importer.read(
-      scoreXml(
-        grace('G', 4) + grace('B', 4, '<chord/>') + note('C', 5, 24, 'quarter') +
-          note('D', 5, 72, 'half', '<dot/>'),
-      ),
-    );
+    const { exercise } = importer.read(bar(grace('G', 4) + grace('B', 4, '<chord/>')));
 
     // One press of two keys, which is what the mark means.
-    expect(demands(exercise)[0]).toEqual([Pitch.parse('G4').midi, Pitch.parse('B4').midi]);
-    expect(exercise.staves[0]?.measures[0]?.entries[0]?.duration.ticks).toBe(120);
+    expect(demands(exercise)[1]).toEqual([Pitch.parse('G4').midi, Pitch.parse('B4').midi]);
+    expect(buildTimeline(exercise).steps.map((step) => step.onsetTicks)).toEqual([0, 360, 480, 960]);
+  });
+
+  it('makes room for two of them in turn', () => {
+    const { exercise } = importer.read(bar(grace('G', 4) + grace('A', 4)));
+
+    // Two presses before the beat, and the beat still where it was.
+    expect(buildTimeline(exercise).steps.map((step) => step.onsetTicks)).toEqual([
+      0, 240, 360, 480, 960,
+    ]);
   });
 
   it('says once what it did, rather than once for every bar', () => {
-    const { warnings } = importer.read(
-      scoreXml(grace('G', 4) + note('A', 4, 24, 'quarter') + note('B', 4, 72, 'half', '<dot/>')),
-    );
+    const { warnings } = importer.read(bar(grace('G', 4)));
 
     expect(warnings.filter((warning) => warning.kind === 'grace-notes')).toHaveLength(1);
   });

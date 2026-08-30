@@ -208,6 +208,21 @@ export function describeTendency(meanDeviationMs: number): string {
   return rounded < 0 ? `${Math.abs(rounded)} ms early` : `${rounded} ms late`;
 }
 
+/** Which bars are on the page, and which the whole piece has. */
+function describeBarRange(controller: AppRuntime['controller']): string {
+  const exercise = controller.currentExercise;
+  const { firstBar, lastBar } = controller.pieceBarRange;
+  if (exercise === null) {
+    return 'none';
+  }
+  const bars = measureCount(exercise);
+  const printedFrom = exercise.firstBarNumber;
+  return (
+    `${printedFrom}-${printedFrom + bars - 1} (${bars} of the piece's ${firstBar}-${lastBar})` +
+    `   range: ${controller.settings.rangeFromBar ?? '-'}..${controller.settings.rangeToBar ?? '-'}`
+  );
+}
+
 /** What a drag just did, in the reader's terms rather than in settings. */
 function describePassage(passage: ChosenPassage): string {
   if (passage.fromBar === null) {
@@ -2207,11 +2222,19 @@ export class AppView {
     const { rangeFromBar, rangeToBar } = controller.settings;
     const total = controller.wholePieceBars;
 
+    const { firstBar, lastBar } = controller.pieceBarRange;
+
     this.el.focusFrom.value = rangeFromBar === null ? '' : String(rangeFromBar);
     this.el.focusTo.value = rangeToBar === null ? '' : String(rangeToBar);
-    this.el.focusFrom.max = String(total);
-    this.el.focusTo.max = String(total);
-    this.el.focusBars.value = `of ${total}`;
+    // The score's own numbers, which is what the reader reads off the page.
+    // A count would be the right answer only for a piece beginning at bar
+    // one, and the boxes would refuse the bar numbers printed on every other
+    // one - an excerpt starting at forty has no bar 3 to type.
+    for (const box of [this.el.focusFrom, this.el.focusTo]) {
+      box.min = String(firstBar);
+      box.max = String(lastBar);
+    }
+    this.el.focusBars.value = firstBar === 1 ? `of ${total}` : `${firstBar}–${lastBar}`;
 
     const narrowed = rangeFromBar !== null || rangeToBar !== null;
     this.el.focusHandle.dataset['passage'] = String(narrowed);
@@ -2980,6 +3003,12 @@ export class AppView {
     const report = controller.lastReport;
     const lines = [
       `exercise: ${controller.currentExercise?.title ?? 'none'}`,
+      // What the page should be printing over the staves. A passage is cut
+      // out and engraved on its own, so "which bar is this" has an answer
+      // that no longer matches its position, and every fault in that answer
+      // looks the same from outside - like a page that started counting at
+      // one.
+      `bars: ${describeBarRange(controller)}`,
       `mode: ${settings.modeId}   tempo: ${controller.tempoBpm} bpm (${controller.tempoPercent}%)`,
       `input delay: ${settings.inputLatencyMs} ms   chord window: ${settings.matchToleranceMs} ms`,
       `marks: ${settings.playedNotes}   hand: ${settings.handStaff ?? 'both'}   count-in: ${settings.countInBars}`,

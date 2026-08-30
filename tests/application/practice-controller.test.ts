@@ -33,6 +33,7 @@ import { PracticeHistory } from '../../src/application/PracticeHistory.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { DomainError } from '../../src/shared/errors.js';
 import { bar, beamedSixteenths, longExercise, p, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import { measureCount } from '../../src/domain/model/Exercise.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry } from '../../src/domain/model/Exercise.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
@@ -1844,6 +1845,24 @@ describe('choosing a passage with the markers', () => {
     const rig = await opened();
 
     expect(rig.controller.choosePassage(6, 2)).toEqual({ fromBar: 6, toBar: 6 });
+  });
+
+  it('cuts the bars it was asked for on a score that starts at bar 40', async () => {
+    // The bug: a range is in the score's own numbers - what the reader reads
+    // off the page - and `sliceExercise` counts positions from the front of
+    // what it is handed. The two agree only for a score beginning at bar one,
+    // and every excerpt and everything with a pickup numbered nought was
+    // quietly cut somewhere else entirely.
+    const rig = createController();
+    await rig.controller.openScore({ ...longExercise({ bars: 8 }), firstBarNumber: 40 });
+
+    rig.controller.choosePassage(42, 44);
+    const loaded = await rig.controller.reloadExercise();
+
+    expect(loaded.firstBarNumber).toBe(42);
+    expect(measureCount(loaded)).toBe(3);
+    // And the page prints those numbers, rather than counting from one.
+    expect(rig.controller.barNumber(0)).toBe(42);
   });
 
   it('counts from the bar numbers the score itself carries', async () => {

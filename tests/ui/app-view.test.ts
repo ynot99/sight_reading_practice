@@ -1381,6 +1381,22 @@ describe('AppView', () => {
       expect(element('import-notice').textContent).toContain('bars 2-3');
     });
 
+    it('writes which bars are on the page into the judging log', async () => {
+      // Every fault in "which bar is this" looks the same from outside, like
+      // a page that started counting at one, so the answer is written down.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      element<HTMLButtonElement>('save-judging').click();
+
+      const written = rig.files.saved.at(-1);
+      const text = new TextDecoder().decode(written?.bytes);
+      expect(text).toContain('bars: 2-3');
+      expect(text).toContain('range: 2..3');
+    });
+
     it('puts the markers away on a touch, and brings them back', async () => {
       // Two lines across the staves, wanted while a passage is being chosen
       // and furniture in front of the notes the rest of the time.

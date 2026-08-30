@@ -733,14 +733,17 @@ export class PracticeController {
         ? source
         : { ...source, tempoBpm: this.tempoBpm };
     const { rangeFromBar, rangeToBar } = this.currentSettings;
+    // A range is in the score's own bar numbers, because that is what the
+    // reader reads off the page and types into the boxes. `sliceExercise`
+    // counts positions from the front of what it is handed. The two are the
+    // same thing only for a score that begins at bar one - and a score that
+    // begins anywhere else, which is every excerpt and everything with a
+    // pickup bar numbered nought, was quietly cut somewhere else entirely.
+    const from = rangeFromBar === null ? 1 : rangeFromBar - retimed.firstBarNumber + 1;
+    const to =
+      rangeToBar === null ? measureCount(retimed) : rangeToBar - retimed.firstBarNumber + 1;
     const exercise =
-      rangeFromBar === null && rangeToBar === null
-        ? retimed
-        : sliceExercise(
-            retimed,
-            rangeFromBar ?? 1,
-            rangeToBar ?? measureCount(retimed),
-          );
+      rangeFromBar === null && rangeToBar === null ? retimed : sliceExercise(retimed, from, to);
     const musicXml = this.deps.serializer.serialize(exercise);
 
     this.exercise = exercise;

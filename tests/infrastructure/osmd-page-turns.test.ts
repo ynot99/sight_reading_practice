@@ -190,6 +190,31 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     expect(markers[renderer.pages.count - 1]).toBe(1);
   });
 
+  it('turns the page itself when the cursor moves onto another one', () => {
+    // The cursor is what every mode moves - practising, listening, a take
+    // played back - so following it is what makes the page turn itself in
+    // all of them. Told by the practice run instead, it turned during a run
+    // and sat still through everything else.
+    renderer.setPaged(true);
+    expect(renderer.pages.at).toBe(0);
+
+    renderer.cursor.moveTo(4 * 15);
+
+    expect(renderer.pages.at).toBeGreaterThan(0);
+  });
+
+  it('does not let its own bookkeeping turn the page', () => {
+    // Reading where every step was drawn means running the cursor from the
+    // top and putting it back. A page that followed that would end every
+    // re-engraving on page one, however far in the reader had got.
+    renderer.setPaged(true);
+    renderer.turnPages(1);
+
+    renderer.refresh();
+
+    expect(renderer.pages.at).toBe(1);
+  });
+
   it('keeps the reader on their page across a re-engraving', () => {
     renderer.setPaged(true);
     renderer.turnPages(1);

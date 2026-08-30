@@ -240,6 +240,8 @@ export class OsmdScoreRenderer
   private stepElements = new Map<number, SVGGElement[]>();
   /** Which sheet each step was drawn on; every page is an SVG of its own. */
   private stepPage = new Map<number, number>();
+  /** True while the cursor is being walked to find out what is where. */
+  private walking = false;
   private faded = new Set<number>();
   private samples: DrawnNoteSample[] = [];
   private marks: PlayedMark[] = [];
@@ -273,6 +275,11 @@ export class OsmdScoreRenderer
     this.options = options;
     this.currentZoom = options.zoom ?? 0.85;
     this.navigator = new CursorNavigator(new OsmdCursorPrimitive(() => this.osmd));
+    // The page follows the cursor, in every mode that moves it: practising,
+    // listening, a take played back. Told by the page's own driver instead,
+    // it would follow only where somebody had remembered to say so - and
+    // during playback nobody had.
+    this.navigator.onMoved((stepIndex) => this.followCursor(stepIndex));
     this.watchForDrags();
   }
 
@@ -299,7 +306,9 @@ export class OsmdScoreRenderer
     osmd.render();
     this.loaded = true;
     this.engravedWidth = this.container.offsetWidth;
+    this.walking = true;
     this.navigator.reset();
+    this.walking = false;
     this.indexDrawnNotes();
     this.measures = this.readMeasures();
     this.showOnlyCurrentPage();
@@ -352,7 +361,9 @@ export class OsmdScoreRenderer
     this.osmd.zoom = this.currentZoom;
     this.osmd.render();
     this.engravedWidth = this.container.offsetWidth;
+    this.walking = true;
     this.navigator.reset();
+    this.walking = false;
     // Re-engraving throws the old SVG away, and everything drawn on it.
     this.indexDrawnNotes();
     this.measures = this.readMeasures();
@@ -509,6 +520,42 @@ export class OsmdScoreRenderer
     for (const [at, sheet] of this.sheets.entries()) {
       sheet.style.display = !this.paged || at === this.pageAt ? '' : 'none';
     }
+    this.placeCursor();
+  }
+
+  /**
+   * Turns to the page the cursor has just landed on.
+   *
+   * And takes the cursor off the page it is not on. The engraver draws it as
+   * one marker over the whole sheet and positions it in the coordinates of
+   * its own page, so on any other page it stands wherever those coordinates
+   * happen to fall - which is a cursor hanging over unrelated music, and is
+   * what the reader saw after turning a page by hand.
+   */
+  private followCursor(stepIndex: number): void {
+    // Not while the renderer is walking the cursor for its own bookkeeping.
+    // Reading where every step was drawn means running the cursor from the
+    // top and putting it back, and a page that followed that would end the
+    // re-engraving on page one however far in the reader had got.
+    if (this.walking) {
+      return;
+    }
+    const page = this.pageOfStep(stepIndex);
+    if (this.paged && page !== this.pageAt) {
+      this.turnToPage(page);
+      return;
+    }
+    this.placeCursor();
+  }
+
+  /** Shows the cursor only where it belongs; the reader's choice still wins. */
+  private placeCursor(): void {
+    const onThisPage = !this.paged || this.pageOfStep(this.navigator.position) === this.pageAt;
+    if (onThisPage && this.navigator.isWanted) {
+      (this.osmd?.cursor as { show?: () => void } | undefined)?.show?.();
+      return;
+    }
+    (this.osmd?.cursor as { hide?: () => void } | undefined)?.hide?.();
   }
 
   private announcePages(): void {
@@ -1170,6 +1217,15 @@ export class OsmdScoreRenderer
    * once and then put back where it was.
    */
   private indexDrawnNotes(): void {
+    this.walking = true;
+    try {
+      this.walkDrawnNotes();
+    } finally {
+      this.walking = false;
+    }
+  }
+
+  private walkDrawnNotes(): void {
     const cursor = this.osmd?.cursor;
     if (cursor === undefined || cursor === null) {
       this.stepX = new Map();

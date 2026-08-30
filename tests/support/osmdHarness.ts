@@ -13,6 +13,12 @@ export interface HarnessContainer {
 const TEXT_WIDTH_PER_CHARACTER = 6;
 
 export function installCanvasStub(): void {
+  // jsdom lays nothing out, so it implements neither of these. The engraver
+  // needs both the moment a cursor is shown: it paints itself with a gradient
+  // and then asks to be scrolled into view.
+  if (typeof Element.prototype.scrollIntoView !== 'function') {
+    Element.prototype.scrollIntoView = () => undefined;
+  }
   HTMLCanvasElement.prototype.getContext = (() => ({
     font: '',
     measureText: (text: string) => ({
@@ -37,6 +43,8 @@ export function installCanvasStub(): void {
     fill: () => undefined,
     clearRect: () => undefined,
     fillRect: () => undefined,
+    // The cursor paints itself with a gradient, so showing one needs this.
+    createLinearGradient: () => ({ addColorStop: () => undefined }),
   })) as unknown as HTMLCanvasElement['getContext'];
 }
 

@@ -391,11 +391,14 @@ export class OsmdScoreRenderer
     // scrolling and the frame around it stops growing to the length of the
     // piece. A frame taller than the screen is a page nobody can see the
     // bottom of, which is what a page turn exists to prevent.
-    for (const box of [this.scroller(), this.container.closest('.score')]) {
+    for (const box of [this.scroller(), this.frame()]) {
       if (box instanceof HTMLElement) {
         box.dataset['paged'] = String(paged);
       }
     }
+    // And the document, which is the box that was actually scrolling: a
+    // swipe across the score moved the whole page under it.
+    this.container.ownerDocument.documentElement.dataset['paged'] = String(paged);
     this.layOutPages();
     if (paged) {
       // Onto the page holding whatever was on screen, rather than back to the
@@ -522,6 +525,7 @@ export class OsmdScoreRenderer
       this.container.style.transform = '';
       if (frame instanceof HTMLElement) {
         frame.style.height = '';
+        frame.style.minHeight = '';
       }
       return;
     }
@@ -536,7 +540,20 @@ export class OsmdScoreRenderer
       const tall = page === undefined ? 0 : (page.bottom - page.top) * this.drawingScale();
       const room = this.windowHeight();
       frame.style.height = tall > 0 ? `${Math.min(tall + PAGE_MARGIN_PX * 2, room)}px` : '';
+      // The minimum has to go with it. Fullscreen gives the frame a floor of
+      // one screen, through a selector more specific than anything a
+      // stylesheet of ours can answer with - and a floor beats a height, so
+      // the frame stayed a screen tall and the next page went on showing
+      // underneath the one being read.
+      frame.style.minHeight = tall > 0 ? '0px' : '';
     }
+
+    // Nothing but the page moves. A document that can still be scrolled -
+    // and in fullscreen it could, by a few pixels - leaves the reader who
+    // turns back to page one looking at something short of the top of it,
+    // because the turn puts the music back and the scroll stays where their
+    // thumb left it.
+    this.container.ownerDocument.defaultView?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
     const svg = this.container.querySelector('svg');
     const drawn = svg?.getBoundingClientRect().height ?? 0;
     const top = pageOffsetFor(

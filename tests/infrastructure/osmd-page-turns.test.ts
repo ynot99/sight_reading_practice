@@ -153,11 +153,36 @@ describe('reading a real engraving as pages', () => {
     expect(shown).toBeLessThanOrEqual(200);
   });
 
+  it('takes the floor off the frame as well as the ceiling', () => {
+    // Fullscreen gives the frame a minimum of one screen, through a selector
+    // more specific than anything a stylesheet of ours can answer with - and
+    // a floor beats a height, so the frame stayed a screen tall and the next
+    // page went on showing underneath the one being read.
+    renderer.setPaged(true);
+
+    expect(frame.style.minHeight).toBe('0px');
+    expect(frame.style.height).not.toBe('');
+  });
+
+  it('stops the document scrolling, and puts it back to the top', () => {
+    // The document was the box that was actually moving: a swipe across the
+    // music panned the whole page under it, and turning back to page one
+    // left the reader short of the top - the music had gone back and the
+    // scroll had not.
+    renderer.setPaged(true);
+
+    expect(document.documentElement.dataset['paged']).toBe('true');
+
+    renderer.setPaged(false);
+    expect(document.documentElement.dataset['paged']).toBe('false');
+  });
+
   it('gives the frame back its height when pages are turned off', () => {
     renderer.setPaged(true);
     renderer.setPaged(false);
 
     expect(frame.style.height).toBe('');
+    expect(frame.style.minHeight).toBe('');
   });
 
   it('does nothing to a scrolling score', () => {

@@ -1184,6 +1184,23 @@ select {
 }
 
 /*
+ * While pages are turned, nothing scrolls at all.
+ *
+ * The score frame is not the only box that could move: the document itself
+ * was taller than the display, so a swipe across the music panned the whole
+ * page under it, and turning back to the first page left the reader short of
+ * the top of it - the music had gone back and the scroll had not.
+ */
+:root[data-paged='true'],
+:root[data-paged='true'] body {
+  overflow: hidden;
+}
+
+:root[data-paged='true'] .app {
+  min-height: 0;
+}
+
+/*
  * One screen, and no taller.
  *
  * A score frame is given a minimum of one screen and then grows to whatever

@@ -1347,11 +1347,11 @@ export class AppView {
     });
 
     this.listen(this.el.latencyMeasure, 'click', () => {
-      const measured = this.measuredLatencyMs();
-      if (measured === null) {
+      const wanted = this.latencyWouldBecome();
+      if (wanted === null) {
         return;
       }
-      controller.updateSettings({ inputLatencyMs: measured });
+      controller.updateSettings({ inputLatencyMs: wanted });
       this.syncControlsFromSettings();
     });
 
@@ -1900,7 +1900,25 @@ export class AppView {
       return null;
     }
     const step = 5;
-    return Math.min(MAX_LATENCY_MS, Math.max(-100, Math.round(centre / step) * step));
+    return Math.round(centre / step) * step;
+  }
+
+  /**
+   * What the delay would become if the last run were taken.
+   *
+   * The run measures what is *left over* after the delay already set, so the
+   * two are added. Replacing one with the other threw away the answer each
+   * time it was found: a reader pressing the button repeatedly went 0, 120,
+   * -100, 105, -90, 95, converging by luck and their own patience rather
+   * than by arithmetic. Added, the first press is the last one needed.
+   */
+  private latencyWouldBecome(): number | null {
+    const measured = this.measuredLatencyMs();
+    if (measured === null) {
+      return null;
+    }
+    const wanted = this.runtime.controller.settings.inputLatencyMs + measured;
+    return Math.min(MAX_LATENCY_MS, Math.max(-MAX_LATENCY_MS, wanted));
   }
 
   /**
@@ -1915,7 +1933,10 @@ export class AppView {
 
     const timing = this.runtime.controller.lastReport?.timing;
     const measured = this.measuredLatencyMs();
-    this.el.latencyMeasure.disabled = measured === null;
+    const wanted = this.latencyWouldBecome();
+    this.el.latencyMeasure.disabled = wanted === null;
+    this.el.latencyMeasure.textContent =
+      wanted === null ? 'Take it from the last run' : `Take it from the last run (${wanted} ms)`;
 
     if (set === 0) {
       this.el.latencyDescription.textContent =
@@ -1925,16 +1946,10 @@ export class AppView {
         `Every press is judged ${Math.abs(set)} ms ${set > 0 ? 'earlier' : 'later'} than it arrived.`;
     }
 
-    if (measured !== null && timing !== undefined) {
-      const raw = Math.round(timing.meanDeviationMs);
+    if (measured !== null && wanted !== null) {
       this.el.latencyDescription.textContent +=
-        ` The last run ran ${Math.abs(measured)} ms ${measured > 0 ? 'late' : 'early'}, steadily.`;
-      if (Math.abs(raw) > MAX_LATENCY_MS) {
-        // A ceiling read as a measurement is the worst of both: the reader
-        // believes the number and it is not the one their device produced.
-        this.el.latencyDescription.textContent +=
-          ` It actually measured ${raw} ms, which is past what this can hold.`;
-      }
+        ` What is left over runs ${Math.abs(measured)} ms ${measured > 0 ? 'late' : 'early'}, steadily,` +
+        ` which would make the delay ${wanted} ms.`;
       return;
     }
     if (timing !== undefined && timing.deviations.length >= MIN_PRESSES_TO_MEASURE) {

@@ -2873,6 +2873,37 @@ describe('measuring how long a press takes to arrive', () => {
     expect(rig.runtime.controller.settings.inputLatencyMs).toBe(120);
   });
 
+  it('settles in one press, because what is measured is what is left over', async () => {
+    // A run measures the residue after the delay already set, so the two add.
+    // Replacing one with the other threw the answer away each time it was
+    // found: pressing repeatedly went 0, 120, -100, 105, -90, 95, converging
+    // by the reader's patience rather than by arithmetic.
+    const rig = createRig();
+    await rig.view.initialize();
+    rig.runtime.controller.updateSettings({ inputLatencyMs: 80 });
+    element<HTMLButtonElement>('latency-test').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const session = rig.runtime.controller.start();
+    rig.metronome.advanceSubdivisions(4);
+    for (let beat = 0; beat < 16; beat += 1) {
+      rig.metronome.advanceSubdivisions(1);
+      // A hundred and twenty milliseconds late on the wall clock, of which
+      // eighty is already being taken off, so forty is left over.
+      rig.clock.set(rig.clock.now() + 120);
+      rig.midi.noteOn(60, rig.clock.now());
+      rig.clock.set(rig.clock.now() - 120);
+    }
+    rig.metronome.advanceSubdivisions(2);
+    expect(session?.status).toBe('completed');
+    expect(element('latency-measure').textContent).toContain('120 ms');
+
+    element<HTMLButtonElement>('latency-measure').click();
+
+    // The whole of it in one press, not the leftover in place of the whole.
+    expect(rig.runtime.controller.settings.inputLatencyMs).toBe(120);
+  });
+
   it('remembers the delay across a visit, which is the point of measuring it', async () => {
     const store = new InMemorySettingsStore();
     const first = createRig(undefined, store);

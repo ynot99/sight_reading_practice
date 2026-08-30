@@ -131,6 +131,22 @@ export class FakeScoreRenderer
     };
   }
 
+  private tapListeners: (() => void)[] = [];
+
+  onScoreTapped(listener: () => void): () => void {
+    this.tapListeners.push(listener);
+    return () => {
+      this.tapListeners = this.tapListeners.filter((each) => each !== listener);
+    };
+  }
+
+  /** Stands in for a reader touching the music itself. */
+  tapScore(): void {
+    for (const listener of [...this.tapListeners]) {
+      listener();
+    }
+  }
+
   /** Stands in for a reader dragging a marker onto those bars. */
   dragPassage(passage: DrawnPassage): void {
     for (const listener of [...this.passageListeners]) {

@@ -1143,6 +1143,20 @@ select {
   opacity: 0.55;
 }
 
+/*
+ * The reachable part of a marker, and why it is invisible rather than absent.
+ *
+ * A browser decides whether a touch will scroll the page as the touch
+ * begins, from the `touch-action` of whatever is under the finger - so
+ * saying it once the drag has started is too late, and a marker could be
+ * nudged sideways with great care and not moved down the page at all. This
+ * is a fingertip's worth of area that says so in advance.
+ */
+.passage-marker__hit {
+  fill: transparent;
+  touch-action: none;
+}
+
 .passage-marker__dot {
   fill: var(--accent);
 }
@@ -1161,10 +1175,6 @@ select {
  * what the gesture is by the time the first move arrives. This is the part
  * that has to be in the stylesheet.
  */
-.score__scroll[data-dragging='true'] {
-  touch-action: none;
-}
-
 /*
  * A score read by turning pages rather than by scrolling it.
  *

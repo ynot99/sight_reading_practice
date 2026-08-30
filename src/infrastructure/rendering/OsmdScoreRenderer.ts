@@ -15,6 +15,7 @@ import type {
 import {
   bracketShapes,
   gripAt,
+  GRIP_RADIUS_PX,
   measureForDrag,
   passageAfterDrag,
   toDrawingPoint,
@@ -65,6 +66,8 @@ const MARKER_WIDTH = 5;
 const MARKER_GRIP_RADIUS = 9;
 /** How far a repeat dot sits from the marker, and from the line between. */
 const REPEAT_DOT_GAP = 9;
+/** How far a finger may wander and still have meant a tap, in screen pixels. */
+const TAP_SLACK_PX = 8;
 
 /** As much of the engraver's own model as the markers need to read. */
 interface DrawnSheet {
@@ -241,6 +244,10 @@ export class OsmdScoreRenderer
   private pageAt = 0;
   private pageListeners: ((state: ScorePageState) => void)[] = [];
   private swipe: PageSwipe | null = null;
+  private tapListeners: (() => void)[] = [];
+  /** Where a touch that took hold of nothing began, so a tap can be told. */
+  private tapFrom: { readonly pointerId: number; readonly x: number; readonly y: number } | null =
+    null;
 
   private osmd: OpenSheetMusicDisplay | null = null;
   private loaded = false;
@@ -494,6 +501,13 @@ export class OsmdScoreRenderer
     };
   }
 
+  onScoreTapped(listener: () => void): () => void {
+    this.tapListeners.push(listener);
+    return () => {
+      this.tapListeners = this.tapListeners.filter((each) => each !== listener);
+    };
+  }
+
   /**
    * Follows a finger that has taken hold of a marker.
    *
@@ -507,18 +521,10 @@ export class OsmdScoreRenderer
     this.container.addEventListener('pointerup', (event) => this.endDrag(event));
     this.container.addEventListener('pointercancel', () => {
       this.swipe = null;
+      this.tapFrom = null;
       this.dragging = null;
-      this.setDragging(false);
       this.paintPassage();
     });
-  }
-
-  /** Tells the stylesheet to stop the page scrolling under the finger. */
-  private setDragging(dragging: boolean): void {
-    const scroller = this.container.closest('.score__scroll');
-    if (scroller instanceof HTMLElement) {
-      scroller.dataset['dragging'] = String(dragging);
-    }
   }
 
   private beginDrag(event: PointerEvent): void {
@@ -538,16 +544,14 @@ export class OsmdScoreRenderer
       this.swipe = this.paged
         ? { pointerId: event.pointerId, from: { x: event.clientX, y: event.clientY } }
         : null;
+      this.tapFrom = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
       return;
     }
     // Held for the whole gesture, so a finger that wanders off the marker -
     // which is most of them - goes on moving it instead of being dropped.
     this.container.setPointerCapture?.(event.pointerId);
-    // Otherwise the score scrolls under the finger that is moving a marker.
-    // Both halves are needed: the flag is what the stylesheet turns into
-    // `touch-action: none`, which is the only thing a touch screen listens
-    // to, and `preventDefault` covers the mouse.
-    this.setDragging(true);
+    // For the mouse. A touch screen has already decided, from the
+    // `touch-action` of the shape the finger landed on.
     event.preventDefault();
     this.dragging = { edge, pointerId: event.pointerId, passage };
   }
@@ -569,13 +573,28 @@ export class OsmdScoreRenderer
       const turned = swipeDirection(swipe.from, { x: event.clientX, y: event.clientY });
       if (turned !== 0) {
         this.turnPages(turned);
+        this.tapFrom = null;
+        return;
+      }
+    }
+
+    const began = this.tapFrom;
+    this.tapFrom = null;
+    if (began !== null && began.pointerId === event.pointerId) {
+      // A tap and not a drag: a finger that stayed put. Anything that moved
+      // was reaching for something, even if it did not reach it.
+      const wandered = Math.hypot(event.clientX - began.x, event.clientY - began.y);
+      if (wandered <= TAP_SLACK_PX) {
+        for (const listener of [...this.tapListeners]) {
+          listener();
+        }
       }
       return;
     }
+
     const moved = this.draggedTo(event);
     const drag = this.dragging;
     this.dragging = null;
-    this.setDragging(false);
     if (moved === null || drag === undefined || drag === null) {
       return;
     }
@@ -834,6 +853,25 @@ export class OsmdScoreRenderer
     )) {
       const shape = doc.createElementNS(SVG_NAMESPACE, 'g');
       shape.setAttribute('class', `passage-marker passage-marker--${bracket.edge}`);
+      // The part the finger is allowed to land on, and the reason it is a
+      // shape of its own: a browser decides whether a touch is going to
+      // scroll the page *as it begins*, from the `touch-action` of whatever
+      // is under it. Setting that when the drag starts is too late by then -
+      // which is exactly what happened, and why a marker could be nudged
+      // sideways with great care and not moved down the page at all. So the
+      // reachable area is drawn, invisibly, and it says so before anyone
+      // touches it.
+      const hit = doc.createElementNS(SVG_NAMESPACE, 'rect');
+      hit.setAttribute('class', 'passage-marker__hit');
+      hit.setAttribute('x', String(bracket.x - GRIP_RADIUS_PX));
+      hit.setAttribute('y', String(bracket.top - GRIP_RADIUS_PX));
+      hit.setAttribute('width', String(GRIP_RADIUS_PX * 2));
+      hit.setAttribute(
+        'height',
+        String(Math.max(0, bracket.bottom - bracket.top) + GRIP_RADIUS_PX * 2),
+      );
+      shape.append(hit);
+
       const bar = doc.createElementNS(SVG_NAMESPACE, 'rect');
       bar.setAttribute('class', 'passage-marker__bar');
       bar.setAttribute('x', String(bracket.x - MARKER_WIDTH / 2));

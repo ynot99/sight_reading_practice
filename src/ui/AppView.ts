@@ -576,6 +576,8 @@ export class AppView {
   private selectedTakeId: string | null = null;
   /** Follows a sounding take, so the slider says where it has got to. */
   private takeTick: ReturnType<typeof setInterval> | null = null;
+  /** Whether the passage markers are on the page, which a tap turns over. */
+  private passageMarkersWanted = true;
   /** Pending redraw of the keep pill: the counter, and the silence closing. */
   private silenceWatch: ReturnType<typeof setTimeout> | null = null;
   /** The step now due, kept so blind mode can be turned off mid-run. */
@@ -1121,7 +1123,7 @@ export class AppView {
    */
   private showPassageMarkers(): void {
     const bars = this.runtime.controller.currentExercise;
-    if (bars === null) {
+    if (bars === null || !this.passageMarkersWanted) {
       this.runtime.renderer.hidePassage();
       return;
     }
@@ -2412,6 +2414,17 @@ export class AppView {
       // work in itself.
       this.runtime.renderer.onPassageDragged((passage) => {
         void this.choosePassageFrom(passage);
+      }),
+    );
+
+    this.subscriptions.push(
+      // A touch on the music puts the markers away, and brings them back.
+      // They are two lines across the staves and they are wanted only while
+      // a passage is being chosen; the rest of the time they are furniture
+      // standing in front of the notes.
+      this.runtime.renderer.onScoreTapped(() => {
+        this.passageMarkersWanted = !this.passageMarkersWanted;
+        this.showPassageMarkers();
       }),
     );
 

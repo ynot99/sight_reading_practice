@@ -11,7 +11,8 @@ function markers(container: HTMLElement): SVGGElement[] {
 
 /** The bar of a marker, as the numbers it was actually drawn with. */
 function barOf(marker: SVGGElement | undefined): { x: number; top: number; bottom: number } {
-  const rect = marker?.querySelector('rect');
+  // The drawn bar, not the invisible area a fingertip is allowed to land on.
+  const rect = marker?.querySelector('rect.passage-marker__bar');
   const x = Number.parseFloat(rect?.getAttribute('x') ?? 'NaN');
   const y = Number.parseFloat(rect?.getAttribute('y') ?? 'NaN');
   const height = Number.parseFloat(rect?.getAttribute('height') ?? 'NaN');
@@ -98,6 +99,23 @@ describe('passage markers over a real engraving', () => {
     // closing one.
     expect(Math.min(...dotsOf(start))).toBeGreaterThan(barOf(start).x);
     expect(Math.max(...dotsOf(end))).toBeLessThan(barOf(end).x);
+  });
+
+  it('gives each marker a fingertip of area to be taken hold of', () => {
+    // A marker is a few pixels wide and a fingertip is a centimetre. This is
+    // also what tells the browser, before the touch begins, that moving it is
+    // not going to scroll the page.
+    renderer.showPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
+
+    const [start] = markers(container);
+    const hit = start?.querySelector('rect.passage-marker__hit');
+    const bar = barOf(start);
+    const width = Number.parseFloat(hit?.getAttribute('width') ?? 'NaN');
+    const left = Number.parseFloat(hit?.getAttribute('x') ?? 'NaN');
+
+    expect(width).toBeGreaterThan(20);
+    expect(left).toBeLessThan(bar.x);
+    expect(left + width).toBeGreaterThan(bar.x);
   });
 
   it('leaves the dots off a passage that is played once', () => {

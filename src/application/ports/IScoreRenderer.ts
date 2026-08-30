@@ -84,6 +84,14 @@ export interface IPassageMarkers {
   showPassage(passage: DrawnPassage): void;
   hidePassage(): void;
   onPassageDragged(listener: (passage: DrawnPassage) => void): () => void;
+  /**
+   * A touch on the music itself: not a marker, not a page being turned.
+   *
+   * The renderer says what happened and nothing about what it means. What it
+   * means is that the markers are shown or put away, which is the
+   * application's decision and not the engraver's.
+   */
+  onScoreTapped(listener: () => void): () => void;
 }
 
 /**

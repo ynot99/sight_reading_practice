@@ -1381,6 +1381,33 @@ describe('AppView', () => {
       expect(element('import-notice').textContent).toContain('bars 2-3');
     });
 
+    it('puts the markers away on a touch, and brings them back', async () => {
+      // Two lines across the staves, wanted while a passage is being chosen
+      // and furniture in front of the notes the rest of the time.
+      const { view, renderer } = createRig();
+      await view.initialize();
+      expect(renderer.shownPassage).not.toBeNull();
+
+      renderer.tapScore();
+      expect(renderer.shownPassage).toBeNull();
+
+      renderer.tapScore();
+      expect(renderer.shownPassage).not.toBeNull();
+    });
+
+    it('leaves them away across a new engraving', async () => {
+      // Otherwise every zoom, tempo change or new exercise would put back
+      // what the reader had just dismissed.
+      const { view, renderer } = createRig();
+      await view.initialize();
+      renderer.tapScore();
+
+      element<HTMLButtonElement>('new-exercise').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(renderer.shownPassage).toBeNull();
+    });
+
     it('reads the markers against the passage already on the page', async () => {
       // Choosing a passage engraves it on its own, so the marker at the left
       // edge is no longer bar one. Read from zero, a second drag would walk

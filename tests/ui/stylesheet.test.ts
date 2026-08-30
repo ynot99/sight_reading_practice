@@ -90,6 +90,19 @@ describe('the stylesheet', () => {
     expect(rules().some((rule) => rule.selector === '.focus-bar__status')).toBe(false);
   });
 
+  it('says a marker will not scroll the page before anyone touches it', () => {
+    // A browser decides whether a touch is going to scroll as the touch
+    // begins, from what is under the finger. Said only once the drag had
+    // started, it was too late by then: the marker could be nudged sideways
+    // with great care and not moved down the page at all. jsdom applies no
+    // stylesheet, so nothing else in the suite can see this.
+    const hit = rules().find((rule) => rule.selector === '.passage-marker__hit');
+
+    expect(hit?.body).toMatch(/touch-action\s*:\s*none/);
+    // Invisible, not absent: it is a fingertip's worth of area to aim at.
+    expect(hit?.body).toMatch(/fill\s*:\s*transparent/);
+  });
+
   it('says whether a take is still open without moving anything', () => {
     // The dot beats while the take is still open and goes quiet once the
     // silence has sealed it, which is what saves the reader counting that

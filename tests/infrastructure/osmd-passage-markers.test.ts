@@ -21,6 +21,15 @@ function tap(container: HTMLElement, x: number, y: number): void {
   }
 }
 
+/** A tap whose target is the handle, wherever the coordinates claim to be. */
+function tapOn(target: Element | null | undefined, x: number, y: number): void {
+  for (const type of ['pointerdown', 'pointerup']) {
+    target?.dispatchEvent(
+      new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, bubbles: true }),
+    );
+  }
+}
+
 /** Shows the engraving at exactly the size it was drawn, which jsdom will not. */
 function showAt(renderer: OsmdScoreRenderer, container: HTMLElement): void {
   void renderer;
@@ -204,6 +213,50 @@ describe('passage markers over a real engraving', () => {
     tap(container, Number(bottom?.getAttribute('cx')), Number(bottom?.getAttribute('cy')));
 
     expect(chosen).toEqual([{ fromMeasureIndex: 2, toMeasureIndex: 2 }]);
+  });
+
+  it('answers a tap on the handle itself, whatever the coordinates say', () => {
+    // The reader's report, and the reason the coordinates are no longer
+    // trusted for this: working the mapping out by hand assumes the drawing
+    // and the box on screen are a plain ratio of one another, and the error
+    // grows with distance from the corner - so the handles at the top were
+    // nearly right, the ones lower down had to be pressed below themselves,
+    // and the right-hand marker could not be taken hold of at all.
+    //
+    // The browser has already worked out what the finger landed on. The
+    // coordinates here are deliberately nowhere near the handle.
+    renderer.showPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
+    const chosen: { fromMeasureIndex: number; toMeasureIndex: number }[] = [];
+    renderer.onPassageDragged((passage) => chosen.push(passage));
+
+    const [, end] = markers(container);
+    const top = end?.querySelector('circle.passage-marker__grip--top');
+    tapOn(top, 9_999, 9_999);
+
+    // The top handle of the end marker takes in the bar after it.
+    expect(chosen).toEqual([{ fromMeasureIndex: 1, toMeasureIndex: 3 }]);
+  });
+
+  it('drags the right-hand marker as readily as the left', () => {
+    renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 3 });
+    const chosen: { fromMeasureIndex: number; toMeasureIndex: number }[] = [];
+    renderer.onPassageDragged((passage) => chosen.push(passage));
+    showAt(renderer, container);
+
+    const [, end] = markers(container);
+    const bar = end?.querySelector('rect.passage-marker__bar');
+    const held = Number(bar?.getAttribute('x'));
+    // Taken hold of at the marker and let go over the second bar.
+    end?.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: held, clientY: 130, pointerId: 1, bubbles: true }),
+    );
+    container.dispatchEvent(
+      new PointerEvent('pointerup', { clientX: 300, clientY: 130, pointerId: 1, bubbles: true }),
+    );
+
+    expect(chosen).toHaveLength(1);
+    expect(chosen[0]?.fromMeasureIndex).toBe(0);
+    expect(chosen[0]?.toMeasureIndex).toBeLessThan(3);
   });
 
   it('takes them away again', () => {

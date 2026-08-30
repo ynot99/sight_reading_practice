@@ -23,6 +23,7 @@ import {
   passageAfterDrag,
   toDrawingPoint,
   type DrawnMeasure,
+  type GripEnd,
   type PassageEdge,
 } from './passageBrackets.js';
 import {
@@ -208,6 +209,8 @@ interface PassageDrag {
   readonly passage: DrawnPassage;
   /** Where the finger landed, so a tap can be told from a drag. */
   readonly from: { readonly x: number; readonly y: number };
+  /** The handle it landed on, when it landed on one rather than the line. */
+  readonly grip: GripEnd | null;
 }
 
 /** A finger that may be turning a page, and where it started. */
@@ -478,6 +481,30 @@ export class OsmdScoreRenderer
     return scale > 0 ? top / scale : 0;
   }
 
+  /**
+   * The marker a touch landed on, from what the browser hit-tested.
+   *
+   * Nothing about coordinates: the drawn handle and the area that answers for
+   * it are one shape, so the element under the finger *is* the answer. Only
+   * where a drag has got to needs arithmetic, and that is asked separately.
+   */
+  private markerUnder(target: EventTarget | null): { edge: PassageEdge; end: GripEnd | null } | null {
+    let node = target instanceof Element ? target : null;
+    let end: GripEnd | null = null;
+    while (node !== null && node !== this.container) {
+      const grip = node.getAttribute('data-end');
+      if (grip === 'top' || grip === 'bottom') {
+        end = grip;
+      }
+      const edge = node.getAttribute('data-edge');
+      if (edge === 'start' || edge === 'end') {
+        return { edge, end };
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   /** The box that actually scrolls, which is not the one being drawn in. */
   private scroller(): Element | null {
     return this.container.closest('.score__scroll') ?? this.container.parentElement;
@@ -536,14 +563,19 @@ export class OsmdScoreRenderer
 
   private beginDrag(event: PointerEvent): void {
     const passage = this.passage;
+    const touched = this.markerUnder(event.target);
     const point = this.drawingPointOf(event);
+    // What the browser says was touched, and only then what the arithmetic
+    // makes of the coordinates. The drawn handle and the area that answers
+    // for it are the same shape, so the first answer is exact.
     const edge =
-      passage === null || point === null
+      touched?.edge ??
+      (passage === null || point === null
         ? null
         : gripAt(
             bracketShapes(this.measures, passage.fromMeasureIndex, passage.toMeasureIndex),
             point,
-          );
+          ));
     if (edge === null || passage === null) {
       // Not a marker, so it may be a page being turned. The markers come
       // first: a finger that landed on one is moving it, whatever else it
@@ -565,6 +597,7 @@ export class OsmdScoreRenderer
       pointerId: event.pointerId,
       passage,
       from: { x: event.clientX, y: event.clientY },
+      grip: touched?.end ?? null,
     };
   }
 
@@ -629,24 +662,27 @@ export class OsmdScoreRenderer
    * "put it back where it already was", and that is not what was meant.
    */
   private tappedGrip(event: PointerEvent, drag: PassageDrag | null): DrawnPassage | null {
-    const point = this.drawingPointOf(event);
-    if (drag === null || point === null) {
+    if (drag === null) {
       return null;
     }
     const wandered = Math.hypot(event.clientX - drag.from.x, event.clientY - drag.from.y);
     if (wandered > TAP_SLACK_PX) {
       return null;
     }
-    const grip = gripUnderPointer(
-      gripsOf(
-        bracketShapes(
-          this.measures,
-          drag.passage.fromMeasureIndex,
-          drag.passage.toMeasureIndex,
-        ),
-      ),
-      point,
+    const shapes = bracketShapes(
+      this.measures,
+      drag.passage.fromMeasureIndex,
+      drag.passage.toMeasureIndex,
     );
+    const point = this.drawingPointOf(event);
+    const grip =
+      drag.grip === null
+        ? point === null
+          ? null
+          : gripUnderPointer(gripsOf(shapes), point)
+        : (gripsOf(shapes).find(
+            (each) => each.edge === drag.edge && each.end === drag.grip,
+          ) ?? null);
     if (grip === null) {
       return null;
     }
@@ -685,6 +721,28 @@ export class OsmdScoreRenderer
     if (svg === null) {
       return null;
     }
+
+    // The browser's own answer, and the only one that is always right.
+    //
+    // Working it out by hand - the box on screen against the size the
+    // engraver drew - assumes those two are a plain ratio of one another,
+    // and they are not: a `viewBox`, a transform anywhere up the tree, or
+    // the page being zoomed all break it, and the error grows with distance
+    // from the origin. Which is exactly how the reader found it: the handles
+    // at the top were nearly right, the ones lower down had to be pressed
+    // below themselves, and the right-hand marker - furthest of all from the
+    // corner - could not be taken hold of at all.
+    const matrix = svg.getScreenCTM?.();
+    if (matrix !== null && matrix !== undefined) {
+      const inside = new DOMPointReadOnly(event.clientX, event.clientY).matrixTransform(
+        matrix.inverse(),
+      );
+      return { x: inside.x, y: inside.y };
+    }
+
+    // No layout to ask - which is every test that runs the engraver without a
+    // browser. The ratio is right whenever the drawing is shown whole and
+    // unrotated, which is what those tests set up.
     const box = svg.getBoundingClientRect();
     return toDrawingPoint(
       { left: box.left, top: box.top, width: box.width, height: box.height },
@@ -904,6 +962,10 @@ export class OsmdScoreRenderer
     )) {
       const shape = doc.createElementNS(SVG_NAMESPACE, 'g');
       shape.setAttribute('class', `passage-marker passage-marker--${bracket.edge}`);
+      // Which control this is, written on the control. The browser has
+      // already worked out what the finger landed on, to a better standard
+      // than any arithmetic of ours; asking it is both simpler and right.
+      shape.setAttribute('data-edge', bracket.edge);
       // The part the finger is allowed to land on, and the reason it is a
       // shape of its own: a browser decides whether a touch is going to
       // scroll the page *as it begins*, from the `touch-action` of whatever
@@ -954,6 +1016,7 @@ export class OsmdScoreRenderer
       for (const grip of gripsOf([bracket])) {
         const circle = doc.createElementNS(SVG_NAMESPACE, 'circle');
         circle.setAttribute('class', `passage-marker__grip passage-marker__grip--${grip.end}`);
+        circle.setAttribute('data-end', grip.end);
         circle.setAttribute('cx', String(grip.x));
         circle.setAttribute('cy', String(grip.y));
         circle.setAttribute('r', String(MARKER_GRIP_RADIUS));

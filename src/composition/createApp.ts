@@ -13,7 +13,11 @@ import type {
   IMidiDeviceDirectory,
   IMidiSource,
 } from '../application/ports/IMidiSource.js';
-import type { IPassageMarkers, IScoreRenderer } from '../application/ports/IScoreRenderer.js';
+import type {
+  IPassageMarkers,
+  IScorePages,
+  IScoreRenderer,
+} from '../application/ports/IScoreRenderer.js';
 import type { IVolumeControl } from '../application/ports/IVolumeControl.js';
 import type { ISettingsStore } from '../application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../application/SettingsRepository.js';
@@ -136,7 +140,7 @@ export interface AppRuntime {
   readonly sustain: ISustainPedal | null;
   /** `null` when the instrument needs nothing downloaded. */
   readonly samples: ISampleLibrary | null;
-  readonly renderer: IScoreRenderer & IPassageMarkers;
+  readonly renderer: IScoreRenderer & IPassageMarkers & IScorePages;
   readonly settings: SettingsRepository;
   readonly metronomeVolume: IVolumeControl;
   readonly instrumentVolume: IVolumeControl;

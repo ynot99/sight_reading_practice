@@ -233,6 +233,15 @@ export interface PracticeSettings {
    */
   readonly strictTiming: boolean;
   /**
+   * Whether the score is read by turning pages instead of by scrolling.
+   *
+   * The engraver lays a piece out as one tall column. That is right for
+   * playing through with the cursor creeping upwards, and wrong for looking
+   * through a piece before playing it, which is turning a page, reading it,
+   * and turning the next.
+   */
+  readonly pagedScore: boolean;
+  /**
    * Stop spelling out the notes of the step that is due.
    *
    * The panel naming them is the crutch that makes hiding the cursor only
@@ -412,6 +421,7 @@ export class PracticeController {
       previewSeconds: 0,
       showCursor: true,
       strictTiming: false,
+      pagedScore: false,
       blindMode: false,
       playedNotes: 'live',
       survival: false,

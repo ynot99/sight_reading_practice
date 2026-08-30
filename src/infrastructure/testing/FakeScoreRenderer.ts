@@ -1,6 +1,8 @@
 import type {
   DrawnPassage,
   IPassageMarkers,
+  IScorePages,
+  ScorePageState,
   IPlayedNoteOverlay,
   IScoreFade,
   IScoreCursor,
@@ -48,7 +50,13 @@ export class FakeScoreCursor implements IScoreCursor {
  * without a DOM, an SVG backend or OSMD.
  */
 export class FakeScoreRenderer
-  implements IScoreRenderer, IPlayedNoteOverlay, IScoreFade, IScoreZoom, IPassageMarkers
+  implements
+    IScoreRenderer,
+    IPlayedNoteOverlay,
+    IScoreFade,
+    IScoreZoom,
+    IPassageMarkers,
+    IScorePages
 {
   readonly cursor = new FakeScoreCursor();
   loadedXml: string | null = null;
@@ -128,6 +136,47 @@ export class FakeScoreRenderer
     for (const listener of [...this.passageListeners]) {
       listener(passage);
     }
+  }
+
+  /** Whether the score is being read as pages, and which one is showing. */
+  isPaged = false;
+  /** Bars per page, so a test can decide where the page boundaries fall. */
+  barsPerPage = 2;
+  private pageAt = 0;
+  private pageListeners: ((state: ScorePageState) => void)[] = [];
+  /** Every bar the reader was brought to, in order. */
+  readonly shownMeasures: number[] = [];
+
+  setPaged(paged: boolean): void {
+    this.isPaged = paged;
+  }
+
+  get pages(): ScorePageState {
+    return { at: this.pageAt, count: this.isPaged ? Math.max(1, this.pageCount) : 0 };
+  }
+
+  /** How many pages the double pretends the current score has. */
+  pageCount = 2;
+
+  turnPages(delta: number): void {
+    this.pageAt = Math.min(Math.max(this.pageAt + delta, 0), Math.max(0, this.pageCount - 1));
+    for (const listener of [...this.pageListeners]) {
+      listener(this.pages);
+    }
+  }
+
+  showMeasure(measureIndex: number): void {
+    this.shownMeasures.push(measureIndex);
+    if (this.isPaged) {
+      this.pageAt = Math.floor(measureIndex / this.barsPerPage);
+    }
+  }
+
+  onPagesChanged(listener: (state: ScorePageState) => void): () => void {
+    this.pageListeners.push(listener);
+    return () => {
+      this.pageListeners = this.pageListeners.filter((each) => each !== listener);
+    };
   }
 
   scrollToStart(): void {

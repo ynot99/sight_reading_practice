@@ -46,6 +46,7 @@ const SETTINGS: PracticeSettings = {
   previewSeconds: 8,
   showCursor: false,
   strictTiming: true,
+  pagedScore: true,
   blindMode: true,
   playedNotes: 'at-end',
   survival: true,

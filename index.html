@@ -595,6 +595,21 @@
             </svg>
           </button>
 
+          <!--
+            Pages instead of a scroll. A reader looking through a piece wants
+            to turn a page, read it and turn the next; the column the engraver
+            lays out has no pages in it at all, so this makes them.
+          -->
+          <button id="focus-pages" type="button"
+            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
+            aria-pressed="false" title="Turn pages instead of scrolling"
+            aria-label="Turn pages instead of scrolling">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 4h7v16H4zM13 4h7v16h-7z" />
+              <path d="M11.2 12l3.4-3.4 1.4 1.4-2 2 2 2-1.4 1.4-3.4-3.4z" />
+            </svg>
+          </button>
+
           <button id="focus-cursor" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
             aria-pressed="true" title="Show the cursor" aria-label="Show the cursor">

@@ -22,6 +22,36 @@ export interface IScoreRenderer {
   clear(): void;
 }
 
+/** Where the reader is in a score that is turned rather than scrolled. */
+export interface ScorePageState {
+  /** Zero-based, so `at + 1` is what a reader would be told. */
+  readonly at: number;
+  readonly count: number;
+}
+
+/**
+ * A score read by turning pages instead of by scrolling.
+ *
+ * The engraver lays a piece out as one tall column, which is right for
+ * scrolling and wrong for reading: someone who is only looking through a
+ * piece wants to turn a page, read it, and turn the next, and someone who is
+ * playing wants the page to turn itself once rather than to creep upwards
+ * under the music.
+ *
+ * Nothing is re-engraved for this. A page is a window onto the same column,
+ * which is what keeps the cursor, the marks and the passage markers all still
+ * true - every one of them is measured against that column.
+ */
+export interface IScorePages {
+  setPaged(paged: boolean): void;
+  readonly pages: ScorePageState;
+  /** Turns by that many pages, stopping at either end. */
+  turnPages(delta: number): void;
+  /** Brings the page holding that bar into view, if it is not already. */
+  showMeasure(measureIndex: number): void;
+  onPagesChanged(listener: (state: ScorePageState) => void): () => void;
+}
+
 /** A passage, as the bars of the engraving that hold it. */
 export interface DrawnPassage {
   readonly fromMeasureIndex: number;

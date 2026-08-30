@@ -2,6 +2,8 @@ import type { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
 import type {
   DrawnPassage,
   IPassageMarkers,
+  IScorePages,
+  ScorePageState,
   IPlayedNoteOverlay,
   IScoreCursor,
   IScoreFade,
@@ -19,6 +21,14 @@ import {
   type DrawnMeasure,
   type PassageEdge,
 } from './passageBrackets.js';
+import {
+  pageContaining,
+  pagesOf,
+  scrollTopFor,
+  swipeDirection,
+  systemsOf,
+  type ScorePage,
+} from './pageTurns.js';
 import { CursorNavigator, type ICursorPrimitive } from './CursorNavigator.js';
 import {
   buildOverlayShapes,
@@ -75,6 +85,30 @@ interface DrawnBox {
 interface DrawnGraphicalMeasure {
   readonly PositionAndShape?: DrawnBox;
   readonly parentSourceMeasure?: { readonly measureListIndex?: number };
+}
+
+/**
+ * The size the engraving was drawn at, in its own pixels.
+ *
+ * Read from the attributes rather than from `width.baseVal`: the animated
+ * length is what a browser fills in, and a document that has laid nothing out
+ * does not have one - which is every test that runs the real engraver without
+ * a real window. The attribute is what the engraver wrote there itself.
+ */
+function intrinsicSize(svg: SVGSVGElement): { readonly width: number; readonly height: number } {
+  const attribute = (name: string): number => Number.parseFloat(svg.getAttribute(name) ?? '');
+  const width = attribute('width');
+  const height = attribute('height');
+  if (Number.isFinite(width) && Number.isFinite(height)) {
+    return { width, height };
+  }
+  const [, , boxWidth, boxHeight] = (svg.getAttribute('viewBox') ?? '')
+    .split(/[\s,]+/)
+    .map((part) => Number.parseFloat(part));
+  return {
+    width: Number.isFinite(boxWidth) ? (boxWidth as number) : 0,
+    height: Number.isFinite(boxHeight) ? (boxHeight as number) : 0,
+  };
 }
 
 /** Top and bottom of everything a system's staves cover, in pixels. */
@@ -166,8 +200,20 @@ interface PassageDrag {
   readonly passage: DrawnPassage;
 }
 
+/** A finger that may be turning a page, and where it started. */
+interface PageSwipe {
+  readonly pointerId: number;
+  readonly from: { readonly x: number; readonly y: number };
+}
+
 export class OsmdScoreRenderer
-  implements IScoreRenderer, IPlayedNoteOverlay, IScoreFade, IScoreZoom, IPassageMarkers
+  implements
+    IScoreRenderer,
+    IPlayedNoteOverlay,
+    IScoreFade,
+    IScoreZoom,
+    IPassageMarkers,
+    IScorePages
 {
   private readonly container: HTMLElement;
   private readonly options: OsmdRendererOptions;
@@ -188,6 +234,13 @@ export class OsmdScoreRenderer
   private passageGroup: SVGGElement | null = null;
   private passageListeners: ((passage: DrawnPassage) => void)[] = [];
   private dragging: PassageDrag | null = null;
+
+  /** The column cut into pages, and which one is being read. */
+  private paged = false;
+  private pageBands: ScorePage[] = [];
+  private pageAt = 0;
+  private pageListeners: ((state: ScorePageState) => void)[] = [];
+  private swipe: PageSwipe | null = null;
 
   private osmd: OpenSheetMusicDisplay | null = null;
   private loaded = false;
@@ -230,6 +283,7 @@ export class OsmdScoreRenderer
     this.navigator.reset();
     this.indexDrawnNotes();
     this.measures = this.readMeasures();
+    this.layOutPages();
     this.paintOverlay();
     this.paintFaded();
     this.paintPassage();
@@ -283,9 +337,136 @@ export class OsmdScoreRenderer
     // Re-engraving throws the old SVG away, and everything drawn on it.
     this.indexDrawnNotes();
     this.measures = this.readMeasures();
+    // A new engraving is a new column, so the pages are cut again - and the
+    // reader is put back on the page they were reading rather than at the
+    // front, since a re-engraving is a zoom or a turn of the tablet and not
+    // a request to start over.
+    const wasOn = this.pageAt;
+    this.layOutPages();
+    this.turnToPage(wasOn);
     this.paintOverlay();
     this.paintFaded();
     this.paintPassage();
+  }
+
+  /**
+   * Reads the score by turning pages, or goes back to scrolling it.
+   *
+   * The engraver's own cursor-following is turned off with it: it creeps the
+   * column upwards a system at a time, which is the opposite of a page that
+   * stays still until it turns. Left on, the two would fight over the
+   * scrollbar every beat.
+   */
+  setPaged(paged: boolean): void {
+    if (this.paged === paged) {
+      return;
+    }
+    this.paged = paged;
+    const engraver = this.osmd as unknown as { FollowCursor?: boolean } | null;
+    if (engraver !== null) {
+      engraver.FollowCursor = !paged;
+    }
+    const scroller = this.scroller();
+    if (scroller instanceof HTMLElement) {
+      scroller.dataset['paged'] = String(paged);
+    }
+    this.layOutPages();
+    if (paged) {
+      // Onto the page holding whatever was on screen, rather than back to the
+      // beginning: turning pages on is not a request to start again.
+      this.turnToPage(pageContaining(this.pageBands, this.scrolledToDrawingY()));
+      return;
+    }
+    this.announcePages();
+  }
+
+  /**
+   * Where the reader is, or nothing at all when the score is being scrolled.
+   *
+   * A scrolling score has no pages to be on rather than one long page: the
+   * difference matters to anything that would say "page 1 of 1" at a reader
+   * who never asked for pages.
+   */
+  get pages(): ScorePageState {
+    return this.paged ? { at: this.pageAt, count: this.pageBands.length } : { at: 0, count: 0 };
+  }
+
+  turnPages(delta: number): void {
+    this.turnToPage(this.pageAt + delta);
+  }
+
+  showMeasure(measureIndex: number): void {
+    if (!this.paged) {
+      return;
+    }
+    const band = this.measures.find((measure) => measure.measureIndex === measureIndex);
+    if (band === undefined) {
+      return;
+    }
+    // Only when it has actually left the page. Scrolling to the same place on
+    // every step would fight a reader who has looked ahead.
+    const wanted = pageContaining(this.pageBands, band.top);
+    if (wanted !== this.pageAt) {
+      this.turnToPage(wanted);
+    }
+  }
+
+  onPagesChanged(listener: (state: ScorePageState) => void): () => void {
+    this.pageListeners.push(listener);
+    return () => {
+      this.pageListeners = this.pageListeners.filter((each) => each !== listener);
+    };
+  }
+
+  /** Cuts the column up again, for a new engraving or a new window. */
+  private layOutPages(): void {
+    const scale = this.drawingScale();
+    const scroller = this.scroller();
+    const height = scroller instanceof HTMLElement ? scroller.clientHeight : 0;
+    this.pageBands = pagesOf(systemsOf(this.measures), scale > 0 ? height / scale : 0);
+    this.pageAt = Math.min(this.pageAt, Math.max(0, this.pageBands.length - 1));
+  }
+
+  private turnToPage(index: number): void {
+    const at = Math.min(Math.max(index, 0), Math.max(0, this.pageBands.length - 1));
+    this.pageAt = at;
+    const scroller = this.scroller();
+    if (this.paged && scroller?.scrollTo !== undefined) {
+      scroller.scrollTo({
+        top: scrollTopFor(this.pageBands[at], this.drawingScale()),
+        left: 0,
+        behavior: 'auto',
+      });
+    }
+    this.announcePages();
+  }
+
+  private announcePages(): void {
+    const state = this.pages;
+    for (const listener of [...this.pageListeners]) {
+      listener(state);
+    }
+  }
+
+  /** How many screen pixels one of the engraving's own pixels takes up. */
+  private drawingScale(): number {
+    const svg = this.container.querySelector('svg');
+    const drawn = svg === null ? 0 : intrinsicSize(svg).height;
+    const shown = svg?.getBoundingClientRect().height ?? 0;
+    return drawn > 0 && shown > 0 ? shown / drawn : 0;
+  }
+
+  /** Where the top of the window is, in the engraving's own pixels. */
+  private scrolledToDrawingY(): number {
+    const scroller = this.scroller();
+    const scale = this.drawingScale();
+    const top = scroller instanceof HTMLElement ? scroller.scrollTop : 0;
+    return scale > 0 ? top / scale : 0;
+  }
+
+  /** The box that actually scrolls, which is not the one being drawn in. */
+  private scroller(): Element | null {
+    return this.container.closest('.score__scroll') ?? this.container.parentElement;
   }
 
   showPassage(passage: DrawnPassage): void {
@@ -325,6 +506,7 @@ export class OsmdScoreRenderer
     this.container.addEventListener('pointermove', (event) => this.continueDrag(event));
     this.container.addEventListener('pointerup', (event) => this.endDrag(event));
     this.container.addEventListener('pointercancel', () => {
+      this.swipe = null;
       this.dragging = null;
       this.setDragging(false);
       this.paintPassage();
@@ -342,14 +524,20 @@ export class OsmdScoreRenderer
   private beginDrag(event: PointerEvent): void {
     const passage = this.passage;
     const point = this.drawingPointOf(event);
-    if (passage === null || point === null) {
-      return;
-    }
-    const edge = gripAt(
-      bracketShapes(this.measures, passage.fromMeasureIndex, passage.toMeasureIndex),
-      point,
-    );
-    if (edge === null) {
+    const edge =
+      passage === null || point === null
+        ? null
+        : gripAt(
+            bracketShapes(this.measures, passage.fromMeasureIndex, passage.toMeasureIndex),
+            point,
+          );
+    if (edge === null || passage === null) {
+      // Not a marker, so it may be a page being turned. The markers come
+      // first: a finger that landed on one is moving it, whatever else it
+      // then does.
+      this.swipe = this.paged
+        ? { pointerId: event.pointerId, from: { x: event.clientX, y: event.clientY } }
+        : null;
       return;
     }
     // Held for the whole gesture, so a finger that wanders off the marker -
@@ -375,6 +563,15 @@ export class OsmdScoreRenderer
   }
 
   private endDrag(event: PointerEvent): void {
+    const swipe = this.swipe;
+    this.swipe = null;
+    if (swipe !== null && swipe.pointerId === event.pointerId) {
+      const turned = swipeDirection(swipe.from, { x: event.clientX, y: event.clientY });
+      if (turned !== 0) {
+        this.turnPages(turned);
+      }
+      return;
+    }
     const moved = this.draggedTo(event);
     const drag = this.dragging;
     this.dragging = null;
@@ -421,20 +618,29 @@ export class OsmdScoreRenderer
     const box = svg.getBoundingClientRect();
     return toDrawingPoint(
       { left: box.left, top: box.top, width: box.width, height: box.height },
-      { width: svg.width.baseVal.value, height: svg.height.baseVal.value },
+      intrinsicSize(svg),
       { x: event.clientX, y: event.clientY },
     );
   }
 
   scrollToStart(): void {
+    if (this.paged) {
+      // Back to the first page, not to a scroll position: the two would
+      // otherwise disagree about where the reader is, and the next page turn
+      // would go somewhere neither of them expected.
+      this.turnToPage(0);
+      return;
+    }
     // The scrolling box, not the framed one: the frame holds the cover and
     // does not move. Whichever ancestor actually scrolls is the one to ask.
-    const scroller = this.container.closest('.score__scroll') ?? this.container.parentElement;
-    scroller?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+    this.scroller()?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
   }
 
   clear(): void {
     this.osmd?.clear();
+    this.pageBands = [];
+    this.pageAt = 0;
+    this.swipe = null;
     this.measures = [];
     this.passage = null;
     this.passageGroup = null;

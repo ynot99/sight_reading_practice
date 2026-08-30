@@ -2500,6 +2500,44 @@ describe('AppView', () => {
       expect(renderer.cursor.visible).toBe(true);
     });
 
+    it('turns the score into pages from the drawer, and back', async () => {
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      const toggle = element<HTMLButtonElement>('focus-pages');
+      expect(renderer.isPaged).toBe(false);
+
+      toggle.click();
+
+      expect(runtime.controller.settings.pagedScore).toBe(true);
+      expect(renderer.isPaged).toBe(true);
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+      toggle.click();
+      expect(renderer.isPaged).toBe(false);
+    });
+
+    it('turns the page when the music leaves it, and not on every beat', async () => {
+      // A page turn is for looking at one thing until it is finished with.
+      // Scrolling a little every beat is the behaviour it exists to replace.
+      const rig = createRig();
+      await rig.view.initialize();
+      // Flow mode, because it is the metronome that moves the music there -
+      // in Wait mode the page waits for the reader and never leaves the bar.
+      rig.runtime.controller.updateSettings({ countInBars: 0, modeId: 'mode.flow' });
+      element<HTMLButtonElement>('focus-pages').click();
+      rig.runtime.controller.start();
+
+      rig.renderer.shownMeasures.length = 0;
+      rig.renderer.barsPerPage = 2;
+      // Three bars of 4/4, which is past the end of a page holding two.
+      rig.metronome.advanceBeats(12);
+
+      // The renderer is told where the music is on every notated beat and
+      // decides for itself whether that is still on the page being read.
+      expect(new Set(rig.renderer.shownMeasures)).toEqual(new Set([0, 1, 2]));
+      expect(rig.renderer.pages.at).toBe(1);
+    });
+
     it('cycles the played notes through all three answers from the drawer', async () => {
       // One question - when do I see what I played - so one control. A
       // switch here could only say two of the three, and a reader who chose

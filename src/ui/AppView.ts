@@ -609,6 +609,7 @@ export class AppView {
     focusCursor: HTMLButtonElement;
     focusWait: HTMLButtonElement;
     focusMarks: HTMLButtonElement;
+    focusPages: HTMLButtonElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
     focusZoom: HTMLOutputElement;
@@ -775,6 +776,7 @@ export class AppView {
       focusCursor: requireElement(doc, 'focus-cursor'),
       focusWait: requireElement(doc, 'focus-wait'),
       focusMarks: requireElement(doc, 'focus-marks'),
+      focusPages: requireElement(doc, 'focus-pages'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
       focusZoom: requireElement(doc, 'focus-zoom'),
@@ -1702,6 +1704,11 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    this.listen(this.el.focusPages, 'click', () => {
+      controller.updateSettings({ pagedScore: !controller.settings.pagedScore });
+      this.syncControlsFromSettings();
+    });
+
     this.listen(this.el.focusMarks, 'click', () => {
       // All three, cycled. "When do I see what I played" is one question with
       // three answers, and answering it in the settings while a switch here
@@ -2351,6 +2358,10 @@ export class AppView {
       // held note - the step is what the reader has to play, not where the
       // count has got to, and the pill was asked the second question.
       session.events.on('positionChanged', ({ measureIndex, beat }) => {
+        // Turned once, when the music has actually left the page, rather
+        // than scrolled a little on every beat. That is what a page turn is
+        // for: the reader looks at one thing until it is finished with.
+        this.runtime.renderer.showMeasure(measureIndex);
         this.lastPosition = `bar ${this.runtime.controller.barNumber(measureIndex)} · beat ${beat
           .toFixed(2)
           .replace(/\.00$/, '')}`;
@@ -2401,6 +2412,18 @@ export class AppView {
       // work in itself.
       this.runtime.renderer.onPassageDragged((passage) => {
         void this.choosePassageFrom(passage);
+      }),
+    );
+
+    this.subscriptions.push(
+      // Which page, said only when it changes. A page turned by a swipe has
+      // nothing else to confirm it happened, and in fullscreen there is no
+      // scrollbar left to say where in the piece the reader is.
+      this.runtime.renderer.onPagesChanged(({ at, count }) => {
+        if (count > 1) {
+          this.showNotice(`Page ${at + 1} of ${count}`);
+          this.restoreNoticeSoon();
+        }
       }),
     );
   }
@@ -2686,6 +2709,8 @@ export class AppView {
     this.el.startFocus.checked = settings.startInFocus;
     this.el.showCursor.checked = settings.showCursor;
     this.el.strictTiming.checked = settings.strictTiming;
+    this.el.focusPages.setAttribute('aria-pressed', String(settings.pagedScore));
+    this.runtime.renderer.setPaged(settings.pagedScore);
     // A display decision, so it is answered in the stylesheet: the marks
     // themselves are the same either way, and what was measured about a press
     // does not change because the reader wants stricter colours.

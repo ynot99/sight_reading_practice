@@ -1166,6 +1166,19 @@ select {
 }
 
 /*
+ * A score read by turning pages rather than by scrolling it.
+ *
+ * The scrollbar is what has to go: a page that can also be nudged upward by
+ * half a system is not a page, and the reader who nudged it has no way back
+ * to where the turn had put them. The column underneath is untouched - a
+ * page is a window onto it - so everything measured against it stays true.
+ */
+.score__scroll[data-paged='true'] {
+  overflow: hidden;
+  touch-action: none;
+}
+
+/*
  * When what was played appears, drawn as the state it is in.
  *
  * Three answers, so the same idiom as the click: the picture says which one

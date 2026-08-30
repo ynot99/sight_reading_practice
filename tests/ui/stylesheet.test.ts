@@ -106,6 +106,17 @@ describe('the stylesheet', () => {
     }
   });
 
+  it('takes the scrollbar away from a score that is turned', () => {
+    // A page that can also be nudged upward by half a system is not a page,
+    // and the reader who nudged it has no way back to where the turn had put
+    // them. jsdom applies no stylesheet, so nothing else in the suite can see
+    // this rule at all.
+    const paged = rules().find((rule) => rule.selector === ".score__scroll[data-paged='true']");
+
+    expect(paged?.body).toMatch(/overflow\s*:\s*hidden/);
+    expect(paged?.body).toMatch(/touch-action\s*:\s*none/);
+  });
+
   it('answers strict marking in colour alone', () => {
     // A note struck off its beat is measured the same either way; only what
     // the page paints it changes. Kept here so it cannot quietly grow into a

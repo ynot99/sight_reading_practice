@@ -47,7 +47,6 @@ const SETTINGS: PracticeSettings = {
   showCursor: false,
   strictTiming: true,
   pagedScore: true,
-  blindMode: true,
   playedNotes: 'at-end',
   survival: true,
   readAheadSteps: 2,
@@ -70,7 +69,6 @@ describe('practice settings codec', () => {
     expect(restored.pitchClassOnly).toBe(true);
     expect(restored.showCursor).toBe(false);
     expect(restored.strictTiming).toBe(true);
-    expect(restored.blindMode).toBe(true);
     expect(restored.clickWhen).toBe('cycle-2');
   });
 

@@ -242,16 +242,6 @@ export interface PracticeSettings {
    */
   readonly pagedScore: boolean;
   /**
-   * Stop spelling out the notes of the step that is due.
-   *
-   * The panel naming them is the crutch that makes hiding the cursor only
-   * half a measure: the reader who loses their place reads the letters
-   * instead of the stave. With this on, the page is the only thing that says
-   * what to play - the bar and beat still show, because knowing *where* you
-   * are is orientation, not an answer.
-   */
-  readonly blindMode: boolean;
-  /**
    * When the marks for what you played appear.
    *
    * One axis rather than a switch plus a switch: "draw them" and "draw them
@@ -422,7 +412,6 @@ export class PracticeController {
       showCursor: true,
       strictTiming: false,
       pagedScore: false,
-      blindMode: false,
       playedNotes: 'live',
       survival: false,
       readAheadSteps: null,

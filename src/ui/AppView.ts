@@ -522,12 +522,6 @@ function readSampleLoading(value: string): SampleLoading {
     : 'lazy';
 }
 
-/** Entries kept in the note log; older ones fall off the end. */
-const MAX_LOG_ENTRIES = 40;
-
-/** How far from the newest entry still counts as following along. */
-const FOLLOW_THRESHOLD_PX = 8;
-
 /** Matches what the stored-settings codec will accept back. */
 const MIN_BARS = 1;
 const MAX_BARS = 32;
@@ -568,10 +562,6 @@ function parseKeyValue(value: string): KeySignature {
   return new KeySignature(Number.parseInt(fifths ?? '0', 10), mode === 'minor' ? 'minor' : 'major');
 }
 
-function formatNotes(midiNotes: readonly number[]): string {
-  return midiNotes.length === 0 ? '—' : midiNotes.map((midi) => midiToLabel(midi)).join(' ');
-}
-
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
@@ -606,8 +596,6 @@ export class AppView {
   private passageMarkersWanted = true;
   /** Pending redraw of the keep pill: the counter, and the silence closing. */
   private silenceWatch: ReturnType<typeof setTimeout> | null = null;
-  /** The step now due, kept so blind mode can be turned off mid-run. */
-  private lastExpected: readonly number[] = [];
   private lastDrainAtMs: number | null = null;
   private healthPaceMs = SETTLE_MS;
   /** Whether the reader has already been given this page. */
@@ -663,11 +651,8 @@ export class AppView {
     midiInput: HTMLSelectElement;
     midiHint: HTMLElement;
     sessionStatus: HTMLElement;
-    expectedRow: HTMLElement;
-    expected: HTMLElement;
     position: HTMLElement;
     progress: HTMLProgressElement;
-    log: HTMLUListElement;
     result: HTMLElement;
     drill: HTMLButtonElement;
     listen: HTMLButtonElement;
@@ -761,7 +746,6 @@ export class AppView {
     showCursor: HTMLInputElement;
     strictTiming: HTMLInputElement;
     startFocus: HTMLInputElement;
-    blindMode: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
     sampleLoadingHint: HTMLElement;
     metronomeVolume: HTMLInputElement;
@@ -830,11 +814,8 @@ export class AppView {
       midiInput: requireElement(doc, 'midi-input'),
       midiHint: requireElement(doc, 'midi-hint'),
       sessionStatus: requireElement(doc, 'session-status'),
-      expectedRow: requireElement(doc, 'expected-row'),
-      expected: requireElement(doc, 'expected'),
       position: requireElement(doc, 'position'),
       progress: requireElement(doc, 'progress'),
-      log: requireElement(doc, 'log'),
       result: requireElement(doc, 'result'),
       drill: requireElement(doc, 'drill'),
       listen: requireElement(doc, 'listen'),
@@ -928,7 +909,6 @@ export class AppView {
       showCursor: requireElement(doc, 'show-cursor'),
       strictTiming: requireElement(doc, 'strict-timing'),
       startFocus: requireElement(doc, 'start-focus'),
-      blindMode: requireElement(doc, 'blind-mode'),
       sampleLoading: requireElement(doc, 'sample-loading'),
       sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
       metronomeVolume: requireElement(doc, 'metronome-volume'),
@@ -1505,13 +1485,6 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
-    this.listen(this.el.blindMode, 'change', () => {
-      controller.updateSettings({ blindMode: this.el.blindMode.checked });
-      // Mid-run the panel would otherwise hold the last answer until the next
-      // step arrives, which in Wait mode may be never.
-      this.renderExpected();
-    });
-
     this.listen(this.el.sampleLoading, 'change', () => {
       this.applySampleLoading(readSampleLoading(this.el.sampleLoading.value));
     });
@@ -1834,7 +1807,6 @@ export class AppView {
    * shows a number and then gets out of the way is a view's business.
    */
   private beginRun(): void {
-    this.clearLog();
     this.el.result.hidden = true;
     this.cancelPreview();
     this.hasLooked = true;
@@ -2275,21 +2247,6 @@ export class AppView {
     this.el.focusNotice.textContent = text;
   }
 
-  /**
-   * Writes the "Play now" row, or takes it away entirely.
-   *
-   * Blank text is not enough on its own: a row headed "Play now" showing a
-   * dash reads as *nothing is due*, and the count of notes left standing
-   * would still be half an answer. Blind mode removes the row and the text
-   * both, so there is nothing to glance at and nothing left in the document
-   * for a screen reader to find.
-   */
-  private renderExpected(): void {
-    const blind = this.runtime.controller.settings.blindMode;
-    this.el.expectedRow.hidden = blind;
-    this.el.expected.textContent = blind ? '' : formatNotes(this.lastExpected);
-  }
-
   private bindControllerEvents(): void {
     const { controller } = this.runtime;
 
@@ -2305,8 +2262,6 @@ export class AppView {
         // reader last left them on the page before it.
         this.showPassageMarkers();
         this.applyScoreCover();
-        this.lastExpected = [];
-        this.renderExpected();
         this.el.position.textContent = '—';
       }),
     );
@@ -2385,9 +2340,7 @@ export class AppView {
           }, 0);
         }
       }),
-      session.events.on('stepEntered', ({ step, expectedMidi }) => {
-        this.lastExpected = expectedMidi;
-        this.renderExpected();
+      session.events.on('stepEntered', ({ step }) => {
         this.el.progress.value = step.index;
       }),
       // Where the music is, which under the metronome goes on moving through a
@@ -2404,13 +2357,8 @@ export class AppView {
         this.el.position.textContent = this.lastPosition;
         this.renderFocusStatus(this.lastPosition);
       }),
-      session.events.on('noteJudged', ({ midi, verdict, remaining }) => {
-        this.appendLog(midi, verdict, remaining);
-      }),
       session.events.on('finished', ({ report, score }) => {
         this.el.progress.value = this.totalSteps;
-        this.lastExpected = [];
-        this.renderExpected();
         this.lastPosition = '';
         // In fullscreen the result panel is hidden, so the notice carries
         // the verdict - beside the bar, where its width is nobody's business.
@@ -2615,8 +2563,7 @@ export class AppView {
       // New material clears the practised bars, and a box still showing the
       // old ones would name a passage of a piece that is no longer open.
       this.syncControlsFromSettings();
-      this.clearLog();
-      this.el.result.hidden = true;
+        this.el.result.hidden = true;
     } catch (error) {
       this.el.result.hidden = false;
       this.el.result.textContent =
@@ -2766,8 +2713,6 @@ export class AppView {
     this.el.focusMarks.dataset['marks'] = settings.playedNotes;
     this.el.focusMarks.title = MARKS_TITLES[settings.playedNotes];
     this.el.focusMarks.setAttribute('aria-label', MARKS_TITLES[settings.playedNotes]);
-    this.el.blindMode.checked = settings.blindMode;
-    this.renderExpected();
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.survival.checked = settings.survival;
@@ -3472,36 +3417,6 @@ export class AppView {
     this.el.focusStop.disabled = !running && !paused;
     this.el.focusNext.disabled = running || paused;
     this.el.focus.disabled = false;
-  }
-
-  private appendLog(midi: number, verdict: string, remaining: readonly number[]): void {
-    const item = this.doc.createElement('li');
-    item.dataset['verdict'] = verdict;
-    const left = this.doc.createElement('span');
-    left.textContent = `${midiToLabel(midi)} ${verdict}`;
-    const right = this.doc.createElement('span');
-    // "still: C4 E4" names the rest of the chord, which is the same answer the
-    // panel was hiding; the note the reader themselves played may stay.
-    right.textContent =
-      remaining.length > 0 && !this.runtime.controller.settings.blindMode
-        ? `still: ${formatNotes(remaining)}`
-        : '';
-    item.append(left, right);
-
-    // Newest first, and the view follows it - unless the reader has scrolled
-    // down to look at something, in which case leave them where they are.
-    const wasFollowing = this.el.log.scrollTop <= FOLLOW_THRESHOLD_PX;
-    this.el.log.prepend(item);
-    while (this.el.log.childElementCount > MAX_LOG_ENTRIES) {
-      this.el.log.lastElementChild?.remove();
-    }
-    if (wasFollowing) {
-      this.el.log.scrollTop = 0;
-    }
-  }
-
-  private clearLog(): void {
-    this.el.log.replaceChildren();
   }
 
   private renderResult(score: SessionScore, report: PerformanceReport): void {

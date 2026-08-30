@@ -52,7 +52,6 @@ import {
   spreadAround,
 } from '../../src/ui/AppView.js';
 import { twoBarExercise } from '../support/fixtures.js';
-import { midiToLabel } from '../../src/domain/model/Pitch.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -549,35 +548,6 @@ describe('AppView', () => {
     expect([...sounded].every((midi) => midi < 60)).toBe(true);
   });
 
-  it('asks for only the chosen hand in a run too', async () => {
-    // The same question asked twice: which hand am I working on. The page
-    // still shows both, and the cursor still visits every step.
-    const { view, runtime } = createRig();
-    await view.initialize();
-
-    const hand = element<HTMLSelectElement>('listen-hand');
-    hand.value = '2';
-    hand.dispatchEvent(new Event('change'));
-    element<HTMLButtonElement>('start').click();
-
-    expect(runtime.controller.settings.handStaff).toBe(2);
-
-    const step = runtime.controller.session?.currentStep;
-    const bass = new Set(
-      (step?.notes ?? []).filter((note) => note.staffNumber === 2).map((note) => note.midi),
-    );
-    const shown = element('expected').textContent ?? '';
-    // Whatever the step holds, the panel names the left hand and only it.
-    expect(shown).not.toBe('—');
-    for (const note of step?.notes ?? []) {
-      const named = midiToLabel(note.midi);
-      expect({ note: named, shown: shown.includes(named) }).toEqual({
-        note: named,
-        shown: bass.has(note.midi),
-      });
-    }
-  });
-
   it('gives up the pulse when a run starts', async () => {
     // Listening and practising share the metronome and the cursor, so one has
     // to yield rather than both driving.
@@ -704,7 +674,7 @@ describe('AppView', () => {
   });
 
   it('drives a run from the buttons and shows live feedback', async () => {
-    const { view, runtime, midi } = createRig();
+    const { view, runtime, midi, renderer } = createRig();
     await view.initialize();
 
     element<HTMLButtonElement>('start').click();
@@ -714,14 +684,15 @@ describe('AppView', () => {
     expect(element('session-status').textContent).toBe('Playing');
     expect(element<HTMLButtonElement>('start').disabled).toBe(true);
     expect(element<HTMLButtonElement>('stop').disabled).toBe(false);
-    expect(element('expected').textContent).not.toBe('—');
 
     const step = session?.currentStep;
     if (step === undefined || step === null) {
       throw new Error('expected a first step');
     }
     midi.noteOn(step.expectedMidi[0] ?? 60, 0);
-    expect(element('log').childElementCount).toBeGreaterThan(0);
+    // The page is where a press shows now, and the panel that used to spell
+    // it out in letters is gone.
+    expect(renderer.played.length).toBeGreaterThan(0);
   });
 
   it('toggles the pause button between pause and resume', async () => {
@@ -1530,121 +1501,6 @@ describe('AppView', () => {
     expect(renderer.cursor.visible).toBe(true);
   });
 
-  describe('blind mode', () => {
-    function setBlind(on: boolean): void {
-      const toggle = element<HTMLInputElement>('blind-mode');
-      toggle.checked = on;
-      toggle.dispatchEvent(new Event('change'));
-    }
-
-    it('takes the answer off the panel while the run is under way', async () => {
-      const { view, runtime } = createRig();
-      await view.initialize();
-      element<HTMLButtonElement>('start').click();
-
-      // The panel is spelling the step out, which is the crutch being removed.
-      const named = element('expected').textContent ?? '';
-      expect(named).not.toBe('—');
-      expect(named).not.toBe('');
-
-      setBlind(true);
-
-      expect(runtime.controller.settings.blindMode).toBe(true);
-      expect(element('expected').textContent).toBe('');
-      expect(element('expected-row').hidden).toBe(true);
-    });
-
-    it('gives the notes back without waiting for the next step', async () => {
-      const { view } = createRig();
-      await view.initialize();
-      element<HTMLButtonElement>('start').click();
-      const named = element('expected').textContent ?? '';
-
-      setBlind(true);
-      expect(element('expected').textContent).toBe('');
-      // Wait mode holds still until the reader plays, so a panel that only
-      // refills on the next step would stay blank exactly when it is needed.
-      setBlind(false);
-
-      expect(element('expected').textContent).toBe(named);
-      expect(element('expected-row').hidden).toBe(false);
-    });
-
-    it('still says where in the piece the reader is', async () => {
-      const { view } = createRig();
-      await view.initialize();
-      setBlind(true);
-      element<HTMLButtonElement>('start').click();
-
-      // Orientation is not an answer: bar and beat stay.
-      expect(element('position').textContent).toMatch(/^bar 1 · beat /);
-      expect(element('focus-notice').textContent).toMatch(/^bar 1 · beat /);
-    });
-
-    /**
-     * Plays the run forward until a step holds more than one note.
-     *
-     * Which step that is depends on the seed, so it is found rather than
-     * assumed; the level always contains one, and Wait mode moves on only
-     * when a step has been played in full.
-     */
-    function advanceToChord(rig: Rig): readonly number[] {
-      for (let pressed = 0; pressed < 64; pressed += 1) {
-        const step = rig.runtime.controller.session?.currentStep;
-        if (step === null || step === undefined) {
-          throw new Error('the run ended before a chord was reached');
-        }
-        if (step.expectedMidi.length > 1) {
-          return step.expectedMidi;
-        }
-        for (const midi of step.expectedMidi) {
-          rig.midi.noteOn(midi, pressed);
-        }
-      }
-      throw new Error('no chord in this exercise');
-    }
-
-    it('stops the note log naming the rest of the chord', async () => {
-      // A press that leaves a chord unfinished is the log's other answer key:
-      // "still: E4 G4" is the same help the panel was just made to withhold.
-      const seeing = createRig();
-      await seeing.view.initialize();
-      element<HTMLButtonElement>('start').click();
-      const chord = advanceToChord(seeing);
-      seeing.midi.noteOn(chord[0] ?? 60, 100);
-      expect(element('log').firstElementChild?.textContent).toContain('still:');
-
-      mountRealMarkup();
-      const blind = createRig();
-      await blind.view.initialize();
-      setBlind(true);
-      element<HTMLButtonElement>('start').click();
-      const hidden = advanceToChord(blind);
-      blind.midi.noteOn(hidden[0] ?? 60, 100);
-
-      const entry = element('log').firstElementChild?.textContent ?? '';
-      expect(entry).not.toContain('still:');
-      // What the reader themselves played is not a hint, and stays.
-      expect(entry).toContain(midiToLabel(hidden[0] ?? 60));
-    });
-
-    it('is remembered on the next visit', async () => {
-      const store = new InMemorySettingsStore();
-      const first = createRig(undefined, store);
-      await first.view.initialize();
-      setBlind(true);
-
-      mountRealMarkup();
-      const second = createRig(undefined, store);
-      await second.view.initialize();
-
-      expect(second.runtime.controller.settings.blindMode).toBe(true);
-      expect(element<HTMLInputElement>('blind-mode').checked).toBe(true);
-      // Restored settings have to reach the panel, not only the checkbox.
-      expect(element('expected-row').hidden).toBe(true);
-    });
-  });
-
   describe('the space bar', () => {
     function pressSpace(target: Element = document.body): boolean {
       const event = new KeyboardEvent('keydown', {
@@ -1740,74 +1596,6 @@ describe('AppView', () => {
       pressSpace();
 
       expect(runtime.controller.session).toBeNull();
-    });
-  });
-
-  describe('the note log', () => {
-    async function playNotes(rig: Rig, count: number): Promise<number[]> {
-      await rig.view.initialize();
-      element<HTMLButtonElement>('start').click();
-      const played: number[] = [];
-      for (let index = 0; index < count; index += 1) {
-        const midi = 60 + index;
-        rig.midi.noteOn(midi, index);
-        played.push(midi);
-      }
-      return played;
-    }
-
-    it('puts the newest note at the top', async () => {
-      const rig = createRig();
-      await playNotes(rig, 3);
-
-      const log = element('log');
-      // Played C4, C#4, D4 - the most recent is the one the reader should not
-      // have to hunt for.
-      expect(log.firstElementChild?.textContent).toContain('D4');
-      expect(log.lastElementChild?.textContent).toContain('C4');
-    });
-
-    it('keeps the view on the newest entry', async () => {
-      const rig = createRig();
-      const log = element('log');
-      log.scrollTop = 0;
-
-      await playNotes(rig, 5);
-
-      expect(log.scrollTop).toBe(0);
-    });
-
-    it('leaves the reader alone when they have scrolled away', async () => {
-      const rig = createRig();
-      await playNotes(rig, 3);
-      const log = element('log');
-
-      log.scrollTop = 120;
-      rig.midi.noteOn(72, 99);
-
-      expect(log.scrollTop).toBe(120);
-    });
-
-    it('drops the oldest entries rather than growing without end', async () => {
-      const rig = createRig();
-      await playNotes(rig, 45);
-
-      const log = element('log');
-      expect(log.childElementCount).toBe(40);
-      // The first five presses fell off the far end.
-      expect(log.textContent).not.toContain('C4 ');
-    });
-
-    it('starts empty on a new run', async () => {
-      const rig = createRig();
-      await playNotes(rig, 3);
-      expect(element('log').childElementCount).toBeGreaterThan(0);
-
-      // Start is disabled while a run is going, so stop it first.
-      element<HTMLButtonElement>('stop').click();
-      element<HTMLButtonElement>('start').click();
-
-      expect(element('log').childElementCount).toBe(0);
     });
   });
 

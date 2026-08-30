@@ -267,66 +267,10 @@ textarea {
   letter-spacing: 0.04em;
 }
 
-.expected {
-  font-size: 22px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-}
-
 progress {
   width: 100%;
   height: 6px;
   accent-color: var(--accent);
-}
-
-.log {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  /*
-   * Not column-reverse: it flips the scroll origin too, so the view sticks to
-   * the oldest entry while new ones pile up out of sight. The newest is put
-   * first in the markup instead, and the list scrolls normally.
-   */
-  flex-direction: column;
-  gap: 4px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  max-height: 220px;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12px;
-}
-
-.log li {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 3px 6px;
-  border-radius: 6px;
-  background: var(--surface-strong);
-}
-
-.log li[data-verdict='correct'] {
-  color: var(--correct);
-}
-
-.log li[data-verdict='wrong'] {
-  color: var(--wrong);
-}
-
-.log li[data-verdict='duplicate'] {
-  color: var(--text-muted);
-}
-
-/*
- * On the page, but not this hand's to play. Neither right nor wrong: the
- * reader read the printed music correctly, and this run simply was not asking
- * for that half of it.
- */
-.log li[data-verdict='other-hand'],
-.log li[data-verdict='late'] {
-  color: var(--pending);
 }
 
 .result {

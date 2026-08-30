@@ -205,16 +205,23 @@ export class TakeLibrary {
     return `${wanted}-${this.takes.length}`;
   }
 
-  /** Moves a take off the shelf that prunes, onto the one that does not. */
-  promote(id: string): StoredTake | null {
+  /**
+   * Moves a take between the shelf that prunes and the one that does not.
+   *
+   * Both ways, because a reader who kept one by mistake has to be able to say
+   * so - and putting it back on the recent shelf is not deleting it, only
+   * letting the tidying reach it again.
+   */
+  setShelf(id: string, shelf: TakeShelf): StoredTake | null {
     const found = this.takes.find((take) => take.id === id);
-    if (found === undefined || found.shelf === 'kept') {
+    if (found === undefined || found.shelf === shelf) {
       return found ?? null;
     }
-    const promoted: StoredTake = { ...found, shelf: 'kept' };
-    this.takes = this.takes.map((take) => (take.id === id ? promoted : take));
+    const moved: StoredTake = { ...found, shelf };
+    this.takes = this.takes.map((take) => (take.id === id ? moved : take));
+    this.prune();
     this.persist();
-    return promoted;
+    return this.takes.find((take) => take.id === id) ?? null;
   }
 
   remove(id: string): void {

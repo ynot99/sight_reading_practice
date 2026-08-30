@@ -917,6 +917,16 @@ select {
   min-width: 0;
 }
 
+/* Reads as part of the heading rather than as another control in a row. */
+.sheet__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .sheet__close {
   font-size: 20px;
   line-height: 1;

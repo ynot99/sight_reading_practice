@@ -152,3 +152,77 @@ describe('playing a take back', () => {
     expect(instrument.stopped.map((note) => note.midi)).toEqual([60]);
   });
 });
+
+describe('a take with the same key struck twice in quick succession', () => {
+  /** C4 twice, a tenth of a second apart: well inside the look-ahead. */
+  const REPEATED: readonly MidiFileEvent[] = [
+    { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
+    { kind: 'noteOff', atMs: 90, midi: 60 },
+    { kind: 'noteOn', atMs: 100, midi: 60, velocity: 0.8 },
+    { kind: 'noteOff', atMs: 190, midi: 60 },
+  ];
+
+  it('does not let the second one kill the first before it sounds', () => {
+    // The instrument keeps one voice per pitch, and striking a key re-hits
+    // the string *now* rather than when the note was scheduled for. Handed
+    // both at once, the first was silenced before it had ever been heard -
+    // which is a run of repeated notes coming out clipped to nothing.
+    const { clock, instrument, player } = rig();
+
+    player.play('take-1', REPEATED);
+    expect(instrument.played).toHaveLength(1);
+
+    // Handed over once the first has finished, and not a moment later: two
+    // notes of one pitch never overlap, so that moment is at or before the
+    // second one's own beginning.
+    clock.advance(90);
+    player.pump();
+
+    expect(instrument.played.map((note) => note.atMs)).toEqual([0, 100]);
+  });
+
+  it('leaves different pitches to be handed over together', () => {
+    // The rule is per pitch, not a queue: a chord is one gesture.
+    const { instrument, player } = rig();
+
+    player.play('take-1', [
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
+      { kind: 'noteOn', atMs: 0, midi: 64, velocity: 0.8 },
+      { kind: 'noteOn', atMs: 0, midi: 67, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 400, midi: 60 },
+      { kind: 'noteOff', atMs: 400, midi: 64 },
+      { kind: 'noteOff', atMs: 400, midi: 67 },
+    ]);
+
+    expect(instrument.played.map((note) => note.midi)).toEqual([60, 64, 67]);
+  });
+
+  it('obeys a pedal mark once, and when the music reaches it', () => {
+    // Read from the whole list on every wake-up, an early "down" was pressed
+    // again each time and an "up" a quarter of a second ahead was obeyed
+    // before the notes it was meant to release.
+    const pedal = { sustained: false, calls: [] as boolean[],
+      setSustain(down: boolean) { this.sustained = down; this.calls.push(down); } };
+    const clock = new ManualClock();
+    const instrument = new RecordingPitchPlayer();
+    const player = new TakePlayer({ instrument, clock, sustain: pedal });
+
+    player.play('take-1', [
+      { kind: 'sustain', atMs: 0, value: 1 },
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 400, midi: 60 },
+      { kind: 'sustain', atMs: 400, value: 0 },
+    ]);
+    // Lifted first, because starting anything clears what was held before.
+    expect(pedal.calls).toEqual([false, true]);
+
+    player.pump();
+    player.pump();
+    expect(pedal.calls).toEqual([false, true]);
+
+    clock.advance(400);
+    player.pump();
+
+    expect(pedal.calls).toEqual([false, true, false]);
+  });
+});

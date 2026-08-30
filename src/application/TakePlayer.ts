@@ -38,8 +38,13 @@ export class TakePlayer {
 
   private notes: readonly PairedNote[] = [];
   private sustains: readonly MidiFileEvent[] = [];
-  /** How many notes have been handed to the instrument already. */
+  /** Notes below this index are all handed over; `handed` holds the rest. */
   private handedOver = 0;
+  private readonly handed = new Set<number>();
+  /** When the note now sounding on each pitch finishes, in take time. */
+  private readonly soundingUntil = new Map<number, number>();
+  /** How many pedal marks have been obeyed. */
+  private pedalDone = 0;
   private lengthMs = 0;
   private startedAtMs: number | null = null;
   private offsetMs = 0;
@@ -96,7 +101,7 @@ export class TakePlayer {
     this.playingId = id;
     this.offsetMs = Math.max(0, Math.min(this.lengthMs, fromMs));
     this.startedAtMs = this.clock.now();
-    this.handedOver = 0;
+    this.rewindTo(0);
     this.pump();
   }
 
@@ -111,33 +116,65 @@ export class TakePlayer {
       return;
     }
     const origin = this.startedAtMs - this.offsetMs;
-    const until = this.positionMs + LOOK_AHEAD_MS;
+    const at = this.positionMs;
+    const until = at + LOOK_AHEAD_MS;
 
-    while (this.handedOver < this.notes.length) {
-      const note = this.notes[this.handedOver];
+    for (let index = this.handedOver; index < this.notes.length; index += 1) {
+      const note = this.notes[index];
       if (note === undefined || note.startMs > until) {
         break;
       }
-      this.handedOver += 1;
+      if (this.handed.has(index)) {
+        continue;
+      }
       // Only what the seek has wholly passed. A note left unreleased at the
       // very end of a take has no length at all, and a plain "ends before
       // here" test would drop it rather than sound it.
       if (note.endMs <= this.offsetMs && note.startMs < this.offsetMs) {
+        this.handed.add(index);
         continue;
       }
+      // The instrument keeps one voice per pitch, and striking a key re-hits
+      // the string *now* rather than at the moment the note was scheduled
+      // for. Handing over a repeat while its predecessor is still waiting to
+      // sound therefore killed the predecessor before it ever did - which is
+      // a run of repeated notes coming out clipped to nothing. So a pitch is
+      // handed over only once the note before it on that pitch has finished.
+      // No note is ever late for this: two notes of one pitch never overlap,
+      // so the moment one ends is at or before the moment the next begins.
+      const busyUntil = this.soundingUntil.get(note.midi);
+      if (busyUntil !== undefined && at < busyUntil) {
+        continue;
+      }
+
       // A note straddling the seek is struck there rather than skipped: a
       // listener who drops into the middle of a held chord should hear the
       // chord, not the silence between its attack and its release.
       const startsAt = Math.max(note.startMs, this.offsetMs);
       this.instrument.play(note.midi, note.velocity, origin + startsAt);
       this.instrument.stop(note.midi, origin + note.endMs);
+      this.soundingUntil.set(note.midi, note.endMs);
+      this.handed.add(index);
     }
 
-    for (const event of this.sustains) {
-      if (event.kind !== 'sustain' || event.atMs < this.offsetMs || event.atMs > until) {
-        continue;
+    while (this.handed.has(this.handedOver)) {
+      this.handed.delete(this.handedOver);
+      this.handedOver += 1;
+    }
+
+    // The pedal follows the music rather than the look-ahead, and each mark
+    // is obeyed once: read from the whole list every time, an early "down"
+    // was pressed again on every wake-up and a "up" a quarter of a second
+    // ahead was obeyed before the notes it was meant to release.
+    while (this.pedalDone < this.sustains.length) {
+      const event = this.sustains[this.pedalDone];
+      if (event === undefined || event.atMs > at) {
+        break;
       }
-      this.sustain?.setSustain(event.value >= 0.5);
+      this.pedalDone += 1;
+      if (event.kind === 'sustain' && event.atMs >= this.offsetMs) {
+        this.sustain?.setSustain(event.value >= 0.5);
+      }
     }
   }
 
@@ -172,11 +209,20 @@ export class TakePlayer {
     this.silence();
     this.offsetMs = at;
     this.startedAtMs = this.clock.now();
-    this.handedOver = this.notes.findIndex((note) => note.endMs > at);
-    if (this.handedOver < 0) {
-      this.handedOver = this.notes.length;
-    }
+    const from = this.notes.findIndex((note) => note.endMs > at);
+    this.rewindTo(from < 0 ? this.notes.length : from);
     this.pump();
+  }
+
+  /** Puts the walk back to a place, forgetting what was handed over before. */
+  private rewindTo(index: number): void {
+    this.handedOver = index;
+    this.handed.clear();
+    this.soundingUntil.clear();
+    this.pedalDone = this.sustains.findIndex((event) => event.atMs >= this.offsetMs);
+    if (this.pedalDone < 0) {
+      this.pedalDone = this.sustains.length;
+    }
   }
 
   private silence(): void {

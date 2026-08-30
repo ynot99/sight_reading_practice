@@ -874,6 +874,22 @@ describe('AppView', () => {
       expect(element('scores-list').textContent).toContain('2 bars');
     });
 
+    it('adds a score from the sheet, through the one picker there is', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      const picker = element<HTMLInputElement>('score-file');
+      let opened = 0;
+      picker.addEventListener('click', () => {
+        opened += 1;
+      });
+
+      element<HTMLButtonElement>('scores-add').click();
+
+      // One way in, so a score opened from here is read and reported on
+      // exactly as one opened from the toolbar.
+      expect(opened).toBe(1);
+    });
+
     it('opens one without going back to the disk', async () => {
       const rig = createRig();
       await keepOne(rig);
@@ -1087,6 +1103,41 @@ describe('AppView', () => {
       element<HTMLButtonElement>('takes-close').click();
 
       expect(rig.runtime.takePlayer.playing).toBeNull();
+    });
+
+    it('takes a take back off the shelf that never gets tidied', async () => {
+      // A reader who starred one by mistake has to be able to say so, and the
+      // star did nothing once it was on.
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      element<HTMLButtonElement>('keep-take').click();
+      expect(rig.takes.list()[0]?.shelf).toBe('kept');
+
+      rowButton('takes-list', 'Kept for good. Press to let the tidying reach it again.').click();
+
+      expect(rig.takes.list()[0]?.shelf).toBe('recent');
+      // Putting it back is not deleting it.
+      expect(rig.takes.list()).toHaveLength(1);
+    });
+
+    it('shows only what was kept for good, when asked to', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      rig.clock.advance(10_000);
+      playSomething(rig);
+      element<HTMLButtonElement>('keep-take').click();
+      expect(element('takes-list').childElementCount).toBe(2);
+
+      const filter = element<HTMLInputElement>('takes-kept-only');
+      filter.checked = true;
+      filter.dispatchEvent(new Event('change'));
+
+      expect(element('takes-list').childElementCount).toBe(1);
+      // The opener still counts everything: it says how much is kept here,
+      // not how much is on screen.
+      expect(element('open-takes').textContent).toBe('Takes (2)');
     });
 
     it('will not keep the same playing twice', async () => {

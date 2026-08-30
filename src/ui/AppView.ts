@@ -591,6 +591,8 @@ export class AppView {
     scoresClear: HTMLButtonElement;
     takesList: HTMLUListElement;
     takesClear: HTMLButtonElement;
+    takesKeptOnly: HTMLInputElement;
+    scoresAdd: HTMLButtonElement;
     openScore: HTMLButtonElement;
     scoreFile: HTMLInputElement;
     importNotice: HTMLElement;
@@ -752,6 +754,8 @@ export class AppView {
       scoresClear: requireElement(doc, 'scores-clear'),
       takesList: requireElement(doc, 'takes-list'),
       takesClear: requireElement(doc, 'takes-clear'),
+      takesKeptOnly: requireElement(doc, 'takes-kept-only'),
+      scoresAdd: requireElement(doc, 'scores-add'),
       openScore: requireElement(doc, 'open-score'),
       scoreFile: requireElement(doc, 'score-file'),
       importNotice: requireElement(doc, 'import-notice'),
@@ -2753,6 +2757,16 @@ export class AppView {
       });
     }
 
+    this.listen(this.el.takesKeptOnly, 'change', () => {
+      this.renderTakes();
+    });
+
+    this.listen(this.el.scoresAdd, 'click', () => {
+      // The same picker the toolbar uses: one way in, so a score opened from
+      // here is a score opened, with the same reading and the same warnings.
+      this.el.scoreFile.click();
+    });
+
     this.listen(this.el.takesClose, 'click', () => {
       this.el.sheetTakes.hidden = true;
     });
@@ -2900,10 +2914,19 @@ export class AppView {
   }
 
   private renderTakes(): void {
-    const takes = this.runtime.takes.list();
+    const all = this.runtime.takes.list();
+    const takes = this.el.takesKeptOnly.checked
+      ? all.filter((take) => take.shelf === 'kept')
+      : all;
     this.el.takesEmpty.hidden = takes.length > 0;
-    this.el.takesClear.disabled = takes.length === 0;
-    this.el.openTakes.textContent = takes.length === 0 ? 'Takes' : `Takes (${takes.length})`;
+    this.el.takesEmpty.textContent =
+      all.length > 0 && takes.length === 0
+        ? 'Nothing kept for good yet. The star on a row puts it out of reach of the tidying.'
+        : 'Nothing kept yet. Play something and keep it from the bar.';
+    this.el.takesClear.disabled = all.length === 0;
+    // The opener counts everything, whatever the list is filtered to: it is
+    // saying how much is kept here, not how much is on screen.
+    this.el.openTakes.textContent = all.length === 0 ? 'Takes' : `Takes (${all.length})`;
     this.el.takesList.replaceChildren();
 
     for (const take of takes) {
@@ -2929,20 +2952,22 @@ export class AppView {
       save.title = 'Save this take as a MIDI file';
       this.listen(save, 'click', () => this.exportTake(take.id));
 
+      const kept = take.shelf === 'kept';
       const promote = this.doc.createElement('button');
       promote.type = 'button';
-      promote.textContent = take.shelf === 'kept' ? '★' : '☆';
-      promote.disabled = take.shelf === 'kept';
-      promote.title =
-        take.shelf === 'kept'
-          ? 'Kept for good; only the recent ones are ever thrown away.'
-          : 'Keep this one for good, out of reach of the tidying.';
+      promote.textContent = kept ? '★' : '☆';
+      // Both ways: a reader who kept one by mistake has to be able to say so,
+      // and putting it back is not deleting it - only letting the tidying
+      // reach it again.
+      promote.title = kept
+        ? 'Kept for good. Press to let the tidying reach it again.'
+        : 'Keep this one for good, out of reach of the tidying.';
       promote.setAttribute(
         'aria-label',
-        take.shelf === 'kept' ? 'Already kept for good' : 'Keep this take for good',
+        kept ? 'Stop keeping this take for good' : 'Keep this take for good',
       );
       this.listen(promote, 'click', () => {
-        this.runtime.takes.promote(take.id);
+        this.runtime.takes.setShelf(take.id, kept ? 'recent' : 'kept');
         this.renderTakes();
       });
 

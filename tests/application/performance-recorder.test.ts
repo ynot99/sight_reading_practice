@@ -260,7 +260,7 @@ describe('the takes that were kept', () => {
     const library = new TakeLibrary(new InMemorySettingsStore(), 1);
     const filed = fileTake(library, 1_000, 'recent');
 
-    library.promote(filed.id);
+    library.setShelf(filed.id, 'kept');
     fileTake(library, 2_000, 'recent');
     fileTake(library, 3_000, 'recent');
 

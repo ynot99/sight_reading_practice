@@ -26,8 +26,13 @@ function withLayout(container: HTMLElement, windowHeight: number): HTMLElement {
   // Taller than the screen, which is what a score frame does: it is given a
   // minimum of one screen and then grows to whatever is engraved in it. The
   // screen is `windowHeight`; the frame runs well past the bottom of it.
-  frame.getBoundingClientRect = (() =>
-    ({ left: 0, top: 0, bottom: 99_999, width: 900, height: 99_999 })) as Element['getBoundingClientRect'];
+  frame.getBoundingClientRect = (() => {
+    // Follows what the renderer writes on it, so a test can see the frame
+    // being cut down to the page it is showing.
+    const written = Number.parseFloat(frame.style.height);
+    const height = Number.isFinite(written) ? written : 99_999;
+    return { left: 0, top: 0, bottom: height, width: 900, height };
+  }) as Element['getBoundingClientRect'];
   scroller.getBoundingClientRect = (() =>
     ({ left: 0, top: 0, bottom: 99_999, width: 900, height: 99_999 })) as Element['getBoundingClientRect'];
   Object.defineProperty(window, 'innerHeight', { value: windowHeight, configurable: true });
@@ -53,6 +58,7 @@ describe('reading a real engraving as pages', () => {
   let container: HTMLElement;
   let renderer: OsmdScoreRenderer;
   let scroller: HTMLElement;
+  let frame: HTMLElement;
 
   beforeAll(() => {
     installCanvasStub();
@@ -66,6 +72,7 @@ describe('reading a real engraving as pages', () => {
     // several pages of them.
     await renderer.load(new MusicXmlSerializer().serialize(longExercise({ bars: 16 })));
     scroller = withLayout(container, 200);
+    frame = scroller.parentElement as HTMLElement;
   });
 
   it('has no pages at all until it is asked for them', () => {
@@ -129,6 +136,28 @@ describe('reading a real engraving as pages', () => {
     // Told twice about the same bar, it turns once: a page turn is for
     // looking at one thing until it is finished with.
     expect(turns).toEqual([reached]);
+  });
+
+  it('shows a page and nothing of the next one', () => {
+    // The difference between a page and a view onto a scroll. Left at the
+    // height of the screen, the frame goes on past the last system of the
+    // page and the first system of the next peers in at the bottom -
+    // visible, unreadable, and the thing a page turn is for getting rid of.
+    renderer.setPaged(true);
+    expect(renderer.pages.count).toBeGreaterThan(1);
+
+    const shown = frame.getBoundingClientRect().height;
+
+    expect(shown).toBeGreaterThan(0);
+    // Cut down to its own systems rather than left at the screen's height.
+    expect(shown).toBeLessThanOrEqual(200);
+  });
+
+  it('gives the frame back its height when pages are turned off', () => {
+    renderer.setPaged(true);
+    renderer.setPaged(false);
+
+    expect(frame.style.height).toBe('');
   });
 
   it('does nothing to a scrolling score', () => {

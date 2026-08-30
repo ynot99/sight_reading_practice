@@ -71,6 +71,9 @@ const MARKER_WIDTH = 5;
 const MARKER_GRIP_RADIUS = 9;
 /** How far a repeat dot sits from the marker, and from the line between. */
 const REPEAT_DOT_GAP = 9;
+/** Breathing room above and below a page, so it does not sit against the edge. */
+const PAGE_MARGIN_PX = 8;
+
 /** How far a finger may wander and still have meant a tap, in screen pixels. */
 const TAP_SLACK_PX = 8;
 /** Half the width of the arrow drawn inside a handle. */
@@ -466,12 +469,14 @@ export class OsmdScoreRenderer
    * hundred bars into one page and made every turn a no-op.
    */
   private windowHeight(): number {
-    const frame = this.container.closest('.score') ?? this.scroller();
-    const box = frame?.getBoundingClientRect();
+    const box = this.frame()?.getBoundingClientRect();
+    // From the top of the frame to the bottom of the screen, and not the
+    // frame's own height: while pages are on, the frame is cut down to the
+    // page it is showing, so measuring it would shrink the window to the
+    // page and then the page to the window, over and over.
+    const screen = this.viewportHeight();
     const height =
-      box === undefined
-        ? 0
-        : visibleHeightOf({ top: box.top, bottom: box.bottom }, this.viewportHeight());
+      box === undefined ? 0 : visibleHeightOf({ top: box.top, bottom: screen }, screen);
     const scroller = this.scroller();
     // The room kept for the pill in fullscreen, which is padding on the
     // scrolling box: a page that used it would put its last system behind
@@ -509,12 +514,28 @@ export class OsmdScoreRenderer
   }
 
   private showPageOffset(): void {
+    const frame = this.frame();
     if (!(this.container instanceof HTMLElement)) {
       return;
     }
     if (!this.paged) {
       this.container.style.transform = '';
+      if (frame instanceof HTMLElement) {
+        frame.style.height = '';
+      }
       return;
+    }
+
+    // The frame is cut down to the page it is showing, which is what makes
+    // this a page rather than a view onto a scroll: without it the screen
+    // goes on past the last system of the page and the first system of the
+    // next one peers in at the bottom - visible, unreadable, and exactly the
+    // thing a page turn is for getting rid of.
+    if (frame instanceof HTMLElement) {
+      const page = this.pageBands[this.pageAt];
+      const tall = page === undefined ? 0 : (page.bottom - page.top) * this.drawingScale();
+      const room = this.windowHeight();
+      frame.style.height = tall > 0 ? `${Math.min(tall + PAGE_MARGIN_PX * 2, room)}px` : '';
     }
     const svg = this.container.querySelector('svg');
     const drawn = svg?.getBoundingClientRect().height ?? 0;
@@ -572,6 +593,11 @@ export class OsmdScoreRenderer
       node = node.parentElement;
     }
     return null;
+  }
+
+  /** The box that clips, which is not the one that scrolls inside it. */
+  private frame(): Element | null {
+    return this.container.closest('.score') ?? this.scroller();
   }
 
   /** The box that actually scrolls, which is not the one being drawn in. */

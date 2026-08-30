@@ -1883,17 +1883,33 @@ export class AppView {
   }
 
   /**
-   * The space bar starts and pauses, rather than scrolling the page.
+   * The space bar starts and pauses, and the arrows turn the pages.
    *
    * Ignored while a control has focus: space is how a button is pressed and
-   * how a checkbox is ticked, and a number box needs it even less disturbed.
+   * how a checkbox is ticked, a number box needs it even less disturbed, and
+   * the arrows belong to a slider or a select entirely. At a desk there is no
+   * swipe, so without this a score read as pages could only be turned with a
+   * mouse held down and dragged across it.
    */
   private bindSpaceBar(): void {
     const handler = (event: KeyboardEvent): void => {
-      if (event.code !== 'Space' || event.metaKey || event.ctrlKey || event.altKey) {
+      if (event.metaKey || event.ctrlKey || event.altKey) {
         return;
       }
       if (isFormControl(this.doc.activeElement)) {
+        return;
+      }
+      const turn = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+      if (turn !== 0) {
+        // Only where there are pages to turn. Left alone otherwise, so the
+        // arrows go on doing whatever the browser does with them.
+        if (this.runtime.renderer.pages.count > 1) {
+          event.preventDefault();
+          this.runtime.renderer.turnPages(turn);
+        }
+        return;
+      }
+      if (event.code !== 'Space') {
         return;
       }
       event.preventDefault();

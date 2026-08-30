@@ -1501,6 +1501,55 @@ describe('AppView', () => {
     expect(renderer.cursor.visible).toBe(true);
   });
 
+  describe('the arrow keys', () => {
+    function pressArrow(key: 'ArrowLeft' | 'ArrowRight', target: Element = document.body): boolean {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    }
+
+    it('turns the pages at a desk, where there is no swipe', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.renderer.pageCount = 3;
+      element<HTMLButtonElement>('focus-pages').click();
+
+      expect(pressArrow('ArrowRight')).toBe(true);
+      expect(rig.renderer.pages.at).toBe(1);
+
+      pressArrow('ArrowRight');
+      pressArrow('ArrowLeft');
+      expect(rig.renderer.pages.at).toBe(1);
+    });
+
+    it('leaves the arrows alone when there are no pages to turn', async () => {
+      // A scrolling score still scrolls with them, which is what a reader
+      // who never asked for pages expects them to do.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.renderer.pageCount = 3;
+
+      pressArrow('ArrowRight');
+
+      expect(rig.renderer.isPaged).toBe(false);
+      expect(rig.renderer.pages.count).toBe(0);
+      expect(rig.renderer.pages.at).toBe(0);
+    });
+
+    it('leaves them to a control that has the focus', async () => {
+      // An arrow belongs to a slider or a select entirely.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.renderer.pageCount = 3;
+      element<HTMLButtonElement>('focus-pages').click();
+      const tempo = element<HTMLInputElement>('tempo');
+      tempo.focus();
+
+      expect(pressArrow('ArrowRight', tempo)).toBe(false);
+      expect(rig.renderer.pages.at).toBe(0);
+    });
+  });
+
   describe('the space bar', () => {
     function pressSpace(target: Element = document.body): boolean {
       const event = new KeyboardEvent('keydown', {

@@ -1869,3 +1869,48 @@ describe('what was decided about each press', () => {
     expect(controller.judgingLog.length).toBeLessThanOrEqual(300);
   });
 });
+
+describe('the last run that reached an end', () => {
+  it('outlives the session, so what it measured can still be acted on', async () => {
+    // The live session is replaced the moment anything starts another run,
+    // and with repeat left on the replacement arrives before the reader can
+    // look at what the last one measured.
+    const { controller, midi, metronome, clock } = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      countInBars: 0,
+    });
+    await controller.loadNewExercise();
+    const first = controller.start();
+    metronome.advanceSubdivisions(1);
+    for (const midiNote of first?.currentStep?.expectedMidi ?? []) {
+      midi.noteOn(midiNote, clock.now());
+    }
+    first?.abort();
+    const measured = controller.lastReport;
+    expect(measured).not.toBeNull();
+
+    controller.start();
+
+    // A fresh session has measured nothing; the run before it still has.
+    expect(controller.session?.report).toBeNull();
+    expect(controller.lastReport).toBe(measured);
+  });
+
+  it('outlives the material too, since a run is about the hands', async () => {
+    const { controller, midi, metronome, clock } = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      countInBars: 0,
+    });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    metronome.advanceSubdivisions(1);
+    for (const midiNote of session?.currentStep?.expectedMidi ?? []) {
+      midi.noteOn(midiNote, clock.now());
+    }
+    session?.abort();
+
+    await controller.loadNewExercise();
+
+    expect(controller.lastReport).not.toBeNull();
+  });
+});

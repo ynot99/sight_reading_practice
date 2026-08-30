@@ -1854,7 +1854,7 @@ export class AppView {
    * would only move the mess.
    */
   private measuredLatencyMs(): number | null {
-    const timing = this.runtime.controller.session?.report?.timing;
+    const timing = this.runtime.controller.lastReport?.timing;
     if (timing === undefined || timing.deviations.length < MIN_PRESSES_TO_MEASURE) {
       return null;
     }
@@ -1876,7 +1876,7 @@ export class AppView {
     const set = this.runtime.controller.settings.inputLatencyMs;
     this.el.latencyValue.value = String(set);
 
-    const timing = this.runtime.controller.session?.report?.timing;
+    const timing = this.runtime.controller.lastReport?.timing;
     const measured = this.measuredLatencyMs();
     this.el.latencyMeasure.disabled = measured === null;
 
@@ -2748,7 +2748,7 @@ export class AppView {
   private judgingLogText(): string {
     const { controller } = this.runtime;
     const settings = controller.settings;
-    const report = controller.session?.report;
+    const report = controller.lastReport;
     const lines = [
       `exercise: ${controller.currentExercise?.title ?? 'none'}`,
       `mode: ${settings.modeId}   tempo: ${settings.tempoBpm} bpm (${controller.tempoPercent}%)`,

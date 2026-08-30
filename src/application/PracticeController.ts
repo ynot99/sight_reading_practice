@@ -5,6 +5,7 @@ import type { Exercise } from '../domain/model/Exercise.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
 import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
+import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
 import { buildTimeline, type ExerciseTimeline, type TimelineStep } from '../domain/timeline/Timeline.js';
 import { playedNoteOffset } from './playedNoteOffset.js';
@@ -343,6 +344,7 @@ export class PracticeController {
   private readonly meter: HealthMeter;
   private lastBeatTicks = 0;
   private readonly judged: JudgedPress[] = [];
+  private finishedReport: PerformanceReport | null = null;
   private cleanReadings = 0;
   private poorReadings = 0;
 
@@ -813,6 +815,22 @@ export class PracticeController {
   }
 
   /**
+   * The last run that reached an end, whatever has happened since.
+   *
+   * Not the live session's: that is replaced the moment anything starts
+   * another run, and with repeat left on the replacement arrives before the
+   * reader can look at what the last one measured. The offer to take the
+   * input delay from "the last run" then sat there enabled and did nothing,
+   * which is worse than being greyed out.
+   *
+   * A run belongs to the reader's hands and their keyboard, not to the piece,
+   * so it outlives both the session and the material.
+   */
+  get lastReport(): PerformanceReport | null {
+    return this.finishedReport;
+  }
+
+  /**
    * What was decided about the last few presses, in order.
    *
    * Kept because every fault in this part of the program has been invisible
@@ -1010,6 +1028,7 @@ export class PracticeController {
     );
     this.sessionSubscriptions.push(
       session.events.on('finished', ({ report, score }) => {
+        this.finishedReport = report;
         this.drawHeldMarks();
         this.deps.history?.record(this.practiceKey(), {
           atMs: this.deps.clock.now(),

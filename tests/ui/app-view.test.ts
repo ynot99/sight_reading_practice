@@ -2801,6 +2801,42 @@ describe('measuring how long a press takes to arrive', () => {
     expect(element('latency-description').textContent).toContain('every click');
   });
 
+  it('offers what the calibration run measured, and applies it', async () => {
+    // The reader's own path: press the test button, play the piece a little
+    // behind the beat, and ask for the number back.
+    const rig = createRig();
+    await rig.view.initialize();
+    // Repeat left on, which is a thing a reader does and a thing that used to
+    // take the measurement away: the finished run was replaced by a fresh one
+    // before they could press the button, and the button then did nothing.
+    rig.runtime.controller.updateSettings({ repeatRange: true });
+    element<HTMLButtonElement>('latency-test').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const session = rig.runtime.controller.start();
+    expect(session).not.toBeNull();
+    // One bar of count-in at 80 bpm, one tick to the beat.
+    rig.metronome.advanceSubdivisions(4);
+
+    for (let beat = 0; beat < 16; beat += 1) {
+      rig.metronome.advanceSubdivisions(1);
+      rig.clock.set(rig.clock.now() + 120);
+      rig.midi.noteOn(60, rig.clock.now());
+      rig.clock.set(rig.clock.now() - 120);
+    }
+    rig.metronome.advanceSubdivisions(2);
+
+    expect(session?.status).toBe('completed');
+    expect(session?.report?.timing.deviations.length).toBeGreaterThanOrEqual(8);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const button = element<HTMLButtonElement>('latency-measure');
+    expect(button.disabled).toBe(false);
+
+    button.click();
+
+    expect(rig.runtime.controller.settings.inputLatencyMs).toBe(120);
+  });
+
   it('remembers the delay across a visit, which is the point of measuring it', async () => {
     const store = new InMemorySettingsStore();
     const first = createRig(undefined, store);

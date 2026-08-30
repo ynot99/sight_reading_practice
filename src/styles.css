@@ -111,8 +111,18 @@ textarea {
   white-space: nowrap;
 }
 
+/*
+ * Which keyboard, and whether it is heard from.
+ *
+ * It reads as a row of its own inside the settings now rather than as part
+ * of a header: the pills say what the state is and the two controls beside
+ * them are what changes it.
+ */
 .midi-cluster {
-  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .app-header h1 {

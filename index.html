@@ -45,17 +45,6 @@
           <h1>Piano Sight-Reading Trainer</h1>
           <p id="exercise-title" class="subtitle">No exercise loaded</p>
         </div>
-        <div class="midi-cluster">
-          <span id="pedal-status" class="pill pill--pedal" data-down="false"
-            aria-label="Sustain pedal up"><span class="pill__dot" aria-hidden="true"></span>Ped.</span>
-          <span id="bridge-status" class="pill pill--idle" hidden>Bridge: connecting…</span>
-          <span id="midi-status" class="pill pill--idle">MIDI: not connected</span>
-          <button id="connect-midi" type="button" class="button button--ghost">Connect MIDI</button>
-          <select id="midi-input" aria-label="MIDI input device">
-            <option value="">All inputs</option>
-          </select>
-          <p id="midi-hint" class="hint midi-hint" hidden></p>
-        </div>
       </header>
 
       <p id="import-notice" class="hint import-notice" hidden></p>
@@ -220,6 +209,28 @@
               title="Close" aria-label="Close">×</button>
           </div>
         <div class="controls">
+          <!--
+            Which keyboard, and whether it is heard from. First, because it
+            is the one thing that has to be right before any of the rest
+            means anything - and because it used to live in a header that
+            fullscreen hid, so at the stand there was no way to see that the
+            keyboard had gone.
+          -->
+          <div class="control-group">
+            <label for="midi-input">Keyboard</label>
+            <div class="midi-cluster">
+          <span id="pedal-status" class="pill pill--pedal" data-down="false"
+            aria-label="Sustain pedal up"><span class="pill__dot" aria-hidden="true"></span>Ped.</span>
+          <span id="bridge-status" class="pill pill--idle" hidden>Bridge: connecting…</span>
+          <span id="midi-status" class="pill pill--idle">MIDI: not connected</span>
+          <button id="connect-midi" type="button" class="button button--ghost">Connect MIDI</button>
+          <select id="midi-input" aria-label="MIDI input device">
+            <option value="">All inputs</option>
+          </select>
+          <p id="midi-hint" class="hint midi-hint" hidden></p>
+            </div>
+          </div>
+
         <div class="control-group">
           <label for="ladder-down">Ladder</label>
           <div class="ladder-row">

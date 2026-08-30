@@ -356,6 +356,8 @@ export class PracticeController {
   private currentSession: PracticeSession | null = null;
   private sessionSubscriptions: Unsubscribe[] = [];
   private lastSeed: number | null = null;
+  /** Where the next run begins, which the reader may have moved. */
+  private beginAt = 0;
   private openedScore: Exercise | null = null;
   private player: ExercisePlayer | null = null;
   /** Highest step already dimmed, so the veil is drawn once per step. */
@@ -559,6 +561,38 @@ export class PracticeController {
     return next;
   }
 
+  /**
+   * Puts the reader's place in the music, for the next run to begin at.
+   *
+   * A bar line and not a note: a run that started halfway through a bar
+   * would be counted in to a beat that is not the first one, and the reader
+   * would be waiting for a downbeat that never came. Touching a note in the
+   * middle of a bar therefore means that bar.
+   *
+   * Returns the step it settled on, or `null` when there was nothing there.
+   */
+  beginAtStep(stepIndex: number): number | null {
+    const timeline = this.timeline;
+    const step = timeline?.at(stepIndex) ?? null;
+    if (timeline === null || step === null) {
+      return null;
+    }
+    const bar = timeline.steps.find((each) => each.measureIndex === step.measureIndex);
+    this.beginAt = bar?.index ?? 0;
+    this.deps.cursor.moveTo(this.beginAt);
+    return this.beginAt;
+  }
+
+  /** Sends the next run back to the top. */
+  beginAtTheStart(): void {
+    this.beginAt = 0;
+  }
+
+  /** Which step the next run begins at; nought is the top of the piece. */
+  get beginsAt(): number {
+    return this.beginAt;
+  }
+
   /** Generates fresh material and renders it. */
   async loadNewExercise(): Promise<Exercise> {
     // Asking for a new exercise is asking the generator for one, so an opened
@@ -738,6 +772,8 @@ export class PracticeController {
     this.exercise = exercise;
     this.timeline = buildTimeline(exercise);
     this.lastSeed = exercise.metadata.seed;
+    // New music, so the reader's place in the old music means nothing.
+    this.beginAt = 0;
 
     await this.deps.renderer.load(musicXml);
     const timeline = this.timeline;
@@ -967,6 +1003,7 @@ export class PracticeController {
           anyPitch: this.currentSettings.rhythmOnly,
         },
         countInBars: this.currentSettings.countInBars,
+        startAtIndex: this.beginAt,
         expectedStaff: this.currentSettings.handStaff,
         inputLatencyMs: this.currentSettings.inputLatencyMs,
         click: this.currentSettings.clickPattern,
@@ -983,9 +1020,17 @@ export class PracticeController {
     // `reset`, not `moveTo(0)`: moving to a position the navigator believes it
     // is already at asks the engraver for nothing, so nothing is redrawn and
     // nothing is scrolled to.
-    this.deps.cursor.reset();
-    // The page a long piece was left scrolled to is not where bar one is.
-    this.deps.renderer.scrollToStart();
+    // Where the reader put the cursor, or the top of the piece. `reset`
+    // rather than `moveTo(0)` for the second: moving to a position the
+    // navigator believes it is already at asks the engraver for nothing, so
+    // nothing is redrawn and nothing is scrolled to.
+    if (this.beginAt > 0) {
+      this.deps.cursor.moveTo(this.beginAt);
+    } else {
+      this.deps.cursor.reset();
+      // The page a long piece was left scrolled to is not where bar one is.
+      this.deps.renderer.scrollToStart();
+    }
     this.meter.reset();
     this.lastBeatTicks = 0;
     if (this.survivalRuns) {

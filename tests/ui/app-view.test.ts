@@ -1368,6 +1368,39 @@ describe('AppView', () => {
       expect(text).toContain('range: 2..3');
     });
 
+    it('starts the next run where a finger was held', async () => {
+      // Pointing at a bar, which is what a long press is for. Whole bars,
+      // because a run beginning halfway through one would be counted in to a
+      // beat that is not the first and the reader would be waiting for a
+      // downbeat that never came.
+      const rig = createRig();
+      await rig.view.initialize();
+      const timeline = rig.runtime.controller.currentTimeline;
+      const later = timeline?.steps.find((step) => step.measureIndex === 2);
+      if (later === undefined) {
+        throw new Error('expected a third bar');
+      }
+
+      rig.renderer.holdNote(later.index);
+
+      expect(rig.runtime.controller.beginsAt).toBe(later.index);
+      expect(element('import-notice').textContent).toContain('bar 3');
+      // And the run actually begins there rather than at the top.
+      rig.runtime.controller.updateSettings({ countInBars: 0 });
+      rig.runtime.controller.start();
+      expect(rig.runtime.controller.session?.currentStep?.measureIndex).toBe(2);
+    });
+
+    it('leaves the place alone while a run is going', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('start').click();
+
+      rig.renderer.holdNote(8);
+
+      expect(rig.runtime.controller.beginsAt).toBe(0);
+    });
+
     it('puts the markers away on a touch, and brings them back', async () => {
       // Two lines across the staves, wanted while a passage is being chosen
       // and furniture in front of the notes the rest of the time.

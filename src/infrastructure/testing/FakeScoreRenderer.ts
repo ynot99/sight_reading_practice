@@ -140,6 +140,22 @@ export class FakeScoreRenderer
     };
   }
 
+  private heldListeners: ((stepIndex: number) => void)[] = [];
+
+  onNoteHeld(listener: (stepIndex: number) => void): () => void {
+    this.heldListeners.push(listener);
+    return () => {
+      this.heldListeners = this.heldListeners.filter((each) => each !== listener);
+    };
+  }
+
+  /** Stands in for a reader holding a finger on the note of that step. */
+  holdNote(stepIndex: number): void {
+    for (const listener of [...this.heldListeners]) {
+      listener(stepIndex);
+    }
+  }
+
   /** Stands in for a reader touching the music itself. */
   tapScore(): void {
     for (const listener of [...this.tapListeners]) {

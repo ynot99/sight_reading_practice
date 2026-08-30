@@ -68,6 +68,14 @@ const MARKER_GRIP_RADIUS = 9;
 const REPEAT_DOT_GAP = 9;
 /** How far a finger may wander and still have meant a tap, in screen pixels. */
 const TAP_SLACK_PX = 8;
+/**
+ * How long a finger stays put before it is pointing rather than touching.
+ *
+ * Long enough not to fire under a reader who is turning a page or reaching
+ * for a marker, short enough that holding still feels like an instruction
+ * rather than a wait.
+ */
+const HOLD_MS = 450;
 /** Half the width of the arrow drawn inside a handle. */
 const ARROW_REACH = 3.5;
 
@@ -259,6 +267,8 @@ export class OsmdScoreRenderer
   private pageListeners: ((state: ScorePageState) => void)[] = [];
   private swipe: PageSwipe | null = null;
   private tapListeners: (() => void)[] = [];
+  private heldListeners: ((stepIndex: number) => void)[] = [];
+  private holding: ReturnType<typeof setTimeout> | null = null;
   /** Where a touch that took hold of nothing began, so a tap can be told. */
   private tapFrom: { readonly pointerId: number; readonly x: number; readonly y: number } | null =
     null;
@@ -631,6 +641,60 @@ export class OsmdScoreRenderer
     };
   }
 
+  onNoteHeld(listener: (stepIndex: number) => void): () => void {
+    this.heldListeners.push(listener);
+    return () => {
+      this.heldListeners = this.heldListeners.filter((each) => each !== listener);
+    };
+  }
+
+  /**
+   * The step a drawn element belongs to, looking outwards from it.
+   *
+   * Which element is which step is already known - it is how a passed note
+   * is dimmed - so this asks nothing new of the engraver.
+   */
+  private stepOf(target: EventTarget | null): number | null {
+    let node = target instanceof Element ? target : null;
+    while (node !== null && node !== this.container) {
+      for (const [stepIndex, elements] of this.stepElements) {
+        if (elements.includes(node as SVGGElement)) {
+          return stepIndex;
+        }
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  /** Starts the clock on a finger that may be pointing at a bar. */
+  private watchForAHold(event: PointerEvent): void {
+    this.cancelHold();
+    const step = this.stepOf(event.target);
+    if (step === null) {
+      return;
+    }
+    this.holding = setTimeout(() => {
+      this.holding = null;
+      // Still where it landed: a finger that travelled was doing something
+      // else, and by now it has been told so.
+      if (this.tapFrom?.pointerId !== event.pointerId) {
+        return;
+      }
+      this.tapFrom = null;
+      for (const listener of [...this.heldListeners]) {
+        listener(step);
+      }
+    }, HOLD_MS);
+  }
+
+  private cancelHold(): void {
+    if (this.holding !== null) {
+      clearTimeout(this.holding);
+      this.holding = null;
+    }
+  }
+
   /**
    * Follows a finger that has taken hold of a marker.
    *
@@ -668,6 +732,7 @@ export class OsmdScoreRenderer
     this.container.addEventListener('pointercancel', () => {
       this.swipe = null;
       this.tapFrom = null;
+      this.cancelHold();
       this.dragging = null;
       this.paintPassage();
     });
@@ -696,6 +761,7 @@ export class OsmdScoreRenderer
         ? { pointerId: event.pointerId, from: { x: event.clientX, y: event.clientY } }
         : null;
       this.tapFrom = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      this.watchForAHold(event);
       return;
     }
     // Held for the whole gesture, so a finger that wanders off the marker -
@@ -714,6 +780,14 @@ export class OsmdScoreRenderer
   }
 
   private continueDrag(event: PointerEvent): void {
+    const began = this.tapFrom;
+    if (
+      began !== null &&
+      Math.hypot(event.clientX - began.x, event.clientY - began.y) > TAP_SLACK_PX
+    ) {
+      // Moving is not pointing.
+      this.cancelHold();
+    }
     const moved = this.draggedTo(event);
     if (moved === null) {
       return;
@@ -737,6 +811,7 @@ export class OsmdScoreRenderer
 
     const began = this.tapFrom;
     this.tapFrom = null;
+    this.cancelHold();
     if (began !== null && began.pointerId === event.pointerId) {
       // A tap and not a drag: a finger that stayed put. Anything that moved
       // was reaching for something, even if it did not reach it.

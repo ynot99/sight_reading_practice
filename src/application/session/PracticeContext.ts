@@ -16,6 +16,15 @@ export interface SessionOptions {
    */
   readonly countInBars: number;
   /**
+   * The step the run begins at.
+   *
+   * Nought for a piece read from the top, which is nearly always. A reader
+   * who has put the cursor somewhere by hand means to start from there, and
+   * the machinery for beginning partway through already exists - it is what
+   * resuming from a pause does, counted back in the same way.
+   */
+  readonly startAtIndex?: number;
+  /**
    * Staff whose notes are expected, or `null` for the whole texture.
    *
    * Practising one hand is not the same as practising half the music: the

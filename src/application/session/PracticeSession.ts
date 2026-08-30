@@ -329,8 +329,12 @@ export class PracticeSession {
     this.runStartedAt = 0;
     this.positionOffsetTicks = 0;
     this.publishedPositionTicks = null;
-    this.resumeAtTicks = 0;
-    this.resumeAtIndex = 0;
+    // Where the run begins, which is the top of the piece unless the reader
+    // has put the cursor somewhere. Beginning partway through is what
+    // resuming from a pause already does, so it is the same two numbers.
+    const from = this.timeline.at(Math.max(0, Math.round(this.options.startAtIndex ?? 0)));
+    this.resumeAtTicks = from?.onsetTicks ?? 0;
+    this.resumeAtIndex = from?.index ?? 0;
     this.countInRemaining = 0;
     this.beforeTheMusic = [];
     this.lastReport = null;

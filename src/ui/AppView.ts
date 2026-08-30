@@ -1135,6 +1135,28 @@ export class AppView {
    * page. Dragging them inwards narrows it; dragging one past the edge of
    * the page widens it again.
    */
+  /**
+   * Puts the reader's place in the music, where the next run will begin.
+   *
+   * Refused while a run is going: the cursor is the run's own, and moving it
+   * under the music would leave the page and the playing in different bars.
+   */
+  private beginAt(stepIndex: number): void {
+    const controller = this.runtime.controller;
+    const status = controller.session?.status;
+    if (status === 'running' || status === 'counting-in' || status === 'paused') {
+      return;
+    }
+    const step = controller.beginAtStep(stepIndex);
+    if (step === null) {
+      return;
+    }
+    const bar = controller.barNumber(controller.currentTimeline?.at(step)?.measureIndex ?? 0);
+    this.showImportNotice(
+      step === 0 ? 'Starting from the top.' : `Starting at bar ${bar}.`,
+    );
+  }
+
   private showPassageMarkers(): void {
     const bars = this.runtime.controller.currentExercise;
     if (bars === null || !this.passageMarkersWanted) {
@@ -2428,6 +2450,13 @@ export class AppView {
       // They are two lines across the staves and they are wanted only while
       // a passage is being chosen; the rest of the time they are furniture
       // standing in front of the notes.
+      // Held on a note: the reader is pointing at where to start.
+      this.runtime.renderer.onNoteHeld((stepIndex) => {
+        this.beginAt(stepIndex);
+      }),
+    );
+
+    this.subscriptions.push(
       this.runtime.renderer.onScoreTapped(() => {
         this.passageMarkersWanted = !this.passageMarkersWanted;
         this.showPassageMarkers();

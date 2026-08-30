@@ -102,6 +102,14 @@ export interface IPassageMarkers {
    * application's decision and not the engraver's.
    */
   onScoreTapped(listener: () => void): () => void;
+  /**
+   * A finger held still on a note, which is how a reader points at a place.
+   *
+   * Held rather than tapped, because a tap on the music already means
+   * something and because pointing at a bar is a deliberate act - the reader
+   * is saying "start here", not brushing the page.
+   */
+  onNoteHeld(listener: (stepIndex: number) => void): () => void;
 }
 
 /**

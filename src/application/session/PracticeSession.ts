@@ -14,6 +14,8 @@ import type { IClock } from '../ports/IClock.js';
 import {
   clickIsSilent,
   resolveDropout,
+  type ClickPattern,
+  type ClickWhen,
   type IMetronome,
   type MetronomeTick,
 } from '../ports/IMetronome.js';
@@ -49,7 +51,7 @@ export class PracticeSession {
   private readonly metronome: IMetronome;
   private readonly clock: IClock;
   private readonly scoring: IScoringStrategy;
-  private readonly options: SessionOptions;
+  private options: SessionOptions;
 
   private readonly emitter = new TypedEventEmitter<SessionEventMap>();
   private readonly machine = createSessionMachine();
@@ -157,6 +159,37 @@ export class PracticeSession {
     }
 
     this.beginRunning(this.clock.now(), 0);
+  }
+
+  /**
+   * Changes how the click sounds, without stopping.
+   *
+   * A reader who wants it off, or wants four to the beat instead of one,
+   * wants it now: stopping the run to ask is stopping the thing they were
+   * asking about. The metronome keeps its place across this, so the music
+   * does not move - only what is heard over it.
+   *
+   * The count-in is where the dropout is counted from, as at the start, so
+   * "only the count-in" goes on meaning the same thing partway through a run
+   * as it did before one.
+   */
+  applyClick(click: ClickPattern, clickWhen: ClickWhen): void {
+    this.options = { ...this.options, click, clickWhen };
+    if (!this.metronome.isRunning) {
+      return;
+    }
+    this.metronome.configure({
+      bpm: this.tempoBpm,
+      timeSignature: this.timeline.exercise.timeSignature,
+      subdivisionsPerPulse: subdivisionsPerPulseFor(
+        this.timeline,
+        this.timeline.exercise.timeSignature,
+        click,
+      ),
+      click,
+      dropout: resolveDropout(clickWhen, Math.max(0, this.options.countInBars)),
+      muted: clickIsSilent(clickWhen),
+    });
   }
 
   pause(): void {

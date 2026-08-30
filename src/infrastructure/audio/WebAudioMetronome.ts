@@ -2,7 +2,12 @@ import { TimeSignature } from '../../domain/model/TimeSignature.js';
 import type { IMetronome, MetronomeConfig, MetronomeTick } from '../../application/ports/IMetronome.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
-import { buildMetronomeTick, isAudibleClick, subdivisionSeconds } from './metronomeMath.js';
+import {
+  buildMetronomeTick,
+  isAudibleClick,
+  subdivisionSeconds,
+  ticksPerSubdivision,
+} from './metronomeMath.js';
 
 export interface WebAudioMetronomeOptions {
   /** How often the scheduler wakes up, in milliseconds. */
@@ -77,7 +82,21 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   }
 
   configure(config: MetronomeConfig): void {
+    if (this.timer === null) {
+      this.config = config;
+      return;
+    }
+    // Re-dressed, not restarted. The next tick keeps the moment it was going
+    // to sound at and the place in the music it was going to be; only how
+    // often they come afterwards, and which of them are heard, changes.
+    //
+    // Clicks already scheduled inside the look-ahead still sound in the old
+    // pattern - they are in the audio graph, a tenth of a second ahead. That
+    // is a tenth of a second, and unpicking it would mean the reader's own
+    // pulse stuttering to answer a button.
+    const positionTicks = this.nextTickIndex * ticksPerSubdivision(this.config);
     this.config = config;
+    this.nextTickIndex = Math.ceil(positionTicks / ticksPerSubdivision(config));
   }
 
   onTick(listener: (tick: MetronomeTick) => void): Unsubscribe {

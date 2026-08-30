@@ -603,3 +603,62 @@ describe('a note played just behind its beat', () => {
     expect(harness.of('noteJudged').at(-1)?.verdict).toBe('correct');
   });
 });
+
+describe('changing the click while the music runs', () => {
+  it('silences it there and then, without stopping anything', () => {
+    // Stopping the run to answer a button is stopping the thing the reader
+    // was asking about.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      options: {
+        countInBars: COUNT_IN_BARS,
+        clickWhen: 'always',
+        click: 'subdivision',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+    startAndCountIn(harness);
+    harness.metronome.advanceSubdivisions(4);
+    expect(harness.metronome.currentConfig.muted).toBe(false);
+    const where = harness.metronome.emitted.at(-1)?.positionTicks ?? -1;
+
+    harness.session.applyClick('pulse', 'never');
+
+    expect(harness.metronome.currentConfig.muted).toBe(true);
+    expect(harness.session.status).toBe('running');
+    // The pulse keeps its place: what was re-dressed is how it sounds.
+    harness.metronome.advanceSubdivisions(1);
+    expect(harness.metronome.emitted.at(-1)?.positionTicks).toBeGreaterThan(where);
+  });
+
+  it('keeps the music where it was when the pattern changes under it', () => {
+    // The grid gets finer or coarser; the piece does not move.
+    const harness = flowHarness();
+    startAndCountIn(harness);
+    harness.metronome.advanceSubdivisions(6);
+    const before = harness.metronome.emitted.at(-1)?.positionTicks ?? -1;
+
+    harness.session.applyClick('downbeat', 'always');
+    harness.metronome.advanceSubdivisions(1);
+
+    const after = harness.metronome.emitted.at(-1)?.positionTicks ?? -1;
+    expect(after).toBeGreaterThanOrEqual(before);
+    // Not a restart: nothing went back to the top of the piece.
+    expect(after).toBeGreaterThan(0);
+    expect(harness.session.currentIndex).toBeGreaterThan(0);
+  });
+
+  it('counts a dropout from the count-in, as it did before the run began', () => {
+    const harness = flowHarness();
+    startAndCountIn(harness);
+
+    harness.session.applyClick('pulse', 'count-in-only');
+
+    // One bar of count-in, so the click falls silent from bar one onwards.
+    expect(harness.metronome.currentConfig.dropout).toEqual({
+      kind: 'silent-from',
+      fromBar: COUNT_IN_BARS,
+    });
+  });
+});

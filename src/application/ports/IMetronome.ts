@@ -177,6 +177,16 @@ export interface MetronomeConfig {
  */
 export interface IMetronome {
   readonly isRunning: boolean;
+  /**
+   * Changes the pulse, which may be done while it is running.
+   *
+   * A reader who wants the click off, or wants four of them to the beat
+   * instead of one, wants it *now* - stopping the run to ask for it is
+   * stopping the thing they were asking about. Implementations must therefore
+   * keep the musical position continuous across the change: what is being
+   * re-dressed is how the pulse sounds and how finely it is delivered, never
+   * where in the piece it has got to.
+   */
   configure(config: MetronomeConfig): void;
   start(): void;
   stop(): void;

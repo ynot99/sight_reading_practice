@@ -1,7 +1,11 @@
 import type { IMetronome, MetronomeConfig, MetronomeTick } from '../../application/ports/IMetronome.js';
 import { TimeSignature } from '../../domain/model/TimeSignature.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
-import { buildMetronomeTick, subdivisionSeconds } from '../audio/metronomeMath.js';
+import {
+  buildMetronomeTick,
+  subdivisionSeconds,
+  ticksPerSubdivision,
+} from '../audio/metronomeMath.js';
 import type { ManualClock } from './ManualClock.js';
 
 const DEFAULT_CONFIG: MetronomeConfig = {
@@ -50,7 +54,18 @@ export class ManualMetronome implements IMetronome {
   }
 
   configure(config: MetronomeConfig): void {
+    if (!this.running) {
+      this.config = config;
+      return;
+    }
+    // Where the next tick was going to fall, in both senses, before anything
+    // moves: the pulse is being re-dressed, not restarted.
+    const nextAtMs = this.startTimeMs + this.nextIndex * this.subdivisionMs;
+    const positionTicks = this.nextIndex * ticksPerSubdivision(this.config);
+
     this.config = config;
+    this.nextIndex = Math.ceil(positionTicks / ticksPerSubdivision(config));
+    this.startTimeMs = nextAtMs - this.nextIndex * this.subdivisionMs;
   }
 
   onTick(listener: (tick: MetronomeTick) => void): Unsubscribe {

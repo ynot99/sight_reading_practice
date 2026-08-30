@@ -2,7 +2,13 @@ import { ticksToMilliseconds } from '../domain/model/Duration.js';
 import { pedalSpans } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
-import type { IMetronome, MetronomeTick } from './ports/IMetronome.js';
+import {
+  clickIsSilent,
+  resolveDropout,
+  type ClickWhen,
+  type IMetronome,
+  type MetronomeTick,
+} from './ports/IMetronome.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import type { IScoreCursor } from './ports/IScoreRenderer.js';
 import { subdivisionsPerPulseFor } from './session/metronomePlan.js';
@@ -14,7 +20,16 @@ export interface ListeningOptions {
   /** Staff to sound alone, or `null` for the whole texture. */
   readonly staffNumber: ListeningHand;
   /** Keep the pulse audible under the music. */
-  readonly clickAudible: boolean;
+  /**
+   * How much of the run the click sounds for.
+   *
+   * A performance has no count-in, so "only the count-in" means silence
+   * throughout - which is what a dropout counted from bar zero already says.
+   * Passing a plain yes-or-no lost that, and the click played through a
+   * playback for a reader who had asked to hear it only while being counted
+   * in.
+   */
+  readonly clickWhen: ClickWhen;
 }
 
 export interface ExercisePlayerDependencies {
@@ -100,6 +115,22 @@ export class ExercisePlayer {
   private nextToSchedule = 0;
   private playing = false;
 
+  /** Changes what is heard over a performance, without interrupting it. */
+  applyClick(clickWhen: ClickWhen): void {
+    if (!this.playing || this.timeline === null) {
+      return;
+    }
+    const timeSignature = this.timeline.exercise.timeSignature;
+    this.deps.metronome.configure({
+      bpm: this.timeline.exercise.tempoBpm,
+      timeSignature,
+      subdivisionsPerPulse: subdivisionsPerPulseFor(this.timeline, timeSignature, 'pulse'),
+      click: 'pulse',
+      dropout: resolveDropout(clickWhen, 0),
+      muted: clickIsSilent(clickWhen),
+    });
+  }
+
   constructor(dependencies: ExercisePlayerDependencies) {
     this.deps = dependencies;
   }
@@ -130,8 +161,9 @@ export class ExercisePlayer {
       timeSignature,
       subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, 'pulse'),
       click: 'pulse',
-      dropout: null,
-      muted: !options.clickAudible,
+      // From bar zero, because there is no count-in in front of a playback.
+      dropout: resolveDropout(options.clickWhen, 0),
+      muted: clickIsSilent(options.clickWhen),
     });
 
     this.subscription = this.deps.metronome.onTick((tick) => this.handleTick(tick));

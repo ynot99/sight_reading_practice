@@ -17,7 +17,7 @@ import type { IMidiSource } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
-import { clickIsSilent, type ClickWhen, type ClickPattern } from './ports/IMetronome.js';
+import type { ClickWhen, ClickPattern } from './ports/IMetronome.js';
 import type {
   PlayedNote,
   IPlayedNoteOverlay,
@@ -472,6 +472,14 @@ export class PracticeController {
       this.applyCursorVisibility();
     }
 
+    // The click is a thing the reader reaches for *while* playing, so it takes
+    // effect there rather than at the next Start. A run stopped to answer a
+    // button is the run they were asking about.
+    if (changes.clickPattern !== undefined || changes.clickWhen !== undefined) {
+      this.currentSession?.applyClick(next.clickPattern, next.clickWhen);
+      this.player?.applyClick(next.clickWhen);
+    }
+
     if (changes.zoom !== undefined && changes.zoom !== this.deps.zoom.zoom) {
       this.deps.zoom.setZoom(changes.zoom);
       this.refreshScore();
@@ -697,7 +705,7 @@ export class PracticeController {
     this.deps.cursor.show();
     player.start(timeline, {
       staffNumber: this.currentSettings.handStaff,
-      clickAudible: !clickIsSilent(this.currentSettings.clickWhen),
+      clickWhen: this.currentSettings.clickWhen,
     });
   }
 

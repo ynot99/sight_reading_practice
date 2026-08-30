@@ -26,7 +26,7 @@ import { TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { ChosenPassage } from '../application/PracticeController.js';
-import type { DrawnPassage } from '../application/ports/IScoreRenderer.js';
+import type { DrawnPassage, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { measureCount } from '../domain/model/Exercise.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { elementAt } from '../shared/asserts.js';
@@ -206,6 +206,17 @@ export function describeTendency(meanDeviationMs: number): string {
     return 'even';
   }
   return rounded < 0 ? `${Math.abs(rounded)} ms early` : `${rounded} ms late`;
+}
+
+/** How the score is cut into pages, and what it was cut against. */
+function describePages(state: ScorePageState, wanted: boolean): string {
+  if (!wanted) {
+    return `off (window ${state.windowPx} px, score ${state.contentPx} px)`;
+  }
+  return (
+    `${state.at + 1} of ${state.count}` +
+    `   window ${state.windowPx} px   score ${state.contentPx} px`
+  );
 }
 
 /** Which bars are on the page, and which the whole piece has. */
@@ -3009,6 +3020,7 @@ export class AppView {
       // looks the same from outside - like a page that started counting at
       // one.
       `bars: ${describeBarRange(controller)}`,
+      `pages: ${describePages(this.runtime.renderer.pages, settings.pagedScore)}`,
       `mode: ${settings.modeId}   tempo: ${controller.tempoBpm} bpm (${controller.tempoPercent}%)`,
       `input delay: ${settings.inputLatencyMs} ms   chord window: ${settings.matchToleranceMs} ms`,
       `marks: ${settings.playedNotes}   hand: ${settings.handStaff ?? 'both'}   count-in: ${settings.countInBars}`,

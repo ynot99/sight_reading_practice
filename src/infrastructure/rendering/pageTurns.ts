@@ -138,6 +138,32 @@ export function scrollTopFor(
 }
 
 /**
+ * How far to move the engraving for a page, in the pixels it is shown at.
+ *
+ * The last page is pulled back so that it ends where the music ends. A
+ * scrollbar gives this for nothing - there is no scrolling past the bottom -
+ * and moving the drawing instead has to be told: without it the final turn
+ * carries the last system up to the top of the screen and leaves the rest of
+ * the page blank, which is what a reader sees as "page two is empty".
+ *
+ * `windowHeight` and `contentHeight` are both in shown pixels, like the
+ * answer.
+ */
+export function pageOffsetFor(
+  page: ScorePage | undefined,
+  scale: number,
+  contentHeight: number,
+  windowHeight: number,
+  marginPx = 8,
+): number {
+  const wanted = scrollTopFor(page, scale, marginPx);
+  if (!Number.isFinite(contentHeight) || !Number.isFinite(windowHeight) || windowHeight <= 0) {
+    return wanted;
+  }
+  return Math.max(0, Math.min(wanted, contentHeight - windowHeight));
+}
+
+/**
  * Which way a finger went, once it has gone far enough to have meant it.
  *
  * A page turn and a scroll are the same gesture until one of them commits, so

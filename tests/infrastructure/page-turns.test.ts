@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DrawnMeasure } from '../../src/infrastructure/rendering/passageBrackets.js';
 import {
   pageContaining,
+  pageOffsetFor,
   pagesOf,
   scrollTopFor,
   swipeDirection,
@@ -130,6 +131,32 @@ describe('scrolling to a page', () => {
   it('says nothing useful about a page that is not there', () => {
     expect(scrollTopFor(undefined, 1)).toBe(0);
     expect(scrollTopFor({ top: 400, bottom: 700, systems: 1 }, 0)).toBe(0);
+  });
+});
+
+describe('moving the engraving for a page', () => {
+  const last = { top: 900, bottom: 1_400, systems: 3 };
+
+  it('pulls the last page back so it ends where the music does', () => {
+    // A scrollbar gives this for nothing - there is no scrolling past the
+    // bottom - and moving the drawing has to be told. Without it the final
+    // turn carries the last system to the top of the screen and leaves the
+    // rest blank, which is what a reader sees as "page two is empty".
+    expect(pageOffsetFor(last, 1, 1_400, 700)).toBe(700);
+  });
+
+  it('leaves a page that fits where it was asked for', () => {
+    expect(pageOffsetFor({ top: 300, bottom: 800, systems: 3 }, 1, 4_000, 700, 8)).toBe(292);
+  });
+
+  it('never moves the first page at all', () => {
+    expect(pageOffsetFor({ top: 0, bottom: 700, systems: 4 }, 1, 4_000, 700)).toBe(0);
+    // Nor moves anything when the whole piece already fits.
+    expect(pageOffsetFor(last, 1, 600, 700)).toBe(0);
+  });
+
+  it('says what it can when the window has not been measured', () => {
+    expect(pageOffsetFor(last, 1, 1_400, 0, 0)).toBe(900);
   });
 });
 

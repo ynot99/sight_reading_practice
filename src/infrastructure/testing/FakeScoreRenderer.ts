@@ -168,7 +168,12 @@ export class FakeScoreRenderer
   }
 
   get pages(): ScorePageState {
-    return { at: this.pageAt, count: this.isPaged ? Math.max(1, this.pageCount) : 0 };
+    return {
+      at: this.pageAt,
+      count: this.isPaged ? Math.max(1, this.pageCount) : 0,
+      windowPx: 700,
+      contentPx: 1_400,
+    };
   }
 
   /** How many pages the double pretends the current score has. */

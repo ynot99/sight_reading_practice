@@ -28,8 +28,8 @@ import {
 } from './passageBrackets.js';
 import {
   pageContaining,
+  pageOffsetFor,
   pagesOf,
-  scrollTopFor,
   swipeDirection,
   systemsOf,
   type ScorePage,
@@ -406,7 +406,13 @@ export class OsmdScoreRenderer
    * who never asked for pages.
    */
   get pages(): ScorePageState {
-    return this.paged ? { at: this.pageAt, count: this.pageBands.length } : { at: 0, count: 0 };
+    const measured = {
+      windowPx: Math.round(this.windowHeight()),
+      contentPx: Math.round(this.container.querySelector('svg')?.getBoundingClientRect().height ?? 0),
+    };
+    return this.paged
+      ? { at: this.pageAt, count: this.pageBands.length, ...measured }
+      : { at: 0, count: 0, ...measured };
   }
 
   turnPages(delta: number): void {
@@ -493,7 +499,14 @@ export class OsmdScoreRenderer
       this.container.style.transform = '';
       return;
     }
-    const top = scrollTopFor(this.pageBands[this.pageAt], this.drawingScale());
+    const svg = this.container.querySelector('svg');
+    const drawn = svg?.getBoundingClientRect().height ?? 0;
+    const top = pageOffsetFor(
+      this.pageBands[this.pageAt],
+      this.drawingScale(),
+      drawn,
+      this.windowHeight(),
+    );
     this.container.style.transform = top === 0 ? '' : `translateY(${-top}px)`;
   }
 

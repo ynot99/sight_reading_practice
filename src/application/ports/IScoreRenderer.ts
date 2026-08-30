@@ -27,6 +27,16 @@ export interface ScorePageState {
   /** Zero-based, so `at + 1` is what a reader would be told. */
   readonly at: number;
   readonly count: number;
+  /**
+   * The two heights the pages were cut from, in screen pixels.
+   *
+   * Carried because a page count is impossible to argue with from outside:
+   * "two pages" is right for a short piece and wrong for a long one, and
+   * which it is depends entirely on these. They go in the judging log, where
+   * they turn a report of "it does not work" into a measurement.
+   */
+  readonly windowPx: number;
+  readonly contentPx: number;
 }
 
 /**

@@ -79,6 +79,45 @@ export function twoBarExercise(overrides: ExerciseOverrides = {}): Exercise {
  * Written across both staves on purpose: a roll notated that way is one
  * gesture from the lowest note to the highest, not two rolls at once.
  */
+/**
+ * As many plain bars as asked for, for anything that is about *which* bars.
+ *
+ * A passage needs room on both sides of it to be widened and narrowed, and
+ * two bars is not room.
+ */
+export function longExercise(
+  overrides: ExerciseOverrides & { readonly bars?: number } = {},
+): Exercise {
+  const count = overrides.bars ?? 8;
+  return {
+    id: overrides.id ?? 'fixture-long',
+    title: overrides.title ?? 'Long fixture',
+    key: overrides.key ?? KeySignature.major(0),
+    keyChanges: [],
+    pedalMarks: [],
+    timeSignature: overrides.timeSignature ?? new TimeSignature(4, 4),
+    tempoBpm: overrides.tempoBpm ?? 60,
+    firstBarNumber: 1,
+    metadata: { generatorId: 'fixture', seed: 1 },
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        clefChanges: [],
+        measures: Array.from({ length: count }, () =>
+          bar(
+            noteEntry(p('C4'), Duration.QUARTER),
+            noteEntry(p('D4'), Duration.QUARTER),
+            noteEntry(p('E4'), Duration.QUARTER),
+            noteEntry(p('F4'), Duration.QUARTER),
+          ),
+        ),
+      },
+    ],
+  };
+}
+
 export function arpeggiatedExercise(overrides: ExerciseOverrides = {}): Exercise {
   return {
     id: overrides.id ?? 'fixture-arpeggiated',

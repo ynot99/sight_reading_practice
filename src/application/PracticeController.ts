@@ -455,6 +455,18 @@ export class PracticeController {
   }
 
   /**
+   * The first and last bar of the whole piece, in its own numbering.
+   *
+   * What a passage may be widened back out to. The engraving cannot say: a
+   * passage is cut out and engraved on its own, so the bars outside it are
+   * not on the page for anything to measure.
+   */
+  get pieceBarRange(): { readonly firstBar: number; readonly lastBar: number } {
+    const firstBar = this.openedScore?.firstBarNumber ?? 1;
+    return { firstBar, lastBar: firstBar + Math.max(1, this.wholePieceBars) - 1 };
+  }
+
+  /**
    * Applies settings.
    *
    * Changing the preset adopts that preset's defaults for anything the caller
@@ -785,40 +797,36 @@ export class PracticeController {
   }
 
   /**
-   * Sets the passage from a note the reader touched.
+   * Sets the passage the markers were dragged around.
    *
    * Whole bars, because that is what `sliceExercise` cuts and what a musician
    * means: a passage begins at a bar line, not partway through one. Cutting
    * mid-bar would leave a pickup and make every seam - the restated clef, the
    * tie let go of, the pedal pressed again - harder for nothing gained.
    *
-   * The gesture reads as a selection. The first touch says where to begin and
-   * leaves the end alone, so one tap means "from here on". A touch later in
-   * the piece closes the passage; a touch on what is already the start opens
-   * the whole piece again, which is the way back.
+   * Bars of the *whole piece*, and clamped to it here. The markers are drawn
+   * on an engraving that may already be a passage, so a drag outwards asks
+   * for bars nothing on the page can measure - only this knows how far out
+   * they go.
    *
-   * Returns the passage now being practised. `toBar` is `null` when it runs
-   * to the end of the piece, which is what one tap leaves behind - saying
-   * "the last bar" would mean counting bars nobody asked about.
+   * Returns the passage now being practised, with `null` on both ends when
+   * it turned out to be the whole piece after all.
    */
-  chooseFromStep(stepIndex: number): ChosenPassage {
-    const step = this.timeline?.at(stepIndex);
-    if (step === null || step === undefined) {
-      return { fromBar: this.currentSettings.rangeFromBar, toBar: this.currentSettings.rangeToBar };
-    }
-    const bar = this.barNumber(step.measureIndex);
-    const from = this.currentSettings.rangeFromBar;
+  choosePassage(fromBar: number, toBar: number): ChosenPassage {
+    const { firstBar, lastBar } = this.pieceBarRange;
+    const from = Math.min(Math.max(Math.round(fromBar), firstBar), lastBar);
+    const to = Math.min(Math.max(Math.round(toBar), from), lastBar);
 
-    if (from === bar && this.currentSettings.rangeToBar === null) {
+    // Pulled back out to both ends, it is not a passage any more. Saying so
+    // in the one way the rest of the app already understands - no range at
+    // all - is what keeps "the whole piece" a single state rather than two
+    // that have to be kept in step.
+    if (from === firstBar && to === lastBar) {
       this.updateSettings({ rangeFromBar: null, rangeToBar: null });
       return { fromBar: null, toBar: null };
     }
-    if (from !== null && bar > from && this.currentSettings.rangeToBar === null) {
-      this.updateSettings({ rangeToBar: bar });
-      return { fromBar: from, toBar: bar };
-    }
-    this.updateSettings({ rangeFromBar: bar, rangeToBar: null });
-    return { fromBar: bar, toBar: null };
+    this.updateSettings({ rangeFromBar: from, rangeToBar: to });
+    return { fromBar: from, toBar: to };
   }
 
   /**

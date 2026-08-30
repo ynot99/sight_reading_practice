@@ -1,4 +1,6 @@
 import type {
+  DrawnPassage,
+  IPassageMarkers,
   IPlayedNoteOverlay,
   IScoreFade,
   IScoreCursor,
@@ -46,7 +48,7 @@ export class FakeScoreCursor implements IScoreCursor {
  * without a DOM, an SVG backend or OSMD.
  */
 export class FakeScoreRenderer
-  implements IScoreRenderer, IPlayedNoteOverlay, IScoreFade, IScoreZoom
+  implements IScoreRenderer, IPlayedNoteOverlay, IScoreFade, IScoreZoom, IPassageMarkers
 {
   readonly cursor = new FakeScoreCursor();
   loadedXml: string | null = null;
@@ -101,19 +103,30 @@ export class FakeScoreRenderer
   }
 
   scrollToStartCount = 0;
-  private tapListeners: ((stepIndex: number) => void)[] = [];
+  private passageListeners: ((passage: DrawnPassage) => void)[] = [];
 
-  onNoteTapped(listener: (stepIndex: number) => void): () => void {
-    this.tapListeners.push(listener);
+  /** The bars the markers are standing around, or `null` when hidden. */
+  shownPassage: DrawnPassage | null = null;
+
+  showPassage(passage: DrawnPassage): void {
+    this.shownPassage = passage;
+  }
+
+  hidePassage(): void {
+    this.shownPassage = null;
+  }
+
+  onPassageDragged(listener: (passage: DrawnPassage) => void): () => void {
+    this.passageListeners.push(listener);
     return () => {
-      this.tapListeners = this.tapListeners.filter((each) => each !== listener);
+      this.passageListeners = this.passageListeners.filter((each) => each !== listener);
     };
   }
 
-  /** Stands in for a reader touching a note of that step. */
-  tapStep(stepIndex: number): void {
-    for (const listener of [...this.tapListeners]) {
-      listener(stepIndex);
+  /** Stands in for a reader dragging a marker onto those bars. */
+  dragPassage(passage: DrawnPassage): void {
+    for (const listener of [...this.passageListeners]) {
+      listener(passage);
     }
   }
 

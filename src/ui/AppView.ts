@@ -26,6 +26,8 @@ import { TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { ChosenPassage } from '../application/PracticeController.js';
+import type { DrawnPassage } from '../application/ports/IScoreRenderer.js';
+import { measureCount } from '../domain/model/Exercise.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { elementAt } from '../shared/asserts.js';
 import { readBackup } from '../application/Backup.js';
@@ -198,15 +200,15 @@ export function describeTendency(meanDeviationMs: number): string {
   return rounded < 0 ? `${Math.abs(rounded)} ms early` : `${rounded} ms late`;
 }
 
-/** What a touch just did, in the reader's terms rather than in settings. */
+/** What a drag just did, in the reader's terms rather than in settings. */
 function describePassage(passage: ChosenPassage): string {
   if (passage.fromBar === null) {
     return 'Practising the whole piece.';
   }
   if (passage.toBar === null) {
-    return `Practising from bar ${passage.fromBar}. Touch a later note to close the passage.`;
+    return `Practising from bar ${passage.fromBar}.`;
   }
-  return `Practising bars ${passage.fromBar}-${passage.toBar}. Touch the first note again for the whole piece.`;
+  return `Practising bars ${passage.fromBar}-${passage.toBar}. Drag a marker off the edge for more.`;
 }
 
 /** An empty box means "no limit", which is a choice and not a missing value. */
@@ -1058,22 +1060,71 @@ export class AppView {
    * Not while a run is going: the page changing under a reader mid-piece is
    * never what a stray touch meant.
    */
-  private async choosePassageFrom(stepIndex: number): Promise<void> {
-    const status = this.runtime.controller.session?.status;
+  /**
+   * Takes the passage the markers were dragged around.
+   *
+   * The markers report bars of *what is engraved*, which may already be a
+   * passage - so the first drawn bar's own number is what turns them back
+   * into bars of the piece. A drag that reached past the edge comes through
+   * as an index outside the engraving, which is how a passage grows back
+   * wider than the page it was chosen on; the controller clamps it to the
+   * piece, because nothing on the page can.
+   */
+  private async choosePassageFrom(drawn: DrawnPassage): Promise<void> {
+    const controller = this.runtime.controller;
+    const status = controller.session?.status;
     if (status === 'running' || status === 'counting-in' || status === 'paused') {
+      // Re-engraving under a reader who is playing would move the music out
+      // from under them mid-bar. The markers go back where they were.
+      this.showPassageMarkers();
       return;
     }
-    const passage = this.runtime.controller.chooseFromStep(stepIndex);
+    const firstDrawn = controller.barNumber(0);
+    const before = controller.settings;
+    const passage = controller.choosePassage(
+      firstDrawn + drawn.fromMeasureIndex,
+      firstDrawn + drawn.toMeasureIndex,
+    );
+    if (
+      passage.fromBar === before.rangeFromBar &&
+      passage.toBar === before.rangeToBar
+    ) {
+      // A tap on a marker, or a drag that came back where it started. Nothing
+      // changed, and re-engraving for nothing is a second of blank staves.
+      this.showPassageMarkers();
+      return;
+    }
     this.syncControlsFromSettings();
     this.showImportNotice(describePassage(passage));
     await this.reload(false);
   }
 
   /**
+   * Stands the markers around the whole of what is engraved.
+   *
+   * Which is the passage: choosing one cuts it out and engraves it on its
+   * own, so after every reload the markers belong at the two ends of the
+   * page. Dragging them inwards narrows it; dragging one past the edge of
+   * the page widens it again.
+   */
+  private showPassageMarkers(): void {
+    const bars = this.runtime.controller.currentExercise;
+    if (bars === null) {
+      this.runtime.renderer.hidePassage();
+      return;
+    }
+    this.runtime.renderer.showPassage({
+      fromMeasureIndex: 0,
+      toMeasureIndex: Math.max(0, measureCount(bars) - 1),
+      repeating: this.runtime.controller.settings.repeatRange,
+    });
+  }
+
+  /**
    * Says something that is not about the run itself.
    *
    * In both places, because the notice lives outside the header and
-   * fullscreen hides it - so choosing a passage by touching a note, which is
+   * fullscreen hides it - so choosing a passage by dragging a marker, which is
    * a fullscreen gesture above all, was answered on a line of the page the
    * reader could not see. The pill says it there instead, and gives it back
    * to the run's own status afterwards.
@@ -2191,6 +2242,10 @@ export class AppView {
         this.el.progress.max = this.totalSteps;
         this.el.progress.value = 0;
         this.hasLooked = false;
+        // Around whatever was just engraved, which *is* the passage: the
+        // markers belong at its two ends after every reload, wherever the
+        // reader last left them on the page before it.
+        this.showPassageMarkers();
         this.applyScoreCover();
         this.lastExpected = [];
         this.renderExpected();
@@ -2326,11 +2381,11 @@ export class AppView {
 
     this.subscriptions.push(this.subscribeAudioFeedback());
     this.subscriptions.push(
-      // Touching a note is how a passage is chosen at the stand, where the
+      // Dragging a marker is how a passage is chosen at the stand, where the
       // bar boxes are out of reach and reading their numbers off the page is
       // work in itself.
-      this.runtime.renderer.onNoteTapped((stepIndex) => {
-        void this.choosePassageFrom(stepIndex);
+      this.runtime.renderer.onPassageDragged((passage) => {
+        void this.choosePassageFrom(passage);
       }),
     );
   }
@@ -2592,6 +2647,9 @@ export class AppView {
     this.el.rangeFrom.value = settings.rangeFromBar === null ? '' : String(settings.rangeFromBar);
     this.el.rangeTo.value = settings.rangeToBar === null ? '' : String(settings.rangeToBar);
     this.describePassageRange();
+    // Here as well as on a new engraving: the repeat button changes what the
+    // markers say without changing what is on the page.
+    this.showPassageMarkers();
     this.el.repeatRange.checked = settings.repeatRange;
     this.el.focusRepeat.setAttribute('aria-pressed', String(settings.repeatRange));
     this.el.preview.value = String(settings.previewSeconds);

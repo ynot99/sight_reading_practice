@@ -1,5 +1,7 @@
 import type { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
 import type {
+  DrawnPassage,
+  IPassageMarkers,
   IPlayedNoteOverlay,
   IScoreCursor,
   IScoreFade,
@@ -8,6 +10,15 @@ import type {
   OverlayContext,
   PlayedNote,
 } from '../../application/ports/IScoreRenderer.js';
+import {
+  bracketShapes,
+  gripAt,
+  measureForDrag,
+  passageAfterDrag,
+  toDrawingPoint,
+  type DrawnMeasure,
+  type PassageEdge,
+} from './passageBrackets.js';
 import { CursorNavigator, type ICursorPrimitive } from './CursorNavigator.js';
 import {
   buildOverlayShapes,
@@ -38,6 +49,57 @@ const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
  * sliding every mark off its note.
  */
 const UNITS_TO_PIXELS = 10;
+/** How wide a passage marker is drawn, in the same pixels. */
+const MARKER_WIDTH = 5;
+/** The circle at each end of a marker, which is what a thumb aims at. */
+const MARKER_GRIP_RADIUS = 9;
+/** How far a repeat dot sits from the marker, and from the line between. */
+const REPEAT_DOT_GAP = 9;
+
+/** As much of the engraver's own model as the markers need to read. */
+interface DrawnSheet {
+  readonly MusicPages?: readonly { readonly MusicSystems?: readonly DrawnSystem[] }[];
+}
+
+interface DrawnSystem {
+  readonly GraphicalMeasures?: readonly (readonly (DrawnGraphicalMeasure | undefined)[])[];
+  readonly StaffLines?: readonly { readonly PositionAndShape?: DrawnBox }[];
+  readonly PositionAndShape?: DrawnBox;
+}
+
+interface DrawnBox {
+  readonly AbsolutePosition?: { readonly x: number; readonly y: number };
+  readonly Size?: { readonly width: number; readonly height: number };
+}
+
+interface DrawnGraphicalMeasure {
+  readonly PositionAndShape?: DrawnBox;
+  readonly parentSourceMeasure?: { readonly measureListIndex?: number };
+}
+
+/** Top and bottom of everything a system's staves cover, in pixels. */
+function systemExtent(system: DrawnSystem): { top: number; bottom: number } | null {
+  // The staff lines and not the measures: a measure's box is drawn round what
+  // is *in* it, so an empty bar of rests reports a height of one unit and a
+  // marker measured on it stops halfway down the treble. The staves are the
+  // thing that is the same height whatever is written on them.
+  //
+  // Nor the system's own box, which reaches down into the gap before the next
+  // line - a marker that long hangs into the space between systems.
+  const boxes = (system.StaffLines ?? []).map((line) => line.PositionAndShape);
+  let top = Number.POSITIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
+  for (const box of boxes) {
+    const at = box?.AbsolutePosition;
+    const size = box?.Size;
+    if (at === undefined || size === undefined) {
+      continue;
+    }
+    top = Math.min(top, at.y * UNITS_TO_PIXELS);
+    bottom = Math.max(bottom, (at.y + size.height) * UNITS_TO_PIXELS);
+  }
+  return Number.isFinite(top) && Number.isFinite(bottom) ? { top, bottom } : null;
+}
 
 /** Class that dims the notes of a step already played. */
 const FADED_CLASS = 'note--passed';
@@ -97,8 +159,15 @@ class OsmdCursorPrimitive implements ICursorPrimitive {
  * is imported dynamically: the controls are interactive while the engraver is
  * still downloading.
  */
+/** A marker a finger is holding, and where it has got to. */
+interface PassageDrag {
+  readonly edge: PassageEdge;
+  readonly pointerId: number;
+  readonly passage: DrawnPassage;
+}
+
 export class OsmdScoreRenderer
-  implements IScoreRenderer, IPlayedNoteOverlay, IScoreFade, IScoreZoom
+  implements IScoreRenderer, IPlayedNoteOverlay, IScoreFade, IScoreZoom, IPassageMarkers
 {
   private readonly container: HTMLElement;
   private readonly options: OsmdRendererOptions;
@@ -113,6 +182,13 @@ export class OsmdScoreRenderer
   private overlayContext: OverlayContext | null = null;
   private overlayGroup: SVGGElement | null = null;
 
+  /** Where the engraver put each bar, and the markers standing on them. */
+  private measures: DrawnMeasure[] = [];
+  private passage: DrawnPassage | null = null;
+  private passageGroup: SVGGElement | null = null;
+  private passageListeners: ((passage: DrawnPassage) => void)[] = [];
+  private dragging: PassageDrag | null = null;
+
   private osmd: OpenSheetMusicDisplay | null = null;
   private loaded = false;
   private currentZoom: number;
@@ -125,6 +201,7 @@ export class OsmdScoreRenderer
     this.options = options;
     this.currentZoom = options.zoom ?? 0.85;
     this.navigator = new CursorNavigator(new OsmdCursorPrimitive(() => this.osmd));
+    this.watchForDrags();
   }
 
   get cursor(): IScoreCursor {
@@ -152,8 +229,10 @@ export class OsmdScoreRenderer
     this.engravedWidth = this.container.offsetWidth;
     this.navigator.reset();
     this.indexDrawnNotes();
+    this.measures = this.readMeasures();
     this.paintOverlay();
     this.paintFaded();
+    this.paintPassage();
     this.watchContainer();
   }
 
@@ -203,42 +282,148 @@ export class OsmdScoreRenderer
     this.navigator.reset();
     // Re-engraving throws the old SVG away, and everything drawn on it.
     this.indexDrawnNotes();
+    this.measures = this.readMeasures();
     this.paintOverlay();
     this.paintFaded();
+    this.paintPassage();
+  }
+
+  showPassage(passage: DrawnPassage): void {
+    this.passage = passage;
+    this.paintPassage();
+  }
+
+  hidePassage(): void {
+    this.passage = null;
+    this.paintPassage();
   }
 
   /**
-   * Tells the application which step a touch landed on.
+   * Reports the passage a drag left behind.
    *
-   * One listener on the container rather than one per notehead: the page is
+   * One listener on the container rather than one per marker: the page is
    * re-engraved often - a zoom, a resize, a tempo change - and handlers bound
    * to elements would have to be rebound each time, or quietly stop working
-   * after the first redraw. Which element belongs to which step is already
-   * known, so the lookup walks up from whatever was touched.
+   * after the first redraw.
    */
-  onNoteTapped(listener: (stepIndex: number) => void): () => void {
-    const handle = (event: Event): void => {
-      const step = this.stepOf(event.target);
-      if (step !== null) {
-        listener(step);
-      }
+  onPassageDragged(listener: (passage: DrawnPassage) => void): () => void {
+    this.passageListeners.push(listener);
+    return () => {
+      this.passageListeners = this.passageListeners.filter((each) => each !== listener);
     };
-    this.container.addEventListener('pointerup', handle);
-    return () => this.container.removeEventListener('pointerup', handle);
   }
 
-  /** The step a drawn element belongs to, looking outwards from it. */
-  private stepOf(target: EventTarget | null): number | null {
-    let node = target instanceof Element ? target : null;
-    while (node !== null && node !== this.container) {
-      for (const [stepIndex, elements] of this.stepElements) {
-        if (elements.includes(node as SVGGElement)) {
-          return stepIndex;
-        }
-      }
-      node = node.parentElement;
+  /**
+   * Follows a finger that has taken hold of a marker.
+   *
+   * Bound once, in the constructor, for the reason above. `pointerdown` only
+   * takes hold when the touch actually landed on a marker, so everything else
+   * - a scroll, a pinch - passes through untouched.
+   */
+  private watchForDrags(): void {
+    this.container.addEventListener('pointerdown', (event) => this.beginDrag(event));
+    this.container.addEventListener('pointermove', (event) => this.continueDrag(event));
+    this.container.addEventListener('pointerup', (event) => this.endDrag(event));
+    this.container.addEventListener('pointercancel', () => {
+      this.dragging = null;
+      this.setDragging(false);
+      this.paintPassage();
+    });
+  }
+
+  /** Tells the stylesheet to stop the page scrolling under the finger. */
+  private setDragging(dragging: boolean): void {
+    const scroller = this.container.closest('.score__scroll');
+    if (scroller instanceof HTMLElement) {
+      scroller.dataset['dragging'] = String(dragging);
     }
-    return null;
+  }
+
+  private beginDrag(event: PointerEvent): void {
+    const passage = this.passage;
+    const point = this.drawingPointOf(event);
+    if (passage === null || point === null) {
+      return;
+    }
+    const edge = gripAt(
+      bracketShapes(this.measures, passage.fromMeasureIndex, passage.toMeasureIndex),
+      point,
+    );
+    if (edge === null) {
+      return;
+    }
+    // Held for the whole gesture, so a finger that wanders off the marker -
+    // which is most of them - goes on moving it instead of being dropped.
+    this.container.setPointerCapture?.(event.pointerId);
+    // Otherwise the score scrolls under the finger that is moving a marker.
+    // Both halves are needed: the flag is what the stylesheet turns into
+    // `touch-action: none`, which is the only thing a touch screen listens
+    // to, and `preventDefault` covers the mouse.
+    this.setDragging(true);
+    event.preventDefault();
+    this.dragging = { edge, pointerId: event.pointerId, passage };
+  }
+
+  private continueDrag(event: PointerEvent): void {
+    const moved = this.draggedTo(event);
+    if (moved === null) {
+      return;
+    }
+    event.preventDefault();
+    this.dragging = { ...this.dragging as PassageDrag, passage: moved };
+    this.paintPassage();
+  }
+
+  private endDrag(event: PointerEvent): void {
+    const moved = this.draggedTo(event);
+    const drag = this.dragging;
+    this.dragging = null;
+    this.setDragging(false);
+    if (moved === null || drag === undefined || drag === null) {
+      return;
+    }
+    this.container.releasePointerCapture?.(event.pointerId);
+    this.passage = moved;
+    this.paintPassage();
+    for (const listener of [...this.passageListeners]) {
+      listener(moved);
+    }
+  }
+
+  /** Where this event puts the passage, or `null` when nothing is held. */
+  private draggedTo(event: PointerEvent): DrawnPassage | null {
+    const drag = this.dragging;
+    if (drag === null || drag.pointerId !== event.pointerId) {
+      return null;
+    }
+    const point = this.drawingPointOf(event);
+    if (point === null) {
+      return null;
+    }
+    const landedOn = measureForDrag(this.measures, point, drag.edge);
+    if (landedOn === null) {
+      return null;
+    }
+    const next = passageAfterDrag(
+      { fromIndex: drag.passage.fromMeasureIndex, toIndex: drag.passage.toMeasureIndex },
+      drag.edge,
+      landedOn,
+    );
+    return { fromMeasureIndex: next.fromIndex, toMeasureIndex: next.toIndex };
+  }
+
+  /** A touch, in the pixels the engraving was measured in. */
+  private drawingPointOf(event: PointerEvent): { x: number; y: number } | null {
+    const svg = this.container.querySelector('svg');
+    if (svg === null) {
+      return null;
+    }
+    const box = svg.getBoundingClientRect();
+    return toDrawingPoint(
+      { left: box.left, top: box.top, width: box.width, height: box.height },
+      { width: svg.width.baseVal.value, height: svg.height.baseVal.value },
+      { x: event.clientX, y: event.clientY },
+    );
   }
 
   scrollToStart(): void {
@@ -250,6 +435,10 @@ export class OsmdScoreRenderer
 
   clear(): void {
     this.osmd?.clear();
+    this.measures = [];
+    this.passage = null;
+    this.passageGroup = null;
+    this.dragging = null;
     this.marks = [];
     this.stepX = new Map();
     this.stepElements = new Map();
@@ -368,6 +557,125 @@ export class OsmdScoreRenderer
       default:
         return doc.createElementNS(SVG_NAMESPACE, 'g');
     }
+  }
+
+  /**
+   * Where the engraver put every bar, asked of its own model.
+   *
+   * The model and not the drawn SVG, for the same reason the noteheads are:
+   * a bounding box has to be measured by a browser that has laid the page
+   * out, and the engraver already knows the answer without one. A bar is
+   * measured across every staff of its system, so a marker spans both hands
+   * rather than hanging off the treble.
+   */
+  private readMeasures(): DrawnMeasure[] {
+    const sheet = (this.osmd as unknown as { GraphicSheet?: DrawnSheet } | null)?.GraphicSheet;
+    const byIndex = new Map<number, DrawnMeasure>();
+    for (const page of sheet?.MusicPages ?? []) {
+      for (const system of page.MusicSystems ?? []) {
+        const extent = systemExtent(system);
+        if (extent === null) {
+          continue;
+        }
+        for (const staves of system.GraphicalMeasures ?? []) {
+          // A grand staff draws each bar once per hand, at the same place
+          // across the page; either copy gives the same left and right, and
+          // the height belongs to the system rather than to the bar.
+          for (const measure of staves ?? []) {
+            const box = measure?.PositionAndShape;
+            const at = measure?.parentSourceMeasure?.measureListIndex;
+            if (box?.AbsolutePosition === undefined || box.Size === undefined || at === undefined) {
+              continue;
+            }
+            const left = box.AbsolutePosition.x * UNITS_TO_PIXELS;
+            const right = left + box.Size.width * UNITS_TO_PIXELS;
+            const known = byIndex.get(at);
+            byIndex.set(at, {
+              measureIndex: at,
+              left: known === undefined ? left : Math.min(known.left, left),
+              right: known === undefined ? right : Math.max(known.right, right),
+              top: extent.top,
+              bottom: extent.bottom,
+            });
+          }
+        }
+      }
+    }
+    return [...byIndex.values()].sort((left, right) => left.measureIndex - right.measureIndex);
+  }
+
+  /**
+   * Draws the two markers, or takes them away.
+   *
+   * Their own group, not the overlay's: a mark for a note the reader played
+   * is cleared at the start of every run, and the passage is not.
+   */
+  private paintPassage(): void {
+    const group = this.ensurePassageGroup();
+    if (group === null) {
+      return;
+    }
+    group.replaceChildren();
+    const showing = this.dragging?.passage ?? this.passage;
+    if (showing === null) {
+      return;
+    }
+    const doc = group.ownerDocument;
+    for (const bracket of bracketShapes(
+      this.measures,
+      showing.fromMeasureIndex,
+      showing.toMeasureIndex,
+    )) {
+      const shape = doc.createElementNS(SVG_NAMESPACE, 'g');
+      shape.setAttribute('class', `passage-marker passage-marker--${bracket.edge}`);
+      const bar = doc.createElementNS(SVG_NAMESPACE, 'rect');
+      bar.setAttribute('class', 'passage-marker__bar');
+      bar.setAttribute('x', String(bracket.x - MARKER_WIDTH / 2));
+      bar.setAttribute('y', String(bracket.top));
+      bar.setAttribute('width', String(MARKER_WIDTH));
+      bar.setAttribute('height', String(Math.max(0, bracket.bottom - bracket.top)));
+      shape.append(bar);
+      if (showing.repeating === true) {
+        // The two dots of a repeat bar line, facing into the passage: a
+        // musician reads this without being told what it is.
+        const facing = bracket.edge === 'start' ? 1 : -1;
+        const middle = (bracket.top + bracket.bottom) / 2;
+        for (const offset of [-REPEAT_DOT_GAP, REPEAT_DOT_GAP]) {
+          const dot = doc.createElementNS(SVG_NAMESPACE, 'circle');
+          dot.setAttribute('class', 'passage-marker__dot');
+          dot.setAttribute('cx', String(bracket.x + facing * REPEAT_DOT_GAP));
+          dot.setAttribute('cy', String(middle + offset));
+          dot.setAttribute('r', String(MARKER_WIDTH / 2));
+          shape.append(dot);
+        }
+      }
+      // A grip at each end, because the middle of the marker is over the
+      // music and a finger there would be covering what it is choosing.
+      for (const y of [bracket.top, bracket.bottom]) {
+        const grip = doc.createElementNS(SVG_NAMESPACE, 'circle');
+        grip.setAttribute('class', 'passage-marker__grip');
+        grip.setAttribute('cx', String(bracket.x));
+        grip.setAttribute('cy', String(y));
+        grip.setAttribute('r', String(MARKER_GRIP_RADIUS));
+        shape.append(grip);
+      }
+      group.append(shape);
+    }
+  }
+
+  private ensurePassageGroup(): SVGGElement | null {
+    if (this.passageGroup !== null && this.passageGroup.isConnected) {
+      return this.passageGroup;
+    }
+    const svg = this.container.querySelector('svg');
+    if (svg === null) {
+      return null;
+    }
+    const group = svg.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
+    group.setAttribute('class', 'passage-markers');
+    svg.append(group);
+    this.passageGroup = group;
+    return group;
   }
 
   private ensureOverlayGroup(): SVGGElement | null {

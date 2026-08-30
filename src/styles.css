@@ -1128,6 +1128,44 @@ select {
 }
 
 /*
+ * The two markers that hold the passage being practised.
+ *
+ * They replace touching a note, which asked a fingertip to hit a notehead
+ * the width of a pencil and said nothing when it missed. A marker is a thing
+ * you can see, take hold of and move, with a grip at each end so the hand
+ * covering it is not covering the music it is choosing.
+ *
+ * Drawn inside the engraving's own SVG, in its own group: what the reader
+ * played is cleared at the start of every run and the passage is not.
+ */
+.passage-marker__bar {
+  fill: var(--accent);
+  opacity: 0.55;
+}
+
+.passage-marker__dot {
+  fill: var(--accent);
+}
+
+.passage-marker__grip {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+/*
+ * Nothing scrolls while a marker is being moved.
+ *
+ * On a touch screen a drag is a scroll until something says otherwise, and
+ * `preventDefault` alone does not say it: the browser has already decided
+ * what the gesture is by the time the first move arrives. This is the part
+ * that has to be in the stylesheet.
+ */
+.score__scroll[data-dragging='true'] {
+  touch-action: none;
+}
+
+/*
  * When what was played appears, drawn as the state it is in.
  *
  * Three answers, so the same idiom as the click: the picture says which one

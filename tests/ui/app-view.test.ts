@@ -1338,39 +1338,82 @@ describe('AppView', () => {
     });
   });
 
-  describe('touching a note to choose a passage', () => {
-    it('narrows to the touched bar and says so', async () => {
+  describe('dragging the markers to choose a passage', () => {
+    it('narrows to the bars they were dragged around, and says so', async () => {
       const { view, runtime, renderer } = createRig();
       await view.initialize();
-      const step = runtime.controller.currentTimeline?.steps.find(
-        (each) => each.measureIndex === 1,
-      );
-      if (step === undefined) {
-        throw new Error('expected a second bar');
-      }
+      // The markers stand around the whole of what is engraved, which is what
+      // a reader takes hold of.
+      expect(renderer.shownPassage).toEqual({
+        fromMeasureIndex: 0,
+        toMeasureIndex: 3,
+        repeating: false,
+      });
 
-      renderer.tapStep(step.index);
+      renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(runtime.controller.settings.rangeFromBar).toBe(2);
+      expect(runtime.controller.settings.rangeToBar).toBe(3);
       // The boxes are the same value seen at the desk, so they follow.
       expect(element<HTMLInputElement>('range-from').value).toBe('2');
-      expect(element('import-notice').textContent).toContain('from bar 2');
+      expect(element('import-notice').textContent).toContain('bars 2-3');
+    });
+
+    it('reads the markers against the passage already on the page', async () => {
+      // Choosing a passage engraves it on its own, so the marker at the left
+      // edge is no longer bar one. Read from zero, a second drag would walk
+      // backwards through the score.
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 3 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.settings.rangeFromBar).toBe(3);
+      expect(runtime.controller.settings.rangeToBar).toBe(4);
+    });
+
+    it('widens again when a marker is dragged off the edge of the page', async () => {
+      // The bars outside a passage are not engraved at all, so a drag past
+      // the edge arrives as an index outside what is drawn. Without this the
+      // markers could only ever narrow, which is half a control.
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      renderer.dragPassage({ fromMeasureIndex: 2, toMeasureIndex: 3 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runtime.controller.settings.rangeFromBar).toBe(3);
+
+      renderer.dragPassage({ fromMeasureIndex: -1, toMeasureIndex: 1 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.settings.rangeFromBar).toBe(2);
+      expect(runtime.controller.settings.rangeToBar).toBe(4);
+
+      // And pulled right back out to both ends it is the whole piece again,
+      // which is one state and not a range that happens to cover everything.
+      renderer.dragPassage({ fromMeasureIndex: -1, toMeasureIndex: 2 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.settings.rangeFromBar).toBeNull();
+      expect(element('import-notice').textContent).toContain('whole piece');
     });
 
     it('says which bars it chose in fullscreen, where the notice is hidden', async () => {
-      // Touching a note is a fullscreen gesture above all - the bar boxes are
-      // out of reach at the stand. The answer went to a line of the page that
-      // fullscreen hides, so the gesture appeared to do nothing at all.
+      // Dragging a marker is a fullscreen gesture above all - the bar boxes
+      // are out of reach at the stand. The answer went to a line of the page
+      // that fullscreen hides, so the gesture appeared to do nothing at all.
       const { view, renderer } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus').click();
       await Promise.resolve();
 
-      renderer.tapStep(1);
+      renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(element('focus-notice').textContent).toContain('bar');
+      expect(element('focus-notice').textContent).toContain('bars');
     });
 
     it('leaves the page alone while a run is going', async () => {
@@ -1378,11 +1421,31 @@ describe('AppView', () => {
       await view.initialize();
       element<HTMLButtonElement>('start').click();
 
-      renderer.tapStep(1);
+      renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      // A stray touch mid-piece never meant "re-engrave under me".
+      // A stray touch mid-piece never meant "re-engrave under me", and the
+      // markers go back where they were rather than staying where the finger
+      // left them.
       expect(runtime.controller.settings.rangeFromBar).toBeNull();
+      expect(renderer.shownPassage).toEqual({
+        fromMeasureIndex: 0,
+        toMeasureIndex: 3,
+        repeating: false,
+      });
+    });
+
+    it('does not re-engrave for a drag that changed nothing', async () => {
+      // A tap on a marker, or a drag that came back where it started. A
+      // re-engraving is most of a second of blank staves on a long piece.
+      const { view, renderer } = createRig();
+      await view.initialize();
+      const before = renderer.loadCount;
+
+      renderer.dragPassage({ fromMeasureIndex: 0, toMeasureIndex: 3 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(renderer.loadCount).toBe(before);
     });
   });
 

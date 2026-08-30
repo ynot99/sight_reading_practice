@@ -32,7 +32,7 @@ import { RecordingPitchPlayer } from '../../src/infrastructure/testing/Recording
 import { PracticeHistory } from '../../src/application/PracticeHistory.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { DomainError } from '../../src/shared/errors.js';
-import { bar, beamedSixteenths, p, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import { bar, beamedSixteenths, longExercise, p, tiedExercise, twoBarExercise } from '../support/fixtures.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry } from '../../src/domain/model/Exercise.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
@@ -1785,81 +1785,76 @@ describe('starting from the top of the page', () => {
   });
 });
 
-describe('choosing a passage by touching a note', () => {
-  async function opened() {
+describe('choosing a passage with the markers', () => {
+  /** Eight bars, numbered from one, so a slice has room on both sides. */
+  async function opened(bars = 8) {
     const rig = createController();
-    await rig.controller.openScore(twoBarExercise({ title: 'Two Bars' }));
+    await rig.controller.openScore(longExercise({ bars, title: 'Eight Bars' }));
     return rig;
   }
 
-  function stepInBar(rig: Awaited<ReturnType<typeof opened>>, bar: number): number {
-    const found = rig.controller.currentTimeline?.steps.find(
-      (step) => step.measureIndex === bar - 1,
-    );
-    if (found === undefined) {
-      throw new Error(`no step in bar ${bar}`);
-    }
-    return found.index;
-  }
-
-  it('starts the passage at the touched note’s bar, open at the end', async () => {
+  it('takes the bars the markers were dragged around', async () => {
     const rig = await opened();
 
-    expect(rig.controller.chooseFromStep(stepInBar(rig, 2))).toEqual({
-      fromBar: 2,
-      toBar: null,
-    });
-    // One touch means "from here on"; saying which bar is last would be
-    // counting bars nobody asked about.
-    expect(rig.controller.settings.rangeFromBar).toBe(2);
+    expect(rig.controller.choosePassage(3, 5)).toEqual({ fromBar: 3, toBar: 5 });
+    expect(rig.controller.settings.rangeFromBar).toBe(3);
+    expect(rig.controller.settings.rangeToBar).toBe(5);
+  });
+
+  it('narrows a passage that is already a passage', async () => {
+    // The engraving *is* the passage once one is chosen, so the caller works
+    // in the piece's own bar numbers and these come through unchanged.
+    const rig = await opened();
+    rig.controller.choosePassage(3, 6);
+    await rig.controller.reloadExercise();
+
+    expect(rig.controller.choosePassage(4, 5)).toEqual({ fromBar: 4, toBar: 5 });
+  });
+
+  it('widens back past what is on the page', async () => {
+    // The bars outside a passage are not engraved at all, so a marker
+    // dragged off the edge asks for bars nothing on the page can measure.
+    // This is the only place that knows how far out they go.
+    const rig = await opened();
+    rig.controller.choosePassage(4, 5);
+    await rig.controller.reloadExercise();
+
+    expect(rig.controller.choosePassage(2, 5)).toEqual({ fromBar: 2, toBar: 5 });
+  });
+
+  it('stops at the ends of the piece however far the drag went', async () => {
+    const rig = await opened();
+
+    expect(rig.controller.choosePassage(-40, 900)).toEqual({ fromBar: null, toBar: null });
+    expect(rig.controller.choosePassage(-40, 3)).toEqual({ fromBar: 1, toBar: 3 });
+  });
+
+  it('is the whole piece again once both markers are back at the ends', async () => {
+    // "The whole piece" stays one state rather than two that have to be kept
+    // in step: pulled back out to both ends, there is no range at all.
+    const rig = await opened();
+    rig.controller.choosePassage(3, 5);
+
+    expect(rig.controller.choosePassage(1, 8)).toEqual({ fromBar: null, toBar: null });
+    expect(rig.controller.settings.rangeFromBar).toBeNull();
     expect(rig.controller.settings.rangeToBar).toBeNull();
   });
 
-  it('closes the passage on a touch further into the piece', async () => {
+  it('will not let the markers cross', async () => {
     const rig = await opened();
-    rig.controller.chooseFromStep(stepInBar(rig, 1));
-    await rig.controller.reloadExercise();
 
-    // Bars are reported against what is on screen, which is now a passage of
-    // its own, so they have to be put back onto the whole piece first.
-    const second = rig.controller.chooseFromStep(stepInBar(rig, 2));
-
-    expect(second).toEqual({ fromBar: 1, toBar: 2 });
-    expect(rig.controller.settings.rangeToBar).toBe(2);
+    expect(rig.controller.choosePassage(6, 2)).toEqual({ fromBar: 6, toBar: 6 });
   });
 
-  it('gives the whole piece back on touching the first note again', async () => {
-    const rig = await opened();
-    rig.controller.chooseFromStep(stepInBar(rig, 2));
-    await rig.controller.reloadExercise();
+  it('counts from the bar numbers the score itself carries', async () => {
+    // A score that starts at bar 40 - which is what a slice carried out of a
+    // longer piece looks like - must not have its passage measured from one.
+    const rig = createController();
+    await rig.controller.openScore({ ...longExercise({ bars: 4 }), firstBarNumber: 40 });
 
-    // The page is now that passage, so its first bar is the one that opened
-    // it - touching there is the way back.
-    const cleared = rig.controller.chooseFromStep(stepInBar(rig, 1));
-
-    expect(cleared).toEqual({ fromBar: null, toBar: null });
-    expect(rig.controller.settings.rangeFromBar).toBeNull();
-  });
-
-  it('starts over rather than growing backwards', async () => {
-    const rig = await opened();
-    rig.controller.chooseFromStep(stepInBar(rig, 2));
-    await rig.controller.reloadExercise();
-    rig.controller.updateSettings({ rangeToBar: 2 });
-
-    // A touch when the passage is already closed begins a new one, which is
-    // the only reading that does not need a rule the reader has to remember.
-    expect(rig.controller.chooseFromStep(stepInBar(rig, 1))).toEqual({
-      fromBar: 2,
-      toBar: null,
-    });
-  });
-
-  it('ignores a touch on nothing', async () => {
-    const rig = await opened();
-    rig.controller.chooseFromStep(9_999);
-
-    expect(rig.controller.settings.rangeFromBar).toBeNull();
+    expect(rig.controller.pieceBarRange).toEqual({ firstBar: 40, lastBar: 43 });
+    expect(rig.controller.choosePassage(41, 42)).toEqual({ fromBar: 41, toBar: 42 });
+    expect(rig.controller.choosePassage(1, 900)).toEqual({ fromBar: null, toBar: null });
   });
 });
 

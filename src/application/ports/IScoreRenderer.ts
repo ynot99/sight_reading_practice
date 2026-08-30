@@ -19,16 +19,41 @@ export interface IScoreRenderer {
    * looking at bar forty.
    */
   scrollToStart(): void;
-  /**
-   * Reports which timeline step a note the reader touched belongs to.
-   *
-   * The renderer already knows which drawn elements are which step - it is
-   * how a passed note is dimmed - so this asks nothing new of it. The
-   * application decides what a touch *means*; the renderer only says where
-   * it landed.
-   */
-  onNoteTapped(listener: (stepIndex: number) => void): () => void;
   clear(): void;
+}
+
+/** A passage, as the bars of the engraving that hold it. */
+export interface DrawnPassage {
+  readonly fromMeasureIndex: number;
+  readonly toMeasureIndex: number;
+  /**
+   * Whether the passage plays round again at the end.
+   *
+   * Drawn, because music already has a sign for it: the markers grow the two
+   * dots of a repeat bar line. It is the same thing the drawer's repeat
+   * button says, said where the reader is actually looking - and it is what
+   * makes the markers read as the repeat brackets they are.
+   */
+  readonly repeating?: boolean;
+}
+
+/**
+ * The two markers that hold the passage being practised.
+ *
+ * They replace touching a note to choose a passage, which asked the reader
+ * to hit a notehead the width of a pencil and said nothing at all when it
+ * missed - and even when it landed, nothing on the page showed what had been
+ * chosen until the score re-engraved. A marker is a thing you can see, take
+ * hold of and move, and it is where a musician would put a pencil anyway.
+ *
+ * Bars, not steps: a passage begins at a bar line. The renderer says which
+ * bars a drag landed between; what that *means* stays the application's.
+ */
+export interface IPassageMarkers {
+  /** Draws the markers around these bars of what is currently engraved. */
+  showPassage(passage: DrawnPassage): void;
+  hidePassage(): void;
+  onPassageDragged(listener: (passage: DrawnPassage) => void): () => void;
 }
 
 /**

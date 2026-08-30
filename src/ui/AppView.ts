@@ -253,6 +253,13 @@ function nextClickWhen(current: ClickWhen): ClickWhen {
   return elementAt(CLICK_WHEN_BY_THUMB, (at + 1) % CLICK_WHEN_BY_THUMB.length);
 }
 
+/** What the drawer's marks button says it is doing, in words. */
+const MARKS_TITLES: Record<PlayedNoteDisplay, string> = {
+  live: 'Colour the notes as I play',
+  'at-end': 'Colour the notes when the run ends',
+  hidden: 'Never colour the notes',
+};
+
 function dropoutDescription(when: ClickWhen, countInBars: number): string {
   if (when === 'always') {
     return 'The click plays all the way through.';
@@ -1630,11 +1637,15 @@ export class AppView {
     });
 
     this.listen(this.el.focusMarks, 'click', () => {
-      // Two of the three values, because a third state on a switch has no way
-      // to show itself: the drawer opens between runs, and "when they appear"
-      // is a question for the settings, not for a thumb mid-piece.
-      const shown = controller.settings.playedNotes !== 'hidden';
-      controller.updateSettings({ playedNotes: shown ? 'hidden' : 'live' });
+      // All three, cycled. "When do I see what I played" is one question with
+      // three answers, and answering it in the settings while a switch here
+      // answered two thirds of it was two controls for one decision - the
+      // reader who chose "at the end" downstairs found a switch up here that
+      // could only turn it into something else.
+      const at = PLAYED_NOTE_DISPLAYS.indexOf(controller.settings.playedNotes);
+      controller.updateSettings({
+        playedNotes: elementAt(PLAYED_NOTE_DISPLAYS, (at + 1) % PLAYED_NOTE_DISPLAYS.length),
+      });
       this.syncControlsFromSettings();
     });
 
@@ -2602,7 +2613,9 @@ export class AppView {
     this.el.startFocus.checked = settings.startInFocus;
     this.el.showCursor.checked = settings.showCursor;
     this.el.focusCursor.setAttribute('aria-pressed', String(settings.showCursor));
-    this.el.focusMarks.setAttribute('aria-pressed', String(settings.playedNotes !== 'hidden'));
+    this.el.focusMarks.dataset['marks'] = settings.playedNotes;
+    this.el.focusMarks.title = MARKS_TITLES[settings.playedNotes];
+    this.el.focusMarks.setAttribute('aria-label', MARKS_TITLES[settings.playedNotes]);
     this.el.blindMode.checked = settings.blindMode;
     this.renderExpected();
     this.el.pitchClass.checked = settings.pitchClassOnly;

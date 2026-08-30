@@ -35,6 +35,18 @@ export interface SampledPitchPlayerOptions {
   readonly fallback?: IPitchPlayer;
   readonly gain?: number;
   readonly releaseSec?: number;
+  /**
+   * Notes that may sound at once before the oldest is taken to make room.
+   *
+   * A piano has eighty-eight strings and a pedalled passage can have most of
+   * them ringing: measured on a reader's own recording, played with the
+   * pedal down throughout, twenty-three notes were sounding at any moment
+   * and thirty-nine at the thickest. A ceiling of sixteen - which is what a
+   * synthesiser voice count looks like - was therefore reached ninety-three
+   * per cent of the time, and every note struck past it cut a note that was
+   * still being heard. That is a hole in the sound several times a second,
+   * and it is what a pedalled recording sounded like coming back.
+   */
   readonly maxVoices?: number;
   readonly fetchAudio?: AudioFetcher;
   readonly loading?: SampleLoading;
@@ -96,7 +108,7 @@ export class SampledPitchPlayer
     this.options = {
       gain: options.gain ?? 1,
       releaseSec: options.releaseSec ?? 0.35,
-      maxVoices: options.maxVoices ?? 16,
+      maxVoices: options.maxVoices ?? 64,
     };
   }
 

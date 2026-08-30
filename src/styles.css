@@ -1128,6 +1128,29 @@ select {
 }
 
 /*
+ * When what was played appears, drawn as the state it is in.
+ *
+ * Three answers, so the same idiom as the click: the picture says which one
+ * at a glance and `title` says it in words. A clock face rides on the icon
+ * for the middle answer, and the whole thing dims when nothing is drawn.
+ */
+.focus-bar__marks {
+  flex: none;
+}
+
+.focus-bar__afterwards {
+  display: none;
+}
+
+.focus-bar__marks[data-marks='at-end'] .focus-bar__afterwards {
+  display: inline;
+}
+
+.focus-bar__marks[data-marks='hidden'] svg {
+  opacity: 0.35;
+}
+
+/*
  * How much of the pulse is clicked, drawn as how many marks are lit.
  *
  * Four answers cannot be a switch and cannot be guessed from one picture, so

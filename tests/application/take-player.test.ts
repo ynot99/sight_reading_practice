@@ -209,6 +209,9 @@ describe('a take played with the sustain pedal down', () => {
     ];
   }
 
+  /** Halfway on the damper, which is where the felt reaches the strings. */
+  const HALFWAY = 64 / 127;
+
   /** When the instrument was told to end the note it was given at `startMs`. */
   function endOf(instrument: RecordingPitchPlayer, midi: number, nth = 0): number | undefined {
     return instrument.stopped.filter((note) => note.midi === midi)[nth]?.atMs;
@@ -281,22 +284,51 @@ describe('a take played with the sustain pedal down', () => {
   });
 
   it('reads a pedal that reports itself twice on every press', () => {
-    // This keyboard sends the damper twice on each press and again halfway.
-    // Only the crossings mean anything, and a half-press is still a press.
+    // This keyboard sends the damper twice on each movement and reports the
+    // halfway point on the way through, in both directions. Only the
+    // crossings mean anything.
     const { instrument, player } = rig();
 
     player.play('take-1', [
-      { kind: 'sustain', atMs: 0, value: 0.504 },
-      { kind: 'sustain', atMs: 0, value: 0.504 },
+      { kind: 'sustain', atMs: 0, value: HALFWAY },
+      { kind: 'sustain', atMs: 0, value: HALFWAY },
       { kind: 'sustain', atMs: 20, value: 1 },
       { kind: 'sustain', atMs: 20, value: 1 },
       { kind: 'noteOn', atMs: 100, midi: 60, velocity: 0.8 },
       { kind: 'noteOff', atMs: 300, midi: 60 },
-      { kind: 'sustain', atMs: 800, value: 0.504 },
+      { kind: 'sustain', atMs: 800, value: HALFWAY },
       { kind: 'sustain', atMs: 810, value: 0 },
     ]);
 
-    expect(endOf(instrument, 60)).toBe(810);
+    // Damped where the felt reached the strings, not where the pedal
+    // finished travelling.
+    expect(endOf(instrument, 60)).toBe(800);
+  });
+
+  it('hears a change of pedal that never reported a zero', () => {
+    // What the reader's own keyboard does. A foot that comes up and goes
+    // straight back down - the way a pianist clears the harmony - is
+    // reported as `127, 64, 127`, eighty milliseconds apart, with no zero in
+    // it anywhere. Read by MIDI's own convention that 64 is already "on",
+    // that is no movement at all, and every note before the change went on
+    // ringing through it.
+    const { clock, instrument, player } = rig();
+
+    player.play('take-1', [
+      { kind: 'sustain', atMs: 0, value: 1 },
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 200, midi: 60 },
+      { kind: 'sustain', atMs: 900, value: HALFWAY },
+      { kind: 'sustain', atMs: 980, value: 1 },
+      { kind: 'noteOn', atMs: 1_000, midi: 64, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 1_200, midi: 64 },
+      { kind: 'sustain', atMs: 2_000, value: 0 },
+    ]);
+    clock.advance(1_000);
+    player.pump();
+
+    expect(endOf(instrument, 60)).toBe(900);
+    expect(endOf(instrument, 64)).toBe(2_000);
   });
 
   it('does not strike everything still ringing when the reader seeks', () => {

@@ -29,6 +29,27 @@ export interface MidiFileOptions {
 const DEFAULT_TEMPO_BPM = 120;
 const MICROSECONDS_PER_MINUTE = 60_000_000;
 
+/** Halfway on a damper pedal, where the felt reaches the strings. */
+const DAMPER_HALFWAY = 64;
+
+/**
+ * Whether the dampers are off the strings, from a pedal reading.
+ *
+ * MIDI's own convention is that 64 and above is "on", and for a switch that
+ * is fine because a switch only ever says 0 or 127. A keyboard that reports
+ * how far the pedal has travelled says 64 on the way through, in both
+ * directions - so a foot that comes up and goes straight back down, which is
+ * how a pianist changes the pedal, is reported as `127, 64, 127` with no
+ * zero in it at all. Read by the convention that would be no movement, and
+ * the change of harmony the reader made with their foot is thrown away.
+ *
+ * Halfway is where the felt begins to touch, so halfway is read as touching.
+ * A switch pedal is unaffected: it never reports the middle.
+ */
+export function damperIsDown(value: number): boolean {
+  return Math.round(value * 127) > DAMPER_HALFWAY;
+}
+
 /** MIDI's 7-bit range, with 0 reserved: a note-on of 0 is a note-off. */
 function toVelocity(normalised: number): number {
   return Math.min(127, Math.max(1, Math.round(normalised * 127)));

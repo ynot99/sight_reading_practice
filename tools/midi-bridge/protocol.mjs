@@ -7,6 +7,18 @@ const NOTE_OFF = 0x80;
 const CONTROL_CHANGE = 0xb0;
 /** Controller number of the damper (sustain) pedal. */
 const SUSTAIN_CONTROLLER = 64;
+/**
+ * Where the damper felt reaches the strings.
+ *
+ * Above it, not at it. MIDI's convention is that 64 is already "on", which is
+ * right for a switch because a switch only says 0 or 127. A pedal that
+ * reports how far it has travelled says 64 on the way through in *both*
+ * directions, so a foot that comes up and goes straight back down - which is
+ * how a pianist changes the pedal - arrives as `127, 64, 127` with no zero in
+ * it. Read by the convention that is no movement at all, and the harmony the
+ * reader cleared with their foot is thrown away.
+ */
+const DAMPER_HALFWAY = 64;
 
 /**
  * Turns a raw MIDI packet into the message the browser expects, or `null` for
@@ -48,7 +60,7 @@ export function midiMessageToBridgeEvent(message, atMs) {
   }
   // The sustain pedal, which the trainer sounds but never judges.
   if (command === CONTROL_CHANGE && note === SUSTAIN_CONTROLLER) {
-    return { type: 'pedal', down: velocity >= 64, value: velocity / 127 };
+    return { type: 'pedal', down: velocity > DAMPER_HALFWAY, value: velocity / 127 };
   }
   // Any other knob, forwarded by number. The bridge decides nothing about
   // what it means; the tablet is where a reader teaches the app their knob,

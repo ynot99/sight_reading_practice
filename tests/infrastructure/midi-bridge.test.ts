@@ -43,6 +43,16 @@ describe('bridge MIDI decoding', () => {
     expect(midiMessageToBridgeEvent([0xb0, 64, 0])).toMatchObject({ down: false });
   });
 
+  it('reads the halfway point as the dampers touching, not as still down', () => {
+    // A pedal that reports how far it has travelled says 64 on the way
+    // through in both directions, so a foot that comes up and goes straight
+    // back down arrives as `127, 64, 127` with no zero in it. MIDI's own
+    // convention - 64 is already "on" - reads that as no movement at all,
+    // and throws away the change of harmony the reader made with their foot.
+    expect(midiMessageToBridgeEvent([0xb0, 64, 64])).toMatchObject({ down: false, value: 64 / 127 });
+    expect(midiMessageToBridgeEvent([0xb0, 64, 65])).toMatchObject({ down: true });
+  });
+
   it('forwards any other knob by number', () => {
     // The tablet is where a reader teaches the app their knob, and it can
     // only learn what reaches it: a bridge that dropped this would make the

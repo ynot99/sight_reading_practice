@@ -592,12 +592,21 @@
             </svg>
           </button>
 
+          <!--
+            When what was played appears: as it is played, once the run is
+            over, or not at all. Three answers to one question, so one button
+            that cycles rather than a switch and a setting that could disagree
+            about it. The clock face is the middle answer, drawn in.
+          -->
           <button id="focus-marks" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="true" title="Show what I played" aria-label="Show what I played">
+            class="focus-bar__button focus-bar__button--icon focus-bar__marks"
+            data-marks="live" title="Colour the notes as I play"
+            aria-label="Colour the notes as I play">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M15 4h2v10.2a3.8 3.8 0 1 1-2-3.3V4z" />
               <path d="M4 7h8v2H4zM4 12h6v2H4zM4 17h6v2H4z" />
+              <path class="focus-bar__afterwards"
+                d="M6.5 14.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm.75 2h-1.5v3l2.3 1.4.75-1.25-1.55-.9V16.5z" />
             </svg>
           </button>
 

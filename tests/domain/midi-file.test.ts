@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { writeMidiFile, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
+import { damperIsDown, writeMidiFile, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import { DIVISIONS_PER_QUARTER } from '../../src/domain/model/Duration.js';
 import { DomainError } from '../../src/shared/errors.js';
 
@@ -133,5 +133,26 @@ describe('writing a Standard MIDI File', () => {
     const bytes = writeMidiFile([]);
     expect(ascii(bytes, 0, 4)).toBe('MThd');
     expect(trackBytes(bytes).slice(-4)).toEqual([0x00, 0xff, 0x2f, 0x00]);
+  });
+});
+
+describe('reading the damper pedal', () => {
+  it('counts a pedal past halfway as holding the strings', () => {
+    expect(damperIsDown(1)).toBe(true);
+    expect(damperIsDown(0)).toBe(false);
+    expect(damperIsDown(100 / 127)).toBe(true);
+  });
+
+  it('counts the halfway point itself as the felt touching', () => {
+    // MIDI's convention is that 64 is already "on", which is right for a
+    // switch because a switch only ever says 0 or 127. A pedal that reports
+    // how far it has travelled says 64 on the way through in *both*
+    // directions: a foot that comes up and goes straight back down - which
+    // is how a pianist changes the pedal - is reported as `127, 64, 127`
+    // with no zero anywhere in it. Read the convention's way, that is no
+    // movement at all.
+    expect(damperIsDown(64 / 127)).toBe(false);
+    expect(damperIsDown(63 / 127)).toBe(false);
+    expect(damperIsDown(65 / 127)).toBe(true);
   });
 });

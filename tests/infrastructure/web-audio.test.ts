@@ -390,13 +390,56 @@ describe('when the click is actually heard', () => {
     metronome.onTick((tick) => heard.push(tick));
 
     metronome.start();
-    context.advance(0.1);
+    // Far enough that the click has not only been queued but left the
+    // speaker, which is when the tick is delivered.
+    context.advance(0.2);
     vi.advanceTimersByTime(120);
 
     const [first] = heard;
     expect(first).toBeDefined();
     // Queued 60 ms in, heard 80 ms after that.
     expect(first?.scheduledTimeMs).toBeCloseTo(60 + 80, 3);
+    vi.useRealTimers();
+  });
+
+  it('holds the tick back until the click has left the speaker', () => {
+    // Everything that acts on a tick acts on it visibly: the cursor steps,
+    // the step closes. Delivered when the graph *reaches* the click rather
+    // than when the click is heard, all of that ran a whole output buffer
+    // early - which the reader saw as the metronome and the notes agreeing
+    // while the cursor sat a little in front of both.
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const context = new FakeAudioContext();
+    context.outputLatency = 0.08;
+    const metronome = new WebAudioMetronome(contextFactory(context), {
+      schedulerIntervalMs: 20,
+      scheduleAheadSec: 0.12,
+    });
+    metronome.configure({
+      bpm: 60,
+      timeSignature: new TimeSignature(4, 4),
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      dropout: null,
+      muted: true,
+    });
+    const ticks: MetronomeTick[] = [];
+    metronome.onTick((tick) => ticks.push(tick));
+
+    metronome.start();
+    // Past the moment the click was queued for, and not yet past the moment
+    // it can be heard.
+    context.advance(0.1);
+    vi.advanceTimersByTime(20);
+    expect(ticks).toHaveLength(0);
+
+    context.advance(0.05);
+    vi.advanceTimersByTime(20);
+
+    expect(ticks).toHaveLength(1);
+    // And it still says it was heard where it was heard.
+    expect(ticks[0]?.scheduledTimeMs).toBeCloseTo(60 + 80, 3);
     vi.useRealTimers();
   });
 

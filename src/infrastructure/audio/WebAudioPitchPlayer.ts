@@ -38,7 +38,10 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
     this.options = {
       gain: options.gain ?? 0.16,
       releaseSec: options.releaseSec ?? 0.25,
-      maxVoices: options.maxVoices ?? 12,
+      // Enough for a pedalled passage; see `SampledPitchPlayerOptions`. An
+      // oscillator costs less than a sample, so this is the cheaper of the
+      // two to leave room in.
+      maxVoices: options.maxVoices ?? 64,
     };
   }
 

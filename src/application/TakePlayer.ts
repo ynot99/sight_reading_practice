@@ -1,4 +1,4 @@
-import type { MidiFileEvent } from '../domain/midi/MidiFile.js';
+import { damperIsDown, type MidiFileEvent } from '../domain/midi/MidiFile.js';
 import type { IClock } from './ports/IClock.js';
 import type { IPitchPlayer, ISustainPedal } from './ports/IPitchPlayer.js';
 
@@ -251,7 +251,7 @@ function damperChanges(events: readonly MidiFileEvent[]): DamperChange[] {
     if (event.kind !== 'sustain') {
       continue;
     }
-    const nowDown = event.value >= 0.5;
+    const nowDown = damperIsDown(event.value);
     if (nowDown !== down) {
       changes.push({ atMs: event.atMs, down: nowDown });
       down = nowDown;

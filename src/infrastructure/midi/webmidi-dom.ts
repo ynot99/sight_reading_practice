@@ -51,7 +51,7 @@ export const NOTE_OFF = 0x80;
 export const CONTROL_CHANGE = 0xb0;
 /** Controller number of the damper (sustain) pedal. */
 export const SUSTAIN_CONTROLLER = 64;
-/** A damper value of 64 or more counts as down, by convention. */
+/** Where the damper felt reaches the strings; see `damperIsDown`. */
 export const SUSTAIN_THRESHOLD = 64;
 
 export type ParsedMidiMessage =
@@ -83,7 +83,10 @@ export function parseMidiMessage(data: Uint8Array | null): ParsedMidiMessage | n
   if (status === CONTROL_CHANGE && midi === SUSTAIN_CONTROLLER) {
     return {
       kind: 'sustain',
-      down: rawVelocity >= SUSTAIN_THRESHOLD,
+      // Above halfway, not at it: a foot that comes up and goes straight
+      // back down reports the middle on the way through, and reading that as
+      // "still down" throws the pedal change away. See `damperIsDown`.
+      down: rawVelocity > SUSTAIN_THRESHOLD,
       value: rawVelocity / 127,
     };
   }

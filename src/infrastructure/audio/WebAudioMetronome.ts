@@ -151,9 +151,24 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
       this.nextTickAudioTime += subdivisionSeconds(this.config);
     }
 
+    // Delivered when the click is *heard*, not when the graph reaches it.
+    //
+    // `currentTime` is the frame being processed; the click leaves the
+    // speaker a whole output buffer later, which on a tablet is a tenth of a
+    // second or more. Everything that acts on a tick acts on it visibly -
+    // the cursor steps, the step closes - so delivering at `audioTime` put
+    // the marker that much ahead of the sound. The reader's report was
+    // exactly that: the metronome and the notes agree, and the cursor is a
+    // little in front of both.
+    //
+    // The arithmetic is untouched by this: `scheduledTimeMs` already says
+    // when the click is heard, and it is what every judgement is measured
+    // against. This only stops the page acting on a beat before there is a
+    // beat to act on.
+    const heard = context.currentTime - this.outputLatencyMs() / 1000;
     while (this.queue.length > 0) {
       const head = this.queue[0];
-      if (head === undefined || head.audioTime > context.currentTime) {
+      if (head === undefined || head.audioTime > heard) {
         break;
       }
       this.queue.shift();

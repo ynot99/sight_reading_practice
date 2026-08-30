@@ -1,3 +1,4 @@
+import { damperIsDown } from './MidiFile.js';
 import { DomainError } from '../../shared/errors.js';
 
 /** One sounded note, in the file's own ticks. */
@@ -243,7 +244,11 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
         const controller = bytes.byte();
         const value = bytes.byte();
         if (controller === 64) {
-          result.pedal.push({ atTicks: at, down: value >= 64 });
+          // Halfway counts as the felt touching, not as still down: see
+          // `damperIsDown`. A file written by a keyboard that reports how far
+          // the pedal travelled has the middle in it on the way through, in
+          // both directions.
+          result.pedal.push({ atTicks: at, down: damperIsDown(value / 127) });
         }
         break;
       }

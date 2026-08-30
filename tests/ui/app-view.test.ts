@@ -2416,33 +2416,40 @@ describe('AppView', () => {
       expect(renderer.cursor.visible).toBe(true);
     });
 
-    it('shows and hides the played notes from the drawer', async () => {
+    it('cycles the played notes through all three answers from the drawer', async () => {
+      // One question - when do I see what I played - so one control. A
+      // switch here could only say two of the three, and a reader who chose
+      // "at the end" downstairs found a button up here that could not put it
+      // back.
       const { view, runtime } = createRig();
       await view.initialize();
       const toggle = element<HTMLButtonElement>('focus-marks');
-      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+      expect(toggle.dataset['marks']).toBe('live');
 
       toggle.click();
+      expect(runtime.controller.settings.playedNotes).toBe('at-end');
+      expect(toggle.dataset['marks']).toBe('at-end');
+      expect(toggle.title).toContain('when the run ends');
 
+      toggle.click();
       expect(runtime.controller.settings.playedNotes).toBe('hidden');
-      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+      expect(toggle.dataset['marks']).toBe('hidden');
 
       toggle.click();
       expect(runtime.controller.settings.playedNotes).toBe('live');
     });
 
-    it('reads as on for marks that are merely being held back', async () => {
+    it('says which of the three the desk chose', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
       const select = element<HTMLSelectElement>('show-played');
       select.value = 'at-end';
       select.dispatchEvent(new Event('change'));
 
-      // Waiting for the run to end is still showing them, so a switch that
-      // read "off" here would be lying about the setting behind it - and the
-      // switch has to hear about a change made from the desk at all.
+      // The two controls are one setting seen twice, so the drawer has to
+      // hear about a change made at the desk, and say which answer it was.
       expect(runtime.controller.settings.playedNotes).toBe('at-end');
-      expect(element('focus-marks').getAttribute('aria-pressed')).toBe('true');
+      expect(element<HTMLButtonElement>('focus-marks').dataset['marks']).toBe('at-end');
 
       element<HTMLButtonElement>('focus-marks').click();
 

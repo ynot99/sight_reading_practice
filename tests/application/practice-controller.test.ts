@@ -1847,22 +1847,24 @@ describe('choosing a passage with the markers', () => {
     expect(rig.controller.choosePassage(6, 2)).toEqual({ fromBar: 6, toBar: 6 });
   });
 
-  it('cuts the bars it was asked for on a score that starts at bar 40', async () => {
-    // The bug: a range is in the score's own numbers - what the reader reads
-    // off the page - and `sliceExercise` counts positions from the front of
-    // what it is handed. The two agree only for a score beginning at bar one,
-    // and every excerpt and everything with a pickup numbered nought was
-    // quietly cut somewhere else entirely.
+  it('practises the bars it was asked for on a score that starts at bar 40', async () => {
+    // A range is in the score's own bar numbers - what the reader reads off
+    // the page - and the run has to begin and end on those bars whatever the
+    // piece calls its first one. The music itself is left whole.
     const rig = createController();
     await rig.controller.openScore({ ...longExercise({ bars: 8 }), firstBarNumber: 40 });
 
     rig.controller.choosePassage(42, 44);
     const loaded = await rig.controller.reloadExercise();
 
-    expect(loaded.firstBarNumber).toBe(42);
-    expect(measureCount(loaded)).toBe(3);
-    // And the page prints those numbers, rather than counting from one.
-    expect(rig.controller.barNumber(0)).toBe(42);
+    // The page still holds the whole piece, numbered as the score numbers it.
+    expect(loaded.firstBarNumber).toBe(40);
+    expect(measureCount(loaded)).toBe(8);
+    expect(rig.controller.barNumber(0)).toBe(40);
+
+    rig.controller.updateSettings({ countInBars: 0 });
+    const session = rig.controller.start();
+    expect(session?.currentStep?.measureIndex).toBe(2);
   });
 
   it('counts from the bar numbers the score itself carries', async () => {

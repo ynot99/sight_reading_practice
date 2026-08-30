@@ -25,6 +25,18 @@ export interface SessionOptions {
    */
   readonly startAtIndex?: number;
   /**
+   * The last step of the run, after which it is over.
+   *
+   * Left out for a piece read to the end, which is what it means to have
+   * chosen no passage. This is how a passage is practised: the music stays
+   * whole on the page and the run is given two ends. Cutting the score down
+   * instead - which is what this used to do - meant restating the clef and
+   * the key, letting go of a tie that led out of the last bar and pressing
+   * the pedal again at the front, and all of that is only a problem because
+   * something was cut.
+   */
+  readonly stopAfterIndex?: number;
+  /**
    * Staff whose notes are expected, or `null` for the whole texture.
    *
    * Practising one hand is not the same as practising half the music: the

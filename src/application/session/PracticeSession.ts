@@ -319,6 +319,13 @@ export class PracticeSession {
     );
   }
 
+  /** The step the run ends on: the passage's last, or the piece's. */
+  private get lastIndex(): number {
+    const wanted = this.options.stopAfterIndex;
+    const end = this.timeline.length - 1;
+    return wanted === undefined ? end : Math.min(Math.max(0, Math.round(wanted)), end);
+  }
+
   private resetRunState(): void {
     this.teardown();
     this.results = [];
@@ -426,7 +433,7 @@ export class PracticeSession {
     this.results.push(result);
     this.emitter.emit('stepCompleted', { result });
 
-    if (step.index + 1 >= this.timeline.length) {
+    if (step.index >= this.lastIndex) {
       this.finish();
       return;
     }

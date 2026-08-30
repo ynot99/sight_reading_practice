@@ -563,10 +563,13 @@ describe('AppView', () => {
     expect(element('listen').textContent).toBe('Listen');
   });
 
-  it('narrows practice to a passage, and says which', async () => {
-    const { view, runtime } = createRig();
-    await view.initialize();
-    const wholePiece = runtime.controller.currentTimeline?.length ?? 0;
+  it('narrows practice to a passage without cutting the music', async () => {
+    // The page keeps the whole piece; the *run* is what gets two ends. That
+    // is what leaves the bar numbers meaning what they say and what stops
+    // there being a seam to repair at either edge.
+    const rig = createRig();
+    await rig.view.initialize();
+    const wholePiece = rig.runtime.controller.currentTimeline?.length ?? 0;
 
     const from = element<HTMLInputElement>('range-from');
     from.value = '2';
@@ -577,10 +580,17 @@ describe('AppView', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(runtime.controller.settings.rangeFromBar).toBe(2);
-    // One bar of the piece is a shorter exercise than the piece.
-    expect(runtime.controller.currentTimeline?.length ?? 0).toBeLessThan(wholePiece);
-    expect(element('exercise-title').textContent).toContain('bars 2');
+    expect(rig.runtime.controller.settings.rangeFromBar).toBe(2);
+    expect(rig.runtime.controller.currentTimeline?.length ?? 0).toBe(wholePiece);
+
+    // And the run plays that bar and stops.
+    rig.runtime.controller.updateSettings({ countInBars: 0, modeId: 'mode.flow' });
+    const session = rig.runtime.controller.start();
+    rig.metronome.advanceSubdivisions(1);
+    expect(session?.currentStep?.measureIndex).toBe(1);
+
+    rig.metronome.advanceBeats(12);
+    expect(session?.status).toBe('completed');
   });
 
   it('opens a MusicXML file and says what it lost', async () => {
@@ -1364,8 +1374,9 @@ describe('AppView', () => {
 
       const written = rig.files.saved.at(-1);
       const text = new TextDecoder().decode(written?.bytes);
-      expect(text).toContain('bars: 2-3');
-      expect(text).toContain('range: 2..3');
+      expect(text).toContain('passage: 2..3');
+      // The page still holds the whole piece, whatever the passage is.
+      expect(text).toContain('page 1-4');
     });
 
     it('starts the next run where a finger was held', async () => {
@@ -1428,10 +1439,10 @@ describe('AppView', () => {
       expect(renderer.shownPassage).toBeNull();
     });
 
-    it('reads the markers against the passage already on the page', async () => {
-      // Choosing a passage engraves it on its own, so the marker at the left
-      // edge is no longer bar one. Read from zero, a second drag would walk
-      // backwards through the score.
+    it('reads the markers against the whole piece, drag after drag', async () => {
+      // The music is not cut down any more, so a bar's place on the page does
+      // not move when a passage is chosen: the second drag means the bars it
+      // names, exactly as the first did.
       const { view, runtime, renderer } = createRig();
       await view.initialize();
       renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 3 });
@@ -1440,21 +1451,20 @@ describe('AppView', () => {
       renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(runtime.controller.settings.rangeFromBar).toBe(3);
-      expect(runtime.controller.settings.rangeToBar).toBe(4);
+      expect(runtime.controller.settings.rangeFromBar).toBe(2);
+      expect(runtime.controller.settings.rangeToBar).toBe(3);
     });
 
-    it('widens again when a marker is dragged off the edge of the page', async () => {
-      // The bars outside a passage are not engraved at all, so a drag past
-      // the edge arrives as an index outside what is drawn. Without this the
-      // markers could only ever narrow, which is half a control.
+    it('widens as readily as it narrows, because the bars are all still there', async () => {
+      // The music is no longer cut down to the passage, so widening is a
+      // plain drag: the bars on both sides are on the page to drag to.
       const { view, runtime, renderer } = createRig();
       await view.initialize();
       renderer.dragPassage({ fromMeasureIndex: 2, toMeasureIndex: 3 });
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(runtime.controller.settings.rangeFromBar).toBe(3);
 
-      renderer.dragPassage({ fromMeasureIndex: -1, toMeasureIndex: 1 });
+      renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 3 });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(runtime.controller.settings.rangeFromBar).toBe(2);
@@ -1462,7 +1472,7 @@ describe('AppView', () => {
 
       // And pulled right back out to both ends it is the whole piece again,
       // which is one state and not a range that happens to cover everything.
-      renderer.dragPassage({ fromMeasureIndex: -1, toMeasureIndex: 2 });
+      renderer.dragPassage({ fromMeasureIndex: 0, toMeasureIndex: 3 });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(runtime.controller.settings.rangeFromBar).toBeNull();

@@ -28,7 +28,6 @@ import type {
   IScoreZoom,
 } from './ports/IScoreRenderer.js';
 import { barNumberOf, clefAtMeasure, keyAtMeasure, measureCount } from '../domain/model/Exercise.js';
-import { sliceExercise } from '../domain/model/exerciseSlice.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
 import type { NoteVerdict } from '../domain/matching/ChordMatcher.js';
@@ -593,6 +592,34 @@ export class PracticeController {
     return this.beginAt;
   }
 
+  /**
+   * The passage the reader chose, as the first and last step of it.
+   *
+   * The whole timeline when nothing is chosen. Bars come in as the score's
+   * own numbers - what is printed on the page and typed into the boxes - and
+   * a step knows which bar it is in, so this is where the two meet.
+   */
+  private get passageSteps(): { readonly from: number; readonly to: number } {
+    const timeline = this.timeline;
+    const last = timeline === null ? 0 : timeline.length - 1;
+    if (timeline === null) {
+      return { from: 0, to: 0 };
+    }
+    const { rangeFromBar, rangeToBar } = this.currentSettings;
+    const first = this.exercise?.firstBarNumber ?? 1;
+    const fromMeasure = rangeFromBar === null ? 0 : rangeFromBar - first;
+    const toMeasure = rangeToBar === null ? Number.POSITIVE_INFINITY : rangeToBar - first;
+    let from = last;
+    let to = 0;
+    for (const step of timeline.steps) {
+      if (step.measureIndex >= fromMeasure && step.measureIndex <= toMeasure) {
+        from = Math.min(from, step.index);
+        to = Math.max(to, step.index);
+      }
+    }
+    return to >= from ? { from, to } : { from: 0, to: last };
+  }
+
   /** Generates fresh material and renders it. */
   async loadNewExercise(): Promise<Exercise> {
     // Asking for a new exercise is asking the generator for one, so an opened
@@ -755,18 +782,12 @@ export class PracticeController {
       this.openedScore === null
         ? source
         : { ...source, tempoBpm: this.tempoBpm };
-    const { rangeFromBar, rangeToBar } = this.currentSettings;
-    // A range is in the score's own bar numbers, because that is what the
-    // reader reads off the page and types into the boxes. `sliceExercise`
-    // counts positions from the front of what it is handed. The two are the
-    // same thing only for a score that begins at bar one - and a score that
-    // begins anywhere else, which is every excerpt and everything with a
-    // pickup bar numbered nought, was quietly cut somewhere else entirely.
-    const from = rangeFromBar === null ? 1 : rangeFromBar - retimed.firstBarNumber + 1;
-    const to =
-      rangeToBar === null ? measureCount(retimed) : rangeToBar - retimed.firstBarNumber + 1;
-    const exercise =
-      rangeFromBar === null && rangeToBar === null ? retimed : sliceExercise(retimed, from, to);
+    // The whole piece, always. A passage is practised by giving the run two
+    // ends rather than by cutting the music down to it: the page keeps its
+    // context, the bar numbers keep meaning what they say, and every seam a
+    // cut has to repair - the restated clef, the tie let go of, the pedal
+    // pressed again - stops existing rather than being handled.
+    const exercise = retimed;
     const musicXml = this.deps.serializer.serialize(exercise);
 
     this.exercise = exercise;
@@ -850,15 +871,12 @@ export class PracticeController {
   /**
    * Sets the passage the markers were dragged around.
    *
-   * Whole bars, because that is what `sliceExercise` cuts and what a musician
-   * means: a passage begins at a bar line, not partway through one. Cutting
-   * mid-bar would leave a pickup and make every seam - the restated clef, the
-   * tie let go of, the pedal pressed again - harder for nothing gained.
+   * Whole bars, because that is what a musician means: a passage begins at a
+   * bar line, not partway through one. A run that began mid-bar would be
+   * counted in to a beat that is not the first, and the reader would be
+   * waiting for a downbeat that never came.
    *
-   * Bars of the *whole piece*, and clamped to it here. The markers are drawn
-   * on an engraving that may already be a passage, so a drag outwards asks
-   * for bars nothing on the page can measure - only this knows how far out
-   * they go.
+   * Bars of the whole piece, and clamped to it here.
    *
    * Returns the passage now being practised, with `null` on both ends when
    * it turned out to be the whole piece after all.
@@ -989,6 +1007,7 @@ export class PracticeController {
     this.disposeSession();
 
     const mode = this.deps.modes.get(this.currentSettings.modeId);
+    const passage = this.passageSteps;
     const session = new PracticeSession({
       timeline,
       mode,
@@ -1003,7 +1022,11 @@ export class PracticeController {
           anyPitch: this.currentSettings.rhythmOnly,
         },
         countInBars: this.currentSettings.countInBars,
-        startAtIndex: this.beginAt,
+        // Where the reader put the cursor, but never outside the passage
+        // they chose: a place pointed at before the passage was narrowed is
+        // no longer in the music being practised.
+        startAtIndex: Math.min(Math.max(this.beginAt, passage.from), passage.to),
+        stopAfterIndex: passage.to,
         expectedStaff: this.currentSettings.handStaff,
         inputLatencyMs: this.currentSettings.inputLatencyMs,
         click: this.currentSettings.clickPattern,
@@ -1024,8 +1047,9 @@ export class PracticeController {
     // rather than `moveTo(0)` for the second: moving to a position the
     // navigator believes it is already at asks the engraver for nothing, so
     // nothing is redrawn and nothing is scrolled to.
-    if (this.beginAt > 0) {
-      this.deps.cursor.moveTo(this.beginAt);
+    const openAt = Math.min(Math.max(this.beginAt, passage.from), passage.to);
+    if (openAt > 0) {
+      this.deps.cursor.moveTo(openAt);
     } else {
       this.deps.cursor.reset();
       // The page a long piece was left scrolled to is not where bar one is.

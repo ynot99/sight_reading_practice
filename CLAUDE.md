@@ -30,9 +30,14 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
   `Duration.of` refuses a tuplet ratio that would not land on a whole division.
 - A generated tie holds one pitch: the voice must stop moving for the length
   of the held note, or `validateExercise` will refuse the bar.
-- Practising a passage is `sliceExercise`, not a range inside the session.
-  Everything downstream stays unaware a longer piece exists; the seams (clef,
-  key, ties, pedal) are where the care goes.
+- Practising a passage gives the *run* two ends; the music on the page stays
+  whole. `startAtIndex` and `stopAfterIndex` are the whole mechanism, and
+  beginning partway through is the same two numbers resuming from a pause has
+  always used. This replaced cutting the score down to the passage, which
+  needed the clef and key restating, a tie out of the last bar letting go of
+  and the pedal pressing again - seams that only existed because something had
+  been cut. The reader keeps their context and the bar numbers keep meaning
+  what they say.
 - Notation the writer chose is carried, not recomputed: beams, stem directions
   and clef changes all round-trip. Dropping one hands the engraver a decision
   that had already been made, and it will make a different one.

@@ -219,7 +219,7 @@ function describePages(state: ScorePageState, wanted: boolean): string {
   );
 }
 
-/** Which bars are on the page, and which the whole piece has. */
+/** Which bars are on the page, and which of them the run will play. */
 function describeBarRange(controller: AppRuntime['controller']): string {
   const exercise = controller.currentExercise;
   const { firstBar, lastBar } = controller.pieceBarRange;
@@ -229,8 +229,9 @@ function describeBarRange(controller: AppRuntime['controller']): string {
   const bars = measureCount(exercise);
   const printedFrom = exercise.firstBarNumber;
   return (
-    `${printedFrom}-${printedFrom + bars - 1} (${bars} of the piece's ${firstBar}-${lastBar})` +
-    `   range: ${controller.settings.rangeFromBar ?? '-'}..${controller.settings.rangeToBar ?? '-'}`
+    `page ${printedFrom}-${printedFrom + bars - 1} (piece ${firstBar}-${lastBar})` +
+    `   passage: ${controller.settings.rangeFromBar ?? '-'}..${controller.settings.rangeToBar ?? '-'}` +
+    `   steps: ${controller.beginsAt}..`
   );
 }
 
@@ -1128,12 +1129,12 @@ export class AppView {
   }
 
   /**
-   * Stands the markers around the whole of what is engraved.
+   * Stands the markers around the passage, inside the whole piece.
    *
-   * Which is the passage: choosing one cuts it out and engraves it on its
-   * own, so after every reload the markers belong at the two ends of the
-   * page. Dragging them inwards narrows it; dragging one past the edge of
-   * the page widens it again.
+   * The music is no longer cut down to a passage, so the markers stand where
+   * a pencil would: somewhere in the middle of the page, with the rest of
+   * the piece still around them. Dragging one is a plain drag in either
+   * direction, because the bars on both sides are on the page to drag to.
    */
   /**
    * Puts the reader's place in the music, where the next run will begin.
@@ -1163,10 +1164,14 @@ export class AppView {
       this.runtime.renderer.hidePassage();
       return;
     }
+    const controller = this.runtime.controller;
+    const { rangeFromBar, rangeToBar } = controller.settings;
+    const first = bars.firstBarNumber;
+    const last = Math.max(0, measureCount(bars) - 1);
     this.runtime.renderer.showPassage({
-      fromMeasureIndex: 0,
-      toMeasureIndex: Math.max(0, measureCount(bars) - 1),
-      repeating: this.runtime.controller.settings.repeatRange,
+      fromMeasureIndex: rangeFromBar === null ? 0 : Math.min(Math.max(rangeFromBar - first, 0), last),
+      toMeasureIndex: rangeToBar === null ? last : Math.min(Math.max(rangeToBar - first, 0), last),
+      repeating: controller.settings.repeatRange,
     });
   }
 

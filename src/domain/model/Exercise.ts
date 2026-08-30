@@ -66,6 +66,22 @@ export interface NoteEntry {
    * did not.
    */
   readonly arpeggiated: boolean;
+  /**
+   * Hold this note longer than it is written.
+   *
+   * A reading instruction the writer chose, like the roll and the beams: how
+   * much longer is the performer's, which is exactly why it has to be on the
+   * page rather than turned into a number here.
+   */
+  readonly fermata: boolean;
+  /**
+   * Lift after this note - the comma over the staff.
+   *
+   * A breath, and the shortest of all the writer's instructions: it takes no
+   * time from the bar and gives none to it, it only says that the line stops
+   * here before it goes on.
+   */
+  readonly breath: boolean;
 }
 
 /** Silence occupying a rhythmic value. */
@@ -233,6 +249,12 @@ export function barNumberOf(exercise: Exercise, measureIndex: number): number {
   return exercise.firstBarNumber + measureIndex;
 }
 
+/** The writer's marks on a note that are neither pitch nor rhythm. */
+export interface EntryMarks {
+  readonly fermata?: boolean;
+  readonly breath?: boolean;
+}
+
 export function noteEntry(
   pitches: Pitch | readonly Pitch[],
   duration: Duration,
@@ -240,6 +262,7 @@ export function noteEntry(
   beams: readonly Beam[] = [],
   stem: StemDirection | null = null,
   arpeggiated = false,
+  marks: EntryMarks = {},
 ): NoteEntry {
   const list = Array.isArray(pitches) ? [...(pitches as readonly Pitch[])] : [pitches as Pitch];
   return {
@@ -250,6 +273,8 @@ export function noteEntry(
     beams: [...beams],
     stem,
     arpeggiated,
+    fermata: marks.fermata === true,
+    breath: marks.breath === true,
   };
 }
 

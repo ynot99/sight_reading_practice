@@ -70,6 +70,8 @@ interface RawNote {
   readonly beams: readonly Beam[];
   readonly stem: StemDirection | null;
   readonly arpeggiated: boolean;
+  readonly fermata: boolean;
+  readonly breath: boolean;
 }
 
 const XML_TYPE_NAMES: Readonly<Record<string, NoteTypeName>> = {
@@ -466,6 +468,8 @@ function fitGracesBefore(
         duration: Duration.of('16th'),
         pitch: readPitch(grace),
         tieStart: false,
+        fermata: false,
+        breath: false,
         isChord: inChord > 0,
         beams: [],
         stem: readStem(grace),
@@ -580,6 +584,13 @@ function readMeasureNotes(
       beams: isChord ? [] : readBeams(node),
       stem: readStem(node),
       arpeggiated: hasChild(child(node, 'notations'), 'arpeggiate'),
+      // Two of the writer's own instructions, and the page has been dropping
+      // both: a fermata says hold this longer and a comma says lift after
+      // it. Neither is a number - how much longer, and how long a lift, are
+      // the performer's - which is exactly why they belong on the page and
+      // cannot be turned into rhythm here.
+      fermata: hasChild(child(node, 'notations'), 'fermata'),
+      breath: hasChild(child(child(node, 'notations'), 'articulations'), 'breath-mark'),
     };
     notes.push(pushed);
 
@@ -634,10 +645,15 @@ function buildMeasure(
       const tied = group
         .filter((note) => note.tieStart && note.pitch !== null)
         .map((note) => note.pitch?.midi ?? 0);
-      // The roll belongs to the chord, so any note carrying the mark rolls it.
+      // The roll belongs to the chord, so any note carrying the mark rolls
+      // it - and so do the hold and the breath, for the same reason: a
+      // writer marks one note of a chord and means the chord.
       const rolled = group.some((note) => note.arpeggiated);
       entries.push(
-        noteEntry(pitches, first.duration, tied, first.beams, first.stem, rolled),
+        noteEntry(pitches, first.duration, tied, first.beams, first.stem, rolled, {
+          fermata: group.some((note) => note.fermata),
+          breath: group.some((note) => note.breath),
+        }),
       );
     }
     cursor += first.duration.ticks;
@@ -816,6 +832,7 @@ function dropTiesThatLeadNowhere(
               entry.beams,
               entry.stem,
               entry.arpeggiated,
+              { fermata: entry.fermata, breath: entry.breath },
             );
       }),
     ),

@@ -58,6 +58,8 @@ describe('exercise validation', () => {
         tiedForward: [],
         beams: [],
         stem: null,
+        fermata: false,
+        breath: false,
         arpeggiated: false,
       }),
       bar(noteEntry(p('G4'), Duration.WHOLE)),

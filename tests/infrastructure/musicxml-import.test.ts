@@ -365,6 +365,30 @@ describe('files written by other programs', () => {
     expect(serializer.serialize(exercise)).toContain('<arpeggiate/>');
   });
 
+  it('carries a fermata and a breath mark, and prints them again', () => {
+    // Both are the writer's own instructions and neither is a number: how
+    // much longer to hold, and how long a lift, are the performer's. So they
+    // belong on the page rather than in the rhythm - and the page had been
+    // dropping both, which is a photocopy that has quietly lost two of the
+    // things the reader is meant to read.
+    const marked = note(
+      'C',
+      4,
+      96,
+      'whole',
+      '<notations><fermata type="upright"/>' +
+        '<articulations><breath-mark>comma</breath-mark></articulations></notations>',
+    );
+    const { exercise } = importer.read(scoreXml(marked));
+
+    const entry = exercise.staves[0]?.measures[0]?.entries[0];
+    expect(entry).toMatchObject({ kind: 'note', fermata: true, breath: true });
+
+    const printed = new MusicXmlSerializer().serialize(exercise);
+    expect(printed).toContain('<fermata');
+    expect(printed).toContain('<breath-mark');
+  });
+
   it('follows the damper pedal', () => {
     const pedalled =
       '<direction placement="below"><direction-type>' +

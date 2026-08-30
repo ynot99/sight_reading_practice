@@ -76,6 +76,10 @@ const TAP_SLACK_PX = 8;
  * rather than a wait.
  */
 const HOLD_MS = 450;
+/** How wide the "start here" line is drawn, and its little flag. */
+const START_WIDTH = 3;
+const START_FLAG = 9;
+
 /** How far the page number sits from the corner of the page, in pixels. */
 const PAGE_NUMBER_INSET = 18;
 /** Half the width of the arrow drawn inside a handle. */
@@ -260,6 +264,8 @@ export class OsmdScoreRenderer
   /** Where the engraver put each bar, and the markers standing on them. */
   private measures: DrawnMeasure[] = [];
   private passage: DrawnPassage | null = null;
+  /** The bar the music will start from, when the reader has moved it. */
+  private startMeasure: number | null = null;
   private passageListeners: ((passage: DrawnPassage) => void)[] = [];
   private dragging: PassageDrag | null = null;
 
@@ -673,6 +679,11 @@ export class OsmdScoreRenderer
 
   showPassage(passage: DrawnPassage): void {
     this.passage = passage;
+    this.paintPassage();
+  }
+
+  showStart(measureIndex: number | null): void {
+    this.startMeasure = measureIndex;
     this.paintPassage();
   }
 
@@ -1252,6 +1263,7 @@ export class OsmdScoreRenderer
     for (const sheet of this.sheets) {
       this.passageGroupFor(sheet).replaceChildren();
     }
+    this.paintStart();
     const showing = this.dragging?.passage ?? this.passage;
     if (showing === null) {
       return;
@@ -1344,6 +1356,52 @@ export class OsmdScoreRenderer
       }
       group.append(shape);
     }
+  }
+
+  /**
+   * Draws the bar the music will start from.
+   *
+   * A quieter line than the passage markers and with nothing to take hold
+   * of: it is a sign and not a control, moved by holding a finger on a bar
+   * and cleared from the transport bar. It hides with the markers, because
+   * a reader who has put the furniture away has put all of it away.
+   */
+  private paintStart(): void {
+    const at = this.startMeasure;
+    const measure = at === null ? undefined : this.measuresHere().find(
+      (each) => each.measureIndex === at,
+    );
+    if (measure === undefined || this.passage === null) {
+      return;
+    }
+    const sheet = this.sheets[measure.page];
+    if (sheet === undefined) {
+      return;
+    }
+    const doc = sheet.ownerDocument;
+    const group = this.passageGroupFor(sheet);
+    const shape = doc.createElementNS(SVG_NAMESPACE, 'g');
+    shape.setAttribute('class', 'start-marker');
+
+    const bar = doc.createElementNS(SVG_NAMESPACE, 'rect');
+    bar.setAttribute('class', 'start-marker__bar');
+    bar.setAttribute('x', String(measure.left - START_WIDTH / 2));
+    bar.setAttribute('y', String(measure.top));
+    bar.setAttribute('width', String(START_WIDTH));
+    bar.setAttribute('height', String(Math.max(0, measure.bottom - measure.top)));
+    shape.append(bar);
+
+    // A small flag at the top, pointing the way the music will go.
+    const flag = doc.createElementNS(SVG_NAMESPACE, 'path');
+    flag.setAttribute('class', 'start-marker__flag');
+    const top = measure.top;
+    flag.setAttribute(
+      'd',
+      `M ${measure.left} ${top} L ${measure.left + START_FLAG} ${top + START_FLAG / 2}` +
+        ` L ${measure.left} ${top + START_FLAG} Z`,
+    );
+    shape.append(flag);
+    group.append(shape);
   }
 
   /** The marker layer inside one page's sheet, made if it is not there yet. */

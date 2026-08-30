@@ -101,6 +101,16 @@ export interface IPassageMarkers {
    * means is that the markers are shown or put away, which is the
    * application's decision and not the engraver's.
    */
+  /**
+   * Marks the bar the music will start from, or takes the mark away.
+   *
+   * Its own mark and not the cursor: the cursor says where the music *is*,
+   * and between runs it is at the top saying nothing useful. A reader who
+   * has put their place somewhere needs to be able to see that they have,
+   * and to see it while looking at the page rather than by pressing Start
+   * and finding out.
+   */
+  showStart(measureIndex: number | null): void;
   onScoreTapped(listener: () => void): () => void;
   /**
    * A finger held still on a note, which is how a reader points at a place.

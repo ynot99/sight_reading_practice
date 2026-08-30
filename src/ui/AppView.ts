@@ -1158,6 +1158,7 @@ export class AppView {
     if (step === null) {
       return;
     }
+    this.showPassageMarkers();
     const bar = controller.barNumber(controller.currentTimeline?.at(step)?.measureIndex ?? 0);
     this.showImportNotice(
       step === 0 ? 'Starting from the top.' : `Starting at bar ${bar}.`,
@@ -1168,6 +1169,7 @@ export class AppView {
     const bars = this.runtime.controller.currentExercise;
     if (bars === null || !this.passageMarkersWanted) {
       this.runtime.renderer.hidePassage();
+      this.runtime.renderer.showStart(null);
       return;
     }
     const controller = this.runtime.controller;
@@ -1179,6 +1181,12 @@ export class AppView {
       toMeasureIndex: rangeToBar === null ? last : Math.min(Math.max(rangeToBar - first, 0), last),
       repeating: controller.settings.repeatRange,
     });
+    // Only when the reader has moved it. From the top is where a piece
+    // starts anyway, and a mark saying so on every page would be furniture.
+    const begins = controller.currentTimeline?.at(controller.beginsAt) ?? null;
+    this.runtime.renderer.showStart(
+      controller.beginsAt > 0 && begins !== null ? begins.measureIndex : null,
+    );
   }
 
   /**
@@ -1742,6 +1750,7 @@ export class AppView {
       }
       controller.beginAtTheStart();
       controller.cursorToStart();
+      this.showPassageMarkers();
       this.showNotice('Back to the beginning');
       this.restoreNoticeSoon();
     });

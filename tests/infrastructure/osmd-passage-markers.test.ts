@@ -259,6 +259,26 @@ describe('passage markers over a real engraving', () => {
     expect(chosen[0]?.toMeasureIndex).toBeLessThan(3);
   });
 
+  it('marks the bar the music will start from, quietly', () => {
+    // A sign and not a control: nothing to take hold of, and it must not
+    // swallow a touch aimed at the music or at a marker beside it.
+    renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 3 });
+    renderer.showStart(2);
+
+    const mark = container.querySelector('g.start-marker');
+    expect(mark).not.toBeNull();
+    expect(mark?.querySelectorAll('circle')).toHaveLength(0);
+    // On the bar it names, which is inside the passage rather than at an end.
+    const bar = mark?.querySelector('rect.start-marker__bar');
+    const at = Number.parseFloat(bar?.getAttribute('x') ?? 'NaN');
+    const [start, end] = markers(container);
+    expect(at).toBeGreaterThan(barOf(start).x);
+    expect(at).toBeLessThan(barOf(end).x);
+
+    renderer.showStart(null);
+    expect(container.querySelector('g.start-marker')).toBeNull();
+  });
+
   it('takes them away again', () => {
     renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 1 });
     renderer.hidePassage();

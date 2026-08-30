@@ -128,6 +128,15 @@ describe('the stylesheet', () => {
     }
   });
 
+  it('keeps the start mark out of the way of a finger too', () => {
+    // It is a sign and not a control, and it stands on a bar line where a
+    // passage marker may be standing as well: a mark that took the touch
+    // would make that marker unusable.
+    const mark = rules().find((rule) => rule.selector === '.start-marker');
+
+    expect(mark?.body).toMatch(/pointer-events\s*:\s*none/);
+  });
+
   it('keeps the page number out of the way of a finger', () => {
     // It is printed on the page, so it sits over the music: a label that
     // swallowed a touch would put a dead patch in the corner of every page,

@@ -131,6 +131,13 @@ export class FakeScoreRenderer
     };
   }
 
+  /** The bar the music will start from, as the view last said. */
+  startMeasure: number | null = null;
+
+  showStart(measureIndex: number | null): void {
+    this.startMeasure = measureIndex;
+  }
+
   private tapListeners: (() => void)[] = [];
 
   onScoreTapped(listener: () => void): () => void {

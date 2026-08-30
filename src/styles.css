@@ -1131,6 +1131,29 @@ select {
  * is a fingertip's worth of area that says so in advance.
  */
 /*
+ * Where the music will start from.
+ *
+ * Grey and thin, because it is a sign and not a control: the passage markers
+ * are things to take hold of and this is a thing to read. It stands on the
+ * bar line the run begins at, with a small flag pointing the way the music
+ * will go, and it goes away with the markers when the reader puts the
+ * furniture away.
+ */
+.start-marker__bar {
+  fill: var(--text-muted);
+  opacity: 0.7;
+}
+
+.start-marker__flag {
+  fill: var(--text-muted);
+  opacity: 0.7;
+}
+
+.start-marker {
+  pointer-events: none;
+}
+
+/*
  * The page number, printed on the page rather than floated over it.
  *
  * Engraved music has this in the corner and so does this: the same grey as

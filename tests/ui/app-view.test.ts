@@ -1421,6 +1421,46 @@ describe('AppView', () => {
       expect(rig.renderer.cursor.position).toBe(0);
     });
 
+    it('marks the bar the music will start from', async () => {
+      // The cursor says where the music *is*, and between runs it sits at
+      // the top saying nothing useful. A reader who has moved their place
+      // has to be able to see that they have, by looking at the page.
+      const rig = createRig();
+      await rig.view.initialize();
+      expect(rig.renderer.startMeasure).toBeNull();
+      const later = rig.runtime.controller.currentTimeline?.steps.find(
+        (step) => step.measureIndex === 2,
+      );
+      if (later === undefined) {
+        throw new Error('expected a third bar');
+      }
+
+      rig.renderer.holdNote(later.index);
+
+      expect(rig.renderer.startMeasure).toBe(2);
+
+      // And it goes away with the markers, because a reader who has put the
+      // furniture away has put all of it away.
+      rig.renderer.tapScore();
+      expect(rig.renderer.startMeasure).toBeNull();
+    });
+
+    it('takes the mark away when the place goes back to the top', async () => {
+      // From the top is where a piece starts anyway, so a mark saying so on
+      // every page would be furniture.
+      const rig = createRig();
+      await rig.view.initialize();
+      const later = rig.runtime.controller.currentTimeline?.steps.find(
+        (step) => step.measureIndex === 2,
+      );
+      rig.renderer.holdNote(later?.index ?? 0);
+      expect(rig.renderer.startMeasure).toBe(2);
+
+      element<HTMLButtonElement>('focus-rewind').click();
+
+      expect(rig.renderer.startMeasure).toBeNull();
+    });
+
     it('stops a run before taking the place back', async () => {
       // Otherwise the marker would go to bar one while the music went on
       // playing from wherever it had got to.

@@ -394,6 +394,7 @@ export class OsmdScoreRenderer
       this.turnToPage(pageContaining(this.pageBands, this.scrolledToDrawingY()));
       return;
     }
+    this.showPageOffset();
     this.announcePages();
   }
 
@@ -438,24 +439,62 @@ export class OsmdScoreRenderer
   /** Cuts the column up again, for a new engraving or a new window. */
   private layOutPages(): void {
     const scale = this.drawingScale();
-    const scroller = this.scroller();
-    const height = scroller instanceof HTMLElement ? scroller.clientHeight : 0;
+    const height = this.windowHeight();
     this.pageBands = pagesOf(systemsOf(this.measures), scale > 0 ? height / scale : 0);
     this.pageAt = Math.min(this.pageAt, Math.max(0, this.pageBands.length - 1));
   }
 
+  /**
+   * The height a page has to fit into, in screen pixels.
+   *
+   * Measured on the frame that *clips* the score rather than on the box that
+   * scrolls inside it. Those are not the same element and need not be the
+   * same height: a scrolling box grows to its content, and asked how tall it
+   * was it answered with the length of the whole piece - which pages a
+   * hundred bars into one page and made every turn a no-op.
+   */
+  private windowHeight(): number {
+    const frame = this.container.closest('.score') ?? this.scroller();
+    const height = frame?.getBoundingClientRect().height ?? 0;
+    const scroller = this.scroller();
+    // The room kept for the pill in fullscreen, which is padding on the
+    // scrolling box: a page that used it would put its last system behind
+    // the transport bar.
+    const reserved =
+      scroller instanceof HTMLElement
+        ? Number.parseFloat(getComputedStyle(scroller).paddingBottom) || 0
+        : 0;
+    return Math.max(0, height - reserved);
+  }
+
+  /**
+   * Puts a page in front of the reader by moving the engraving, not the
+   * scrollbar.
+   *
+   * Scrolling was the first attempt and it did nothing at all: which element
+   * actually scrolls depends on the layout the score happens to be in, and
+   * on this page it was not the one being asked. Moving the drawing itself
+   * cannot miss - the frame around it already clips - and it leaves the
+   * marker arithmetic alone, because that asks the browser for its mapping
+   * and the browser knows about transforms.
+   */
   private turnToPage(index: number): void {
     const at = Math.min(Math.max(index, 0), Math.max(0, this.pageBands.length - 1));
     this.pageAt = at;
-    const scroller = this.scroller();
-    if (this.paged && scroller?.scrollTo !== undefined) {
-      scroller.scrollTo({
-        top: scrollTopFor(this.pageBands[at], this.drawingScale()),
-        left: 0,
-        behavior: 'auto',
-      });
-    }
+    this.showPageOffset();
     this.announcePages();
+  }
+
+  private showPageOffset(): void {
+    if (!(this.container instanceof HTMLElement)) {
+      return;
+    }
+    if (!this.paged) {
+      this.container.style.transform = '';
+      return;
+    }
+    const top = scrollTopFor(this.pageBands[this.pageAt], this.drawingScale());
+    this.container.style.transform = top === 0 ? '' : `translateY(${-top}px)`;
   }
 
   private announcePages(): void {
@@ -550,6 +589,29 @@ export class OsmdScoreRenderer
    * - a scroll, a pinch - passes through untouched.
    */
   private watchForDrags(): void {
+    // Before anything else, and not passive: a touch that landed on a marker
+    // must not become a scroll. `touch-action` is supposed to say this on
+    // its own, and on an SVG child it is not honoured everywhere - which is
+    // why a marker could be moved sideways but never down the page. This
+    // says it in the one way every browser obeys.
+    this.container.addEventListener(
+      'touchstart',
+      (event) => {
+        if (this.markerUnder(event.target) !== null) {
+          event.preventDefault();
+        }
+      },
+      { passive: false },
+    );
+    this.container.addEventListener(
+      'touchmove',
+      (event) => {
+        if (this.dragging !== null) {
+          event.preventDefault();
+        }
+      },
+      { passive: false },
+    );
     this.container.addEventListener('pointerdown', (event) => this.beginDrag(event));
     this.container.addEventListener('pointermove', (event) => this.continueDrag(event));
     this.container.addEventListener('pointerup', (event) => this.endDrag(event));

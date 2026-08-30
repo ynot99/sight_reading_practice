@@ -14,18 +14,21 @@ import { createScoreContainer, installCanvasStub } from '../support/osmdHarness.
  * pages into a single page and the feature quietly does nothing at all.
  */
 function withLayout(container: HTMLElement, windowHeight: number): HTMLElement {
+  // The frame that clips and the box that scrolls inside it, which is the
+  // arrangement the real page has - and they are not the same height.
+  const frame = document.createElement('div');
+  frame.className = 'score';
   const scroller = document.createElement('div');
   scroller.className = 'score__scroll';
-  container.replaceWith(scroller);
+  container.replaceWith(frame);
+  frame.append(scroller);
   scroller.append(container);
-  Object.defineProperty(scroller, 'clientHeight', { value: windowHeight, configurable: true });
-  scroller.scrollTo = ((options: ScrollToOptions) => {
-    Object.defineProperty(scroller, 'scrollTop', {
-      value: options.top ?? 0,
-      configurable: true,
-      writable: true,
-    });
-  }) as HTMLElement['scrollTo'];
+  frame.getBoundingClientRect = (() =>
+    ({ left: 0, top: 0, width: 900, height: windowHeight })) as Element['getBoundingClientRect'];
+  // As tall as everything in it, which is what a scrolling box does and what
+  // made asking it for the window's height give back the whole piece.
+  scroller.getBoundingClientRect = (() =>
+    ({ left: 0, top: 0, width: 900, height: 99_999 })) as Element['getBoundingClientRect'];
 
   const svg = container.querySelector('svg');
   const height = Number.parseFloat(svg?.getAttribute('height') ?? '0');
@@ -36,6 +39,12 @@ function withLayout(container: HTMLElement, windowHeight: number): HTMLElement {
       ({ left: 0, top: 0, width: 900, height })) as Element['getBoundingClientRect'];
   }
   return scroller;
+}
+
+/** How far up the engraving has been moved, in pixels. */
+function movedBy(container: HTMLElement): number {
+  const match = /translateY\((-?[\d.]+)px\)/.exec(container.style.transform);
+  return match === null ? 0 : -Number.parseFloat(match[1] ?? '0');
 }
 
 describe('reading a real engraving as pages', () => {
@@ -70,17 +79,30 @@ describe('reading a real engraving as pages', () => {
     expect(renderer.pages.at).toBe(0);
   });
 
-  it('scrolls to a page rather than re-engraving anything', () => {
+  it('moves the engraving rather than re-engraving anything', () => {
+    // Scrolling was the first attempt and it did nothing at all: which
+    // element actually scrolls depends on the layout the score is in, and it
+    // was not the one being asked. Moving the drawing cannot miss.
     renderer.setPaged(true);
     const engravings = container.querySelectorAll('svg').length;
 
     renderer.turnPages(1);
 
     expect(renderer.pages.at).toBe(1);
-    expect(scroller.scrollTop).toBeGreaterThan(0);
+    expect(movedBy(container)).toBeGreaterThan(0);
     // The column is untouched: a page is a window onto it, which is what
     // keeps the cursor, the marks and the markers all still true.
     expect(container.querySelectorAll('svg')).toHaveLength(engravings);
+  });
+
+  it('puts the engraving back when pages are turned off', () => {
+    renderer.setPaged(true);
+    renderer.turnPages(1);
+    expect(movedBy(container)).toBeGreaterThan(0);
+
+    renderer.setPaged(false);
+
+    expect(movedBy(container)).toBe(0);
   });
 
   it('stops at either end instead of running off', () => {
@@ -110,7 +132,7 @@ describe('reading a real engraving as pages', () => {
   it('does nothing to a scrolling score', () => {
     renderer.showMeasure(15);
 
-    expect(scroller.scrollTop ?? 0).toBe(0);
+    expect(movedBy(container)).toBe(0);
   });
 
   it('gives the scroll back when pages are turned off', () => {

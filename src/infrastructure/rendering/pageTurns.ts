@@ -50,6 +50,41 @@ export function systemsOf(measures: readonly DrawnMeasure[]): SystemBand[] {
 }
 
 /**
+ * The bands turned into tiles that cover the column with no gaps.
+ *
+ * A system measured by its staff lines is not the whole of what is drawn
+ * there. Beams hang below the bass staff, stems and ledger lines reach above
+ * the treble, and a slur can arch over both - so packing pages by the staves
+ * fits one more system than there is room for, and the last one on every
+ * page comes out sliced through the middle.
+ *
+ * Tiling fixes it without having to measure ink: everything belonging to a
+ * system lies between the staves above it and the staves below it, or the
+ * engraving would collide with itself. So each tile runs from halfway up the
+ * gap before its system to halfway up the gap after, the first reaches the
+ * top of the page and the last reaches the bottom, and nothing drawn anywhere
+ * can fall outside the tile it belongs to.
+ */
+export function tileSystems(
+  bands: readonly SystemBand[],
+  contentHeight: number,
+): SystemBand[] {
+  const tiles: SystemBand[] = [];
+  for (const [at, band] of bands.entries()) {
+    const before = bands[at - 1];
+    const after = bands[at + 1];
+    tiles.push({
+      top: before === undefined ? 0 : (before.bottom + band.top) / 2,
+      bottom:
+        after === undefined
+          ? Math.max(band.bottom, contentHeight)
+          : (band.bottom + after.top) / 2,
+    });
+  }
+  return tiles;
+}
+
+/**
  * As many whole systems as fit, and then a new page.
  *
  * Whole systems, always: a page that ended halfway down a stave would be
@@ -135,32 +170,6 @@ export function scrollTopFor(
     return 0;
   }
   return Math.max(0, page.top * scale - marginPx);
-}
-
-/**
- * How far to move the engraving for a page, in the pixels it is shown at.
- *
- * The last page is pulled back so that it ends where the music ends. A
- * scrollbar gives this for nothing - there is no scrolling past the bottom -
- * and moving the drawing instead has to be told: without it the final turn
- * carries the last system up to the top of the screen and leaves the rest of
- * the page blank, which is what a reader sees as "page two is empty".
- *
- * `windowHeight` and `contentHeight` are both in shown pixels, like the
- * answer.
- */
-export function pageOffsetFor(
-  page: ScorePage | undefined,
-  scale: number,
-  contentHeight: number,
-  windowHeight: number,
-  marginPx = 8,
-): number {
-  const wanted = scrollTopFor(page, scale, marginPx);
-  if (!Number.isFinite(contentHeight) || !Number.isFinite(windowHeight) || windowHeight <= 0) {
-    return wanted;
-  }
-  return Math.max(0, Math.min(wanted, contentHeight - windowHeight));
 }
 
 /**

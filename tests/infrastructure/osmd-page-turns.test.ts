@@ -185,6 +185,33 @@ describe('reading a real engraving as pages', () => {
     expect(frame.style.minHeight).toBe('');
   });
 
+  it('fits its pages to the window at a zoom the reader has chosen', async () => {
+    // The engraver's own units and the pixels a drawing is shown at part
+    // company the moment the reader zooms: at 85% the box is 818 units tall
+    // while the attribute says 696 pixels. Read the attribute as the unit
+    // count - which is what this did - and every position comes out eighteen
+    // per cent too far down, which packs a system too many onto each page
+    // and slices the last one through the middle. Which is what the reader
+    // photographed.
+    document.body.replaceChildren();
+    const zoomed = createScoreContainer();
+    const renderer85 = new OsmdScoreRenderer(zoomed, { zoom: 0.85 });
+    await renderer85.load(new MusicXmlSerializer().serialize(longExercise({ bars: 40 })));
+    const frame85 = withLayout(zoomed, 400).parentElement as HTMLElement;
+    renderer85.setPaged(true);
+
+    expect(renderer85.pages.count).toBeGreaterThan(1);
+
+    // The pages have to cover the drawing exactly. Read the shown height as
+    // the unit count and they cover a tenth more than there is, so the last
+    // page hangs past the end of the music and every page before it is
+    // packed a system too tightly.
+    renderer85.turnPages(renderer85.pages.count);
+    const covered = movedBy(zoomed) + frame85.getBoundingClientRect().height;
+
+    expect(covered).toBeCloseTo(renderer85.pages.contentPx, 0);
+  });
+
   it('does nothing to a scrolling score', () => {
     renderer.showMeasure(15);
 

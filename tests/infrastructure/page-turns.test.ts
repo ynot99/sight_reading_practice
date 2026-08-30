@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { DrawnMeasure } from '../../src/infrastructure/rendering/passageBrackets.js';
 import {
   pageContaining,
-  pageOffsetFor,
   pagesOf,
   scrollTopFor,
   swipeDirection,
   systemsOf,
+  tileSystems,
   visibleHeightOf,
   type SystemBand,
 } from '../../src/infrastructure/rendering/pageTurns.js';
@@ -44,6 +44,47 @@ describe('finding the systems in what was drawn', () => {
 
   it('has nothing to say about an empty page', () => {
     expect(systemsOf([])).toEqual([]);
+  });
+});
+
+describe('tiling the systems', () => {
+  it('gives each system the gap on either side of it', () => {
+    // A system measured by its staff lines is not the whole of what is drawn
+    // there: beams hang below the bass staff, stems and ledger lines reach
+    // above the treble. Packed by the staves, one system too many fits and
+    // the last one on every page comes out sliced through the middle.
+    const tiles = tileSystems(bands(3), 1_000);
+
+    expect(tiles).toEqual([
+      { top: 0, bottom: 150 },
+      { top: 150, bottom: 350 },
+      { top: 350, bottom: 1_000 },
+    ]);
+  });
+
+  it('covers the column with nothing left between', () => {
+    const tiles = tileSystems(bands(4), 900);
+
+    for (const [at, tile] of tiles.entries()) {
+      const next = tiles[at + 1];
+      if (next !== undefined) {
+        expect(next.top).toBe(tile.bottom);
+      }
+    }
+    expect(tiles[0]?.top).toBe(0);
+    expect(tiles[tiles.length - 1]?.bottom).toBe(900);
+  });
+
+  it('never gives back less than the staves themselves', () => {
+    // A drawing shorter than what is in it is a measurement gone wrong, and
+    // the last system still has to be reachable.
+    const tiles = tileSystems(bands(2), 0);
+
+    expect(tiles[1]?.bottom).toBe(300);
+  });
+
+  it('has nothing to tile on an empty page', () => {
+    expect(tileSystems([], 500)).toEqual([]);
   });
 });
 
@@ -132,32 +173,6 @@ describe('scrolling to a page', () => {
   it('says nothing useful about a page that is not there', () => {
     expect(scrollTopFor(undefined, 1)).toBe(0);
     expect(scrollTopFor({ top: 400, bottom: 700, systems: 1 }, 0)).toBe(0);
-  });
-});
-
-describe('moving the engraving for a page', () => {
-  const last = { top: 900, bottom: 1_400, systems: 3 };
-
-  it('pulls the last page back so it ends where the music does', () => {
-    // A scrollbar gives this for nothing - there is no scrolling past the
-    // bottom - and moving the drawing has to be told. Without it the final
-    // turn carries the last system to the top of the screen and leaves the
-    // rest blank, which is what a reader sees as "page two is empty".
-    expect(pageOffsetFor(last, 1, 1_400, 700)).toBe(700);
-  });
-
-  it('leaves a page that fits where it was asked for', () => {
-    expect(pageOffsetFor({ top: 300, bottom: 800, systems: 3 }, 1, 4_000, 700, 8)).toBe(292);
-  });
-
-  it('never moves the first page at all', () => {
-    expect(pageOffsetFor({ top: 0, bottom: 700, systems: 4 }, 1, 4_000, 700)).toBe(0);
-    // Nor moves anything when the whole piece already fits.
-    expect(pageOffsetFor(last, 1, 600, 700)).toBe(0);
-  });
-
-  it('says what it can when the window has not been measured', () => {
-    expect(pageOffsetFor(last, 1, 1_400, 0, 0)).toBe(900);
   });
 });
 

@@ -28,8 +28,9 @@ import {
 } from './passageBrackets.js';
 import {
   pageContaining,
-  pageOffsetFor,
   pagesOf,
+  scrollTopFor,
+  tileSystems,
   visibleHeightOf,
   swipeDirection,
   systemsOf,
@@ -71,9 +72,6 @@ const MARKER_WIDTH = 5;
 const MARKER_GRIP_RADIUS = 9;
 /** How far a repeat dot sits from the marker, and from the line between. */
 const REPEAT_DOT_GAP = 9;
-/** Breathing room above and below a page, so it does not sit against the edge. */
-const PAGE_MARGIN_PX = 8;
-
 /** How far a finger may wander and still have meant a tap, in screen pixels. */
 const TAP_SLACK_PX = 8;
 /** Half the width of the arrow drawn inside a handle. */
@@ -109,18 +107,25 @@ interface DrawnGraphicalMeasure {
  * a real window. The attribute is what the engraver wrote there itself.
  */
 function intrinsicSize(svg: SVGSVGElement): { readonly width: number; readonly height: number } {
+  // The `viewBox` first, because everything measured here is in the
+  // engraver's own units and the viewBox is what those units mean. The width
+  // and height attributes are the size the drawing is *shown* at, and the two
+  // part company the moment the reader zooms: at 85% the box is 818 units
+  // tall while the attribute says 696 pixels. Read the attribute as the unit
+  // count and every position comes out eighteen per cent too far down, which
+  // packs a system too many onto each page and slices the last one.
+  const box = (svg.getAttribute('viewBox') ?? '').split(/[\s,]+/).map((part) => Number.parseFloat(part));
+  const boxWidth = box[2];
+  const boxHeight = box[3];
+  if (boxWidth !== undefined && boxHeight !== undefined && Number.isFinite(boxWidth) && Number.isFinite(boxHeight)) {
+    return { width: boxWidth, height: boxHeight };
+  }
   const attribute = (name: string): number => Number.parseFloat(svg.getAttribute(name) ?? '');
   const width = attribute('width');
   const height = attribute('height');
-  if (Number.isFinite(width) && Number.isFinite(height)) {
-    return { width, height };
-  }
-  const [, , boxWidth, boxHeight] = (svg.getAttribute('viewBox') ?? '')
-    .split(/[\s,]+/)
-    .map((part) => Number.parseFloat(part));
   return {
-    width: Number.isFinite(boxWidth) ? (boxWidth as number) : 0,
-    height: Number.isFinite(boxHeight) ? (boxHeight as number) : 0,
+    width: Number.isFinite(width) ? width : 0,
+    height: Number.isFinite(height) ? height : 0,
   };
 }
 
@@ -458,7 +463,11 @@ export class OsmdScoreRenderer
   private layOutPages(): void {
     const scale = this.drawingScale();
     const height = this.windowHeight();
-    this.pageBands = pagesOf(systemsOf(this.measures), scale > 0 ? height / scale : 0);
+    const drawn = this.drawingHeight();
+    this.pageBands = pagesOf(
+      tileSystems(systemsOf(this.measures), scale > 0 ? drawn / scale : 0),
+      scale > 0 ? height / scale : 0,
+    );
     this.pageAt = Math.min(this.pageAt, Math.max(0, this.pageBands.length - 1));
   }
 
@@ -489,6 +498,11 @@ export class OsmdScoreRenderer
         ? Number.parseFloat(getComputedStyle(scroller).paddingBottom) || 0
         : 0;
     return Math.max(0, height - reserved);
+  }
+
+  /** How tall the engraving is on screen, in the pixels it is shown at. */
+  private drawingHeight(): number {
+    return this.container.querySelector('svg')?.getBoundingClientRect().height ?? 0;
   }
 
   /** How tall the screen is, as far as this document can tell. */
@@ -539,7 +553,9 @@ export class OsmdScoreRenderer
       const page = this.pageBands[this.pageAt];
       const tall = page === undefined ? 0 : (page.bottom - page.top) * this.drawingScale();
       const room = this.windowHeight();
-      frame.style.height = tall > 0 ? `${Math.min(tall + PAGE_MARGIN_PX * 2, room)}px` : '';
+      // The tiles already carry their own breathing room - each runs from
+      // halfway up the gap before its system to halfway up the gap after.
+      frame.style.height = tall > 0 ? `${Math.min(tall, room)}px` : '';
       // The minimum has to go with it. Fullscreen gives the frame a floor of
       // one screen, through a selector more specific than anything a
       // stylesheet of ours can answer with - and a floor beats a height, so
@@ -554,14 +570,10 @@ export class OsmdScoreRenderer
     // because the turn puts the music back and the scroll stays where their
     // thumb left it.
     this.container.ownerDocument.defaultView?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
-    const svg = this.container.querySelector('svg');
-    const drawn = svg?.getBoundingClientRect().height ?? 0;
-    const top = pageOffsetFor(
-      this.pageBands[this.pageAt],
-      this.drawingScale(),
-      drawn,
-      this.windowHeight(),
-    );
+    // No clamp against the end of the music any more: the frame is cut to
+    // the page below, so a page cannot show anything past its own last
+    // system, and clamping only stopped the last page from being reached.
+    const top = scrollTopFor(this.pageBands[this.pageAt], this.drawingScale(), 0);
     this.container.style.transform = top === 0 ? '' : `translateY(${-top}px)`;
   }
 

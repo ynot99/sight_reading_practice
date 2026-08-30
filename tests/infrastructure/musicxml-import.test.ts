@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
 import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
+import { Pitch } from '../../src/domain/model/Pitch.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { validateExercise } from '../../src/domain/model/Exercise.js';
@@ -587,5 +588,85 @@ describe('compressed scores', () => {
   it('says so when the archive holds no score at all', async () => {
     const archive = packMxl([{ name: 'notes.txt', body: 'nothing musical here' }]);
     await expect(zipped.readFile(archive)).rejects.toThrow(/no score in it/);
+  });
+});
+
+describe('a grace note', () => {
+  /** A note carrying `<grace/>`, which has no duration of its own. */
+  function grace(step: string, octave: number, extra = ''): string {
+    return `<note><grace slash="yes"/><pitch><step>${step}</step><octave>${octave}</octave></pitch>` +
+      `<voice>1</voice><type>eighth</type>${extra}</note>`;
+  }
+
+  it('is played, so it is given time out of the note it leans on', () => {
+    // Dropped instead, as they were, the reader plays a key the page never
+    // asked for and is told it was wrong.
+    const { exercise, warnings } = importer.read(
+      scoreXml(grace('G', 4) + note('A', 4, 24, 'quarter') + note('B', 4, 72, 'half', '<dot/>')),
+    );
+
+    expect(() => validateExercise(exercise)).not.toThrow();
+    const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
+    // A sixteenth of the quarter's own time, and the quarter keeps the rest.
+    expect(entries.slice(0, 2).map((entry) => entry.duration.ticks)).toEqual([120, 360]);
+    expect(warnings.map((warning) => warning.kind)).toContain('grace-notes');
+  });
+
+  it('is asked for, which is the whole point of keeping it', () => {
+    const { exercise } = importer.read(
+      scoreXml(grace('G', 4) + note('A', 4, 24, 'quarter') + note('B', 4, 72, 'half', '<dot/>')),
+    );
+
+    expect(demands(exercise)[0]).toEqual([Pitch.parse('G4').midi]);
+  });
+
+  it('goes before the note rather than with it', () => {
+    const { exercise } = importer.read(
+      scoreXml(grace('G', 4) + note('A', 4, 24, 'quarter') + note('B', 4, 72, 'half', '<dot/>')),
+    );
+
+    // Two presses in order, not one chord: that is what a grace note is.
+    expect(demands(exercise).slice(0, 2)).toEqual([
+      [Pitch.parse('G4').midi],
+      [Pitch.parse('A4').midi],
+    ]);
+  });
+
+  it('is dropped when the note it leans on has nothing to give', () => {
+    // A sixteenth cannot hand over a sixteenth and still exist, and a note of
+    // no length is not something the page can show or a reader can play.
+    const { exercise, warnings } = importer.read(
+      scoreXml(
+        grace('G', 4) +
+          note('A', 4, 6, '16th') +
+          note('B', 4, 18, 'eighth', '<dot/>') +
+          note('C', 5, 72, 'half', '<dot/>'),
+      ),
+    );
+
+    expect(() => validateExercise(exercise)).not.toThrow();
+    expect(warnings.map((warning) => warning.detail).join(' ')).toContain('too short');
+    expect(demands(exercise)[0]).toEqual([Pitch.parse('A4').midi]);
+  });
+
+  it('strikes two grace notes together when they are marked as a chord', () => {
+    const { exercise } = importer.read(
+      scoreXml(
+        grace('G', 4) + grace('B', 4, '<chord/>') + note('C', 5, 24, 'quarter') +
+          note('D', 5, 72, 'half', '<dot/>'),
+      ),
+    );
+
+    // One press of two keys, which is what the mark means.
+    expect(demands(exercise)[0]).toEqual([Pitch.parse('G4').midi, Pitch.parse('B4').midi]);
+    expect(exercise.staves[0]?.measures[0]?.entries[0]?.duration.ticks).toBe(120);
+  });
+
+  it('says once what it did, rather than once for every bar', () => {
+    const { warnings } = importer.read(
+      scoreXml(grace('G', 4) + note('A', 4, 24, 'quarter') + note('B', 4, 72, 'half', '<dot/>')),
+    );
+
+    expect(warnings.filter((warning) => warning.kind === 'grace-notes')).toHaveLength(1);
   });
 });

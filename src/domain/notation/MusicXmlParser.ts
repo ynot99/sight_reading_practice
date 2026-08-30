@@ -393,6 +393,72 @@ function hasTie(note: XmlNode, type: 'start' | 'stop'): boolean {
 }
 
 /** Walks one measure, placing every note on the staff and beat it belongs to. */
+/**
+ * The shortest value this project can write, and so what a grace note gets.
+ *
+ * An acciaccatura is meant to be shorter than anything notated, which cannot
+ * be said in a vocabulary that stops at the sixteenth. A sixteenth is the
+ * nearest true thing to it, and it is still one press at roughly the right
+ * moment - which is the whole of what a reader has to do with it.
+ */
+const GRACE_TICKS = 120;
+
+/**
+ * Places grace notes in front of the note they lean on, out of its time.
+ *
+ * Returns `null` when there is not enough to take: a grace before a sixteenth
+ * would leave that sixteenth nothing at all, and a note of no length is not
+ * something the page can show or the reader can play.
+ *
+ * Graces marked as a chord join the one before them rather than following it,
+ * because that is what the mark means - two keys struck together, once.
+ */
+function takeTimeForGraces(
+  graces: readonly XmlNode[],
+  cursorTicks: number,
+  hostTicks: number,
+  at: { readonly staff: number; readonly voice: number; readonly where: string },
+): { readonly notes: RawNote[]; readonly stolenTicks: number } | null {
+  // Each run of chorded graces is one press, and one press needs one slot.
+  const slots: XmlNode[][] = [];
+  for (const grace of graces) {
+    const last = slots[slots.length - 1];
+    if (hasChild(grace, 'chord') && last !== undefined) {
+      last.push(grace);
+    } else {
+      slots.push([grace]);
+    }
+  }
+
+  const stolenTicks = slots.length * GRACE_TICKS;
+  const left = hostTicks - stolenTicks;
+  if (left < GRACE_TICKS || !Duration.isNotatable(left)) {
+    return null;
+  }
+
+  const notes: RawNote[] = [];
+  slots.forEach((slot, index) => {
+    const onsetTicks = cursorTicks + index * GRACE_TICKS;
+    for (const grace of slot) {
+      notes.push({
+        staff: childNumber(grace, 'staff') ?? at.staff,
+        voice: childNumber(grace, 'voice') ?? at.voice,
+        onsetTicks,
+        ticks: GRACE_TICKS,
+        duration: Duration.of('16th'),
+        pitch: readPitch(grace),
+        tieStart: false,
+        isChord: slot.indexOf(grace) > 0,
+        beams: [],
+        stem: readStem(grace),
+        arpeggiated: false,
+      });
+    }
+  });
+
+  return { notes, stolenTicks };
+}
+
 function readMeasureNotes(
   measure: XmlNode,
   measureIndex: number,
@@ -403,7 +469,12 @@ function readMeasureNotes(
   const notes: RawNote[] = [];
   let cursor = 0;
   let previousOnset = 0;
-  let sawGrace = false;
+  const pendingGraces: XmlNode[] = [];
+  const sayOnce = (detail: string): void => {
+    if (!warnings.some((warning) => warning.kind === 'grace-notes')) {
+      warnings.push({ kind: 'grace-notes', detail });
+    }
+  };
 
   for (const node of measure.children) {
     if (node.name === 'backup' || node.name === 'forward') {
@@ -426,13 +497,9 @@ function readMeasureNotes(
       continue;
     }
     if (hasChild(node, 'grace')) {
-      if (!sawGrace) {
-        sawGrace = true;
-        warnings.push({
-          kind: 'grace-notes',
-          detail: `Grace notes were dropped, first in bar ${measureIndex + 1}.`,
-        });
-      }
+      // Held until the note they lean on arrives: only then is it known how
+      // much time there is to take from it.
+      pendingGraces.push(node);
       continue;
     }
 
@@ -446,16 +513,42 @@ function readMeasureNotes(
         ? header.timeSignature.ticksPerMeasure
         : toTicks(rawDuration ?? 0, header.divisions, where);
 
+    // A grace note is played, so it needs time, and the only time there is
+    // belongs to the note it leans on - which is exactly where a performer
+    // takes it from. Dropped instead, as they were, the reader plays a key
+    // the page never asked for and is told it was wrong.
+    let ownTicks = ticks;
+    if (pendingGraces.length > 0 && !isChord) {
+      const taken = takeTimeForGraces(pendingGraces, cursor, ticks, {
+        staff: childNumber(node, 'staff') ?? 1,
+        voice: childNumber(node, 'voice') ?? 1,
+        where: `Bar ${measureIndex + 1}`,
+      });
+      if (taken === null) {
+        sayOnce(
+          `A grace note was dropped, first in bar ${measureIndex + 1}: the note it leans on is too short to give it any time.`,
+        );
+      } else {
+        notes.push(...taken.notes);
+        cursor += taken.stolenTicks;
+        ownTicks = ticks - taken.stolenTicks;
+        sayOnce(
+          'Grace notes were written as sixteenths, taking their time from the note they lean on.',
+        );
+      }
+      pendingGraces.length = 0;
+    }
+
     const onsetTicks = isChord ? previousOnset : cursor;
     notes.push({
       staff: childNumber(node, 'staff') ?? 1,
       voice: childNumber(node, 'voice') ?? 1,
       onsetTicks,
-      ticks,
+      ticks: ownTicks,
       duration:
-        isWholeMeasureRest && !Duration.isNotatable(ticks)
+        isWholeMeasureRest && !Duration.isNotatable(ownTicks)
           ? Duration.WHOLE
-          : readDuration(node, ticks, where),
+          : readDuration(node, ownTicks, where),
       pitch: readPitch(node),
       tieStart: hasTie(node, 'start'),
       isChord,
@@ -466,7 +559,7 @@ function readMeasureNotes(
 
     if (!isChord) {
       previousOnset = cursor;
-      cursor += ticks;
+      cursor += ownTicks;
     }
   }
 

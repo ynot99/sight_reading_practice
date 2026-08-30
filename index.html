@@ -126,6 +126,7 @@
           <div class="panel__row panel__row--compact">
             <button id="open-scores" type="button" class="button button--ghost">Scores</button>
             <button id="open-takes" type="button" class="button button--ghost">Takes</button>
+            <button id="open-settings" type="button" class="button button--ghost">Settings</button>
           </div>
 
           <div id="result" class="result" hidden></div>
@@ -200,7 +201,25 @@
         </div>
       </div>
 
-      <footer class="controls">
+      <!--
+        Everything that is chosen rather than done, behind one button.
+        
+        The controls used to be a strip under the score, which meant they were
+        on the page while the reader was playing and absent the moment they
+        went fullscreen - where they are actually wanted, because that is
+        where the reading happens. One sheet answers both: it is the same
+        controls, raised from either place, over music that is not re-engraved
+        to make room for it.
+      -->
+      <div id="sheet-settings" class="sheet" hidden>
+        <div class="sheet__panel sheet__panel--wide" role="dialog" aria-modal="true"
+          aria-label="Settings">
+          <div class="sheet__head">
+            <strong class="sheet__title">Settings</strong>
+            <button id="settings-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+        <div class="controls">
         <div class="control-group">
           <label for="ladder-down">Ladder</label>
           <div class="ladder-row">
@@ -403,7 +422,9 @@
           <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
         </div>
 
-      </footer>
+        </div>
+        </div>
+      </div>
 
       <div id="focus-bar" class="focus-bar" hidden data-open="false">
         <!--
@@ -600,6 +621,20 @@
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M4 4h7v16H4zM13 4h7v16h-7z" />
               <path d="M11.2 12l3.4-3.4 1.4 1.4-2 2 2 2-1.4 1.4-3.4-3.4z" />
+            </svg>
+          </button>
+
+          <!--
+            Everything that is chosen rather than done. One button, because
+            the reader looking for a setting should not have to remember
+            which of two places it was in.
+          -->
+          <button id="focus-settings" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+              <path d="M10.6 2h2.8l.4 2.5 1.7.7 2.1-1.4 2 2-1.4 2.1.7 1.7 2.5.4v2.8l-2.5.4-.7 1.7 1.4 2.1-2 2-2.1-1.4-1.7.7-.4 2.5h-2.8l-.4-2.5-1.7-.7-2.1 1.4-2-2 1.4-2.1-.7-1.7L2 13.4v-2.8l2.5-.4.7-1.7-1.4-2.1 2-2 2.1 1.4 1.7-.7L10.6 2z" />
             </svg>
           </button>
 

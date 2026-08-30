@@ -668,6 +668,10 @@ export class AppView {
     openScores: HTMLButtonElement;
     sheetTakes: HTMLElement;
     sheetScores: HTMLElement;
+    sheetSettings: HTMLElement;
+    openSettings: HTMLButtonElement;
+    focusSettings: HTMLButtonElement;
+    settingsClose: HTMLButtonElement;
     takesClose: HTMLButtonElement;
     scoresClose: HTMLButtonElement;
     takesEmpty: HTMLElement;
@@ -831,6 +835,10 @@ export class AppView {
       openScores: requireElement(doc, 'open-scores'),
       sheetTakes: requireElement(doc, 'sheet-takes'),
       sheetScores: requireElement(doc, 'sheet-scores'),
+      sheetSettings: requireElement(doc, 'sheet-settings'),
+      openSettings: requireElement(doc, 'open-settings'),
+      focusSettings: requireElement(doc, 'focus-settings'),
+      settingsClose: requireElement(doc, 'settings-close'),
       takesClose: requireElement(doc, 'takes-close'),
       scoresClose: requireElement(doc, 'scores-close'),
       takesEmpty: requireElement(doc, 'takes-empty'),
@@ -3067,6 +3075,13 @@ export class AppView {
         [this.el.openScores, this.el.focusScores],
         () => this.renderScores(),
       ],
+      [
+        this.el.sheetSettings,
+        [this.el.openSettings, this.el.focusSettings],
+        // Opened onto whatever the settings actually are, since a run can
+        // have moved them - the ladder does, and so does opening a score.
+        () => this.syncControlsFromSettings(),
+      ],
     ];
 
     for (const [sheet, openers, render] of pairs) {
@@ -3084,6 +3099,10 @@ export class AppView {
         }
       });
     }
+
+    this.listen(this.el.settingsClose, 'click', () => {
+      this.el.sheetSettings.hidden = true;
+    });
 
     this.listen(this.el.takesKeptOnly, 'change', () => {
       this.renderTakes();
@@ -3108,7 +3127,12 @@ export class AppView {
       }
       // Before focus mode sees it: a sheet is the innermost thing open, and
       // Escape should shut that rather than the layout underneath it.
-      for (const sheet of [this.el.sheetConfirm, this.el.sheetTakes, this.el.sheetScores]) {
+      for (const sheet of [
+        this.el.sheetConfirm,
+        this.el.sheetTakes,
+        this.el.sheetScores,
+        this.el.sheetSettings,
+      ]) {
         if (!sheet.hidden) {
           sheet.hidden = true;
           event.stopPropagation();

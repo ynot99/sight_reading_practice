@@ -299,6 +299,10 @@ describe('the stylesheet', () => {
     for (const part of ['.app.is-focus .import-notice', '.app.is-focus .panel']) {
       expect(selectors).toContain(part);
     }
+    // And the controls are *not* on that list any more: they live in a sheet
+    // now, and hiding them here would hide the only way into the settings
+    // from the place the reader is actually reading in.
+    expect(selectors).not.toContain('.app.is-focus .controls');
   });
 
   it('gives every fullscreen control a name on hover', () => {

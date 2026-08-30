@@ -1599,6 +1599,48 @@ describe('AppView', () => {
     });
   });
 
+  describe('the settings sheet', () => {
+    it('is shut until it is asked for, from either place', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      const sheet = element('sheet-settings');
+      expect(sheet.hidden).toBe(true);
+
+      element<HTMLButtonElement>('open-settings').click();
+      expect(sheet.hidden).toBe(false);
+
+      element<HTMLButtonElement>('settings-close').click();
+      expect(sheet.hidden).toBe(true);
+
+      // And from the drawer, which is where the reader actually is.
+      element<HTMLButtonElement>('focus-settings').click();
+      expect(sheet.hidden).toBe(false);
+    });
+
+    it('opens onto what the settings actually are', async () => {
+      // A run can have moved them: the ladder does, and so does opening a
+      // score. A sheet showing the values it was built with would be lying.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ measures: 7 });
+
+      element<HTMLButtonElement>('open-settings').click();
+
+      expect(element<HTMLInputElement>('measures-value').value).toBe('7');
+    });
+
+    it('shuts on a tap outside it', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      const sheet = element('sheet-settings');
+      element<HTMLButtonElement>('open-settings').click();
+
+      sheet.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(sheet.hidden).toBe(true);
+    });
+  });
+
   describe('layout and score settings', () => {
     it('keeps the run controls in the toolbar, out of the settings', async () => {
       const { view } = createRig();

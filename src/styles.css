@@ -629,7 +629,13 @@ select {
  */
 .app.is-focus .app-header,
 .app.is-focus .import-notice,
-.app.is-focus .controls,
+/*
+ * Nothing on the page in fullscreen but the music.
+ *
+ * The controls are not on this list any more: they live in a sheet now, and
+ * a sheet is raised from either place. Hiding them here would hide the one
+ * way into the settings from the place the reader is actually reading in.
+ */
 .app.is-focus .panel {
   display: none;
 }
@@ -801,6 +807,24 @@ select {
   background: rgb(16 24 40 / 45%);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
+}
+
+/*
+ * Wider, because the settings are a form and not a list.
+ *
+ * The controls were laid out as a strip across the page and read in columns;
+ * squeezed into a list's width they become one very long column, and the
+ * reader scrolls past everything to reach anything.
+ */
+.sheet__panel--wide {
+  width: min(880px, 100%);
+  max-height: min(86vh, 900px);
+}
+
+.sheet__panel--wide .controls {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
 }
 
 .sheet__panel {

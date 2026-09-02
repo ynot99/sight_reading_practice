@@ -1,4 +1,4 @@
-import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES } from '../model/Duration.js';
+import { DIVISIONS_PER_QUARTER, Duration, type NoteTypeName } from '../model/Duration.js';
 import { DomainError } from '../../shared/errors.js';
 import type { Exercise, MusicalEntry, PedalMark, StaffPart } from '../model/Exercise.js';
 import { measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
@@ -26,11 +26,11 @@ const RIGHT_HAND = 1;
 const LEFT_HAND = 2;
 
 /**
- * The finest ordinary value, in divisions: a sixteenth.
+ * The finest ordinary value a performance is read at, in divisions.
  *
- * Everything a plain-valued bar is made of is a whole number of these, and
- * nothing shorter can be written at all - so this is where the grid has to
- * stop whatever the file was played at.
+ * A sixteenth, and it stays one however short a value can be *written*: see
+ * {@link PLAYED_NOTE_TYPES}. Everything a plain-valued bar is made of is a
+ * whole number of these.
  */
 const PLAIN_GRID = 120;
 
@@ -49,6 +49,17 @@ function snap(ticks: number, grid: number): number {
 }
 
 /**
+ * How fine a grid a *performance* is measured against.
+ *
+ * Deliberately shorter than what can be notated. A written score says what it
+ * means and is read down to sixty-fourths; a recording only lands near a grid,
+ * and offering finer ones does not read the playing more truthfully - it turns
+ * the unevenness of a hand into notation, and every grid added is another
+ * answer for a beat to be mistaken for.
+ */
+const PLAYED_NOTE_TYPES: readonly NoteTypeName[] = ['whole', 'half', 'quarter', 'eighth', '16th'];
+
+/**
  * The finest triplet division of a beat, in divisions.
  *
  * The *finest*, not a third: a beat played in sixes is as much a triplet beat
@@ -57,7 +68,7 @@ function snap(ticks: number, grid: number): number {
  * written as sixteenths, which is a different piece of music.
  */
 function tripletGridFor(ticksPerBeat: number): number | null {
-  const units = NOTE_TYPES.map((type) => Duration.triplet(type).ticks)
+  const units = PLAYED_NOTE_TYPES.map((type) => Duration.triplet(type).ticks)
     .filter((ticks) => ticks > 0 && ticksPerBeat % ticks === 0)
     .sort((left, right) => left - right);
   return units[0] ?? null;
@@ -65,7 +76,7 @@ function tripletGridFor(ticksPerBeat: number): number | null {
 
 /** Every triplet value that can sit inside one beat, longest first. */
 function tripletVocabulary(ticksPerBeat: number): Duration[] {
-  return NOTE_TYPES.map((type) => Duration.triplet(type))
+  return PLAYED_NOTE_TYPES.map((type) => Duration.triplet(type))
     .filter((value) => value.ticks <= ticksPerBeat)
     .sort((left, right) => right.ticks - left.ticks);
 }

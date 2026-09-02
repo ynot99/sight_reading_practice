@@ -21,6 +21,28 @@ describe('Duration', () => {
     expect(Duration.of('16th', 1).ticks).toBe(180);
   });
 
+  it('reaches the short values imported music is written in', () => {
+    // Nothing here generates these; a piano arrangement is full of them, and
+    // every one of them has to stay a whole number of divisions.
+    expect(Duration.of('32nd').ticks).toBe(60);
+    expect(Duration.of('64th').ticks).toBe(30);
+    expect(Duration.of('32nd', 1).ticks).toBe(90);
+    expect(Duration.of('64th', 1).ticks).toBe(45);
+    expect(Duration.triplet('32nd').ticks).toBe(40);
+    expect(Duration.triplet('64th').ticks).toBe(20);
+  });
+
+  it('still closes a tuplet group on the value the group adds up to', () => {
+    // The serializer infers groups: one closes when its accumulated span
+    // becomes a plain notatable value. Short values make more spans notatable,
+    // and a group that closed early would be written as two groups of music
+    // nobody played.
+    expect(Duration.isNotatable(Duration.triplet('32nd').ticks)).toBe(false);
+    expect(Duration.isNotatable(Duration.triplet('32nd').ticks * 2)).toBe(false);
+    expect(Duration.isNotatable(Duration.triplet('32nd').ticks * 3)).toBe(true);
+    expect(Duration.isNotatable(Duration.triplet('eighth').ticks * 2)).toBe(false);
+  });
+
   it('interns values so identity comparison is safe', () => {
     expect(Duration.of('quarter')).toBe(Duration.QUARTER);
     expect(Duration.of('half', 1)).toBe(Duration.DOTTED_HALF);

@@ -80,6 +80,8 @@ const XML_TYPE_NAMES: Readonly<Record<string, NoteTypeName>> = {
   quarter: 'quarter',
   eighth: 'eighth',
   '16th': '16th',
+  '32nd': '32nd',
+  '64th': '64th',
 };
 
 const CLEF_BY_SIGN_AND_LINE = new Map<string, ClefKind>(
@@ -323,7 +325,7 @@ function toTicks(fileDivisions: number, divisions: number, where: string): numbe
 
 function readDuration(note: XmlNode, ticks: number, where: string): Duration {
   const typeText = childText(note, 'type');
-  // An unknown type name (32nd, breve) reads as absent, and the tick count
+  // An unknown type name (128th, breve) reads as absent, and the tick count
   // decides instead - or the note is refused below.
   const type = typeText === null ? null : (XML_TYPE_NAMES[typeText] ?? null);
   const dots = childrenNamed(note, 'dot').length;
@@ -349,7 +351,7 @@ function readDuration(note: XmlNode, ticks: number, where: string): Duration {
     return Duration.of(type, dots === 1 ? 1 : 0);
   }
   throw new DomainError(
-    `${where} is a rhythmic value this trainer cannot write - it reads down to sixteenth notes, one dot and triplets.`,
+    `${where} is a rhythmic value this trainer cannot write - it reads down to sixty-fourth notes, one dot and triplets.`,
   );
 }
 

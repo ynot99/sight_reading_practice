@@ -489,12 +489,36 @@ describe('files written by other programs', () => {
     expect(entries.slice(0, -1).every((entry) => entry.kind === 'rest')).toBe(true);
   });
 
-  it('refuses a value it cannot write, and says which', () => {
-    // A 32nd note is 3 divisions here, and this trainer reads down to
-    // sixteenths.
-    expect(() => importer.read(scoreXml(note('C', 4, 3, '32nd') + note('D', 4, 93, 'whole')))).toThrow(
-      /sixteenth notes/,
+  it('reads the short values a piano arrangement is written in', () => {
+    // 48 divisions to the quarter, and a bar filled exactly: a run of
+    // thirty-seconds and sixty-fourths is ordinary in the music being
+    // imported, and refusing it turned away five of the reader's scores.
+    const { exercise, warnings } = importer.read(
+      scoreXml(
+        note('C', 4, 96, 'half') +
+          note('D', 4, 48, 'quarter') +
+          note('E', 4, 24, 'eighth') +
+          note('F', 4, 12, '16th') +
+          note('G', 4, 6, '32nd') +
+          note('A', 4, 3, '64th') +
+          note('B', 4, 3, '64th'),
+        48,
+      ),
     );
+
+    expect(warnings).toEqual([]);
+    expect(exercise.staves[0]?.measures[0]?.entries.map((entry) => entry.duration.ticks)).toEqual([
+      960, 480, 240, 120, 60, 30, 30,
+    ]);
+  });
+
+  it('refuses a value it cannot write, and says which', () => {
+    // 32 divisions to the quarter, so a 128th is one of them - shorter than
+    // anything that can be drawn here, and not a rounding away from something
+    // that can.
+    expect(() =>
+      importer.read(scoreXml(note('C', 4, 1, '128th') + note('D', 4, 127, 'whole'), 32)),
+    ).toThrow(/sixty-fourth notes/);
   });
 });
 

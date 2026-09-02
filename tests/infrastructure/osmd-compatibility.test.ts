@@ -10,7 +10,9 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
-import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import { bar, p, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { noteEntry, validateExercise } from '../../src/domain/model/Exercise.js';
 
 const RHYTHMS = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
 
@@ -119,6 +121,50 @@ describe('OSMD accepts the MusicXML we produce', () => {
       staff.measures.some((measure) => measure.entries.some((entry) => entry.duration.isTuplet)),
     );
     expect(hasTriplets).toBe(true);
+
+    const timeline = buildTimeline(exercise);
+    const osmd = createDisplay();
+
+    await osmd.load(serializer.serialize(exercise));
+
+    const iterator = osmd.Sheet.MusicPartManager.getIterator();
+    let positions = 0;
+    let guard = timeline.length * 4 + 10;
+    while (!iterator.EndReached && guard > 0) {
+      guard -= 1;
+      positions += 1;
+      iterator.moveToNext();
+    }
+
+    expect(positions).toBe(timeline.length);
+  });
+
+  it('draws the short values imported music is written in', async () => {
+    // A bar of a piano arrangement: down to sixty-fourths, which the reader's
+    // scores are full of. The engraver has to stop on every one of them, or
+    // the marker and the timeline disagree for the rest of the piece.
+    const base = twoBarExercise();
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    const run = bar(
+      noteEntry(p('C4'), Duration.HALF),
+      noteEntry(p('D4'), Duration.QUARTER),
+      noteEntry(p('E4'), Duration.EIGHTH),
+      noteEntry(p('F4'), Duration.SIXTEENTH),
+      noteEntry(p('G4'), Duration.of('32nd')),
+      noteEntry(p('A4'), Duration.of('64th')),
+      noteEntry(p('B4'), Duration.of('64th')),
+    );
+    const exercise = {
+      ...base,
+      staves: [
+        { ...treble, measures: [run, ...treble.measures.slice(1)] },
+        bass,
+      ],
+    };
+    validateExercise(exercise);
 
     const timeline = buildTimeline(exercise);
     const osmd = createDisplay();

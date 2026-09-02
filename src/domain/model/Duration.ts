@@ -1,13 +1,29 @@
 import { DomainError } from '../../shared/errors.js';
 
 /**
- * MusicXML divisions per quarter note. 480 keeps every value we can notate
- * (down to dotted sixteenths, and triplets when they arrive) an exact integer,
- * so timeline arithmetic never touches floating point.
+ * MusicXML divisions per quarter note. 480 keeps every value we can notate an
+ * exact integer, so timeline arithmetic never touches floating point: the
+ * shortest of them is a triplet sixty-fourth at 20 divisions, and a dotted
+ * sixty-fourth is 45.
+ *
+ * It is a multiple of 2, 3 and 5, so halving, thirds and fifths all land
+ * whole - but not of 7. A septuplet is the one written rhythm this number
+ * refuses, and the way to take one would be to make this 3360.
  */
 export const DIVISIONS_PER_QUARTER = 480;
 
-export const NOTE_TYPES = ['whole', 'half', 'quarter', 'eighth', '16th'] as const;
+/**
+ * Every value that can be written, longest first.
+ *
+ * The order is load-bearing: {@link Duration.fromTicks} and the rest-tiling in
+ * `RhythmFiller` walk this list and take the first that fits.
+ *
+ * It reaches down to sixty-fourths for reading, not for writing. Nothing this
+ * program generates is shorter than a sixteenth; the short end of the list is
+ * for the piano music people actually import, where a run of thirty-seconds is
+ * ordinary and a bar of a Hisaishi arrangement will hold sixty-fourths.
+ */
+export const NOTE_TYPES = ['whole', 'half', 'quarter', 'eighth', '16th', '32nd', '64th'] as const;
 
 /** MusicXML `<type>` value. */
 export type NoteTypeName = (typeof NOTE_TYPES)[number];
@@ -21,6 +37,8 @@ const BASE_TICKS: Readonly<Record<NoteTypeName, number>> = {
   quarter: DIVISIONS_PER_QUARTER,
   eighth: DIVISIONS_PER_QUARTER / 2,
   '16th': DIVISIONS_PER_QUARTER / 4,
+  '32nd': DIVISIONS_PER_QUARTER / 8,
+  '64th': DIVISIONS_PER_QUARTER / 16,
 };
 
 /**

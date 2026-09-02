@@ -229,6 +229,8 @@ interface PassageDrag {
   readonly from: { readonly x: number; readonly y: number };
   /** The handle it landed on, when it landed on one rather than the line. */
   readonly grip: GripEnd | null;
+  /** Whether the finger is currently past the end of the page it is on. */
+  readonly overshot: boolean;
 }
 
 /** A finger that may be turning a page, and where it started. */
@@ -835,6 +837,7 @@ export class OsmdScoreRenderer
       passage,
       from: { x: event.clientX, y: event.clientY },
       grip: touched?.end ?? null,
+      overshot: false,
     };
   }
 
@@ -954,21 +957,36 @@ export class OsmdScoreRenderer
    * the moment it arrives.
    */
   private turnIfDraggedOffThePage(event: PointerEvent): void {
-    const sheet = this.currentSheet();
-    if (!this.paged || this.dragging === null || sheet === null) {
+    const drag = this.dragging;
+    if (!this.paged || drag === null) {
       return;
     }
+    const here = this.measuresHere();
     const point = this.drawingPointOf(event);
-    const width = intrinsicSize(sheet).width;
-    if (point === null || width <= 0) {
+    const landed = point === null ? null : measureForDrag(here, point, drag.edge);
+    const first = here[0]?.measureIndex;
+    const last = here[here.length - 1]?.measureIndex;
+    if (landed === null || first === undefined || last === undefined) {
       return;
     }
-    if (point.x > width) {
-      this.turnPages(1);
+
+    // Past the last bar *of this page*, not past the page itself. The page
+    // is as wide as the screen, so a finger cannot get beyond it - which is
+    // why this worked with a mouse, which can leave the window, and never
+    // worked on a tablet. The engraver leaves a margin after the last bar,
+    // and that margin is somewhere a finger can actually reach.
+    const beyond = landed > last ? 1 : landed < first ? -1 : 0;
+    if (beyond !== 0 && !drag.overshot) {
+      this.dragging = { ...drag, overshot: true };
+      this.turnPages(beyond);
       return;
     }
-    if (point.x < 0) {
-      this.turnPages(-1);
+    // Only on the way in. Held out there, the finger would be past the new
+    // page's last bar too the moment it arrived, and the reader would watch
+    // the whole piece flip by; coming back inside arms it again, so going
+    // several pages is several small movements rather than one long wait.
+    if (beyond === 0 && drag.overshot) {
+      this.dragging = { ...drag, overshot: false };
     }
   }
 

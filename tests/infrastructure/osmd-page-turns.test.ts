@@ -4,6 +4,7 @@ import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer
 import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
+import type { DrawnMeasure } from '../../src/infrastructure/rendering/passageBrackets.js';
 import { longExercise } from '../support/fixtures.js';
 import { createScoreContainer, installCanvasStub } from '../support/osmdHarness.js';
 
@@ -31,6 +32,26 @@ function withLayout(container: HTMLElement, windowHeight: number): HTMLElement {
   })) as Element['getBoundingClientRect'];
   Object.defineProperty(window, 'innerHeight', { value: windowHeight, configurable: true });
   return scroller;
+}
+
+/** Where the engraver put each bar, which the renderer keeps to itself. */
+function measuresOf(renderer: OsmdScoreRenderer): DrawnMeasure[] {
+  return (renderer as unknown as { measures: DrawnMeasure[] }).measures;
+}
+
+/**
+ * Shows every page at exactly the size it was drawn.
+ *
+ * jsdom lays nothing out, and the pointer arithmetic falls back to the box
+ * on screen against the size in the drawing when there is no layout to ask.
+ */
+function showSheetsAtTheirOwnSize(container: HTMLElement): void {
+  for (const sheet of sheets(container)) {
+    const width = Number.parseFloat(sheet.getAttribute('width') ?? '0');
+    const height = Number.parseFloat(sheet.getAttribute('height') ?? '0');
+    sheet.getBoundingClientRect = (() =>
+      ({ left: 0, top: 0, width, height })) as Element['getBoundingClientRect'];
+  }
 }
 
 /** The pages the engraver drew. */
@@ -137,6 +158,64 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     // Told twice about the same bar it turns once: a page turn is for
     // looking at one thing until it is finished with.
     expect(turns).toEqual([reached]);
+  });
+
+  it('turns the page when a marker is dragged past the last bar on it', () => {
+    // The reader's report: this worked on a laptop and never on the tablet.
+    // The threshold was the page's own width, and the page is as wide as the
+    // screen - a mouse can leave the window and a finger cannot. The
+    // engraver leaves a margin after the last bar, and that margin is
+    // somewhere a finger can actually reach.
+    renderer.setPaged(true);
+    renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 15 });
+    showSheetsAtTheirOwnSize(container);
+    expect(renderer.pages.at).toBe(0);
+
+    const onThisPage = measuresOf(renderer).filter((measure) => measure.page === 0);
+    const last = onThisPage[onThisPage.length - 1];
+    const marker = container.querySelector('g.passage-marker--end');
+    marker?.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, bubbles: true }),
+    );
+    // Out into the margin the engraver left after the last bar.
+    container.dispatchEvent(
+      new PointerEvent('pointermove', {
+        clientX: (last?.right ?? 0) + 30,
+        clientY: (last?.top ?? 0) + 10,
+        pointerId: 1,
+        bubbles: true,
+      }),
+    );
+
+    expect(renderer.pages.at).toBe(1);
+  });
+
+  it('turns once while the finger stays out there, not over and over', () => {
+    // Held past the end, the finger is past the new page's last bar the
+    // moment it arrives - so without this the reader would watch the whole
+    // piece flip by. Coming back inside arms it again.
+    renderer.setPaged(true);
+    renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 15 });
+    showSheetsAtTheirOwnSize(container);
+    const onThisPage = measuresOf(renderer).filter((measure) => measure.page === 0);
+    const last = onThisPage[onThisPage.length - 1];
+    const marker = container.querySelector('g.passage-marker--end');
+    marker?.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, bubbles: true }),
+    );
+    const outside = {
+      clientX: (last?.right ?? 0) + 30,
+      clientY: (last?.top ?? 0) + 10,
+      pointerId: 1,
+      bubbles: true,
+    };
+
+    container.dispatchEvent(new PointerEvent('pointermove', outside));
+    const afterOne = renderer.pages.at;
+    container.dispatchEvent(new PointerEvent('pointermove', outside));
+    container.dispatchEvent(new PointerEvent('pointermove', outside));
+
+    expect(renderer.pages.at).toBe(afterOne);
   });
 
   it('does nothing to a scrolling score', () => {

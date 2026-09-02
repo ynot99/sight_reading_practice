@@ -1012,6 +1012,9 @@ export class AppView {
         file.name,
       );
       await this.runtime.controller.openScore(exercise);
+      // Opening a piece can put the passage back to the two ends, and the
+      // boxes in the sheet are the same setting seen from another chair.
+      this.syncControlsFromSettings();
       // Kept on the way in, so the file is chosen from the disk once and
       // afterwards the piece is simply there.
       await this.runtime.scores.keep(exercise, Date.now());

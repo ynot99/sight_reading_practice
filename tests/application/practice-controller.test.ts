@@ -447,6 +447,44 @@ describe('PracticeController', () => {
     expect(controller.settings.rangeToBar).toBe(4);
   });
 
+  it('forgets them when another piece is opened', async () => {
+    const { controller } = createController();
+    await controller.openScore(longExercise({ bars: 8, title: 'Eight Bars' }));
+    controller.choosePassage(3, 5);
+
+    await controller.openScore(longExercise({ bars: 8, title: 'Something Else' }));
+
+    // The markers were dragged around bars of the piece just closed. Left
+    // where they were, they would narrow music the reader has not even read
+    // yet - and on a shorter piece they would point past the last bar.
+    expect(controller.settings.rangeFromBar).toBeNull();
+    expect(controller.settings.rangeToBar).toBeNull();
+  });
+
+  it('keeps them when the same piece is opened again', async () => {
+    const { controller } = createController();
+    await controller.openScore(longExercise({ bars: 8, title: 'Eight Bars' }));
+    controller.choosePassage(3, 5);
+
+    // A second read of the same file - what the library hands back, and what
+    // an edit in MuseScore comes back as. The bars still mean what they said.
+    await controller.openScore(longExercise({ bars: 8, title: 'Eight Bars' }));
+
+    expect(controller.settings.rangeFromBar).toBe(3);
+    expect(controller.settings.rangeToBar).toBe(5);
+  });
+
+  it('forgets them when a score replaces generated material', async () => {
+    const { controller } = createController();
+    await controller.loadNewExercise();
+    controller.updateSettings({ rangeFromBar: 2, rangeToBar: 3 });
+
+    await controller.openScore(longExercise({ bars: 8, title: 'Eight Bars' }));
+
+    expect(controller.settings.rangeFromBar).toBeNull();
+    expect(controller.settings.rangeToBar).toBeNull();
+  });
+
   it('says so once, rather than on every fresh page', async () => {
     const { controller } = createController();
     const changed = vi.fn();

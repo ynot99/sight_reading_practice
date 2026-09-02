@@ -611,6 +611,33 @@ describe('AppView', () => {
     expect(element('import-notice').textContent).toContain('Borrowed');
   });
 
+  it('puts the passage boxes back when a file replaces what was on the stand', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    const from = element<HTMLInputElement>('range-from');
+    from.value = '2';
+    from.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(runtime.controller.settings.rangeFromBar).toBe(2);
+
+    const xml = new MusicXmlSerializer().serialize(twoBarExercise({ title: 'Borrowed' }));
+    const input = element<HTMLInputElement>('score-file');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [{ arrayBuffer: () => Promise.resolve(new TextEncoder().encode(xml).buffer) }],
+    });
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // The setting and the box are one thing seen twice: a box still reading
+    // "2" over music that is not narrowed is the page telling the reader
+    // something untrue about what Start will play.
+    expect(runtime.controller.settings.rangeFromBar).toBeNull();
+    expect(from.value).toBe('');
+  });
+
   it('explains a file it cannot read instead of going quiet', async () => {
     const { view, runtime } = createRig();
     await view.initialize();

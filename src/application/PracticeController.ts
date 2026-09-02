@@ -656,13 +656,21 @@ export class PracticeController {
     // needs no attention: the reader chose a percentage, and it means the
     // same thing against whatever is on the stand next.
     this.openedScore = null;
-    // Bars 12-16 of the piece just closed mean nothing in the piece about to
-    // open, and silently applying them would hand back a passage of something
-    // the reader never asked to narrow. A range is about *this* music.
+    this.forgetThePassage();
+    return this.load(undefined);
+  }
+
+  /**
+   * Puts the markers back at the two ends, wherever they were dragged to.
+   *
+   * Bars 12-16 of the piece just closed mean nothing in the piece about to
+   * open, and silently applying them would hand back a passage of something
+   * the reader never asked to narrow. A range is about *this* music.
+   */
+  private forgetThePassage(): void {
     if (this.currentSettings.rangeFromBar !== null || this.currentSettings.rangeToBar !== null) {
       this.updateSettings({ rangeFromBar: null, rangeToBar: null });
     }
-    return this.load(undefined);
   }
 
   /**
@@ -672,6 +680,14 @@ export class PracticeController {
    * generated, so the two sources never quietly swap places underneath them.
    */
   async openScore(exercise: Exercise): Promise<Exercise> {
+    // A different piece is a reason to forget the passage; the same piece
+    // opened again is not. Identity is the title, which is what the library
+    // means by "the same piece" too - a file read back after being edited in
+    // MuseScore is the piece the reader was working on, and its id is minted
+    // afresh by the parser on every read, so the id cannot answer this.
+    if (this.openedScore === null || this.openedScore.title !== exercise.title) {
+      this.forgetThePassage();
+    }
     this.openedScore = exercise;
     // Nothing to adopt: the file brings the tempo it is written at, which is
     // what 100% now means, and the reader's percentage of it travels with

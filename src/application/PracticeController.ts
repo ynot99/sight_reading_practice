@@ -570,14 +570,13 @@ export class PracticeController {
    *
    * Returns the step it settled on, or `null` when there was nothing there.
    */
-  beginAtStep(stepIndex: number): number | null {
+  beginAtBar(measureIndex: number): number | null {
     const timeline = this.timeline;
-    const step = timeline?.at(stepIndex) ?? null;
-    if (timeline === null || step === null) {
+    const bar = timeline?.steps.find((each) => each.measureIndex === measureIndex) ?? null;
+    if (bar === null) {
       return null;
     }
-    const bar = timeline.steps.find((each) => each.measureIndex === step.measureIndex);
-    this.beginAt = bar?.index ?? 0;
+    this.beginAt = bar.index;
     this.deps.cursor.moveTo(this.beginAt);
     return this.beginAt;
   }

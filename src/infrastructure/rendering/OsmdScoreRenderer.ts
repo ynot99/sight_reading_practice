@@ -18,6 +18,7 @@ import {
   gripsOf,
   gripUnderPointer,
   GRIP_RADIUS_PX,
+  measureAt,
   passageAfterTap,
   measureForDrag,
   passageAfterDrag,
@@ -275,7 +276,7 @@ export class OsmdScoreRenderer
   private pageListeners: ((state: ScorePageState) => void)[] = [];
   private swipe: PageSwipe | null = null;
   private tapListeners: (() => void)[] = [];
-  private heldListeners: ((stepIndex: number) => void)[] = [];
+  private heldListeners: ((measureIndex: number) => void)[] = [];
   private holding: ReturnType<typeof setTimeout> | null = null;
   /** Where a touch that took hold of nothing began, so a tap can be told. */
   private tapFrom: { readonly pointerId: number; readonly x: number; readonly y: number } | null =
@@ -714,39 +715,16 @@ export class OsmdScoreRenderer
     };
   }
 
-  onNoteHeld(listener: (stepIndex: number) => void): () => void {
+  onBarHeld(listener: (measureIndex: number) => void): () => void {
     this.heldListeners.push(listener);
     return () => {
       this.heldListeners = this.heldListeners.filter((each) => each !== listener);
     };
   }
 
-  /**
-   * The step a drawn element belongs to, looking outwards from it.
-   *
-   * Which element is which step is already known - it is how a passed note
-   * is dimmed - so this asks nothing new of the engraver.
-   */
-  private stepOf(target: EventTarget | null): number | null {
-    let node = target instanceof Element ? target : null;
-    while (node !== null && node !== this.container) {
-      for (const [stepIndex, elements] of this.stepElements) {
-        if (elements.includes(node as SVGGElement)) {
-          return stepIndex;
-        }
-      }
-      node = node.parentElement;
-    }
-    return null;
-  }
-
   /** Starts the clock on a finger that may be pointing at a bar. */
   private watchForAHold(event: PointerEvent): void {
     this.cancelHold();
-    const step = this.stepOf(event.target);
-    if (step === null) {
-      return;
-    }
     this.holding = setTimeout(() => {
       this.holding = null;
       // Still where it landed: a finger that travelled was doing something
@@ -754,9 +732,17 @@ export class OsmdScoreRenderer
       if (this.tapFrom?.pointerId !== event.pointerId) {
         return;
       }
+      // Asked at the end rather than at the start, because what is wanted is
+      // where the finger *is*, and a bar is found by coordinates rather than
+      // by whatever element happened to be under it.
+      const point = this.drawingPointOf(event);
+      const bar = point === null ? null : measureAt(this.measuresHere(), point);
+      if (bar === null) {
+        return;
+      }
       this.tapFrom = null;
       for (const listener of [...this.heldListeners]) {
-        listener(step);
+        listener(bar);
       }
     }, HOLD_MS);
   }

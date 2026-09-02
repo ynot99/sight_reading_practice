@@ -1386,15 +1386,13 @@ describe('AppView', () => {
       // downbeat that never came.
       const rig = createRig();
       await rig.view.initialize();
-      const timeline = rig.runtime.controller.currentTimeline;
-      const later = timeline?.steps.find((step) => step.measureIndex === 2);
-      if (later === undefined) {
-        throw new Error('expected a third bar');
-      }
+      const later = rig.runtime.controller.currentTimeline?.steps.find(
+        (step) => step.measureIndex === 2,
+      );
 
-      rig.renderer.holdNote(later.index);
+      rig.renderer.holdBar(2);
 
-      expect(rig.runtime.controller.beginsAt).toBe(later.index);
+      expect(rig.runtime.controller.beginsAt).toBe(later?.index);
       expect(element('import-notice').textContent).toContain('bar 3');
       // And the run actually begins there rather than at the top.
       rig.runtime.controller.updateSettings({ countInBars: 0 });
@@ -1407,12 +1405,7 @@ describe('AppView', () => {
       // back must not be "find bar one and hold a finger on that".
       const rig = createRig();
       await rig.view.initialize();
-      const timeline = rig.runtime.controller.currentTimeline;
-      const later = timeline?.steps.find((step) => step.measureIndex === 2);
-      if (later === undefined) {
-        throw new Error('expected a third bar');
-      }
-      rig.renderer.holdNote(later.index);
+      rig.renderer.holdBar(2);
       expect(rig.runtime.controller.beginsAt).toBeGreaterThan(0);
 
       element<HTMLButtonElement>('focus-rewind').click();
@@ -1428,14 +1421,7 @@ describe('AppView', () => {
       const rig = createRig();
       await rig.view.initialize();
       expect(rig.renderer.startMeasure).toBeNull();
-      const later = rig.runtime.controller.currentTimeline?.steps.find(
-        (step) => step.measureIndex === 2,
-      );
-      if (later === undefined) {
-        throw new Error('expected a third bar');
-      }
-
-      rig.renderer.holdNote(later.index);
+      rig.renderer.holdBar(2);
 
       expect(rig.renderer.startMeasure).toBe(2);
 
@@ -1450,10 +1436,7 @@ describe('AppView', () => {
       // every page would be furniture.
       const rig = createRig();
       await rig.view.initialize();
-      const later = rig.runtime.controller.currentTimeline?.steps.find(
-        (step) => step.measureIndex === 2,
-      );
-      rig.renderer.holdNote(later?.index ?? 0);
+      rig.renderer.holdBar(2);
       expect(rig.renderer.startMeasure).toBe(2);
 
       element<HTMLButtonElement>('focus-rewind').click();
@@ -1514,7 +1497,7 @@ describe('AppView', () => {
       await rig.view.initialize();
       element<HTMLButtonElement>('start').click();
 
-      rig.renderer.holdNote(8);
+      rig.renderer.holdBar(2);
 
       expect(rig.runtime.controller.beginsAt).toBe(0);
     });

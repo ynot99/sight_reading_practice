@@ -113,13 +113,19 @@ export interface IPassageMarkers {
   showStart(measureIndex: number | null): void;
   onScoreTapped(listener: () => void): () => void;
   /**
-   * A finger held still on a note, which is how a reader points at a place.
+   * A finger held still on a bar, which is how a reader points at a place.
+   *
+   * A bar and not a note. A notehead is the size of a pencil tip and a
+   * fingertip is a centimetre, so pointing at one meant aiming at one -
+   * which on a tablet is most of the effort and most of the misses. A bar is
+   * a box several thumbprints wide, and it is what the answer is made of
+   * anyway: a run begins at a bar line, never partway through one.
    *
    * Held rather than tapped, because a tap on the music already means
    * something and because pointing at a bar is a deliberate act - the reader
    * is saying "start here", not brushing the page.
    */
-  onNoteHeld(listener: (stepIndex: number) => void): () => void;
+  onBarHeld(listener: (measureIndex: number) => void): () => void;
 }
 
 /**

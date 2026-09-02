@@ -1148,20 +1148,21 @@ export class AppView {
    * Refused while a run is going: the cursor is the run's own, and moving it
    * under the music would leave the page and the playing in different bars.
    */
-  private beginAt(stepIndex: number): void {
+  private beginAt(measureIndex: number): void {
     const controller = this.runtime.controller;
     const status = controller.session?.status;
     if (status === 'running' || status === 'counting-in' || status === 'paused') {
       return;
     }
-    const step = controller.beginAtStep(stepIndex);
+    const step = controller.beginAtBar(measureIndex);
     if (step === null) {
       return;
     }
     this.showPassageMarkers();
-    const bar = controller.barNumber(controller.currentTimeline?.at(step)?.measureIndex ?? 0);
     this.showImportNotice(
-      step === 0 ? 'Starting from the top.' : `Starting at bar ${bar}.`,
+      step === 0
+        ? 'Starting from the top.'
+        : `Starting at bar ${controller.barNumber(measureIndex)}.`,
     );
   }
 
@@ -2504,9 +2505,9 @@ export class AppView {
       // They are two lines across the staves and they are wanted only while
       // a passage is being chosen; the rest of the time they are furniture
       // standing in front of the notes.
-      // Held on a note: the reader is pointing at where to start.
-      this.runtime.renderer.onNoteHeld((stepIndex) => {
-        this.beginAt(stepIndex);
+      // Held on a bar: the reader is pointing at where to start.
+      this.runtime.renderer.onBarHeld((measureIndex) => {
+        this.beginAt(measureIndex);
       }),
     );
 

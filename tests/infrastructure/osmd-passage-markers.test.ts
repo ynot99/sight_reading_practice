@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
+import type { DrawnMeasure } from '../../src/infrastructure/rendering/passageBrackets.js';
 import { longExercise, twoBarExercise } from '../support/fixtures.js';
 import { createScoreContainer, installCanvasStub, staffLineYs } from '../support/osmdHarness.js';
 
@@ -18,6 +19,25 @@ function tap(container: HTMLElement, x: number, y: number): void {
     container.dispatchEvent(
       new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, bubbles: true }),
     );
+  }
+}
+
+/**
+ * A finger that lands and stays put long enough to be pointing.
+ *
+ * The clock is faked around the gesture rather than the test waiting half a
+ * second: the hold is a timer, and a suite that slept for every one of them
+ * would spend longer waiting than engraving.
+ */
+function hold(container: HTMLElement, x: number, y: number): void {
+  vi.useFakeTimers();
+  try {
+    container.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: x, clientY: y, pointerId: 1, bubbles: true }),
+    );
+    vi.advanceTimersByTime(600);
+  } finally {
+    vi.useRealTimers();
   }
 }
 
@@ -277,6 +297,25 @@ describe('passage markers over a real engraving', () => {
 
     renderer.showStart(null);
     expect(container.querySelector('g.start-marker')).toBeNull();
+  });
+
+  it('points at the bar a finger rests on, wherever in it that is', () => {
+    // The gesture nothing else can see. A notehead is the size of a pencil
+    // tip and a fingertip is a centimetre, so aiming at one was most of the
+    // effort and most of the misses; a bar is a box several thumbprints
+    // wide, and a run begins at a bar line anyway.
+    showAt(renderer, container);
+    renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 3 });
+    const pointed: number[] = [];
+    renderer.onBarHeld((measureIndex) => pointed.push(measureIndex));
+
+    // Held in the empty space of the second bar, nowhere near a notehead.
+    const measures = (renderer as unknown as { measures: DrawnMeasure[] }).measures;
+    const second = measures.find((measure) => measure.measureIndex === 1);
+    const middle = ((second?.left ?? 0) + (second?.right ?? 0)) / 2;
+    hold(container, middle, (second?.top ?? 0) - 30);
+
+    expect(pointed).toEqual([1]);
   });
 
   it('takes them away again', () => {

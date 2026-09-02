@@ -143,6 +143,48 @@ export function measureUnderPointer(
 }
 
 /**
+ * The bar a finger is resting on.
+ *
+ * Not the nearest bar *line* - that is what a marker being dragged wants,
+ * because a marker stands on one - but the bar the point is inside. A reader
+ * holding a finger on the music is pointing at a bar, and the bar is a box
+ * the size of a thumbprint several times over where a notehead is the size
+ * of a pencil tip.
+ *
+ * Outside every box it takes the nearest bar on the nearest system, so a
+ * finger on the stem of a high note, or in the space under the last stave,
+ * still means the bar it is plainly over.
+ */
+export function measureAt(
+  measures: readonly DrawnMeasure[],
+  point: { readonly x: number; readonly y: number },
+): number | null {
+  if (measures.length === 0) {
+    return null;
+  }
+  const onSystem = nearestSystem(measures, point.y);
+  const inside = onSystem.find(
+    (measure) => point.x >= measure.left && point.x <= measure.right,
+  );
+  if (inside !== undefined) {
+    return inside.measureIndex;
+  }
+  let best: DrawnMeasure | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const measure of onSystem) {
+    const distance = Math.min(
+      Math.abs(point.x - measure.left),
+      Math.abs(point.x - measure.right),
+    );
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = measure;
+    }
+  }
+  return best?.measureIndex ?? null;
+}
+
+/**
  * The bar a drag has landed on, which may be outside the engraving.
  *
  * The score on screen *is* the passage - a passage is cut out and engraved on

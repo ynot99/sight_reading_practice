@@ -4,6 +4,7 @@ import {
   gripAt,
   gripsOf,
   gripUnderPointer,
+  measureAt,
   measureForDrag,
   passageAfterTap,
   measureUnderPointer,
@@ -91,6 +92,33 @@ describe('a drag that reaches past the edge of the engraving', () => {
   it('behaves like a plain drag anywhere inside the piece', () => {
     expect(measureForDrag(page(), { x: 240, y: 70 }, 'start')).toBe(2);
     expect(measureForDrag([], { x: 0, y: 0 }, 'start')).toBeNull();
+  });
+});
+
+describe('the bar a finger is resting on', () => {
+  it('takes the bar the point is inside, not the nearest bar line', () => {
+    // A marker being dragged wants the nearest line, because it stands on
+    // one. A finger pointing at a bar wants the bar - which is a box the
+    // size of a thumbprint several times over, where a notehead is the size
+    // of a pencil tip.
+    // Bars run 40..140, 140..240, 240..340, so this is well inside the third.
+    expect(measureAt(page(), { x: 290, y: 70 })).toBe(2);
+    expect(measureAt(page(), { x: 190, y: 70 })).toBe(1);
+  });
+
+  it('reads the line first, like everything else on a page', () => {
+    expect(measureAt(page(), { x: 290, y: 270 })).toBe(6);
+  });
+
+  it('lands on a bar even when the finger is off the staves', () => {
+    // On the stem of a high note, or in the space under the last stave.
+    expect(measureAt(page(), { x: 290, y: -40 })).toBe(2);
+    expect(measureAt(page(), { x: 900, y: 70 })).toBe(3);
+    expect(measureAt(page(), { x: -60, y: 70 })).toBe(0);
+  });
+
+  it('has nothing to point at on an empty page', () => {
+    expect(measureAt([], { x: 0, y: 0 })).toBeNull();
   });
 });
 

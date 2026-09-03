@@ -522,6 +522,71 @@ describe('files written by other programs', () => {
     );
   });
 
+  it('reads every part, since an exporter may write the hands as two', () => {
+    // senbonzakura is exported that way: two parts of one staff each. Read
+    // as the first part alone it opened, played, and was half the music -
+    // which is worse than a refusal, because nothing on the page says a hand
+    // is missing.
+    const hands =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<score-partwise version="4.0">' +
+      '<part-list>' +
+      '<score-part id="P1"><part-name>Right</part-name></score-part>' +
+      '<score-part id="P2"><part-name>Left</part-name></score-part>' +
+      '</part-list>' +
+      '<part id="P1"><measure number="1"><attributes><divisions>24</divisions>' +
+      '<key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>' +
+      '<clef><sign>G</sign><line>2</line></clef></attributes>' +
+      note('C', 5, 96, 'whole') +
+      '</measure></part>' +
+      '<part id="P2"><measure number="1"><attributes><divisions>24</divisions>' +
+      '<clef><sign>F</sign><line>4</line></clef></attributes>' +
+      note('C', 3, 96, 'whole') +
+      '</measure></part>' +
+      '</score-partwise>';
+
+    const { exercise, warnings } = importer.read(hands);
+
+    expect(exercise.staves).toHaveLength(2);
+    // A staff number groups voices onto one printed staff, and two parts
+    // share neither that nor a voice number.
+    expect(exercise.staves.map((staff) => staff.staffNumber)).toEqual([1, 2]);
+    expect(exercise.staves.map((staff) => staff.voice)).toEqual([1, 2]);
+    expect(exercise.staves.map((staff) => staff.clef)).toEqual(['treble', 'bass']);
+    // And both hands are struck together, which is the point of reading both.
+    expect(demands(exercise)).toEqual([[Pitch.parse('C3').midi, Pitch.parse('C5').midi]]);
+    expect(warnings.map((warning) => warning.kind)).not.toContain('extra-parts');
+  });
+
+  it('leaves out a part that disagrees about how many bars there are', () => {
+    const ragged =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<score-partwise version="4.0">' +
+      '<part-list>' +
+      '<score-part id="P1"><part-name>Right</part-name></score-part>' +
+      '<score-part id="P2"><part-name>Left</part-name></score-part>' +
+      '</part-list>' +
+      '<part id="P1"><measure number="1"><attributes><divisions>24</divisions>' +
+      '<key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>' +
+      '<clef><sign>G</sign><line>2</line></clef></attributes>' +
+      note('C', 5, 96, 'whole') +
+      '</measure></part>' +
+      '<part id="P2"><measure number="1"><attributes><divisions>24</divisions>' +
+      '<clef><sign>F</sign><line>4</line></clef></attributes>' +
+      note('C', 3, 96, 'whole') +
+      '</measure><measure number="2">' +
+      note('D', 3, 96, 'whole') +
+      '</measure></part>' +
+      '</score-partwise>';
+
+    const { exercise, warnings } = importer.read(ragged);
+
+    // Read, and said so: refusing the file would cost the reader a piece
+    // that is otherwise sound.
+    expect(exercise.staves).toHaveLength(1);
+    expect(warnings.map((warning) => warning.kind)).toContain('extra-parts');
+  });
+
   it('follows a metre change instead of holding the piece to its first bar', () => {
     // Three of the reader's scores were refused outright over this and a
     // fourth - Merry Christmas Mr Lawrence, 12/8 for one bar and 2/2 after it

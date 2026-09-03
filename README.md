@@ -637,8 +637,10 @@ the timeline the player is judged against is derived from the exercise, and
 building it from the engraver's parse of the same file instead would be the
 drift the single source of truth exists to prevent. The model is narrower than
 the format, so the import either refuses a file or reports what it dropped;
-`MusicXmlParser` lists the cases. Several voices on a staff are kept as several
-parts sharing a staff number, so a held note under a moving line stays a held
+`MusicXmlParser` lists the cases. Every part of the score is read, one staff
+after another - an exporter may write a piano's two hands as two parts of one
+staff each, and reading only the first of those is reading only one hand.
+Several voices on a staff are kept as several parts sharing a staff number, so a held note under a moving line stays a held
 note; a voice absent from a bar is left out of it rather than resting through
 it. Key, metre and clef changes, stem directions and beaming are all followed
 as written, along with rolled chords and the damper pedal. A metre change

@@ -113,12 +113,6 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   if (part === undefined) {
     throw new DomainError('This file has no parts to read.');
   }
-  if (parts.length > 1) {
-    warnings.push({
-      kind: 'extra-parts',
-      detail: `Only the first of ${parts.length} parts was read.`,
-    });
-  }
 
   const measures = childrenNamed(part, 'measure');
   if (measures.length === 0) {
@@ -126,7 +120,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   }
 
   const header = readHeader(measures, warnings);
-  const { staves, pedalMarks } = buildStaves(measures, header, warnings);
+  const { staves, pedalMarks } = readEveryPart(parts, measures.length, header, warnings);
 
   const exercise: Exercise = {
     id: `import-${Date.now().toString(36)}`,
@@ -730,6 +724,88 @@ function buildMeasure(
   }
 
   return measureOf(entries);
+}
+
+/**
+ * Every part of the score, laid out one staff after another.
+ *
+ * A piano piece is usually one part of two staves, but an exporter may
+ * write the hands as two parts of one staff each - senbonzakura is - and
+ * reading only the first of those is reading only one hand. Because it
+ * *did* open, that was worse than a refusal: the reader had half the music
+ * and nothing to tell them so but a warning.
+ *
+ * Key, metre and its changes come from the first part, since bar lengths
+ * have to agree across the score for it to be one piece of music at all;
+ * divisions and clefs are read per part, because those are the part's own.
+ * A part that disagrees about how many bars there are is not read, and said
+ * so - the alternative is refusing a file that is otherwise sound.
+ */
+function readEveryPart(
+  parts: readonly XmlNode[],
+  bars: number,
+  header: ScoreHeader,
+  warnings: ImportWarning[],
+): { readonly staves: readonly StaffPart[]; readonly pedalMarks: readonly PedalMark[] } {
+  const staves: StaffPart[] = [];
+  const pedalMarks: PedalMark[] = [];
+
+  for (const [index, part] of parts.entries()) {
+    const measures = childrenNamed(part, 'measure');
+    if (index > 0 && measures.length !== bars) {
+      warnings.push({
+        kind: 'extra-parts',
+        detail: `A part with ${measures.length} bars was left out; the first has ${bars}.`,
+      });
+      continue;
+    }
+    const forThisPart = index === 0 ? header : { ...header, ...readPartAttributes(measures, warnings) };
+    const built = buildStaves(measures, forThisPart, warnings);
+    // Staff numbers carry on where the last part's left off, and so do voice
+    // numbers: a staff number groups voices onto one printed staff, and two
+    // parts share neither.
+    const staffOffset = new Set(staves.map((staff) => staff.staffNumber)).size;
+    const voiceOffset = staves.length;
+    for (const staff of built.staves) {
+      staves.push({
+        ...staff,
+        staffNumber: staff.staffNumber + staffOffset,
+        voice: staff.voice + voiceOffset,
+      });
+    }
+    // The pedal belongs to the instrument, and whichever part carried the
+    // marks meant them for all of it.
+    pedalMarks.push(...built.pedalMarks);
+  }
+
+  return { staves, pedalMarks };
+}
+
+/** What a part says about itself: how finely it counts, and its clefs. */
+function readPartAttributes(
+  measures: readonly XmlNode[],
+  warnings: ImportWarning[],
+): Pick<ScoreHeader, 'divisions' | 'clefByStaff' | 'clefChangesByStaff' | 'staffCount'> {
+  const attributes = child(measures[0] ?? null, 'attributes');
+  const divisions = childNumber(attributes, 'divisions');
+  const clefChangesByStaff = new Map<number, ClefChange[]>();
+  measures.forEach((measure, measureIndex) => {
+    if (measureIndex === 0) {
+      return;
+    }
+    for (const [staffNumber, clef] of readClefs(child(measure, 'attributes'), warnings)) {
+      clefChangesByStaff.set(staffNumber, [
+        ...(clefChangesByStaff.get(staffNumber) ?? []),
+        { measureIndex, clef },
+      ]);
+    }
+  });
+  return {
+    divisions: divisions === null || divisions <= 0 ? DIVISIONS_PER_QUARTER : divisions,
+    clefByStaff: readClefs(attributes, warnings),
+    clefChangesByStaff,
+    staffCount: Math.max(1, childNumber(attributes, 'staves') ?? 1),
+  };
 }
 
 function buildStaves(

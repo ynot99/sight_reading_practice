@@ -134,11 +134,11 @@ export interface StaffPart {
 
 /** Absolute spans, in divisions, during which the damper pedal is down. */
 export function pedalSpans(exercise: Exercise): readonly (readonly [number, number])[] {
-  const ticksPerMeasure = exercise.timeSignature.ticksPerMeasure;
+  const bars = barLines(exercise);
   const spans: [number, number][] = [];
   let down: number | null = null;
   for (const mark of exercise.pedalMarks) {
-    const at = mark.measureIndex * ticksPerMeasure + mark.offsetTicks;
+    const at = (bars[mark.measureIndex]?.startTicks ?? 0) + mark.offsetTicks;
     if (mark.type === 'start') {
       down ??= at;
       continue;
@@ -153,6 +153,38 @@ export function pedalSpans(exercise: Exercise): readonly (readonly [number, numb
     spans.push([down, exerciseTicks(exercise)]);
   }
   return spans;
+}
+
+/** The metre in force at a given measure. */
+export function timeAtMeasure(exercise: Exercise, measureIndex: number): TimeSignature {
+  let current = exercise.timeSignature;
+  for (const change of exercise.timeChanges) {
+    if (change.measureIndex <= measureIndex) {
+      current = change.timeSignature;
+    }
+  }
+  return current;
+}
+
+/**
+ * Where every bar begins, in divisions, and what metre governs it.
+ *
+ * The one place that walks the bars. Every other answer about musical
+ * position - how long the piece is, whether a bar is full, which bar a tick
+ * falls in - is read off this, because once a metre can change partway
+ * through, none of them can be had by multiplying any more.
+ */
+export function barLines(
+  exercise: Exercise,
+): readonly { readonly startTicks: number; readonly timeSignature: TimeSignature }[] {
+  const bars: { startTicks: number; timeSignature: TimeSignature }[] = [];
+  let startTicks = 0;
+  for (let measureIndex = 0; measureIndex < measureCount(exercise); measureIndex += 1) {
+    const timeSignature = timeAtMeasure(exercise, measureIndex);
+    bars.push({ startTicks, timeSignature });
+    startTicks += timeSignature.ticksPerMeasure;
+  }
+  return bars;
 }
 
 /** The key in force at a given measure. */
@@ -203,6 +235,12 @@ export interface KeyChange {
   readonly key: KeySignature;
 }
 
+/** A metre the score changes to, from the given measure onwards. */
+export interface TimeChange {
+  readonly measureIndex: number;
+  readonly timeSignature: TimeSignature;
+}
+
 export interface Exercise {
   readonly id: string;
   readonly title: string;
@@ -225,6 +263,20 @@ export interface Exercise {
    */
   readonly pedalMarks: readonly PedalMark[];
   readonly timeSignature: TimeSignature;
+  /**
+   * Metres the score changes to partway through.
+   *
+   * Unlike a key change, this one moves the bar lines: bars stop being all
+   * the same length, so where a bar begins can no longer be worked out by
+   * multiplying. Everything that needs to know asks {@link barLines}, which
+   * is the one place that walks them.
+   *
+   * A piece held to its first metre is not merely mis-clicked, it is
+   * mis-read: the bars fill up at the wrong rate, so every one of them is
+   * short or over-full, and what the writer wrote as half notes comes back
+   * padded with rests. Empty for anything this program generates.
+   */
+  readonly timeChanges: readonly TimeChange[];
   readonly tempoBpm: number;
   /**
    * What the first bar is *called*, which is not always 1.
@@ -302,7 +354,33 @@ export function measureTicks(measure: Measure): number {
 
 /** Total notated length of an exercise, in divisions. */
 export function exerciseTicks(exercise: Exercise): number {
-  return exercise.timeSignature.ticksPerMeasure * measureCount(exercise);
+  return barLines(exercise).reduce(
+    (total, bar) => total + bar.timeSignature.ticksPerMeasure,
+    0,
+  );
+}
+
+/** Which bar a tick falls in, and how far into it, once metres may change. */
+export function positionOfTick(
+  exercise: Exercise,
+  ticks: number,
+): { readonly measureIndex: number; readonly beat: number } {
+  const bars = barLines(exercise);
+  let at = 0;
+  for (const [measureIndex, bar] of bars.entries()) {
+    if (ticks < bar.startTicks) {
+      break;
+    }
+    at = measureIndex;
+  }
+  const bar = bars[at];
+  if (bar === undefined) {
+    return { measureIndex: 0, beat: 1 };
+  }
+  return {
+    measureIndex: at,
+    beat: bar.timeSignature.beatOf(ticks - bar.startTicks),
+  };
 }
 
 /** Number of measures; every staff is required to agree on this. */
@@ -333,7 +411,9 @@ export function validateExercise(exercise: Exercise): void {
     throw new ExerciseValidationError('An exercise needs at least one measure.', 'staves[0]');
   }
 
-  const expectedTicks = exercise.timeSignature.ticksPerMeasure;
+  // Per bar, because a metre may change partway through and each bar has to
+  // add up to the one that governs it.
+  const governedBy = barLines(exercise);
 
   exercise.staves.forEach((staff, staffIndex) => {
     const path = `staves[${staffIndex}]`;
@@ -382,9 +462,11 @@ export function validateExercise(exercise: Exercise): void {
       // separate check for it - one that could never fire would be worse than
       // none.
       const actual = measureTicks(measure);
+      const governing = governedBy[measureIndex]?.timeSignature ?? exercise.timeSignature;
+      const expectedTicks = governing.ticksPerMeasure;
       if (actual !== expectedTicks) {
         throw new ExerciseValidationError(
-          `Measure holds ${actual} divisions but ${exercise.timeSignature.toString()} requires ${expectedTicks}.`,
+          `Measure holds ${actual} divisions but ${governing.toString()} requires ${expectedTicks}.`,
           measurePath,
         );
       }

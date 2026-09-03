@@ -1,6 +1,6 @@
 import { elementAt } from '../../shared/asserts.js';
 import type { Exercise, MusicalEntry } from '../model/Exercise.js';
-import { exerciseTicks } from '../model/Exercise.js';
+import { barLines, exerciseTicks, positionOfTick } from '../model/Exercise.js';
 import type { Pitch } from '../model/Pitch.js';
 
 /** A single sounding pitch inside a timeline step. */
@@ -130,11 +130,14 @@ function soundingTicks(
 export function buildTimeline(exercise: Exercise): ExerciseTimeline {
   const notesByOnset = new Map<number, TimelineNote[]>();
   const onsets = new Set<number>();
-  const ticksPerMeasure = exercise.timeSignature.ticksPerMeasure;
+  // Where each bar begins, rather than a bar length to multiply by: a metre
+  // may change partway through, and from there on the bars are no longer all
+  // the same length.
+  const bars = barLines(exercise);
 
   for (const staff of exercise.staves) {
     const entries = staff.measures.flatMap((measure, measureIndex) => {
-      let cursor = measureIndex * ticksPerMeasure;
+      let cursor = bars[measureIndex]?.startTicks ?? 0;
       return measure.entries.map((entry) => {
         const onsetTicks = cursor;
         cursor += entry.duration.ticks;
@@ -180,8 +183,7 @@ export function buildTimeline(exercise: Exercise): ExerciseTimeline {
       index,
       onsetTicks,
       durationTicks: next - onsetTicks,
-      measureIndex: exercise.timeSignature.measureOf(onsetTicks),
-      beat: exercise.timeSignature.beatOf(onsetTicks),
+      ...positionOfTick(exercise, onsetTicks),
       notes,
       // Both hands may notate the same sounding pitch; the player still has
       // exactly one key to press for it.

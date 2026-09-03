@@ -37,6 +37,7 @@ export function calibrationExercise(tempoBpm = 80): Exercise {
     title: 'Measuring the delay',
     key: KeySignature.major(0),
     keyChanges: [],
+    timeChanges: [],
     pedalMarks: [],
     timeSignature: new TimeSignature(4, 4),
     tempoBpm,

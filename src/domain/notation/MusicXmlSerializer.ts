@@ -4,7 +4,13 @@ import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
 import type { Duration } from '../model/Duration.js';
 import type { Exercise, MusicalEntry, PedalMark, StaffPart } from '../model/Exercise.js';
 import type { KeySignature } from '../model/KeySignature.js';
-import { barNumberOf, keyAtMeasure, tupletPositions, validateExercise } from '../model/Exercise.js';
+import {
+  barNumberOf,
+  keyAtMeasure,
+  timeAtMeasure,
+  tupletPositions,
+  validateExercise,
+} from '../model/Exercise.js';
 import type { TupletPosition } from '../model/Exercise.js';
 import type { Alteration, Pitch } from '../model/Pitch.js';
 import { XmlWriter } from './XmlWriter.js';
@@ -135,10 +141,16 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         const pedal = exercise.pedalMarks.filter(
           (mark) => mark.measureIndex === measureIndex,
         );
+        // Back to the start of *this* bar, which is not the length of the
+        // first one once a metre may change partway through. Written as the
+        // opening metre, the second staff of a bar in a wider metre began
+        // late and ran past the bar line - and the file we had just written
+        // was one we could no longer read.
+        const barTicks = timeAtMeasure(exercise, measureIndex).ticksPerMeasure;
         present.forEach((staff, index) => {
           if (index > 0) {
             writer.element('backup', undefined, () => {
-              writer.leaf('duration', exercise.timeSignature.ticksPerMeasure);
+              writer.leaf('duration', barTicks);
             });
           }
           this.writeStaffMeasure(
@@ -187,7 +199,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
   }
 
   /**
-   * Key and clef changes that take effect here.
+   * Key, metre and clef changes that take effect here.
    *
    * Written as their own `<attributes>` at the head of the measure, which is
    * where a reader expects to meet them: on the bar line, before the notes
@@ -199,6 +211,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     measureIndex: number,
   ): void {
     const key = exercise.keyChanges.find((change) => change.measureIndex === measureIndex);
+    const time = exercise.timeChanges.find((change) => change.measureIndex === measureIndex);
     const changing = new Map<number, ClefKind>();
     for (const staff of exercise.staves) {
       for (const change of staff.clefChanges) {
@@ -207,7 +220,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         }
       }
     }
-    if (key === undefined && changing.size === 0) {
+    if (key === undefined && time === undefined && changing.size === 0) {
       return;
     }
     writer.element('attributes', undefined, () => {
@@ -216,6 +229,15 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         writer.element('key', undefined, () => {
           writer.leaf('fifths', key.key.fifths);
           writer.leaf('mode', key.key.mode);
+        });
+      }
+      // Then the metre, which the schema wants after the key and before the
+      // clefs - and which the engraver needs, or it goes on drawing bar lines
+      // where the old metre put them.
+      if (time !== undefined) {
+        writer.element('time', undefined, () => {
+          writer.leaf('beats', time.timeSignature.beats);
+          writer.leaf('beat-type', time.timeSignature.beatType);
         });
       }
       for (const [staffNumber, clef] of [...changing].sort((left, right) => left[0] - right[0])) {

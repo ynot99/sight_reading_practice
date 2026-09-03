@@ -322,6 +322,7 @@ describe('waiting while practising one hand', () => {
       title: 'Held right hand',
       key: KeySignature.major(0),
       keyChanges: [],
+      timeChanges: [],
       pedalMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 60,

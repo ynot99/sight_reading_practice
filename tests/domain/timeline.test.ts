@@ -59,6 +59,53 @@ describe('buildTimeline', () => {
     expect(timeline.stepAtTick(-1)).toBeNull();
   });
 
+  it('counts bars by where they begin once the metre changes', () => {
+    // Bars stop being all the same length at a metre change, so a position
+    // can no longer be had by multiplying: bar three of a piece that drops to
+    // 3/4 begins earlier than four times a whole note.
+    const base = twoBarExercise();
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    const threeFour = new TimeSignature(3, 4);
+    const timeline = buildTimeline({
+      ...base,
+      timeChanges: [{ measureIndex: 1, timeSignature: threeFour }],
+      staves: [
+        {
+          ...treble,
+          measures: [
+            bar(noteEntry(p('C4'), Duration.WHOLE)),
+            bar(
+              noteEntry(p('D4'), Duration.QUARTER),
+              noteEntry(p('E4'), Duration.QUARTER),
+              noteEntry(p('F4'), Duration.QUARTER),
+            ),
+          ],
+        },
+        {
+          ...bass,
+          measures: [
+            bar(noteEntry(p('C3'), Duration.WHOLE)),
+            bar(noteEntry(p('G2'), Duration.DOTTED_HALF)),
+          ],
+        },
+      ],
+    });
+
+    const quarter = Duration.QUARTER.ticks;
+    expect(timeline.steps.map((step) => step.onsetTicks)).toEqual([
+      0,
+      quarter * 4,
+      quarter * 5,
+      quarter * 6,
+    ]);
+    expect(timeline.steps.map((step) => step.measureIndex)).toEqual([0, 1, 1, 1]);
+    // And the beats are counted inside the new bar, not the old one.
+    expect(timeline.steps.map((step) => step.beat)).toEqual([1, 1, 2, 3]);
+  });
+
   it('deduplicates a pitch notated in both hands at the same instant', () => {
     const doubled = buildTimeline({
       ...singleBarExercise(),
@@ -91,6 +138,7 @@ describe('buildTimeline', () => {
       title: 'silent',
       key: KeySignature.major(0),
       keyChanges: [],
+      timeChanges: [],
       pedalMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 60,

@@ -639,9 +639,12 @@ the format, so the import either refuses a file or reports what it dropped;
 `MusicXmlParser` lists the cases. Several voices on a staff are kept as several
 parts sharing a staff number, so a held note under a moving line stays a held
 note; a voice absent from a bar is left out of it rather than resting through
-it. Key and clef changes, stem directions and beaming are all followed as
-written, along with rolled chords and the damper pedal. Grace notes, metre
-changes are the remaining limit.
+it. Key, metre and clef changes, stem directions and beaming are all followed
+as written, along with rolled chords and the damper pedal. A metre change
+moves the bar lines, so bars stop being all the same length and every answer
+about musical position is read off `barLines` rather than worked out by
+multiplying; the click is the one thing that does not follow yet, and goes on
+counting the metre the piece opened in. Grace notes are the remaining limit.
 Written values are read down to sixty-fourths, with tuplets up to septuplets:
 a file that divides a beat into sevens rounds its own numbers to fit its
 divisions, and the written value is trusted over the rounding. Compressed

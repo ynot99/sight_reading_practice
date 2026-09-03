@@ -10,6 +10,7 @@ import type {
   KeyChange,
   PedalMark,
   StemDirection,
+  TimeChange,
 } from '../model/Exercise.js';
 import { KeySignature, type KeyMode } from '../model/KeySignature.js';
 import { Pitch, type Alteration } from '../model/Pitch.js';
@@ -132,6 +133,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     title: readTitle(score),
     key: header.key,
     keyChanges: header.keyChanges,
+    timeChanges: header.timeChanges,
     pedalMarks,
     timeSignature: header.timeSignature,
     tempoBpm: header.tempoBpm,
@@ -172,12 +174,30 @@ interface ScoreHeader {
   readonly divisions: number;
   readonly key: KeySignature;
   readonly timeSignature: TimeSignature;
+  /** Metres it changes to later, by the measure each one begins at. */
+  readonly timeChanges: readonly TimeChange[];
   readonly tempoBpm: number;
   readonly clefByStaff: ReadonlyMap<number, ClefKind>;
   /** Clefs a staff switches to later, keyed by the file's own staff number. */
   readonly clefChangesByStaff: ReadonlyMap<number, readonly ClefChange[]>;
   readonly keyChanges: readonly KeyChange[];
   readonly staffCount: number;
+}
+
+/**
+ * How long a bar is at a given measure, in our divisions.
+ *
+ * Asked per bar rather than taken once, because a metre change moves the bar
+ * lines: from there on, "how much fills a bar" has a different answer.
+ */
+function barTicksAt(header: ScoreHeader, measureIndex: number): number {
+  let current = header.timeSignature;
+  for (const change of header.timeChanges) {
+    if (change.measureIndex <= measureIndex) {
+      current = change.timeSignature;
+    }
+  }
+  return current.ticksPerMeasure;
 }
 
 /** Reads `<clef>` elements into our own kinds, warning about the rest. */
@@ -229,7 +249,7 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
   // lines instead is exactly the difficulty the change exists to remove.
   const clefChangesByStaff = new Map<number, ClefChange[]>();
   const keyChanges: KeyChange[] = [];
-  let changedMetre = false;
+  const timeChanges: TimeChange[] = [];
   measures.forEach((measure, measureIndex) => {
     if (measureIndex === 0) {
       return;
@@ -256,22 +276,26 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
         key: new KeySignature(laterFifths, laterMode satisfies KeyMode),
       });
     }
-    if (hasChild(later, 'time')) {
-      changedMetre = true;
+    // A metre change moves the bar lines, so it cannot be ignored the way a
+    // missing ornament can. Held to the first metre, every bar after the
+    // change is short or over-full: the file is either refused outright or
+    // read as music nobody wrote, its half notes padded out with rests.
+    const laterTime = child(later, 'time');
+    const laterBeats = childNumber(laterTime, 'beats');
+    const laterBeatType = childNumber(laterTime, 'beat-type');
+    if (laterBeats !== null && laterBeatType !== null) {
+      timeChanges.push({
+        measureIndex,
+        timeSignature: new TimeSignature(laterBeats, laterBeatType),
+      });
     }
   });
-
-  if (changedMetre) {
-    warnings.push({
-      kind: 'changing-attributes',
-      detail: 'A metre change partway through was ignored; the first is used throughout.',
-    });
-  }
 
   return {
     divisions,
     key: new KeySignature(fifths, mode satisfies KeyMode),
     timeSignature: new TimeSignature(beats, beatType),
+    timeChanges,
     tempoBpm: readTempo(measures),
     clefByStaff,
     clefChangesByStaff,
@@ -562,7 +586,7 @@ function readMeasureNotes(
       hasChild(node, 'rest') && attribute(child(node, 'rest'), 'measure') === 'yes';
     const ticks =
       rawDuration === null && isWholeMeasureRest
-        ? header.timeSignature.ticksPerMeasure
+        ? barTicksAt(header, measureIndex)
         : toTicks(rawDuration ?? 0, header.divisions, where);
 
     const staff = childNumber(node, 'staff') ?? 1;
@@ -757,7 +781,7 @@ function buildStaves(
       if (mine.length === 0) {
         return measureOf([]);
       }
-      return buildMeasure(mine, measureIndex, header.timeSignature.ticksPerMeasure, warnings);
+      return buildMeasure(mine, measureIndex, barTicksAt(header, measureIndex), warnings);
     });
 
     return {
@@ -774,7 +798,7 @@ function buildStaves(
   });
 
   return {
-    staves: restStaffThatFallsSilent(parts, header.timeSignature.ticksPerMeasure),
+    staves: restStaffThatFallsSilent(parts, (bar) => barTicksAt(header, bar)),
     pedalMarks,
   };
 }
@@ -790,7 +814,7 @@ function buildStaves(
  */
 function restStaffThatFallsSilent(
   parts: readonly StaffPart[],
-  ticksPerMeasure: number,
+  ticksPerMeasure: (measureIndex: number) => number,
 ): readonly StaffPart[] {
   const bars = parts[0]?.measures.length ?? 0;
   const silent = new Map<number, Set<number>>();
@@ -819,7 +843,7 @@ function restStaffThatFallsSilent(
       ...part,
       measures: part.measures.map((measure, index) =>
         bars.has(index)
-          ? measureOf(splitIntoRests(ticksPerMeasure).map((rest) => restEntry(rest)))
+          ? measureOf(splitIntoRests(ticksPerMeasure(index)).map((rest) => restEntry(rest)))
           : measure,
       ),
     };

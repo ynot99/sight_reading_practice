@@ -469,6 +469,7 @@ export function midiToExercise(
     title,
     key: KeySignature.major(document.fifths),
     keyChanges: [],
+    timeChanges: [],
     pedalMarks,
     timeSignature,
     tempoBpm: document.tempoBpm,

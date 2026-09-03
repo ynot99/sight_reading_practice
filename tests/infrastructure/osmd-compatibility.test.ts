@@ -220,6 +220,61 @@ describe('OSMD accepts the MusicXML we produce', () => {
     expect(positions).toBe(timeline.length);
   });
 
+  it('agrees on the cursor across a change of metre', async () => {
+    // A metre change moves the bar lines, and the engraver draws them from
+    // the `<time>` we write while the timeline counts them from the metre we
+    // recorded. If those two ever part company the marker walks out of step
+    // for the rest of the piece - which is the whole reason the change is
+    // carried rather than ignored.
+    const base = twoBarExercise();
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    const exercise = {
+      ...base,
+      timeChanges: [{ measureIndex: 1, timeSignature: new TimeSignature(3, 4) }],
+      staves: [
+        {
+          ...treble,
+          measures: [
+            bar(noteEntry(p('C4'), Duration.WHOLE)),
+            bar(
+              noteEntry(p('D4'), Duration.QUARTER),
+              noteEntry(p('E4'), Duration.QUARTER),
+              noteEntry(p('F4'), Duration.QUARTER),
+            ),
+          ],
+        },
+        {
+          ...bass,
+          measures: [
+            bar(noteEntry(p('C3'), Duration.WHOLE)),
+            bar(noteEntry(p('G2'), Duration.DOTTED_HALF)),
+          ],
+        },
+      ],
+    };
+    validateExercise(exercise);
+
+    const timeline = buildTimeline(exercise);
+    const osmd = createDisplay();
+
+    await osmd.load(serializer.serialize(exercise));
+
+    expect(osmd.Sheet.SourceMeasures).toHaveLength(2);
+    const iterator = osmd.Sheet.MusicPartManager.getIterator();
+    let positions = 0;
+    let guard = timeline.length * 4 + 10;
+    while (!iterator.EndReached && guard > 0) {
+      guard -= 1;
+      positions += 1;
+      iterator.moveToNext();
+    }
+
+    expect(positions).toBe(timeline.length);
+  });
+
   it('agrees on the cursor when two voices share a staff', async () => {
     // An imported score puts an inner line on the same staff as the melody.
     // The engraver stops wherever either voice moves, and so must we.

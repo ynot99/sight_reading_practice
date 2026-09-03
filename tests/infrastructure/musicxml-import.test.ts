@@ -6,7 +6,13 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { validateExercise } from '../../src/domain/model/Exercise.js';
+import {
+  measureTicks,
+  noteEntry,
+  restEntry,
+  timeAtMeasure,
+  validateExercise,
+} from '../../src/domain/model/Exercise.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
@@ -514,6 +520,110 @@ describe('files written by other programs', () => {
         (type) => Duration.of(type as Parameters<typeof Duration.of>[0]).ticks,
       ),
     );
+  });
+
+  it('follows a metre change instead of holding the piece to its first bar', () => {
+    // Three of the reader's scores were refused outright over this and a
+    // fourth - Merry Christmas Mr Lawrence, 12/8 for one bar and 2/2 after it
+    // - came in looking like music nobody wrote: 182 bars reported short and
+    // padded with rests where the writer had half notes.
+    const twoFour =
+      '<measure number="2"><attributes><time><beats>2</beats><beat-type>4</beat-type>' +
+      '</time></attributes>' +
+      note('D', 4, 48, 'half') +
+      '</measure>';
+    const { exercise, warnings } = importer.read(
+      // Straight after the first bar, which is where a second measure goes.
+      scoreXml(note('C', 4, 96, 'whole')).replace('</measure>', '</measure>' + twoFour),
+    );
+
+    expect(warnings.map((warning) => warning.kind)).not.toContain('padded-measure');
+    expect(timeAtMeasure(exercise, 0).toString()).toBe('4/4');
+    expect(timeAtMeasure(exercise, 1).toString()).toBe('2/4');
+    // The second bar is a half note and full, not a half note in a bar that
+    // wanted a whole one.
+    expect(measureTicks(exercise.staves[0]?.measures[1] ?? { entries: [] })).toBe(
+      Duration.HALF.ticks,
+    );
+  });
+
+  it('reads back a piece that widens its metre, both staves in step', () => {
+    // The reader's report: nausicaa opened and drew nothing, and opening it
+    // again from the library failed outright. Both were the same fault - the
+    // `<backup>` that sends the writer back to the start of the bar for the
+    // second staff was written as the length of the *first* bar of the piece.
+    // In a bar that had grown from 3/4 to 4/4 the second staff began a
+    // quarter late and ran a quarter past the bar line, so the file we had
+    // just written was one neither we nor the engraver could read.
+    const base = twoBarExercise();
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    const widening = {
+      ...base,
+      timeSignature: new TimeSignature(3, 4),
+      timeChanges: [{ measureIndex: 1, timeSignature: new TimeSignature(4, 4) }],
+      staves: [
+        {
+          ...treble,
+          measures: [
+            { entries: [noteEntry(Pitch.parse('C4'), Duration.DOTTED_HALF)] },
+            { entries: [noteEntry(Pitch.parse('D4'), Duration.WHOLE)] },
+          ],
+        },
+        {
+          ...bass,
+          measures: [
+            { entries: [noteEntry(Pitch.parse('C3'), Duration.DOTTED_HALF)] },
+            { entries: [noteEntry(Pitch.parse('G2'), Duration.WHOLE)] },
+          ],
+        },
+      ],
+    };
+    validateExercise(widening);
+
+    const { exercise } = importer.read(serializer.serialize(widening));
+
+    expect(timeAtMeasure(exercise, 0).toString()).toBe('3/4');
+    expect(timeAtMeasure(exercise, 1).toString()).toBe('4/4');
+    expect(demands(exercise)).toEqual(demands(widening));
+  });
+
+  it('writes a metre change back out, so the engraver draws the new bar lines', () => {
+    const base = twoBarExercise();
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    const changed = {
+      ...base,
+      timeChanges: [{ measureIndex: 1, timeSignature: new TimeSignature(3, 4) }],
+      staves: [
+        {
+          ...treble,
+          measures: [treble.measures[0] ?? { entries: [] }, { entries: [] }],
+        },
+        {
+          ...bass,
+          measures: [bass.measures[0] ?? { entries: [] }, { entries: [] }],
+        },
+      ],
+    };
+    const withThree = {
+      ...changed,
+      staves: changed.staves.map((staff) => ({
+        ...staff,
+        measures: [
+          staff.measures[0] ?? { entries: [] },
+          { entries: [restEntry(Duration.DOTTED_HALF)] },
+        ],
+      })),
+    };
+
+    const { exercise } = importer.read(serializer.serialize(withThree));
+
+    expect(timeAtMeasure(exercise, 1).toString()).toBe('3/4');
   });
 
   it('reads a score that names no tempo at the speed everything else assumes', () => {

@@ -301,6 +301,7 @@ describe('rolling a chord the writer marked', () => {
       title: 'Short arpeggio',
       key: KeySignature.major(0),
       keyChanges: [],
+      timeChanges: [],
       pedalMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 240,

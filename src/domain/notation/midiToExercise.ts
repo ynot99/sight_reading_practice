@@ -32,7 +32,7 @@ const LEFT_HAND = 2;
  * {@link PLAYED_NOTE_TYPES}. Everything a plain-valued bar is made of is a
  * whole number of these.
  */
-const PLAIN_GRID = 120;
+const PLAIN_GRID = Duration.SIXTEENTH.ticks;
 
 /** How a beat is divided: into halves, or into thirds. */
 type BeatGrid = 'plain' | 'triplet';

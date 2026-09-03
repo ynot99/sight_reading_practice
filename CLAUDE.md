@@ -25,9 +25,12 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
   matcher's timeline are both *derived* from it — never let one be edited
   independently of the other. `tests/infrastructure/osmd-compatibility.test.ts`
   asserts that OSMD's cursor and our timeline agree on the number of positions.
-- Musical time is integer divisions (`DIVISIONS_PER_QUARTER = 480`). Do not
+- Musical time is integer divisions (`DIVISIONS_PER_QUARTER = 3360`). Do not
   introduce floating-point positions; convert to milliseconds only at the edge.
   `Duration.of` refuses a tuplet ratio that would not land on a whole division.
+  The number is a claim about which tuplets exist - it divides by 2, 3, 5 and
+  7 - and it has changed once already, so say `Duration.QUARTER.ticks` and
+  never a bare tick count, in tests above all.
 - A generated tie holds one pitch: the voice must stop moving for the length
   of the held note, or `validateExercise` will refuse the bar.
 - Practising a passage gives the *run* two ends; the music on the page stays

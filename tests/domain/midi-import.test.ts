@@ -5,6 +5,7 @@ import { midiToExercise } from '../../src/domain/notation/midiToExercise.js';
 import { measureCount, validateExercise } from '../../src/domain/model/Exercise.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { DomainError } from '../../src/shared/errors.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 
 /** The writer's own tempo is 120, so a quarter note is half a second. */
 const QUARTER_MS = 500;
@@ -39,7 +40,7 @@ function handWritten(trackBytes: readonly number[]): Uint8Array {
   return Uint8Array.from([
     0x4d, 0x54, 0x68, 0x64, 0x00, 0x00, 0x00, 0x06,
     0x00, 0x00, 0x00, 0x01,
-    // 480 ticks to the quarter, the same division our own writer uses.
+    // 480 ticks to the quarter, which is what our own writer declares.
     0x01, 0xe0,
     0x4d, 0x54, 0x72, 0x6b,
     (length >> 24) & 0xff, (length >> 16) & 0xff, (length >> 8) & 0xff, length & 0xff,
@@ -269,7 +270,8 @@ describe('a beat played in threes', () => {
     expect(() => validateExercise(exercise)).not.toThrow();
     expect(warnings.map((each) => each.detail).join(' ')).toContain('written as triplets');
     const first = exercise.staves[0]?.measures[0]?.entries.slice(0, 3) ?? [];
-    expect(first.map((entry) => entry.duration.ticks)).toEqual([160, 160, 160]);
+    const third = Duration.TRIPLET_EIGHTH.ticks;
+    expect(first.map((entry) => entry.duration.ticks)).toEqual([third, third, third]);
     expect(first.every((entry) => entry.duration.isTuplet)).toBe(true);
     // The plain beat after it is written plainly: the decision is per beat,
     // because a piece puts a bar of triplets beside a bar of sixteenths.
@@ -290,9 +292,9 @@ describe('a beat played in threes', () => {
     expect(() => validateExercise(exercise)).not.toThrow();
     const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
     // A quarter, tied into a third of the next beat, then the rest of it.
-    expect(entries[0]?.duration.ticks).toBe(480);
+    expect(entries[0]?.duration.ticks).toBe(Duration.QUARTER.ticks);
     expect(entries[0]?.kind === 'note' ? entries[0].tiedForward : []).toEqual([60]);
-    expect(entries[1]?.duration.ticks).toBe(160);
+    expect(entries[1]?.duration.ticks).toBe(Duration.TRIPLET_EIGHTH.ticks);
   });
 
   it('subdivides a triplet when the playing did', () => {
@@ -306,7 +308,11 @@ describe('a beat played in threes', () => {
     expect(() => validateExercise(exercise)).not.toThrow();
     expect(
       (exercise.staves[0]?.measures[0]?.entries ?? []).slice(0, 3).map((e) => e.duration.ticks),
-    ).toEqual([80, 80, 320]);
+    ).toEqual([
+      Duration.TRIPLET_SIXTEENTH.ticks,
+      Duration.TRIPLET_SIXTEENTH.ticks,
+      Duration.TRIPLET_QUARTER.ticks,
+    ]);
   });
 });
 

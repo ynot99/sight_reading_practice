@@ -56,14 +56,14 @@ describe('clicksPerPulse', () => {
 describe('musicalResolutionTicks', () => {
   it('is as coarse as the music allows', () => {
     expect(musicalResolutionTicks(buildTimeline(evenBar(COMMON, Duration.QUARTER)), COMMON)).toBe(
-      480,
+      Duration.QUARTER.ticks,
     );
     expect(musicalResolutionTicks(buildTimeline(evenBar(COMMON, Duration.EIGHTH)), COMMON)).toBe(
-      240,
+      Duration.EIGHTH.ticks,
     );
     expect(
       musicalResolutionTicks(buildTimeline(evenBar(COMMON, Duration.SIXTEENTH)), COMMON),
-    ).toBe(120);
+    ).toBe(Duration.SIXTEENTH.ticks);
   });
 
   it('lands on every onset of a mixed bar', () => {

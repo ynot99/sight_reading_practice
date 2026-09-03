@@ -7,6 +7,7 @@ import { Pitch } from '../../src/domain/model/Pitch.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { validateExercise } from '../../src/domain/model/Exercise.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
@@ -112,8 +113,8 @@ function note(step: string, octave: number, duration: number, type: string, extr
 
 describe('files written by other programs', () => {
   it('rescales whatever divisions the file chose', () => {
-    // 24 divisions to the quarter, so a quarter note says 24 and must come
-    // back as our 480.
+    // 24 divisions to the quarter, so a quarter note says 24 there and has
+    // to come back as a quarter in ours, whatever ours happens to be.
     const { exercise } = importer.read(
       scoreXml(
         note('C', 4, 24, 'quarter') +
@@ -123,7 +124,8 @@ describe('files written by other programs', () => {
     );
 
     const durations = exercise.staves[0]?.measures[0]?.entries.map((entry) => entry.duration.ticks);
-    expect(durations).toEqual([480, 480, 960]);
+    const q = Duration.QUARTER.ticks;
+    expect(durations).toEqual([q, q, q * 2]);
     expect(exercise.title).toBe('Something Borrowed');
     expect(exercise.key.fifths).toBe(1);
   });
@@ -214,7 +216,7 @@ describe('files written by other programs', () => {
     for (const staff of exercise.staves) {
       expect(
         staff.measures[0]?.entries.reduce((total, entry) => total + entry.duration.ticks, 0),
-      ).toBe(1920);
+      ).toBe(Duration.WHOLE.ticks);
     }
   });
 
@@ -401,7 +403,7 @@ describe('files written by other programs', () => {
 
     expect(exercise.pedalMarks).toEqual([
       { measureIndex: 0, offsetTicks: 0, type: 'start' },
-      { measureIndex: 0, offsetTicks: 960, type: 'stop' },
+      { measureIndex: 0, offsetTicks: Duration.HALF.ticks, type: 'stop' },
     ]);
 
     const printed = serializer.serialize(exercise);
@@ -507,9 +509,76 @@ describe('files written by other programs', () => {
     );
 
     expect(warnings).toEqual([]);
-    expect(exercise.staves[0]?.measures[0]?.entries.map((entry) => entry.duration.ticks)).toEqual([
-      960, 480, 240, 120, 60, 30, 30,
-    ]);
+    expect(exercise.staves[0]?.measures[0]?.entries.map((entry) => entry.duration.ticks)).toEqual(
+      ['half', 'quarter', 'eighth', '16th', '32nd', '64th', '64th'].map(
+        (type) => Duration.of(type as Parameters<typeof Duration.of>[0]).ticks,
+      ),
+    );
+  });
+
+  it('reads a score that names no tempo at the speed everything else assumes', () => {
+    // Plenty of arrangements carry no <sound> and no metronome mark at all -
+    // the Nier one carries neither anywhere in it. Something has to be
+    // assumed, and 120 is what MuseScore assumes in the same case, so a file
+    // with no mark opens here at the speed it opened where the reader saw it
+    // last. At 72 it opened noticeably slower and looked like the writer's
+    // own marking rather than our guess.
+    const { exercise } = importer.read(scoreXml(note('C', 4, 96, 'whole')));
+
+    expect(exercise.tempoBpm).toBe(120);
+  });
+
+  it('still takes the tempo the file does state', () => {
+    const stated =
+      '<direction placement="above"><direction-type>' +
+      '<metronome><beat-unit>quarter</beat-unit><per-minute>63</per-minute></metronome>' +
+      '</direction-type><sound tempo="63"/></direction>';
+    const { exercise } = importer.read(scoreXml(stated + note('C', 4, 96, 'whole')));
+
+    expect(exercise.tempoBpm).toBe(63);
+  });
+
+  it('reads a septuplet a file could not divide evenly', () => {
+    // 24 divisions to the quarter, so a seventh of a beat is 3.43 of them and
+    // MuseScore writes 3, 4, 3, 4, 3, 4, 3 - adding up to the beat while no
+    // one of them is a seventh of it. This is how every septuplet in the
+    // reader's scores is written, the Debussy and the Ocarina among them.
+    const septuplet = (step: string, duration: number): string =>
+      note(step, 4, duration, '16th', '<time-modification><actual-notes>7</actual-notes>' +
+        '<normal-notes>4</normal-notes></time-modification>');
+    const { exercise } = importer.read(
+      scoreXml(
+        septuplet('C', 3) +
+          septuplet('D', 4) +
+          septuplet('E', 3) +
+          septuplet('F', 4) +
+          septuplet('G', 3) +
+          septuplet('A', 4) +
+          septuplet('B', 3) +
+          note('C', 5, 72, 'half', '<dot/>'),
+      ),
+    );
+
+    expect(() => validateExercise(exercise)).not.toThrow();
+    const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
+    // Seven equal sevenths, whatever the file called them one by one.
+    expect(entries.slice(0, 7).map((entry) => entry.duration.ticks)).toEqual(
+      Array.from({ length: 7 }, () => Duration.QUARTER.ticks / 7),
+    );
+    // And the note after the group is still on the second beat, which is the
+    // whole reason the roundings must not be allowed to accumulate.
+    const onsets = buildTimeline(exercise).steps.map((step) => step.onsetTicks);
+    expect(onsets[7]).toBe(Duration.QUARTER.ticks);
+  });
+
+  it('still refuses a group that disagrees with itself by a real value', () => {
+    // Rounding is a division or so. A note written as a triplet eighth and
+    // lasting a whole beat is not rounding; it is a file we cannot trust.
+    const wrong = note('C', 4, 24, 'eighth', '<time-modification><actual-notes>3</actual-notes>' +
+      '<normal-notes>2</normal-notes></time-modification>');
+    expect(() => importer.read(scoreXml(wrong + note('D', 4, 72, 'half', '<dot/>')))).toThrow(
+      /disagrees with itself/,
+    );
   });
 
   it('refuses a value it cannot write, and says which', () => {
@@ -665,7 +734,8 @@ describe('a grace note', () => {
     expect(() => validateExercise(exercise)).not.toThrow();
     const onsets = buildTimeline(exercise).steps.map((step) => step.onsetTicks);
     // Beat one, the grace just before beat two, beat two itself, beat three.
-    expect(onsets).toEqual([0, 360, 480, 960]);
+    const q = Duration.QUARTER.ticks;
+    expect(onsets).toEqual([0, q * 0.75, q, q * 2]);
   });
 
   it('takes its time from whatever was sounding before it', () => {
@@ -673,7 +743,8 @@ describe('a grace note', () => {
 
     const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
     // The quarter before gives up a sixteenth and becomes a dotted eighth.
-    expect(entries.map((entry) => entry.duration.ticks)).toEqual([360, 120, 480, 960]);
+    const q = Duration.QUARTER.ticks;
+    expect(entries.map((entry) => entry.duration.ticks)).toEqual([q * 0.75, q / 4, q, q * 2]);
     expect(warnings.map((warning) => warning.kind)).toContain('grace-notes');
   });
 
@@ -722,15 +793,19 @@ describe('a grace note', () => {
 
     // One press of two keys, which is what the mark means.
     expect(demands(exercise)[1]).toEqual([Pitch.parse('G4').midi, Pitch.parse('B4').midi]);
-    expect(buildTimeline(exercise).steps.map((step) => step.onsetTicks)).toEqual([0, 360, 480, 960]);
+    const q = Duration.QUARTER.ticks;
+    expect(buildTimeline(exercise).steps.map((step) => step.onsetTicks)).toEqual([
+      0, q * 0.75, q, q * 2,
+    ]);
   });
 
   it('makes room for two of them in turn', () => {
     const { exercise } = importer.read(bar(grace('G', 4) + grace('A', 4)));
 
     // Two presses before the beat, and the beat still where it was.
+    const q = Duration.QUARTER.ticks;
     expect(buildTimeline(exercise).steps.map((step) => step.onsetTicks)).toEqual([
-      0, 240, 360, 480, 960,
+      0, q / 2, q * 0.75, q, q * 2,
     ]);
   });
 

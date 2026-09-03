@@ -402,7 +402,7 @@ src/
 ├── domain/                         # pure music logic — no DOM, no I/O, no time
 │   ├── model/
 │   │   ├── Pitch.ts                #   spelled pitch  ⇄ MIDI ⇄ staff position
-│   │   ├── Duration.ts             #   interned rhythmic values incl. tuplets, 480/quarter
+│   │   ├── Duration.ts             #   interned rhythmic values incl. tuplets, 3360/quarter
 │   │   ├── TimeSignature.ts        #   beat/measure tick arithmetic
 │   │   ├── KeySignature.ts         #   accidentals + "spell this staff position"
 │   │   ├── Clef.ts
@@ -641,13 +641,17 @@ parts sharing a staff number, so a held note under a moving line stays a held
 note; a voice absent from a bar is left out of it rather than resting through
 it. Key and clef changes, stem directions and beaming are all followed as
 written, along with rolled chords and the damper pedal. Grace notes, metre
-changes and anything shorter than a sixteenth are the remaining limits.
-Compressed `.mxl` files are unpacked on the way in, since that is what
-MuseScore hands you unless you ask otherwise.
+changes are the remaining limit.
+Written values are read down to sixty-fourths, with tuplets up to septuplets:
+a file that divides a beat into sevens rounds its own numbers to fit its
+divisions, and the written value is trusted over the rounding. Compressed
+`.mxl` files are unpacked on the way in, since that is what MuseScore hands
+you unless you ask otherwise.
 
 ## Known limits and next steps
 
-- Rhythms stop at sixteenth notes, one dot and triplets; no pickup bars.
+- *Generated* rhythms stop at sixteenth notes, one dot and triplets; no
+  pickup bars. An imported score may go shorter and use other tuplets.
   Sixteenths arrive in beamed pairs and triplets in complete threes, never
   singly and never straddling a beat.
 - Values may cross a beat under the `syncopated` level, split at the boundary

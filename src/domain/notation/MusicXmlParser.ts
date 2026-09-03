@@ -294,6 +294,18 @@ function readFirstBarNumber(measures: readonly XmlNode[]): number {
   return Number.isInteger(declared) && declared >= 1 ? declared : 1;
 }
 
+/**
+ * What a score that names no tempo is read at.
+ *
+ * Plenty of them name none - the Nier arrangement carries no `<sound>` and no
+ * metronome mark anywhere in it - and something has to be assumed. 120 is
+ * what MuseScore assumes in the same case, so a file with no mark opens here
+ * at the speed it opened where the reader last saw it. The number they meant
+ * is a slider away either way; being off by the same amount as everyone else
+ * is worth more than a lower guess that looks like the writer's own.
+ */
+const ASSUMED_TEMPO_BPM = 120;
+
 function readTempo(measures: readonly XmlNode[]): number {
   for (const measure of measures) {
     for (const direction of childrenNamed(measure, 'direction')) {
@@ -309,7 +321,7 @@ function readTempo(measures: readonly XmlNode[]): number {
       }
     }
   }
-  return 72;
+  return ASSUMED_TEMPO_BPM;
 }
 
 /** Divisions in the file's units, converted to ours. */
@@ -323,7 +335,11 @@ function toTicks(fileDivisions: number, divisions: number, where: string): numbe
   return ticks;
 }
 
-function readDuration(note: XmlNode, ticks: number, where: string): Duration {
+/**
+ * @param rounding One division of the file, in ours - how far a written value
+ * may sit from the number the file gives for it.
+ */
+function readDuration(note: XmlNode, ticks: number, where: string, rounding: number): Duration {
   const typeText = childText(note, 'type');
   // An unknown type name (128th, breve) reads as absent, and the tick count
   // decides instead - or the note is refused below.
@@ -338,7 +354,13 @@ function readDuration(note: XmlNode, ticks: number, where: string): Duration {
       throw new DomainError(`${where} is part of a group this trainer cannot read.`);
     }
     const duration = Duration.of(type, dots === 1 ? 1 : 0, { actual, normal });
-    if (duration.ticks !== ticks) {
+    // A file divides its quarter its own way, and a septuplet rarely fits:
+    // MuseScore writes seven notes of 68, 69, 68, 69... which add up to the
+    // beat while no one of them is a seventh of it. The written value is the
+    // truth and the numbers are its rounding, so a disagreement smaller than
+    // one of the file's own divisions is not a disagreement. Anything larger
+    // still is: a note saying "quarter" and lasting a half is a broken file.
+    if (Math.abs(duration.ticks - ticks) >= Math.max(rounding, 1)) {
       throw new DomainError(`${where} disagrees with itself about how long it lasts.`);
     }
     return duration;
@@ -398,14 +420,14 @@ function hasTie(note: XmlNode, type: 'start' | 'stop'): boolean {
 
 /** Walks one measure, placing every note on the staff and beat it belongs to. */
 /**
- * The shortest value this project can write, and so what a grace note gets.
+ * How long a grace note is given: a sixteenth.
  *
- * An acciaccatura is meant to be shorter than anything notated, which cannot
- * be said in a vocabulary that stops at the sixteenth. A sixteenth is the
- * nearest true thing to it, and it is still one press just before the beat -
- * which is the whole of what a reader has to do with it.
+ * An acciaccatura is meant to be shorter than anything notated, which no
+ * vocabulary of written values can say. A sixteenth is the nearest true thing
+ * to it, and it is still one press just before the beat - which is the whole
+ * of what a reader has to do with it.
  */
-const GRACE_TICKS = 120;
+const GRACE_TICKS = Duration.SIXTEENTH.ticks;
 
 /** Each run of chorded graces is one press, and one press needs one slot. */
 function graceSlots(graces: readonly XmlNode[]): XmlNode[][] {
@@ -493,6 +515,8 @@ function readMeasureNotes(
   const notes: RawNote[] = [];
   let cursor = 0;
   let previousOnset = 0;
+  /** One of the file's divisions, in ours: the finest number it can write. */
+  const roundingTicks = DIVISIONS_PER_QUARTER / Math.max(1, header.divisions);
   const pendingGraces: XmlNode[] = [];
   /** The notes sounding immediately before here: one, or a chord of them. */
   let lastNotes: RawNote[] = [];
@@ -569,17 +593,23 @@ function readMeasureNotes(
       pendingGraces.length = 0;
     }
 
-    const ownTicks = ticks;
+    const duration =
+      isWholeMeasureRest && !Duration.isNotatable(ticks)
+        ? Duration.WHOLE
+        : readDuration(node, ticks, where, roundingTicks);
+    // A tuplet the file could not divide evenly moves the cursor by what it is
+    // written as, not by the rounded number beside it. The group adds up to
+    // the same beat either way, but positions taken from the roundings drift
+    // inside it - and a drift of a division is a hole the next note has to be
+    // padded across, which is how a bar of sevens became unwritable.
+    const ownTicks = duration.isTuplet ? duration.ticks : ticks;
     const onsetTicks = isChord ? previousOnset : cursor;
     const pushed: RawNote = {
       staff,
       voice,
       onsetTicks,
       ticks: ownTicks,
-      duration:
-        isWholeMeasureRest && !Duration.isNotatable(ownTicks)
-          ? Duration.WHOLE
-          : readDuration(node, ownTicks, where),
+      duration,
       pitch: readPitch(node),
       tieStart: hasTie(node, 'start'),
       isChord,

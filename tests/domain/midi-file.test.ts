@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { damperIsDown, writeMidiFile, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
-import { DIVISIONS_PER_QUARTER } from '../../src/domain/model/Duration.js';
 import { DomainError } from '../../src/shared/errors.js';
 
 function ascii(bytes: Uint8Array, from: number, length: number): string {
@@ -24,14 +23,10 @@ describe('writing a Standard MIDI File', () => {
     expect(ascii(bytes, 0, 4)).toBe('MThd');
     // Format 0, one track: a capture of one keyboard is one stream, and every
     // program reads format 0.
-    expect([...bytes.slice(8, 14)]).toEqual([
-      0,
-      0,
-      0,
-      1,
-      (DIVISIONS_PER_QUARTER >> 8) & 0xff,
-      DIVISIONS_PER_QUARTER & 0xff,
-    ]);
+    // 480 ticks to the quarter, which is what a sequencer expects to see -
+    // and deliberately not the notation's divisions, which a capture has no
+    // use for.
+    expect([...bytes.slice(8, 14)]).toEqual([0, 0, 0, 1, (480 >> 8) & 0xff, 480 & 0xff]);
     expect(ascii(bytes, 14, 4)).toBe('MTrk');
   });
 

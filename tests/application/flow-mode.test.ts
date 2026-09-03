@@ -431,7 +431,7 @@ describe('Flow mode', () => {
 
     harness.metronome.advanceSubdivisions(1);
     expect(harness.of('beat')).toHaveLength(1);
-    expect(harness.of('beat')[0]?.positionTicks).toBe(1920);
+    expect(harness.of('beat')[0]?.positionTicks).toBe(Duration.WHOLE.ticks);
   });
 
   describe('where the music has got to', () => {

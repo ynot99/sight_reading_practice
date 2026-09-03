@@ -24,7 +24,7 @@ describe('exercise validation', () => {
   it('accepts a well-formed grand staff exercise', () => {
     expect(() => validateExercise(twoBarExercise())).not.toThrow();
     expect(measureCount(twoBarExercise())).toBe(2);
-    expect(exerciseTicks(twoBarExercise())).toBe(3840);
+    expect(exerciseTicks(twoBarExercise())).toBe(Duration.WHOLE.ticks * 2);
   });
 
   it('rejects measures that do not add up to the time signature', () => {
@@ -33,7 +33,9 @@ describe('exercise validation', () => {
       bar(noteEntry(p('G4'), Duration.WHOLE)),
     ]);
     expect(() => validateExercise(broken)).toThrow(ExerciseValidationError);
-    expect(() => validateExercise(broken)).toThrow(/480 divisions but 4\/4 requires 1920/);
+    expect(() => validateExercise(broken)).toThrow(
+      new RegExp(`${Duration.QUARTER.ticks} divisions but 4/4 requires ${Duration.WHOLE.ticks}`),
+    );
   });
 
   it('rejects staves with different bar counts', () => {
@@ -102,6 +104,8 @@ describe('exercise validation', () => {
   });
 
   it('measures the notated length of a bar', () => {
-    expect(measureTicks(bar(noteEntry(p('C4'), Duration.HALF), restEntry(Duration.HALF)))).toBe(1920);
+    expect(measureTicks(bar(noteEntry(p('C4'), Duration.HALF), restEntry(Duration.HALF)))).toBe(
+      Duration.WHOLE.ticks,
+    );
   });
 });

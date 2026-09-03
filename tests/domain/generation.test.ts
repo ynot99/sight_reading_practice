@@ -142,9 +142,10 @@ describe('fillMeasure', () => {
   });
 
   it('tiles leftover space with notatable rests', () => {
-    expect(splitIntoRests(1920)).toEqual([Duration.WHOLE]);
-    expect(splitIntoRests(1440)).toEqual([Duration.DOTTED_HALF]);
-    expect(splitIntoRests(600).reduce((sum, rest) => sum + rest.ticks, 0)).toBe(600);
+    expect(splitIntoRests(Duration.WHOLE.ticks)).toEqual([Duration.WHOLE]);
+    expect(splitIntoRests(Duration.DOTTED_HALF.ticks)).toEqual([Duration.DOTTED_HALF]);
+    const awkward = Duration.HALF.ticks + Duration.SIXTEENTH.ticks;
+    expect(splitIntoRests(awkward).reduce((sum, rest) => sum + rest.ticks, 0)).toBe(awkward);
   });
 });
 

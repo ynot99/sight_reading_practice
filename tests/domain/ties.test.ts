@@ -30,7 +30,9 @@ describe('a note held across the bar line', () => {
 
   it('is demanded once, not twice', () => {
     const timeline = buildTimeline(exercise);
-    const downbeatOfBarTwo = timeline.steps.find((step) => step.onsetTicks === 1920);
+    const downbeatOfBarTwo = timeline.steps.find(
+      (step) => step.onsetTicks === Duration.WHOLE.ticks,
+    );
 
     expect(downbeatOfBarTwo).toBeDefined();
     // The E4 is still sounding from bar one: the only key left to press is the
@@ -42,16 +44,19 @@ describe('a note held across the bar line', () => {
     // The engraver draws a notehead there, so the timeline must have a step
     // there too - the two walk in lockstep or the cursor drifts.
     const timeline = buildTimeline(exercise);
-    expect(timeline.steps.map((step) => step.onsetTicks)).toEqual([0, 960, 1440, 1920]);
+    const q = Duration.QUARTER.ticks;
+    expect(timeline.steps.map((step) => step.onsetTicks)).toEqual([0, q * 2, q * 3, q * 4]);
   });
 
   it('reports how long the key is actually held', () => {
     const timeline = buildTimeline(exercise);
-    const struck = timeline.steps.find((step) => step.onsetTicks === 1440);
+    const struck = timeline.steps.find(
+      (step) => step.onsetTicks === Duration.DOTTED_HALF.ticks,
+    );
     const held = struck?.notes.find((note) => note.midi === p('E4').midi);
 
     // A quarter tied to a whole: one press lasting five beats, not one.
-    expect(held?.durationTicks).toBe(480 + 1920);
+    expect(held?.durationTicks).toBe(Duration.QUARTER.ticks + Duration.WHOLE.ticks);
   });
 
   it('counts as one note in the total', () => {
@@ -103,7 +108,7 @@ describe('ties that lead nowhere', () => {
     expect(() => validateExercise(partly)).not.toThrow();
 
     const timeline = buildTimeline(partly);
-    const second = timeline.steps.find((step) => step.onsetTicks === 960);
+    const second = timeline.steps.find((step) => step.onsetTicks === Duration.HALF.ticks);
     // The C is still held; the E has to be struck again.
     expect(second?.expectedMidi).toEqual([p('E4').midi]);
   });
@@ -121,7 +126,9 @@ describe('ties in the printed score', () => {
 
   it('puts the tie where the schema expects it', () => {
     // Right after the duration, and the slur inside notations after the staff.
-    expect(xml).toMatch(/<duration>480<\/duration>\s*<tie type="start"\/>/);
+    expect(xml).toMatch(
+      new RegExp(`<duration>${Duration.QUARTER.ticks}</duration>\\s*<tie type="start"/>`),
+    );
     expect(xml).toMatch(/<staff>1<\/staff>\s*<notations>/);
   });
 

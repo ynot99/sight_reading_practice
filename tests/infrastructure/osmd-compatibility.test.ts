@@ -183,6 +183,43 @@ describe('OSMD accepts the MusicXML we produce', () => {
     expect(positions).toBe(timeline.length);
   });
 
+  it('draws seven in the time of four, and stops on each of them', async () => {
+    // The engraver has to accept the bracket we write for a septuplet, and
+    // count the same seven positions inside it. Anything less and the marker
+    // walks out of step with the music for the rest of the piece.
+    const base = twoBarExercise();
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    const seven = Duration.of('16th', 0, { actual: 7, normal: 4 });
+    const run = bar(
+      ...['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4'].map((name) => noteEntry(p(name), seven)),
+      noteEntry(p('C5'), Duration.DOTTED_HALF),
+    );
+    const exercise = {
+      ...base,
+      staves: [{ ...treble, measures: [run, ...treble.measures.slice(1)] }, bass],
+    };
+    validateExercise(exercise);
+
+    const timeline = buildTimeline(exercise);
+    const osmd = createDisplay();
+
+    await osmd.load(serializer.serialize(exercise));
+
+    const iterator = osmd.Sheet.MusicPartManager.getIterator();
+    let positions = 0;
+    let guard = timeline.length * 4 + 10;
+    while (!iterator.EndReached && guard > 0) {
+      guard -= 1;
+      positions += 1;
+      iterator.moveToNext();
+    }
+
+    expect(positions).toBe(timeline.length);
+  });
+
   it('agrees on the cursor when two voices share a staff', async () => {
     // An imported score puts an inner line on the same staff as the melody.
     // The engraver stops wherever either voice moves, and so must we.

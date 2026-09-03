@@ -9,27 +9,51 @@ import { COMMON_KEYS, KeySignature } from '../../src/domain/model/KeySignature.j
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { DomainError } from '../../src/shared/errors.js';
 
+/**
+ * Lengths are said in quarters, never in a number of divisions.
+ *
+ * The divisions are a choice about which tuplets can exist, and it has been
+ * made twice already. A test that spells a length as `1920` is a test that
+ * has to be rewritten the next time it changes, and forty of them once were.
+ */
+const Q = DIVISIONS_PER_QUARTER;
+
 describe('Duration', () => {
   it('measures every notated value in whole divisions', () => {
-    expect(Duration.WHOLE.ticks).toBe(1920);
-    expect(Duration.HALF.ticks).toBe(960);
-    expect(Duration.QUARTER.ticks).toBe(480);
-    expect(Duration.EIGHTH.ticks).toBe(240);
-    expect(Duration.SIXTEENTH.ticks).toBe(120);
-    expect(Duration.DOTTED_QUARTER.ticks).toBe(720);
-    expect(Duration.DOTTED_HALF.ticks).toBe(1440);
-    expect(Duration.of('16th', 1).ticks).toBe(180);
+    expect(Duration.WHOLE.ticks).toBe(Q * 4);
+    expect(Duration.HALF.ticks).toBe(Q * 2);
+    expect(Duration.QUARTER.ticks).toBe(Q);
+    expect(Duration.EIGHTH.ticks).toBe(Q / 2);
+    expect(Duration.SIXTEENTH.ticks).toBe(Q / 4);
+    expect(Duration.DOTTED_QUARTER.ticks).toBe(Q * 1.5);
+    expect(Duration.DOTTED_HALF.ticks).toBe(Q * 3);
+    expect(Duration.of('16th', 1).ticks).toBe((Q * 3) / 8);
   });
 
   it('reaches the short values imported music is written in', () => {
     // Nothing here generates these; a piano arrangement is full of them, and
     // every one of them has to stay a whole number of divisions.
-    expect(Duration.of('32nd').ticks).toBe(60);
-    expect(Duration.of('64th').ticks).toBe(30);
-    expect(Duration.of('32nd', 1).ticks).toBe(90);
-    expect(Duration.of('64th', 1).ticks).toBe(45);
-    expect(Duration.triplet('32nd').ticks).toBe(40);
-    expect(Duration.triplet('64th').ticks).toBe(20);
+    expect(Duration.of('32nd').ticks).toBe(Q / 8);
+    expect(Duration.of('64th').ticks).toBe(Q / 16);
+    expect(Duration.of('32nd', 1).ticks).toBe((Q * 3) / 16);
+    expect(Duration.of('64th', 1).ticks).toBe((Q * 3) / 32);
+    expect(Duration.triplet('32nd').ticks).toBe(Q / 12);
+    expect(Duration.triplet('64th').ticks).toBe(Q / 24);
+  });
+
+  it('keeps the tuplets the divisions were chosen for whole', () => {
+    // The number of divisions is exactly this claim: 3360 divides by 2, 3, 5
+    // and 7, so every one of these lands on a whole division. A septuplet is
+    // why the seven is there - Debussy and the Ocarina arrangement both want
+    // sevens against fours, and 480 refused them.
+    for (const actual of [3, 5, 6, 7, 12]) {
+      for (const normal of [2, 4, 6, 9]) {
+        for (const type of ['half', 'quarter', 'eighth', '16th'] as const) {
+          const value = Duration.of(type, 0, { actual, normal });
+          expect(Number.isInteger(value.ticks)).toBe(true);
+        }
+      }
+    }
   });
 
   it('still closes a tuplet group on the value the group adds up to', () => {
@@ -49,10 +73,10 @@ describe('Duration', () => {
   });
 
   it('reconstructs values from tick counts', () => {
-    expect(Duration.fromTicks(720)).toBe(Duration.DOTTED_QUARTER);
-    expect(Duration.fromTicks(1440)).toBe(Duration.DOTTED_HALF);
-    expect(Duration.isNotatable(1000)).toBe(false);
-    expect(() => Duration.fromTicks(1000)).toThrow(DomainError);
+    expect(Duration.fromTicks(Duration.DOTTED_QUARTER.ticks)).toBe(Duration.DOTTED_QUARTER);
+    expect(Duration.fromTicks(Duration.DOTTED_HALF.ticks)).toBe(Duration.DOTTED_HALF);
+    expect(Duration.isNotatable(Duration.QUARTER.ticks + 1)).toBe(false);
+    expect(() => Duration.fromTicks(Duration.QUARTER.ticks + 1)).toThrow(DomainError);
   });
 
   it('converts between divisions and milliseconds at a tempo', () => {
@@ -65,45 +89,45 @@ describe('Duration', () => {
 describe('TimeSignature', () => {
   it('derives beat and measure lengths from the denominator', () => {
     const common = new TimeSignature(4, 4);
-    expect(common.ticksPerBeat).toBe(480);
-    expect(common.ticksPerMeasure).toBe(1920);
+    expect(common.ticksPerBeat).toBe(Q);
+    expect(common.ticksPerMeasure).toBe(Q * 4);
 
     const compound = new TimeSignature(6, 8);
-    expect(compound.ticksPerBeat).toBe(240);
-    expect(compound.ticksPerMeasure).toBe(1440);
+    expect(compound.ticksPerBeat).toBe(Q / 2);
+    expect(compound.ticksPerMeasure).toBe(Q * 3);
 
     const waltz = new TimeSignature(3, 4);
-    expect(waltz.ticksPerMeasure).toBe(1440);
+    expect(waltz.ticksPerMeasure).toBe(Q * 3);
     expect(waltz.quartersPerMeasure).toBe(3);
   });
 
   it('locates a tick inside the bar structure', () => {
     const common = new TimeSignature(4, 4);
     expect(common.measureOf(0)).toBe(0);
-    expect(common.measureOf(1920)).toBe(1);
-    expect(common.measureOf(2400)).toBe(1);
+    expect(common.measureOf(Q * 4)).toBe(1);
+    expect(common.measureOf(Q * 5)).toBe(1);
     expect(common.beatOf(0)).toBe(1);
-    expect(common.beatOf(480)).toBe(2);
-    expect(common.beatOf(2400)).toBe(2);
-    expect(common.beatOf(240)).toBe(1.5);
+    expect(common.beatOf(Q)).toBe(2);
+    expect(common.beatOf(Q * 5)).toBe(2);
+    expect(common.beatOf(Q / 2)).toBe(1.5);
   });
 
   it('tells a felt beat from a notated one', () => {
     const common = new TimeSignature(4, 4);
     expect(common.isCompound).toBe(false);
-    expect(common.ticksPerPulse).toBe(480);
+    expect(common.ticksPerPulse).toBe(Q);
     expect(common.pulsesPerMeasure).toBe(4);
     expect(common.divisionsPerPulse).toBe(2);
 
     // 6/8 is written in eighths and counted in two dotted quarters.
     const compound = new TimeSignature(6, 8);
     expect(compound.isCompound).toBe(true);
-    expect(compound.ticksPerPulse).toBe(720);
+    expect(compound.ticksPerPulse).toBe(Q * 1.5);
     expect(compound.pulsesPerMeasure).toBe(2);
     expect(compound.divisionsPerPulse).toBe(3);
     expect(compound.pulseOf(0)).toBe(1);
-    expect(compound.pulseOf(720)).toBe(2);
-    expect(compound.pulseOf(240)).toBeCloseTo(1 + 1 / 3, 10);
+    expect(compound.pulseOf(Q * 1.5)).toBe(2);
+    expect(compound.pulseOf(Q / 2)).toBeCloseTo(1 + 1 / 3, 10);
 
     expect(new TimeSignature(9, 8).pulsesPerMeasure).toBe(3);
     expect(new TimeSignature(12, 8).pulsesPerMeasure).toBe(4);

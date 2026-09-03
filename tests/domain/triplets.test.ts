@@ -39,18 +39,36 @@ function tripletBar(): Measure {
 
 describe('tuplet values', () => {
   it('divides the beat exactly, with no floating point anywhere', () => {
-    expect(Duration.TRIPLET_EIGHTH.ticks).toBe(160);
-    expect(Duration.TRIPLET_QUARTER.ticks).toBe(320);
-    expect(Duration.TRIPLET_SIXTEENTH.ticks).toBe(80);
+    const quarter = Duration.QUARTER.ticks;
+    expect(Duration.TRIPLET_EIGHTH.ticks).toBe(quarter / 3);
+    expect(Duration.TRIPLET_QUARTER.ticks).toBe((quarter * 2) / 3);
+    expect(Duration.TRIPLET_SIXTEENTH.ticks).toBe(quarter / 6);
     // Three of them make the value they borrowed from.
     expect(Duration.TRIPLET_EIGHTH.tupletSpanTicks).toBe(Duration.QUARTER.ticks);
     expect(Duration.TRIPLET_QUARTER.tupletSpanTicks).toBe(Duration.HALF.ticks);
   });
 
-  it('refuses a ratio that would land between divisions', () => {
-    // A sixteenth split seven ways is 68.57 divisions: not a musical position
-    // this project is willing to hold.
-    expect(() => Duration.of('16th', 0, { actual: 7, normal: 4 })).toThrow(DomainError);
+  it('takes a septuplet, which is what the divisions were widened for', () => {
+    // Seven sixteenths in the time of four. At 480 divisions this was 68.57
+    // and the file was refused; the Debussy and the Ocarina arrangement both
+    // open on it.
+    const seven = Duration.of('16th', 0, { actual: 7, normal: 4 });
+
+    expect(Number.isInteger(seven.ticks)).toBe(true);
+    expect(seven.tupletSpanTicks).toBe(Duration.QUARTER.ticks);
+    expect(Duration.of('eighth', 0, { actual: 7, normal: 2 }).tupletSpanTicks).toBe(
+      Duration.QUARTER.ticks,
+    );
+    expect(Duration.of('16th', 0, { actual: 5, normal: 4 }).tupletSpanTicks).toBe(
+      Duration.QUARTER.ticks,
+    );
+  });
+
+  it('still refuses a ratio that would land between divisions', () => {
+    // Eleven has no factor here and never will: the answer to a ratio that
+    // does not divide is to refuse it, not to round it and let the timeline
+    // drift by a fraction of a division for the rest of the piece.
+    expect(() => Duration.of('16th', 0, { actual: 11, normal: 4 })).toThrow(DomainError);
   });
 
   it('is a different value from the plain one it is written as', () => {
@@ -185,7 +203,11 @@ describe('triplets in the printed score', () => {
   it('keeps the printed value the one a reader recognises', () => {
     // A triplet eighth is still written as an eighth; the ratio is what makes
     // it shorter, and the reader is told so by the bracket.
-    expect(xml).toMatch(/<duration>160<\/duration>[\s\S]*?<type>eighth<\/type>/);
+    expect(xml).toMatch(
+      new RegExp(
+        `<duration>${Duration.TRIPLET_EIGHTH.ticks}</duration>[\\s\\S]*?<type>eighth</type>`,
+      ),
+    );
   });
 });
 

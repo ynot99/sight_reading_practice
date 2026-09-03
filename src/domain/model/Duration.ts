@@ -1,16 +1,23 @@
 import { DomainError } from '../../shared/errors.js';
 
 /**
- * MusicXML divisions per quarter note. 480 keeps every value we can notate an
- * exact integer, so timeline arithmetic never touches floating point: the
- * shortest of them is a triplet sixty-fourth at 20 divisions, and a dotted
- * sixty-fourth is 45.
+ * MusicXML divisions per quarter note.
  *
- * It is a multiple of 2, 3 and 5, so halving, thirds and fifths all land
- * whole - but not of 7. A septuplet is the one written rhythm this number
- * refuses, and the way to take one would be to make this 3360.
+ * Every value that can be written has to be a whole number of these, so that
+ * timeline arithmetic never touches floating point. That makes this number a
+ * statement about which tuplets exist: it must divide by 2 and 3 for halves
+ * and triplets, by 5 for quintuplets, and by 7 for septuplets.
+ *
+ * 3360 is 480 x 7, and the seven is what the reader's own scores asked for -
+ * Debussy writes sevens against fours, and so does the Ocarina of Time
+ * arrangement. Nothing else moved: every value keeps the same length in
+ * quarters, the digest of what the generators produce is unchanged, and a
+ * stored score carries its own `<divisions>` and is rescaled on the way in.
+ *
+ * Nothing outside this file should spell a length as a number. Say
+ * `Duration.QUARTER.ticks`, and this number can change again.
  */
-export const DIVISIONS_PER_QUARTER = 480;
+export const DIVISIONS_PER_QUARTER = 3360;
 
 /**
  * Every value that can be written, longest first.

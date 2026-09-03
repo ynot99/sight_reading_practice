@@ -5,6 +5,7 @@ import type {
   MetronomeTick,
 } from '../../src/application/ports/IMetronome.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import {
   buildMetronomeTick,
   isAudibleClick,
@@ -161,8 +162,8 @@ describe('metronome maths', () => {
   });
 
   it('derives the musical length of a subdivision', () => {
-    expect(ticksPerSubdivision(COMMON)).toBe(120);
-    expect(ticksPerSubdivision({ ...COMMON, subdivisionsPerPulse: 1 })).toBe(480);
+    expect(ticksPerSubdivision(COMMON)).toBe(Duration.SIXTEENTH.ticks);
+    expect(ticksPerSubdivision({ ...COMMON, subdivisionsPerPulse: 1 })).toBe(Duration.QUARTER.ticks);
   });
 
   it('locates a tick in the bar', () => {
@@ -180,7 +181,7 @@ describe('metronome maths', () => {
     const offBeat = buildMetronomeTick(2, COMMON, 500);
     expect(offBeat.isPulse).toBe(false);
     expect(offBeat.beat).toBe(1);
-    expect(offBeat.positionTicks).toBe(240);
+    expect(offBeat.positionTicks).toBe(Duration.EIGHTH.ticks);
 
     const secondBeat = buildMetronomeTick(4, COMMON, 1000);
     expect(secondBeat.isPulse).toBe(true);
@@ -191,7 +192,7 @@ describe('metronome maths', () => {
     expect(secondBar.measure).toBe(1);
     expect(secondBar.beat).toBe(1);
     expect(secondBar.isDownbeat).toBe(true);
-    expect(secondBar.positionTicks).toBe(1920);
+    expect(secondBar.positionTicks).toBe(Duration.WHOLE.ticks);
   });
 });
 
@@ -234,9 +235,9 @@ describe('ManualMetronome', () => {
     metronome.configure(COMMON);
     metronome.start();
 
-    metronome.advanceToTicks(480);
+    metronome.advanceToTicks(Duration.QUARTER.ticks);
 
-    expect(metronome.emitted.at(-1)?.positionTicks).toBe(480);
+    expect(metronome.emitted.at(-1)?.positionTicks).toBe(Duration.QUARTER.ticks);
     expect(metronome.nextTickIndex).toBe(5);
   });
 

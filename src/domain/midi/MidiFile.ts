@@ -1,4 +1,3 @@
-import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
 import { DomainError } from '../../shared/errors.js';
 
 /**
@@ -28,6 +27,17 @@ export interface MidiFileOptions {
 
 const DEFAULT_TEMPO_BPM = 120;
 const MICROSECONDS_PER_MINUTE = 60_000_000;
+
+/**
+ * Ticks to the quarter in the files this writes.
+ *
+ * Its own number, not the notation's divisions. They were the same once and
+ * that was a coincidence: a capture is placed in real time and carries no
+ * notated values at all, so how finely a septuplet has to divide is nothing
+ * to do with it. 480 is what a sequencer expects to see in a header, and a
+ * capture is meant to be opened by other programs.
+ */
+const TICKS_PER_QUARTER = 480;
 
 /** Halfway on a damper pedal, where the felt reaches the strings. */
 const DAMPER_HALFWAY = 64;
@@ -116,7 +126,7 @@ export function writeMidiFile(
   if (tempoBpm <= 0) {
     throw new DomainError(`A tempo must be positive, got ${tempoBpm}.`);
   }
-  const msPerTick = 60_000 / (tempoBpm * DIVISIONS_PER_QUARTER);
+  const msPerTick = 60_000 / (tempoBpm * TICKS_PER_QUARTER);
 
   // Stable: two events at the same instant keep the order they arrived in,
   // except that a release always precedes a press, so re-striking a key that
@@ -174,8 +184,8 @@ export function writeMidiFile(
     0x00,
     0x00,
     0x01,
-    (DIVISIONS_PER_QUARTER >> 8) & 0xff,
-    DIVISIONS_PER_QUARTER & 0xff,
+    (TICKS_PER_QUARTER >> 8) & 0xff,
+    TICKS_PER_QUARTER & 0xff,
     ...ascii('MTrk'),
     ...uint32(track.length),
     ...track,

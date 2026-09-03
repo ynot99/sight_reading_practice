@@ -72,7 +72,7 @@ describe('MusicXmlSerializer', () => {
       throw new Error('expected an attributes block');
     }
 
-    expect(text(block, 'divisions')).toBe('480');
+    expect(text(block, 'divisions')).toBe(String(Duration.QUARTER.ticks));
     expect(text(block, 'fifths')).toBe('0');
     expect(text(block, 'mode')).toBe('major');
     expect(text(block, 'beats')).toBe('4');
@@ -93,7 +93,7 @@ describe('MusicXmlSerializer', () => {
 
     const backups = all(root, 'backup');
     expect(backups).toHaveLength(2);
-    expect(text(backups[0] as ElementLike, 'duration')).toBe('1920');
+    expect(text(backups[0] as ElementLike, 'duration')).toBe(String(Duration.WHOLE.ticks));
   });
 
   it('prints the bar numbers the passage carries, not a fresh count from one', () => {
@@ -119,7 +119,7 @@ describe('MusicXmlSerializer', () => {
     const trebleNote = notes[0] as ElementLike;
     expect(text(trebleNote, 'step')).toBe('C');
     expect(text(trebleNote, 'octave')).toBe('4');
-    expect(text(trebleNote, 'duration')).toBe('480');
+    expect(text(trebleNote, 'duration')).toBe(String(Duration.QUARTER.ticks));
     expect(text(trebleNote, 'type')).toBe('quarter');
     expect(text(trebleNote, 'voice')).toBe('1');
     expect(text(trebleNote, 'staff')).toBe('1');

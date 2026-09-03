@@ -140,7 +140,7 @@ describe('listening to an exercise', () => {
     expect(renderer.cursor.position).toBe(0);
     metronome.advanceSubdivisions(1);
     expect(renderer.cursor.position).toBe(1);
-    expect(timeline.at(1)?.onsetTicks).toBe(480);
+    expect(timeline.at(1)?.onsetTicks).toBe(Duration.QUARTER.ticks);
   });
 
   it('stops itself at the end, and says so', () => {

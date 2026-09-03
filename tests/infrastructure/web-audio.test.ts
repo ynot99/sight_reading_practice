@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MetronomeTick } from '../../src/application/ports/IMetronome.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import { WebAudioMetronome } from '../../src/infrastructure/audio/WebAudioMetronome.js';
 import { WebAudioPitchPlayer } from '../../src/infrastructure/audio/WebAudioPitchPlayer.js';
 
@@ -163,7 +164,8 @@ describe('WebAudioMetronome', () => {
 
     expect(ticks.map((tick) => tick.index)).toEqual([0, 1, 2]);
     expect(ticks.map((tick) => tick.beat)).toEqual([1, 2, 3]);
-    expect(ticks.map((tick) => tick.positionTicks)).toEqual([0, 480, 960]);
+    const q = Duration.QUARTER.ticks;
+    expect(ticks.map((tick) => tick.positionTicks)).toEqual([0, q, q * 2]);
 
     const [first, second] = ticks;
     expect((second?.scheduledTimeMs ?? 0) - (first?.scheduledTimeMs ?? 0)).toBeCloseTo(1000, 6);

@@ -10,8 +10,11 @@ describe('buildTimeline', () => {
   const timeline = buildTimeline(twoBarExercise());
 
   it('creates one step per distinct onset across both staves', () => {
-    expect(timeline.steps.map((step) => step.onsetTicks)).toEqual([0, 480, 960, 1440, 1920, 2880]);
-    expect(timeline.totalTicks).toBe(3840);
+    const q = Duration.QUARTER.ticks;
+    expect(timeline.steps.map((step) => step.onsetTicks)).toEqual([
+      0, q, q * 2, q * 3, q * 4, q * 6,
+    ]);
+    expect(timeline.totalTicks).toBe(q * 8);
   });
 
   it('merges simultaneous notes from different staves into one step', () => {
@@ -34,7 +37,8 @@ describe('buildTimeline', () => {
   });
 
   it('measures each step up to the next onset', () => {
-    expect(timeline.steps.map((step) => step.durationTicks)).toEqual([480, 480, 480, 480, 960, 960]);
+    const q = Duration.QUARTER.ticks;
+    expect(timeline.steps.map((step) => step.durationTicks)).toEqual([q, q, q, q, q * 2, q * 2]);
   });
 
   it('locates every step in the bar structure', () => {
@@ -51,7 +55,7 @@ describe('buildTimeline', () => {
   it('exposes safe and unsafe lookups', () => {
     expect(timeline.at(99)).toBeNull();
     expect(() => timeline.require(99)).toThrow();
-    expect(timeline.stepAtTick(1000)?.onsetTicks).toBe(960);
+    expect(timeline.stepAtTick(Duration.HALF.ticks + 1)?.onsetTicks).toBe(Duration.HALF.ticks);
     expect(timeline.stepAtTick(-1)).toBeNull();
   });
 
@@ -105,6 +109,6 @@ describe('buildTimeline', () => {
 
     expect(silent.length).toBe(1);
     expect(silent.playableSteps).toHaveLength(0);
-    expect(silent.require(0).durationTicks).toBe(1920);
+    expect(silent.require(0).durationTicks).toBe(Duration.WHOLE.ticks);
   });
 });

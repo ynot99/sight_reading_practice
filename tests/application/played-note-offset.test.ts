@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { playedNoteOffset } from '../../src/application/playedNoteOffset.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import { twoBarExercise } from '../support/fixtures.js';
 
 // Quarter notes at 60 bpm: every gap in the first bar is exactly 1000 ms.
@@ -45,8 +46,8 @@ describe('playedNoteOffset', () => {
     // Step 4 opens bar two and lasts two beats, while the step before it lasts
     // one. The same 500 ms therefore means different things either side of it,
     // and an early press must not be flattened by the long note it lands on.
-    expect(timeline.at(3)?.durationTicks).toBe(480);
-    expect(timeline.at(4)?.durationTicks).toBe(960);
+    expect(timeline.at(3)?.durationTicks).toBe(Duration.QUARTER.ticks);
+    expect(timeline.at(4)?.durationTicks).toBe(Duration.HALF.ticks);
     expect(playedNoteOffset(timeline, 4, -500, 60)).toBeCloseTo(-0.5, 10);
     expect(playedNoteOffset(timeline, 4, 500, 60)).toBeCloseTo(0.25, 10);
   });

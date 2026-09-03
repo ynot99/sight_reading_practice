@@ -222,6 +222,47 @@ export function measureForDrag(
   return landed;
 }
 
+/**
+ * Which way a dragged marker has been taken off the page, if either.
+ *
+ * Not a question about the marker being dragged. Either handle can want the
+ * next page, and asking `measureForDrag` decided it by *which* handle was
+ * held: the start marker extrapolates leftwards and the end marker
+ * rightwards, so whoever dragged the end marker back towards the start could
+ * never turn a page, however far they went.
+ *
+ * The system matters, though. A page is as wide as the screen and every
+ * system spans it, so reaching the right-hand margin from the middle of a
+ * page is not leaving it - the next bar is on the line below. Only from the
+ * last system is the right margin the end of the page, and only from the
+ * first is the left margin the start of it.
+ *
+ * Halfway into the margin, not a pixel into it. The engraver leaves a strip
+ * after the last bar, and one pixel past a bar line is where a hand lands by
+ * accident: a mouse turned pages the instant it began to move. Half of the
+ * strip is a deliberate move and still somewhere a finger can reach, which
+ * is what the strip was chosen for in the first place.
+ */
+export function pageTurnForDrag(
+  measures: readonly DrawnMeasure[],
+  point: { readonly x: number; readonly y: number },
+  pageWidth: number,
+): -1 | 0 | 1 {
+  const first = measures[0];
+  const last = measures[measures.length - 1];
+  if (first === undefined || last === undefined || !(pageWidth > 0)) {
+    return 0;
+  }
+  const onSystem = nearestSystem(measures, point.y);
+  if (onSystem.includes(last) && point.x > (last.right + pageWidth) / 2) {
+    return 1;
+  }
+  if (onSystem.includes(first) && point.x < first.left / 2) {
+    return -1;
+  }
+  return 0;
+}
+
 /** How wide a bar is here, for measuring an overshoot in bars. */
 function averageWidth(measures: readonly DrawnMeasure[]): number {
   const total = measures.reduce((sum, measure) => sum + (measure.right - measure.left), 0);

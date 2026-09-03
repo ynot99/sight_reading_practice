@@ -21,6 +21,7 @@ import {
   measureAt,
   passageAfterTap,
   measureForDrag,
+  pageTurnForDrag,
   passageAfterDrag,
   toDrawingPoint,
   type DrawnMeasure,
@@ -1111,21 +1112,17 @@ export class OsmdScoreRenderer
     if (!this.paged || drag === null) {
       return;
     }
-    const here = this.measuresHere();
     const point = this.drawingPointOf(event);
-    const landed = point === null ? null : measureForDrag(here, point, drag.edge);
-    const first = here[0]?.measureIndex;
-    const last = here[here.length - 1]?.measureIndex;
-    if (landed === null || first === undefined || last === undefined) {
+    const sheet = this.currentSheet();
+    if (point === null || sheet === null) {
       return;
     }
 
-    // Past the last bar *of this page*, not past the page itself. The page
-    // is as wide as the screen, so a finger cannot get beyond it - which is
-    // why this worked with a mouse, which can leave the window, and never
-    // worked on a tablet. The engraver leaves a margin after the last bar,
-    // and that margin is somewhere a finger can actually reach.
-    const beyond = landed > last ? 1 : landed < first ? -1 : 0;
+    // Into the margin the engraver leaves at the edge of the page, which is
+    // somewhere a finger can actually reach - the page is as wide as the
+    // screen, so nothing can be dragged beyond it. Which handle is being
+    // held has nothing to do with it: either of them can want the next page.
+    const beyond = pageTurnForDrag(this.measuresHere(), point, intrinsicSize(sheet).width);
     if (beyond !== 0 && !drag.overshot) {
       this.dragging = { ...drag, overshot: true };
       this.turnPages(beyond);

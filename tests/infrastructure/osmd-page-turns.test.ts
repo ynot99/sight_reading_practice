@@ -102,6 +102,12 @@ function everyPageDrawsPastItsBox(): void {
     };
 }
 
+/** How wide the page is, in the units the bars were measured in. */
+function pageWidth(container: HTMLElement): number {
+  const svg = sheets(container).find((sheet) => sheet.style.display !== 'none');
+  return Number((svg?.getAttribute('viewBox') ?? '').split(/[\s,]+/)[2] ?? 0);
+}
+
 /** Which of them the reader can see. */
 function showing(container: HTMLElement): number[] {
   return sheets(container)
@@ -278,10 +284,10 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     marker?.dispatchEvent(
       new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, bubbles: true }),
     );
-    // Out into the margin the engraver left after the last bar.
+    // Halfway into the margin the engraver left after the last bar.
     container.dispatchEvent(
       new PointerEvent('pointermove', {
-        clientX: (last?.right ?? 0) + 30,
+        clientX: ((last?.right ?? 0) + pageWidth(container)) / 2 + 2,
         clientY: (last?.top ?? 0) + 10,
         pointerId: 1,
         bubbles: true,
@@ -289,6 +295,66 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     );
 
     expect(renderer.pages.at).toBe(1);
+  });
+
+  it('stays put for a hand that has merely passed the last bar line', () => {
+    // The reader's report from the laptop: a drag to the right was so eager
+    // that starting one could land them on the next page. One pixel past a
+    // bar line is where a hand goes by accident; the margin has to be
+    // crossed on purpose.
+    renderer.setPaged(true);
+    renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 15 });
+    showSheetsAtTheirOwnSize(container);
+    const onThisPage = measuresOf(renderer).filter((measure) => measure.page === 0);
+    const last = onThisPage[onThisPage.length - 1];
+    const marker = container.querySelector('g.passage-marker--end');
+    marker?.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, bubbles: true }),
+    );
+
+    container.dispatchEvent(
+      new PointerEvent('pointermove', {
+        clientX: (last?.right ?? 0) + 2,
+        clientY: (last?.top ?? 0) + 10,
+        pointerId: 1,
+        bubbles: true,
+      }),
+    );
+
+    expect(renderer.pages.at).toBe(0);
+  });
+
+  it('turns back when a marker is dragged into the margin before the first bar', () => {
+    // The other half of the reader's report: leftwards did nothing at all.
+    // Which way a page turned was decided by *which* handle was held - the
+    // start marker reached backwards and the end marker forwards - so anyone
+    // dragging the end marker back towards the start was stuck on the page
+    // they were on, however far they went.
+    renderer.setPaged(true);
+    renderer.turnPages(1);
+    const onThisPage = measuresOf(renderer).filter((measure) => measure.page === 1);
+    const first = onThisPage[0];
+    const last = onThisPage[onThisPage.length - 1];
+    renderer.showPassage({
+      fromMeasureIndex: first?.measureIndex ?? 0,
+      toMeasureIndex: last?.measureIndex ?? 0,
+    });
+    showSheetsAtTheirOwnSize(container);
+    const marker = container.querySelector('g.passage-marker--end');
+    marker?.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, bubbles: true }),
+    );
+
+    container.dispatchEvent(
+      new PointerEvent('pointermove', {
+        clientX: (first?.left ?? 0) / 2 - 1,
+        clientY: (first?.top ?? 0) + 10,
+        pointerId: 1,
+        bubbles: true,
+      }),
+    );
+
+    expect(renderer.pages.at).toBe(0);
   });
 
   it('turns once while the finger stays out there, not over and over', () => {

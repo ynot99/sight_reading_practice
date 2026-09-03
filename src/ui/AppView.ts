@@ -568,6 +568,19 @@ function percent(value: number): string {
 }
 
 /**
+ * Puts a failure where it can be copied from.
+ *
+ * The notice on the page says what went wrong in one sentence, which is what
+ * a reader needs mid-practice and all there is room for. It cannot be
+ * selected on a tablet and it carries no stack, so a fault the reader wants
+ * to report has to be read off the screen by hand - the reader asked for
+ * this after doing exactly that.
+ */
+function reportToTheConsole(what: string, error: unknown): void {
+  console.error(what, error);
+}
+
+/**
  * Vanilla DOM presentation layer.
  *
  * The view only reads controller/session state and writes to elements: it
@@ -1024,6 +1037,7 @@ export class AppView {
         dropped === '' ? `Opened ${exercise.title}.` : `Opened ${exercise.title}. ${dropped}`,
       );
     } catch (error) {
+      reportToTheConsole('Could not open the chosen file.', error);
       this.showImportNotice(
         error instanceof Error ? `Could not open that file. ${error.message}` : 'Could not open that file.',
       );
@@ -1082,6 +1096,7 @@ export class AppView {
       this.syncControlsFromSettings();
       this.showImportNotice(`Opened ${exercise.title}.`);
     } catch (error) {
+      reportToTheConsole(`Could not open ${title}.`, error);
       this.showImportNotice(
         error instanceof Error ? `Could not open ${title}. ${error.message}` : `Could not open ${title}.`,
       );

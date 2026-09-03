@@ -639,6 +639,7 @@ describe('AppView', () => {
   });
 
   it('explains a file it cannot read instead of going quiet', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { view, runtime } = createRig();
     await view.initialize();
 
@@ -657,6 +658,11 @@ describe('AppView', () => {
 
     expect(runtime.controller.openedExercise).toBeNull();
     expect(element('import-notice').textContent).toContain('Could not open');
+    // And somewhere it can be copied from. The notice says one sentence,
+    // which is what a reader needs mid-practice - but it cannot be selected
+    // on a tablet and carries no stack, so a fault worth reporting had to be
+    // read off the screen by hand.
+    expect(logged).toHaveBeenCalled();
   });
 
   it('lets the click drop out for whole bars', async () => {

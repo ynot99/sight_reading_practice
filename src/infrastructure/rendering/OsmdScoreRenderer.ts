@@ -203,6 +203,13 @@ function pageBoxOf(
   return { height, scale };
 }
 
+/** A bar's notes, in order, and which of them a beam group starts on. */
+interface MeasureNotes {
+  readonly notes: readonly Element[];
+  readonly at: ReadonlyMap<Element, number>;
+  readonly owners: ReadonlySet<string>;
+}
+
 /** Class that dims the notes of a step already played. */
 const FADED_CLASS = 'note--passed';
 
@@ -302,6 +309,22 @@ export class OsmdScoreRenderer
   private walking = false;
   private faded = new Set<number>();
   private samples: DrawnNoteSample[] = [];
+  /**
+   * How tall a staff position is on each page, measured once per engraving.
+   *
+   * It is a fact about the drawing, so it changes only when the drawing does
+   * - and it was being worked out again for every page on every note the
+   * reader played, from every note in the score. On a long piece that was
+   * thousands of measurements per keystroke, growing as the marks did, and
+   * the trainer stopped answering partway through.
+   */
+  private geometryByPage = new Map<number, ReturnType<typeof fitStaffGeometry>>();
+  /** Each page's overlay layer; see {@link overlayGroupFor}. */
+  private overlayGroups = new WeakMap<SVGSVGElement, SVGGElement>();
+  /** The pages as last engraved; see {@link sheets}. */
+  private drawnSheets: SVGSVGElement[] | null = null;
+  /** Each page's printed number; see {@link numberPage}. */
+  private pageNumbers = new WeakMap<SVGSVGElement, Element>();
   private marks: PlayedMark[] = [];
   private overlayContext: OverlayContext | null = null;
 
@@ -394,8 +417,11 @@ export class OsmdScoreRenderer
     this.pageSurplusPx = 0;
     this.pageSurplusWindow = 0;
     this.markPaged();
+    // The engraver may only now exist, and it is made with following on.
+    this.followOrTurn();
     this.applyPageFormat();
     osmd.render();
+    this.forgetSheets();
     this.fitPagesToTheirContent();
     this.loaded = true;
     this.engravedWidth = this.container.offsetWidth;
@@ -457,6 +483,7 @@ export class OsmdScoreRenderer
     this.markPaged();
     this.applyPageFormat();
     this.osmd.render();
+    this.forgetSheets();
     this.fitPagesToTheirContent();
     this.engravedWidth = this.container.offsetWidth;
     this.walking = true;
@@ -503,15 +530,12 @@ export class OsmdScoreRenderer
     // never written for the rest of the session, because coming back through
     // here found the setting already true and left at the top.
     this.markPaged();
+    this.followOrTurn();
     if (!this.loaded) {
       // Nothing engraved yet. The setting is kept and the first engraving
       // will be asked for in pages, which is what a visit that opens in
       // pages needs.
       return;
-    }
-    const engraver = this.osmd as unknown as { FollowCursor?: boolean } | null;
-    if (engraver !== null) {
-      engraver.FollowCursor = !paged;
     }
     // A new page size is a new engraving; there is no way to page a layout
     // that was made without pages in mind.
@@ -548,6 +572,29 @@ export class OsmdScoreRenderer
     const height = window - this.pageSurplusPx;
     if (width > 0 && height > 0) {
       osmd.setCustomPageFormat?.(width / UNITS_TO_PIXELS, height / UNITS_TO_PIXELS);
+    }
+  }
+
+  /**
+   * Whether the engraver scrolls the page to keep the marker in view.
+   *
+   * Off in pages, where a turn is what shows the reader the next system and
+   * nothing scrolls at all. Leaving it on there is not merely redundant: the
+   * engraver calls `scrollIntoView` with a smooth behaviour on *every* step,
+   * which on a long score is an animation over tens of thousands of elements
+   * started again before the last one has finished. On a tablet that is a
+   * stall on every beat of the piece.
+   *
+   * Applied wherever the setting or the engraver may have changed, and
+   * before the early return in {@link setPaged}: a visit that opens in pages
+   * sets the mode before anything is engraved, and this used to be left
+   * behind by that - so the readers who never touched the switch were the
+   * ones who paid for it.
+   */
+  private followOrTurn(): void {
+    const engraver = this.osmd as unknown as { FollowCursor?: boolean } | null;
+    if (engraver !== null) {
+      engraver.FollowCursor = !this.paged;
     }
   }
 
@@ -597,6 +644,7 @@ export class OsmdScoreRenderer
     this.pageSurplusPx += surplus;
     this.applyPageFormat();
     this.osmd.render();
+    this.forgetSheets();
   }
 
   /**
@@ -620,9 +668,24 @@ export class OsmdScoreRenderer
     return worst;
   }
 
-  /** Every page the engraver drew, in reading order. */
+  /**
+   * Every page the engraver drew, in reading order.
+   *
+   * Kept between engravings. Asking the container for them is a query over
+   * the whole drawing, and this is read on every note the reader plays - on
+   * a long score that one lookup was almost the entire cost of showing a
+   * mark. The pages change only when the music is engraved again, which is
+   * where the list is dropped.
+   */
   private get sheets(): SVGSVGElement[] {
-    return [...this.container.querySelectorAll('svg')];
+    const drawn = this.drawnSheets ?? [...this.container.querySelectorAll('svg')];
+    this.drawnSheets = drawn;
+    return drawn;
+  }
+
+  /** Forgets the pages, so the next reader of {@link sheets} finds them again. */
+  private forgetSheets(): void {
+    this.drawnSheets = null;
   }
 
   /** The page the reader is looking at. */
@@ -724,7 +787,13 @@ export class OsmdScoreRenderer
   private showOnlyCurrentPage(): void {
     const sheets = this.sheets;
     for (const [at, sheet] of sheets.entries()) {
-      sheet.style.display = !this.paged || at === this.pageAt ? '' : 'none';
+      // Only where it differs. A turn changes two pages of the thirty, and
+      // assigning the same value to the rest still asks the browser to lay
+      // them out again.
+      const shown = !this.paged || at === this.pageAt ? '' : 'none';
+      if (sheet.style.display !== shown) {
+        sheet.style.display = shown;
+      }
       this.numberPage(sheet, at, this.paged ? sheets.length : 0);
     }
     this.placeCursor();
@@ -743,18 +812,30 @@ export class OsmdScoreRenderer
    * so this is ours to draw.
    */
   private numberPage(sheet: SVGSVGElement, at: number, count: number): void {
-    const existing = sheet.querySelector('text.page-number');
+    // Kept rather than looked up, for the reason the overlay layer is: asking
+    // the page for it by class walks the whole page, it is appended last so
+    // the walk never ends early, and this runs for every page of the score on
+    // every turn. Thirty pages of a long piece made a page turn a visible
+    // stall - the music stopped, then caught up all at once.
+    const held = this.pageNumbers.get(sheet);
+    const existing = held?.parentNode === sheet ? held : null;
     if (count < 2) {
       existing?.remove();
+      this.pageNumbers.delete(sheet);
       return;
     }
     const text = existing ?? sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'text');
+    const label = `Page ${at + 1} of ${count}`;
+    if (existing !== null && text.textContent === label) {
+      return;
+    }
     text.setAttribute('class', 'page-number');
     text.setAttribute('x', String(PAGE_NUMBER_INSET));
     text.setAttribute('y', String(PAGE_NUMBER_INSET));
-    text.textContent = `Page ${at + 1} of ${count}`;
+    text.textContent = label;
     if (existing === null) {
       sheet.append(text);
+      this.pageNumbers.set(sheet, text);
     }
   }
 
@@ -1213,6 +1294,7 @@ export class OsmdScoreRenderer
 
   clear(): void {
     this.osmd?.clear();
+    this.forgetSheets();
     this.pageAt = 0;
     this.swipe = null;
     this.measures = [];
@@ -1231,13 +1313,25 @@ export class OsmdScoreRenderer
   }
 
   showPlayed(note: PlayedNote): void {
-    this.marks.push({
+    const mark: PlayedMark = {
       stepIndex: note.stepIndex,
       midi: note.midi,
       correct: note.correct,
       offset: note.offset,
-    });
-    this.paintOverlay();
+    };
+    this.marks.push(mark);
+    // Only the mark just made, onto the page its own note is drawn on.
+    // Redrawing every mark on every page for each note played is work that
+    // grows with the run: two hundred notes into a long piece it was two
+    // hundred times the drawing for one keystroke, and the trainer stopped
+    // answering partway through the score.
+    const page = this.pageOfStep(mark.stepIndex);
+    const sheet = this.sheets[page];
+    const geometry = this.geometryByPage.get(page) ?? null;
+    if (sheet === undefined || geometry === null) {
+      return;
+    }
+    this.drawMarks([mark], this.overlayGroupFor(sheet), geometry);
   }
 
   clearPlayed(): void {
@@ -1281,28 +1375,54 @@ export class OsmdScoreRenderer
    */
   private paintOverlay(): void {
     const context = this.overlayContext;
+    // Sorted once, not filtered once per page: this runs on every note the
+    // reader plays.
+    const byPage = new Map<number, PlayedMark[]>();
+    for (const mark of this.marks) {
+      const page = this.pageOfStep(mark.stepIndex);
+      byPage.set(page, [...(byPage.get(page) ?? []), mark]);
+    }
     for (const [at, sheet] of this.sheets.entries()) {
       const group = this.overlayGroupFor(sheet);
       while (group.firstChild !== null) {
         group.firstChild.remove();
       }
-      const marks = this.marks.filter((mark) => this.pageOfStep(mark.stepIndex) === at);
+      const marks = byPage.get(at) ?? [];
       // The heights this page was measured at, and no other: at a page break
       // the nearest note in the same step is on the sheet before, and taking
       // its height would put the mark a page out.
-      const geometry = fitStaffGeometry(this.samples.filter((sample) => sample.page === at));
+      const geometry = this.geometryByPage.get(at) ?? null;
       if (context === null || geometry === null || marks.length === 0) {
         continue;
       }
-      const shapes = buildOverlayShapes(marks, {
-        geometry,
-        stepX: this.stepX,
-        clefAt: context.clefAt,
-        keyAt: context.keyAt,
-      });
-      for (const shape of shapes) {
-        group.append(this.createShape(shape, group.ownerDocument));
-      }
+      this.drawMarks(marks, group, geometry);
+    }
+  }
+
+  /**
+   * Draws marks onto a page's overlay, leaving what is already there.
+   *
+   * Every mark is worked out on its own - none of them depends on another -
+   * so the one that has just been played can be added without redrawing the
+   * ones before it.
+   */
+  private drawMarks(
+    marks: readonly PlayedMark[],
+    group: SVGGElement,
+    geometry: NonNullable<ReturnType<typeof fitStaffGeometry>>,
+  ): void {
+    const context = this.overlayContext;
+    if (context === null || marks.length === 0) {
+      return;
+    }
+    const shapes = buildOverlayShapes(marks, {
+      geometry,
+      stepX: this.stepX,
+      clefAt: context.clefAt,
+      keyAt: context.keyAt,
+    });
+    for (const shape of shapes) {
+      group.append(this.createShape(shape, group.ownerDocument));
     }
   }
 
@@ -1580,14 +1700,26 @@ export class OsmdScoreRenderer
    * to live in that page's SVG or it is drawn in the wrong coordinates on
    * the wrong sheet.
    */
+  /**
+   * The layer a page's marks are drawn into, kept rather than looked up.
+   *
+   * Asking the page for it by class walks the whole drawing, and the layer is
+   * appended last so the walk never ends early: on a score of twenty-odd
+   * thousand elements that was the entire cost of showing a played note, paid
+   * again on every keystroke.
+   *
+   * Keyed by the page itself, so an engraving that replaces the pages leaves
+   * the old entries unreachable and the new pages simply have none.
+   */
   private overlayGroupFor(sheet: SVGSVGElement): SVGGElement {
-    const found = sheet.querySelector('g.played-overlay');
-    if (found !== null) {
-      return found as SVGGElement;
+    const kept = this.overlayGroups.get(sheet);
+    if (kept !== undefined && kept.parentNode === sheet) {
+      return kept;
     }
     const group = sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
     group.setAttribute('class', 'played-overlay');
     sheet.append(group);
+    this.overlayGroups.set(sheet, group);
     return group;
   }
 
@@ -1632,9 +1764,28 @@ export class OsmdScoreRenderer
 
     this.stepX = stepX;
     this.samples = samples;
+    this.measureStaffHeights();
     this.attachNoteFurniture();
     this.navigator.reset();
     this.navigator.moveTo(restoreTo);
+  }
+
+  /**
+   * Measures each page's staff, once per engraving.
+   *
+   * A page's own notes and no others: at a page break the nearest note in
+   * the same step is on the sheet before, and its height belongs to that
+   * page's drawing rather than this one's.
+   */
+  private measureStaffHeights(): void {
+    const byPage = new Map<number, DrawnNoteSample[]>();
+    for (const sample of this.samples) {
+      byPage.set(sample.page, [...(byPage.get(sample.page) ?? []), sample]);
+    }
+    this.geometryByPage = new Map();
+    for (const [page, samples] of byPage) {
+      this.geometryByPage.set(page, fitStaffGeometry(samples));
+    }
   }
 
   /**
@@ -1649,11 +1800,6 @@ export class OsmdScoreRenderer
    * is `vf-auto1003-beam0`.
    */
   private attachNoteFurniture(): void {
-    const svg = this.container.querySelector('svg');
-    if (svg === null) {
-      return;
-    }
-
     const stepOfNote = new Map<string, number>();
     for (const [stepIndex, elements] of this.stepElements) {
       for (const element of elements) {
@@ -1672,14 +1818,33 @@ export class OsmdScoreRenderer
       this.stepElements.set(stepIndex, bucket);
     };
 
+    // One pass over the drawing for each kind of furniture, and a map to look
+    // them up in. Asking the document to find one element at a time cost the
+    // length of the score times the size of it - thousands of full scans on a
+    // long piece, every time it was engraved.
+    //
+    // The whole container rather than its first sheet, too: a paged score is
+    // several of them, and stems on every page but the first were being left
+    // behind by the notes they belong to.
+    const byId = (selector: string): Map<string, SVGGElement> => {
+      const found = new Map<string, SVGGElement>();
+      for (const element of this.container.querySelectorAll<SVGGElement>(selector)) {
+        found.set(element.id, element);
+      }
+      return found;
+    };
+    const stems = byId('g.vf-stem');
+    const ledgers = byId('g.vf-ledgers');
     for (const [id, stepIndex] of stepOfNote) {
-      add(stepIndex, svg.querySelector<SVGGElement>(`g.vf-stem[id="${id}-stem"]`));
-      add(stepIndex, svg.querySelector<SVGGElement>(`g.vf-ledgers[id="${id}ledgers"]`));
+      add(stepIndex, stems.get(`${id}-stem`) ?? null);
+      add(stepIndex, ledgers.get(`${id}ledgers`) ?? null);
     }
 
-    for (const beam of svg.querySelectorAll<SVGGElement>('g.vf-beam')) {
+    const notes = byId('g.vf-stavenote');
+    const inMeasures = new Map<Element, MeasureNotes>();
+    for (const beam of this.container.querySelectorAll<SVGGElement>('g.vf-beam')) {
       const owner = beam.id.replace(/-beam\d+$/, '');
-      const lastStep = this.lastStepOfBeam(owner, stepOfNote);
+      const lastStep = this.lastStepOfBeam(owner, notes, inMeasures, stepOfNote);
       if (lastStep !== null) {
         // The *last* note of the group, not its first: a beam that left with
         // the note it starts on would strand the notes it still joins.
@@ -1697,21 +1862,39 @@ export class OsmdScoreRenderer
    * direction to be wrong in: a note keeping its beam still reads correctly,
    * while a beam without notes does not.
    */
-  private lastStepOfBeam(owner: string, stepOfNote: ReadonlyMap<string, number>): number | null {
-    const start = this.container.querySelector(`g.vf-stavenote[id="${owner}"]`);
+  private lastStepOfBeam(
+    owner: string,
+    notesById: ReadonlyMap<string, SVGGElement>,
+    inMeasures: Map<Element, MeasureNotes>,
+    stepOfNote: ReadonlyMap<string, number>,
+  ): number | null {
+    const start = notesById.get(owner) ?? null;
     const measure = start?.parentElement ?? null;
     if (start === null || measure === null) {
       return null;
     }
-    const notes = [...measure.querySelectorAll('g.vf-stavenote')];
-    const owners = new Set(
-      [...measure.querySelectorAll('g.vf-beam')].map((beam) => beam.id.replace(/-beam\d+$/, '')),
-    );
+    // Read once per measure and kept: a bar's notes and its beam owners are
+    // the same answer for every beam in it, and there may be many.
+    let inMeasure = inMeasures.get(measure);
+    if (inMeasure === undefined) {
+      const notes = [...measure.querySelectorAll('g.vf-stavenote')];
+      inMeasure = {
+        notes,
+        at: new Map(notes.map((note, index) => [note, index])),
+        owners: new Set(
+          [...measure.querySelectorAll('g.vf-beam')].map((beam) =>
+            beam.id.replace(/-beam\d+$/, ''),
+          ),
+        ),
+      };
+      inMeasures.set(measure, inMeasure);
+    }
 
+    const from = inMeasure.at.get(start) ?? -1;
     let last: number | null = null;
-    for (let at = notes.indexOf(start); at < notes.length; at += 1) {
-      const note = notes[at];
-      if (note === undefined || (at > notes.indexOf(start) && owners.has(note.id))) {
+    for (let at = from; at >= 0 && at < inMeasure.notes.length; at += 1) {
+      const note = inMeasure.notes[at];
+      if (note === undefined || (at > from && inMeasure.owners.has(note.id))) {
         break;
       }
       const step = stepOfNote.get(note.id);

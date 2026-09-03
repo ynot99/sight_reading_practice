@@ -468,6 +468,64 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     expect(numbers[count - 1]).toBe(`Page ${count} of ${count}`);
   });
 
+  it('does not scroll after the marker in a mode that turns pages', async () => {
+    // The engraver scrolls the page to keep its marker in view, with a smooth
+    // behaviour, on *every* step. In pages there is nothing to scroll - a
+    // turn is what shows the next system - and leaving it on meant an
+    // animation over tens of thousands of elements started again before the
+    // last had finished: a stall on every beat, worst on a tablet.
+    //
+    // Told before anything was engraved, which is how a visit that opens in
+    // pages arrives, the switch used to be missed entirely: it was applied
+    // after an early return. So the readers who never touched it were the
+    // ones who paid.
+    document.body.replaceChildren();
+    const fresh = createScoreContainer();
+    const opening = new OsmdScoreRenderer(fresh, { zoom: 1 });
+    opening.setPaged(true);
+    withLayout(fresh, 260);
+
+    await opening.load(new MusicXmlSerializer().serialize(longExercise({ bars: 16 })));
+
+    const engraver = (opening as unknown as { osmd: { FollowCursor: boolean } }).osmd;
+    expect(engraver.FollowCursor).toBe(false);
+
+    // And it comes back for a reader who goes back to one column, where
+    // following the marker is the only thing that moves the music.
+    opening.setPaged(false);
+    expect(engraver.FollowCursor).toBe(true);
+  });
+
+  it('turns a page without searching the drawing for anything', () => {
+    // A search by class walks the whole page, and the things being looked for
+    // - the page number, the overlay layer - are appended last, so the walk
+    // never ends early. Done for every page of the score on every turn, that
+    // made a turn a visible stall on a long piece: the music stopped for a
+    // moment and then caught up all at once, because the clock had gone on
+    // without the thread. This is the invariant, since the cost itself is not
+    // something an assertion can see.
+    renderer.setPaged(true);
+    const searched: string[] = [];
+    for (const sheet of sheets(container)) {
+      const original = sheet.querySelector.bind(sheet);
+      sheet.querySelector = ((selector: string) => {
+        searched.push(selector);
+        return original(selector);
+      }) as Element['querySelector'];
+    }
+
+    renderer.turnPages(1);
+    renderer.turnPages(1);
+
+    expect(searched).toEqual([]);
+    // And the pages still say which they are, one label apiece.
+    for (const [at, sheet] of sheets(container).entries()) {
+      const labels = sheet.querySelectorAll('text.page-number');
+      expect(labels).toHaveLength(1);
+      expect(labels[0]?.textContent).toBe(`Page ${at + 1} of ${renderer.pages.count}`);
+    }
+  });
+
   it('says nothing about pages on a score that is one column', () => {
     // "Page 1 of 1" at a reader who never asked for pages is furniture.
     renderer.setPaged(true);

@@ -149,16 +149,33 @@ export function anchorFor(
   if (bucket === undefined || bucket.length === 0) {
     return null;
   }
-  let best = bucket[0] ?? null;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const sample of bucket) {
-    const distance = Math.abs(sample.stepIndex - stepIndex);
-    if (distance < bestDistance) {
-      best = sample;
-      bestDistance = distance;
+  // The bucket is in step order, so the nearest sample is one of the two
+  // either side of where this step would fall. Walking the whole staff to
+  // find it read every note in the piece, several times over for every note
+  // the reader played - which on a long score was most of the cost of
+  // drawing a mark, and did not get smaller as the run went on.
+  let low = 0;
+  let high = bucket.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if ((bucket[middle]?.stepIndex ?? 0) < stepIndex) {
+      low = middle + 1;
+    } else {
+      high = middle;
     }
   }
-  return best;
+
+  const after = bucket[low] ?? null;
+  const before = low > 0 ? (bucket[low - 1] ?? null) : null;
+  if (before === null) {
+    return after;
+  }
+  if (after === null) {
+    return before;
+  }
+  // The earlier one on a tie, which is the sample a walk from the start
+  // would have stopped on.
+  return stepIndex - before.stepIndex <= after.stepIndex - stepIndex ? before : after;
 }
 
 /** Where a staff position sits vertically, near a given step. */

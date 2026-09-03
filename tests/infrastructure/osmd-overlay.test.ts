@@ -134,6 +134,35 @@ describe('played notes drawn over a real engraving', () => {
     );
   });
 
+  it('adds the note just played without redrawing the ones before it', () => {
+    // Every mark is worked out on its own, so a new one is drawn beside the
+    // others rather than by clearing the layer and building all of them
+    // again. On a long score that redrawing grew with the run - two hundred
+    // notes in, one keystroke cost two hundred marks' worth of work, and the
+    // page stopped answering partway through.
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
+    const first = noteheads(container)[0];
+
+    renderer.showPlayed({ stepIndex: 1, midi: Pitch.parse('D4').midi, correct: true, offset: 0 });
+
+    // The very same element, not an equal one drawn afresh.
+    expect(noteheads(container)[0]).toBe(first);
+    expect(noteheads(container)).toHaveLength(2);
+  });
+
+  it('keeps one layer per page rather than looking for it each time', () => {
+    // Finding it by class walks the whole drawing, and it is appended last so
+    // the walk never ends early - which on a big score was the entire cost of
+    // showing a played note.
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
+    const layers = container.querySelectorAll('g.played-overlay');
+
+    renderer.showPlayed({ stepIndex: 1, midi: Pitch.parse('D4').midi, correct: true, offset: 0 });
+
+    expect(container.querySelectorAll('g.played-overlay')).toHaveLength(layers.length);
+    expect(layers[0]?.querySelectorAll('ellipse.played-note')).toHaveLength(2);
+  });
+
   it('places marks along the page, one step after another', () => {
     renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
     renderer.showPlayed({ stepIndex: 1, midi: Pitch.parse('D4').midi, correct: true, offset: 0 });
@@ -202,6 +231,21 @@ describe('played notes drawn over a real engraving', () => {
     renderer.refresh();
 
     expect(container.querySelectorAll('.note--passed')).toHaveLength(before);
+  });
+
+  it('draws onto the pages the engraver has just made, not the ones it replaced', () => {
+    // The pages are remembered between engravings, because finding them is a
+    // query over the whole drawing and a mark is drawn for every note the
+    // reader plays. Remembering them across a re-engraving instead would
+    // draw onto sheets that are no longer on the page - marks that simply
+    // never appear.
+    renderer.refresh();
+
+    renderer.showPlayed({ stepIndex: 0, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
+
+    const head = noteheads(container)[0];
+    expect(head).toBeDefined();
+    expect(head?.isConnected).toBe(true);
   });
 
   it('brings every note back', () => {

@@ -649,11 +649,7 @@ about musical position is read off `barLines` rather than worked out by
 multiplying - the metronome included, which is handed those bars and accents
 the downbeat the page draws rather than the one the opening metre would have
 put there. Grace notes are the remaining limit.
-A score that carries no time signature carries no bar lines either, and its
-writer's program puts a whole line of music in each `<measure>`. The metre is
-found rather than guessed - the one metre whose bar lines fall where no note
-is sounding - and the lines are then cut along them. Written values are read
-down to sixty-fourths, with tuplets up to septuplets:
+Written values are read down to sixty-fourths, with tuplets up to septuplets:
 a file that divides a beat into sevens rounds its own numbers to fit its
 divisions, and the written value is trusted over the rounding. Compressed
 `.mxl` files are unpacked on the way in, since that is what MuseScore hands

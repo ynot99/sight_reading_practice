@@ -170,13 +170,6 @@ interface ScoreHeader {
   readonly timeSignature: TimeSignature;
   /** Metres it changes to later, by the measure each one begins at. */
   readonly timeChanges: readonly TimeChange[];
-  /**
-   * How many bars each measure of the file holds, or `null` for one apiece.
-   *
-   * Only ever set for a score with no metre and no bar lines, where a
-   * `<measure>` is a whole line of music - see {@link inferMetre}.
-   */
-  readonly systemBars: readonly number[] | null;
   readonly tempoBpm: number;
   readonly clefByStaff: ReadonlyMap<number, ClefKind>;
   /** Clefs a staff switches to later, keyed by the file's own staff number. */
@@ -223,110 +216,6 @@ function readClefs(
   return clefs;
 }
 
-/** Where a note sits in the measure that holds it, in our divisions. */
-interface Span {
-  readonly from: number;
-  readonly to: number;
-}
-
-/**
- * Every note of a measure as a span, and how far the measure reaches.
- *
- * Read straight off the file rather than through {@link readMeasureNotes},
- * because this has to run before there is a metre to read anything against -
- * which is the whole reason it exists.
- */
-function spansOf(measure: XmlNode, divisions: number): { readonly notes: Span[]; readonly to: number } {
-  const notes: Span[] = [];
-  let cursor = 0;
-  let furthest = 0;
-  for (const node of measure.children) {
-    // In our divisions, for every kind of node: a `<backup>` counted in the
-    // file's own units would barely move the cursor at all, and the staves
-    // would stack up one after another instead of sounding together.
-    const ticks = ((childNumber(node, 'duration') ?? 0) * DIVISIONS_PER_QUARTER) / divisions;
-    if (node.name === 'backup' || node.name === 'forward') {
-      cursor += node.name === 'backup' ? -ticks : ticks;
-      continue;
-    }
-    if (node.name !== 'note' || hasChild(node, 'grace')) {
-      continue;
-    }
-    if (!hasChild(node, 'chord')) {
-      notes.push({ from: cursor, to: cursor + ticks });
-      cursor += ticks;
-    }
-    furthest = Math.max(furthest, cursor);
-  }
-  return { notes, to: furthest };
-}
-
-/**
- * The metres worth trying on a score that names none, commonest first.
- *
- * Only ordinary ones: a file with no time signature is a file nobody told,
- * not a file in something exotic, and a metre nobody wrote is a guess that
- * has to be answerable for.
- */
-const METRES_TO_TRY: readonly (readonly [number, number])[] = [
-  [4, 4],
-  [3, 4],
-  [2, 4],
-  [6, 8],
-  [2, 2],
-  [12, 8],
-  [9, 8],
-  [5, 4],
-];
-
-/**
- * The metre a score without one is actually in.
- *
- * Not a guess between equals: a bar line has to fall where no note is
- * sounding, so a metre that would cut a note in half is not merely a worse
- * reading of the music, it is a wrong one. On the reader's own unbarred
- * score exactly one of these leaves every one of its five hundred notes
- * whole, and the others cut a hundred and fifty.
- *
- * `null` when none of them fits, and then the file is refused as before -
- * better than barring music that will not be barred.
- */
-function inferMetre(
-  measures: readonly XmlNode[],
-  divisions: number,
-): { readonly timeSignature: TimeSignature; readonly systemBars: readonly number[] } | null {
-  const spans = measures.map((measure) => spansOf(measure, divisions));
-  for (const [beats, beatType] of METRES_TO_TRY) {
-    const timeSignature = new TimeSignature(beats, beatType);
-    const bar = timeSignature.ticksPerMeasure;
-    const fits = spans.every(
-      (measure) =>
-        measure.to % bar === 0 &&
-        measure.notes.every(
-          (note) =>
-            // Nothing of no length can straddle anything: a whole-measure
-            // rest is written without a duration at all, and asking where it
-            // ends would refuse the metre over a note that occupies no time.
-            note.to <= note.from ||
-            Math.floor(note.from / bar) === Math.floor((note.to - 1) / bar),
-        ),
-    );
-    if (fits) {
-      return { timeSignature, systemBars: spans.map((measure) => Math.max(1, measure.to / bar)) };
-    }
-  }
-  return null;
-}
-
-/** Which bar of the piece a measure of the file begins at. */
-function barsBefore(systemBars: readonly number[], measureIndex: number): number {
-  let total = 0;
-  for (let at = 0; at < measureIndex && at < systemBars.length; at += 1) {
-    total += systemBars[at] ?? 1;
-  }
-  return total;
-}
-
 function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): ScoreHeader {
   const first = measures[0];
   const attributes = child(first ?? null, 'attributes');
@@ -342,20 +231,8 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
   const timeNode = child(attributes, 'time');
   const beats = childNumber(timeNode, 'beats');
   const beatType = childNumber(timeNode, 'beat-type');
-  // A score nobody gave a metre to has no bar lines either - the writer's
-  // program draws none, and each `<measure>` it writes is a *system*, one
-  // line of music holding seven or eight bars. So the metre has to be found
-  // and the lines cut into bars, or there is nothing here a reader could be
-  // counted into.
-  const unbarred = beats === null || beatType === null ? inferMetre(measures, divisions) : null;
   if (beats === null || beatType === null) {
-    if (unbarred === null) {
-      throw new DomainError('The file does not give a time signature.');
-    }
-    warnings.push({
-      kind: 'changing-attributes',
-      detail: `This score carries no time signature and no bar lines. It reads as ${unbarred.timeSignature.toString()}, which is the only metre its notes fit without one being cut in half.`,
-    });
+    throw new DomainError('The file does not give a time signature.');
   }
 
   const staffCount = childNumber(attributes, 'staves') ?? 1;
@@ -408,29 +285,15 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
     }
   });
 
-  const systemBars = unbarred?.systemBars ?? null;
-  // Everything keyed by a measure of the file is keyed by a bar of the music
-  // once the lines have been cut up. Declared at the head of a line, a change
-  // takes effect at the head of that line's first bar.
-  const atBar = (measureIndex: number): number =>
-    systemBars === null ? measureIndex : barsBefore(systemBars, measureIndex);
-
   return {
     divisions,
     key: new KeySignature(fifths, mode satisfies KeyMode),
-    timeSignature:
-      unbarred?.timeSignature ?? new TimeSignature(beats ?? 4, beatType ?? 4),
+    timeSignature: new TimeSignature(beats, beatType),
     timeChanges,
-    systemBars,
     tempoBpm: readTempo(measures),
     clefByStaff,
-    clefChangesByStaff: new Map(
-      [...clefChangesByStaff].map(([staffNumber, changes]) => [
-        staffNumber,
-        changes.map((change) => ({ ...change, measureIndex: atBar(change.measureIndex) })),
-      ]),
-    ),
-    keyChanges: keyChanges.map((change) => ({ ...change, measureIndex: atBar(change.measureIndex) })),
+    clefChangesByStaff,
+    keyChanges,
     staffCount: Math.max(1, staffCount),
   };
 }
@@ -997,63 +860,15 @@ function readPartAttributes(
   };
 }
 
-/**
- * Cuts each line of an unbarred score into the bars the metre asks for.
- *
- * Safe because the metre was chosen so that no note crosses a bar line - see
- * {@link inferMetre} - so every note lands wholly inside one of them and
- * nothing has to be split or tied.
- *
- * The pedal is moved with the notes: it is written as an offset into the
- * measure that carried it, and that measure is about to become several.
- */
-function cutIntoBars(
-  perMeasure: readonly (readonly RawNote[])[],
-  header: ScoreHeader,
-  pedalMarks: PedalMark[],
-): RawNote[][] {
-  const systemBars = header.systemBars ?? [];
-  const bar = header.timeSignature.ticksPerMeasure;
-  const bars: RawNote[][] = Array.from(
-    { length: systemBars.reduce((total, count) => total + count, 0) },
-    () => [],
-  );
-
-  perMeasure.forEach((notes, at) => {
-    const base = barsBefore(systemBars, at);
-    for (const note of notes) {
-      const into = Math.floor(note.onsetTicks / bar);
-      bars[base + into]?.push({ ...note, onsetTicks: note.onsetTicks - into * bar });
-    }
-  });
-
-  const moved = pedalMarks.map((mark) => {
-    const base = barsBefore(systemBars, mark.measureIndex);
-    const into = Math.floor(mark.offsetTicks / bar);
-    return {
-      measureIndex: base + into,
-      offsetTicks: mark.offsetTicks - into * bar,
-      type: mark.type,
-    };
-  });
-  pedalMarks.length = 0;
-  pedalMarks.push(...moved);
-
-  return bars;
-}
-
 function buildStaves(
   measures: readonly XmlNode[],
   header: ScoreHeader,
   warnings: ImportWarning[],
 ): { readonly staves: readonly StaffPart[]; readonly pedalMarks: readonly PedalMark[] } {
   const pedalMarks: PedalMark[] = [];
-  const read = measures.map((measure, index) =>
+  const perMeasure = measures.map((measure, index) =>
     readMeasureNotes(measure, index, header, warnings, pedalMarks),
   );
-  // A score with no bar lines arrives as one measure per *line* of music. The
-  // metre says where the bars are; this is where the lines are cut along them.
-  const perMeasure = header.systemBars === null ? read : cutIntoBars(read, header, pedalMarks);
 
   // One part per voice of each staff, rather than one per staff. Two voices on
   // a staff is how piano writing puts an inner line under a melody, and saying

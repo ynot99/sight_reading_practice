@@ -7,7 +7,6 @@ import { Pitch } from '../../src/domain/model/Pitch.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import {
-  measureCount,
   measureTicks,
   noteEntry,
   restEntry,
@@ -712,51 +711,6 @@ describe('files written by other programs', () => {
     const { exercise } = importer.read(scoreXml(stated + note('C', 4, 96, 'whole')));
 
     expect(exercise.tempoBpm).toBe(63);
-  });
-
-  /** A score with no `<time>` at all, and one measure per line of music. */
-  function unbarred(body: string): string {
-    return scoreXml(body).replace('<time><beats>4</beats><beat-type>4</beat-type></time>', '');
-  }
-
-  it('finds the metre of a score that carries none, and cuts its lines into bars', () => {
-    // A file nobody gave a time signature draws no bar lines either, so its
-    // program writes one `<measure>` per *line* - seven or eight bars of
-    // music in each. Refused for want of a metre, the reader lost the piece
-    // entirely; there is nothing here to count them into otherwise.
-    const eightQuarters = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C']
-      .map((step) => note(step, 4, 24, 'quarter'))
-      .join('');
-    const { exercise, warnings } = importer.read(unbarred(eightQuarters));
-
-    expect(() => validateExercise(exercise)).not.toThrow();
-    expect(exercise.timeSignature.toString()).toBe('4/4');
-    // One line of eight quarters is two bars, not one bar of eight.
-    expect(measureCount(exercise)).toBe(2);
-    expect(warnings.map((warning) => warning.detail).join(' ')).toContain('no bar lines');
-  });
-
-  it('picks the metre that cuts no note in half, not merely the first that fits', () => {
-    // Twelve quarters, as four dotted halves. The length suits 4/4 as well as
-    // 3/4, and 4/4 is tried first - but its second bar line would fall in the
-    // middle of the note that runs from the third quarter to the sixth. A
-    // metre that cuts a note is not a worse reading of the music, it is a
-    // wrong one, so 3/4 is the answer even though it was tried second.
-    const dottedHalves = ['C', 'D', 'E', 'F']
-      .map((step) => note(step, 4, 72, 'half', '<dot/>'))
-      .join('');
-    const { exercise } = importer.read(unbarred(dottedHalves));
-
-    expect(exercise.timeSignature.toString()).toBe('3/4');
-    expect(measureCount(exercise)).toBe(4);
-    expect(() => validateExercise(exercise)).not.toThrow();
-  });
-
-  it('still refuses a score no ordinary metre will bar', () => {
-    // Seven quarters: no metre worth trying divides them, and barring it
-    // anyway would be inventing music the writer did not write.
-    const seven = Array.from({ length: 7 }, () => note('C', 4, 24, 'quarter')).join('');
-    expect(() => importer.read(unbarred(seven))).toThrow(/time signature/);
   });
 
   it('takes a note at what it sounds, not at what it is drawn as', () => {

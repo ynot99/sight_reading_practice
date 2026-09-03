@@ -147,6 +147,21 @@ describe('fillMeasure', () => {
     const awkward = Duration.HALF.ticks + Duration.SIXTEENTH.ticks;
     expect(splitIntoRests(awkward).reduce((sum, rest) => sum + rest.ticks, 0)).toBe(awkward);
   });
+
+  it('reaches for a tuplet rest only when no plain value will do', () => {
+    // A gap inside a tuplet group: an imported score can rest for a third of
+    // a beat, and no whole number of sixty-fourths is a third of anything.
+    // Only ever a last resort - nothing generated here leaves such a gap,
+    // which is what the preset digest holds to.
+    const third = Duration.triplet('64th').ticks;
+
+    const tiled = splitIntoRests(third);
+
+    expect(tiled.reduce((sum, rest) => sum + rest.ticks, 0)).toBe(third);
+    expect(tiled.every((rest) => rest.isTuplet)).toBe(true);
+    // And a plain span is still tiled with plain values.
+    expect(splitIntoRests(Duration.QUARTER.ticks)).toEqual([Duration.QUARTER]);
+  });
 });
 
 describe('voice generators', () => {

@@ -713,6 +713,42 @@ describe('files written by other programs', () => {
     expect(exercise.tempoBpm).toBe(63);
   });
 
+  it('takes a note at what it sounds, not at what it is drawn as', () => {
+    // MuseScore leaves a note looking whole while giving it the duration of
+    // a shade less, to make room for what follows. Read as the type alone,
+    // the bar adds up to more than the metre allows and the file is refused
+    // outright - which is how the reader lost the-sixth-station over one bar.
+    // 24 divisions to the quarter, so this whole note sounds 90 of the 96 it
+    // is drawn as: a dotted half tied to a dotted eighth.
+    const { exercise } = importer.read(
+      scoreXml(note('C', 4, 90, 'whole') + note('D', 4, 6, '16th')),
+    );
+
+    expect(() => validateExercise(exercise)).not.toThrow();
+    const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
+    expect(entries.map((entry) => entry.duration.ticks)).toEqual([
+      Duration.DOTTED_HALF.ticks,
+      Duration.of('eighth', 1).ticks,
+      Duration.SIXTEENTH.ticks,
+    ]);
+    // One press, not two: the pieces are held together, so the reader is
+    // never asked for the note again partway through it.
+    const first = entries[0];
+    expect(first?.kind === 'note' ? first.tiedForward : []).toEqual([Pitch.parse('C4').midi]);
+    // The engraver draws a notehead where the tie continues, so there is a
+    // position there - and nothing is asked for at it, which is what makes
+    // the whole thing one press.
+    expect(demands(exercise)).toEqual([[Pitch.parse('C4').midi], [], [Pitch.parse('D4').midi]]);
+  });
+
+  it('leaves a note alone when it sounds what it says', () => {
+    const { exercise } = importer.read(scoreXml(note('C', 4, 96, 'whole')));
+
+    expect(exercise.staves[0]?.measures[0]?.entries.map((entry) => entry.duration.ticks)).toEqual([
+      Duration.WHOLE.ticks,
+    ]);
+  });
+
   it('reads a septuplet a file could not divide evenly', () => {
     // 24 divisions to the quarter, so a seventh of a beat is 3.43 of them and
     // MuseScore writes 3, 4, 3, 4, 3, 4, 3 - adding up to the beat while no

@@ -198,9 +198,31 @@ function crossesTheBeat(
   return !fitsRhythmicGrid(onsetTicks, duration.ticks, ticksPerBeat, options.keepInsideBeats);
 }
 
+/**
+ * Tuplet values, longest first - a last resort and never an offer.
+ *
+ * A span the plain values cannot tile is a gap *inside* a tuplet group: an
+ * imported score can rest for a third of a beat, and no whole number of
+ * sixty-fourths is a third of anything. The ratios are the ones the divisions
+ * were chosen to carry, so each of these is a whole number of them.
+ *
+ * Deliberately not in {@link LONGEST_FIRST}: this list is reached only where
+ * that one has already failed, so nothing this project *generates* can see
+ * it - which is what `tests/fixtures/preset-digest.txt` holds to.
+ */
+const TUPLETS_LONGEST_FIRST: readonly Duration[] = NOTE_TYPES.flatMap((type) =>
+  [
+    { actual: 3, normal: 2 },
+    { actual: 5, normal: 4 },
+    { actual: 7, normal: 4 },
+  ].map((tuplet) => Duration.of(type, 0, tuplet)),
+).sort((left, right) => right.ticks - left.ticks);
+
 /** Longest single value that fits into `remaining` divisions. */
 function largestThatFits(remaining: number): Duration {
-  const found = LONGEST_FIRST.find((duration) => duration.ticks <= remaining);
+  const found =
+    LONGEST_FIRST.find((duration) => duration.ticks <= remaining) ??
+    TUPLETS_LONGEST_FIRST.find((duration) => duration.ticks <= remaining);
   if (found === undefined) {
     throw new DomainError(`${remaining} divisions cannot be notated with the known values.`);
   }

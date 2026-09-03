@@ -659,6 +659,32 @@ function readMeasureNotes(
 }
 
 /** Turns the notes of one staff and measure into entries that fill the bar. */
+/**
+ * The values a note is worth, which is usually the one it is written as.
+ *
+ * A file may write a note as one value and give it the duration of another -
+ * MuseScore leaves a whole note looking whole while sounding a shade less, to
+ * make room for what follows. The duration is the truth about the music, so a
+ * span that is not a single value becomes several tied together, exactly as a
+ * writer would have to notate it.
+ *
+ * Tuplets are left alone: their value is decided by the group they belong to,
+ * and the numbers beside them are that group's rounding rather than a
+ * disagreement - see {@link readDuration}.
+ */
+function soundedValues(note: RawNote): readonly Duration[] {
+  if (note.duration.isTuplet || note.duration.ticks === note.ticks || note.ticks <= 0) {
+    return [note.duration];
+  }
+  try {
+    return splitIntoRests(note.ticks);
+  } catch {
+    // Nothing can tile it - a span between the values there are. The written
+    // value is the better answer than refusing the file over one note.
+    return [note.duration];
+  }
+}
+
 function buildMeasure(
   notes: readonly RawNote[],
   measureIndex: number,
@@ -689,8 +715,16 @@ function buildMeasure(
     const pitches = group
       .map((note) => note.pitch)
       .filter((pitch): pitch is Pitch => pitch !== null);
+    // What it *sounds*, which is not always what it is written as: a note may
+    // carry a `<type>` of one value and a `<duration>` of another, and the
+    // duration is the truth about the music. Written as the type alone, the
+    // bar adds up to more than the metre allows and the whole file is
+    // refused - which is how the reader lost a score over one bar of it.
+    const values = soundedValues(first);
     if (pitches.length === 0) {
-      entries.push(restEntry(first.duration));
+      for (const value of values) {
+        entries.push(restEntry(value));
+      }
     } else {
       const tied = group
         .filter((note) => note.tieStart && note.pitch !== null)
@@ -699,14 +733,32 @@ function buildMeasure(
       // it - and so do the hold and the breath, for the same reason: a
       // writer marks one note of a chord and means the chord.
       const rolled = group.some((note) => note.arpeggiated);
-      entries.push(
-        noteEntry(pitches, first.duration, tied, first.beams, first.stem, rolled, {
-          fermata: group.some((note) => note.fermata),
-          breath: group.some((note) => note.breath),
-        }),
-      );
+      const held = pitches.map((pitch) => pitch.midi);
+      values.forEach((value, at) => {
+        const last = at === values.length - 1;
+        entries.push(
+          // Everything but the last piece holds into the one after it, which
+          // is what makes the pieces one press rather than several notes.
+          // The writer's own marks belong to the first: they were written
+          // once, over the note as they wrote it.
+          noteEntry(
+            pitches,
+            value,
+            last ? tied : held,
+            at === 0 ? first.beams : [],
+            first.stem,
+            at === 0 && rolled,
+            at === 0
+              ? {
+                  fermata: group.some((note) => note.fermata),
+                  breath: group.some((note) => note.breath),
+                }
+              : {},
+          ),
+        );
+      });
     }
-    cursor += first.duration.ticks;
+    cursor += values.reduce((total, value) => total + value.ticks, 0);
   }
 
   if (cursor < ticksPerMeasure) {

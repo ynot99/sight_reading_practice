@@ -101,5 +101,51 @@ export function subdivisionsPerPulseFor(
 ): number {
   const fromMusic = timeSignature.ticksPerPulse / musicalResolutionTicks(timeline, timeSignature);
   const fromClick = clicksPerPulse(click, timeSignature);
-  return Math.max(1, leastCommonMultiple(fromMusic, fromClick));
+  const wanted = Math.max(1, leastCommonMultiple(fromMusic, fromClick));
+  if (wanted <= MAX_SUBDIVISIONS_PER_PULSE) {
+    return wanted;
+  }
+  return coarsestGridWithin(timeSignature.ticksPerPulse, fromClick);
+}
+
+/**
+ * As fine as the loop is ever run, whatever the music asks for.
+ *
+ * Landing exactly on every onset is what {@link musicalResolutionTicks} is
+ * for, and on ordinary music it costs nothing: a piece of sixteenths and
+ * triplets wants twelve ticks to the beat. But the divisor collapses when a
+ * piece mixes tuplets that share no factor - senbonzakura has fives, sixes,
+ * sevens and thirty-seconds together, and asked for eight hundred and forty
+ * ticks a beat, two thousand a second. The whole practice loop runs on each
+ * one, so the page stopped answering at all: not a stutter, a reader unable
+ * to tell whether their own stop button had registered.
+ *
+ * Forty-eight to the beat is finer than a sixty-fourth triplet, which is
+ * finer than anything that can be written. What it costs is that a step may
+ * open up to one subdivision late - at a hundred beats a minute, twelve
+ * milliseconds, against a matching tolerance measured in hundreds. What it
+ * buys is a loop that runs at a rate a tablet can keep up with, on any music
+ * at all. The modes already expect it: a tick may span several steps, and
+ * they walk to the one the position has reached.
+ */
+const MAX_SUBDIVISIONS_PER_PULSE = 48;
+
+/**
+ * The finest grid within the ceiling that still divides the beat exactly.
+ *
+ * Exactly, because positions are counted in whole divisions - a grid that
+ * did not divide the pulse would put every tick a fraction further out of
+ * step with the bar lines. And a multiple of what the click needs, because
+ * the click has to keep landing on the beat it names; that is the one demand
+ * here that a reader would hear being broken.
+ */
+function coarsestGridWithin(ticksPerPulse: number, fromClick: number): number {
+  const clicks = Math.max(1, fromClick);
+  let best = clicks;
+  for (let grid = clicks; grid <= MAX_SUBDIVISIONS_PER_PULSE; grid += clicks) {
+    if (ticksPerPulse % grid === 0) {
+      best = grid;
+    }
+  }
+  return best;
 }

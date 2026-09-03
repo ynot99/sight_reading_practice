@@ -12,7 +12,12 @@ import {
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { FlowMode } from '../../src/application/modes/FlowMode.js';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { measureOf, noteEntry, type Exercise } from '../../src/domain/model/Exercise.js';
+import {
+  measureOf,
+  noteEntry,
+  type Exercise,
+  type MusicalEntry,
+} from '../../src/domain/model/Exercise.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { compoundBarExercise, p, twoBarExercise } from '../support/fixtures.js';
@@ -110,6 +115,72 @@ describe('the bars a metronome beats through', () => {
 
     expect(bars.map((bar) => bar.timeSignature.toString())).toEqual(['3/4', '3/4']);
     expect(bars.map((bar) => bar.startTicks)).toEqual([0, Duration.DOTTED_HALF.ticks]);
+  });
+});
+
+/**
+ * A bar that mixes tuplets sharing no factor, which is what collapses the
+ * grid: sevens, fives, sixes and thirty-seconds, a beat of each.
+ */
+function tupletsAgainstEachOther(): Exercise {
+  const beat = (count: number, value: Duration): MusicalEntry[] =>
+    Array.from({ length: count }, () => noteEntry(p('C4'), value));
+  const entries = [
+    ...beat(7, Duration.of('16th', 0, { actual: 7, normal: 4 })),
+    ...beat(5, Duration.of('16th', 0, { actual: 5, normal: 4 })),
+    ...beat(6, Duration.of('16th', 0, { actual: 6, normal: 4 })),
+    ...beat(8, Duration.of('32nd')),
+  ];
+  return {
+    ...twoBarExercise(),
+    staves: [
+      { staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: [measureOf(entries)] },
+    ],
+  };
+}
+
+describe('how fine the practice loop runs', () => {
+  it('takes what ordinary music asks for, exactly', () => {
+    // Sixteenths want four to the beat, and nothing here changes that.
+    const sixteenths = buildTimeline(evenBar(COMMON, Duration.SIXTEENTH));
+
+    expect(subdivisionsPerPulseFor(sixteenths, COMMON, 'pulse')).toBe(4);
+  });
+
+  it('refuses to run faster than a loop can be run, whatever the music wants', () => {
+    // Landing on every onset of these costs eight hundred and forty ticks a
+    // beat - two thousand a second, each one running the whole practice loop.
+    // The page stopped answering altogether: not a stutter, a reader unable
+    // to tell whether their own stop button had registered.
+    const timeline = buildTimeline(tupletsAgainstEachOther());
+    const exact = COMMON.ticksPerPulse / musicalResolutionTicks(timeline, COMMON);
+    expect(exact).toBeGreaterThan(100);
+
+    const used = subdivisionsPerPulseFor(timeline, COMMON, 'pulse');
+
+    expect(used).toBeLessThanOrEqual(48);
+  });
+
+  it('keeps a grid that divides the beat, so the bar lines stay where they are', () => {
+    const timeline = buildTimeline(tupletsAgainstEachOther());
+
+    for (const click of ['downbeat', 'pulse', 'division', 'subdivision'] as ClickPattern[]) {
+      const used = subdivisionsPerPulseFor(timeline, COMMON, click);
+      expect({ click, remainder: COMMON.ticksPerPulse % used }).toEqual({ click, remainder: 0 });
+      // And the click still lands on the beats it names, which is the one
+      // demand here a reader would hear being broken.
+      expect({ click, over: used % clicksPerPulse(click, COMMON) }).toEqual({ click, over: 0 });
+    }
+  });
+
+  it('runs a compound metre inside the ceiling too', () => {
+    const timeline = buildTimeline(tupletsAgainstEachOther());
+
+    const used = subdivisionsPerPulseFor(timeline, COMPOUND, 'division');
+
+    expect(used).toBeLessThanOrEqual(48);
+    expect(COMPOUND.ticksPerPulse % used).toBe(0);
+    expect(used % clicksPerPulse('division', COMPOUND)).toBe(0);
   });
 });
 

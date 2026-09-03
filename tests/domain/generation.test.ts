@@ -148,6 +148,17 @@ describe('fillMeasure', () => {
     expect(splitIntoRests(awkward).reduce((sum, rest) => sum + rest.ticks, 0)).toBe(awkward);
   });
 
+  it('writes a span that is one value as that value, not as the largest that fits', () => {
+    // Two triplet eighths are a whole number of divisions, and taking the
+    // largest plain value first spent them on a sixteenth and a sixty-fourth
+    // and left seventy over - which nothing at all can write, so the file was
+    // refused. One value is the better notation for it in any case.
+    const two = Duration.triplet('eighth').ticks * 2;
+
+    expect(splitIntoRests(two)).toEqual([Duration.triplet('quarter')]);
+    expect(splitIntoRests(two).reduce((sum, rest) => sum + rest.ticks, 0)).toBe(two);
+  });
+
   it('reaches for a tuplet rest only when no plain value will do', () => {
     // A gap inside a tuplet group: an imported score can rest for a third of
     // a beat, and no whole number of sixty-fourths is a third of anything.

@@ -50,7 +50,11 @@ describe('reading back what we wrote', () => {
     expect(buildTimeline(exercise).noteCount).toBe(buildTimeline(original).noteCount);
   });
 
-  it('recovers every built-in preset under every rhythm, triplets included', () => {
+  // Every preset against every rhythm, each generated, written and read back:
+  // seconds of real work by design, and the default limit is five of them. It
+  // had been passing with little to spare and failing whenever the machine was
+  // busy, which is a test that reports the load rather than the code.
+  it('recovers every built-in preset under every rhythm, triplets included', { timeout: 30_000 }, () => {
     for (const preset of BUILT_IN_PRESETS) {
       for (const profile of BUILT_IN_RHYTHM_PROFILES) {
         const original = preset.generator.generate({

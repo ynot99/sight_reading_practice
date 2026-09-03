@@ -218,9 +218,31 @@ const TUPLETS_LONGEST_FIRST: readonly Duration[] = NOTE_TYPES.flatMap((type) =>
   ].map((tuplet) => Duration.of(type, 0, tuplet)),
 ).sort((left, right) => right.ticks - left.ticks);
 
-/** Longest single value that fits into `remaining` divisions. */
+/**
+ * Every value by the span it fills, for the one-value answer.
+ *
+ * Plain values are added last so they win where a tuplet happens to measure
+ * the same: a reader would rather see the plain one, and it needs no group
+ * around it to mean anything.
+ */
+const EXACTLY: ReadonlyMap<number, Duration> = new Map(
+  [...TUPLETS_LONGEST_FIRST, ...LONGEST_FIRST].map((duration) => [duration.ticks, duration]),
+);
+
+/**
+ * The value to write next for `remaining` divisions.
+ *
+ * A span that *is* one value is written as that one value, before anything
+ * larger is tried. Taking the largest that fits and going again is right for
+ * plain values, where every value is twice the next, but it strands a span
+ * that only a tuplet can say: two triplet eighths are a whole number of
+ * divisions, and the greedy walk spent them on a sixteenth and a
+ * sixty-fourth and left seventy over, which nothing at all can write. One
+ * value is also simply the better notation for it.
+ */
 function largestThatFits(remaining: number): Duration {
   const found =
+    EXACTLY.get(remaining) ??
     LONGEST_FIRST.find((duration) => duration.ticks <= remaining) ??
     TUPLETS_LONGEST_FIRST.find((duration) => duration.ticks <= remaining);
   if (found === undefined) {

@@ -97,6 +97,7 @@ describe('WebAudioMetronome', () => {
     metronome.configure({
       bpm: 60,
       timeSignature: new TimeSignature(4, 4),
+      bars: [],
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,
@@ -132,6 +133,7 @@ describe('WebAudioMetronome', () => {
     metronome.configure({
       bpm: 60,
       timeSignature: new TimeSignature(4, 4),
+      bars: [],
       subdivisionsPerPulse: 4,
       click: 'pulse',
       dropout: null,
@@ -195,6 +197,7 @@ describe('WebAudioMetronome', () => {
     metronome.configure({
       bpm: 60,
       timeSignature: new TimeSignature(4, 4),
+      bars: [],
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,
@@ -383,6 +386,7 @@ describe('when the click is actually heard', () => {
     metronome.configure({
       bpm: 60,
       timeSignature: new TimeSignature(4, 4),
+      bars: [],
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,
@@ -421,6 +425,7 @@ describe('when the click is actually heard', () => {
     metronome.configure({
       bpm: 60,
       timeSignature: new TimeSignature(4, 4),
+      bars: [],
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,
@@ -456,6 +461,7 @@ describe('when the click is actually heard', () => {
     metronome.configure({
       bpm: 60,
       timeSignature: new TimeSignature(4, 4),
+      bars: [],
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,

@@ -3,6 +3,7 @@ import {
   type MetronomeConfig,
   type MetronomeTick,
 } from '../../application/ports/IMetronome.js';
+import type { TimeSignature } from '../../domain/model/TimeSignature.js';
 import { DIVISIONS_PER_QUARTER } from '../../domain/model/Duration.js';
 
 /** Seconds occupied by one subdivision at the configured tempo. */
@@ -18,26 +19,71 @@ export function ticksPerSubdivision(config: MetronomeConfig): number {
 }
 
 /**
+ * The bar a position falls in, and where that bar began.
+ *
+ * From the table when there is one, and by counting from the start in the
+ * configured metre when there is not - which is the same answer for music
+ * that never changes metre, and the only one available for a metronome
+ * beating on past the end of the music.
+ */
+function barAt(
+  config: MetronomeConfig,
+  positionTicks: number,
+): { readonly index: number; readonly startTicks: number; readonly timeSignature: TimeSignature } {
+  const bars = config.bars;
+  let at = -1;
+  for (const [index, bar] of bars.entries()) {
+    if (bar.startTicks > positionTicks) {
+      break;
+    }
+    at = index;
+  }
+  const found = at < 0 ? undefined : bars[at];
+  if (found === undefined) {
+    const length = config.timeSignature.ticksPerMeasure;
+    const index = Math.floor(positionTicks / length);
+    return { index, startTicks: index * length, timeSignature: config.timeSignature };
+  }
+  const length = found.timeSignature.ticksPerMeasure;
+  // Past the last bar the last metre repeats: a run that reaches the end
+  // keeps a pulse for the mode to finish on, and it has to beat in
+  // something.
+  const over = at === bars.length - 1 ? Math.floor((positionTicks - found.startTicks) / length) : 0;
+  return {
+    index: at + over,
+    startTicks: found.startTicks + over * length,
+    timeSignature: found.timeSignature,
+  };
+}
+
+/**
  * Derives a tick from its ordinal.
  *
  * Shared by the Web Audio metronome and the manual one used in tests, so both
  * agree on what beat 3 of bar 2 means down to the tick.
+ *
+ * The pulse itself is even - one subdivision is one length of time, always -
+ * and it is only *which* of those ticks begin a bar or a beat that the bars
+ * decide. That keeps one clock for a piece that changes metre, and asks of
+ * the grid only that it be fine enough to land on every metre's beat, which
+ * is what {@link subdivisionsPerPulseFor} sees to.
  */
 export function buildMetronomeTick(
   index: number,
   config: MetronomeConfig,
   scheduledTimeMs: number,
 ): MetronomeTick {
-  const { subdivisionsPerPulse, timeSignature } = config;
-  const pulseIndex = Math.floor(index / subdivisionsPerPulse);
-  const pulses = timeSignature.pulsesPerMeasure;
+  const positionTicks = index * ticksPerSubdivision(config);
+  const bar = barAt(config, positionTicks);
+  const into = positionTicks - bar.startTicks;
+  const ticksPerPulse = bar.timeSignature.ticksPerPulse;
   return {
     index,
-    measure: Math.floor(pulseIndex / pulses),
-    beat: (pulseIndex % pulses) + 1,
-    isPulse: index % subdivisionsPerPulse === 0,
-    isDownbeat: index % (subdivisionsPerPulse * pulses) === 0,
-    positionTicks: index * ticksPerSubdivision(config),
+    measure: bar.index,
+    beat: Math.floor(into / ticksPerPulse) + 1,
+    isPulse: into % ticksPerPulse === 0,
+    isDownbeat: into === 0,
+    positionTicks,
     scheduledTimeMs,
   };
 }

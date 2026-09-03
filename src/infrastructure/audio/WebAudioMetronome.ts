@@ -28,6 +28,9 @@ interface ScheduledTick {
 const DEFAULT_CONFIG: MetronomeConfig = {
   bpm: 72,
   timeSignature: new TimeSignature(4, 4),
+  // Nothing to beat through until something is loaded, which counts from
+  // the start in the metre above.
+  bars: [],
   subdivisionsPerPulse: 4,
   click: 'pulse',
   dropout: null,

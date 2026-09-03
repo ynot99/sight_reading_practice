@@ -17,10 +17,12 @@ import {
   type ClickPattern,
   type ClickWhen,
   type IMetronome,
+  type MetronomeBar,
   type MetronomeTick,
 } from '../ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from '../ports/IMidiSource.js';
-import { subdivisionsPerPulseFor } from './metronomePlan.js';
+import { timeAtMeasure } from '../../domain/model/Exercise.js';
+import { metronomeBars, subdivisionsPerPulseFor } from './metronomePlan.js';
 import { DEFAULT_SESSION_OPTIONS, type PracticeContext, type SessionOptions } from './PracticeContext.js';
 import type { SessionEventMap } from './SessionEvents.js';
 import { createSessionMachine, type SessionStatus, type SessionTrigger } from './SessionState.js';
@@ -136,6 +138,7 @@ export class PracticeSession {
     this.metronome.configure({
       bpm: this.tempoBpm,
       timeSignature: this.timeline.exercise.timeSignature,
+      bars: this.barsToBeat(),
       subdivisionsPerPulse: subdivisionsPerPulseFor(
         this.timeline,
         this.timeline.exercise.timeSignature,
@@ -181,6 +184,7 @@ export class PracticeSession {
     this.metronome.configure({
       bpm: this.tempoBpm,
       timeSignature: this.timeline.exercise.timeSignature,
+      bars: this.barsToBeat(),
       subdivisionsPerPulse: subdivisionsPerPulseFor(
         this.timeline,
         this.timeline.exercise.timeSignature,
@@ -306,8 +310,22 @@ export class PracticeSession {
       : this.options.matchPolicy;
   }
 
+  /** The bars the metronome beats through: the count-in, then the music. */
+  private barsToBeat(): readonly MetronomeBar[] {
+    return metronomeBars(this.timeline.exercise, {
+      countInBars: Math.max(0, this.options.countInBars),
+      fromTicks: this.resumeAtTicks,
+    });
+  }
+
   private countInPulses(): number {
-    const pulses = this.timeline.exercise.timeSignature.pulsesPerMeasure;
+    // The metre the music is about to begin in, which for a piece that
+    // changes metre is not always the one it opened in - and a count-in in
+    // the wrong metre is the worst possible way to arrive.
+    const pulses = timeAtMeasure(
+      this.timeline.exercise,
+      this.timeline.at(this.resumeAtIndex)?.measureIndex ?? 0,
+    ).pulsesPerMeasure;
     return Math.max(0, Math.round(this.options.countInBars * pulses));
   }
 

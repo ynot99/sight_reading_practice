@@ -5,6 +5,7 @@ import {
   type ClickPattern,
 } from '../../src/application/ports/IMetronome.js';
 import {
+  metronomeBars,
   musicalResolutionTicks,
   subdivisionsPerPulseFor,
 } from '../../src/application/session/metronomePlan.js';
@@ -50,6 +51,65 @@ describe('clicksPerPulse', () => {
         compound,
       });
     }
+  });
+});
+
+/** Two bars in 4/4 and 3/4, which is nausicaa's shape. */
+function changingMetre(): Exercise {
+  const base = twoBarExercise();
+  const [treble, bass] = base.staves;
+  if (treble === undefined || bass === undefined) {
+    throw new Error('expected two staves');
+  }
+  return {
+    ...base,
+    timeChanges: [{ measureIndex: 1, timeSignature: new TimeSignature(3, 4) }],
+    staves: [
+      {
+        ...treble,
+        measures: [
+          measureOf([noteEntry(p('C4'), Duration.WHOLE)]),
+          measureOf([noteEntry(p('D4'), Duration.DOTTED_HALF)]),
+        ],
+      },
+      {
+        ...bass,
+        measures: [
+          measureOf([noteEntry(p('C3'), Duration.WHOLE)]),
+          measureOf([noteEntry(p('G2'), Duration.DOTTED_HALF)]),
+        ],
+      },
+    ],
+  };
+}
+
+describe('the bars a metronome beats through', () => {
+  it('lays the count-in in front of the music', () => {
+    const bars = metronomeBars(twoBarExercise(), { countInBars: 2, fromTicks: 0 });
+    const whole = Duration.WHOLE.ticks;
+
+    // Two counted, then the two the piece is made of.
+    expect(bars.map((bar) => bar.startTicks)).toEqual([0, whole, whole * 2, whole * 3]);
+  });
+
+  it('moves the bar lines where the metre changes', () => {
+    const bars = metronomeBars(changingMetre(), { countInBars: 1, fromTicks: 0 });
+    const whole = Duration.WHOLE.ticks;
+
+    expect(bars.map((bar) => bar.startTicks)).toEqual([0, whole, whole * 2]);
+    expect(bars.map((bar) => bar.timeSignature.toString())).toEqual(['4/4', '4/4', '3/4']);
+  });
+
+  it('counts the reader in to the metre the music is about to start in', () => {
+    // Resuming into the 3/4 bar. Counted in four to music that begins in
+    // three is the worst possible way to arrive.
+    const bars = metronomeBars(changingMetre(), {
+      countInBars: 1,
+      fromTicks: Duration.WHOLE.ticks,
+    });
+
+    expect(bars.map((bar) => bar.timeSignature.toString())).toEqual(['3/4', '3/4']);
+    expect(bars.map((bar) => bar.startTicks)).toEqual([0, Duration.DOTTED_HALF.ticks]);
   });
 });
 
@@ -152,6 +212,27 @@ describe('count-in', () => {
     // One bar of 6/8 is two dotted-quarter beats, not six eighths. Counting
     // "1 2 3 4" into it would leave the reader out of phase with the bar.
     expect(countInBeatsFor(compoundBarExercise(), 1)).toEqual([2, 1]);
+  });
+
+  it('beats the run through the bars the reader is looking at', () => {
+    // End to end: the session hands the metronome the bars, so the accent
+    // lands on the bar line the page draws. Nausicaa's shape - 4/4 into 3/4
+    // - and the second downbeat comes a beat sooner than the opening metre
+    // would have put it.
+    const harness = createHarness({
+      exercise: changingMetre(),
+      mode: new FlowMode(),
+      options: { countInBars: 0, clickWhen: 'always', click: 'pulse' },
+    });
+
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(8);
+
+    const downbeats = harness.metronome.emitted
+      .filter((tick) => tick.isDownbeat)
+      .map((tick) => tick.positionTicks);
+    expect(downbeats).toContain(Duration.WHOLE.ticks);
+    expect(downbeats).toContain(Duration.WHOLE.ticks + Duration.DOTTED_HALF.ticks);
   });
 
   it('can be turned off, and then the pulse is only what the mode needs', () => {

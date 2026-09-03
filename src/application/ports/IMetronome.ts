@@ -149,9 +149,29 @@ export function resolveDropout(when: ClickWhen, fromBar: number): MetronomeDropo
   return bars === null ? null : { kind: 'cycle', bars, fromBar };
 }
 
+/** One bar of the metronome's life, in its own clock. */
+export interface MetronomeBar {
+  readonly startTicks: number;
+  readonly timeSignature: TimeSignature;
+}
+
 export interface MetronomeConfig {
   readonly bpm: number;
   readonly timeSignature: TimeSignature;
+  /**
+   * Every bar it will beat through: the count-in, then the music.
+   *
+   * A pulse generator can work out the bar and the beat by division only
+   * while every bar is the same length, and a piece that changes metre
+   * partway through stops being one. Given the bars, the click accents the
+   * downbeat the *reader* is looking at rather than the one the opening
+   * metre would have put there.
+   *
+   * Empty when nobody has worked them out, which is answered by counting
+   * from the start in {@link timeSignature} - the same thing, for the music
+   * that never changes metre.
+   */
+  readonly bars: readonly MetronomeBar[];
   /**
    * Ticks emitted per felt beat.
    *

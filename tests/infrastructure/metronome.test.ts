@@ -18,6 +18,7 @@ import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronom
 const COMMON: MetronomeConfig = {
   bpm: 60,
   timeSignature: new TimeSignature(4, 4),
+  bars: [],
   subdivisionsPerPulse: 4,
   click: 'subdivision',
   dropout: null,
@@ -44,6 +45,7 @@ describe('which ticks are heard', () => {
     const compound: MetronomeConfig = {
       ...COMMON,
       timeSignature: new TimeSignature(6, 8),
+      bars: [],
       subdivisionsPerPulse: 6,
     };
     // Two dotted-quarter beats to the bar, each of three eighths.
@@ -156,6 +158,7 @@ describe('metronome maths', () => {
       subdivisionSeconds({
         ...COMMON,
         timeSignature: new TimeSignature(6, 8),
+        bars: [],
         subdivisionsPerPulse: 1,
       }),
     ).toBeCloseTo(1.5, 10);
@@ -164,6 +167,49 @@ describe('metronome maths', () => {
   it('derives the musical length of a subdivision', () => {
     expect(ticksPerSubdivision(COMMON)).toBe(Duration.SIXTEENTH.ticks);
     expect(ticksPerSubdivision({ ...COMMON, subdivisionsPerPulse: 1 })).toBe(Duration.QUARTER.ticks);
+  });
+
+  it('moves the downbeat when the bars it was given change metre', () => {
+    // A pulse generator can find the bar by division only while every bar is
+    // the same length. Told which bars there are, it accents the downbeat the
+    // reader is looking at rather than the one the opening metre would have
+    // put there - which for a piece that drops from 4/4 to 3/4 is a beat
+    // further along every bar after the change.
+    const whole = Duration.WHOLE.ticks;
+    const config: MetronomeConfig = {
+      ...COMMON,
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      bars: [
+        { startTicks: 0, timeSignature: new TimeSignature(4, 4) },
+        { startTicks: whole, timeSignature: new TimeSignature(3, 4) },
+        { startTicks: whole + Duration.DOTTED_HALF.ticks, timeSignature: new TimeSignature(3, 4) },
+      ],
+    };
+
+    const downbeats = Array.from({ length: 11 }, (_, index) => index).filter(
+      (index) => buildMetronomeTick(index, config, 0).isDownbeat,
+    );
+
+    // Quarters: bar one at 0, then every three rather than every four.
+    expect(downbeats).toEqual([0, 4, 7, 10]);
+    expect(buildMetronomeTick(5, config, 0).beat).toBe(2);
+    expect(buildMetronomeTick(5, config, 0).measure).toBe(1);
+  });
+
+  it('goes on beating in the last metre after the music has run out', () => {
+    // A run that reaches the end keeps a pulse for the mode to finish on,
+    // and it has to beat in something.
+    const config: MetronomeConfig = {
+      ...COMMON,
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      bars: [{ startTicks: 0, timeSignature: new TimeSignature(3, 4) }],
+    };
+
+    expect(buildMetronomeTick(3, config, 0).isDownbeat).toBe(true);
+    expect(buildMetronomeTick(3, config, 0).measure).toBe(1);
+    expect(buildMetronomeTick(6, config, 0).measure).toBe(2);
   });
 
   it('locates a tick in the bar', () => {

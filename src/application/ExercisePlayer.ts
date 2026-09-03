@@ -11,7 +11,7 @@ import {
 } from './ports/IMetronome.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import type { IScoreCursor } from './ports/IScoreRenderer.js';
-import { subdivisionsPerPulseFor } from './session/metronomePlan.js';
+import { metronomeBars, subdivisionsPerPulseFor } from './session/metronomePlan.js';
 
 /** Which hands to sound. `null` is both. */
 export type ListeningHand = number | null;
@@ -137,6 +137,9 @@ export class ExercisePlayer {
     this.deps.metronome.configure({
       bpm: this.timeline.exercise.tempoBpm,
       timeSignature,
+      // From where the performance actually began, which is where its own
+      // clock reads nought.
+      bars: metronomeBars(this.timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
       subdivisionsPerPulse: subdivisionsPerPulseFor(this.timeline, timeSignature, 'pulse'),
       click: 'pulse',
       dropout: resolveDropout(clickWhen, 0),
@@ -179,6 +182,9 @@ export class ExercisePlayer {
     this.deps.metronome.configure({
       bpm: timeline.exercise.tempoBpm,
       timeSignature,
+      // No count-in in front of a playback, and it starts wherever the
+      // reader put their place.
+      bars: metronomeBars(timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
       subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, 'pulse'),
       click: 'pulse',
       // From bar zero, because there is no count-in in front of a playback.

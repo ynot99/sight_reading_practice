@@ -1,6 +1,8 @@
+import type { Exercise } from '../../domain/model/Exercise.js';
+import { barLines } from '../../domain/model/Exercise.js';
 import type { TimeSignature } from '../../domain/model/TimeSignature.js';
 import type { ExerciseTimeline } from '../../domain/timeline/Timeline.js';
-import { clicksPerPulse, type ClickPattern } from '../ports/IMetronome.js';
+import { clicksPerPulse, type ClickPattern, type MetronomeBar } from '../ports/IMetronome.js';
 
 function greatestCommonDivisor(left: number, right: number): number {
   let a = Math.abs(left);
@@ -17,6 +19,47 @@ function leastCommonMultiple(left: number, right: number): number {
 }
 
 /**
+ * Every bar the metronome will beat through, in its own clock.
+ *
+ * Its clock is not the music's: it starts at the first beat of the count-in
+ * and the music arrives some bars later, and a run picked up from a pause
+ * starts partway into the piece. So the music's bars are shifted onto that
+ * clock, with the count-in laid out in front of them.
+ *
+ * The count-in is beaten in the metre the music is about to *begin* in,
+ * which for a piece that changes metre is not the one it opened in - being
+ * counted in four to music that starts in three is the worst possible way
+ * to arrive.
+ *
+ * A run resuming in the middle of a bar keeps that bar's remainder in the
+ * count-in's metre, since there is no bar line to hang a new one on until
+ * the next one comes round.
+ */
+export function metronomeBars(
+  exercise: Exercise,
+  options: { readonly countInBars: number; readonly fromTicks: number },
+): readonly MetronomeBar[] {
+  const music = barLines(exercise);
+  const startsIn =
+    [...music].reverse().find((bar) => bar.startTicks <= options.fromTicks)?.timeSignature ??
+    exercise.timeSignature;
+  const countIn = Math.max(0, Math.round(options.countInBars));
+  const bars: MetronomeBar[] = Array.from({ length: countIn }, (_, index) => ({
+    startTicks: index * startsIn.ticksPerMeasure,
+    timeSignature: startsIn,
+  }));
+
+  const musicStarts = countIn * startsIn.ticksPerMeasure;
+  const shift = musicStarts - options.fromTicks;
+  for (const bar of music) {
+    if (bar.startTicks >= options.fromTicks) {
+      bars.push({ startTicks: bar.startTicks + shift, timeSignature: bar.timeSignature });
+    }
+  }
+  return bars;
+}
+
+/**
  * Finest grid the music actually lands on, as ticks.
  *
  * Every step onset and length is an exact number of divisions, so their
@@ -30,6 +73,12 @@ export function musicalResolutionTicks(
   timeSignature: TimeSignature,
 ): number {
   let divisor = timeSignature.ticksPerPulse;
+  // Every metre the piece passes through, not only the one it opened in: the
+  // grid has to land on the beats of all of them, or the click stops falling
+  // on the beat the moment the metre changes.
+  for (const bar of barLines(timeline.exercise)) {
+    divisor = greatestCommonDivisor(divisor, bar.timeSignature.ticksPerPulse);
+  }
   for (const step of timeline.steps) {
     divisor = greatestCommonDivisor(divisor, step.onsetTicks);
     divisor = greatestCommonDivisor(divisor, step.durationTicks);

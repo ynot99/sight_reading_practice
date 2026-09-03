@@ -11,6 +11,7 @@ import type { ManualClock } from './ManualClock.js';
 const DEFAULT_CONFIG: MetronomeConfig = {
   bpm: 60,
   timeSignature: new TimeSignature(4, 4),
+  bars: [],
   subdivisionsPerPulse: 4,
   click: 'pulse',
   dropout: null,

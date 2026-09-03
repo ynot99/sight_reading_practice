@@ -173,7 +173,8 @@ It is deliberately separate from the rate the practice loop runs at, which is
 derived from the shortest note in the exercise — one number cannot both resolve
 sixteenths and click once a bar. Compound metres are counted as they are felt:
 6/8 is two dotted quarters, not six eighths, and a count-in is a bar long
-whatever that works out to.
+whatever that works out to — in the metre the music is about to *begin* in,
+which for a piece that changes metre is not always the one it opened in.
 
 The click can also be told to drop out: two bars of pulse, two bars where you
 carry it alone, and you find out on its return whether you drifted. The
@@ -643,8 +644,9 @@ it. Key, metre and clef changes, stem directions and beaming are all followed
 as written, along with rolled chords and the damper pedal. A metre change
 moves the bar lines, so bars stop being all the same length and every answer
 about musical position is read off `barLines` rather than worked out by
-multiplying; the click is the one thing that does not follow yet, and goes on
-counting the metre the piece opened in. Grace notes are the remaining limit.
+multiplying - the metronome included, which is handed those bars and accents
+the downbeat the page draws rather than the one the opening metre would have
+put there. Grace notes are the remaining limit.
 Written values are read down to sixty-fourths, with tuplets up to septuplets:
 a file that divides a beat into sevens rounds its own numbers to fit its
 divisions, and the written value is trusted over the rounding. Compressed

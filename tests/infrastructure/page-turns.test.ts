@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  overflowBelow,
   swipeDirection,
   visibleHeightOf,
 } from '../../src/infrastructure/rendering/pageTurns.js';
@@ -29,6 +30,24 @@ describe('how much of the frame the reader can see', () => {
 
   it('is nothing at all for a frame scrolled right off the screen', () => {
     expect(visibleHeightOf({ top: 900, bottom: 1_200 }, 800)).toBe(0);
+  });
+});
+
+describe('what the engraver drew past the page it was given', () => {
+  it('is nothing when the drawing sits inside the page', () => {
+    expect(overflowBelow({ y: 7, height: 600 }, 777)).toBe(0);
+    expect(overflowBelow({ y: 0, height: 777 }, 777)).toBe(0);
+  });
+
+  it('measures from the top of the drawing, not from the top of the page', () => {
+    // The music starts a little way down the page, and that margin is part of
+    // what has to fit: a system pushed past the bottom is clipped by the
+    // page's own edge, which is why this is measured at all.
+    expect(overflowBelow({ y: 7, height: 802 }, 777)).toBe(32);
+  });
+
+  it('answers nothing for a page nothing has been drawn on', () => {
+    expect(overflowBelow({ y: 0, height: 0 }, 777)).toBe(0);
   });
 });
 

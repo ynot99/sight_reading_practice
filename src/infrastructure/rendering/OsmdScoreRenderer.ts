@@ -28,6 +28,7 @@ import {
   type PassageEdge,
 } from './passageBrackets.js';
 import {
+  overflowBelow,
   visibleHeightOf,
   swipeDirection,
 } from './pageTurns.js';
@@ -162,6 +163,45 @@ function systemExtent(system: DrawnSystem): { top: number; bottom: number } | nu
   return Number.isFinite(top) && Number.isFinite(bottom) ? { top, bottom } : null;
 }
 
+/**
+ * What was actually drawn on a page, in the drawing's own units.
+ *
+ * `null` where nothing can measure it: jsdom has no layout engine and an
+ * empty page has no box at all.
+ */
+function boundingBoxOf(sheet: SVGSVGElement): { readonly y: number; readonly height: number } | null {
+  if (typeof sheet.getBBox !== 'function') {
+    return null;
+  }
+  try {
+    const box = sheet.getBBox();
+    return box.height > 0 ? { y: box.y, height: box.height } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The page itself: how tall it is in the drawing's units, and how much of a
+ * pixel each of those is worth on screen.
+ *
+ * Read from the `viewBox` against the height it is displayed at, because
+ * those two are what the engraver actually wrote - the attributes carry the
+ * zoom, the box carries the drawing.
+ */
+function pageBoxOf(
+  sheet: SVGSVGElement,
+): { readonly height: number; readonly scale: number } | null {
+  const viewBox = (sheet.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
+  const height = viewBox[3];
+  const shown = Number.parseFloat(sheet.getAttribute('height') ?? '');
+  if (height === undefined || !Number.isFinite(height) || height <= 0) {
+    return null;
+  }
+  const scale = Number.isFinite(shown) && shown > 0 ? shown / height : 1;
+  return { height, scale };
+}
+
 /** Class that dims the notes of a step already played. */
 const FADED_CLASS = 'note--passed';
 
@@ -274,6 +314,25 @@ export class OsmdScoreRenderer
 
   /** The column cut into pages, and which one is being read. */
   private paged = false;
+  /**
+   * How much shorter than the window a page has to be asked for.
+   *
+   * Kept between engravings of the same music: a piece whose systems spill
+   * over spills every time, and starting from nothing again would mean two
+   * engravings on every resize instead of one. Cleared when new music
+   * arrives, because it is a fact about the music, not about the window.
+   */
+  private pageSurplusPx = 0;
+  /**
+   * The window the correction was measured against.
+   *
+   * A correction is only true of the page it was measured on. The trainer
+   * opens in the desk layout and enters the reading layout a moment later,
+   * which is a different window and a different page - carrying the first
+   * measurement into the second would shorten a page that never spilled, and
+   * carrying it again on every following engraving would go on shortening it.
+   */
+  private pageSurplusWindow = 0;
   private pageAt = 0;
   private pageListeners: ((state: ScorePageState) => void)[] = [];
   private swipe: PageSwipe | null = null;
@@ -329,8 +388,14 @@ export class OsmdScoreRenderer
     // left it - has nothing to turn them on, so the page was laid out as one
     // endless column and only switching the setting off and on again fixed
     // it. Asked here, the first engraving is already the right shape.
+    // New music, so what the last piece spilled over says nothing about this
+    // one.
+    this.pageSurplusPx = 0;
+    this.pageSurplusWindow = 0;
+    this.markPaged();
     this.applyPageFormat();
     osmd.render();
+    this.fitPagesToTheirContent();
     this.loaded = true;
     this.engravedWidth = this.container.offsetWidth;
     this.walking = true;
@@ -388,8 +453,10 @@ export class OsmdScoreRenderer
     this.osmd.zoom = this.currentZoom;
     // The window may be a different size than it was - a rotation, a resize,
     // the transport bar appearing - and a page is cut to the window.
+    this.markPaged();
     this.applyPageFormat();
     this.osmd.render();
+    this.fitPagesToTheirContent();
     this.engravedWidth = this.container.offsetWidth;
     this.walking = true;
     this.navigator.reset();
@@ -429,6 +496,12 @@ export class OsmdScoreRenderer
       return;
     }
     this.paged = paged;
+    // Before the early return below, not after it. A visit that opens already
+    // in pages sets this before anything is engraved, and the stylesheet's
+    // promise - no scrollbar, no drag - hung on an attribute that was then
+    // never written for the rest of the session, because coming back through
+    // here found the setting already true and left at the top.
+    this.markPaged();
     if (!this.loaded) {
       // Nothing engraved yet. The setting is kept and the first engraving
       // will be asked for in pages, which is what a visit that opens in
@@ -438,10 +511,6 @@ export class OsmdScoreRenderer
     const engraver = this.osmd as unknown as { FollowCursor?: boolean } | null;
     if (engraver !== null) {
       engraver.FollowCursor = !paged;
-    }
-    const scroller = this.scroller();
-    if (scroller instanceof HTMLElement) {
-      scroller.dataset['paged'] = String(paged);
     }
     // A new page size is a new engraving; there is no way to page a layout
     // that was made without pages in mind.
@@ -470,10 +539,84 @@ export class OsmdScoreRenderer
       return;
     }
     const width = this.container.offsetWidth;
-    const height = this.windowHeight();
+    const window = this.windowHeight();
+    if (window !== this.pageSurplusWindow) {
+      this.pageSurplusPx = 0;
+      this.pageSurplusWindow = window;
+    }
+    const height = window - this.pageSurplusPx;
     if (width > 0 && height > 0) {
       osmd.setCustomPageFormat?.(width / UNITS_TO_PIXELS, height / UNITS_TO_PIXELS);
     }
+  }
+
+  /**
+   * Says on the page itself whether it is being read in pages.
+   *
+   * The stylesheet takes the scrollbar away and stops a drag from scrolling
+   * when this is set, so it has to be true of the element whenever it is true
+   * of the renderer - including the visit that opens in pages before there is
+   * anything engraved, and every engraving after it.
+   */
+  private markPaged(): void {
+    const scroller = this.scroller();
+    if (scroller instanceof HTMLElement) {
+      scroller.dataset['paged'] = String(this.paged);
+    }
+  }
+
+  /**
+   * Re-engraves when the engraver drew past the page it was given.
+   *
+   * It fits systems onto a page by its own reckoning of how tall each one is,
+   * and that reckoning is short of what actually gets drawn - a beam over a
+   * run of thirty-seconds, a ledger line, an inner voice hanging below the
+   * stave. The page is an SVG cut to the size we asked for, so anything past
+   * the bottom is not merely off the window: it is clipped away by the page's
+   * own edge, and the reader sees a system sliced in half with no way to
+   * scroll to the rest of it.
+   *
+   * So the page is asked for again, shorter by exactly what spilled over, and
+   * the system that did not fit moves to the next page where it belongs. The
+   * measurement is the drawing's own bounding box against the page box, so
+   * there is no margin invented here and nothing to tune.
+   *
+   * Once only. A second engraving lays the systems out differently and could
+   * spill again by a hair; chasing that would re-engrave all night, and the
+   * remedy for a hair is not another whole page.
+   */
+  private fitPagesToTheirContent(): void {
+    if (!this.paged || this.osmd === null) {
+      return;
+    }
+    const surplus = this.surplusBelowPage();
+    if (surplus <= 0) {
+      return;
+    }
+    this.pageSurplusPx += surplus;
+    this.applyPageFormat();
+    this.osmd.render();
+  }
+
+  /**
+   * How far the tallest page's drawing runs past the bottom of the page.
+   *
+   * In screen pixels: the box is in the drawing's own units, so it is scaled
+   * by what the page is displayed at. Pages that cannot be measured - no
+   * layout engine, no box - answer nothing, which is the right answer for a
+   * page nobody can see.
+   */
+  private surplusBelowPage(): number {
+    let worst = 0;
+    for (const sheet of this.sheets) {
+      const box = boundingBoxOf(sheet);
+      const page = pageBoxOf(sheet);
+      if (box === null || page === null || page.height <= 0) {
+        continue;
+      }
+      worst = Math.max(worst, overflowBelow(box, page.height) * page.scale);
+    }
+    return worst;
   }
 
   /** Every page the engraver drew, in reading order. */
@@ -534,20 +677,32 @@ export class OsmdScoreRenderer
     };
   }
 
-  /** How tall a page may be, in the pixels the reader can actually see. */
+  /**
+   * How tall a page may be: the room inside the box it is drawn into.
+   *
+   * Asked of that box rather than worked out from the window, because the box
+   * is what the page has to fit and only the box knows what has been reserved
+   * inside it. Subtracting the room kept for the transport bar by hand once
+   * left the strip above the page unaccounted for - eight pixels nobody
+   * owned, enough to push the frame past the screen and put a scrollbar on a
+   * mode whose promise is that there is nothing to scroll.
+   *
+   * Clamped to the screen: outside the reading layout the frame is given a
+   * minimum of one screen and then grows to whatever is engraved in it, so
+   * its own height is the length of the piece rather than the room a page
+   * has.
+   */
   private windowHeight(): number {
-    const box = this.frame()?.getBoundingClientRect();
-    const screen = this.viewportHeight();
-    const height =
-      box === undefined ? 0 : visibleHeightOf({ top: box.top, bottom: screen }, screen);
     const scroller = this.scroller();
-    // The room kept for the transport bar, which is padding on the scrolling
-    // box: a page that used it would put its last system behind the bar.
+    if (!(scroller instanceof HTMLElement)) {
+      return 0;
+    }
+    const box = scroller.getBoundingClientRect();
+    const visible = visibleHeightOf({ top: box.top, bottom: box.bottom }, this.viewportHeight());
+    const style = getComputedStyle(scroller);
     const reserved =
-      scroller instanceof HTMLElement
-        ? Number.parseFloat(getComputedStyle(scroller).paddingBottom) || 0
-        : 0;
-    return Math.max(0, height - reserved);
+      (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0);
+    return Math.max(0, visible - reserved);
   }
 
   /** How tall the screen is, as far as this document can tell. */
@@ -668,11 +823,6 @@ export class OsmdScoreRenderer
       node = node.parentElement;
     }
     return null;
-  }
-
-  /** The box that clips, which is not the one that scrolls inside it. */
-  private frame(): Element | null {
-    return this.container.closest('.score') ?? this.scroller();
   }
 
   /** The box that actually scrolls, which is not the one being drawn in. */

@@ -36,6 +36,24 @@ export function visibleHeightOf(
 }
 
 /**
+ * How far a drawing runs past the bottom of the page it was drawn on.
+ *
+ * The engraver decides how many systems a page holds by its own reckoning of
+ * their heights, and that reckoning comes up short of what is drawn: a beam
+ * over a run of short values, a ledger line, an inner voice hanging below its
+ * stave. The page is cut to the size it was given, so the surplus is not
+ * merely below the fold - it is clipped off, and a system comes out sliced.
+ *
+ * Zero when it fits, which is the only answer that means "leave it alone".
+ */
+export function overflowBelow(
+  drawn: { readonly y: number; readonly height: number },
+  pageHeight: number,
+): number {
+  return Math.max(0, drawn.y + drawn.height - pageHeight);
+}
+
+/**
  * Which way a finger went, once it has gone far enough to have meant it.
  *
  * A page turn and a scroll are the same gesture until one of them commits, so

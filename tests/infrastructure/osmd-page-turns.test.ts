@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
@@ -30,6 +30,15 @@ function withLayout(container: HTMLElement, windowHeight: number): HTMLElement {
     width: 900,
     height: 99_999,
   })) as Element['getBoundingClientRect'];
+  // The box the page is drawn into fills the screen, which is what the
+  // reading layout gives it - and what the page is sized against.
+  scroller.getBoundingClientRect = (() => ({
+    left: 0,
+    top: 0,
+    bottom: windowHeight,
+    width: 900,
+    height: windowHeight,
+  })) as Element['getBoundingClientRect'];
   Object.defineProperty(window, 'innerHeight', { value: windowHeight, configurable: true });
   return scroller;
 }
@@ -59,6 +68,40 @@ function sheets(container: HTMLElement): SVGSVGElement[] {
   return [...container.querySelectorAll('svg')];
 }
 
+/** The box the stylesheet takes the scrollbar away from. */
+function scrollerOf(container: HTMLElement): HTMLElement | null {
+  return container.closest('.score__scroll');
+}
+
+/** Every height the engraver was asked to lay a page out to. */
+function spyOnPageSizes(renderer: OsmdScoreRenderer): number[] {
+  const engraver = (renderer as unknown as {
+    osmd: { setCustomPageFormat: (width: number, height: number) => void };
+  }).osmd;
+  const asked: number[] = [];
+  const original = engraver.setCustomPageFormat.bind(engraver);
+  engraver.setCustomPageFormat = (width: number, height: number): void => {
+    asked.push(height);
+    original(width, height);
+  };
+  return asked;
+}
+
+/**
+ * Makes every page report a drawing taller than its own box.
+ *
+ * jsdom lays nothing out, so the real overflow cannot happen here - but the
+ * measurement is a bounding box against a `viewBox`, and both of those can be
+ * answered without a layout engine.
+ */
+function everyPageDrawsPastItsBox(): void {
+  (SVGSVGElement.prototype as unknown as { getBBox: () => DOMRect }).getBBox =
+    function getBBox(this: SVGSVGElement): DOMRect {
+      const box = Number((this.getAttribute('viewBox') ?? '').split(/[\s,]+/)[3] ?? 0);
+      return { x: 0, y: 0, width: 10, height: box + 50 } as DOMRect;
+    };
+}
+
 /** Which of them the reader can see. */
 function showing(container: HTMLElement): number[] {
   return sheets(container)
@@ -81,6 +124,11 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
 
   beforeAll(() => {
     installCanvasStub();
+  });
+
+  afterEach(() => {
+    // The stub is on the prototype, so it has to come off again.
+    delete (SVGSVGElement.prototype as unknown as { getBBox?: unknown }).getBBox;
   });
 
   beforeEach(async () => {
@@ -113,6 +161,59 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
 
     expect(sheets(fresh).length).toBeGreaterThan(1);
     expect(opening.pages.count).toBe(sheets(fresh).length);
+    // And it says so on the page, which is what takes the scrollbar away.
+    // Set before the first engraving and then never again - coming back here
+    // finds the setting already on and leaves at the top - this was written
+    // nowhere for the rest of the session, and a page that turns could also
+    // be nudged half a system out of place by a finger.
+    expect(scrollerOf(fresh)?.dataset['paged']).toBe('true');
+  });
+
+  it('says on the page when the reader goes back to one column', () => {
+    renderer.setPaged(true);
+    expect(scrollerOf(container)?.dataset['paged']).toBe('true');
+
+    renderer.setPaged(false);
+
+    expect(scrollerOf(container)?.dataset['paged']).toBe('false');
+  });
+
+  it('asks for a page that fits the room inside the box, reserves and all', () => {
+    // Not the window minus what we remembered to subtract. The box keeps
+    // room at both ends - eight pixels above the page and the transport bar's
+    // room below it - and a page sized to the window overflowed by the strip
+    // nobody owned, which the frame then grew to hold and the document
+    // scrolled by.
+    const asked = spyOnPageSizes(renderer);
+    const scroller = container.closest('.score__scroll');
+    if (!(scroller instanceof HTMLElement)) {
+      throw new Error('expected a scrolling box');
+    }
+    scroller.style.paddingTop = '8px';
+    scroller.style.paddingBottom = '92px';
+    scroller.getBoundingClientRect = (() =>
+      ({ left: 0, top: 0, bottom: 260, width: 900, height: 260 })) as Element['getBoundingClientRect'];
+
+    renderer.setPaged(true);
+
+    expect(asked[0]).toBe((260 - 8 - 92) / 10);
+  });
+
+  it('asks for a shorter page when the engraver drew past the one it got', () => {
+    // The engraver fits systems by its own reckoning of their heights, and
+    // that reckoning is short of what it then draws - a beam over a run of
+    // short values, an inner voice hanging below its stave. The page is an
+    // SVG cut to the size we asked for, so the surplus is not below the fold:
+    // it is clipped off, and the last system comes out sliced in half.
+    const asked = spyOnPageSizes(renderer);
+    everyPageDrawsPastItsBox();
+
+    renderer.setPaged(true);
+
+    expect(asked.length).toBeGreaterThan(1);
+    const first = asked[0] ?? 0;
+    const last = asked[asked.length - 1] ?? 0;
+    expect(last).toBeLessThan(first);
   });
 
   it('has the engraver break the music into several pages', () => {

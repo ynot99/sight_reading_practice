@@ -247,6 +247,18 @@ textarea {
   width: 100%;
 }
 
+/*
+ * A page is a block, not a line of text.
+ *
+ * An `<svg>` is inline by default, so it stands on a text baseline and the
+ * line keeps room under it for the tails of letters that are not there. Five
+ * and a half pixels of nothing, below every page - enough to push the frame
+ * past the window and give a mode that turns pages a scrollbar.
+ */
+.score__surface svg {
+  display: block;
+}
+
 .panel {
   display: flex;
   flex-direction: column;
@@ -655,12 +667,22 @@ select {
   gap: 0;
 }
 
+/*
+ * The frame is the window, and not a pixel more.
+ *
+ * `min-height` let it grow to whatever ended up inside - a page, the strip
+ * the engraver leaves above it, the room kept below it for the transport bar
+ * - and anything over a screenful became a scrollbar on the document, in a
+ * mode whose whole promise is that there is nothing to scroll. Fixed, there
+ * is nowhere to grow: what does not fit is clipped by `overflow: hidden`
+ * above, and a page drawn too tall is measured and asked for again shorter.
+ */
 .app.is-focus .score {
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
 }
 
 /* Room for the pill, so the last system is never hidden behind it. */

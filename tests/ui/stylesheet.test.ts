@@ -158,6 +158,28 @@ describe('the stylesheet', () => {
     expect(paged?.body).toMatch(/touch-action\s*:\s*none/);
   });
 
+  it('gives the reading frame the height of the screen, not a minimum', () => {
+    // A minimum lets the frame grow to whatever ends up inside it - a page,
+    // the strip above it, the room kept below it for the transport bar - and
+    // anything over a screenful becomes a scrollbar on the document, in a
+    // mode whose whole promise is that there is nothing to scroll. Fixed,
+    // there is nowhere to grow, and no arithmetic has to keep it in line.
+    const frame = rules().find((rule) => rule.selector === '.app.is-focus .score');
+
+    expect(frame?.body).toMatch(/(^|[^-])height\s*:\s*100dvh/);
+    expect(frame?.body).not.toMatch(/min-height/);
+  });
+
+  it('draws a page as a block, so no text line hangs under it', () => {
+    // An `<svg>` is inline by default: it stands on a baseline, and the line
+    // keeps room under it for the tails of letters that are not there. Five
+    // and a half pixels of nothing under every page, which was most of the
+    // scrollbar that would not go away.
+    const page = rules().find((rule) => rule.selector === '.score__surface svg');
+
+    expect(page?.body).toMatch(/display\s*:\s*block/);
+  });
+
   it('answers strict marking in colour alone', () => {
     // A note struck off its beat is measured the same either way; only what
     // the page paints it changes. Kept here so it cannot quietly grow into a

@@ -2496,6 +2496,17 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      // Every way a performance begins, rather than only the button that
+      // begins most of them. A repeat starts the next round from inside the
+      // last one's `finished`, which the button knows nothing about - so the
+      // transport went back to offering Listen, and Stop went grey, over a
+      // performance that was playing.
+      controller.playbackEvents.on('started', () => {
+        this.describeListening();
+      }),
+    );
+
+    this.subscriptions.push(
       controller.playbackEvents.on('finished', () => {
         this.describeListening();
         // Round again, exactly as a run does. A repeat sign on the page

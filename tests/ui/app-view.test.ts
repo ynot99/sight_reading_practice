@@ -2789,6 +2789,27 @@ describe('AppView', () => {
       expect(runtime.controller.session).toBe(first);
     });
 
+    it('keeps saying a performance is playing when it comes round again', async () => {
+      // The complaint this answers: on repeat, Stop went grey and the button
+      // went back to offering Listen over a performance that was playing. A
+      // repeat starts the next round from inside the last one's `finished`,
+      // which the button that starts most of them knows nothing about.
+      const { view, runtime, metronome } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-repeat').click();
+      element<HTMLButtonElement>('focus-listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runtime.controller.isListening).toBe(true);
+
+      // Round it goes: past the end of the piece and into the next reading.
+      metronome.advanceSubdivisions(40);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.isListening).toBe(true);
+      expect(element('focus-listen').getAttribute('aria-label')).toBe('Pause listening');
+      expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
+    });
+
     it('raises the kept lists without leaving the stand', async () => {
       // Leaving fullscreen to look at a list and coming back is a re-engraving
       // each way, which on a long piece is most of a second twice over.

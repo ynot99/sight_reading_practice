@@ -460,6 +460,9 @@ export function midiToExercise(
     return {
       measureIndex: Math.min(bars - 1, Math.floor(ticks / ticksPerMeasure)),
       offsetTicks: ticks % ticksPerMeasure,
+      // A bracket, because a recording says exactly how long the pedal was
+      // held and the bracket is the notation that says exactly that.
+      line: true,
       type: mark.down ? ('start' as const) : ('stop' as const),
     };
   });

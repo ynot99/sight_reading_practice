@@ -558,7 +558,14 @@ function readMeasureNotes(
       const pedal = child(child(node, 'direction-type'), 'pedal');
       const type = attribute(pedal, 'type');
       if (type === 'start' || type === 'stop') {
-        pedalMarks.push({ measureIndex, offsetTicks: cursor, type });
+        pedalMarks.push({
+          measureIndex,
+          offsetTicks: cursor,
+          type,
+          // A bracket unless the file says otherwise, which is what the format
+          // itself defaults to and what all but a handful of marks are.
+          line: attribute(pedal, 'line') !== 'no',
+        });
       }
       const tempoBpm = readTempoMark(node);
       if (tempoBpm !== null) {

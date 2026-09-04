@@ -575,7 +575,15 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     }
     writer.element('direction', { placement: 'below' }, () => {
       writer.element('direction-type', undefined, () => {
-        writer.leaf('pedal', undefined, { type: mark.type, line: 'no', sign: 'yes' });
+        // As the writer drew it. Rewritten as the sign, a bracket the engraver
+        // lays out in twenty units became a system of ninety-six - four times
+        // the height of any other on the page, and three extra pages behind
+        // it - because it was being asked to draw something nobody wrote.
+        writer.leaf('pedal', undefined, {
+          type: mark.type,
+          line: mark.line ? 'yes' : 'no',
+          sign: mark.line ? 'no' : 'yes',
+        });
       });
       writer.leaf('staff', staffNumber);
     });

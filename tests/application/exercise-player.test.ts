@@ -107,8 +107,8 @@ describe('listening to an exercise', () => {
     const pedalled = {
       ...base,
       pedalMarks: [
-        { measureIndex: 0, offsetTicks: 0, type: 'start' as const },
-        { measureIndex: 1, offsetTicks: 0, type: 'stop' as const },
+        { measureIndex: 0, offsetTicks: 0, type: 'start' as const, line: true },
+        { measureIndex: 1, offsetTicks: 0, type: 'stop' as const, line: true },
       ],
     };
     const { player, metronome, instrument } = rig(pedalled);

@@ -401,6 +401,30 @@ describe('files written by other programs', () => {
     expect(printed).toContain('<breath-mark');
   });
 
+  it('draws the pedal the way the writer drew it', () => {
+    // Notation the writer chose, like the beams and the stems. Rewritten as
+    // the sign, a bracket the engraver lays out in twenty units became a
+    // system of ninety-six - four times the height of any other on the page,
+    // with three extra pages behind it - because it was being asked to draw
+    // something nobody wrote. Two thousand of the reader's own pedal marks
+    // are brackets and fewer than two hundred are signs.
+    const bracket =
+      '<direction placement="below"><direction-type>' +
+      '<pedal type="start" line="yes"/></direction-type><staff>1</staff></direction>' +
+      note('C', 4, 48, 'half') +
+      '<direction placement="below"><direction-type>' +
+      '<pedal type="stop" line="yes"/></direction-type><staff>1</staff></direction>' +
+      note('D', 4, 48, 'half');
+    const { exercise } = importer.read(scoreXml(bracket));
+
+    expect(exercise.pedalMarks.map((mark) => mark.line)).toEqual([true, true]);
+
+    const written = serializer.serialize(exercise);
+    expect(written).toContain('line="yes"');
+    expect(written).not.toContain('sign="yes"');
+    expect(importer.read(written).exercise.pedalMarks).toEqual(exercise.pedalMarks);
+  });
+
   it('follows the damper pedal', () => {
     const pedalled =
       '<direction placement="below"><direction-type>' +
@@ -412,8 +436,9 @@ describe('files written by other programs', () => {
     const { exercise } = importer.read(scoreXml(pedalled));
 
     expect(exercise.pedalMarks).toEqual([
-      { measureIndex: 0, offsetTicks: 0, type: 'start' },
-      { measureIndex: 0, offsetTicks: Duration.HALF.ticks, type: 'stop' },
+      // Written as the "Ped." sign in this file, and kept as one.
+      { measureIndex: 0, offsetTicks: 0, type: 'start', line: false },
+      { measureIndex: 0, offsetTicks: Duration.HALF.ticks, type: 'stop', line: false },
     ]);
 
     const printed = serializer.serialize(exercise);

@@ -354,6 +354,15 @@ export interface PedalMark {
   /** Offset from the start of that measure, in divisions. */
   readonly offsetTicks: number;
   readonly type: 'start' | 'stop';
+  /**
+   * Drawn as a bracket rather than as the word "Ped.".
+   *
+   * Notation the writer chose, like the beams and the stems: the bracket says
+   * exactly how long the pedal is held and the sign only says that it was
+   * pressed. Both are in the reader's own library - two thousand of the one
+   * and under two hundred of the other - so it is carried rather than picked.
+   */
+  readonly line: boolean;
 }
 
 /** A key the score changes to, from the given measure onwards. */

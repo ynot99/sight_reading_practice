@@ -76,18 +76,16 @@ describe('the stylesheet', () => {
   });
 
   it('keeps everything that changes out of the transport row', () => {
-    // What fullscreen says - "Idle", "Counting in... 3", "bar 12 . beat 2.5",
-    // a grade - all changes while the reader plays and all of it is wider
-    // than a button. It is one pill, taken out of the flow, so no width it
-    // takes can move what a thumb is aiming at.
-    const notice = rules().find((rule) => rule.selector === '.focus-notice');
-
-    expect(notice).toBeDefined();
-    expect(notice?.body).toMatch(/position\s*:\s*absolute/);
-    // Anchored past the bar's left edge, so it grows away from it.
-    expect(notice?.body).toMatch(/right\s*:\s*100%/);
-    // Nothing left inside the row that sizes itself to changing text.
+    // Nothing in the row may size itself to text that changes while the
+    // reader plays: a width that moves moves every button beside it, and a
+    // thumb is aiming at one of those. What the page has to say is said in
+    // the middle of it now, or by the page drawing the thing itself.
+    const inTheRow = rules().filter((rule) => rule.selector.startsWith('.focus-bar__'));
+    for (const rule of inTheRow) {
+      expect(rule.body).not.toMatch(/width\s*:\s*max-content/);
+    }
     expect(rules().some((rule) => rule.selector === '.focus-bar__status')).toBe(false);
+    expect(rules().some((rule) => rule.selector === '.focus-notice')).toBe(false);
   });
 
   it('takes the transport away while the music is going', () => {
@@ -106,10 +104,10 @@ describe('the stylesheet', () => {
     expect(stripped?.body).toMatch(/background\s*:\s*transparent/);
     expect(stripped?.body).toMatch(/box-shadow\s*:\s*none/);
     expect(row?.body).toMatch(/display\s*:\s*none/);
-    // The pill, the take recorder and the drawer's handle go with it.
+    // The take recorder and the drawer's handle go with it.
     const hidden = rules().find(
       (rule) =>
-        rule.selector.includes("[data-playing='true']") && rule.selector.includes('.focus-notice'),
+        rule.selector.includes("[data-playing='true']") && rule.selector.includes('.focus-record'),
     );
     expect(hidden?.selector).toContain('.focus-bar__handle');
     expect(hidden?.body).toMatch(/display\s*:\s*none/);
@@ -301,23 +299,6 @@ describe('the stylesheet', () => {
     expect(bare.map((rule) => rule.selector)).toEqual([]);
   });
 
-  it('keeps the two pills off each other where the bar is narrow', () => {
-    // Both are taken out of the row's flow, and on a phone both move above
-    // the bar. Sent to the same corner they are one pill drawn over the
-    // other: the two things fullscreen has to say, and neither readable.
-    const narrow = rules().filter((rule) => /bottom\s*:\s*100%/.test(rule.body));
-    const corners = new Map(
-      narrow.map((rule) => [
-        rule.selector,
-        /left\s*:\s*0/.test(rule.body) ? 'left' : 'right',
-      ]),
-    );
-
-    expect(corners.get('.focus-record')).toBeDefined();
-    expect(corners.get('.focus-notice')).toBeDefined();
-    expect(corners.get('.focus-record')).not.toBe(corners.get('.focus-notice'));
-  });
-
   it('puts the question above the thing it is asking about', () => {
     // The confirm sheet is the only one raised from another. Sharing a
     // stacking level with the list it was opened from put it behind that
@@ -330,22 +311,6 @@ describe('the stylesheet', () => {
 
     expect(level(over)).toBeGreaterThan(level(base));
     expect(HTML).toMatch(/id="sheet-confirm"[^>]*class="[^"]*sheet--over/);
-  });
-
-  it('keeps the notice inside the screen it grows away from', () => {
-    // It is anchored past the bar's left edge and grows leftwards, so an
-    // unbroken line ran off the side and took its own beginning with it -
-    // which is exactly where "Opened <a long piece's name>." starts.
-    const notice = rules().find((rule) => rule.selector === '.focus-notice');
-
-    expect(notice?.body).toMatch(/max-width\s*:/);
-    // Two lines of pill are free: it is out of the row's flow, so its height
-    // moves nothing a thumb is aiming at.
-    expect(notice?.body).not.toMatch(/white-space\s*:\s*nowrap/);
-    // And it must be given a width of its own. Anchored at `right: 100%` the
-    // room to its right is zero, so a box left to shrink to fit collapses to
-    // its longest word - which wrapped "Counting in... 3" onto three lines.
-    expect(notice?.body).toMatch(/width\s*:\s*max-content/);
   });
 
   it('asks the viewport to reach under the safe areas', () => {

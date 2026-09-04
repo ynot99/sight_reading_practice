@@ -689,7 +689,6 @@ select {
   padding: 0;
 }
 
-.focus-bar[data-playing='true'] .focus-notice,
 .focus-bar[data-playing='true'] .focus-record,
 .focus-bar[data-playing='true'] .focus-bar__handle,
 .focus-bar[data-playing='true'] .focus-bar__drawer {
@@ -721,50 +720,6 @@ select {
  * reach for between runs lives in the drawer, which is what keeps the bar to
  * a single line on a tablet held upright.
  */
-/*
- * Beside the bar and out of its flow, which is what lets the bar stay centred
- * on the screen while this grows leftwards. `right: 100%` puts it just past
- * the bar's left edge; absolutely positioned, its width is not the bar's
- * business at all.
- */
-.focus-notice {
-  position: absolute;
-  right: 100%;
-  top: 50%;
-  transform: translateY(-50%);
-  margin-right: 10px;
-  z-index: 21;
-  padding: 6px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 6px 24px rgb(16 24 40 / 18%);
-  color: var(--accent);
-  font-size: 15px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-  /*
-   * As wide as its text wants, up to a limit, and only then wrapping.
-   *
-   * `width: max-content` is doing the real work and is not decoration. This
-   * box is anchored at `right: 100%`, so the room to its right is zero by
-   * construction - and an absolutely positioned box with no width of its own
-   * shrinks to fit *that*, which collapses it to its longest word and wraps
-   * everything else. It was `nowrap` before, which hid the problem by letting
-   * the box overflow the screen instead; taking that away to stop "Opened <a
-   * long piece's name>." running off the side broke "Counting in... 3", which
-   * had always fitted.
-   *
-   * Two lines of pill cost nothing when a message really is that long: it is
-   * out of the transport row's flow, so its height moves nothing.
-   */
-  width: max-content;
-  max-width: min(52ch, 46vw);
-  overflow-wrap: break-word;
-}
 
 /*
  * The keep-a-take pill, on the far side of the bar.
@@ -969,28 +924,6 @@ select {
   min-height: 0;
 }
 
-/*
- * On a narrow screen the pill is put above the bar instead of beside it.
- *
- * Hiding it was the other option and it is the wrong one: where the reader is
- * in the piece, what was just opened, what the last run scored - fullscreen
- * has nowhere else to say any of it. The countdown and the verdict now have
- * the middle of the page, but the middle of the page is a moment and this is
- * what is still there afterwards. Above the bar there is empty page, and the
- * pill still takes no part in the row's width.
- */
-@media (max-width: 560px) {
-  .focus-notice {
-    right: 0;
-    top: auto;
-    bottom: 100%;
-    transform: none;
-    margin-right: 0;
-    margin-bottom: 8px;
-    /* Above the bar there is the whole width, less the take pill beside it. */
-    max-width: 66vw;
-  }
-}
 
 .focus-bar__handle {
   appearance: none;

@@ -163,19 +163,29 @@ Which hand is one button carrying all three answers, cycling both → left →
 right. Both hands are always drawn and the one not being read is dimmed, so
 the control shows its own state instead of naming it.
 
-A pill beside the bar carries everything fullscreen has to say — what was just
-opened, what is happening, how the last run ended. All of that changes while
-the reader plays and all of it is wider than a button, so it is absolutely
-positioned outside the bar's flow: its width can neither move a button a thumb
-is aiming at nor shift the bar off centre. The transport row holds only things
-that do not change size, a lesson four separate indicators taught the hard way.
+**Nothing is said in words beside the bar.** There was a pill there, and one
+by one everything it said turned out to be said better by the page itself:
+which piece opened is printed in the page's corner, which bars are being
+practised is where the markers are standing, where the run starts is where
+the start flag is, what the countdown is on is the number in the middle, and
+the grade is the card. What is left of it — "Idle", "Playing" — the play
+button's own icon says.
 
-It does **not** say where the run has got to. "bar 12 · beat 2.5" changed
-several times a second on music of any density and changed width with it, so
-what it produced was a smear rather than a number anyone could read. The
-cursor is on the note and the bar numbers are printed on the page: the answer
-is already in front of the reader, and more exactly than a line of text can
-give it.
+It did once say where the run had got to, and "bar 12 · beat 2.5" changed
+several times a second on music of any density and changed width with it: a
+smear rather than a number anyone could read. The cursor is on the note and
+the bar numbers are printed on the page.
+
+The transport row still holds only things that do not change size, which is
+the rule that pill existed to keep — a lesson four separate indicators taught
+the hard way.
+
+A **failure** is said in the middle of the page, over the music, where every
+other failure is said: a file that will not open, a piece no longer stored.
+What a file merely *lost* on the way in — a feature the importer dropped —
+goes to the console instead. Those warnings are worth keeping, since several
+faults here were found through one, and they are not worth a line across the
+music.
 
 **While the music is going the interface goes away.** The bar loses its own
 ground and everything in it but two buttons — pause and stop — which are left
@@ -187,13 +197,13 @@ counts as playing, the look being reading. The markup marks what *stays*
 rather than what goes, so a button added to that row is out of the way by
 default.
 
-**The middle of the page** is for the two things the pill is the wrong shape
-for. A countdown — the look before a run, then the metronome's count-in — is
+**The middle of the page** is where anything that has to be said in words is
+said. A countdown — the look before a run, then the metronome's count-in — is
 drawn there huge and faint, over the music rather than instead of it: what
 the reader is doing while it runs is reading the first bar. And the verdict
 on a finished run goes there as a panel, with the breakdown and **Drill the
-worst bars** in it, because the panel that used to hold them is not on the
-page in fullscreen at all. A tap puts it away, and so does starting anything.
+worst bars** in it. So does a failure. A tap puts it away, and so does
+starting anything.
 Each number is said once: the status lines say *what* is happening, the
 middle of the page says how much of it is left.
 

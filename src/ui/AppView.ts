@@ -26,7 +26,6 @@ import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
-import type { ChosenPassage } from '../application/PracticeController.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { measureCount } from '../domain/model/Exercise.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
@@ -116,35 +115,8 @@ export function isRealTendency(meanMs: number, spreadMs: number, presses: number
   return Math.abs(meanMs) > 2 * standardError;
 }
 
-/**
- * How long the pill holds a message that is not about the run.
- *
- * Long enough to read a sentence about which bars are being practised, short
- * enough that a glance during the next run finds the bar and not the sentence.
- */
-const NOTICE_HOLD_MS = 6_000;
-
 /** Written out rather than escaped inline, where it has been mangled before. */
 const NEWLINE = String.fromCharCode(10);
-
-/**
- * The run's timing tendency, for the pill, or nothing worth saying.
- *
- * In fullscreen the report is not on the page, so a reader who feels they are
- * being marked late has no number to point at - and a feeling is the one
- * thing that cannot be acted on. Shown only when it is large enough to be a
- * habit rather than noise, and only when the presses were steady enough for a
- * single number to describe them.
- */
-function timingTail(report: PerformanceReport): string {
-  const { deviations, meanDeviationMs, deviationSpreadMs } = report.timing;
-  if (deviations.length < MIN_PRESSES_TO_MEASURE || Math.abs(meanDeviationMs) < 15) {
-    return '';
-  }
-  const drift = Math.round(meanDeviationMs);
-  const steady = isRealTendency(meanDeviationMs, deviationSpreadMs, deviations.length);
-  return ` · ${drift > 0 ? '+' : ''}${drift} ms${steady ? '' : ' ±'}`;
-}
 
 /** How often the take slider is moved while something is sounding. */
 const TAKE_TICK_MS = 80;
@@ -233,17 +205,6 @@ function describeBarRange(controller: AppRuntime['controller']): string {
     `   passage: ${controller.settings.rangeFromBar ?? '-'}..${controller.settings.rangeToBar ?? '-'}` +
     `   steps: ${controller.beginsAt}..`
   );
-}
-
-/** What a drag just did, in the reader's terms rather than in settings. */
-function describePassage(passage: ChosenPassage): string {
-  if (passage.fromBar === null) {
-    return 'Practising the whole piece.';
-  }
-  if (passage.toBar === null) {
-    return `Practising from bar ${passage.fromBar}.`;
-  }
-  return `Practising bars ${passage.fromBar}-${passage.toBar}. Drag a marker off the edge for more.`;
 }
 
 /** An empty box means "no limit", which is a choice and not a missing value. */
@@ -532,15 +493,6 @@ function readSampleLoading(value: string): SampleLoading {
 const MIN_BARS = 1;
 const MAX_BARS = 32;
 
-const STATUS_LABELS: Readonly<Record<SessionStatus, string>> = {
-  idle: 'Idle',
-  'counting-in': 'Counting in…',
-  running: 'Playing',
-  paused: 'Paused',
-  completed: 'Finished',
-  aborted: 'Stopped',
-};
-
 const MIDI_STATUS_LABELS: Readonly<Record<MidiConnectionStatus, string>> = {
   idle: 'MIDI: not connected',
   connecting: 'MIDI: connecting…',
@@ -599,11 +551,9 @@ export class AppView {
   private sessionSubscriptions: Unsubscribe[] = [];
   private audioFeedbackEnabled = true;
   private previewTimer: ReturnType<typeof setInterval> | null = null;
-  private lastStatus: SessionStatus = 'idle';
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
   /** Pending return of the pill to what the run is saying. */
-  private noticeRestore: ReturnType<typeof setTimeout> | null = null;
   /** Which take the transport is showing, playing or not. */
   private selectedTakeId: string | null = null;
   /** Follows a sounding take, so the slider says where it has got to. */
@@ -633,7 +583,6 @@ export class AppView {
     focusPlayIcon: SVGPathElement;
     focusHandle: HTMLButtonElement;
     focusHealth: HTMLElement;
-    focusNotice: HTMLElement;
     focusListenIcon: SVGPathElement;
     focusHands: HTMLButtonElement;
     focusSurvival: HTMLButtonElement;
@@ -785,7 +734,6 @@ export class AppView {
       focusPlayIcon: requireElement(doc, 'focus-play-icon'),
       focusHandle: requireElement(doc, 'focus-handle'),
       focusHealth: requireElement(doc, 'focus-health'),
-      focusNotice: requireElement(doc, 'focus-notice'),
       focusListenIcon: requireElement(doc, 'focus-listen-icon'),
       focusHands: requireElement(doc, 'focus-hands'),
       focusSurvival: requireElement(doc, 'focus-survival'),
@@ -954,10 +902,6 @@ export class AppView {
       clearTimeout(this.silenceWatch);
       this.silenceWatch = null;
     }
-    if (this.noticeRestore !== null) {
-      clearTimeout(this.noticeRestore);
-      this.noticeRestore = null;
-    }
     this.runtime.takePlayer.stop();
     for (const unsubscribe of [...this.subscriptions, ...this.sessionSubscriptions]) {
       unsubscribe();
@@ -994,13 +938,16 @@ export class AppView {
       // afterwards the piece is simply there.
       await this.runtime.scores.keep(exercise, Date.now());
       this.renderScores();
-      const dropped = warnings.map((warning) => warning.detail).join(' ');
-      this.showImportNotice(
-        dropped === '' ? `Opened ${exercise.title}.` : `Opened ${exercise.title}. ${dropped}`,
-      );
+      // What the file did not bring with it goes to the console and no
+      // further. It is worth keeping - several faults here were found through
+      // one of these - and it is not worth a line across the music: the page
+      // says which piece opened by printing its name in the corner.
+      for (const warning of warnings) {
+        reportToTheConsole(`Opening ${exercise.title}:`, warning.detail);
+      }
     } catch (error) {
       reportToTheConsole('Could not open the chosen file.', error);
-      this.showImportNotice(
+      this.sayInTheMiddle(
         error instanceof Error ? `Could not open that file. ${error.message}` : 'Could not open that file.',
       );
     }
@@ -1049,16 +996,15 @@ export class AppView {
     try {
       const exercise = await this.runtime.scores.open(id);
       if (exercise === null) {
-        this.showImportNotice(`${title} is no longer stored on this device.`);
+        this.sayInTheMiddle(`${title} is no longer stored on this device.`);
         this.renderScores();
         return;
       }
       await this.runtime.controller.openScore(exercise);
       this.syncControlsFromSettings();
-      this.showImportNotice(`Opened ${exercise.title}.`);
     } catch (error) {
       reportToTheConsole(`Could not open ${title}.`, error);
-      this.showImportNotice(
+      this.sayInTheMiddle(
         error instanceof Error ? `Could not open ${title}. ${error.message}` : `Could not open ${title}.`,
       );
     }
@@ -1103,7 +1049,6 @@ export class AppView {
     // reader back on the first page - which is what dragging a marker on
     // page three felt like.
     this.syncControlsFromSettings();
-    this.showImportNotice(describePassage(passage));
   }
 
   /**
@@ -1131,11 +1076,6 @@ export class AppView {
       return;
     }
     this.showPassageMarkers();
-    this.showImportNotice(
-      step === 0
-        ? 'Starting from the top.'
-        : `Starting at bar ${controller.barNumber(measureIndex)}.`,
-    );
   }
 
   /**
@@ -1172,17 +1112,13 @@ export class AppView {
       return;
     }
     if (rangeFromBar === null) {
-      this.narrowTo(bar, null, `Practising from bar ${bar}.`);
+      this.narrowTo(bar, null);
       return;
     }
     if (rangeToBar === null) {
       // Either way round, because a reader who holds behind the near end
       // meant the two bars they pointed at and not an empty passage.
-      this.narrowTo(
-        Math.min(rangeFromBar, bar),
-        Math.max(rangeFromBar, bar),
-        `Practising bars ${Math.min(rangeFromBar, bar)}–${Math.max(rangeFromBar, bar)}.`,
-      );
+      this.narrowTo(Math.min(rangeFromBar, bar), Math.max(rangeFromBar, bar));
       return;
     }
     // All three are set, so this is a fresh start rather than a fourth mark.
@@ -1210,15 +1146,21 @@ export class AppView {
     const last = first + Math.max(0, measureCount(exercise) - 1);
     const { rangeFromBar, rangeToBar } = controller.settings;
     const bar = end === 'from' ? (rangeFromBar ?? first) : (rangeToBar ?? last);
-    this.narrowTo(bar, bar, `Practising bar ${bar} alone.`);
+    this.narrowTo(bar, bar);
   }
 
-  /** Puts the passage where a gesture asked for it, and says so. */
-  private narrowTo(fromBar: number, toBar: number | null, message: string): void {
+  /**
+   * Puts the passage where a gesture asked for it.
+   *
+   * Nothing is said about it in words. The markers are drawn on the bars they
+   * were just put on, which is the same answer given where the reader is
+   * already looking - and given by the thing itself rather than by a sentence
+   * about it.
+   */
+  private narrowTo(fromBar: number, toBar: number | null): void {
     this.runtime.controller.updateSettings({ rangeFromBar: fromBar, rangeToBar: toBar });
     this.passageMarkersWanted = true;
     this.syncControlsFromSettings();
-    this.showImportNotice(message);
   }
 
   private showPassageMarkers(): void {
@@ -1247,37 +1189,6 @@ export class AppView {
     this.runtime.renderer.showStart(
       controller.beginsAt > 0 && !atThePassageStart ? begins.measureIndex : null,
     );
-  }
-
-  /**
-   * Says something that is not about the run itself.
-   *
-   * In both places, because the notice lives outside the header and
-   * fullscreen hides it - so choosing a passage by dragging a marker, which is
-   * a fullscreen gesture above all, was answered on a line of the page the
-   * reader could not see. The pill says it there instead, and gives it back
-   * to the run's own status afterwards.
-   */
-  private showImportNotice(message: string): void {
-    this.showNotice(message);
-    this.restoreNoticeSoon();
-  }
-
-  /**
-   * Hands the pill back to whatever it was saying.
-   *
-   * A passage is chosen between runs, so the pill is idle and the message can
-   * sit there; but leaving it would mean the next glance mid-run read a
-   * sentence about bars instead of the bar being played.
-   */
-  private restoreNoticeSoon(): void {
-    if (this.noticeRestore !== null) {
-      clearTimeout(this.noticeRestore);
-    }
-    this.noticeRestore = setTimeout(() => {
-      this.noticeRestore = null;
-      this.renderFocusStatus(STATUS_LABELS[this.lastStatus]);
-    }, NOTICE_HOLD_MS);
   }
 
   /**
@@ -1792,12 +1703,6 @@ export class AppView {
       controller.beginAtTheStart();
       controller.cursorToStart();
       this.showPassageMarkers();
-      this.showNotice(
-        controller.settings.rangeFromBar === null
-          ? 'Back to the beginning'
-          : `Back to bar ${controller.settings.rangeFromBar}`,
-      );
-      this.restoreNoticeSoon();
     });
 
     this.listen(this.el.focusWait, 'click', () => {
@@ -1921,10 +1826,6 @@ export class AppView {
 
     let left = seconds;
     const show = (): void => {
-      // The phase in words, the count in figures, and each said once: the
-      // status lines say what is happening and the middle of the page says
-      // how much of it is left.
-      this.renderFocusStatus('Look at it…');
       this.showCount(left);
     };
     show();
@@ -2420,29 +2321,6 @@ export class AppView {
     this.el.focusWhole.disabled = !narrowed || this.isPlaying;
   }
 
-  /**
-   * The pill beside the bar: what just happened, or what is about to.
-   *
-   * Kept off the transport row on purpose. "Counting in… 3" and "B · 84%" are
-   * the widest things this ever says, and out of the bar's flow their width
-   * cannot move a button a thumb is aiming at, nor shift the bar off centre.
-   */
-  private showNotice(text: string): void {
-    this.el.focusNotice.textContent = text;
-  }
-
-  /**
-   * The pill beside the bar, which is the whole of what fullscreen says.
-   *
-   * Where the run is, what it is counting, how it ended: all of it changes
-   * while the reader plays, and all of it is wider than a button. Kept out of
-   * the transport row entirely, so nothing it says can move what they are
-   * reaching for.
-   */
-  private renderFocusStatus(text: string): void {
-    this.el.focusNotice.textContent = text;
-  }
-
   private bindControllerEvents(): void {
     const { controller } = this.runtime;
 
@@ -2547,19 +2425,11 @@ export class AppView {
 
     this.sessionSubscriptions.push(
       session.events.on('statusChanged', ({ status }) => {
-        if (status === 'counting-in') {
-          // The first beat is a tick away, and an empty pill in the meantime
-          // reads as something broken rather than as something about to start.
-          this.showNotice('Counting in…');
-        }
-        this.renderFocusStatus(STATUS_LABELS[status]);
         this.updateButtons(status);
       }),
-      // The number itself and nowhere else. The pill and the desk's status
-      // line both said "Counting in… 3" as well, which is the same count in
-      // three places - and the two of them are in the corner of an eye that
-      // is on the music. They keep the plain "Counting in…" the status gives
-      // them, which says what is happening without counting it.
+      // The number itself and nowhere else. It was said in words beside the
+      // bar as well, which is the same count twice - and the words were in
+      // the corner of an eye that is on the music.
       session.events.on('countIn', ({ beatsRemaining }) => {
         this.showCount(beatsRemaining);
       }),
@@ -2587,10 +2457,6 @@ export class AppView {
         this.followMusic(at);
       }),
       session.events.on('finished', ({ report, score }) => {
-        // Twice over, and deliberately: the card is the moment, dismissed as
-        // soon as it has been read, and the pill is what is still there
-        // afterwards when the reader wants to check what they got.
-        this.showNotice(`${score.grade} · ${percent(score.overall)}${timingTail(report)}`);
         this.renderResult(score, report);
         // The run just measured what it measured; the delay control can say
         // so, and offer to settle itself from it.
@@ -3663,7 +3529,6 @@ export class AppView {
   }
 
   private updateButtons(status: SessionStatus): void {
-    this.lastStatus = status;
     const running = status === 'running' || status === 'counting-in';
     const paused = status === 'paused';
     // What is being practised is settled before a run and not during one: a

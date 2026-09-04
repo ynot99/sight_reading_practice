@@ -401,7 +401,6 @@ describe('AppView', () => {
 
       // Nothing is running yet: the look is the point, and it ends by itself.
       expect(runtime.controller.session).toBeNull();
-      expect(element('focus-notice').textContent).toContain('Look at it');
 
       vi.advanceTimersByTime(3000);
       expect(runtime.controller.session).not.toBeNull();
@@ -701,7 +700,10 @@ describe('AppView', () => {
     expect(session?.status).toBe('completed');
   });
 
-  it('opens a MusicXML file and says what it lost', async () => {
+  it('opens a MusicXML file and logs what it lost', async () => {
+    // The warnings are worth keeping - several faults here were found through
+    // one - and not worth a line across the music, so they go to the console.
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { view, runtime } = createRig();
     await view.initialize();
 
@@ -715,8 +717,9 @@ describe('AppView', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(runtime.controller.openedExercise?.title).toBe('Borrowed');
-    expect(element('focus-notice').hidden).toBe(false);
-    expect(element('focus-notice').textContent).toContain('Borrowed');
+    // Nothing was lost from this one, so nothing was said about it either.
+    expect(logged).not.toHaveBeenCalled();
+    logged.mockRestore();
   });
 
   it('puts the passage boxes back when a file replaces what was on the stand', async () => {
@@ -765,7 +768,10 @@ describe('AppView', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(runtime.controller.openedExercise).toBeNull();
-    expect(element('focus-notice').textContent).toContain('Could not open');
+    // Said in the middle of the page, over the music: the one place a reader
+    // is certain to be looking, and where every other failure is said.
+    expect(element('score-verdict').hidden).toBe(false);
+    expect(element('result').textContent).toContain('Could not open');
     // And somewhere it can be copied from. The notice says one sentence,
     // which is what a reader needs mid-practice - but it cannot be selected
     // on a tablet and carries no stack, so a fault worth reporting had to be
@@ -832,7 +838,6 @@ describe('AppView', () => {
 
     const session = runtime.controller.session;
     expect(session?.status).toBe('running');
-    expect(element('focus-notice').textContent).toBe('Playing');
     expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
     expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
 
@@ -875,8 +880,6 @@ describe('AppView', () => {
     expect(element('score-verdict').hidden).toBe(false);
     expect(element('result').textContent).toContain('Overall');
     // The pill carries the verdict once there is one; the status it was
-    // saying before is what the verdict replaces.
-    expect(element('focus-notice').textContent).toMatch(/^[A-F] · \d+%/);
   });
 
   it('reports which way a run leaned, not only how far off it was', async () => {
@@ -971,9 +974,6 @@ describe('AppView', () => {
       expect(element('score-card').hidden).toBe(false);
 
       // And nowhere else counts it. The pill and the desk's status line say
-      // what is happening; the number is asked for once and answered once.
-      expect(element('focus-notice').textContent).toBe('Counting in…');
-      expect(element('focus-notice').textContent).toBe('Counting in…');
 
       // And it is gone by the time there is a bar to play.
       metronome.advanceBeats(8);
@@ -1741,7 +1741,6 @@ describe('AppView', () => {
       expect(runtime.controller.settings.rangeToBar).toBe(3);
       // The boxes are the same value seen at the desk, so they follow.
       expect(element<HTMLInputElement>('focus-from').value).toBe('2');
-      expect(element('focus-notice').textContent).toContain('bars 2-3');
     });
 
     it('writes which bars are on the page into the judging log', async () => {
@@ -1775,7 +1774,6 @@ describe('AppView', () => {
       rig.renderer.holdBar(2);
 
       expect(rig.runtime.controller.beginsAt).toBe(later?.index);
-      expect(element('focus-notice').textContent).toContain('bar 3');
       // And the run actually begins there rather than at the top.
       rig.runtime.controller.updateSettings({ countInBars: 0 });
       rig.runtime.controller.start();
@@ -2059,20 +2057,6 @@ describe('AppView', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(runtime.controller.settings.rangeFromBar).toBeNull();
-      expect(element('focus-notice').textContent).toContain('whole piece');
-    });
-
-    it('says which bars it chose in fullscreen, where the notice is hidden', async () => {
-      // Dragging a marker is a fullscreen gesture above all - the bar boxes
-      // are out of reach at the stand. The answer went to a line of the page
-      // that fullscreen hides, so the gesture appeared to do nothing at all.
-      const { view, renderer } = createRig();
-      await view.initialize();
-
-      renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      expect(element('focus-notice').textContent).toContain('bars');
     });
 
     it('cannot be taken hold of while a run is going', async () => {
@@ -2972,7 +2956,6 @@ describe('AppView', () => {
 
         element<HTMLButtonElement>('focus-play').click();
 
-        expect(element('focus-notice').textContent).not.toMatch(/beat/);
         expect(document.getElementById('position')).toBeNull();
       });
 
@@ -3185,22 +3168,6 @@ describe('AppView', () => {
       );
     });
 
-    it('says the count-in and the verdict on a pill of its own', async () => {
-      const { view, runtime } = createRig();
-      await view.initialize();
-      runtime.controller.updateSettings({ countInBars: 1, modeId: FLOW_MODE_ID });
-      await runtime.controller.reloadExercise();
-      expect(element('focus-notice').textContent).not.toContain('Counting in');
-
-      runtime.controller.start();
-
-      // The widest thing the transport ever says, kept out of the row a thumb
-      // is aiming at: absolutely positioned beside the bar, its width cannot
-      // move the buttons nor shift the bar off centre.
-      expect(element('focus-notice').textContent).toContain('Counting in');
-      expect(element('focus-notice').parentElement?.id).toBe('focus-bar');
-    });
-
     it('opens and closes the drawer from its handle', async () => {
       const { view } = createRig();
       await view.initialize();
@@ -3325,12 +3292,10 @@ describe('AppView', () => {
       expect(element('focus-listen-icon').getAttribute('d')).not.toBe(speaking);
     });
 
-    it('says what is happening, then the grade, without the side panel', async () => {
+    it('gives the grade in the middle of the page, there being no panel', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-play').click();
-
-      expect(element('focus-notice').textContent).toBe('Playing');
 
       const session = runtime.controller.session;
       let guard = 400;
@@ -3346,9 +3311,11 @@ describe('AppView', () => {
       }
 
       expect(session?.status).toBe('completed');
-      // The verdict goes to the pill beside the bar, where its width is
-      // nobody's business; the status says only where the run got to.
-      expect(element('focus-notice').textContent).toMatch(/^[A-F] · \d+%$/);
+      // The whole report, in the middle of the page. There is no side panel
+      // to put it in and the pill that used to carry two words of it is gone.
+      expect(element('score-verdict').hidden).toBe(false);
+      expect(element('result').textContent).toMatch(/[A-F]/);
+      expect(element('result').textContent).toContain('Overall');
     });
 
     it('loads a new exercise from the pill', async () => {

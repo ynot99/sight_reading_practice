@@ -784,6 +784,56 @@ select {
 }
 
 /*
+ * While the music is going, the bar stops being a bar.
+ *
+ * Its own chrome goes - the border, the ground, the blur, the shadow, the
+ * padding - and so does everything in it except the two buttons marked
+ * `data-mid-run`: pause and stop. What is left is those two, floating over
+ * the score in the place the transport was, so a thumb that knows where to
+ * go still finds them.
+ *
+ * Marking what stays rather than what goes is the safe way round: a button
+ * added to this row is hidden mid-run until someone says otherwise, which is
+ * the right default for a row whose promise is that it gets out of the way.
+ *
+ * The health bar is not chrome and stays. It is the reader's own state in a
+ * survival run, changing as they play - the thing they would look up for.
+ */
+.focus-bar[data-playing='true'] {
+  border-color: transparent;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.focus-bar[data-playing='true'] .focus-notice,
+.focus-bar[data-playing='true'] .focus-record,
+.focus-bar[data-playing='true'] .focus-bar__handle,
+.focus-bar[data-playing='true'] .focus-bar__drawer {
+  display: none;
+}
+
+.focus-bar[data-playing='true'] .focus-bar__row > *:not([data-mid-run]) {
+  display: none;
+}
+
+/*
+ * Floating alone, the two need the standing they used to borrow from the bar:
+ * a shadow to lift them off the staves and a ground solid enough to read
+ * against notation rather than against the page.
+ */
+.focus-bar[data-playing='true'] .focus-bar__row > [data-mid-run] {
+  box-shadow: 0 6px 24px rgb(16 24 40 / 22%);
+  background: var(--surface);
+}
+
+.focus-bar[data-playing='true'] .focus-bar__row > [data-mid-run].focus-bar__button--primary {
+  background: var(--accent);
+}
+
+/*
  * The grab handle, and the whole of what says there is more underneath.
  *
  * One row of transport is all a reader needs at the stand; everything they

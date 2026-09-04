@@ -95,8 +95,8 @@ set, since following along is most of the value — and put back the way they
 had it when the performance ends.
 
 The fullscreen bar holds the whole transport on one row, as icons: play/pause
-as a single button, stop, listen, a new exercise, the way out, where you are,
-and the pace. A drawer under it — opened by its handle or by dragging up —
+as a single button, stop, listen, a new exercise, the way out, and the pace.
+A drawer under it — opened by its handle or by dragging up —
 holds what you *change* rather than what you press mid-run: note size, which
 hand, the cursor, the marks for what you played, survival.
 
@@ -104,13 +104,29 @@ Which hand is one button carrying all three answers, cycling both → left →
 right. Both hands are always drawn and the one not being read is dimmed, so
 the control shows its own state instead of naming it.
 
-A pill beside the bar carries everything fullscreen has to say — where the run
-is, what is happening, how it ended — and it is always there. All of that
-changes while the reader plays and all of it is wider than a button, so it is
-absolutely positioned outside the bar's flow: its width can neither move a
-button a thumb is aiming at nor shift the bar off centre. The transport row
-holds only things that do not change size, a lesson four separate indicators
-taught the hard way.
+A pill beside the bar carries everything fullscreen has to say — what was just
+opened, what is happening, how the last run ended. All of that changes while
+the reader plays and all of it is wider than a button, so it is absolutely
+positioned outside the bar's flow: its width can neither move a button a thumb
+is aiming at nor shift the bar off centre. The transport row holds only things
+that do not change size, a lesson four separate indicators taught the hard way.
+
+It does **not** say where the run has got to. "bar 12 · beat 2.5" changed
+several times a second on music of any density and changed width with it, so
+what it produced was a smear rather than a number anyone could read. The
+cursor is on the note and the bar numbers are printed on the page: the answer
+is already in front of the reader, and more exactly than a line of text can
+give it.
+
+**While the music is going the interface goes away.** The bar loses its own
+ground and everything in it but two buttons — pause and stop — which are left
+floating over the score where the transport was. A reader mid-piece has their
+hands on the keys and their eyes on the page, so anything else there is
+something to look past. A pause does not bring it back and stopping does,
+which is the whole difference between the two buttons; the look before a run
+counts as playing, the look being reading. The markup marks what *stays*
+rather than what goes, so a button added to that row is out of the way by
+default.
 
 **The middle of the page** is for the two things the pill is the wrong shape
 for. A countdown — the look before a run, then the metronome's count-in — is
@@ -152,8 +168,7 @@ letters beside the score and a reader who loses their place reads those instead
 of the stave. The whole row goes rather than its text: "Play now —" reads as
 *nothing is due*, and the count of notes left standing would still be half an
 answer. The note log stops naming the rest of an unfinished chord for the same
-reason. Bar and beat stay — knowing where you are is orientation, not an
-answer.
+reason.
 
 **Survival** is the game mode: a bar drains while the music runs and fills
 when you get a step right, and running out ends the run. It is deliberately

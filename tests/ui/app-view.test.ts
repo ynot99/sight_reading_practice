@@ -963,6 +963,77 @@ describe('AppView', () => {
     });
   });
 
+  describe('getting out of the way while the music is going', () => {
+    it('says so on the bar, and stops saying it when the run stops', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      expect(element('focus-bar').dataset['playing']).toBe('false');
+
+      element<HTMLButtonElement>('start').click();
+      expect(element('focus-bar').dataset['playing']).toBe('true');
+
+      element<HTMLButtonElement>('stop').click();
+      expect(element('focus-bar').dataset['playing']).toBe('false');
+    });
+
+    it('keeps out of the way through a pause', async () => {
+      // A pause is a place held inside a reading, and the reading is still
+      // what is happening. Stopping is what says it is over, which is the
+      // whole difference between the two buttons left on the page.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('start').click();
+
+      element<HTMLButtonElement>('pause').click();
+
+      expect(runtime.controller.session?.status).toBe('paused');
+      expect(element('focus-bar').dataset['playing']).toBe('true');
+    });
+
+    it('goes for the look as well, that being reading too', async () => {
+      vi.useFakeTimers();
+      try {
+        const { view, runtime } = createRig();
+        await view.initialize();
+        runtime.controller.updateSettings({ previewSeconds: 3 });
+
+        element<HTMLButtonElement>('start').click();
+        // No session yet - the look has no status to change, so it has to say
+        // this for itself.
+        expect(runtime.controller.session).toBeNull();
+        expect(element('focus-bar').dataset['playing']).toBe('true');
+
+        vi.advanceTimersByTime(3000);
+        expect(element('focus-bar').dataset['playing']).toBe('true');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('shuts the drawer rather than only hiding it', async () => {
+      // Hidden, it would come back open when the music stopped - a drawer the
+      // reader never opened, over the score they had just been graded on.
+      const { view } = createRig();
+      await view.initialize();
+      view.setDrawerOpen(true);
+      expect(element('focus-bar').dataset['open']).toBe('true');
+
+      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('stop').click();
+
+      expect(element('focus-bar').dataset['open']).toBe('false');
+    });
+
+    it('leaves exactly the two buttons a reader needs mid-piece', () => {
+      // Marked on the markup rather than counted in script: the stylesheet
+      // hides everything in the row without the mark, so this is the list.
+      const row = element('focus-row');
+      const kept = [...row.children].filter((child) => child.hasAttribute('data-mid-run'));
+
+      expect(kept.map((child) => child.id)).toEqual(['focus-play', 'focus-stop']);
+    });
+  });
+
   it('pushes control changes into the settings', async () => {
     const { view, runtime } = createRig();
     await view.initialize();
@@ -2704,10 +2775,16 @@ describe('AppView', () => {
         expect(element<HTMLInputElement>('range-from').value).toBe('2');
       });
 
-      it('counts by the score\'s own bar numbers, not from one again', async () => {
-        // The complaint this answers: a passage is a score in its own right by
-        // the time it reaches the page, so the reader was told they were at
-        // bar 1 of a piece whose bar 1 they had cut away.
+      it('does not spell out the place a cursor is already standing on', async () => {
+        // "bar 12 · beat 2.5" changed several times a second on music of any
+        // density, and its width changed with it: what it produced was a
+        // smear, not a number anyone could read. The cursor is on the note
+        // and the bar numbers are printed - the answer is in front of the
+        // reader, more exactly than a line of text could give it.
+        //
+        // That it counted by the score's own numbering rather than from one
+        // again is still the rule, and still tested: see `barNumber` in
+        // tests/application/practice-controller.test.ts.
         const { view } = createRig();
         await view.initialize();
         const from = element<HTMLInputElement>('focus-from');
@@ -2717,8 +2794,8 @@ describe('AppView', () => {
 
         element<HTMLButtonElement>('start').click();
 
-        expect(element('focus-notice').textContent).toMatch(/^bar 2 · beat /);
-        expect(element('position').textContent).toMatch(/^bar 2 · beat /);
+        expect(element('focus-notice').textContent).not.toMatch(/beat/);
+        expect(document.getElementById('position')).toBeNull();
       });
 
       it('gives the whole piece back', async () => {
@@ -3080,14 +3157,14 @@ describe('AppView', () => {
       expect(element('focus-listen-icon').getAttribute('d')).not.toBe(speaking);
     });
 
-    it('shows where you are, then the grade, without the side panel', async () => {
+    it('says what is happening, then the grade, without the side panel', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus').click();
       await Promise.resolve();
       element<HTMLButtonElement>('focus-play').click();
 
-      expect(element('focus-notice').textContent).toContain('bar 1');
+      expect(element('focus-notice').textContent).toBe('Playing');
 
       const session = runtime.controller.session;
       let guard = 400;

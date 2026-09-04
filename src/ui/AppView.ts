@@ -598,7 +598,6 @@ export class AppView {
   private previewTimer: ReturnType<typeof setInterval> | null = null;
   private focusMode: FocusMode | null = null;
   private lastStatus: SessionStatus = 'idle';
-  private lastPosition = '';
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
   /** Pending return of the pill to what the run is saying. */
@@ -670,7 +669,6 @@ export class AppView {
     midiInput: HTMLSelectElement;
     midiHint: HTMLElement;
     sessionStatus: HTMLElement;
-    position: HTMLElement;
     progress: HTMLProgressElement;
     result: HTMLElement;
     drill: HTMLButtonElement;
@@ -841,7 +839,6 @@ export class AppView {
       midiInput: requireElement(doc, 'midi-input'),
       midiHint: requireElement(doc, 'midi-hint'),
       sessionStatus: requireElement(doc, 'session-status'),
-      position: requireElement(doc, 'position'),
       progress: requireElement(doc, 'progress'),
       result: requireElement(doc, 'result'),
       drill: requireElement(doc, 'drill'),
@@ -1243,9 +1240,7 @@ export class AppView {
     }
     this.noticeRestore = setTimeout(() => {
       this.noticeRestore = null;
-      this.renderFocusStatus(
-        this.lastPosition === '' ? STATUS_LABELS[this.lastStatus] : this.lastPosition,
-      );
+      this.renderFocusStatus(STATUS_LABELS[this.lastStatus]);
     }, NOTICE_HOLD_MS);
   }
 
@@ -1951,6 +1946,10 @@ export class AppView {
       this.cancelPreview();
       this.runtime.controller.start();
     }, 1000);
+    // After the timer exists, not before: the look is what makes this a
+    // playing state and there is no session to read it off, so asking any
+    // earlier gets the answer for a page with nothing happening on it.
+    this.applyPlayingChrome();
   }
 
   /**
@@ -2011,23 +2010,21 @@ export class AppView {
   }
 
   /**
-   * Says where the music has reached, whoever is playing it.
+   * Keeps the page under the music, whoever is playing it.
    *
-   * A run and a performance answer the same question and the page has one
-   * place to put the answer. Wired to a run alone, the pill went blank the
-   * moment the machine took over - which is exactly when a reader following
-   * along wants to know where they are.
+   * It used to say the place in words as well - "bar 12 · beat 2.5" - in the
+   * pill and again in the panel. On music of any density that line changes
+   * several times a second and its width changes with it, so what it
+   * actually produced was a smear too unstable to read a number out of. The
+   * cursor is already on the note and the bar numbers are already printed:
+   * the reader has the answer in front of them, more precisely than a line
+   * of text could give it.
    */
-  private showPosition({ measureIndex, beat }: PositionEvent): void {
+  private followMusic({ measureIndex }: PositionEvent): void {
     // Turned once, when the music has actually left the page, rather than
     // scrolled a little on every beat. That is what a page turn is for: the
     // reader looks at one thing until it is finished with.
     this.runtime.renderer.showMeasure(measureIndex);
-    this.lastPosition = `bar ${this.runtime.controller.barNumber(measureIndex)} · beat ${beat
-      .toFixed(2)
-      .replace(/\.00$/, '')}`;
-    this.el.position.textContent = this.lastPosition;
-    this.renderFocusStatus(this.lastPosition);
   }
 
   /** Ends a look in progress, whether it ran out or the reader stopped it. */
@@ -2466,7 +2463,6 @@ export class AppView {
             .filter((at) => at >= 0),
         );
         this.applyScoreCover();
-        this.el.position.textContent = '—';
         // A performance does not survive its own score being replaced, so the
         // button that offers to stop one has to stop saying so.
         this.describeListening();
@@ -2496,7 +2492,7 @@ export class AppView {
 
     this.subscriptions.push(
       controller.playbackEvents.on('positionChanged', (at) => {
-        this.showPosition(at);
+        this.followMusic(at);
       }),
     );
 
@@ -2555,11 +2551,7 @@ export class AppView {
           // reads as something broken rather than as something about to start.
           this.showNotice('Counting in…');
         }
-        this.renderFocusStatus(
-          status === 'running' && this.lastPosition !== ''
-            ? this.lastPosition
-            : STATUS_LABELS[status],
-        );
+        this.renderFocusStatus(STATUS_LABELS[status]);
         this.updateButtons(status);
       }),
       // The number itself and nowhere else. The pill and the desk's status
@@ -2592,11 +2584,10 @@ export class AppView {
       // held note - the step is what the reader has to play, not where the
       // count has got to, and the pill was asked the second question.
       session.events.on('positionChanged', (at) => {
-        this.showPosition(at);
+        this.followMusic(at);
       }),
       session.events.on('finished', ({ report, score }) => {
         this.el.progress.value = this.totalSteps;
-        this.lastPosition = '';
         // Twice over, and deliberately: the card is the moment, dismissed as
         // soon as it has been read, and the pill is what is still there
         // afterwards when the reader wants to check what they got.
@@ -3701,6 +3692,36 @@ export class AppView {
     this.el.focusStop.disabled = !running && !paused;
     this.el.focusNext.disabled = running || paused;
     this.el.focus.disabled = false;
+    this.applyPlayingChrome();
+  }
+
+  /**
+   * Takes the interface away while there is music to attend to.
+   *
+   * What is left is two buttons floating over the score - the one that
+   * pauses and the one that stops - and nothing else: no pill, no drawer, no
+   * handle, and not even the bar they sat in. A reader mid-piece has their
+   * hands on the keys and their eyes on the page, so every control that is
+   * not one of those two is something to look past.
+   *
+   * A pause does not bring it back. Stopping does, which is the difference
+   * between the two buttons: a pause is a place held inside a reading and
+   * the reading is still what is happening.
+   *
+   * The look before a run counts as playing, because the whole point of the
+   * look is to read the page.
+   *
+   * One attribute, and the stylesheet does the rest - nothing here measures
+   * or moves anything.
+   */
+  private applyPlayingChrome(): void {
+    const playing = this.isPlaying || this.isPreviewing;
+    this.el.focusBar.dataset['playing'] = String(playing);
+    if (playing) {
+      // Shut rather than merely hidden, so what comes back when the music
+      // stops is the bar the reader left, not a drawer they never opened.
+      this.setDrawerOpen(false);
+    }
   }
 
   private renderResult(score: SessionScore, report: PerformanceReport): void {

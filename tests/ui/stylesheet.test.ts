@@ -90,6 +90,31 @@ describe('the stylesheet', () => {
     expect(rules().some((rule) => rule.selector === '.focus-bar__status')).toBe(false);
   });
 
+  it('takes the transport away while the music is going', () => {
+    // Only the marked buttons survive mid-run, and the bar loses its own
+    // ground so the two that stay are floating over the score rather than
+    // sitting in a strip of furniture. jsdom applies no stylesheet, so
+    // without this the attribute could be set on a bar that still shows
+    // everything and every UI test would pass.
+    const stripped = rules().find(
+      (rule) => rule.selector === ".focus-bar[data-playing='true']",
+    );
+    const row = rules().find(
+      (rule) => rule.selector === ".focus-bar[data-playing='true'] .focus-bar__row > *:not([data-mid-run])",
+    );
+
+    expect(stripped?.body).toMatch(/background\s*:\s*transparent/);
+    expect(stripped?.body).toMatch(/box-shadow\s*:\s*none/);
+    expect(row?.body).toMatch(/display\s*:\s*none/);
+    // The pill, the take recorder and the drawer's handle go with it.
+    const hidden = rules().find(
+      (rule) =>
+        rule.selector.includes("[data-playing='true']") && rule.selector.includes('.focus-notice'),
+    );
+    expect(hidden?.selector).toContain('.focus-bar__handle');
+    expect(hidden?.body).toMatch(/display\s*:\s*none/);
+  });
+
   it('lets a touch through the middle of the page to the music under it', () => {
     // The card covering the score is transparent and covers all of it, so
     // taking touches would kill the two gestures the page is read with - a

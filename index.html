@@ -125,10 +125,6 @@
             <strong id="session-status">Idle</strong>
           </div>
           <progress id="progress" value="0" max="1"></progress>
-          <div class="panel__row panel__row--compact">
-            <span class="label">Position</span>
-            <span id="position">—</span>
-          </div>
 
           <!--
             Openers rather than the lists themselves. Both grow without limit
@@ -498,7 +494,16 @@
         </div>
 
         <div id="focus-row" class="focus-bar__row">
-          <button id="focus-play" type="button"
+          <!--
+            `data-mid-run` marks the two buttons a reader needs with their
+            hands on the keys. While the music is going the rest of the row
+            goes and the bar loses its own chrome, leaving these floating over
+            the score - which is the whole of the "hide the interface while
+            playing" idea. Marking what stays rather than listing what goes
+            means a button added to this row is hidden by default, which is
+            the safe way round.
+          -->
+          <button id="focus-play" type="button" data-mid-run
             class="focus-bar__button focus-bar__button--primary focus-bar__button--icon"
             title="Start" aria-label="Start">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -520,7 +525,8 @@
             </svg>
           </button>
 
-          <button id="focus-stop" type="button" class="focus-bar__button focus-bar__button--icon"
+          <button id="focus-stop" type="button" data-mid-run
+            class="focus-bar__button focus-bar__button--icon"
             title="Stop" aria-label="Stop" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M6 6h12v12H6z" />

@@ -35,6 +35,7 @@ const DEFAULT_CONFIG: MetronomeConfig = {
   subdivisionsPerPulse: 4,
   click: 'pulse',
   dropout: null,
+  endsAtTicks: null,
   muted: false,
 };
 

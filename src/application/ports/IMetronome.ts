@@ -203,6 +203,19 @@ export interface MetronomeConfig {
   readonly click: ClickPattern;
   /** Bars to fall silent for, or `null` to click throughout. */
   readonly dropout: MetronomeDropout | null;
+  /**
+   * Where the music ends, after which nothing sounds.
+   *
+   * The pulse has to run one tick past the last note - that is the tick the
+   * mode finishes on, and there is no other way to know the note has had its
+   * full length. But that tick is the downbeat of a bar the page does not
+   * have, and sounding it puts a beat between the last note and whatever
+   * comes next: on repeat, a bar of two beats is practised as a bar of three.
+   *
+   * `null` when nobody has said, which clicks throughout - the same thing for
+   * a metronome that is not following a piece.
+   */
+  readonly endsAtTicks: number | null;
   /** Keep the pulse but stay silent (Flow mode without a click). */
   readonly muted: boolean;
 }

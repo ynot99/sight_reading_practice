@@ -23,6 +23,7 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { compoundBarExercise, p, twoBarExercise } from '../support/fixtures.js';
 import { createHarness } from '../support/harness.js';
+import { isAudibleClick } from '../../src/infrastructure/audio/metronomeMath.js';
 
 const COMMON = new TimeSignature(4, 4);
 const COMPOUND = new TimeSignature(6, 8);
@@ -349,5 +350,48 @@ describe('the tempos the metronome will beat at', () => {
     });
 
     expect(tempos).toEqual([{ startTicks: 0, bpm: 120 }]);
+  });
+});
+
+describe('where the click stops', () => {
+  it('sounds a beat for every beat of the music and no more', () => {
+    // The pulse has to run one tick past the last note - that is the tick the
+    // mode finishes on - but a click there is the downbeat of a bar the page
+    // does not have. Practised on repeat, a passage of eight beats was heard
+    // as nine.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      options: { countInBars: 0, clickWhen: 'always', click: 'pulse' },
+    });
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(20);
+
+    const config = harness.metronome.currentConfig;
+    const heard = harness.metronome.emitted.filter((tick) => isAudibleClick(tick, config));
+
+    expect(harness.session.status).toBe('completed');
+    expect(heard).toHaveLength(8);
+    expect(config.endsAtTicks).toBe(Duration.WHOLE.ticks * 2);
+  });
+
+  it('stops at the end of the passage, not of the piece', () => {
+    // The bars run on to the end of the score either way, so the passage's
+    // own end is the only thing that says where the click has nothing left
+    // to mark.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      // The four quarters of bar one, and no further.
+      options: { countInBars: 0, clickWhen: 'always', click: 'pulse', stopAfterIndex: 3 },
+    });
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(20);
+
+    const config = harness.metronome.currentConfig;
+    const heard = harness.metronome.emitted.filter((tick) => isAudibleClick(tick, config));
+
+    expect(config.endsAtTicks).toBe(Duration.WHOLE.ticks);
+    expect(heard).toHaveLength(4);
   });
 });

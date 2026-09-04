@@ -143,6 +143,11 @@ function isInSilentBar(tick: MetronomeTick, config: MetronomeConfig): boolean {
  * resolve sixteenth notes while clicking only on the beat.
  */
 export function isAudibleClick(tick: MetronomeTick, config: MetronomeConfig): boolean {
+  // Past the last note the pulse still runs, because that is what the mode
+  // finishes on, but there is no bar there for it to be the downbeat of.
+  if (config.endsAtTicks !== null && tick.positionTicks >= config.endsAtTicks) {
+    return false;
+  }
   if (isInSilentBar(tick, config)) {
     return false;
   }

@@ -22,7 +22,12 @@ import {
 } from '../ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from '../ports/IMidiSource.js';
 import { elapsedMsAt, spanMs, timeAtMeasure } from '../../domain/model/Exercise.js';
-import { metronomeBars, metronomeTempos, subdivisionsPerPulseFor } from './metronomePlan.js';
+import {
+  metronomeBars,
+  metronomeEnd,
+  metronomeTempos,
+  subdivisionsPerPulseFor,
+} from './metronomePlan.js';
 import { DEFAULT_SESSION_OPTIONS, type PracticeContext, type SessionOptions } from './PracticeContext.js';
 import type { SessionEventMap } from './SessionEvents.js';
 import { createSessionMachine, type SessionStatus, type SessionTrigger } from './SessionState.js';
@@ -140,6 +145,7 @@ export class PracticeSession {
       timeSignature: this.timeline.exercise.timeSignature,
       bars: this.barsToBeat(),
       tempos: this.temposToBeat(),
+      endsAtTicks: this.endOfTheMusic(),
       subdivisionsPerPulse: subdivisionsPerPulseFor(
         this.timeline,
         this.timeline.exercise.timeSignature,
@@ -187,6 +193,7 @@ export class PracticeSession {
       timeSignature: this.timeline.exercise.timeSignature,
       bars: this.barsToBeat(),
       tempos: this.temposToBeat(),
+      endsAtTicks: this.endOfTheMusic(),
       subdivisionsPerPulse: subdivisionsPerPulseFor(
         this.timeline,
         this.timeline.exercise.timeSignature,
@@ -329,6 +336,19 @@ export class PracticeSession {
     return metronomeBars(this.timeline.exercise, {
       countInBars: Math.max(0, this.options.countInBars),
       fromTicks: this.resumeAtTicks,
+    });
+  }
+
+  /** Where the run's last note stops, on the metronome's clock. */
+  private endOfTheMusic(): number | null {
+    const last = this.timeline.at(this.lastIndex);
+    if (last === null) {
+      return null;
+    }
+    return metronomeEnd(this.timeline.exercise, {
+      countInBars: Math.max(0, this.options.countInBars),
+      fromTicks: this.resumeAtTicks,
+      untilTicks: last.onsetTicks + last.durationTicks,
     });
   }
 

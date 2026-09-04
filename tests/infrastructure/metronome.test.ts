@@ -26,6 +26,7 @@ const COMMON: MetronomeConfig = {
   subdivisionsPerPulse: 4,
   click: 'subdivision',
   dropout: null,
+  endsAtTicks: null,
   muted: true,
 };
 
@@ -109,6 +110,7 @@ describe('bars the click sits out', () => {
       const config: MetronomeConfig = {
         ...PULSED,
         dropout: { kind: 'silent-from', fromBar: 1 },
+        endsAtTicks: null,
       };
       // The reader is handed one bar of pulse and carries the rest alone.
       expect(barsHeard(config, 12)).toEqual([1]);
@@ -118,6 +120,7 @@ describe('bars the click sits out', () => {
       const config: MetronomeConfig = {
         ...PULSED,
         dropout: { kind: 'silent-from', fromBar: 2 },
+        endsAtTicks: null,
       };
       // The cycle rule would have let it return; this one must not.
       expect(barsHeard(config, 40)).toEqual([1, 2]);
@@ -127,6 +130,7 @@ describe('bars the click sits out', () => {
       const config: MetronomeConfig = {
         ...PULSED,
         dropout: { kind: 'silent-from', fromBar: 0 },
+        endsAtTicks: null,
       };
       expect(barsHeard(config, 4)).toEqual([]);
     });
@@ -142,6 +146,7 @@ describe('bars the click sits out', () => {
       ...COMMON,
       click: 'subdivision',
       dropout: CYCLE(1, 0),
+      endsAtTicks: null,
     };
     // Bar one keeps all sixteen sixteenths; bar two keeps none.
     const heard = Array.from({ length: 32 }, (_, index) => index).filter((index) =>
@@ -370,5 +375,41 @@ describe('a pulse that changes tempo', () => {
       250,
       6,
     );
+  });
+});
+
+describe('the click at the end of the music', () => {
+  const music: MetronomeConfig = {
+    ...COMMON,
+    subdivisionsPerPulse: 1,
+    click: 'pulse',
+    muted: false,
+    // Two bars of 4/4, and the run ends with them.
+    bars: [
+      { startTicks: 0, timeSignature: new TimeSignature(4, 4) },
+      { startTicks: Duration.WHOLE.ticks, timeSignature: new TimeSignature(4, 4) },
+    ],
+    endsAtTicks: Duration.WHOLE.ticks * 2,
+  };
+
+  it('stops where the music does', () => {
+    // The pulse runs one tick past the last note, because that is the tick a
+    // mode finishes on. Sounding it puts a beat between the last note and
+    // whatever comes next, which on repeat makes a bar of four into five.
+    expect(audibleIndices(music, 10)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it('goes on clicking when nobody has said where the music ends', () => {
+    expect(audibleIndices({ ...music, endsAtTicks: null }, 10)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+    ]);
+  });
+
+  it('ends where the passage does, not where the piece does', () => {
+    // A passage stops at its own last note while the bars run on to the end
+    // of the score - which is exactly the case the reader practises in.
+    expect(audibleIndices({ ...music, endsAtTicks: Duration.WHOLE.ticks }, 10)).toEqual([
+      0, 1, 2, 3,
+    ]);
   });
 });

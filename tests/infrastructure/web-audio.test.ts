@@ -102,6 +102,7 @@ describe('WebAudioMetronome', () => {
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,
+      endsAtTicks: null,
       muted: false,
     });
     ticks = [];
@@ -139,6 +140,7 @@ describe('WebAudioMetronome', () => {
       subdivisionsPerPulse: 4,
       click: 'pulse',
       dropout: null,
+      endsAtTicks: null,
       muted: false,
     });
     metronome.start();
@@ -204,6 +206,7 @@ describe('WebAudioMetronome', () => {
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,
+      endsAtTicks: null,
       muted: true,
     });
     metronome.start();
@@ -394,6 +397,7 @@ describe('when the click is actually heard', () => {
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,
+      endsAtTicks: null,
       muted: true,
     });
     const heard: MetronomeTick[] = [];
@@ -434,6 +438,7 @@ describe('when the click is actually heard', () => {
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,
+      endsAtTicks: null,
       muted: true,
     });
     const ticks: MetronomeTick[] = [];
@@ -471,6 +476,7 @@ describe('when the click is actually heard', () => {
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,
+      endsAtTicks: null,
       muted: true,
     });
     const heard: MetronomeTick[] = [];

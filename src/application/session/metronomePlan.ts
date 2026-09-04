@@ -96,6 +96,29 @@ export function metronomeTempos(
 }
 
 /**
+ * Where the music ends, on the metronome's clock.
+ *
+ * The same shift again. A run's end is not the piece's: a passage stops at
+ * its own last note while the bars go on to the end of the score, so this is
+ * the one thing that says where the click has nothing left to mark.
+ */
+export function metronomeEnd(
+  exercise: Exercise,
+  options: {
+    readonly countInBars: number;
+    readonly fromTicks: number;
+    readonly untilTicks: number;
+  },
+): number {
+  const music = barLines(exercise);
+  const startsIn =
+    [...music].reverse().find((bar) => bar.startTicks <= options.fromTicks)?.timeSignature ??
+    exercise.timeSignature;
+  const countIn = Math.max(0, Math.round(options.countInBars));
+  return options.untilTicks + countIn * startsIn.ticksPerMeasure - options.fromTicks;
+}
+
+/**
  * Finest grid the music actually lands on, as ticks.
  *
  * Every step onset and length is an exact number of divisions, so their

@@ -148,6 +148,7 @@ export class ExercisePlayer {
         countInBars: 0,
         fromTicks: this.fromTicks,
       }),
+      endsAtTicks: this.untilTicks - this.fromTicks,
       subdivisionsPerPulse: subdivisionsPerPulseFor(this.timeline, timeSignature, 'pulse'),
       click: 'pulse',
       dropout: resolveDropout(clickWhen, 0),
@@ -194,6 +195,7 @@ export class ExercisePlayer {
       // reader put their place.
       bars: metronomeBars(timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
       tempos: metronomeTempos(timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
+      endsAtTicks: this.untilTicks - this.fromTicks,
       subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, 'pulse'),
       click: 'pulse',
       // From bar zero, because there is no count-in in front of a playback.

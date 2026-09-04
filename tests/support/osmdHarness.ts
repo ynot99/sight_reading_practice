@@ -56,6 +56,43 @@ export function createScoreContainer(width = 900): HTMLElement {
   return element;
 }
 
+/**
+ * The frame and the box that scrolls inside it, arranged the way the real page
+ * has them - the frame taller than the screen, because it is given a minimum
+ * of one screen and then grows to what is engraved in it.
+ *
+ * Anything testing pages needs this: without a window height the engraver is
+ * given an endless page and lays the piece out as one column, so a test about
+ * turning would have nothing to turn.
+ */
+export function withLayout(container: HTMLElement, windowHeight: number): HTMLElement {
+  const frame = document.createElement('div');
+  frame.className = 'score';
+  const scroller = document.createElement('div');
+  scroller.className = 'score__scroll';
+  container.replaceWith(frame);
+  frame.append(scroller);
+  scroller.append(container);
+  frame.getBoundingClientRect = (() => ({
+    left: 0,
+    top: 0,
+    bottom: 99_999,
+    width: 900,
+    height: 99_999,
+  })) as Element['getBoundingClientRect'];
+  // The box the page is drawn into fills the screen, which is what the
+  // reading layout gives it - and what the page is sized against.
+  scroller.getBoundingClientRect = (() => ({
+    left: 0,
+    top: 0,
+    bottom: windowHeight,
+    width: 900,
+    height: windowHeight,
+  })) as Element['getBoundingClientRect'];
+  Object.defineProperty(window, 'innerHeight', { value: windowHeight, configurable: true });
+  return scroller;
+}
+
 /** Y positions of the printed staff lines, read out of the drawn SVG. */
 export function staffLineYs(container: HTMLElement): number[] {
   const ys: number[] = [];

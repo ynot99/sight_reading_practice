@@ -1788,7 +1788,14 @@ export class OsmdScoreRenderer
    */
   private paintRepeats(): void {
     for (const at of this.repeatedBars) {
-      const measure = this.measuresHere().find((each) => each.measureIndex === at);
+      // Every page, not the one being read. `measuresHere` is for aiming a
+      // touch, where only the page in front of the reader can be hit; a mark
+      // is drawn once and then turned to, so asking that question here meant
+      // the marks existed only on whichever page happened to be current when
+      // this last ran. Turning to any other page showed none - and zooming
+      // in, which cuts the piece into more pages, put nearly every repeated
+      // bar on a page that had never been painted.
+      const measure = this.measures.find((each) => each.measureIndex === at);
       const sheet = measure === undefined ? undefined : this.sheets[measure.page];
       if (measure === undefined || sheet === undefined) {
         continue;
@@ -1870,7 +1877,10 @@ export class OsmdScoreRenderer
 
   private paintStart(): void {
     const at = this.startMeasure;
-    const measure = at === null ? undefined : this.measuresHere().find(
+    // All of them, for the reason the repeat marks are: the reader puts their
+    // place on a bar and then turns the page away from it, and the mark has
+    // to be there when they turn back.
+    const measure = at === null ? undefined : this.measures.find(
       (each) => each.measureIndex === at,
     );
     if (measure === undefined || this.passage === null) {

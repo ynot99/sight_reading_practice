@@ -4,7 +4,7 @@ import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer
 import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
 import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
 import { longExercise } from '../support/fixtures.js';
-import { createScoreContainer, installCanvasStub } from '../support/osmdHarness.js';
+import { createScoreContainer, installCanvasStub, withLayout } from '../support/osmdHarness.js';
 
 const importer = new DomScoreImporter();
 const serializer = new MusicXmlSerializer();
@@ -98,6 +98,56 @@ describe('what the page says about a repeat and a pedal', () => {
 
     expect(all).toBe(numbered);
     expect(one).toBeLessThanOrEqual(1);
+  });
+
+  it('marks the pages the reader is not looking at yet', async () => {
+    // A mark is drawn once and then turned to, so it belongs on the page its
+    // own bar is on - the way the passage markers already do it. Asked for
+    // "the bars on this page" instead, the marks existed only on whichever
+    // page happened to be current when they were last painted, and turning
+    // anywhere else showed none.
+    document.body.replaceChildren();
+    const paged = createScoreContainer();
+    const renderer2 = new OsmdScoreRenderer(paged, { zoom: 1 });
+    withLayout(paged, 260);
+    await renderer2.load(new MusicXmlSerializer().serialize(longExercise({ bars: 16 })));
+    renderer2.setPaged(true);
+    expect(renderer2.pages.count).toBeGreaterThan(1);
+
+    renderer2.showRepeatedBars([...Array(16).keys()]);
+
+    const perSheet = [...paged.querySelectorAll('svg')].map(
+      (sheet) => sheet.querySelectorAll('.repeat-mark').length,
+    );
+    expect(perSheet.filter((count) => count > 0).length).toBeGreaterThan(1);
+  });
+
+  it('keeps them through the re-engraving a zoom is', async () => {
+    // The complaint this answers: zooming in made the marks disappear for
+    // good. Zooming cuts the piece into more pages, so nearly every repeated
+    // bar landed on a page that was never painted - the marks were not lost,
+    // they had only ever been drawn on one page.
+    document.body.replaceChildren();
+    const paged = createScoreContainer();
+    const renderer2 = new OsmdScoreRenderer(paged, { zoom: 1 });
+    withLayout(paged, 260);
+    await renderer2.load(new MusicXmlSerializer().serialize(longExercise({ bars: 16 })));
+    renderer2.setPaged(true);
+    renderer2.showRepeatedBars([...Array(16).keys()]);
+
+    const before = paged.querySelectorAll('.repeat-mark').length;
+    expect(before).toBeGreaterThan(0);
+
+    renderer2.setZoom(2);
+    renderer2.refresh();
+
+    // One per number the engraver drew, whatever the zoom did to how many of
+    // them there are: the mark answers a printed number, so there are exactly
+    // as many as there are numbers to answer.
+    const numbers = [...paged.querySelectorAll('text')].filter((text) =>
+      /^\d+$/.test(text.textContent ?? ''),
+    ).length;
+    expect(paged.querySelectorAll('.repeat-mark')).toHaveLength(numbers);
   });
 
   it('draws the pedal the way its writer drew it', () => {

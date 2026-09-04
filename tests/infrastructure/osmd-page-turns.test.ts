@@ -6,42 +6,8 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
 import type { DrawnMeasure } from '../../src/infrastructure/rendering/passageBrackets.js';
 import { longExercise } from '../support/fixtures.js';
-import { createScoreContainer, installCanvasStub } from '../support/osmdHarness.js';
+import { createScoreContainer, installCanvasStub, withLayout } from '../support/osmdHarness.js';
 
-/**
- * A window with a real size, which jsdom does not otherwise provide.
- *
- * The frame and the box that scrolls inside it, arranged the way the real
- * page has them - the frame taller than the screen, because it is given a
- * minimum of one screen and then grows to what is engraved in it.
- */
-function withLayout(container: HTMLElement, windowHeight: number): HTMLElement {
-  const frame = document.createElement('div');
-  frame.className = 'score';
-  const scroller = document.createElement('div');
-  scroller.className = 'score__scroll';
-  container.replaceWith(frame);
-  frame.append(scroller);
-  scroller.append(container);
-  frame.getBoundingClientRect = (() => ({
-    left: 0,
-    top: 0,
-    bottom: 99_999,
-    width: 900,
-    height: 99_999,
-  })) as Element['getBoundingClientRect'];
-  // The box the page is drawn into fills the screen, which is what the
-  // reading layout gives it - and what the page is sized against.
-  scroller.getBoundingClientRect = (() => ({
-    left: 0,
-    top: 0,
-    bottom: windowHeight,
-    width: 900,
-    height: windowHeight,
-  })) as Element['getBoundingClientRect'];
-  Object.defineProperty(window, 'innerHeight', { value: windowHeight, configurable: true });
-  return scroller;
-}
 
 /** Where the engraver put each bar, which the renderer keeps to itself. */
 function measuresOf(renderer: OsmdScoreRenderer): DrawnMeasure[] {

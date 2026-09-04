@@ -60,19 +60,30 @@ one pulls the near one up to the start of its own. A tap on a marker's grip
 still nudges the passage a bar, and dragging one still moves it.
 
 Whole bars throughout, because that is what a passage is made of and where a
-musician starts — cutting partway through one would leave a pickup and make
-every seam harder for nothing gained.
+musician starts. A run beginning halfway through a bar would be counted into
+a beat that is not the first, and the reader would be waiting for a downbeat
+that never came.
 
-**Bars**, in the transport bar rather than among the settings, narrows the
-exercise to a passage: which bars to read is changed between attempts, not
-dialled in once, and it is the one control a reader reaches for with the music
-already in front of them. Asking for a new exercise empties it — bars 12-16 of
-the piece just closed mean nothing in the one opening. It is done by cutting
-those bars out as a score in their own right rather than by teaching the session
-to start and stop in the middle of a longer one, so the timeline, the page, the
-cursor, the report and the playback all carry on unaware a longer piece exists.
-The seams are the work: an inherited clef or key is stated at the head, a tie
-leading out of the last bar is cut, and a pedal already down is pressed again.
+**Bars** in the drawer say the same passage in figures, for when a number is
+what you have rather than a place on the page: which bars to read is changed
+between attempts, not dialled in once. Asking for a new exercise empties it —
+bars 12-16 of the piece just closed mean nothing in the one opening.
+
+**A passage gives the run two ends; the music on the page stays whole.** A
+start index and a stop index are the whole mechanism, and beginning partway
+through is the same pair of numbers that resuming from a pause has always
+used.
+
+It was done the other way first — the bars were cut out as a score in their
+own right, so that the timeline, the page, the cursor, the report and the
+playback all carried on unaware a longer piece existed. What that bought in
+simplicity it spent on seams, and the seams were all of the work: an
+inherited clef and key had to be restated at the head, a tie leading out of
+the last bar had to be let go of, a pedal already down had to be pressed
+again. Every one of those existed only because something had been cut. Left
+whole, the reader keeps their context — the bar before the passage is still
+there to be seen — and the bar numbers go on meaning what they say.
+
 Readings are remembered between visits, so the report can say whether a
 passage is steadier than last time — a passage being the piece and the bars,
 or the level when the material is generated, since one random exercise has no

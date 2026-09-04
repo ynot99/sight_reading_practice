@@ -69,6 +69,7 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
       tempoBpm: request.tempoBpm,
       staves,
       firstBarNumber: 1,
+      barLabels: [],
       metadata: { generatorId: this.id, seed },
     };
 

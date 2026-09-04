@@ -661,7 +661,11 @@ put there. A tempo change does the same to the clock: an accelerando is a run
 of marks a sixteenth apart, so they are placed to the division and every answer
 about *time* is walked over `tempoSpans` instead. The reader's tempo control is
 a share of the written speed, so the changes move with it and keep their
-proportions. Grace notes are read as ornaments: drawn where
+proportions. A repeat is written out in the order it is read rather than jumped back to,
+with each re-read bar keeping the number it has in the score - everything
+drawn for the reader moves forward, and two readings of one printed page would
+have to share the marker, the page turns, the veil and the marks. First and
+second endings are followed. Grace notes are read as ornaments: drawn where
 they were written, costing the bar nothing, and offered rather than demanded -
 playing one is never a wrong note and leaving it out is never a missing one.
 Written values are read down to sixty-fourths, with tuplets up to septuplets:

@@ -201,6 +201,7 @@ describe('MusicXmlSerializer', () => {
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 72,
       firstBarNumber: 1,
+      barLabels: [],
       metadata: { generatorId: 'fixture', seed: 3 },
       staves: [
         {
@@ -290,6 +291,7 @@ describe('a tie in one voice of a shared staff', () => {
       timeSignature: new TimeSignature(2, 4),
       tempoBpm: 60,
       firstBarNumber: 1,
+      barLabels: [],
       metadata: { generatorId: 'fixture', seed: 1 },
       staves: [
         {

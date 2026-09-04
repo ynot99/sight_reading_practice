@@ -11,6 +11,7 @@ import {
   validateExercise,
 } from '../model/Exercise.js';
 import type {
+  BarLabel,
   Beam,
   BeamType,
   ClefChange,
@@ -24,6 +25,7 @@ import type {
 import { KeySignature, type KeyMode } from '../model/KeySignature.js';
 import { Pitch, type Alteration } from '../model/Pitch.js';
 import { splitIntoRests } from '../generation/RhythmFiller.js';
+import { playedOrder, unrollRepeats, type BarRepeat } from './unrollRepeats.js';
 import { TimeSignature } from '../model/TimeSignature.js';
 import {
   attribute,
@@ -45,6 +47,7 @@ export interface ImportWarning {
     | 'unsupported-clef'
     | 'dropped-tie'
     | 'padded-measure'
+    | 'repeats-unrolled'
     // What reading a *performance* has to decide rather than read. Kept in one
     // list because the reader meets them the same way: as the page they got
     // differing from the page they expected.
@@ -160,11 +163,102 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     tempoBpm: opening.at(-1)?.tempoBpm ?? ASSUMED_TEMPO_BPM,
     staves,
     firstBarNumber: readFirstBarNumber(measures),
+    barLabels: readBarLabels(measures, readFirstBarNumber(measures)),
     metadata: { generatorId: 'import.musicxml', seed: 0 },
   };
 
-  validateExercise(exercise);
-  return { exercise, warnings };
+  // Written out in the order it is read. A repeat asks the reader to turn
+  // back, and everything drawn for them moves forward.
+  const order = playedOrder(spreadEndings(readRepeats(measures)));
+  const unrolled = unrollRepeats(exercise, order);
+  // Again, because the order changed. A note tied over the end of a repeated
+  // span leads into the bar the reading jumps *back* to, which is not the bar
+  // it was written next to - so a tie that led somewhere on the page can lead
+  // nowhere in the reading.
+  const played =
+    unrolled === exercise
+      ? exercise
+      : {
+          ...unrolled,
+          staves: unrolled.staves.map((staff) => ({
+            ...staff,
+            measures: dropTiesThatLeadNowhere(staff.measures, warnings),
+          })),
+        };
+  if (played !== exercise) {
+    warnings.push({
+      kind: 'repeats-unrolled',
+      detail: `The repeated bars are written out in full: ${measures.length} bars are read as ${order.length}, each keeping the number it has in the score.`,
+    });
+  }
+
+  validateExercise(played);
+  return { exercise: played, warnings };
+}
+
+/**
+ * What the barlines of each measure say about repeating.
+ *
+ * Read from the first part only: a repeat is a route through the piece and
+ * every part takes the same one, however many of them restate the signs.
+ */
+function readRepeats(measures: readonly XmlNode[]): BarRepeat[] {
+  return measures.map((measure) => {
+    let opens = false;
+    let closes = false;
+    let times = 2;
+    const endings: number[] = [];
+    let endsEnding = false;
+    for (const barline of childrenNamed(measure, 'barline')) {
+      const repeat = child(barline, 'repeat');
+      const direction = attribute(repeat, 'direction');
+      if (direction === 'forward') {
+        opens = true;
+      }
+      if (direction === 'backward') {
+        closes = true;
+        const asked = Number(attribute(repeat, 'times') ?? '');
+        times = Number.isInteger(asked) && asked >= 2 ? asked : 2;
+      }
+      const ending = child(barline, 'ending');
+      if (ending === null) {
+        continue;
+      }
+      for (const part of (attribute(ending, 'number') ?? '').split(/[,\s]+/)) {
+        const which = Number(part);
+        if (Number.isInteger(which) && which >= 1) {
+          endings.push(which);
+        }
+      }
+      const type = attribute(ending, 'type');
+      if (type === 'stop' || type === 'discontinue') {
+        endsEnding = true;
+      }
+    }
+    return { opens, closes, times, endings, endsEnding };
+  });
+}
+
+/**
+ * The bars an ending bracket covers, not only the one it is written on.
+ *
+ * MusicXML marks the bracket at its two ends; the bars between carry nothing
+ * and would otherwise look like ordinary music played every time round.
+ */
+function spreadEndings(bars: readonly BarRepeat[]): BarRepeat[] {
+  const spread = bars.map((bar) => ({ ...bar, endings: [...bar.endings] }));
+  let open: readonly number[] = [];
+  for (const bar of spread) {
+    if (bar.endings.length > 0) {
+      open = bar.endings;
+    } else if (open.length > 0) {
+      bar.endings = [...open];
+    }
+    if (bar.endsEnding) {
+      open = [];
+    }
+  }
+  return spread;
 }
 
 function findScore(root: XmlNode): XmlNode {
@@ -332,6 +426,27 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
  * number - `X1` on a repeated bar, an implicit pickup written as `0` - falls
  * back to 1, which is what a reader counts from when nothing says otherwise.
  */
+/**
+ * What each bar is called, when that is not simply its place plus the first.
+ *
+ * A score written out from its repeats says "20" twice, and the second one is
+ * a re-reading of the first - which is a fact the file states plainly and
+ * which would otherwise be lost the moment the score was put away and opened
+ * again. Left empty for music numbered straight through, where the place and
+ * the first number say everything.
+ */
+function readBarLabels(measures: readonly XmlNode[], firstBarNumber: number): BarLabel[] {
+  const seen = new Set<number>();
+  const labels = measures.map((measure, at) => {
+    const declared = Number(attribute(measure, 'number') ?? '');
+    const number = Number.isInteger(declared) ? declared : firstBarNumber + at;
+    const repeated = seen.has(number);
+    seen.add(number);
+    return { number, repeated };
+  });
+  return labels.every((label, at) => label.number === firstBarNumber + at) ? [] : labels;
+}
+
 function readFirstBarNumber(measures: readonly XmlNode[]): number {
   const declared = Number(attribute(measures[0] ?? null, 'number') ?? '');
   return Number.isInteger(declared) && declared >= 1 ? declared : 1;
@@ -1125,14 +1240,19 @@ function dropTiesThatLeadNowhere(
 ): readonly Measure[] {
   const flat = measures.flatMap((measure) => measure.entries);
   let dropped = 0;
+  // Counted as the walk goes rather than looked up by identity. A repeated
+  // bar is the same bar, so its entries are the same objects in two places,
+  // and asking a list where an object *is* answers with the first of them -
+  // which for the second reading is somebody else's neighbour.
+  let position = -1;
 
   const cleaned = measures.map((measure) =>
     measureOf(
       measure.entries.map((entry) => {
+        position += 1;
         if (entry.kind !== 'note' || entry.tiedForward.length === 0) {
           return entry;
         }
-        const position = flat.indexOf(entry);
         const next = flat[position + 1];
         const kept = entry.tiedForward.filter(
           (midi) =>
@@ -1150,7 +1270,7 @@ function dropTiesThatLeadNowhere(
               entry.beams,
               entry.stem,
               entry.arpeggiated,
-              { fermata: entry.fermata, breath: entry.breath },
+              { fermata: entry.fermata, breath: entry.breath, graces: entry.graces },
             );
       }),
     ),

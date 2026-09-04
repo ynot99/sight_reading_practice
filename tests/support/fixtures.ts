@@ -41,6 +41,7 @@ export function twoBarExercise(overrides: ExerciseOverrides = {}): Exercise {
     timeSignature: overrides.timeSignature ?? new TimeSignature(4, 4),
     tempoBpm: overrides.tempoBpm ?? 60,
     firstBarNumber: 1,
+    barLabels: [],
     metadata: { generatorId: 'fixture', seed: 1 },
     staves: [
       {
@@ -102,6 +103,7 @@ export function longExercise(
     timeSignature: overrides.timeSignature ?? new TimeSignature(4, 4),
     tempoBpm: overrides.tempoBpm ?? 60,
     firstBarNumber: 1,
+    barLabels: [],
     metadata: { generatorId: 'fixture', seed: 1 },
     staves: [
       {
@@ -134,6 +136,7 @@ export function arpeggiatedExercise(overrides: ExerciseOverrides = {}): Exercise
     timeSignature: overrides.timeSignature ?? new TimeSignature(4, 4),
     tempoBpm: overrides.tempoBpm ?? 60,
     firstBarNumber: 1,
+    barLabels: [],
     metadata: { generatorId: 'fixture', seed: 1 },
     staves: [
       {
@@ -182,6 +185,7 @@ export function beamedSixteenths(overrides: ExerciseOverrides = {}): Exercise {
     timeSignature: overrides.timeSignature ?? new TimeSignature(2, 4),
     tempoBpm: overrides.tempoBpm ?? 60,
     firstBarNumber: 1,
+    barLabels: [],
     metadata: { generatorId: 'fixture', seed: 1 },
     staves: [
       {
@@ -219,6 +223,7 @@ export function singleBarExercise(overrides: ExerciseOverrides = {}): Exercise {
     timeSignature: overrides.timeSignature ?? new TimeSignature(4, 4),
     tempoBpm: overrides.tempoBpm ?? 60,
     firstBarNumber: 1,
+    barLabels: [],
     metadata: { generatorId: 'fixture', seed: 2 },
     staves: [
       {
@@ -262,6 +267,7 @@ export function compoundBarExercise(overrides: ExerciseOverrides = {}): Exercise
     timeSignature: overrides.timeSignature ?? new TimeSignature(6, 8),
     tempoBpm: overrides.tempoBpm ?? 60,
     firstBarNumber: 1,
+    barLabels: [],
     metadata: { generatorId: 'fixture', seed: 2 },
     staves: [
       { staffNumber: 1, voice: 1, clef: 'treble', clefChanges: [], measures: [bar(...melody)] },
@@ -305,6 +311,7 @@ export function tiedExercise(overrides: ExerciseOverrides = {}): Exercise {
     timeSignature: overrides.timeSignature ?? new TimeSignature(4, 4),
     tempoBpm: overrides.tempoBpm ?? 60,
     firstBarNumber: 1,
+    barLabels: [],
     metadata: { generatorId: 'fixture', seed: 3 },
     staves: [
       {
@@ -360,6 +367,7 @@ export function partialVoiceExercise(
     timeSignature: new TimeSignature(4, 4),
     tempoBpm: 60,
     firstBarNumber: 1,
+    barLabels: [],
     metadata: { generatorId: 'fixture', seed: 1 },
     staves: [
       {

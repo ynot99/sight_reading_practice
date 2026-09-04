@@ -336,6 +336,12 @@ export function clefAtMeasure(staff: StaffPart, measureIndex: number): ClefKind 
   return current;
 }
 
+/** A bar's printed name, and whether the reader has seen it before. */
+export interface BarLabel {
+  readonly number: number;
+  readonly repeated: boolean;
+}
+
 export interface ExerciseMetadata {
   readonly generatorId: string;
   readonly seed: number;
@@ -458,13 +464,33 @@ export interface Exercise {
    * always have.
    */
   readonly firstBarNumber: number;
+  /**
+   * What each bar is called, and whether it is a re-reading of an earlier one.
+   *
+   * Empty for music read straight through, where a bar's name is its place
+   * plus {@link firstBarNumber} and nothing else needs saying.
+   *
+   * A repeat is written out here rather than jumped back to: the reader moves
+   * forward and so does everything drawn for them - the marker, the page, the
+   * veil over what is still to come, the marks left where they played. A page
+   * that has to be read twice would have those two readings arguing over one
+   * piece of paper. Written out, the second reading has a page of its own and
+   * keeps the bar numbers of the first, so the score still says where in the
+   * piece it is.
+   */
+  readonly barLabels: readonly BarLabel[];
   readonly staves: readonly StaffPart[];
   readonly metadata: ExerciseMetadata;
 }
 
 /** What the reader should see printed over a bar, one-based. */
 export function barNumberOf(exercise: Exercise, measureIndex: number): number {
-  return exercise.firstBarNumber + measureIndex;
+  return exercise.barLabels[measureIndex]?.number ?? exercise.firstBarNumber + measureIndex;
+}
+
+/** Whether this bar is a second reading of one already printed. */
+export function barIsRepeated(exercise: Exercise, measureIndex: number): boolean {
+  return exercise.barLabels[measureIndex]?.repeated === true;
 }
 
 /** The writer's marks on a note that are neither pitch nor rhythm. */

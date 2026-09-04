@@ -478,6 +478,7 @@ export function midiToExercise(
     timeSignature,
     tempoBpm: document.tempoBpm,
     firstBarNumber: 1,
+    barLabels: [],
     staves,
     metadata: { generatorId: 'import.midi', seed: 0 },
   };

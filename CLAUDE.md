@@ -38,6 +38,11 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
   is - is read off `elapsedMsAt` / `spanMs`, and the metronome is handed its
   tempo spans exactly as it is handed its bars. `ticksToMilliseconds` takes one
   bpm and so is only ever right inside one span.
+- A repeat is written out, not jumped back to. `unrollRepeats` reads the score
+  in playing order and each re-read bar keeps the number it has in the file,
+  which `barLabels` carries. Everything this program draws moves forward - the
+  marker, the page, the veil, the marks left where the reader played - and two
+  readings of one printed page would have to share all of it.
 - An ornament takes no time from the bar. A grace note is carried on the entry
   it leans on, never in the entry list: given real time it has to be paid for,
   and both payments are wrong. The engraver gives it no cursor position, so

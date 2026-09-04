@@ -43,6 +43,7 @@ export function calibrationExercise(tempoBpm = 80): Exercise {
     timeSignature: new TimeSignature(4, 4),
     tempoBpm,
     firstBarNumber: 1,
+    barLabels: [],
     staves: [
       {
         staffNumber: 1,

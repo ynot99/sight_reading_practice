@@ -1429,6 +1429,7 @@ describe('AppView', () => {
         fromMeasureIndex: 0,
         toMeasureIndex: 3,
         repeating: false,
+        movable: true,
       });
 
       renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
@@ -1663,23 +1664,43 @@ describe('AppView', () => {
       expect(element('focus-notice').textContent).toContain('bars');
     });
 
-    it('leaves the page alone while a run is going', async () => {
+    it('cannot be taken hold of while a run is going', async () => {
+      // A run is graded, and a passage moved halfway through makes the report
+      // a report of nothing in particular: some of it judged against one
+      // stretch and the rest against another the reader never agreed to. The
+      // markers used to move under the finger and then jump back, which said
+      // the page had changed its mind.
       const { view, runtime, renderer } = createRig();
       await view.initialize();
+
+      expect(renderer.shownPassage?.movable).toBe(true);
+      expect(element<HTMLInputElement>('range-from').disabled).toBe(false);
+
       element<HTMLButtonElement>('start').click();
 
-      renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      // A stray touch mid-piece never meant "re-engrave under me", and the
-      // markers go back where they were rather than staying where the finger
-      // left them.
-      expect(runtime.controller.settings.rangeFromBar).toBeNull();
+      // Still drawn - it says what is being read, which is worth seeing while
+      // reading it - and no longer a handle.
       expect(renderer.shownPassage).toEqual({
         fromMeasureIndex: 0,
         toMeasureIndex: 3,
         repeating: false,
+        movable: false,
       });
+      expect(element<HTMLInputElement>('range-from').disabled).toBe(true);
+      expect(element<HTMLInputElement>('range-to').disabled).toBe(true);
+      expect(runtime.controller.settings.rangeFromBar).toBeNull();
+    });
+
+    it('is a handle again once the run is over', async () => {
+      const { view, renderer } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('start').click();
+      expect(renderer.shownPassage?.movable).toBe(false);
+
+      element<HTMLButtonElement>('stop').click();
+
+      expect(renderer.shownPassage?.movable).toBe(true);
+      expect(element<HTMLInputElement>('range-from').disabled).toBe(false);
     });
 
     it('does not re-engrave for choosing a passage at all', async () => {

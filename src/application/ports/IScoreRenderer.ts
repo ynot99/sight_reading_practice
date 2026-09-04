@@ -67,6 +67,18 @@ export interface DrawnPassage {
   readonly fromMeasureIndex: number;
   readonly toMeasureIndex: number;
   /**
+   * Whether it can still be taken hold of.
+   *
+   * Drawn either way, because it says what is being practised and that is
+   * worth seeing while playing it. Only the handles go: a run is being
+   * *graded*, and a passage moved halfway through makes the report a report
+   * of nothing in particular - some of it judged against one stretch and the
+   * rest against another the reader never agreed to.
+   *
+   * `undefined` means movable, which is what it is between runs.
+   */
+  readonly movable?: boolean;
+  /**
    * Whether the passage plays round again at the end.
    *
    * Drawn, because music already has a sign for it: the markers grow the two

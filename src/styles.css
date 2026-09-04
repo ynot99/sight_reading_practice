@@ -1196,6 +1196,17 @@ select {
   touch-action: none;
 }
 
+/*
+ * A marker that is being played cannot be taken hold of, so it does not reach
+ * for the finger either. The browser decides whether a touch will scroll the
+ * page from what is under it at the moment the touch begins, which is why this
+ * is a state of the marker rather than something checked when a drag starts.
+ */
+.passage-marker[data-locked='true'] .passage-marker__hit {
+  pointer-events: none;
+  touch-action: auto;
+}
+
 .passage-marker__dot {
   fill: var(--accent);
 }

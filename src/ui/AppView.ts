@@ -1122,13 +1122,6 @@ export class AppView {
    */
   private async choosePassageFrom(drawn: DrawnPassage): Promise<void> {
     const controller = this.runtime.controller;
-    const status = controller.session?.status;
-    if (status === 'running' || status === 'counting-in' || status === 'paused') {
-      // Re-engraving under a reader who is playing would move the music out
-      // from under them mid-bar. The markers go back where they were.
-      this.showPassageMarkers();
-      return;
-    }
     const firstDrawn = controller.barNumber(0);
     const before = controller.settings;
     const passage = controller.choosePassage(
@@ -1200,6 +1193,7 @@ export class AppView {
       fromMeasureIndex: rangeFromBar === null ? 0 : Math.min(Math.max(rangeFromBar - first, 0), last),
       toMeasureIndex: rangeToBar === null ? last : Math.min(Math.max(rangeToBar - first, 0), last),
       repeating: controller.settings.repeatRange,
+      movable: !this.isPlaying,
     });
     // Only where the reader has actually moved it. A place at the beginning
     // of the passage is where a run starts anyway, and a mark saying so
@@ -2348,7 +2342,9 @@ export class AppView {
 
     const narrowed = rangeFromBar !== null || rangeToBar !== null;
     this.el.focusHandle.dataset['passage'] = String(narrowed);
-    this.el.focusWhole.disabled = !narrowed;
+    // Narrowed to something, and not in the middle of reading it: giving the
+    // whole piece back mid-run would move what is being graded.
+    this.el.focusWhole.disabled = !narrowed || this.isPlaying;
   }
 
   /**
@@ -3559,10 +3555,30 @@ export class AppView {
       : 'The cursor waits until you play the notes on the page.';
   }
 
+  /** True while a run is under way, paused included: it is still that run. */
+  private get isPlaying(): boolean {
+    const status = this.runtime.controller.session?.status;
+    return status === 'running' || status === 'counting-in' || status === 'paused';
+  }
+
   private updateButtons(status: SessionStatus): void {
     this.lastStatus = status;
     const running = status === 'running' || status === 'counting-in';
     const paused = status === 'paused';
+    // What is being practised is settled before a run and not during one: a
+    // run is graded, and a passage moved halfway through makes the report a
+    // report of nothing in particular. The markers stay on the page saying
+    // what is being read; only the handles go.
+    for (const input of [
+      this.el.rangeFrom,
+      this.el.rangeTo,
+      this.el.focusFrom,
+      this.el.focusTo,
+    ]) {
+      input.disabled = running || paused;
+    }
+    this.showPassageMarkers();
+    this.describePassageRange();
 
     this.el.start.disabled = running || paused;
     this.el.pause.disabled = !running && !paused;

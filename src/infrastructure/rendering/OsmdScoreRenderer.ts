@@ -919,6 +919,9 @@ export class OsmdScoreRenderer
       if (grip === 'top' || grip === 'bottom') {
         end = grip;
       }
+      if (node.getAttribute('data-locked') === 'true') {
+        return null;
+      }
       const edge = node.getAttribute('data-edge');
       if (edge === 'start' || edge === 'end') {
         return { edge, end };
@@ -1612,6 +1615,14 @@ export class OsmdScoreRenderer
       // already worked out what the finger landed on, to a better standard
       // than any arithmetic of ours; asking it is both simpler and right.
       shape.setAttribute('data-edge', bracket.edge);
+      // Nothing to take hold of while it is being played. Said on the marker
+      // rather than checked when a drag begins, because the browser decides
+      // whether a touch will scroll the page from what is under it at the
+      // moment it starts - and a marker that swallows the touch and then does
+      // nothing is worse than one that never took it.
+      if (showing.movable === false) {
+        shape.setAttribute('data-locked', 'true');
+      }
       // The part the finger is allowed to land on, and the reason it is a
       // shape of its own: a browser decides whether a touch is going to
       // scroll the page *as it begins*, from the `touch-action` of whatever
@@ -1659,7 +1670,7 @@ export class OsmdScoreRenderer
       // one bar, which is most of what is actually wanted - it was nearly
       // right and wants a bar more at the front. The arrow says which way,
       // so the rule behind it does not have to be remembered.
-      for (const grip of gripsOf([bracket])) {
+      for (const grip of showing.movable === false ? [] : gripsOf([bracket])) {
         const circle = doc.createElementNS(SVG_NAMESPACE, 'circle');
         circle.setAttribute('class', `passage-marker__grip passage-marker__grip--${grip.end}`);
         circle.setAttribute('data-end', grip.end);

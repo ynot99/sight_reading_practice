@@ -1191,6 +1191,23 @@ select {
   pointer-events: none;
 }
 
+/*
+ * The mark on a bar that is a second reading of one already printed. Quieter
+ * than the passage markers and with nothing to take hold of: it is a sign
+ * saying "you have read this before", not a control.
+ */
+.repeat-mark__ring {
+  fill: none;
+  stroke: var(--muted, #8a8a8a);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.repeat-mark__head {
+  fill: var(--muted, #8a8a8a);
+  stroke: none;
+}
+
 .passage-marker__hit {
   fill: transparent;
   touch-action: none;

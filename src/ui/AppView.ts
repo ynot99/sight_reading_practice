@@ -2388,6 +2388,14 @@ export class AppView {
         // markers belong at its two ends after every reload, wherever the
         // reader last left them on the page before it.
         this.showPassageMarkers();
+        // Which bars the reader has seen before. A repeat is written out
+        // rather than jumped back to, so without this the music simply looks
+        // like a piece that says the same thing twice.
+        this.runtime.renderer.showRepeatedBars(
+          exercise.barLabels
+            .map((label, at) => (label.repeated ? at : -1))
+            .filter((at) => at >= 0),
+        );
         this.applyScoreCover();
         this.el.position.textContent = '—';
         // A performance does not survive its own score being replaced, so the

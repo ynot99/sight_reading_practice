@@ -81,6 +81,14 @@ const TAP_SLACK_PX = 8;
 const HOLD_MS = 450;
 /** How wide the "start here" line is drawn, and its little flag. */
 const START_WIDTH = 3;
+
+/**
+ * How big the mark on a re-read bar is drawn.
+ *
+ * A rehearsal mark's worth: big enough to be seen at the stand without
+ * being read as something the writer put there.
+ */
+const REPEAT_MARK_RADIUS = 7;
 const START_FLAG = 9;
 
 /** How far the page number sits from the corner of the page, in pixels. */
@@ -354,6 +362,7 @@ export class OsmdScoreRenderer
   private passage: DrawnPassage | null = null;
   /** The bar the music will start from, when the reader has moved it. */
   private startMeasure: number | null = null;
+  private repeatedBars: readonly number[] = [];
   private passageListeners: ((passage: DrawnPassage) => void)[] = [];
   private dragging: PassageDrag | null = null;
 
@@ -943,6 +952,11 @@ export class OsmdScoreRenderer
 
   showStart(measureIndex: number | null): void {
     this.startMeasure = measureIndex;
+    this.paintPassage();
+  }
+
+  showRepeatedBars(measureIndexes: readonly number[]): void {
+    this.repeatedBars = [...measureIndexes];
     this.paintPassage();
   }
 
@@ -1591,6 +1605,7 @@ export class OsmdScoreRenderer
       this.passageGroupFor(sheet).replaceChildren();
     }
     this.paintStart();
+    this.paintRepeats();
     const showing = this.dragging?.passage ?? this.passage;
     if (showing === null) {
       return;
@@ -1701,6 +1716,52 @@ export class OsmdScoreRenderer
    * and cleared from the transport bar. It hides with the markers, because
    * a reader who has put the furniture away has put all of it away.
    */
+  /**
+   * Marks each bar that is a second reading of one already printed.
+   *
+   * A turning arrow rather than a repeat sign: the repeat has been written
+   * out, so nothing here turns back, and a sign saying it did would be the
+   * page lying about its own layout. It sits above the bar line, where a
+   * rehearsal mark would, and it is deliberately not in the engraver's
+   * vocabulary - this is ours, not the writer's.
+   */
+  private paintRepeats(): void {
+    for (const at of this.repeatedBars) {
+      const measure = this.measuresHere().find((each) => each.measureIndex === at);
+      const sheet = measure === undefined ? undefined : this.sheets[measure.page];
+      if (measure === undefined || sheet === undefined) {
+        continue;
+      }
+      const doc = sheet.ownerDocument;
+      const mark = doc.createElementNS(SVG_NAMESPACE, 'g');
+      mark.setAttribute('class', 'repeat-mark');
+      const x = measure.left + REPEAT_MARK_RADIUS + 2;
+      const y = measure.top - REPEAT_MARK_RADIUS - 2;
+
+      const ring = doc.createElementNS(SVG_NAMESPACE, 'path');
+      ring.setAttribute('class', 'repeat-mark__ring');
+      // Most of a circle, open at the top right, so the arrow has somewhere
+      // to come from.
+      const r = REPEAT_MARK_RADIUS;
+      ring.setAttribute(
+        'd',
+        `M ${x + r} ${y} A ${r} ${r} 0 1 1 ${x} ${y - r}`,
+      );
+      mark.append(ring);
+
+      const head = doc.createElementNS(SVG_NAMESPACE, 'path');
+      head.setAttribute('class', 'repeat-mark__head');
+      const tip = r * 0.55;
+      head.setAttribute(
+        'd',
+        `M ${x - tip} ${y - r} L ${x + tip} ${y - r} L ${x} ${y - r + tip} Z`,
+      );
+      mark.append(head);
+
+      this.passageGroupFor(sheet).append(mark);
+    }
+  }
+
   private paintStart(): void {
     const at = this.startMeasure;
     const measure = at === null ? undefined : this.measuresHere().find(
@@ -2088,6 +2149,12 @@ export class OsmdScoreRenderer
       ],
     });
     osmd.zoom = this.currentZoom;
+    // The pedal is carried and it is played; it is not drawn. A pedal line is
+    // a long bracket under the staff, and to a reader at the stand it reads as
+    // a box around the music rather than as an instruction they can act on at
+    // tempo. Nothing is lost from the file or from the sound - the sustain
+    // still holds - only from the page.
+    (osmd.EngravingRules as unknown as { RenderPedals: boolean }).RenderPedals = false;
     this.osmd = osmd;
     return osmd;
   }

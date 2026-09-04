@@ -123,6 +123,16 @@ export interface IPassageMarkers {
    * and finding out.
    */
   showStart(measureIndex: number | null): void;
+  /**
+   * Marks the bars that are a second reading of ones already printed.
+   *
+   * A repeat is written out rather than jumped back to, so the music is on
+   * the page twice and a reader with no mark to go by would think the piece
+   * simply says it twice. The mark is not notation and does not pretend to
+   * be: the writer drew a repeat sign, and this says "you have read this
+   * before" in the one place a repeat sign no longer is.
+   */
+  showRepeatedBars(measureIndexes: readonly number[]): void;
   onScoreTapped(listener: () => void): () => void;
   /**
    * A finger held still on a bar, which is how a reader points at a place.

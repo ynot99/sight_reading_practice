@@ -138,6 +138,13 @@ export class FakeScoreRenderer
     this.startMeasure = measureIndex;
   }
 
+  /** Bars marked as a second reading, for assertions. */
+  repeatedBars: readonly number[] = [];
+
+  showRepeatedBars(measureIndexes: readonly number[]): void {
+    this.repeatedBars = [...measureIndexes];
+  }
+
   private tapListeners: (() => void)[] = [];
 
   onScoreTapped(listener: () => void): () => void {

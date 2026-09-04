@@ -221,6 +221,19 @@ interface DrawnNote {
     readonly parentStaffEntry?: { readonly parentStaff?: { readonly id?: number } };
   };
   readonly PositionAndShape?: { readonly AbsolutePosition?: { x: number; y: number } };
+  /**
+   * The engraver's own answer to which page this was laid out on.
+   *
+   * Asked only where the drawing cannot be: a rest is given no group of its
+   * own in the SVG, so there is no element to look up from.
+   */
+  readonly parentVoiceEntry?: {
+    readonly parentStaffEntry?: {
+      readonly parentMeasure?: {
+        readonly ParentMusicSystem?: { readonly Parent?: { readonly PageNumber?: number } };
+      };
+    };
+  };
 }
 
 /** Bridges OSMD's forward-only cursor to {@link ICursorPrimitive}. */
@@ -1431,6 +1444,16 @@ export class OsmdScoreRenderer
     return this.stepPage.get(stepIndex) ?? 0;
   }
 
+  /** The page the engraver says it laid something out on, zero-based. */
+  private pageOfGraphical(note: DrawnNote): number | null {
+    const number =
+      note.parentVoiceEntry?.parentStaffEntry?.parentMeasure?.ParentMusicSystem?.Parent
+        ?.PageNumber;
+    // The engraver numbers its pages from one; every page index here is from
+    // nought, because it indexes the sheets it drew.
+    return typeof number === 'number' && number >= 1 ? number - 1 : null;
+  }
+
   /** The page an element belongs to, by the sheet it is drawn in. */
   private pageOfElement(element: Element): number {
     const sheet = element.closest('svg');
@@ -1762,12 +1785,34 @@ export class OsmdScoreRenderer
       cursor.next();
     }
 
+    this.carryPagesForward(index);
     this.stepX = stepX;
     this.samples = samples;
     this.measureStaffHeights();
     this.attachNoteFurniture();
     this.navigator.reset();
     this.navigator.moveTo(restoreTo);
+  }
+
+  /**
+   * Gives the steps that could say nothing the page of the one before them.
+   *
+   * Two whole bars of rest in a row are drawn as a single multi-rest, so the
+   * second bar has no graphical object at all to ask. A step the engraver
+   * cannot place is on the page the music had reached when it got there,
+   * which is the only answer a forward walk can give and the right one: a
+   * page break happens at a bar the engraver *did* draw.
+   */
+  private carryPagesForward(steps: number): void {
+    let last = 0;
+    for (let index = 0; index < steps; index += 1) {
+      const known = this.stepPage.get(index);
+      if (known === undefined) {
+        this.stepPage.set(index, last);
+        continue;
+      }
+      last = known;
+    }
   }
 
   /**
@@ -1915,8 +1960,7 @@ export class OsmdScoreRenderer
       for (const graphical of cursor.GNotesUnderCursor()) {
         const note = graphical as unknown as DrawnNote;
         const position = note.PositionAndShape?.AbsolutePosition;
-        const pitch = note.sourceNote?.pitch;
-        if (position === undefined || pitch === undefined || pitch === null) {
+        if (position === undefined) {
           continue;
         }
 
@@ -1932,6 +1976,25 @@ export class OsmdScoreRenderer
           // Which sheet the engraver put it on, read off the drawing rather
           // than worked out: a step's page is the page its notes are on.
           this.stepPage.set(stepIndex, this.pageOfElement(drawn));
+        } else if (!this.stepPage.has(stepIndex)) {
+          // A rest gets no group of its own in the SVG, so there is nothing
+          // to look the page up from - and skipped for that, a bar of rests
+          // belonged to no page at all, which reads as page one. The page
+          // then turned back to the beginning under a reader in the middle of
+          // the piece, and the marker went with it. The engraver knows where
+          // it laid the bar out, so it is asked.
+          const page = this.pageOfGraphical(note);
+          if (page !== null) {
+            this.stepPage.set(stepIndex, page);
+          }
+        }
+
+        // Everything below is about *pitch*, which a rest has none of: it
+        // takes a cursor position and a place on the page, but no staff
+        // position for the overlay geometry to measure from.
+        const pitch = note.sourceNote?.pitch;
+        if (pitch === undefined || pitch === null) {
+          continue;
         }
 
         const diatonicIndex = diatonicIndexOf(pitch.FundamentalNote ?? -1, pitch.Octave ?? 0);

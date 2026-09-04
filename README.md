@@ -105,12 +105,22 @@ right. Both hands are always drawn and the one not being read is dimmed, so
 the control shows its own state instead of naming it.
 
 A pill beside the bar carries everything fullscreen has to say — where the run
-is, what it is counting, how it ended — and it is always there. All of that
+is, what is happening, how it ended — and it is always there. All of that
 changes while the reader plays and all of it is wider than a button, so it is
 absolutely positioned outside the bar's flow: its width can neither move a
 button a thumb is aiming at nor shift the bar off centre. The transport row
 holds only things that do not change size, a lesson four separate indicators
 taught the hard way.
+
+**The middle of the page** is for the two things the pill is the wrong shape
+for. A countdown — the look before a run, then the metronome's count-in — is
+drawn there huge and faint, over the music rather than instead of it: what
+the reader is doing while it runs is reading the first bar. And the verdict
+on a finished run goes there as a panel, with the breakdown and **Drill the
+worst bars** in it, because the panel that used to hold them is not on the
+page in fullscreen at all. A tap puts it away, and so does starting anything.
+Each number is said once: the status lines say *what* is happening, the
+middle of the page says how much of it is left.
 
 In fullscreen the pace is a **percentage of the written tempo**, moved five
 points at a time. A percentage rather than a number of beats because the

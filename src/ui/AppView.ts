@@ -626,6 +626,9 @@ export class AppView {
     score: HTMLElement;
     scoreCover: HTMLElement;
     scoreCoverText: HTMLElement;
+    scoreCard: HTMLElement;
+    scoreCount: HTMLElement;
+    scoreVerdict: HTMLElement;
     focusPlay: HTMLButtonElement;
     focusPlayIcon: SVGPathElement;
     focusHandle: HTMLButtonElement;
@@ -794,6 +797,9 @@ export class AppView {
       score: requireElement(doc, 'score'),
       scoreCover: requireElement(doc, 'score-cover'),
       scoreCoverText: requireElement(doc, 'score-cover-text'),
+      scoreCard: requireElement(doc, 'score-card'),
+      scoreCount: requireElement(doc, 'score-count'),
+      scoreVerdict: requireElement(doc, 'score-verdict'),
       focusPlay: requireElement(doc, 'focus-play'),
       focusPlayIcon: requireElement(doc, 'focus-play-icon'),
       focusHandle: requireElement(doc, 'focus-handle'),
@@ -1266,6 +1272,9 @@ export class AppView {
     // look, not a way around it.
     this.hasLooked = true;
     this.applyScoreCover();
+    // The last run's verdict is over the music the performance is about to
+    // walk through, which the reader asked to watch.
+    this.showVerdict(false);
     controller.listen();
     this.describeListening();
   }
@@ -1462,6 +1471,21 @@ export class AppView {
       }
       this.syncControlsFromSettings();
       void this.reload(false);
+    });
+
+    /*
+     * A tap anywhere on the verdict puts it away.
+     *
+     * The whole panel and not a close button in its corner: it is over the
+     * music, the reader has read it, and the gesture for "yes, I have seen
+     * that" is to touch it. The one thing inside it that means something
+     * else is the drill button, so that stops the tap before it arrives.
+     */
+    this.listen(this.el.scoreVerdict, 'click', (event) => {
+      if (event.target instanceof Element && event.target.closest('button') !== null) {
+        return;
+      }
+      this.showVerdict(false);
     });
 
     this.listen(this.el.repeatRange, 'change', () => {
@@ -1892,7 +1916,7 @@ export class AppView {
    * shows a number and then gets out of the way is a view's business.
    */
   private beginRun(): void {
-    this.el.result.hidden = true;
+    this.showVerdict(false);
     this.cancelPreview();
     this.hasLooked = true;
     this.applyScoreCover();
@@ -1905,9 +1929,12 @@ export class AppView {
 
     let left = seconds;
     const show = (): void => {
-      const message = `Look at it… ${left}`;
-      this.el.sessionStatus.textContent = message;
-      this.renderFocusStatus(message);
+      // The phase in words, the count in figures, and each said once: the
+      // status lines say what is happening and the middle of the page says
+      // how much of it is left.
+      this.el.sessionStatus.textContent = 'Look at it…';
+      this.renderFocusStatus('Look at it…');
+      this.showCount(left);
     };
     show();
     // Stop is how the reader says they have seen enough, so it has to be
@@ -1945,6 +1972,45 @@ export class AppView {
   }
 
   /**
+   * The number in the middle of the page, or `null` to take it away.
+   *
+   * Both countdowns come through here - the look before a run and the count
+   * the metronome beats in - because they are the same thing to a reader:
+   * how long until they have to play. Said in two places they would be two
+   * mechanisms, and the pill said them in the corner of an eye that is on
+   * the music.
+   */
+  private showCount(count: number | null): void {
+    this.el.scoreCount.textContent = count === null ? '' : String(count);
+    this.el.scoreCount.hidden = count === null;
+    this.syncCard();
+  }
+
+  /**
+   * Puts the verdict up in the middle of the page, or takes it away.
+   *
+   * Contents are still {@link renderResult}'s; this only decides whether the
+   * panel holding them is on screen. Away on a tap, and away whenever the
+   * music starts again - which is Start, a performance, or a repeat coming
+   * round - because a grade over the bar being played is a grade in the way.
+   */
+  private showVerdict(shown: boolean): void {
+    this.el.scoreVerdict.hidden = !shown;
+    this.syncCard();
+  }
+
+  /**
+   * The card is only there when it has something in it.
+   *
+   * Empty it would still be a transparent sheet over the whole score, and
+   * although it lets touches through, `hidden` is the honest way to say a
+   * thing is not on the page - and the one every test can read.
+   */
+  private syncCard(): void {
+    this.el.scoreCard.hidden = this.el.scoreCount.hidden && this.el.scoreVerdict.hidden;
+  }
+
+  /**
    * Says where the music has reached, whoever is playing it.
    *
    * A run and a performance answer the same question and the page has one
@@ -1971,6 +2037,9 @@ export class AppView {
     }
     clearInterval(this.previewTimer);
     this.previewTimer = null;
+    // Whether the look ran out or the reader cut it short, the number it was
+    // counting has nothing left to say.
+    this.showCount(null);
     this.updateButtons(this.runtime.controller.session?.status ?? 'idle');
   }
 
@@ -2409,6 +2478,10 @@ export class AppView {
         this.bindSession(session);
         // A run takes the pulse from a playback, so the button has to admit it.
         this.describeListening();
+        // Every way of starting a run arrives here - the button, the repeat
+        // coming round, a drill - so the verdict on the last one is put away
+        // in one place rather than at each of them.
+        this.showVerdict(false);
       }),
     );
 
@@ -2463,8 +2536,7 @@ export class AppView {
 
     this.subscriptions.push(
       controller.events.on('error', ({ error, context }) => {
-        this.el.result.hidden = false;
-        this.el.result.textContent = `${context}: ${error.message}`;
+        this.sayInTheMiddle(`${context}: ${error.message}`);
       }),
     );
   }
@@ -2490,9 +2562,13 @@ export class AppView {
         );
         this.updateButtons(status);
       }),
+      // The number itself and nowhere else. The pill and the desk's status
+      // line both said "Counting in… 3" as well, which is the same count in
+      // three places - and the two of them are in the corner of an eye that
+      // is on the music. They keep the plain "Counting in…" the status gives
+      // them, which says what is happening without counting it.
       session.events.on('countIn', ({ beatsRemaining }) => {
-        this.el.sessionStatus.textContent = `Counting in… ${beatsRemaining}`;
-        this.showNotice(`Counting in… ${beatsRemaining}`);
+        this.showCount(beatsRemaining);
       }),
       session.events.on('statusChanged', ({ status }) => {
         // Restarting is the view's job, not the controller's: tearing a
@@ -2508,6 +2584,9 @@ export class AppView {
       }),
       session.events.on('stepEntered', ({ step }) => {
         this.el.progress.value = step.index;
+        // The count has run out by the time there is a step to play, and the
+        // count-in emits no final zero to say so.
+        this.showCount(null);
       }),
       // Where the music is, which under the metronome goes on moving through a
       // held note - the step is what the reader has to play, not where the
@@ -2518,8 +2597,9 @@ export class AppView {
       session.events.on('finished', ({ report, score }) => {
         this.el.progress.value = this.totalSteps;
         this.lastPosition = '';
-        // In fullscreen the result panel is hidden, so the notice carries
-        // the verdict - beside the bar, where its width is nobody's business.
+        // Twice over, and deliberately: the card is the moment, dismissed as
+        // soon as it has been read, and the pill is what is still there
+        // afterwards when the reader wants to check what they got.
         this.showNotice(`${score.grade} · ${percent(score.overall)}${timingTail(report)}`);
         this.renderResult(score, report);
         // The run just measured what it measured; the delay control can say
@@ -2717,12 +2797,26 @@ export class AppView {
       // New material clears the practised bars, and a box still showing the
       // old ones would name a passage of a piece that is no longer open.
       this.syncControlsFromSettings();
-        this.el.result.hidden = true;
+      this.showVerdict(false);
     } catch (error) {
-      this.el.result.hidden = false;
-      this.el.result.textContent =
-        error instanceof Error ? error.message : 'Failed to build an exercise.';
+      this.sayInTheMiddle(
+        error instanceof Error ? error.message : 'Failed to build an exercise.',
+      );
     }
+  }
+
+  /**
+   * Puts a plain sentence where the verdict goes.
+   *
+   * Which is where a failure has to be said, because the panel it used to be
+   * written into is not on the page in fullscreen at all - so the reader
+   * whose import failed was told nothing whatsoever, on the layout they
+   * actually practise in.
+   */
+  private sayInTheMiddle(message: string): void {
+    this.el.result.replaceChildren(this.doc.createTextNode(message));
+    this.el.drill.hidden = true;
+    this.showVerdict(true);
   }
 
   /** Applies and remembers when the recordings should be fetched. */
@@ -3610,7 +3704,7 @@ export class AppView {
   }
 
   private renderResult(score: SessionScore, report: PerformanceReport): void {
-    this.el.result.hidden = false;
+    this.showVerdict(true);
     // Offered only when the run actually left something to work on; a clean
     // reading has no worst bars, and a button that says otherwise is noise.
     this.el.drill.hidden = worstPassage(report) === null;

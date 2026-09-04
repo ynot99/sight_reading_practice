@@ -90,6 +90,24 @@ describe('the stylesheet', () => {
     expect(rules().some((rule) => rule.selector === '.focus-bar__status')).toBe(false);
   });
 
+  it('lets a touch through the middle of the page to the music under it', () => {
+    // The card covering the score is transparent and covers all of it, so
+    // taking touches would kill the two gestures the page is read with - a
+    // held finger on a bar to put the place there, a tap to raise the passage
+    // markers - and kill them silently, since nothing would happen at all.
+    // Only the verdict takes a touch, and only because a tap is how it is
+    // dismissed. jsdom applies no stylesheet, so nothing else can see this.
+    const card = rules().find((rule) => rule.selector === '.score-card');
+    const verdict = rules().find((rule) => rule.selector === '.score-card__verdict');
+
+    expect(card?.body).toMatch(/pointer-events\s*:\s*none/);
+    expect(verdict?.body).toMatch(/pointer-events\s*:\s*auto/);
+    // And the count never does: it is a phase that ends on its own, and a tap
+    // that dismissed it would leave the run starting on a blank page.
+    const count = rules().find((rule) => rule.selector === '.score-card__count');
+    expect(count?.body).not.toMatch(/pointer-events\s*:\s*auto/);
+  });
+
   it('says a marker will not scroll the page before anyone touches it', () => {
     // A browser decides whether a touch is going to scroll as the touch
     // begins, from what is under the finger. Said only once the drag had

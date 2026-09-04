@@ -295,9 +295,80 @@ progress {
   accent-color: var(--accent);
 }
 
+/*
+ * The middle of the page: a number counting down, or the verdict on a run.
+ *
+ * Over the score and centred on it, which in fullscreen is centred on the
+ * screen. `inset: 0` rather than a measured position, because the frame is
+ * already `position: relative` and the browser can centre a box far better
+ * than script can - and this has to stay right through a page turn, a zoom
+ * and a rotation without anything being told about them.
+ *
+ * No pointer events of its own: the card is dismissed by a tap, but a tap on
+ * the music underneath is how a reader chooses a passage, and a transparent
+ * sheet over the whole page would swallow every one of them. Only the boxes
+ * that are actually showing take a touch, which is what `auto` on the
+ * children below does.
+ */
+.score-card {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  pointer-events: none;
+}
+
+/*
+ * The countdown, drawn over the music rather than instead of it.
+ *
+ * Big, and deliberately faint. What the reader is doing during a count-in is
+ * reading the first bar, so a number solid enough to hide it would be
+ * counting them into music they had not been allowed to look at. Faint and
+ * enormous, it is read without being looked at.
+ *
+ * It takes no touch at all: the count is a phase with an end of its own, and
+ * a tap that dismissed it would leave the run about to start with nothing on
+ * screen saying so.
+ */
+.score-card__count {
+  font-size: clamp(72px, 22vmin, 200px);
+  font-weight: 700;
+  line-height: 1;
+  color: color-mix(in srgb, var(--accent) 30%, transparent);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/*
+ * The verdict, which is a panel and not a ghost: nothing is being read at
+ * the moment it appears, so it may sit on the music opaquely and be legible.
+ */
+.score-card__verdict {
+  pointer-events: auto;
+  display: grid;
+  gap: 10px;
+  min-width: min(320px, 100%);
+  max-width: min(420px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 40px rgb(16 24 40 / 22%);
+  cursor: pointer;
+}
+
 .result {
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
   display: grid;
   gap: 4px;
   font-size: 13px;
@@ -970,10 +1041,12 @@ select {
 /*
  * On a narrow screen the pill is put above the bar instead of beside it.
  *
- * Hiding it was the other option and it is the wrong one: this is where the
- * count-in is counted and where the grade is given, and fullscreen has nowhere
- * else to say either. Above the bar there is empty page, and the pill still
- * takes no part in the row's width.
+ * Hiding it was the other option and it is the wrong one: where the reader is
+ * in the piece, what was just opened, what the last run scored - fullscreen
+ * has nowhere else to say any of it. The countdown and the verdict now have
+ * the middle of the page, but the middle of the page is a moment and this is
+ * what is still there afterwards. Above the bar there is empty page, and the
+ * pill still takes no part in the row's width.
  */
 @media (max-width: 560px) {
   .focus-notice {

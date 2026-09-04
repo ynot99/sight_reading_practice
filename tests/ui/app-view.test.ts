@@ -835,9 +835,8 @@ describe('AppView', () => {
 
     element<HTMLButtonElement>('stop').click();
 
-    const result = element('result');
-    expect(result.hidden).toBe(false);
-    expect(result.textContent).toContain('Overall');
+    expect(element('score-verdict').hidden).toBe(false);
+    expect(element('result').textContent).toContain('Overall');
     expect(element('session-status').textContent).toBe('Stopped');
   });
 
@@ -848,6 +847,120 @@ describe('AppView', () => {
     element<HTMLButtonElement>('stop').click();
 
     expect(element('result').textContent).toContain('Tendency');
+  });
+
+  describe('what the middle of the page says', () => {
+    it('is empty until there is something to say', async () => {
+      const { view } = createRig();
+      await view.initialize();
+
+      expect(element('score-card').hidden).toBe(true);
+      // Over the music and not over the app: in fullscreen the score is the
+      // whole page anyway, and this is about the score either way.
+      expect(element('score-card').parentElement?.id).toBe('score');
+    });
+
+    it('gives the verdict there, where a panel fullscreen hides cannot', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('start').click();
+
+      element<HTMLButtonElement>('stop').click();
+
+      expect(element('score-card').hidden).toBe(false);
+      expect(element('score-verdict').hidden).toBe(false);
+      expect(element('result').textContent).toContain('Overall');
+    });
+
+    it('puts the verdict away on a tap, the card with it', async () => {
+      // It is over the music the reader is about to go back to, and touching
+      // a thing you have read is how you say you have read it.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('stop').click();
+
+      element('score-verdict').click();
+
+      expect(element('score-verdict').hidden).toBe(true);
+      expect(element('score-card').hidden).toBe(true);
+    });
+
+    it('keeps it up when the tap was on a button inside it', async () => {
+      // The drill button means "practise the worst bars", not "I have read
+      // this" - and a dismissal riding on top of it would take the verdict
+      // away from under a reader who was answering it.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('stop').click();
+
+      element<HTMLButtonElement>('drill').click();
+
+      expect(element('score-verdict').hidden).toBe(false);
+    });
+
+    it('takes the verdict away when the music starts again', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('stop').click();
+      expect(element('score-verdict').hidden).toBe(false);
+
+      element<HTMLButtonElement>('start').click();
+
+      expect(element('score-verdict').hidden).toBe(true);
+      expect(element('score-card').hidden).toBe(true);
+    });
+
+    it('counts the run in there, rather than in the corner of an eye', async () => {
+      // What the reader is doing during a count-in is reading the first bar,
+      // so the number belongs where they are already looking.
+      const { view, runtime, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ countInBars: 1, modeId: FLOW_MODE_ID });
+      await runtime.controller.reloadExercise();
+      expect(element('score-count').hidden).toBe(true);
+
+      runtime.controller.start();
+      // The count is beaten, not announced on starting: the number is how
+      // many pulses are left, and it takes a pulse to know.
+      metronome.advanceBeats(1);
+
+      expect(element('score-count').hidden).toBe(false);
+      expect(Number.parseInt(element('score-count').textContent ?? '', 10)).toBeGreaterThan(0);
+      expect(element('score-card').hidden).toBe(false);
+
+      // And nowhere else counts it. The pill and the desk's status line say
+      // what is happening; the number is asked for once and answered once.
+      expect(element('focus-notice').textContent).toBe('Counting in…');
+      expect(element('session-status').textContent).toBe('Counting in…');
+
+      // And it is gone by the time there is a bar to play.
+      metronome.advanceBeats(8);
+      expect(element('score-count').hidden).toBe(true);
+    });
+
+    it('counts the look down there too, being the same question', async () => {
+      // "How long until I have to play" is one question, so it is answered in
+      // one place - not in the middle for the count-in and in a pill for the
+      // look that comes before it.
+      vi.useFakeTimers();
+      try {
+        const { view, runtime } = createRig();
+        await view.initialize();
+        runtime.controller.updateSettings({ previewSeconds: 3 });
+
+        element<HTMLButtonElement>('start').click();
+        expect(element('score-count').textContent).toBe('3');
+
+        vi.advanceTimersByTime(3000);
+        // And it goes when the look does, rather than hanging over the run.
+        expect(element('score-count').hidden).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('pushes control changes into the settings', async () => {

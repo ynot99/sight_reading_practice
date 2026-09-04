@@ -93,6 +93,30 @@
           <div id="score-cover" class="score__cover" hidden>
             <p id="score-cover-text" class="score__cover-text"></p>
           </div>
+
+          <!--
+            The middle of the page, where the reader is already looking.
+
+            Two things are said here and they can never both be up: a number
+            counting down to a run, and the verdict on one that has finished.
+            Beside the transport bar both used to be a pill in the corner of
+            the eye - which for a countdown is the wrong corner, since the
+            eyes are on the music, and for a grade is too small to hold a
+            breakdown at all. In fullscreen the panel that held the breakdown
+            is not on the page, so there it was said in two words or not at
+            all.
+
+            Over the score rather than over the whole app, because that is
+            what it is about and because the score is the whole of the page
+            in fullscreen anyway.
+          -->
+          <div id="score-card" class="score-card" hidden>
+            <output id="score-count" class="score-card__count" hidden></output>
+            <div id="score-verdict" class="score-card__verdict" hidden>
+              <div id="result" class="result"></div>
+              <button id="drill" type="button" class="button" hidden>Drill the worst bars</button>
+            </div>
+          </div>
         </section>
 
         <aside class="panel">
@@ -118,8 +142,6 @@
             <button id="open-settings" type="button" class="button button--ghost">Settings</button>
           </div>
 
-          <div id="result" class="result" hidden></div>
-        <button id="drill" type="button" class="button" hidden>Drill the worst bars</button>
         </aside>
       </main>
 

@@ -118,8 +118,12 @@ written tempo changes from piece to piece: "a bit slower" is the same gesture
 at 60 and at 132, and 100% always means as written. It is derived from the
 material rather than stored, so it cannot drift out of step with the music on
 screen — an opened score brings its own tempo, a generated one takes its
-level's. Changing it re-engraves, since the tempo mark is printed on the page
-and a page that says 88 while the run goes at 70 lies about itself.
+level's. Changing it does *not* redraw the page: a printed score states the
+tempo its writer chose and says nothing about how fast anyone is playing it
+today, so the page is engraved from the score as written and the transport
+says what the run is actually taken at. Engraving a long score is two and a
+half seconds against thirty milliseconds to write the file, so a nudge that
+redrew it spent nearly all of that on notes nobody had touched.
 
 **Look before playing** is the only time you get with the music. Set it above
 zero and the page is kept face down until you press Start; then you have those

@@ -382,6 +382,8 @@ export class PracticeController {
   private beginAt = 0;
   private openedScore: Exercise | null = null;
   private player: ExercisePlayer | null = null;
+  /** The file the page is currently engraved from, so it is drawn once. */
+  private engravedXml: string | null = null;
   /** Highest step already dimmed, so the veil is drawn once per step. */
   private fadedThrough = -1;
   /** Marks waiting for the run to end, when that is when they are drawn. */
@@ -892,7 +894,12 @@ export class PracticeController {
     // cut has to repair - the restated clef, the tie let go of, the pedal
     // pressed again - stops existing rather than being handled.
     const exercise = retimed;
-    const musicXml = this.deps.serializer.serialize(exercise);
+    // Engraved from the score *as written*, never at the share the reader is
+    // taking it. A printed page states the tempo its writer chose and says
+    // nothing about how fast anyone is playing it today - which is also why
+    // it need not be drawn again when they change their mind. What speed the
+    // run is actually going is the transport's to say, and it does.
+    const musicXml = this.deps.serializer.serialize(source);
 
     this.exercise = exercise;
     this.timeline = buildTimeline(exercise);
@@ -900,7 +907,14 @@ export class PracticeController {
     // New music, so the reader's place in the old music means nothing.
     this.beginAt = 0;
 
-    await this.deps.renderer.load(musicXml);
+    // Only when the notes have changed. Engraving is two and a half seconds
+    // on a long score against thirty milliseconds to write the file, so a
+    // tempo nudge that redrew the page spent nearly all of its time redrawing
+    // notes nobody had touched - and swallowed the next press while it did.
+    if (musicXml !== this.engravedXml) {
+      this.engravedXml = musicXml;
+      await this.deps.renderer.load(musicXml);
+    }
     const timeline = this.timeline;
     this.deps.overlay.configureOverlay({
       keyAt: (stepIndex) =>

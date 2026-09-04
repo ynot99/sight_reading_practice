@@ -2022,12 +2022,16 @@ export class AppView {
   /**
    * Changes the pace without leaving the stand.
    *
-   * The reading moves at once and the page follows when the pressing stops.
-   * Re-engraving is what makes this expensive - the tempo mark is printed, so
-   * leaving it saying 88 while the run goes at 70 is a page that lies about
-   * itself - and on a long piece it is most of a second. Done on every press
-   * it swallowed the next one, so a reader holding the button watched a
-   * number that moved in jerks and wondered whether it had heard them.
+   * The reading moves at once and the run follows when the pressing stops.
+   *
+   * The page itself no longer moves at all: it is engraved from the score as
+   * written, and a printed page states the tempo its writer chose rather than
+   * how fast anyone is playing it today. What the run is actually taken at is
+   * the transport's to say, and it says it in beats and in per cent.
+   *
+   * The wait is still worth having. Settling a new tempo rebuilds what the
+   * run is judged against and puts the marks and the veil away, and doing
+   * that on every press of a held button is churn nobody asked to watch.
    *
    * Generation is seeded, so the notes are the same ones either way.
    */

@@ -318,7 +318,30 @@ describe('PracticeController', () => {
     // Same notes, read at half the speed the file asked for.
     expect(controller.currentExercise?.tempoBpm).toBe(60);
     expect(controller.openedExercise?.tempoBpm).toBe(120);
-    expect(renderer.loadedXml).toContain('<per-minute>60</per-minute>');
+    // And the page still says what the writer wrote. A printed score states
+    // the tempo it was written at and says nothing about how fast anyone is
+    // playing it today; what the run is actually taken at is the transport's
+    // to say, and it says it.
+    expect(renderer.loadedXml).toContain('<per-minute>120</per-minute>');
+  });
+
+  it('does not engrave the page again for a change of speed', async () => {
+    // Engraving is two and a half seconds on a long score against thirty
+    // milliseconds to write the file. Redrawing for a tempo nudge spent
+    // nearly all of it on notes nobody had touched, and swallowed the next
+    // press while it did.
+    const { controller, renderer } = createController();
+    await controller.openScore(tiedExercise({ tempoBpm: 120 }));
+    const drawn = renderer.loadCount;
+
+    controller.setTempoBpm(60);
+    await controller.reloadExercise();
+    controller.setTempoBpm(90);
+    await controller.reloadExercise();
+
+    expect(renderer.loadCount).toBe(drawn);
+    // The run does follow, which is the half that has to keep working.
+    expect(controller.currentExercise?.tempoBpm).toBe(90);
   });
 
   it('keeps the opened score until something says otherwise', async () => {

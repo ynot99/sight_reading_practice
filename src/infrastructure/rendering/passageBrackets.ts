@@ -46,8 +46,17 @@ export interface BracketShape {
 
 export type PassageEdge = 'start' | 'end';
 
-/** How far outside a marker a touch still counts as landing on it. */
-export const GRIP_RADIUS_PX = 22;
+/**
+ * How far outside a marker a touch still counts as landing on it.
+ *
+ * A fingertip is about a centimetre across and a marker is a line five units
+ * wide, so the strip that answers for it has to be most of the reaching. At
+ * 22 it was the 44 wide that a tablet's own guidance asks for as a minimum,
+ * and a minimum is what it felt like - the reader could not reliably take
+ * hold of one. Sixty is still well under half a bar at reading size, so a
+ * hold meant for the bar does not land on the marker instead.
+ */
+export const GRIP_RADIUS_PX = 30;
 
 /**
  * The markers for a passage running from one bar to another.

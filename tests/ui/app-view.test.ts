@@ -1737,6 +1737,117 @@ describe('AppView', () => {
       expect(rig.runtime.controller.session?.currentStep?.measureIndex).toBe(2);
     });
 
+    describe('filling in the marks one hold at a time', () => {
+      /**
+       * The whole ladder, in the order a reader climbs it.
+       *
+       * Which mark a hold places is read off the page rather than counted:
+       * the next one missing. Said by *where in the bar* the finger landed
+       * instead - near the line against the middle - a third of the misses
+       * would place the wrong mark, a bar being a couple of centimetres and
+       * a fingertip being one.
+       */
+      it('goes place, then near end, then far end, then starts over', async () => {
+        const rig = createRig();
+        await rig.view.initialize();
+        const { controller } = rig.runtime;
+
+        rig.renderer.holdBar(1);
+        expect(controller.beginsAt).toBeGreaterThan(0);
+        expect(controller.settings.rangeFromBar).toBeNull();
+
+        rig.renderer.holdBar(1);
+        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(1));
+        expect(controller.settings.rangeToBar).toBeNull();
+
+        rig.renderer.holdBar(3);
+        expect(controller.settings.rangeToBar).toBe(controller.barNumber(3));
+
+        // A fourth is a fresh start, not a fourth mark.
+        rig.renderer.holdBar(2);
+        expect(controller.settings.rangeFromBar).toBeNull();
+        expect(controller.settings.rangeToBar).toBeNull();
+      });
+
+      it('takes the two bars pointed at, whichever came first', async () => {
+        // A reader who holds behind the near end meant the stretch between
+        // the two bars they pointed at, not an empty passage.
+        const rig = createRig();
+        await rig.view.initialize();
+        const { controller } = rig.runtime;
+
+        rig.renderer.holdBar(3);
+        rig.renderer.holdBar(3);
+        rig.renderer.holdBar(1);
+
+        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(1));
+        expect(controller.settings.rangeToBar).toBe(controller.barNumber(3));
+      });
+
+      it('shuts the passage onto one bar when a marker is held', async () => {
+        // The fast way to say "this bar and no more", read off the marker the
+        // finger is on rather than from a count.
+        const rig = createRig();
+        await rig.view.initialize();
+        const { controller } = rig.runtime;
+        rig.renderer.holdBar(1);
+        rig.renderer.holdBar(1);
+        rig.renderer.holdBar(3);
+
+        rig.renderer.holdMarker('from');
+
+        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(1));
+        expect(controller.settings.rangeToBar).toBe(controller.barNumber(1));
+      });
+
+      it('shuts it onto the far marker’s bar from the other end', async () => {
+        const rig = createRig();
+        await rig.view.initialize();
+        const { controller } = rig.runtime;
+        rig.renderer.holdBar(1);
+        rig.renderer.holdBar(1);
+        rig.renderer.holdBar(3);
+
+        rig.renderer.holdMarker('to');
+
+        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(3));
+        expect(controller.settings.rangeToBar).toBe(controller.barNumber(3));
+      });
+
+      it('changes nothing while a run is being graded', async () => {
+        // What is being practised is settled before a run, not during one:
+        // a passage moved halfway through makes the report a report of
+        // nothing in particular.
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.renderer.holdBar(1);
+        rig.renderer.holdBar(1);
+        const before = rig.runtime.controller.settings.rangeFromBar;
+        rig.runtime.controller.updateSettings({ countInBars: 0 });
+        element<HTMLButtonElement>('start').click();
+
+        rig.renderer.holdBar(3);
+        rig.renderer.holdMarker('from');
+
+        expect(rig.runtime.controller.settings.rangeFromBar).toBe(before);
+        expect(rig.runtime.controller.settings.rangeToBar).toBeNull();
+      });
+
+      it('shows the markers it has just placed', async () => {
+        // Placing one and leaving it invisible would be the reader wondering
+        // whether the hold registered at all.
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.renderer.tapScore();
+        expect(rig.renderer.shownPassage).toBeNull();
+
+        rig.renderer.holdBar(1);
+        rig.renderer.holdBar(1);
+
+        expect(rig.renderer.shownPassage).not.toBeNull();
+      });
+    });
+
     it('takes the place back to the top from the transport bar', async () => {
       // A place can be set anywhere by holding a finger on a bar, so the way
       // back must not be "find bar one and hold a finger on that".

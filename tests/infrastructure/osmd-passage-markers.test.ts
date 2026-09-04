@@ -279,6 +279,53 @@ describe('passage markers over a real engraving', () => {
     expect(chosen[0]?.toMeasureIndex).toBeLessThan(3);
   });
 
+  it('says when a finger is held on a marker rather than on a bar', () => {
+    // Told apart by what is under the finger, not by where in the bar it
+    // landed: a marker is a drawn thing with an edge to aim at, and "near
+    // the bar line" against "in the middle of the bar" is a distinction a
+    // fingertip cannot reliably make.
+    renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 3 });
+    showAt(renderer, container);
+    const ends: string[] = [];
+    const bars: number[] = [];
+    renderer.onMarkerHeld((end) => ends.push(end));
+    renderer.onBarHeld((measureIndex) => bars.push(measureIndex));
+    const chosen: unknown[] = [];
+    renderer.onPassageDragged((passage) => chosen.push(passage));
+
+    const [, end] = markers(container);
+    const held = Number(end?.querySelector('rect.passage-marker__bar')?.getAttribute('x'));
+    vi.useFakeTimers();
+    try {
+      end?.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          clientX: held,
+          clientY: 130,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
+      vi.advanceTimersByTime(600);
+      container.dispatchEvent(
+        new PointerEvent('pointerup', {
+          clientX: held,
+          clientY: 130,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(ends).toEqual(['to']);
+    // Not both: a hold on a marker is not a hold on the bar behind it.
+    expect(bars).toEqual([]);
+    // And letting go afterwards must not also nudge the passage a bar - a
+    // tap on a grip already means that, and the reader did not tap.
+    expect(chosen).toEqual([]);
+  });
+
   it('marks the bar the music will start from, quietly', () => {
     // A sign and not a control: nothing to take hold of, and it must not
     // swallow a touch aimed at the music or at a marker beside it.

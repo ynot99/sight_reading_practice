@@ -10,6 +10,7 @@ import type {
   IScoreRenderer,
   IScoreZoom,
   OverlayContext,
+  PassageEnd,
   PlayedNote,
 } from '../../application/ports/IScoreRenderer.js';
 import {
@@ -426,6 +427,7 @@ export class OsmdScoreRenderer
   private swipe: PageSwipe | null = null;
   private tapListeners: (() => void)[] = [];
   private heldListeners: ((measureIndex: number) => void)[] = [];
+  private markerHeldListeners: ((end: PassageEnd) => void)[] = [];
   private holding: ReturnType<typeof setTimeout> | null = null;
   /** Where a touch that took hold of nothing began, so a tap can be told. */
   private tapFrom: { readonly pointerId: number; readonly x: number; readonly y: number } | null =
@@ -1055,6 +1057,37 @@ export class OsmdScoreRenderer
     };
   }
 
+  onMarkerHeld(listener: (end: PassageEnd) => void): () => void {
+    this.markerHeldListeners.push(listener);
+    return () => {
+      this.markerHeldListeners = this.markerHeldListeners.filter((each) => each !== listener);
+    };
+  }
+
+  /**
+   * Starts the clock on a finger that has taken hold of a marker.
+   *
+   * The same wait as a hold on a bar, and it ends the drag when it fires:
+   * the reader asked for the marker to do something, not to be moved, and
+   * letting the drag finish as well would nudge the passage a bar on the way
+   * out - a tap on a grip already means that.
+   */
+  private watchForAMarkerHold(event: PointerEvent, edge: PassageEdge): void {
+    this.cancelHold();
+    this.holding = setTimeout(() => {
+      this.holding = null;
+      if (this.dragging?.pointerId !== event.pointerId) {
+        return;
+      }
+      this.dragging = null;
+      this.container.releasePointerCapture?.(event.pointerId);
+      const end: PassageEnd = edge === 'start' ? 'from' : 'to';
+      for (const listener of [...this.markerHeldListeners]) {
+        listener(end);
+      }
+    }, HOLD_MS);
+  }
+
   /** Starts the clock on a finger that may be pointing at a bar. */
   private watchForAHold(event: PointerEvent): void {
     this.cancelHold();
@@ -1170,16 +1203,19 @@ export class OsmdScoreRenderer
       grip: touched?.end ?? null,
       overshot: false,
     };
+    this.watchForAMarkerHold(event, edge);
   }
 
   private continueDrag(event: PointerEvent): void {
     this.turnIfDraggedOffThePage(event);
-    const began = this.tapFrom;
+    const began = this.tapFrom ?? this.dragging?.from ?? null;
     if (
       began !== null &&
       Math.hypot(event.clientX - began.x, event.clientY - began.y) > TAP_SLACK_PX
     ) {
-      // Moving is not pointing.
+      // Moving is not pointing - of a bar or of a marker. A finger that has
+      // set off with a marker is dragging it, and the wait it started when it
+      // landed must not go off in the middle of that.
       this.cancelHold();
     }
     const moved = this.draggedTo(event);

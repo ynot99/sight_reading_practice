@@ -62,6 +62,9 @@ export interface IScorePages {
   onPagesChanged(listener: (state: ScorePageState) => void): () => void;
 }
 
+/** Which end of the passage a gesture was aimed at. */
+export type PassageEnd = 'from' | 'to';
+
 /** A passage, as the bars of the engraving that hold it. */
 export interface DrawnPassage {
   readonly fromMeasureIndex: number;
@@ -134,6 +137,15 @@ export interface IPassageMarkers {
    */
   showRepeatedBars(measureIndexes: readonly number[]): void;
   onScoreTapped(listener: () => void): () => void;
+  /**
+   * A finger held still on one of the two markers.
+   *
+   * Told apart from a hold on a bar by what is under the finger rather than
+   * by where in the bar it landed: a marker is a drawn thing with an edge to
+   * aim at, and "near the bar line" against "in the middle of the bar" is a
+   * distinction a fingertip cannot reliably make.
+   */
+  onMarkerHeld(listener: (end: PassageEnd) => void): () => void;
   /**
    * A finger held still on a bar, which is how a reader points at a place.
    *

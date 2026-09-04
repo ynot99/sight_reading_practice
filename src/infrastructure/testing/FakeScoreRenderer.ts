@@ -9,6 +9,7 @@ import type {
   IScoreRenderer,
   IScoreZoom,
   OverlayContext,
+  PassageEnd,
   PlayedNote,
 } from '../../application/ports/IScoreRenderer.js';
 import type { ICursorPrimitive } from '../rendering/CursorNavigator.js';
@@ -167,6 +168,22 @@ export class FakeScoreRenderer
   holdBar(measureIndex: number): void {
     for (const listener of [...this.heldListeners]) {
       listener(measureIndex);
+    }
+  }
+
+  private markerHeldListeners: ((end: PassageEnd) => void)[] = [];
+
+  onMarkerHeld(listener: (end: PassageEnd) => void): () => void {
+    this.markerHeldListeners.push(listener);
+    return () => {
+      this.markerHeldListeners = this.markerHeldListeners.filter((each) => each !== listener);
+    };
+  }
+
+  /** Stands in for a reader holding a finger on one of the two markers. */
+  holdMarker(end: PassageEnd): void {
+    for (const listener of [...this.markerHeldListeners]) {
+      listener(end);
     }
   }
 

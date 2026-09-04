@@ -38,12 +38,30 @@ the serializer and the parser is exact, measured on the real test file and
 byte for byte, so there is one representation to keep correct instead of two
 — and what is on disk stays a format other programs can read.
 
-**Touch a note** to choose the passage. The first touch says where to begin
-and leaves the end alone, so one tap means "from here on"; a touch further
-into the piece closes it, and a touch on what is already the first bar gives
-the whole piece back. Whole bars, because that is what a passage is made of
-and where a musician starts — cutting partway through one would leave a
-pickup and make every seam harder for nothing gained.
+**Hold a finger on a bar** to fill in the next mark that is missing: the
+place the music will start from, then the near end of the passage, then the
+far end. With all three set the next hold starts over. Which mark it is comes
+off the page and not off a count — you look and see what is not there yet —
+and holding behind the near end is read as the stretch between the two bars
+pointed at rather than as an empty passage.
+
+Which mark could instead have been said by *where in the bar* the finger
+landed, near the bar line against the middle of it, and that is a distinction
+a fingertip cannot reliably make: a bar is a couple of centimetres and a
+fingertip is one, so a third of the misses would place the wrong mark. A
+double tap was the other candidate, and it costs either a quarter-second of
+waiting on every tap — including the grip taps that nudge the passage a bar
+at a time, which are pressed in a row — or a first tap that acts and is then
+undone.
+
+**Hold a finger on a marker** to shut the passage onto the one bar it stands
+at: the near marker pulls the far one back to the end of its own bar, the far
+one pulls the near one up to the start of its own. A tap on a marker's grip
+still nudges the passage a bar, and dragging one still moves it.
+
+Whole bars throughout, because that is what a passage is made of and where a
+musician starts — cutting partway through one would leave a pickup and make
+every seam harder for nothing gained.
 
 The bar boxes stay as the same value seen at the desk, the way the tempo
 slider and the fullscreen percentage are one setting with two editors. At the

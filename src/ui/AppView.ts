@@ -27,7 +27,7 @@ import { TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { ChosenPassage } from '../application/PracticeController.js';
-import type { DrawnPassage, ScorePageState } from '../application/ports/IScoreRenderer.js';
+import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { measureCount } from '../domain/model/Exercise.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { elementAt } from '../shared/asserts.js';
@@ -1179,6 +1179,89 @@ export class AppView {
         ? 'Starting from the top.'
         : `Starting at bar ${controller.barNumber(measureIndex)}.`,
     );
+  }
+
+  /**
+   * One gesture, and the page says what it will do next.
+   *
+   * Holding a finger on a bar fills in the next mark that is missing: the
+   * place to start from, then the near end of the passage, then the far end.
+   * With all three set it starts over.
+   *
+   * Which mark it is could have been said by *where* in the bar the finger
+   * landed - near the bar line against the middle of it - and that is a
+   * distinction a fingertip cannot reliably make: a bar is a couple of
+   * centimetres and a fingertip is one, so a third of the misses would place
+   * the wrong mark. Said by what is already on the page instead, the reader
+   * never has to aim at anything smaller than a bar, and never has to count
+   * how many times they have held: they look, and see which mark is missing.
+   *
+   * A double tap would have been the other way to say it, and it costs
+   * either a quarter-second of waiting on *every* tap - including the grip
+   * taps that nudge the passage a bar at a time, which are pressed in a row -
+   * or a first tap that acts and is then undone.
+   */
+  private placeNextMark(measureIndex: number): void {
+    const controller = this.runtime.controller;
+    const status = controller.session?.status;
+    if (status === 'running' || status === 'counting-in' || status === 'paused') {
+      return;
+    }
+    const { rangeFromBar, rangeToBar } = controller.settings;
+    const bar = controller.barNumber(measureIndex);
+
+    if (controller.beginsAt === 0) {
+      this.beginAt(measureIndex);
+      return;
+    }
+    if (rangeFromBar === null) {
+      this.narrowTo(bar, null, `Practising from bar ${bar}.`);
+      return;
+    }
+    if (rangeToBar === null) {
+      // Either way round, because a reader who holds behind the near end
+      // meant the two bars they pointed at and not an empty passage.
+      this.narrowTo(
+        Math.min(rangeFromBar, bar),
+        Math.max(rangeFromBar, bar),
+        `Practising bars ${Math.min(rangeFromBar, bar)}–${Math.max(rangeFromBar, bar)}.`,
+      );
+      return;
+    }
+    // All three are set, so this is a fresh start rather than a fourth mark.
+    controller.updateSettings({ rangeFromBar: null, rangeToBar: null });
+    this.beginAt(measureIndex);
+  }
+
+  /**
+   * Shuts the passage onto the single bar one of its markers stands at.
+   *
+   * The fast way to say "this bar and no more", and it reads off the marker
+   * the finger is on: the near one pulls the far one back to the end of its
+   * own bar, the far one pulls the near one up to the start of its own.
+   */
+  private closeOnto(end: PassageEnd): void {
+    const controller = this.runtime.controller;
+    if (this.isPlaying) {
+      return;
+    }
+    const exercise = controller.currentExercise;
+    if (exercise === null) {
+      return;
+    }
+    const first = exercise.firstBarNumber;
+    const last = first + Math.max(0, measureCount(exercise) - 1);
+    const { rangeFromBar, rangeToBar } = controller.settings;
+    const bar = end === 'from' ? (rangeFromBar ?? first) : (rangeToBar ?? last);
+    this.narrowTo(bar, bar, `Practising bar ${bar} alone.`);
+  }
+
+  /** Puts the passage where a gesture asked for it, and says so. */
+  private narrowTo(fromBar: number, toBar: number | null, message: string): void {
+    this.runtime.controller.updateSettings({ rangeFromBar: fromBar, rangeToBar: toBar });
+    this.passageMarkersWanted = true;
+    this.syncControlsFromSettings();
+    this.showImportNotice(message);
   }
 
   private showPassageMarkers(): void {
@@ -2671,9 +2754,16 @@ export class AppView {
       // They are two lines across the staves and they are wanted only while
       // a passage is being chosen; the rest of the time they are furniture
       // standing in front of the notes.
-      // Held on a bar: the reader is pointing at where to start.
+      // Held on a bar: the reader is filling in the next mark that is
+      // missing - where to start, then the two ends of the passage.
       this.runtime.renderer.onBarHeld((measureIndex) => {
-        this.beginAt(measureIndex);
+        this.placeNextMark(measureIndex);
+      }),
+    );
+
+    this.subscriptions.push(
+      this.runtime.renderer.onMarkerHeld((end) => {
+        this.closeOnto(end);
       }),
     );
 

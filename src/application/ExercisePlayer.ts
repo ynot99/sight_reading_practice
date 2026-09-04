@@ -151,6 +151,17 @@ export class ExercisePlayer {
   private fromTicks = 0;
   private untilTicks = 0;
   private playing = false;
+  /** The step the music has reached, which is where a pause holds. */
+  private atIndex = 0;
+  /**
+   * Where a pause left off, or `null` when nothing is being held.
+   *
+   * A step and not a tick, for the reason a run's pause is: picking up
+   * partway through a note would sound its tail without its beginning, and
+   * the reader following the marker would see it land somewhere no note
+   * starts.
+   */
+  private pausedAtIndex: number | null = null;
   private click: ClickPattern = 'pulse';
   private clickWhen: ClickWhen = 'never';
   private hand: ListeningHand = null;
@@ -237,6 +248,40 @@ export class ExercisePlayer {
     return this.playing;
   }
 
+  /** Where a held performance would pick up, or `null` if none is held. */
+  get pausedAt(): number | null {
+    return this.playing ? null : this.pausedAtIndex;
+  }
+
+  /**
+   * Holds the performance where it is, rather than ending it.
+   *
+   * The sound stops the way it does on any stop - what is already on the
+   * audio clock rings out and what is still held is silenced - but the step
+   * is kept, so pressing the button again picks the music up rather than
+   * starting it over. Which is what the button had always looked like it
+   * would do: it is the same button that started the playback, and pressing
+   * a play button again does not mean "back to the top".
+   *
+   * Nothing else is remembered. What to play, how fast, with what click and
+   * how much of it are read from the reader's settings again on the way back
+   * in, so a passage or a click changed during the pause takes effect.
+   */
+  pause(): void {
+    if (!this.playing) {
+      return;
+    }
+    const at = this.atIndex;
+    this.stop();
+    this.pausedAtIndex = at;
+  }
+
+  /** Ends the performance for good, whether it was playing or held. */
+  end(): void {
+    this.stop();
+    this.pausedAtIndex = null;
+  }
+
   start(timeline: ExerciseTimeline, options: ListeningOptions): void {
     this.stop();
     if (timeline.length === 0) {
@@ -250,6 +295,9 @@ export class ExercisePlayer {
     this.publishedPosition = null;
     const first = timeline.at(Math.max(0, Math.round(options.fromIndex ?? 0)));
     this.fromTicks = first?.onsetTicks ?? 0;
+    this.atIndex = first?.index ?? 0;
+    // Whatever was being held, this is now what is happening instead.
+    this.pausedAtIndex = null;
     this.untilTicks = this.endOf(options.toIndex);
     this.pending = this.collectNotes(timeline, options.staffNumber);
     this.nextToSchedule = 0;
@@ -393,6 +441,7 @@ export class ExercisePlayer {
     const position = tick.positionTicks + this.fromTicks;
     const step = this.timeline.stepAtTick(position);
     if (step !== null) {
+      this.atIndex = step.index;
       this.deps.cursor.moveTo(step.index);
     }
     this.publishPosition(position);
@@ -423,7 +472,10 @@ export class ExercisePlayer {
   }
 
   private finish(): void {
-    this.stop();
+    // Ended rather than merely stopped: a performance that reached its own
+    // end is not a performance being held, and pressing the button after one
+    // means hearing it again from the top of the passage.
+    this.end();
     this.emitter.emit('finished', {});
   }
 }

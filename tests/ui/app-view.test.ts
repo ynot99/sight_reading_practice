@@ -513,7 +513,12 @@ describe('AppView', () => {
     }
   });
 
-  it('plays the exercise back, and stops when asked', async () => {
+  it('plays the exercise back, holds it, and picks it up again', async () => {
+    // Pressing it a second time holds the music rather than throwing it
+    // away. It is the same button that started the performance, and pressing
+    // a play button again does not mean "back to the top" anywhere else - it
+    // used to here, so hearing a phrase twice meant sitting through
+    // everything in front of it again.
     const { view, runtime } = createRig();
     await view.initialize();
 
@@ -522,10 +527,34 @@ describe('AppView', () => {
     element<HTMLButtonElement>('listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.controller.isListening).toBe(true);
-    expect(element('listen').textContent).toBe('Stop listening');
+    expect(element('listen').textContent).toBe('Pause listening');
 
     element<HTMLButtonElement>('listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runtime.controller.isListening).toBe(false);
+    expect(runtime.controller.isListeningPaused).toBe(true);
+    expect(element('listen').textContent).toBe('Resume listening');
+
+    element<HTMLButtonElement>('listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runtime.controller.isListening).toBe(true);
+    expect(runtime.controller.isListeningPaused).toBe(false);
+  });
+
+  it('ends a held performance with Stop, which is what Stop is for', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+    element<HTMLButtonElement>('listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    element<HTMLButtonElement>('listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runtime.controller.isListeningPaused).toBe(true);
+    // And it offers to, rather than sitting greyed out over held music.
+    expect(element<HTMLButtonElement>('stop').disabled).toBe(false);
+
+    element<HTMLButtonElement>('stop').click();
+
+    expect(runtime.controller.isListeningPaused).toBe(false);
     expect(runtime.controller.isListening).toBe(false);
     expect(element('listen').textContent).toBe('Listen');
   });
@@ -570,7 +599,7 @@ describe('AppView', () => {
 
     element<HTMLButtonElement>('listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(element('listen').textContent).toBe('Stop listening');
+    expect(element('listen').textContent).toBe('Pause listening');
 
     await runtime.controller.loadNewExercise();
 
@@ -3299,15 +3328,17 @@ describe('AppView', () => {
       // fullscreen one says it in its name: writing the label into the button
       // would throw the icon away, which is what it used to do.
       const speaking = element('focus-listen-icon').getAttribute('d');
-      expect(element('focus-listen').getAttribute('aria-label')).toBe('Stop listening');
-      expect(element('listen').textContent).toBe('Stop listening');
+      expect(element('focus-listen').getAttribute('aria-label')).toBe('Pause listening');
+      expect(element('listen').textContent).toBe('Pause listening');
       expect(element('focus-listen').querySelector('svg')).not.toBeNull();
 
       element<HTMLButtonElement>('focus-listen').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
+      // Held, not thrown away - so the button offers to pick it up.
       expect(runtime.controller.isListening).toBe(false);
-      expect(element('focus-listen').getAttribute('aria-label')).toBe('Listen');
+      expect(runtime.controller.isListeningPaused).toBe(true);
+      expect(element('focus-listen').getAttribute('aria-label')).toBe('Resume listening');
       expect(element('focus-listen-icon').getAttribute('d')).not.toBe(speaking);
     });
 

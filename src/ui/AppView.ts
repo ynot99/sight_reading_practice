@@ -431,7 +431,17 @@ function readPlayedNotes(value: string): PlayedNoteDisplay {
 
 /** The transport icons, as one path each so only the `d` has to change. */
 const LISTEN_ICON = 'M4 9v6h4l5 4V5L8 9H4zm12-.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z';
-const HUSH_ICON = 'M4 9v6h4l5 4V5L8 9H4zm12.2 1.3 1.4-1.4L20 11.3l2.4-2.4 1.4 1.4-2.4 2.4 2.4 2.4-1.4 1.4-2.4-2.4-2.4 2.4-1.4-1.4 2.4-2.4-2.4-2.4z';
+/**
+ * The same speaker with a pause beside it, and with a play beside it.
+ *
+ * Three states rather than two, since the button holds the performance now
+ * instead of throwing it away: nothing playing, playing, held. The speaker
+ * stays in all three so the button is recognisably the same one - what
+ * changes is what pressing it will do next, which is what an icon on a
+ * transport says.
+ */
+const PAUSE_LISTEN_ICON = 'M4 9v6h4l5 4V5L8 9H4z M16 8h2v8h-2z M20 8h2v8h-2z';
+const RESUME_LISTEN_ICON = 'M4 9v6h4l5 4V5L8 9H4z M16 8l6 4-6 4z';
 const PLAY_ICON = 'M8 5l11 7-11 7z';
 const PAUSE_ICON = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
 
@@ -1336,8 +1346,18 @@ export class AppView {
    */
   private async toggleListening(): Promise<void> {
     const { controller } = this.runtime;
+    // Pressing it again holds the music rather than throwing it away. It is
+    // the same button that started the performance, and pressing a play
+    // button a second time does not mean "back to the top" anywhere else -
+    // it used to here, so listening to a phrase twice meant sitting through
+    // everything in front of it again. Stop is what ends a performance.
     if (controller.isListening) {
-      controller.stopListening();
+      controller.pauseListening();
+      this.describeListening();
+      return;
+    }
+    if (controller.isListeningPaused) {
+      controller.resumeListening();
       this.describeListening();
       return;
     }
@@ -1359,14 +1379,21 @@ export class AppView {
 
   private describeListening(): void {
     const listening = this.runtime.controller.isListening;
-    // "Stop" alone would read as the run's Stop, which sits beside it.
-    const label = listening ? 'Stop listening' : 'Listen';
+    const held = this.runtime.controller.isListeningPaused;
+    // Three answers, because there are three states: nothing playing, playing,
+    // and held. "Pause listening" rather than "Pause" alone for the reason
+    // the old label said "Stop listening" - the run's own Pause sits beside
+    // it, and one word would not say which of the two this is.
+    const label = listening ? 'Pause listening' : held ? 'Resume listening' : 'Listen';
     this.el.listen.textContent = label;
     // The fullscreen one is a picture: writing the label into it would throw
     // the icon away, which is exactly what it used to do.
     this.el.focusListen.setAttribute('aria-label', label);
     this.el.focusListen.title = label;
-    this.el.focusListenIcon.setAttribute('d', listening ? HUSH_ICON : LISTEN_ICON);
+    this.el.focusListenIcon.setAttribute(
+      'd',
+      listening ? PAUSE_LISTEN_ICON : held ? RESUME_LISTEN_ICON : LISTEN_ICON,
+    );
     this.describeStopping();
   }
 
@@ -1384,7 +1411,8 @@ export class AppView {
       status === 'counting-in' ||
       status === 'paused' ||
       this.isPreviewing ||
-      this.runtime.controller.isListening;
+      this.runtime.controller.isListening ||
+      this.runtime.controller.isListeningPaused;
     this.el.stop.disabled = !stoppable;
     this.el.focusStop.disabled = !stoppable;
   }
@@ -2140,10 +2168,11 @@ export class AppView {
    * not, which is exactly the wrong way round.
    */
   private stopEverything(): void {
+    const controller = this.runtime.controller;
     this.cancelPreview();
-    this.runtime.controller.stop();
-    if (this.runtime.controller.isListening) {
-      this.runtime.controller.stopListening();
+    controller.stop();
+    if (controller.isListening || controller.isListeningPaused) {
+      controller.stopListening();
       this.describeListening();
     }
   }

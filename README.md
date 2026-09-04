@@ -89,7 +89,17 @@ played — weighing steps the music took away above untidy ones, and ignoring
 timing entirely, since being a little late throughout is a matter for the
 tempo rather than a place to work.
 
-**Listen** plays the exercise instead of judging it. The hand selector beside it
+**Listen** plays the exercise instead of judging it. Pressing it again holds
+the music where it is and pressing it once more picks it up: it is the same
+button that started the performance, and pressing a play button a second time
+does not mean "back to the top" anywhere else — it used to here, so hearing a
+phrase twice meant sitting through everything in front of it again. **Stop**
+is what ends a performance, as it ends a run or a look. Only the place is
+held: what to play, how fast, with what click and how much of it are read from
+the settings again on the way back in, so a passage moved during the pause
+takes effect.
+
+The hand selector beside it
 governs both listening and practice, because they are the same question asked
 twice: which hand am I working on. Practising one hand is not practising half
 the music — the page still shows both staves and the cursor still visits every

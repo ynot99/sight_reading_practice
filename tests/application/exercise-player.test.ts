@@ -66,6 +66,81 @@ describe('listening to an exercise', () => {
     expect(onsets).toEqual([0, 1000, 2000, 3000, 4000]);
   });
 
+  it('holds where it is when it is paused, and says where', () => {
+    // A step and not a tick: picking up partway through a note would sound
+    // its tail without its beginning, and the marker would land where no
+    // note starts.
+    const { player, metronome, renderer, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(2);
+    const reached = renderer.cursor.position;
+    expect(reached).toBeGreaterThan(0);
+
+    player.pause();
+
+    expect(player.isPlaying).toBe(false);
+    expect(player.pausedAt).toBe(reached);
+    // And the pulse under it has stopped, not merely gone quiet.
+    const ticks = metronome.emitted.length;
+    metronome.advanceSubdivisions(4);
+    expect(metronome.emitted).toHaveLength(ticks);
+  });
+
+  it('picks up from there rather than from the top', () => {
+    const { player, metronome, instrument, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(2);
+    player.pause();
+    const from = player.pausedAt ?? -1;
+    expect(from).toBeGreaterThan(0);
+    const heardBefore = instrument.played.length;
+
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      fromIndex: from,
+    });
+
+    // Picking it up is a performance again, and it is no longer being held.
+    expect(player.isPlaying).toBe(true);
+    expect(player.pausedAt).toBeNull();
+    metronome.advanceSubdivisions(8);
+    // Exactly the music from the hold onwards, and none of what came before
+    // it: the whole point of holding is not to sit through it again.
+    const heardAfter = instrument.played.slice(heardBefore).map((note) => note.midi);
+    const expected = timeline.steps
+      .slice(from)
+      .flatMap((step) => step.notes.map((note) => note.midi));
+    expect(heardAfter.sort((a, b) => a - b)).toEqual(expected.sort((a, b) => a - b));
+  });
+
+  it('is not being held once it has ended of its own accord', () => {
+    // A performance that reached its end is not one waiting to be picked up;
+    // pressing the button after one means hearing it again.
+    const { player, metronome, timeline } = rig();
+    const finished: unknown[] = [];
+    player.events.on('finished', () => finished.push(true));
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+
+    metronome.advanceSubdivisions(16);
+
+    expect(finished).toHaveLength(1);
+    expect(player.pausedAt).toBeNull();
+  });
+
+  it('forgets a held place when the performance is ended', () => {
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(2);
+    player.pause();
+    expect(player.pausedAt).not.toBeNull();
+
+    player.end();
+
+    expect(player.pausedAt).toBeNull();
+  });
+
   it('holds a note for as long as it is written, ties included', () => {
     const { player, metronome, instrument, timeline } = rig(tiedExercise({ tempoBpm: 60 }));
     player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });

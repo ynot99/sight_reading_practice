@@ -945,7 +945,7 @@ export class PracticeController {
    * serve two masters, and nobody wants to be graded on a performance the
    * machine is giving.
    */
-  listen(): void {
+  listen(fromStepIndex?: number): void {
     const timeline = this.timeline;
     if (timeline === null) {
       return;
@@ -964,10 +964,35 @@ export class PracticeController {
       // Where the reader put their place, kept inside the passage they chose.
       // Hearing the music is part of learning the passage, so a playback that
       // always began at bar one made them listen through everything they were
-      // not working on.
-      fromIndex: Math.min(Math.max(this.beginAt, passage.from), passage.to),
+      // not working on. Clamped either way, so a performance picked up after
+      // a pause still lands inside a passage that moved while it was held.
+      fromIndex: Math.min(Math.max(fromStepIndex ?? this.beginAt, passage.from), passage.to),
       toIndex: passage.to,
     });
+  }
+
+  /**
+   * Holds a performance where it is, to be picked up rather than restarted.
+   *
+   * Nothing about *what* to play is remembered with it: the way back in goes
+   * through {@link listen} like any other, reading the passage, the click and
+   * the hand from the reader's settings again. Only the place is kept.
+   */
+  pauseListening(): void {
+    if (this.player?.isPlaying !== true) {
+      return;
+    }
+    this.player.pause();
+    this.applyCursorVisibility();
+  }
+
+  /** Picks a held performance up where it left off. */
+  resumeListening(): void {
+    const at = this.player?.pausedAt ?? null;
+    if (at === null) {
+      return;
+    }
+    this.listen(at);
   }
 
   /**
@@ -1091,15 +1116,22 @@ export class PracticeController {
   }
 
   stopListening(): void {
-    if (this.player?.isPlaying !== true) {
+    // A held performance counts: it is still a performance, and Stop is what
+    // says there is not going to be one.
+    if (this.player === null || (!this.player.isPlaying && this.player.pausedAt === null)) {
       return;
     }
-    this.player.stop();
+    this.player.end();
     this.applyCursorVisibility();
   }
 
   get isListening(): boolean {
     return this.player?.isPlaying ?? false;
+  }
+
+  /** Whether a performance is being held rather than played or ended. */
+  get isListeningPaused(): boolean {
+    return this.player?.pausedAt !== null && this.player?.pausedAt !== undefined;
   }
 
   /** Fires when a playback reaches the end on its own. */
@@ -1582,7 +1614,9 @@ export class PracticeController {
    * which is what changing the tempo from the stand does.
    */
   private applyCursorVisibility(): void {
-    if (this.currentSettings.showCursor || this.isListening) {
+    // A held performance keeps its marker: taking it away would lose the one
+    // thing on the page saying where the music will pick up.
+    if (this.currentSettings.showCursor || this.isListening || this.isListeningPaused) {
       this.deps.cursor.show();
     } else {
       this.deps.cursor.hide();

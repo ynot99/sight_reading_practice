@@ -340,6 +340,48 @@ describe('OSMD accepts the MusicXML we produce', () => {
     expect(positions).toBe(timeline.length);
   });
 
+  it('draws an ornament without giving it a cursor position', async () => {
+    // Which is the whole reason a grace note can cost the bar nothing: the
+    // engraver hangs it off the note it leans on and its cursor never stops
+    // there, so the two go on agreeing about how many places there are.
+    const base = twoBarExercise();
+    const [treble, bassStaff] = base.staves;
+    if (treble === undefined || bassStaff === undefined) {
+      throw new Error('expected two staves');
+    }
+    const decorated = bar(
+      noteEntry(p('C4'), Duration.QUARTER, [], [], null, false, {
+        graces: [{ pitches: [p('B3')], duration: Duration.of('16th'), slashed: true }],
+      }),
+      noteEntry(p('D4'), Duration.QUARTER),
+      noteEntry(p('E4'), Duration.QUARTER),
+      noteEntry(p('F4'), Duration.QUARTER),
+    );
+    const exercise = {
+      ...base,
+      staves: [{ ...treble, measures: [decorated, ...treble.measures.slice(1)] }, bassStaff],
+    };
+    validateExercise(exercise);
+
+    const timeline = buildTimeline(exercise);
+    const osmd = createDisplay();
+    await osmd.load(serializer.serialize(exercise));
+
+    const iterator = osmd.Sheet.MusicPartManager.getIterator();
+    let positions = 0;
+    let guard = timeline.length * 4 + 10;
+    while (!iterator.EndReached && guard > 0) {
+      guard -= 1;
+      positions += 1;
+      iterator.moveToNext();
+    }
+
+    expect(positions).toBe(timeline.length);
+    // And it is offered at the note it decorates, without being demanded.
+    expect(timeline.require(0).expectedMidi).toEqual([p('C3').midi, p('C4').midi]);
+    expect(timeline.require(0).ornamentMidi).toEqual([p('B3').midi]);
+  });
+
   it('reads a tie as one held note and still stops the cursor on it', async () => {
     const exercise = tiedExercise();
     const timeline = buildTimeline(exercise);

@@ -5,6 +5,7 @@ import type { Duration } from '../model/Duration.js';
 import type {
   Exercise,
   MusicalEntry,
+  GraceNote,
   PedalMark,
   StaffPart,
   TempoChange,
@@ -403,6 +404,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         return;
       }
       case 'note': {
+        this.writeGraces(writer, staff, entry.graces, key, activeAccidentals);
         entry.pitches.forEach((pitch, pitchIndex) => {
           const stopping = held.has(pitch.midi);
           const starting = entry.tiedForward.includes(pitch.midi);
@@ -519,6 +521,47 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     }
     if (tuplet.stops) {
       writer.leaf('tuplet', undefined, { type: 'stop', number: 1 });
+    }
+  }
+
+  /**
+   * The ornaments leaning on a note, written before it.
+   *
+   * `<grace>` and no `<duration>`, which is the format saying what they are:
+   * played, drawn, and costing the bar nothing. The engraver squeezes them in
+   * front of the note and its cursor never stops on them, so nothing the
+   * reader is asked for moves.
+   */
+  private writeGraces(
+    writer: XmlWriter,
+    staff: StaffPart,
+    graces: readonly GraceNote[],
+    key: KeySignature,
+    activeAccidentals: Map<string, Alteration>,
+  ): void {
+    for (const grace of graces) {
+      grace.pitches.forEach((pitch, at) => {
+        writer.element('note', undefined, () => {
+          writer.leaf('grace', undefined, grace.slashed ? { slash: 'yes' } : { slash: 'no' });
+          if (at > 0) {
+            writer.leaf('chord');
+          }
+          writer.element('pitch', undefined, () => {
+            writer.leaf('step', pitch.step);
+            if (pitch.alter !== 0) {
+              writer.leaf('alter', pitch.alter);
+            }
+            writer.leaf('octave', pitch.octave);
+          });
+          writer.leaf('voice', staff.voice);
+          writer.leaf('type', grace.duration.type);
+          const accidental = this.accidentalFor(key, pitch, activeAccidentals);
+          if (accidental !== null) {
+            writer.leaf('accidental', accidental);
+          }
+          writer.leaf('staff', staff.staffNumber);
+        });
+      });
     }
   }
 

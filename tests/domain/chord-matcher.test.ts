@@ -148,3 +148,37 @@ describe('ChordMatcher', () => {
     expect(matcher.expected).toEqual([60, 64]);
   });
 });
+
+describe('an ornament printed at a step', () => {
+  it('is neither asked for nor held against the reader', () => {
+    // A grace note is on the page, so playing it is reading the page
+    // correctly and must not be marked wrong. It is also the performer's to
+    // add, so nothing waits for it.
+    const matcher = new ChordMatcher([60], DEFAULT_MATCH_POLICY, [59]);
+
+    const ornament = matcher.accept(59, 0);
+    expect(ornament.verdict).toBe('ornament');
+    expect(ornament.completed).toBe(false);
+    expect(matcher.wrong).toEqual([]);
+    expect(matcher.remaining).toEqual([60]);
+
+    const note = matcher.accept(60, 10);
+    expect(note.verdict).toBe('correct');
+    expect(note.completed).toBe(true);
+    expect(matcher.matched).toEqual([60]);
+  });
+
+  it('completes the step without it', () => {
+    const matcher = new ChordMatcher([60], DEFAULT_MATCH_POLICY, [59]);
+
+    expect(matcher.accept(60, 0).completed).toBe(true);
+    expect(matcher.remaining).toEqual([]);
+  });
+
+  it('still calls a note that is neither wrong', () => {
+    const matcher = new ChordMatcher([60], DEFAULT_MATCH_POLICY, [59]);
+
+    expect(matcher.accept(70, 0).verdict).toBe('wrong');
+    expect(matcher.wrong).toEqual([70]);
+  });
+});

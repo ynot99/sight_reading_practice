@@ -67,6 +67,7 @@ describe('exercise validation', () => {
         fermata: false,
         breath: false,
         arpeggiated: false,
+        graces: [],
       }),
       bar(noteEntry(p('G4'), Duration.WHOLE)),
     ]);

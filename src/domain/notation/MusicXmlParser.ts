@@ -14,6 +14,7 @@ import type {
   Beam,
   BeamType,
   ClefChange,
+  GraceNote,
   KeyChange,
   PedalMark,
   StemDirection,
@@ -81,6 +82,8 @@ interface RawNote {
   readonly arpeggiated: boolean;
   readonly fermata: boolean;
   readonly breath: boolean;
+  /** Ornaments leaning on this note, which take none of its time. */
+  readonly graces: readonly GraceNote[];
 }
 
 const XML_TYPE_NAMES: Readonly<Record<string, NoteTypeName>> = {
@@ -471,16 +474,6 @@ function hasTie(note: XmlNode, type: 'start' | 'stop'): boolean {
 }
 
 /** Walks one measure, placing every note on the staff and beat it belongs to. */
-/**
- * How long a grace note is given: a sixteenth.
- *
- * An acciaccatura is meant to be shorter than anything notated, which no
- * vocabulary of written values can say. A sixteenth is the nearest true thing
- * to it, and it is still one press just before the beat - which is the whole
- * of what a reader has to do with it.
- */
-const GRACE_TICKS = Duration.SIXTEENTH.ticks;
-
 /** Each run of chorded graces is one press, and one press needs one slot. */
 function graceSlots(graces: readonly XmlNode[]): XmlNode[][] {
   const slots: XmlNode[][] = [];
@@ -496,65 +489,35 @@ function graceSlots(graces: readonly XmlNode[]): XmlNode[][] {
 }
 
 /**
- * Fits grace notes into the time in front of the note they lean on.
+ * Reads the ornaments leaning on a note, as ornaments.
  *
- * *In front of*, not out of it. A grace note is played before the beat and
- * the note it leans on stays on the beat - which is exactly what a reader is
- * being asked to do, and what taking the time from the host got wrong: every
- * note after the ornament arrived late, and the beat is the one thing a
- * sight-reading trainer must not move.
- *
- * So the time comes from whatever was sounding before, which is where a
- * performer takes it from too. Returns `null` when it cannot be had - nothing
- * before it in the bar, too little of it, or a tuplet whose group would come
- * apart - and then the ornament is dropped rather than the beat.
+ * They take no time from the bar, so nothing has to be paid for them. Given
+ * real time it had to come from somewhere, and both places are wrong: out of
+ * the note they lean on moves it off its beat, and out of the note before
+ * shortens something the writer did not shorten. Written as they are written,
+ * the question does not arise - the engraver squeezes them in and the bar goes
+ * on adding up.
  */
-function fitGracesBefore(
-  graces: readonly XmlNode[],
-  hostOnsetTicks: number,
-  before: readonly RawNote[],
-  at: { readonly staff: number; readonly voice: number },
-): { readonly notes: RawNote[]; readonly shortened: readonly RawNote[] } | null {
-  const slots = graceSlots(graces);
-  const wanted = slots.length * GRACE_TICKS;
-  const host = before[0];
-  if (host === undefined || host.staff !== at.staff || host.voice !== at.voice) {
-    return null;
-  }
-  const left = host.ticks - wanted;
-  if (left < GRACE_TICKS || host.duration.isTuplet || !Duration.isNotatable(left)) {
-    return null;
-  }
-
-  const shortened = before.map((note) => ({
-    ...note,
-    ticks: left,
-    duration: Duration.fromTicks(left),
-  }));
-
-  const notes: RawNote[] = [];
-  slots.forEach((slot, index) => {
-    const onsetTicks = hostOnsetTicks - wanted + index * GRACE_TICKS;
-    slot.forEach((grace, inChord) => {
-      notes.push({
-        staff: childNumber(grace, 'staff') ?? at.staff,
-        voice: childNumber(grace, 'voice') ?? at.voice,
-        onsetTicks,
-        ticks: GRACE_TICKS,
-        duration: Duration.of('16th'),
-        pitch: readPitch(grace),
-        tieStart: false,
-        fermata: false,
-        breath: false,
-        isChord: inChord > 0,
-        beams: [],
-        stem: readStem(grace),
-        arpeggiated: false,
-      });
+function readGraces(graces: readonly XmlNode[]): GraceNote[] {
+  const ornaments: GraceNote[] = [];
+  for (const slot of graceSlots(graces)) {
+    const pitches = slot
+      .map((grace) => readPitch(grace))
+      .filter((pitch): pitch is Pitch => pitch !== null);
+    if (pitches.length === 0) {
+      continue;
+    }
+    const first = slot[0];
+    const type = XML_TYPE_NAMES[childText(first ?? null, 'type') ?? '16th'];
+    ornaments.push({
+      pitches,
+      duration: Duration.of(type ?? '16th'),
+      // The stroke through the stem, which says crush it in rather than lean
+      // on the beat. MuseScore writes it; nothing else has to be decided.
+      slashed: attribute(child(first ?? null, 'grace'), 'slash') !== 'no',
     });
-  });
-
-  return { notes, shortened };
+  }
+  return ornaments;
 }
 
 function readMeasureNotes(
@@ -626,26 +589,15 @@ function readMeasureNotes(
     const staff = childNumber(node, 'staff') ?? 1;
     const voice = childNumber(node, 'voice') ?? 1;
 
-    // A grace note is played, so it needs time - and it takes it from what was
-    // sounding *before*, not from the note it leans on. The note it leans on
-    // has to stay on its beat, which is the one thing a sight-reading trainer
-    // must not move.
+    // The ornaments waiting in front of this note belong *to* it, and take no
+    // time from anybody: they are carried on the entry and drawn where the
+    // writer drew them.
+    let graces: readonly GraceNote[] = [];
     if (pendingGraces.length > 0 && !isChord) {
-      const fitted = fitGracesBefore(pendingGraces, cursor, lastNotes, { staff, voice });
-      if (fitted === null) {
+      graces = readGraces(pendingGraces);
+      if (graces.length > 0) {
         sayOnce(
-          `A grace note was dropped, first in bar ${measureIndex + 1}: there was nothing before it to take its time from, and an ornament missing is a smaller loss than every note after it being off the beat.`,
-        );
-      } else {
-        for (const shortened of fitted.shortened) {
-          const at = notes.indexOf(lastNotes[fitted.shortened.indexOf(shortened)] as RawNote);
-          if (at >= 0) {
-            notes[at] = shortened;
-          }
-        }
-        notes.push(...fitted.notes);
-        sayOnce(
-          'Grace notes were written as sixteenths, taking their time from the note before them so the note they lean on keeps its beat.',
+          'Grace notes are drawn where they were written and may be played, but the run does not wait for them: an ornament is the performer’s to add.',
         );
       }
       pendingGraces.length = 0;
@@ -681,6 +633,7 @@ function readMeasureNotes(
       // cannot be turned into rhythm here.
       fermata: hasChild(child(node, 'notations'), 'fermata'),
       breath: hasChild(child(child(node, 'notations'), 'articulations'), 'breath-mark'),
+      graces,
     };
     notes.push(pushed);
 
@@ -794,6 +747,9 @@ function buildMeasure(
               ? {
                   fermata: group.some((note) => note.fermata),
                   breath: group.some((note) => note.breath),
+                  // The ornament leans on the note as it was written, which is
+                  // the first piece of it once a long value has been split.
+                  graces: group.flatMap((note) => note.graces),
                 }
               : {},
           ),

@@ -38,6 +38,11 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
   is - is read off `elapsedMsAt` / `spanMs`, and the metronome is handed its
   tempo spans exactly as it is handed its bars. `ticksToMilliseconds` takes one
   bpm and so is only ever right inside one span.
+- An ornament takes no time from the bar. A grace note is carried on the entry
+  it leans on, never in the entry list: given real time it has to be paid for,
+  and both payments are wrong. The engraver gives it no cursor position, so
+  neither does `buildTimeline` - it goes into `ornamentMidi`, which the matcher
+  accepts and never waits for.
 - A generated tie holds one pitch: the voice must stop moving for the length
   of the held note, or `validateExercise` will refuse the bar.
 - Practising a passage gives the *run* two ends; the music on the page stays

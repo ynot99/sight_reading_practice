@@ -940,56 +940,67 @@ describe('a grace note', () => {
     );
   }
 
-  it('leaves the note it leans on exactly where it was', () => {
-    // The whole point. Taking the time from the host instead put every note
-    // after the ornament late, and the beat is the one thing a sight-reading
-    // trainer must not move.
+  it('costs the bar nothing at all', () => {
+    // The whole point. Given real time it has to come from somewhere, and
+    // both places are wrong: out of the note it leans on moves that note off
+    // its beat, and out of the note before shortens something the writer did
+    // not shorten. As an ornament the question does not arise.
     const { exercise } = importer.read(bar(grace('G', 4)));
 
     expect(() => validateExercise(exercise)).not.toThrow();
-    const onsets = buildTimeline(exercise).steps.map((step) => step.onsetTicks);
-    // Beat one, the grace just before beat two, beat two itself, beat three.
     const q = Duration.QUARTER.ticks;
-    expect(onsets).toEqual([0, q * 0.75, q, q * 2]);
+    const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
+    expect(entries.map((entry) => entry.duration.ticks)).toEqual([q, q, q * 2]);
+    expect(buildTimeline(exercise).steps.map((step) => step.onsetTicks)).toEqual([0, q, q * 2]);
   });
 
-  it('takes its time from whatever was sounding before it', () => {
+  it('is carried on the note it leans on', () => {
     const { exercise, warnings } = importer.read(bar(grace('G', 4)));
 
     const entries = exercise.staves[0]?.measures[0]?.entries ?? [];
-    // The quarter before gives up a sixteenth and becomes a dotted eighth.
-    const q = Duration.QUARTER.ticks;
-    expect(entries.map((entry) => entry.duration.ticks)).toEqual([q * 0.75, q / 4, q, q * 2]);
+    const host = entries[1];
+    expect(host?.kind).toBe('note');
+    const graces = host?.kind === 'note' ? host.graces : [];
+    expect(graces).toHaveLength(1);
+    expect(graces[0]?.pitches.map((pitch) => pitch.toString())).toEqual(['G4']);
+    // The stroke through the stem, which the file asked for.
+    expect(graces[0]?.slashed).toBe(true);
     expect(warnings.map((warning) => warning.kind)).toContain('grace-notes');
   });
 
-  it('is asked for, which is the whole point of keeping it', () => {
+  it('may be played and is never demanded', () => {
     const { exercise } = importer.read(bar(grace('G', 4)));
+    const steps = buildTimeline(exercise).steps;
 
     expect(demands(exercise)).toEqual([
       [Pitch.parse('C4').midi],
-      [Pitch.parse('G4').midi],
       [Pitch.parse('A4').midi],
       [Pitch.parse('B4').midi],
     ]);
+    // Offered at the note it decorates, and nowhere else.
+    expect(steps.map((step) => step.ornamentMidi)).toEqual([
+      [],
+      [Pitch.parse('G4').midi],
+      [],
+    ]);
   });
 
-  it('is dropped when there is nothing in front of it to take from', () => {
-    // An ornament missing is a smaller loss than every note after it being
-    // off the beat.
-    const { exercise, warnings } = importer.read(
+  it('is kept where there is nothing in front of it', () => {
+    // Nothing has to be taken from anywhere, so the case that used to drop
+    // the ornament no longer exists.
+    const { exercise } = importer.read(
       scoreXml(grace('G', 4) + note('A', 4, 24, 'quarter') + note('B', 4, 72, 'half', '<dot/>')),
     );
 
     expect(() => validateExercise(exercise)).not.toThrow();
-    expect(warnings.map((warning) => warning.detail).join(' ')).toContain('nothing before it');
-    // And the note it leaned on is still on beat one.
+    const first = exercise.staves[0]?.measures[0]?.entries[0];
+    expect(first?.kind === 'note' ? first.graces.length : 0).toBe(1);
     expect(buildTimeline(exercise).steps[0]?.onsetTicks).toBe(0);
     expect(demands(exercise)[0]).toEqual([Pitch.parse('A4').midi]);
   });
 
-  it('is dropped when what is before it is too short to give any', () => {
-    const { exercise, warnings } = importer.read(
+  it('is kept where what is before it is far too short to give any', () => {
+    const { exercise } = importer.read(
       scoreXml(
         note('C', 4, 6, '16th') +
           grace('G', 4) +
@@ -999,29 +1010,43 @@ describe('a grace note', () => {
     );
 
     expect(() => validateExercise(exercise)).not.toThrow();
-    expect(warnings.map((warning) => warning.kind)).toContain('grace-notes');
     expect(demands(exercise)).toHaveLength(3);
+    const host = exercise.staves[0]?.measures[0]?.entries[1];
+    expect(host?.kind === 'note' ? host.graces.length : 0).toBe(1);
   });
 
-  it('strikes two grace notes together when they are marked as a chord', () => {
+  it('is one press of two keys when they are marked as a chord', () => {
     const { exercise } = importer.read(bar(grace('G', 4) + grace('B', 4, '<chord/>')));
 
-    // One press of two keys, which is what the mark means.
-    expect(demands(exercise)[1]).toEqual([Pitch.parse('G4').midi, Pitch.parse('B4').midi]);
-    const q = Duration.QUARTER.ticks;
-    expect(buildTimeline(exercise).steps.map((step) => step.onsetTicks)).toEqual([
-      0, q * 0.75, q, q * 2,
-    ]);
+    const host = exercise.staves[0]?.measures[0]?.entries[1];
+    const graces = host?.kind === 'note' ? host.graces : [];
+    expect(graces).toHaveLength(1);
+    expect(graces[0]?.pitches.map((pitch) => pitch.toString())).toEqual(['G4', 'B4']);
   });
 
-  it('makes room for two of them in turn', () => {
+  it('keeps two of them in the order they are played', () => {
     const { exercise } = importer.read(bar(grace('G', 4) + grace('A', 4)));
 
-    // Two presses before the beat, and the beat still where it was.
-    const q = Duration.QUARTER.ticks;
-    expect(buildTimeline(exercise).steps.map((step) => step.onsetTicks)).toEqual([
-      0, q / 2, q * 0.75, q, q * 2,
+    const host = exercise.staves[0]?.measures[0]?.entries[1];
+    const graces = host?.kind === 'note' ? host.graces : [];
+    expect(graces.map((one) => one.pitches.map((pitch) => pitch.toString()).join(''))).toEqual([
+      'G4',
+      'A4',
     ]);
+    // And the bar is still four beats of three notes.
+    const q = Duration.QUARTER.ticks;
+    expect(buildTimeline(exercise).steps.map((step) => step.onsetTicks)).toEqual([0, q, q * 2]);
+  });
+
+  it('survives being written out and read back', () => {
+    const { exercise } = importer.read(bar(grace('G', 4) + grace('B', 4, '<chord/>')));
+    const { exercise: back } = importer.read(serializer.serialize(exercise));
+
+    const host = back.staves[0]?.measures[0]?.entries[1];
+    const graces = host?.kind === 'note' ? host.graces : [];
+    expect(graces).toHaveLength(1);
+    expect(graces[0]?.pitches.map((pitch) => pitch.toString())).toEqual(['G4', 'B4']);
+    expect(graces[0]?.slashed).toBe(true);
   });
 
   it('says once what it did, rather than once for every bar', () => {

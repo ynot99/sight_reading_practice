@@ -37,7 +37,21 @@ export const DEFAULT_MATCH_POLICY: MatchPolicy = {
  * before. The session knows both, and they are the difference between a note
  * the reader invented and a note that was there to be played.
  */
-export type NoteVerdict = 'correct' | 'duplicate' | 'wrong' | 'other-hand' | 'late';
+export type NoteVerdict =
+  | 'correct'
+  | 'duplicate'
+  | 'wrong'
+  | 'other-hand'
+  | 'late'
+  /**
+   * An ornament printed here, which the run neither asked for nor minds.
+   *
+   * A grace note is on the page: playing it is reading the page correctly and
+   * must not be marked wrong. It is also the performer's to add rather than
+   * the writer's to demand, so nothing waits for it and it counts towards
+   * nothing.
+   */
+  | 'ornament';
 
 export interface MatchOutcome {
   readonly verdict: NoteVerdict;
@@ -72,6 +86,7 @@ export class ChordMatcher {
   private readonly policy: MatchPolicy;
   private readonly expectedList: readonly number[];
   private readonly expectedByKey: ReadonlyMap<number, number>;
+  private readonly ornamentKeys: ReadonlySet<number>;
   private pending: Set<number>;
   /** Rhythm-only: whether this step has had its one press yet. */
   private tapped = false;
@@ -79,7 +94,11 @@ export class ChordMatcher {
   private wrongPresses: number[] = [];
   private windowStart: number | null = null;
 
-  constructor(expectedMidi: Iterable<number>, policy: MatchPolicy = DEFAULT_MATCH_POLICY) {
+  constructor(
+    expectedMidi: Iterable<number>,
+    policy: MatchPolicy = DEFAULT_MATCH_POLICY,
+    ornamentMidi: Iterable<number> = [],
+  ) {
     if (policy.toleranceMs !== Number.POSITIVE_INFINITY) {
       assertPositive(policy.toleranceMs, 'toleranceMs');
     }
@@ -95,6 +114,9 @@ export class ChordMatcher {
     this.expectedByKey = byKey;
     this.expectedList = [...byKey.values()].sort((left, right) => left - right);
     this.pending = new Set(byKey.keys());
+    // Never counted among the expected, so nothing waits for one and nothing
+    // is missing when it is left out.
+    this.ornamentKeys = new Set([...ornamentMidi].map((midi) => this.keyOf(midi)));
   }
 
   private keyOf(midi: number): number {
@@ -160,6 +182,12 @@ export class ChordMatcher {
     }
 
     if (!this.expectedByKey.has(key)) {
+      if (this.ornamentKeys.has(key)) {
+        // On the page and not asked for: neither collected nor held against
+        // the reader, and it does not restart the window either - an ornament
+        // is played *into* the beat it decorates.
+        return this.outcome('ornament', windowRestarted);
+      }
       this.wrongPresses.push(midi);
       return this.outcome('wrong', windowRestarted);
     }

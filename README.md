@@ -657,7 +657,9 @@ put there. A tempo change does the same to the clock: an accelerando is a run
 of marks a sixteenth apart, so they are placed to the division and every answer
 about *time* is walked over `tempoSpans` instead. The reader's tempo control is
 a share of the written speed, so the changes move with it and keep their
-proportions. Grace notes are the remaining limit.
+proportions. Grace notes are read as ornaments: drawn where
+they were written, costing the bar nothing, and offered rather than demanded -
+playing one is never a wrong note and leaving it out is never a missing one.
 Written values are read down to sixty-fourths, with tuplets up to septuplets:
 a file that divides a beat into sevens rounds its own numbers to fit its
 divisions, and the written value is trusted over the rounding. Compressed

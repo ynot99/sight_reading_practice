@@ -27,6 +27,30 @@ export interface Beam {
   readonly type: BeamType;
 }
 
+/**
+ * An ornament leaning on the note that follows it.
+ *
+ * It takes no time from the bar, which is the whole of why it is here rather
+ * than in the entry list: written as a real note it has to be paid for, and
+ * the payment either moves the note it leans on off its beat or shortens the
+ * one before. Neither is what the page says. The engraver draws it small and
+ * squeezes it in, and the bar goes on adding up.
+ *
+ * `duration` is how it is *drawn* - a sixteenth, an eighth - and buys nothing.
+ */
+export interface GraceNote {
+  readonly pitches: readonly Pitch[];
+  readonly duration: Duration;
+  /**
+   * The stroke through the stem: an acciaccatura rather than an appoggiatura.
+   *
+   * A reading instruction the writer chose, and the difference between "crush
+   * this in" and "lean on the beat" - which is a decision about how it sounds,
+   * so it is carried rather than decided here.
+   */
+  readonly slashed: boolean;
+}
+
 /** One or more simultaneous pitches sharing a rhythmic value. */
 export interface NoteEntry {
   readonly kind: 'note';
@@ -82,6 +106,14 @@ export interface NoteEntry {
    * here before it goes on.
    */
   readonly breath: boolean;
+  /**
+   * Ornaments leaning on this note, in the order they are played.
+   *
+   * On the entry rather than beside it, because that is what they are: the
+   * engraver hangs them off this notehead and the cursor never stops on them.
+   * Empty for anything this program generates.
+   */
+  readonly graces: readonly GraceNote[];
 }
 
 /** A drawn silence: the writer asked for this rest and the reader counts it. */
@@ -430,6 +462,7 @@ export function barNumberOf(exercise: Exercise, measureIndex: number): number {
 export interface EntryMarks {
   readonly fermata?: boolean;
   readonly breath?: boolean;
+  readonly graces?: readonly GraceNote[];
 }
 
 export function noteEntry(
@@ -452,6 +485,7 @@ export function noteEntry(
     arpeggiated,
     fermata: marks.fermata === true,
     breath: marks.breath === true,
+    graces: marks.graces === undefined ? [] : [...marks.graces],
   };
 }
 
@@ -777,6 +811,24 @@ function validateEntry(entry: MusicalEntry, path: string): void {
       if (entry.pitches.length === 0) {
         throw new ExerciseValidationError('Note entry has no pitches.', path);
       }
+      entry.graces.forEach((grace, at) => {
+        if (grace.pitches.length === 0) {
+          throw new ExerciseValidationError(
+            'A grace note has no pitches.',
+            `${path}.graces[${at}]`,
+          );
+        }
+        const heard = new Set<number>();
+        for (const pitch of grace.pitches) {
+          if (heard.has(pitch.midi)) {
+            throw new ExerciseValidationError(
+              `Pitch ${pitch.toString()} is duplicated inside a grace chord.`,
+              `${path}.graces[${at}]`,
+            );
+          }
+          heard.add(pitch.midi);
+        }
+      });
       const seen = new Set<number>();
       for (const pitch of entry.pitches) {
         if (seen.has(pitch.midi)) {

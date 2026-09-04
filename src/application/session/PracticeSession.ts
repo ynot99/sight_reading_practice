@@ -462,7 +462,14 @@ export class PracticeSession {
 
     this.stepIndex = index;
     const expected = this.expectedAt(step);
-    this.matcher = expected.length > 0 ? new ChordMatcher(expected, this.policyFor(step)) : null;
+    // Ornaments printed here are handed over too: on the page, so playing one
+    // is reading correctly, and the performer's to add, so nothing waits for
+    // it. Whichever hand it belongs to - a note the reader can see is a note
+    // they may play.
+    this.matcher =
+      expected.length > 0
+        ? new ChordMatcher(expected, this.policyFor(step), step.ornamentMidi)
+        : null;
     this.stepEnteredAt = this.clock.now();
     this.stepDeviationMs = null;
     this.stepWrongNotes = [];

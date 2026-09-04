@@ -39,6 +39,15 @@ export interface TimelineStep {
   readonly notes: readonly TimelineNote[];
   /** Ascending MIDI numbers the player is expected to sound here. */
   readonly expectedMidi: readonly number[];
+  /**
+   * Ornaments printed here: playable, and never required.
+   *
+   * A grace note is on the page, so playing it is reading the page correctly
+   * and must not be marked wrong. It is also the performer's to add, and a
+   * run that waited for it would hold the reader at a note the writer offered
+   * rather than asked for. So it is neither demanded nor punished.
+   */
+  readonly ornamentMidi: readonly number[];
 }
 
 /**
@@ -129,6 +138,7 @@ function soundingTicks(
  */
 export function buildTimeline(exercise: Exercise): ExerciseTimeline {
   const notesByOnset = new Map<number, TimelineNote[]>();
+  const ornamentsByOnset = new Map<number, number[]>();
   const onsets = new Set<number>();
   // Where each bar begins, rather than a bar length to multiply by: a metre
   // may change partway through, and from there on the bars are no longer all
@@ -150,6 +160,15 @@ export function buildTimeline(exercise: Exercise): ExerciseTimeline {
     let held = new Set<number>();
 
     entries.forEach(({ entry, onsetTicks }, index) => {
+      if (entry.kind === 'note' && entry.graces.length > 0) {
+        const bucket = ornamentsByOnset.get(onsetTicks) ?? [];
+        for (const grace of entry.graces) {
+          for (const pitch of grace.pitches) {
+            bucket.push(pitch.midi);
+          }
+        }
+        ornamentsByOnset.set(onsetTicks, bucket);
+      }
       // A silence is drawn as nothing, so the engraver's cursor never stops
       // there and neither may we: the two agree on *positions*, and a position
       // nobody can see is one the reader would be held at for no reason.
@@ -193,6 +212,11 @@ export function buildTimeline(exercise: Exercise): ExerciseTimeline {
       // Both hands may notate the same sounding pitch; the player still has
       // exactly one key to press for it.
       expectedMidi: [...new Set(notes.map((note) => note.midi))],
+      // Minus anything the step demands anyway: a grace on the note it is
+      // already asking for is that note, and asking for it once is enough.
+      ornamentMidi: [...new Set(ornamentsByOnset.get(onsetTicks) ?? [])]
+        .filter((midi) => !notes.some((note) => note.midi === midi))
+        .sort((left, right) => left - right),
     };
   });
 

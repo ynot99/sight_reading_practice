@@ -37,7 +37,7 @@ function rig(exercise = twoBarExercise({ tempoBpm: 60 })) {
 describe('listening to an exercise', () => {
   it('sounds every note the score asks for', () => {
     const { player, metronome, instrument, timeline } = rig();
-    player.start(timeline, { staffNumber: null, clickWhen: 'never' });
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(8);
 
     expect(instrument.played.map((note) => note.midi).sort((a, b) => a - b)).toEqual(
@@ -52,7 +52,7 @@ describe('listening to an exercise', () => {
     // delivery is late by however long the scheduler slept. Every note carries
     // the moment it should sound instead.
     const { player, metronome, instrument, timeline } = rig();
-    player.start(timeline, { staffNumber: null, clickWhen: 'never' });
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(8);
 
     for (const note of instrument.played) {
@@ -68,7 +68,7 @@ describe('listening to an exercise', () => {
 
   it('holds a note for as long as it is written, ties included', () => {
     const { player, metronome, instrument, timeline } = rig(tiedExercise({ tempoBpm: 60 }));
-    player.start(timeline, { staffNumber: null, clickWhen: 'never' });
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(12);
 
     // The tied E4 is struck on beat four and held through the whole next bar:
@@ -93,7 +93,7 @@ describe('listening to an exercise', () => {
       staves: [treble, { ...bass, staffNumber: 1, voice: 3, measures: treble.measures }, bass],
     };
     const { player, metronome, instrument } = rig(doubled);
-    player.start(buildTimeline(doubled), { staffNumber: null, clickWhen: 'never' });
+    player.start(buildTimeline(doubled), { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(8);
 
     const struck = instrument.played.map((note) => `${note.midi}@${note.atMs}`);
@@ -112,7 +112,7 @@ describe('listening to an exercise', () => {
       ],
     };
     const { player, metronome, instrument } = rig(pedalled);
-    player.start(buildTimeline(pedalled), { staffNumber: null, clickWhen: 'never' });
+    player.start(buildTimeline(pedalled), { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(12);
 
     // The first note is written as a quarter and released at the bar line.
@@ -124,7 +124,7 @@ describe('listening to an exercise', () => {
 
   it('can sound one hand alone', () => {
     const { player, metronome, instrument, timeline } = rig();
-    player.start(timeline, { staffNumber: 2, clickWhen: 'never' });
+    player.start(timeline, { staffNumber: 2, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(8);
 
     const sounded = new Set(instrument.played.map((note) => note.midi));
@@ -134,7 +134,7 @@ describe('listening to an exercise', () => {
 
   it('walks the cursor with the music', () => {
     const { player, metronome, renderer, timeline } = rig();
-    player.start(timeline, { staffNumber: null, clickWhen: 'never' });
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
 
     metronome.advanceSubdivisions(1);
     expect(renderer.cursor.position).toBe(0);
@@ -149,7 +149,7 @@ describe('listening to an exercise', () => {
     player.events.on('finished', () => {
       finished += 1;
     });
-    player.start(timeline, { staffNumber: null, clickWhen: 'never' });
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     expect(player.isPlaying).toBe(true);
 
     metronome.advanceSubdivisions(12);
@@ -161,7 +161,7 @@ describe('listening to an exercise', () => {
 
   it('goes quiet when it is stopped partway', () => {
     const { player, metronome, instrument, timeline } = rig();
-    player.start(timeline, { staffNumber: null, clickWhen: 'never' });
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(2);
 
     player.stop();
@@ -174,7 +174,7 @@ describe('listening to an exercise', () => {
     // The whole playback replays from hand-advanced ticks, which is the same
     // property the practice loop has and the reason either can be tested.
     const { player, metronome, instrument, timeline } = rig();
-    player.start(timeline, { staffNumber: null, clickWhen: 'never' });
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(12);
 
     expect(instrument.played.length).toBeGreaterThan(0);
@@ -193,6 +193,7 @@ describe('rolling a chord the writer marked', () => {
     const harness = rig(arpeggiatedExercise({ tempoBpm: options.tempoBpm ?? 60 }));
     harness.player.start(harness.timeline, {
       staffNumber: options.staffNumber ?? null,
+      click: 'pulse',
       clickWhen: 'never',
     });
     harness.metronome.advanceSubdivisions(4);
@@ -254,7 +255,7 @@ describe('rolling a chord the writer marked', () => {
     // short one: an eighth at 240 bpm lasts 125 ms, and the delay that sounds
     // right slowly would spread five notes over 152.
     const harness = rig(shortArpeggio());
-    harness.player.start(harness.timeline, { staffNumber: null, clickWhen: 'never' });
+    harness.player.start(harness.timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     harness.metronome.advanceSubdivisions(8);
 
     const played = attacks(harness.instrument);
@@ -317,7 +318,7 @@ describe('rolling a chord the writer marked', () => {
 
   function rigAndPlay() {
     const harness = rig();
-    harness.player.start(harness.timeline, { staffNumber: null, clickWhen: 'never' });
+    harness.player.start(harness.timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     harness.metronome.advanceSubdivisions(8);
     return harness;
   }
@@ -329,17 +330,17 @@ describe('what is heard over a performance', () => {
     // a plain yes-or-no lost that, playing the click through the whole thing
     // for a reader who had asked to hear it only while being counted in.
     const harness = rig();
-    harness.player.start(harness.timeline, { staffNumber: null, clickWhen: 'count-in-only' });
+    harness.player.start(harness.timeline, { staffNumber: null, click: 'pulse', clickWhen: 'count-in-only' });
 
     expect(harness.metronome.currentConfig.dropout).toEqual({ kind: 'silent-from', fromBar: 0 });
   });
 
   it('changes what is heard without interrupting the performance', () => {
     const harness = rig();
-    harness.player.start(harness.timeline, { staffNumber: null, clickWhen: 'always' });
+    harness.player.start(harness.timeline, { staffNumber: null, click: 'pulse', clickWhen: 'always' });
     harness.metronome.advanceSubdivisions(2);
 
-    harness.player.applyClick('never');
+    harness.player.applyClick('pulse', 'never');
 
     expect(harness.metronome.currentConfig.muted).toBe(true);
     expect(harness.player.isPlaying).toBe(true);
@@ -359,7 +360,7 @@ describe('playing a piece that changes tempo', () => {
     // Bar one is four quarters at a second each; bar two is a whole note
     // beginning at four seconds, and at 120 it lasts two rather than four.
     const { player, metronome, instrument, timeline } = rig(retimed());
-    player.start(timeline, { staffNumber: null, clickWhen: 'never' });
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(16);
 
     const first = instrument.played.find((note) => note.midi === MIDI.C4);
@@ -373,11 +374,94 @@ describe('playing a piece that changes tempo', () => {
 
   it('beats the change as well as sounding it', () => {
     const { player, metronome, timeline } = rig(retimed());
-    player.start(timeline, { staffNumber: null, clickWhen: 'always' });
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'always' });
 
     expect(metronome.currentConfig.tempos).toEqual([
       { startTicks: 0, bpm: 60 },
       { startTicks: Duration.WHOLE.ticks, bpm: 120 },
     ]);
+  });
+});
+
+describe('a performance follows the reader as a run does', () => {
+  it('clicks the part of the pulse they asked for', () => {
+    // Fixed at the felt beat, a performance clicked in crotchets to somebody
+    // who had asked for the half-beats - and the setting looked broken rather
+    // than unimplemented, because the same button worked the moment they
+    // pressed Start.
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'division', clickWhen: 'always' });
+
+    expect(metronome.currentConfig.click).toBe('division');
+    expect(metronome.currentConfig.subdivisionsPerPulse % 2).toBe(0);
+  });
+
+  it('changes the click mid-performance without interrupting it', () => {
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'always' });
+    metronome.advanceSubdivisions(2);
+
+    player.applyClick('subdivision', 'always');
+
+    expect(metronome.currentConfig.click).toBe('subdivision');
+    expect(player.isPlaying).toBe(true);
+  });
+
+  it('says where the music has reached', () => {
+    // Only a run published it, so the pill went blank the moment the machine
+    // took over the playing - which is exactly when a reader following along
+    // wants to know where they are.
+    const { player, metronome, timeline } = rig();
+    const seen: { measureIndex: number; beat: number }[] = [];
+    player.events.on('positionChanged', (at) => seen.push(at));
+
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(6);
+
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen[0]).toEqual({ measureIndex: 0, beat: 1 });
+    // Two bars of 4/4, so it reaches the second bar and counts its beats from
+    // one again rather than going on to five.
+    expect(seen.some((at) => at.measureIndex === 1 && at.beat === 1)).toBe(true);
+    expect(seen.every((at) => at.beat <= 4)).toBe(true);
+  });
+
+  it('takes a passage the reader widens while it plays', () => {
+    // The stretch was read once at the start and never again, so clearing the
+    // passage changed nothing until the performance was stopped and started.
+    const { player, metronome, instrument, timeline } = rig();
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      fromIndex: 0,
+      // The first bar only.
+      toIndex: 3,
+    });
+    metronome.advanceSubdivisions(2);
+    const heardWhileNarrow = instrument.played.length;
+
+    player.retarget(timeline.length - 1);
+    metronome.advanceSubdivisions(4);
+
+    expect(player.isPlaying).toBe(true);
+    expect(instrument.played.length).toBeGreaterThan(heardWhileNarrow);
+    // And nothing already sounded is sounded twice.
+    const struck = instrument.played.map((note) => `${note.midi}@${note.atMs}`);
+    expect(new Set(struck).size).toBe(struck.length);
+  });
+
+  it('stops where a passage narrowed mid-performance now ends', () => {
+    const { player, metronome, timeline } = rig();
+    const finished: number[] = [];
+    player.events.on('finished', () => finished.push(1));
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(4);
+
+    player.retarget(3);
+    metronome.advanceSubdivisions(2);
+
+    expect(finished).toHaveLength(1);
+    expect(player.isPlaying).toBe(false);
   });
 });

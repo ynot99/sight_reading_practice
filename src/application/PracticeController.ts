@@ -17,6 +17,7 @@ import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
+import type { PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type { ClickWhen, ClickPattern } from './ports/IMetronome.js';
 import type {
@@ -556,7 +557,15 @@ export class PracticeController {
     // button is the run they were asking about.
     if (changes.clickPattern !== undefined || changes.clickWhen !== undefined) {
       this.currentSession?.applyClick(next.clickPattern, next.clickWhen);
-      this.player?.applyClick(next.clickWhen);
+      this.player?.applyClick(next.clickPattern, next.clickWhen);
+    }
+
+    // The passage is a thing the reader reaches for *while* listening, so it
+    // takes effect there too: clearing it means the rest of the piece should
+    // now be heard, and a performance that read the stretch once at the start
+    // went on playing the old one to the end.
+    if (changes.rangeFromBar !== undefined || changes.rangeToBar !== undefined) {
+      this.player?.retarget(this.passageSteps.to);
     }
 
     if (changes.zoom !== undefined && changes.zoom !== this.deps.zoom.zoom) {
@@ -919,6 +928,7 @@ export class PracticeController {
     const passage = this.passageSteps;
     player.start(timeline, {
       staffNumber: this.currentSettings.handStaff,
+      click: this.currentSettings.clickPattern,
       clickWhen: this.currentSettings.clickWhen,
       // Where the reader put their place, kept inside the passage they chose.
       // Hearing the music is part of learning the passage, so a playback that
@@ -1062,7 +1072,7 @@ export class PracticeController {
   }
 
   /** Fires when a playback reaches the end on its own. */
-  get playbackEvents(): IEventSource<{ started: Record<string, never>; finished: Record<string, never> }> {
+  get playbackEvents(): IEventSource<PlayerEventMap> {
     return this.ensurePlayer().events;
   }
 

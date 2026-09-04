@@ -395,3 +395,64 @@ describe('where the click stops', () => {
     expect(heard).toHaveLength(4);
   });
 });
+
+describe('where the run says the music has got to', () => {
+  it('counts the bar off the bar lines once the metre changes', () => {
+    // Worked out by dividing by the opening metre, every position after a
+    // change lands in the wrong bar - and the pill was reading that.
+    const base = twoBarExercise({ tempoBpm: 60 });
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    const twoFour = new TimeSignature(2, 4);
+    const harness = createHarness({
+      exercise: {
+        ...base,
+        timeChanges: [{ measureIndex: 1, timeSignature: twoFour }],
+        staves: [
+          {
+            ...treble,
+            measures: [
+              measureOf([
+                noteEntry(p('C4'), Duration.QUARTER),
+                noteEntry(p('D4'), Duration.QUARTER),
+                noteEntry(p('E4'), Duration.QUARTER),
+                noteEntry(p('F4'), Duration.QUARTER),
+              ]),
+              measureOf([
+                noteEntry(p('G4'), Duration.QUARTER),
+                noteEntry(p('A4'), Duration.QUARTER),
+              ]),
+              measureOf([
+                noteEntry(p('B4'), Duration.QUARTER),
+                noteEntry(p('C5'), Duration.QUARTER),
+              ]),
+            ],
+          },
+          {
+            ...bass,
+            measures: [
+              measureOf([noteEntry(p('C3'), Duration.WHOLE)]),
+              measureOf([noteEntry(p('G2'), Duration.HALF)]),
+              measureOf([noteEntry(p('G2'), Duration.HALF)]),
+            ],
+          },
+        ],
+      },
+      mode: new FlowMode(),
+      options: { countInBars: 0, clickWhen: 'never', click: 'pulse' },
+    });
+
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(10);
+
+    const seen = harness.of('positionChanged');
+    // Four beats of 4/4, then two of 2/4, then two more. Divided by the
+    // opening metre, the third bar is bar two beats three and four - a bar
+    // that never ends, and a beat the reader is not on.
+    expect(seen.filter((at) => at.measureIndex === 0).map((at) => at.beat)).toEqual([1, 2, 3, 4]);
+    expect(seen.filter((at) => at.measureIndex === 1).map((at) => at.beat)).toEqual([1, 2]);
+    expect(seen.filter((at) => at.measureIndex === 2).map((at) => at.beat)).toEqual([1, 2]);
+  });
+});

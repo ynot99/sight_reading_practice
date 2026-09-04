@@ -21,7 +21,12 @@ import {
   type MetronomeTick,
 } from '../ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from '../ports/IMidiSource.js';
-import { elapsedMsAt, spanMs, timeAtMeasure } from '../../domain/model/Exercise.js';
+import {
+  elapsedMsAt,
+  positionOfTick,
+  spanMs,
+  timeAtMeasure,
+} from '../../domain/model/Exercise.js';
 import {
   metronomeBars,
   metronomeEnd,
@@ -652,11 +657,10 @@ export class PracticeSession {
       return;
     }
     this.publishedPositionTicks = ticks;
-    const signature = this.timeline.exercise.timeSignature;
-    this.emitter.emit('positionChanged', {
-      measureIndex: signature.measureOf(ticks),
-      beat: signature.beatOf(ticks),
-    });
+    // Off the bar lines, not by dividing: a piece that changes metre has bars
+    // of different lengths from there on, and the opening metre puts every
+    // position after the change in the wrong bar.
+    this.emitter.emit('positionChanged', positionOfTick(this.timeline.exercise, ticks));
   }
 
   private emitCountIn(beatsRemaining: number): void {

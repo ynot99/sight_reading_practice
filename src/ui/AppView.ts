@@ -3,6 +3,7 @@ import { FLOW_MODE_ID } from '../application/modes/FlowMode.js';
 import { WAIT_MODE_ID } from '../application/modes/WaitMode.js';
 import type { PracticeSession } from '../application/session/PracticeSession.js';
 import type { SessionStatus } from '../application/session/SessionState.js';
+import type { PositionEvent } from '../application/session/SessionEvents.js';
 import type { MidiConnectionStatus, MidiEvent } from '../application/ports/IMidiSource.js';
 import {
   CLICK_WHEN,
@@ -1949,6 +1950,26 @@ export class AppView {
       : '';
   }
 
+  /**
+   * Says where the music has reached, whoever is playing it.
+   *
+   * A run and a performance answer the same question and the page has one
+   * place to put the answer. Wired to a run alone, the pill went blank the
+   * moment the machine took over - which is exactly when a reader following
+   * along wants to know where they are.
+   */
+  private showPosition({ measureIndex, beat }: PositionEvent): void {
+    // Turned once, when the music has actually left the page, rather than
+    // scrolled a little on every beat. That is what a page turn is for: the
+    // reader looks at one thing until it is finished with.
+    this.runtime.renderer.showMeasure(measureIndex);
+    this.lastPosition = `bar ${this.runtime.controller.barNumber(measureIndex)} · beat ${beat
+      .toFixed(2)
+      .replace(/\.00$/, '')}`;
+    this.el.position.textContent = this.lastPosition;
+    this.renderFocusStatus(this.lastPosition);
+  }
+
   /** Ends a look in progress, whether it ran out or the reader stopped it. */
   private cancelPreview(): void {
     if (this.previewTimer === null) {
@@ -2390,6 +2411,12 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      controller.playbackEvents.on('positionChanged', (at) => {
+        this.showPosition(at);
+      }),
+    );
+
+    this.subscriptions.push(
       controller.playbackEvents.on('finished', () => {
         this.describeListening();
         // Round again, exactly as a run does. A repeat sign on the page
@@ -2474,16 +2501,8 @@ export class AppView {
       // Where the music is, which under the metronome goes on moving through a
       // held note - the step is what the reader has to play, not where the
       // count has got to, and the pill was asked the second question.
-      session.events.on('positionChanged', ({ measureIndex, beat }) => {
-        // Turned once, when the music has actually left the page, rather
-        // than scrolled a little on every beat. That is what a page turn is
-        // for: the reader looks at one thing until it is finished with.
-        this.runtime.renderer.showMeasure(measureIndex);
-        this.lastPosition = `bar ${this.runtime.controller.barNumber(measureIndex)} · beat ${beat
-          .toFixed(2)
-          .replace(/\.00$/, '')}`;
-        this.el.position.textContent = this.lastPosition;
-        this.renderFocusStatus(this.lastPosition);
+      session.events.on('positionChanged', (at) => {
+        this.showPosition(at);
       }),
       session.events.on('finished', ({ report, score }) => {
         this.el.progress.value = this.totalSteps;

@@ -1,10 +1,12 @@
 
-import { pedalSpans, spanMs } from '../domain/model/Exercise.js';
+import { pedalSpans, positionOfTick, spanMs } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
+import type { PositionEvent } from './session/SessionEvents.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import {
   clickIsSilent,
   resolveDropout,
+  type ClickPattern,
   type ClickWhen,
   type IMetronome,
   type MetronomeTick,
@@ -35,6 +37,15 @@ export interface ListeningOptions {
    */
   readonly clickWhen: ClickWhen;
   /**
+   * How much of the pulse is sounded.
+   *
+   * The reader's own choice, as a run takes it. Fixed at the felt beat here,
+   * a performance clicked in crotchets to somebody who had asked for the
+   * half-beats - and the setting looked broken rather than unimplemented,
+   * because the same button worked perfectly the moment they pressed Start.
+   */
+  readonly click: ClickPattern;
+  /**
    * The stretch to play, as the first and last step of it.
    *
    * The whole piece when left out. A reader who has chosen a passage, or put
@@ -57,6 +68,15 @@ export interface ExercisePlayerDependencies {
 export interface PlayerEventMap {
   started: Record<string, never>;
   finished: Record<string, never>;
+  /**
+   * Where the music has reached, as the bar and beat a reader would say.
+   *
+   * The same event a run publishes, because it answers the same question and
+   * the page has one place to put the answer. Only a run published it, so the
+   * pill went blank the moment the machine took over the playing - which is
+   * exactly when a reader following along wants to know where they are.
+   */
+  positionChanged: PositionEvent;
 }
 
 /** One note the player still has to start and stop. */
@@ -131,12 +151,59 @@ export class ExercisePlayer {
   private fromTicks = 0;
   private untilTicks = 0;
   private playing = false;
+  private click: ClickPattern = 'pulse';
+  private clickWhen: ClickWhen = 'never';
+  private hand: ListeningHand = null;
+  /** Last bar and beat announced, so an unchanged one is not announced again. */
+  private publishedPosition: PositionEvent | null = null;
 
-  /** Changes what is heard over a performance, without interrupting it. */
-  applyClick(clickWhen: ClickWhen): void {
+  /** Where the stretch ends, in the timeline's own ticks. */
+  private endOf(toIndex: number | undefined): number {
+    const timeline = this.timeline;
+    if (timeline === null) {
+      return 0;
+    }
+    const last = timeline.at(
+      Math.min(timeline.length - 1, Math.round(toIndex ?? timeline.length - 1)),
+    );
+    return last === null ? timeline.totalTicks : last.onsetTicks + last.durationTicks;
+  }
+
+  /**
+   * Moves the end of a performance while it is playing.
+   *
+   * A reader who clears the passage mid-playback means it now, and the notes
+   * they have just given back have to be heard - the stretch was read once at
+   * the start and never again, so clearing it changed nothing until the
+   * performance was stopped and started. Where it *began* is left alone: that
+   * is where this performance's clock reads nought, and moving it would move
+   * every note already scheduled.
+   */
+  retarget(toIndex: number | undefined): void {
     if (!this.playing || this.timeline === null) {
       return;
     }
+    const until = this.endOf(toIndex);
+    if (until === this.untilTicks) {
+      return;
+    }
+    this.untilTicks = until;
+    // Collected again, because the notes past the old end were never gathered
+    // - the walk skips anything outside the stretch. Everything before it is
+    // gathered identically and in the same order, so what has already been
+    // handed to the instrument stays handed over exactly once.
+    this.pending = this.collectNotes(this.timeline, this.hand);
+    this.nextToSchedule = Math.min(this.nextToSchedule, this.pending.length);
+    this.applyClick(this.click, this.clickWhen);
+  }
+
+  /** Changes what is heard over a performance, without interrupting it. */
+  applyClick(click: ClickPattern, clickWhen: ClickWhen): void {
+    if (!this.playing || this.timeline === null) {
+      return;
+    }
+    this.click = click;
+    this.clickWhen = clickWhen;
     const timeSignature = this.timeline.exercise.timeSignature;
     this.deps.metronome.configure({
       bpm: this.timeline.exercise.tempoBpm,
@@ -144,13 +211,15 @@ export class ExercisePlayer {
       // From where the performance actually began, which is where its own
       // clock reads nought.
       bars: metronomeBars(this.timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
+      // Re-read, because the end may have moved: clearing the passage while
+      // it plays widens what there is left to hear.
       tempos: metronomeTempos(this.timeline.exercise, {
         countInBars: 0,
         fromTicks: this.fromTicks,
       }),
       endsAtTicks: this.untilTicks - this.fromTicks,
-      subdivisionsPerPulse: subdivisionsPerPulseFor(this.timeline, timeSignature, 'pulse'),
-      click: 'pulse',
+      subdivisionsPerPulse: subdivisionsPerPulseFor(this.timeline, timeSignature, this.click),
+      click: this.click,
       dropout: resolveDropout(clickWhen, 0),
       muted: clickIsSilent(clickWhen),
     });
@@ -175,13 +244,13 @@ export class ExercisePlayer {
     }
 
     this.timeline = timeline;
+    this.click = options.click;
+    this.clickWhen = options.clickWhen;
+    this.hand = options.staffNumber;
+    this.publishedPosition = null;
     const first = timeline.at(Math.max(0, Math.round(options.fromIndex ?? 0)));
-    const last = timeline.at(
-      Math.min(timeline.length - 1, Math.round(options.toIndex ?? timeline.length - 1)),
-    );
     this.fromTicks = first?.onsetTicks ?? 0;
-    this.untilTicks =
-      last === null ? timeline.totalTicks : last.onsetTicks + last.durationTicks;
+    this.untilTicks = this.endOf(options.toIndex);
     this.pending = this.collectNotes(timeline, options.staffNumber);
     this.nextToSchedule = 0;
     this.startedAtMs = null;
@@ -196,8 +265,8 @@ export class ExercisePlayer {
       bars: metronomeBars(timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
       tempos: metronomeTempos(timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
       endsAtTicks: this.untilTicks - this.fromTicks,
-      subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, 'pulse'),
-      click: 'pulse',
+      subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, this.click),
+      click: this.click,
       // From bar zero, because there is no count-in in front of a playback.
       dropout: resolveDropout(options.clickWhen, 0),
       muted: clickIsSilent(options.clickWhen),
@@ -326,9 +395,31 @@ export class ExercisePlayer {
     if (step !== null) {
       this.deps.cursor.moveTo(step.index);
     }
+    this.publishPosition(position);
     if (position >= this.untilTicks) {
       this.finish();
     }
+  }
+
+  /**
+   * Announces where the music has reached, if it has moved.
+   *
+   * Read off the bar lines rather than worked out from the opening metre: a
+   * piece that changes metre has bars of different lengths from there on, and
+   * a position had by dividing lands in the wrong one.
+   */
+  private publishPosition(ticks: number): void {
+    const timeline = this.timeline;
+    if (timeline === null) {
+      return;
+    }
+    const at = positionOfTick(timeline.exercise, Math.max(0, ticks));
+    const last = this.publishedPosition;
+    if (last !== null && last.measureIndex === at.measureIndex && last.beat === at.beat) {
+      return;
+    }
+    this.publishedPosition = at;
+    this.emitter.emit('positionChanged', at);
   }
 
   private finish(): void {

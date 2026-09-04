@@ -325,6 +325,26 @@ describe('PracticeController', () => {
     expect(renderer.loadedXml).toContain('<per-minute>120</per-minute>');
   });
 
+  it('beats a written tempo change at the reader’s share of it too', async () => {
+    // The whole way through, not only in the settings: a Più mosso left at
+    // its own beats would be the piece speeding up to somewhere they never
+    // asked for, and the metronome is what they would hear it in.
+    const { controller, metronome } = createController();
+    await controller.openScore({
+      ...twoBarExercise({ tempoBpm: 100 }),
+      tempoChanges: [{ measureIndex: 1, offsetTicks: 0, tempoBpm: 200 }],
+    });
+    controller.nudgeTempoPercent(-50);
+    await controller.reloadExercise();
+    controller.start();
+
+    expect(metronome.currentConfig.bpm).toBe(50);
+    expect(metronome.currentConfig.tempos).toEqual([
+      { startTicks: 0, bpm: 50 },
+      { startTicks: Duration.WHOLE.ticks, bpm: 100 },
+    ]);
+  });
+
   it('does not engrave the page again for a change of speed', async () => {
     // Engraving is two and a half seconds on a long score against thirty
     // milliseconds to write the file. Redrawing for a tempo nudge spent

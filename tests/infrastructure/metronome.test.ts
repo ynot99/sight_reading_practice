@@ -413,3 +413,64 @@ describe('the click at the end of the music', () => {
     ]);
   });
 });
+
+describe('a click that outlives the metre it started in', () => {
+  const sixEight = new TimeSignature(6, 8);
+  const fourFour = new TimeSignature(4, 4);
+  /** One bar of 6/8, then one of 4/4: a grid that lands on both their beats. */
+  const changing: MetronomeConfig = {
+    ...COMMON,
+    timeSignature: sixEight,
+    // An eighth, which is a beat of neither but divides both.
+    subdivisionsPerPulse: sixEight.ticksPerPulse / Duration.EIGHTH.ticks,
+    click: 'pulse',
+    muted: false,
+    endsAtTicks: null,
+    bars: [
+      { startTicks: 0, timeSignature: sixEight },
+      { startTicks: sixEight.ticksPerMeasure, timeSignature: fourFour },
+    ],
+  };
+
+  it('beats the bar it is in, not the one the piece opened in', () => {
+    // Counted from the tick's own ordinal, the click keeps the opening metre
+    // for the whole run: the Minecraft credits open in 6/8 and spend a
+    // hundred and forty-eight bars in 4/4, where a dotted-quarter click falls
+    // a beat and a half apart and lands on eighty-seven bar lines out of two
+    // hundred and twenty-three.
+    const eighth = Duration.EIGHTH.ticks;
+    const heard = audibleIndices(changing, 14).map((index) => index * eighth);
+
+    expect(heard).toEqual([
+      // Two dotted quarters of 6/8.
+      0,
+      sixEight.ticksPerPulse,
+      // Then four quarters of 4/4, from the bar line.
+      sixEight.ticksPerMeasure,
+      sixEight.ticksPerMeasure + fourFour.ticksPerPulse,
+      sixEight.ticksPerMeasure + fourFour.ticksPerPulse * 2,
+      sixEight.ticksPerMeasure + fourFour.ticksPerPulse * 3,
+    ]);
+  });
+
+  it('divides the bar it is in as well', () => {
+    const eighth = Duration.EIGHTH.ticks;
+    const heard = audibleIndices({ ...changing, click: 'division' }, 14).map(
+      (index) => index * eighth,
+    );
+
+    // Three eighths to the beat in 6/8, two in 4/4 - which is what the words
+    // mean, and it has to go on meaning them after the metre changes.
+    expect(heard.slice(0, 6)).toEqual([0, eighth, eighth * 2, eighth * 3, eighth * 4, eighth * 5]);
+    expect(heard.slice(6)).toEqual([
+      sixEight.ticksPerMeasure,
+      sixEight.ticksPerMeasure + eighth,
+      sixEight.ticksPerMeasure + eighth * 2,
+      sixEight.ticksPerMeasure + eighth * 3,
+      sixEight.ticksPerMeasure + eighth * 4,
+      sixEight.ticksPerMeasure + eighth * 5,
+      sixEight.ticksPerMeasure + eighth * 6,
+      sixEight.ticksPerMeasure + eighth * 7,
+    ]);
+  });
+});

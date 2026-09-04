@@ -154,9 +154,20 @@ export function isAudibleClick(tick: MetronomeTick, config: MetronomeConfig): bo
   if (config.click === 'downbeat') {
     return tick.isDownbeat;
   }
-  const wanted = clicksPerPulse(config.click, config.timeSignature);
-  const every = config.subdivisionsPerPulse / wanted;
-  // A click rate the resolution cannot express falls back to the pulse, which
-  // is always on the grid.
-  return Number.isInteger(every) ? tick.index % every === 0 : tick.isPulse;
+  // Against the bar this tick is in, not against the metre the piece opened
+  // in. Counted from the tick's own ordinal, the click keeps the beat of the
+  // opening metre for the whole run: the Minecraft credits open in 6/8 and
+  // spend a hundred and forty-eight bars in 4/4, where a click every dotted
+  // quarter falls a beat and a half apart and never on a bar line again.
+  const bar = barAt(config, tick.positionTicks);
+  const wanted = clicksPerPulse(config.click, bar.timeSignature);
+  // How far apart the clicks fall, in divisions, and how far apart the ticks
+  // do. A click rate the grid cannot land on - finer than a tick, or not a
+  // whole number of them - falls back to the pulse, which always is on it.
+  const every = bar.timeSignature.ticksPerPulse / wanted;
+  const step = ticksPerSubdivision(config);
+  if (!Number.isInteger(every) || every < step || every % step !== 0) {
+    return tick.isPulse;
+  }
+  return (tick.positionTicks - bar.startTicks) % every === 0;
 }

@@ -164,7 +164,15 @@ export function subdivisionsPerPulseFor(
   if (wanted <= MAX_SUBDIVISIONS_PER_PULSE) {
     return wanted;
   }
-  return coarsestGridWithin(timeSignature.ticksPerPulse, fromClick);
+  // Every metre the piece passes through, for the same reason
+  // `musicalResolutionTicks` walks them all: a grid that lands on the opening
+  // metre's beats and no others stops clicking on the beat the moment the
+  // metre changes.
+  const pulses = new Set(
+    barLines(timeline.exercise).map((bar) => bar.timeSignature.ticksPerPulse),
+  );
+  pulses.add(timeSignature.ticksPerPulse);
+  return coarsestGridWithin(timeSignature.ticksPerPulse, fromClick, [...pulses]);
 }
 
 /**
@@ -194,15 +202,24 @@ const MAX_SUBDIVISIONS_PER_PULSE = 48;
  *
  * Exactly, because positions are counted in whole divisions - a grid that
  * did not divide the pulse would put every tick a fraction further out of
- * step with the bar lines. And a multiple of what the click needs, because
- * the click has to keep landing on the beat it names; that is the one demand
- * here that a reader would hear being broken.
+ * step with the bar lines. Every metre's pulse, not only the opening one, or
+ * the click stops landing on the beat where the metre changes. And a multiple
+ * of what the click needs, because the click has to keep landing on the beat
+ * it names; that is the one demand here that a reader would hear being broken.
  */
-function coarsestGridWithin(ticksPerPulse: number, fromClick: number): number {
+function coarsestGridWithin(
+  ticksPerPulse: number,
+  fromClick: number,
+  pulses: readonly number[],
+): number {
   const clicks = Math.max(1, fromClick);
   let best = clicks;
   for (let grid = clicks; grid <= MAX_SUBDIVISIONS_PER_PULSE; grid += clicks) {
-    if (ticksPerPulse % grid === 0) {
+    if (ticksPerPulse % grid !== 0) {
+      continue;
+    }
+    const step = ticksPerPulse / grid;
+    if (pulses.every((pulse) => pulse % step === 0)) {
       best = grid;
     }
   }

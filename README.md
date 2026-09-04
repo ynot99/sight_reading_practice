@@ -647,13 +647,17 @@ of one, is silent for the remainder rather than resting through that either -
 a rest is an instruction the writer gave, and inventing one asks the reader to
 count something nobody wrote. What that may never do is leave the staff itself
 blank, so the bars are checked across all their voices at once and a rest is
-given back wherever nothing at all would be drawn. Key, metre and clef changes, stem directions and beaming are all followed
-as written, along with rolled chords and the damper pedal. A metre change
-moves the bar lines, so bars stop being all the same length and every answer
-about musical position is read off `barLines` rather than worked out by
+given back wherever nothing at all would be drawn. Key, metre, tempo and clef changes, stem directions and beaming are all
+followed as written, along with rolled chords and the damper pedal. A metre
+change moves the bar lines, so bars stop being all the same length and every
+answer about musical position is read off `barLines` rather than worked out by
 multiplying - the metronome included, which is handed those bars and accents
 the downbeat the page draws rather than the one the opening metre would have
-put there. Grace notes are the remaining limit.
+put there. A tempo change does the same to the clock: an accelerando is a run
+of marks a sixteenth apart, so they are placed to the division and every answer
+about *time* is walked over `tempoSpans` instead. The reader's tempo control is
+a share of the written speed, so the changes move with it and keep their
+proportions. Grace notes are the remaining limit.
 Written values are read down to sixty-fourths, with tuplets up to septuplets:
 a file that divides a beat into sevens rounds its own numbers to fit its
 divisions, and the written value is trusted over the rounding. Compressed

@@ -5,7 +5,7 @@ import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.j
 import {
   buildMetronomeTick,
   isAudibleClick,
-  subdivisionSeconds,
+  subdivisionSecondsAt,
   ticksPerSubdivision,
 } from './metronomeMath.js';
 
@@ -31,6 +31,7 @@ const DEFAULT_CONFIG: MetronomeConfig = {
   // Nothing to beat through until something is loaded, which counts from
   // the start in the metre above.
   bars: [],
+  tempos: [],
   subdivisionsPerPulse: 4,
   click: 'pulse',
   dropout: null,
@@ -151,7 +152,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
       }
       this.queue.push({ tick, audioTime: this.nextTickAudioTime });
       this.nextTickIndex += 1;
-      this.nextTickAudioTime += subdivisionSeconds(this.config);
+      this.nextTickAudioTime += subdivisionSecondsAt(this.config, this.nextTickIndex - 1);
     }
 
     // Delivered when the click is *heard*, not when the graph reaches it.

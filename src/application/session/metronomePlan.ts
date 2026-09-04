@@ -1,8 +1,13 @@
 import type { Exercise } from '../../domain/model/Exercise.js';
-import { barLines } from '../../domain/model/Exercise.js';
+import { barLines, tempoAtTick, tempoSpans } from '../../domain/model/Exercise.js';
 import type { TimeSignature } from '../../domain/model/TimeSignature.js';
 import type { ExerciseTimeline } from '../../domain/timeline/Timeline.js';
-import { clicksPerPulse, type ClickPattern, type MetronomeBar } from '../ports/IMetronome.js';
+import {
+  clicksPerPulse,
+  type ClickPattern,
+  type MetronomeBar,
+  type MetronomeTempo,
+} from '../ports/IMetronome.js';
 
 function greatestCommonDivisor(left: number, right: number): number {
   let a = Math.abs(left);
@@ -57,6 +62,37 @@ export function metronomeBars(
     }
   }
   return bars;
+}
+
+/**
+ * Every tempo the metronome will beat at, in its own clock.
+ *
+ * The same shift {@link metronomeBars} applies, for the same reason: the
+ * count-in is beaten at the tempo the music is about to *start* at, not the
+ * one the piece opened in - being counted in at a Lento to music that begins
+ * Presto is as useless as being counted in four to music that starts in
+ * three.
+ */
+export function metronomeTempos(
+  exercise: Exercise,
+  options: { readonly countInBars: number; readonly fromTicks: number },
+): readonly MetronomeTempo[] {
+  const music = barLines(exercise);
+  const startsIn =
+    [...music].reverse().find((bar) => bar.startTicks <= options.fromTicks)?.timeSignature ??
+    exercise.timeSignature;
+  const countIn = Math.max(0, Math.round(options.countInBars));
+  const shift = countIn * startsIn.ticksPerMeasure - options.fromTicks;
+
+  const tempos: MetronomeTempo[] = [
+    { startTicks: 0, bpm: tempoAtTick(exercise, options.fromTicks) },
+  ];
+  for (const span of tempoSpans(exercise)) {
+    if (span.startTicks > options.fromTicks) {
+      tempos.push({ startTicks: span.startTicks + shift, bpm: span.tempoBpm });
+    }
+  }
+  return tempos;
 }
 
 /**

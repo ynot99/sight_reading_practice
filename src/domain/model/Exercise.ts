@@ -1,7 +1,7 @@
 import { ExerciseValidationError } from '../../shared/errors.js';
 import { assertNever } from '../../shared/asserts.js';
 import type { ClefKind } from './Clef.js';
-import { Duration } from './Duration.js';
+import { Duration, ticksToMilliseconds } from './Duration.js';
 import type { KeySignature } from './KeySignature.js';
 import type { Pitch } from './Pitch.js';
 import type { TimeSignature } from './TimeSignature.js';
@@ -207,6 +207,81 @@ export function barLines(
   return bars;
 }
 
+/** One stretch of the piece taken at one tempo, from `startTicks` onwards. */
+export interface TempoSpan {
+  readonly startTicks: number;
+  readonly tempoBpm: number;
+}
+
+/**
+ * Every tempo the piece is taken at, by where it begins.
+ *
+ * The one place that walks the tempo marks, for the same reason
+ * {@link barLines} is the one place that walks the bars: once a tempo can
+ * change partway through, no answer about clock time can be had by
+ * multiplying. Always opens with a span at nought, so there is a tempo in
+ * force everywhere.
+ */
+export function tempoSpans(exercise: Exercise): readonly TempoSpan[] {
+  const bars = barLines(exercise);
+  const spans: TempoSpan[] = [{ startTicks: 0, tempoBpm: exercise.tempoBpm }];
+  const marks = exercise.tempoChanges
+    .map((change) => ({
+      startTicks: (bars[change.measureIndex]?.startTicks ?? 0) + change.offsetTicks,
+      tempoBpm: change.tempoBpm,
+    }))
+    .sort((left, right) => left.startTicks - right.startTicks);
+  for (const mark of marks) {
+    const last = spans[spans.length - 1];
+    if (last !== undefined && mark.startTicks <= last.startTicks) {
+      // Two marks at one instant, or one on the downbeat the piece opens at:
+      // the later of them is what is played from there.
+      spans[spans.length - 1] = { startTicks: last.startTicks, tempoBpm: mark.tempoBpm };
+      continue;
+    }
+    spans.push(mark);
+  }
+  return spans;
+}
+
+/** The tempo in force at a given position, in quarter notes per minute. */
+export function tempoAtTick(exercise: Exercise, ticks: number): number {
+  let current = exercise.tempoBpm;
+  for (const span of tempoSpans(exercise)) {
+    if (span.startTicks > ticks) {
+      break;
+    }
+    current = span.tempoBpm;
+  }
+  return current;
+}
+
+/**
+ * Milliseconds from the start of the piece to a position in it.
+ *
+ * Walked rather than multiplied, since each stretch runs at its own tempo.
+ * Positions before the start count backwards at the opening tempo, which is
+ * what a count-in needs.
+ */
+export function elapsedMsAt(exercise: Exercise, ticks: number): number {
+  const spans = tempoSpans(exercise);
+  let elapsed = 0;
+  for (const [index, span] of spans.entries()) {
+    if (span.startTicks >= ticks) {
+      break;
+    }
+    const next = spans[index + 1]?.startTicks ?? Infinity;
+    const until = Math.min(next, ticks);
+    elapsed += ticksToMilliseconds(until - span.startTicks, span.tempoBpm);
+  }
+  return ticks >= 0 ? elapsed : ticksToMilliseconds(ticks, exercise.tempoBpm);
+}
+
+/** How long a stretch of the piece lasts, from one position to another. */
+export function spanMs(exercise: Exercise, fromTicks: number, toTicks: number): number {
+  return elapsedMsAt(exercise, toTicks) - elapsedMsAt(exercise, fromTicks);
+}
+
 /** The key in force at a given measure. */
 export function keyAtMeasure(exercise: Exercise, measureIndex: number): KeySignature {
   let current = exercise.key;
@@ -261,6 +336,21 @@ export interface TimeChange {
   readonly timeSignature: TimeSignature;
 }
 
+/**
+ * A tempo the score changes to, from the given point onwards.
+ *
+ * Placed to the division rather than to the bar, because that is how the mark
+ * is written: an accelerando is a run of them inside one bar, each on the note
+ * it applies from. Quarter notes per minute, like {@link Exercise.tempoBpm}
+ * and like MusicXML's own `<sound tempo>`.
+ */
+export interface TempoChange {
+  readonly measureIndex: number;
+  /** Offset from the start of that measure, in divisions. */
+  readonly offsetTicks: number;
+  readonly tempoBpm: number;
+}
+
 export interface Exercise {
   readonly id: string;
   readonly title: string;
@@ -298,6 +388,21 @@ export interface Exercise {
    */
   readonly timeChanges: readonly TimeChange[];
   readonly tempoBpm: number;
+  /**
+   * Tempos the score changes to partway through.
+   *
+   * Like a metre change, this one is not decoration: held to its opening
+   * tempo, a piece marked Lento that later says Più mosso is played at the
+   * Lento throughout, and the reader is asked to sight-read the fast section
+   * at a speed the writer never wrote. Ten of the reader's own thirty-two
+   * scores change tempo, one of them thirty-one times.
+   *
+   * What it breaks is multiplication: how long a position is into the piece
+   * can no longer be had from one number, so everything that converts between
+   * divisions and time asks {@link elapsedMsAt}, which is the one place that
+   * walks them. Empty for anything this program generates.
+   */
+  readonly tempoChanges: readonly TempoChange[];
   /**
    * What the first bar is *called*, which is not always 1.
    *
@@ -427,6 +532,22 @@ export function validateExercise(exercise: Exercise): void {
       'tempoBpm',
     );
   }
+  exercise.tempoChanges.forEach((change, index) => {
+    // A tempo of nought or less does not slow the music down, it stops the
+    // clock: every position after it lands at the same instant.
+    if (!Number.isFinite(change.tempoBpm) || change.tempoBpm <= 0) {
+      throw new ExerciseValidationError(
+        `Tempo must be a positive number, got ${change.tempoBpm}.`,
+        `tempoChanges[${index}]`,
+      );
+    }
+    if (!Number.isInteger(change.offsetTicks) || change.offsetTicks < 0) {
+      throw new ExerciseValidationError(
+        `A tempo change sits ${change.offsetTicks} divisions into its bar.`,
+        `tempoChanges[${index}]`,
+      );
+    }
+  });
 
   const staffNumbers = new Set<number>();
   const voices = new Set<number>();

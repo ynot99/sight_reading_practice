@@ -63,6 +63,18 @@ export const TEMPO_STEP_PERCENT = 5;
 /** Matches what the stored-settings codec will accept back. */
 const MIN_TEMPO_BPM = 20;
 const MAX_TEMPO_BPM = 300;
+
+/**
+ * A written tempo taken at the reader's share of it.
+ *
+ * Kept inside what the metronome and the codec will accept: a quarter of a
+ * very slow piece is slower than a metronome can go, and a written rallentando
+ * to ten beats a minute is slower still.
+ */
+function scaledTempo(writtenBpm: number, percent: number): number {
+  const bpm = Math.round((writtenBpm * percent) / 100);
+  return Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, bpm));
+}
 const MIN_TEMPO_PERCENT = 25;
 const MAX_TEMPO_PERCENT = 200;
 
@@ -764,8 +776,7 @@ export class PracticeController {
    * page arguing with them.
    */
   private tempoBpmForPercent(percent: number): number {
-    const bpm = Math.round((this.baseTempoBpm * percent) / 100);
-    return Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, bpm));
+    return scaledTempo(this.baseTempoBpm, percent);
   }
 
   /** The opened score, or `null` when the material is being generated. */
@@ -823,10 +834,22 @@ export class PracticeController {
   private async present(source: Exercise): Promise<Exercise> {
     // An opened score keeps its own notes but takes the reader's tempo, so the
     // slider works on a file exactly as it works on generated material.
+    // A score that changes tempo keeps its changes in proportion. The reader
+    // set one number and meant one thing by it - take the whole piece at this
+    // share of its written speed - and a Più mosso left at its own beats
+    // would be the piece speeding up to somewhere they never asked for.
+    const percent = this.currentSettings.tempoPercent;
     const retimed =
       this.openedScore === null
         ? source
-        : { ...source, tempoBpm: this.tempoBpm };
+        : {
+            ...source,
+            tempoBpm: this.tempoBpm,
+            tempoChanges: source.tempoChanges.map((change) => ({
+              ...change,
+              tempoBpm: scaledTempo(change.tempoBpm, percent),
+            })),
+          };
     // The whole piece, always. A passage is practised by giving the run two
     // ends rather than by cutting the music down to it: the page keeps its
     // context, the bar numbers keep meaning what they say, and every seam a

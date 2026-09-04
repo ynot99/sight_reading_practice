@@ -155,8 +155,26 @@ export interface MetronomeBar {
   readonly timeSignature: TimeSignature;
 }
 
+/** One stretch of the metronome's life beaten at one tempo. */
+export interface MetronomeTempo {
+  readonly startTicks: number;
+  readonly bpm: number;
+}
+
 export interface MetronomeConfig {
   readonly bpm: number;
+  /**
+   * Every tempo it will beat at, by where that tempo begins.
+   *
+   * The pulse is even only while a piece keeps one tempo. Given these, a
+   * subdivision lasts as long as the tempo in force where it falls, so an
+   * accelerando written into the score is beaten rather than ignored.
+   *
+   * Empty when nobody has worked them out, which is answered by beating
+   * throughout at {@link bpm} - the same thing, for music that never changes
+   * tempo.
+   */
+  readonly tempos: readonly MetronomeTempo[];
   readonly timeSignature: TimeSignature;
   /**
    * Every bar it will beat through: the count-in, then the music.

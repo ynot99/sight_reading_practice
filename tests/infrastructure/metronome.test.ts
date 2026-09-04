@@ -7,11 +7,14 @@ import type {
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import {
+  bpmAt,
   buildMetronomeTick,
   isAudibleClick,
   subdivisionSeconds,
+  subdivisionSecondsAt,
   ticksPerSubdivision,
 } from '../../src/infrastructure/audio/metronomeMath.js';
+import { elementAt } from '../../src/shared/asserts.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 
@@ -19,6 +22,7 @@ const COMMON: MetronomeConfig = {
   bpm: 60,
   timeSignature: new TimeSignature(4, 4),
   bars: [],
+  tempos: [],
   subdivisionsPerPulse: 4,
   click: 'subdivision',
   dropout: null,
@@ -46,6 +50,7 @@ describe('which ticks are heard', () => {
       ...COMMON,
       timeSignature: new TimeSignature(6, 8),
       bars: [],
+      tempos: [],
       subdivisionsPerPulse: 6,
     };
     // Two dotted-quarter beats to the bar, each of three eighths.
@@ -159,6 +164,7 @@ describe('metronome maths', () => {
         ...COMMON,
         timeSignature: new TimeSignature(6, 8),
         bars: [],
+        tempos: [],
         subdivisionsPerPulse: 1,
       }),
     ).toBeCloseTo(1.5, 10);
@@ -300,5 +306,69 @@ describe('ManualMetronome', () => {
 
     expect(tick?.index).toBe(0);
     expect(tick?.scheduledTimeMs).toBe(9000);
+  });
+});
+
+describe('a pulse that changes tempo', () => {
+  it('gives each subdivision the length of the tempo it falls in', () => {
+    // Four to the beat at 60: a quarter of a second each. Doubled from the
+    // second beat, an eighth.
+    const config: MetronomeConfig = {
+      ...COMMON,
+      tempos: [
+        { startTicks: 0, bpm: 60 },
+        { startTicks: Duration.QUARTER.ticks, bpm: 120 },
+      ],
+    };
+
+    expect(subdivisionSecondsAt(config, 0)).toBeCloseTo(0.25, 9);
+    expect(subdivisionSecondsAt(config, 3)).toBeCloseTo(0.25, 9);
+    expect(subdivisionSecondsAt(config, 4)).toBeCloseTo(0.125, 9);
+    expect(bpmAt(config, Duration.QUARTER.ticks - 1)).toBe(60);
+    expect(bpmAt(config, Duration.QUARTER.ticks)).toBe(120);
+  });
+
+  it('beats the accelerando rather than ignoring it', () => {
+    const clock = new ManualClock(0);
+    const metronome = new ManualMetronome(clock);
+    metronome.configure({
+      ...COMMON,
+      subdivisionsPerPulse: 1,
+      tempos: [
+        { startTicks: 0, bpm: 60 },
+        { startTicks: Duration.QUARTER.ticks * 2, bpm: 120 },
+      ],
+    });
+    metronome.start();
+
+    const ticks = metronome.advanceSubdivisions(5);
+    // A second a beat, then half of one from the third.
+    expect(ticks.map((tick) => tick.scheduledTimeMs)).toEqual([0, 1000, 2000, 2500, 3000]);
+  });
+
+  it('keeps its place when the click is re-dressed mid-accelerando', () => {
+    const clock = new ManualClock(0);
+    const metronome = new ManualMetronome(clock);
+    const tempos = [
+      { startTicks: 0, bpm: 60 },
+      { startTicks: Duration.QUARTER.ticks * 2, bpm: 120 },
+    ];
+    metronome.configure({ ...COMMON, subdivisionsPerPulse: 1, tempos });
+    metronome.start();
+    metronome.advanceSubdivisions(3);
+
+    // Two beats gone at a second each, so the next falls at two seconds.
+    metronome.configure({ ...COMMON, subdivisionsPerPulse: 2, tempos, click: 'division' });
+    const after = metronome.advanceSubdivisions(2);
+
+    expect(after.map((tick) => tick.positionTicks)).toEqual([
+      Duration.QUARTER.ticks * 3,
+      Duration.QUARTER.ticks * 3 + Duration.EIGHTH.ticks,
+    ]);
+    // And they are half-beats at the faster tempo: a quarter of a second.
+    expect(elementAt(after, 1).scheduledTimeMs - elementAt(after, 0).scheduledTimeMs).toBeCloseTo(
+      250,
+      6,
+    );
   });
 });

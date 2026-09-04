@@ -362,6 +362,25 @@ describe('PracticeController', () => {
     expect(controller.tempoBpm).not.toBe(32);
   });
 
+  it('takes a written tempo change at the same share as the rest', async () => {
+    // The reader set one number and meant one thing by it: the whole piece at
+    // this share of its written speed. A Più mosso left at its own beats would
+    // be the piece speeding up to somewhere they never asked for.
+    const { controller } = createController();
+    await controller.openScore({
+      ...twoBarExercise({ tempoBpm: 100 }),
+      tempoChanges: [{ measureIndex: 1, offsetTicks: 0, tempoBpm: 200 }],
+    });
+    controller.nudgeTempoPercent(-50);
+    await controller.reloadExercise();
+
+    expect(controller.tempoPercent).toBe(50);
+    expect(controller.tempoBpm).toBe(50);
+    expect(controller.currentExercise?.tempoChanges).toEqual([
+      { measureIndex: 1, offsetTicks: 0, tempoBpm: 100 },
+    ]);
+  });
+
   it('draws a note taken early as right, and as displaced', async () => {
     // The whole chain, which is where it was broken: an early press has to
     // reach the page as *correct* before the paler green it is drawn in can

@@ -1,5 +1,5 @@
-import { ticksToMilliseconds } from '../domain/model/Duration.js';
-import { pedalSpans } from '../domain/model/Exercise.js';
+
+import { pedalSpans, spanMs } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import {
@@ -11,7 +11,11 @@ import {
 } from './ports/IMetronome.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import type { IScoreCursor } from './ports/IScoreRenderer.js';
-import { metronomeBars, subdivisionsPerPulseFor } from './session/metronomePlan.js';
+import {
+  metronomeBars,
+  metronomeTempos,
+  subdivisionsPerPulseFor,
+} from './session/metronomePlan.js';
 
 /** Which hands to sound. `null` is both. */
 export type ListeningHand = number | null;
@@ -140,6 +144,10 @@ export class ExercisePlayer {
       // From where the performance actually began, which is where its own
       // clock reads nought.
       bars: metronomeBars(this.timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
+      tempos: metronomeTempos(this.timeline.exercise, {
+        countInBars: 0,
+        fromTicks: this.fromTicks,
+      }),
       subdivisionsPerPulse: subdivisionsPerPulseFor(this.timeline, timeSignature, 'pulse'),
       click: 'pulse',
       dropout: resolveDropout(clickWhen, 0),
@@ -185,6 +193,7 @@ export class ExercisePlayer {
       // No count-in in front of a playback, and it starts wherever the
       // reader put their place.
       bars: metronomeBars(timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
+      tempos: metronomeTempos(timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
       subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, 'pulse'),
       click: 'pulse',
       // From bar zero, because there is no count-in in front of a playback.
@@ -232,8 +241,11 @@ export class ExercisePlayer {
     timeline: ExerciseTimeline,
     staffNumber: ListeningHand,
   ): ScheduledNote[] {
-    const tempo = timeline.exercise.tempoBpm;
-    const spans = pedalSpans(timeline.exercise);
+    const exercise = timeline.exercise;
+    const spans = pedalSpans(exercise);
+    // From where this performance began, and walked rather than multiplied:
+    // a piece that changes tempo has no single number to multiply by.
+    const at = (ticks: number): number => spanMs(exercise, this.fromTicks, ticks);
     const longest = new Map<string, ScheduledNote>();
     for (const step of timeline.steps) {
       // Only the stretch being played, and timed from its own beginning.
@@ -248,7 +260,7 @@ export class ExercisePlayer {
       // where the reader's own would.
       const offsets = rollOffsets(
         sounding.filter((note) => note.arpeggiated).length,
-        ticksToMilliseconds(step.durationTicks, tempo),
+        spanMs(exercise, step.onsetTicks, step.onsetTicks + step.durationTicks),
       );
       let rolled = 0;
       for (const note of sounding) {
@@ -256,7 +268,7 @@ export class ExercisePlayer {
         if (note.arpeggiated) {
           rolled += 1;
         }
-        const at = ticksToMilliseconds(step.onsetTicks - this.fromTicks, tempo) + offset;
+        const startsAt = at(step.onsetTicks) + offset;
         const heldUntil = spans.find(
           ([from, to]) => step.onsetTicks >= from && step.onsetTicks < to,
         )?.[1];
@@ -264,7 +276,7 @@ export class ExercisePlayer {
           step.onsetTicks + note.durationTicks,
           heldUntil ?? 0,
         );
-        const until = ticksToMilliseconds(endTicks - this.fromTicks, tempo);
+        const until = at(endTicks);
         // Two voices may notate the same sounding pitch at the same instant.
         // That is one key on the keyboard and must be one sound here: striking
         // it twice doubles the attack into an audible knock. The longer of the
@@ -275,7 +287,11 @@ export class ExercisePlayer {
           // A rolled note is released with the rest of the chord - the hand
           // lifts once - so only the attack moves. `Math.max` is the guard
           // for a roll that a very short step has squeezed to nothing.
-          longest.set(seen, { midi: note.midi, atMs: at, untilMs: Math.max(until, at) });
+          longest.set(seen, {
+            midi: note.midi,
+            atMs: startsAt,
+            untilMs: Math.max(until, startsAt),
+          });
         }
       }
     }

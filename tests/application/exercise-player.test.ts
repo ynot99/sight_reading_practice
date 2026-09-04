@@ -302,6 +302,7 @@ describe('rolling a chord the writer marked', () => {
       key: KeySignature.major(0),
       keyChanges: [],
       timeChanges: [],
+      tempoChanges: [],
       pedalMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 240,
@@ -342,5 +343,41 @@ describe('what is heard over a performance', () => {
 
     expect(harness.metronome.currentConfig.muted).toBe(true);
     expect(harness.player.isPlaying).toBe(true);
+  });
+});
+
+describe('playing a piece that changes tempo', () => {
+  /** Two bars at 60, the second at 120: the fixture's own notes, faster. */
+  function retimed(): Exercise {
+    return {
+      ...twoBarExercise({ tempoBpm: 60 }),
+      tempoChanges: [{ measureIndex: 1, offsetTicks: 0, tempoBpm: 120 }],
+    };
+  }
+
+  it('sounds the faster stretch faster', () => {
+    // Bar one is four quarters at a second each; bar two is a whole note
+    // beginning at four seconds, and at 120 it lasts two rather than four.
+    const { player, metronome, instrument, timeline } = rig(retimed());
+    player.start(timeline, { staffNumber: null, clickWhen: 'never' });
+    metronome.advanceSubdivisions(16);
+
+    const first = instrument.played.find((note) => note.midi === MIDI.C4);
+    const second = instrument.played.find((note) => note.midi === MIDI.G4);
+    expect(first?.atMs).toBe(0);
+    expect(second?.atMs).toBe(4000);
+
+    const release = instrument.stopped.find((note) => note.midi === MIDI.G4);
+    expect(release?.atMs).toBe(6000);
+  });
+
+  it('beats the change as well as sounding it', () => {
+    const { player, metronome, timeline } = rig(retimed());
+    player.start(timeline, { staffNumber: null, clickWhen: 'always' });
+
+    expect(metronome.currentConfig.tempos).toEqual([
+      { startTicks: 0, bpm: 60 },
+      { startTicks: Duration.WHOLE.ticks, bpm: 120 },
+    ]);
   });
 });

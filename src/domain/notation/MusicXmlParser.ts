@@ -17,6 +17,7 @@ import type {
   KeyChange,
   PedalMark,
   StemDirection,
+  TempoChange,
   TimeChange,
 } from '../model/Exercise.js';
 import { KeySignature, type KeyMode } from '../model/KeySignature.js';
@@ -127,7 +128,20 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   }
 
   const header = readHeader(measures, warnings);
-  const { staves, pedalMarks } = readEveryPart(parts, measures.length, header, warnings);
+  const { staves, pedalMarks, tempoMarks } = readEveryPart(
+    parts,
+    measures.length,
+    header,
+    warnings,
+  );
+  // A mark on the very first instant is not a change, it is the tempo the
+  // piece opens at - which is the number the reader's percentage is a
+  // percentage *of*. A score that marks nothing until bar thirty opens at
+  // the assumed tempo and changes there, exactly as its writer's program
+  // plays it.
+  const opening = tempoMarks.filter(
+    (mark) => mark.measureIndex === 0 && mark.offsetTicks === 0,
+  );
 
   const exercise: Exercise = {
     id: `import-${Date.now().toString(36)}`,
@@ -135,9 +149,12 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     key: header.key,
     keyChanges: header.keyChanges,
     timeChanges: header.timeChanges,
+    tempoChanges: tempoMarks.filter(
+      (mark) => !(mark.measureIndex === 0 && mark.offsetTicks === 0),
+    ),
     pedalMarks,
     timeSignature: header.timeSignature,
-    tempoBpm: header.tempoBpm,
+    tempoBpm: opening.at(-1)?.tempoBpm ?? ASSUMED_TEMPO_BPM,
     staves,
     firstBarNumber: readFirstBarNumber(measures),
     metadata: { generatorId: 'import.musicxml', seed: 0 },
@@ -177,7 +194,6 @@ interface ScoreHeader {
   readonly timeSignature: TimeSignature;
   /** Metres it changes to later, by the measure each one begins at. */
   readonly timeChanges: readonly TimeChange[];
-  readonly tempoBpm: number;
   readonly clefByStaff: ReadonlyMap<number, ClefKind>;
   /** Clefs a staff switches to later, keyed by the file's own staff number. */
   readonly clefChangesByStaff: ReadonlyMap<number, readonly ClefChange[]>;
@@ -297,7 +313,6 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
     key: new KeySignature(fifths, mode satisfies KeyMode),
     timeSignature: new TimeSignature(beats, beatType),
     timeChanges,
-    tempoBpm: readTempo(measures),
     clefByStaff,
     clefChangesByStaff,
     keyChanges,
@@ -331,22 +346,34 @@ function readFirstBarNumber(measures: readonly XmlNode[]): number {
  */
 const ASSUMED_TEMPO_BPM = 120;
 
-function readTempo(measures: readonly XmlNode[]): number {
-  for (const measure of measures) {
-    for (const direction of childrenNamed(measure, 'direction')) {
-      const sound = child(direction, 'sound');
-      const tempo = Number(attribute(sound, 'tempo') ?? '');
-      if (Number.isFinite(tempo) && tempo > 0) {
-        return Math.round(tempo);
-      }
-      const metronome = child(child(direction, 'direction-type'), 'metronome');
-      const perMinute = childNumber(metronome, 'per-minute');
-      if (perMinute !== null && perMinute > 0) {
-        return Math.round(perMinute);
-      }
-    }
+/**
+ * The tempo one `<direction>` asks for, in quarter notes per minute.
+ *
+ * `<sound tempo>` is already in quarters and is preferred, because it is what
+ * the writing program plays and it survives marks that name no number at all.
+ * The printed mark is the fallback, and it is *not* in quarters: it names its
+ * own beat, so "eighth = 100" is a hundred eighths and fifty quarters. Read as
+ * a hundred, the piece plays at twice its own speed.
+ */
+function readTempoMark(direction: XmlNode): number | null {
+  const sound = Number(attribute(child(direction, 'sound'), 'tempo') ?? '');
+  if (Number.isFinite(sound) && sound > 0) {
+    return Math.round(sound);
   }
-  return ASSUMED_TEMPO_BPM;
+  for (const type of childrenNamed(direction, 'direction-type')) {
+    const metronome = child(type, 'metronome');
+    const perMinute = childNumber(metronome, 'per-minute');
+    if (metronome === null || perMinute === null || perMinute <= 0) {
+      continue;
+    }
+    const unitName = XML_TYPE_NAMES[childText(metronome, 'beat-unit') ?? 'quarter'];
+    const dots = childrenNamed(metronome, 'beat-unit-dot').length;
+    const unit =
+      unitName === undefined ? Duration.QUARTER : Duration.of(unitName, dots >= 1 ? 1 : 0);
+    const quarters = (perMinute * unit.ticks) / DIVISIONS_PER_QUARTER;
+    return quarters > 0 ? Math.round(quarters) : null;
+  }
+  return null;
 }
 
 /** Divisions in the file's units, converted to ours. */
@@ -536,6 +563,7 @@ function readMeasureNotes(
   header: ScoreHeader,
   warnings: ImportWarning[],
   pedalMarks: PedalMark[] = [],
+  tempoMarks: TempoChange[] = [],
 ): RawNote[] {
   const notes: RawNote[] = [];
   let cursor = 0;
@@ -562,11 +590,16 @@ function readMeasureNotes(
     }
     if (node.name === 'direction') {
       // Directions sit between notes, so the cursor is already where the mark
-      // belongs - which is the only way to place a pedal at all.
+      // belongs - which is the only way to place a pedal at all, and the only
+      // way to place an accelerando written as a run of marks inside one bar.
       const pedal = child(child(node, 'direction-type'), 'pedal');
       const type = attribute(pedal, 'type');
       if (type === 'start' || type === 'stop') {
         pedalMarks.push({ measureIndex, offsetTicks: cursor, type });
+      }
+      const tempoBpm = readTempoMark(node);
+      if (tempoBpm !== null) {
+        tempoMarks.push({ measureIndex, offsetTicks: Math.max(0, cursor), tempoBpm });
       }
       continue;
     }
@@ -808,9 +841,14 @@ function readEveryPart(
   bars: number,
   header: ScoreHeader,
   warnings: ImportWarning[],
-): { readonly staves: readonly StaffPart[]; readonly pedalMarks: readonly PedalMark[] } {
+): {
+  readonly staves: readonly StaffPart[];
+  readonly pedalMarks: readonly PedalMark[];
+  readonly tempoMarks: readonly TempoChange[];
+} {
   const staves: StaffPart[] = [];
   const pedalMarks: PedalMark[] = [];
+  const tempoMarks: TempoChange[] = [];
 
   for (const [index, part] of parts.entries()) {
     const measures = childrenNamed(part, 'measure');
@@ -836,11 +874,13 @@ function readEveryPart(
       });
     }
     // The pedal belongs to the instrument, and whichever part carried the
-    // marks meant them for all of it.
+    // marks meant them for all of it. So does the tempo, and more so: a piece
+    // has one, however many parts repeat the mark.
     pedalMarks.push(...built.pedalMarks);
+    tempoMarks.push(...built.tempoMarks);
   }
 
-  return { staves, pedalMarks };
+  return { staves, pedalMarks, tempoMarks };
 }
 
 /** What a part says about itself: how finely it counts, and its clefs. */
@@ -874,10 +914,15 @@ function buildStaves(
   measures: readonly XmlNode[],
   header: ScoreHeader,
   warnings: ImportWarning[],
-): { readonly staves: readonly StaffPart[]; readonly pedalMarks: readonly PedalMark[] } {
+): {
+  readonly staves: readonly StaffPart[];
+  readonly pedalMarks: readonly PedalMark[];
+  readonly tempoMarks: readonly TempoChange[];
+} {
   const pedalMarks: PedalMark[] = [];
+  const tempoMarks: TempoChange[] = [];
   const perMeasure = measures.map((measure, index) =>
-    readMeasureNotes(measure, index, header, warnings, pedalMarks),
+    readMeasureNotes(measure, index, header, warnings, pedalMarks, tempoMarks),
   );
 
   // One part per voice of each staff, rather than one per staff. Two voices on
@@ -944,9 +989,22 @@ function buildStaves(
     } satisfies StaffPart;
   });
 
+  // A pickup's notes were moved to the end of its bar, so a mark inside that
+  // bar has to move with the music it marks. The first bar only: everywhere
+  // else the file's own offset is ours.
+  const pickupShift = pickup
+    ? barTicksAt(header, 0) -
+      Math.max(0, ...firstBar.map((note) => note.onsetTicks + note.ticks))
+    : 0;
+
   return {
     staves: restStaffThatFallsSilent(parts, (bar) => barTicksAt(header, bar), warnings),
     pedalMarks,
+    tempoMarks: tempoMarks.map((mark) =>
+      mark.measureIndex === 0 && mark.offsetTicks > 0
+        ? { ...mark, offsetTicks: mark.offsetTicks + pickupShift }
+        : mark,
+    ),
   };
 }
 

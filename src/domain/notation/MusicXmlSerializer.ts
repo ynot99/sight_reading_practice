@@ -2,7 +2,13 @@ import { assertNever } from '../../shared/asserts.js';
 import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
 import type { Duration } from '../model/Duration.js';
-import type { Exercise, MusicalEntry, PedalMark, StaffPart } from '../model/Exercise.js';
+import type {
+  Exercise,
+  MusicalEntry,
+  PedalMark,
+  StaffPart,
+  TempoChange,
+} from '../model/Exercise.js';
 import type { KeySignature } from '../model/KeySignature.js';
 import {
   barNumberOf,
@@ -141,6 +147,13 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         const pedal = exercise.pedalMarks.filter(
           (mark) => mark.measureIndex === measureIndex,
         );
+        // So do tempo marks, and for a stronger reason: a piece has one tempo
+        // however many staves are printed. The one at the very start is
+        // written above with the attributes, which is where the opening mark
+        // belongs.
+        const tempos = exercise.tempoChanges.filter(
+          (change) => change.measureIndex === measureIndex,
+        );
         // Back to the start of *this* bar, which is not the length of the
         // first one once a metre may change partway through. Written as the
         // opening metre, the second staff of a bar in a wider metre began
@@ -162,7 +175,46 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             index === 0 ? pedal : [],
           );
         });
+        this.writeTempoChanges(writer, tempos, barTicks, present.length > 0);
       });
+    }
+  }
+
+  /**
+   * Tempo marks, each at the division it takes effect from.
+   *
+   * Written in a pass of their own rather than beside the notes, because a
+   * mark need not fall where any voice has a note: a ritardando is a run of
+   * them a sixteenth apart under a held chord, and placed at the nearest note
+   * they would collapse onto each other. The cursor is wound back to the bar
+   * line and walked forward to each in turn, which is how MusicXML says
+   * "here" about something that is not a note.
+   */
+  private writeTempoChanges(
+    writer: XmlWriter,
+    tempos: readonly TempoChange[],
+    barTicks: number,
+    anyStaffWritten: boolean,
+  ): void {
+    const ordered = [...tempos].sort((left, right) => left.offsetTicks - right.offsetTicks);
+    if (ordered.length === 0) {
+      return;
+    }
+    if (anyStaffWritten) {
+      writer.element('backup', undefined, () => {
+        writer.leaf('duration', barTicks);
+      });
+    }
+    let at = 0;
+    for (const change of ordered) {
+      const step = Math.min(barTicks, change.offsetTicks) - at;
+      if (step > 0) {
+        writer.element('forward', undefined, () => {
+          writer.leaf('duration', step);
+        });
+        at += step;
+      }
+      this.writeTempo(writer, change.tempoBpm);
     }
   }
 

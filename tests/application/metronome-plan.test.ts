@@ -6,6 +6,7 @@ import {
 } from '../../src/application/ports/IMetronome.js';
 import {
   metronomeBars,
+  metronomeTempos,
   musicalResolutionTicks,
   subdivisionsPerPulseFor,
 } from '../../src/application/session/metronomePlan.js';
@@ -316,5 +317,37 @@ describe('count-in', () => {
     });
     harness.session.start();
     expect(harness.session.status).toBe('running');
+  });
+});
+
+describe('the tempos the metronome will beat at', () => {
+  /** Two bars at 60, the second at 120. */
+  function retimed(): Exercise {
+    return {
+      ...twoBarExercise({ tempoBpm: 60 }),
+      tempoChanges: [{ measureIndex: 1, offsetTicks: 0, tempoBpm: 120 }],
+    };
+  }
+
+  it('lays the tempos out on the metronome clock, not the music one', () => {
+    const tempos = metronomeTempos(retimed(), { countInBars: 1, fromTicks: 0 });
+
+    // One bar of count-in in front, so the change arrives a bar later than it
+    // does in the music.
+    expect(tempos).toEqual([
+      { startTicks: 0, bpm: 60 },
+      { startTicks: Duration.WHOLE.ticks * 2, bpm: 120 },
+    ]);
+  });
+
+  it('counts a passage in at the tempo it is about to begin at', () => {
+    // Beginning in the fast half, being counted in at the opening Lento would
+    // hand the reader a pulse the music never plays.
+    const tempos = metronomeTempos(retimed(), {
+      countInBars: 1,
+      fromTicks: Duration.WHOLE.ticks,
+    });
+
+    expect(tempos).toEqual([{ startTicks: 0, bpm: 120 }]);
   });
 });

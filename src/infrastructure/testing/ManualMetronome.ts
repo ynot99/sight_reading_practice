@@ -3,7 +3,7 @@ import { TimeSignature } from '../../domain/model/TimeSignature.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
 import {
   buildMetronomeTick,
-  subdivisionSeconds,
+  subdivisionSecondsAt,
   ticksPerSubdivision,
 } from '../audio/metronomeMath.js';
 import type { ManualClock } from './ManualClock.js';
@@ -12,6 +12,7 @@ const DEFAULT_CONFIG: MetronomeConfig = {
   bpm: 60,
   timeSignature: new TimeSignature(4, 4),
   bars: [],
+  tempos: [],
   subdivisionsPerPulse: 4,
   click: 'pulse',
   dropout: null,
@@ -32,7 +33,14 @@ export class ManualMetronome implements IMetronome {
   private config: MetronomeConfig = DEFAULT_CONFIG;
   private running = false;
   private nextIndex = 0;
-  private startTimeMs = 0;
+  /**
+   * Clock time the next tick falls at, carried forward rather than derived.
+   *
+   * A start time plus so many equal subdivisions only works while the piece
+   * keeps one tempo; carrying the moment forward costs nothing and is right
+   * either way.
+   */
+  private nextTimeMs = 0;
 
   /** Every tick emitted so far, for assertions. */
   readonly emitted: MetronomeTick[] = [];
@@ -59,14 +67,13 @@ export class ManualMetronome implements IMetronome {
       this.config = config;
       return;
     }
-    // Where the next tick was going to fall, in both senses, before anything
-    // moves: the pulse is being re-dressed, not restarted.
-    const nextAtMs = this.startTimeMs + this.nextIndex * this.subdivisionMs;
+    // Where the next tick was going to be in the music, before anything
+    // moves: the pulse is being re-dressed, not restarted, so it keeps both
+    // its place and the moment it was going to sound at.
     const positionTicks = this.nextIndex * ticksPerSubdivision(this.config);
 
     this.config = config;
     this.nextIndex = Math.ceil(positionTicks / ticksPerSubdivision(config));
-    this.startTimeMs = nextAtMs - this.nextIndex * this.subdivisionMs;
   }
 
   onTick(listener: (tick: MetronomeTick) => void): Unsubscribe {
@@ -76,16 +83,16 @@ export class ManualMetronome implements IMetronome {
   start(): void {
     this.running = true;
     this.nextIndex = 0;
-    this.startTimeMs = this.clock?.now() ?? 0;
+    this.nextTimeMs = this.clock?.now() ?? 0;
   }
 
   stop(): void {
     this.running = false;
   }
 
-  /** Milliseconds between two subdivisions at the configured tempo. */
+  /** Milliseconds the next subdivision lasts, at the tempo in force there. */
   get subdivisionMs(): number {
-    return subdivisionSeconds(this.config) * 1000;
+    return subdivisionSecondsAt(this.config, this.nextIndex) * 1000;
   }
 
   /**
@@ -98,8 +105,9 @@ export class ManualMetronome implements IMetronome {
       if (!this.running) {
         break;
       }
-      const scheduledTimeMs = this.startTimeMs + this.nextIndex * this.subdivisionMs;
+      const scheduledTimeMs = this.nextTimeMs;
       const tick = buildMetronomeTick(this.nextIndex, this.config, scheduledTimeMs);
+      this.nextTimeMs += subdivisionSecondsAt(this.config, this.nextIndex) * 1000;
       this.nextIndex += 1;
       this.clock?.set(scheduledTimeMs);
       this.emitted.push(tick);

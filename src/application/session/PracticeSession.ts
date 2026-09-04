@@ -1,5 +1,4 @@
 import { ChordMatcher, type MatchPolicy, type NoteVerdict } from '../../domain/matching/ChordMatcher.js';
-import { ticksToMilliseconds } from '../../domain/model/Duration.js';
 import type { IScoringStrategy, SessionScore } from '../../domain/scoring/IScoringStrategy.js';
 import {
   buildPerformanceReport,
@@ -18,11 +17,12 @@ import {
   type ClickWhen,
   type IMetronome,
   type MetronomeBar,
+  type MetronomeTempo,
   type MetronomeTick,
 } from '../ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from '../ports/IMidiSource.js';
-import { timeAtMeasure } from '../../domain/model/Exercise.js';
-import { metronomeBars, subdivisionsPerPulseFor } from './metronomePlan.js';
+import { elapsedMsAt, spanMs, timeAtMeasure } from '../../domain/model/Exercise.js';
+import { metronomeBars, metronomeTempos, subdivisionsPerPulseFor } from './metronomePlan.js';
 import { DEFAULT_SESSION_OPTIONS, type PracticeContext, type SessionOptions } from './PracticeContext.js';
 import type { SessionEventMap } from './SessionEvents.js';
 import { createSessionMachine, type SessionStatus, type SessionTrigger } from './SessionState.js';
@@ -139,6 +139,7 @@ export class PracticeSession {
       bpm: this.tempoBpm,
       timeSignature: this.timeline.exercise.timeSignature,
       bars: this.barsToBeat(),
+      tempos: this.temposToBeat(),
       subdivisionsPerPulse: subdivisionsPerPulseFor(
         this.timeline,
         this.timeline.exercise.timeSignature,
@@ -185,6 +186,7 @@ export class PracticeSession {
       bpm: this.tempoBpm,
       timeSignature: this.timeline.exercise.timeSignature,
       bars: this.barsToBeat(),
+      tempos: this.temposToBeat(),
       subdivisionsPerPulse: subdivisionsPerPulseFor(
         this.timeline,
         this.timeline.exercise.timeSignature,
@@ -247,7 +249,7 @@ export class PracticeSession {
 
     this.results = this.results.filter((result) => result.index < this.resumeAtIndex);
     this.positionOffsetTicks = -this.resumeAtTicks;
-    this.runStartedAt = this.clock.now() - ticksToMilliseconds(this.resumeAtTicks, this.tempoBpm);
+    this.runStartedAt = this.clock.now() - this.elapsedTo(this.resumeAtTicks);
 
     if (this.usesPulse()) {
       this.metronome.start();
@@ -311,8 +313,27 @@ export class PracticeSession {
   }
 
   /** The bars the metronome beats through: the count-in, then the music. */
+  /**
+   * Clock time from the first note of the piece to a position in it.
+   *
+   * Never a multiplication, because a piece may change tempo: the answer is
+   * walked over the stretches it is taken at. The run's own clock starts at
+   * the piece's start even when the reader begins partway through, which is
+   * what lets a passage resume without every onset after it moving.
+   */
+  private elapsedTo(ticks: number): number {
+    return elapsedMsAt(this.timeline.exercise, ticks);
+  }
+
   private barsToBeat(): readonly MetronomeBar[] {
     return metronomeBars(this.timeline.exercise, {
+      countInBars: Math.max(0, this.options.countInBars),
+      fromTicks: this.resumeAtTicks,
+    });
+  }
+
+  private temposToBeat(): readonly MetronomeTempo[] {
+    return metronomeTempos(this.timeline.exercise, {
       countInBars: Math.max(0, this.options.countInBars),
       fromTicks: this.resumeAtTicks,
     });
@@ -376,7 +397,7 @@ export class PracticeSession {
    * shown - goes on counting from the start of the piece.
    */
   private beginRunning(atMs: number, tickPositionTicks: number): void {
-    this.runStartedAt = atMs - ticksToMilliseconds(this.resumeAtTicks, this.tempoBpm);
+    this.runStartedAt = atMs - this.elapsedTo(this.resumeAtTicks);
     this.positionOffsetTicks = tickPositionTicks - this.resumeAtTicks;
     this.dispatch('countInComplete');
     this.mode.onSessionStart(this.context);
@@ -704,7 +725,7 @@ export class PracticeSession {
     if (deviationMs === null || from === null || now === null) {
       return deviationMs;
     }
-    return deviationMs + ticksToMilliseconds(now.onsetTicks - from.onsetTicks, this.tempoBpm);
+    return deviationMs + spanMs(this.timeline.exercise, from.onsetTicks, now.onsetTicks);
   }
 
   /** First step of the measure the given step belongs to. */
@@ -763,8 +784,7 @@ export class PracticeSession {
         return session.runStartedAt;
       },
       positionTicks: (tick: MetronomeTick) => tick.positionTicks - session.positionOffsetTicks,
-      scheduledTimeMs: (ticks: number) =>
-        session.runStartedAt + ticksToMilliseconds(ticks, session.tempoBpm),
+      scheduledTimeMs: (ticks: number) => session.runStartedAt + session.elapsedTo(ticks),
       judgeNote: (midi: number, verdict: NoteVerdict, deviationMs: number | null) => {
         session.judgeNote(midi, verdict, deviationMs);
       },

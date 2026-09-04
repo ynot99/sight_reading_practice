@@ -63,6 +63,7 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
       key: request.key,
       keyChanges: [],
       timeChanges: [],
+      tempoChanges: [],
       pedalMarks: [],
       timeSignature: request.timeSignature,
       tempoBpm: request.tempoBpm,

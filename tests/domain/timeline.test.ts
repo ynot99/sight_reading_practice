@@ -146,6 +146,7 @@ describe('buildTimeline', () => {
       key: KeySignature.major(0),
       keyChanges: [],
       timeChanges: [],
+      tempoChanges: [],
       pedalMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 60,

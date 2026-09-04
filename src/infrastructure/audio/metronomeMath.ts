@@ -8,7 +8,31 @@ import { DIVISIONS_PER_QUARTER } from '../../domain/model/Duration.js';
 
 /** Seconds occupied by one subdivision at the configured tempo. */
 export function subdivisionSeconds(config: MetronomeConfig): number {
-  const secondsPerQuarter = 60 / config.bpm;
+  return subdivisionSecondsAt(config, 0);
+}
+
+/** The tempo in force at a position, in quarter notes per minute. */
+export function bpmAt(config: MetronomeConfig, positionTicks: number): number {
+  let current = config.bpm;
+  for (const span of config.tempos) {
+    if (span.startTicks > positionTicks) {
+      break;
+    }
+    current = span.bpm;
+  }
+  return current;
+}
+
+/**
+ * Seconds occupied by the subdivision that *starts* at a given index.
+ *
+ * A pulse is only even while the piece keeps one tempo. Where it does not,
+ * each subdivision lasts as long as the tempo in force where it begins - so a
+ * tempo change takes effect at the first tick at or after it, which is as
+ * exactly as a grid can place anything.
+ */
+export function subdivisionSecondsAt(config: MetronomeConfig, index: number): number {
+  const secondsPerQuarter = 60 / bpmAt(config, index * ticksPerSubdivision(config));
   const quartersPerPulse = config.timeSignature.ticksPerPulse / DIVISIONS_PER_QUARTER;
   return (secondsPerQuarter * quartersPerPulse) / config.subdivisionsPerPulse;
 }

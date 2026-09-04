@@ -31,6 +31,13 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
   The number is a claim about which tuplets exist - it divides by 2, 3, 5 and
   7 - and it has changed once already, so say `Duration.QUARTER.ticks` and
   never a bare tick count, in tests above all.
+- Two things may change partway through a piece, and each takes an answer away
+  from multiplication. A metre change moves the bar lines, so every musical
+  *position* is read off `barLines`. A tempo change moves the clock, so every
+  *time* - how long a stretch lasts, when a note sounds, how long a subdivision
+  is - is read off `elapsedMsAt` / `spanMs`, and the metronome is handed its
+  tempo spans exactly as it is handed its bars. `ticksToMilliseconds` takes one
+  bpm and so is only ever right inside one span.
 - A generated tie holds one pitch: the voice must stop moving for the length
   of the held note, or `validateExercise` will refuse the bar.
 - Practising a passage gives the *run* two ends; the music on the page stays

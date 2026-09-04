@@ -225,3 +225,39 @@ function coarsestGridWithin(
   }
   return best;
 }
+
+/**
+ * The same stretch of plan laid end to end, for a passage played round again.
+ *
+ * A repeat used to be a whole new performance: the metronome was stopped and
+ * started, which re-anchors it to the audio clock a fixed lead ahead of now,
+ * and everything the restart had to do first was silence added in front of
+ * the music. Played round *inside* one performance the pulse never stops, and
+ * there is no gap at all - but then the plan has to repeat with the music,
+ * because the metronome reads its bars and its tempos off a clock that only
+ * ever goes forward.
+ *
+ * Only the passage's own entries are tiled. What follows it in the piece is
+ * not what comes next when it plays again, and left in, a passage of two 4/4
+ * bars followed by a bar of 3/4 was accented as 3/4 on its second reading.
+ * The tempo is re-stated at the head of every lap for the same reason: the
+ * music starts again, so the tempo it starts at does too.
+ */
+export function laidEndToEnd<T extends { readonly startTicks: number }>(
+  plan: readonly T[],
+  lapTicks: number,
+  laps: number,
+  fromLap = 0,
+): T[] {
+  if (lapTicks <= 0) {
+    return [...plan];
+  }
+  const own = plan.filter((entry) => entry.startTicks < lapTicks);
+  const tiled: T[] = [];
+  for (let lap = fromLap; lap < fromLap + laps; lap += 1) {
+    for (const entry of own) {
+      tiled.push({ ...entry, startTicks: entry.startTicks + lap * lapTicks });
+    }
+  }
+  return tiled;
+}

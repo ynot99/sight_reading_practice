@@ -2507,21 +2507,13 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      // Nothing to restart here any more. A repeating performance goes round
+      // inside itself and never finishes, so this fires only when the music
+      // has actually run out - and starting it again from here is where the
+      // gap on a repeat came from: a stop and a start re-anchor the metronome
+      // to the audio clock a fixed lead ahead of now.
       controller.playbackEvents.on('finished', () => {
         this.describeListening();
-        // Round again, exactly as a run does. A repeat sign on the page
-        // means the music repeats, whoever is playing it - and hearing a
-        // hard passage over and over is most of what listening to one is
-        // for. Deferred for the same reason the run's repeat is: tearing a
-        // playback down from inside its own event is how re-entrancy bugs
-        // are made.
-        if (controller.settings.repeatRange) {
-          setTimeout(() => {
-            if (controller.settings.repeatRange) {
-              controller.listen();
-            }
-          }, 0);
-        }
       }),
     );
 

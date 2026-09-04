@@ -9,11 +9,13 @@ import {
   type ClickPattern,
   type ClickWhen,
   type IMetronome,
+  type MetronomeConfig,
   type MetronomeTick,
 } from './ports/IMetronome.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import type { IScoreCursor } from './ports/IScoreRenderer.js';
 import {
+  laidEndToEnd,
   metronomeBars,
   metronomeTempos,
   subdivisionsPerPulseFor,
@@ -55,6 +57,16 @@ export interface ListeningOptions {
    */
   readonly fromIndex?: number;
   readonly toIndex?: number;
+  /**
+   * Play the stretch round again when it ends, without stopping.
+   *
+   * Round again *inside* one performance rather than by starting another.
+   * Stopping and starting re-anchors the metronome to the audio clock a fixed
+   * lead ahead of now, and everything the restart does first is silence added
+   * in front of the music - which a reader tapping along hears as a repeat
+   * that comes in late.
+   */
+  readonly repeat?: boolean;
 }
 
 export interface ExercisePlayerDependencies {
@@ -87,6 +99,16 @@ interface ScheduledNote {
 }
 
 const DEFAULT_HORIZON_MS = 250;
+
+/**
+ * How many laps of a repeating passage the plan is written out for at a time.
+ *
+ * A bounded number, re-based as the pulse catches up: an unbounded one is not
+ * available, since the plan is a list. Sixty-four readings of the same bars is
+ * most of an hour on anything short, so the re-basing is rare enough to be a
+ * safeguard rather than a mechanism.
+ */
+const PLANNED_LAPS = 64;
 const LISTENING_VELOCITY = 0.7;
 
 /**
@@ -162,6 +184,11 @@ export class ExercisePlayer {
    * starts.
    */
   private pausedAtIndex: number | null = null;
+  /** Whether the stretch plays round again, and the shape of one round. */
+  private looping = false;
+  private lapTicks = 0;
+  private lapMs = 0;
+  private lapsDone = 0;
   private click: ClickPattern = 'pulse';
   private clickWhen: ClickWhen = 'never';
   private hand: ListeningHand = null;
@@ -199,6 +226,9 @@ export class ExercisePlayer {
       return;
     }
     this.untilTicks = until;
+    // A lap is a different length now, in ticks and in time both.
+    this.lapTicks = Math.max(0, this.untilTicks - this.fromTicks);
+    this.lapMs = spanMs(this.timeline.exercise, this.fromTicks, this.untilTicks);
     // Collected again, because the notes past the old end were never gathered
     // - the walk skips anything outside the stretch. Everything before it is
     // gathered identically and in the same order, so what has already been
@@ -215,25 +245,11 @@ export class ExercisePlayer {
     }
     this.click = click;
     this.clickWhen = clickWhen;
-    const timeSignature = this.timeline.exercise.timeSignature;
-    this.deps.metronome.configure({
-      bpm: this.timeline.exercise.tempoBpm,
-      timeSignature,
-      // From where the performance actually began, which is where its own
-      // clock reads nought.
-      bars: metronomeBars(this.timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
-      // Re-read, because the end may have moved: clearing the passage while
-      // it plays widens what there is left to hear.
-      tempos: metronomeTempos(this.timeline.exercise, {
-        countInBars: 0,
-        fromTicks: this.fromTicks,
-      }),
-      endsAtTicks: this.untilTicks - this.fromTicks,
-      subdivisionsPerPulse: subdivisionsPerPulseFor(this.timeline, timeSignature, this.click),
-      click: this.click,
-      dropout: resolveDropout(clickWhen, 0),
-      muted: clickIsSilent(clickWhen),
-    });
+    // The whole plan again, from the lap the pulse is on. Built inline here
+    // once, it quietly undid the repeat: a reader who changed the click
+    // mid-performance got a plan with the piece's own continuation in it and
+    // an end to stop at, so the passage stopped going round.
+    this.deps.metronome.configure(this.planFrom(this.lapsDone));
   }
 
   constructor(dependencies: ExercisePlayerDependencies) {
@@ -303,22 +319,14 @@ export class ExercisePlayer {
     this.nextToSchedule = 0;
     this.startedAtMs = null;
     this.playing = true;
+    this.looping = options.repeat === true;
+    this.lapTicks = Math.max(0, this.untilTicks - this.fromTicks);
+    // Read off the tempo spans rather than multiplied: a lap that changes
+    // tempo partway is not its length in ticks times one bpm.
+    this.lapMs = spanMs(timeline.exercise, this.fromTicks, this.untilTicks);
+    this.lapsDone = 0;
 
-    const timeSignature = timeline.exercise.timeSignature;
-    this.deps.metronome.configure({
-      bpm: timeline.exercise.tempoBpm,
-      timeSignature,
-      // No count-in in front of a playback, and it starts wherever the
-      // reader put their place.
-      bars: metronomeBars(timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
-      tempos: metronomeTempos(timeline.exercise, { countInBars: 0, fromTicks: this.fromTicks }),
-      endsAtTicks: this.untilTicks - this.fromTicks,
-      subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, this.click),
-      click: this.click,
-      // From bar zero, because there is no count-in in front of a playback.
-      dropout: resolveDropout(options.clickWhen, 0),
-      muted: clickIsSilent(options.clickWhen),
-    });
+    this.deps.metronome.configure(this.planFrom(0));
 
     this.subscription = this.deps.metronome.onTick((tick) => this.handleTick(tick));
     // The clock first, and everything that takes time after it.
@@ -338,6 +346,63 @@ export class ExercisePlayer {
     this.pending = this.collectNotes(timeline, options.staffNumber);
     this.deps.cursor.moveTo(first?.index ?? 0);
     this.emitter.emit('started', {});
+  }
+
+  /**
+   * The metronome's whole plan, from a given lap onwards.
+   *
+   * Laid end to end when the stretch plays round again, because the metronome
+   * reads its bars and its tempos off a clock that only ever goes forward.
+   * What follows the passage in the *piece* is not what comes next when it
+   * plays again, so only the passage's own bars are tiled - left in, two 4/4
+   * bars followed by one of 3/4 were accented as 3/4 on the second reading.
+   *
+   * Enough laps to keep the plan ahead of the pulse for a long stretch of
+   * practice, and re-based when the pulse catches up with it. Past the last
+   * bar the metronome repeats the last metre, so running off the end is
+   * never silence - it is only, eventually, wrong.
+   */
+  private planFrom(lap: number): MetronomeConfig {
+    const timeline = this.timeline;
+    if (timeline === null) {
+      throw new Error('A plan needs music.');
+    }
+    const timeSignature = timeline.exercise.timeSignature;
+    // No count-in in front of a playback, and it starts wherever the reader
+    // put their place.
+    const of = { countInBars: 0, fromTicks: this.fromTicks };
+    const bars = metronomeBars(timeline.exercise, of);
+    const tempos = metronomeTempos(timeline.exercise, of);
+    return {
+      bpm: timeline.exercise.tempoBpm,
+      timeSignature,
+      bars: this.looping ? laidEndToEnd(bars, this.lapTicks, PLANNED_LAPS, lap) : bars,
+      tempos: this.looping ? laidEndToEnd(tempos, this.lapTicks, PLANNED_LAPS, lap) : tempos,
+      // Nothing to end at while it goes round: the end of a lap is the
+      // beginning of the next one, and a click that stopped there would stop
+      // for good.
+      endsAtTicks: this.looping ? null : this.untilTicks - this.fromTicks,
+      subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, this.click),
+      click: this.click,
+      // From bar zero, because there is no count-in in front of a playback.
+      dropout: resolveDropout(this.clickWhen, 0),
+      muted: clickIsSilent(this.clickWhen),
+    };
+  }
+
+  /**
+   * Starts or stops the stretch playing round again, mid-performance.
+   *
+   * A reader who turns the repeat off means it now, the way clearing the
+   * passage does - and turning it on mid-performance must not stop the music
+   * to say so, since stopping is the thing this exists to avoid.
+   */
+  setRepeating(repeat: boolean): void {
+    if (!this.playing || this.looping === repeat || this.lapTicks <= 0) {
+      return;
+    }
+    this.looping = repeat;
+    this.deps.metronome.configure(this.planFrom(this.lapsDone));
   }
 
   stop(): void {
@@ -439,20 +504,31 @@ export class ExercisePlayer {
     this.startedAtMs ??= tick.scheduledTimeMs;
     const from = this.startedAtMs;
 
+    // Scheduled straight through the seam, which is the whole of being
+    // seamless. The notes of the next lap are handed over while the last of
+    // this one are still sounding, exactly as any other note is handed over
+    // ahead of its moment - so the lap boundary costs nothing at all, and the
+    // reader tapping along hears the downbeat where the downbeat is.
     const horizon = tick.scheduledTimeMs + (this.deps.horizonMs ?? DEFAULT_HORIZON_MS);
-    while (this.nextToSchedule < this.pending.length) {
-      const note = this.pending[this.nextToSchedule];
-      if (note === undefined || from + note.atMs > horizon) {
+    const laps = this.pending.length;
+    while (laps > 0 && (this.looping || this.nextToSchedule < laps)) {
+      const note = this.pending[this.nextToSchedule % laps];
+      const lap = Math.floor(this.nextToSchedule / laps);
+      const at = from + lap * this.lapMs;
+      if (note === undefined || at + note.atMs > horizon) {
         break;
       }
       this.nextToSchedule += 1;
-      this.deps.instrument.play(note.midi, LISTENING_VELOCITY, from + note.atMs);
-      this.deps.instrument.stop(note.midi, from + note.untilMs);
+      this.deps.instrument.play(note.midi, LISTENING_VELOCITY, at + note.atMs);
+      this.deps.instrument.stop(note.midi, at + note.untilMs);
     }
 
     // The metronome counts from nought whatever the music does, so where the
-    // playback began is added back on before asking the timeline anything.
-    const position = tick.positionTicks + this.fromTicks;
+    // playback began is added back on before asking the timeline anything -
+    // and where it goes round, only how far into the lap it has got.
+    const elapsed = tick.positionTicks;
+    const lapsDone = this.looping && this.lapTicks > 0 ? Math.floor(elapsed / this.lapTicks) : 0;
+    const position = elapsed - lapsDone * this.lapTicks + this.fromTicks;
     // Asked before the marker is moved, not after. The tick that ends a
     // stretch stands at the end of its last note, which is the *beginning of
     // the next one* - so moving first walked the marker into the bar after
@@ -461,9 +537,17 @@ export class ExercisePlayer {
     // the next bar was on the next page the page turned forward and straight
     // back. Nothing is heard there either way: the notes were scheduled from
     // the stretch alone.
-    if (position >= this.untilTicks) {
+    if (!this.looping && position >= this.untilTicks) {
       this.finish();
       return;
+    }
+    if (lapsDone !== this.lapsDone) {
+      this.lapsDone = lapsDone;
+      // Kept ahead of the pulse. The plan is written out for a fixed number
+      // of laps, and this is what stops it running off the end of them.
+      if (lapsDone % PLANNED_LAPS === PLANNED_LAPS - 1) {
+        this.deps.metronome.configure(this.planFrom(lapsDone));
+      }
     }
     const step = this.timeline.stepAtTick(position);
     if (step !== null) {

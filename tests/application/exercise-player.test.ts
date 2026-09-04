@@ -225,6 +225,139 @@ describe('listening to an exercise', () => {
     expect(player.pausedAt).toBeNull();
   });
 
+  describe('playing a passage round again', () => {
+    /** Every distinct moment a note was started, in order. */
+    function onsets(instrument: RecordingPitchPlayer): number[] {
+      return [...new Set(instrument.played.map((note) => note.atMs ?? 0))].sort((a, b) => a - b);
+    }
+
+    it('goes round inside one performance, without stopping', () => {
+      // The whole point. A repeat used to be a new performance: the metronome
+      // was stopped and started, which re-anchors it to the audio clock a
+      // fixed lead ahead of now, and everything the restart had to do first
+      // was silence in front of the music.
+      const { player, metronome, timeline } = rig();
+      const finished: unknown[] = [];
+      player.events.on('finished', () => finished.push(true));
+
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'never',
+        repeat: true,
+      });
+      metronome.advanceSubdivisions(20);
+
+      expect(finished).toEqual([]);
+      expect(player.isPlaying).toBe(true);
+      expect(metronome.isRunning).toBe(true);
+    });
+
+    it('sounds the next lap a lap after the last, to the millisecond', () => {
+      // The seam costs nothing, which is what "seamless" has to mean: the
+      // notes of the next round are handed over while the last of this one
+      // are still sounding, exactly as any other note is handed over ahead of
+      // its moment.
+      const { player, metronome, instrument, timeline } = rig();
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'never',
+        repeat: true,
+      });
+      metronome.advanceSubdivisions(16);
+
+      // The fixture is eight quarters at 60 bpm, so a lap is eight seconds.
+      const heard = onsets(instrument);
+      const lap = 8_000;
+      expect(heard).toContain(0);
+      expect(heard).toContain(lap);
+      expect(heard).toContain(lap + 1_000);
+    });
+
+    it('takes the marker back to the beginning of the passage', () => {
+      const { player, metronome, renderer, timeline } = rig();
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'never',
+        toIndex: 1,
+        repeat: true,
+      });
+
+      metronome.advanceSubdivisions(6);
+
+      // Two steps round and round: nothing past the passage is ever visited,
+      // and the marker goes *back* - which is the only way a step can follow
+      // one that came after it.
+      const moves = renderer.cursor.moves;
+      expect(Math.max(...moves)).toBe(1);
+      expect(moves.some((at, index) => index > 0 && at < (moves[index - 1] ?? 0))).toBe(true);
+    });
+
+    it('keeps clicking, having no end to stop at', () => {
+      // The end exists to stop the click sounding one more downbeat after the
+      // last note. Going round, the end of a lap is the beginning of the next
+      // one, and a click that stopped there would stop for good.
+      const { player, metronome, timeline } = rig();
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'always',
+        toIndex: 1,
+        repeat: true,
+      });
+
+      expect(metronome.currentConfig.endsAtTicks).toBeNull();
+    });
+
+    it('lays out the passage again, not what follows it in the piece', () => {
+      // What comes after the passage is not what comes next when it plays
+      // again. Left in, two 4/4 bars followed by a bar of 3/4 were accented
+      // as 3/4 on the second reading.
+      const { player, metronome, timeline } = rig();
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'always',
+        toIndex: 3,
+        repeat: true,
+      });
+
+      const bars = metronome.currentConfig.bars;
+      const lap = Duration.WHOLE.ticks;
+      // One bar per lap, laid end to end - and every one of them the metre the
+      // passage is in rather than whatever the piece does next.
+      expect(bars.length).toBeGreaterThan(2);
+      expect(bars.slice(0, 3).map((bar) => bar.startTicks)).toEqual([0, lap, lap * 2]);
+      expect(bars.every((bar) => bar.timeSignature.equals(timeline.exercise.timeSignature))).toBe(
+        true,
+      );
+    });
+
+    it('stops going round when the reader says so, at the end of the lap', () => {
+      // A reader who turns the repeat off means this reading to be the last,
+      // and saying so must not stop the music.
+      const { player, metronome, timeline } = rig();
+      const finished: unknown[] = [];
+      player.events.on('finished', () => finished.push(true));
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'never',
+        repeat: true,
+      });
+      metronome.advanceSubdivisions(2);
+
+      player.setRepeating(false);
+      expect(finished).toEqual([]);
+      expect(player.isPlaying).toBe(true);
+
+      metronome.advanceSubdivisions(10);
+      expect(finished).toHaveLength(1);
+    });
+  });
+
   it('holds a note for as long as it is written, ties included', () => {
     const { player, metronome, instrument, timeline } = rig(tiedExercise({ tempoBpm: 60 }));
     player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });

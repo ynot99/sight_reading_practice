@@ -104,7 +104,16 @@ being graded yet. It lives in the fullscreen drawer as well as in the
 settings, because a setting whose point is not reaching for the tablet should
 not be two taps deep.
 
-**Repeat when it ends** starts the passage over as soon as it finishes, and
+**Repeat when it ends** starts the passage over as soon as it finishes. When
+it is *heard* rather than played it goes round inside the one performance:
+the metronome never stops and the notes of the next round are handed to the
+instrument while the last of this one are still sounding, so the seam costs
+nothing at all. It used to be a whole new performance, and stopping and
+starting re-anchors the metronome to the audio clock a fixed lead ahead of
+now — a reader tapping along heard the repeat come in late. The plan is laid
+end to end with the music: only the passage's own bars, since what follows it
+in the piece is not what comes next when it plays again.
+
 **Drill the worst bars** picks the passage for you from the run you just
 played — weighing steps the music took away above untidy ones, and ignoring
 timing entirely, since being a little late throughout is a matter for the

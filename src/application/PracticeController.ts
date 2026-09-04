@@ -581,6 +581,14 @@ export class PracticeController {
       this.player?.retarget(this.passageSteps.to);
     }
 
+    // Said now rather than at the end of the round: a reader who turns the
+    // repeat off means this reading to be the last, and one who turns it on
+    // means this one to come round - and neither should have to stop the
+    // music to say so.
+    if (changes.repeatRange !== undefined) {
+      this.player?.setRepeating(changes.repeatRange);
+    }
+
     if (changes.zoom !== undefined && changes.zoom !== this.deps.zoom.zoom) {
       this.deps.zoom.setZoom(changes.zoom);
       this.refreshScore();
@@ -987,6 +995,10 @@ export class PracticeController {
       // a pause still lands inside a passage that moved while it was held.
       fromIndex: Math.min(Math.max(fromStepIndex ?? this.beginAt, passage.from), passage.to),
       toIndex: passage.to,
+      // Round again inside the one performance, rather than by starting
+      // another: stopping and starting is where the gap on a repeat came
+      // from.
+      repeat: this.currentSettings.repeatRange,
     });
     // Something is happening to the music now, so a press is a press and not
     // the beginning of a run.

@@ -299,7 +299,7 @@ export class ExercisePlayer {
     // Whatever was being held, this is now what is happening instead.
     this.pausedAtIndex = null;
     this.untilTicks = this.endOf(options.toIndex);
-    this.pending = this.collectNotes(timeline, options.staffNumber);
+    this.pending = [];
     this.nextToSchedule = 0;
     this.startedAtMs = null;
     this.playing = true;
@@ -321,8 +321,22 @@ export class ExercisePlayer {
     });
 
     this.subscription = this.deps.metronome.onTick((tick) => this.handleTick(tick));
-    this.deps.cursor.moveTo(first?.index ?? 0);
+    // The clock first, and everything that takes time after it.
+    //
+    // Starting the metronome is what anchors the performance to the audio
+    // clock: its first tick is placed a fixed moment ahead of *now*, so every
+    // millisecond spent before this call is a millisecond of silence added in
+    // front of the music. Gathering the notes walks the whole timeline and
+    // moving the marker walks the engraver's cursor from wherever it stood -
+    // on a long piece with the passage well into it, that was most of the gap
+    // a reader tapping along could hear on a repeat.
+    //
+    // Nothing is missed by doing them after: the first tick is not delivered
+    // until it is due, which is that fixed moment away, and both of these
+    // finish long before it.
     this.deps.metronome.start();
+    this.pending = this.collectNotes(timeline, options.staffNumber);
+    this.deps.cursor.moveTo(first?.index ?? 0);
     this.emitter.emit('started', {});
   }
 

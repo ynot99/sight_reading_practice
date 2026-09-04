@@ -115,6 +115,50 @@ describe('listening to an exercise', () => {
     expect(heardAfter.sort((a, b) => a - b)).toEqual(expected.sort((a, b) => a - b));
   });
 
+  it('anchors the clock before doing anything that takes time', () => {
+    // Starting the metronome is what fixes the performance to the audio
+    // clock: its first tick is placed a fixed moment ahead of *now*, so every
+    // millisecond spent before that call is silence added in front of the
+    // music. Gathering the notes walks the whole timeline and moving the
+    // marker walks the engraver's cursor from wherever it stood. On a
+    // two-hundred-bar piece those two came to about ninety milliseconds
+    // before this order changed, and a reader tapping along could hear them
+    // as a repeat that came in late.
+    const clock = new ManualClock();
+    const metronome = new ManualMetronome(clock);
+    const renderer = new FakeScoreRenderer();
+    const order: string[] = [];
+    const startMetronome = metronome.start.bind(metronome);
+    metronome.start = (): void => {
+      order.push('clock');
+      startMetronome();
+    };
+    const moveCursor = renderer.cursor.moveTo.bind(renderer.cursor);
+    renderer.cursor.moveTo = (index: number): void => {
+      order.push('cursor');
+      moveCursor(index);
+    };
+    const player = new ExercisePlayer({
+      metronome,
+      instrument: new RecordingPitchPlayer(),
+      cursor: renderer.cursor,
+      horizonMs: 2_000,
+    });
+
+    player.start(buildTimeline(twoBarExercise({ tempoBpm: 60 })), {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+    });
+
+    expect(order[0]).toBe('clock');
+    expect(order).toContain('cursor');
+    // And the music still sounds, so nothing was lost by deferring it: the
+    // first tick is not delivered until it is due, which is long after both.
+    metronome.advanceSubdivisions(8);
+    expect(renderer.cursor.position).toBeGreaterThan(0);
+  });
+
   it('leaves the marker on the last note, not in the bar after it', () => {
     // The complaint this answers: on a repeat the music visibly overran by a
     // bar before starting again. The tick that ends a stretch stands at the

@@ -189,6 +189,14 @@ export class ExercisePlayer {
   private lapTicks = 0;
   private lapMs = 0;
   private lapsDone = 0;
+  /**
+   * The furthest moment already handed to the instrument.
+   *
+   * Kept in time rather than as a count, because a count means nothing once
+   * the list it counts into has been rebuilt - and it is rebuilt whenever the
+   * reader moves a passage marker while the music plays.
+   */
+  private scheduledThroughMs = Number.NEGATIVE_INFINITY;
   private click: ClickPattern = 'pulse';
   private clickWhen: ClickWhen = 'never';
   private hand: ListeningHand = null;
@@ -234,8 +242,39 @@ export class ExercisePlayer {
     // gathered identically and in the same order, so what has already been
     // handed to the instrument stays handed over exactly once.
     this.pending = this.collectNotes(this.timeline, this.hand);
-    this.nextToSchedule = Math.min(this.nextToSchedule, this.pending.length);
+    this.catchUpSchedule();
     this.applyClick(this.click, this.clickWhen);
+  }
+
+  /**
+   * Puts the scheduler back where it was, in a list that has just changed.
+   *
+   * Carried over as a count, it meant nothing: the count runs on across laps
+   * while a passage repeats, so clamping it to the length of the new list -
+   * which is what used to happen - landed it partway through some earlier
+   * lap. Every note from there to the horizon was then handed to the
+   * instrument with a moment already long past, and an instrument asked to
+   * play at a moment gone by plays at once. Moving a marker mid-performance
+   * fired a whole lap of notes in one chord.
+   *
+   * Asked in time instead: the first note whose moment is later than the
+   * furthest already scheduled. Each moment is handed over at most once, and
+   * never into the past.
+   */
+  private catchUpSchedule(): void {
+    const laps = this.pending.length;
+    if (laps === 0 || this.startedAtMs === null) {
+      this.nextToSchedule = 0;
+      return;
+    }
+    const since = this.scheduledThroughMs - this.startedAtMs;
+    const lap = this.looping && this.lapMs > 0 ? Math.max(0, Math.floor(since / this.lapMs)) : 0;
+    const within = since - lap * this.lapMs;
+    let count = 0;
+    while (count < laps && (this.pending[count]?.atMs ?? Number.POSITIVE_INFINITY) <= within) {
+      count += 1;
+    }
+    this.nextToSchedule = lap * laps + count;
   }
 
   /** Changes what is heard over a performance, without interrupting it. */
@@ -317,6 +356,7 @@ export class ExercisePlayer {
     this.untilTicks = this.endOf(options.toIndex);
     this.pending = [];
     this.nextToSchedule = 0;
+    this.scheduledThroughMs = Number.NEGATIVE_INFINITY;
     this.startedAtMs = null;
     this.playing = true;
     this.looping = options.repeat === true;
@@ -519,6 +559,7 @@ export class ExercisePlayer {
         break;
       }
       this.nextToSchedule += 1;
+      this.scheduledThroughMs = Math.max(this.scheduledThroughMs, at + note.atMs);
       this.deps.instrument.play(note.midi, LISTENING_VELOCITY, at + note.atMs);
       this.deps.instrument.stop(note.midi, at + note.untilMs);
     }

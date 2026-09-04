@@ -744,6 +744,39 @@ describe('a performance follows the reader as a run does', () => {
     expect(new Set(struck).size).toBe(struck.length);
   });
 
+  it('sounds nothing twice when a marker moves during a repeat', () => {
+    // The complaint this answers: moving a passage marker while a repeating
+    // playback ran fired several notes at once and loudly.
+    //
+    // The scheduler's place was carried as a count, and the count runs on
+    // across laps while a passage repeats - so clamping it to the length of
+    // the rebuilt list landed it partway through some earlier lap. Every note
+    // from there to the horizon was handed over with a moment already long
+    // past, and an instrument asked to play at a moment gone by plays at
+    // once.
+    const { player, metronome, instrument, timeline } = rig();
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      toIndex: 3,
+      repeat: true,
+    });
+    // Well into the third time round, so the count is far past the list.
+    metronome.advanceSubdivisions(14);
+    const heard = instrument.played.length;
+    expect(heard).toBeGreaterThan(4);
+
+    player.retarget(timeline.length - 1);
+    metronome.advanceSubdivisions(1);
+
+    // Nothing arrives in a heap: one tick's worth of new sound at most, and
+    // no moment sounded twice.
+    const struck = instrument.played.map((note) => `${note.midi}@${note.atMs}`);
+    expect(new Set(struck).size).toBe(struck.length);
+    expect(instrument.played.length - heard).toBeLessThan(4);
+  });
+
   it('stops where a passage narrowed mid-performance now ends', () => {
     const { player, metronome, timeline } = rig();
     const finished: number[] = [];

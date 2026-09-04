@@ -205,10 +205,10 @@ describe('the stylesheet', () => {
   it('gives the reading frame the height of the screen, not a minimum', () => {
     // A minimum lets the frame grow to whatever ends up inside it - a page,
     // the strip above it, the room kept below it for the transport bar - and
-    // anything over a screenful becomes a scrollbar on the document, in a
-    // mode whose whole promise is that there is nothing to scroll. Fixed,
-    // there is nowhere to grow, and no arithmetic has to keep it in line.
-    const frame = rules().find((rule) => rule.selector === '.app.is-focus .score');
+    // anything over a screenful becomes a scrollbar on a layout whose whole
+    // promise is that there is nothing to scroll. Fixed, there is nowhere to
+    // grow, and no arithmetic has to keep it in line.
+    const frame = rules().find((rule) => rule.selector === '.score');
 
     expect(frame?.body).toMatch(/(^|[^-])height\s*:\s*100dvh/);
     expect(frame?.body).not.toMatch(/min-height/);
@@ -366,28 +366,17 @@ describe('the stylesheet', () => {
     expect(HTML).toMatch(/<link[^>]*rel="apple-touch-icon"/);
   });
 
-  it('hides everything that is not the music in fullscreen', () => {
-    // The import notice sits outside the header, so it was left printing
-    // "Opened Bone Bottom." across the page the reader had gone fullscreen to
-    // look at.
-    const hidden = rules().filter(
-      (rule) => rule.selector.startsWith('.app.is-focus') && /display\s*:\s*none/.test(rule.body),
-    );
-    const selectors = hidden.flatMap((rule) => rule.selector.split(','))
-      .concat(
-        rules()
-          .filter((rule) => /display\s*:\s*none/.test(rule.body))
-          .flatMap((rule) => rule.selector.split(',')),
-      )
-      .map((part) => part.trim());
-
-    for (const part of ['.app.is-focus .import-notice', '.app.is-focus .panel']) {
-      expect(selectors).toContain(part);
+  it('leaves the music the only thing on the page', () => {
+    // There is one layout now. The desk it used to be hidden behind - a
+    // header, a toolbar and a side panel - is gone rather than hidden, so
+    // what this used to check by looking for `display: none` is checked by
+    // looking for the markup at all.
+    for (const gone of ['toolbar', 'panel', 'app-header', 'layout']) {
+      expect(HTML).not.toContain(`class="${gone}"`);
     }
-    // And the controls are *not* on that list any more: they live in a sheet
-    // now, and hiding them here would hide the only way into the settings
-    // from the place the reader is actually reading in.
-    expect(selectors).not.toContain('.app.is-focus .controls');
+    // And the settings are not hidden anywhere: they live in a sheet, which
+    // is the one way into them from where the reader is actually reading.
+    expect(HTML).toContain('id="sheet-settings"');
   });
 
   it('gives every fullscreen control a name on hover', () => {

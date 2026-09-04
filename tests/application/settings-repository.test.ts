@@ -39,7 +39,6 @@ const SETTINGS: PracticeSettings = {
   ladderStepId: 'rung.2b',
   clickWhen: 'cycle-2',
   inputLatencyMs: 0,
-  startInFocus: false,
   matchToleranceMs: 180,
   pitchClassOnly: true,
   rhythmOnly: true,

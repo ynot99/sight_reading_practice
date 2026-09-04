@@ -334,8 +334,9 @@ describe('AppView', () => {
     await view.initialize();
 
     expect(renderer.loadCount).toBe(1);
-    expect(element('exercise-title').textContent).toContain('seed');
-    expect(element<HTMLProgressElement>('progress').max).toBeGreaterThan(1);
+    // Which piece it is is printed in the corner of the page itself now,
+    // beside the page number - see tests/infrastructure/osmd-page-turns.
+    expect(renderer.loadedXml).toContain('<work-title>');
   });
 
   it('regenerates when the level changes', async () => {
@@ -396,11 +397,11 @@ describe('AppView', () => {
       await view.initialize();
       runtime.controller.updateSettings({ previewSeconds: 3 });
 
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
 
       // Nothing is running yet: the look is the point, and it ends by itself.
       expect(runtime.controller.session).toBeNull();
-      expect(element('session-status').textContent).toContain('Look at it');
+      expect(element('focus-notice').textContent).toContain('Look at it');
 
       vi.advanceTimersByTime(3000);
       expect(runtime.controller.session).not.toBeNull();
@@ -439,7 +440,7 @@ describe('AppView', () => {
         setPreview(5);
         expect(element('score-cover').hidden).toBe(false);
 
-        element<HTMLButtonElement>('start').click();
+        element<HTMLButtonElement>('focus-play').click();
 
         // The five seconds are now the whole time the reader gets with it,
         // which is the point: staring at it beforehand was the hole.
@@ -457,7 +458,7 @@ describe('AppView', () => {
       const { view, runtime } = createRig();
       await view.initialize();
       setPreview(5);
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
       expect(element('score-cover').hidden).toBe(true);
 
       await runtime.controller.loadNewExercise();
@@ -472,7 +473,7 @@ describe('AppView', () => {
         const { view, runtime } = createRig();
         await view.initialize();
         setPreview(2);
-        element<HTMLButtonElement>('start').click();
+        element<HTMLButtonElement>('focus-play').click();
         vi.advanceTimersByTime(2000);
         runtime.controller.session?.abort();
 
@@ -487,7 +488,7 @@ describe('AppView', () => {
       await view.initialize();
       setPreview(6);
 
-      element<HTMLButtonElement>('listen').click();
+      element<HTMLButtonElement>('focus-listen').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       // The cursor would otherwise walk across a blank page.
@@ -501,9 +502,9 @@ describe('AppView', () => {
       const { view, runtime } = createRig();
       await view.initialize();
       runtime.controller.updateSettings({ previewSeconds: 10 });
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
 
-      element<HTMLButtonElement>('stop').click();
+      element<HTMLButtonElement>('focus-stop').click();
       vi.advanceTimersByTime(20_000);
 
       // Stopping during the look means seen enough, not start in ten seconds.
@@ -524,18 +525,18 @@ describe('AppView', () => {
 
     // The recordings are awaited before a note sounds, so the click resolves a
     // moment later than it is made.
-    element<HTMLButtonElement>('listen').click();
+    element<HTMLButtonElement>('focus-listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.controller.isListening).toBe(true);
-    expect(element('listen').textContent).toBe('Pause listening');
+    expect(element('focus-listen').getAttribute('aria-label')).toBe('Pause listening');
 
-    element<HTMLButtonElement>('listen').click();
+    element<HTMLButtonElement>('focus-listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.controller.isListening).toBe(false);
     expect(runtime.controller.isListeningPaused).toBe(true);
-    expect(element('listen').textContent).toBe('Resume listening');
+    expect(element('focus-listen').getAttribute('aria-label')).toBe('Resume listening');
 
-    element<HTMLButtonElement>('listen').click();
+    element<HTMLButtonElement>('focus-listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.controller.isListening).toBe(true);
     expect(runtime.controller.isListeningPaused).toBe(false);
@@ -544,19 +545,19 @@ describe('AppView', () => {
   it('ends a held performance with Stop, which is what Stop is for', async () => {
     const { view, runtime } = createRig();
     await view.initialize();
-    element<HTMLButtonElement>('listen').click();
+    element<HTMLButtonElement>('focus-listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    element<HTMLButtonElement>('listen').click();
+    element<HTMLButtonElement>('focus-listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.controller.isListeningPaused).toBe(true);
     // And it offers to, rather than sitting greyed out over held music.
-    expect(element<HTMLButtonElement>('stop').disabled).toBe(false);
+    expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
 
-    element<HTMLButtonElement>('stop').click();
+    element<HTMLButtonElement>('focus-stop').click();
 
     expect(runtime.controller.isListeningPaused).toBe(false);
     expect(runtime.controller.isListening).toBe(false);
-    expect(element('listen').textContent).toBe('Listen');
+    expect(element('focus-listen').getAttribute('aria-label')).toBe('Listen');
   });
 
   it('gives the transport back when a run is taken away by a playback', async () => {
@@ -568,27 +569,27 @@ describe('AppView', () => {
     const { view, runtime } = createRig();
     await view.initialize();
 
-    element<HTMLButtonElement>('start').click();
-    expect(element<HTMLButtonElement>('start').disabled).toBe(true);
+    element<HTMLButtonElement>('focus-play').click();
+    expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
 
-    element<HTMLButtonElement>('listen').click();
+    element<HTMLButtonElement>('focus-listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(runtime.controller.session).toBeNull();
-    expect(element<HTMLButtonElement>('start').disabled).toBe(false);
-    // Pause is the run's, and there is no run. Stop is not: something is
-    // playing, and Stop is the button that ends whatever is playing.
-    expect(element<HTMLButtonElement>('stop').disabled).toBe(false);
-    expect(element<HTMLButtonElement>('pause').disabled).toBe(true);
+    expect(element('focus-play').getAttribute('aria-label')).toBe('Start');
+    // Play offers to start rather than to pause, there being no run. Stop is
+    // not idle: something is playing, and Stop ends whatever is playing.
+    expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
+    expect(element('focus-play').getAttribute('aria-label')).toBe('Start');
 
-    element<HTMLButtonElement>('listen').click();
+    element<HTMLButtonElement>('focus-listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     // And Start still works afterwards, which is the whole complaint.
-    element<HTMLButtonElement>('start').click();
+    element<HTMLButtonElement>('focus-play').click();
     expect(runtime.controller.session?.status).toBe('running');
-    expect(element<HTMLButtonElement>('start').disabled).toBe(true);
-    expect(element<HTMLButtonElement>('stop').disabled).toBe(false);
+    expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
+    expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
   });
 
   it('stops offering to stop a performance its score replaced', async () => {
@@ -597,14 +598,14 @@ describe('AppView', () => {
     const { view, runtime } = createRig();
     await view.initialize();
 
-    element<HTMLButtonElement>('listen').click();
+    element<HTMLButtonElement>('focus-listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(element('listen').textContent).toBe('Pause listening');
+    expect(element('focus-listen').getAttribute('aria-label')).toBe('Pause listening');
 
     await runtime.controller.loadNewExercise();
 
     expect(runtime.controller.isListening).toBe(false);
-    expect(element('listen').textContent).toBe('Listen');
+    expect(element('focus-listen').getAttribute('aria-label')).toBe('Listen');
   });
 
   it('tells the page which bars the reader has seen before', async () => {
@@ -641,10 +642,10 @@ describe('AppView', () => {
     const { view, instrument, metronome } = createRig();
     await view.initialize();
 
-    const hand = element<HTMLSelectElement>('listen-hand');
-    hand.value = '2';
-    hand.dispatchEvent(new Event('change'));
-    element<HTMLButtonElement>('listen').click();
+    // Both hands -> left alone -> right alone, so one press is the left.
+    const hand = element<HTMLButtonElement>('focus-hands');
+    hand.click();
+    element<HTMLButtonElement>('focus-listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     metronome.advanceSubdivisions(8);
 
@@ -660,14 +661,14 @@ describe('AppView', () => {
     // to yield rather than both driving.
     const { view, runtime } = createRig();
     await view.initialize();
-    element<HTMLButtonElement>('listen').click();
+    element<HTMLButtonElement>('focus-listen').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.controller.isListening).toBe(true);
 
-    element<HTMLButtonElement>('start').click();
+    element<HTMLButtonElement>('focus-play').click();
 
     expect(runtime.controller.isListening).toBe(false);
-    expect(element('listen').textContent).toBe('Listen');
+    expect(element('focus-listen').getAttribute('aria-label')).toBe('Listen');
   });
 
   it('narrows practice to a passage without cutting the music', async () => {
@@ -678,10 +679,10 @@ describe('AppView', () => {
     await rig.view.initialize();
     const wholePiece = rig.runtime.controller.currentTimeline?.length ?? 0;
 
-    const from = element<HTMLInputElement>('range-from');
+    const from = element<HTMLInputElement>('focus-from');
     from.value = '2';
     from.dispatchEvent(new Event('change'));
-    const to = element<HTMLInputElement>('range-to');
+    const to = element<HTMLInputElement>('focus-to');
     to.value = '2';
     to.dispatchEvent(new Event('change'));
     await Promise.resolve();
@@ -714,15 +715,15 @@ describe('AppView', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(runtime.controller.openedExercise?.title).toBe('Borrowed');
-    expect(element('import-notice').hidden).toBe(false);
-    expect(element('import-notice').textContent).toContain('Borrowed');
+    expect(element('focus-notice').hidden).toBe(false);
+    expect(element('focus-notice').textContent).toContain('Borrowed');
   });
 
   it('puts the passage boxes back when a file replaces what was on the stand', async () => {
     const { view, runtime } = createRig();
     await view.initialize();
 
-    const from = element<HTMLInputElement>('range-from');
+    const from = element<HTMLInputElement>('focus-from');
     from.value = '2';
     from.dispatchEvent(new Event('change'));
     await Promise.resolve();
@@ -764,7 +765,7 @@ describe('AppView', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(runtime.controller.openedExercise).toBeNull();
-    expect(element('import-notice').textContent).toContain('Could not open');
+    expect(element('focus-notice').textContent).toContain('Could not open');
     // And somewhere it can be copied from. The notice says one sentence,
     // which is what a reader needs mid-practice - but it cannot be selected
     // on a tablet and carries no stack, so a fault worth reporting had to be
@@ -827,13 +828,13 @@ describe('AppView', () => {
     const { view, runtime, midi, renderer } = createRig();
     await view.initialize();
 
-    element<HTMLButtonElement>('start').click();
+    element<HTMLButtonElement>('focus-play').click();
 
     const session = runtime.controller.session;
     expect(session?.status).toBe('running');
-    expect(element('session-status').textContent).toBe('Playing');
-    expect(element<HTMLButtonElement>('start').disabled).toBe(true);
-    expect(element<HTMLButtonElement>('stop').disabled).toBe(false);
+    expect(element('focus-notice').textContent).toBe('Playing');
+    expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
+    expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
 
     const step = session?.currentStep;
     if (step === undefined || step === null) {
@@ -845,37 +846,44 @@ describe('AppView', () => {
     expect(renderer.played.length).toBeGreaterThan(0);
   });
 
-  it('toggles the pause button between pause and resume', async () => {
+  it('turns the one transport button through its three answers', async () => {
+    // One button for start, pause and resume, as a transport has: the icon
+    // says which of them it is now and the accessible name says it in words.
     const { view, runtime } = createRig();
     await view.initialize();
-    element<HTMLButtonElement>('start').click();
+    expect(element('focus-play').getAttribute('aria-label')).toBe('Start');
 
-    element<HTMLButtonElement>('pause').click();
+    element<HTMLButtonElement>('focus-play').click();
+    expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
+
+    element<HTMLButtonElement>('focus-play').click();
     expect(runtime.controller.session?.status).toBe('paused');
-    expect(element<HTMLButtonElement>('pause').textContent).toBe('Resume');
+    expect(element('focus-play').getAttribute('aria-label')).toBe('Resume');
 
-    element<HTMLButtonElement>('pause').click();
+    element<HTMLButtonElement>('focus-play').click();
     expect(runtime.controller.session?.status).toBe('running');
-    expect(element<HTMLButtonElement>('pause').textContent).toBe('Pause');
+    expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
   });
 
   it('shows the final report when a run is stopped', async () => {
     const { view } = createRig();
     await view.initialize();
-    element<HTMLButtonElement>('start').click();
+    element<HTMLButtonElement>('focus-play').click();
 
-    element<HTMLButtonElement>('stop').click();
+    element<HTMLButtonElement>('focus-stop').click();
 
     expect(element('score-verdict').hidden).toBe(false);
     expect(element('result').textContent).toContain('Overall');
-    expect(element('session-status').textContent).toBe('Stopped');
+    // The pill carries the verdict once there is one; the status it was
+    // saying before is what the verdict replaces.
+    expect(element('focus-notice').textContent).toMatch(/^[A-F] · \d+%/);
   });
 
   it('reports which way a run leaned, not only how far off it was', async () => {
     const { view } = createRig();
     await view.initialize();
-    element<HTMLButtonElement>('start').click();
-    element<HTMLButtonElement>('stop').click();
+    element<HTMLButtonElement>('focus-play').click();
+    element<HTMLButtonElement>('focus-stop').click();
 
     expect(element('result').textContent).toContain('Tendency');
   });
@@ -894,9 +902,9 @@ describe('AppView', () => {
     it('gives the verdict there, where a panel fullscreen hides cannot', async () => {
       const { view } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
 
-      element<HTMLButtonElement>('stop').click();
+      element<HTMLButtonElement>('focus-stop').click();
 
       expect(element('score-card').hidden).toBe(false);
       expect(element('score-verdict').hidden).toBe(false);
@@ -908,8 +916,8 @@ describe('AppView', () => {
       // a thing you have read is how you say you have read it.
       const { view } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('start').click();
-      element<HTMLButtonElement>('stop').click();
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
 
       element('score-verdict').click();
 
@@ -923,8 +931,8 @@ describe('AppView', () => {
       // away from under a reader who was answering it.
       const { view } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('start').click();
-      element<HTMLButtonElement>('stop').click();
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
 
       element<HTMLButtonElement>('drill').click();
 
@@ -934,11 +942,11 @@ describe('AppView', () => {
     it('takes the verdict away when the music starts again', async () => {
       const { view } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('start').click();
-      element<HTMLButtonElement>('stop').click();
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
       expect(element('score-verdict').hidden).toBe(false);
 
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
 
       expect(element('score-verdict').hidden).toBe(true);
       expect(element('score-card').hidden).toBe(true);
@@ -965,7 +973,7 @@ describe('AppView', () => {
       // And nowhere else counts it. The pill and the desk's status line say
       // what is happening; the number is asked for once and answered once.
       expect(element('focus-notice').textContent).toBe('Counting in…');
-      expect(element('session-status').textContent).toBe('Counting in…');
+      expect(element('focus-notice').textContent).toBe('Counting in…');
 
       // And it is gone by the time there is a bar to play.
       metronome.advanceBeats(8);
@@ -982,7 +990,7 @@ describe('AppView', () => {
         await view.initialize();
         runtime.controller.updateSettings({ previewSeconds: 3 });
 
-        element<HTMLButtonElement>('start').click();
+        element<HTMLButtonElement>('focus-play').click();
         expect(element('score-count').textContent).toBe('3');
 
         vi.advanceTimersByTime(3000);
@@ -1000,10 +1008,10 @@ describe('AppView', () => {
       await view.initialize();
       expect(element('focus-bar').dataset['playing']).toBe('false');
 
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
       expect(element('focus-bar').dataset['playing']).toBe('true');
 
-      element<HTMLButtonElement>('stop').click();
+      element<HTMLButtonElement>('focus-stop').click();
       expect(element('focus-bar').dataset['playing']).toBe('false');
     });
 
@@ -1013,9 +1021,9 @@ describe('AppView', () => {
       // whole difference between the two buttons left on the page.
       const { view, runtime } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
 
-      element<HTMLButtonElement>('pause').click();
+      element<HTMLButtonElement>('focus-play').click();
 
       expect(runtime.controller.session?.status).toBe('paused');
       expect(element('focus-bar').dataset['playing']).toBe('true');
@@ -1028,7 +1036,7 @@ describe('AppView', () => {
         await view.initialize();
         runtime.controller.updateSettings({ previewSeconds: 3 });
 
-        element<HTMLButtonElement>('start').click();
+        element<HTMLButtonElement>('focus-play').click();
         // No session yet - the look has no status to change, so it has to say
         // this for itself.
         expect(runtime.controller.session).toBeNull();
@@ -1049,8 +1057,8 @@ describe('AppView', () => {
       view.setDrawerOpen(true);
       expect(element('focus-bar').dataset['open']).toBe('true');
 
-      element<HTMLButtonElement>('start').click();
-      element<HTMLButtonElement>('stop').click();
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
 
       expect(element('focus-bar').dataset['open']).toBe('false');
     });
@@ -1066,7 +1074,7 @@ describe('AppView', () => {
         await view.initialize();
         runtime.controller.updateSettings({ previewSeconds: 10 });
 
-        element<HTMLButtonElement>('start').click();
+        element<HTMLButtonElement>('focus-play').click();
         expect(view.isPreviewing).toBe(true);
         expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
 
@@ -1086,14 +1094,14 @@ describe('AppView', () => {
     it('stops a performance too, that also being something playing', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('listen').click();
+      element<HTMLButtonElement>('focus-listen').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(runtime.controller.isListening).toBe(true);
 
       element<HTMLButtonElement>('focus-stop').click();
 
       expect(runtime.controller.isListening).toBe(false);
-      expect(element('listen').textContent).toBe('Listen');
+      expect(element('focus-listen').getAttribute('aria-label')).toBe('Listen');
     });
 
     it('offers starting-by-playing in the drawer and in the settings', async () => {
@@ -1204,8 +1212,8 @@ describe('AppView', () => {
     const { view, runtime } = createRig();
     await view.initialize();
 
-    const from = element<HTMLInputElement>('range-from');
-    const to = element<HTMLInputElement>('range-to');
+    const from = element<HTMLInputElement>('focus-from');
+    const to = element<HTMLInputElement>('focus-to');
     from.value = '2';
     from.dispatchEvent(new Event('change'));
     to.value = '3';
@@ -1213,14 +1221,14 @@ describe('AppView', () => {
     await Promise.resolve();
     expect(runtime.controller.settings.rangeFromBar).toBe(2);
 
-    element<HTMLButtonElement>('new-exercise').click();
+    element<HTMLButtonElement>('focus-next').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     // The boxes have to follow the setting, or they would name a passage of
     // the last piece over the top of a new one.
     expect(runtime.controller.settings.rangeFromBar).toBeNull();
-    expect(element<HTMLInputElement>('range-from').value).toBe('');
-    expect(element<HTMLInputElement>('range-to').value).toBe('');
+    expect(element<HTMLInputElement>('focus-from').value).toBe('');
+    expect(element<HTMLInputElement>('focus-to').value).toBe('');
   });
 
   describe('the scores kept between visits', () => {
@@ -1235,8 +1243,6 @@ describe('AppView', () => {
       await view.initialize();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      // The opener names the count, since the list itself is behind it now.
-      expect(element('open-scores').textContent).toBe('Scores');
       expect(element('scores-empty').hidden).toBe(false);
     });
 
@@ -1244,7 +1250,6 @@ describe('AppView', () => {
       const rig = createRig();
       await keepOne(rig);
 
-      expect(element('open-scores').textContent).toBe('Scores (1)');
       expect(element('scores-list').childElementCount).toBe(1);
       expect(element('scores-list').textContent).toContain('Something Borrowed');
       expect(element('scores-list').textContent).toContain('2 bars');
@@ -1262,7 +1267,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('scores-add').click();
 
       // One way in, so a score opened from here is read and reported on
-      // exactly as one opened from the toolbar.
+      // exactly as any other score is.
       expect(opened).toBe(1);
     });
 
@@ -1287,7 +1292,6 @@ describe('AppView', () => {
       await confirmDeletion();
 
       expect(rig.runtime.scores.isEmpty).toBe(true);
-      expect(element('open-scores').textContent).toBe('Scores');
     });
 
     it('asks before forgetting one, because the row is a thumb wide', async () => {
@@ -1327,9 +1331,8 @@ describe('AppView', () => {
       const { view } = createRig();
       await view.initialize();
 
-      expect(element<HTMLButtonElement>('keep-take').disabled).toBe(true);
       expect(element<HTMLButtonElement>('focus-keep').disabled).toBe(true);
-      expect(element('open-takes').textContent).toBe('Takes');
+      expect(element<HTMLButtonElement>('focus-keep').disabled).toBe(true);
     });
 
     it('wakes up as soon as the keyboard is touched', async () => {
@@ -1337,7 +1340,7 @@ describe('AppView', () => {
       await rig.view.initialize();
       playSomething(rig);
 
-      const button = element<HTMLButtonElement>('keep-take');
+      const button = element<HTMLButtonElement>('focus-keep');
       expect(button.disabled).toBe(false);
       // Says what it is offering, so a take cut at the wrong pause shows.
       expect(button.textContent).toContain('0:00');
@@ -1349,28 +1352,25 @@ describe('AppView', () => {
       // see, and learning by feel how long it was.
       const rig = createRig();
       await rig.view.initialize();
-      const desk = element<HTMLButtonElement>('keep-take');
-      const bar = element<HTMLButtonElement>('focus-keep');
+      const keep = element<HTMLButtonElement>('focus-keep');
 
       vi.useFakeTimers();
       try {
         playSomething(rig);
-        expect(desk.dataset['recording']).toBe('true');
-        expect(bar.dataset['recording']).toBe('true');
+        expect(keep.dataset['recording']).toBe('true');
 
         // Nothing more is played; the page counts the silence out on its own,
         // which is the whole point - there is nothing else to notice.
         rig.clock.advance(rig.recorder.silenceMs + 1);
         vi.advanceTimersByTime(rig.recorder.silenceMs + 100);
 
-        expect(desk.dataset['recording']).toBe('false');
-        expect(bar.dataset['recording']).toBe('false');
+        expect(keep.dataset['recording']).toBe('false');
         // Still there to be kept: sealed is not gone.
-        expect(desk.disabled).toBe(false);
-        expect(desk.title).toContain('starts a new take');
+        expect(keep.disabled).toBe(false);
+        expect(keep.title).toContain('starts a new take');
 
         playSomething(rig);
-        expect(desk.dataset['recording']).toBe('true');
+        expect(keep.dataset['recording']).toBe('true');
       } finally {
         vi.useRealTimers();
       }
@@ -1381,7 +1381,7 @@ describe('AppView', () => {
       // a moment's thought does not look like a fault in the recording.
       const rig = createRig();
       await rig.view.initialize();
-      const desk = element<HTMLButtonElement>('keep-take');
+      const desk = element<HTMLButtonElement>('focus-keep');
 
       vi.useFakeTimers();
       try {
@@ -1403,10 +1403,9 @@ describe('AppView', () => {
       // Nothing was pressed before playing: an idea is noticed afterwards.
       playSomething(rig);
 
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
 
       expect(rig.takes.list()).toHaveLength(1);
-      expect(element('open-takes').textContent).toBe('Takes (1)');
       expect(element('takes-list').childElementCount).toBe(1);
     });
 
@@ -1425,7 +1424,6 @@ describe('AppView', () => {
 
       expect(rig.takes.list()).toHaveLength(1);
       expect(rig.takes.list()[0]?.shelf).toBe('recent');
-      expect(element('open-takes').textContent).toBe('Takes (1)');
     });
 
     it('moves one off the shelf that gets tidied', async () => {
@@ -1445,7 +1443,7 @@ describe('AppView', () => {
       const rig = createRig();
       await rig.view.initialize();
       playSomething(rig);
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
       expect(element('take-transport').hidden).toBe(true);
 
       rowButton('takes-list', 'Play this take').click();
@@ -1461,7 +1459,7 @@ describe('AppView', () => {
       rig.midi.noteOn(60, rig.clock.now());
       rig.clock.advance(2_000);
       rig.midi.noteOff(60, rig.clock.now());
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
       rowButton('takes-list', 'Play this take').click();
 
       const scrub = element<HTMLInputElement>('take-scrub');
@@ -1479,7 +1477,7 @@ describe('AppView', () => {
       const rig = createRig();
       await rig.view.initialize();
       playSomething(rig);
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
       rowButton('takes-list', 'Play this take').click();
 
       // Played out, and stopped by the follower.
@@ -1526,7 +1524,7 @@ describe('AppView', () => {
       const rig = createRig();
       await rig.view.initialize();
       playSomething(rig);
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
       rowButton('takes-list', 'Play this take').click();
       expect(rig.runtime.takePlayer.playing).not.toBeNull();
 
@@ -1541,7 +1539,7 @@ describe('AppView', () => {
       const rig = createRig();
       await rig.view.initialize();
       playSomething(rig);
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
       expect(rig.takes.list()[0]?.shelf).toBe('kept');
 
       rowButton('takes-list', 'Kept for good. Press to let the tidying reach it again.').click();
@@ -1557,7 +1555,7 @@ describe('AppView', () => {
       playSomething(rig);
       rig.clock.advance(10_000);
       playSomething(rig);
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
       expect(element('takes-list').childElementCount).toBe(2);
 
       const filter = element<HTMLInputElement>('takes-kept-only');
@@ -1565,9 +1563,6 @@ describe('AppView', () => {
       filter.dispatchEvent(new Event('change'));
 
       expect(element('takes-list').childElementCount).toBe(1);
-      // The opener still counts everything: it says how much is kept here,
-      // not how much is on screen.
-      expect(element('open-takes').textContent).toBe('Takes (2)');
     });
 
     it('will not keep the same playing twice', async () => {
@@ -1575,18 +1570,18 @@ describe('AppView', () => {
       await rig.view.initialize();
       playSomething(rig);
 
-      element<HTMLButtonElement>('keep-take').click();
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
+      element<HTMLButtonElement>('focus-keep').click();
 
       expect(rig.takes.list()).toHaveLength(1);
-      expect(element<HTMLButtonElement>('keep-take').disabled).toBe(true);
+      expect(element<HTMLButtonElement>('focus-keep').disabled).toBe(true);
     });
 
     it('writes a MIDI file from the row', async () => {
       const rig = createRig();
       await rig.view.initialize();
       playSomething(rig);
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
 
       rowButton('takes-list', 'Save this take as a MIDI file').click();
 
@@ -1602,30 +1597,28 @@ describe('AppView', () => {
       const rig = createRig();
       await rig.view.initialize();
       playSomething(rig);
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
 
       rowButton('takes-list', 'Delete this take').click();
       await confirmDeletion();
 
       expect(rig.takes.list()).toHaveLength(0);
-      expect(element('open-takes').textContent).toBe('Takes');
     });
 
     it('empties the whole list when asked', async () => {
       const rig = createRig();
       await rig.view.initialize();
       playSomething(rig);
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
       rig.clock.advance(10_000);
       playSomething(rig);
-      element<HTMLButtonElement>('keep-take').click();
+      element<HTMLButtonElement>('focus-keep').click();
       expect(rig.takes.list()).toHaveLength(2);
 
       element<HTMLButtonElement>('takes-clear').click();
       await confirmDeletion();
 
       expect(rig.takes.list()).toHaveLength(0);
-      expect(element('open-takes').textContent).toBe('Takes');
     });
 
     it('keeps capturing while the monitor is muted', async () => {
@@ -1638,7 +1631,7 @@ describe('AppView', () => {
       playSomething(rig);
 
       // Silencing what you hear is not a decision to stop capturing.
-      expect(element<HTMLButtonElement>('keep-take').disabled).toBe(false);
+      expect(element<HTMLButtonElement>('focus-keep').disabled).toBe(false);
     });
   });
 
@@ -1747,8 +1740,8 @@ describe('AppView', () => {
       expect(runtime.controller.settings.rangeFromBar).toBe(2);
       expect(runtime.controller.settings.rangeToBar).toBe(3);
       // The boxes are the same value seen at the desk, so they follow.
-      expect(element<HTMLInputElement>('range-from').value).toBe('2');
-      expect(element('import-notice').textContent).toContain('bars 2-3');
+      expect(element<HTMLInputElement>('focus-from').value).toBe('2');
+      expect(element('focus-notice').textContent).toContain('bars 2-3');
     });
 
     it('writes which bars are on the page into the judging log', async () => {
@@ -1782,7 +1775,7 @@ describe('AppView', () => {
       rig.renderer.holdBar(2);
 
       expect(rig.runtime.controller.beginsAt).toBe(later?.index);
-      expect(element('import-notice').textContent).toContain('bar 3');
+      expect(element('focus-notice').textContent).toContain('bar 3');
       // And the run actually begins there rather than at the top.
       rig.runtime.controller.updateSettings({ countInBars: 0 });
       rig.runtime.controller.start();
@@ -1876,7 +1869,7 @@ describe('AppView', () => {
         rig.renderer.holdBar(1);
         const before = rig.runtime.controller.settings.rangeFromBar;
         rig.runtime.controller.updateSettings({ countInBars: 0 });
-        element<HTMLButtonElement>('start').click();
+        element<HTMLButtonElement>('focus-play').click();
 
         rig.renderer.holdBar(3);
         rig.renderer.holdMarker('from');
@@ -1984,7 +1977,7 @@ describe('AppView', () => {
       // playing from wherever it had got to.
       const rig = createRig();
       await rig.view.initialize();
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
 
       element<HTMLButtonElement>('focus-rewind').click();
 
@@ -1995,7 +1988,7 @@ describe('AppView', () => {
     it('leaves the place alone while a run is going', async () => {
       const rig = createRig();
       await rig.view.initialize();
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
 
       rig.renderer.holdBar(2);
 
@@ -2023,7 +2016,7 @@ describe('AppView', () => {
       await view.initialize();
       renderer.tapScore();
 
-      element<HTMLButtonElement>('new-exercise').click();
+      element<HTMLButtonElement>('focus-next').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(renderer.shownPassage).toBeNull();
@@ -2066,7 +2059,7 @@ describe('AppView', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(runtime.controller.settings.rangeFromBar).toBeNull();
-      expect(element('import-notice').textContent).toContain('whole piece');
+      expect(element('focus-notice').textContent).toContain('whole piece');
     });
 
     it('says which bars it chose in fullscreen, where the notice is hidden', async () => {
@@ -2075,8 +2068,6 @@ describe('AppView', () => {
       // that fullscreen hides, so the gesture appeared to do nothing at all.
       const { view, renderer } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
 
       renderer.dragPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -2094,9 +2085,9 @@ describe('AppView', () => {
       await view.initialize();
 
       expect(renderer.shownPassage?.movable).toBe(true);
-      expect(element<HTMLInputElement>('range-from').disabled).toBe(false);
+      expect(element<HTMLInputElement>('focus-from').disabled).toBe(false);
 
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
 
       // Still drawn - it says what is being read, which is worth seeing while
       // reading it - and no longer a handle.
@@ -2106,21 +2097,21 @@ describe('AppView', () => {
         repeating: false,
         movable: false,
       });
-      expect(element<HTMLInputElement>('range-from').disabled).toBe(true);
-      expect(element<HTMLInputElement>('range-to').disabled).toBe(true);
+      expect(element<HTMLInputElement>('focus-from').disabled).toBe(true);
+      expect(element<HTMLInputElement>('focus-to').disabled).toBe(true);
       expect(runtime.controller.settings.rangeFromBar).toBeNull();
     });
 
     it('is a handle again once the run is over', async () => {
       const { view, renderer } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('start').click();
+      element<HTMLButtonElement>('focus-play').click();
       expect(renderer.shownPassage?.movable).toBe(false);
 
-      element<HTMLButtonElement>('stop').click();
+      element<HTMLButtonElement>('focus-stop').click();
 
       expect(renderer.shownPassage?.movable).toBe(true);
-      expect(element<HTMLInputElement>('range-from').disabled).toBe(false);
+      expect(element<HTMLInputElement>('focus-from').disabled).toBe(false);
     });
 
     it('does not re-engrave for choosing a passage at all', async () => {
@@ -2167,7 +2158,7 @@ describe('AppView', () => {
       await rig.view.initialize();
       rig.runtime.controller.updateSettings({ repeatRange: true });
 
-      element<HTMLButtonElement>('listen').click();
+      element<HTMLButtonElement>('focus-listen').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(rig.runtime.controller.isListening).toBe(true);
 
@@ -2183,10 +2174,10 @@ describe('AppView', () => {
       const rig = createRig();
       await rig.view.initialize();
       rig.runtime.controller.updateSettings({ repeatRange: true });
-      element<HTMLButtonElement>('listen').click();
+      element<HTMLButtonElement>('focus-listen').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      element<HTMLButtonElement>('listen').click();
+      element<HTMLButtonElement>('focus-listen').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(rig.runtime.controller.isListening).toBe(false);
@@ -2291,7 +2282,7 @@ describe('AppView', () => {
       const { view, runtime } = createRig();
       await view.initialize();
 
-      const button = element<HTMLButtonElement>('new-exercise');
+      const button = element<HTMLButtonElement>('focus-next');
       button.focus();
       pressSpace(button);
 
@@ -2318,8 +2309,6 @@ describe('AppView', () => {
     it('agrees with the pill about what play means', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
 
       element<HTMLButtonElement>('focus-play').click();
       expect(runtime.controller.session?.status).toBe('running');
@@ -2347,7 +2336,7 @@ describe('AppView', () => {
       const sheet = element('sheet-settings');
       expect(sheet.hidden).toBe(true);
 
-      element<HTMLButtonElement>('open-settings').click();
+      element<HTMLButtonElement>('focus-settings').click();
       expect(sheet.hidden).toBe(false);
 
       element<HTMLButtonElement>('settings-close').click();
@@ -2365,7 +2354,7 @@ describe('AppView', () => {
       await view.initialize();
       runtime.controller.updateSettings({ measures: 7 });
 
-      element<HTMLButtonElement>('open-settings').click();
+      element<HTMLButtonElement>('focus-settings').click();
 
       expect(element<HTMLInputElement>('measures-value').value).toBe('7');
     });
@@ -2374,7 +2363,7 @@ describe('AppView', () => {
       const { view } = createRig();
       await view.initialize();
       const sheet = element('sheet-settings');
-      element<HTMLButtonElement>('open-settings').click();
+      element<HTMLButtonElement>('focus-settings').click();
 
       sheet.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
@@ -2383,19 +2372,6 @@ describe('AppView', () => {
   });
 
   describe('layout and score settings', () => {
-    it('keeps the run controls in the toolbar, out of the settings', async () => {
-      const { view } = createRig();
-      await view.initialize();
-
-      const toolbar = document.querySelector('.toolbar');
-      const controls = document.querySelector('.controls');
-      expect(toolbar).not.toBeNull();
-      for (const id of ['start', 'pause', 'stop', 'new-exercise', 'focus']) {
-        expect(toolbar?.contains(element(id))).toBe(true);
-        expect(controls?.contains(element(id))).toBe(false);
-      }
-    });
-
     it('sets the bar count by typing as well as by dragging', async () => {
       const { view, runtime, renderer } = createRig();
       await view.initialize();
@@ -2745,26 +2721,22 @@ describe('AppView', () => {
   });
 
   describe('fullscreen', () => {
-    it('hides the page furniture and shows the pill', async () => {
-      const { view, renderer } = createRig();
+    it('is the page, rather than somewhere the reader goes', async () => {
+      // It used to be a mode with a desk layout of toolbars and a side panel
+      // underneath it. Two layouts meant every control had two homes and the
+      // reader was only ever in one of them, so the desk is gone.
+      const { view } = createRig();
       await view.initialize();
-      const rendersBefore = renderer.refreshCount;
 
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
-
-      expect(element('app').classList.contains('is-focus')).toBe(true);
       expect(element('focus-bar').hidden).toBe(false);
-      expect(element<HTMLButtonElement>('focus').textContent).toBe('Exit fullscreen');
-      // The score has the whole width now, so it has to be laid out again.
-      expect(renderer.refreshCount).toBeGreaterThan(rendersBefore);
+      expect(document.querySelector('.toolbar')).toBeNull();
+      expect(document.querySelector('.panel')).toBeNull();
+      expect(document.querySelector('.app-header')).toBeNull();
     });
 
     it('starts and pauses the run from the pill', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
 
       element<HTMLButtonElement>('focus-play').click();
       expect(runtime.controller.session?.status).toBe('running');
@@ -2789,32 +2761,12 @@ describe('AppView', () => {
       select.dispatchEvent(new Event('change'));
     }
 
-    it('opens straight into fullscreen when the reader asked it to', async () => {
-      const store = new InMemorySettingsStore();
-      const first = createRig(undefined, store);
-      await first.view.initialize();
-      const startFocus = element<HTMLInputElement>('start-focus');
-      startFocus.checked = true;
-      startFocus.dispatchEvent(new Event('change'));
-      await Promise.resolve();
-      expect(element('app').classList.contains('is-focus')).toBe(false);
-
-      mountRealMarkup();
-      const second = createRig(undefined, store);
-      await second.view.initialize();
-
-      expect(element('app').classList.contains('is-focus')).toBe(true);
-      expect(element('focus-bar').hidden).toBe(false);
-    });
-
     it('turns the passage round again from the drawer', async () => {
       // A passage learned by heart is learned by playing it over, and
       // reaching for Start between each time is the one part of that which
       // is not practice.
       const { view, runtime } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
 
       const repeat = element<HTMLButtonElement>('focus-repeat');
       expect(repeat.getAttribute('aria-pressed')).toBe('false');
@@ -2823,15 +2775,11 @@ describe('AppView', () => {
 
       expect(runtime.controller.settings.repeatRange).toBe(true);
       expect(repeat.getAttribute('aria-pressed')).toBe('true');
-      // One setting, two places to reach it, and they cannot disagree.
-      expect(element<HTMLInputElement>('repeat-range').checked).toBe(true);
     });
 
     it('starts the passage again when it ends, without being asked', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
       element<HTMLButtonElement>('focus-repeat').click();
 
       const first = runtime.controller.start();
@@ -2846,8 +2794,6 @@ describe('AppView', () => {
       // each way, which on a long piece is most of a second twice over.
       const { view } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
       expect(element('sheet-takes').hidden).toBe(true);
 
       element<HTMLButtonElement>('focus-takes').click();
@@ -2867,8 +2813,6 @@ describe('AppView', () => {
     it('keeps a take from the bar, and hides its clock when asked', async () => {
       const rig = createRig();
       await rig.view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
       rig.midi.noteOn(60, rig.clock.now());
       rig.clock.advance(200);
       rig.midi.noteOff(60, rig.clock.now());
@@ -2914,7 +2858,7 @@ describe('AppView', () => {
       const { view } = createRig();
       await view.initialize();
 
-      element<HTMLButtonElement>('open-metronome').click();
+      element<HTMLButtonElement>('focus-metronome').click();
       expect(element('sheet-metronome').hidden).toBe(false);
 
       element<HTMLButtonElement>('metronome-close').click();
@@ -2962,7 +2906,7 @@ describe('AppView', () => {
         expect(element('focus-handle').dataset['passage']).toBe('false');
         expect(element<HTMLButtonElement>('focus-whole').disabled).toBe(true);
 
-        const from = element<HTMLInputElement>('range-from');
+        const from = element<HTMLInputElement>('focus-from');
         from.value = '2';
         from.dispatchEvent(new Event('change'));
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -2985,7 +2929,7 @@ describe('AppView', () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(runtime.controller.settings.rangeFromBar).toBe(2);
-        expect(element<HTMLInputElement>('range-from').value).toBe('2');
+        expect(element<HTMLInputElement>('focus-from').value).toBe('2');
       });
 
       it('does not spell out the place a cursor is already standing on', async () => {
@@ -3005,7 +2949,7 @@ describe('AppView', () => {
         from.dispatchEvent(new Event('change'));
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        element<HTMLButtonElement>('start').click();
+        element<HTMLButtonElement>('focus-play').click();
 
         expect(element('focus-notice').textContent).not.toMatch(/beat/);
         expect(document.getElementById('position')).toBeNull();
@@ -3024,7 +2968,7 @@ describe('AppView', () => {
 
         expect(runtime.controller.settings.rangeFromBar).toBeNull();
         expect(element<HTMLInputElement>('focus-from').value).toBe('');
-        expect(element<HTMLInputElement>('range-from').value).toBe('');
+        expect(element<HTMLInputElement>('focus-from').value).toBe('');
         expect(element('focus-handle').dataset['passage']).toBe('false');
       });
     });
@@ -3032,14 +2976,12 @@ describe('AppView', () => {
     it('keeps the transport on one row and the settings underneath', async () => {
       const { view } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
 
       // Icons small enough that the whole transport fits a single line; the
       // drawer is for what you change rather than what you press mid-run.
       const row = element('focus-play').parentElement;
       expect(row?.className).toContain('focus-bar__row');
-      for (const id of ['focus-stop', 'focus-listen', 'focus-next', 'focus-exit']) {
+      for (const id of ['focus-stop', 'focus-listen', 'focus-metronome', 'focus-next']) {
         expect(element(id).parentElement).toBe(row);
         // Named for a screen reader, since the label is a picture now.
         expect(element(id).getAttribute('aria-label')).toBeTruthy();
@@ -3241,8 +3183,6 @@ describe('AppView', () => {
     it('opens and closes the drawer from its handle', async () => {
       const { view } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
 
       expect(element('focus-bar').dataset['open']).toBe('false');
       expect(element('focus-handle').getAttribute('aria-expanded')).toBe('false');
@@ -3283,8 +3223,6 @@ describe('AppView', () => {
     it('says which of the three the one button is', async () => {
       const { view } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
       const icon = (): string => element('focus-play-icon').getAttribute('d') ?? '';
 
       expect(element('focus-play').getAttribute('aria-label')).toBe('Start');
@@ -3301,8 +3239,6 @@ describe('AppView', () => {
     it('changes the pace without leaving the stand', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
       expect(element('focus-tempo').textContent).toBe('100%');
 
       element<HTMLButtonElement>('focus-slower').click();
@@ -3319,8 +3255,6 @@ describe('AppView', () => {
     it('re-engraves once the pressing stops, not on every press', async () => {
       const { view, renderer } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
       const before = renderer.loadCount;
 
       for (let press = 0; press < 4; press += 1) {
@@ -3346,8 +3280,6 @@ describe('AppView', () => {
     it('hears the exercise without leaving fullscreen', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
 
       element<HTMLButtonElement>('focus-listen').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -3359,7 +3291,7 @@ describe('AppView', () => {
       // would throw the icon away, which is what it used to do.
       const speaking = element('focus-listen-icon').getAttribute('d');
       expect(element('focus-listen').getAttribute('aria-label')).toBe('Pause listening');
-      expect(element('listen').textContent).toBe('Pause listening');
+      expect(element('focus-listen').getAttribute('aria-label')).toBe('Pause listening');
       expect(element('focus-listen').querySelector('svg')).not.toBeNull();
 
       element<HTMLButtonElement>('focus-listen').click();
@@ -3375,8 +3307,6 @@ describe('AppView', () => {
     it('says what is happening, then the grade, without the side panel', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
       element<HTMLButtonElement>('focus-play').click();
 
       expect(element('focus-notice').textContent).toBe('Playing');
@@ -3403,8 +3333,6 @@ describe('AppView', () => {
     it('loads a new exercise from the pill', async () => {
       const { view, renderer } = createRig();
       await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
 
       element<HTMLButtonElement>('focus-next').click();
       await Promise.resolve();
@@ -3413,19 +3341,6 @@ describe('AppView', () => {
       expect(renderer.loadCount).toBe(2);
     });
 
-    it('comes back out again', async () => {
-      const { view } = createRig();
-      await view.initialize();
-      element<HTMLButtonElement>('focus').click();
-      await Promise.resolve();
-
-      element<HTMLButtonElement>('focus-exit').click();
-      await Promise.resolve();
-
-      expect(element('app').classList.contains('is-focus')).toBe(false);
-      expect(element('focus-bar').hidden).toBe(true);
-      expect(element<HTMLButtonElement>('focus').textContent).toBe('Fullscreen');
-    });
   });
 
   it('detaches its listeners on dispose', async () => {
@@ -3433,7 +3348,7 @@ describe('AppView', () => {
     await view.initialize();
 
     view.dispose();
-    element<HTMLButtonElement>('start').click();
+    element<HTMLButtonElement>('focus-play').click();
 
     expect(runtime.controller.session).toBeNull();
   });

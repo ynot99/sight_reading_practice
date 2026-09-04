@@ -40,107 +40,46 @@
   </head>
   <body>
     <div class="app" id="app">
-      <header class="app-header">
-        <div class="brand">
-          <h1>Piano Sight-Reading Trainer</h1>
-          <p id="exercise-title" class="subtitle">No exercise loaded</p>
+      <!--
+        The picker itself has no button of its own any more: a score is opened
+        from the Scores sheet, which is the one place scores live. It stays
+        here because a file input has to be in the document to be clicked.
+      -->
+      <input id="score-file" type="file" hidden />
+
+      <section id="score" class="score" aria-label="Score">
+        <div id="score-scroll" class="score__scroll">
+          <div id="score-surface" class="score__surface"></div>
         </div>
-      </header>
+        <div id="score-cover" class="score__cover" hidden>
+          <p id="score-cover-text" class="score__cover-text"></p>
+        </div>
 
-      <p id="import-notice" class="hint import-notice" hidden></p>
-
-      <div class="toolbar">
-        <button id="start" type="button" class="button button--primary" title="Space">Start</button>
-        <button id="pause" type="button" class="button" title="Space" disabled>Pause</button>
-        <button id="stop" type="button" class="button button--ghost" disabled>Stop</button>
-        <button id="listen" type="button" class="button">Listen</button>
-        <select id="listen-hand" title="Which hand to read and to hear">
-          <option value="">Both hands</option>
-          <option value="1">Right hand only</option>
-          <option value="2">Left hand only</option>
-        </select>
-        <span class="toolbar__bars">
-          <label for="range-from">Bars</label>
-          <input id="range-from" type="number" min="1" max="999" placeholder="first" />
-          <span aria-hidden="true">–</span>
-          <input id="range-to" type="number" min="1" max="999" placeholder="last" />
-          <label class="toolbar__repeat">
-            <input id="repeat-range" type="checkbox" />
-            <span>Repeat</span>
-          </label>
-        </span>
-        <button id="keep-take" type="button" class="button button--record" disabled>
-          <span class="button__dot" aria-hidden="true"></span>Keep take
-        </button>
-        <span class="toolbar__gap"></span>
-        <button id="new-exercise" type="button" class="button">New exercise</button>
-        <button id="open-score" type="button" class="button">Open score…</button>
         <!--
-          No `accept`: iOS resolves it to its own file types, and `.mxl` is not
-          one it knows - so a picker that named it greyed out every score the
-          reader owns. What the file actually is gets decided on opening, where
-          it can be answered honestly.
+          The middle of the page, where the reader is already looking.
+
+          Two things are said here and they can never both be up: a number
+          counting down to a run, and the verdict on one that has finished.
+          Beside the transport bar both used to be a pill in the corner of
+          the eye - which for a countdown is the wrong corner, since the
+          eyes are on the music, and for a grade is too small to hold a
+          breakdown at all. In fullscreen the panel that held the breakdown
+          is not on the page, so there it was said in two words or not at
+          all.
+
+          Over the score rather than over the whole app, because that is
+          what it is about and because the score is the whole of the page
+          in fullscreen anyway.
         -->
-        <input id="score-file" type="file" hidden />
-        <button id="focus" type="button" class="button">Fullscreen</button>
-      </div>
-
-      <main class="layout">
-        <section id="score" class="score" aria-label="Score">
-          <div id="score-scroll" class="score__scroll">
-            <div id="score-surface" class="score__surface"></div>
+        <div id="score-card" class="score-card" hidden>
+          <output id="score-count" class="score-card__count" hidden></output>
+          <div id="score-verdict" class="score-card__verdict" hidden>
+            <div id="result" class="result"></div>
+            <button id="drill" type="button" class="button" hidden>Drill the worst bars</button>
           </div>
-          <div id="score-cover" class="score__cover" hidden>
-            <p id="score-cover-text" class="score__cover-text"></p>
-          </div>
+        </div>
+      </section>
 
-          <!--
-            The middle of the page, where the reader is already looking.
-
-            Two things are said here and they can never both be up: a number
-            counting down to a run, and the verdict on one that has finished.
-            Beside the transport bar both used to be a pill in the corner of
-            the eye - which for a countdown is the wrong corner, since the
-            eyes are on the music, and for a grade is too small to hold a
-            breakdown at all. In fullscreen the panel that held the breakdown
-            is not on the page, so there it was said in two words or not at
-            all.
-
-            Over the score rather than over the whole app, because that is
-            what it is about and because the score is the whole of the page
-            in fullscreen anyway.
-          -->
-          <div id="score-card" class="score-card" hidden>
-            <output id="score-count" class="score-card__count" hidden></output>
-            <div id="score-verdict" class="score-card__verdict" hidden>
-              <div id="result" class="result"></div>
-              <button id="drill" type="button" class="button" hidden>Drill the worst bars</button>
-            </div>
-          </div>
-        </section>
-
-        <aside class="panel">
-          <div class="panel__row">
-            <span class="label">Session</span>
-            <strong id="session-status">Idle</strong>
-          </div>
-          <progress id="progress" value="0" max="1"></progress>
-
-          <!--
-            Openers rather than the lists themselves. Both grow without limit
-            and both are looked at rarely, and in fullscreen the panel is not
-            on the page at all - so they live in sheets that either place can
-            raise, and there is one of each rather than one per place.
-          -->
-          <div class="panel__row panel__row--compact">
-            <button id="open-scores" type="button" class="button button--ghost">Scores</button>
-            <button id="open-takes" type="button" class="button button--ghost">Takes</button>
-            <button id="open-metronome" type="button" class="button button--ghost">Metronome</button>
-            <button id="open-settings" type="button" class="button button--ghost">Settings</button>
-          </div>
-
-        </aside>
-      </main>
 
       <!--
         Sheets, not `<dialog>`: the element's `showModal` is unimplemented in
@@ -470,7 +409,6 @@
         </div>
 
         <div class="control-group control-group--checks">
-          <label><input id="start-focus" type="checkbox" /> Open straight into fullscreen</label>
           <label><input id="show-cursor" type="checkbox" checked /> Show cursor</label>
           <label><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
           <label><input id="rhythm-only" type="checkbox" /> Rhythm only: any note counts</label>
@@ -489,7 +427,7 @@
         </div>
       </div>
 
-      <div id="focus-bar" class="focus-bar" hidden data-open="false">
+      <div id="focus-bar" class="focus-bar" data-open="false">
         <!--
           Beside the bar rather than in it, and taken out of the flow: the
           where the run is, what it is counting and how it ended - everything
@@ -606,13 +544,6 @@
             title="New exercise" aria-label="New exercise">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" />
-            </svg>
-          </button>
-          <button id="focus-exit" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__button--exit"
-            title="Leave fullscreen" aria-label="Leave fullscreen">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M9 4H7v3H4v2h5V4zm6 0h-2v5h5V7h-3V4zM4 15v2h3v3h2v-5H4zm11 0v5h2v-3h3v-2h-5z" />
             </svg>
           </button>
         </div>

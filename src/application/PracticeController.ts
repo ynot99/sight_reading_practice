@@ -203,14 +203,6 @@ export interface PracticeSettings {
    * their notes travelled.
    */
   readonly inputLatencyMs: number;
-  /**
-   * Open straight into the reading layout.
-   *
-   * A preference about the page rather than about the practice, kept here
-   * with the note size and the cursor for the same reason those are: it is
-   * one of the things a reader sets once and expects to find again.
-   */
-  readonly startInFocus: boolean;
   readonly pitchClassOnly: boolean;
   /**
    * Judge the timing and not the notes.
@@ -450,7 +442,6 @@ export class PracticeController {
       clickWhen: 'always',
       matchToleranceMs: 250,
       inputLatencyMs: 0,
-      startInFocus: false,
       pitchClassOnly: false,
       rhythmOnly: false,
       previewSeconds: 0,

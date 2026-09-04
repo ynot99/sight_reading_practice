@@ -63,11 +63,6 @@ Whole bars throughout, because that is what a passage is made of and where a
 musician starts — cutting partway through one would leave a pickup and make
 every seam harder for nothing gained.
 
-The bar boxes stay as the same value seen at the desk, the way the tempo
-slider and the fullscreen percentage are one setting with two editors. At the
-stand the boxes are out of reach, and reading bar numbers off the page is work
-in itself.
-
 **Bars**, in the transport bar rather than among the settings, narrows the
 exercise to a passage: which bars to read is changed between attempts, not
 dialled in once, and it is the one control a reader reaches for with the music
@@ -114,8 +109,7 @@ held: what to play, how fast, with what click and how much of it are read from
 the settings again on the way back in, so a passage moved during the pause
 takes effect.
 
-The hand selector beside it
-governs both listening and practice, because they are the same question asked
+The hand button beside it governs both listening and practice, because they are the same question asked
 twice: which hand am I working on. Practising one hand is not practising half
 the music — the page still shows both staves and the cursor still visits every
 step; only what is demanded narrows. In Wait mode the run walks past the steps
@@ -131,9 +125,7 @@ instead of arriving there — the cursor and the click are both at that step, so
 a roll finishing on the beat would put the lowest note, the one carrying the
 harmony, audibly early against both. The spread is capped at half the step, or
 the delay that sounds right at a walking tempo would run a five-note chord
-into the chord after it at speed. It is in the fullscreen
-bar too: "how is this meant to go" is a question that comes up at the stand,
-not at the desk. The cursor is shown for the performance whatever the reader
+into the chord after it at speed. The cursor is shown for the performance whatever the reader
 set, since following along is most of the value — and put back the way they
 had it when the performance ends.
 
@@ -243,13 +235,12 @@ standard practice and it is the half beginners drop first. It is a match rule
 rather than a mode of its own, so it composes with either — nothing about when
 the cursor moves changes.
 
-Everything about the click lives behind one button on the transport bar, and
-behind one opener at the desk — what it marks, how much of the run it sounds
-for, how many bars it counts in, and how loud it is. It was in three places
-before: two cycle buttons under the drawer handle and two sliders down the
-settings sheet, so "quieter, and give me two bars of count-in" meant both of
-them and a scroll. They are one subject, and the button says what they add up
-to without being opened.
+Everything about the click lives behind one button on the transport bar —
+what it marks, how much of the run it sounds for, how many bars it counts in,
+and how loud it is. It was in three places before: two cycle buttons under the
+drawer handle and two sliders down the settings sheet, so "quieter, and give
+me two bars of count-in" meant both of them and a scroll. They are one
+subject, and the button says what they add up to without being opened.
 
 The click is a practice setting of its own: it can sound every beat, halve or
 third it, or give only the downbeat and leave the pulse inside the bar to you.
@@ -295,7 +286,7 @@ tablet is where the reader is, and it can only learn what reaches it.
 ### Keeping what you played
 
 The recorder runs from the moment the page opens, and the red **Keep** button
-in the toolbar does not start it — it keeps what already happened. That is the
+does not start it — it keeps what already happened. That is the
 whole design: an idea worth saving is one you notice *after* playing it, so a
 Record button would arrive after the thing it was for. The button says how much
 it is offering, and a take is cut at the last pause longer than four seconds,
@@ -437,11 +428,19 @@ The space bar starts, pauses and resumes, so a run can be driven without
 reaching for the mouse. It steps aside whenever a control has focus, since
 that is how buttons and checkboxes are worked.
 
-**Fullscreen** hides everything but the score and leaves a pill of controls at
-the bottom of the screen - start or pause, stop, next exercise, and the way
-out. It asks for real fullscreen where the browser allows it, but the layout
-does not depend on that: if fullscreen is refused, the score still takes the
-whole page and the pill still gets you out.
+**There is one layout**, and it is the reading one: the score fills the screen
+and a pill of controls sits at the bottom. It used to be a mode, with a desk
+layout of toolbars and a side panel to arrive from — and two layouts meant
+every control had two homes, every change had to be made twice, and the reader
+was only ever in one of them.
+
+Nothing asks the browser for real fullscreen. On a tablet that brings a
+swipe-down gesture and a floating close button no page can turn off; it leaves
+the moment an on-screen keyboard opens, which is what tapping a bar number
+does, and it leaves again if a scroll runs past the top of the page. Every one
+of those dropped the reader out mid-practice. Installed to a Home Screen there
+is no browser chrome anyway, which is the way to get the last of the screen
+back.
 
 ## Architecture
 
@@ -765,8 +764,6 @@ you unless you ask otherwise.
   other levels readable.
 - Generated music is deliberately simple — diatonic, no accidentals outside the
   key — though the notation layer already handles accidentals correctly.
-- The side panel still names the notes you owe, so hiding the cursor is not yet
-  a full "read it blind" mode.
 - No progress tracking between sessions yet: settings are remembered on the
   device, but performance reports are not stored. Because every exercise is
   reproducible from its seed, "practise that one again" is a small feature

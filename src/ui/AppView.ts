@@ -159,7 +159,6 @@ const TAKE_COUNTER_MS = 500;
 
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
-import { FocusMode } from './FocusMode.js';
 
 const SCORING_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'scoring.accuracy': 'The notes alone. You set the pace, so timing is not judged.',
@@ -599,9 +598,7 @@ export class AppView {
   private readonly subscriptions: Unsubscribe[] = [];
   private sessionSubscriptions: Unsubscribe[] = [];
   private audioFeedbackEnabled = true;
-  private totalSteps = 1;
   private previewTimer: ReturnType<typeof setInterval> | null = null;
-  private focusMode: FocusMode | null = null;
   private lastStatus: SessionStatus = 'idle';
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
@@ -625,7 +622,6 @@ export class AppView {
 
   private readonly el: {
     app: HTMLElement;
-    focus: HTMLButtonElement;
     focusBar: HTMLElement;
     score: HTMLElement;
     scoreCover: HTMLElement;
@@ -666,36 +662,25 @@ export class AppView {
     focusFaster: HTMLButtonElement;
     focusTempo: HTMLOutputElement;
     focusNext: HTMLButtonElement;
-    focusExit: HTMLButtonElement;
-    exerciseTitle: HTMLElement;
     midiStatus: HTMLElement;
     bridgeStatus: HTMLElement;
     pedalStatus: HTMLElement;
     connectMidi: HTMLButtonElement;
     midiInput: HTMLSelectElement;
     midiHint: HTMLElement;
-    sessionStatus: HTMLElement;
-    progress: HTMLProgressElement;
     result: HTMLElement;
     drill: HTMLButtonElement;
-    listen: HTMLButtonElement;
-    listenHand: HTMLSelectElement;
-    keepTake: HTMLButtonElement;
     focusKeep: HTMLButtonElement;
     focusKeepText: HTMLElement;
     focusRecord: HTMLElement;
     focusRecordEye: HTMLButtonElement;
     focusTakes: HTMLButtonElement;
     focusScores: HTMLButtonElement;
-    openTakes: HTMLButtonElement;
-    openMetronome: HTMLButtonElement;
     sheetMetronome: HTMLElement;
     metronomeClose: HTMLButtonElement;
-    openScores: HTMLButtonElement;
     sheetTakes: HTMLElement;
     sheetScores: HTMLElement;
     sheetSettings: HTMLElement;
-    openSettings: HTMLButtonElement;
     focusSettings: HTMLButtonElement;
     settingsClose: HTMLButtonElement;
     takesClose: HTMLButtonElement;
@@ -718,9 +703,7 @@ export class AppView {
     takesClear: HTMLButtonElement;
     takesKeptOnly: HTMLInputElement;
     scoresAdd: HTMLButtonElement;
-    openScore: HTMLButtonElement;
     scoreFile: HTMLInputElement;
-    importNotice: HTMLElement;
     ladderDown: HTMLButtonElement;
     ladderUp: HTMLButtonElement;
     ladderStep: HTMLElement;
@@ -743,13 +726,10 @@ export class AppView {
     clickDescription: HTMLElement;
     dropout: HTMLSelectElement;
     dropoutDescription: HTMLElement;
-    rangeFrom: HTMLInputElement;
-    rangeTo: HTMLInputElement;
     focusFrom: HTMLInputElement;
     focusTo: HTMLInputElement;
     focusBars: HTMLOutputElement;
     focusWhole: HTMLButtonElement;
-    repeatRange: HTMLInputElement;
     preview: HTMLInputElement;
     previewValue: HTMLOutputElement;
     countIn: HTMLInputElement;
@@ -775,7 +755,6 @@ export class AppView {
     readAheadDescription: HTMLElement;
     showCursor: HTMLInputElement;
     strictTiming: HTMLInputElement;
-    startFocus: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
     sampleLoadingHint: HTMLElement;
     metronomeVolume: HTMLInputElement;
@@ -788,10 +767,6 @@ export class AppView {
     rhythmOnly: HTMLInputElement;
     audioFeedback: HTMLInputElement;
     computerKeyboard: HTMLInputElement;
-    newExercise: HTMLButtonElement;
-    start: HTMLButtonElement;
-    pause: HTMLButtonElement;
-    stop: HTMLButtonElement;
   };
 
   constructor(runtime: AppRuntime, doc: Document = document) {
@@ -799,7 +774,6 @@ export class AppView {
     this.doc = doc;
     this.el = {
       app: requireElement(doc, 'app'),
-      focus: requireElement(doc, 'focus'),
       focusBar: requireElement(doc, 'focus-bar'),
       score: requireElement(doc, 'score'),
       scoreCover: requireElement(doc, 'score-cover'),
@@ -840,36 +814,25 @@ export class AppView {
       focusFaster: requireElement(doc, 'focus-faster'),
       focusTempo: requireElement(doc, 'focus-tempo'),
       focusNext: requireElement(doc, 'focus-next'),
-      focusExit: requireElement(doc, 'focus-exit'),
-      exerciseTitle: requireElement(doc, 'exercise-title'),
       midiStatus: requireElement(doc, 'midi-status'),
       bridgeStatus: requireElement(doc, 'bridge-status'),
       pedalStatus: requireElement(doc, 'pedal-status'),
       connectMidi: requireElement(doc, 'connect-midi'),
       midiInput: requireElement(doc, 'midi-input'),
       midiHint: requireElement(doc, 'midi-hint'),
-      sessionStatus: requireElement(doc, 'session-status'),
-      progress: requireElement(doc, 'progress'),
       result: requireElement(doc, 'result'),
       drill: requireElement(doc, 'drill'),
-      listen: requireElement(doc, 'listen'),
-      listenHand: requireElement(doc, 'listen-hand'),
-      keepTake: requireElement(doc, 'keep-take'),
       focusKeep: requireElement(doc, 'focus-keep'),
       focusKeepText: requireElement(doc, 'focus-keep-text'),
       focusRecord: requireElement(doc, 'focus-record'),
       focusRecordEye: requireElement(doc, 'focus-record-eye'),
       focusTakes: requireElement(doc, 'focus-takes'),
       focusScores: requireElement(doc, 'focus-scores'),
-      openTakes: requireElement(doc, 'open-takes'),
-      openMetronome: requireElement(doc, 'open-metronome'),
       sheetMetronome: requireElement(doc, 'sheet-metronome'),
       metronomeClose: requireElement(doc, 'metronome-close'),
-      openScores: requireElement(doc, 'open-scores'),
       sheetTakes: requireElement(doc, 'sheet-takes'),
       sheetScores: requireElement(doc, 'sheet-scores'),
       sheetSettings: requireElement(doc, 'sheet-settings'),
-      openSettings: requireElement(doc, 'open-settings'),
       focusSettings: requireElement(doc, 'focus-settings'),
       settingsClose: requireElement(doc, 'settings-close'),
       takesClose: requireElement(doc, 'takes-close'),
@@ -892,9 +855,7 @@ export class AppView {
       takesClear: requireElement(doc, 'takes-clear'),
       takesKeptOnly: requireElement(doc, 'takes-kept-only'),
       scoresAdd: requireElement(doc, 'scores-add'),
-      openScore: requireElement(doc, 'open-score'),
       scoreFile: requireElement(doc, 'score-file'),
-      importNotice: requireElement(doc, 'import-notice'),
       ladderDown: requireElement(doc, 'ladder-down'),
       ladderUp: requireElement(doc, 'ladder-up'),
       ladderStep: requireElement(doc, 'ladder-step'),
@@ -917,13 +878,10 @@ export class AppView {
       clickDescription: requireElement(doc, 'click-description'),
       dropout: requireElement(doc, 'dropout'),
       dropoutDescription: requireElement(doc, 'dropout-description'),
-      rangeFrom: requireElement(doc, 'range-from'),
-      rangeTo: requireElement(doc, 'range-to'),
       focusFrom: requireElement(doc, 'focus-from'),
       focusTo: requireElement(doc, 'focus-to'),
       focusBars: requireElement(doc, 'focus-bars'),
       focusWhole: requireElement(doc, 'focus-whole'),
-      repeatRange: requireElement(doc, 'repeat-range'),
       preview: requireElement(doc, 'preview'),
       previewValue: requireElement(doc, 'preview-value'),
       countIn: requireElement(doc, 'count-in'),
@@ -949,7 +907,6 @@ export class AppView {
       readAheadDescription: requireElement(doc, 'read-ahead-description'),
       showCursor: requireElement(doc, 'show-cursor'),
       strictTiming: requireElement(doc, 'strict-timing'),
-      startFocus: requireElement(doc, 'start-focus'),
       sampleLoading: requireElement(doc, 'sample-loading'),
       sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
       metronomeVolume: requireElement(doc, 'metronome-volume'),
@@ -962,17 +919,13 @@ export class AppView {
       rhythmOnly: requireElement(doc, 'rhythm-only'),
       audioFeedback: requireElement(doc, 'audio-feedback'),
       computerKeyboard: requireElement(doc, 'computer-keyboard'),
-      newExercise: requireElement(doc, 'new-exercise'),
-      start: requireElement(doc, 'start'),
-      pause: requireElement(doc, 'pause'),
-      stop: requireElement(doc, 'stop'),
     };
   }
 
   async initialize(): Promise<void> {
     this.populateSelects();
     this.bindControls();
-    this.bindFocusMode();
+    this.bindTransport();
     this.bindControllerEvents();
     this.bindMidi();
     this.syncControlsFromSettings();
@@ -984,12 +937,6 @@ export class AppView {
     // when it arrives rather than holding the trainer up for it.
     void this.runtime.scores.load().then(() => this.renderScores());
     await this.runtime.controller.loadNewExercise();
-    // After the first engraving rather than before it: entering the layout
-    // re-engraves for the new width, and doing that to an empty page would
-    // mean drawing the piece twice for nothing.
-    if (this.runtime.controller.settings.startInFocus) {
-      this.focusMode?.enter();
-    }
     void this.runtime.webMidi.connect();
   }
 
@@ -1012,8 +959,6 @@ export class AppView {
       this.noticeRestore = null;
     }
     this.runtime.takePlayer.stop();
-    this.focusMode?.dispose();
-    this.focusMode = null;
     for (const unsubscribe of [...this.subscriptions, ...this.sessionSubscriptions]) {
       unsubscribe();
     }
@@ -1066,7 +1011,6 @@ export class AppView {
     const scores = this.runtime.scores.list();
     this.el.scoresEmpty.hidden = scores.length > 0;
     this.el.scoresClear.disabled = scores.length === 0;
-    this.el.openScores.textContent = scores.length === 0 ? 'Scores' : `Scores (${scores.length})`;
     this.el.scoresList.replaceChildren();
 
     for (const score of scores) {
@@ -1315,12 +1259,8 @@ export class AppView {
    * to the run's own status afterwards.
    */
   private showImportNotice(message: string): void {
-    this.el.importNotice.textContent = message;
-    this.el.importNotice.hidden = false;
-    if (this.focusMode?.isActive === true) {
-      this.showNotice(message);
-      this.restoreNoticeSoon();
-    }
+    this.showNotice(message);
+    this.restoreNoticeSoon();
   }
 
   /**
@@ -1388,7 +1328,6 @@ export class AppView {
     // the old label said "Stop listening" - the run's own Pause sits beside
     // it, and one word would not say which of the two this is.
     const label = listening ? 'Pause listening' : held ? 'Resume listening' : 'Listen';
-    this.el.listen.textContent = label;
     // The fullscreen one is a picture: writing the label into it would throw
     // the icon away, which is exactly what it used to do.
     this.el.focusListen.setAttribute('aria-label', label);
@@ -1416,7 +1355,6 @@ export class AppView {
       this.isPreviewing ||
       this.runtime.controller.isListening ||
       this.runtime.controller.isListeningPaused;
-    this.el.stop.disabled = !stoppable;
     this.el.focusStop.disabled = !stoppable;
   }
 
@@ -1479,19 +1417,6 @@ export class AppView {
 
   private bindControls(): void {
     const { controller } = this.runtime;
-
-    this.listen(this.el.listen, 'click', () => {
-      void this.toggleListening();
-    });
-
-    this.listen(this.el.listenHand, 'change', () => {
-      const hand = this.el.listenHand.value;
-      controller.updateSettings({ handStaff: hand === '' ? null : Number.parseInt(hand, 10) });
-    });
-
-    this.listen(this.el.openScore, 'click', () => {
-      this.el.scoreFile.click();
-    });
 
     this.listen(this.el.scoreFile, 'change', () => {
       void this.openChosenScore();
@@ -1566,14 +1491,9 @@ export class AppView {
       void this.reload(false);
     });
 
-    // Two pairs of boxes, one setting: the panel is not on the page in
-    // fullscreen, which is where the reader actually is. Each pair writes the
-    // range and `syncControlsFromSettings` writes both back, so they cannot
-    // come to hold different answers.
-    for (const [from, to] of [
-      [this.el.rangeFrom, this.el.rangeTo],
-      [this.el.focusFrom, this.el.focusTo],
-    ] as const) {
+    // One pair of boxes now, where there were two: the desk had its own and
+    // the reader was only ever in one place.
+    for (const [from, to] of [[this.el.focusFrom, this.el.focusTo]] as const) {
       for (const input of [from, to]) {
         this.listen(input, 'change', () => {
           controller.updateSettings({
@@ -1617,11 +1537,6 @@ export class AppView {
       this.showVerdict(false);
     });
 
-    this.listen(this.el.repeatRange, 'change', () => {
-      controller.updateSettings({ repeatRange: this.el.repeatRange.checked });
-      this.syncControlsFromSettings();
-    });
-
     this.listen(this.el.focusRepeat, 'click', () => {
       controller.updateSettings({ repeatRange: !controller.settings.repeatRange });
       this.syncControlsFromSettings();
@@ -1639,10 +1554,6 @@ export class AppView {
         inputLatencyMs: Number.parseInt(this.el.latency.value, 10),
       });
       this.describeLatency();
-    });
-
-    this.listen(this.el.startFocus, 'change', () => {
-      controller.updateSettings({ startInFocus: this.el.startFocus.checked });
     });
 
     this.listen(this.el.latencyTest, 'click', () => {
@@ -1756,11 +1667,9 @@ export class AppView {
       this.applyInputSettings(true);
     });
 
-    for (const button of [this.el.keepTake, this.el.focusKeep]) {
-      this.listen(button, 'click', () => {
-        this.keepTake();
-      });
-    }
+    this.listen(this.el.focusKeep, 'click', () => {
+      this.keepTake();
+    });
 
     this.listen(this.el.focusRecordEye, 'click', () => {
       const open = this.el.focusRecord.dataset['open'] !== 'true';
@@ -1802,33 +1711,12 @@ export class AppView {
       }),
     );
 
-    this.listen(this.el.newExercise, 'click', () => {
-      void this.reload(true);
-    });
-
-    this.listen(this.el.start, 'click', () => {
-      this.beginRun();
-    });
-
     this.listen(this.el.preview, 'input', () => {
       this.el.previewValue.value = this.el.preview.value;
       controller.updateSettings({ previewSeconds: Number.parseInt(this.el.preview.value, 10) });
       // Asking for a look while staring at the page would be asking for
       // nothing, so the page goes back under until the look is taken.
       this.applyScoreCover();
-    });
-
-    this.listen(this.el.pause, 'click', () => {
-      const status = controller.session?.status;
-      if (status === 'paused') {
-        controller.resume();
-      } else {
-        controller.pause();
-      }
-    });
-
-    this.listen(this.el.stop, 'click', () => {
-      this.stopEverything();
     });
 
     this.bindSpaceBar();
@@ -1881,29 +1769,9 @@ export class AppView {
     this.subscriptions.push(() => narrow.removeEventListener('change', place));
   }
 
-  private bindFocusMode(): void {
+  private bindTransport(): void {
     const { controller } = this.runtime;
     this.bindNarrowLayout();
-
-    this.focusMode = new FocusMode({
-      root: this.el.app,
-      doc: this.doc,
-      onChange: (active) => {
-        this.el.focusBar.hidden = !active;
-        this.el.focus.textContent = active ? 'Exit fullscreen' : 'Fullscreen';
-        // The score just changed width; re-engrave it for the new space.
-        controller.refreshScore();
-        this.updateButtons(this.lastStatus);
-      },
-    });
-
-    this.listen(this.el.focus, 'click', () => {
-      void this.focusMode?.toggle();
-    });
-
-    this.listen(this.el.focusExit, 'click', () => {
-      void this.focusMode?.exit();
-    });
 
     this.listen(this.el.focusPlay, 'click', () => {
       this.togglePlayback();
@@ -2056,12 +1924,10 @@ export class AppView {
       // The phase in words, the count in figures, and each said once: the
       // status lines say what is happening and the middle of the page says
       // how much of it is left.
-      this.el.sessionStatus.textContent = 'Look at it…';
       this.renderFocusStatus('Look at it…');
       this.showCount(left);
     };
     show();
-    this.el.start.disabled = true;
     this.previewTimer = setInterval(() => {
       left -= 1;
       if (left > 0) {
@@ -2581,11 +2447,7 @@ export class AppView {
     const { controller } = this.runtime;
 
     this.subscriptions.push(
-      controller.events.on('exerciseLoaded', ({ exercise, timeline }) => {
-        this.totalSteps = Math.max(1, timeline.length);
-        this.el.exerciseTitle.textContent = `${exercise.title} · ${timeline.noteCount} notes · seed ${exercise.metadata.seed.toString(16)}`;
-        this.el.progress.max = this.totalSteps;
-        this.el.progress.value = 0;
+      controller.events.on('exerciseLoaded', ({ exercise }) => {
         this.hasLooked = false;
         // Around whatever was just engraved, which *is* the passage: the
         // markers belong at its two ends after every reload, wherever the
@@ -2682,7 +2544,6 @@ export class AppView {
 
     this.sessionSubscriptions.push(
       session.events.on('statusChanged', ({ status }) => {
-        this.el.sessionStatus.textContent = STATUS_LABELS[status];
         if (status === 'counting-in') {
           // The first beat is a tick away, and an empty pill in the meantime
           // reads as something broken rather than as something about to start.
@@ -2711,8 +2572,7 @@ export class AppView {
           }, 0);
         }
       }),
-      session.events.on('stepEntered', ({ step }) => {
-        this.el.progress.value = step.index;
+      session.events.on('stepEntered', () => {
         // The count has run out by the time there is a step to play, and the
         // count-in emits no final zero to say so.
         this.showCount(null);
@@ -2724,7 +2584,6 @@ export class AppView {
         this.followMusic(at);
       }),
       session.events.on('finished', ({ report, score }) => {
-        this.el.progress.value = this.totalSteps;
         // Twice over, and deliberately: the card is the moment, dismissed as
         // soon as it has been read, and the pill is what is still there
         // afterwards when the reader wants to check what they got.
@@ -3053,19 +2912,15 @@ export class AppView {
     this.el.tempo.value = String(this.runtime.controller.tempoBpm);
     this.describeTempo();
     this.el.tempoValue.value = String(this.runtime.controller.tempoBpm);
-    this.el.listenHand.value = settings.handStaff === null ? '' : String(settings.handStaff);
     this.describeHands(settings.handStaff);
     this.el.click.value = settings.clickPattern;
     this.el.clickDescription.textContent = CLICK_DESCRIPTIONS[settings.clickPattern];
     this.el.dropout.value = settings.clickWhen;
     this.describeDropout();
-    this.el.rangeFrom.value = settings.rangeFromBar === null ? '' : String(settings.rangeFromBar);
-    this.el.rangeTo.value = settings.rangeToBar === null ? '' : String(settings.rangeToBar);
     this.describePassageRange();
     // Here as well as on a new engraving: the repeat button changes what the
     // markers say without changing what is on the page.
     this.showPassageMarkers();
-    this.el.repeatRange.checked = settings.repeatRange;
     this.el.focusRepeat.setAttribute('aria-pressed', String(settings.repeatRange));
     this.el.preview.value = String(settings.previewSeconds);
     this.el.previewValue.value = String(settings.previewSeconds);
@@ -3083,7 +2938,6 @@ export class AppView {
     this.el.readAhead.value = readAheadValue(settings.readAheadSteps);
     this.el.readAheadDescription.textContent =
       READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';
-    this.el.startFocus.checked = settings.startInFocus;
     this.el.showCursor.checked = settings.showCursor;
     this.el.strictTiming.checked = settings.strictTiming;
     this.el.focusPages.setAttribute('aria-pressed', String(settings.pagedScore));
@@ -3216,15 +3070,6 @@ export class AppView {
       : open
         ? 'Keeps what you have just played, back to the last pause. Playing on adds to it.'
         : 'Keeps what you have just played. The next key you press starts a new take.';
-
-    this.el.keepTake.disabled = !playing;
-    this.el.keepTake.textContent = '';
-    const dot = this.doc.createElement('span');
-    dot.className = 'button__dot';
-    dot.setAttribute('aria-hidden', 'true');
-    this.el.keepTake.append(dot, this.doc.createTextNode(playing ? `Keep ${clockTime(ms)}` : 'Keep take'));
-    this.el.keepTake.title = title;
-    this.el.keepTake.dataset['recording'] = String(open);
 
     this.el.focusKeep.disabled = !playing;
     this.el.focusKeepText.textContent = playing ? clockTime(ms) : 'Keep';
@@ -3443,12 +3288,12 @@ export class AppView {
     const pairs: readonly [HTMLElement, readonly HTMLButtonElement[], () => void][] = [
       [
         this.el.sheetTakes,
-        [this.el.openTakes, this.el.focusTakes],
+        [this.el.focusTakes],
         () => this.renderTakes(),
       ],
       [
         this.el.sheetScores,
-        [this.el.openScores, this.el.focusScores],
+        [this.el.focusScores],
         () => this.renderScores(),
       ],
       [
@@ -3456,12 +3301,12 @@ export class AppView {
         // buttons in the drawer and two sliders down the settings sheet, and
         // "quieter, and give me two bars of count-in" meant both.
         this.el.sheetMetronome,
-        [this.el.openMetronome, this.el.focusMetronome],
+        [this.el.focusMetronome],
         () => this.syncControlsFromSettings(),
       ],
       [
         this.el.sheetSettings,
-        [this.el.openSettings, this.el.focusSettings],
+        [this.el.focusSettings],
         // Opened onto whatever the settings actually are, since a run can
         // have moved them - the ladder does, and so does opening a score.
         () => this.syncControlsFromSettings(),
@@ -3493,8 +3338,8 @@ export class AppView {
     });
 
     this.listen(this.el.scoresAdd, 'click', () => {
-      // The same picker the toolbar uses: one way in, so a score opened from
-      // here is a score opened, with the same reading and the same warnings.
+      // One picker, so a score opened from here is a score opened, with the
+      // same reading and the same warnings.
       this.el.scoreFile.click();
     });
 
@@ -3666,7 +3511,6 @@ export class AppView {
     this.el.takesClear.disabled = all.length === 0;
     // The opener counts everything, whatever the list is filtered to: it is
     // saying how much is kept here, not how much is on screen.
-    this.el.openTakes.textContent = all.length === 0 ? 'Takes' : `Takes (${all.length})`;
     this.el.takesList.replaceChildren();
 
     for (const take of takes) {
@@ -3824,8 +3668,6 @@ export class AppView {
     // report of nothing in particular. The markers stay on the page saying
     // what is being read; only the handles go.
     for (const input of [
-      this.el.rangeFrom,
-      this.el.rangeTo,
       this.el.focusFrom,
       this.el.focusTo,
     ]) {
@@ -3834,10 +3676,6 @@ export class AppView {
     this.showPassageMarkers();
     this.describePassageRange();
 
-    this.el.start.disabled = running || paused;
-    this.el.pause.disabled = !running && !paused;
-    this.el.pause.textContent = paused ? 'Resume' : 'Pause';
-    this.el.newExercise.disabled = running || paused;
 
     // One button for all three, as a transport has: an icon says which of
     // them it is now, and the accessible name says it in words.
@@ -3847,7 +3685,6 @@ export class AppView {
     this.el.focusPlayIcon.setAttribute('d', running ? PAUSE_ICON : PLAY_ICON);
     this.describeStopping();
     this.el.focusNext.disabled = running || paused;
-    this.el.focus.disabled = false;
     this.applyPlayingChrome();
   }
 

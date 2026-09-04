@@ -87,30 +87,6 @@ textarea {
   padding: 16px;
 }
 
-.app-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-/*
- * The title gives way before the controls do. Its subtitle is a piece's name
- * and can be any length at all, and without this a long one pushed the
- * connection controls onto their own line.
- */
-.brand {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.brand .subtitle {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /*
  * Which keyboard, and whether it is heard from.
  *
@@ -125,47 +101,6 @@ textarea {
   gap: 8px;
 }
 
-.app-header h1 {
-  margin: 0;
-  font-size: 20px;
-  letter-spacing: -0.01em;
-}
-
-.subtitle {
-  margin: 2px 0 0;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.midi-cluster {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  align-items: center;
-}
-
-/* Wraps onto its own line under the connection controls. */
-.midi-hint {
-  flex-basis: 100%;
-  max-width: 46ch;
-  text-align: right;
-  min-height: 0;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 12px;
-  flex: 1;
-  min-height: 0;
-}
-
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 
 /*
  * The frame: border, corners and nothing that moves.
@@ -179,12 +114,20 @@ textarea {
 .score {
   position: relative;
   background: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
   overflow: hidden;
-  min-height: 340px;
   display: flex;
+  /*
+   * The window, and not a pixel more.
+   *
+   * `min-height` let it grow to whatever ended up inside - a page, the strip
+   * the engraver leaves above it, the room kept below it for the transport
+   * bar - and anything over a screenful became a scrollbar on a layout whose
+   * whole promise is that there is nothing to scroll. Fixed, there is nowhere
+   * to grow: what does not fit is clipped by `overflow: hidden`, and a page
+   * drawn too tall is measured and asked for again shorter.
+   */
+  height: 100vh;
+  height: 100dvh;
 }
 
 .score__scroll {
@@ -200,7 +143,9 @@ textarea {
   /* Reserved up front: a scrollbar that appears later would shrink the width
      the engraver already measured, and push the notation off the right edge. */
   scrollbar-gutter: stable;
-  padding: 8px 0;
+  /* Room at the foot for the transport bar, so the last system is never
+     hidden behind it. */
+  padding: 8px 0 92px;
 }
 
 /*
@@ -257,42 +202,6 @@ textarea {
  */
 .score__surface svg {
   display: block;
-}
-
-.panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 14px;
-}
-
-.panel__row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.panel__row--compact {
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.label {
-  color: var(--text-muted);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-progress {
-  width: 100%;
-  height: 6px;
-  accent-color: var(--accent);
 }
 
 /*
@@ -702,14 +611,17 @@ select {
   color: var(--text-muted);
 }
 
-/* ---- Focus mode -------------------------------------------------------- */
+/* ---- Reading the music ------------------------------------------------- */
 
 /*
- * The score takes the whole screen and everything else steps aside. Driven by
- * a class rather than by the Fullscreen API, so it still works on a device
- * that refuses real fullscreen.
+ * The score takes the whole screen, because there is nothing else on it.
+ *
+ * This used to be a mode - a class the reader turned on, with a desk layout
+ * of toolbars and a side panel underneath it. Two layouts meant every control
+ * had two homes and every change had to be made twice, and the reader was
+ * only ever in one of them. So the desk is gone and this is the layout.
  */
-.app.is-focus {
+.app {
   padding: 0;
   gap: 0;
   background: #ffffff;
@@ -725,55 +637,9 @@ select {
   touch-action: manipulation;
 }
 
-.app.is-focus input {
+.app input {
   user-select: text;
   -webkit-user-select: text;
-}
-
-/*
- * Everything that is not the music. The import notice belongs here too: it
- * sits outside the header, so fullscreen left "Opened Bone Bottom." printed
- * over the page the reader had gone fullscreen to look at.
- */
-.app.is-focus .app-header,
-.app.is-focus .import-notice,
-/*
- * Nothing on the page in fullscreen but the music.
- *
- * The controls are not on this list any more: they live in a sheet now, and
- * a sheet is raised from either place. Hiding them here would hide the one
- * way into the settings from the place the reader is actually reading in.
- */
-.app.is-focus .panel {
-  display: none;
-}
-
-.app.is-focus .layout {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-}
-
-/*
- * The frame is the window, and not a pixel more.
- *
- * `min-height` let it grow to whatever ended up inside - a page, the strip
- * the engraver leaves above it, the room kept below it for the transport bar
- * - and anything over a screenful became a scrollbar on the document, in a
- * mode whose whole promise is that there is nothing to scroll. Fixed, there
- * is nowhere to grow: what does not fit is clipped by `overflow: hidden`
- * above, and a page drawn too tall is measured and asked for again shorter.
- */
-.app.is-focus .score {
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  height: 100vh;
-  height: 100dvh;
-}
-
-/* Room for the pill, so the last system is never hidden behind it. */
-.app.is-focus .score__scroll {
-  padding-bottom: 92px;
 }
 
 .focus-bar {
@@ -1577,49 +1443,6 @@ select {
 
 /* ---- Action bar -------------------------------------------------------- */
 
-/*
- * Sticky, because these are the buttons reached between every exercise. The
- * settings below are set once and left alone, which is why they stay at the
- * bottom of the page.
- */
-.toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-
-/*
- * Controls in the toolbar sit beside the buttons rather than under a label,
- * so they take the width of their content - the full-width rule the settings
- * panel needs would stretch this one across the bar.
- */
-.toolbar select {
-  width: auto;
-}
-
-.toolbar__gap {
-  flex: 1;
-}
-
-.toolbar .button {
-  min-height: 40px;
-}
-
-.app.is-focus .toolbar {
-  display: none;
-}
-
 /* ---- Notes already passed ----------------------------------------------- */
 
 /*
@@ -1684,45 +1507,6 @@ select {
   flex: 1;
   text-align: center;
   font-variant-numeric: tabular-nums;
-}
-
-/*
- * The passage under practice, beside the transport it governs.
- *
- * It belongs with Start rather than among the settings: which bars to read is
- * changed between attempts, not dialled in once, and it is the one control a
- * reader reaches for with the music already in front of them.
- */
-.toolbar__bars {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.toolbar__bars > label[for='range-from'] {
-  color: var(--text-muted);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.toolbar__bars input[type='number'] {
-  width: 5em;
-  background: var(--surface-strong);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 8px;
-  font: inherit;
-  font-variant-numeric: tabular-nums;
-}
-
-.toolbar__repeat {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 13px;
 }
 
 .knob-row {

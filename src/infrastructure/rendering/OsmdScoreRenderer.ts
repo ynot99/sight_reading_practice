@@ -2149,12 +2149,6 @@ export class OsmdScoreRenderer
       ],
     });
     osmd.zoom = this.currentZoom;
-    // The pedal is carried and it is played; it is not drawn. A pedal line is
-    // a long bracket under the staff, and to a reader at the stand it reads as
-    // a box around the music rather than as an instruction they can act on at
-    // tempo. Nothing is lost from the file or from the sound - the sustain
-    // still holds - only from the page.
-    (osmd.EngravingRules as unknown as { RenderPedals: boolean }).RenderPedals = false;
     this.osmd = osmd;
     return osmd;
   }

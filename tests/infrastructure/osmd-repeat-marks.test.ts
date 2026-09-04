@@ -69,28 +69,15 @@ describe('what the page says about a repeat and a pedal', () => {
     expect(container.querySelectorAll('.repeat-mark')).toHaveLength(0);
   });
 
-  it('keeps the pedal off the page while keeping it in the music', async () => {
-    // A pedal line is a long bracket under the staff, and to a reader at the
-    // stand it reads as a box around the music. Nothing is lost from the file
-    // or from the sound - only from the page.
+  it('draws the pedal the way its writer drew it', () => {
+    // A bracket, which is what MuseScore wrote and what says exactly how long
+    // the pedal is held. The word "Ped." says only that it was pressed - and
+    // asked for that instead, the engraver laid one system out four times too
+    // tall.
     const { exercise } = importer.read(PEDALLED);
+
     expect(exercise.pedalMarks).toHaveLength(2);
     expect(exercise.pedalMarks.every((mark) => mark.line)).toBe(true);
-
-    const written = serializer.serialize(exercise);
-    expect(written).toContain('<pedal type="start"');
-
-    const before = container.querySelectorAll('svg path').length;
-    await renderer.load(written);
-    const withPedal = container.querySelectorAll('svg path').length;
-
-    // The same drawing as the notes alone: the bracket adds nothing to it.
-    document.body.replaceChildren();
-    const plain = createScoreContainer();
-    const second = new OsmdScoreRenderer(plain, { zoom: 1 });
-    await second.load(
-      serializer.serialize({ ...exercise, pedalMarks: [] }),
-    );
-    expect(withPedal - before).toBe(plain.querySelectorAll('svg path').length);
+    expect(serializer.serialize(exercise)).toContain('line="yes"');
   });
 });

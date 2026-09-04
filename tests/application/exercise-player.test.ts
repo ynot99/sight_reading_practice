@@ -115,6 +115,46 @@ describe('listening to an exercise', () => {
     expect(heardAfter.sort((a, b) => a - b)).toEqual(expected.sort((a, b) => a - b));
   });
 
+  it('leaves the marker on the last note, not in the bar after it', () => {
+    // The complaint this answers: on a repeat the music visibly overran by a
+    // bar before starting again. The tick that ends a stretch stands at the
+    // end of its last note, which is the beginning of the next one - so a
+    // marker moved before the end was noticed walked into the bar after the
+    // passage, and the page turned forward and straight back with it.
+    const { player, metronome, renderer, timeline } = rig();
+    const last = 1;
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      toIndex: last,
+    });
+
+    metronome.advanceSubdivisions(16);
+
+    expect(renderer.cursor.position).toBe(last);
+    expect(Math.max(...renderer.cursor.moves)).toBe(last);
+  });
+
+  it('says nothing about a position past the end of the stretch', () => {
+    // The page follows the position, so publishing one in the bar after the
+    // passage is what turned the page there.
+    const { player, metronome, timeline } = rig();
+    const seen: number[] = [];
+    player.events.on('positionChanged', (at) => seen.push(at.measureIndex));
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      toIndex: 1,
+    });
+
+    metronome.advanceSubdivisions(16);
+
+    const lastBar = timeline.at(1)?.measureIndex ?? 0;
+    expect(Math.max(...seen)).toBe(lastBar);
+  });
+
   it('is not being held once it has ended of its own accord', () => {
     // A performance that reached its end is not one waiting to be picked up;
     // pressing the button after one means hearing it again.

@@ -439,15 +439,24 @@ export class ExercisePlayer {
     // The metronome counts from nought whatever the music does, so where the
     // playback began is added back on before asking the timeline anything.
     const position = tick.positionTicks + this.fromTicks;
+    // Asked before the marker is moved, not after. The tick that ends a
+    // stretch stands at the end of its last note, which is the *beginning of
+    // the next one* - so moving first walked the marker into the bar after
+    // the passage and published a position there. On a repeat that showed as
+    // the music visibly overrunning by a bar before starting again, and where
+    // the next bar was on the next page the page turned forward and straight
+    // back. Nothing is heard there either way: the notes were scheduled from
+    // the stretch alone.
+    if (position >= this.untilTicks) {
+      this.finish();
+      return;
+    }
     const step = this.timeline.stepAtTick(position);
     if (step !== null) {
       this.atIndex = step.index;
       this.deps.cursor.moveTo(step.index);
     }
     this.publishPosition(position);
-    if (position >= this.untilTicks) {
-      this.finish();
-    }
   }
 
   /**

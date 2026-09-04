@@ -560,6 +560,22 @@ describe('AppView', () => {
     expect(element<HTMLButtonElement>('stop').disabled).toBe(false);
   });
 
+  it('stops offering to stop a performance its score replaced', async () => {
+    // The button said "Stop listening" over a piece that was no longer
+    // playing and no longer even on the page.
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    element<HTMLButtonElement>('listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(element('listen').textContent).toBe('Stop listening');
+
+    await runtime.controller.loadNewExercise();
+
+    expect(runtime.controller.isListening).toBe(false);
+    expect(element('listen').textContent).toBe('Listen');
+  });
+
   it('sounds only the hand that was chosen', async () => {
     const { view, instrument, metronome } = createRig();
     await view.initialize();

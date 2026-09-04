@@ -2390,6 +2390,9 @@ export class AppView {
         this.showPassageMarkers();
         this.applyScoreCover();
         this.el.position.textContent = '—';
+        // A performance does not survive its own score being replaced, so the
+        // button that offers to stop one has to stop saying so.
+        this.describeListening();
       }),
     );
 

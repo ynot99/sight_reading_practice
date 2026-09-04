@@ -1198,6 +1198,31 @@ describe('cursor visibility', () => {
     expect(renderer.cursor.visible).toBe(false);
   });
 
+  it('ends a performance when the music it was of is replaced', async () => {
+    // Left running, it went on playing the notes of the piece before this one
+    // over a page already engraved with the new one - and drove the marker
+    // across that page while it did.
+    const { controller } = createController(true);
+    await controller.loadNewExercise();
+    controller.listen();
+    expect(controller.isListening).toBe(true);
+
+    await controller.openScore(twoBarExercise({ title: 'Something Else' }));
+
+    expect(controller.isListening).toBe(false);
+  });
+
+  it('ends it for a fresh generated exercise too', async () => {
+    const { controller } = createController(true);
+    await controller.openScore(twoBarExercise({ title: 'On The Stand' }));
+    controller.listen();
+    expect(controller.isListening).toBe(true);
+
+    await controller.loadNewExercise();
+
+    expect(controller.isListening).toBe(false);
+  });
+
   it('leaves the cursor alone when there was nothing to stop', async () => {
     const { controller, renderer } = createController(true);
     await controller.loadNewExercise();

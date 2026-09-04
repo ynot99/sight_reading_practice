@@ -688,7 +688,23 @@ export class PracticeController {
     // same thing against whatever is on the stand next.
     this.openedScore = null;
     this.forgetThePassage();
+    this.endThePerformance();
     return this.load(undefined);
+  }
+
+  /**
+   * Ends a performance because the music it was of is being replaced.
+   *
+   * Not on every re-engraving: changing the tempo from the stand redraws the
+   * page under a performance that is still the same music, and taking the
+   * sound away for that would answer a question the reader did not ask.
+   * Handing them a *different piece* is not that - left running, the
+   * performance went on playing the notes of the piece before this one over
+   * a page already engraved with the new one, and drove the marker across it
+   * while it did.
+   */
+  private endThePerformance(): void {
+    this.stopListening();
   }
 
   /**
@@ -720,6 +736,7 @@ export class PracticeController {
       this.forgetThePassage();
     }
     this.openedScore = exercise;
+    this.endThePerformance();
     // Nothing to adopt: the file brings the tempo it is written at, which is
     // what 100% now means, and the reader's percentage of it travels with
     // them. Someone who reads at 80% is reading at 80% of this piece too,

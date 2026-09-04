@@ -134,7 +134,12 @@ export function buildOverlayShapes(
     const looseTiming = mark.offset !== 0;
     const key = layout.keyAt(mark.stepIndex);
     const pitch = spellPlayed(mark.midi, key);
-    const staffNumber = staffForDiatonic(layout.geometry, mark.stepIndex, pitch.diatonicIndex);
+    const staffNumber = staffForDiatonic(
+      layout.geometry,
+      mark.stepIndex,
+      pitch.diatonicIndex,
+      (staff) => layout.clefAt(staff, mark.stepIndex),
+    );
     if (staffNumber === null) {
       continue;
     }

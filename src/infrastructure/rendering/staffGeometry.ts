@@ -1,4 +1,5 @@
 import { floorMod } from '../../shared/asserts.js';
+import type { ClefKind } from '../../domain/model/Clef.js';
 
 /**
  * A note the engraver has already drawn, used to work out where everything
@@ -247,27 +248,49 @@ export function yForDiatonic(
   return anchor.y - (diatonicIndex - anchor.diatonicIndex) * geometry.stepHeight;
 }
 
+/** How far a staff position is from the printed lines of a clef. */
+function distanceToClef(clef: ClefKind, diatonicIndex: number): number {
+  const [bottom, top] = CLEF_LINE_RANGE[clef];
+  if (diatonicIndex < bottom) {
+    return bottom - diatonicIndex;
+  }
+  return diatonicIndex > top ? diatonicIndex - top : 0;
+}
+
 /**
  * The staff a played note belongs on.
  *
- * Judged against what each staff is carrying *at that point in the music*,
- * not against a page-wide average: a left hand that climbs above middle C in
- * one bar must not drag every later mark onto the wrong stave.
+ * By the *clef*, which is the thing on the page that says which pitches a
+ * staff is for. Judged instead against whatever note each staff happened to
+ * draw nearby, the answer turned on an accident: where both hands are written
+ * close together, one staff wins by a single position and a bass note is
+ * marked on the treble stave - and in a bar where the left hand climbs, the
+ * bass staff's nearest note can be higher than the treble's, so a low note
+ * loses to the staff it least belongs on.
+ *
+ * Distance to the printed lines rather than to their middle, so a note below
+ * the bass stave is nearer to it than to the treble by the margin a reader
+ * would say it is. Where two staves share a clef nothing distinguishes them,
+ * and the nearest note decides as it always did.
  */
 export function staffForDiatonic(
   geometry: StaffGeometry,
   stepIndex: number,
   diatonicIndex: number,
+  clefOf: (staffNumber: number) => ClefKind,
 ): number | null {
-  let best: { staffNumber: number; distance: number } | null = null;
+  let best: { staffNumber: number; clef: number; pitch: number } | null = null;
   for (const staffNumber of geometry.byStaff.keys()) {
     const anchor = anchorFor(geometry, staffNumber, stepIndex);
     if (anchor === null) {
+      // Nothing drawn on it anywhere near, so there is nothing to measure a
+      // mark from even if the clef says this is where the note belongs.
       continue;
     }
-    const distance = Math.abs(diatonicIndex - anchor.diatonicIndex);
-    if (best === null || distance < best.distance) {
-      best = { staffNumber, distance };
+    const clef = distanceToClef(clefOf(staffNumber), diatonicIndex);
+    const pitch = Math.abs(diatonicIndex - anchor.diatonicIndex);
+    if (best === null || clef < best.clef || (clef === best.clef && pitch < best.pitch)) {
+      best = { staffNumber, clef, pitch };
     }
   }
   return best?.staffNumber ?? null;

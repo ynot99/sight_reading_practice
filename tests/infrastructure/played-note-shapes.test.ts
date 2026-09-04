@@ -160,9 +160,20 @@ describe('buildOverlayShapes', () => {
   });
 
   it('stacks ledger lines for a note further out', () => {
-    // A3 needs lines at C4 and at itself.
-    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 57, correct: false, offset: 0 }], layout());
+    // C6 needs lines at A5 and at itself, above the treble stave.
+    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 84, correct: false, offset: 0 }], layout());
     expect(shapes.filter((shape) => shape.kind === 'ledger')).toHaveLength(2);
+  });
+
+  it('draws a note the bass clef prints on the bass stave, with no lines', () => {
+    // A3 is the top line of the bass clef and two ledger lines below the
+    // treble. Chosen by whichever staff had drawn the nearer note, it was
+    // hung under the right hand; the clef is what says whose note it is.
+    const shapes = buildOverlayShapes([{ stepIndex: 0, midi: 57, correct: false, offset: 0 }], layout());
+
+    expect(shapes.filter((shape) => shape.kind === 'ledger')).toHaveLength(0);
+    // The bass staff's own C3 sits at 210.5, and A3 is five positions above.
+    expect(noteheads(shapes)[0]?.y).toBeCloseTo(185.5, 10);
   });
 
   it('spells a black key and draws the accidental, so the mark cannot lie', () => {

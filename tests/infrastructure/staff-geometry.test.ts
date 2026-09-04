@@ -10,6 +10,7 @@ import {
   type DrawnNoteSample,
 } from '../../src/infrastructure/rendering/staffGeometry.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
+import type { ClefKind } from '../../src/domain/model/Clef.js';
 
 /**
  * The numbers below are the ones a real engraving produced: staff lines ten
@@ -105,14 +106,44 @@ describe('staffForDiatonic', () => {
     { stepIndex: 1, page: 0, system: 0, staffNumber: 2, diatonicIndex: Pitch.parse('G2').diatonicIndex, y: 225.5 },
   ]);
 
-  it('puts a note on the staff it is nearest', () => {
-    expect(staffForDiatonic(geometry!, 0, Pitch.parse('G4').diatonicIndex)).toBe(1);
-    expect(staffForDiatonic(geometry!, 0, Pitch.parse('E2').diatonicIndex)).toBe(2);
+  /** A grand staff: treble above, bass below. */
+  const grandStaff = (staffNumber: number): ClefKind =>
+    staffNumber === 1 ? 'treble' : 'bass';
+
+  it('puts a note on the staff whose clef is for it', () => {
+    expect(staffForDiatonic(geometry!, 0, Pitch.parse('G4').diatonicIndex, grandStaff)).toBe(1);
+    expect(staffForDiatonic(geometry!, 0, Pitch.parse('E2').diatonicIndex, grandStaff)).toBe(2);
   });
 
   it('keeps a wildly wrong note on the nearer staff rather than dropping it', () => {
-    expect(staffForDiatonic(geometry!, 0, Pitch.parse('C7').diatonicIndex)).toBe(1);
-    expect(staffForDiatonic(geometry!, 0, Pitch.parse('A0').diatonicIndex)).toBe(2);
+    expect(staffForDiatonic(geometry!, 0, Pitch.parse('C7').diatonicIndex, grandStaff)).toBe(1);
+    expect(staffForDiatonic(geometry!, 0, Pitch.parse('A0').diatonicIndex, grandStaff)).toBe(2);
+  });
+
+  it('is not swayed by which hand happens to be drawn nearer', () => {
+    // The left hand climbing into the treble range, which is ordinary piano
+    // writing: the bass staff's nearest note is then *higher* than the
+    // treble's, and a low note lost to the staff it least belongs on.
+    const crossed = fitStaffGeometry([
+      { stepIndex: 0, page: 0, system: 0, staffNumber: 1, diatonicIndex: Pitch.parse('G4').diatonicIndex, y: 140 },
+      { stepIndex: 1, page: 0, system: 0, staffNumber: 1, diatonicIndex: Pitch.parse('A4').diatonicIndex, y: 135 },
+      { stepIndex: 0, page: 0, system: 0, staffNumber: 2, diatonicIndex: Pitch.parse('B4').diatonicIndex, y: 230 },
+      { stepIndex: 1, page: 0, system: 0, staffNumber: 2, diatonicIndex: Pitch.parse('C5').diatonicIndex, y: 225 },
+    ]);
+
+    expect(staffForDiatonic(crossed!, 0, Pitch.parse('E2').diatonicIndex, grandStaff)).toBe(2);
+  });
+
+  it('lets the nearest note decide where two staves share a clef', () => {
+    // Nothing about the clef tells them apart, so the old question is the
+    // only one left to ask.
+    const bothTreble = fitStaffGeometry([
+      { stepIndex: 0, page: 0, system: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C5').diatonicIndex, y: 140 },
+      { stepIndex: 0, page: 0, system: 0, staffNumber: 2, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 230 },
+    ]);
+
+    expect(staffForDiatonic(bothTreble!, 0, Pitch.parse('D4').diatonicIndex, () => 'treble')).toBe(2);
+    expect(staffForDiatonic(bothTreble!, 0, Pitch.parse('B4').diatonicIndex, () => 'treble')).toBe(1);
   });
 });
 

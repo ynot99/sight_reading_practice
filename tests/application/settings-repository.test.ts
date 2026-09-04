@@ -51,6 +51,7 @@ const SETTINGS: PracticeSettings = {
   survival: true,
   readAheadSteps: 2,
   zoom: 1.2,
+  immediateStart: false,
 };
 
 describe('practice settings codec', () => {

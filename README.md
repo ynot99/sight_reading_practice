@@ -83,6 +83,21 @@ passage is steadier than last time — a passage being the piece and the bars,
 or the level when the material is generated, since one random exercise has no
 lasting identity to improve on.
 
+**Start when you play the first notes** listens to the keyboard while nothing
+is running and begins the run the moment the opening the page asks for has
+been played — with no count-in, since the reader has just set the tempo
+themselves by playing it. Their hands are already on the keys, and reaching
+for the tablet to begin and reaching back is most of what starting costs. The
+chord that started it is *credited*, not asked for again: it goes through the
+same path as any press landing just ahead of the first beat. What it waits
+for is the chord the run would actually begin with, so a place put somewhere
+else or a passage chosen moves it too, and it is judged by the same matcher
+the run would use — the reader's tolerance, their octave rule, the ornaments
+the page offers but does not demand. Wrong notes are not punished: nothing is
+being graded yet. It lives in the fullscreen drawer as well as in the
+settings, because a setting whose point is not reaching for the tablet should
+not be two taps deep.
+
 **Repeat when it ends** starts the passage over as soon as it finishes, and
 **Drill the worst bars** picks the passage for you from the run you just
 played — weighing steps the music took away above untidy ones, and ignoring

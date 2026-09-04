@@ -51,6 +51,30 @@ export interface TimelineStep {
 }
 
 /**
+ * What a step asks of the hand being practised.
+ *
+ * A step where the chosen hand has nothing to play is a rest for this run,
+ * even though the other hand is busy - the cursor still stops there, because
+ * the reader is still reading it.
+ *
+ * Here rather than inside the session because two things now ask it: the run
+ * that judges the press, and the watch that decides whether the opening chord
+ * has been played. Asked differently in the two places, the run could be
+ * started by notes it would then have refused.
+ */
+export function expectedFor(
+  step: TimelineStep,
+  staffNumber: number | null,
+): readonly number[] {
+  if (staffNumber === null) {
+    return step.expectedMidi;
+  }
+  return [
+    ...new Set(step.notes.filter((note) => note.staffNumber === staffNumber).map((note) => note.midi)),
+  ];
+}
+
+/**
  * The performable projection of an {@link Exercise}: a flat, ordered list of
  * expected events. This is what the practice session walks and what MIDI
  * input is judged against.

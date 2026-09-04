@@ -7,14 +7,19 @@ import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
-import { buildTimeline, type ExerciseTimeline, type TimelineStep } from '../domain/timeline/Timeline.js';
+import {
+  buildTimeline,
+  expectedFor,
+  type ExerciseTimeline,
+  type TimelineStep,
+} from '../domain/timeline/Timeline.js';
 import { playedNoteOffset } from './playedNoteOffset.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
 import type { IClock } from './ports/IClock.js';
 import { GeneratedExerciseProvider, type IExerciseProvider } from './ports/IExerciseProvider.js';
 import type { IMetronome } from './ports/IMetronome.js';
-import type { IMidiSource } from './ports/IMidiSource.js';
+import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
 import type { PlayerEventMap } from './ExercisePlayer.js';
@@ -31,7 +36,7 @@ import type {
 import { barNumberOf, clefAtMeasure, keyAtMeasure, measureCount } from '../domain/model/Exercise.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
-import type { NoteVerdict } from '../domain/matching/ChordMatcher.js';
+import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMeter.js';
 import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
 
@@ -293,6 +298,16 @@ export interface PracticeSettings {
   readonly readAheadSteps: number | null;
   /** Note size on the page, as a multiplier. */
   readonly zoom: number;
+  /**
+   * Start the run by playing its first chord, rather than by pressing Start.
+   *
+   * The keyboard is listened to while nothing is running, and the moment the
+   * opening the page asks for has been played the run begins - with no
+   * count-in, since the reader has just set the tempo themselves by playing
+   * it. Their hands are already on the keys; reaching for the tablet to
+   * begin, and reaching back, is most of what starting costs.
+   */
+  readonly immediateStart: boolean;
 }
 
 export interface ExerciseLoadedEvent {
@@ -380,6 +395,10 @@ export class PracticeController {
   private lastSeed: number | null = null;
   /** Where the next run begins, which the reader may have moved. */
   private beginAt = 0;
+  /** The opening chord, while it is being waited for; see {@link watchForTheOpening}. */
+  private opening: ChordMatcher | null = null;
+  private openingPresses: MidiNoteOnEvent[] = [];
+  private listeningForTheOpening: Unsubscribe | null = null;
   private openedScore: Exercise | null = null;
   private player: ExercisePlayer | null = null;
   /** The file the page is currently engraved from, so it is drawn once. */
@@ -442,6 +461,7 @@ export class PracticeController {
       survival: false,
       readAheadSteps: null,
       zoom: 0.85,
+      immediateStart: false,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();
@@ -589,6 +609,9 @@ export class PracticeController {
       this.repaintFade();
     }
 
+    // Any of these can change what the opening chord is, or whether there is
+    // anything listening for one.
+    this.watchForTheOpening();
     this.emitter.emit('settingsChanged', { settings: next });
     return next;
   }
@@ -611,6 +634,9 @@ export class PracticeController {
     }
     this.beginAt = bar.index;
     this.deps.cursor.moveTo(this.beginAt);
+    // The run would now begin somewhere else, so the chord that starts it is
+    // a different chord.
+    this.watchForTheOpening();
     return this.beginAt;
   }
 
@@ -623,6 +649,7 @@ export class PracticeController {
    */
   beginAtTheStart(): void {
     this.beginAt = 0;
+    this.watchForTheOpening();
   }
 
   /**
@@ -930,6 +957,7 @@ export class PracticeController {
     this.deps.cursor.reset();
     this.applyCursorVisibility();
 
+    this.watchForTheOpening();
     this.emitter.emit('exerciseLoaded', { exercise, timeline: this.timeline, musicXml });
     return exercise;
   }
@@ -969,6 +997,9 @@ export class PracticeController {
       fromIndex: Math.min(Math.max(fromStepIndex ?? this.beginAt, passage.from), passage.to),
       toIndex: passage.to,
     });
+    // Something is happening to the music now, so a press is a press and not
+    // the beginning of a run.
+    this.watchForTheOpening();
   }
 
   /**
@@ -984,6 +1015,7 @@ export class PracticeController {
     }
     this.player.pause();
     this.applyCursorVisibility();
+    this.watchForTheOpening();
   }
 
   /** Picks a held performance up where it left off. */
@@ -1123,6 +1155,7 @@ export class PracticeController {
     }
     this.player.end();
     this.applyCursorVisibility();
+    this.watchForTheOpening();
   }
 
   get isListening(): boolean {
@@ -1151,7 +1184,102 @@ export class PracticeController {
     return this.player;
   }
 
+  /**
+   * Listens for the opening chord while nothing is running.
+   *
+   * Armed and disarmed in one place rather than at each of the events that
+   * change the answer - a run beginning or ending, a performance, a new
+   * piece, the setting itself - because the question is always the same one:
+   * is there music on the page with nothing happening to it.
+   */
+  private watchForTheOpening(): void {
+    const status = this.currentSession?.status;
+    const wanted =
+      this.currentSettings.immediateStart &&
+      this.timeline !== null &&
+      // A session that has *ended* is not something happening: it is the
+      // report of the last run, and it stays around to be read. Asked whether
+      // a session exists at all, this armed itself again only when the next
+      // one was created - so the feature worked once and then stopped.
+      status !== 'running' &&
+      status !== 'counting-in' &&
+      status !== 'paused' &&
+      // A held performance does count: the reader means to pick it up, and
+      // playing over it would start a run instead.
+      !this.isListening &&
+      !this.isListeningPaused;
+    if (!wanted) {
+      this.listeningForTheOpening?.();
+      this.listeningForTheOpening = null;
+      this.opening = null;
+      this.openingPresses = [];
+      return;
+    }
+    if (this.listeningForTheOpening !== null) {
+      this.armTheOpening();
+      return;
+    }
+    this.armTheOpening();
+    this.listeningForTheOpening = this.deps.midi.subscribe((event) => this.hearTheOpening(event));
+  }
+
+  /** Builds the matcher for whatever the run would now begin with. */
+  private armTheOpening(): void {
+    const timeline = this.timeline;
+    const passage = this.passageSteps;
+    const step = timeline?.at(Math.min(Math.max(this.beginAt, passage.from), passage.to)) ?? null;
+    const expected = step === null ? [] : expectedFor(step, this.currentSettings.handStaff);
+    this.openingPresses = [];
+    // A step with nothing in it for this hand cannot be played, so there is
+    // nothing to wait for and the watch stands down rather than starting the
+    // run on the reader's next stray key.
+    this.opening =
+      expected.length === 0
+        ? null
+        : new ChordMatcher(
+            expected,
+            {
+              toleranceMs: this.currentSettings.matchToleranceMs,
+              pitchClassOnly: this.currentSettings.pitchClassOnly,
+              anyPitch: this.currentSettings.rhythmOnly,
+            },
+            step?.ornamentMidi ?? [],
+          );
+  }
+
+  /**
+   * A press heard while nothing was running.
+   *
+   * Judged by the same matcher a run would judge it with, so the chord that
+   * starts the run is exactly the chord the run then asks for - including
+   * the reader's own tolerance, their octave rule, and the ornaments the
+   * page offers but does not demand. A wrong note is not punished: nothing
+   * is being graded yet, and the matcher simply goes on waiting.
+   */
+  private hearTheOpening(event: MidiEvent): void {
+    const matcher = this.opening;
+    if (matcher === null || event.type !== 'noteon') {
+      return;
+    }
+    this.openingPresses.push(event);
+    matcher.accept(event.midi, event.timestampMs);
+    if (!matcher.completed) {
+      return;
+    }
+    // No count-in: the reader has just played the tempo themselves, and
+    // counting them in after that is asking them to wait for a bar they have
+    // already begun.
+    this.beginRun(0, this.openingPresses);
+  }
+
   start(): PracticeSession | null {
+    return this.beginRun(this.currentSettings.countInBars, []);
+  }
+
+  private beginRun(
+    countInBars: number,
+    opening: readonly MidiNoteOnEvent[],
+  ): PracticeSession | null {
     this.stopListening();
     const timeline = this.timeline;
     if (timeline === null) {
@@ -1179,7 +1307,7 @@ export class PracticeController {
           pitchClassOnly: this.currentSettings.pitchClassOnly,
           anyPitch: this.currentSettings.rhythmOnly,
         },
-        countInBars: this.currentSettings.countInBars,
+        countInBars,
         // Where the reader put the cursor, but never outside the passage
         // they chose: a place pointed at before the passage was narrowed is
         // no longer in the music being practised.
@@ -1328,11 +1456,18 @@ export class PracticeController {
         if (status === 'aborted') {
           this.cursorToStart();
         }
+        // A run that has ended leaves the music with nothing happening to it,
+        // so the opening is worth listening for again.
+        this.watchForTheOpening();
       }),
     );
 
     this.emitter.emit('sessionCreated', { session });
-    session.start();
+    // Before the session hears anything of its own: the watch and the run
+    // would otherwise both be subscribed to the keyboard, and the presses
+    // that started this run would arrive at the watch a second time.
+    this.watchForTheOpening();
+    session.start(opening);
     return session;
   }
 
@@ -1349,6 +1484,8 @@ export class PracticeController {
   }
 
   dispose(): void {
+    this.listeningForTheOpening?.();
+    this.listeningForTheOpening = null;
     this.player?.dispose();
     this.player = null;
     this.disposeSession();
@@ -1365,6 +1502,8 @@ export class PracticeController {
     this.currentSession?.dispose();
     this.currentSession = null;
     if (had) {
+      // Nothing is running now, so the opening is worth listening for again.
+      this.watchForTheOpening();
       this.emitter.emit('sessionDiscarded', {});
     }
   }

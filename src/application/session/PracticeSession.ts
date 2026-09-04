@@ -6,6 +6,7 @@ import {
   type StepResult,
   type StepStatus,
 } from '../../domain/scoring/PerformanceReport.js';
+import { expectedFor } from '../../domain/timeline/Timeline.js';
 import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timeline.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../../shared/EventEmitter.js';
 import type { IPracticeMode } from '../modes/IPracticeMode.js';
@@ -139,10 +140,21 @@ export class PracticeSession {
   }
 
   /** Begins (or restarts) a run. */
-  start(): void {
+  /**
+   * Begins the run, optionally carrying presses that arrived before it.
+   *
+   * A run started *by* the reader playing the opening chord has already had
+   * that chord played at it, and the session did not exist to hear it. Handed
+   * over here, those presses go through the same path as any press that lands
+   * just ahead of the first beat - they are held, then replayed with their
+   * real timestamps and graded as early - so the reader does not have to play
+   * the first chord twice.
+   */
+  start(opening: readonly MidiNoteOnEvent[] = []): void {
     const previous = this.machine.state;
     this.machine.dispatch('start');
     this.resetRunState();
+    this.beforeTheMusic = [...opening];
     this.emitStatus(previous);
 
     this.metronome.configure({
@@ -292,13 +304,7 @@ export class PracticeSession {
    * the reader is still reading it.
    */
   private expectedAt(step: TimelineStep): readonly number[] {
-    const staff = this.options.expectedStaff;
-    if (staff === null) {
-      return step.expectedMidi;
-    }
-    return [
-      ...new Set(step.notes.filter((note) => note.staffNumber === staff).map((note) => note.midi)),
-    ];
+    return expectedFor(step, this.options.expectedStaff);
   }
 
   /**

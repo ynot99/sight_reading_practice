@@ -268,6 +268,7 @@ export function decodePracticeSettings(
     survival: readBoolean(value['survival']),
     readAheadSteps: readReadAhead(value['readAheadSteps'], value['fadePassedNotes']),
     zoom: readNumber(value['zoom'], 0.3, 3),
+    immediateStart: readBoolean(value['immediateStart']),
   } as PracticeSettings);
 }
 
@@ -305,6 +306,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     survival: settings.survival,
     readAheadSteps: settings.readAheadSteps,
     zoom: settings.zoom,
+    immediateStart: settings.immediateStart,
   };
 }
 

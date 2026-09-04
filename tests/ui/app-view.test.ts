@@ -1096,6 +1096,29 @@ describe('AppView', () => {
       expect(element('listen').textContent).toBe('Listen');
     });
 
+    it('offers starting-by-playing in the drawer and in the settings', async () => {
+      // One setting with two editors, the way the tempo has a slider at the
+      // desk and a percentage in fullscreen. In the drawer above all: the
+      // whole point of the setting is not having to reach for the tablet, so
+      // burying it two taps deep would be its own joke.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      expect(runtime.controller.settings.immediateStart).toBe(false);
+
+      element<HTMLButtonElement>('focus-immediate').click();
+
+      expect(runtime.controller.settings.immediateStart).toBe(true);
+      expect(element('focus-immediate').getAttribute('aria-pressed')).toBe('true');
+      expect(element<HTMLInputElement>('immediate-start').checked).toBe(true);
+
+      const box = element<HTMLInputElement>('immediate-start');
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.immediateStart).toBe(false);
+      expect(element('focus-immediate').getAttribute('aria-pressed')).toBe('false');
+    });
+
     it('leaves exactly the two buttons a reader needs mid-piece', () => {
       // Marked on the markup rather than counted in script: the stylesheet
       // hides everything in the row without the mark, so this is the list.

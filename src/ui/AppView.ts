@@ -646,6 +646,7 @@ export class AppView {
     focusListenIcon: SVGPathElement;
     focusHands: HTMLButtonElement;
     focusSurvival: HTMLButtonElement;
+    focusImmediate: HTMLButtonElement;
     focusClick: HTMLButtonElement;
     focusPattern: HTMLButtonElement;
     focusRepeat: HTMLButtonElement;
@@ -660,6 +661,7 @@ export class AppView {
     focusHandRight: SVGElement;
     focusHealthFill: HTMLElement;
     survival: HTMLInputElement;
+    immediateStart: HTMLInputElement;
     focusDrawer: HTMLElement;
     focusRow: HTMLElement;
     focusSpeed: HTMLElement;
@@ -816,6 +818,7 @@ export class AppView {
       focusListenIcon: requireElement(doc, 'focus-listen-icon'),
       focusHands: requireElement(doc, 'focus-hands'),
       focusSurvival: requireElement(doc, 'focus-survival'),
+      focusImmediate: requireElement(doc, 'focus-immediate'),
       focusClick: requireElement(doc, 'focus-click'),
       focusPattern: requireElement(doc, 'focus-pattern'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
@@ -830,6 +833,7 @@ export class AppView {
       focusHandRight: requireElement(doc, 'focus-hand-right'),
       focusHealthFill: requireElement(doc, 'focus-health-fill'),
       survival: requireElement(doc, 'survival'),
+      immediateStart: requireElement(doc, 'immediate-start'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
       focusRow: requireElement(doc, 'focus-row'),
       focusSpeed: requireElement(doc, 'focus-speed'),
@@ -1736,6 +1740,11 @@ export class AppView {
       controller.updateSettings({ rhythmOnly: this.el.rhythmOnly.checked });
     });
 
+    this.listen(this.el.immediateStart, 'change', () => {
+      controller.updateSettings({ immediateStart: this.el.immediateStart.checked });
+      this.syncControlsFromSettings();
+    });
+
     this.listen(this.el.pitchClass, 'change', () => {
       controller.updateSettings({ pitchClassOnly: this.el.pitchClass.checked });
     });
@@ -1960,6 +1969,11 @@ export class AppView {
       controller.updateSettings({ survival: !controller.settings.survival });
       this.syncControlsFromSettings();
       this.renderHealth(controller.health);
+    });
+
+    this.listen(this.el.focusImmediate, 'click', () => {
+      controller.updateSettings({ immediateStart: !controller.settings.immediateStart });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.focusClick, 'click', () => {
@@ -3113,6 +3127,8 @@ export class AppView {
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.survival.checked = settings.survival;
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
+    this.el.immediateStart.checked = settings.immediateStart;
+    this.el.focusImmediate.setAttribute('aria-pressed', String(settings.immediateStart));
     this.describeClickButton(settings.clickWhen);
     this.describePatternButton(settings.clickPattern);
     this.renderHealth(this.runtime.controller.health);

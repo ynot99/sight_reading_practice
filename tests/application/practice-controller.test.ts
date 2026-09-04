@@ -2093,6 +2093,143 @@ describe('the last run that reached an end', () => {
     expect(controller.lastReport).toBe(measured);
   });
 
+  describe('starting by playing the opening', () => {
+    /** The notes the run would ask for first. */
+    function opening(controller: PracticeController): readonly number[] {
+      return controller.currentTimeline?.at(0)?.expectedMidi ?? [];
+    }
+
+    it('starts the run when the opening chord is played', async () => {
+      // The reader's hands are already on the keys; reaching for the tablet
+      // to begin, and reaching back, is most of what starting costs.
+      const { controller, midi, clock } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+      });
+      await controller.loadNewExercise();
+      expect(controller.session).toBeNull();
+
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, clock.now());
+      }
+
+      expect(controller.session).not.toBeNull();
+    });
+
+    it('waits, and does not punish, while the wrong notes are played', async () => {
+      // Nothing is being graded yet, so a wrong note is not a mistake - it is
+      // simply not the thing being waited for.
+      const { controller, midi, clock } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+      });
+      await controller.loadNewExercise();
+      const wanted = new Set(opening(controller));
+
+      for (const stray of [40, 41, 42]) {
+        if (!wanted.has(stray)) {
+          midi.noteOn(stray, clock.now());
+        }
+      }
+
+      expect(controller.session).toBeNull();
+      expect(controller.lastReport).toBeNull();
+    });
+
+    it('counts the chord that started it as played, not as owed', async () => {
+      // Otherwise the reader plays the first chord to begin and is then asked
+      // for it again, which is the feature undoing itself. Wait mode is the
+      // one that can be asked plainly: the music holds still until the notes
+      // are played, so being past the first step is proof it was credited.
+      const { controller, midi, clock } = createController(true, undefined, {
+        immediateStart: true,
+      });
+      await controller.loadNewExercise();
+
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, clock.now());
+      }
+
+      expect(controller.session?.status).toBe('running');
+      expect(controller.session?.currentStep?.index).toBe(1);
+    });
+
+    it('does nothing at all while the setting is off', async () => {
+      const { controller, midi, clock } = createController(true, undefined, {
+        modeId: FLOW_MODE_ID,
+      });
+      await controller.loadNewExercise();
+
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, clock.now());
+      }
+
+      expect(controller.session).toBeNull();
+    });
+
+    it('stands down while something is already playing', async () => {
+      // A performance is happening to the music, so a press is a press.
+      const { controller, midi, clock } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+      });
+      await controller.loadNewExercise();
+      controller.listen();
+
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, clock.now());
+      }
+
+      expect(controller.session).toBeNull();
+      expect(controller.isListening).toBe(true);
+    });
+
+    it('waits for the chord the run would ask for, not the piece’s first', async () => {
+      // A place put somewhere else, or a passage chosen, moves what the run
+      // begins with - so it moves what starts it.
+      const { controller, midi, clock } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+      });
+      await controller.loadNewExercise();
+      const later = controller.currentTimeline?.steps.find((step) => step.measureIndex === 1);
+      controller.beginAtBar(1);
+
+      // The piece's own opening no longer starts anything.
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, clock.now());
+      }
+      expect(controller.session).toBeNull();
+
+      for (const midiNote of later?.expectedMidi ?? []) {
+        midi.noteOn(midiNote, clock.now());
+      }
+      expect(controller.session).not.toBeNull();
+    });
+
+    it('listens again once the run it started is over', async () => {
+      const { controller, midi, clock } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+      });
+      await controller.loadNewExercise();
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, clock.now());
+      }
+      const first = controller.session;
+      expect(first).not.toBeNull();
+
+      controller.stop();
+      controller.beginAtTheStart();
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, clock.now());
+      }
+
+      expect(controller.session).not.toBeNull();
+      expect(controller.session).not.toBe(first);
+    });
+  });
+
   it('outlives the material too, since a run is about the hands', async () => {
     const { controller, midi, metronome, clock } = createController(true, undefined, {
       modeId: FLOW_MODE_ID,

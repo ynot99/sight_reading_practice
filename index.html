@@ -447,6 +447,12 @@
           <label><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
           <label><input id="rhythm-only" type="checkbox" /> Rhythm only: any note counts</label>
           <label><input id="survival" type="checkbox" /> Survival: keep the bar up</label>
+          <!--
+            The same setting as the drawer's button, seen from the desk. One
+            question with two editors, the way the tempo has a slider here and
+            a percentage in fullscreen.
+          -->
+          <label><input id="immediate-start" type="checkbox" /> Start when you play the first notes</label>
           <label><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
           <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
         </div>
@@ -660,6 +666,23 @@
             aria-pressed="false" title="Wait for the notes" aria-label="Wait for the notes">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.3l3.6 2.1-1 1.7L11 13.5V7h2z" />
+            </svg>
+          </button>
+
+          <!--
+            Start by playing rather than by pressing. In the drawer because it
+            is chosen before a run and not reached for during one - and in the
+            drawer rather than only in the settings sheet because it is the
+            one setting whose whole point is not having to reach for the
+            tablet, so burying it two taps deep would be its own joke.
+          -->
+          <button id="focus-immediate" type="button"
+            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
+            aria-pressed="false" title="Start by playing the first notes"
+            aria-label="Start by playing the first notes">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 15h18v4H3zM6 5h2v9H6zM11 5h2v9h-2zM16 5h2v9h-2z" />
+              <path d="M9.4 3.6 12 1l2.6 2.6-1.4 1.4L12 3.8l-1.2 1.2z" />
             </svg>
           </button>
 

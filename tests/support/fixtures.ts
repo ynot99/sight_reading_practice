@@ -1,6 +1,6 @@
 import { Duration } from '../../src/domain/model/Duration.js';
 import type { Exercise, Measure, MusicalEntry } from '../../src/domain/model/Exercise.js';
-import { measureOf, noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
+import { measureOf, noteEntry, restEntry, silenceEntry } from '../../src/domain/model/Exercise.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
@@ -323,6 +323,57 @@ export function tiedExercise(overrides: ExerciseOverrides = {}): Exercise {
           bar(noteEntry(p('C3'), Duration.WHOLE)),
           bar(noteEntry(p('C3'), Duration.WHOLE)),
         ],
+      },
+    ],
+  };
+}
+
+/**
+ * One bar of 4/4 where two voices share a staff and the lower one comes and
+ * goes - the shape that made rests appear where nobody wrote any.
+ *
+ *   voice 1: C4 D4 E4 F4 (quarters, all through)
+ *   voice 2: (silent) G3 (half) (silent)
+ */
+export function partialVoiceExercise(
+  entries: readonly MusicalEntry[] = [
+    silenceEntry(Duration.QUARTER),
+    noteEntry(p('G3'), Duration.HALF),
+    silenceEntry(Duration.QUARTER),
+  ],
+): Exercise {
+  return {
+    id: 'fixture-partial-voice',
+    title: 'Partial voice fixture',
+    key: KeySignature.major(0),
+    keyChanges: [],
+    timeChanges: [],
+    pedalMarks: [],
+    timeSignature: new TimeSignature(4, 4),
+    tempoBpm: 60,
+    firstBarNumber: 1,
+    metadata: { generatorId: 'fixture', seed: 1 },
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        clefChanges: [],
+        measures: [
+          bar(
+            noteEntry(p('C4'), Duration.QUARTER),
+            noteEntry(p('D4'), Duration.QUARTER),
+            noteEntry(p('E4'), Duration.QUARTER),
+            noteEntry(p('F4'), Duration.QUARTER),
+          ),
+        ],
+      },
+      {
+        staffNumber: 1,
+        voice: 2,
+        clef: 'treble',
+        clefChanges: [],
+        measures: [bar(...entries)],
       },
     ],
   };

@@ -321,6 +321,17 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     tuplet: TupletPosition | null,
   ): void {
     switch (entry.kind) {
+      case 'silence': {
+        // The format's own word for time passing with nothing drawn in it.
+        // No `<type>` and no tuplet marks: `<duration>` is in divisions, which
+        // says a third of a beat as exactly as it says half of one.
+        writer.element('forward', undefined, () => {
+          writer.leaf('duration', entry.duration.ticks);
+          writer.leaf('voice', staff.voice);
+          writer.leaf('staff', staff.staffNumber);
+        });
+        return;
+      }
       case 'rest': {
         const isFullMeasure = entry.duration.ticks === exercise.timeSignature.ticksPerMeasure;
         writer.element('note', undefined, () => {

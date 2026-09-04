@@ -47,10 +47,13 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
 - A `StaffPart` is one *voice*, not one staff: several may share a
   `staffNumber`, which is how an inner line sits under a melody. Voice numbers
   are what must stay unique.
-- An empty measure means the voice is *absent* from that bar, not resting - a
-  rest is drawn and a silence is not. Allowed only while another voice on the
-  same staff fills the bar; when none does, the staff rests and one voice has
-  to carry it.
+- A rest is drawn and a silence is not, so the two are different entries. An
+  empty measure means the voice is absent from that whole bar; a `silence`
+  entry means it is absent for part of one, takes its time so the bar still
+  adds up, and is written as `<forward>`. Neither may leave the *staff* blank:
+  `validateStaffCoverage` walks every bar and demands that its voices between
+  them draw something across the whole of it, and the importer gives a rest
+  back wherever they do not.
 - Tuplet groups are *inferred*, not stored: a group closes when its accumulated
   span becomes a plain notatable value. Values shorter than a group's share of
   the beat must never reach `largestThatFits`, which knows only plain values.

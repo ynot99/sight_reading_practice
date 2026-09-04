@@ -8,12 +8,13 @@ import {
   measureTicks,
   noteEntry,
   restEntry,
+  silenceEntry,
   timeAtMeasure,
   validateExercise,
 } from '../../src/domain/model/Exercise.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { ExerciseValidationError } from '../../src/shared/errors.js';
-import { bar, p, twoBarExercise } from '../support/fixtures.js';
+import { bar, p, partialVoiceExercise, twoBarExercise } from '../support/fixtures.js';
 
 function withTrebleMeasures(exercise: Exercise, measures: Exercise['staves'][number]['measures']): Exercise {
   const [treble, ...rest] = exercise.staves;
@@ -174,5 +175,86 @@ describe('exercise validation', () => {
     expect(measureTicks(bar(noteEntry(p('C4'), Duration.HALF), restEntry(Duration.HALF)))).toBe(
       Duration.WHOLE.ticks,
     );
+  });
+});
+
+describe('a voice that is absent rather than resting', () => {
+  it('lets a voice come and go inside a bar another voice plays through', () => {
+    const exercise = partialVoiceExercise();
+
+    expect(() => validateExercise(exercise)).not.toThrow();
+    // It still takes its time, so the bar goes on adding up.
+    expect(measureTicks(exercise.staves[1]?.measures[0] ?? bar())).toBe(Duration.WHOLE.ticks);
+  });
+
+  it('refuses a stretch of staff with nothing drawn on it at all', () => {
+    // The only other voice stops after two beats, so the second half of the
+    // bar would be blank staff - which is not silence a reader can count.
+    const exercise = partialVoiceExercise([
+      noteEntry(p('G3'), Duration.HALF),
+      silenceEntry(Duration.HALF),
+    ]);
+    const [melody, ...rest] = exercise.staves;
+    if (melody === undefined) {
+      throw new Error('expected a melody');
+    }
+    const holed: Exercise = {
+      ...exercise,
+      staves: [
+        {
+          ...melody,
+          measures: [bar(noteEntry(p('C4'), Duration.HALF), silenceEntry(Duration.HALF))],
+        },
+        ...rest,
+      ],
+    };
+
+    expect(() => validateExercise(holed)).toThrow(ExerciseValidationError);
+    expect(() => validateExercise(holed)).toThrow(/draws nothing/);
+  });
+
+  it('counts voices that overlap rather than following one after the other', () => {
+    // Two voices each covering three beats, offset by one: between them they
+    // cover the bar, and a rule that only added up lengths would say so too -
+    // this one has to notice that they overlap and still reach the bar line.
+    const exercise = partialVoiceExercise([
+      silenceEntry(Duration.QUARTER),
+      noteEntry(p('G3'), Duration.DOTTED_HALF),
+    ]);
+    const [melody, ...rest] = exercise.staves;
+    if (melody === undefined) {
+      throw new Error('expected a melody');
+    }
+
+    expect(() =>
+      validateExercise({
+        ...exercise,
+        staves: [
+          {
+            ...melody,
+            measures: [bar(noteEntry(p('C4'), Duration.DOTTED_HALF), silenceEntry(Duration.QUARTER))],
+          },
+          ...rest,
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('will not let the last voice on a staff vanish', () => {
+    const alone = twoBarExercise();
+    const [treble, bass] = alone.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+
+    expect(() =>
+      validateExercise({
+        ...alone,
+        staves: [
+          { ...treble, measures: [bar(silenceEntry(Duration.WHOLE)), treble.measures[1] ?? bar()] },
+          bass,
+        ],
+      }),
+    ).toThrow(/draws nothing/);
   });
 });

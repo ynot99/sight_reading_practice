@@ -642,7 +642,12 @@ after another - an exporter may write a piano's two hands as two parts of one
 staff each, and reading only the first of those is reading only one hand.
 Several voices on a staff are kept as several parts sharing a staff number, so a held note under a moving line stays a held
 note; a voice absent from a bar is left out of it rather than resting through
-it. Key, metre and clef changes, stem directions and beaming are all followed
+it, and one that only comes in partway through a bar, or leaves before the end
+of one, is silent for the remainder rather than resting through that either -
+a rest is an instruction the writer gave, and inventing one asks the reader to
+count something nobody wrote. What that may never do is leave the staff itself
+blank, so the bars are checked across all their voices at once and a rest is
+given back wherever nothing at all would be drawn. Key, metre and clef changes, stem directions and beaming are all followed
 as written, along with rolled chords and the damper pedal. A metre change
 moves the bar lines, so bars stop being all the same length and every answer
 about musical position is read off `barLines` rather than worked out by

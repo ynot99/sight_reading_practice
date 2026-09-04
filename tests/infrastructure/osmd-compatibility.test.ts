@@ -10,9 +10,15 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
-import { bar, p, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import {
+  bar,
+  p,
+  partialVoiceExercise,
+  tiedExercise,
+  twoBarExercise,
+} from '../support/fixtures.js';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { noteEntry, validateExercise } from '../../src/domain/model/Exercise.js';
+import { noteEntry, silenceEntry, validateExercise } from '../../src/domain/model/Exercise.js';
 
 const RHYTHMS = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
 
@@ -302,6 +308,35 @@ describe('OSMD accepts the MusicXML we produce', () => {
       iterator.moveToNext();
     }
 
+    expect(positions).toBe(timeline.length);
+  });
+
+  it('agrees on the cursor when a voice is absent for part of a bar', async () => {
+    // A silence is written as `<forward>`, which is the format's way of saying
+    // that time passes with nothing drawn. The engraver has to make no cursor
+    // position of it - otherwise the reader is stopped in front of blank
+    // staff, and our timeline and the page no longer count the same places.
+    const exercise = partialVoiceExercise([
+      silenceEntry(Duration.EIGHTH),
+      noteEntry(p('G3'), Duration.HALF),
+      silenceEntry(Duration.DOTTED_QUARTER),
+    ]);
+    const timeline = buildTimeline(exercise);
+    const osmd = createDisplay();
+
+    await osmd.load(serializer.serialize(exercise));
+
+    const iterator = osmd.Sheet.MusicPartManager.getIterator();
+    let positions = 0;
+    let guard = timeline.length * 4 + 10;
+    while (!iterator.EndReached && guard > 0) {
+      guard -= 1;
+      positions += 1;
+      iterator.moveToNext();
+    }
+
+    // Four quarters plus the one place only the inner voice moves.
+    expect(timeline.length).toBe(5);
     expect(positions).toBe(timeline.length);
   });
 

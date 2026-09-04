@@ -84,13 +84,33 @@ export interface NoteEntry {
   readonly breath: boolean;
 }
 
-/** Silence occupying a rhythmic value. */
+/** A drawn silence: the writer asked for this rest and the reader counts it. */
 export interface RestEntry {
   readonly kind: 'rest';
   readonly duration: Duration;
 }
 
-export type MusicalEntry = NoteEntry | RestEntry;
+/**
+ * Time this voice is simply not there for, drawn as nothing at all.
+ *
+ * A rest is an instruction and a silence is an absence, and a page that
+ * confuses them tells the reader to count something nobody wrote. Piano
+ * writing leans on this constantly: an inner voice enters halfway through a
+ * bar and leaves before the end of it, and what happens either side is not a
+ * rest - the other voice on the staff is playing there, and the engraver
+ * draws nothing.
+ *
+ * It still takes its time, so a bar goes on adding up, and it is written out
+ * as MusicXML's `<forward>` - the same thing said in the format's own words.
+ * Allowed only while some voice on the staff *is* drawing there; where none
+ * is, the staff really does rest and one voice has to say so.
+ */
+export interface SilenceEntry {
+  readonly kind: 'silence';
+  readonly duration: Duration;
+}
+
+export type MusicalEntry = NoteEntry | RestEntry | SilenceEntry;
 
 /** Whether an entry opens or closes the tuplet group it belongs to. */
 export interface TupletPosition {
@@ -343,6 +363,10 @@ export function restEntry(duration: Duration): RestEntry {
   return { kind: 'rest', duration };
 }
 
+export function silenceEntry(duration: Duration): SilenceEntry {
+  return { kind: 'silence', duration };
+}
+
 export function measureOf(entries: readonly MusicalEntry[]): Measure {
   return { entries };
 }
@@ -438,21 +462,9 @@ export function validateExercise(exercise: Exercise): void {
 
       // An empty measure means this voice is not present in that bar at all,
       // which is different from resting through it: a rest is drawn and a
-      // silence is not. Only a voice sharing its staff with one that does fill
-      // the bar may vanish, or the staff would have a hole in it.
+      // silence is not. That the staff still has something drawn on it is
+      // checked once per bar, by {@link validateStaffCoverage}.
       if (measure.entries.length === 0) {
-        const covered = exercise.staves.some(
-          (other) =>
-            other !== staff &&
-            other.staffNumber === staff.staffNumber &&
-            (other.measures[measureIndex]?.entries.length ?? 0) > 0,
-        );
-        if (!covered) {
-          throw new ExerciseValidationError(
-            'Measure has no entries, and no other voice fills it.',
-            measurePath,
-          );
-        }
         return;
       }
 
@@ -477,6 +489,67 @@ export function validateExercise(exercise: Exercise): void {
 
     validateTies(staff, path);
   });
+
+  validateStaffCoverage(exercise, governedBy);
+}
+
+/** The spans an entry list draws on the page, as [from, to) pairs. */
+function drawnSpans(measure: Measure | undefined): readonly (readonly [number, number])[] {
+  const spans: [number, number][] = [];
+  let cursor = 0;
+  for (const entry of measure?.entries ?? []) {
+    const ends = cursor + entry.duration.ticks;
+    if (entry.kind !== 'silence') {
+      spans.push([cursor, ends]);
+    }
+    cursor = ends;
+  }
+  return spans;
+}
+
+/**
+ * Every bar of every staff has something drawn across the whole of it.
+ *
+ * A voice may vanish from a bar or from part of one, because piano writing
+ * puts an inner line under a melody and the line comes and goes. What it may
+ * not do is leave the staff blank: a bar with nothing drawn in it is not
+ * silence the reader can count, it is a hole. Checked across the staff rather
+ * than per voice, since covering each other is the whole point of them.
+ */
+function validateStaffCoverage(
+  exercise: Exercise,
+  governedBy: ReturnType<typeof barLines>,
+): void {
+  const staffNumbers = [...new Set(exercise.staves.map((staff) => staff.staffNumber))];
+  const bars = measureCount(exercise);
+
+  for (let measureIndex = 0; measureIndex < bars; measureIndex += 1) {
+    const expected =
+      governedBy[measureIndex]?.timeSignature.ticksPerMeasure ??
+      exercise.timeSignature.ticksPerMeasure;
+    for (const staffNumber of staffNumbers) {
+      const spans = exercise.staves
+        .filter((staff) => staff.staffNumber === staffNumber)
+        .flatMap((staff) => drawnSpans(staff.measures[measureIndex]))
+        .sort((left, right) => left[0] - right[0]);
+      // Walk the spans in order, carrying how far the staff is covered so far.
+      // Overlapping voices simply push it further; a span that starts beyond
+      // it is the far side of a hole.
+      let reached = 0;
+      for (const [from, to] of spans) {
+        if (from > reached) {
+          break;
+        }
+        reached = Math.max(reached, to);
+      }
+      if (reached < expected) {
+        throw new ExerciseValidationError(
+          `Staff ${staffNumber} draws nothing from ${reached} to ${expected} divisions of this bar.`,
+          `measures[${measureIndex}]`,
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -499,7 +572,10 @@ export function tupletPositions(
   let openedAt = -1;
 
   entries.forEach((entry, index) => {
-    if (!entry.duration.isTuplet) {
+    // A silence is drawn as nothing, so it can belong to no group: a bracket
+    // reaching across it would be drawn over empty staff and would count a
+    // value the reader cannot see.
+    if (entry.kind === 'silence' || !entry.duration.isTuplet) {
       positions.push(null);
       span = 0;
       openedAt = -1;
@@ -574,6 +650,7 @@ function validateTies(staff: StaffPart, path: string): void {
 function validateEntry(entry: MusicalEntry, path: string): void {
   switch (entry.kind) {
     case 'rest':
+    case 'silence':
       return;
     case 'note': {
       if (entry.pitches.length === 0) {

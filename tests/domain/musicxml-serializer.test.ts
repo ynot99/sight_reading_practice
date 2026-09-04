@@ -9,7 +9,7 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { XmlWriter, escapeXmlText } from '../../src/domain/notation/XmlWriter.js';
 import { DomainError, ExerciseValidationError } from '../../src/shared/errors.js';
-import { bar, p, twoBarExercise } from '../support/fixtures.js';
+import { bar, p, partialVoiceExercise, twoBarExercise } from '../support/fixtures.js';
 
 interface ElementLike {
   getAttribute(name: string): string | null;
@@ -348,5 +348,24 @@ describe('a tie in one voice of a shared staff', () => {
     for (const note of notes) {
       expect(all(note, 'tie')).toHaveLength(0);
     }
+  });
+});
+
+describe('a voice that is absent for part of a bar', () => {
+  const serializer = new MusicXmlSerializer();
+
+  it('says so with <forward> rather than drawing a rest', () => {
+    const xml = serializer.serialize(partialVoiceExercise());
+    const forwards = all(parse(xml), 'forward');
+
+    expect(all(parse(xml), 'rest')).toHaveLength(0);
+    expect(forwards).toHaveLength(2);
+    expect(forwards.map((node) => text(node, 'duration'))).toEqual([
+      String(Duration.QUARTER.ticks),
+      String(Duration.QUARTER.ticks),
+    ]);
+    // Named, so a part of several staves knows which line the time belongs to.
+    expect(forwards.map((node) => text(node, 'voice'))).toEqual(['2', '2']);
+    expect(forwards.map((node) => text(node, 'staff'))).toEqual(['1', '1']);
   });
 });

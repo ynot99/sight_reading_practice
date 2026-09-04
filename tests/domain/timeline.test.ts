@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
+import { noteEntry, restEntry, silenceEntry } from '../../src/domain/model/Exercise.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
-import { MIDI, bar, p, singleBarExercise, twoBarExercise } from '../support/fixtures.js';
+import {
+  MIDI,
+  bar,
+  p,
+  partialVoiceExercise,
+  singleBarExercise,
+  twoBarExercise,
+} from '../support/fixtures.js';
 
 describe('buildTimeline', () => {
   const timeline = buildTimeline(twoBarExercise());
@@ -158,5 +165,52 @@ describe('buildTimeline', () => {
     expect(silent.length).toBe(1);
     expect(silent.playableSteps).toHaveLength(0);
     expect(silent.require(0).durationTicks).toBe(Duration.WHOLE.ticks);
+  });
+});
+
+describe('a silence is not a place the cursor stops', () => {
+  it('makes no step of its own, where a rest would', () => {
+    // The engraver draws nothing for a silence, so its cursor never stops
+    // there. A step for it would be a position the reader is held at with
+    // nothing on the page to explain why.
+    const silent = buildTimeline(partialVoiceExercise());
+    const q = Duration.QUARTER.ticks;
+    expect(silent.steps.map((step) => step.onsetTicks)).toEqual([0, q, q * 2, q * 3]);
+
+    // Written as rests instead, the same bar is the same four positions - the
+    // difference is what is drawn, not where the cursor can be. So make the
+    // lower voice enter off the beat, where only it has anything to say.
+    const offBeat = buildTimeline(
+      partialVoiceExercise([
+        silenceEntry(Duration.EIGHTH),
+        noteEntry(p('G3'), Duration.HALF),
+        silenceEntry(Duration.DOTTED_QUARTER),
+      ]),
+    );
+    expect(offBeat.steps.map((step) => step.onsetTicks)).toEqual([
+      0,
+      Duration.EIGHTH.ticks,
+      q,
+      q * 2,
+      q * 3,
+    ]);
+
+    const drawn = buildTimeline(
+      partialVoiceExercise([
+        restEntry(Duration.EIGHTH),
+        noteEntry(p('G3'), Duration.HALF),
+        restEntry(Duration.DOTTED_QUARTER),
+      ]),
+    );
+    // The rests are drawn, so the engraver stops on them and so do we: the
+    // one after the held note is a position the silent version does not have.
+    expect(drawn.steps.map((step) => step.onsetTicks)).toEqual([
+      0,
+      Duration.EIGHTH.ticks,
+      q,
+      q * 2,
+      q * 2 + Duration.EIGHTH.ticks,
+      q * 3,
+    ]);
   });
 });

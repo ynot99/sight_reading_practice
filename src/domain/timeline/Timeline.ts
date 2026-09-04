@@ -150,7 +150,12 @@ export function buildTimeline(exercise: Exercise): ExerciseTimeline {
     let held = new Set<number>();
 
     entries.forEach(({ entry, onsetTicks }, index) => {
-      onsets.add(onsetTicks);
+      // A silence is drawn as nothing, so the engraver's cursor never stops
+      // there and neither may we: the two agree on *positions*, and a position
+      // nobody can see is one the reader would be held at for no reason.
+      if (entry.kind !== 'silence') {
+        onsets.add(onsetTicks);
+      }
       if (entry.kind === 'note') {
         const bucket = notesByOnset.get(onsetTicks) ?? [];
         for (const pitch of entry.pitches) {

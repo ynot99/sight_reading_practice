@@ -2,7 +2,14 @@ import { DomainError } from '../../shared/errors.js';
 import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '../model/Duration.js';
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
-import { BEAM_TYPES, measureOf, noteEntry, restEntry, validateExercise } from '../model/Exercise.js';
+import {
+  BEAM_TYPES,
+  measureOf,
+  noteEntry,
+  restEntry,
+  silenceEntry,
+  validateExercise,
+} from '../model/Exercise.js';
 import type {
   Beam,
   BeamType,
@@ -687,9 +694,8 @@ function soundedValues(note: RawNote): readonly Duration[] {
 
 function buildMeasure(
   notes: readonly RawNote[],
-  measureIndex: number,
+  isPickup: boolean,
   ticksPerMeasure: number,
-  warnings: ImportWarning[],
 ): Measure {
   const byOnset = new Map<number, RawNote[]>();
   for (const note of notes) {
@@ -707,8 +713,11 @@ function buildMeasure(
       continue;
     }
     if (onset > cursor) {
-      for (const rest of splitIntoRests(onset - cursor)) {
-        entries.push(restEntry(rest));
+      // A gap the writer left rather than filled: they wrote no rest here, so
+      // none is drawn. If nothing else on the staff covers it either, it
+      // becomes one again in {@link restStaffThatFallsSilent}.
+      for (const gap of splitIntoRests(onset - cursor)) {
+        entries.push(silenceEntry(gap));
       }
       cursor = onset;
     }
@@ -762,17 +771,18 @@ function buildMeasure(
   }
 
   if (cursor < ticksPerMeasure) {
-    const padding = splitIntoRests(ticksPerMeasure - cursor).map((rest) => restEntry(rest));
-    if (cursor > 0) {
-      // A voice that said nothing at all in this bar is resting, not short.
-      warnings.push({
-        kind: 'padded-measure',
-        detail: `Bar ${measureIndex + 1} was short and was padded with rests.`,
-      });
-    }
-    // A short *first* bar is a pickup, and its notes belong at the end of it -
-    // padding the tail instead would move every downbeat that follows.
-    entries.splice(measureIndex === 0 ? 0 : entries.length, 0, ...padding);
+    // The voice stops before the bar line does. In piano writing that is
+    // ordinary - an inner line drops out while the melody plays on - and the
+    // engraver draws nothing for it, so neither do we. Whether the *staff* is
+    // left blank is a question about all its voices at once, and is answered
+    // in {@link restStaffThatFallsSilent}.
+    const padding = splitIntoRests(ticksPerMeasure - cursor).map((gap) => silenceEntry(gap));
+    // A pickup's notes belong at the *end* of its bar - padding the tail
+    // instead would move every downbeat that follows. Asked of the bar rather
+    // than of this voice: a first bar is only a pickup when it is short for
+    // everybody, and one inner line that stops early in bar one is an ordinary
+    // absence whose notes must stay where they were written.
+    entries.splice(isPickup ? 0 : entries.length, 0, ...padding);
   }
 
   return measureOf(entries);
@@ -885,6 +895,15 @@ function buildStaves(
     pairs.set('1:1', { staff: 1, voice: 1 });
   }
 
+  // A first bar that nobody fills is an anacrusis. Read across every voice at
+  // once, because that is what makes it one: a bar where a single inner line
+  // stops early is just an absence, and pushing its notes to the end of the
+  // bar would move music the writer put on the downbeat.
+  const firstBar = perMeasure[0] ?? [];
+  const pickup =
+    firstBar.length > 0 &&
+    firstBar.every((note) => note.onsetTicks + note.ticks < barTicksAt(header, 0));
+
   const ordered = [...pairs.values()].sort(
     (left, right) => left.staff - right.staff || left.voice - right.voice,
   );
@@ -909,7 +928,7 @@ function buildStaves(
       if (mine.length === 0) {
         return measureOf([]);
       }
-      return buildMeasure(mine, measureIndex, barTicksAt(header, measureIndex), warnings);
+      return buildMeasure(mine, pickup && measureIndex === 0, barTicksAt(header, measureIndex));
     });
 
     return {
@@ -926,56 +945,150 @@ function buildStaves(
   });
 
   return {
-    staves: restStaffThatFallsSilent(parts, (bar) => barTicksAt(header, bar)),
+    staves: restStaffThatFallsSilent(parts, (bar) => barTicksAt(header, bar), warnings),
     pedalMarks,
   };
 }
 
+/** A half-open span of one bar, in divisions. */
+type Span = readonly [number, number];
+
+/** What the voices of one staff leave undrawn in one bar. */
+function holesIn(onStaff: readonly StaffPart[], bar: number, total: number): readonly Span[] {
+  const drawn: Span[] = [];
+  for (const part of onStaff) {
+    let cursor = 0;
+    for (const entry of part.measures[bar]?.entries ?? []) {
+      const ends = cursor + entry.duration.ticks;
+      if (entry.kind !== 'silence') {
+        drawn.push([cursor, ends]);
+      }
+      cursor = ends;
+    }
+  }
+  drawn.sort((left, right) => left[0] - right[0]);
+
+  const holes: Span[] = [];
+  let reached = 0;
+  for (const [from, to] of drawn) {
+    if (from > reached) {
+      holes.push([reached, from]);
+    }
+    reached = Math.max(reached, to);
+  }
+  if (reached < total) {
+    holes.push([reached, total]);
+  }
+  return holes;
+}
+
+/** The part of `span` that falls inside `hole`, or null where they miss. */
+function overlap(span: Span, hole: Span): Span | null {
+  const from = Math.max(span[0], hole[0]);
+  const to = Math.min(span[1], hole[1]);
+  return from < to ? [from, to] : null;
+}
+
 /**
- * Gives a resting staff its rest back.
+ * Draws the rests a staff cannot do without, and only those.
  *
- * A voice absent from a bar is left out of it, which is what keeps a sparse
- * inner line from littering the page. But when *every* voice of a staff is
- * absent, the staff is not sparse - it is resting, and a resting staff is
- * drawn with a rest. Only the first voice carries it, or the bar would show
- * one rest per voice.
+ * A voice may be absent from a bar or from part of one - that is how a sparse
+ * inner line stays sparse instead of littering the page with rests nobody
+ * wrote. But an absence is only legible while some other voice on the staff is
+ * playing there. Where none is, that stretch of staff would be blank, and
+ * blank staff is not something a reader can count: it is a hole. So the holes
+ * are found across the whole staff at once, and the first voice on it draws
+ * rests through them - only the first, or the bar would show one rest per
+ * voice.
  */
 function restStaffThatFallsSilent(
   parts: readonly StaffPart[],
   ticksPerMeasure: (measureIndex: number) => number,
+  warnings: ImportWarning[],
 ): readonly StaffPart[] {
   const bars = parts[0]?.measures.length ?? 0;
-  const silent = new Map<number, Set<number>>();
+  const repairs = new Map<number, Map<number, readonly Span[]>>();
 
   for (let bar = 0; bar < bars; bar += 1) {
     for (const staffNumber of new Set(parts.map((part) => part.staffNumber))) {
       const onStaff = parts.filter((part) => part.staffNumber === staffNumber);
-      if (onStaff.every((part) => (part.measures[bar]?.entries.length ?? 0) === 0)) {
-        const first = onStaff[0];
-        if (first !== undefined) {
-          silent.set(first.voice, (silent.get(first.voice) ?? new Set()).add(bar));
-        }
+      const holes = holesIn(onStaff, bar, ticksPerMeasure(bar));
+      const carrier = onStaff[0];
+      if (holes.length === 0 || carrier === undefined) {
+        continue;
       }
+      const byBar = repairs.get(carrier.voice) ?? new Map<number, readonly Span[]>();
+      byBar.set(bar, holes);
+      repairs.set(carrier.voice, byBar);
+      warnings.push({
+        kind: 'padded-measure',
+        detail: `Bar ${bar + 1} left staff ${staffNumber} blank, and was given rests.`,
+      });
     }
   }
 
-  if (silent.size === 0) {
+  if (repairs.size === 0) {
     return parts;
   }
   return parts.map((part) => {
-    const bars = silent.get(part.voice);
-    if (bars === undefined) {
+    const byBar = repairs.get(part.voice);
+    if (byBar === undefined) {
       return part;
     }
     return {
       ...part,
-      measures: part.measures.map((measure, index) =>
-        bars.has(index)
-          ? measureOf(splitIntoRests(ticksPerMeasure(index)).map((rest) => restEntry(rest)))
-          : measure,
-      ),
+      measures: part.measures.map((measure, index) => {
+        const holes = byBar.get(index);
+        if (holes === undefined) {
+          return measure;
+        }
+        // An absent voice has nothing to rewrite, so it is read as one silence
+        // over the whole bar - which is what it means.
+        const source =
+          measure.entries.length > 0
+            ? measure.entries
+            : splitIntoRests(ticksPerMeasure(index)).map((gap) => silenceEntry(gap));
+        return measureOf(drawThrough(source, holes));
+      }),
     };
   });
+}
+
+/** Rewrites the silences of one voice into rests wherever a hole needs one. */
+function drawThrough(
+  entries: readonly MusicalEntry[],
+  holes: readonly Span[],
+): readonly MusicalEntry[] {
+  const rewritten: MusicalEntry[] = [];
+  let cursor = 0;
+  for (const entry of entries) {
+    const span: Span = [cursor, cursor + entry.duration.ticks];
+    cursor = span[1];
+    if (entry.kind !== 'silence') {
+      rewritten.push(entry);
+      continue;
+    }
+    // Only the parts of this silence that fall in a hole become rests; the
+    // rest of it stays silent, because another voice is drawing there.
+    let at = span[0];
+    for (const hole of holes) {
+      const inside = overlap(span, hole);
+      if (inside === null) {
+        continue;
+      }
+      for (const gap of splitIntoRests(inside[0] - at)) {
+        rewritten.push(silenceEntry(gap));
+      }
+      for (const rest of splitIntoRests(inside[1] - inside[0])) {
+        rewritten.push(restEntry(rest));
+      }
+      at = inside[1];
+    }
+    for (const gap of splitIntoRests(span[1] - at)) {
+      rewritten.push(silenceEntry(gap));
+    }
+  }
+  return rewritten;
 }
 
 /**

@@ -530,6 +530,36 @@ describe('AppView', () => {
     expect(element('listen').textContent).toBe('Listen');
   });
 
+  it('gives the transport back when a run is taken away by a playback', async () => {
+    // Listening throws the run away - the same pulse and the same cursor
+    // cannot serve two masters - but a run that is *taken* has no session
+    // left to say so with. The buttons went on believing one was in
+    // progress: Start stayed disabled for good, and Stop and Pause went on
+    // offering to act on something that no longer existed.
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    element<HTMLButtonElement>('start').click();
+    expect(element<HTMLButtonElement>('start').disabled).toBe(true);
+
+    element<HTMLButtonElement>('listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(runtime.controller.session).toBeNull();
+    expect(element<HTMLButtonElement>('start').disabled).toBe(false);
+    expect(element<HTMLButtonElement>('stop').disabled).toBe(true);
+    expect(element<HTMLButtonElement>('pause').disabled).toBe(true);
+
+    element<HTMLButtonElement>('listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // And Start still works afterwards, which is the whole complaint.
+    element<HTMLButtonElement>('start').click();
+    expect(runtime.controller.session?.status).toBe('running');
+    expect(element<HTMLButtonElement>('start').disabled).toBe(true);
+    expect(element<HTMLButtonElement>('stop').disabled).toBe(false);
+  });
+
   it('sounds only the hand that was chosen', async () => {
     const { view, instrument, metronome } = createRig();
     await view.initialize();

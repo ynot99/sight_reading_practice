@@ -305,6 +305,16 @@ export interface ControllerEventMap {
   exerciseLoaded: ExerciseLoadedEvent;
   sessionCreated: { readonly session: PracticeSession };
   /**
+   * A run was thrown away without finishing.
+   *
+   * A run that ends says so through the session's own events, but a run that
+   * is *taken away* has no session left to say it with - and everything
+   * watching went on believing one was in progress. Starting a playback does
+   * exactly that, so Start stayed disabled and Stop went on offering to stop
+   * something that no longer existed.
+   */
+  sessionDiscarded: Record<string, never>;
+  /**
    * Where the survival bar stands, `0..1`, and why it moved.
    *
    * The two causes look different and must be drawn differently: a drain is a
@@ -1278,8 +1288,12 @@ export class PracticeController {
       unsubscribe();
     }
     this.sessionSubscriptions = [];
+    const had = this.currentSession !== null;
     this.currentSession?.dispose();
     this.currentSession = null;
+    if (had) {
+      this.emitter.emit('sessionDiscarded', {});
+    }
   }
 
   /**

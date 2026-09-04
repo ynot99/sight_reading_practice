@@ -2381,6 +2381,15 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      controller.events.on('sessionDiscarded', () => {
+        // Asked rather than assumed: this fires on the way into starting a
+        // run as well as on the way out of one, and the answer differs.
+        this.updateButtons(controller.session?.status ?? 'idle');
+        this.describeListening();
+      }),
+    );
+
+    this.subscriptions.push(
       controller.playbackEvents.on('finished', () => {
         this.describeListening();
         // Round again, exactly as a run does. A repeat sign on the page

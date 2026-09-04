@@ -576,6 +576,36 @@ describe('AppView', () => {
     expect(element('listen').textContent).toBe('Listen');
   });
 
+  it('tells the page which bars the reader has seen before', async () => {
+    // A repeat is written out rather than jumped back to, so the numbers go
+    // back on their own. Without the mark, a reader has no way of knowing
+    // why - and the wiring from the score to the page had no test at all.
+    const { view, runtime, renderer } = createRig();
+    await view.initialize();
+
+    const base = twoBarExercise({ title: 'With A Repeat' });
+    const [treble, bass] = base.staves;
+    if (treble === undefined || bass === undefined) {
+      throw new Error('expected two staves');
+    }
+    await runtime.controller.openScore({
+      ...base,
+      // Bar one read twice: two, one again, two again.
+      barLabels: [
+        { number: 1, repeated: false },
+        { number: 2, repeated: false },
+        { number: 1, repeated: true },
+        { number: 2, repeated: true },
+      ],
+      staves: [
+        { ...treble, measures: [...treble.measures, ...treble.measures] },
+        { ...bass, measures: [...bass.measures, ...bass.measures] },
+      ],
+    });
+
+    expect(renderer.repeatedBars).toEqual([2, 3]);
+  });
+
   it('sounds only the hand that was chosen', async () => {
     const { view, instrument, metronome } = createRig();
     await view.initialize();

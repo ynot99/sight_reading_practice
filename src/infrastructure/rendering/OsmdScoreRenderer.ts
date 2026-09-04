@@ -88,7 +88,16 @@ const START_WIDTH = 3;
  * A rehearsal mark's worth: big enough to be seen at the stand without
  * being read as something the writer put there.
  */
-const REPEAT_MARK_RADIUS = 7;
+const REPEAT_MARK_RADIUS = 4;
+
+/**
+ * How close to a bar number a text has to be to *be* that bar's number.
+ *
+ * The engraver draws it just above and just left of the bar line, a few units
+ * out. Bars are more than a hundred units apart, so nothing else can be
+ * mistaken for it.
+ */
+const NUMBER_REACH = 14;
 const START_FLAG = 9;
 
 /** How far the page number sits from the corner of the page, in pixels. */
@@ -1732,11 +1741,20 @@ export class OsmdScoreRenderer
       if (measure === undefined || sheet === undefined) {
         continue;
       }
+      // Beside the number, and only where there is one. The engraver numbers
+      // every second bar or so, and the number is the thing that needs
+      // explaining: a bar with no number asks the reader no question. It is
+      // also the one place above the staff that is already kept clear, so
+      // nothing here can land on a note.
+      const number = this.numberTextNear(sheet, measure);
+      if (number === null) {
+        continue;
+      }
       const doc = sheet.ownerDocument;
       const mark = doc.createElementNS(SVG_NAMESPACE, 'g');
       mark.setAttribute('class', 'repeat-mark');
-      const x = measure.left + REPEAT_MARK_RADIUS + 2;
-      const y = measure.top - REPEAT_MARK_RADIUS - 2;
+      const x = number.x + number.width + REPEAT_MARK_RADIUS;
+      const y = number.y - number.height;
 
       const ring = doc.createElementNS(SVG_NAMESPACE, 'path');
       ring.setAttribute('class', 'repeat-mark__ring');
@@ -1760,6 +1778,42 @@ export class OsmdScoreRenderer
 
       this.passageGroupFor(sheet).append(mark);
     }
+  }
+
+  /**
+   * The bar number the engraver drew for this bar, if it drew one.
+   *
+   * Found by where it is rather than by what it says: a score written out
+   * from its repeats says "twenty" twice, which is the whole reason the mark
+   * exists, so the text itself cannot tell the two apart.
+   */
+  private numberTextNear(
+    sheet: SVGSVGElement,
+    measure: DrawnMeasure,
+  ): { x: number; y: number; width: number; height: number } | null {
+    for (const text of sheet.querySelectorAll('text')) {
+      if (!/^\d+$/.test(text.textContent ?? '')) {
+        continue;
+      }
+      const x = Number.parseFloat(text.getAttribute('x') ?? '');
+      const y = Number.parseFloat(text.getAttribute('y') ?? '');
+      if (
+        Math.abs(x - measure.left) > NUMBER_REACH ||
+        Math.abs(y - measure.top) > NUMBER_REACH
+      ) {
+        continue;
+      }
+      const height = Number.parseFloat((text.getAttribute('font-size') ?? '15').replace(/[a-z]+$/i, ''));
+      return {
+        x,
+        y,
+        // Its own width, near enough: the digits are what the mark stands
+        // clear of, and a glyph is about half its height across.
+        width: (text.textContent?.length ?? 1) * height * 0.5,
+        height: Number.isFinite(height) ? height : 15,
+      };
+    }
+    return null;
   }
 
   private paintStart(): void {

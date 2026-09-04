@@ -100,10 +100,35 @@ const REPEAT_MARK_RADIUS = 4;
 const NUMBER_REACH = 14;
 const START_FLAG = 9;
 
-/** How far the page number sits from the corner of the page, in pixels. */
-const PAGE_NUMBER_INSET = 18;
+/** How far the page's label sits from the corner of the page, in pixels. */
+const PAGE_LABEL_INSET = 18;
+/**
+ * How much of a title the corner of a page will take.
+ *
+ * Counted in characters rather than measured, because the text is an SVG
+ * `<text>` and the one honest way to measure one is `getComputedTextLength`,
+ * which the headless document this is tested in answers `0` to. A guess at
+ * the width of a character would be a measurement in name only, so this is
+ * openly a limit on length: past it a corner label has stopped being glanced
+ * at and started being read, whatever it measures.
+ */
+const TITLE_LIMIT = 48;
 /** Half the width of the arrow drawn inside a handle. */
 const ARROW_REACH = 3.5;
+
+/**
+ * A title cut to {@link TITLE_LIMIT}, with an ellipsis where it was cut.
+ *
+ * SVG text does not wrap, so a long one does not become two lines - it runs
+ * off the side of the page and out of the drawing.
+ */
+function shortened(title: string): string {
+  const trimmed = title.trim();
+  if (trimmed.length <= TITLE_LIMIT) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, TITLE_LIMIT - 1).trimEnd()}…`;
+}
 
 /** As much of the engraver's own model as the markers need to read. */
 interface DrawnSheet {
@@ -361,8 +386,8 @@ export class OsmdScoreRenderer
   private overlayGroups = new WeakMap<SVGSVGElement, SVGGElement>();
   /** The pages as last engraved; see {@link sheets}. */
   private drawnSheets: SVGSVGElement[] | null = null;
-  /** Each page's printed number; see {@link numberPage}. */
-  private pageNumbers = new WeakMap<SVGSVGElement, Element>();
+  /** Each page's printed label; see {@link labelPage}. */
+  private pageLabels = new WeakMap<SVGSVGElement, Element>();
   private marks: PlayedMark[] = [];
   private overlayContext: OverlayContext | null = null;
 
@@ -444,7 +469,12 @@ export class OsmdScoreRenderer
   async load(musicXml: string): Promise<void> {
     const osmd = await this.ensureEngraver();
     this.marks = [];
-    await osmd.load(musicXml);
+    // Nothing, rather than the engraver's "Untitled Score", for a score that
+    // does not name itself. The second argument is the name it falls back to,
+    // and left at its default it invents one - which the page label would
+    // then print in the corner of all thirty pages as though the piece were
+    // called that. An empty title is a fact about the file and says so.
+    await osmd.load(musicXml, '');
     osmd.zoom = this.currentZoom;
     // Before the first engraving, not only when the reader turns pages on.
     // A visit that opens already in pages - because that is how the reader
@@ -833,13 +863,13 @@ export class OsmdScoreRenderer
       if (sheet.style.display !== shown) {
         sheet.style.display = shown;
       }
-      this.numberPage(sheet, at, this.paged ? sheets.length : 0);
+      this.labelPage(sheet, at, this.paged ? sheets.length : 0);
     }
     this.placeCursor();
   }
 
   /**
-   * Writes the page number onto the page, the way a printed score has it.
+   * What this page is: which piece, and which page of it.
    *
    * Drawn into the sheet rather than floated over it, because that is what
    * it is: part of this page and not part of the screen. It stays put, it is
@@ -847,35 +877,57 @@ export class OsmdScoreRenderer
    * goes - none of which a pill announcing a turn can do, since it says its
    * piece and disappears.
    *
-   * The engraver keeps a page number in its model and draws nothing with it,
-   * so this is ours to draw.
+   * The title is here rather than printed over the first system, which is
+   * where engraved music puts it and where the engraver would put it if
+   * `drawTitle` were on. A title block costs vertical room on the one page
+   * whose room is scarcest, and room is what a page in this trainer is
+   * always short of. In the margin it costs none - and being on every page
+   * it answers "what am I playing" on page seven, which a printed title
+   * cannot do at all.
+   *
+   * The engraver keeps both a title and a page number in its model and draws
+   * neither, so this is ours to draw.
    */
-  private numberPage(sheet: SVGSVGElement, at: number, count: number): void {
+  private labelPage(sheet: SVGSVGElement, at: number, count: number): void {
     // Kept rather than looked up, for the reason the overlay layer is: asking
     // the page for it by class walks the whole page, it is appended last so
     // the walk never ends early, and this runs for every page of the score on
     // every turn. Thirty pages of a long piece made a page turn a visible
     // stall - the music stopped, then caught up all at once.
-    const held = this.pageNumbers.get(sheet);
+    const held = this.pageLabels.get(sheet);
     const existing = held?.parentNode === sheet ? held : null;
-    if (count < 2) {
+    const label = this.pageLabel(at, count);
+    if (label === '') {
       existing?.remove();
-      this.pageNumbers.delete(sheet);
+      this.pageLabels.delete(sheet);
       return;
     }
     const text = existing ?? sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'text');
-    const label = `Page ${at + 1} of ${count}`;
     if (existing !== null && text.textContent === label) {
       return;
     }
-    text.setAttribute('class', 'page-number');
-    text.setAttribute('x', String(PAGE_NUMBER_INSET));
-    text.setAttribute('y', String(PAGE_NUMBER_INSET));
+    text.setAttribute('class', 'page-label');
+    text.setAttribute('x', String(PAGE_LABEL_INSET));
+    text.setAttribute('y', String(PAGE_LABEL_INSET));
     text.textContent = label;
     if (existing === null) {
       sheet.append(text);
-      this.pageNumbers.set(sheet, text);
+      this.pageLabels.set(sheet, text);
     }
+  }
+
+  /**
+   * The line itself, or `''` where there is nothing to say.
+   *
+   * "Page 1 of 1" at a reader who never asked for pages is furniture, so the
+   * count only speaks when there is more than one page. The title speaks
+   * whenever the score has one - including in a single column, where it is
+   * the whole of the line.
+   */
+  private pageLabel(at: number, count: number): string {
+    const title = shortened(this.osmd?.Sheet?.TitleString ?? '');
+    const pages = count < 2 ? '' : `Page ${at + 1} of ${count}`;
+    return [title, pages].filter((part) => part !== '').join(' · ');
   }
 
   /**

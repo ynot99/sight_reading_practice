@@ -1176,14 +1176,19 @@ select {
 }
 
 /*
- * The page number, printed on the page rather than floated over it.
+ * What the page is - the title, the page number - printed on the page rather
+ * than floated over it.
  *
  * Engraved music has this in the corner and so does this: the same grey as
  * the bar numbers the engraver draws, small, and out of the way of the top
  * stave. It is part of the page, so it turns with it and is there before
  * anything has been turned at all.
+ *
+ * Quiet on purpose. The title of a piece being practised is a thing to be
+ * able to check, not a thing to be told: a heading in the reader's own black
+ * would compete with the noteheads, which are what is being read.
  */
-.page-number {
+.page-label {
   font: 12px/1 ui-serif, Georgia, 'Times New Roman', serif;
   fill: #6b7280;
   user-select: none;

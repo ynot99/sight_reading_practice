@@ -137,14 +137,15 @@ describe('the stylesheet', () => {
     expect(mark?.body).toMatch(/pointer-events\s*:\s*none/);
   });
 
-  it('keeps the page number out of the way of a finger', () => {
+  it('keeps the page label out of the way of a finger', () => {
     // It is printed on the page, so it sits over the music: a label that
     // swallowed a touch would put a dead patch in the corner of every page,
-    // which is exactly where a marker at bar one stands.
-    const number = rules().find((rule) => rule.selector === '.page-number');
+    // which is exactly where a marker at bar one stands. Longer now that it
+    // carries the title too, so it covers more of that corner.
+    const label = rules().find((rule) => rule.selector === '.page-label');
 
-    expect(number?.body).toMatch(/pointer-events\s*:\s*none/);
-    expect(number?.body).toMatch(/fill\s*:/);
+    expect(label?.body).toMatch(/pointer-events\s*:\s*none/);
+    expect(label?.body).toMatch(/fill\s*:/);
   });
 
   it('takes the scrollbar away from a score that is turned', () => {

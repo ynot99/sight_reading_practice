@@ -453,19 +453,21 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     expect(markers[renderer.pages.count - 1]).toBe(1);
   });
 
-  it('prints the page number on the page, the way a score has it', () => {
+  it('prints what the page is on the page, the way a score has it', () => {
     // Part of the page and not part of the screen: it stays put, it is there
     // before anything is turned, and it goes wherever the page goes - which
-    // is what a pill announcing a turn cannot do.
+    // is what a pill announcing a turn cannot do. And the title is beside the
+    // number rather than printed over the first system, so it costs no
+    // vertical room and is answered on every page instead of only the first.
     renderer.setPaged(true);
     const count = renderer.pages.count;
 
-    const numbers = sheets(container).map(
-      (sheet) => sheet.querySelector('text.page-number')?.textContent ?? '',
+    const labels = sheets(container).map(
+      (sheet) => sheet.querySelector('text.page-label')?.textContent ?? '',
     );
 
-    expect(numbers[0]).toBe(`Page 1 of ${count}`);
-    expect(numbers[count - 1]).toBe(`Page ${count} of ${count}`);
+    expect(labels[0]).toBe(`Long fixture · Page 1 of ${count}`);
+    expect(labels[count - 1]).toBe(`Long fixture · Page ${count} of ${count}`);
   });
 
   it('does not scroll after the marker in a mode that turns pages', async () => {
@@ -520,18 +522,59 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     expect(searched).toEqual([]);
     // And the pages still say which they are, one label apiece.
     for (const [at, sheet] of sheets(container).entries()) {
-      const labels = sheet.querySelectorAll('text.page-number');
+      const labels = sheet.querySelectorAll('text.page-label');
       expect(labels).toHaveLength(1);
-      expect(labels[0]?.textContent).toBe(`Page ${at + 1} of ${renderer.pages.count}`);
+      expect(labels[0]?.textContent).toBe(
+        `Long fixture · Page ${at + 1} of ${renderer.pages.count}`,
+      );
     }
   });
 
   it('says nothing about pages on a score that is one column', () => {
-    // "Page 1 of 1" at a reader who never asked for pages is furniture.
+    // "Page 1 of 1" at a reader who never asked for pages is furniture. The
+    // title is not: a column has a top, and what piece it is the top of is
+    // worth saying there.
     renderer.setPaged(true);
     renderer.setPaged(false);
 
-    expect(container.querySelector('text.page-number')).toBeNull();
+    const label = container.querySelector('text.page-label');
+    expect(label?.textContent).toBe('Long fixture');
+  });
+
+  it('says only the pages when the score has no title to say', async () => {
+    // A generated exercise can arrive nameless, and " · Page 1 of 3" with
+    // nothing in front of the separator is furniture of a worse kind.
+    document.body.replaceChildren();
+    const bare = createScoreContainer();
+    const nameless = new OsmdScoreRenderer(bare, { zoom: 1 });
+    withLayout(bare, 260);
+
+    await nameless.load(new MusicXmlSerializer().serialize(longExercise({ bars: 16, title: '' })));
+    nameless.setPaged(true);
+
+    const label = bare.querySelector('text.page-label');
+    expect(label?.textContent).toBe(`Page 1 of ${nameless.pages.count}`);
+  });
+
+  it('cuts a title too long for the corner it is written in', async () => {
+    // SVG text does not wrap: an untrimmed one runs off the side of the page
+    // and out of the drawing entirely, taking the page number with it.
+    document.body.replaceChildren();
+    const wordy = createScoreContainer();
+    const long = new OsmdScoreRenderer(wordy, { zoom: 1 });
+    withLayout(wordy, 260);
+    const title = 'Nausicaa of the Valley of the Wind: Requiem for a Dying World, Arranged';
+
+    await long.load(new MusicXmlSerializer().serialize(longExercise({ bars: 16, title })));
+    long.setPaged(true);
+
+    const written = wordy.querySelector('text.page-label')?.textContent ?? '';
+    const shown = written.split(' · ')[0] ?? '';
+    expect(shown).toHaveLength(48);
+    expect(shown.endsWith('…')).toBe(true);
+    expect(title.startsWith(shown.slice(0, -1))).toBe(true);
+    // And the page number survives the cut, which is the point of cutting.
+    expect(written.endsWith(`Page 1 of ${long.pages.count}`)).toBe(true);
   });
 
   it('turns the page itself when the cursor moves onto another one', () => {

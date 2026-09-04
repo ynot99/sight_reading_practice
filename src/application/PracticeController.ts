@@ -240,8 +240,8 @@ export interface PracticeSettings {
    * towards the grade is the scoring strategy's question, not this one. This
    * says what the *page* should show, and there are two honest answers - the
    * colour can mean "the right note", with the outline saying it was late, or
-   * it can mean "the right note, in time", which is stricter and is how a
-   * reader used to Piano Marvel expects to be marked.
+   * it can mean "the right note, in time", which is stricter and is how the
+   * graded trainers mark it.
    */
   readonly strictTiming: boolean;
   /**

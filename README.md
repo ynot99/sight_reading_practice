@@ -3,8 +3,8 @@
 A client-side sight-reading trainer for piano: it generates fresh grand-staff
 exercises, engraves them as real notation, and judges what you play on a MIDI
 keyboard in real time. Free, open source, and offline after the first load —
-an alternative to the SASR-style drills in Piano Marvel or Sight Reading
-Factory.
+an alternative to the graded sight-reading drills the subscription trainers
+sell.
 
 Two practice modes:
 
@@ -685,3 +685,16 @@ you unless you ask otherwise.
 ## Licence
 
 MIT.
+
+The bundled piano is not ours to license. The recordings in
+`public/samples/piano/` are a reduction of the **Salamander Grand Piano V3**
+by **Alexander Holm** — a Yamaha C5 sampled at sixteen velocity layers —
+published under [Creative Commons Attribution
+3.0](http://creativecommons.org/licenses/by/3.0/), and taken here from the
+subset [Tone.js publishes](https://tonejs.github.io/audio/salamander). The
+original library is at
+<https://archive.org/details/SalamanderGrandPianoV3>.
+
+Attribution is a condition of that licence, so it belongs where the licence
+is stated rather than only beside the files. What was cut down and how is in
+`public/samples/piano/CREDITS.md`, next to the recordings themselves.

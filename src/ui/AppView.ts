@@ -1284,6 +1284,26 @@ export class AppView {
     this.el.focusListen.setAttribute('aria-label', label);
     this.el.focusListen.title = label;
     this.el.focusListenIcon.setAttribute('d', listening ? HUSH_ICON : LISTEN_ICON);
+    this.describeStopping();
+  }
+
+  /**
+   * Whether there is anything for Stop to stop.
+   *
+   * Asked of all three things it can end rather than of the session alone: a
+   * greyed-out Stop while a performance plays says the button is not for
+   * this, which was never true - it was only ever not wired to it.
+   */
+  private describeStopping(): void {
+    const status = this.runtime.controller.session?.status;
+    const stoppable =
+      status === 'running' ||
+      status === 'counting-in' ||
+      status === 'paused' ||
+      this.isPreviewing ||
+      this.runtime.controller.isListening;
+    this.el.stop.disabled = !stoppable;
+    this.el.focusStop.disabled = !stoppable;
   }
 
   private populateSelects(): void {
@@ -1689,9 +1709,7 @@ export class AppView {
     });
 
     this.listen(this.el.stop, 'click', () => {
-      // Stopping during the look means the reader has seen enough of it.
-      this.cancelPreview();
-      controller.stop();
+      this.stopEverything();
     });
 
     this.bindSpaceBar();
@@ -1773,7 +1791,7 @@ export class AppView {
     });
 
     this.listen(this.el.focusStop, 'click', () => {
-      controller.stop();
+      this.stopEverything();
     });
 
     this.listen(this.el.focusRewind, 'click', () => {
@@ -1932,11 +1950,7 @@ export class AppView {
       this.showCount(left);
     };
     show();
-    // Stop is how the reader says they have seen enough, so it has to be
-    // reachable during the look - a phase they cannot leave is a trap.
     this.el.start.disabled = true;
-    this.el.stop.disabled = false;
-    this.el.focusStop.disabled = false;
     this.previewTimer = setInterval(() => {
       left -= 1;
       if (left > 0) {
@@ -1948,8 +1962,12 @@ export class AppView {
     }, 1000);
     // After the timer exists, not before: the look is what makes this a
     // playing state and there is no session to read it off, so asking any
-    // earlier gets the answer for a page with nothing happening on it.
+    // earlier gets the answer for a page with nothing happening on it. Stop
+    // is asked the same question and for the same reason - it is how the
+    // reader says they have seen enough, and a phase they cannot leave is a
+    // trap.
     this.applyPlayingChrome();
+    this.describeStopping();
   }
 
   /**
@@ -2025,6 +2043,26 @@ export class AppView {
     // scrolled a little on every beat. That is what a page turn is for: the
     // reader looks at one thing until it is finished with.
     this.runtime.renderer.showMeasure(measureIndex);
+  }
+
+  /**
+   * Stops whatever is going: a run, a look, a performance.
+   *
+   * One button for all three, because from where the reader is sitting there
+   * is only one thing happening and Stop is what ends it. Wired to the
+   * session alone it did nothing at all during a look or a performance -
+   * neither of which *is* a session - and in fullscreen, where Stop is one of
+   * the two buttons left on the page, that made the look a phase with no way
+   * out. The desk's Stop knew about the look; the one beside the music did
+   * not, which is exactly the wrong way round.
+   */
+  private stopEverything(): void {
+    this.cancelPreview();
+    this.runtime.controller.stop();
+    if (this.runtime.controller.isListening) {
+      this.runtime.controller.stopListening();
+      this.describeListening();
+    }
   }
 
   /** Ends a look in progress, whether it ran out or the reader stopped it. */
@@ -3680,7 +3718,6 @@ export class AppView {
     this.el.start.disabled = running || paused;
     this.el.pause.disabled = !running && !paused;
     this.el.pause.textContent = paused ? 'Resume' : 'Pause';
-    this.el.stop.disabled = !running && !paused;
     this.el.newExercise.disabled = running || paused;
 
     // One button for all three, as a transport has: an icon says which of
@@ -3689,7 +3726,7 @@ export class AppView {
     this.el.focusPlay.setAttribute('aria-label', label);
     this.el.focusPlay.title = label;
     this.el.focusPlayIcon.setAttribute('d', running ? PAUSE_ICON : PLAY_ICON);
-    this.el.focusStop.disabled = !running && !paused;
+    this.describeStopping();
     this.el.focusNext.disabled = running || paused;
     this.el.focus.disabled = false;
     this.applyPlayingChrome();

@@ -547,7 +547,9 @@ describe('AppView', () => {
 
     expect(runtime.controller.session).toBeNull();
     expect(element<HTMLButtonElement>('start').disabled).toBe(false);
-    expect(element<HTMLButtonElement>('stop').disabled).toBe(true);
+    // Pause is the run's, and there is no run. Stop is not: something is
+    // playing, and Stop is the button that ends whatever is playing.
+    expect(element<HTMLButtonElement>('stop').disabled).toBe(false);
     expect(element<HTMLButtonElement>('pause').disabled).toBe(true);
 
     element<HTMLButtonElement>('listen').click();
@@ -1022,6 +1024,47 @@ describe('AppView', () => {
       element<HTMLButtonElement>('stop').click();
 
       expect(element('focus-bar').dataset['open']).toBe('false');
+    });
+
+    it('leaves a stop that stops the look it is left alone with', async () => {
+      // The complaint this answers: with the interface down to two buttons,
+      // Stop did nothing. It was wired to the session, and a look is not a
+      // session - so the one phase where the reader has no other control was
+      // the one phase they could not leave.
+      vi.useFakeTimers();
+      try {
+        const { view, runtime } = createRig();
+        await view.initialize();
+        runtime.controller.updateSettings({ previewSeconds: 10 });
+
+        element<HTMLButtonElement>('start').click();
+        expect(view.isPreviewing).toBe(true);
+        expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
+
+        element<HTMLButtonElement>('focus-stop').click();
+
+        expect(view.isPreviewing).toBe(false);
+        expect(runtime.controller.session).toBeNull();
+        expect(element('focus-bar').dataset['playing']).toBe('false');
+        // And the look does not go on to start a run behind the reader's back.
+        vi.advanceTimersByTime(20_000);
+        expect(runtime.controller.session).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('stops a performance too, that also being something playing', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runtime.controller.isListening).toBe(true);
+
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(runtime.controller.isListening).toBe(false);
+      expect(element('listen').textContent).toBe('Listen');
     });
 
     it('leaves exactly the two buttons a reader needs mid-piece', () => {

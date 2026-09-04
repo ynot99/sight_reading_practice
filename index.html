@@ -135,6 +135,7 @@
           <div class="panel__row panel__row--compact">
             <button id="open-scores" type="button" class="button button--ghost">Scores</button>
             <button id="open-takes" type="button" class="button button--ghost">Takes</button>
+            <button id="open-metronome" type="button" class="button button--ghost">Metronome</button>
             <button id="open-settings" type="button" class="button button--ghost">Settings</button>
           </div>
 
@@ -176,6 +177,57 @@
           <div class="sheet__actions">
             <button id="confirm-no" type="button" class="button button--ghost">Cancel</button>
             <button id="confirm-yes" type="button" class="button button--danger">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!--
+        Everything about the click, in one place.
+
+        It was in three: two of these were cycle buttons in the fullscreen
+        drawer, and all four were control groups scattered down the settings
+        sheet - so "make the metronome quieter and give me two bars of
+        count-in" meant two different places and a scroll. They are one
+        subject and they are asked together.
+
+        A sheet, raised from the transport bar and from the desk, for the
+        reason the lists are: in fullscreen the desk panel is not on the page
+        at all, and leaving fullscreen to change the click and coming back is
+        a re-engraving each way.
+      -->
+      <div id="sheet-metronome" class="sheet" hidden>
+        <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
+          aria-label="Metronome">
+          <div class="sheet__head">
+            <strong class="sheet__title">Metronome</strong>
+            <button id="metronome-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+          <div class="controls controls--stacked">
+            <div class="control-group">
+              <label for="dropout">Metronome sounds</label>
+              <select id="dropout"></select>
+              <p id="dropout-description" class="hint"></p>
+            </div>
+
+            <div class="control-group">
+              <label for="click">Click on</label>
+              <select id="click"></select>
+              <p id="click-description" class="hint"></p>
+            </div>
+
+            <div class="control-group">
+              <label for="count-in">Count-in: <output id="count-in-value">1</output> bars</label>
+              <input id="count-in" type="range" min="0" max="4" step="1" value="1" />
+            </div>
+
+            <div class="control-group">
+              <label for="metronome-volume">
+                Metronome: <output id="metronome-volume-value">60</output>%
+              </label>
+              <input id="metronome-volume" type="range" min="0" max="100" step="5" value="60" />
+            </div>
+
           </div>
         </div>
       </div>
@@ -316,26 +368,9 @@
         </div>
 
         <div class="control-group">
-          <label for="click">Click on</label>
-          <select id="click"></select>
-          <p id="click-description" class="hint"></p>
-        </div>
-
-        <div class="control-group">
-          <label for="dropout">Metronome sounds</label>
-          <select id="dropout"></select>
-          <p id="dropout-description" class="hint"></p>
-        </div>
-
-        <div class="control-group">
           <label for="preview">Look before playing: <output id="preview-value">0</output> s</label>
           <input id="preview" type="range" min="0" max="20" step="1" value="0" />
           <p class="hint">A scan the run starts itself after, so the look is deliberate.</p>
-        </div>
-
-        <div class="control-group">
-          <label for="count-in">Count-in: <output id="count-in-value">1</output> bars</label>
-          <input id="count-in" type="range" min="0" max="4" step="1" value="1" />
         </div>
 
         <div class="control-group">
@@ -380,13 +415,6 @@
             <button id="latency-test" type="button" class="button">Play a test</button>
           </div>
           <p id="latency-description" class="hint"></p>
-        </div>
-
-        <div class="control-group">
-          <label for="metronome-volume">
-            Metronome: <output id="metronome-volume-value">60</output>%
-          </label>
-          <input id="metronome-volume" type="range" min="0" max="100" step="5" value="60" />
         </div>
 
         <div class="control-group">
@@ -559,6 +587,21 @@
               class="focus-bar__button focus-bar__button--step" title="Faster" aria-label="Faster">+</button>
           </span>
 
+          <!--
+            Everything about the click behind one button, and in the row
+            rather than in the drawer: it is the thing reached for most
+            between runs, and it used to be two cycle buttons under the
+            handle plus two sliders down the settings sheet.
+          -->
+          <button id="focus-metronome" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Metronome" aria-label="Metronome">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M9.2 2h5.6l3.6 20H5.6L9.2 2zm1.7 2-2.5 14h6.2l-2.5-14h-1.2z" />
+              <path d="M16.8 5.6 8.4 14.2l1 1.4 8.7-8.9-1.3-1.1z" />
+            </svg>
+          </button>
+
           <button id="focus-next" type="button" class="focus-bar__button focus-bar__button--icon"
             title="New exercise" aria-label="New exercise">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -618,35 +661,9 @@
           </span>
 
           <!--
-            The three answers a thumb needs mid-practice. The cycles - a bar
-            on, a bar off - stay in the settings: they are chosen deliberately
-            before a run, not reached for between two.
-          -->
-          <button id="focus-click" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__click"
-            data-click="always" title="Metronome: all the way through"
-            aria-label="Metronome: all the way through">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M9.2 2h5.6l3.6 20H5.6L9.2 2zm1.7 2-2.5 14h6.2l-2.5-14h-1.2z" />
-              <path d="M16.8 5.6 8.4 14.2l1 1.4 8.7-8.9-1.3-1.1z" />
-            </svg>
-          </button>
-
-          <!--
             How much of the pulse is clicked. Its own question from when the
             click sounds at all: two clicks a bar is a metre, not a volume.
           -->
-          <button id="focus-pattern" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__pattern"
-            data-pattern="pulse" title="Click: every beat" aria-label="Click: every beat">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <rect class="focus-bar__beat" data-at="1" x="2" y="6" width="3" height="12" />
-              <rect class="focus-bar__beat" data-at="2" x="8" y="6" width="3" height="12" />
-              <rect class="focus-bar__beat" data-at="3" x="14" y="6" width="3" height="12" />
-              <rect class="focus-bar__beat" data-at="4" x="20" y="6" width="3" height="12" />
-            </svg>
-          </button>
-
           <!--
             Round again as soon as it ends. A passage learned by heart is
             learned by playing it over, and reaching for Start between each

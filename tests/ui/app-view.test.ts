@@ -2888,61 +2888,68 @@ describe('AppView', () => {
       expect(eye.getAttribute('aria-expanded')).toBe('true');
     });
 
-    it('cycles the click through the three answers a thumb wants', async () => {
-      const { runtime, view } = createRig();
+    it('puts everything about the click behind one button', async () => {
+      // It was in three places: two cycle buttons under the drawer handle and
+      // two sliders down the settings sheet, so "quieter, and give me two
+      // bars of count-in" meant both of them and a scroll.
+      const { view } = createRig();
       await view.initialize();
-      setClickWhen('always');
+      expect(element('sheet-metronome').hidden).toBe(true);
 
-      const button = element<HTMLButtonElement>('focus-click');
-      expect(button.dataset['click']).toBe('always');
+      element<HTMLButtonElement>('focus-metronome').click();
 
-      button.click();
-      expect(runtime.controller.settings.clickWhen).toBe('count-in-only');
-      // The name as well as the picture: three states cannot be guessed at.
-      expect(button.title).toBe('Metronome: only the count-in');
-
-      button.click();
-      expect(runtime.controller.settings.clickWhen).toBe('never');
-      expect(button.dataset['click']).toBe('never');
-
-      button.click();
-      expect(runtime.controller.settings.clickWhen).toBe('always');
+      expect(element('sheet-metronome').hidden).toBe(false);
+      for (const id of ['dropout', 'click', 'count-in', 'metronome-volume']) {
+        expect(element(id).closest('#sheet-metronome')).not.toBeNull();
+      }
+      // And none of them is left in the settings sheet to disagree with.
+      for (const id of ['dropout', 'click', 'count-in', 'metronome-volume']) {
+        expect(element(id).closest('#sheet-settings')).toBeNull();
+      }
     });
 
-    it('cycles how much of the pulse is clicked', async () => {
-      // A different question from when the click sounds at all: two clicks a
-      // bar is a metre, not a volume, and a piece that gives only those is
-      // exactly when a reader wants more of them.
-      const { runtime, view } = createRig();
+    it('opens the same sheet from the desk', async () => {
+      // One sheet raised from two places, the way the lists are: in
+      // fullscreen the desk panel is not on the page at all.
+      const { view } = createRig();
+      await view.initialize();
+
+      element<HTMLButtonElement>('open-metronome').click();
+      expect(element('sheet-metronome').hidden).toBe(false);
+
+      element<HTMLButtonElement>('metronome-close').click();
+      expect(element('sheet-metronome').hidden).toBe(true);
+    });
+
+    it('says what the metronome is set to without being opened', async () => {
+      // A reader glancing at the row wants to know whether the click is on at
+      // all, and that answer is one short line rather than a sheet.
+      const { view } = createRig();
+      await view.initialize();
+      setClickWhen('always');
+      const button = element<HTMLButtonElement>('focus-metronome');
+
+      expect(button.dataset['click']).toBe('always');
+      expect(button.title).toContain('all the way through');
+
+      setClickWhen('never');
+      expect(button.dataset['click']).toBe('never');
+      expect(button.title).toContain('never');
+
+      // A cycle - a bar on, a bar off - has no picture of its own, so it is
+      // shown as sounding, which is what it mostly is.
+      setClickWhen('cycle-2');
+      expect(button.dataset['click']).toBe('always');
+    });
+
+    it('names the pattern on the same button, that being the same subject', async () => {
+      const { view } = createRig();
       await view.initialize();
       const select = element<HTMLSelectElement>('click');
       select.value = 'downbeat';
       select.dispatchEvent(new Event('change'));
 
-      const button = element<HTMLButtonElement>('focus-pattern');
-      button.click();
-
-      expect(runtime.controller.settings.clickPattern).toBe('pulse');
-      expect(button.dataset['pattern']).toBe('pulse');
-      expect(button.title).toBe('Click: every beat');
-
-      button.click();
-      expect(runtime.controller.settings.clickPattern).toBe('division');
-    });
-
-    it('leaves the cycles to the settings, and steps out of one', async () => {
-      // A bar on and a bar off is chosen deliberately before a run. The button
-      // shows it as sounding, which is what its next press makes true.
-      const { runtime, view } = createRig();
-      await view.initialize();
-      setClickWhen('cycle-2');
-
-      const button = element<HTMLButtonElement>('focus-click');
-      expect(button.dataset['click']).toBe('always');
-
-      button.click();
-
-      expect(runtime.controller.settings.clickWhen).toBe('always');
+      expect(element('focus-metronome').title).toContain('first beat of the bar');
     });
 
     describe('saying which bars are being read', () => {

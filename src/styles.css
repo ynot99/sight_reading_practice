@@ -401,6 +401,21 @@ progress {
   padding: 14px;
 }
 
+/*
+ * One column, for a sheet that holds a subject rather than a form.
+ *
+ * The settings are laid out across the page and read in columns because
+ * there are thirty of them. Four read as a list, and squeezed into columns
+ * they would be two short ones with a gap where the fourth should be.
+ */
+.controls--stacked {
+  grid-template-columns: minmax(0, 1fr);
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  background: transparent;
+}
+
 .control-group {
   display: flex;
   flex-direction: column;
@@ -1241,12 +1256,12 @@ select {
  * count-in only sits plain, and silence is dimmed the way an unpressed toggle
  * is. `title` carries the exact answer, which is the half a picture cannot.
  */
-.focus-bar__click[data-click='always'] {
+#focus-metronome[data-click='always'] {
   color: var(--wrong);
   border-color: currentcolor;
 }
 
-.focus-bar__click[data-click='never'] svg {
+#focus-metronome[data-click='never'] svg {
   opacity: 0.35;
 }
 
@@ -1424,31 +1439,8 @@ select {
   opacity: 0.35;
 }
 
-/*
- * How much of the pulse is clicked, drawn as how many marks are lit.
- *
- * Four answers cannot be a switch and cannot be guessed from one picture, so
- * the button counts: one mark for a click on the bar, two for the beat, three
- * or four for its divisions. `title` says which in words.
- */
-.focus-bar__beat {
-  fill: currentcolor;
-  opacity: 0.2;
-}
-
-.focus-bar__click,
-.focus-bar__pattern {
+#focus-metronome {
   flex: none;
-}
-
-.focus-bar__pattern[data-pattern='downbeat'] .focus-bar__beat[data-at='1'],
-.focus-bar__pattern[data-pattern='pulse'] .focus-bar__beat[data-at='1'],
-.focus-bar__pattern[data-pattern='pulse'] .focus-bar__beat[data-at='2'],
-.focus-bar__pattern[data-pattern='division'] .focus-bar__beat[data-at='1'],
-.focus-bar__pattern[data-pattern='division'] .focus-bar__beat[data-at='2'],
-.focus-bar__pattern[data-pattern='division'] .focus-bar__beat[data-at='3'],
-.focus-bar__pattern[data-pattern='subdivision'] .focus-bar__beat {
-  opacity: 1;
 }
 
 .focus-bar__hands {

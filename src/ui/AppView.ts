@@ -286,11 +286,6 @@ const CLICK_WHEN_LABELS: Readonly<Record<ClickWhen, string>> = {
  */
 const CLICK_WHEN_BY_THUMB: readonly ClickWhen[] = ['always', 'count-in-only', 'never'];
 
-function nextClickWhen(current: ClickWhen): ClickWhen {
-  const at = CLICK_WHEN_BY_THUMB.indexOf(current);
-  return elementAt(CLICK_WHEN_BY_THUMB, (at + 1) % CLICK_WHEN_BY_THUMB.length);
-}
-
 /** What the drawer's marks button says it is doing, in words. */
 const MARKS_TITLES: Record<PlayedNoteDisplay, string> = {
   live: 'Colour the notes as I play',
@@ -647,8 +642,7 @@ export class AppView {
     focusHands: HTMLButtonElement;
     focusSurvival: HTMLButtonElement;
     focusImmediate: HTMLButtonElement;
-    focusClick: HTMLButtonElement;
-    focusPattern: HTMLButtonElement;
+    focusMetronome: HTMLButtonElement;
     focusRepeat: HTMLButtonElement;
     focusCursor: HTMLButtonElement;
     focusWait: HTMLButtonElement;
@@ -694,6 +688,9 @@ export class AppView {
     focusTakes: HTMLButtonElement;
     focusScores: HTMLButtonElement;
     openTakes: HTMLButtonElement;
+    openMetronome: HTMLButtonElement;
+    sheetMetronome: HTMLElement;
+    metronomeClose: HTMLButtonElement;
     openScores: HTMLButtonElement;
     sheetTakes: HTMLElement;
     sheetScores: HTMLElement;
@@ -819,8 +816,7 @@ export class AppView {
       focusHands: requireElement(doc, 'focus-hands'),
       focusSurvival: requireElement(doc, 'focus-survival'),
       focusImmediate: requireElement(doc, 'focus-immediate'),
-      focusClick: requireElement(doc, 'focus-click'),
-      focusPattern: requireElement(doc, 'focus-pattern'),
+      focusMetronome: requireElement(doc, 'focus-metronome'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
       focusCursor: requireElement(doc, 'focus-cursor'),
       focusWait: requireElement(doc, 'focus-wait'),
@@ -866,6 +862,9 @@ export class AppView {
       focusTakes: requireElement(doc, 'focus-takes'),
       focusScores: requireElement(doc, 'focus-scores'),
       openTakes: requireElement(doc, 'open-takes'),
+      openMetronome: requireElement(doc, 'open-metronome'),
+      sheetMetronome: requireElement(doc, 'sheet-metronome'),
+      metronomeClose: requireElement(doc, 'metronome-close'),
       openScores: requireElement(doc, 'open-scores'),
       sheetTakes: requireElement(doc, 'sheet-takes'),
       sheetScores: requireElement(doc, 'sheet-scores'),
@@ -1976,19 +1975,6 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
-    this.listen(this.el.focusClick, 'click', () => {
-      controller.updateSettings({ clickWhen: nextClickWhen(controller.settings.clickWhen) });
-      this.syncControlsFromSettings();
-    });
-
-    this.listen(this.el.focusPattern, 'click', () => {
-      const at = CLICK_PATTERNS.indexOf(controller.settings.clickPattern);
-      controller.updateSettings({
-        clickPattern: elementAt(CLICK_PATTERNS, (at + 1) % CLICK_PATTERNS.length),
-      });
-      this.syncControlsFromSettings();
-    });
-
     this.listen(this.el.focusSmaller, 'click', () => {
       this.nudgeZoom(-ZOOM_STEP_PERCENT);
     });
@@ -2496,33 +2482,20 @@ export class AppView {
   }
 
   /**
-   * Shows how much of the run the click sounds for, on the button itself.
+   * Says what the metronome is set to, on the button that opens it.
    *
-   * A name as well as a picture: an icon that has to be guessed at is not a
-   * label, and this one has three answers rather than two.
+   * The button raises a sheet rather than cycling anything, so its own state
+   * is only ever a label - but a reader glancing at the row wants to know
+   * whether the click is on at all without opening it, and the answer is one
+   * short line.
    */
-  private describeClickButton(when: ClickWhen): void {
-    const label = `Metronome: ${CLICK_WHEN_LABELS[when].toLowerCase()}`;
-    // Cycles have no state of their own here; the button shows them as the
-    // sounding answer, which is what its next press would make true.
-    this.el.focusClick.dataset['click'] = CLICK_WHEN_BY_THUMB.includes(when) ? when : 'always';
-    this.el.focusClick.title = label;
-    this.el.focusClick.setAttribute('aria-label', label);
-  }
-
-  /**
-   * Shows how much of the pulse is clicked, by how many marks are lit.
-   *
-   * Its own control rather than more states on the one beside it: how often
-   * the click falls and how much of the run it sounds for are two questions,
-   * and a reader who wants two clicks a bar instead of six is asking the
-   * first.
-   */
-  private describePatternButton(pattern: ClickPattern): void {
-    const label = `Click: ${CLICK_LABELS[pattern].toLowerCase()}`;
-    this.el.focusPattern.dataset['pattern'] = pattern;
-    this.el.focusPattern.title = label;
-    this.el.focusPattern.setAttribute('aria-label', label);
+  private describeMetronomeButton(when: ClickWhen, pattern: ClickPattern): void {
+    const label =
+      `Metronome: ${CLICK_WHEN_LABELS[when].toLowerCase()}` +
+      `, ${CLICK_LABELS[pattern].toLowerCase()}`;
+    this.el.focusMetronome.dataset['click'] = CLICK_WHEN_BY_THUMB.includes(when) ? when : 'always';
+    this.el.focusMetronome.title = label;
+    this.el.focusMetronome.setAttribute('aria-label', label);
   }
 
   /**
@@ -3129,8 +3102,7 @@ export class AppView {
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.focusImmediate.setAttribute('aria-pressed', String(settings.immediateStart));
-    this.describeClickButton(settings.clickWhen);
-    this.describePatternButton(settings.clickPattern);
+    this.describeMetronomeButton(settings.clickWhen, settings.clickPattern);
     this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
     this.applyScoreCover();
@@ -3480,6 +3452,14 @@ export class AppView {
         () => this.renderScores(),
       ],
       [
+        // Everything about the click, from either place. It was two cycle
+        // buttons in the drawer and two sliders down the settings sheet, and
+        // "quieter, and give me two bars of count-in" meant both.
+        this.el.sheetMetronome,
+        [this.el.openMetronome, this.el.focusMetronome],
+        () => this.syncControlsFromSettings(),
+      ],
+      [
         this.el.sheetSettings,
         [this.el.openSettings, this.el.focusSettings],
         // Opened onto whatever the settings actually are, since a run can
@@ -3524,6 +3504,9 @@ export class AppView {
     this.listen(this.el.scoresClose, 'click', () => {
       this.el.sheetScores.hidden = true;
     });
+    this.listen(this.el.metronomeClose, 'click', () => {
+      this.el.sheetMetronome.hidden = true;
+    });
 
     this.listen(this.doc, 'keydown', (event) => {
       if ((event as KeyboardEvent).key !== 'Escape') {
@@ -3535,6 +3518,7 @@ export class AppView {
         this.el.sheetConfirm,
         this.el.sheetTakes,
         this.el.sheetScores,
+        this.el.sheetMetronome,
         this.el.sheetSettings,
       ]) {
         if (!sheet.hidden) {

@@ -138,10 +138,14 @@ set, since following along is most of the value — and put back the way they
 had it when the performance ends.
 
 The fullscreen bar holds the whole transport on one row, as icons: play/pause
-as a single button, stop, listen, a new exercise, the way out, and the pace.
-A drawer under it — opened by its handle or by dragging up —
+as a single button, stop, listen, the metronome, a new exercise, the way out,
+and the pace. A drawer under it — opened by its handle or by dragging up —
 holds what you *change* rather than what you press mid-run: note size, which
 hand, the cursor, the marks for what you played, survival.
+
+The metronome is in the row rather than the drawer because it is the thing
+reached for most between runs, and a drawer is a gesture before it is a
+button.
 
 Which hand is one button carrying all three answers, cycling both → left →
 right. Both hands are always drawn and the one not being read is dimmed, so
@@ -238,6 +242,14 @@ whatever the pitch, because reading a rhythm before playing the notes is
 standard practice and it is the half beginners drop first. It is a match rule
 rather than a mode of its own, so it composes with either — nothing about when
 the cursor moves changes.
+
+Everything about the click lives behind one button on the transport bar, and
+behind one opener at the desk — what it marks, how much of the run it sounds
+for, how many bars it counts in, and how loud it is. It was in three places
+before: two cycle buttons under the drawer handle and two sliders down the
+settings sheet, so "quieter, and give me two bars of count-in" meant both of
+them and a scroll. They are one subject, and the button says what they add up
+to without being opened.
 
 The click is a practice setting of its own: it can sound every beat, halve or
 third it, or give only the downbeat and leave the pulse inside the bar to you.

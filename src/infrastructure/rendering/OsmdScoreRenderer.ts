@@ -318,6 +318,14 @@ export class OsmdScoreRenderer
   private stepElements = new Map<number, SVGGElement[]>();
   /** Which sheet each step was drawn on; every page is an SVG of its own. */
   private stepPage = new Map<number, number>();
+  /**
+   * The engraver's systems, numbered in the order the walk meets them.
+   *
+   * Its own system object is the identity and is never read from; the number
+   * is ours, so that a sample can carry it and two samples can be compared.
+   * Rebuilt with every engraving, since the objects are.
+   */
+  private systemNumbers = new Map<object, number>();
   /** True while the cursor is being walked to find out what is where. */
   private walking = false;
   private faded = new Set<number>();
@@ -1444,6 +1452,28 @@ export class OsmdScoreRenderer
     return this.stepPage.get(stepIndex) ?? 0;
   }
 
+  /**
+   * Which system of the engraving this was drawn in, numbered as met.
+   *
+   * The engraver's own system object is the identity; the number is ours, so
+   * that a sample can carry it and two samples can be compared. Numbered in
+   * walk order, which is the order the systems run down the page.
+   */
+  private systemNumberOf(note: DrawnNote): number {
+    const system: object | undefined =
+      note.parentVoiceEntry?.parentStaffEntry?.parentMeasure?.ParentMusicSystem;
+    if (system === undefined) {
+      return -1;
+    }
+    const known = this.systemNumbers.get(system);
+    if (known !== undefined) {
+      return known;
+    }
+    const next = this.systemNumbers.size;
+    this.systemNumbers.set(system, next);
+    return next;
+  }
+
   /** The page the engraver says it laid something out on, zero-based. */
   private pageOfGraphical(note: DrawnNote): number | null {
     const number =
@@ -1774,6 +1804,7 @@ export class OsmdScoreRenderer
     const stepX = new Map<number, number>();
     const samples: DrawnNoteSample[] = [];
     this.stepElements = new Map();
+    this.systemNumbers = new Map();
 
     cursor.reset();
     let index = 0;
@@ -2004,6 +2035,7 @@ export class OsmdScoreRenderer
         samples.push({
           stepIndex,
           page: this.stepPage.get(stepIndex) ?? 0,
+          system: this.systemNumberOf(note),
           staffNumber: note.sourceNote?.parentStaffEntry?.parentStaff?.id ?? 1,
           diatonicIndex,
           y: position.y * UNITS_TO_PIXELS,

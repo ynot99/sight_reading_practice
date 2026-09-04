@@ -16,6 +16,16 @@ export interface DrawnNoteSample {
    * is on the sheet before - which would put the mark a page's height out.
    */
   readonly page: number;
+  /**
+   * Which system of that page this note was drawn in.
+   *
+   * A page holds several systems one under another, and the same fault the
+   * page number exists to stop happens again at a smaller scale between them:
+   * the nearest note in step order is on the line above or below whenever a
+   * staff has nothing at the step being placed, and a mark measured from it
+   * is drawn a system's height out - over empty staff, in the other clef.
+   */
+  readonly system: number;
   readonly staffNumber: number;
   /** Absolute staff position: `C4` is 28, `D4` is 29. */
   readonly diatonicIndex: number;
@@ -35,6 +45,14 @@ export interface StaffGeometry {
    * in the same *step*, never against a page-wide average.
    */
   readonly byStaff: ReadonlyMap<number, readonly DrawnNoteSample[]>;
+  /**
+   * Which system each step was drawn in, across every staff of the page.
+   *
+   * Read from the staves together, because a step drawn on one of them is at
+   * that height on all of them - which is what lets a mark on a staff with
+   * nothing at this step still be placed on the right line.
+   */
+  readonly systemOfStep: ReadonlyMap<number, number>;
 }
 
 /** Semitone value of each letter, which is what the engraver reports. */
@@ -91,17 +109,19 @@ export function fitStaffGeometry(samples: readonly DrawnNoteSample[]): StaffGeom
     byStaff.set(sample.staffNumber, bucket);
   }
 
-  // Neighbours only. Two notes from different systems are hundreds of units
-  // apart vertically for reasons that have nothing to do with pitch, and
-  // pairing them would measure the gap between staves instead of the gap
-  // between staff positions.
+  // Neighbours in the same system only. Two notes from different systems are
+  // hundreds of units apart vertically for reasons that have nothing to do
+  // with pitch, and pairing them measures the gap between systems instead of
+  // the gap between staff positions. The median used to absorb those pairs;
+  // now that a sample says which system it was drawn in, they are simply not
+  // made.
   const heights: number[] = [];
   for (const bucket of byStaff.values()) {
     const ordered = [...bucket].sort((left, right) => left.stepIndex - right.stepIndex);
     for (let index = 1; index < ordered.length; index += 1) {
       const previous = ordered[index - 1];
       const current = ordered[index];
-      if (previous === undefined || current === undefined) {
+      if (previous === undefined || current === undefined || previous.system !== current.system) {
         continue;
       }
       const steps = previous.diatonicIndex - current.diatonicIndex;
@@ -131,7 +151,31 @@ export function fitStaffGeometry(samples: readonly DrawnNoteSample[]): StaffGeom
     );
   }
 
-  return { stepHeight, byStaff: sorted };
+  return { stepHeight, byStaff: sorted, systemOfStep: systemsByStep(samples) };
+}
+
+/**
+ * The system each step belongs to, filled in for the steps that drew nothing.
+ *
+ * A step of rests contributes no sample - a rest has no staff position to
+ * measure - so it would otherwise have no system, and a mark on it would fall
+ * back to whatever is nearest. It is on the system the music had reached when
+ * it got there, which is the same answer a forward walk gives everywhere else.
+ */
+function systemsByStep(samples: readonly DrawnNoteSample[]): ReadonlyMap<number, number> {
+  const ordered = [...samples].sort((left, right) => left.stepIndex - right.stepIndex);
+  const systems = new Map<number, number>();
+  let last: number | null = null;
+  for (const sample of ordered) {
+    if (last !== null) {
+      for (let step = last + 1; step < sample.stepIndex; step += 1) {
+        systems.set(step, systems.get(last) ?? sample.system);
+      }
+    }
+    systems.set(sample.stepIndex, sample.system);
+    last = sample.stepIndex;
+  }
+  return systems;
 }
 
 /**
@@ -145,10 +189,20 @@ export function anchorFor(
   staffNumber: number,
   stepIndex: number,
 ): DrawnNoteSample | null {
-  const bucket = geometry.byStaff.get(staffNumber);
-  if (bucket === undefined || bucket.length === 0) {
+  const all = geometry.byStaff.get(staffNumber);
+  if (all === undefined || all.length === 0) {
     return null;
   }
+  // This staff's notes in the system the step was drawn in, when it is known
+  // which that is. Nearest in time is nearest on the page only *along* a
+  // system: across a break it is the line above or below, and a mark measured
+  // from there is drawn a system's height out, over empty staff. Where this
+  // staff drew nothing in the whole system there is nothing better to measure
+  // from, so the nearest note anywhere is used, as it always was.
+  const system = geometry.systemOfStep.get(stepIndex);
+  const inSystem =
+    system === undefined ? [] : all.filter((sample) => sample.system === system);
+  const bucket = inSystem.length > 0 ? inSystem : all;
   // The bucket is in step order, so the nearest sample is one of the two
   // either side of where this step would fall. Walking the whole staff to
   // find it read every note in the piece, several times over for every note

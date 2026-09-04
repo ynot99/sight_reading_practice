@@ -350,8 +350,22 @@ export class PracticeSession {
     });
   }
 
-  /** Where the run's last note stops, on the metronome's clock. */
+  /**
+   * Where the run's last note stops, on the metronome's clock.
+   *
+   * `null` unless the pulse is what carries the music. It exists to stop the
+   * click sounding one more downbeat after the last note - which is right
+   * when the metronome and the music are the same clock, and wrong when they
+   * are not. In Wait mode the music holds still until the reader plays, so a
+   * one-bar passage may take twenty seconds, and an end read off the *clock*
+   * silenced the click after one bar of it. The reader was left working
+   * through the bar with nothing to keep time against, which is the opposite
+   * of what asking for a click means.
+   */
   private endOfTheMusic(): number | null {
+    if (!this.mode.requiresMetronome) {
+      return null;
+    }
     const last = this.timeline.at(this.lastIndex);
     if (last === null) {
       return null;

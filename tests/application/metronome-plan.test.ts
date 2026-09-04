@@ -394,6 +394,34 @@ describe('where the click stops', () => {
     expect(config.endsAtTicks).toBe(Duration.WHOLE.ticks);
     expect(heard).toHaveLength(4);
   });
+
+  it('goes on clicking in a mode the clock does not carry', () => {
+    // The complaint this answers: a one-bar passage in Wait mode was clicked
+    // for exactly one bar and then fell silent, with the reader still working
+    // through the bar.
+    //
+    // The end exists to stop the click sounding one more downbeat after the
+    // last note, which is right while the metronome and the music are the
+    // same clock. In Wait mode they are not: the music holds still until the
+    // notes are played, so a bar may take twenty seconds, and an end read off
+    // the clock arrives while the reader is still on the first chord.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new WaitMode(),
+      options: { countInBars: 0, clickWhen: 'always', click: 'pulse', stopAfterIndex: 3 },
+    });
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(20);
+
+    const config = harness.metronome.currentConfig;
+    const heard = harness.metronome.emitted.filter((tick) => isAudibleClick(tick, config));
+
+    expect(config.endsAtTicks).toBeNull();
+    // Nothing was played, so the run has not moved - and the click has kept
+    // time throughout rather than stopping where the music would have.
+    expect(harness.session.status).toBe('running');
+    expect(heard.length).toBeGreaterThan(4);
+  });
 });
 
 describe('where the run says the music has got to', () => {

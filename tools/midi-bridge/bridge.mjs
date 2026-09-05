@@ -172,6 +172,16 @@ function main() {
   const server = createServer((request, response) => {
     serveStatic(options.root, request, response);
   });
+  // Nagle's algorithm holds a small packet back to see whether another is
+  // coming, so that the two can travel together. That is a good trade for a
+  // file and a bad one for a keyboard: a note is a few bytes and the next one
+  // arrives whenever the reader plays it, so the wait buys nothing and is
+  // paid on every press - tens of milliseconds of it, and unevenly, which is
+  // the shape of delay a player feels rather than measures.
+  server.on('connection', (socket) => {
+    socket.setNoDelay(true);
+  });
+
   const sockets = new WebSocketServer({ server, path: '/midi' });
 
   let openPortIndex = -1;

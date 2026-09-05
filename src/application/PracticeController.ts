@@ -733,9 +733,13 @@ export class PracticeController {
   /** Generates fresh material and renders it. */
   async loadNewExercise(): Promise<Exercise> {
     // Asking for a new exercise is asking the generator for one, so an opened
-    // file steps aside rather than being handed back unchanged. The tempo
-    // needs no attention: the reader chose a percentage, and it means the
-    // same thing against whatever is on the stand next.
+    // file steps aside rather than being handed back unchanged - and the
+    // speed it was being read at steps aside with it. Between one generated
+    // exercise and the next it stays: that is the same stand with different
+    // notes on it, and what the reader meant by eighty per cent still holds.
+    if (this.openedScore !== null) {
+      this.forgetTheSpeed();
+    }
     this.openedScore = null;
     this.forgetThePassage();
     this.endThePerformance();
@@ -771,6 +775,23 @@ export class PracticeController {
   }
 
   /**
+   * Puts the reading speed back to what the music is written at.
+   *
+   * For the reason the passage goes back to the two ends: a percentage is a
+   * share *of* something. Sixty per cent of the piece being learned says
+   * nothing about the next piece, and carried across it opened every new
+   * score at a speed the reader had never asked it for - the harder the
+   * piece they had just been slowing down, the further from its own tempo
+   * the next one started. What travels between pieces is the reader's habit
+   * of choosing a speed, not the number they chose last.
+   */
+  private forgetTheSpeed(): void {
+    if (this.currentSettings.tempoPercent !== 100) {
+      this.updateSettings({ tempoPercent: 100 });
+    }
+  }
+
+  /**
    * Practises a score that came from outside instead of from the generator.
    *
    * It stays until the reader asks for a new exercise or changes what would be
@@ -784,13 +805,13 @@ export class PracticeController {
     // afresh by the parser on every read, so the id cannot answer this.
     if (this.openedScore === null || this.openedScore.title !== exercise.title) {
       this.forgetThePassage();
+      this.forgetTheSpeed();
     }
     this.openedScore = exercise;
     this.endThePerformance();
     // Nothing to adopt: the file brings the tempo it is written at, which is
-    // what 100% now means, and the reader's percentage of it travels with
-    // them. Someone who reads at 80% is reading at 80% of this piece too,
-    // without having to work out what number that is.
+    // what 100% means - and a piece just opened is read at what it says
+    // until the reader says otherwise.
     return this.load(undefined);
   }
 

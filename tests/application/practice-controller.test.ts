@@ -423,11 +423,11 @@ describe('PracticeController', () => {
     expect(controller.openedExercise).toBeNull();
   });
 
-  it('keeps the percentage, not the number, when the written tempo changes', async () => {
-    // 100% means the tempo the material declares, and a file declares its own.
-    // Asking for generated material afterwards changes what 100% is; the bpm
-    // used to be carried straight across, so 80% of a slow piece came back as
-    // some number well past full speed on the next one.
+  it('does not carry a slow piece’s beats onto generated material', async () => {
+    // 100% means the tempo the material declares, and a file declares its
+    // own. The bpm used to be carried straight across, so 80% of a slow piece
+    // came back as some number well past full speed on the next one. Now the
+    // piece is left behind and the speed it was being read at goes with it.
     const { controller } = createController();
     await controller.openScore({ ...twoBarExercise(), tempoBpm: 40 });
     controller.nudgeTempoPercent(-20);
@@ -435,7 +435,8 @@ describe('PracticeController', () => {
 
     await controller.loadNewExercise();
 
-    expect(controller.tempoPercent).toBe(80);
+    expect(controller.tempoPercent).toBe(100);
+    expect(controller.tempoBpm).toBe(controller.baseTempoBpm);
     expect(controller.tempoBpm).not.toBe(32);
   });
 
@@ -1594,9 +1595,60 @@ describe('the pace, as a share of the written tempo', () => {
 
     expect(controller.baseTempoBpm).toBe(132);
     expect(controller.baseTempoBpm).not.toBe(generated);
-    // The reader's share travels with them onto the new piece.
+    // And it opens at what it is written at. A share is a share *of*
+    // something, and eighty per cent of the exercise just closed says
+    // nothing whatever about this piece.
+    expect(controller.tempoPercent).toBe(100);
+    expect(controller.tempoBpm).toBe(132);
+  });
+
+  it('opens a different piece at its own written speed', async () => {
+    // His report: the percentage stayed put while the piece under it changed,
+    // so a score opened after an hour of slow practice began at six tenths of
+    // a tempo nobody had looked at yet.
+    const { controller } = createController();
+    await controller.openScore({ ...twoBarExercise({ tempoBpm: 100 }), title: 'One' });
+    controller.nudgeTempoPercent(-40);
+    expect(controller.tempoPercent).toBe(60);
+
+    await controller.openScore({ ...tiedExercise({ tempoBpm: 90 }), title: 'Another' });
+
+    expect(controller.tempoPercent).toBe(100);
+    expect(controller.tempoBpm).toBe(90);
+  });
+
+  it('keeps the speed when the same piece is opened again', async () => {
+    // Which is what the library does when a file is read back after being
+    // edited in MuseScore: the piece the reader was working on, at the speed
+    // they were working on it. Identity is the title, as it is for the
+    // passage.
+    const { controller } = createController();
+    await controller.openScore({ ...twoBarExercise(), title: 'One' });
+    controller.nudgeTempoPercent(-40);
+
+    await controller.openScore({ ...twoBarExercise(), title: 'One' });
+
+    expect(controller.tempoPercent).toBe(60);
+  });
+
+  it('leaves a piece behind at the speed it was being read', async () => {
+    const { controller } = createController();
+    await controller.openScore(twoBarExercise());
+    controller.nudgeTempoPercent(-40);
+
+    await controller.loadNewExercise();
+
+    expect(controller.tempoPercent).toBe(100);
+  });
+
+  it('keeps it between one generated exercise and the next', async () => {
+    // The same stand with different notes on it.
+    const { controller } = createController();
+    controller.nudgeTempoPercent(-20);
+
+    await controller.loadNewExercise();
+
     expect(controller.tempoPercent).toBe(80);
-    expect(controller.tempoBpm).toBe(Math.round(132 * 0.8));
   });
 
   it('does not carry an opened score off the stand and onto the next visit', async () => {
@@ -1619,9 +1671,12 @@ describe('the pace, as a share of the written tempo', () => {
   });
 
   it('keeps the share the reader chose across the visit, not the beats', async () => {
+    // Generated material either side, which is the same stand: what is kept
+    // is the percentage, and it is read against whatever the next visit puts
+    // in front of the reader.
     const first = createController();
     first.controller.nudgeTempoPercent(-20);
-    await first.controller.openScore(twoBarExercise({ tempoBpm: 132 }));
+    await first.controller.loadNewExercise();
 
     const next = createController(false, undefined, first.controller.settings);
 

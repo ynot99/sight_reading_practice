@@ -293,7 +293,7 @@ describe('played notes drawn over a real engraving', () => {
       expect(cursorStops()).toBe(plain);
 
       await renderer.load(
-        new MusicXmlSerializer().serialize(exercise, { spacersEvery: Duration.QUARTER.ticks }),
+        new MusicXmlSerializer().serialize(exercise, { evenBars: true }),
       );
 
       expect(cursorStops()).toBe(plain);
@@ -328,7 +328,7 @@ describe('played notes drawn over a real engraving', () => {
 
       const asWritten = await widths(serializer.serialize(uneven));
       const spaced = await widths(
-        serializer.serialize(uneven, { spacersEvery: Duration.QUARTER.ticks }),
+        serializer.serialize(uneven, { evenBars: true }),
       );
 
       // Time says the half should take twice the room of the quarter.
@@ -343,7 +343,7 @@ describe('played notes drawn over a real engraving', () => {
       // fully transparent, which comes to the same thing.
       await renderer.load(
         new MusicXmlSerializer().serialize(twoBarExercise(), {
-          spacersEvery: Duration.QUARTER.ticks,
+          evenBars: true,
         }),
       );
 

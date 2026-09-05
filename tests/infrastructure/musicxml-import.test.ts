@@ -104,18 +104,20 @@ describe('making room for the beat', () => {
     expect(serializer.serialize(uneven)).not.toContain('print-object="no"');
   });
 
-  it('rules the bar with rests nobody is meant to see', () => {
-    const printed = serializer.serialize(uneven, { spacersEvery: Duration.QUARTER.ticks });
+  it('rules each bar by its own grid, and by nothing coarser', () => {
+    const printed = serializer.serialize(uneven, { evenBars: true });
 
-    // Four to a bar of four four, in both bars, and every one of them marked
-    // not to be printed.
+    // The fixture moves in quarters through its first bar and in halves
+    // through its second, so that is what each is ruled by: four rests and
+    // then two, every one of them marked not to be printed.
     const spacers = printed.match(/<note print-object="no">/g) ?? [];
-    expect(spacers).toHaveLength(8);
+    expect(spacers).toHaveLength(6);
     expect(printed).toContain(`<duration>${Duration.QUARTER.ticks}</duration>`);
+    expect(printed).toContain(`<duration>${Duration.HALF.ticks}</duration>`);
   });
 
   it('keeps them out of the way of the voices the music uses', () => {
-    const printed = serializer.serialize(uneven, { spacersEvery: Duration.QUARTER.ticks });
+    const printed = serializer.serialize(uneven, { evenBars: true });
     const voices = uneven.staves.map((staff) => staff.voice);
 
     // One above every voice written, so it can collide with none of them.
@@ -123,15 +125,19 @@ describe('making room for the beat', () => {
     expect(Number(spacer?.[1])).toBe(Math.max(...voices) + 1);
   });
 
-  it('is a printing and not a file - the room is never read back', () => {
-    // Read back, the room *would* be rests: nothing in MusicXML says "this is
-    // scaffolding". So this printing goes to the engraver and nowhere else -
-    // what the library keeps and what the trainer announces is the music, and
-    // the test for that is next door in the controller.
-    const printed = serializer.serialize(uneven, { spacersEvery: Duration.QUARTER.ticks });
-
-    expect(demands(importer.read(printed).exercise)).not.toEqual(demands(uneven));
+  it('is a printing and not a file', () => {
+    // Nothing in MusicXML says "this is scaffolding", so read back the room
+    // would be rests. This printing therefore goes to the engraver and
+    // nowhere else: what the library keeps and what the trainer announces is
+    // the music, and the test for that is next door in the controller.
     expect(serializer.serialize(uneven)).not.toContain('print-object');
+
+    // And what it does say is only ever a rest - no pitch, nothing to play.
+    const spacer = /<note print-object="no">([\s\S]*?)<\/note>/.exec(
+      serializer.serialize(uneven, { evenBars: true }),
+    );
+    expect(spacer?.[1]).toContain('<rest/>');
+    expect(spacer?.[1]).not.toContain('<pitch>');
   });
 });
 

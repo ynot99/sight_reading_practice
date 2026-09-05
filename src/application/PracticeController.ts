@@ -1077,9 +1077,14 @@ export class PracticeController {
     // so that the beats of a bar stand at even distances across it. See
     // `PrintingOptions.spacersEvery` for why an engraver does not do that on
     // its own.
-    const spacersEvery = rulerStepTicks(this.currentSettings.rhythmRuler);
-    const printed =
-      spacersEvery <= 0 ? musicXml : this.deps.serializer.serialize(source, { spacersEvery });
+    // Evened out whenever the bars are ruled, and by the *bar's* own grid
+    // rather than the ruler's: measured, a ruler of halves over a bar of
+    // quarters changes nothing at all, because the notes between two spacers
+    // are back to being spaced by the engraver's judgement.
+    const evenBars = rulerStepTicks(this.currentSettings.rhythmRuler) > 0;
+    const printed = evenBars
+      ? this.deps.serializer.serialize(source, { evenBars: true })
+      : musicXml;
 
     // The same bytes are the same page. This one test answers both of the
     // questions a re-presentation asks - whether the engraver has anything

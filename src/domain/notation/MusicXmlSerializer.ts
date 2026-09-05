@@ -41,21 +41,27 @@ export interface IMusicXmlSerializer {
  */
 export interface PrintingOptions {
   /**
-   * Space the bars by time, at this grid, using rests nobody sees.
+   * Space the bars by time, using rests nobody sees.
    *
    * An engraver gives a long note less room than its length asks for - a half
-   * takes about a bar's width and a half of a quarter's, not two - because
+   * takes about one and a half times a quarter's width, not two - because
    * that is how music has always been set, and it is why the beats of a bar
    * do not fall at even distances across it. Reading rhythm off the page is
    * the one thing that wants them even.
    *
-   * The fix is to give the engraver something to space *around* at each beat:
-   * a rest in a voice of its own, marked not to be printed. Measured, it
-   * costs nothing anywhere else - the engraver draws it fully transparent,
-   * and its cursor steps straight over it, so the marker and the timeline go
-   * on agreeing about every position in the piece.
+   * The fix is to give the engraver something to space *around* at every
+   * moment: a rest in a voice of its own, marked not to be printed. Measured,
+   * it costs nothing anywhere else - the engraver draws such a note fully
+   * transparent, and its cursor steps straight over it, so the marker and the
+   * timeline go on agreeing about every position in the piece.
+   *
+   * The grid is the bar's own: the largest step every note in it lands on.
+   * Anything coarser leaves the notes between the spacers unevenly spaced -
+   * measured, a half-note grid under a bar of quarters changes nothing at
+   * all, a quarter grid gets three quarters of the way there, and a grid as
+   * fine as the shortest note is exact.
    */
-  readonly spacersEvery?: number;
+  readonly evenBars?: boolean;
 }
 
 export interface MusicXmlSerializerOptions {
@@ -94,6 +100,44 @@ interface ResolvedOptions {
  * Everything is derived from the exercise, including the accidental-carry
  * rules, so the printed page always agrees with the timeline the matcher uses.
  */
+/** The finest grid worth ruling a bar by; see {@link spacerGrid}. */
+const FINEST_SPACER_TICKS = DIVISIONS_PER_QUARTER / 8;
+
+/**
+ * The largest step every note of a bar lands on, which is the grid to space
+ * it by.
+ *
+ * Coarser than the shortest note and the notes between two spacers are back
+ * to being spaced by the engraver's own judgement, which is the thing being
+ * corrected. Finer buys nothing: the events are already evenly spread.
+ */
+function spacerGrid(exercise: Exercise, measureIndex: number, barTicks: number): number {
+  let grid = barTicks;
+  for (const staff of exercise.staves) {
+    let at = 0;
+    for (const entry of staff.measures[measureIndex]?.entries ?? []) {
+      if (at > 0) {
+        grid = greatestCommonDivisor(grid, at);
+      }
+      at += entry.duration.ticks;
+    }
+  }
+  // A bar whose voices disagree about the beat - three against two, and
+  // worse - can ask for a grid finer than any of them. Held to a
+  // thirty-second: past that the rests outnumber the music and buy a
+  // sharpness nobody reading rhythm can see.
+  return Math.max(grid, FINEST_SPACER_TICKS);
+}
+
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(left);
+  let b = Math.abs(right);
+  while (b > 0) {
+    [a, b] = [b, a % b];
+  }
+  return a;
+}
+
 export class MusicXmlSerializer implements IMusicXmlSerializer {
   private readonly options: ResolvedOptions;
 
@@ -207,7 +251,14 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
           );
         });
         this.writeTempoChanges(writer, tempos, barTicks, present.length > 0);
-        this.writeSpacers(writer, exercise, barTicks, printing, present.length > 0);
+        this.writeSpacers(
+          writer,
+          exercise,
+          measureIndex,
+          barTicks,
+          printing,
+          present.length > 0,
+        );
       });
     }
   }
@@ -227,12 +278,16 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
   private writeSpacers(
     writer: XmlWriter,
     exercise: Exercise,
+    measureIndex: number,
     barTicks: number,
     printing: PrintingOptions,
     anyStaffWritten: boolean,
   ): void {
-    const every = printing.spacersEvery ?? 0;
-    if (every <= 0 || barTicks <= 0) {
+    if (printing.evenBars !== true || barTicks <= 0) {
+      return;
+    }
+    const every = spacerGrid(exercise, measureIndex, barTicks);
+    if (every <= 0) {
       return;
     }
     if (anyStaffWritten) {

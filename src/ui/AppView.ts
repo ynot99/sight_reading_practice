@@ -672,6 +672,7 @@ export class AppView {
     scoreCoverText: HTMLElement;
     scoreCard: HTMLElement;
     scoreCount: HTMLElement;
+    scoreEngraving: HTMLElement;
     scoreVerdict: HTMLElement;
     focusPlay: HTMLButtonElement;
     focusPlayIcon: SVGPathElement;
@@ -837,6 +838,7 @@ export class AppView {
       scoreCoverText: requireElement(doc, 'score-cover-text'),
       scoreCard: requireElement(doc, 'score-card'),
       scoreCount: requireElement(doc, 'score-count'),
+      scoreEngraving: requireElement(doc, 'score-engraving'),
       scoreVerdict: requireElement(doc, 'score-verdict'),
       focusPlay: requireElement(doc, 'focus-play'),
       focusPlayIcon: requireElement(doc, 'focus-play-icon'),
@@ -2173,7 +2175,8 @@ export class AppView {
    * thing is not on the page - and the one every test can read.
    */
   private syncCard(): void {
-    this.el.scoreCard.hidden = this.el.scoreCount.hidden && this.el.scoreVerdict.hidden;
+    this.el.scoreCard.hidden =
+      this.el.scoreCount.hidden && this.el.scoreVerdict.hidden && this.el.scoreEngraving.hidden;
   }
 
   /**
@@ -2642,6 +2645,13 @@ export class AppView {
         // coming round, a drill - so the verdict on the last one is put away
         // in one place rather than at each of them.
         this.showVerdict(false);
+      }),
+    );
+
+    this.subscriptions.push(
+      controller.events.on('engraving', ({ busy }) => {
+        this.el.scoreEngraving.hidden = !busy;
+        this.syncCard();
       }),
     );
 

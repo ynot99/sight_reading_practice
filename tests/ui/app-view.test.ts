@@ -1074,6 +1074,30 @@ describe('AppView', () => {
       }
     });
 
+    it('says the page is being drawn while it is being drawn', async () => {
+      // Engraving a long score is seconds - more of them since the bars can
+      // be ruled - and the page it replaces stays on screen while it works.
+      // Without this the reader has asked for something and nothing whatever
+      // has happened.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      expect(element('score-engraving').hidden).toBe(true);
+
+      const seen: boolean[] = [];
+      runtime.controller.events.on('engraving', ({ busy }) => {
+        seen.push(busy);
+        if (busy) {
+          expect(element('score-engraving').hidden).toBe(false);
+          expect(element('score-card').hidden).toBe(false);
+        }
+      });
+      await runtime.controller.openScore(twoBarExercise({ title: 'Something New' }));
+
+      // Said on the way in and taken back on the way out.
+      expect(seen).toEqual([true, false]);
+      expect(element('score-engraving').hidden).toBe(true);
+    });
+
     it('takes the number away when the run is stopped mid-count', async () => {
       // Reported from the page: Start and then Stop straight away left the
       // number standing in the middle of the score with nothing counting it

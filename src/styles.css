@@ -282,6 +282,25 @@ textarea {
  * a tap that dismissed it would leave the run about to start with nothing on
  * screen saying so.
  */
+/*
+ * "Engraving…", while a page is being drawn.
+ *
+ * Quiet: it is not news, it is the reason nothing has happened yet. On its
+ * own ground so it can be read against notation, the old page being still on
+ * screen while the new one is worked out.
+ */
+.score-card__busy {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--text-muted);
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+
 .score-card__count {
   font-size: clamp(72px, 22vmin, 200px);
   font-weight: 700;

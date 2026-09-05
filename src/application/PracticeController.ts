@@ -401,6 +401,15 @@ export interface ControllerEventMap {
    */
   sessionDiscarded: Record<string, never>;
   /**
+   * Whether the engraver is drawing a page right now.
+   *
+   * Seconds on a long score, and more of them since the bars can be ruled:
+   * room is made in every bar and the engraver has that much more to place.
+   * The page it is replacing stays on screen while it works, so without this
+   * the reader has asked for something and nothing whatever has happened.
+   */
+  engraving: { readonly busy: boolean };
+  /**
    * The beats about to pass, and when each of them falls.
    *
    * Said ahead rather than one at a time, because in a mode that waits there
@@ -1121,7 +1130,14 @@ export class PracticeController {
     if (newMusic || printed !== this.printedXml) {
       this.engravedXml = musicXml;
       this.printedXml = printed;
-      await this.deps.renderer.load(printed);
+      this.emitter.emit('engraving', { busy: true });
+      try {
+        await this.deps.renderer.load(printed);
+      } finally {
+        // Said even where the drawing threw: a page that failed to appear is
+        // still a page nobody is waiting for any more.
+        this.emitter.emit('engraving', { busy: false });
+      }
     }
     const timeline = this.timeline;
     this.deps.overlay.configureOverlay({

@@ -67,6 +67,15 @@ export interface ListeningOptions {
    * that comes in late.
    */
   readonly repeat?: boolean;
+  /**
+   * The step a repeat goes back to, when that is not where this began.
+   *
+   * A performance picked up after a pause starts where the reader stopped,
+   * and the *lap* is still the passage. Told only where it began, a pause
+   * halfway through a bar being looped shortened the loop to that half bar -
+   * the reader heard the second half of the bar over and over.
+   */
+  readonly loopFromIndex?: number;
 }
 
 export interface ExercisePlayerDependencies {
@@ -186,8 +195,15 @@ export class ExercisePlayer {
   private pausedAtIndex: number | null = null;
   /** Whether the stretch plays round again, and the shape of one round. */
   private looping = false;
+  /** Where a lap begins, which is the passage rather than where this did. */
+  private loopFromTicks = 0;
   private lapTicks = 0;
   private lapMs = 0;
+  /** The first time round, which is short when the music was picked up late. */
+  private firstLapTicks = 0;
+  private firstLapMs = 0;
+  /** The lap's own notes, timed from the lap's start rather than from here. */
+  private lapNotes: ScheduledNote[] = [];
   private lapsDone = 0;
   /**
    * The furthest moment already handed to the instrument.
@@ -235,13 +251,19 @@ export class ExercisePlayer {
     }
     this.untilTicks = until;
     // A lap is a different length now, in ticks and in time both.
-    this.lapTicks = Math.max(0, this.untilTicks - this.fromTicks);
-    this.lapMs = spanMs(this.timeline.exercise, this.fromTicks, this.untilTicks);
+    this.lapTicks = Math.max(0, this.untilTicks - this.loopFromTicks);
+    this.lapMs = spanMs(this.timeline.exercise, this.loopFromTicks, this.untilTicks);
+    this.firstLapTicks = Math.max(0, this.untilTicks - this.fromTicks);
+    this.firstLapMs = spanMs(this.timeline.exercise, this.fromTicks, this.untilTicks);
     // Collected again, because the notes past the old end were never gathered
     // - the walk skips anything outside the stretch. Everything before it is
     // gathered identically and in the same order, so what has already been
     // handed to the instrument stays handed over exactly once.
-    this.pending = this.collectNotes(this.timeline, this.hand);
+    this.pending = this.collectNotes(this.timeline, this.hand, this.fromTicks);
+    this.lapNotes =
+      this.looping && this.loopFromTicks !== this.fromTicks
+        ? this.collectNotes(this.timeline, this.hand, this.loopFromTicks)
+        : this.pending;
     this.catchUpSchedule();
     this.applyClick(this.click, this.clickWhen);
   }
@@ -262,19 +284,23 @@ export class ExercisePlayer {
    * never into the past.
    */
   private catchUpSchedule(): void {
-    const laps = this.pending.length;
-    if (laps === 0 || this.startedAtMs === null) {
+    if (this.startedAtMs === null) {
       this.nextToSchedule = 0;
       return;
     }
     const since = this.scheduledThroughMs - this.startedAtMs;
-    const lap = this.looping && this.lapMs > 0 ? Math.max(0, Math.floor(since / this.lapMs)) : 0;
-    const within = since - lap * this.lapMs;
-    let count = 0;
-    while (count < laps && (this.pending[count]?.atMs ?? Number.POSITIVE_INFINITY) <= within) {
-      count += 1;
+    let at = 0;
+    // Walked rather than divided into, because the first time round is a
+    // different length from the ones after it. It runs to the moment already
+    // scheduled and no further, which is bounded by what has been heard.
+    for (;;) {
+      const note = this.noteAt(at);
+      if (note === null || note.atMs > since) {
+        break;
+      }
+      at += 1;
     }
-    this.nextToSchedule = lap * laps + count;
+    this.nextToSchedule = at;
   }
 
   /** Changes what is heard over a performance, without interrupting it. */
@@ -360,10 +386,18 @@ export class ExercisePlayer {
     this.startedAtMs = null;
     this.playing = true;
     this.looping = options.repeat === true;
-    this.lapTicks = Math.max(0, this.untilTicks - this.fromTicks);
+    const lapStart = timeline.at(
+      Math.max(0, Math.round(options.loopFromIndex ?? options.fromIndex ?? 0)),
+    );
+    // Never past where the music actually began: a lap that started after the
+    // first note would leave the opening of it unheard for ever.
+    this.loopFromTicks = Math.min(lapStart?.onsetTicks ?? this.fromTicks, this.fromTicks);
+    this.lapTicks = Math.max(0, this.untilTicks - this.loopFromTicks);
+    this.firstLapTicks = Math.max(0, this.untilTicks - this.fromTicks);
     // Read off the tempo spans rather than multiplied: a lap that changes
     // tempo partway is not its length in ticks times one bpm.
-    this.lapMs = spanMs(timeline.exercise, this.fromTicks, this.untilTicks);
+    this.lapMs = spanMs(timeline.exercise, this.loopFromTicks, this.untilTicks);
+    this.firstLapMs = spanMs(timeline.exercise, this.fromTicks, this.untilTicks);
     this.lapsDone = 0;
 
     this.deps.metronome.configure(this.planFrom(0));
@@ -383,7 +417,14 @@ export class ExercisePlayer {
     // until it is due, which is that fixed moment away, and both of these
     // finish long before it.
     this.deps.metronome.start();
-    this.pending = this.collectNotes(timeline, options.staffNumber);
+    this.pending = this.collectNotes(timeline, options.staffNumber, this.fromTicks);
+    // The lap's own notes, when a lap is not simply this performance again:
+    // picked up after a pause, the first time round is the tail of a lap and
+    // every one after it is the whole thing.
+    this.lapNotes =
+      this.looping && this.loopFromTicks !== this.fromTicks
+        ? this.collectNotes(timeline, options.staffNumber, this.loopFromTicks)
+        : this.pending;
     this.deps.cursor.moveTo(first?.index ?? 0);
     this.emitter.emit('started', {});
   }
@@ -413,11 +454,20 @@ export class ExercisePlayer {
     const of = { countInBars: 0, fromTicks: this.fromTicks };
     const bars = metronomeBars(timeline.exercise, of);
     const tempos = metronomeTempos(timeline.exercise, of);
+    // The lap's own plan, for every time round after the first. Picked up
+    // mid-lap the two differ: the first time round is the tail of a lap and
+    // is beaten from where the music actually began, and every one after it
+    // is the whole lap beaten from the lap's own start.
+    const round = { countInBars: 0, fromTicks: this.loopFromTicks };
+    const lapBars = metronomeBars(timeline.exercise, round);
+    const lapTempos = metronomeTempos(timeline.exercise, round);
     return {
       bpm: timeline.exercise.tempoBpm,
       timeSignature,
-      bars: this.looping ? laidEndToEnd(bars, this.lapTicks, PLANNED_LAPS, lap) : bars,
-      tempos: this.looping ? laidEndToEnd(tempos, this.lapTicks, PLANNED_LAPS, lap) : tempos,
+      // Counted among the *loop's* laps, of which the first time round is
+      // not one: it is the tail that got the music to the loop.
+      bars: this.looping ? this.roundAndRound(bars, lapBars, Math.max(0, lap - 1)) : bars,
+      tempos: this.looping ? this.roundAndRound(tempos, lapTempos, Math.max(0, lap - 1)) : tempos,
       // Nothing to end at while it goes round: the end of a lap is the
       // beginning of the next one, and a click that stopped there would stop
       // for good.
@@ -428,6 +478,27 @@ export class ExercisePlayer {
       dropout: resolveDropout(this.clickWhen, 0),
       muted: clickIsSilent(this.clickWhen),
     };
+  }
+
+  /**
+   * The first time round, then the lap laid end to end after it.
+   *
+   * They are the same list whenever the music was picked up at the lap's own
+   * start, which is every performance that was not resumed from a pause -
+   * and then this is simply the lap tiled, as it was before a pause could
+   * begin one partway through.
+   */
+  private roundAndRound<T extends { readonly startTicks: number }>(
+    first: readonly T[],
+    lap: readonly T[],
+    from: number,
+  ): T[] {
+    const opening = first.filter((entry) => entry.startTicks < this.firstLapTicks);
+    const rounds = laidEndToEnd(lap, this.lapTicks, PLANNED_LAPS, from).map((entry) => ({
+      ...entry,
+      startTicks: entry.startTicks + this.firstLapTicks,
+    }));
+    return [...opening, ...rounds];
   }
 
   /**
@@ -464,6 +535,52 @@ export class ExercisePlayer {
   }
 
   /**
+   * The nth note of the performance, timed from where it began.
+   *
+   * A flat list while nothing repeats. Where it does, the first time round is
+   * whatever was left of the lap when the music was picked up, and every one
+   * after it is the whole lap - so the two are asked for separately and the
+   * count runs straight through both.
+   */
+  private noteAt(index: number): { midi: number; atMs: number; untilMs: number } | null {
+    const first = this.pending;
+    if (index < first.length) {
+      return first[index] ?? null;
+    }
+    const lap = this.lapNotes;
+    if (!this.looping || lap.length === 0) {
+      return null;
+    }
+    const after = index - first.length;
+    const note = lap[after % lap.length];
+    if (note === undefined) {
+      return null;
+    }
+    const base = this.firstLapMs + Math.floor(after / lap.length) * this.lapMs;
+    return { midi: note.midi, atMs: base + note.atMs, untilMs: base + note.untilMs };
+  }
+
+  /**
+   * How far round the music has got, and how many times it has been round.
+   *
+   * The metronome counts from nought whatever the music does, so where the
+   * playback began is added back on - and where it goes round, only how far
+   * into the lap it has got. The first time round is measured from where the
+   * performance began and every one after it from where the lap does, which
+   * are the same place unless the reader picked the music up mid-lap.
+   */
+  private lapAt(elapsed: number): { lap: number; position: number } {
+    if (!this.looping || this.lapTicks <= 0 || elapsed < this.firstLapTicks) {
+      return { lap: 0, position: elapsed + this.fromTicks };
+    }
+    const after = elapsed - this.firstLapTicks;
+    return {
+      lap: 1 + Math.floor(after / this.lapTicks),
+      position: this.loopFromTicks + (after % this.lapTicks),
+    };
+  }
+
+  /**
    * Every note to sound, flattened and timed.
    *
    * `durationTicks` on a timeline note already follows any ties out of it, so
@@ -478,16 +595,17 @@ export class ExercisePlayer {
   private collectNotes(
     timeline: ExerciseTimeline,
     staffNumber: ListeningHand,
+    fromTicks: number,
   ): ScheduledNote[] {
     const exercise = timeline.exercise;
     const spans = pedalSpans(exercise);
     // From where this performance began, and walked rather than multiplied:
     // a piece that changes tempo has no single number to multiply by.
-    const at = (ticks: number): number => spanMs(exercise, this.fromTicks, ticks);
+    const at = (ticks: number): number => spanMs(exercise, fromTicks, ticks);
     const longest = new Map<string, ScheduledNote>();
     for (const step of timeline.steps) {
       // Only the stretch being played, and timed from its own beginning.
-      if (step.onsetTicks < this.fromTicks || step.onsetTicks >= this.untilTicks) {
+      if (step.onsetTicks < fromTicks || step.onsetTicks >= this.untilTicks) {
         continue;
       }
       const sounding = step.notes.filter(
@@ -550,26 +668,24 @@ export class ExercisePlayer {
     // ahead of its moment - so the lap boundary costs nothing at all, and the
     // reader tapping along hears the downbeat where the downbeat is.
     const horizon = tick.scheduledTimeMs + (this.deps.horizonMs ?? DEFAULT_HORIZON_MS);
-    const laps = this.pending.length;
-    while (laps > 0 && (this.looping || this.nextToSchedule < laps)) {
-      const note = this.pending[this.nextToSchedule % laps];
-      const lap = Math.floor(this.nextToSchedule / laps);
-      const at = from + lap * this.lapMs;
-      if (note === undefined || at + note.atMs > horizon) {
+    for (;;) {
+      const note = this.noteAt(this.nextToSchedule);
+      if (note === null || from + note.atMs > horizon) {
         break;
       }
       this.nextToSchedule += 1;
-      this.scheduledThroughMs = Math.max(this.scheduledThroughMs, at + note.atMs);
-      this.deps.instrument.play(note.midi, LISTENING_VELOCITY, at + note.atMs);
-      this.deps.instrument.stop(note.midi, at + note.untilMs);
+      this.scheduledThroughMs = Math.max(this.scheduledThroughMs, from + note.atMs);
+      this.deps.instrument.play(note.midi, LISTENING_VELOCITY, from + note.atMs);
+      this.deps.instrument.stop(note.midi, from + note.untilMs);
     }
 
     // The metronome counts from nought whatever the music does, so where the
     // playback began is added back on before asking the timeline anything -
     // and where it goes round, only how far into the lap it has got.
     const elapsed = tick.positionTicks;
-    const lapsDone = this.looping && this.lapTicks > 0 ? Math.floor(elapsed / this.lapTicks) : 0;
-    const position = elapsed - lapsDone * this.lapTicks + this.fromTicks;
+    const round = this.lapAt(elapsed);
+    const lapsDone = round.lap;
+    const position = round.position;
     // Asked before the marker is moved, not after. The tick that ends a
     // stretch stands at the end of its last note, which is the *beginning of
     // the next one* - so moving first walked the marker into the bar after

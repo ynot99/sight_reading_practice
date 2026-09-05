@@ -1022,6 +1022,10 @@ export class PracticeController {
       // another: stopping and starting is where the gap on a repeat came
       // from.
       repeat: this.currentSettings.repeatRange,
+      // And round to the *passage*, wherever this performance was picked up.
+      // A pause halfway through the bar being looped otherwise made that half
+      // bar the loop.
+      loopFromIndex: passage.from,
     });
     // Something is happening to the music now, so a press is a press and not
     // the beginning of a run.

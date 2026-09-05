@@ -335,6 +335,72 @@ describe('listening to an exercise', () => {
       );
     });
 
+    it('goes round the passage, not round from where it was picked up', () => {
+      // The complaint this answers: repeating one bar and pausing halfway
+      // through it made that half bar the loop, and the reader heard the back
+      // half of the bar over and over.
+      //
+      // A pause says where the music picks up. It does not say what the
+      // passage is - and the passage is what a lap is.
+      const { player, metronome, instrument, timeline } = rig();
+      const bar = 4; // Four quarters at 60 bpm: the fixture's first bar.
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'never',
+        toIndex: bar - 1,
+        repeat: true,
+      });
+      metronome.advanceSubdivisions(2);
+      const from = player.pausedAt;
+      player.pause();
+      const heldAt = player.pausedAt ?? 0;
+      expect(heldAt).toBeGreaterThan(0);
+      void from;
+
+      // Picked up where it stopped, and the loop is still the whole bar.
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'never',
+        fromIndex: heldAt,
+        toIndex: bar - 1,
+        repeat: true,
+        loopFromIndex: 0,
+      });
+      const before = instrument.played.length;
+      metronome.advanceSubdivisions(12);
+
+      // Every note of the bar comes round, including the ones in front of
+      // where the reader had paused.
+      const sounded = new Set(instrument.played.slice(before).map((note) => note.midi));
+      const whole = new Set(
+        timeline.steps.slice(0, bar).flatMap((step) => step.notes.map((note) => note.midi)),
+      );
+      for (const midi of whole) {
+        expect(sounded).toContain(midi);
+      }
+    });
+
+    it('takes the marker back to the top of the passage, not to the pause', () => {
+      const { player, metronome, renderer, timeline } = rig();
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'never',
+        fromIndex: 2,
+        toIndex: 3,
+        repeat: true,
+        loopFromIndex: 0,
+      });
+
+      metronome.advanceSubdivisions(6);
+
+      // It came round to step 0, which is where the passage begins - not to
+      // step 2, which is only where this performance happened to start.
+      expect(renderer.cursor.moves).toContain(0);
+    });
+
     it('stops going round when the reader says so, at the end of the lap', () => {
       // A reader who turns the repeat off means this reading to be the last,
       // and saying so must not stop the music.

@@ -981,6 +981,39 @@ describe('AppView', () => {
       expect(element('score-count').hidden).toBe(true);
     });
 
+    it('shows the page ahead only while there is music moving', async () => {
+      // Reported from the page: the run stopped and the top of the next page
+      // stayed hanging over the system he had just played. It exists to
+      // soften a page turn, and nothing is about to turn when nothing is
+      // playing.
+      const { view, renderer } = createRig();
+      await view.initialize();
+      expect(renderer.nextPagePreview).toBe(false);
+
+      element<HTMLButtonElement>('focus-play').click();
+      expect(renderer.nextPagePreview).toBe(true);
+
+      element<HTMLButtonElement>('focus-stop').click();
+      expect(renderer.nextPagePreview).toBe(false);
+    });
+
+    it('shows it for a playback too, which is where he asked for it', async () => {
+      const { view, renderer } = createRig();
+      await view.initialize();
+
+      element<HTMLButtonElement>('focus-listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(renderer.nextPagePreview).toBe(true);
+
+      // Held, not ended: the music will go on from where it is.
+      element<HTMLButtonElement>('focus-listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(renderer.nextPagePreview).toBe(true);
+
+      element<HTMLButtonElement>('focus-stop').click();
+      expect(renderer.nextPagePreview).toBe(false);
+    });
+
     it('takes the number away when the run is stopped mid-count', async () => {
       // Reported from the page: Start and then Stop straight away left the
       // number standing in the middle of the score with nothing counting it

@@ -1300,7 +1300,27 @@ export class AppView {
     this.describeListening();
   }
 
+  /**
+   * Shows the top of the next page only while there is music moving.
+   *
+   * It exists to soften a page turn, and nothing is about to turn when
+   * nothing is playing: what the reader has then is a page with the top of
+   * the *next* one standing over the system they may well want to read
+   * again - the one they have just played. Reported from the page: the run
+   * stopped and the preview stayed hanging there.
+   *
+   * A held run and a held playback both count. The reader means to pick
+   * them up, and the music will go on from where it is.
+   */
+  private applyPreview(): void {
+    const controller = this.runtime.controller;
+    const moving =
+      this.isPlaying || this.isPreviewing || controller.isListening || controller.isListeningPaused;
+    this.runtime.renderer.showNextPagePreview(controller.settings.previewNextPage && moving);
+  }
+
   private describeListening(): void {
+    this.applyPreview();
     const listening = this.runtime.controller.isListening;
     const held = this.runtime.controller.isListeningPaused;
     // Three answers, because there are three states: nothing playing, playing,
@@ -2959,7 +2979,7 @@ export class AppView {
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.el.previewNextPage.checked = settings.previewNextPage;
-    this.runtime.renderer.showNextPagePreview(settings.previewNextPage);
+    this.applyPreview();
     this.el.focusImmediate.setAttribute('aria-pressed', String(settings.immediateStart));
     this.describeMetronomeButton(settings.clickWhen, settings.clickPattern);
     this.renderHealth(this.runtime.controller.health);
@@ -3713,6 +3733,7 @@ export class AppView {
    */
   private applyPlayingChrome(): void {
     const playing = this.isPlaying || this.isPreviewing;
+    this.applyPreview();
     this.el.focusBar.dataset['playing'] = String(playing);
     if (playing) {
       // Shut rather than merely hidden, so what comes back when the music

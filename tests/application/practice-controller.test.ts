@@ -1424,6 +1424,42 @@ describe('hearing the hand you are not reading', () => {
   });
 });
 
+describe('ruling the bars', () => {
+  it('makes room in the page it prints, and keeps it out of the music', async () => {
+    // The engraver is given a score with rests nobody sees in it, so the
+    // beats of a bar stand at even distances. What the trainer *announces* -
+    // and so what the library keeps and what anything else reads - is the
+    // music, without a word of that scaffolding in it.
+    const { controller, renderer } = createController();
+    const announced: string[] = [];
+    controller.events.on('exerciseLoaded', ({ musicXml }) => announced.push(musicXml));
+
+    await controller.openScore(twoBarExercise());
+    expect(renderer.loadedXml).not.toContain('print-object="no"');
+
+    controller.updateSettings({ rhythmRuler: 'quarter' });
+    await controller.reloadExercise();
+
+    expect(renderer.loadedXml).toContain('print-object="no"');
+    expect(announced[announced.length - 1]).not.toContain('print-object');
+  });
+
+  it('is the same piece, so the reader keeps their place in it', async () => {
+    // Ruling the bars re-engraves the page, and a re-engraving is not new
+    // music: the marker stays where it was put.
+    const { controller, renderer } = createController();
+    await controller.openScore(longExercise({ bars: 8 }));
+    const at = controller.beginAtBar(5);
+    expect(at).toBeGreaterThan(0);
+
+    controller.updateSettings({ rhythmRuler: 'eighth' });
+    await controller.reloadExercise();
+
+    expect(controller.beginsAt).toBe(at);
+    expect(renderer.cursor.position).toBe(at);
+  });
+});
+
 describe('the click in a mode that waits', () => {
   it('sounds the beat the reader plays, and the ones they will not', async () => {
     // His words: the metronome sounds when he presses the keys, and where it

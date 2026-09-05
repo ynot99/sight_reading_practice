@@ -27,7 +27,7 @@ import type { PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type { ClickWhen, ClickPattern } from './ports/IMetronome.js';
 import { clickFollowsTheReader } from './ports/IMetronome.js';
-import { rulerMarks, type RulerDivision } from './rhythmRuler.js';
+import { rulerMarks, rulerStepTicks, type RulerDivision } from './rhythmRuler.js';
 import type {
   PlayedNote,
   IPlayedNoteOverlay,
@@ -452,8 +452,10 @@ export class PracticeController {
   private listeningForTheOpening: Unsubscribe | null = null;
   private openedScore: Exercise | null = null;
   private player: ExercisePlayer | null = null;
-  /** The file the page is currently engraved from, so it is drawn once. */
+  /** The music the page is currently showing, so it is drawn once. */
   private engravedXml: string | null = null;
+  /** And what was actually handed to the engraver, spacers and all. */
+  private printedXml: string | null = null;
   /** Highest step already dimmed, so the veil is drawn once per step. */
   private fadedThrough = -1;
   /** Marks waiting for the run to end, when that is when they are drawn. */
@@ -1045,11 +1047,23 @@ export class PracticeController {
     // it need not be drawn again when they change their mind. What speed the
     // run is actually going is the transport's to say, and it does.
     const musicXml = this.deps.serializer.serialize(source);
+    // What is actually handed to the engraver, which is the same music with
+    // room made in it: rests nobody sees, at the grid the ruler is drawn on,
+    // so that the beats of a bar stand at even distances across it. See
+    // `PrintingOptions.spacersEvery` for why an engraver does not do that on
+    // its own.
+    const spacersEvery = rulerStepTicks(this.currentSettings.rhythmRuler);
+    const printed =
+      spacersEvery <= 0 ? musicXml : this.deps.serializer.serialize(source, { spacersEvery });
 
     // The same bytes are the same page. This one test answers both of the
     // questions a re-presentation asks - whether the engraver has anything
     // to draw again, and whether what the reader knows about the page is
     // still true - because they are the same question.
+    //
+    // Asked of the music and not of the printing: ruling the bars re-engraves
+    // the page, but it is the same piece and the reader is in the same place
+    // in it.
     const newMusic = musicXml !== this.engravedXml;
 
     this.exercise = exercise;
@@ -1064,9 +1078,10 @@ export class PracticeController {
     // on a long score against thirty milliseconds to write the file, so a
     // tempo nudge that redrew the page spent nearly all of its time redrawing
     // notes nobody had touched - and swallowed the next press while it did.
-    if (newMusic) {
+    if (newMusic || printed !== this.printedXml) {
       this.engravedXml = musicXml;
-      await this.deps.renderer.load(musicXml);
+      this.printedXml = printed;
+      await this.deps.renderer.load(printed);
     }
     const timeline = this.timeline;
     this.deps.overlay.configureOverlay({

@@ -96,6 +96,45 @@ describe('files the reader cannot use', () => {
   });
 });
 
+describe('making room for the beat', () => {
+  /** One bar: a half and two quarters, where the beats are uneven on paper. */
+  const uneven = twoBarExercise();
+
+  it('writes nothing at all until it is asked to', () => {
+    expect(serializer.serialize(uneven)).not.toContain('print-object="no"');
+  });
+
+  it('rules the bar with rests nobody is meant to see', () => {
+    const printed = serializer.serialize(uneven, { spacersEvery: Duration.QUARTER.ticks });
+
+    // Four to a bar of four four, in both bars, and every one of them marked
+    // not to be printed.
+    const spacers = printed.match(/<note print-object="no">/g) ?? [];
+    expect(spacers).toHaveLength(8);
+    expect(printed).toContain(`<duration>${Duration.QUARTER.ticks}</duration>`);
+  });
+
+  it('keeps them out of the way of the voices the music uses', () => {
+    const printed = serializer.serialize(uneven, { spacersEvery: Duration.QUARTER.ticks });
+    const voices = uneven.staves.map((staff) => staff.voice);
+
+    // One above every voice written, so it can collide with none of them.
+    const spacer = /<note print-object="no">[\s\S]*?<voice>(\d+)<\/voice>/.exec(printed);
+    expect(Number(spacer?.[1])).toBe(Math.max(...voices) + 1);
+  });
+
+  it('is a printing and not a file - the room is never read back', () => {
+    // Read back, the room *would* be rests: nothing in MusicXML says "this is
+    // scaffolding". So this printing goes to the engraver and nowhere else -
+    // what the library keeps and what the trainer announces is the music, and
+    // the test for that is next door in the controller.
+    const printed = serializer.serialize(uneven, { spacersEvery: Duration.QUARTER.ticks });
+
+    expect(demands(importer.read(printed).exercise)).not.toEqual(demands(uneven));
+    expect(serializer.serialize(uneven)).not.toContain('print-object');
+  });
+});
+
 describe('what to call a piece', () => {
   /** A score whose header says nothing, with whatever credits are given. */
   function credited(credits: string, header = ''): string {

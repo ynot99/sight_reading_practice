@@ -29,7 +29,33 @@ import { XmlWriter } from './XmlWriter.js';
  * MusicXML today, and any other engraver that speaks it can be swapped in.
  */
 export interface IMusicXmlSerializer {
-  serialize(exercise: Exercise): string;
+  serialize(exercise: Exercise, printing?: PrintingOptions): string;
+}
+
+/**
+ * How this printing of the score differs from any other.
+ *
+ * Not part of the music: the same exercise printed twice with different
+ * options is the same piece, and nothing here may change a note, a length or
+ * a bar line.
+ */
+export interface PrintingOptions {
+  /**
+   * Space the bars by time, at this grid, using rests nobody sees.
+   *
+   * An engraver gives a long note less room than its length asks for - a half
+   * takes about a bar's width and a half of a quarter's, not two - because
+   * that is how music has always been set, and it is why the beats of a bar
+   * do not fall at even distances across it. Reading rhythm off the page is
+   * the one thing that wants them even.
+   *
+   * The fix is to give the engraver something to space *around* at each beat:
+   * a rest in a voice of its own, marked not to be printed. Measured, it
+   * costs nothing anywhere else - the engraver draws it fully transparent,
+   * and its cursor steps straight over it, so the marker and the timeline go
+   * on agreeing about every position in the piece.
+   */
+  readonly spacersEvery?: number;
 }
 
 export interface MusicXmlSerializerOptions {
@@ -80,7 +106,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     };
   }
 
-  serialize(exercise: Exercise): string {
+  serialize(exercise: Exercise, printing: PrintingOptions = {}): string {
     validateExercise(exercise);
 
     const writer = new XmlWriter();
@@ -107,14 +133,18 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         });
       });
       writer.element('part', { id: 'P1' }, () => {
-        this.writeMeasures(writer, exercise);
+        this.writeMeasures(writer, exercise, printing);
       });
     });
 
     return writer.toString();
   }
 
-  private writeMeasures(writer: XmlWriter, exercise: Exercise): void {
+  private writeMeasures(
+    writer: XmlWriter,
+    exercise: Exercise,
+    printing: PrintingOptions = {},
+  ): void {
     const bars = exercise.staves[0]?.measures.length ?? 0;
     // Ties cross bar lines - that is most of what they are for - so what is
     // still being held has to outlive the measure loop.
@@ -177,6 +207,50 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
           );
         });
         this.writeTempoChanges(writer, tempos, barTicks, present.length > 0);
+        this.writeSpacers(writer, exercise, barTicks, printing, present.length > 0);
+      });
+    }
+  }
+
+  /**
+   * Rests nobody sees, at a fixed grid, so the bar is spaced by time.
+   *
+   * Written like the tempo marks and for the same reason: they belong to the
+   * bar rather than to any voice, so the cursor is wound back to the bar line
+   * and they are laid out from there in a voice of their own.
+   *
+   * The voice is one above every voice the music uses, so it can collide with
+   * nothing. The staff is the first, because a spacer is about *when* and not
+   * about where - and one grid for the bar spaces both staves, the engraver
+   * lining the two up at every moment either of them has.
+   */
+  private writeSpacers(
+    writer: XmlWriter,
+    exercise: Exercise,
+    barTicks: number,
+    printing: PrintingOptions,
+    anyStaffWritten: boolean,
+  ): void {
+    const every = printing.spacersEvery ?? 0;
+    if (every <= 0 || barTicks <= 0) {
+      return;
+    }
+    if (anyStaffWritten) {
+      writer.element('backup', undefined, () => {
+        writer.leaf('duration', barTicks);
+      });
+    }
+    const voice = Math.max(0, ...exercise.staves.map((staff) => staff.voice)) + 1;
+    for (let at = 0; at < barTicks; at += every) {
+      // The last one is short wherever the grid does not divide the bar - a
+      // half ruled through three four - and stopping at the bar line is the
+      // truth about that rather than a fault in it.
+      const length = Math.min(every, barTicks - at);
+      writer.element('note', { 'print-object': 'no' }, () => {
+        writer.leaf('rest');
+        writer.leaf('duration', length);
+        writer.leaf('voice', voice);
+        writer.leaf('staff', 1);
       });
     }
   }

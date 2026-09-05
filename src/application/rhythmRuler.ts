@@ -35,6 +35,17 @@ const RULER_TICKS: Readonly<Record<Exclude<RulerDivision, 'off'>, number>> = {
   'thirty-second': Duration.SIXTEENTH.ticks / 2,
 };
 
+/**
+ * The grid one ruling steps by, in divisions - nought for no ruler.
+ *
+ * The same number twice over: it is where the lines are drawn, and it is
+ * where the invisible rests go that make the page even enough for them to be
+ * worth drawing. Two grids would be two answers to one question.
+ */
+export function rulerStepTicks(division: RulerDivision): number {
+  return division === 'off' ? 0 : RULER_TICKS[division];
+}
+
 /** What a ruled line is marking, which is how strongly it is drawn. */
 export type RulerWeight = 'downbeat' | 'beat' | 'division';
 

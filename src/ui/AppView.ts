@@ -1723,6 +1723,10 @@ export class AppView {
     this.listen(this.el.rhythmRuler, 'change', () => {
       controller.updateSettings({ rhythmRuler: readRuler(this.el.rhythmRuler.value) });
       this.syncControlsFromSettings();
+      // The page is engraved differently for a ruled score - room is made in
+      // every bar for the beats to stand at even distances - so this is one
+      // of the few settings that has to be drawn again to be seen.
+      void this.reload(false);
     });
 
     this.listen(this.el.hearOtherHand, 'change', () => {

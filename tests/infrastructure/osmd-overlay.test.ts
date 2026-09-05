@@ -264,6 +264,100 @@ describe('played notes drawn over a real engraving', () => {
     expect(noteheads(container)).toHaveLength(0);
   });
 
+  describe('room made for the beat', () => {
+    /** How many places the engraver's own cursor will stop at. */
+    function cursorStops(): number {
+      const inner = renderer as unknown as {
+        osmd: { cursor: { reset: () => void; next: () => void; iterator: { EndReached: boolean } } };
+      };
+      const cursor = inner.osmd.cursor;
+      cursor.reset();
+      let stops = 0;
+      let guard = 200;
+      while (!cursor.iterator.EndReached && guard > 0) {
+        guard -= 1;
+        stops += 1;
+        cursor.next();
+      }
+      return stops;
+    }
+
+    it('costs the marker nothing, which is the invariant it must not break', async () => {
+      // The ruler asks for room in every bar - rests nobody sees, at the beat
+      // - so the beats stand at even distances across it. Those rests are
+      // events, and an event is somewhere a cursor could stop. The marker and
+      // the timeline are stepped by one index, so a stop that is not a step
+      // would put every note of the piece out by one.
+      const exercise = twoBarExercise();
+      const plain = buildTimeline(exercise).length;
+      expect(cursorStops()).toBe(plain);
+
+      await renderer.load(
+        new MusicXmlSerializer().serialize(exercise, { spacersEvery: Duration.QUARTER.ticks }),
+      );
+
+      expect(cursorStops()).toBe(plain);
+    });
+
+    it('spaces the beats of a bar by their time, near enough', async () => {
+      // What the room is *for*. Left to the engraver, a half takes about one
+      // and a half times a quarter's width where its length asks for two -
+      // which is why the beats of a bar do not fall at even distances, and
+      // why a ruler drawn over them looked crooked.
+      const uneven: Exercise = {
+        ...twoBarExercise(),
+        staves: twoBarExercise().staves.map((staff, at) => ({
+          ...staff,
+          measures: [
+            bar(
+              noteEntry(p(at === 0 ? 'C4' : 'C3'), Duration.HALF),
+              noteEntry(p(at === 0 ? 'D4' : 'D3'), Duration.QUARTER),
+              noteEntry(p(at === 0 ? 'E4' : 'E3'), Duration.QUARTER),
+            ),
+            bar(noteEntry(p(at === 0 ? 'G4' : 'G3'), Duration.WHOLE)),
+          ],
+        })),
+      };
+      const serializer = new MusicXmlSerializer();
+      const widths = async (xml: string): Promise<number> => {
+        await renderer.load(xml);
+        const inner = renderer as unknown as { stepX: Map<number, number> };
+        const at = [0, 1, 2].map((step) => inner.stepX.get(step) ?? Number.NaN);
+        return (at[1]! - at[0]!) / (at[2]! - at[1]!);
+      };
+
+      const asWritten = await widths(serializer.serialize(uneven));
+      const spaced = await widths(
+        serializer.serialize(uneven, { spacersEvery: Duration.QUARTER.ticks }),
+      );
+
+      // Time says the half should take twice the room of the quarter.
+      expect(asWritten).toBeLessThan(1.7);
+      expect(spaced).toBeGreaterThan(1.85);
+      expect(spaced).toBeLessThanOrEqual(2.05);
+    });
+
+    it('draws them, but with nothing anyone can see', async () => {
+      // The engraver has no way to leave them out - drawing hidden notes is
+      // "not yet supported", says its own documentation - so it draws them
+      // fully transparent, which comes to the same thing.
+      await renderer.load(
+        new MusicXmlSerializer().serialize(twoBarExercise(), {
+          spacersEvery: Duration.QUARTER.ticks,
+        }),
+      );
+
+      const inked = [...container.querySelectorAll('svg path')].filter(
+        (path) => (path.getAttribute('fill') ?? '') !== '#00000000',
+      );
+      const transparent = [...container.querySelectorAll('svg path')].filter(
+        (path) => path.getAttribute('fill') === '#00000000',
+      );
+      expect(transparent.length).toBeGreaterThan(0);
+      expect(inked.length).toBeGreaterThan(transparent.length);
+    });
+  });
+
   describe('the ruler through the bars', () => {
     /** Every line of the ruler, left to right. */
     function ruled(): SVGLineElement[] {

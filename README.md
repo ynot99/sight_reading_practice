@@ -6,6 +6,13 @@ keyboard in real time. Free, open source, and offline after the first load —
 an alternative to the graded sight-reading drills the subscription trainers
 sell.
 
+Around those two modes are the aids a reader reaches for: a **ruler** of the
+beat drawn through bars spaced by time rather than by an engraver, the **other
+hand** sounded while you read yours, a **click that follows you** instead of
+counting at you, a page that turns **in halves**, and a reminder to **stop**
+that waits for the music to stop first. Each of them is described further
+down; every one of them is off until asked for.
+
 Two practice modes:
 
 - **Wait mode** — the cursor waits until you actually play the notated chord.
@@ -478,6 +485,22 @@ released key keeps ringing while the pedal is down, and is damped when it
 comes up. See
 [public/samples/piano/CREDITS.md](public/samples/piano/CREDITS.md).
 
+### Turning the page, and starting over
+
+A page turn is the hardest moment in sight reading: the music you need next is
+on a page you cannot see, and turning it is when you can least afford to look
+away. So the page turns **in halves** - once the music reaches the last system,
+the top of the next page is drawn where the first system used to be, closed
+with a dashed edge so it reads as a piece of somewhere else. It is a clone of
+the page ahead at the same size, so the notes stand where they will stand when
+the page does turn, and it appears only while there is music moving: nothing is
+about to turn when nothing is playing.
+
+**Quick replay** is stop and start in one press, and it is the only button in
+the row whose home is a run - between runs the thing that begins one is Start.
+Rewind is left where it is: that puts the *place* back to the top and belongs
+between runs.
+
 ### Practising on a tablet
 
 iPadOS has no Web MIDI in any browser — every browser there is Safari
@@ -491,6 +514,16 @@ npm run bridge
 It prints an address to open on the tablet. The keyboard's notes are relayed
 over the local network, and the iPad becomes a screen on the music stand. See
 [tools/midi-bridge](tools/midi-bridge/README.md) for the details.
+
+The relay stamps each press with the moment the key went down and the page
+corrects for the difference between the two clocks, measured rather than
+assumed - a desktop whose clock has drifted otherwise hands over every press
+wrong by the same amount, with nothing to show for it. What cannot be
+corrected is a hop that varies, and that is what a player feels, so the bridge
+pill says it: `Bridge: Casio · ±37 ms` is a connection worth fixing before
+blaming the keyboard. It says nothing while the hop is steady. The relay's
+sockets are told not to wait for a second packet before sending the first,
+which is the difference between a note and a file.
 
 The space bar starts, pauses and resumes, so a run can be driven without
 reaching for the mouse. It steps aside whenever a control has focus, since
@@ -509,6 +542,89 @@ does, and it leaves again if a scroll runs past the top of the page. Every one
 of those dropped the reader out mid-practice. Installed to a Home Screen there
 is no browser chrome anyway, which is the way to get the last of the screen
 back.
+
+### Reading the rhythm off the page
+
+A **ruler** can be drawn through the bars: a line at every half, quarter,
+eighth, sixteenth or thirty-second, in three weights - the bar beginning, a
+beat falling, a beat divided - so that where the beats are is *seen* rather
+than worked out from the note values. It is drawn behind the notation, since a
+grid that hides a notehead is worse than no grid, and its strength is one
+number the reader turns down as far as invisible.
+
+For that to be worth drawing, the page has to be spaced by *time*, and an
+engraver does not space it that way: a long note gets less room than its length
+asks for. Measured on a bar of half, quarter, quarter, where time says the half
+should take twice the quarter's width, this engraver gives it 1.55 - and that
+number does not move for `spacingFactorSoftmax`, for `SoftmaxFactorVexFlow`, or
+for the `NoteDistances` table.
+
+So the score handed to the engraver is padded with **rests nobody sees**, at
+the finest grid every note of that bar lands on. The file on disk is never
+touched - the printed MusicXML has always been derived from the exercise, and
+this is one more thing derived into it. With them the same bar comes out at
+2.00, exactly. They cost nothing anyone can see, the engraver drawing a hidden
+note fully transparent, and nothing at all to the marker: its cursor steps
+straight over them, so the timeline and the cursor go on agreeing about every
+position in the piece. A coarser grid buys nothing - a half-note grid under a
+bar of quarters changes not one pixel - and the whole of it costs a long score
+about two seconds more to engrave, which is why the page says it is being
+drawn while it draws.
+
+A second **marker can run along the ruler**, beat by beat. It is not the marker
+on the notes and could not be: that one stands where the music is written, and
+under a held note it stands still while the beats go on passing - which is
+exactly the stretch a reader loses count in.
+
+### Playing against something
+
+**The other hand can be heard** while you read yours. Practising one hand
+against silence is practising something the piece never asks for: the part only
+means what it means against the other one. It is not a second performance - the
+same pulse and the same cursor cannot serve two masters - but the step itself,
+sounded as the music reaches it, under the reader's own playing rather than
+beside it.
+
+**The click can follow the reader** instead of counting at them. In a mode that
+waits there is no pulse, so asking for a click used to start one, which is a
+machine counting on through music that is standing still. Told to keep time
+*with* them, the beat they play is clicked where they put it and the beats
+between their entries are placed where they are written and go on without them
+- the same rule the other hand follows, so the two can never disagree about
+where a beat is. It stops at the beat they come in on: that one is theirs to
+place, and sounding it early would be the machine playing their part.
+
+Both are reckoned from the moment the **key went down** rather than from the
+moment the page heard about it, which over the relay is a hop apart - anchored
+on the hearing, everything after a press came out that much late.
+
+### The marker, and when it says something
+
+Whether the marker is drawn is three questions, not one: while you play, while
+the machine plays it back, and while nothing is running - a reader may want no
+marker at all under their own hands and still want one following a playback,
+and the third answer is how they see where they stopped.
+
+Where a run keeps failing at one step, the marker **reddens** - once for each
+wrong note played there, and back to itself when the music moves on. It comes
+back even for a reader who put it away, and only for as long as there is
+something to say: practising with every colour turned off is reading blind on
+purpose, but blind you cannot tell *where* it went wrong, only that it did.
+
+### Being reminded to stop
+
+Long practice is how hands are hurt, and this program knows something no clock
+does: when you are actually playing. It counts the notes rather than the wall,
+so a page left open over lunch is not an hour of practice, and a silence long
+enough to be a break is not counted - while the thinking between two notes is,
+the hands being on the keys throughout.
+
+A rest falls **due** on that clock and is **said** at the first moment nothing
+is going. A reminder that interrupts a run is one to be resented and then
+turned off, so a run reaches its end, a performance finishes, and a repeat will
+not come round again over a rest that is owed. Put off, it keeps the hour
+already played rather than starting it over; taken, a ring counts three minutes
+down and two notes say when they are up.
 
 ## Architecture
 
@@ -832,10 +948,13 @@ you unless you ask otherwise.
   other levels readable.
 - Generated music is deliberately simple — diatonic, no accidentals outside the
   key — though the notation layer already handles accidentals correctly.
-- No progress tracking between sessions yet: settings are remembered on the
-  device, but performance reports are not stored. Because every exercise is
-  reproducible from its seed, "practise that one again" is a small feature
-  away.
+- How a reading went is kept per practice setting, which is what the ladder
+  moves on, but there is no history to look back over yet - no list of the
+  last runs and nothing to beat. Because every exercise is reproducible from
+  its seed, "practise that one again" is a small feature away.
+- Ruling the bars costs about two seconds more to engrave on a long score,
+  since room is made in every bar of it. It is paid when the ruling changes
+  and when a piece is opened, not while playing.
 
 ## Licence
 

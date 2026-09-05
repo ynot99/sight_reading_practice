@@ -57,6 +57,12 @@ export class CursorNavigator implements IScoreCursor {
   show(): void {
     this.wanted = true;
     this.primitive.show();
+    // Said, for the reason a reset is: *where* the marker is decides whether
+    // showing it shows the reader anything true. The engraver draws one
+    // marker over the whole score and places it in the coordinates of its
+    // own page, so turned on while page five is in front of them it stands
+    // over page five's first bar and claims to be there.
+    this.moved?.(this.index, false);
   }
 
   hide(): void {

@@ -74,6 +74,12 @@ function pageWidth(container: HTMLElement): number {
   return Number((svg?.getAttribute('viewBox') ?? '').split(/[\s,]+/)[2] ?? 0);
 }
 
+/** Whether the engraver's own marker is on show. */
+function markerShown(renderer: OsmdScoreRenderer): boolean {
+  const engraver = renderer as unknown as { osmd: { cursor: { hidden: boolean } } };
+  return !engraver.osmd.cursor.hidden;
+}
+
 /** Which of them the reader can see. */
 function showing(container: HTMLElement): number[] {
   return sheets(container)
@@ -602,6 +608,24 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     renderer.cursor.reset();
 
     expect(renderer.pages.at).toBe(reading);
+  });
+
+  it('does not show the marker on a page it is not on', () => {
+    // The engraver keeps one marker for the whole score and places it in the
+    // coordinates of its own page, so a marker on page one shown while page
+    // two is up stands over page two's first bar and claims to be there.
+    // Turning the marker on is as much a way of doing that as moving it, and
+    // that is the path a tempo nudge takes.
+    renderer.setPaged(true);
+    renderer.turnPages(1);
+
+    renderer.cursor.show();
+
+    expect(markerShown(renderer)).toBe(false);
+
+    // And it comes back on the page it belongs to, without being asked again.
+    renderer.turnPages(-1);
+    expect(markerShown(renderer)).toBe(true);
   });
 
   it('does not let its own bookkeeping turn the page', () => {

@@ -364,6 +364,40 @@ describe('PracticeController', () => {
     expect(controller.currentExercise?.tempoBpm).toBe(90);
   });
 
+  it('leaves the marker where the reader put it for a change of speed', async () => {
+    // Reported from the page: nudging the percentage while reading page five
+    // put the marker on the first bar of *that* page. It had been sent back
+    // to the top of the piece, and the engraver draws one marker for the
+    // whole score in the coordinates of its own page - so bar one of page one
+    // is drawn at the top of whichever page is up. The music did not change,
+    // so nothing the reader knows about the page changed either.
+    const { controller, renderer } = createController();
+    await controller.openScore(longExercise({ bars: 8 }));
+    const at = controller.beginAtBar(5);
+    expect(at).toBeGreaterThan(0);
+    const puttingBack = renderer.cursor.resetCount;
+
+    controller.nudgeTempoPercent(-20);
+    await controller.reloadExercise();
+
+    expect(renderer.cursor.position).toBe(at);
+    expect(controller.beginsAt).toBe(at);
+    expect(renderer.cursor.resetCount).toBe(puttingBack);
+  });
+
+  it('does put the marker back when the music itself changes', async () => {
+    // The other half of the same rule: a place in the piece just closed means
+    // nothing in the one being opened.
+    const { controller, renderer } = createController();
+    await controller.openScore(longExercise({ bars: 8 }));
+    controller.beginAtBar(5);
+
+    await controller.openScore(tiedExercise());
+
+    expect(renderer.cursor.position).toBe(0);
+    expect(controller.beginsAt).toBe(0);
+  });
+
   it('keeps the opened score until something says otherwise', async () => {
     const { controller } = createController();
     await controller.openScore(tiedExercise());

@@ -949,17 +949,25 @@ export class PracticeController {
     // run is actually going is the transport's to say, and it does.
     const musicXml = this.deps.serializer.serialize(source);
 
+    // The same bytes are the same page. This one test answers both of the
+    // questions a re-presentation asks - whether the engraver has anything
+    // to draw again, and whether what the reader knows about the page is
+    // still true - because they are the same question.
+    const newMusic = musicXml !== this.engravedXml;
+
     this.exercise = exercise;
     this.timeline = buildTimeline(exercise);
     this.lastSeed = exercise.metadata.seed;
-    // New music, so the reader's place in the old music means nothing.
-    this.beginAt = 0;
+    if (newMusic) {
+      // New music, so the reader's place in the old music means nothing.
+      this.beginAt = 0;
+    }
 
     // Only when the notes have changed. Engraving is two and a half seconds
     // on a long score against thirty milliseconds to write the file, so a
     // tempo nudge that redrew the page spent nearly all of its time redrawing
     // notes nobody had touched - and swallowed the next press while it did.
-    if (musicXml !== this.engravedXml) {
+    if (newMusic) {
       this.engravedXml = musicXml;
       await this.deps.renderer.load(musicXml);
     }
@@ -975,7 +983,13 @@ export class PracticeController {
     });
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
-    this.deps.cursor.reset();
+    if (newMusic) {
+      // And the marker goes back to the top of it. On music already on the
+      // stand it stays where the reader put it: a tempo nudge is not a
+      // request to start over, and the marker sent back to bar one while
+      // page five stayed in front of them named a place they were not at.
+      this.deps.cursor.reset();
+    }
     this.applyCursorVisibility();
 
     this.watchForTheOpening();

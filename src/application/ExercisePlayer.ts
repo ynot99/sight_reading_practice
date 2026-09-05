@@ -195,6 +195,19 @@ export class ExercisePlayer {
   private pausedAtIndex: number | null = null;
   /** Whether the stretch plays round again, and the shape of one round. */
   private looping = false;
+  /**
+   * Whether the performance is *laid out* in laps, which outlives the repeat.
+   *
+   * Turning the repeat off means "let this reading be the last", not "stop":
+   * the pulse goes on counting through the lap it is in, on the plan it was
+   * given, and everything that reads its position - which lap, which note,
+   * which bar of the click - has to go on reading it the same way until that
+   * lap is over. Asked `looping` instead they all changed their mind at
+   * once, and the music stopped where it stood: the position was read as a
+   * distance from the top of a piece it had gone round twice, which is past
+   * every end there is.
+   */
+  private laidInLaps = false;
   /** Where a lap begins, which is the passage rather than where this did. */
   private loopFromTicks = 0;
   private lapTicks = 0;
@@ -261,7 +274,7 @@ export class ExercisePlayer {
     // handed to the instrument stays handed over exactly once.
     this.pending = this.collectNotes(this.timeline, this.hand, this.fromTicks);
     this.lapNotes =
-      this.looping && this.loopFromTicks !== this.fromTicks
+      this.laidInLaps && this.loopFromTicks !== this.fromTicks
         ? this.collectNotes(this.timeline, this.hand, this.loopFromTicks)
         : this.pending;
     this.catchUpSchedule();
@@ -399,6 +412,7 @@ export class ExercisePlayer {
     this.lapMs = spanMs(timeline.exercise, this.loopFromTicks, this.untilTicks);
     this.firstLapMs = spanMs(timeline.exercise, this.fromTicks, this.untilTicks);
     this.lapsDone = 0;
+    this.laidInLaps = this.looping;
 
     this.deps.metronome.configure(this.planFrom(0));
 
@@ -422,7 +436,7 @@ export class ExercisePlayer {
     // picked up after a pause, the first time round is the tail of a lap and
     // every one after it is the whole thing.
     this.lapNotes =
-      this.looping && this.loopFromTicks !== this.fromTicks
+      this.laidInLaps && this.loopFromTicks !== this.fromTicks
         ? this.collectNotes(timeline, options.staffNumber, this.loopFromTicks)
         : this.pending;
     this.deps.cursor.moveTo(first?.index ?? 0);
@@ -466,18 +480,38 @@ export class ExercisePlayer {
       timeSignature,
       // Counted among the *loop's* laps, of which the first time round is
       // not one: it is the tail that got the music to the loop.
-      bars: this.looping ? this.roundAndRound(bars, lapBars, Math.max(0, lap - 1)) : bars,
-      tempos: this.looping ? this.roundAndRound(tempos, lapTempos, Math.max(0, lap - 1)) : tempos,
+      bars: this.laidInLaps ? this.roundAndRound(bars, lapBars, Math.max(0, lap - 1)) : bars,
+      tempos: this.laidInLaps
+        ? this.roundAndRound(tempos, lapTempos, Math.max(0, lap - 1))
+        : tempos,
       // Nothing to end at while it goes round: the end of a lap is the
       // beginning of the next one, and a click that stopped there would stop
       // for good.
-      endsAtTicks: this.looping ? null : this.untilTicks - this.fromTicks,
+      endsAtTicks: this.endsAtTicks,
       subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, this.click),
       click: this.click,
       // From bar zero, because there is no count-in in front of a playback.
       dropout: resolveDropout(this.clickWhen, 0),
       muted: clickIsSilent(this.clickWhen),
     };
+  }
+
+  /**
+   * Where this reading ends, in the pulse's own ticks - `null` while it goes
+   * round for ever.
+   *
+   * The end of the lap being played, which for a performance that never
+   * repeated is the first and only one. Derived rather than stored, so that
+   * a reader turning the repeat off names an end without being asked when:
+   * the lap they are in is the last one, whichever that is.
+   */
+  private get endsAtTicks(): number | null {
+    return this.looping ? null : this.firstLapTicks + this.lapsDone * this.lapTicks;
+  }
+
+  /** The same moment in milliseconds, which is what notes are timed in. */
+  private get endsAtMs(): number | null {
+    return this.looping ? null : this.firstLapMs + this.lapsDone * this.lapMs;
   }
 
   /**
@@ -513,6 +547,16 @@ export class ExercisePlayer {
       return;
     }
     this.looping = repeat;
+    if (repeat && !this.laidInLaps) {
+      this.laidInLaps = true;
+      // The lap's own notes, which a performance that began without a repeat
+      // never gathered: picked up mid-passage, every time round after this
+      // one is the whole lap and not the tail of it that is playing now.
+      this.lapNotes =
+        this.timeline === null || this.loopFromTicks === this.fromTicks
+          ? this.pending
+          : this.collectNotes(this.timeline, this.hand, this.loopFromTicks);
+    }
     this.deps.metronome.configure(this.planFrom(this.lapsDone));
   }
 
@@ -548,7 +592,7 @@ export class ExercisePlayer {
       return first[index] ?? null;
     }
     const lap = this.lapNotes;
-    if (!this.looping || lap.length === 0) {
+    if (!this.laidInLaps || lap.length === 0) {
       return null;
     }
     const after = index - first.length;
@@ -570,7 +614,7 @@ export class ExercisePlayer {
    * are the same place unless the reader picked the music up mid-lap.
    */
   private lapAt(elapsed: number): { lap: number; position: number } {
-    if (!this.looping || this.lapTicks <= 0 || elapsed < this.firstLapTicks) {
+    if (!this.laidInLaps || this.lapTicks <= 0 || elapsed < this.firstLapTicks) {
       return { lap: 0, position: elapsed + this.fromTicks };
     }
     const after = elapsed - this.firstLapTicks;
@@ -668,9 +712,17 @@ export class ExercisePlayer {
     // ahead of its moment - so the lap boundary costs nothing at all, and the
     // reader tapping along hears the downbeat where the downbeat is.
     const horizon = tick.scheduledTimeMs + (this.deps.horizonMs ?? DEFAULT_HORIZON_MS);
+    // Which is also where the handing over stops. Scheduling runs ahead of
+    // the pulse, so without this the lap after the last one had its opening
+    // notes already on the audio clock by the time the pulse reached the end
+    // and they sounded after the music had finished.
+    const last = this.endsAtMs;
     for (;;) {
       const note = this.noteAt(this.nextToSchedule);
       if (note === null || from + note.atMs > horizon) {
+        break;
+      }
+      if (last !== null && note.atMs >= last) {
         break;
       }
       this.nextToSchedule += 1;
@@ -694,7 +746,13 @@ export class ExercisePlayer {
     // the next bar was on the next page the page turned forward and straight
     // back. Nothing is heard there either way: the notes were scheduled from
     // the stretch alone.
-    if (!this.looping && position >= this.untilTicks) {
+    // And it is the end of the *lap*, not of the first one. The pulse counts
+    // laps laid end to end and goes on counting them after the reader turns
+    // the repeat off, so an end read as the end of the first lap is a moment
+    // already behind it - which ended the performance the instant they said
+    // "let this be the last time round".
+    const ends = this.endsAtTicks;
+    if (ends !== null && elapsed >= ends) {
       this.finish();
       return;
     }

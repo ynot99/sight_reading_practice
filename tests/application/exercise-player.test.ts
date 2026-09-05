@@ -401,6 +401,43 @@ describe('listening to an exercise', () => {
       expect(renderer.cursor.moves).toContain(0);
     });
 
+    it('ends the lap it is in, however many have already been round', () => {
+      // Reported from the page: turning the repeat off after the passage had
+      // come round once stopped the music dead. The pulse counts laps laid
+      // end to end and goes on counting them, but the end was being read as
+      // the end of the *first* lap - a moment two laps behind it.
+      const { player, metronome, instrument, timeline } = rig();
+      const finished: unknown[] = [];
+      player.events.on('finished', () => finished.push(true));
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'never',
+        repeat: true,
+      });
+      // Round once, and two beats into the second time round.
+      metronome.advanceSubdivisions(10);
+      const heard = instrument.played.length;
+
+      player.setRepeating(false);
+
+      expect(finished).toEqual([]);
+      expect(player.isPlaying).toBe(true);
+
+      // The rest of that lap is still played.
+      metronome.advanceSubdivisions(4);
+      expect(instrument.played.length).toBeGreaterThan(heard);
+      expect(finished).toEqual([]);
+
+      // And it ends where that lap ends: two laps of the eight-second bar
+      // pair, with nothing scheduled past them.
+      metronome.advanceSubdivisions(3);
+      expect(finished).toHaveLength(1);
+      for (const note of instrument.played) {
+        expect(note.atMs).toBeLessThan(16_000);
+      }
+    });
+
     it('stops going round when the reader says so, at the end of the lap', () => {
       // A reader who turns the repeat off means this reading to be the last,
       // and saying so must not stop the music.

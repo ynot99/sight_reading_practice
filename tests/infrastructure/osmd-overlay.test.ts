@@ -379,6 +379,48 @@ describe('played notes drawn over a real engraving', () => {
       expect(xOf(ruled()[1])).toBeCloseTo(Number.parseFloat(head?.getAttribute('cx') ?? 'NaN'), 5);
     });
 
+    it('keeps every line inside the bar it belongs to', async () => {
+      // Reported from the page: ruled in eighths, the last line of a bar came
+      // out past the bar line and into the next one - the room a bar line and
+      // its margins take carries no time, so nothing may be reckoned across
+      // it.
+      // A bar held by one long note, which is where it showed: with nothing
+      // printed after the downbeat, every later line of the bar was reckoned
+      // between it and the *next bar's* first note.
+      const held: Exercise = {
+        ...twoBarExercise(),
+        staves: twoBarExercise().staves.map((staff, at) => ({
+          ...staff,
+          measures: [
+            bar(noteEntry(p(at === 0 ? 'C4' : 'C3'), Duration.WHOLE)),
+            bar(
+              noteEntry(p(at === 0 ? 'D4' : 'D3'), Duration.QUARTER),
+              noteEntry(p(at === 0 ? 'E4' : 'E3'), Duration.QUARTER),
+              noteEntry(p(at === 0 ? 'F4' : 'F3'), Duration.QUARTER),
+              noteEntry(p(at === 0 ? 'G4' : 'G3'), Duration.QUARTER),
+            ),
+          ],
+        })),
+      };
+      await renderer.load(new MusicXmlSerializer().serialize(held));
+      renderer.configureOverlay({
+        keyAt: () => KeySignature.major(0),
+        clefAt: (staffNumber) => CLEFS.get(staffNumber) ?? 'treble',
+      });
+      renderer.showRhythmRuler(rulerMarks(buildTimeline(held), 'eighth'));
+      const bars = (renderer as unknown as { measures: { measureIndex: number; right: number }[] })
+        .measures;
+      const firstBar = bars.find((measure) => measure.measureIndex === 0);
+      expect(firstBar).toBeDefined();
+
+      const lines = ruled().map(xOf);
+      const inside = lines.filter((x) => x < (firstBar?.right ?? 0));
+      // Eight of them in a bar of four four, and every one to the left of the
+      // bar line.
+      expect(inside).toHaveLength(8);
+      expect(Math.max(...inside)).toBeLessThan(firstBar?.right ?? 0);
+    });
+
     it('is drawn behind the music, not over it', () => {
       renderer.showRhythmRuler(rulerMarks(buildTimeline(twoBarExercise()), 'quarter'));
 

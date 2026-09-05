@@ -8,10 +8,16 @@ import { twoBarExercise } from '../support/fixtures.js';
 const timeline = buildTimeline(twoBarExercise());
 
 /** Where a mark sits, as the test would say it aloud. */
-function placed(mark: { fromStep: number; toStep: number; fraction: number }): string {
-  return mark.fromStep === mark.toStep
-    ? `on ${mark.fromStep}`
-    : `${mark.fraction} between ${mark.fromStep} and ${mark.toStep}`;
+function placed(mark: {
+  fromStep: number;
+  toStep: number | null;
+  fraction: number;
+}): string {
+  if (mark.toStep === mark.fromStep) {
+    return `on ${mark.fromStep}`;
+  }
+  const far = mark.toStep === null ? 'the bar line' : String(mark.toStep);
+  return `${mark.fraction} between ${mark.fromStep} and ${far}`;
 }
 
 describe('ruling the beat through the bars', () => {
@@ -46,6 +52,26 @@ describe('ruling the beat through the bars', () => {
       'beat',
       'division',
     ]);
+  });
+
+  it('never reckons a line across a bar line', () => {
+    // Reported from the page: ruled in eighths, the last line of a bar came
+    // out past the bar line and into the bar after it. The next note after
+    // the last one of a bar is in the *next* bar, and between them stand the
+    // bar line, its margins and whatever the next bar restates - room that
+    // carries no time at all.
+    const eighths = rulerMarks(timeline, 'eighth');
+    const lastOfTheBar = eighths.filter(
+      (mark) => mark.ticks === Duration.WHOLE.ticks - Duration.EIGHTH.ticks,
+    );
+
+    expect(lastOfTheBar).toHaveLength(1);
+    // Reckoned against the bar's own edge, which is the last place in it that
+    // still means a moment of its music.
+    expect(lastOfTheBar[0]?.toStep).toBeNull();
+    expect(lastOfTheBar[0]?.bar).toBe(0);
+    expect(lastOfTheBar[0]?.fraction).toBeGreaterThan(0);
+    expect(lastOfTheBar[0]?.fraction).toBeLessThan(1);
   });
 
   it('starts every bar again, so a changed metre is ruled as it is written', () => {

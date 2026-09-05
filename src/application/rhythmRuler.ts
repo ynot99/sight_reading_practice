@@ -65,12 +65,24 @@ export type RulerWeight = 'downbeat' | 'beat' | 'division';
  */
 export interface RulerMark {
   readonly fromStep: number;
-  readonly toStep: number;
-  /** Nought at `fromStep`, one at `toStep`. */
+  /**
+   * The step on the far side, or `null` for the end of the bar.
+   *
+   * Nothing is reckoned across a bar line. The next note after the last one
+   * of a bar is in the *next* bar, and between them stand the bar line, the
+   * margin either side of it and whatever the next bar restates - room that
+   * carries no time at all. Reckoned across it, the last division of a bar
+   * came out past the bar line and into the bar after, which is where he saw
+   * it. The bar's own right edge is the honest far side.
+   */
+  readonly toStep: number | null;
+  /** Nought at `fromStep`, one at the far side. */
   readonly fraction: number;
   readonly weight: RulerWeight;
   /** The moment it stands for, which is what a marker running along it needs. */
   readonly ticks: number;
+  /** The bar it is drawn in, whose right edge is the far side when there is no step. */
+  readonly bar: number;
 }
 
 /**
@@ -109,7 +121,8 @@ export function rulerMarksBetween(
   const step = RULER_TICKS[division];
   const exercise: Exercise = timeline.exercise;
   const marks: RulerMark[] = [];
-  for (const bar of barLines(exercise)) {
+  const bars = barLines(exercise);
+  for (const bar of bars) {
     const end = bar.startTicks + bar.timeSignature.ticksPerMeasure;
     if (end <= fromTicks) {
       continue;
@@ -122,7 +135,7 @@ export function rulerMarksBetween(
       if (at < fromTicks || at >= untilTicks) {
         continue;
       }
-      const placed = placeInTheDrawing(timeline, at);
+      const placed = placeInTheDrawing(timeline, at, end);
       if (placed === null) {
         continue;
       }
@@ -130,6 +143,7 @@ export function rulerMarksBetween(
       marks.push({
         ...placed,
         ticks: at,
+        bar: bars.indexOf(bar),
         weight: into === 0 ? 'downbeat' : into % pulse === 0 ? 'beat' : 'division',
       });
     }
@@ -153,7 +167,8 @@ export function rulerMarksBetween(
 function placeInTheDrawing(
   timeline: ExerciseTimeline,
   ticks: number,
-): { fromStep: number; toStep: number; fraction: number } | null {
+  barEndTicks: number,
+): { fromStep: number; toStep: number | null; fraction: number } | null {
   const steps = timeline.steps;
   let before: number | null = null;
   for (const step of steps) {
@@ -171,14 +186,30 @@ function placeInTheDrawing(
     if (from === undefined) {
       return null;
     }
-    const span = step.onsetTicks - from.onsetTicks;
-    return span <= 0
-      ? null
-      : {
-          fromStep: from.index,
-          toStep: step.index,
-          fraction: (ticks - from.onsetTicks) / span,
-        };
+    // Only where the far side is in this bar. Past the bar line the page
+    // spends room on things that take no time, so the two cannot be reckoned
+    // between - the bar's own edge stands in instead.
+    // Strictly inside: a bar's end tick *is* the next bar's first, and the
+    // note printed there is on the far side of the line.
+    const inside = step.onsetTicks < barEndTicks;
+    const span = (inside ? step.onsetTicks : barEndTicks) - from.onsetTicks;
+    if (span <= 0) {
+      return null;
+    }
+    return {
+      fromStep: from.index,
+      toStep: inside ? step.index : null,
+      fraction: (ticks - from.onsetTicks) / span,
+    };
   }
-  return null;
+  // Past every step there is: the music has stopped but the bar has not, and
+  // its own edge is all there is to reckon against.
+  if (before === null) {
+    return null;
+  }
+  const from = steps[before];
+  const span = from === undefined ? 0 : barEndTicks - from.onsetTicks;
+  return from === undefined || span <= 0
+    ? null
+    : { fromStep: from.index, toStep: null, fraction: (ticks - from.onsetTicks) / span };
 }

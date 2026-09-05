@@ -1340,7 +1340,13 @@ export class OsmdScoreRenderer
       return null;
     }
     const from = this.stepX.get(mark.fromStep);
-    const to = this.stepX.get(mark.toStep);
+    // The far side: the step across the way, or - where that would be over a
+    // bar line - this bar's own right edge, which is the last place in it
+    // that still means a moment of its music.
+    const to =
+      mark.toStep === null
+        ? this.measures.find((measure) => measure.measureIndex === mark.bar)?.right
+        : this.stepX.get(mark.toStep);
     if (from === undefined || to === undefined) {
       return null;
     }
@@ -1349,7 +1355,7 @@ export class OsmdScoreRenderer
     // exactly. Notes on either side of a system break would be reckoned
     // across the width of the page, so those are left unruled.
     const system = this.systemOfStep(mark.fromStep);
-    if (system === null || system !== this.systemOfStep(mark.toStep)) {
+    if (system === null || (mark.toStep !== null && system !== this.systemOfStep(mark.toStep))) {
       return null;
     }
     const band = this.systemBands.get(`${this.pageAt}:${this.systemIndexOnPage.get(system) ?? -1}`);

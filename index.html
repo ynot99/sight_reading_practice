@@ -531,10 +531,18 @@
             </svg>
           </button>
 
-          <button id="focus-next" type="button" class="focus-bar__button focus-bar__button--icon"
-            title="New exercise" aria-label="New exercise">
+          <!--
+            Round again as soon as it ends, and in the row rather than the
+            drawer: a passage learned by heart is learned by playing it over,
+            and reaching past a drawer between each time is the one part of
+            that which is not practice.
+          -->
+          <button id="focus-repeat" type="button"
+            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
+            aria-pressed="false" title="Play the passage again and again"
+            aria-label="Play the passage again and again">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" />
+              <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
             </svg>
           </button>
         </div>
@@ -586,17 +594,17 @@
             How much of the pulse is clicked. Its own question from when the
             click sounds at all: two clicks a bar is a metre, not a volume.
           -->
+
           <!--
-            Round again as soon as it ends. A passage learned by heart is
-            learned by playing it over, and reaching for Start between each
-            time is the one part of that which is not practice.
+            A fresh generated exercise. In the drawer because it does nothing
+            at all while a real score is open - the controller sees the opened
+            piece and simply presents it again - so for most of the reading
+            here it is a button that cannot be pressed usefully.
           -->
-          <button id="focus-repeat" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="false" title="Play the passage again and again"
-            aria-label="Play the passage again and again">
+          <button id="focus-next" type="button" class="focus-bar__button focus-bar__button--icon"
+            title="New exercise" aria-label="New exercise">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
+              <path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" />
             </svg>
           </button>
 

@@ -2985,11 +2985,15 @@ describe('AppView', () => {
       // drawer is for what you change rather than what you press mid-run.
       const row = element('focus-play').parentElement;
       expect(row?.className).toContain('focus-bar__row');
-      for (const id of ['focus-stop', 'focus-listen', 'focus-metronome', 'focus-next']) {
+      for (const id of ['focus-stop', 'focus-listen', 'focus-metronome', 'focus-repeat']) {
         expect(element(id).parentElement).toBe(row);
         // Named for a screen reader, since the label is a picture now.
         expect(element(id).getAttribute('aria-label')).toBeTruthy();
       }
+      // A fresh generated exercise does nothing at all while a real score is
+      // open - the controller sees the opened piece and presents it again -
+      // so for most of the reading here it is not a button worth a slot.
+      expect(element('focus-next').closest('#focus-drawer')).not.toBeNull();
       expect(element('focus-hands').parentElement?.id).toBe('focus-drawer');
       expect(element('focus-zoom').closest('#focus-drawer')).not.toBeNull();
     });

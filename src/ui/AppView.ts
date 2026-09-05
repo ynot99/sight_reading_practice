@@ -1672,7 +1672,7 @@ export class AppView {
       if (narrow.matches) {
         this.el.focusDrawer.prepend(this.el.focusSpeed);
       } else {
-        this.el.focusRow.insertBefore(this.el.focusSpeed, this.el.focusNext);
+        this.el.focusRow.insertBefore(this.el.focusSpeed, this.el.focusMetronome);
       }
     };
     place();

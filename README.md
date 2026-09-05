@@ -149,11 +149,17 @@ into the chord after it at speed. The cursor is shown for the performance whatev
 set, since following along is most of the value — and put back the way they
 had it when the performance ends.
 
-The fullscreen bar holds the whole transport on one row, as icons: play/pause
-as a single button, stop, listen, the metronome, a new exercise, the way out,
-and the pace. A drawer under it — opened by its handle or by dragging up —
-holds what you *change* rather than what you press mid-run: note size, which
-hand, the cursor, the marks for what you played, survival.
+The transport is one row of icons: play/pause as a single button, stop,
+listen, the pace, the metronome, and repeat. A drawer under it — opened by
+its handle or by dragging up — holds what you *change* rather than what you
+press mid-run: note size, which hand, the cursor, the marks for what you
+played, survival, a fresh exercise.
+
+Repeat is in the row and a fresh exercise is not, which is a swap rather than
+a widening: the row is as short as it was. A new exercise does nothing at all
+while a real score is open — the controller sees the opened piece and
+presents it again — so for most of the reading done here it is a button that
+cannot be pressed usefully, while repeat is how a passage is learned.
 
 The metronome is in the row rather than the drawer because it is the thing
 reached for most between runs, and a drawer is a gesture before it is a

@@ -416,6 +416,38 @@ const LEFT_HAND_STAFF = 2;
  * third gives the music back. A single button can carry that where three
  * would take a row the bar does not have.
  */
+/**
+ * Which staves the run is asking for, as a set rather than as one answer.
+ *
+ * The setting holds one of three: both hands, or the number of the single
+ * staff being read. Two switches need to know which of *them* are on, which
+ * is the same fact said the other way round.
+ */
+function handsPlaying(handStaff: number | null): number[] {
+  return handStaff === null ? [RIGHT_HAND_STAFF, LEFT_HAND_STAFF] : [handStaff];
+}
+
+/**
+ * The setting after one staff's switch has been pressed.
+ *
+ * Turning off the last hand still standing is read as "put them both back":
+ * a run that asks for nothing is not a thing anyone means, and refusing the
+ * press outright would leave a switch that sometimes does nothing with no
+ * way of saying why.
+ */
+function handsAfterToggling(handStaff: number | null, staffNumber: number): number | null {
+  const playing = new Set(handsPlaying(handStaff));
+  if (playing.has(staffNumber)) {
+    playing.delete(staffNumber);
+  } else {
+    playing.add(staffNumber);
+  }
+  if (playing.size !== 1) {
+    return null;
+  }
+  return [...playing][0] ?? null;
+}
+
 function nextHand(current: number | null): number | null {
   if (current === null) {
     return LEFT_HAND_STAFF;
@@ -1761,6 +1793,17 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    this.subscriptions.push(
+      // A switch beside a staff, pressed. The same setting the drawer's
+      // button cycles, said as the two halves it is made of.
+      this.runtime.renderer.onHandToggled((staffNumber) => {
+        controller.updateSettings({
+          handStaff: handsAfterToggling(controller.settings.handStaff, staffNumber),
+        });
+        this.syncControlsFromSettings();
+      }),
+    );
+
     this.listen(this.el.focusHandle, 'click', () => {
       this.setDrawerOpen(!this.isDrawerOpen);
     });
@@ -2280,6 +2323,9 @@ export class AppView {
       'aria-label',
       handStaff === null ? 'Both hands' : readsLeft ? 'Left hand only' : 'Right hand only',
     );
+    // The switches on the staves say the same thing, where the reader is
+    // looking. One setting with two editors, as the tempo has.
+    this.runtime.renderer.showHands(handsPlaying(handStaff));
   }
 
   /**

@@ -1150,6 +1150,31 @@ select {
   stroke: none;
 }
 
+/*
+ * A switch beside each staff, saying whether that hand is being read.
+ *
+ * In the margin the brace lives in, so it can never land on a note. Quiet
+ * while the hand is on - the staff itself is the statement, and a lit control
+ * beside every system on every page would be a page of controls - and plainly
+ * marked when it is off, which is the state worth seeing at a glance.
+ */
+.hand-switch__hit {
+  fill: transparent;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.hand-switch__tab {
+  fill: var(--accent);
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.hand-switch[data-on='false'] .hand-switch__tab {
+  fill: var(--text-muted);
+  opacity: 0.9;
+}
+
 .passage-marker__hit {
   fill: transparent;
   touch-action: none;

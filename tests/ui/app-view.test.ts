@@ -1127,6 +1127,60 @@ describe('AppView', () => {
       expect(element('focus-immediate').getAttribute('aria-pressed')).toBe('false');
     });
 
+    describe('the hand switches beside the staves', () => {
+      it('turns off the hand whose staff was pressed', async () => {
+        // The switch sits on the staff it governs, so there is no icon to
+        // decode: press the upper one and the upper staff stops being asked
+        // for.
+        const rig = createRig();
+        await rig.view.initialize();
+        expect(rig.runtime.controller.settings.handStaff).toBeNull();
+        expect(rig.renderer.handsPlaying).toEqual([1, 2]);
+
+        rig.renderer.toggleHand(1);
+
+        expect(rig.runtime.controller.settings.handStaff).toBe(2);
+        expect(rig.renderer.handsPlaying).toEqual([2]);
+      });
+
+      it('turns it back on again', async () => {
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.renderer.toggleHand(1);
+
+        rig.renderer.toggleHand(1);
+
+        expect(rig.runtime.controller.settings.handStaff).toBeNull();
+        expect(rig.renderer.handsPlaying).toEqual([1, 2]);
+      });
+
+      it('reads turning off the last hand as putting them both back', async () => {
+        // A run that asks for nothing is not a thing anyone means, and a
+        // switch that silently refuses is a switch that sometimes does
+        // nothing with no way of saying why.
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.renderer.toggleHand(1);
+        expect(rig.runtime.controller.settings.handStaff).toBe(2);
+
+        rig.renderer.toggleHand(2);
+
+        expect(rig.runtime.controller.settings.handStaff).toBeNull();
+      });
+
+      it('is the same setting the drawer’s button cycles', async () => {
+        // One setting with two editors, as the tempo has: they cannot come to
+        // hold different answers.
+        const rig = createRig();
+        await rig.view.initialize();
+
+        element<HTMLButtonElement>('focus-hands').click();
+
+        expect(rig.runtime.controller.settings.handStaff).toBe(2);
+        expect(rig.renderer.handsPlaying).toEqual([2]);
+      });
+    });
+
     it('leaves exactly the two buttons a reader needs mid-piece', () => {
       // Marked on the markup rather than counted in script: the stylesheet
       // hides everything in the row without the mark, so this is the list.

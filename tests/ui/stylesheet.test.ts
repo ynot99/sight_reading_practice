@@ -144,6 +144,24 @@ describe('the stylesheet', () => {
     expect(hit?.body).toMatch(/fill\s*:\s*transparent/);
   });
 
+  it('lets a hand switch be aimed at without scrolling the page', () => {
+    // The same rule the passage markers live by: a browser decides whether a
+    // touch will scroll from what is under the finger at the moment it lands,
+    // so it has to be said on the shape rather than when the press arrives.
+    const hit = rules().find((rule) => rule.selector === '.hand-switch__hit');
+    const tab = rules().find((rule) => rule.selector === '.hand-switch__tab');
+
+    expect(hit?.body).toMatch(/touch-action\s*:\s*none/);
+    // Invisible, not absent: it is a fingertip's worth of area to aim at.
+    expect(hit?.body).toMatch(/fill\s*:\s*transparent/);
+    // The drawn tab is a label on the switch and must not swallow the touch.
+    expect(tab?.body).toMatch(/pointer-events\s*:\s*none/);
+    // And a hand that is off looks different from one that is on, which is
+    // the whole of what the switch says.
+    const off = rules().find((rule) => rule.selector === ".hand-switch[data-on='false'] .hand-switch__tab");
+    expect(off?.body).toMatch(/opacity\s*:/);
+  });
+
   it('draws the arrow on a handle over it rather than in front of it', () => {
     // The handles are buttons and the arrow is a label on one. A label that
     // swallowed the touch would leave the button working everywhere except

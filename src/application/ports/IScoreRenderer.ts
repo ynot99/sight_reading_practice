@@ -163,6 +163,27 @@ export interface IPassageMarkers {
 }
 
 /**
+ * The hand switches, drawn beside the staves they govern.
+ *
+ * Which hand is being read used to be one button in the drawer, cycling
+ * through three answers - and reaching it meant a gesture, then a tap, then
+ * the gesture back. A switch that sits *on* the staff it turns off needs no
+ * icon to be understood and no memory to be found: it is beside the notes the
+ * reader is already looking at, and it repeats down the page the way a clef
+ * does, so there is one within reach of wherever the eye is.
+ */
+export interface IHandSwitches {
+  /**
+   * Which staves the run is asking for; the rest are drawn as switched off.
+   *
+   * Staff numbers as the score counts them, from the top down.
+   */
+  showHands(playing: readonly number[]): void;
+  /** A switch that was pressed, by the staff it stands beside. */
+  onHandToggled(listener: (staffNumber: number) => void): () => void;
+}
+
+/**
  * Position marker on the rendered score.
  *
  * Positions are timeline step indices, and the renderer is responsible for

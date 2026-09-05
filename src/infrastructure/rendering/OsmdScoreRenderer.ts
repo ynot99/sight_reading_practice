@@ -118,6 +118,16 @@ const TITLE_LIMIT = 48;
 const ARROW_REACH = 3.5;
 
 /**
+ * How wide a hand switch is, and how far it stands off its staff.
+ *
+ * Wide enough for a fingertip, which is the whole reason it is out here
+ * rather than a smaller thing drawn more precisely. The gap keeps it clear of
+ * the brace and of the clef.
+ */
+const HAND_SWITCH_WIDTH = 26;
+const HAND_SWITCH_GAP = 6;
+
+/**
  * A title cut to {@link TITLE_LIMIT}, with an ellipsis where it was cut.
  *
  * SVG text does not wrap, so a long one does not become two lines - it runs
@@ -132,6 +142,14 @@ function shortened(title: string): string {
 }
 
 /** As much of the engraver's own model as the markers need to read. */
+interface DrawnStaff {
+  readonly staffNumber: number;
+  readonly page: number;
+  readonly left: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
 interface DrawnSheet {
   readonly MusicPages?: readonly { readonly MusicSystems?: readonly DrawnSystem[] }[];
 }
@@ -428,6 +446,11 @@ export class OsmdScoreRenderer
   private tapListeners: (() => void)[] = [];
   private heldListeners: ((measureIndex: number) => void)[] = [];
   private markerHeldListeners: ((end: PassageEnd) => void)[] = [];
+  private handListeners: ((staffNumber: number) => void)[] = [];
+  /** A finger down on a hand switch, and which staff it stands beside. */
+  private pressedHand: { pointerId: number; staffNumber: number } | null = null;
+  /** Which staves the run is asking for; see {@link paintHands}. */
+  private handsPlaying: readonly number[] = [];
   private holding: ReturnType<typeof setTimeout> | null = null;
   /** Where a touch that took hold of nothing began, so a tap can be told. */
   private tapFrom: { readonly pointerId: number; readonly x: number; readonly y: number } | null =
@@ -505,6 +528,7 @@ export class OsmdScoreRenderer
     this.paintOverlay();
     this.paintFaded();
     this.paintPassage();
+    this.paintHands();
     this.watchContainer();
   }
 
@@ -570,6 +594,7 @@ export class OsmdScoreRenderer
     this.paintOverlay();
     this.paintFaded();
     this.paintPassage();
+    this.paintHands();
   }
 
   /**
@@ -976,6 +1001,16 @@ export class OsmdScoreRenderer
     }
   }
 
+  /** The staff whose switch a touch landed on, or `null` for anything else. */
+  private handUnder(target: EventTarget | null): number | null {
+    if (!(target instanceof Element)) {
+      return null;
+    }
+    const found = target.closest('g.hand-switch');
+    const staff = Number.parseInt((found as SVGGElement | null)?.dataset['staff'] ?? '', 10);
+    return Number.isFinite(staff) ? staff : null;
+  }
+
   /**
    * The marker a touch landed on, from what the browser hit-tested.
    *
@@ -1164,6 +1199,15 @@ export class OsmdScoreRenderer
   }
 
   private beginDrag(event: PointerEvent): void {
+    // Before anything else. A switch is a drawn thing with an edge to aim
+    // at, so what the browser says was touched is the exact answer - and a
+    // press on one is not a tap on the music, a hold on a bar, or a page
+    // being swiped.
+    const hand = this.handUnder(event.target);
+    if (hand !== null) {
+      this.pressedHand = { pointerId: event.pointerId, staffNumber: hand };
+      return;
+    }
     const passage = this.passage;
     const touched = this.markerUnder(event.target);
     const point = this.drawingPointOf(event);
@@ -1228,6 +1272,18 @@ export class OsmdScoreRenderer
   }
 
   private endDrag(event: PointerEvent): void {
+    const pressed = this.pressedHand;
+    if (pressed !== null && pressed.pointerId === event.pointerId) {
+      this.pressedHand = null;
+      // Only if the finger is still on it: one that travelled was reaching
+      // for something else, even if it did not reach it.
+      if (this.handUnder(event.target) === pressed.staffNumber) {
+        for (const listener of [...this.handListeners]) {
+          listener(pressed.staffNumber);
+        }
+      }
+      return;
+    }
     const swipe = this.swipe;
     this.swipe = null;
     if (swipe !== null && swipe.pointerId === event.pointerId) {
@@ -1953,6 +2009,121 @@ export class OsmdScoreRenderer
   }
 
   /** The marker layer inside one page's sheet, made if it is not there yet. */
+  /**
+   * Where each staff of each system was drawn, page by page.
+   *
+   * The staff lines and not the measures, for the reason the passage markers
+   * use them: a measure's box is drawn round what is *in* it, so a bar of
+   * rests reports a height of one unit. A staff is the same height whatever
+   * is written on it.
+   */
+  private readStaves(): DrawnStaff[] {
+    const sheet = (this.osmd as unknown as { GraphicSheet?: DrawnSheet } | null)?.GraphicSheet;
+    const staves: DrawnStaff[] = [];
+    for (const [pageAt, page] of (sheet?.MusicPages ?? []).entries()) {
+      for (const system of page.MusicSystems ?? []) {
+        for (const [at, line] of (system.StaffLines ?? []).entries()) {
+          const box = line.PositionAndShape;
+          if (box?.AbsolutePosition === undefined || box.Size === undefined) {
+            continue;
+          }
+          const top = box.AbsolutePosition.y * UNITS_TO_PIXELS;
+          staves.push({
+            // Counted from the top down, which is how the score numbers them
+            // and how the reader would: the right hand is the upper staff.
+            staffNumber: at + 1,
+            page: pageAt,
+            left: box.AbsolutePosition.x * UNITS_TO_PIXELS,
+            top,
+            bottom: top + box.Size.height * UNITS_TO_PIXELS,
+          });
+        }
+      }
+    }
+    return staves;
+  }
+
+  showHands(playing: readonly number[]): void {
+    this.handsPlaying = [...playing];
+    this.paintHands();
+  }
+
+  onHandToggled(listener: (staffNumber: number) => void): () => void {
+    this.handListeners.push(listener);
+    return () => {
+      this.handListeners = this.handListeners.filter((each) => each !== listener);
+    };
+  }
+
+  /**
+   * A switch beside every staff, on every system of every page.
+   *
+   * Repeated the way a clef is repeated, so there is one within reach of
+   * wherever the reader's eye happens to be - a single switch at the top of
+   * the page would be a switch to go and find.
+   *
+   * Outside the staff rather than over it: the left margin holds the brace
+   * and nothing else, so nothing here can land on a note.
+   */
+  private paintHands(): void {
+    for (const sheet of this.sheets) {
+      this.handGroupFor(sheet).replaceChildren();
+    }
+    if (this.handsPlaying.length === 0) {
+      return;
+    }
+    for (const staff of this.readStaves()) {
+      const sheet = this.sheets[staff.page];
+      if (sheet === undefined) {
+        continue;
+      }
+      const doc = sheet.ownerDocument;
+      const on = this.handsPlaying.includes(staff.staffNumber);
+      const height = Math.max(0, staff.bottom - staff.top);
+      const group = doc.createElementNS(SVG_NAMESPACE, 'g');
+      group.setAttribute('class', 'hand-switch');
+      group.dataset['staff'] = String(staff.staffNumber);
+      group.dataset['on'] = String(on);
+
+      const hit = doc.createElementNS(SVG_NAMESPACE, 'rect');
+      hit.setAttribute('class', 'hand-switch__hit');
+      hit.setAttribute('x', String(staff.left - HAND_SWITCH_GAP - HAND_SWITCH_WIDTH));
+      hit.setAttribute('y', String(staff.top));
+      hit.setAttribute('width', String(HAND_SWITCH_WIDTH));
+      hit.setAttribute('height', String(height));
+      group.append(hit);
+
+      const tab = doc.createElementNS(SVG_NAMESPACE, 'rect');
+      tab.setAttribute('class', 'hand-switch__tab');
+      tab.setAttribute('x', String(staff.left - HAND_SWITCH_GAP - HAND_SWITCH_WIDTH / 2));
+      tab.setAttribute('y', String(staff.top + height / 4));
+      tab.setAttribute('width', String(HAND_SWITCH_WIDTH / 2));
+      tab.setAttribute('height', String(height / 2));
+      tab.setAttribute('rx', String(HAND_SWITCH_WIDTH / 6));
+      group.append(tab);
+
+      this.handGroupFor(sheet).append(group);
+    }
+  }
+
+  /**
+   * Its own layer, and under the passage markers.
+   *
+   * The passage layer is emptied and redrawn every time a marker moves, and
+   * these do not move at all: they belong to the staves, which only change
+   * when the music is engraved again.
+   */
+  private handGroupFor(sheet: SVGSVGElement): SVGGElement {
+    const found = sheet.querySelector('g.hand-switches');
+    if (found !== null) {
+      return found as SVGGElement;
+    }
+    const group = sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
+    group.setAttribute('class', 'hand-switches');
+    sheet.append(group);
+    return group;
+  }
+
   private passageGroupFor(sheet: SVGSVGElement): SVGGElement {
     const found = sheet.querySelector('g.passage-markers');
     if (found !== null) {

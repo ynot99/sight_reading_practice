@@ -326,6 +326,77 @@ describe('passage markers over a real engraving', () => {
     expect(chosen).toEqual([]);
   });
 
+  describe('the hand switches', () => {
+    // A grand staff, because the whole feature is one switch per hand and the
+    // four-bar fixture above is written on a single staff.
+    beforeEach(async () => {
+      await renderer.load(new MusicXmlSerializer().serialize(twoBarExercise()));
+      showAt(renderer, container);
+    });
+
+    it('draws one beside every staff, outside the music', () => {
+      // Repeated the way a clef is, so there is one within reach of wherever
+      // the eye happens to be - a single switch at the top of the page would
+      // be a switch to go and find.
+      renderer.showHands([1, 2]);
+      renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 1 });
+
+      const switches = [...container.querySelectorAll('g.hand-switch')];
+      expect(switches.map((drawn) => drawn.getAttribute('data-staff'))).toEqual(['1', '2']);
+
+      // Clear of the staff: the marker at bar one stands on the opening bar
+      // line, and every switch is left of it.
+      const [firstBarLine] = markers(container);
+      for (const drawn of switches) {
+        const hit = drawn.querySelector('rect.hand-switch__hit');
+        const x = Number.parseFloat(hit?.getAttribute('x') ?? 'NaN');
+        const width = Number.parseFloat(hit?.getAttribute('width') ?? 'NaN');
+        expect(width).toBeGreaterThan(20);
+        expect(x + width).toBeLessThanOrEqual(barOf(firstBarLine).x);
+      }
+    });
+
+    it('stands each one against its own staff', () => {
+      renderer.showHands([1, 2]);
+
+      const tops = [...container.querySelectorAll('rect.hand-switch__hit')].map((hit) =>
+        Number.parseFloat(hit.getAttribute('y') ?? 'NaN'),
+      );
+      // The upper switch is above the lower one, which is the whole of what
+      // "the switch for this hand" means on the page.
+      expect(tops).toHaveLength(2);
+      expect(tops[0]).toBeLessThan(tops[1] ?? 0);
+    });
+
+    it('says which staff was pressed, and nothing else', () => {
+      renderer.showHands([1, 2]);
+      const pressed: number[] = [];
+      renderer.onHandToggled((staffNumber) => pressed.push(staffNumber));
+      const taps: unknown[] = [];
+      renderer.onScoreTapped(() => taps.push(true));
+
+      const [first] = [...container.querySelectorAll('g.hand-switch')];
+      tapOn(first?.querySelector('rect.hand-switch__hit'), 5, 5);
+
+      expect(pressed).toEqual([1]);
+      // A press on a switch is that switch, and not a tap on the music.
+      expect(taps).toEqual([]);
+    });
+
+    it('draws the hand that is off differently from the one that is on', () => {
+      renderer.showHands([2]);
+
+      const states = [...container.querySelectorAll('g.hand-switch')].map((drawn) => [
+        drawn.getAttribute('data-staff'),
+        drawn.getAttribute('data-on'),
+      ]);
+      expect(states).toEqual([
+        ['1', 'false'],
+        ['2', 'true'],
+      ]);
+    });
+  });
+
   it('marks the bar the music will start from, quietly', () => {
     // A sign and not a control: nothing to take hold of, and it must not
     // swallow a touch aimed at the music or at a marker beside it.

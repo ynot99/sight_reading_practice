@@ -129,8 +129,21 @@ held: what to play, how fast, with what click and how much of it are read from
 the settings again on the way back in, so a passage moved during the pause
 takes effect.
 
-The hand button beside it governs both listening and practice, because they are the same question asked
-twice: which hand am I working on. Practising one hand is not practising half
+**Which hand** is asked on the page itself: a switch in the margin beside each
+staff, repeated down the page the way a clef is, so there is one within reach
+of wherever the eye happens to be. Press the upper one and the upper staff
+stops being asked for. It needs no icon to be understood and no memory to be
+found — it is beside the notes already being looked at — and it takes nothing
+from the transport row. The drawer's button cycles the same setting for
+anyone who prefers a button; they cannot come to hold different answers.
+
+The setting has three states and the switches are two, so turning off the
+last hand still standing is read as putting them both back: a run that asks
+for nothing is not a thing anyone means, and a switch that silently refused
+would be a switch that sometimes does nothing with no way of saying why.
+
+It governs both listening and practice, because they are the same question
+asked twice: which hand am I working on. Practising one hand is not practising half
 the music — the page still shows both staves and the cursor still visits every
 step; only what is demanded narrows. In Wait mode the run walks past the steps
 that hand has nothing in — a held right hand while the left keeps moving is no

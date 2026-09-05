@@ -1,5 +1,6 @@
 import type {
   DrawnPassage,
+  IHandSwitches,
   IPassageMarkers,
   IScorePages,
   ScorePageState,
@@ -57,7 +58,8 @@ export class FakeScoreRenderer
     IScoreFade,
     IScoreZoom,
     IPassageMarkers,
-    IScorePages
+    IScorePages,
+    IHandSwitches
 {
   readonly cursor = new FakeScoreCursor();
   loadedXml: string | null = null;
@@ -178,6 +180,29 @@ export class FakeScoreRenderer
     return () => {
       this.markerHeldListeners = this.markerHeldListeners.filter((each) => each !== listener);
     };
+  }
+
+  /** Which staves the run is asking for, as the view last said. */
+  handsPlaying: readonly number[] = [];
+
+  showHands(playing: readonly number[]): void {
+    this.handsPlaying = [...playing];
+  }
+
+  private handListeners: ((staffNumber: number) => void)[] = [];
+
+  onHandToggled(listener: (staffNumber: number) => void): () => void {
+    this.handListeners.push(listener);
+    return () => {
+      this.handListeners = this.handListeners.filter((each) => each !== listener);
+    };
+  }
+
+  /** Stands in for a reader pressing the switch beside one staff. */
+  toggleHand(staffNumber: number): void {
+    for (const listener of [...this.handListeners]) {
+      listener(staffNumber);
+    }
   }
 
   /** Stands in for a reader holding a finger on one of the two markers. */

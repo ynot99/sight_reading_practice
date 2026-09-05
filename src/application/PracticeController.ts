@@ -28,8 +28,8 @@ import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type { ClickWhen, ClickPattern } from './ports/IMetronome.js';
 import { clickFollowsTheReader } from './ports/IMetronome.js';
 import {
-  rulerMarkAt,
   rulerMarks,
+  rulerMarksBetween,
   rulerStepTicks,
   type RulerDivision,
   type RulerMark,
@@ -2140,25 +2140,24 @@ export class PracticeController {
     if (rulerStepTicks(this.currentSettings.rhythmRuler) <= 0) {
       return;
     }
-    const beats: { mark: RulerMark; atMs: number }[] = [];
-    const here = beatAt(exercise, fromTicks, this.currentSettings.clickPattern);
-    if (here !== null) {
-      const mark = rulerMarkAt(timeline, fromTicks, here.weight);
-      if (mark !== null) {
-        beats.push({ mark, atMs });
-      }
-    }
-    for (const beat of beatsBetween(
-      exercise,
+    // The ruler's own lines, and not the click's beats: the two are separate
+    // questions and the reader answers them separately. Ruled in eighths with
+    // the click on the beat, the marker used to skip every line the click had
+    // no opinion about - which is most of them.
+    //
+    // From this moment inclusive: the line the reader has just arrived at is
+    // theirs and is marked now. Up to their next entry exclusive: that one is
+    // theirs to place, and standing on it early would be the machine playing
+    // their part for them.
+    const beats = rulerMarksBetween(
+      timeline,
+      this.currentSettings.rhythmRuler,
       fromTicks,
       untilTicks,
-      this.currentSettings.clickPattern,
-    )) {
-      const mark = rulerMarkAt(timeline, beat.ticks, beat.weight);
-      if (mark !== null) {
-        beats.push({ mark, atMs: atMs + spanMs(exercise, fromTicks, beat.ticks) });
-      }
-    }
+    ).map((mark) => ({
+      mark,
+      atMs: atMs + spanMs(exercise, fromTicks, mark.ticks),
+    }));
     if (beats.length > 0) {
       this.emitter.emit('beatsAhead', { beats });
     }

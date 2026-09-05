@@ -1477,6 +1477,36 @@ describe('ruling the bars', () => {
     ]);
   });
 
+  it('runs on the grid the ruler is drawn in, not the click', async () => {
+    // Reported from the page: a line was drawn at the end of the first bar of
+    // Inside a House and the marker never stood on it. It was running on the
+    // metronome grid: ruled in eighths with the click on the beat, it
+    // skipped every line the click had no opinion about, which is most of
+    // them. Two questions, answered separately by the reader.
+    const { controller, midi, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({
+      handStaff: 2,
+      rhythmRuler: 'eighth',
+      clickPattern: 'pulse',
+      rulerCursor: true,
+    });
+    const promised: number[] = [];
+    controller.events.on('beatsAhead', ({ beats }) => {
+      for (const beat of beats) {
+        promised.push(beat.atMs);
+      }
+    });
+    controller.start();
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+
+    // Eighths at sixty beats are half a second apart, from the line he is on
+    // up to the one he comes in on - which stays his.
+    expect(promised).toEqual([5_000, 5_500, 6_000, 6_500, 7_000, 7_500, 8_000, 8_500]);
+  });
+
   it('says nothing about beats while the reader has not asked for them', async () => {
     const { controller, midi, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));

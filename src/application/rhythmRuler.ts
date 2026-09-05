@@ -69,6 +69,8 @@ export interface RulerMark {
   /** Nought at `fromStep`, one at `toStep`. */
   readonly fraction: number;
   readonly weight: RulerWeight;
+  /** The moment it stands for, which is what a marker running along it needs. */
+  readonly ticks: number;
 }
 
 /**
@@ -83,6 +85,24 @@ export function rulerMarks(
   timeline: ExerciseTimeline,
   division: RulerDivision,
 ): readonly RulerMark[] {
+  return rulerMarksBetween(timeline, division, 0, Number.POSITIVE_INFINITY);
+}
+
+/**
+ * The ruler's lines over one stretch of the music, ends included at the front.
+ *
+ * What a marker running along the ruler needs, and it must be the *ruler's*
+ * grid rather than the metronome's: they are two different questions and the
+ * reader answers them separately - ruled in eighths while the click keeps the
+ * beat is an ordinary thing to want, and the marker then skipped every line
+ * the click had no opinion about.
+ */
+export function rulerMarksBetween(
+  timeline: ExerciseTimeline,
+  division: RulerDivision,
+  fromTicks: number,
+  untilTicks: number,
+): readonly RulerMark[] {
   if (division === 'off') {
     return [];
   }
@@ -91,8 +111,17 @@ export function rulerMarks(
   const marks: RulerMark[] = [];
   for (const bar of barLines(exercise)) {
     const end = bar.startTicks + bar.timeSignature.ticksPerMeasure;
+    if (end <= fromTicks) {
+      continue;
+    }
+    if (bar.startTicks >= untilTicks) {
+      break;
+    }
     const pulse = bar.timeSignature.ticksPerPulse;
     for (let at = bar.startTicks; at < end; at += step) {
+      if (at < fromTicks || at >= untilTicks) {
+        continue;
+      }
       const placed = placeInTheDrawing(timeline, at);
       if (placed === null) {
         continue;
@@ -100,6 +129,7 @@ export function rulerMarks(
       const into = at - bar.startTicks;
       marks.push({
         ...placed,
+        ticks: at,
         weight: into === 0 ? 'downbeat' : into % pulse === 0 ? 'beat' : 'division',
       });
     }
@@ -113,15 +143,6 @@ export function rulerMarks(
  * The same reckoning the ruler is drawn by, asked about a single moment: a
  * beat the run has just reached, so that a marker can stand on it.
  */
-export function rulerMarkAt(
-  timeline: ExerciseTimeline,
-  ticks: number,
-  weight: RulerWeight,
-): RulerMark | null {
-  const placed = placeInTheDrawing(timeline, ticks);
-  return placed === null ? null : { ...placed, weight };
-}
-
 /**
  * Which two drawn steps a moment falls between, and how far along.
  *

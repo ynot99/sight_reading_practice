@@ -92,6 +92,17 @@ export class PracticeSession {
   private resumeAtIndex = 0;
   /** Note-ons that landed during the count-in, kept until the music starts. */
   private beforeTheMusic: MidiNoteOnEvent[] = [];
+  /**
+   * The chord the reader started the run by playing, kept the same way.
+   *
+   * Apart from the count-in's presses because it is not one of them. A press
+   * during the count-in raises a question - was that aimed at the first beat,
+   * or was it noise? - and the early window is the answer to it. The opening
+   * chord raises no question: it was matched against the notes the run was
+   * about to ask for, with the reader's own tolerance, and starting the run
+   * *is* the answer.
+   */
+  private theOpeningChord: MidiNoteOnEvent[] = [];
   private lastReport: PerformanceReport | null = null;
   private lastScore: SessionScore | null = null;
 
@@ -154,7 +165,7 @@ export class PracticeSession {
     const previous = this.machine.state;
     this.machine.dispatch('start');
     this.resetRunState();
-    this.beforeTheMusic = [...opening];
+    this.theOpeningChord = [...opening];
     this.emitStatus(previous);
 
     this.metronome.configure({
@@ -428,6 +439,7 @@ export class PracticeSession {
     this.resumeAtIndex = from?.index ?? 0;
     this.countInRemaining = 0;
     this.beforeTheMusic = [];
+    this.theOpeningChord = [];
     this.lastReport = null;
     this.lastScore = null;
   }
@@ -461,10 +473,26 @@ export class PracticeSession {
    * early exactly like any other anticipated beat.
    */
   private replayPressesAimedAtTheFirstBeat(runStartedAtMs: number): void {
+    const opening = this.theOpeningChord;
     const held = this.beforeTheMusic;
+    this.theOpeningChord = [];
     this.beforeTheMusic = [];
     if (this.status !== 'running') {
       return;
+    }
+    // Whatever the clock says about it. A press carries the moment the key
+    // went down, and the page hears about it later - by the hop from the
+    // bridge, and by however much the two machines disagree about the time.
+    // Weighed against the early window, the chord that had just started the
+    // run was thrown out for being too old, and the run then asked the reader
+    // to play it a second time. There is nothing to weigh: this chord was
+    // matched against the notes the run begins with before the run existed.
+    //
+    // Corrected here, because these are the only presses that did not come
+    // through the door where that is done - the run had no ears yet when they
+    // were played.
+    for (const event of opening) {
+      this.mode.onNoteOn(this.context, this.struckAt(event));
     }
     for (const event of held) {
       if (runStartedAtMs - event.timestampMs <= this.options.earlyWindowMs) {

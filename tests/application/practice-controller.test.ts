@@ -2303,6 +2303,49 @@ describe('the last run that reached an end', () => {
       expect(controller.session?.currentStep?.index).toBe(1);
     });
 
+    it('counts it however late the page heard about it', async () => {
+      // Reported from the page: with immediate start the first note is not
+      // counted, and has to be played twice. A press carries the moment the
+      // key went down; over the bridge the page hears about it later, by the
+      // hop and by whatever the two clocks disagree about. Judged against the
+      // early-press window, the chord that started the run was thrown away
+      // for being too old - and the run then asked for it again.
+      const { controller, midi, clock } = createController(true, undefined, {
+        immediateStart: true,
+      });
+      await controller.loadNewExercise();
+      const wentDown = clock.now() - 300;
+
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, wentDown);
+      }
+
+      expect(controller.session?.status).toBe('running');
+      expect(controller.session?.currentStep?.index).toBe(1);
+    });
+
+    it('corrects it for the input delay, like every other press', async () => {
+      // These are the only presses that do not come through the door where
+      // that is done, the run having had no ears when they were played. Left
+      // uncorrected they were the one press in the run judged against a
+      // different idea of when it happened - and the mark for the first note
+      // was drawn away from the beat because of it.
+      const { controller, midi, clock } = createController(true, undefined, {
+        immediateStart: true,
+        inputLatencyMs: 100,
+      });
+      await controller.loadNewExercise();
+      const wentDown = clock.now() - 300;
+
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, wentDown);
+      }
+
+      // Struck 300 ms before the step was entered, and heard about 100 ms
+      // after it was struck.
+      expect(controller.session?.stepResults[0]?.deviationMs).toBe(-400);
+    });
+
     it('does nothing at all while the setting is off', async () => {
       const { controller, midi, clock } = createController(true, undefined, {
         modeId: FLOW_MODE_ID,

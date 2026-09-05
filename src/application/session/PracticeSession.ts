@@ -188,11 +188,8 @@ export class PracticeSession {
         this.options.click,
       ),
       click: this.options.click,
-      dropout: resolveDropout(
-        this.options.clickWhen,
-        Math.max(0, this.options.countInBars),
-      ),
-      muted: clickIsSilent(this.options.clickWhen),
+      dropout: resolveDropout(this.clickForThePulse(), Math.max(0, this.options.countInBars)),
+      muted: clickIsSilent(this.clickForThePulse()),
     });
 
     this.subscriptions.push(this.midi.subscribe((event) => this.handleMidi(event)));
@@ -236,8 +233,8 @@ export class PracticeSession {
         click,
       ),
       click,
-      dropout: resolveDropout(clickWhen, Math.max(0, this.options.countInBars)),
-      muted: clickIsSilent(clickWhen),
+      dropout: resolveDropout(this.clickForThePulse(), Math.max(0, this.options.countInBars)),
+      muted: clickIsSilent(this.clickForThePulse()),
     });
   }
 
@@ -412,6 +409,23 @@ export class PracticeSession {
       this.timeline.at(this.resumeAtIndex)?.measureIndex ?? 0,
     ).pulsesPerMeasure;
     return Math.max(0, Math.round(this.options.countInBars * pulses));
+  }
+
+  /**
+   * How the running pulse should sound, given who is placing the beat.
+   *
+   * A beat the reader places must not be clicked by the pulse as well: the
+   * two fall a moment apart and are heard as one beat clicked twice, which
+   * is exactly what he heard. The pulse may still be running for a reason of
+   * its own - a count-in is asked for by its own setting - and the count-in
+   * *is* the machine's to give, there being nothing of the reader's to
+   * follow before the music has begun. So it clicks through that and then
+   * falls silent, which is what "only the count-in" already means.
+   */
+  private clickForThePulse(): ClickWhen {
+    return clickFollowsTheReader(this.options.clickWhen) && !this.mode.requiresMetronome
+      ? 'count-in-only'
+      : this.options.clickWhen;
   }
 
   private usesPulse(): boolean {

@@ -1446,6 +1446,23 @@ describe('the click in a mode that waits', () => {
     ]);
   });
 
+  it('leaves the pulse to count the reader in and no further', async () => {
+    // Reported from the page: the metronome went on playing by itself, and
+    // every beat he played came out clicked twice. A count-in is asked for by
+    // its own setting, so the pulse was running for that - and then went on
+    // clicking through music that was standing still waiting for him.
+    const { controller, metronome } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', countInBars: 1 });
+
+    controller.start();
+
+    // Silent from the bar the music begins in, which is what the count-in's
+    // own answer has always meant.
+    expect(metronome.currentConfig.dropout).toEqual({ kind: 'silent-from', fromBar: 1 });
+    expect(metronome.currentConfig.muted).toBe(false);
+  });
+
   it('stops at the beat the reader comes in on', async () => {
     // That one is his to place. Clicking it before he arrives would be the
     // machine playing his part for him.

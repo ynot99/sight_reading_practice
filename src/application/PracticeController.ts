@@ -27,11 +27,13 @@ import type { PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type { ClickWhen, ClickPattern } from './ports/IMetronome.js';
 import { clickFollowsTheReader } from './ports/IMetronome.js';
+import { rulerMarks, type RulerDivision } from './rhythmRuler.js';
 import type {
   PlayedNote,
   IPlayedNoteOverlay,
   IScoreCursor,
   IScoreFade,
+  IRhythmRuler,
   IStuckMarker,
   IScoreRenderer,
   IScoreZoom,
@@ -351,6 +353,8 @@ export interface PracticeSettings {
   readonly dimUnplayed: boolean;
   /** Show the top of the next page where the reader has finished reading. */
   readonly previewNextPage: boolean;
+  /** How finely the beat is ruled through the bars, or `off`. */
+  readonly rhythmRuler: RulerDivision;
 }
 
 export interface ExerciseLoadedEvent {
@@ -401,6 +405,8 @@ export interface PracticeControllerDependencies {
   readonly fade: IScoreFade;
   /** Says how much trouble the step under the marker is giving the reader. */
   readonly stuck: IStuckMarker;
+  /** Rules the beat through the bars, for reading the rhythm off the page. */
+  readonly ruler: IRhythmRuler;
   readonly zoom: IScoreZoom;
   readonly midi: IMidiSource;
   readonly metronome: IMetronome;
@@ -525,6 +531,7 @@ export class PracticeController {
       immediateStart: false,
       dimUnplayed: true,
       previewNextPage: true,
+      rhythmRuler: 'off',
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();
@@ -686,6 +693,10 @@ export class PracticeController {
       changes.rangeToBar !== undefined
     ) {
       this.applyDimming();
+    }
+
+    if (changes.rhythmRuler !== undefined) {
+      this.drawTheRuler();
     }
 
     if (changes.readAheadSteps !== undefined) {
@@ -1081,6 +1092,7 @@ export class PracticeController {
 
     this.watchForTheOpening();
     this.applyDimming();
+    this.drawTheRuler();
     this.emitter.emit('exerciseLoaded', { exercise, timeline: this.timeline, musicXml });
     return exercise;
   }
@@ -2059,6 +2071,21 @@ export class PracticeController {
       }
     }
     return timeline.totalTicks;
+  }
+
+  /**
+   * Rules the beat through the bars, or takes the ruling away.
+   *
+   * Worked out here rather than in the drawing because it is a question about
+   * the *music* - where the beats of each bar fall, and which of them a metre
+   * change moves - and answered as places between drawn notes because that is
+   * the only thing the music can say about a page it cannot see.
+   */
+  private drawTheRuler(): void {
+    const timeline = this.timeline;
+    this.deps.ruler.showRhythmRuler(
+      timeline === null ? [] : rulerMarks(timeline, this.currentSettings.rhythmRuler),
+    );
   }
 
   /** Whether there is another hand to hear at all. */

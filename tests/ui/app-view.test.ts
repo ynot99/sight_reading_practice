@@ -175,6 +175,7 @@ function createRig(
     overlay: renderer,
     fade: renderer,
     stuck: renderer,
+    ruler: renderer,
     zoom: renderer,
     midi,
     metronome,

@@ -1177,6 +1177,30 @@ select {
  * would compete with the noteheads, which are what is being read.
  */
 /*
+ * The ruler: a bar line for every beat, drawn behind the music.
+ *
+ * What it is for is *seeing* the rhythm - where the beats of this bar fall,
+ * and which notes are on them - so it has to be read past rather than read.
+ * Three weights, because the three things it marks are not equal: the bar
+ * begins, the beat falls, and the beat is divided.
+ */
+.ruler-line {
+  stroke: var(--accent);
+  stroke-width: 1px;
+  opacity: 0.14;
+}
+
+.ruler-line--beat {
+  stroke-width: 1.4px;
+  opacity: 0.24;
+}
+
+.ruler-line--downbeat {
+  stroke-width: 2px;
+  opacity: 0.34;
+}
+
+/*
  * The top of the next page, shown where the reader has finished reading.
  *
  * Solid ground under it, because it *replaces* the system it stands on: two

@@ -1,3 +1,4 @@
+import type { RulerMark } from '../../application/rhythmRuler.js';
 import type {
   DrawnPassage,
   IHandSwitches,
@@ -7,6 +8,7 @@ import type {
   ScorePageState,
   IPlayedNoteOverlay,
   IScoreFade,
+  IRhythmRuler,
   IStuckMarker,
   IScoreCursor,
   IScoreRenderer,
@@ -62,7 +64,8 @@ export class FakeScoreRenderer
     IPassageMarkers,
     IScorePages,
     IHandSwitches,
-    IStuckMarker
+    IStuckMarker,
+    IRhythmRuler
 {
   readonly cursor = new FakeScoreCursor();
   loadedXml: string | null = null;
@@ -78,6 +81,12 @@ export class FakeScoreRenderer
 
   /** How much trouble the marker has been told to show. */
   trouble = 0;
+  /** The ruler it was last told to draw. */
+  ruler: readonly RulerMark[] = [];
+
+  showRhythmRuler(marks: readonly RulerMark[]): void {
+    this.ruler = marks;
+  }
   /** Whether the top of the next page is wanted where the reader has finished. */
   nextPagePreview = true;
 

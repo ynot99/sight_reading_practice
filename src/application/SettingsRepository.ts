@@ -1,6 +1,7 @@
 import { KeySignature, type KeyMode } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { PracticeSettings } from './PracticeController.js';
+import { RULER_DIVISIONS, type RulerDivision } from './rhythmRuler.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { SAMPLE_LOADING_MODES, type SampleLoading } from './ports/IPitchPlayer.js';
 import {
@@ -65,6 +66,12 @@ const STORAGE_VERSION = 1;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function readRuler(value: unknown): RulerDivision | undefined {
+  return typeof value === 'string' && RULER_DIVISIONS.includes(value as RulerDivision)
+    ? (value as RulerDivision)
+    : undefined;
 }
 
 function readBoolean(value: unknown): boolean | undefined {
@@ -277,6 +284,7 @@ export function decodePracticeSettings(
     immediateStart: readBoolean(value['immediateStart']),
     dimUnplayed: readBoolean(value['dimUnplayed']),
     previewNextPage: readBoolean(value['previewNextPage']),
+    rhythmRuler: readRuler(value['rhythmRuler']),
   } as PracticeSettings);
 }
 
@@ -319,6 +327,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     immediateStart: settings.immediateStart,
     dimUnplayed: settings.dimUnplayed,
     previewNextPage: settings.previewNextPage,
+    rhythmRuler: settings.rhythmRuler,
   };
 }
 

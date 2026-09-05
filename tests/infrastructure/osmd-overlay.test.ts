@@ -11,6 +11,8 @@ import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile
 
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { bar, beamedSixteenths, p, twoBarExercise } from '../support/fixtures.js';
+import { rulerMarks } from '../../src/application/rhythmRuler.js';
+import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { noteEntry, restEntry, type Exercise } from '../../src/domain/model/Exercise.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { createScoreContainer, installCanvasStub, staffLineYs } from '../support/osmdHarness.js';
@@ -260,6 +262,74 @@ describe('played notes drawn over a real engraving', () => {
     renderer.clearPlayed();
 
     expect(noteheads(container)).toHaveLength(0);
+  });
+
+  describe('the ruler through the bars', () => {
+    /** Every line of the ruler, left to right. */
+    function ruled(): SVGLineElement[] {
+      return [...container.querySelectorAll('line.ruler-line')] as SVGLineElement[];
+    }
+
+    function xOf(line: SVGLineElement | undefined): number {
+      return Number.parseFloat(line?.getAttribute('x1') ?? 'NaN');
+    }
+
+    it('stands on the notes the beats are written on', () => {
+      // The sharpest thing that can be said about a ruler: the line for a
+      // beat and the mark for the note played on that beat are the same
+      // place, since a mark is already known to land on its notehead.
+      renderer.showRhythmRuler(rulerMarks(buildTimeline(twoBarExercise()), 'quarter'));
+      renderer.showPlayed({ stepIndex: 1, midi: Pitch.parse('D4').midi, correct: true, offset: 0 });
+
+      const [head] = noteheads(container);
+      expect(xOf(ruled()[1])).toBeCloseTo(Number.parseFloat(head?.getAttribute('cx') ?? 'NaN'), 5);
+    });
+
+    it('is drawn behind the music, not over it', () => {
+      renderer.showRhythmRuler(rulerMarks(buildTimeline(twoBarExercise()), 'quarter'));
+
+      // First child of the page: an SVG is painted in document order, so the
+      // engraver's ink goes over the grid rather than the other way about. A
+      // grid that hides a notehead is worse than no grid.
+      const sheet = container.querySelector('svg');
+      expect(sheet?.firstElementChild?.getAttribute('class')).toBe('rhythm-ruler');
+    });
+
+    it('runs across the page in order, and more finely when asked', () => {
+      renderer.showRhythmRuler(rulerMarks(buildTimeline(twoBarExercise()), 'quarter'));
+      const quarters = ruled().map(xOf);
+      expect(quarters.length).toBeGreaterThan(2);
+      for (let at = 1; at < quarters.length; at += 1) {
+        expect(quarters[at]).toBeGreaterThan(quarters[at - 1] ?? Number.NaN);
+      }
+
+      renderer.showRhythmRuler(rulerMarks(buildTimeline(twoBarExercise()), 'eighth'));
+
+      expect(ruled().length).toBeGreaterThan(quarters.length);
+    });
+
+    it('stands as tall as the staves it rules, top line to bottom', () => {
+      renderer.showRhythmRuler(rulerMarks(buildTimeline(twoBarExercise()), 'quarter'));
+
+      const [line] = ruled();
+      const top = Number.parseFloat(line?.getAttribute('y1') ?? 'NaN');
+      const bottom = Number.parseFloat(line?.getAttribute('y2') ?? 'NaN');
+      // Both staves and the gap between them, which is where a bar line
+      // stands - because that is what this is, a bar line for a beat.
+      expect(bottom - top).toBeGreaterThan(0);
+      const lines = staffLineYs(container);
+      expect(top).toBeCloseTo(Math.min(...lines), 1);
+      expect(bottom).toBeCloseTo(Math.max(...lines), 1);
+    });
+
+    it('takes the ruling away again', () => {
+      renderer.showRhythmRuler(rulerMarks(buildTimeline(twoBarExercise()), 'quarter'));
+      expect(ruled().length).toBeGreaterThan(0);
+
+      renderer.showRhythmRuler([]);
+
+      expect(ruled()).toEqual([]);
+    });
   });
 
   describe('the marker where the reader keeps missing', () => {

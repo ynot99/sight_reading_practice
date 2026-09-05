@@ -54,6 +54,7 @@ const SETTINGS: PracticeSettings = {
   dimUnplayed: true,
   previewNextPage: true,
   hearTheOtherHand: true,
+  rhythmRuler: 'eighth',
 };
 
 describe('practice settings codec', () => {

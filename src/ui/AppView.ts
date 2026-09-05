@@ -24,6 +24,7 @@ import { midiToLabel } from '../domain/model/Pitch.js';
 import { writeMidiFile } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
+import { RULER_DIVISIONS, type RulerDivision } from '../application/rhythmRuler.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
@@ -227,6 +228,29 @@ const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
  * standard exercise, and it makes each one a number the reader can reason
  * about.
  */
+const RULER_LABELS: Readonly<Record<RulerDivision, string>> = {
+  off: 'None',
+  half: 'Halves',
+  quarter: 'Quarters',
+  eighth: 'Eighths',
+  sixteenth: 'Sixteenths',
+  'thirty-second': 'Thirty-seconds',
+};
+
+const RULER_DESCRIPTIONS: Readonly<Record<RulerDivision, string>> = {
+  off: 'Nothing ruled through the bars.',
+  half: 'A line at every half note - the broad shape of a slow piece.',
+  quarter: 'A line at every quarter, so the beats of the bar can be seen.',
+  eighth: 'A line at every eighth, for reading offbeats against the beat.',
+  sixteenth: 'A line at every sixteenth, for a bar that is full of them.',
+  'thirty-second': 'Every thirty-second, which is a grid more than a ruler.',
+};
+
+/** The ruling a stored or typed value names, or none at all. */
+function readRuler(value: string): RulerDivision {
+  return RULER_DIVISIONS.includes(value as RulerDivision) ? (value as RulerDivision) : 'off';
+}
+
 const CLICK_WHEN_LABELS: Readonly<Record<ClickWhen, string>> = {
   always: 'All the way through',
   'with-me': 'With me, beat by beat',
@@ -648,6 +672,8 @@ export class AppView {
     dimUnplayed: HTMLInputElement;
     previewNextPage: HTMLInputElement;
     hearOtherHand: HTMLInputElement;
+    rhythmRuler: HTMLSelectElement;
+    rhythmRulerDescription: HTMLElement;
     focusDrawer: HTMLElement;
     focusRow: HTMLElement;
     focusSpeed: HTMLElement;
@@ -805,6 +831,8 @@ export class AppView {
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
       previewNextPage: requireElement(doc, 'preview-next-page'),
       hearOtherHand: requireElement(doc, 'hear-other-hand'),
+      rhythmRuler: requireElement(doc, 'rhythm-ruler'),
+      rhythmRulerDescription: requireElement(doc, 'rhythm-ruler-description'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
       focusRow: requireElement(doc, 'focus-row'),
       focusSpeed: requireElement(doc, 'focus-speed'),
@@ -1411,6 +1439,11 @@ export class AppView {
       this.runtime.controller.settings.clickWhen,
     );
     fillSelect(
+      this.el.rhythmRuler,
+      RULER_DIVISIONS.map((choice) => ({ value: choice, label: RULER_LABELS[choice] })),
+      this.runtime.controller.settings.rhythmRuler,
+    );
+    fillSelect(
       this.el.showPlayed,
       PLAYED_NOTE_DISPLAYS.map((choice) => ({ value: choice, label: PLAYED_NOTE_LABELS[choice] })),
       this.runtime.controller.settings.playedNotes,
@@ -1684,6 +1717,11 @@ export class AppView {
 
     this.listen(this.el.immediateStart, 'change', () => {
       controller.updateSettings({ immediateStart: this.el.immediateStart.checked });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.rhythmRuler, 'change', () => {
+      controller.updateSettings({ rhythmRuler: readRuler(this.el.rhythmRuler.value) });
       this.syncControlsFromSettings();
     });
 
@@ -3022,6 +3060,8 @@ export class AppView {
     this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.el.previewNextPage.checked = settings.previewNextPage;
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
+    this.el.rhythmRuler.value = settings.rhythmRuler;
+    this.el.rhythmRulerDescription.textContent = RULER_DESCRIPTIONS[settings.rhythmRuler];
     this.applyPreview();
     this.el.focusImmediate.setAttribute('aria-pressed', String(settings.immediateStart));
     this.describeMetronomeButton(settings.clickWhen, settings.clickPattern);

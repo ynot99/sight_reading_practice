@@ -431,6 +431,18 @@
           <label><input id="dim-unplayed" type="checkbox" checked /> Dim what this run will not ask for</label>
           <label><input id="preview-next-page" type="checkbox" checked /> Show the next page while you finish this one</label>
           <label><input id="hear-other-hand" type="checkbox" /> Hear the hand I am not playing</label>
+        </div>
+
+        <!--
+          A grid of the beat, ruled through the bars. What it is for is
+          *seeing* the rhythm rather than working it out from the note values,
+          so the reader says how finely to rule it: in halves while they find
+          the pulse of a slow piece, in sixteenths where a bar is full of them.
+        -->
+        <div class="control-group">
+          <label for="rhythm-ruler">Rhythm ruler</label>
+          <select id="rhythm-ruler"></select>
+          <p id="rhythm-ruler-description" class="hint"></p>
           <label><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
           <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
         </div>

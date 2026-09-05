@@ -1,4 +1,5 @@
 import type { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
+import type { RulerMark } from '../../application/rhythmRuler.js';
 import type {
   DrawnPassage,
   IPassageMarkers,
@@ -7,6 +8,7 @@ import type {
   IPlayedNoteOverlay,
   IScoreCursor,
   IScoreFade,
+  IRhythmRuler,
   IScoreRenderer,
   IStuckMarker,
   ScoreReading,
@@ -487,7 +489,8 @@ export class OsmdScoreRenderer
     IScoreZoom,
     IPassageMarkers,
     IScorePages,
-    IStuckMarker
+    IStuckMarker,
+    IRhythmRuler
 {
   private readonly container: HTMLElement;
   private readonly options: OsmdRendererOptions;
@@ -574,6 +577,11 @@ export class OsmdScoreRenderer
   private lastSystemOnPage = new Map<number, number>();
   /** How many systems each page holds. */
   private systemsOnPage = new Map<number, number>();
+  /** Which system of its own page each system is, top down. */
+  private systemIndexOnPage = new Map<number, number>();
+  /** The ruler to draw through the bars, in playing order. */
+  private ruled: readonly RulerMark[] = [];
+  private rulerGroup: SVGGElement | null = null;
   private pageListeners: ((state: ScorePageState) => void)[] = [];
   private swipe: PageSwipe | null = null;
   private tapListeners: (() => void)[] = [];
@@ -667,6 +675,7 @@ export class OsmdScoreRenderer
     this.paintPassage();
     this.paintHands();
     this.paintPreview(true);
+    this.paintRuler();
     this.watchContainer();
   }
 
@@ -753,6 +762,7 @@ export class OsmdScoreRenderer
     this.paintPassage();
     this.paintHands();
     this.paintPreview(true);
+    this.paintRuler();
   }
 
   /**
@@ -1052,6 +1062,7 @@ export class OsmdScoreRenderer
     }
     this.placeCursor();
     this.paintPreview();
+    this.paintRuler();
   }
 
   /**
@@ -1282,6 +1293,76 @@ export class OsmdScoreRenderer
 
     sheet.append(group);
     this.previewGroup = group;
+  }
+
+  /**
+   * Rules the beat through the bars of the page in front of the reader.
+   *
+   * Drawn *behind* the notation rather than over it - it is a grid to read
+   * the music against, and a grid that hides a notehead is worse than none.
+   * Only the page being read: a ruler is thousands of lines on a long score,
+   * and the pages nobody is looking at can be ruled when they are turned to.
+   *
+   * The line stands from the top staff's top line to the bottom staff's
+   * bottom one, which is where a bar line stands - because that is what this
+   * is, a bar line for a beat.
+   */
+  private paintRuler(): void {
+    this.rulerGroup?.remove();
+    this.rulerGroup = null;
+    const sheet = this.sheets[this.pageAt];
+    if (sheet === undefined || this.ruled.length === 0) {
+      return;
+    }
+    const doc = sheet.ownerDocument;
+    const group = doc.createElementNS(SVG_NAMESPACE, 'g');
+    group.setAttribute('class', 'rhythm-ruler');
+    for (const mark of this.ruled) {
+      const line = this.ruleOne(mark, doc);
+      if (line !== null) {
+        group.append(line);
+      }
+    }
+    // First, so the engraver's ink is drawn over it.
+    sheet.prepend(group);
+    this.rulerGroup = group;
+  }
+
+  /** One ruled line, or `null` where this page cannot place it. */
+  private ruleOne(mark: RulerMark, doc: Document): SVGLineElement | null {
+    if (this.pageOfStep(mark.fromStep) !== this.pageAt) {
+      return null;
+    }
+    const from = this.stepX.get(mark.fromStep);
+    const to = this.stepX.get(mark.toStep);
+    if (from === undefined || to === undefined) {
+      return null;
+    }
+    // A line that falls between two notes is reckoned between where they were
+    // drawn; one that falls *on* a note names it twice and lands on it
+    // exactly. Notes on either side of a system break would be reckoned
+    // across the width of the page, so those are left unruled.
+    const system = this.systemOfStep(mark.fromStep);
+    if (system === null || system !== this.systemOfStep(mark.toStep)) {
+      return null;
+    }
+    const band = this.systemBands.get(`${this.pageAt}:${this.systemIndexOnPage.get(system) ?? -1}`);
+    if (band === undefined) {
+      return null;
+    }
+    const x = from + (to - from) * mark.fraction;
+    const line = doc.createElementNS(SVG_NAMESPACE, 'line');
+    line.setAttribute('class', `ruler-line ruler-line--${mark.weight}`);
+    line.setAttribute('x1', String(x));
+    line.setAttribute('x2', String(x));
+    line.setAttribute('y1', String(band.top));
+    line.setAttribute('y2', String(band.bottom));
+    return line;
+  }
+
+  showRhythmRuler(marks: readonly RulerMark[]): void {
+    this.ruled = marks;
+    this.paintRuler();
   }
 
   /** Turns the preview on or off, the reader having said which they want. */
@@ -2652,9 +2733,16 @@ export class OsmdScoreRenderer
     }
     this.lastSystemOnPage = new Map();
     this.systemsOnPage = new Map();
+    this.systemIndexOnPage = new Map();
     for (const [page, systems] of byPage) {
       this.lastSystemOnPage.set(page, Math.max(...systems));
       this.systemsOnPage.set(page, systems.size);
+      // Numbered as they were met, so sorting them puts them back in the
+      // order they run down the page - which is what the printed bands are
+      // keyed by.
+      for (const [at, system] of [...systems].sort((left, right) => left - right).entries()) {
+        this.systemIndexOnPage.set(system, at);
+      }
     }
   }
 

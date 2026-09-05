@@ -1,4 +1,5 @@
 import type { ClefKind } from '../../domain/model/Clef.js';
+import type { RulerMark } from '../rhythmRuler.js';
 import type { KeySignature } from '../../domain/model/KeySignature.js';
 
 /**
@@ -191,6 +192,18 @@ export interface IHandSwitches {
   showHands(playing: readonly number[]): void;
   /** A switch that was pressed, by the staff it stands beside. */
   onHandToggled(listener: (staffNumber: number) => void): () => void;
+}
+
+/**
+ * A grid of the beat, ruled through the bars.
+ *
+ * What it is for is seeing the rhythm rather than working it out: where the
+ * beats of this bar fall, and which notes are on them. The lines come as
+ * places *between drawn notes* rather than as positions, because only the
+ * drawing knows how wide a moment is - see {@link RulerMark}.
+ */
+export interface IRhythmRuler {
+  showRhythmRuler(marks: readonly RulerMark[]): void;
 }
 
 /**

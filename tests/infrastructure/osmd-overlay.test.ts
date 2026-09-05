@@ -416,6 +416,21 @@ describe('played notes drawn over a real engraving', () => {
       expect(bottom).toBeCloseTo(Math.max(...lines), 1);
     });
 
+    it('stands a marker on one of its lines, and takes it off again', () => {
+      const marks = rulerMarks(buildTimeline(twoBarExercise()), 'quarter');
+      renderer.showRhythmRuler(marks);
+
+      renderer.showBeat(marks[2] ?? null);
+
+      const [beat] = [...container.querySelectorAll('line.ruler-beat')];
+      expect(beat).toBeDefined();
+      // On the very line the ruler drew there, and not beside it.
+      expect(beat?.getAttribute('x1')).toBe(ruled()[2]?.getAttribute('x1'));
+
+      renderer.showBeat(null);
+      expect(container.querySelectorAll('line.ruler-beat')).toHaveLength(0);
+    });
+
     it('takes the ruling away again', () => {
       renderer.showRhythmRuler(rulerMarks(buildTimeline(twoBarExercise()), 'quarter'));
       expect(ruled().length).toBeGreaterThan(0);

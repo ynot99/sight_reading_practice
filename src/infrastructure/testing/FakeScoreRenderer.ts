@@ -87,6 +87,13 @@ export class FakeScoreRenderer
   showRhythmRuler(marks: readonly RulerMark[]): void {
     this.ruler = marks;
   }
+
+  /** The ruled line a marker was last stood on. */
+  beatMark: RulerMark | null = null;
+
+  showBeat(mark: RulerMark | null): void {
+    this.beatMark = mark;
+  }
   /** Whether the top of the next page is wanted where the reader has finished. */
   nextPagePreview = true;
 

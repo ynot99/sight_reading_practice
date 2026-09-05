@@ -51,7 +51,7 @@ import {
   middle,
   spreadAround,
 } from '../../src/ui/AppView.js';
-import { twoBarExercise } from '../support/fixtures.js';
+import { p, twoBarExercise } from '../support/fixtures.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -226,6 +226,7 @@ function createRig(
     sustain,
     samples,
     renderer,
+    clock,
     settings,
     metronomeVolume,
     instrumentVolume,
@@ -1013,6 +1014,45 @@ describe('AppView', () => {
 
       element<HTMLButtonElement>('focus-stop').click();
       expect(renderer.nextPagePreview).toBe(false);
+    });
+
+    it('runs the marker along the ruler, beat by beat', async () => {
+      // The run says which beats are about to pass and when; the timing is
+      // the view's, because the application layer has no timer. Under a held
+      // note this is the only thing that moves.
+      vi.useFakeTimers();
+      try {
+        const { view, runtime, renderer, midi, clock } = createRig();
+        await view.initialize();
+        await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+        runtime.controller.updateSettings({
+          handStaff: 2,
+          rhythmRuler: 'quarter',
+          rulerCursor: true,
+        });
+        runtime.controller.start();
+        clock.set(5_000);
+
+        midi.noteOn(p('C3').midi, 5_000);
+
+        // The beat he played, at once.
+        vi.advanceTimersByTime(0);
+        const first = renderer.beatMark;
+        expect(first).not.toBeNull();
+
+        // And the next one a quarter later, with nothing else moving.
+        vi.advanceTimersByTime(1_000);
+        expect(renderer.beatMark).not.toBe(first);
+        expect(renderer.beatMark).not.toBeNull();
+
+        // Stopping takes it off the page, and the beats still to come with it.
+        element<HTMLButtonElement>('focus-stop').click();
+        expect(renderer.beatMark).toBeNull();
+        vi.advanceTimersByTime(5_000);
+        expect(renderer.beatMark).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('takes the number away when the run is stopped mid-count', async () => {

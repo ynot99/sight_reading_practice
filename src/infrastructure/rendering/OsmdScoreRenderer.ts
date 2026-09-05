@@ -582,6 +582,9 @@ export class OsmdScoreRenderer
   /** The ruler to draw through the bars, in playing order. */
   private ruled: readonly RulerMark[] = [];
   private rulerGroup: SVGGElement | null = null;
+  /** The ruled line the music has reached, if it is being shown. */
+  private beatMark: RulerMark | null = null;
+  private beatGroup: SVGGElement | null = null;
   private pageListeners: ((state: ScorePageState) => void)[] = [];
   private swipe: PageSwipe | null = null;
   private tapListeners: (() => void)[] = [];
@@ -676,6 +679,7 @@ export class OsmdScoreRenderer
     this.paintHands();
     this.paintPreview(true);
     this.paintRuler();
+    this.paintBeat();
     this.watchContainer();
   }
 
@@ -763,6 +767,7 @@ export class OsmdScoreRenderer
     this.paintHands();
     this.paintPreview(true);
     this.paintRuler();
+    this.paintBeat();
   }
 
   /**
@@ -1063,6 +1068,7 @@ export class OsmdScoreRenderer
     this.placeCursor();
     this.paintPreview();
     this.paintRuler();
+    this.paintBeat();
   }
 
   /**
@@ -1363,6 +1369,40 @@ export class OsmdScoreRenderer
   showRhythmRuler(marks: readonly RulerMark[]): void {
     this.ruled = marks;
     this.paintRuler();
+  }
+
+  showBeat(mark: RulerMark | null): void {
+    this.beatMark = mark;
+    this.paintBeat();
+  }
+
+  /**
+   * Stands a marker on the ruled line the music has reached.
+   *
+   * Drawn over the ruler rather than as part of it: the ruler says where the
+   * beats *are*, and this says which one is happening - the second of those
+   * moves and the first does not, so redrawing one must not redraw the other
+   * on every beat of the piece.
+   */
+  private paintBeat(): void {
+    this.beatGroup?.remove();
+    this.beatGroup = null;
+    const sheet = this.sheets[this.pageAt];
+    const mark = this.beatMark;
+    if (sheet === undefined || mark === null) {
+      return;
+    }
+    const doc = sheet.ownerDocument;
+    const line = this.ruleOne(mark, doc);
+    if (line === null) {
+      return;
+    }
+    line.setAttribute('class', `ruler-beat ruler-beat--${mark.weight}`);
+    const group = doc.createElementNS(SVG_NAMESPACE, 'g');
+    group.setAttribute('class', 'ruler-beat-mark');
+    group.append(line);
+    sheet.prepend(group);
+    this.beatGroup = group;
   }
 
   /** Turns the preview on or off, the reader having said which they want. */

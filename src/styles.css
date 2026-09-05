@@ -1207,6 +1207,25 @@ select {
 }
 
 /*
+ * The marker that runs along the ruler.
+ *
+ * Where the *beat* is, which under a held note is not where the notes are -
+ * and that gap is exactly where a reader loses count. Solid and strong, so
+ * it reads as a thing moving over the grid rather than as part of it.
+ */
+.ruler-beat {
+  stroke: var(--accent);
+  stroke-width: 3.4px;
+  stroke-dasharray: none;
+  opacity: 0.85;
+}
+
+.ruler-beat--division {
+  stroke-width: 2.4px;
+  opacity: 0.7;
+}
+
+/*
  * The top of the next page, shown where the reader has finished reading.
  *
  * Solid ground under it, because it *replaces* the system it stands on: two

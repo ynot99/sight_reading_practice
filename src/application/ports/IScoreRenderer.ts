@@ -204,6 +204,15 @@ export interface IHandSwitches {
  */
 export interface IRhythmRuler {
   showRhythmRuler(marks: readonly RulerMark[]): void;
+  /**
+   * Stands a marker on one ruled line, or takes it off.
+   *
+   * The beat the music has reached, which is not the same question as where
+   * the *notes* have reached: under a held note the marker stands still while
+   * the beats go on passing, and that gap is the thing a reader loses count
+   * in. `null` when nothing is running.
+   */
+  showBeat(mark: RulerMark | null): void;
 }
 
 /**

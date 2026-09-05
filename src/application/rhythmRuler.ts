@@ -108,6 +108,21 @@ export function rulerMarks(
 }
 
 /**
+ * Where one moment of the music sits on the page, as a ruled line would.
+ *
+ * The same reckoning the ruler is drawn by, asked about a single moment: a
+ * beat the run has just reached, so that a marker can stand on it.
+ */
+export function rulerMarkAt(
+  timeline: ExerciseTimeline,
+  ticks: number,
+  weight: RulerWeight,
+): RulerMark | null {
+  const placed = placeInTheDrawing(timeline, ticks);
+  return placed === null ? null : { ...placed, weight };
+}
+
+/**
  * Which two drawn steps a moment falls between, and how far along.
  *
  * `null` past the last one: there is nothing on the far side to reckon

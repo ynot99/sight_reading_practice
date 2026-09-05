@@ -1444,6 +1444,54 @@ describe('ruling the bars', () => {
     expect(announced[announced.length - 1]).not.toContain('print-object');
   });
 
+  it('says which beats are about to pass, and when', async () => {
+    // The marker on the notes stands still under a held note while the beats
+    // go on passing, and that gap is where a reader loses count. Nothing in a
+    // waiting mode can say those beats one at a time - the run reaches them
+    // all at once - so they are promised ahead, with the moment each falls.
+    const { controller, midi, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({
+      handStaff: 2,
+      rhythmRuler: 'quarter',
+      rulerCursor: true,
+    });
+    const promised: { atMs: number; weight: string }[] = [];
+    controller.events.on('beatsAhead', ({ beats }) => {
+      for (const beat of beats) {
+        promised.push({ atMs: beat.atMs, weight: beat.mark.weight });
+      }
+    });
+    controller.start();
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+
+    // The beat he played, now; then the three he will wait through, a quarter
+    // apart at sixty beats.
+    expect(promised).toEqual([
+      { atMs: 5_000, weight: 'downbeat' },
+      { atMs: 6_000, weight: 'beat' },
+      { atMs: 7_000, weight: 'beat' },
+      { atMs: 8_000, weight: 'beat' },
+    ]);
+  });
+
+  it('says nothing about beats while the reader has not asked for them', async () => {
+    const { controller, midi, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, rhythmRuler: 'quarter' });
+    let said = 0;
+    controller.events.on('beatsAhead', () => {
+      said += 1;
+    });
+    controller.start();
+
+    midi.noteOn(p('C3').midi, clock.now());
+
+    expect(said).toBe(0);
+  });
+
   it('is the same piece, so the reader keeps their place in it', async () => {
     // Ruling the bars re-engraves the page, and a re-engraving is not new
     // music: the marker stays where it was put.

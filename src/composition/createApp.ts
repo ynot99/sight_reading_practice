@@ -16,6 +16,7 @@ import type {
 import type {
   IHandSwitches,
   IPassageMarkers,
+  IRhythmRuler,
   IScorePages,
   IScoreRenderer,
 } from '../application/ports/IScoreRenderer.js';
@@ -68,6 +69,7 @@ import { resolveBridgeUrl, type LocationLike } from '../infrastructure/midi/brid
 import { browserMidiAccessProvider } from '../infrastructure/midi/webmidi-dom.js';
 import { OsmdScoreRenderer } from '../infrastructure/rendering/OsmdScoreRenderer.js';
 import { SystemClock } from '../infrastructure/time/SystemClock.js';
+import type { IClock } from '../application/ports/IClock.js';
 
 export interface AppRuntimeOptions {
   readonly scoreContainer: HTMLElement;
@@ -141,7 +143,19 @@ export interface AppRuntime {
   readonly sustain: ISustainPedal | null;
   /** `null` when the instrument needs nothing downloaded. */
   readonly samples: ISampleLibrary | null;
-  readonly renderer: IScoreRenderer & IPassageMarkers & IScorePages & IHandSwitches;
+  readonly renderer: IScoreRenderer &
+    IPassageMarkers &
+    IScorePages &
+    IHandSwitches &
+    IRhythmRuler;
+  /**
+   * The page's own clock, which every moment the run announces is on.
+   *
+   * The view times things - a look, a beat about to fall - and a delay is
+   * the difference between a promised moment and now. Asking the same clock
+   * the moment was made on is the only way those two are the same question.
+   */
+  readonly clock: IClock;
   readonly settings: SettingsRepository;
   readonly metronomeVolume: IVolumeControl;
   readonly instrumentVolume: IVolumeControl;
@@ -307,6 +321,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     sustain: pitchPlayer,
     samples: pitchPlayer,
     renderer,
+    clock,
     settings,
     metronomeVolume: metronome,
     instrumentVolume: pitchPlayer,

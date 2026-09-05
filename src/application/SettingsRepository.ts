@@ -285,6 +285,7 @@ export function decodePracticeSettings(
     dimUnplayed: readBoolean(value['dimUnplayed']),
     previewNextPage: readBoolean(value['previewNextPage']),
     rhythmRuler: readRuler(value['rhythmRuler']),
+    rulerCursor: readBoolean(value['rulerCursor']),
   } as PracticeSettings);
 }
 
@@ -328,6 +329,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     dimUnplayed: settings.dimUnplayed,
     previewNextPage: settings.previewNextPage,
     rhythmRuler: settings.rhythmRuler,
+    rulerCursor: settings.rulerCursor,
   };
 }
 

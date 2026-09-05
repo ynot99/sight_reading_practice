@@ -24,7 +24,11 @@ import { midiToLabel } from '../domain/model/Pitch.js';
 import { writeMidiFile } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
-import { RULER_DIVISIONS, type RulerDivision } from '../application/rhythmRuler.js';
+import {
+  RULER_DIVISIONS,
+  type RulerDivision,
+  type RulerMark,
+} from '../application/rhythmRuler.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
@@ -610,6 +614,8 @@ export class AppView {
   private previewTimer: ReturnType<typeof setInterval> | null = null;
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
+  /** Beats promised but not yet reached; see {@link runTheBeats}. */
+  private beatTimers: ReturnType<typeof setTimeout>[] = [];
   /** Pending return of the pill to what the run is saying. */
   /** Which take the transport is showing, playing or not. */
   private selectedTakeId: string | null = null;
@@ -672,6 +678,7 @@ export class AppView {
     dimUnplayed: HTMLInputElement;
     previewNextPage: HTMLInputElement;
     hearOtherHand: HTMLInputElement;
+    rulerCursor: HTMLInputElement;
     rhythmRuler: HTMLSelectElement;
     rhythmRulerDescription: HTMLElement;
     focusDrawer: HTMLElement;
@@ -831,6 +838,7 @@ export class AppView {
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
       previewNextPage: requireElement(doc, 'preview-next-page'),
       hearOtherHand: requireElement(doc, 'hear-other-hand'),
+      rulerCursor: requireElement(doc, 'ruler-cursor'),
       rhythmRuler: requireElement(doc, 'rhythm-ruler'),
       rhythmRulerDescription: requireElement(doc, 'rhythm-ruler-description'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
@@ -979,6 +987,7 @@ export class AppView {
   }
 
   dispose(): void {
+    this.forgetTheBeats();
     this.cancelPreview();
     if (this.tempoRedraw !== null) {
       clearTimeout(this.tempoRedraw);
@@ -1720,6 +1729,14 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    this.listen(this.el.rulerCursor, 'change', () => {
+      controller.updateSettings({ rulerCursor: this.el.rulerCursor.checked });
+      this.syncControlsFromSettings();
+      if (!this.el.rulerCursor.checked) {
+        this.forgetTheBeats();
+      }
+    });
+
     this.listen(this.el.rhythmRuler, 'change', () => {
       controller.updateSettings({ rhythmRuler: readRuler(this.el.rhythmRuler.value) });
       this.syncControlsFromSettings();
@@ -2152,6 +2169,7 @@ export class AppView {
    */
   private stopEverything(): void {
     const controller = this.runtime.controller;
+    this.forgetTheBeats();
     this.cancelPreview();
     controller.stop();
     if (controller.isListening || controller.isListeningPaused) {
@@ -2590,6 +2608,12 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      controller.events.on('beatsAhead', ({ beats }) => {
+        this.runTheBeats(beats);
+      }),
+    );
+
+    this.subscriptions.push(
       controller.events.on('sessionDiscarded', () => {
         // Asked rather than assumed: this fires on the way into starting a
         // run as well as on the way out of one, and the answer differs.
@@ -2904,6 +2928,43 @@ export class AppView {
   }
 
   /**
+   * Moves the marker along the ruler, beat by beat.
+   *
+   * The moments come from the run, which knows where the beats are and when
+   * each of them falls; the timing is the view's, because the application
+   * layer has no timer and should not grow one. In a mode that waits, this
+   * is the only thing that moves between the reader's entries - which is
+   * exactly the stretch a reader loses count in.
+   *
+   * Each announcement replaces the last: a new press is a new answer about
+   * where the music is, and the beats promised from the old one were
+   * promises about a moment that has been overtaken.
+   */
+  private runTheBeats(
+    beats: readonly { readonly mark: RulerMark; readonly atMs: number }[],
+  ): void {
+    this.forgetTheBeats();
+    const now = this.runtime.clock.now();
+    for (const beat of beats) {
+      const wait = Math.max(0, beat.atMs - now);
+      this.beatTimers.push(
+        setTimeout(() => {
+          this.runtime.renderer.showBeat(beat.mark);
+        }, wait),
+      );
+    }
+  }
+
+  /** Stops the beats that have not happened, and takes the marker off. */
+  private forgetTheBeats(): void {
+    for (const timer of this.beatTimers) {
+      clearTimeout(timer);
+    }
+    this.beatTimers = [];
+    this.runtime.renderer.showBeat(null);
+  }
+
+  /**
    * Puts a plain sentence where the verdict goes.
    *
    * Which is where a failure has to be said, because the panel it used to be
@@ -3064,6 +3125,7 @@ export class AppView {
     this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.el.previewNextPage.checked = settings.previewNextPage;
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
+    this.el.rulerCursor.checked = settings.rulerCursor;
     this.el.rhythmRuler.value = settings.rhythmRuler;
     this.el.rhythmRulerDescription.textContent = RULER_DESCRIPTIONS[settings.rhythmRuler];
     this.applyPreview();

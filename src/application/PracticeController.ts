@@ -27,7 +27,13 @@ import type { PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type { ClickWhen, ClickPattern } from './ports/IMetronome.js';
 import { clickFollowsTheReader } from './ports/IMetronome.js';
-import { rulerMarks, rulerStepTicks, type RulerDivision } from './rhythmRuler.js';
+import {
+  rulerMarkAt,
+  rulerMarks,
+  rulerStepTicks,
+  type RulerDivision,
+  type RulerMark,
+} from './rhythmRuler.js';
 import type {
   PlayedNote,
   IPlayedNoteOverlay,
@@ -355,6 +361,14 @@ export interface PracticeSettings {
   readonly previewNextPage: boolean;
   /** How finely the beat is ruled through the bars, or `off`. */
   readonly rhythmRuler: RulerDivision;
+  /**
+   * Run a marker along the ruler, beat by beat.
+   *
+   * Not the same thing as the marker on the notes. Under a held note that one
+   * stands still while the beats go on passing, and the gap between the two
+   * is exactly where a reader loses count.
+   */
+  readonly rulerCursor: boolean;
 }
 
 export interface ExerciseLoadedEvent {
@@ -377,6 +391,16 @@ export interface ControllerEventMap {
    * something that no longer existed.
    */
   sessionDiscarded: Record<string, never>;
+  /**
+   * The beats about to pass, and when each of them falls.
+   *
+   * Said ahead rather than one at a time, because in a mode that waits there
+   * is nothing to say them *with*: the music between two of the reader's
+   * entries is nobody's to play, and the run reaches it all at once. The
+   * moments are on the page's own clock, and timing them is the view's -
+   * the application layer has no timer, and never wants one.
+   */
+  beatsAhead: { readonly beats: readonly { readonly mark: RulerMark; readonly atMs: number }[] };
   /**
    * Where the survival bar stands, `0..1`, and why it moved.
    *
@@ -534,6 +558,7 @@ export class PracticeController {
       dimUnplayed: true,
       previewNextPage: true,
       rhythmRuler: 'off',
+      rulerCursor: false,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();
@@ -1992,7 +2017,13 @@ export class PracticeController {
     // Under a pulse the music arrives when the beat falls, and the step is
     // entered at that moment: there is nothing to work out.
     if (this.deps.modes.get(this.currentSettings.modeId).requiresMetronome) {
-      this.soundTheOtherHand(step, this.deps.clock.now());
+      const now = this.deps.clock.now();
+      this.soundTheOtherHand(step, now);
+      // As far as the next step and no further: under a pulse the music
+      // arrives on its own, and each step will say for itself when it does.
+      // The beats *inside* a held note have nothing else to announce them,
+      // which is the whole of what this is for.
+      this.announceTheBeats(step.onsetTicks, this.nextStepTicks(step.index), now);
       return;
     }
     // Waiting, the reader is the clock. A step they owe nothing on is reached
@@ -2031,6 +2062,7 @@ export class PracticeController {
       return;
     }
     this.clickTheBeats(step, atMs);
+    this.announceTheBeats(step.onsetTicks, this.nextOwedTicks(step.index), atMs);
     if (!this.wantsTheOtherHand()) {
       return;
     }
@@ -2073,6 +2105,56 @@ export class PracticeController {
     for (const beat of beatsBetween(exercise, step.onsetTicks, until, pattern)) {
       this.deps.metronome.click(atMs + spanMs(exercise, step.onsetTicks, beat.ticks), beat.weight);
     }
+  }
+
+  /**
+   * Says which beats are about to pass, for anything that shows them.
+   *
+   * The same beats the click marks and by the same reckoning - the one the
+   * reader is on is now, and the ones after it are where they are written -
+   * so the two can never disagree about where a beat is. Where a pulse keeps
+   * time this says only the beat that has just fallen, that being all the
+   * pulse knows.
+   */
+  private announceTheBeats(fromTicks: number, untilTicks: number, atMs: number): void {
+    const timeline = this.timeline;
+    const exercise = this.exercise;
+    if (!this.currentSettings.rulerCursor || timeline === null || exercise === null) {
+      return;
+    }
+    if (rulerStepTicks(this.currentSettings.rhythmRuler) <= 0) {
+      return;
+    }
+    const beats: { mark: RulerMark; atMs: number }[] = [];
+    const here = beatAt(exercise, fromTicks, this.currentSettings.clickPattern);
+    if (here !== null) {
+      const mark = rulerMarkAt(timeline, fromTicks, here.weight);
+      if (mark !== null) {
+        beats.push({ mark, atMs });
+      }
+    }
+    for (const beat of beatsBetween(
+      exercise,
+      fromTicks,
+      untilTicks,
+      this.currentSettings.clickPattern,
+    )) {
+      const mark = rulerMarkAt(timeline, beat.ticks, beat.weight);
+      if (mark !== null) {
+        beats.push({ mark, atMs: atMs + spanMs(exercise, fromTicks, beat.ticks) });
+      }
+    }
+    if (beats.length > 0) {
+      this.emitter.emit('beatsAhead', { beats });
+    }
+  }
+
+  /** Where the next step of the music is, or the end of it. */
+  private nextStepTicks(fromIndex: number): number {
+    const timeline = this.timeline;
+    return (
+      timeline?.at(fromIndex + 1)?.onsetTicks ?? timeline?.totalTicks ?? 0
+    );
   }
 
   /** Where the reader next has to play, or the end of the music. */

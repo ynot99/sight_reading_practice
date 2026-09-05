@@ -55,6 +55,7 @@ const SETTINGS: PracticeSettings = {
   previewNextPage: true,
   hearTheOtherHand: true,
   rhythmRuler: 'eighth',
+  rulerCursor: true,
 };
 
 describe('practice settings codec', () => {

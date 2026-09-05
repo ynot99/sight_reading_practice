@@ -370,11 +370,35 @@ describe('passage markers over a real engraving', () => {
       expect(tops[0]).toBeLessThan(tops[1] ?? 0);
     });
 
-    it('draws both switches the same size, whatever is on their staves', async () => {
-      // Measured as a share of each staff's own box they came out different
-      // heights: the engraver draws that box round what is *on* the staff, so
-      // the hand carrying ledger lines got the taller switch. Two switches
-      // that do the same thing have to look the same.
+    /**
+     * The five printed lines of each staff, read off the drawing.
+     *
+     * Ledger lines are drawn in the same group and have to be told from the
+     * staff's own: a ledger is a couple of note-widths, a staff line runs the
+     * width of the measure.
+     */
+    function printedStaves(): number[][] {
+      return [...container.querySelectorAll('.staffline')].map((group) => {
+        const lines = [...group.querySelectorAll('path')]
+          .map((path) => /^M([\d.]+) ([\d.]+)L([\d.]+) ([\d.]+)$/.exec(path.getAttribute('d') ?? ''))
+          .filter((drawn): drawn is RegExpExecArray => drawn !== null && drawn[2] === drawn[4])
+          .map((drawn) => ({
+            y: Number.parseFloat(drawn[2] ?? '0'),
+            width: Number.parseFloat(drawn[3] ?? '0') - Number.parseFloat(drawn[1] ?? '0'),
+          }));
+        const widest = Math.max(...lines.map((line) => line.width), 0);
+        return [
+          ...new Set(lines.filter((line) => line.width >= widest / 2).map((line) => line.y)),
+        ].sort((a, b) => a - b);
+      });
+    }
+
+    it('centres each switch on the printed lines, not on what is written', async () => {
+      // The complaint this answers: the switches sat below the staff, and by
+      // a different amount on each hand. They were centred in the engraver's
+      // box for the staff, and that box is drawn round what is *on* it -
+      // stems, beams, an inner voice hanging below. The lines themselves are
+      // where the staff is.
       const lopsided = twoBarExercise();
       const treble = lopsided.staves[0];
       const withLedgers: Exercise = {
@@ -394,15 +418,45 @@ describe('passage markers over a real engraving', () => {
       showAt(renderer, container);
       renderer.showHands([1, 2]);
 
-      const staves = [...container.querySelectorAll('rect.hand-switch__hit')].map((hit) =>
-        Number.parseFloat(hit.getAttribute('height') ?? 'NaN'),
-      );
-      // The staves really are different heights here, which is the whole
-      // premise: without that this would pass on the arithmetic it replaced.
-      expect(staves[0]).not.toBe(staves[1]);
-
+      const staves = printedStaves();
       const tabs = [...container.querySelectorAll('rect.hand-switch__tab')];
-      const sizes = tabs.map((tab) => [tab.getAttribute('width'), tab.getAttribute('height')]);
+      expect(tabs).toHaveLength(staves.length);
+
+      for (const [at, tab] of tabs.entries()) {
+        const lines = staves[at] ?? [];
+        const middle = ((lines[0] ?? 0) + (lines[lines.length - 1] ?? 0)) / 2;
+        const y = Number.parseFloat(tab.getAttribute('y') ?? 'NaN');
+        const height = Number.parseFloat(tab.getAttribute('height') ?? 'NaN');
+        expect(y + height / 2).toBeCloseTo(middle, 5);
+      }
+    });
+
+    it('draws both switches the same size, whatever is on their staves', async () => {
+      // Two controls that do the same thing have to look the same, and one of
+      // these staves is carrying ledger lines the other is not.
+      const lopsided = twoBarExercise();
+      const treble = lopsided.staves[0];
+      const withLedgers: Exercise = {
+        ...lopsided,
+        staves: [
+          {
+            ...(treble as StaffPart),
+            measures: [
+              bar(noteEntry(p('C7'), Duration.WHOLE)),
+              bar(noteEntry(p('C7'), Duration.WHOLE)),
+            ],
+          },
+          ...lopsided.staves.slice(1),
+        ],
+      };
+      await renderer.load(new MusicXmlSerializer().serialize(withLedgers));
+      showAt(renderer, container);
+      renderer.showHands([1, 2]);
+
+      const sizes = [...container.querySelectorAll('rect.hand-switch__tab')].map((tab) => [
+        tab.getAttribute('width'),
+        tab.getAttribute('height'),
+      ]);
       expect(sizes).toHaveLength(2);
       expect(sizes[0]).toEqual(sizes[1]);
     });

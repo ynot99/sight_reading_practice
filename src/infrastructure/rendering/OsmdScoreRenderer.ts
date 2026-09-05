@@ -143,6 +143,28 @@ const HAND_SWITCH_HEIGHT = 30;
  * SVG text does not wrap, so a long one does not become two lines - it runs
  * off the side of the page and out of the drawing.
  */
+/**
+ * Every horizontal line drawn inside an element, with the span it covers.
+ *
+ * The engraver draws a staff line and a ledger line the same way; what tells
+ * them apart is how far they run.
+ */
+function horizontalRules(group: Element): { y: number; from: number; to: number }[] {
+  const found: { y: number; from: number; to: number }[] = [];
+  for (const path of group.querySelectorAll('path')) {
+    const drawn = /^M([\d.]+) ([\d.]+)L([\d.]+) ([\d.]+)$/.exec(path.getAttribute('d') ?? '');
+    if (drawn === null || drawn[2] !== drawn[4]) {
+      continue;
+    }
+    found.push({
+      y: Number.parseFloat(drawn[2] ?? '0'),
+      from: Number.parseFloat(drawn[1] ?? '0'),
+      to: Number.parseFloat(drawn[3] ?? '0'),
+    });
+  }
+  return found;
+}
+
 function shortened(title: string): string {
   const trimmed = title.trim();
   if (trimmed.length <= TITLE_LIMIT) {
@@ -2022,35 +2044,57 @@ export class OsmdScoreRenderer
   /**
    * Where each staff of each system was drawn, page by page.
    *
-   * The staff lines and not the measures, for the reason the passage markers
-   * use them: a measure's box is drawn round what is *in* it, so a bar of
-   * rests reports a height of one unit. A staff is the same height whatever
-   * is written on it.
+   * Read off the five printed lines rather than out of the engraver's model.
+   * The model's box for a staff is drawn round what is *on* it - stems,
+   * beams, an inner voice hanging below - so a switch centred in that box
+   * sat below the lines, and by a different amount on each hand. The lines
+   * themselves are where the staff is, by definition.
+   *
+   * Ledger lines are drawn in the same group and have to be told from the
+   * staff's own: a ledger is a couple of note-widths and a staff line runs
+   * the width of the measure, so width tells them apart. Middle C in the
+   * treble is exactly this case, and it is the first note of half the
+   * fixtures here.
    */
   private readStaves(): DrawnStaff[] {
-    const sheet = (this.osmd as unknown as { GraphicSheet?: DrawnSheet } | null)?.GraphicSheet;
     const staves: DrawnStaff[] = [];
-    for (const [pageAt, page] of (sheet?.MusicPages ?? []).entries()) {
-      for (const system of page.MusicSystems ?? []) {
-        for (const [at, line] of (system.StaffLines ?? []).entries()) {
-          const box = line.PositionAndShape;
-          if (box?.AbsolutePosition === undefined || box.Size === undefined) {
-            continue;
-          }
-          const top = box.AbsolutePosition.y * UNITS_TO_PIXELS;
-          staves.push({
-            // Counted from the top down, which is how the score numbers them
-            // and how the reader would: the right hand is the upper staff.
-            staffNumber: at + 1,
-            page: pageAt,
-            left: box.AbsolutePosition.x * UNITS_TO_PIXELS,
-            top,
-            bottom: top + box.Size.height * UNITS_TO_PIXELS,
-          });
+    for (const [pageAt, sheet] of this.sheets.entries()) {
+      const drawn = [...sheet.querySelectorAll('.staffline')];
+      for (const [at, group] of drawn.entries()) {
+        const lines = horizontalRules(group);
+        const widest = Math.max(...lines.map((line) => line.to - line.from), 0);
+        const full = lines.filter((line) => line.to - line.from >= widest / 2);
+        if (full.length === 0) {
+          continue;
         }
+        const ys = full.map((line) => line.y);
+        staves.push({
+          // Counted from the top down within each system, which is how the
+          // score numbers them and how the reader would: the right hand is
+          // the upper staff.
+          staffNumber: (at % Math.max(1, this.stavesPerSystem())) + 1,
+          page: pageAt,
+          left: Math.min(...full.map((line) => line.from)),
+          top: Math.min(...ys),
+          bottom: Math.max(...ys),
+        });
       }
     }
     return staves;
+  }
+
+  /** How many staves each system carries, which is the same for every one. */
+  private stavesPerSystem(): number {
+    const sheet = (this.osmd as unknown as { GraphicSheet?: DrawnSheet } | null)?.GraphicSheet;
+    for (const page of sheet?.MusicPages ?? []) {
+      for (const system of page.MusicSystems ?? []) {
+        const count = (system.StaffLines ?? []).length;
+        if (count > 0) {
+          return count;
+        }
+      }
+    }
+    return 1;
   }
 
   showHands(playing: readonly number[]): void {

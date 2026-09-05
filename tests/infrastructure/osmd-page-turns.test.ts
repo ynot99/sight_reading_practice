@@ -496,6 +496,23 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     }
   });
 
+  it('opens new music at its own first page', async () => {
+    // The complaint this answers: a piece opened while page four of the last
+    // one was on screen stayed on page four - a page nobody had turned to,
+    // in music they had not started reading.
+    //
+    // A re-engraving is different and deliberately so: a zoom or a rotation
+    // puts the reader back where they were. This is new music.
+    renderer.setPaged(true);
+    renderer.turnPages(1);
+    expect(renderer.pages.at).toBeGreaterThan(0);
+
+    await renderer.load(new MusicXmlSerializer().serialize(longExercise({ bars: 16 })));
+
+    expect(renderer.pages.at).toBe(0);
+    expect(showing(container)).toEqual([0]);
+  });
+
   it('says nothing about pages on a score that is one column', () => {
     // "Page 1 of 1" at a reader who never asked for pages is furniture. The
     // title is not: a column has a top, and what piece it is the top of is

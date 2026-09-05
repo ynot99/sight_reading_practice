@@ -598,9 +598,12 @@ export class OsmdScoreRenderer
     // endless column and only switching the setting off and on again fixed
     // it. Asked here, the first engraving is already the right shape.
     // New music, so what the last piece spilled over says nothing about this
-    // one.
+    // one - and neither does the page the reader had reached in it. A piece
+    // opened while page four of the last one was on screen stayed on page
+    // four, which in the new piece is a page nobody had turned to.
     this.pageSurplusPx = 0;
     this.pageSurplusWindow = 0;
+    this.pageAt = 0;
     this.markPaged();
     // The engraver may only now exist, and it is made with following on.
     this.followOrTurn();

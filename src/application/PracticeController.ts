@@ -5,7 +5,7 @@ import type { Exercise } from '../domain/model/Exercise.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
 import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
-import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
+import type { PerformanceReport, StepStatus } from '../domain/scoring/PerformanceReport.js';
 import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
 import {
   buildTimeline,
@@ -454,6 +454,16 @@ export class PracticeController {
   private missteps = 0;
   /** Notes of the other hand still sounding, so a stop can take them back. */
   private readonly sounding = new Set<number>();
+  /**
+   * When the reader last moved the music on, and where the music was then.
+   *
+   * A mode that waits has no clock of its own: it reaches every step the
+   * reader owes nothing on the instant it can, so their music has to be laid
+   * back out in the time it is written in, measured from the moment the
+   * reader last played. Without it the whole phrase between two entries
+   * arrived as one cluster with no rhythm in it at all.
+   */
+  private otherHandAnchor: { readonly wallMs: number; readonly ticks: number } | null = null;
   private readonly meter: HealthMeter;
   private lastBeatTicks = 0;
   private readonly judged: JudgedPress[] = [];
@@ -1476,6 +1486,7 @@ export class PracticeController {
       // A step is dimmed the moment it is done with, whether it was played
       // well, badly or not at all: the page empties as the music passes.
       session.events.on('stepCompleted', ({ result }) => {
+        this.readerReaches(result.index, result.status);
         if (this.currentSettings.readAheadSteps !== null) {
           this.fadeThrough(result.index);
         }
@@ -1556,7 +1567,7 @@ export class PracticeController {
         this.fadeAhead(step.index);
         // A new step is nobody's fault yet.
         this.forgetTheTrouble();
-        this.soundTheOtherHand(step);
+        this.otherHandReaches(step);
       }),
     );
     this.sessionSubscriptions.push(
@@ -1945,33 +1956,104 @@ export class PracticeController {
    * pedal or a rolled chord - both belong to the performance the player
    * gives, and this is an accompaniment rather than a performance.
    */
-  private soundTheOtherHand(step: TimelineStep): void {
-    const hand = this.currentSettings.handStaff;
-    const exercise = this.exercise;
-    // With both hands being read there is no other hand to hear.
-    if (!this.currentSettings.hearTheOtherHand || hand === null || exercise === null) {
+  private otherHandReaches(step: TimelineStep): void {
+    if (!this.wantsTheOtherHand()) {
+      return;
+    }
+    // Under a pulse the music arrives when the beat falls, and the step is
+    // entered at that moment: there is nothing to work out.
+    if (this.deps.modes.get(this.currentSettings.modeId).requiresMetronome) {
+      this.soundTheOtherHand(step, this.deps.clock.now());
+      return;
+    }
+    // Waiting, the reader is the clock. A step they owe nothing on is reached
+    // the instant the one before it is finished, so its music is placed where
+    // it is *written* - a written quarter after the note they just played,
+    // however long they take to play the next one.
+    if (this.owedByTheReader(step)) {
+      return;
+    }
+    const anchor = this.otherHandAnchor ?? {
+      wallMs: this.deps.clock.now(),
+      ticks: step.onsetTicks,
+    };
+    this.otherHandAnchor = anchor;
+    this.soundTheOtherHand(
+      step,
+      anchor.wallMs + spanMs(this.exercise as Exercise, anchor.ticks, step.onsetTicks),
+    );
+  }
+
+  /**
+   * The reader has finished a step, which in a waiting mode is the clock.
+   *
+   * The other hand's share of *that* step sounds with them rather than when
+   * the step was entered: the music was standing still until they played, and
+   * an accompaniment that had already gone would have been answering a note
+   * nobody had struck yet.
+   */
+  private readerReaches(stepIndex: number, status: StepStatus): void {
+    const step = this.timeline?.at(stepIndex) ?? null;
+    if (
+      !this.wantsTheOtherHand() ||
+      step === null ||
+      status === 'skipped' ||
+      this.deps.modes.get(this.currentSettings.modeId).requiresMetronome
+    ) {
       return;
     }
     const now = this.deps.clock.now();
+    this.otherHandAnchor = { wallMs: now, ticks: step.onsetTicks };
+    this.soundTheOtherHand(step, now);
+  }
+
+  /** Whether there is another hand to hear at all. */
+  private wantsTheOtherHand(): boolean {
+    return (
+      this.currentSettings.hearTheOtherHand &&
+      this.currentSettings.handStaff !== null &&
+      this.exercise !== null
+    );
+  }
+
+  /** Whether this step is one the reader has to play. */
+  private owedByTheReader(step: TimelineStep): boolean {
+    return expectedFor(step, this.currentSettings.handStaff).length > 0;
+  }
+
+  private soundTheOtherHand(step: TimelineStep, atMs: number): void {
+    const hand = this.currentSettings.handStaff;
+    const exercise = this.exercise;
+    if (hand === null || exercise === null) {
+      return;
+    }
     for (const note of step.notes) {
       if (note.staffNumber === hand) {
         continue;
       }
-      this.deps.instrument.play(note.midi, OTHER_HAND_VELOCITY);
+      this.deps.instrument.play(note.midi, OTHER_HAND_VELOCITY, atMs);
       this.deps.instrument.stop(
         note.midi,
-        now + spanMs(exercise, step.onsetTicks, step.onsetTicks + note.durationTicks),
+        atMs + spanMs(exercise, step.onsetTicks, step.onsetTicks + note.durationTicks),
       );
       this.sounding.add(note.midi);
     }
   }
 
-  /** Takes back what the other hand was still holding when the run ended. */
+  /**
+   * Takes back what the other hand was holding, or was about to.
+   *
+   * Stopping a note that has not started yet is what silences the rest of a
+   * phrase the reader has walked away from: the accompaniment is laid out
+   * ahead of them as far as their next entry, and a run stopped in the middle
+   * of that would otherwise play on without anybody.
+   */
   private silenceTheOtherHand(): void {
     for (const midi of this.sounding) {
       this.deps.instrument.stop(midi);
     }
     this.sounding.clear();
+    this.otherHandAnchor = null;
   }
 
   /** Puts the marker back to itself, the trouble being over or elsewhere. */

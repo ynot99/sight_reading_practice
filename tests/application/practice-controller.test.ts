@@ -1286,45 +1286,82 @@ describe('note size', () => {
 });
 
 describe('hearing the hand you are not reading', () => {
-  /** The pitches the trainer sounded of its own accord. */
+  /** The pitches the trainer sounded of its own accord, in the order asked for. */
   function sounded(instrument: RecordingPitchPlayer): number[] {
     return instrument.played.map((note) => note.midi);
   }
 
-  it('sounds the other hand as the music reaches each step', async () => {
+  /** Reading the treble against a bass that holds a whole note under it. */
+  async function readingTheTreble(): Promise<ReturnType<typeof createController>> {
+    const rig = createController(true);
+    await rig.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
+    return rig;
+  }
+
+  it('waits for the reader before answering them', async () => {
+    // Nothing keeps time in this mode but the reader, so an accompaniment
+    // that had already gone would be answering a note nobody had struck.
+    const { controller, instrument } = await readingTheTreble();
+
+    controller.start();
+
+    expect(instrument.played).toEqual([]);
+  });
+
+  it('sounds the other hand as the reader reaches each step', async () => {
     // Practising one hand against silence is practising something the piece
     // never asks for: the part only means what it means against the other.
-    const { controller, instrument } = createController(true);
-    await controller.openScore(twoBarExercise());
-    controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
-    const timeline = controller.currentTimeline;
-    const first = timeline?.at(0);
+    const { controller, midi, instrument, clock } = await readingTheTreble();
+    const first = controller.currentTimeline?.at(0);
     const left = (first?.notes ?? []).filter((note) => note.staffNumber === 2).map((n) => n.midi);
     const right = (first?.notes ?? []).filter((note) => note.staffNumber === 1).map((n) => n.midi);
     expect(left.length).toBeGreaterThan(0);
     expect(right.length).toBeGreaterThan(0);
-
     controller.start();
 
-    // The hand being read is the reader's to play; the other one answers.
-    for (const midi of left) {
-      expect(sounded(instrument)).toContain(midi);
+    for (const midiNote of right) {
+      midi.noteOn(midiNote, clock.now());
     }
-    for (const midi of right) {
-      expect(sounded(instrument)).not.toContain(midi);
+
+    // The hand being read is the reader's to play; the other one answers.
+    for (const midiNote of left) {
+      expect(sounded(instrument)).toContain(midiNote);
+    }
+    for (const midiNote of right) {
+      expect(sounded(instrument)).not.toContain(midiNote);
     }
   });
 
-  it('holds each note for as long as it is written', async () => {
-    const { controller, instrument } = createController(true);
-    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
-
+  it('goes on in time while the reader holds out the beat', async () => {
+    // His correction, and the whole point: in this mode the music must go on
+    // *in rhythm* while he holds a long note out to his next entry. The mode
+    // reaches every step he owes nothing on the instant it can, so played as
+    // they were reached the whole phrase between two entries arrived as one
+    // cluster with no rhythm in it.
+    const { controller, midi, instrument, clock } = await readingTheTreble();
+    // Reading the bass instead: it holds a whole note under a treble that
+    // plays four quarters, so three of those quarters are his to wait through.
+    controller.updateSettings({ handStaff: 2 });
     controller.start();
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+
+    // A quarter apart at sixty beats, counted from the moment he played -
+    // not from when the run began, and not all at once.
+    expect(instrument.played.map((note) => note.atMs)).toEqual([5_000, 6_000, 7_000, 8_000]);
+  });
+
+  it('holds each note for as long as it is written', async () => {
+    const { controller, midi, instrument, clock } = await readingTheTreble();
+    controller.start();
+
+    midi.noteOn(p('C4').midi, clock.now());
 
     // As long as it is written and no longer: the stop is asked for at the
     // moment the note ends rather than left to the next step to cut it off.
-    // At sixty beats a quarter is a second.
+    // At sixty beats a quarter is a second, and this bass note is a whole.
     const note = (controller.currentTimeline?.at(0)?.notes ?? []).find(
       (each) => each.staffNumber === 2,
     );
@@ -1337,36 +1374,36 @@ describe('hearing the hand you are not reading', () => {
   it('says nothing while both hands are being read', async () => {
     // There is no other hand then, and sounding one would be the trainer
     // playing the piece at the reader.
-    const { controller, instrument } = createController(true);
-    await controller.openScore(twoBarExercise());
-    controller.updateSettings({ handStaff: null, hearTheOtherHand: true });
-
+    const { controller, midi, instrument, clock } = await readingTheTreble();
+    controller.updateSettings({ handStaff: null });
     controller.start();
+
+    midi.noteOn(p('C4').midi, clock.now());
 
     expect(instrument.played).toEqual([]);
   });
 
   it('is silent until it is asked for', async () => {
-    const { controller, instrument } = createController(true);
-    await controller.openScore(twoBarExercise());
-    controller.updateSettings({ handStaff: 1 });
-
+    const { controller, midi, instrument, clock } = await readingTheTreble();
+    controller.updateSettings({ hearTheOtherHand: false });
     controller.start();
+
+    midi.noteOn(p('C4').midi, clock.now());
 
     expect(instrument.played).toEqual([]);
   });
 
-  it('takes back what it was holding when the run ends', async () => {
-    const { controller, instrument } = createController(true);
-    await controller.openScore(twoBarExercise());
-    controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
+  it('takes back what it was holding, and what was still to come', async () => {
+    // The accompaniment is laid out ahead of the reader as far as their next
+    // entry, so a run stopped in the middle of that would play on alone.
+    const { controller, midi, instrument, clock } = await readingTheTreble();
     controller.start();
+    midi.noteOn(p('C4').midi, clock.now());
     const scheduled = instrument.stopped.length;
+    expect(scheduled).toBeGreaterThan(0);
 
     controller.stop();
 
-    // Every note it started is stopped again, and now rather than at the end
-    // of a bar the reader has walked away from.
     expect(instrument.stopped.length).toBeGreaterThan(scheduled);
     expect(instrument.stopped.some((note) => note.atMs === undefined)).toBe(true);
   });

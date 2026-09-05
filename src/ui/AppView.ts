@@ -2897,6 +2897,13 @@ export class AppView {
       // Before the mute check: the recorder hears everything the keyboard
       // does, and silencing the monitor is not a decision to stop capturing.
       this.describeTake();
+      // Before the mute check, and not inside it: that the pedal was *heard*
+      // is not part of hearing the notes. A reader whose keyboard makes its
+      // own sound turns the monitor off - which is the whole point of the
+      // setting - and their pedal light then went out for good.
+      if (event.type === 'pedal') {
+        this.renderPedal(event.down);
+      }
       if (!this.audioFeedbackEnabled) {
         return;
       }
@@ -2908,8 +2915,9 @@ export class AppView {
           this.runtime.pitchPlayer.stop(event.midi);
           return;
         case 'pedal':
+          // The dampers of the instrument *we* are sounding, which is a
+          // different thing from the light and rightly follows the monitor.
           this.runtime.sustain?.setSustain(event.down);
-          this.renderPedal(event.down);
           return;
         default:
           return;

@@ -2952,6 +2952,26 @@ describe('AppView', () => {
     expect(shape()).toBe(before);
   });
 
+  it('shows the pedal even with the monitor turned off', async () => {
+    // Reported from the page: the light never came on. It was being lit
+    // inside the handler that sounds his notes, *after* the check for whether
+    // to sound them - and a reader whose keyboard has its own sound turns
+    // that off, which is the whole point of the setting. That the pedal was
+    // heard is not part of hearing the notes.
+    const rig = createRig();
+    await rig.view.initialize();
+    const monitor = element<HTMLInputElement>('audio-feedback');
+    monitor.checked = false;
+    monitor.dispatchEvent(new Event('change'));
+
+    rig.midi.pedal(true);
+
+    expect(element('pedal-status').dataset['down']).toBe('true');
+    // The dampers of the instrument *we* sound are a different question, and
+    // they rightly follow the monitor.
+    expect(rig.sustain.sustained).toBe(false);
+  });
+
   it('sends the sustain pedal to the instrument and shows it', async () => {
     const rig = createRig();
     await rig.view.initialize();

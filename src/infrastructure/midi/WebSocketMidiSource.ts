@@ -397,6 +397,21 @@ export class WebSocketMidiSource implements IMidiSource, IMidiConnection {
     return this.gaps.length === 0 ? null : Math.min(...this.gaps);
   }
 
+  /**
+   * How unsteady the hop is: the spread of the last few dozen presses.
+   *
+   * The part of the delay that no correction can take out. A hop that is
+   * *always* twenty milliseconds is folded into the clock difference and
+   * subtracted with it, so the timestamps come out right; one that is
+   * twenty milliseconds sometimes and eighty at others cannot be, and that
+   * is what a reader feels as the timing wobbling under their hands.
+   *
+   * `null` until there are two presses to compare - one press has no spread.
+   */
+  get hopSpreadMs(): number | null {
+    return this.gaps.length < 2 ? null : Math.max(...this.gaps) - Math.min(...this.gaps);
+  }
+
   private setDevice(device: string | null): void {
     if (this.device === device) {
       return;

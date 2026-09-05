@@ -105,6 +105,14 @@ export interface IMidiBridge extends IMidiSource, IMidiConnection {
    * theirs to fix.
    */
   readonly clockSkewMs: number | null;
+  /**
+   * How unsteady the hop is, or `null` until it can say.
+   *
+   * The half of the delay that cannot be corrected away, and therefore the
+   * half worth showing: a steady hop is folded into the clock difference and
+   * subtracted with it, while an unsteady one is felt directly.
+   */
+  readonly hopSpreadMs: number | null;
   onDeviceChange(listener: (device: string | null) => void): Unsubscribe;
 }
 

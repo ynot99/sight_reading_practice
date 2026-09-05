@@ -44,6 +44,9 @@ import { calibrationExercise } from '../domain/generation/calibrationExercise.js
  * Long enough that a run of presses costs one redraw rather than one each,
  * short enough that a single press still looks immediate.
  */
+/** How often the bridge pill may redraw while he plays. */
+const HOP_REFRESH_MS = 1_000;
+
 const TEMPO_REDRAW_DELAY_MS = 350;
 
 /**
@@ -360,6 +363,24 @@ function takeName(savedAtMs: number): string {
  * second of lateness has no way of telling a slow keyboard from a computer
  * that thinks it is a different time, and only one of those is theirs.
  */
+/**
+ * What to add to the bridge pill about the hop, if anything.
+ *
+ * Only the spread, because only the spread is felt. A hop that takes the
+ * same time every press is taken off every stamp along with the difference
+ * between the two clocks; one that varies cannot be, and it is that
+ * variation a reader feels as their timing wobbling.
+ *
+ * Nothing at all while it is steady enough not to matter: a pill that says
+ * a number nobody needs is furniture.
+ */
+function describeHop(spreadMs: number | null): string {
+  if (spreadMs === null || spreadMs < 8) {
+    return '';
+  }
+  return ` · ±${Math.round(spreadMs)} ms`;
+}
+
 function describeSkew(skewMs: number | null): string {
   if (skewMs === null) {
     return 'not measured (no relay, or too few presses yet)';
@@ -2818,7 +2839,7 @@ export class AppView {
       const device = bridge.deviceName;
       this.el.bridgeStatus.textContent =
         status === 'connected'
-          ? `Bridge: ${device ?? 'no keyboard'}`
+          ? `Bridge: ${device ?? 'no keyboard'}${describeHop(bridge.hopSpreadMs)}`
           : status === 'connecting'
             ? 'Bridge: connecting…'
             : 'Bridge: offline';
@@ -2833,6 +2854,20 @@ export class AppView {
 
     this.subscriptions.push(bridge.onStatusChange(render));
     this.subscriptions.push(bridge.onDeviceChange(render));
+    // And as he plays, because the number is about the hop he is feeling now
+    // rather than the one when the socket opened. Throttled: it is a pill,
+    // and he is in the middle of a piece.
+    let shownAt = 0;
+    this.subscriptions.push(
+      bridge.subscribe(() => {
+        const now = this.runtime.clock.now();
+        if (now - shownAt < HOP_REFRESH_MS) {
+          return;
+        }
+        shownAt = now;
+        render();
+      }),
+    );
     render();
     void bridge.connect();
   }

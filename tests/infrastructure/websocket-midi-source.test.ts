@@ -453,6 +453,34 @@ describe('when the two computers disagree about the time', () => {
     return rig.events.at(-1);
   }
 
+  it('says how unsteady the hop is, which is the half nobody can correct', () => {
+    // A hop that always takes the same time is folded into the clock
+    // difference and taken off every stamp with it. One that varies cannot
+    // be, and that is what a reader feels as their timing wobbling - so it
+    // is the number worth putting where they can see it.
+    const rig = createRig(undefined, ORIGIN);
+    rig.source.connect();
+    rig.sockets[0]?.open();
+    expect(rig.source.hopSpreadMs).toBeNull();
+
+    for (const late of [40, 40, 40, 95, 40, 62]) {
+      const now = rig.clock.now();
+      rig.sockets[0]?.deliver({
+        v: 1,
+        type: 'noteon',
+        note: 60,
+        velocity: 0.8,
+        at: ORIGIN + now - late,
+      });
+      rig.clock.advance(500);
+    }
+
+    // Between the best press and the worst: 95 against 40.
+    expect(rig.source.hopSpreadMs).toBe(55);
+    // And the steady part is still read as the clock difference.
+    expect(rig.source.clockSkewMs).toBe(40);
+  });
+
   it('measures the difference rather than assuming there is none', () => {
     // A desktop whose clock has drifted hands over every press wrong by the
     // same amount, with nothing to show for it - and a reader correcting that

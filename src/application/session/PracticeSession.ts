@@ -12,6 +12,7 @@ import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../../sh
 import type { IPracticeMode } from '../modes/IPracticeMode.js';
 import type { IClock } from '../ports/IClock.js';
 import {
+  clickFollowsTheReader,
   clickIsSilent,
   resolveDropout,
   type ClickPattern,
@@ -417,7 +418,11 @@ export class PracticeSession {
     return (
       this.mode.requiresMetronome ||
       this.options.countInBars > 0 ||
-      !clickIsSilent(this.options.clickWhen)
+      // A click the reader places needs no pulse to place it - and starting
+      // one would be the very thing they asked to be rid of, a machine
+      // counting on through music that is waiting for them.
+      (!clickIsSilent(this.options.clickWhen) &&
+        !clickFollowsTheReader(this.options.clickWhen))
     );
   }
 

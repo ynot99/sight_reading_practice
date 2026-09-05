@@ -6,6 +6,7 @@ import type { KeySignature } from '../domain/model/KeySignature.js';
 import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import type { PerformanceReport, StepStatus } from '../domain/scoring/PerformanceReport.js';
+import { beatAt, beatsBetween } from './session/metronomePlan.js';
 import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
 import {
   buildTimeline,
@@ -25,6 +26,7 @@ import { ExercisePlayer } from './ExercisePlayer.js';
 import type { PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type { ClickWhen, ClickPattern } from './ports/IMetronome.js';
+import { clickFollowsTheReader } from './ports/IMetronome.js';
 import type {
   PlayedNote,
   IPlayedNoteOverlay,
@@ -1995,11 +1997,14 @@ export class PracticeController {
   private readerReaches(stepIndex: number, status: StepStatus, atMs: number): void {
     const step = this.timeline?.at(stepIndex) ?? null;
     if (
-      !this.wantsTheOtherHand() ||
       step === null ||
       status === 'skipped' ||
       this.deps.modes.get(this.currentSettings.modeId).requiresMetronome
     ) {
+      return;
+    }
+    this.clickTheBeats(step, atMs);
+    if (!this.wantsTheOtherHand()) {
       return;
     }
     // From the moment the key went down. Over the bridge that is a hop
@@ -2008,6 +2013,52 @@ export class PracticeController {
     // reader feels as lag.
     this.otherHandAnchor = { wallMs: atMs, ticks: step.onsetTicks };
     this.soundTheOtherHand(step, atMs);
+  }
+
+  /**
+   * Clicks the beat the reader has just played, and the ones they will not.
+   *
+   * His own words: the metronome sounds when he presses the keys, and where
+   * it is the other hand's turn while he rests or holds a note, it goes on in
+   * rhythm without waiting for him. Both halves are the same rule as the
+   * accompaniment's - the beat he plays is where *he* puts it, and the beats
+   * between his entries are where they are *written* - and it is the rule a
+   * waiting mode needs, because there is no pulse in it to hand beats out.
+   *
+   * Scheduled as far as his next entry and no further: the beat he comes in
+   * on is his to place, and clicking it before he arrives would be the
+   * machine playing his part for him.
+   */
+  private clickTheBeats(step: TimelineStep, atMs: number): void {
+    const exercise = this.exercise;
+    if (!clickFollowsTheReader(this.currentSettings.clickWhen) || exercise === null) {
+      return;
+    }
+    const here = beatAt(exercise, step.onsetTicks);
+    if (here !== null) {
+      this.deps.metronome.click(atMs, here.downbeat);
+    }
+    const until = this.nextOwedTicks(step.index);
+    for (const beat of beatsBetween(exercise, step.onsetTicks, until)) {
+      this.deps.metronome.click(
+        atMs + spanMs(exercise, step.onsetTicks, beat.ticks),
+        beat.downbeat,
+      );
+    }
+  }
+
+  /** Where the reader next has to play, or the end of the music. */
+  private nextOwedTicks(fromIndex: number): number {
+    const timeline = this.timeline;
+    if (timeline === null) {
+      return 0;
+    }
+    for (const step of timeline.steps) {
+      if (step.index > fromIndex && this.owedByTheReader(step)) {
+        return step.onsetTicks;
+      }
+    }
+    return timeline.totalTicks;
   }
 
   /** Whether there is another hand to hear at all. */
@@ -2057,6 +2108,9 @@ export class PracticeController {
     }
     this.sounding.clear();
     this.otherHandAnchor = null;
+    // And the beats laid out with them. A run walked away from must not go on
+    // counting itself in an empty room.
+    this.deps.metronome.stop();
   }
 
   /** Puts the marker back to itself, the trouble being over or elsewhere. */

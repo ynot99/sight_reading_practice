@@ -40,6 +40,54 @@ function leastCommonMultiple(left: number, right: number): number {
  * count-in's metre, since there is no bar line to hang a new one on until
  * the next one comes round.
  */
+/** A beat of the music, and whether it is the one a bar begins on. */
+export interface WrittenBeat {
+  readonly ticks: number;
+  readonly downbeat: boolean;
+}
+
+/**
+ * The beats falling strictly between two moments of the music.
+ *
+ * Read off the bar lines and the metre in force at each, because both change
+ * partway through a piece: a beat is a share of *its own* bar, and 6/8 is
+ * felt in two dotted quarters rather than six eighths.
+ */
+export function beatsBetween(
+  exercise: Exercise,
+  fromTicks: number,
+  toTicks: number,
+): readonly WrittenBeat[] {
+  const beats: WrittenBeat[] = [];
+  for (const bar of barLines(exercise)) {
+    const end = bar.startTicks + bar.timeSignature.ticksPerMeasure;
+    if (end <= fromTicks) {
+      continue;
+    }
+    if (bar.startTicks >= toTicks) {
+      break;
+    }
+    for (let at = bar.startTicks; at < end; at += bar.timeSignature.ticksPerPulse) {
+      if (at > fromTicks && at < toTicks) {
+        beats.push({ ticks: at, downbeat: at === bar.startTicks });
+      }
+    }
+  }
+  return beats;
+}
+
+/** The beat a moment falls on, or `null` where it falls between two. */
+export function beatAt(exercise: Exercise, ticks: number): WrittenBeat | null {
+  const bar = [...barLines(exercise)].reverse().find((each) => each.startTicks <= ticks);
+  if (bar === undefined) {
+    return null;
+  }
+  const into = ticks - bar.startTicks;
+  return into % bar.timeSignature.ticksPerPulse === 0
+    ? { ticks, downbeat: into === 0 }
+    : null;
+}
+
 export function metronomeBars(
   exercise: Exercise,
   options: { readonly countInBars: number; readonly fromTicks: number },

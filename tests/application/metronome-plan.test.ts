@@ -5,6 +5,8 @@ import {
   type ClickPattern,
 } from '../../src/application/ports/IMetronome.js';
 import {
+  beatAt,
+  beatsBetween,
   metronomeBars,
   metronomeTempos,
   musicalResolutionTicks,
@@ -39,6 +41,45 @@ function evenBar(timeSignature: TimeSignature, duration: Duration): Exercise {
     ],
   };
 }
+
+describe('the beats of the music', () => {
+  it('walks a bar by its felt beat', () => {
+    // Four in a bar of four four, and none of the three inside it a downbeat.
+    const beats = beatsBetween(twoBarExercise(), 0, Duration.WHOLE.ticks);
+
+    expect(beats.map((beat) => beat.ticks)).toEqual([
+      Duration.QUARTER.ticks,
+      Duration.HALF.ticks,
+      Duration.HALF.ticks + Duration.QUARTER.ticks,
+    ]);
+    expect(beats.every((beat) => !beat.downbeat)).toBe(true);
+  });
+
+  it('crosses a bar line and says which beat begins the bar', () => {
+    const beats = beatsBetween(twoBarExercise(), Duration.HALF.ticks, Duration.WHOLE.ticks * 2);
+    const opening = beats.find((beat) => beat.ticks === Duration.WHOLE.ticks);
+
+    expect(opening?.downbeat).toBe(true);
+    expect(beats.filter((beat) => beat.downbeat)).toHaveLength(1);
+  });
+
+  it('feels a compound bar in its dotted beats, not in its eighths', () => {
+    // 6/8 is two dotted quarters. Counting all six is how a beginner reads it
+    // slowly and how nobody plays it.
+    const bar = compoundBarExercise();
+    const beats = beatsBetween(bar, 0, bar.timeSignature.ticksPerMeasure);
+
+    expect(beats.map((beat) => beat.ticks)).toEqual([bar.timeSignature.ticksPerPulse]);
+  });
+
+  it('answers whether a moment is a beat at all', () => {
+    const exercise = twoBarExercise();
+
+    expect(beatAt(exercise, 0)?.downbeat).toBe(true);
+    expect(beatAt(exercise, Duration.QUARTER.ticks)?.downbeat).toBe(false);
+    expect(beatAt(exercise, Duration.EIGHTH.ticks)).toBeNull();
+  });
+});
 
 describe('clicksPerPulse', () => {
   it('counts a division in twos, or in threes when the metre is compound', () => {

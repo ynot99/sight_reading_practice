@@ -323,7 +323,7 @@ describe('AppView', () => {
     expect(element('rhythm-description').textContent).not.toBe('');
     expect(element<HTMLSelectElement>('click').options).toHaveLength(4);
     expect(element('click-description').textContent).not.toBe('');
-    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(6);
+    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(7);
     expect(element('dropout-description').textContent).not.toBe('');
     expect(element('mode-description').textContent).toContain('waits');
     expect(element<HTMLSelectElement>('scoring').options).toHaveLength(3);

@@ -56,6 +56,8 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   private config: MetronomeConfig = DEFAULT_CONFIG;
   private timer: ReturnType<typeof setInterval> | null = null;
   private queue: ScheduledTick[] = [];
+  /** One-off clicks already on the audio clock, so a stop can take them back. */
+  private pending: OscillatorNode[] = [];
   private nextTickIndex = 0;
   private nextTickAudioTime = 0;
   private audioEpochMs = 0;
@@ -132,6 +134,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
       this.timer = null;
     }
     this.queue = [];
+    this.forgetPendingClicks();
   }
 
   private ensureContext(): AudioContext {
@@ -222,22 +225,52 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
   }
 
+  /**
+   * Sounds one click at a moment on the page's clock, running or not.
+   *
+   * The epoch is worked out afresh rather than taken from the last start:
+   * this is asked for by a mode that never starts the pulse at all, and the
+   * two clocks drift apart over a practice session anyway.
+   */
+  click(atMs?: number, downbeat = false): void {
+    const context = this.ensureContext();
+    void context.resume();
+    const epoch = performance.now() - context.currentTime * 1000;
+    const at = atMs === undefined ? context.currentTime : (atMs - epoch) / 1000;
+    // Kept, so that stopping can take back the ones that have not sounded.
+    // These are laid out as far ahead as the reader's next entry, which on a
+    // held note is a bar or more of beats waiting to be heard.
+    const pending = this.sound(context, Math.max(context.currentTime, at), downbeat, true);
+    if (pending !== null) {
+      this.pending.push(pending);
+    }
+  }
+
   private playClick(context: AudioContext, tick: MetronomeTick, at: number): void {
+    this.sound(context, at, tick.isDownbeat, tick.isPulse);
+  }
+
+  private sound(
+    context: AudioContext,
+    at: number,
+    downbeat: boolean,
+    pulse: boolean,
+  ): OscillatorNode | null {
     const level = volumeToGain(this.currentVolume, this.options.gain);
     if (level <= 0) {
-      return;
+      return null;
     }
     const oscillator = context.createOscillator();
     const envelope = context.createGain();
 
-    oscillator.frequency.value = tick.isDownbeat
+    oscillator.frequency.value = downbeat
       ? this.options.downbeatFrequency
-      : tick.isPulse
+      : pulse
         ? this.options.beatFrequency
         : this.options.subdivisionFrequency;
     oscillator.type = 'square';
 
-    const peak = tick.isPulse ? level : level * 0.35;
+    const peak = pulse ? level : level * 0.35;
     envelope.gain.setValueAtTime(0.0001, at);
     envelope.gain.exponentialRampToValueAtTime(peak, at + 0.002);
     envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.05);
@@ -245,6 +278,20 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     oscillator.connect(envelope).connect(context.destination);
     oscillator.start(at);
     oscillator.stop(at + 0.06);
+    return oscillator;
+  }
+
+  /** Silences the one-off clicks that have not sounded yet. */
+  private forgetPendingClicks(): void {
+    const now = this.context?.currentTime ?? 0;
+    for (const oscillator of this.pending) {
+      try {
+        oscillator.stop(now);
+      } catch {
+        // It had already finished on its own.
+      }
+    }
+    this.pending = [];
   }
 }
 

@@ -101,6 +101,7 @@ export type MetronomeDropout = MetronomeCycleDropout | MetronomeSilenceFrom;
  */
 export const CLICK_WHEN = [
   'always',
+  'with-me',
   'count-in-only',
   'cycle-1',
   'cycle-2',
@@ -113,6 +114,22 @@ export type ClickWhen = (typeof CLICK_WHEN)[number];
 /** Silent throughout - the pulse still runs, since the loop rides on it. */
 export function clickIsSilent(when: ClickWhen): boolean {
   return when === 'never';
+}
+
+/**
+ * Whether the click is the reader's to place rather than the machine's.
+ *
+ * In a mode that waits, "always" starts a pulse and counts on regardless -
+ * which is a click the reader is measured against, not one that follows
+ * them. This is the other answer: every beat still sounds, but the beat they
+ * play is where *they* put it, and only the beats between their entries are
+ * placed where they are written.
+ *
+ * Where a pulse runs anyway there is nothing to choose: the beat falling is
+ * the click, so this sounds exactly like "always".
+ */
+export function clickFollowsTheReader(when: ClickWhen): boolean {
+  return when === 'with-me';
 }
 
 /** Bars in one sounding half of a cycle, or `null` when there is no cycle. */
@@ -241,5 +258,17 @@ export interface IMetronome {
   configure(config: MetronomeConfig): void;
   start(): void;
   stop(): void;
+  /**
+   * Sounds one click, at a moment, without running.
+   *
+   * For the mode that has no pulse of its own. There the music waits for the
+   * reader, so the beat is not something the machine keeps and hands out - it
+   * is something the reader produces, and the click marks it where they put
+   * it. Between their entries, where they owe nothing, the beats are placed
+   * where they are written and go on without them.
+   *
+   * `atMs` is on the same clock the ticks carry; omitted means now.
+   */
+  click(atMs?: number, downbeat?: boolean): void;
   onTick(listener: (tick: MetronomeTick) => void): Unsubscribe;
 }

@@ -229,6 +229,7 @@ const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
  */
 const CLICK_WHEN_LABELS: Readonly<Record<ClickWhen, string>> = {
   always: 'All the way through',
+  'with-me': 'With me, beat by beat',
   'count-in-only': 'Only the count-in',
   'cycle-1': '1 bar on, 1 off',
   'cycle-2': '2 bars on, 2 off',

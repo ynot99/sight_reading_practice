@@ -45,6 +45,12 @@ export class ManualMetronome implements IMetronome {
 
   /** Every tick emitted so far, for assertions. */
   readonly emitted: MetronomeTick[] = [];
+  /** Every one-off click asked for, as the moment it was asked to sound at. */
+  readonly clicks: { readonly atMs: number | undefined; readonly downbeat: boolean }[] = [];
+
+  click(atMs?: number, downbeat = false): void {
+    this.clicks.push({ atMs, downbeat });
+  }
 
   constructor(clock?: ManualClock) {
     this.clock = clock ?? null;

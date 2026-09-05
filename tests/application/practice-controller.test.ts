@@ -1423,6 +1423,55 @@ describe('hearing the hand you are not reading', () => {
   });
 });
 
+describe('the click in a mode that waits', () => {
+  it('sounds the beat the reader plays, and the ones they will not', async () => {
+    // His words: the metronome sounds when he presses the keys, and where it
+    // is the other hand’s turn while he rests or holds, it goes on in
+    // rhythm without waiting for him.
+    const { controller, midi, metronome, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    // Reading the bass, which holds a whole note under four treble quarters:
+    // three of those beats are his to wait through.
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    controller.start();
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+
+    expect(metronome.clicks).toEqual([
+      { atMs: 5_000, downbeat: true },
+      { atMs: 6_000, downbeat: false },
+      { atMs: 7_000, downbeat: false },
+      { atMs: 8_000, downbeat: false },
+    ]);
+  });
+
+  it('stops at the beat the reader comes in on', async () => {
+    // That one is his to place. Clicking it before he arrives would be the
+    // machine playing his part for him.
+    const { controller, midi, metronome, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    controller.start();
+    midi.noteOn(p('C3').midi, clock.now());
+
+    // The next thing the bass owes is the downbeat of bar two, and no click
+    // was laid out for it.
+    expect(metronome.clicks.map((click) => click.atMs)).not.toContain(4_000);
+  });
+
+  it('says nothing while the reader asked for no click', async () => {
+    const { controller, midi, metronome, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'never' });
+    controller.start();
+
+    midi.noteOn(p('C3').midi, clock.now());
+
+    expect(metronome.clicks).toEqual([]);
+  });
+});
+
 describe('cursor visibility', () => {
   it('shows the cursor by default', async () => {
     const { controller, renderer } = createController();

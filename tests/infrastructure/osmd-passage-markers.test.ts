@@ -3,7 +3,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
 import type { DrawnMeasure } from '../../src/infrastructure/rendering/passageBrackets.js';
-import { longExercise, twoBarExercise } from '../support/fixtures.js';
+import { bar, longExercise, p, twoBarExercise } from '../support/fixtures.js';
+import { noteEntry, type Exercise, type StaffPart } from '../../src/domain/model/Exercise.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import { createScoreContainer, installCanvasStub, staffLineYs } from '../support/osmdHarness.js';
 
 function markers(container: HTMLElement): SVGGElement[] {
@@ -366,6 +368,43 @@ describe('passage markers over a real engraving', () => {
       // "the switch for this hand" means on the page.
       expect(tops).toHaveLength(2);
       expect(tops[0]).toBeLessThan(tops[1] ?? 0);
+    });
+
+    it('draws both switches the same size, whatever is on their staves', async () => {
+      // Measured as a share of each staff's own box they came out different
+      // heights: the engraver draws that box round what is *on* the staff, so
+      // the hand carrying ledger lines got the taller switch. Two switches
+      // that do the same thing have to look the same.
+      const lopsided = twoBarExercise();
+      const treble = lopsided.staves[0];
+      const withLedgers: Exercise = {
+        ...lopsided,
+        staves: [
+          {
+            ...(treble as StaffPart),
+            measures: [
+              bar(noteEntry(p('C7'), Duration.WHOLE)),
+              bar(noteEntry(p('C7'), Duration.WHOLE)),
+            ],
+          },
+          ...lopsided.staves.slice(1),
+        ],
+      };
+      await renderer.load(new MusicXmlSerializer().serialize(withLedgers));
+      showAt(renderer, container);
+      renderer.showHands([1, 2]);
+
+      const staves = [...container.querySelectorAll('rect.hand-switch__hit')].map((hit) =>
+        Number.parseFloat(hit.getAttribute('height') ?? 'NaN'),
+      );
+      // The staves really are different heights here, which is the whole
+      // premise: without that this would pass on the arithmetic it replaced.
+      expect(staves[0]).not.toBe(staves[1]);
+
+      const tabs = [...container.querySelectorAll('rect.hand-switch__tab')];
+      const sizes = tabs.map((tab) => [tab.getAttribute('width'), tab.getAttribute('height')]);
+      expect(sizes).toHaveLength(2);
+      expect(sizes[0]).toEqual(sizes[1]);
     });
 
     it('says which staff was pressed, and nothing else', () => {

@@ -1197,6 +1197,7 @@ export class AppView {
 
   private showPassageMarkers(): void {
     const bars = this.runtime.controller.currentExercise;
+    this.showHandSwitches();
     if (bars === null || !this.passageMarkersWanted) {
       this.runtime.renderer.hidePassage();
       this.runtime.renderer.showStart(null);
@@ -2323,9 +2324,20 @@ export class AppView {
       'aria-label',
       handStaff === null ? 'Both hands' : readsLeft ? 'Left hand only' : 'Right hand only',
     );
-    // The switches on the staves say the same thing, where the reader is
-    // looking. One setting with two editors, as the tempo has.
-    this.runtime.renderer.showHands(handsPlaying(handStaff));
+    this.showHandSwitches();
+  }
+
+  /**
+   * The switches beside the staves, which are furniture like the markers.
+   *
+   * A touch on the music puts the furniture away and brings it back, and
+   * these go with the rest of it: they stand in the margin of every system on
+   * the page, and a reader who has cleared the page has cleared it.
+   */
+  private showHandSwitches(): void {
+    this.runtime.renderer.showHands(
+      this.passageMarkersWanted ? handsPlaying(this.runtime.controller.settings.handStaff) : [],
+    );
   }
 
   /**

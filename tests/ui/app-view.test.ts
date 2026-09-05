@@ -1168,6 +1168,32 @@ describe('AppView', () => {
         expect(rig.runtime.controller.settings.handStaff).toBeNull();
       });
 
+      it('goes away with the rest of the furniture on a tap', async () => {
+        // A touch on the music puts the markers away, and these stand in the
+        // margin of every system on the page: a reader who has cleared the
+        // page has cleared it.
+        const rig = createRig();
+        await rig.view.initialize();
+        expect(rig.renderer.handsPlaying).toEqual([1, 2]);
+
+        rig.renderer.tapScore();
+        expect(rig.renderer.handsPlaying).toEqual([]);
+
+        rig.renderer.tapScore();
+        expect(rig.renderer.handsPlaying).toEqual([1, 2]);
+      });
+
+      it('comes back saying what it said before it went', async () => {
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.renderer.toggleHand(1);
+        rig.renderer.tapScore();
+
+        rig.renderer.tapScore();
+
+        expect(rig.renderer.handsPlaying).toEqual([2]);
+      });
+
       it('is the same setting the drawer’s button cycles', async () => {
         // One setting with two editors, as the tempo has: they cannot come to
         // hold different answers.

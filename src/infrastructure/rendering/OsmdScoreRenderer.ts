@@ -126,6 +126,16 @@ const ARROW_REACH = 3.5;
  */
 const HAND_SWITCH_WIDTH = 26;
 const HAND_SWITCH_GAP = 6;
+/**
+ * How tall the drawn part of a hand switch is.
+ *
+ * Fixed, and centred on its staff. Measured as a share of the staff's own box
+ * they came out different heights from each other: the engraver's box for a
+ * staff is drawn round what is on it, so the hand with the ledger lines got a
+ * taller switch than the hand without. Two switches that do the same thing
+ * have to look the same, whatever the music above them happens to be.
+ */
+const HAND_SWITCH_HEIGHT = 30;
 
 /**
  * A title cut to {@link TITLE_LIMIT}, with an ellipsis where it was cut.
@@ -2096,9 +2106,11 @@ export class OsmdScoreRenderer
       const tab = doc.createElementNS(SVG_NAMESPACE, 'rect');
       tab.setAttribute('class', 'hand-switch__tab');
       tab.setAttribute('x', String(staff.left - HAND_SWITCH_GAP - HAND_SWITCH_WIDTH / 2));
-      tab.setAttribute('y', String(staff.top + height / 4));
+      // Centred on the staff rather than measured from it, so both switches
+      // are the same switch however tall the engraver drew their staves.
+      tab.setAttribute('y', String(staff.top + height / 2 - HAND_SWITCH_HEIGHT / 2));
       tab.setAttribute('width', String(HAND_SWITCH_WIDTH / 2));
-      tab.setAttribute('height', String(height / 2));
+      tab.setAttribute('height', String(HAND_SWITCH_HEIGHT));
       tab.setAttribute('rx', String(HAND_SWITCH_WIDTH / 6));
       group.append(tab);
 

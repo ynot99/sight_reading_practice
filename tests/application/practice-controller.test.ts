@@ -2093,6 +2093,66 @@ describe('the last run that reached an end', () => {
     expect(controller.lastReport).toBe(measured);
   });
 
+  describe('dimming what the run will not ask for', () => {
+    it('says the whole piece and both hands when nothing is narrowed', async () => {
+      const { controller, renderer } = createController(true);
+      await controller.loadNewExercise();
+
+      // Every step, and no hand singled out: there is nothing to dim, and
+      // saying so is not the same as being switched off.
+      expect(renderer.reading).toEqual({
+        staves: [],
+        from: 0,
+        to: (controller.currentTimeline?.length ?? 0) - 1,
+      });
+    });
+
+    it('names the hand being read when one is', async () => {
+      const { controller, renderer } = createController(true);
+      await controller.loadNewExercise();
+
+      controller.updateSettings({ handStaff: 2 });
+
+      expect(renderer.reading?.staves).toEqual([2]);
+    });
+
+    it('narrows to the passage when one is chosen', async () => {
+      const { controller, renderer } = createController(true);
+      await controller.loadNewExercise();
+      const whole = renderer.reading;
+
+      // The fixture is two bars, so each end has to be narrowed on its own.
+      controller.updateSettings({ rangeToBar: 1 });
+      expect(renderer.reading?.to).toBeLessThan(whole?.to ?? Infinity);
+
+      controller.updateSettings({ rangeFromBar: 2, rangeToBar: null });
+      expect(renderer.reading?.from).toBeGreaterThan(whole?.from ?? 0);
+    });
+
+    it('says nothing at all when the reader has turned it off', async () => {
+      // Off means off: a page that dims nothing is what was asked for, and
+      // the renderer is told that rather than being told a reading it should
+      // then ignore.
+      const { controller, renderer } = createController(true);
+      await controller.loadNewExercise();
+      expect(renderer.reading).not.toBeNull();
+
+      controller.updateSettings({ dimUnplayed: false });
+
+      expect(renderer.reading).toBeNull();
+    });
+
+    it('starts saying it again when it is turned back on', async () => {
+      const { controller, renderer } = createController(true);
+      await controller.loadNewExercise();
+      controller.updateSettings({ dimUnplayed: false, handStaff: 1 });
+
+      controller.updateSettings({ dimUnplayed: true });
+
+      expect(renderer.reading?.staves).toEqual([1]);
+    });
+  });
+
   describe('starting by playing the opening', () => {
     /** The notes the run would ask for first. */
     function opening(controller: PracticeController): readonly number[] {

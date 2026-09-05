@@ -3,6 +3,7 @@ import type {
   IHandSwitches,
   IPassageMarkers,
   IScorePages,
+  ScoreReading,
   ScorePageState,
   IPlayedNoteOverlay,
   IScoreFade,
@@ -97,6 +98,13 @@ export class FakeScoreRenderer
   clearFaded(): void {
     this.faded.clear();
     this.clearFadedCount += 1;
+  }
+
+  /** What the run is about to ask for, as the view last said. */
+  reading: ScoreReading | null = null;
+
+  dimUnplayed(reading: ScoreReading | null): void {
+    this.reading = reading;
   }
 
   setZoom(zoom: number): void {

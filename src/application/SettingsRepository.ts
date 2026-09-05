@@ -268,6 +268,7 @@ export function decodePracticeSettings(
     readAheadSteps: readReadAhead(value['readAheadSteps'], value['fadePassedNotes']),
     zoom: readNumber(value['zoom'], 0.3, 3),
     immediateStart: readBoolean(value['immediateStart']),
+    dimUnplayed: readBoolean(value['dimUnplayed']),
   } as PracticeSettings);
 }
 
@@ -305,6 +306,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     readAheadSteps: settings.readAheadSteps,
     zoom: settings.zoom,
     immediateStart: settings.immediateStart,
+    dimUnplayed: settings.dimUnplayed,
   };
 }
 

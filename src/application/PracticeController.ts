@@ -300,6 +300,16 @@ export interface PracticeSettings {
    * begin, and reaching back, is most of what starting costs.
    */
   readonly immediateStart: boolean;
+  /**
+   * Dim the music this run will not ask for.
+   *
+   * The hand that is not being read, and the bars outside the chosen
+   * passage. Both are still worth having on the page - the neighbours say
+   * what the passage is a passage *of*, and the other hand says what this one
+   * is playing against - so they are dimmed rather than taken away, and less
+   * than a note already played, which goes altogether.
+   */
+  readonly dimUnplayed: boolean;
 }
 
 export interface ExerciseLoadedEvent {
@@ -453,6 +463,7 @@ export class PracticeController {
       readAheadSteps: null,
       zoom: 0.85,
       immediateStart: false,
+      dimUnplayed: true,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();
@@ -599,6 +610,17 @@ export class PracticeController {
       // front of the reader should be clean again now.
       this.deps.overlay.clearPlayed();
       this.heldMarks = [];
+    }
+
+    // Any of these changes what the run will ask for, or whether saying so
+    // is wanted at all.
+    if (
+      changes.dimUnplayed !== undefined ||
+      changes.handStaff !== undefined ||
+      changes.rangeFromBar !== undefined ||
+      changes.rangeToBar !== undefined
+    ) {
+      this.applyDimming();
     }
 
     if (changes.readAheadSteps !== undefined) {
@@ -957,6 +979,7 @@ export class PracticeController {
     this.applyCursorVisibility();
 
     this.watchForTheOpening();
+    this.applyDimming();
     this.emitter.emit('exerciseLoaded', { exercise, timeline: this.timeline, musicXml });
     return exercise;
   }
@@ -1557,6 +1580,27 @@ export class PracticeController {
       return;
     }
     this.fadeThrough(stepIndex + lead - 1);
+  }
+
+  /**
+   * Says what the run is about to ask for, so the rest can be dimmed.
+   *
+   * Here rather than in the view because the two halves of the answer are
+   * both the controller's: which hand is being read, and which steps the
+   * passage comes to. The view knows the setting; this knows the music.
+   */
+  private applyDimming(): void {
+    if (!this.currentSettings.dimUnplayed || this.timeline === null) {
+      this.deps.fade.dimUnplayed(null);
+      return;
+    }
+    const passage = this.passageSteps;
+    const hand = this.currentSettings.handStaff;
+    this.deps.fade.dimUnplayed({
+      staves: hand === null ? [] : [hand],
+      from: passage.from,
+      to: passage.to,
+    });
   }
 
   /** Puts the veil back where the current setting says it belongs. */

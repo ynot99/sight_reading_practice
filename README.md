@@ -143,7 +143,17 @@ for nothing is not a thing anyone means, and a switch that silently refused
 would be a switch that sometimes does nothing with no way of saying why.
 
 It governs both listening and practice, because they are the same question
-asked twice: which hand am I working on. Practising one hand is not practising half
+asked twice: which hand am I working on.
+
+**Dim what this run will not ask for** answers it on the page as well. The
+hand that is not being read and the bars outside the chosen passage are the
+same thing from the reader's side: notation still worth having there — the
+neighbours say what the passage is a passage *of*, and the other hand says
+what this one is playing against — but not what is being asked for now. So
+they are dimmed rather than taken away, and nothing like as far as a note
+already played, which goes altogether: one is behind you and finished with,
+the other is context and has to stay readable. It is a setting, and off means
+the page says nothing about it at all. Practising one hand is not practising half
 the music — the page still shows both staves and the cursor still visits every
 step; only what is demanded narrows. In Wait mode the run walks past the steps
 that hand has nothing in — a held right hand while the left keeps moving is no

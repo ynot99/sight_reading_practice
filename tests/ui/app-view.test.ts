@@ -1127,6 +1127,24 @@ describe('AppView', () => {
       expect(element('focus-immediate').getAttribute('aria-pressed')).toBe('false');
     });
 
+    it('lets the reader turn the dimming off, and back on', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      expect(rig.renderer.reading).not.toBeNull();
+
+      const box = element<HTMLInputElement>('dim-unplayed');
+      expect(box.checked).toBe(true);
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+
+      expect(rig.runtime.controller.settings.dimUnplayed).toBe(false);
+      expect(rig.renderer.reading).toBeNull();
+
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      expect(rig.renderer.reading).not.toBeNull();
+    });
+
     describe('the hand switches beside the staves', () => {
       it('turns off the hand whose staff was pressed', async () => {
         // The switch sits on the staff it governs, so there is no icon to

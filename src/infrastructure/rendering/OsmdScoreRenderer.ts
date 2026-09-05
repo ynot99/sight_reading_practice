@@ -8,6 +8,7 @@ import type {
   IScoreCursor,
   IScoreFade,
   IScoreRenderer,
+  ScoreReading,
   IScoreZoom,
   OverlayContext,
   PassageEnd,
@@ -357,6 +358,8 @@ interface MeasureNotes {
 
 /** Class that dims the notes of a step already played. */
 const FADED_CLASS = 'note--passed';
+/** What the run will not ask for: another hand, or outside the passage. */
+const UNPLAYED_CLASS = 'note--unplayed';
 
 /** The part of the engraver's graphical note this adapter reads. */
 interface DrawnNote {
@@ -461,6 +464,10 @@ export class OsmdScoreRenderer
   /** Where each timeline step sits, and the notes drawn there. */
   private stepX = new Map<number, number>();
   private stepElements = new Map<number, SVGGElement[]>();
+  /** Which staff each drawn note belongs to; see {@link paintDimmed}. */
+  private elementStaff = new WeakMap<SVGGElement, number>();
+  /** What the run is about to ask for, or `null` to dim nothing. */
+  private reading: ScoreReading | null = null;
   /** Which sheet each step was drawn on; every page is an SVG of its own. */
   private stepPage = new Map<number, number>();
   /**
@@ -611,6 +618,7 @@ export class OsmdScoreRenderer
     this.showOnlyCurrentPage();
     this.paintOverlay();
     this.paintFaded();
+    this.paintDimmed();
     this.paintPassage();
     this.paintHands();
     this.watchContainer();
@@ -677,6 +685,7 @@ export class OsmdScoreRenderer
     this.turnToPage(this.pageAt);
     this.paintOverlay();
     this.paintFaded();
+    this.paintDimmed();
     this.paintPassage();
     this.paintHands();
   }
@@ -1631,6 +1640,35 @@ export class OsmdScoreRenderer
   }
 
   /** Re-dims everything already passed, after the page has been redrawn. */
+  dimUnplayed(reading: ScoreReading | null): void {
+    this.reading = reading;
+    this.paintDimmed();
+  }
+
+  /**
+   * Dims every note this run will not ask for, and undims the rest.
+   *
+   * Walked over the steps rather than kept as a set of elements, because the
+   * answer changes whenever the passage or the hand does and the drawing is
+   * thrown away whenever the music is engraved again. It is one pass over
+   * what is on the page, which is what the fade already costs.
+   */
+  private paintDimmed(): void {
+    const reading = this.reading;
+    for (const [stepIndex, elements] of this.stepElements) {
+      const outside = reading !== null && (stepIndex < reading.from || stepIndex > reading.to);
+      for (const element of elements) {
+        const staff = this.elementStaff.get(element);
+        const otherHand =
+          reading !== null &&
+          reading.staves.length > 0 &&
+          staff !== undefined &&
+          !reading.staves.includes(staff);
+        element.classList.toggle(UNPLAYED_CLASS, outside || otherHand);
+      }
+    }
+  }
+
   private paintFaded(): void {
     for (const stepIndex of this.faded) {
       for (const element of this.stepElements.get(stepIndex) ?? []) {
@@ -2505,6 +2543,11 @@ export class OsmdScoreRenderer
           const bucket = this.stepElements.get(stepIndex) ?? [];
           bucket.push(drawn);
           this.stepElements.set(stepIndex, bucket);
+          // Which hand drew it, for dimming the one that is not being read.
+          const staff = note.sourceNote?.parentStaffEntry?.parentStaff?.id;
+          if (staff !== undefined) {
+            this.elementStaff.set(drawn, staff);
+          }
           // Which sheet the engraver put it on, read off the drawing rather
           // than worked out: a step's page is the page its notes are on.
           this.stepPage.set(stepIndex, this.pageOfElement(drawn));

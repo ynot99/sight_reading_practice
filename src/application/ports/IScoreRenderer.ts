@@ -257,6 +257,29 @@ export interface IPlayedNoteOverlay {
 export interface IScoreFade {
   fadePassed(stepIndex: number): void;
   clearFaded(): void;
+  /**
+   * Dims the music this run will not ask for.
+   *
+   * A hand that is not being read and the bars outside the chosen passage are
+   * the same thing from the reader's side: notation still on the page, and
+   * still worth having there - the passage's neighbours say what it is a
+   * passage *of*, and the other hand says what this one is playing against -
+   * but not what is being asked for now. Dimmed rather than removed, and
+   * dimmed less than a note already played, which goes altogether: this is
+   * context, not litter.
+   *
+   * `null` when nothing should be dimmed, which is the reader's own choice.
+   */
+  dimUnplayed(reading: ScoreReading | null): void;
+}
+
+/** What a run is about to ask for, as the page can see it. */
+export interface ScoreReading {
+  /** Staff numbers being read; empty means all of them. */
+  readonly staves: readonly number[];
+  /** The stretch being read, as timeline step indices. */
+  readonly from: number;
+  readonly to: number;
 }
 
 /**

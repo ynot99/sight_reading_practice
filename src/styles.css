@@ -1419,6 +1419,20 @@ select {
   transition: opacity 400ms ease-out;
 }
 
+/*
+ * Music the run will not ask for: the other hand, the bars outside the
+ * passage.
+ *
+ * Dimmed and not removed, and nothing like as far as a note already played
+ * goes. A note behind the reader is finished with; this is context - the
+ * neighbours say what the passage is a passage *of*, and the other hand says
+ * what this one is playing against - so it has to stay readable. Faint enough
+ * that the eye knows at a glance which staff it is being asked for.
+ */
+.note--unplayed {
+  opacity: 0.32;
+}
+
 /* ---- What you played --------------------------------------------------- */
 
 /*

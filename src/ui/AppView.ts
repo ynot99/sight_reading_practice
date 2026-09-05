@@ -633,6 +633,7 @@ export class AppView {
     focusHealthFill: HTMLElement;
     survival: HTMLInputElement;
     immediateStart: HTMLInputElement;
+    dimUnplayed: HTMLInputElement;
     focusDrawer: HTMLElement;
     focusRow: HTMLElement;
     focusSpeed: HTMLElement;
@@ -784,6 +785,7 @@ export class AppView {
       focusHealthFill: requireElement(doc, 'focus-health-fill'),
       survival: requireElement(doc, 'survival'),
       immediateStart: requireElement(doc, 'immediate-start'),
+      dimUnplayed: requireElement(doc, 'dim-unplayed'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
       focusRow: requireElement(doc, 'focus-row'),
       focusSpeed: requireElement(doc, 'focus-speed'),
@@ -1597,6 +1599,10 @@ export class AppView {
     this.listen(this.el.immediateStart, 'change', () => {
       controller.updateSettings({ immediateStart: this.el.immediateStart.checked });
       this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.dimUnplayed, 'change', () => {
+      controller.updateSettings({ dimUnplayed: this.el.dimUnplayed.checked });
     });
 
     this.listen(this.el.pitchClass, 'change', () => {
@@ -2882,6 +2888,7 @@ export class AppView {
     this.el.survival.checked = settings.survival;
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.el.immediateStart.checked = settings.immediateStart;
+    this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.el.focusImmediate.setAttribute('aria-pressed', String(settings.immediateStart));
     this.describeMetronomeButton(settings.clickWhen, settings.clickPattern);
     this.renderHealth(this.runtime.controller.health);

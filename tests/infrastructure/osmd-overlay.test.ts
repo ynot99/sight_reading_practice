@@ -204,6 +204,60 @@ describe('played notes drawn over a real engraving', () => {
     expect(noteheads(container)).toHaveLength(0);
   });
 
+  describe('dimming what the run will not ask for', () => {
+    /** Every note group that is currently dimmed as unplayed. */
+    function dimmed(): Element[] {
+      return [...container.querySelectorAll('.note--unplayed.vf-stavenote')];
+    }
+
+    it('dims nothing until it is told what is being read', () => {
+      expect(dimmed()).toHaveLength(0);
+    });
+
+    it('dims the hand that is not being read', () => {
+      // The fixture is C4 over C3, so one note a step on each staff.
+      renderer.dimUnplayed({ staves: [1], from: 0, to: 99 });
+      const withoutTheLeft = new Set(dimmed());
+      renderer.dimUnplayed({ staves: [2], from: 0, to: 99 });
+      const withoutTheRight = new Set(dimmed());
+
+      // Reading one hand dims exactly the other, so the two answers share
+      // nothing and between them account for every note on the page.
+      expect(withoutTheLeft.size).toBeGreaterThan(0);
+      expect(withoutTheRight.size).toBeGreaterThan(0);
+      expect([...withoutTheLeft].filter((note) => withoutTheRight.has(note))).toEqual([]);
+      expect(withoutTheLeft.size + withoutTheRight.size).toBe(
+        container.querySelectorAll('.vf-stavenote').length,
+      );
+    });
+
+    it('dims the steps outside the passage', () => {
+      renderer.dimUnplayed({ staves: [], from: 0, to: 0 });
+
+      // Step 0 is left alone on both hands; everything after it is dimmed.
+      expect(dimmed().length).toBeGreaterThan(0);
+    });
+
+    it('gives it all back when there is nothing to dim', () => {
+      renderer.dimUnplayed({ staves: [1], from: 0, to: 0 });
+      expect(dimmed().length).toBeGreaterThan(0);
+
+      renderer.dimUnplayed(null);
+
+      expect(dimmed()).toHaveLength(0);
+    });
+
+    it('says nothing about a note already played, which is a different veil', () => {
+      // One is "behind you" and goes altogether; the other is "not yours this
+      // time" and stays readable. A note can be both.
+      renderer.dimUnplayed({ staves: [1], from: 0, to: 99 });
+      renderer.fadePassed(0);
+
+      expect(container.querySelectorAll('.note--passed').length).toBeGreaterThan(0);
+      expect(dimmed().length).toBeGreaterThan(0);
+    });
+  });
+
   it('dims the notes of a step once it is passed, and only those', () => {
     renderer.fadePassed(0);
 

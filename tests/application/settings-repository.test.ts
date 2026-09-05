@@ -43,7 +43,7 @@ const SETTINGS: PracticeSettings = {
   pitchClassOnly: true,
   rhythmOnly: true,
   previewSeconds: 8,
-  showCursor: false,
+  cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false,
   strictTiming: true,
   pagedScore: true,
   playedNotes: 'at-end',
@@ -69,7 +69,7 @@ describe('practice settings codec', () => {
     expect(restored.clickWhen).toBe('cycle-2');
     expect(restored.matchToleranceMs).toBe(180);
     expect(restored.pitchClassOnly).toBe(true);
-    expect(restored.showCursor).toBe(false);
+    expect(restored.cursorWhileRunning).toBe(false);
     expect(restored.strictTiming).toBe(true);
     expect(restored.clickWhen).toBe('cycle-2');
   });

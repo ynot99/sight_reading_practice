@@ -802,7 +802,7 @@ describe('what you played, drawn over the score', () => {
     // unstuck - only that he did. The marker is standing on the place.
     const { controller, renderer, midi } = createController(true, undefined, {
       playedNotes: 'hidden',
-      showCursor: false,
+      cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false,
     });
     await controller.loadNewExercise();
     const session = controller.start();
@@ -821,7 +821,7 @@ describe('what you played, drawn over the score', () => {
 
   it('forgets the trouble when the music moves on', async () => {
     const { controller, renderer, midi } = createController(true, undefined, {
-      showCursor: false,
+      cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false,
     });
     await controller.loadNewExercise();
     const session = controller.start();
@@ -844,7 +844,7 @@ describe('what you played, drawn over the score', () => {
     // what is left of it is the report and the marks. Both ways a run can end
     // come through the same place, so stopping one clears it too.
     const { controller, renderer, midi } = createController(true, undefined, {
-      showCursor: false,
+      cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false,
     });
     await controller.openScore(twoBarExercise());
     // A passage of one bar, so that the step he misses is the *last* one the
@@ -893,7 +893,7 @@ describe('what you played, drawn over the score', () => {
     // marker would have it blink back at them on every slip.
     const { controller, renderer, midi, metronome } = createController(true, undefined, {
       modeId: FLOW_MODE_ID,
-      showCursor: false,
+      cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false,
     });
     await controller.loadNewExercise();
     const session = controller.start();
@@ -1286,7 +1286,7 @@ describe('note size', () => {
 describe('cursor visibility', () => {
   it('shows the cursor by default', async () => {
     const { controller, renderer } = createController();
-    expect(controller.settings.showCursor).toBe(true);
+    expect(controller.settings.cursorWhileRunning).toBe(true);
 
     await controller.loadNewExercise();
 
@@ -1297,14 +1297,14 @@ describe('cursor visibility', () => {
     const { controller, renderer } = createController();
     await controller.loadNewExercise();
 
-    controller.updateSettings({ showCursor: false });
+    controller.updateSettings({ cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false });
 
     expect(renderer.cursor.visible).toBe(false);
   });
 
   it('keeps it hidden across a new exercise', async () => {
     const { controller, renderer } = createController();
-    controller.updateSettings({ showCursor: false });
+    controller.updateSettings({ cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false });
 
     await controller.loadNewExercise();
     await controller.loadNewExercise();
@@ -1336,7 +1336,7 @@ describe('cursor visibility', () => {
 
   it('still follows the music while hidden', async () => {
     const { controller, renderer, midi } = createController(true);
-    controller.updateSettings({ showCursor: false });
+    controller.updateSettings({ cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false });
     await controller.loadNewExercise();
 
     const session = controller.start();
@@ -1353,10 +1353,17 @@ describe('cursor visibility', () => {
     expect(renderer.cursor.visible).toBe(false);
   });
 
-  it('shows it for a playback and then puts it back as it was', async () => {
+  it('answers a playback with the answer given for playbacks', async () => {
+    // His own case, said in his words: never while he plays, sometimes while
+    // the machine plays it back.
     const { controller, renderer } = createController(true);
-    controller.updateSettings({ showCursor: false });
+    controller.updateSettings({
+      cursorWhileRunning: false,
+      cursorWhileListening: true,
+      cursorAtRest: false,
+    });
     await controller.loadNewExercise();
+    expect(renderer.cursor.visible).toBe(false);
 
     controller.listen();
     // Following along is most of the value of hearing it played.
@@ -1364,14 +1371,46 @@ describe('cursor visibility', () => {
 
     controller.stopListening();
 
-    // A performance is not a decision about the reader's own settings; one
-    // listen must not undo the aid they turned off.
+    // A performance is not a decision about the rest of the page: it must not
+    // undo the aid the reader turned off everywhere else.
     expect(renderer.cursor.visible).toBe(false);
+  });
+
+  it('takes the marker off a playback when that is what was asked', async () => {
+    // Which the machine used to overrule in two places: "hide the marker" was
+    // a setting a playback simply ignored.
+    const { controller, renderer } = createController(true);
+    controller.updateSettings({ cursorWhileListening: false, cursorAtRest: true });
+    await controller.loadNewExercise();
+    expect(renderer.cursor.visible).toBe(true);
+
+    controller.listen();
+
+    expect(renderer.cursor.visible).toBe(false);
+  });
+
+  it('takes it away for a run and gives it back at the end', async () => {
+    // The other half of the same wish, and what the third answer is for: no
+    // marker while reading, and one afterwards to see where it stopped.
+    const { controller, renderer } = createController(true);
+    controller.updateSettings({ cursorWhileRunning: false, cursorAtRest: true });
+    await controller.loadNewExercise();
+    expect(renderer.cursor.visible).toBe(true);
+
+    controller.start();
+    expect(renderer.cursor.visible).toBe(false);
+
+    controller.stop();
+    expect(renderer.cursor.visible).toBe(true);
   });
 
   it('keeps it through a re-engraving while the exercise plays itself', async () => {
     const { controller, renderer } = createController(true);
-    controller.updateSettings({ showCursor: false });
+    controller.updateSettings({
+      cursorWhileRunning: false,
+      cursorWhileListening: true,
+      cursorAtRest: false,
+    });
     await controller.loadNewExercise();
     controller.listen();
     expect(renderer.cursor.visible).toBe(true);
@@ -1414,7 +1453,7 @@ describe('cursor visibility', () => {
   it('leaves the cursor alone when there was nothing to stop', async () => {
     const { controller, renderer } = createController(true);
     await controller.loadNewExercise();
-    controller.updateSettings({ showCursor: false });
+    controller.updateSettings({ cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false });
 
     controller.stopListening();
 
@@ -1424,9 +1463,9 @@ describe('cursor visibility', () => {
   it('brings it back when the setting is turned on again', async () => {
     const { controller, renderer } = createController();
     await controller.loadNewExercise();
-    controller.updateSettings({ showCursor: false });
+    controller.updateSettings({ cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false });
 
-    controller.updateSettings({ showCursor: true });
+    controller.updateSettings({ cursorWhileRunning: true, cursorWhileListening: true, cursorAtRest: true });
 
     expect(renderer.cursor.visible).toBe(true);
   });
@@ -1466,7 +1505,7 @@ describe('cursor visibility', () => {
   it('leaves visibility alone when other settings change', async () => {
     const { controller, renderer } = createController();
     await controller.loadNewExercise();
-    controller.updateSettings({ showCursor: false });
+    controller.updateSettings({ cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false });
 
     controller.setTempoBpm(90);
 

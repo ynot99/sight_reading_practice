@@ -2358,11 +2358,11 @@ describe('AppView', () => {
     await view.initialize();
     expect(renderer.cursor.visible).toBe(true);
 
-    const toggle = element<HTMLInputElement>('show-cursor');
+    const toggle = element<HTMLInputElement>('cursor-rest');
     toggle.checked = false;
     toggle.dispatchEvent(new Event('change'));
 
-    expect(runtime.controller.settings.showCursor).toBe(false);
+    expect(runtime.controller.settings.cursorAtRest).toBe(false);
     expect(renderer.cursor.visible).toBe(false);
 
     toggle.checked = true;
@@ -2811,7 +2811,7 @@ describe('AppView', () => {
       const tempo = element<HTMLInputElement>('tempo');
       tempo.value = '128';
       tempo.dispatchEvent(new Event('change'));
-      const cursor = element<HTMLInputElement>('show-cursor');
+      const cursor = element<HTMLInputElement>('cursor-rest');
       cursor.checked = false;
       cursor.dispatchEvent(new Event('change'));
       await Promise.resolve();
@@ -2821,9 +2821,9 @@ describe('AppView', () => {
       await second.view.initialize();
 
       expect(second.runtime.controller.tempoBpm).toBe(128);
-      expect(second.runtime.controller.settings.showCursor).toBe(false);
+      expect(second.runtime.controller.settings.cursorAtRest).toBe(false);
       expect(element<HTMLInputElement>('tempo').value).toBe('128');
-      expect(element<HTMLInputElement>('show-cursor').checked).toBe(false);
+      expect(element<HTMLInputElement>('cursor-rest').checked).toBe(false);
     });
 
     it('chooses when the piano samples are fetched, and remembers it', async () => {
@@ -3296,6 +3296,29 @@ describe('AppView', () => {
       expect(runtime.controller.settings.modeId).toBe(new WaitMode().id);
     });
 
+    it('answers for whatever is happening when it is pressed', async () => {
+      // His case: never while he plays, sometimes while the machine plays it
+      // back. One flag could not hold that, so the button in the row moves
+      // the one of the three the reader is looking at.
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      const toggle = element<HTMLButtonElement>('focus-cursor');
+
+      element<HTMLButtonElement>('focus-play').click();
+      toggle.click();
+
+      expect(runtime.controller.settings.cursorWhileRunning).toBe(false);
+      expect(runtime.controller.settings.cursorAtRest).toBe(true);
+      expect(renderer.cursor.visible).toBe(false);
+      expect(element<HTMLInputElement>('cursor-running').checked).toBe(false);
+
+      // And the marker is back the moment the run is over, that being a
+      // different question with a different answer.
+      element<HTMLButtonElement>('focus-stop').click();
+      expect(renderer.cursor.visible).toBe(true);
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    });
+
     it('shows and hides the cursor from the drawer', async () => {
       const { view, runtime, renderer } = createRig();
       await view.initialize();
@@ -3304,11 +3327,11 @@ describe('AppView', () => {
 
       toggle.click();
 
-      expect(runtime.controller.settings.showCursor).toBe(false);
+      expect(runtime.controller.settings.cursorAtRest).toBe(false);
       expect(renderer.cursor.visible).toBe(false);
       expect(toggle.getAttribute('aria-pressed')).toBe('false');
       // The checkbox at the desk is the same value seen elsewhere.
-      expect(element<HTMLInputElement>('show-cursor').checked).toBe(false);
+      expect(element<HTMLInputElement>('cursor-rest').checked).toBe(false);
 
       toggle.click();
       expect(renderer.cursor.visible).toBe(true);

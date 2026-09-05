@@ -409,7 +409,16 @@
         </div>
 
         <div class="control-group control-group--checks">
-          <label><input id="show-cursor" type="checkbox" checked /> Show cursor</label>
+          <!--
+            Three answers and not one. A reader may want no marker at all
+            while *they* play - it is a crutch, and reading without it is the
+            point - and still want one while the machine plays the passage
+            back, where following along is most of the value. The third is
+            how they see where they stopped.
+          -->
+          <label><input id="cursor-running" type="checkbox" checked /> Cursor while I play</label>
+          <label><input id="cursor-listening" type="checkbox" checked /> Cursor while it plays back</label>
+          <label><input id="cursor-rest" type="checkbox" checked /> Cursor when nothing is playing</label>
           <label><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
           <label><input id="rhythm-only" type="checkbox" /> Rhythm only: any note counts</label>
           <label><input id="survival" type="checkbox" /> Survival: keep the bar up</label>

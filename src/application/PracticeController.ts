@@ -229,7 +229,19 @@ export interface PracticeSettings {
    * Turning it off is a practice aid in its own right: it forces you to keep
    * your place by reading rather than by following the highlight.
    */
-  readonly showCursor: boolean;
+  /**
+   * Whether the marker is drawn, asked three times over.
+   *
+   * One flag could not hold this. A reader may want no marker at all while
+   * *they* are playing - it is a crutch, and reading without it is the point
+   * - and still want one while the machine plays the passage back, where
+   * following along is most of the value. And a third answer for when
+   * nothing is happening at all, which is how they see where they stopped.
+   * The three are independent because the reader's reasons for them are.
+   */
+  readonly cursorWhileRunning: boolean;
+  readonly cursorWhileListening: boolean;
+  readonly cursorAtRest: boolean;
   /**
    * Whether missing the beat makes a right note count as a wrong one.
    *
@@ -462,7 +474,9 @@ export class PracticeController {
       pitchClassOnly: false,
       rhythmOnly: false,
       previewSeconds: 0,
-      showCursor: true,
+      cursorWhileRunning: true,
+      cursorWhileListening: true,
+      cursorAtRest: true,
       strictTiming: false,
       pagedScore: false,
       playedNotes: 'live',
@@ -580,7 +594,11 @@ export class PracticeController {
       this.currentSettings = next;
     }
 
-    if (changes.showCursor !== undefined) {
+    if (
+      changes.cursorWhileRunning !== undefined ||
+      changes.cursorWhileListening !== undefined ||
+      changes.cursorAtRest !== undefined
+    ) {
       this.applyCursorVisibility();
     }
 
@@ -1046,10 +1064,6 @@ export class PracticeController {
     }
     this.disposeSession();
     const player = this.ensurePlayer();
-    // Following along is most of the value of hearing it, so the marker is
-    // shown whatever the reader set - and put back the way they had it when
-    // the performance ends.
-    this.deps.cursor.show();
     const passage = this.passageSteps;
     player.start(timeline, {
       staffNumber: this.currentSettings.handStaff,
@@ -1071,6 +1085,12 @@ export class PracticeController {
       // bar the loop.
       loopFromIndex: passage.from,
     });
+    // After the performance has begun, not before: what the marker is for
+    // now is whatever the reader asked for *a playback*, and until the player
+    // is going there is no playback to ask about. Shown here regardless of
+    // what they had said, this was one of the two places that made "hide the
+    // marker" a setting the machine overruled.
+    this.applyCursorVisibility();
     // Something is happening to the music now, so a press is a press and not
     // the beginning of a run.
     this.watchForTheOpening();
@@ -1542,8 +1562,10 @@ export class PracticeController {
           this.cursorToStart();
         }
         // A run that has ended leaves the music with nothing happening to it,
-        // so the opening is worth listening for again.
+        // so the opening is worth listening for again - and the marker is
+        // answered for by a different one of the reader's three answers.
         this.watchForTheOpening();
+        this.applyCursorVisibility();
       }),
     );
 
@@ -1887,21 +1909,56 @@ export class PracticeController {
     this.applyCursorVisibility();
   }
 
+  /**
+   * Which of the three answers is the one being asked now.
+   *
+   * A held playback is still a playback and a paused run is still a run: the
+   * reader means to pick both up, and what the marker is for does not change
+   * while they are held.
+   */
+  private wantsCursorNow(): boolean {
+    if (this.isListening || this.isListeningPaused) {
+      return this.currentSettings.cursorWhileListening;
+    }
+    const status = this.currentSession?.status;
+    const running = status === 'running' || status === 'counting-in' || status === 'paused';
+    return running ? this.currentSettings.cursorWhileRunning : this.currentSettings.cursorAtRest;
+  }
+
+  /** Whether the marker is on show for whatever is happening now. */
+  get cursorShownNow(): boolean {
+    return this.wantsCursorNow();
+  }
+
+  /**
+   * Turns the marker on or off for whatever is happening now.
+   *
+   * The button beside the music acts on the state the reader is in, the way
+   * every other button in that row does: pressed during a run it answers for
+   * runs, during a playback for playbacks. Which of the three it moved is
+   * not a thing the page has to explain, because it is the one the reader
+   * was looking at when they pressed it.
+   */
+  toggleCursorNow(): PracticeSettings {
+    const wanted = !this.wantsCursorNow();
+    if (this.isListening || this.isListeningPaused) {
+      return this.updateSettings({ cursorWhileListening: wanted });
+    }
+    const status = this.currentSession?.status;
+    const running = status === 'running' || status === 'counting-in' || status === 'paused';
+    return this.updateSettings(
+      running ? { cursorWhileRunning: wanted } : { cursorAtRest: wanted },
+    );
+  }
+
   private applyCursorVisibility(): void {
-    // A held performance keeps its marker: taking it away would lose the one
-    // thing on the page saying where the music will pick up.
-    //
-    // And so does a step that keeps going wrong. A reader practising with
-    // every colour off is reading blind on purpose, but blind they cannot
-    // tell *where* it went wrong - only that it did. The marker comes back
-    // for exactly as long as there is something to say, and it says it by
-    // reddening rather than by adding anything to the page.
-    if (
-      this.missteps > 0 ||
-      this.currentSettings.showCursor ||
-      this.isListening ||
-      this.isListeningPaused
-    ) {
+    // A step that keeps going wrong shows the marker whatever the reader
+    // asked for. Practising with every colour off is reading blind on
+    // purpose, but blind they cannot tell *where* it went wrong - only that
+    // it did. The marker comes back for exactly as long as there is
+    // something to say, and it says it by reddening rather than by adding
+    // anything to the page.
+    if (this.missteps > 0 || this.wantsCursorNow()) {
       this.deps.cursor.show();
     } else {
       this.deps.cursor.hide();

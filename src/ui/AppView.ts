@@ -747,7 +747,9 @@ export class AppView {
     showPlayedDescription: HTMLElement;
     readAhead: HTMLSelectElement;
     readAheadDescription: HTMLElement;
-    showCursor: HTMLInputElement;
+    cursorRunning: HTMLInputElement;
+    cursorListening: HTMLInputElement;
+    cursorRest: HTMLInputElement;
     strictTiming: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
     sampleLoadingHint: HTMLElement;
@@ -901,7 +903,9 @@ export class AppView {
       showPlayedDescription: requireElement(doc, 'show-played-description'),
       readAhead: requireElement(doc, 'read-ahead'),
       readAheadDescription: requireElement(doc, 'read-ahead-description'),
-      showCursor: requireElement(doc, 'show-cursor'),
+      cursorRunning: requireElement(doc, 'cursor-running'),
+      cursorListening: requireElement(doc, 'cursor-listening'),
+      cursorRest: requireElement(doc, 'cursor-rest'),
       strictTiming: requireElement(doc, 'strict-timing'),
       sampleLoading: requireElement(doc, 'sample-loading'),
       sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
@@ -1319,7 +1323,22 @@ export class AppView {
     this.runtime.renderer.showNextPagePreview(controller.settings.previewNextPage && moving);
   }
 
+  /**
+   * What the marker button is showing, for the state the reader is in.
+   *
+   * Said here rather than only when a setting changes, because *which* of the
+   * three answers is being shown changes when the music does - the run ends,
+   * and the button is suddenly reporting a different one.
+   */
+  private describeCursorButton(): void {
+    this.el.focusCursor.setAttribute(
+      'aria-pressed',
+      String(this.runtime.controller.cursorShownNow),
+    );
+  }
+
   private describeListening(): void {
+    this.describeCursorButton();
     this.applyPreview();
     const listening = this.runtime.controller.isListening;
     const held = this.runtime.controller.isListeningPaused;
@@ -1606,8 +1625,18 @@ export class AppView {
       this.el.readAheadDescription.textContent = READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';
     });
 
-    this.listen(this.el.showCursor, 'change', () => {
-      controller.updateSettings({ showCursor: this.el.showCursor.checked });
+    this.listen(this.el.cursorListening, 'change', () => {
+      controller.updateSettings({ cursorWhileListening: this.el.cursorListening.checked });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.cursorRest, 'change', () => {
+      controller.updateSettings({ cursorAtRest: this.el.cursorRest.checked });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.cursorRunning, 'change', () => {
+      controller.updateSettings({ cursorWhileRunning: this.el.cursorRunning.checked });
     });
 
     this.listen(this.el.strictTiming, 'change', () => {
@@ -1819,7 +1848,10 @@ export class AppView {
     });
 
     this.listen(this.el.focusCursor, 'click', () => {
-      controller.updateSettings({ showCursor: !controller.settings.showCursor });
+      // For whatever is happening now, which is what the reader was looking
+      // at when they pressed it. The three answers live in the sheet; this
+      // button moves the one in front of them.
+      controller.toggleCursorNow();
       this.syncControlsFromSettings();
     });
 
@@ -2960,7 +2992,9 @@ export class AppView {
     this.el.readAhead.value = readAheadValue(settings.readAheadSteps);
     this.el.readAheadDescription.textContent =
       READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';
-    this.el.showCursor.checked = settings.showCursor;
+    this.el.cursorRunning.checked = settings.cursorWhileRunning;
+    this.el.cursorListening.checked = settings.cursorWhileListening;
+    this.el.cursorRest.checked = settings.cursorAtRest;
     this.el.strictTiming.checked = settings.strictTiming;
     this.el.focusPages.setAttribute('aria-pressed', String(settings.pagedScore));
     this.runtime.renderer.setPaged(settings.pagedScore);
@@ -2968,7 +3002,7 @@ export class AppView {
     // themselves are the same either way, and what was measured about a press
     // does not change because the reader wants stricter colours.
     this.el.score.dataset['strict'] = String(settings.strictTiming);
-    this.el.focusCursor.setAttribute('aria-pressed', String(settings.showCursor));
+    this.describeCursorButton();
     this.el.focusMarks.dataset['marks'] = settings.playedNotes;
     this.el.focusMarks.title = MARKS_TITLES[settings.playedNotes];
     this.el.focusMarks.setAttribute('aria-label', MARKS_TITLES[settings.playedNotes]);
@@ -3685,6 +3719,7 @@ export class AppView {
   }
 
   private updateButtons(status: SessionStatus): void {
+    this.describeCursorButton();
     const running = status === 'running' || status === 'counting-in';
     const paused = status === 'paused';
     // What is being practised is settled before a run and not during one: a

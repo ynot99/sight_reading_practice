@@ -260,7 +260,13 @@ export function decodePracticeSettings(
     pitchClassOnly: readBoolean(value['pitchClassOnly']),
     rhythmOnly: readBoolean(value['rhythmOnly']),
     previewSeconds: readInteger(value['previewSeconds'], 0, 30),
-    showCursor: readBoolean(value['showCursor']),
+    // Three answers where there was one, and a visit that stored the one is
+    // read as having meant it for all three: the reader who had turned the
+    // marker off gets it off, and gets to say where they want it back.
+    cursorWhileRunning: readBoolean(value['cursorWhileRunning']) ?? readBoolean(value['showCursor']),
+    cursorWhileListening:
+      readBoolean(value['cursorWhileListening']) ?? readBoolean(value['showCursor']),
+    cursorAtRest: readBoolean(value['cursorAtRest']) ?? readBoolean(value['showCursor']),
     strictTiming: readBoolean(value['strictTiming']),
     pagedScore: readBoolean(value['pagedScore']),
     playedNotes: readPlayedNotes(value['playedNotes'], value['showPlayedNotes']),
@@ -299,7 +305,9 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     pitchClassOnly: settings.pitchClassOnly,
     rhythmOnly: settings.rhythmOnly,
     previewSeconds: settings.previewSeconds,
-    showCursor: settings.showCursor,
+    cursorWhileRunning: settings.cursorWhileRunning,
+    cursorWhileListening: settings.cursorWhileListening,
+    cursorAtRest: settings.cursorAtRest,
     strictTiming: settings.strictTiming,
     pagedScore: settings.pagedScore,
     playedNotes: settings.playedNotes,

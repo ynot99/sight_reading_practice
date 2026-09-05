@@ -277,12 +277,55 @@ function findScore(root: XmlNode): XmlNode {
   throw new DomainError('This does not look like a MusicXML score.');
 }
 
+/**
+ * What to call the piece.
+ *
+ * The two places a score is meant to say so, and then the place a score
+ * actually says so. Six of his thirty-three files carry neither
+ * `<work-title>` nor `<movement-title>`: they were laid out by hand and the
+ * name was typed onto the page as a credit, which is exactly what a credit
+ * is - words printed at a place on the first page. All six name themselves
+ * in one, and every one of them was being called "Imported score" - in the
+ * library, and now in the corner of all thirty pages of the piece.
+ */
 function readTitle(score: XmlNode): string {
   return (
     childText(child(score, 'work'), 'work-title') ??
     childText(score, 'movement-title') ??
+    creditTitle(score) ??
     'Imported score'
   );
+}
+
+/**
+ * The name a score prints on its own first page, if it prints one.
+ *
+ * The credit marked as the title where there is one, and otherwise the first
+ * credit on the first page - which is where an engraver puts the title, above
+ * the composer and the arranger. Only the first: the credits after it are
+ * those two, and calling a piece by its arranger is worse than calling it
+ * nothing. A credit on a later page is a running header or a page number and
+ * is never the name of the piece.
+ */
+function creditTitle(score: XmlNode): string | null {
+  const credits = childrenNamed(score, 'credit').filter((credit) => {
+    const page = attribute(credit, 'page');
+    return page === null || page === '1';
+  });
+  const marked = credits.find(
+    (credit) => childText(credit, 'credit-type')?.toLowerCase() === 'title',
+  );
+  const chosen = marked ?? credits[0];
+  return chosen === undefined ? null : creditWords(chosen);
+}
+
+/** One credit's words, its lines joined - a title may be typed on two. */
+function creditWords(credit: XmlNode): string | null {
+  const words = childrenNamed(credit, 'credit-words')
+    .map((line) => line.text.trim())
+    .filter((line) => line !== '');
+  const joined = words.join(' ').trim();
+  return joined === '' ? null : joined;
 }
 
 interface ScoreHeader {

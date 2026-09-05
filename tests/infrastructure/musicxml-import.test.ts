@@ -96,6 +96,82 @@ describe('files the reader cannot use', () => {
   });
 });
 
+describe('what to call a piece', () => {
+  /** A score whose header says nothing, with whatever credits are given. */
+  function credited(credits: string, header = ''): string {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  ${header}
+  ${credits}
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>24</divisions><key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef></attributes>
+      <note><rest/><duration>96</duration><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+  }
+
+  it('reads the name a score prints on its own first page', () => {
+    // Six of his thirty-three files carry neither a work title nor a movement
+    // title: they were laid out by hand and the name was typed onto the page
+    // as a credit. Every one of them was called "Imported score" - in the
+    // library, and in the corner of all thirty pages of the piece.
+    const { exercise } = importer.read(
+      credited('<credit page="1"><credit-words>Senbonzakura</credit-words></credit>'),
+    );
+
+    expect(exercise.title).toBe('Senbonzakura');
+  });
+
+  it('takes the credit that says it is the title, wherever it stands', () => {
+    const { exercise } = importer.read(
+      credited(
+        '<credit page="1"><credit-words>Kurousa P</credit-words></credit>' +
+          '<credit page="1"><credit-type>title</credit-type>' +
+          '<credit-words>One Summer Day</credit-words></credit>',
+      ),
+    );
+
+    expect(exercise.title).toBe('One Summer Day');
+  });
+
+  it('otherwise takes the first, which is where a title is printed', () => {
+    // Above the composer and the arranger. Calling a piece by its arranger is
+    // worse than calling it nothing.
+    const { exercise } = importer.read(
+      credited(
+        '<credit page="1"><credit-words>The Sixth Station</credit-words></credit>' +
+          '<credit page="1"><credit-words>Joe Hisaishi</credit-words></credit>',
+      ),
+    );
+
+    expect(exercise.title).toBe('The Sixth Station');
+  });
+
+  it('ignores what is printed on a later page, that being a header', () => {
+    const { exercise } = importer.read(
+      credited('<credit page="4"><credit-words>Clair de Lune - 4</credit-words></credit>'),
+    );
+
+    expect(exercise.title).toBe('Imported score');
+  });
+
+  it('lets the header have the last word when it says anything', () => {
+    const { exercise } = importer.read(
+      credited(
+        '<credit page="1"><credit-words>Typeset by hand</credit-words></credit>',
+        '<work><work-title>Something Borrowed</work-title></work>',
+      ),
+    );
+
+    expect(exercise.title).toBe('Something Borrowed');
+  });
+});
+
 /** A one-part score in the shape other programs actually write. */
 function scoreXml(body: string, divisions = 24): string {
   return `<?xml version="1.0" encoding="UTF-8"?>

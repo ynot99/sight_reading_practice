@@ -1186,18 +1186,24 @@ select {
  */
 .ruler-line {
   stroke: var(--accent);
-  stroke-width: 1px;
-  opacity: 0.14;
+  stroke-width: 1.1px;
+  /* Dashed, which is what tells a division from a beat at a glance - the two
+     were only a shade apart in weight, and a shade is not a difference when
+     the thing behind it is notation. */
+  stroke-dasharray: 3 5;
+  opacity: 0.45;
 }
 
 .ruler-line--beat {
-  stroke-width: 1.4px;
-  opacity: 0.24;
+  stroke-width: 1.8px;
+  stroke-dasharray: none;
+  opacity: 0.5;
 }
 
 .ruler-line--downbeat {
-  stroke-width: 2px;
-  opacity: 0.34;
+  stroke-width: 3px;
+  stroke-dasharray: none;
+  opacity: 0.6;
 }
 
 /*

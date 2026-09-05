@@ -144,6 +144,29 @@ describe('the stylesheet', () => {
     }
   });
 
+  it('tells the three weights of the ruler apart at a glance', () => {
+    // Reported from the page: the ruler was so faint he could barely see it,
+    // and a division looked like a beat. A shade of difference is not a
+    // difference when the thing behind it is notation, so the division is
+    // dashed and the beats are not - and none of the three is a whisper.
+    const rules_ = rules();
+    const base = rules_.find((rule) => rule.selector === '.ruler-line');
+    const beat = rules_.find((rule) => rule.selector === '.ruler-line--beat');
+    const downbeat = rules_.find((rule) => rule.selector === '.ruler-line--downbeat');
+
+    expect(base?.body).toMatch(/stroke-dasharray/);
+    expect(beat?.body).toMatch(/stroke-dasharray\s*:\s*none/);
+    expect(downbeat?.body).toMatch(/stroke-dasharray\s*:\s*none/);
+    const opacity = (body: string | undefined): number =>
+      Number.parseFloat(/opacity\s*:\s*([\d.]+)/.exec(body ?? '')?.[1] ?? '0');
+    expect(opacity(base?.body)).toBeGreaterThan(0.3);
+    expect(opacity(downbeat?.body)).toBeGreaterThan(opacity(beat?.body));
+    const width = (body: string | undefined): number =>
+      Number.parseFloat(/stroke-width\s*:\s*([\d.]+)/.exec(body ?? '')?.[1] ?? '0');
+    expect(width(downbeat?.body)).toBeGreaterThan(width(beat?.body));
+    expect(width(beat?.body)).toBeGreaterThan(width(base?.body));
+  });
+
   it('lets a touch through the middle of the page to the music under it', () => {
     // The card covering the score is transparent and covers all of it, so
     // taking touches would kill the two gestures the page is read with - a

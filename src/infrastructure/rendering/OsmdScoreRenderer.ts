@@ -365,6 +365,28 @@ interface MeasureNotes {
  */
 const TROUBLE_LEVELS = 4;
 
+/**
+ * Everything on a page that this program drew rather than the engraver.
+ *
+ * A preview of the page ahead is a picture of the *music* on it. The marks
+ * left by an earlier reading, the passage markers, the hand switches and the
+ * page's own label all belong to the page they are on and to the moment they
+ * were drawn, and carried into the preview they would be saying those things
+ * about the wrong bars.
+ */
+const OUR_OWN_MARKS = [
+  '.played-overlay',
+  '.page-label',
+  '.passage-marker',
+  '.start-marker',
+  '.repeat-mark',
+  '.hand-switch',
+  '.page-preview',
+].join(',');
+
+/** The one clip the preview needs; only ever one preview is on the page. */
+const PREVIEW_CLIP_ID = 'page-preview-clip';
+
 /** Class that dims the notes of a step already played. */
 const FADED_CLASS = 'note--passed';
 /** What the run will not ask for: another hand, or outside the passage. */
@@ -542,6 +564,16 @@ export class OsmdScoreRenderer
    */
   private pageSurplusWindow = 0;
   private pageAt = 0;
+  /** The page whose top is being shown in place of this one's, if any. */
+  private previewShown: number | null = null;
+  private previewGroup: SVGGElement | null = null;
+  private previewWanted = true;
+  /** Printed extent of each system, keyed `page:index within the page`. */
+  private systemBands = new Map<string, { top: number; bottom: number }>();
+  /** The last system of each page, in the numbering the samples carry. */
+  private lastSystemOnPage = new Map<number, number>();
+  /** How many systems each page holds. */
+  private systemsOnPage = new Map<number, number>();
   private pageListeners: ((state: ScorePageState) => void)[] = [];
   private swipe: PageSwipe | null = null;
   private tapListeners: (() => void)[] = [];
@@ -634,6 +666,7 @@ export class OsmdScoreRenderer
     this.paintDimmed();
     this.paintPassage();
     this.paintHands();
+    this.paintPreview(true);
     this.watchContainer();
   }
 
@@ -719,6 +752,7 @@ export class OsmdScoreRenderer
     this.paintDimmed();
     this.paintPassage();
     this.paintHands();
+    this.paintPreview(true);
   }
 
   /**
@@ -1017,6 +1051,7 @@ export class OsmdScoreRenderer
       this.labelPage(sheet, at, this.paged ? sheets.length : 0);
     }
     this.placeCursor();
+    this.paintPreview();
   }
 
   /**
@@ -1106,6 +1141,156 @@ export class OsmdScoreRenderer
     // The marker still has to be taken off a page it is no longer on, even
     // when the page is staying where it is.
     this.placeCursor();
+    this.paintPreview();
+  }
+
+  /**
+   * Whether to show the top of the page ahead, and which page that is.
+   *
+   * Only once the music has reached the *last* system of the page: what the
+   * preview stands on is a system the reader has finished with, and taking
+   * away a system they are still reading would be worse than no preview at
+   * all. A page holding one system has nothing to give up, so it gets none -
+   * the reader's own answer for that case is a single bar inset into the
+   * system being played, which is a different drawing and not this one.
+   */
+  private previewToShow(): number | null {
+    const next = this.pageAt + 1;
+    if (!this.previewWanted || !this.paged || next >= this.sheets.length) {
+      return null;
+    }
+    if ((this.systemsOnPage.get(this.pageAt) ?? 0) < 2) {
+      return null;
+    }
+    const at = this.navigator.position;
+    if (this.pageOfStep(at) !== this.pageAt) {
+      return null;
+    }
+    const system = this.systemOfStep(at);
+    const last = this.lastSystemOnPage.get(this.pageAt);
+    return system !== null && last !== undefined && system >= last ? next : null;
+  }
+
+  /**
+   * Draws it, or takes it away, when the answer has changed.
+   *
+   * Asked on every step the music reaches, and a preview is a clone of a
+   * whole page of notation - so the drawing happens only when the answer
+   * actually moves, never on the steps in between.
+   */
+  private paintPreview(afresh = false): void {
+    const next = this.previewToShow();
+    if (!afresh && next === this.previewShown) {
+      return;
+    }
+    this.previewShown = next;
+    this.previewGroup?.remove();
+    this.previewGroup = null;
+    if (next !== null) {
+      this.drawPreview(next);
+    }
+  }
+
+  /**
+   * The top of the next page, in the place the first system of this one had.
+   *
+   * A page turn is the hardest moment in sight reading: the music the reader
+   * needs is on a page they cannot see yet, and turning it is exactly when
+   * they can least afford to look away. So the page turns *in halves* - by
+   * the time the last system is being played, the music after it is already
+   * on screen, in the space the first system has finished needing.
+   *
+   * A clone of the page ahead rather than anything re-engraved: it is the
+   * same drawing at the same size, so the notes stand where they will stand
+   * when the page does turn, and nothing about the layout has to be worked
+   * out twice. Shifted so that page's first system lands where this page's
+   * first system was, and cut off at the line between the two systems it
+   * stands in front of.
+   */
+  private drawPreview(next: number): void {
+    const sheet = this.sheets[this.pageAt];
+    const ahead = this.sheets[next];
+    const slot = this.systemBands.get(`${this.pageAt}:0`);
+    const below = this.systemBands.get(`${this.pageAt}:1`);
+    const target = this.systemBands.get(`${next}:0`);
+    if (sheet === undefined || ahead === undefined) {
+      return;
+    }
+    if (slot === undefined || below === undefined || target === undefined) {
+      return;
+    }
+    const doc = sheet.ownerDocument;
+    const box = (sheet.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
+    const width = box[2] ?? 0;
+    // Halfway to the system underneath: far enough to hold the ledger lines
+    // and the tails hanging off the previewed music, and never into the
+    // system the reader is actually playing.
+    const bottom = (slot.bottom + below.top) / 2;
+    const shift = target.top - slot.top;
+
+    const group = doc.createElementNS(SVG_NAMESPACE, 'g');
+    group.setAttribute('class', 'page-preview');
+
+    const clip = doc.createElementNS(SVG_NAMESPACE, 'clipPath');
+    clip.setAttribute('id', PREVIEW_CLIP_ID);
+    const cut = doc.createElementNS(SVG_NAMESPACE, 'rect');
+    cut.setAttribute('x', '0');
+    cut.setAttribute('y', '0');
+    cut.setAttribute('width', String(width));
+    cut.setAttribute('height', String(bottom));
+    clip.append(cut);
+    group.append(clip);
+
+    // Solid, because this *replaces* the system underneath rather than being
+    // laid over it: two systems of notation printed on top of one another is
+    // no clearer than the page turn this exists to soften.
+    const ground = doc.createElementNS(SVG_NAMESPACE, 'rect');
+    ground.setAttribute('class', 'page-preview__ground');
+    ground.setAttribute('x', '0');
+    ground.setAttribute('y', '0');
+    ground.setAttribute('width', String(width));
+    ground.setAttribute('height', String(bottom));
+    group.append(ground);
+
+    // The clip on one group and the shift on another inside it, because a
+    // clip is resolved in the space the element it sits on already has - so a
+    // group carrying both would be cut in the shifted space and take the cut
+    // with it.
+    const frame = doc.createElementNS(SVG_NAMESPACE, 'g');
+    frame.setAttribute('clip-path', `url(#${PREVIEW_CLIP_ID})`);
+    const moved = doc.createElementNS(SVG_NAMESPACE, 'g');
+    moved.setAttribute('transform', `translate(0, ${-shift})`);
+    for (const child of [...ahead.children]) {
+      moved.append(child.cloneNode(true));
+    }
+    for (const ours of [...moved.querySelectorAll(OUR_OWN_MARKS)]) {
+      ours.remove();
+    }
+    frame.append(moved);
+    group.append(frame);
+
+    // Said with a line, because otherwise this is simply a page with the
+    // wrong bars at the top of it. Dashed: the reader is looking at a piece
+    // of something, and a solid rule would read as a system of its own.
+    const edge = doc.createElementNS(SVG_NAMESPACE, 'line');
+    edge.setAttribute('class', 'page-preview__edge');
+    edge.setAttribute('x1', '0');
+    edge.setAttribute('x2', String(width));
+    edge.setAttribute('y1', String(bottom));
+    edge.setAttribute('y2', String(bottom));
+    group.append(edge);
+
+    sheet.append(group);
+    this.previewGroup = group;
+  }
+
+  /** Turns the preview on or off, the reader having said which they want. */
+  showNextPagePreview(wanted: boolean): void {
+    if (this.previewWanted === wanted) {
+      return;
+    }
+    this.previewWanted = wanted;
+    this.paintPreview(true);
   }
 
   /** Shows the cursor only where it belongs; the reader's choice still wins. */
@@ -1323,6 +1508,13 @@ export class OsmdScoreRenderer
   }
 
   private beginDrag(event: PointerEvent): void {
+    // A preview of the page ahead is a picture and nothing else. The bars in
+    // it are not on this page, so a finger landing there must not be read as
+    // pointing at a bar of this one - nor take hold of a marker standing
+    // underneath it, which is drawn there and hidden.
+    if (event.target instanceof Element && event.target.closest('.page-preview') !== null) {
+      return;
+    }
     // Before anything else. A switch is a drawn thing with an edge to aim
     // at, so what the browser says was touched is the exact answer - and a
     // press on one is not a tap on the music, a hold on a bar, or a page
@@ -1620,6 +1812,14 @@ export class OsmdScoreRenderer
     this.stepElements = new Map();
     this.faded = new Set();
     this.samples = [];
+    // The page it stood on has gone, so the group has too - and what is being
+    // remembered about it must go with them, or the next page that wanted the
+    // same preview would decide it was already drawn.
+    this.previewGroup = null;
+    this.previewShown = null;
+    this.systemBands = new Map();
+    this.lastSystemOnPage = new Map();
+    this.systemsOnPage = new Map();
     this.loaded = false;
   }
 
@@ -1867,6 +2067,9 @@ export class OsmdScoreRenderer
     const sheet = (this.osmd as unknown as { GraphicSheet?: DrawnSheet } | null)?.GraphicSheet;
     const byIndex = new Map<number, DrawnMeasure>();
     const printed = this.readSystems();
+    // Kept: the preview needs to know where a system stands, and reading the
+    // printed lines walks every page of the drawing.
+    this.systemBands = printed;
     for (const [pageAt, page] of (sheet?.MusicPages ?? []).entries()) {
       for (const [systemAt, system] of (page.MusicSystems ?? []).entries()) {
         // The printed lines where they can be read, and the engraver's own
@@ -2424,9 +2627,39 @@ export class OsmdScoreRenderer
     this.stepX = stepX;
     this.samples = samples;
     this.measureStaffHeights();
+    this.readSystemShape();
     this.attachNoteFurniture();
     this.navigator.reset();
     this.navigator.moveTo(restoreTo);
+  }
+
+  /**
+   * Which systems each page holds, in the numbering the samples carry.
+   *
+   * The samples number systems as they are met, walking the score, so the
+   * numbers on one page are consecutive and run down it - which makes the
+   * largest of them the last system on that page, and that is the only thing
+   * the preview needs to know about where the music has got to.
+   */
+  private readSystemShape(): void {
+    const byPage = new Map<number, Set<number>>();
+    for (const sample of this.samples) {
+      const bucket = byPage.get(sample.page) ?? new Set<number>();
+      bucket.add(sample.system);
+      byPage.set(sample.page, bucket);
+    }
+    this.lastSystemOnPage = new Map();
+    this.systemsOnPage = new Map();
+    for (const [page, systems] of byPage) {
+      this.lastSystemOnPage.set(page, Math.max(...systems));
+      this.systemsOnPage.set(page, systems.size);
+    }
+  }
+
+  /** Which system a step was drawn in, or `null` where nothing knows. */
+  private systemOfStep(stepIndex: number): number | null {
+    const page = this.pageOfStep(stepIndex);
+    return this.geometryByPage.get(page)?.systemOfStep.get(stepIndex) ?? null;
   }
 
   /**

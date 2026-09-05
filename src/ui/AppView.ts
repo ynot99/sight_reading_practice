@@ -645,6 +645,7 @@ export class AppView {
     survival: HTMLInputElement;
     immediateStart: HTMLInputElement;
     dimUnplayed: HTMLInputElement;
+    previewNextPage: HTMLInputElement;
     focusDrawer: HTMLElement;
     focusRow: HTMLElement;
     focusSpeed: HTMLElement;
@@ -798,6 +799,7 @@ export class AppView {
       survival: requireElement(doc, 'survival'),
       immediateStart: requireElement(doc, 'immediate-start'),
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
+      previewNextPage: requireElement(doc, 'preview-next-page'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
       focusRow: requireElement(doc, 'focus-row'),
       focusSpeed: requireElement(doc, 'focus-speed'),
@@ -1630,6 +1632,11 @@ export class AppView {
 
     this.listen(this.el.immediateStart, 'change', () => {
       controller.updateSettings({ immediateStart: this.el.immediateStart.checked });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.previewNextPage, 'change', () => {
+      controller.updateSettings({ previewNextPage: this.el.previewNextPage.checked });
       this.syncControlsFromSettings();
     });
 
@@ -2951,6 +2958,8 @@ export class AppView {
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
+    this.el.previewNextPage.checked = settings.previewNextPage;
+    this.runtime.renderer.showNextPagePreview(settings.previewNextPage);
     this.el.focusImmediate.setAttribute('aria-pressed', String(settings.immediateStart));
     this.describeMetronomeButton(settings.clickWhen, settings.clickPattern);
     this.renderHealth(this.runtime.controller.health);

@@ -1176,6 +1176,29 @@ select {
  * able to check, not a thing to be told: a heading in the reader's own black
  * would compete with the noteheads, which are what is being read.
  */
+/*
+ * The top of the next page, shown where the reader has finished reading.
+ *
+ * Solid ground under it, because it *replaces* the system it stands on: two
+ * systems of notation printed over one another are no clearer than the page
+ * turn this exists to soften. The page is white because notation is.
+ */
+.page-preview__ground {
+  fill: #fff;
+}
+
+/*
+ * And a line to say it is a piece of somewhere else. Dashed, because a solid
+ * rule at that place reads as a system's own edge - which is exactly the
+ * thing it must not be mistaken for.
+ */
+.page-preview__edge {
+  stroke: var(--text-muted);
+  stroke-width: 1.2px;
+  stroke-dasharray: 7 5;
+  opacity: 0.55;
+}
+
 .page-label {
   font: 12px/1 ui-serif, Georgia, 'Times New Roman', serif;
   fill: #6b7280;

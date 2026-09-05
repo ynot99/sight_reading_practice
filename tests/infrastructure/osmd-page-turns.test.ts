@@ -640,6 +640,98 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     expect(renderer.pages.at).toBe(1);
   });
 
+  describe('the top of the next page, while this one is being finished', () => {
+    /** The last step the music reaches before the page turns. */
+    function lastStepOnThisPage(): number {
+      let last = 0;
+      for (let step = 0; step < 400; step += 1) {
+        renderer.cursor.moveTo(step);
+        if (renderer.pages.at !== 0) {
+          break;
+        }
+        last = step;
+      }
+      renderer.cursor.moveTo(last);
+      return last;
+    }
+
+    function preview(): Element | null {
+      return container.querySelector('.page-preview');
+    }
+
+    beforeEach(async () => {
+      // Long enough to run past one page, and a page tall enough to hold more
+      // than one system - which is what a preview needs, since what it stands
+      // on is a system the reader has finished with.
+      await renderer.load(new MusicXmlSerializer().serialize(longExercise({ bars: 60 })));
+      withLayout(container, 700);
+      renderer.setPaged(true);
+      renderer.refresh();
+      expect(renderer.pages.count).toBeGreaterThan(1);
+      expect(sheets(container)[0]?.querySelectorAll('.staffline').length ?? 0).toBeGreaterThan(1);
+    });
+
+    it('is not there while the reader is still reading the top of the page', () => {
+      renderer.cursor.moveTo(0);
+
+      expect(preview()).toBeNull();
+    });
+
+    it('stands where the first system was, once the music is past it', () => {
+      const last = lastStepOnThisPage();
+      expect(last).toBeGreaterThan(0);
+      expect(renderer.pages.at).toBe(0);
+
+      const shown = preview();
+      expect(shown).not.toBeNull();
+      // Solid ground and an edge to say it is a piece of somewhere else.
+      expect(shown?.querySelector('.page-preview__ground')).not.toBeNull();
+      expect(shown?.querySelector('.page-preview__edge')).not.toBeNull();
+      // And it is on the page the reader is looking at, not the one ahead.
+      expect(shown?.closest('svg')).toBe(sheets(container)[0]);
+    });
+
+    it('carries the music of the page ahead and none of its furniture', () => {
+      lastStepOnThisPage();
+      const shown = preview();
+
+      // The page ahead prints its own label in the corner, and the preview
+      // must not: it would be saying "page 2" over the top of page 1.
+      expect(sheets(container)[1]?.querySelector('.page-label')).not.toBeNull();
+      expect(shown?.querySelector('.page-label')).toBeNull();
+      // What it does carry is notation - the drawing the engraver made.
+      expect((shown?.querySelectorAll('path').length ?? 0)).toBeGreaterThan(0);
+    });
+
+    it('goes away when the music moves back up the page', () => {
+      lastStepOnThisPage();
+      expect(preview()).not.toBeNull();
+
+      renderer.cursor.moveTo(0);
+
+      expect(preview()).toBeNull();
+    });
+
+    it('offers nothing on the last page, there being nothing ahead', () => {
+      renderer.turnPages(renderer.pages.count);
+      const last = renderer.pages.at;
+      expect(last).toBe(renderer.pages.count - 1);
+
+      expect(preview()).toBeNull();
+    });
+
+    it('is the reader’s to turn off', () => {
+      lastStepOnThisPage();
+      expect(preview()).not.toBeNull();
+
+      renderer.showNextPagePreview(false);
+      expect(preview()).toBeNull();
+
+      renderer.showNextPagePreview(true);
+      expect(preview()).not.toBeNull();
+    });
+  });
+
   it('keeps the reader on their page across a re-engraving', () => {
     renderer.setPaged(true);
     renderer.turnPages(1);

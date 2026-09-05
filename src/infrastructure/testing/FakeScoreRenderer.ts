@@ -78,6 +78,12 @@ export class FakeScoreRenderer
 
   /** How much trouble the marker has been told to show. */
   trouble = 0;
+  /** Whether the top of the next page is wanted where the reader has finished. */
+  nextPagePreview = true;
+
+  showNextPagePreview(wanted: boolean): void {
+    this.nextPagePreview = wanted;
+  }
 
   showTrouble(missteps: number): void {
     this.trouble = missteps;

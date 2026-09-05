@@ -52,6 +52,7 @@ const SETTINGS: PracticeSettings = {
   zoom: 1.2,
   immediateStart: false,
   dimUnplayed: true,
+  previewNextPage: true,
 };
 
 describe('practice settings codec', () => {

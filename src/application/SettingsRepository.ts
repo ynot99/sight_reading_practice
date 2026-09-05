@@ -269,6 +269,7 @@ export function decodePracticeSettings(
     zoom: readNumber(value['zoom'], 0.3, 3),
     immediateStart: readBoolean(value['immediateStart']),
     dimUnplayed: readBoolean(value['dimUnplayed']),
+    previewNextPage: readBoolean(value['previewNextPage']),
   } as PracticeSettings);
 }
 
@@ -307,6 +308,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     zoom: settings.zoom,
     immediateStart: settings.immediateStart,
     dimUnplayed: settings.dimUnplayed,
+    previewNextPage: settings.previewNextPage,
   };
 }
 

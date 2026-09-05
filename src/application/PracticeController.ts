@@ -311,6 +311,8 @@ export interface PracticeSettings {
    * than a note already played, which goes altogether.
    */
   readonly dimUnplayed: boolean;
+  /** Show the top of the next page where the reader has finished reading. */
+  readonly previewNextPage: boolean;
 }
 
 export interface ExerciseLoadedEvent {
@@ -469,6 +471,7 @@ export class PracticeController {
       zoom: 0.85,
       immediateStart: false,
       dimUnplayed: true,
+      previewNextPage: true,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();

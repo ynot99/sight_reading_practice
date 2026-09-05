@@ -59,6 +59,16 @@ export interface IScorePages {
   turnPages(delta: number): void;
   /** Brings the page holding that bar into view, if it is not already. */
   showMeasure(measureIndex: number): void;
+  /**
+   * Whether to show the top of the next page where the reader has finished.
+   *
+   * A page turn is the hardest moment in sight reading: the music the reader
+   * needs next is on a page they cannot see, and turning it is exactly when
+   * they can least afford to look away. Turned on, the page turns in halves -
+   * by the time the last system is being played, what follows it is already
+   * on screen, standing where the first system has finished being needed.
+   */
+  showNextPagePreview(wanted: boolean): void;
   onPagesChanged(listener: (state: ScorePageState) => void): () => void;
 }
 

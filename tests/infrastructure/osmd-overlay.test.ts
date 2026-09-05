@@ -10,7 +10,9 @@ import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProf
 import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
 
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
-import { beamedSixteenths, twoBarExercise } from '../support/fixtures.js';
+import { bar, beamedSixteenths, p, twoBarExercise } from '../support/fixtures.js';
+import { noteEntry, restEntry, type Exercise } from '../../src/domain/model/Exercise.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import { createScoreContainer, installCanvasStub, staffLineYs } from '../support/osmdHarness.js';
 
 const RHYTHMS = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
@@ -51,6 +53,62 @@ describe('played notes drawn over a real engraving', () => {
       keyAt: () => KeySignature.major(0),
       clefAt: (staffNumber) => CLEFS.get(staffNumber) ?? 'treble',
     });
+  });
+
+  it('places a step by a note, never by a hand resting through the bar', async () => {
+    // Reported from the page. Bone Bottom opens with four bars of the right
+    // hand resting while the left plays, and every mark for a downbeat there
+    // was drawn well inside the bar instead of on the beat: a whole-measure
+    // rest is drawn in the *middle* of its bar - it says "silent for the
+    // whole bar" and has no moment of its own - and the step's place was
+    // being read off whichever thing the engraver happened to hand over
+    // first.
+    const resting: Exercise = {
+      ...twoBarExercise(),
+      staves: [
+        {
+          staffNumber: 1,
+          voice: 1,
+          clef: 'treble',
+          clefChanges: [],
+          measures: [bar(restEntry(Duration.WHOLE)), bar(noteEntry(p('G4'), Duration.WHOLE))],
+        },
+        {
+          staffNumber: 2,
+          voice: 2,
+          clef: 'bass',
+          clefChanges: [],
+          measures: [
+            bar(
+              noteEntry(p('C3'), Duration.QUARTER),
+              noteEntry(p('D3'), Duration.QUARTER),
+              noteEntry(p('E3'), Duration.QUARTER),
+              noteEntry(p('F3'), Duration.QUARTER),
+            ),
+            bar(noteEntry(p('G3'), Duration.WHOLE)),
+          ],
+        },
+      ],
+    };
+    await renderer.load(new MusicXmlSerializer().serialize(resting));
+    renderer.configureOverlay({
+      keyAt: () => KeySignature.major(0),
+      clefAt: (staffNumber) => CLEFS.get(staffNumber) ?? 'treble',
+    });
+
+    for (const [at, name] of ['C3', 'D3', 'E3', 'F3'].entries()) {
+      renderer.showPlayed({ stepIndex: at, midi: Pitch.parse(name).midi, correct: true, offset: 0 });
+    }
+
+    // The four beats of the bar run across the page in the order they were
+    // played. With the downbeat read off the resting hand's rest it landed in
+    // the middle of the bar, which is to say between the second beat and the
+    // third.
+    const across = noteheads(container).map((head) => Number.parseFloat(head.getAttribute('cx') ?? 'NaN'));
+    expect(across).toHaveLength(4);
+    for (let at = 1; at < across.length; at += 1) {
+      expect(across[at]).toBeGreaterThan(across[at - 1] ?? Number.NaN);
+    }
   });
 
   it('draws a correct press exactly on the note the engraver printed', () => {

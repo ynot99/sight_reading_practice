@@ -2609,6 +2609,8 @@ export class OsmdScoreRenderer
 
     const restoreTo = this.navigator.position;
     const stepX = new Map<number, number>();
+    /** Steps whose place was read off a note rather than off a rest. */
+    const placedByANote = new Set<number>();
     const samples: DrawnNoteSample[] = [];
     this.stepElements = new Map();
     this.systemNumbers = new Map();
@@ -2618,7 +2620,7 @@ export class OsmdScoreRenderer
     let guard = 10_000;
     while (!cursor.iterator.EndReached && guard > 0) {
       guard -= 1;
-      this.readStep(cursor, index, stepX, samples);
+      this.readStep(cursor, index, stepX, placedByANote, samples);
       index += 1;
       cursor.next();
     }
@@ -2822,6 +2824,7 @@ export class OsmdScoreRenderer
     cursor: NonNullable<OpenSheetMusicDisplay['cursor']>,
     stepIndex: number,
     stepX: Map<number, number>,
+    placedByANote: Set<number>,
     samples: DrawnNoteSample[],
   ): void {
     try {
@@ -2832,8 +2835,23 @@ export class OsmdScoreRenderer
           continue;
         }
 
-        if (!stepX.has(stepIndex)) {
+        // Where this step stands on the page - and taken from a *note*
+        // whenever one is drawn here. A whole-measure rest is not drawn where
+        // its bar begins but in the middle of the bar, wherever the music of
+        // that bar actually falls: it says "this voice is silent for the
+        // whole bar" and has no moment of its own to stand at. Read off one,
+        // every mark for a downbeat in Bone Bottom's opening bars - the right
+        // hand resting through them while the left plays - was drawn half a
+        // bar to the right of the beat it was played on.
+        //
+        // A rest still answers where nothing else does: a step where every
+        // voice is silent has nowhere better for a mark to go.
+        const pitched = note.sourceNote?.pitch !== undefined && note.sourceNote?.pitch !== null;
+        if (pitched ? !placedByANote.has(stepIndex) : !stepX.has(stepIndex)) {
           stepX.set(stepIndex, position.x * UNITS_TO_PIXELS);
+          if (pitched) {
+            placedByANote.add(stepIndex);
+          }
         }
 
         const drawn = typeof note.getSVGGElement === 'function' ? note.getSVGGElement() : null;

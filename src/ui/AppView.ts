@@ -931,6 +931,13 @@ export class AppView {
     // when it arrives rather than holding the trainer up for it.
     void this.runtime.scores.load().then(() => this.renderScores());
     await this.runtime.controller.loadNewExercise();
+    // Again, and after the material this time. Opening material settles
+    // things the reader left set on a visit that is over - the passage of a
+    // piece not on the stand is not a passage of this one - and the boxes
+    // are a view of those settings, not a second copy of them. Drawn only
+    // beforehand they went on showing bars 12 to 16 of a piece nobody had
+    // opened, and the next thing the reader touched wrote them back.
+    this.syncControlsFromSettings();
     void this.runtime.webMidi.connect();
   }
 
@@ -2549,6 +2556,15 @@ export class AppView {
         this.showCount(beatsRemaining);
       }),
       session.events.on('statusChanged', ({ status }) => {
+        // The number in the middle of the page is the count-in and nothing
+        // else, so every way out of counting in takes it away: the music
+        // beginning, and equally the reader stopping the run while it counts.
+        // Told by the first step of the music instead, a run stopped during
+        // the count-in never reached one - and the number stood on the page
+        // afterwards with nothing counting it down.
+        if (status !== 'counting-in') {
+          this.showCount(null);
+        }
         // Restarting is the view's job, not the controller's: tearing a
         // session down from inside its own event is how re-entrancy bugs are
         // made, and the application layer has no timer to defer with.
@@ -2559,11 +2575,6 @@ export class AppView {
             }
           }, 0);
         }
-      }),
-      session.events.on('stepEntered', () => {
-        // The count has run out by the time there is a step to play, and the
-        // count-in emits no final zero to say so.
-        this.showCount(null);
       }),
       // Where the music is, which under the metronome goes on moving through a
       // held note - the step is what the reader has to play, not where the

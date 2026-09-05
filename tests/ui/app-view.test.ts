@@ -980,6 +980,24 @@ describe('AppView', () => {
       expect(element('score-count').hidden).toBe(true);
     });
 
+    it('takes the number away when the run is stopped mid-count', async () => {
+      // Reported from the page: Start and then Stop straight away left the
+      // number standing in the middle of the score with nothing counting it
+      // down. It was told to go by the first step of the music, and a run
+      // stopped during the count-in never reaches one.
+      const { view, runtime, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ countInBars: 1, modeId: FLOW_MODE_ID });
+      await runtime.controller.reloadExercise();
+      runtime.controller.start();
+      metronome.advanceBeats(1);
+      expect(element('score-count').hidden).toBe(false);
+
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(element('score-count').hidden).toBe(true);
+    });
+
     it('counts the look down there too, being the same question', async () => {
       // "How long until I have to play" is one question, so it is answered in
       // one place - not in the middle for the count-in and in a pill for the
@@ -1350,6 +1368,31 @@ describe('AppView', () => {
     // The boxes have to follow the setting, or they would name a passage of
     // the last piece over the top of a new one.
     expect(runtime.controller.settings.rangeFromBar).toBeNull();
+    expect(element<HTMLInputElement>('focus-from').value).toBe('');
+    expect(element<HTMLInputElement>('focus-to').value).toBe('');
+  });
+
+  it('opens a visit with the bar boxes saying what the settings say', async () => {
+    // Reported from the page: the boxes came back on the next visit still
+    // naming bars of a piece nobody had opened. The setting itself was put
+    // back - the material a visit opens with is not the piece those bars
+    // were chosen in - but the boxes were drawn from the settings before
+    // that material was loaded, so they showed the old numbers over the new
+    // music, and the next thing the reader touched wrote them back.
+    const store = new InMemorySettingsStore();
+    const first = createRig(undefined, store);
+    await first.view.initialize();
+    const from = element<HTMLInputElement>('focus-from');
+    from.value = '2';
+    from.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+    expect(first.runtime.controller.settings.rangeFromBar).toBe(2);
+
+    mountRealMarkup();
+    const second = createRig(undefined, store);
+    await second.view.initialize();
+
+    expect(second.runtime.controller.settings.rangeFromBar).toBeNull();
     expect(element<HTMLInputElement>('focus-from').value).toBe('');
     expect(element<HTMLInputElement>('focus-to').value).toBe('');
   });

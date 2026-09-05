@@ -1544,6 +1544,37 @@ describe('ruling the bars', () => {
     expect(announced[announced.length - 1]).not.toContain('print-object');
   });
 
+  it('gives the cheap page back when it is turned off again', async () => {
+    // The spacers are the expensive half of this feature: on his City of
+    // Tears there are 1032 of them, and they cost about 150 kB of MusicXML
+    // and two seconds of engraving. Nothing on the page says whether they are
+    // there, so a refactor that made them unconditional would take those two
+    // seconds on every score and look exactly the same - which is the kind of
+    // fault that lives for months.
+    //
+    // The way back is the half that is easy to break: the printing is only
+    // redone when the file it would write has changed, so a ruler that stayed
+    // in the printed score after being turned off would go on being paid for
+    // while drawing nothing at all.
+    const { controller, renderer } = createController();
+
+    await controller.openScore(twoBarExercise());
+    expect(renderer.loadedXml).not.toContain('print-object="no"');
+    // And the drawing is asked for nothing either, rather than being handed
+    // marks it would have to decide to ignore.
+    expect(renderer.ruler).toEqual([]);
+
+    controller.updateSettings({ rhythmRuler: 'quarter' });
+    await controller.reloadExercise();
+    expect(renderer.loadedXml).toContain('print-object="no"');
+    expect(renderer.ruler.length).toBeGreaterThan(0);
+
+    controller.updateSettings({ rhythmRuler: 'off' });
+    await controller.reloadExercise();
+    expect(renderer.loadedXml).not.toContain('print-object="no"');
+    expect(renderer.ruler).toEqual([]);
+  });
+
   it('says which beats are about to pass, and when', async () => {
     // The marker on the notes stands still under a held note while the beats
     // go on passing, and that gap is where a reader loses count. Nothing in a

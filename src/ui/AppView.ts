@@ -56,6 +56,15 @@ const REST_LENGTH_MS = 3 * 60_000;
  * Given in turn rather than at random, so the same one is not offered twice
  * running - a reminder that repeats itself is one that stops being read.
  */
+/** How often a rest may be asked for, and what to call each answer. */
+const REST_INTERVALS: readonly { readonly value: string; readonly label: string }[] = [
+  { value: '20', label: 'Every 20 minutes' },
+  { value: '30', label: 'Every 30 minutes' },
+  { value: '45', label: 'Every 45 minutes' },
+  { value: '60', label: 'Every 60 minutes' },
+  { value: '0', label: 'Never' },
+];
+
 const REST_TIPS: readonly string[] = [
   'Stand up and walk about for a minute.',
   'Shake your hands out, and let the wrists hang.',
@@ -700,6 +709,7 @@ export class AppView {
     restRingArc: SVGCircleElement;
     restLeft: HTMLOutputElement;
     restEvery: HTMLSelectElement;
+    restEverySettings: HTMLSelectElement;
     restTake: HTMLButtonElement;
     restLater: HTMLButtonElement;
     scoreVerdict: HTMLElement;
@@ -875,6 +885,7 @@ export class AppView {
       restRingArc: requireElement(doc, 'rest-ring-arc'),
       restLeft: requireElement(doc, 'rest-left'),
       restEvery: requireElement(doc, 'rest-every'),
+      restEverySettings: requireElement(doc, 'rest-every-settings'),
       restTake: requireElement(doc, 'rest-take'),
       restLater: requireElement(doc, 'rest-later'),
       scoreVerdict: requireElement(doc, 'score-verdict'),
@@ -1529,6 +1540,13 @@ export class AppView {
       RULER_DIVISIONS.map((choice) => ({ value: choice, label: RULER_LABELS[choice] })),
       this.runtime.controller.settings.rhythmRuler,
     );
+    for (const select of [this.el.restEvery, this.el.restEverySettings]) {
+      fillSelect(
+        select,
+        REST_INTERVALS.map((choice) => ({ ...choice })),
+        String(this.runtime.controller.settings.restEveryMinutes),
+      );
+    }
     fillSelect(
       this.el.showPlayed,
       PLAYED_NOTE_DISPLAYS.map((choice) => ({ value: choice, label: PLAYED_NOTE_LABELS[choice] })),
@@ -1815,14 +1833,18 @@ export class AppView {
       this.hideTheRest();
     });
 
-    this.listen(this.el.restEvery, 'change', () => {
-      controller.updateSettings({ restEveryMinutes: Number(this.el.restEvery.value) });
-      this.syncControlsFromSettings();
-      if (Number(this.el.restEvery.value) === 0) {
-        controller.restTaken();
-        this.hideTheRest();
-      }
-    });
+    for (const select of [this.el.restEvery, this.el.restEverySettings]) {
+      this.listen(select, 'change', () => {
+        const minutes = Number(select.value);
+        controller.updateSettings({ restEveryMinutes: minutes });
+        this.syncControlsFromSettings();
+        // Turned off while the card is up, the card has nothing left to say.
+        if (minutes === 0) {
+          controller.restTaken();
+          this.hideTheRest();
+        }
+      });
+    }
 
     this.listen(this.el.rulerStrength, 'input', () => {
       controller.updateSettings({ rulerStrength: Number(this.el.rulerStrength.value) / 100 });
@@ -3339,6 +3361,7 @@ export class AppView {
     this.el.previewNextPage.checked = settings.previewNextPage;
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
     this.el.restEvery.value = String(settings.restEveryMinutes);
+    this.el.restEverySettings.value = this.el.restEvery.value;
     this.el.rulerCursor.checked = settings.rulerCursor;
     this.el.rulerStrength.value = String(Math.round(settings.rulerStrength * 100));
     this.el.rulerStrengthValue.value = this.el.rulerStrength.value;

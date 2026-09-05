@@ -1074,6 +1074,24 @@ describe('AppView', () => {
       }
     });
 
+    it('can be found and turned off before it has ever spoken', async () => {
+      // Reported: he could not find the setting. It was only in the card,
+      // and the card is only on the page once a rest has fallen due - so for
+      // the first half hour there was nowhere to find it at all.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const inSettings = element<HTMLSelectElement>('rest-every-settings');
+      expect(inSettings.options.length).toBeGreaterThan(1);
+      expect(inSettings.value).toBe(String(runtime.controller.settings.restEveryMinutes));
+
+      inSettings.value = '0';
+      inSettings.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.restEveryMinutes).toBe(0);
+      // The two chairs are one value, so the card's own follows.
+      expect(element<HTMLSelectElement>('rest-every').value).toBe('0');
+    });
+
     it('offers a rest, and counts one down when it is taken', async () => {
       // His own idea. The card appears in the middle of the page, where
       // everything the page has to say is said, and the only thing it insists

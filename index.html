@@ -96,13 +96,7 @@
             <output id="rest-left" class="rest-ring__left" hidden></output>
             <div class="control-group">
               <label for="rest-every">Remind me every</label>
-              <select id="rest-every">
-                <option value="20">20 minutes</option>
-                <option value="30">30 minutes</option>
-                <option value="45">45 minutes</option>
-                <option value="60">60 minutes</option>
-                <option value="0">Never</option>
-              </select>
+              <select id="rest-every"></select>
             </div>
             <div class="control-group control-group--actions">
               <button id="rest-take" type="button" class="button button--primary">Rest</button>
@@ -510,6 +504,21 @@
           <label><input id="preview-next-page" type="checkbox" checked /> Show the next page while you finish this one</label>
           <label><input id="hear-other-hand" type="checkbox" /> Hear the hand I am not playing</label>
           <label><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
+        </div>
+
+        <!--
+          The same setting the reminder itself offers, and here as well - the
+          card is only on the page once a rest has fallen due, so until then
+          there was nowhere to find this at all, not even to turn it off.
+          Two chairs, one value: both are filled from one list and both are
+          drawn from the settings, so they cannot come to disagree.
+        -->
+        <div class="control-group">
+          <label for="rest-every-settings">Remind me to rest every</label>
+          <select id="rest-every-settings"></select>
+          <p class="hint">
+            Never in the middle of playing: the reminder waits for the music to stop.
+          </p>
           <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
         </div>
 

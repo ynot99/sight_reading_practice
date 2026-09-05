@@ -475,6 +475,22 @@
             </svg>
           </button>
           <!--
+            The one button whose only home is a run: one press where stopping
+            and starting again were two. Between runs the button that begins
+            a reading is Start, and a second one saying the same would be two
+            controls answering one question - so it is marked to survive a
+            run like the other two, and the stylesheet keeps it off the bar
+            until there is a run to begin again.
+          -->
+          <button id="focus-replay" type="button" data-mid-run
+            class="focus-bar__button focus-bar__button--icon"
+            title="Play it again" aria-label="Play the run again from the beginning">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z" />
+            </svg>
+          </button>
+
+          <!--
             Back to the top. The place can be put anywhere by holding a
             finger on a bar, so there has to be a way back that does not mean
             finding the first bar and holding a finger on that.

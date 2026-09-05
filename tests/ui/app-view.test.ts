@@ -1225,13 +1225,38 @@ describe('AppView', () => {
       });
     });
 
-    it('leaves exactly the two buttons a reader needs mid-piece', () => {
+    it('leaves exactly the buttons a reader needs mid-piece', () => {
       // Marked on the markup rather than counted in script: the stylesheet
       // hides everything in the row without the mark, so this is the list.
+      // In the order a thumb finds them: hold it, take it from the top, end
+      // it.
       const row = element('focus-row');
       const kept = [...row.children].filter((child) => child.hasAttribute('data-mid-run'));
 
-      expect(kept.map((child) => child.id)).toEqual(['focus-play', 'focus-stop']);
+      expect(kept.map((child) => child.id)).toEqual([
+        'focus-play',
+        'focus-replay',
+        'focus-stop',
+      ]);
+    });
+
+    it('takes the run from the top in one press', async () => {
+      // Stop and start, without the stop and the start. A passage gone wrong
+      // in its second bar is a passage to begin again, and doing that by hand
+      // meant finding two buttons and pressing them in order.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const going = runtime.controller.session;
+      expect(going?.status).toBe('running');
+
+      element<HTMLButtonElement>('focus-replay').click();
+
+      const again = runtime.controller.session;
+      expect(again?.status).toBe('running');
+      // A reading of its own, and the one that was going is over.
+      expect(again).not.toBe(going);
+      expect(going?.status).toBe('aborted');
     });
   });
 

@@ -623,6 +623,7 @@ export class AppView {
     scoreVerdict: HTMLElement;
     focusPlay: HTMLButtonElement;
     focusPlayIcon: SVGPathElement;
+    focusReplay: HTMLButtonElement;
     focusHandle: HTMLButtonElement;
     focusHealth: HTMLElement;
     focusListenIcon: SVGPathElement;
@@ -775,6 +776,7 @@ export class AppView {
       scoreVerdict: requireElement(doc, 'score-verdict'),
       focusPlay: requireElement(doc, 'focus-play'),
       focusPlayIcon: requireElement(doc, 'focus-play-icon'),
+      focusReplay: requireElement(doc, 'focus-replay'),
       focusHandle: requireElement(doc, 'focus-handle'),
       focusHealth: requireElement(doc, 'focus-health'),
       focusListenIcon: requireElement(doc, 'focus-listen-icon'),
@@ -1754,6 +1756,10 @@ export class AppView {
       this.stopEverything();
     });
 
+    this.listen(this.el.focusReplay, 'click', () => {
+      this.replayRun();
+    });
+
     this.listen(this.el.focusRewind, 'click', () => {
       // Where a run would begin, put back at the top. A place can be set
       // anywhere by holding a finger on a bar, so the way back must not be
@@ -1921,6 +1927,25 @@ export class AppView {
     // trap.
     this.applyPlayingChrome();
     this.describeStopping();
+  }
+
+  /**
+   * Reads it again from the top, in one press.
+   *
+   * Which is stop and then start, and deliberately nothing cleverer: the
+   * same place, the same look, the same count-in the reader gets by pressing
+   * the two buttons themselves. What it saves is the two presses - and a
+   * passage gone wrong in its second bar is a passage to begin again rather
+   * than one to sit through to the end.
+   *
+   * Rewind is left alone. That one puts the *place* back to the top and is
+   * for between runs; this one begins the reading that is already going.
+   * They are near enough to look like one button and far enough apart that
+   * making them one would lose one of the two.
+   */
+  private replayRun(): void {
+    this.stopEverything();
+    this.beginRun();
   }
 
   /**

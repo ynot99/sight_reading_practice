@@ -714,6 +714,19 @@ select {
 }
 
 /*
+ * Quick replay, which is the row's one button the other way round.
+ *
+ * Everything else here is a control the reader has between runs, marked if
+ * it also has to survive one. This has nothing to say between runs: what
+ * begins a reading then is Start, and a second button saying so would be two
+ * controls answering one question. So it waits until there is a reading to
+ * begin again, and then stands with pause and stop.
+ */
+.focus-bar:not([data-playing='true']) #focus-replay {
+  display: none;
+}
+
+/*
  * The grab handle, and the whole of what says there is more underneath.
  *
  * One row of transport is all a reader needs at the stand; everything they

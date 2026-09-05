@@ -113,6 +113,18 @@ describe('the stylesheet', () => {
     expect(hidden?.body).toMatch(/display\s*:\s*none/);
   });
 
+  it('keeps quick replay off the bar until there is a run to replay', () => {
+    // The row's one button the other way round: it survives a run like pause
+    // and stop, and has nothing to say between runs, where the button that
+    // begins a reading is Start. jsdom applies no stylesheet, so nothing in
+    // the view tests can see this.
+    const waiting = rules().find(
+      (rule) => rule.selector === ".focus-bar:not([data-playing='true']) #focus-replay",
+    );
+
+    expect(waiting?.body).toMatch(/display\s*:\s*none/);
+  });
+
   it('lets a touch through the middle of the page to the music under it', () => {
     // The card covering the score is transparent and covers all of it, so
     // taking touches would kill the two gestures the page is read with - a

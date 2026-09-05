@@ -1184,6 +1184,14 @@ select {
  * Three weights, because the three things it marks are not equal: the bar
  * begins, the beat falls, and the beat is divided.
  */
+/*
+ * How strongly the whole ruler is drawn, which the reader sets.
+ *
+ * One number scaling all three weights, so that turning it down keeps the
+ * difference between a bar line, a beat and a division - dimming them each
+ * by hand would be three settings answering one question, and they would
+ * drift apart.
+ */
 .ruler-line {
   stroke: var(--accent);
   stroke-width: 1.1px;
@@ -1191,19 +1199,19 @@ select {
      were only a shade apart in weight, and a shade is not a difference when
      the thing behind it is notation. */
   stroke-dasharray: 3 5;
-  opacity: 0.45;
+  opacity: calc(0.45 * var(--ruler-strength, 1));
 }
 
 .ruler-line--beat {
   stroke-width: 1.8px;
   stroke-dasharray: none;
-  opacity: 0.5;
+  opacity: calc(0.5 * var(--ruler-strength, 1));
 }
 
 .ruler-line--downbeat {
   stroke-width: 3px;
   stroke-dasharray: none;
-  opacity: 0.6;
+  opacity: calc(0.6 * var(--ruler-strength, 1));
 }
 
 /*

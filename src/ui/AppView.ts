@@ -679,6 +679,11 @@ export class AppView {
     previewNextPage: HTMLInputElement;
     hearOtherHand: HTMLInputElement;
     rulerCursor: HTMLInputElement;
+    rulerStrength: HTMLInputElement;
+    rulerStrengthValue: HTMLOutputElement;
+    sheetRuler: HTMLElement;
+    focusRuler: HTMLButtonElement;
+    rulerClose: HTMLButtonElement;
     rhythmRuler: HTMLSelectElement;
     rhythmRulerDescription: HTMLElement;
     focusDrawer: HTMLElement;
@@ -839,6 +844,11 @@ export class AppView {
       previewNextPage: requireElement(doc, 'preview-next-page'),
       hearOtherHand: requireElement(doc, 'hear-other-hand'),
       rulerCursor: requireElement(doc, 'ruler-cursor'),
+      rulerStrength: requireElement(doc, 'ruler-strength'),
+      rulerStrengthValue: requireElement(doc, 'ruler-strength-value'),
+      sheetRuler: requireElement(doc, 'sheet-ruler'),
+      focusRuler: requireElement(doc, 'focus-ruler'),
+      rulerClose: requireElement(doc, 'ruler-close'),
       rhythmRuler: requireElement(doc, 'rhythm-ruler'),
       rhythmRulerDescription: requireElement(doc, 'rhythm-ruler-description'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
@@ -1726,6 +1736,11 @@ export class AppView {
 
     this.listen(this.el.immediateStart, 'change', () => {
       controller.updateSettings({ immediateStart: this.el.immediateStart.checked });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.rulerStrength, 'input', () => {
+      controller.updateSettings({ rulerStrength: Number(this.el.rulerStrength.value) / 100 });
       this.syncControlsFromSettings();
     });
 
@@ -3126,6 +3141,12 @@ export class AppView {
     this.el.previewNextPage.checked = settings.previewNextPage;
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
     this.el.rulerCursor.checked = settings.rulerCursor;
+    this.el.rulerStrength.value = String(Math.round(settings.rulerStrength * 100));
+    this.el.rulerStrengthValue.value = this.el.rulerStrength.value;
+    // A display decision, so the stylesheet is told and does the rest: the
+    // three weights keep their difference from one another whatever it is
+    // turned down to.
+    this.el.score.style.setProperty('--ruler-strength', String(settings.rulerStrength));
     this.el.rhythmRuler.value = settings.rhythmRuler;
     this.el.rhythmRulerDescription.textContent = RULER_DESCRIPTIONS[settings.rhythmRuler];
     this.applyPreview();
@@ -3479,6 +3500,14 @@ export class AppView {
         () => this.syncControlsFromSettings(),
       ],
       [
+        // The ruler is reached for with a piece open, so it is its own sheet
+        // rather than a row in the settings: reading rhythm off the page is a
+        // way of working, not a preference to be filed away.
+        this.el.sheetRuler,
+        [this.el.focusRuler],
+        () => this.syncControlsFromSettings(),
+      ],
+      [
         this.el.sheetSettings,
         [this.el.focusSettings],
         // Opened onto whatever the settings actually are, since a run can
@@ -3526,6 +3555,9 @@ export class AppView {
     this.listen(this.el.metronomeClose, 'click', () => {
       this.el.sheetMetronome.hidden = true;
     });
+    this.listen(this.el.rulerClose, 'click', () => {
+      this.el.sheetRuler.hidden = true;
+    });
 
     this.listen(this.doc, 'keydown', (event) => {
       if ((event as KeyboardEvent).key !== 'Escape') {
@@ -3538,6 +3570,7 @@ export class AppView {
         this.el.sheetTakes,
         this.el.sheetScores,
         this.el.sheetMetronome,
+        this.el.sheetRuler,
         this.el.sheetSettings,
       ]) {
         if (!sheet.hidden) {

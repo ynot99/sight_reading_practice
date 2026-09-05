@@ -158,13 +158,18 @@ describe('the stylesheet', () => {
     expect(beat?.body).toMatch(/stroke-dasharray\s*:\s*none/);
     expect(downbeat?.body).toMatch(/stroke-dasharray\s*:\s*none/);
     const opacity = (body: string | undefined): number =>
-      Number.parseFloat(/opacity\s*:\s*([\d.]+)/.exec(body ?? '')?.[1] ?? '0');
+      Number.parseFloat(/opacity\s*:\s*(?:calc\()?\s*([\d.]+)/.exec(body ?? '')?.[1] ?? '0');
     expect(opacity(base?.body)).toBeGreaterThan(0.3);
     expect(opacity(downbeat?.body)).toBeGreaterThan(opacity(beat?.body));
     const width = (body: string | undefined): number =>
       Number.parseFloat(/stroke-width\s*:\s*([\d.]+)/.exec(body ?? '')?.[1] ?? '0');
     expect(width(downbeat?.body)).toBeGreaterThan(width(beat?.body));
     expect(width(beat?.body)).toBeGreaterThan(width(base?.body));
+    // And one number turns all three down together, so that turning the
+    // ruler down never turns a division into a beat.
+    for (const rule of [base, beat, downbeat]) {
+      expect(rule?.body).toContain('--ruler-strength');
+    }
   });
 
   it('lets a touch through the middle of the page to the music under it', () => {

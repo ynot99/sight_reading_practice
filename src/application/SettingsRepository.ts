@@ -286,6 +286,7 @@ export function decodePracticeSettings(
     previewNextPage: readBoolean(value['previewNextPage']),
     rhythmRuler: readRuler(value['rhythmRuler']),
     rulerCursor: readBoolean(value['rulerCursor']),
+    rulerStrength: readNumber(value['rulerStrength'], 0, 1),
   } as PracticeSettings);
 }
 
@@ -330,6 +331,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     previewNextPage: settings.previewNextPage,
     rhythmRuler: settings.rhythmRuler,
     rulerCursor: settings.rulerCursor,
+    rulerStrength: settings.rulerStrength,
   };
 }
 

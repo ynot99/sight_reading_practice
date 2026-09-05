@@ -1016,6 +1016,25 @@ describe('AppView', () => {
       expect(renderer.nextPagePreview).toBe(false);
     });
 
+    it('opens the ruler from its own button, and turns it down', async () => {
+      // Its own sheet because it is reached for with a piece open: reading
+      // rhythm off the page is a way of working, not a preference to file.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      expect(element('sheet-ruler').hidden).toBe(true);
+
+      element<HTMLButtonElement>('focus-ruler').click();
+      expect(element('sheet-ruler').hidden).toBe(false);
+
+      const strength = element<HTMLInputElement>('ruler-strength');
+      strength.value = '30';
+      strength.dispatchEvent(new Event('input'));
+
+      expect(runtime.controller.settings.rulerStrength).toBeCloseTo(0.3, 5);
+      // Said to the stylesheet, which scales all three weights by it at once.
+      expect(element('score').style.getPropertyValue('--ruler-strength')).toBe('0.3');
+    });
+
     it('runs the marker along the ruler, beat by beat', async () => {
       // The run says which beats are about to pass and when; the timing is
       // the view's, because the application layer has no timer. Under a held

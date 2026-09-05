@@ -171,6 +171,47 @@
         </div>
       </div>
 
+      <!--
+        The ruler, in a sheet of its own.
+        A grid of the beat ruled through the bars: what it is for is *seeing*
+        the rhythm rather than working it out from the note values. Three
+        questions belong together here - how finely to rule it, whether a
+        marker runs along it, and how loudly it is drawn - and none of them is
+        a thing the reader wants to hunt for down a settings sheet while a
+        piece is open in front of them.
+      -->
+      <div id="sheet-ruler" class="sheet" hidden>
+        <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
+          aria-label="Rhythm ruler">
+          <div class="sheet__head">
+            <strong class="sheet__title">Rhythm ruler</strong>
+            <button id="ruler-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+          <div class="controls controls--stacked">
+            <div class="control-group">
+              <label for="rhythm-ruler">Rule the bars in</label>
+              <select id="rhythm-ruler"></select>
+              <p id="rhythm-ruler-description" class="hint"></p>
+            </div>
+
+            <div class="control-group">
+              <label for="ruler-strength">
+                How strongly: <output id="ruler-strength-value">100</output>%
+              </label>
+              <input id="ruler-strength" type="range" min="0" max="100" step="5" value="100" />
+              <p class="hint">
+                At nothing at all the lines go, and the bars stay spaced by time.
+              </p>
+            </div>
+
+            <div class="control-group control-group--checks">
+              <label><input id="ruler-cursor" type="checkbox" /> Run a marker along it</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="sheet-takes" class="sheet" hidden>
         <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Kept takes">
           <div class="sheet__head">
@@ -431,19 +472,6 @@
           <label><input id="dim-unplayed" type="checkbox" checked /> Dim what this run will not ask for</label>
           <label><input id="preview-next-page" type="checkbox" checked /> Show the next page while you finish this one</label>
           <label><input id="hear-other-hand" type="checkbox" /> Hear the hand I am not playing</label>
-        </div>
-
-        <!--
-          A grid of the beat, ruled through the bars. What it is for is
-          *seeing* the rhythm rather than working it out from the note values,
-          so the reader says how finely to rule it: in halves while they find
-          the pulse of a slow piece, in sixteenths where a bar is full of them.
-        -->
-        <div class="control-group">
-          <label for="rhythm-ruler">Rhythm ruler</label>
-          <select id="rhythm-ruler"></select>
-          <p id="rhythm-ruler-description" class="hint"></p>
-          <label><input id="ruler-cursor" type="checkbox" /> Run a marker along it</label>
           <label><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
           <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
         </div>
@@ -694,6 +722,19 @@
             the reader looking for a setting should not have to remember
             which of two places it was in.
           -->
+          <!--
+            The ruler is its own question and its own sheet: it is reached for
+            with a piece open, and reading rhythm off the page is a way of
+            working rather than a setting to be filed away.
+          -->
+          <button id="focus-ruler" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Rhythm ruler" aria-label="Rhythm ruler">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 5h1.7v14H4zM9.2 5h1.7v14H9.2zM14.4 5h1.7v14h-1.7zM19.6 5h1.7v14h-1.7z" />
+            </svg>
+          </button>
+
           <button id="focus-settings" type="button"
             class="focus-bar__button focus-bar__button--icon"
             title="Settings" aria-label="Settings">

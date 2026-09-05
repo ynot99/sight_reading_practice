@@ -369,6 +369,15 @@ export interface PracticeSettings {
    * is exactly where a reader loses count.
    */
   readonly rulerCursor: boolean;
+  /**
+   * How strongly the ruler is drawn, from nothing at all to full.
+   *
+   * A display decision and nothing else: at nought the lines are invisible
+   * and the bars are still spaced by time, which is a page some readers will
+   * want - the evenness is what makes the rhythm legible, and the lines only
+   * say where the beats are on it.
+   */
+  readonly rulerStrength: number;
 }
 
 export interface ExerciseLoadedEvent {
@@ -559,6 +568,7 @@ export class PracticeController {
       previewNextPage: true,
       rhythmRuler: 'off',
       rulerCursor: false,
+      rulerStrength: 1,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();

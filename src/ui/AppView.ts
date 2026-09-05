@@ -592,6 +592,16 @@ export class AppView {
   private takeTick: ReturnType<typeof setInterval> | null = null;
   /** Whether the passage markers are on the page, which a tap turns over. */
   private passageMarkersWanted = true;
+  /**
+   * The bar a hold last put the place on, or `null` for none.
+   *
+   * Kept here rather than asked of the controller, which answers with the
+   * *step* a run begins at - and nought there means "no place of my own",
+   * which is also the answer for a place put on the very first bar. The two
+   * are the same number and different facts, and this gesture needs the
+   * difference: it is what says whether the next hold opens a passage.
+   */
+  private placedOnBar: number | null = null;
   /** Pending redraw of the keep pill: the counter, and the silence closing. */
   private silenceWatch: ReturnType<typeof setTimeout> | null = null;
   private lastDrainAtMs: number | null = null;
@@ -1109,6 +1119,7 @@ export class AppView {
     if (step === null) {
       return;
     }
+    this.placedOnBar = measureIndex;
     this.showPassageMarkers();
   }
 
@@ -1138,25 +1149,37 @@ export class AppView {
     if (status === 'running' || status === 'counting-in' || status === 'paused') {
       return;
     }
-    const { rangeFromBar, rangeToBar } = controller.settings;
-    const bar = controller.barNumber(measureIndex);
-
-    if (controller.beginsAt === 0) {
-      this.beginAt(measureIndex);
+    const exercise = controller.currentExercise;
+    if (exercise === null) {
       return;
     }
-    if (rangeFromBar === null) {
+    const { rangeFromBar, rangeToBar } = controller.settings;
+    const bar = controller.barNumber(measureIndex);
+    const last = controller.barNumber(Math.max(0, measureCount(exercise) - 1));
+    const flagged = this.placedOnBar;
+
+    // Inside the passage, with a near end already standing: this is the far
+    // end. Held on the near end's own bar it makes a passage of that one bar,
+    // which is the quickest thing a reader wants; held further on it takes in
+    // everything between.
+    if (rangeFromBar !== null && bar >= rangeFromBar && bar <= (rangeToBar ?? last)) {
+      this.narrowTo(rangeFromBar, bar);
+      return;
+    }
+    // On the place the music starts from, and no passage yet: this is the
+    // near end. The place has to be *here* rather than anywhere, so a reader
+    // can see what the next hold will do by looking at the bar under their
+    // finger.
+    if (rangeFromBar === null && flagged === measureIndex) {
       this.narrowTo(bar, null);
       return;
     }
-    if (rangeToBar === null) {
-      // Either way round, because a reader who holds behind the near end
-      // meant the two bars they pointed at and not an empty passage.
-      this.narrowTo(Math.min(rangeFromBar, bar), Math.max(rangeFromBar, bar));
-      return;
+    // Anywhere else: a bar outside what is being practised is a reader
+    // starting again somewhere new, so the passage goes and the place lands
+    // here.
+    if (rangeFromBar !== null || rangeToBar !== null) {
+      controller.updateSettings({ rangeFromBar: null, rangeToBar: null });
     }
-    // All three are set, so this is a fresh start rather than a fourth mark.
-    controller.updateSettings({ rangeFromBar: null, rangeToBar: null });
     this.beginAt(measureIndex);
   }
 
@@ -1740,6 +1763,8 @@ export class AppView {
         controller.stop();
       }
       controller.beginAtTheStart();
+      // The place is gone, so no bar is standing ready to open a passage.
+      this.placedOnBar = null;
       controller.cursorToStart();
       this.showPassageMarkers();
     });
@@ -2391,6 +2416,7 @@ export class AppView {
     this.subscriptions.push(
       controller.events.on('exerciseLoaded', ({ exercise }) => {
         this.hasLooked = false;
+        this.placedOnBar = null;
         // Around whatever was just engraved, which *is* the passage: the
         // markers belong at its two ends after every reload, wherever the
         // reader last left them on the page before it.

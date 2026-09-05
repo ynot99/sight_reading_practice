@@ -38,14 +38,23 @@ the serializer and the parser is exact, measured on the real test file and
 byte for byte, so there is one representation to keep correct instead of two
 — and what is on disk stays a format other programs can read.
 
-**Hold a finger on a bar** to fill in the next mark that is missing: the
-place the music will start from, then the near end of the passage, then the
-far end. With all three set the next hold starts over. Which mark it is comes
-off the page and not off a count — you look and see what is not there yet —
-and holding behind the near end is read as the stretch between the two bars
-pointed at rather than as an empty passage.
+**Hold a finger on a bar** to mark it. What the hold does is decided by what
+is already standing on *that bar*, so it can be read off the page rather than
+counted:
 
-Which mark could instead have been said by *where in the bar* the finger
+- a bar **outside** what is being practised clears the passage and puts the
+  place there — a reader holding somewhere else is beginning somewhere else,
+  not stretching the passage to reach a bar they never said belonged to it;
+- a hold on the bar **the place is on** opens the passage there;
+- a hold **inside** the passage, with the near end already standing, is the
+  far end. On the near end's own bar that makes a passage of one bar, which is
+  the quickest thing anyone wants; further along it takes in everything
+  between.
+
+So bars 9 to 12 are: hold 9, hold 9, hold 12. And bar 9 alone is: hold 9,
+hold 9, hold 9.
+
+Which mark it is could instead have been said by *where in the bar* the finger
 landed, near the bar line against the middle of it, and that is a distinction
 a fingertip cannot reliably make: a bar is a couple of centimetres and a
 fingertip is one, so a third of the misses would place the wrong mark. A

@@ -1888,7 +1888,10 @@ describe('AppView', () => {
        * would place the wrong mark, a bar being a couple of centimetres and
        * a fingertip being one.
        */
-      it('goes place, then near end, then far end, then starts over', async () => {
+      it('goes place, then near end, then far end, all on the one bar', async () => {
+        // Read off the bar under the finger rather than out of a count of
+        // holds: what the next one does is decided by what is already
+        // standing *there*, so a reader can see it by looking.
         const rig = createRig();
         await rig.view.initialize();
         const { controller } = rig.runtime;
@@ -1897,32 +1900,66 @@ describe('AppView', () => {
         expect(controller.beginsAt).toBeGreaterThan(0);
         expect(controller.settings.rangeFromBar).toBeNull();
 
+        // The place is on this bar, so this is the near end.
         rig.renderer.holdBar(1);
         expect(controller.settings.rangeFromBar).toBe(controller.barNumber(1));
         expect(controller.settings.rangeToBar).toBeNull();
 
-        rig.renderer.holdBar(3);
-        expect(controller.settings.rangeToBar).toBe(controller.barNumber(3));
-
-        // A fourth is a fresh start, not a fourth mark.
-        rig.renderer.holdBar(2);
-        expect(controller.settings.rangeFromBar).toBeNull();
-        expect(controller.settings.rangeToBar).toBeNull();
+        // The near end is on this bar, so this is the far end: one bar.
+        rig.renderer.holdBar(1);
+        expect(controller.settings.rangeToBar).toBe(controller.barNumber(1));
       });
 
-      it('takes the two bars pointed at, whichever came first', async () => {
-        // A reader who holds behind the near end meant the stretch between
-        // the two bars they pointed at, not an empty passage.
+      it('takes in everything up to a hold further into the passage', async () => {
+        // The near end standing and a hold beyond it is the reader saying
+        // where the passage ends, which is how a passage of more than one bar
+        // is asked for without dragging anything.
         const rig = createRig();
         await rig.view.initialize();
         const { controller } = rig.runtime;
+        rig.renderer.holdBar(0);
+        rig.renderer.holdBar(0);
+        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(0));
 
-        rig.renderer.holdBar(3);
-        rig.renderer.holdBar(3);
         rig.renderer.holdBar(1);
 
+        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(0));
+        expect(controller.settings.rangeToBar).toBe(controller.barNumber(1));
+      });
+
+      it('starts again somewhere new when the hold is outside the passage', async () => {
+        // A bar outside what is being practised is a reader beginning
+        // somewhere else. The passage goes rather than being stretched to
+        // reach a bar they never said belonged to it.
+        const rig = createRig();
+        await rig.view.initialize();
+        const { controller } = rig.runtime;
+        rig.renderer.holdBar(1);
+        rig.renderer.holdBar(1);
+        rig.renderer.holdBar(1);
         expect(controller.settings.rangeFromBar).toBe(controller.barNumber(1));
-        expect(controller.settings.rangeToBar).toBe(controller.barNumber(3));
+        expect(controller.settings.rangeToBar).toBe(controller.barNumber(1));
+
+        rig.renderer.holdBar(0);
+
+        expect(controller.settings.rangeFromBar).toBeNull();
+        expect(controller.settings.rangeToBar).toBeNull();
+        expect(controller.currentTimeline?.at(controller.beginsAt)?.measureIndex).toBe(0);
+      });
+
+      it('does not take the near end from a bar the place is not on', async () => {
+        // The place is what says where the near end may go, so a hold on some
+        // other bar is a fresh start rather than a passage opening there.
+        const rig = createRig();
+        await rig.view.initialize();
+        const { controller } = rig.runtime;
+        rig.renderer.holdBar(0);
+        expect(controller.settings.rangeFromBar).toBeNull();
+
+        rig.renderer.holdBar(1);
+
+        expect(controller.settings.rangeFromBar).toBeNull();
+        expect(controller.currentTimeline?.at(controller.beginsAt)?.measureIndex).toBe(1);
       });
 
       it('shuts the passage onto one bar when a marker is held', async () => {

@@ -37,6 +37,41 @@ function noteheads(shapes: readonly OverlayShape[]): NoteheadShape[] {
   return shapes.filter((shape): shape is NoteheadShape => shape.kind === 'notehead');
 }
 
+describe('where a press is drawn across the page', () => {
+    // Reported from the page: the mark for a left-hand note stood a little
+    // beside the notehead. The two hands do not share a point *across* the
+    // page - the engraver gives the left hand's chord whatever room its
+    // stems, accidentals and ledger lines need - and a step's own place is
+    // one moment for both of them. Measured on his file: nearly three units
+    // of daylight in one bar and nearly nine in another.
+  const staggered = fitStaffGeometry([
+    { stepIndex: 0, page: 0, system: 0, staffNumber: 1, diatonicIndex: Pitch.parse('C4').diatonicIndex, y: 155.5, x: 120 },
+    { stepIndex: 0, page: 0, system: 0, staffNumber: 2, diatonicIndex: Pitch.parse('C3').diatonicIndex, y: 210.5, x: 111.3 },
+  ]);
+
+  function drawnAt(midi: number): number {
+    if (staggered === null) {
+      throw new Error('expected geometry');
+    }
+    const shapes = buildOverlayShapes([{ stepIndex: 0, midi, correct: true, offset: 0 }], {
+      ...layout(),
+      geometry: staggered,
+    });
+    return noteheads(shapes)[0]?.x ?? Number.NaN;
+  }
+
+  it('stands on the notehead of the hand that printed it', () => {
+    expect(drawnAt(Pitch.parse('C4').midi)).toBe(120);
+    expect(drawnAt(Pitch.parse('C3').midi)).toBe(111.3);
+  });
+
+  it('falls back to the step for a note the page never printed there', () => {
+    // A wrong note is printed nowhere, so there is nothing better than the
+    // moment it was played at - which is where every mark stood before.
+    expect(drawnAt(Pitch.parse('F3').midi)).toBe(120);
+  });
+});
+
 describe('where a press is drawn in time', () => {
   function xOf(stepIndex: number, offset: number, stepX?: ReadonlyMap<number, number>): number {
     const base = layout();

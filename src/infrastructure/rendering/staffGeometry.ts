@@ -32,6 +32,15 @@ export interface DrawnNoteSample {
   readonly diatonicIndex: number;
   /** Vertical centre of the notehead, in the drawing's own units. */
   readonly y: number;
+  /**
+   * Where the notehead stands across the page, in the same units.
+   *
+   * Optional because a sample can be fabricated - the arithmetic here is
+   * tested on made-up numbers - and a fabricated one has no drawing to have
+   * been read off. Absent, a mark falls back to the step's own place, which
+   * is where every mark stood before this was recorded.
+   */
+  readonly x?: number;
 }
 
 export interface StaffGeometry {
@@ -55,13 +64,20 @@ export interface StaffGeometry {
    */
   readonly systemOfStep: ReadonlyMap<number, number>;
   /**
-   * The staff each printed note stands on, by step and staff position.
+   * Where each printed note stands, by step and staff position.
    *
-   * The page's own answer to "which hand is this note written for", and the
-   * only one that cannot be argued with: the note is *there*, on that stave,
-   * in that bar.
+   * The page's own answer to "which hand is this note written for, and where
+   * is it", and the only one that cannot be argued with: the note is *there*,
+   * on that stave, in that bar, at that point across it.
    */
-  readonly printedOn: ReadonlyMap<number, ReadonlyMap<number, number>>;
+  readonly printedOn: ReadonlyMap<number, ReadonlyMap<number, PrintedNote>>;
+}
+
+/** Where the page puts one note: which stave, and where across it. */
+export interface PrintedNote {
+  readonly staffNumber: number;
+  /** `null` where the drawing did not say. */
+  readonly x: number | null;
 }
 
 /** Semitone value of each letter, which is what the engraver reports. */
@@ -168,22 +184,46 @@ export function fitStaffGeometry(samples: readonly DrawnNoteSample[]): StaffGeom
   };
 }
 
-/** Where each note of the page is printed: step, then position, then staff. */
+/** Where each note of the page is printed: step, then position, then place. */
 function printedByStep(
   samples: readonly DrawnNoteSample[],
-): ReadonlyMap<number, ReadonlyMap<number, number>> {
-  const printed = new Map<number, Map<number, number>>();
+): ReadonlyMap<number, ReadonlyMap<number, PrintedNote>> {
+  const printed = new Map<number, Map<number, PrintedNote>>();
   for (const sample of samples) {
-    const atStep = printed.get(sample.stepIndex) ?? new Map<number, number>();
+    const atStep = printed.get(sample.stepIndex) ?? new Map<number, PrintedNote>();
     // The first staff that printed it. Two staves may notate one sounding
     // pitch at one instant - a unison written in both hands - and then either
     // is the right answer, because the reader played the note that is on both.
     if (!atStep.has(sample.diatonicIndex)) {
-      atStep.set(sample.diatonicIndex, sample.staffNumber);
+      atStep.set(sample.diatonicIndex, {
+        staffNumber: sample.staffNumber,
+        x: sample.x ?? null,
+      });
     }
     printed.set(sample.stepIndex, atStep);
   }
   return printed;
+}
+
+/**
+ * Where a note printed at this step stands across the page.
+ *
+ * The two hands do not share a point in time on the page: a chord in the left
+ * hand is drawn a little to the left of the right hand's, by however much the
+ * engraver needed for stems, accidentals and the ledger lines between them.
+ * Measured on his own file, that is nearly three units in one bar and nearly
+ * nine in another - small, and enough for a mark to sit visibly beside the
+ * notehead it belongs to.
+ *
+ * `null` where the page prints no such note here, and then the step's own
+ * place is the best answer there is.
+ */
+export function xForDiatonic(
+  geometry: StaffGeometry,
+  stepIndex: number,
+  diatonicIndex: number,
+): number | null {
+  return geometry.printedOn.get(stepIndex)?.get(diatonicIndex)?.x ?? null;
 }
 
 /**
@@ -320,7 +360,7 @@ export function staffForDiatonic(
 ): number | null {
   const printed = geometry.printedOn.get(stepIndex)?.get(diatonicIndex);
   if (printed !== undefined) {
-    return printed;
+    return printed.staffNumber;
   }
   let best: { staffNumber: number; clef: number; pitch: number } | null = null;
   for (const staffNumber of geometry.byStaff.keys()) {

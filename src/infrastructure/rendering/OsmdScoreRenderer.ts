@@ -2894,6 +2894,7 @@ export class OsmdScoreRenderer
         }
         samples.push({
           stepIndex,
+          x: position.x * UNITS_TO_PIXELS,
           page: this.stepPage.get(stepIndex) ?? 0,
           system: this.systemNumberOf(note),
           staffNumber: note.sourceNote?.parentStaffEntry?.parentStaff?.id ?? 1,

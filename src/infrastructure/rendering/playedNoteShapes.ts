@@ -5,6 +5,7 @@ import {
   CLEF_LINE_RANGE,
   ledgerIndicesFor,
   staffForDiatonic,
+  xForDiatonic,
   yForDiatonic,
   type StaffGeometry,
 } from './staffGeometry.js';
@@ -100,8 +101,12 @@ function markX(
   stepX: ReadonlyMap<number, number>,
   stepIndex: number,
   offset: number,
+  printed: number | null,
 ): number | undefined {
-  const base = stepX.get(stepIndex);
+  // Where the page prints this very note, when it prints it. The step's own
+  // place is one point in time for both hands, and the two hands are not
+  // drawn at one point across the page.
+  const base = printed ?? stepX.get(stepIndex);
   if (base === undefined || offset === 0) {
     return base;
   }
@@ -123,17 +128,23 @@ export function buildOverlayShapes(
   const radiusY = step * 0.95;
 
   for (const mark of marks) {
-    const x = markX(layout.stepX, mark.stepIndex, mark.offset);
+    // The pitch first, because where the mark goes depends on it: the page
+    // knows where *this note* is printed, and that is a better answer than
+    // the moment the whole chord shares.
+    const looseTiming = mark.offset !== 0;
+    const key = layout.keyAt(mark.stepIndex);
+    const pitch = spellPlayed(mark.midi, key);
+    const x = markX(
+      layout.stepX,
+      mark.stepIndex,
+      mark.offset,
+      xForDiatonic(layout.geometry, mark.stepIndex, pitch.diatonicIndex),
+    );
     if (x === undefined) {
       // A step the engraver never drew, such as a bar of rests.
       continue;
     }
 
-    // Displaced means it missed the beat: the offset already carries the
-    // dead zone, so nothing here has to re-decide what counts as on time.
-    const looseTiming = mark.offset !== 0;
-    const key = layout.keyAt(mark.stepIndex);
-    const pitch = spellPlayed(mark.midi, key);
     const staffNumber = staffForDiatonic(
       layout.geometry,
       mark.stepIndex,

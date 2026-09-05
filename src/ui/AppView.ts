@@ -646,6 +646,7 @@ export class AppView {
     immediateStart: HTMLInputElement;
     dimUnplayed: HTMLInputElement;
     previewNextPage: HTMLInputElement;
+    hearOtherHand: HTMLInputElement;
     focusDrawer: HTMLElement;
     focusRow: HTMLElement;
     focusSpeed: HTMLElement;
@@ -802,6 +803,7 @@ export class AppView {
       immediateStart: requireElement(doc, 'immediate-start'),
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
       previewNextPage: requireElement(doc, 'preview-next-page'),
+      hearOtherHand: requireElement(doc, 'hear-other-hand'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
       focusRow: requireElement(doc, 'focus-row'),
       focusSpeed: requireElement(doc, 'focus-speed'),
@@ -1681,6 +1683,11 @@ export class AppView {
 
     this.listen(this.el.immediateStart, 'change', () => {
       controller.updateSettings({ immediateStart: this.el.immediateStart.checked });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.hearOtherHand, 'change', () => {
+      controller.updateSettings({ hearTheOtherHand: this.el.hearOtherHand.checked });
       this.syncControlsFromSettings();
     });
 
@@ -3013,6 +3020,7 @@ export class AppView {
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.el.previewNextPage.checked = settings.previewNextPage;
+    this.el.hearOtherHand.checked = settings.hearTheOtherHand;
     this.applyPreview();
     this.el.focusImmediate.setAttribute('aria-pressed', String(settings.immediateStart));
     this.describeMetronomeButton(settings.clickWhen, settings.clickPattern);

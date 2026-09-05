@@ -65,11 +65,13 @@ function createController(
   midi: MockMidiAdapter;
   metronome: ManualMetronome;
   clock: ManualClock;
+  instrument: RecordingPitchPlayer;
 } {
   const clock = new ManualClock();
   const midi = new MockMidiAdapter({ clock });
   const metronome = new ManualMetronome(clock);
   const renderer = new FakeScoreRenderer();
+  const instrument = new RecordingPitchPlayer();
 
   const controller = new PracticeController({
     presets: new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS),
@@ -84,7 +86,7 @@ function createController(
     zoom: renderer,
     midi,
     metronome,
-    instrument: new RecordingPitchPlayer(),
+    instrument,
     ...(history === undefined ? {} : { history }),
     clock,
     scorings: new ScoringStrategyRegistry().registerAll([
@@ -106,7 +108,7 @@ function createController(
     },
   });
 
-  return { controller, renderer, midi, metronome, clock };
+  return { controller, renderer, midi, metronome, clock, instrument };
 }
 
 describe('PracticeController', () => {
@@ -1280,6 +1282,93 @@ describe('note size', () => {
     controller.updateSettings({ zoom: 1.5 });
 
     expect(renderer.refreshCount).toBe(1);
+  });
+});
+
+describe('hearing the hand you are not reading', () => {
+  /** The pitches the trainer sounded of its own accord. */
+  function sounded(instrument: RecordingPitchPlayer): number[] {
+    return instrument.played.map((note) => note.midi);
+  }
+
+  it('sounds the other hand as the music reaches each step', async () => {
+    // Practising one hand against silence is practising something the piece
+    // never asks for: the part only means what it means against the other.
+    const { controller, instrument } = createController(true);
+    await controller.openScore(twoBarExercise());
+    controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
+    const timeline = controller.currentTimeline;
+    const first = timeline?.at(0);
+    const left = (first?.notes ?? []).filter((note) => note.staffNumber === 2).map((n) => n.midi);
+    const right = (first?.notes ?? []).filter((note) => note.staffNumber === 1).map((n) => n.midi);
+    expect(left.length).toBeGreaterThan(0);
+    expect(right.length).toBeGreaterThan(0);
+
+    controller.start();
+
+    // The hand being read is the reader's to play; the other one answers.
+    for (const midi of left) {
+      expect(sounded(instrument)).toContain(midi);
+    }
+    for (const midi of right) {
+      expect(sounded(instrument)).not.toContain(midi);
+    }
+  });
+
+  it('holds each note for as long as it is written', async () => {
+    const { controller, instrument } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
+
+    controller.start();
+
+    // As long as it is written and no longer: the stop is asked for at the
+    // moment the note ends rather than left to the next step to cut it off.
+    // At sixty beats a quarter is a second.
+    const note = (controller.currentTimeline?.at(0)?.notes ?? []).find(
+      (each) => each.staffNumber === 2,
+    );
+    const beats = (note?.durationTicks ?? 0) / Duration.QUARTER.ticks;
+    expect(beats).toBeGreaterThan(0);
+    const [held] = instrument.stopped;
+    expect(held?.atMs).toBeCloseTo(beats * 1000, 5);
+  });
+
+  it('says nothing while both hands are being read', async () => {
+    // There is no other hand then, and sounding one would be the trainer
+    // playing the piece at the reader.
+    const { controller, instrument } = createController(true);
+    await controller.openScore(twoBarExercise());
+    controller.updateSettings({ handStaff: null, hearTheOtherHand: true });
+
+    controller.start();
+
+    expect(instrument.played).toEqual([]);
+  });
+
+  it('is silent until it is asked for', async () => {
+    const { controller, instrument } = createController(true);
+    await controller.openScore(twoBarExercise());
+    controller.updateSettings({ handStaff: 1 });
+
+    controller.start();
+
+    expect(instrument.played).toEqual([]);
+  });
+
+  it('takes back what it was holding when the run ends', async () => {
+    const { controller, instrument } = createController(true);
+    await controller.openScore(twoBarExercise());
+    controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
+    controller.start();
+    const scheduled = instrument.stopped.length;
+
+    controller.stop();
+
+    // Every note it started is stopped again, and now rather than at the end
+    // of a bar the reader has walked away from.
+    expect(instrument.stopped.length).toBeGreaterThan(scheduled);
+    expect(instrument.stopped.some((note) => note.atMs === undefined)).toBe(true);
   });
 });
 

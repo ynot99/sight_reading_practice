@@ -34,7 +34,13 @@ import type {
   IScoreRenderer,
   IScoreZoom,
 } from './ports/IScoreRenderer.js';
-import { barNumberOf, clefAtMeasure, keyAtMeasure, measureCount } from '../domain/model/Exercise.js';
+import {
+  barNumberOf,
+  clefAtMeasure,
+  keyAtMeasure,
+  measureCount,
+  spanMs,
+} from '../domain/model/Exercise.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
@@ -68,6 +74,15 @@ export interface JudgedPress {
 /** How far one press of the tempo buttons moves, as a percentage. */
 export const TEMPO_STEP_PERCENT = 5;
 /** Matches what the stored-settings codec will accept back. */
+/**
+ * How loudly the hand the reader is not playing is sounded.
+ *
+ * Under the reader's own playing rather than beside it: it is there to be
+ * played *against*, and an accompaniment as loud as the part is a duet
+ * nobody asked for.
+ */
+const OTHER_HAND_VELOCITY = 0.45;
+
 const MIN_TEMPO_BPM = 20;
 const MAX_TEMPO_BPM = 300;
 
@@ -165,6 +180,15 @@ export interface PracticeSettings {
    * question asked twice: which hand am I working on.
    */
   readonly handStaff: number | null;
+  /**
+   * Sound the hand the reader is not reading, as the music reaches it.
+   *
+   * Practising one hand against silence is practising something the piece
+   * never asks for: the part only means what it means against the other one.
+   * Off by default, because an accompaniment nobody asked for is a surprise
+   * in the middle of a run.
+   */
+  readonly hearTheOtherHand: boolean;
   /**
    * Bars to practise, one-based and inclusive, or `null` for the whole thing.
    *
@@ -428,6 +452,8 @@ export class PracticeController {
   private heldMarks: PlayedNote[] = [];
   /** Wrong notes played at the step the marker is standing on. */
   private missteps = 0;
+  /** Notes of the other hand still sounding, so a stop can take them back. */
+  private readonly sounding = new Set<number>();
   private readonly meter: HealthMeter;
   private lastBeatTicks = 0;
   private readonly judged: JudgedPress[] = [];
@@ -464,6 +490,7 @@ export class PracticeController {
       countInBars: 1,
       clickPattern: 'pulse',
       handStaff: null,
+      hearTheOtherHand: false,
       rangeFromBar: null,
       rangeToBar: null,
       repeatRange: false,
@@ -1529,6 +1556,7 @@ export class PracticeController {
         this.fadeAhead(step.index);
         // A new step is nobody's fault yet.
         this.forgetTheTrouble();
+        this.soundTheOtherHand(step);
       }),
     );
     this.sessionSubscriptions.push(
@@ -1541,6 +1569,8 @@ export class PracticeController {
         // would be saying the reader is stuck on music they have finished.
         // Said for both ways a run can end, which both arrive here.
         this.forgetTheTrouble();
+        // A run that is over takes back what it was still holding.
+        this.silenceTheOtherHand();
         this.deps.history?.record(this.practiceKey(), {
           atMs: this.deps.clock.now(),
           overall: score.overall,
@@ -1897,6 +1927,51 @@ export class PracticeController {
     this.deps.stuck.showTrouble(this.missteps);
     // Shown though the reader hid it: see {@link applyCursorVisibility}.
     this.applyCursorVisibility();
+  }
+
+  /**
+   * Sounds the hand the reader is not reading, as the music reaches it.
+   *
+   * From the *step*, not from a second player. The same pulse and the same
+   * cursor cannot serve two masters - a performance running under a run
+   * would be two clocks arguing about where the music is - and there is no
+   * need for one here: the session already says when the music arrives
+   * somewhere, in both modes and for its own reasons. Under the pulse that
+   * is the beat falling; in Wait mode it is the reader finishing the chord
+   * before, which is exactly when the next one should answer them.
+   *
+   * Each note is held for as long as it is written, read off `spanMs` so a
+   * written change of speed is honoured. What it does *not* carry is the
+   * pedal or a rolled chord - both belong to the performance the player
+   * gives, and this is an accompaniment rather than a performance.
+   */
+  private soundTheOtherHand(step: TimelineStep): void {
+    const hand = this.currentSettings.handStaff;
+    const exercise = this.exercise;
+    // With both hands being read there is no other hand to hear.
+    if (!this.currentSettings.hearTheOtherHand || hand === null || exercise === null) {
+      return;
+    }
+    const now = this.deps.clock.now();
+    for (const note of step.notes) {
+      if (note.staffNumber === hand) {
+        continue;
+      }
+      this.deps.instrument.play(note.midi, OTHER_HAND_VELOCITY);
+      this.deps.instrument.stop(
+        note.midi,
+        now + spanMs(exercise, step.onsetTicks, step.onsetTicks + note.durationTicks),
+      );
+      this.sounding.add(note.midi);
+    }
+  }
+
+  /** Takes back what the other hand was still holding when the run ended. */
+  private silenceTheOtherHand(): void {
+    for (const midi of this.sounding) {
+      this.deps.instrument.stop(midi);
+    }
+    this.sounding.clear();
   }
 
   /** Puts the marker back to itself, the trouble being over or elsewhere. */

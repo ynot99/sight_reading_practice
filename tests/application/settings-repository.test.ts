@@ -53,6 +53,7 @@ const SETTINGS: PracticeSettings = {
   immediateStart: false,
   dimUnplayed: true,
   previewNextPage: true,
+  hearTheOtherHand: true,
 };
 
 describe('practice settings codec', () => {

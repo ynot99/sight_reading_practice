@@ -1330,6 +1330,8 @@ export class AppView {
     // everything in front of it again. Stop is what ends a performance.
     if (controller.isListening) {
       controller.pauseListening();
+      // Held music has no next beat until it is picked up again.
+      this.forgetTheBeats();
       this.describeListening();
       return;
     }
@@ -2661,6 +2663,9 @@ export class AppView {
       // gap on a repeat came from: a stop and a start re-anchor the metronome
       // to the audio clock a fixed lead ahead of now.
       controller.playbackEvents.on('finished', () => {
+        // The beats it had promised go with it: they were promises about a
+        // performance that is over.
+        this.forgetTheBeats();
         this.describeListening();
       }),
     );

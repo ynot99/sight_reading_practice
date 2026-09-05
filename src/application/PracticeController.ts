@@ -1380,6 +1380,12 @@ export class PracticeController {
         cursor: this.deps.cursor,
       });
       this.player.events.on('finished', () => this.applyCursorVisibility());
+      // A performance keeps time, so the beats between one step and the next
+      // fall where they are written - the same reckoning a mode under a pulse
+      // uses, and for the same reason.
+      this.player.events.on('stepReached', ({ stepIndex, ticks, atMs }) => {
+        this.announceTheBeats(ticks, this.nextStepTicks(stepIndex), atMs);
+      });
     }
     return this.player;
   }

@@ -98,6 +98,20 @@ export interface PlayerEventMap {
    * exactly when a reader following along wants to know where they are.
    */
   positionChanged: PositionEvent;
+  /**
+   * The performance has reached a step of the music, and when.
+   *
+   * Where {@link positionChanged} says the bar and beat a reader would name,
+   * this says the moment and the place in divisions - which is what anything
+   * drawing *on* the page needs, and what a bar and a beat cannot be turned
+   * back into. The moment is the pulse's own, so it is the same clock the
+   * notes were scheduled against rather than whenever this was delivered.
+   */
+  stepReached: {
+    readonly stepIndex: number;
+    readonly ticks: number;
+    readonly atMs: number;
+  };
 }
 
 /** One note the player still has to start and stop. */
@@ -184,6 +198,15 @@ export class ExercisePlayer {
   private playing = false;
   /** The step the music has reached, which is where a pause holds. */
   private atIndex = 0;
+  /**
+   * The step last announced as reached, or nothing before the first tick.
+   *
+   * Its own field rather than {@link atIndex}, which starts *at* the step the
+   * performance begins on - that is where a pause would hold, and the same
+   * number cannot also mean "already announced" without the opening step
+   * going unannounced.
+   */
+  private announcedIndex: number | null = null;
   /**
    * Where a pause left off, or `null` when nothing is being held.
    *
@@ -390,6 +413,7 @@ export class ExercisePlayer {
     const first = timeline.at(Math.max(0, Math.round(options.fromIndex ?? 0)));
     this.fromTicks = first?.onsetTicks ?? 0;
     this.atIndex = first?.index ?? 0;
+    this.announcedIndex = null;
     // Whatever was being held, this is now what is happening instead.
     this.pausedAtIndex = null;
     this.untilTicks = this.endOf(options.toIndex);
@@ -766,8 +790,17 @@ export class ExercisePlayer {
     }
     const step = this.timeline.stepAtTick(position);
     if (step !== null) {
+      const arrived = step.index !== this.announcedIndex;
+      this.announcedIndex = step.index;
       this.atIndex = step.index;
       this.deps.cursor.moveTo(step.index);
+      if (arrived) {
+        this.emitter.emit('stepReached', {
+          stepIndex: step.index,
+          ticks: step.onsetTicks,
+          atMs: tick.scheduledTimeMs,
+        });
+      }
     }
     this.publishPosition(position);
   }

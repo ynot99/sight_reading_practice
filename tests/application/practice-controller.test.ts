@@ -1507,6 +1507,35 @@ describe('ruling the bars', () => {
     expect(promised).toEqual([5_000, 5_500, 6_000, 6_500, 7_000, 7_500, 8_000, 8_500]);
   });
 
+  it('runs the marker along it while the machine plays too', async () => {
+    // Reported from the page: nothing moved along the ruler during a
+    // playback. A performance goes past the session entirely, and only the
+    // session was saying where the beats were.
+    const { controller, metronome, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ rhythmRuler: 'quarter', rulerCursor: true });
+    const promised: number[] = [];
+    controller.events.on('beatsAhead', ({ beats }) => {
+      for (const beat of beats) {
+        promised.push(beat.mark.ticks);
+      }
+    });
+
+    controller.listen();
+    metronome.advanceSubdivisions(4);
+    void clock;
+
+    // The quarters of the first bar, in order, as the performance reaches
+    // them - not one lump at the start and not nothing at all.
+    expect(promised.length).toBeGreaterThanOrEqual(4);
+    expect(promised.slice(0, 4)).toEqual([
+      0,
+      Duration.QUARTER.ticks,
+      Duration.HALF.ticks,
+      Duration.HALF.ticks + Duration.QUARTER.ticks,
+    ]);
+  });
+
   it('says nothing about beats while the reader has not asked for them', async () => {
     const { controller, midi, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));

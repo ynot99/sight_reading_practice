@@ -93,6 +93,13 @@ export class PracticeSession {
   /** Note-ons that landed during the count-in, kept until the music starts. */
   private beforeTheMusic: MidiNoteOnEvent[] = [];
   /**
+   * When the last press this run took notice of was made.
+   *
+   * Corrected on the way in like every other moment a press carries, so it
+   * is when the key went down rather than when the page heard about it.
+   */
+  private lastStruckAtMs: number | null = null;
+  /**
    * The chord the reader started the run by playing, kept the same way.
    *
    * Apart from the count-in's presses because it is not one of them. A press
@@ -440,6 +447,7 @@ export class PracticeSession {
     this.countInRemaining = 0;
     this.beforeTheMusic = [];
     this.theOpeningChord = [];
+    this.lastStruckAtMs = null;
     this.lastReport = null;
     this.lastScore = null;
   }
@@ -550,7 +558,11 @@ export class PracticeSession {
     };
 
     this.results.push(result);
-    this.emitter.emit('stepCompleted', { result });
+    // Finished by a press where there was one, and otherwise by the run
+    // walking through: a step of rests is nobody's doing.
+    const finishedAt =
+      result.status === 'skipped' ? this.clock.now() : (this.lastStruckAtMs ?? this.clock.now());
+    this.emitter.emit('stepCompleted', { result, atMs: finishedAt });
 
     if (step.index >= this.lastIndex) {
       this.finish();
@@ -637,6 +649,7 @@ export class PracticeSession {
     }
     switch (event.type) {
       case 'noteon':
+        this.lastStruckAtMs = event.timestampMs;
         this.mode.onNoteOn(this.context, event);
         return;
       case 'noteoff':

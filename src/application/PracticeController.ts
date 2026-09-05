@@ -1485,8 +1485,8 @@ export class PracticeController {
     this.sessionSubscriptions.push(
       // A step is dimmed the moment it is done with, whether it was played
       // well, badly or not at all: the page empties as the music passes.
-      session.events.on('stepCompleted', ({ result }) => {
-        this.readerReaches(result.index, result.status);
+      session.events.on('stepCompleted', ({ result, atMs }) => {
+        this.readerReaches(result.index, result.status, atMs);
         if (this.currentSettings.readAheadSteps !== null) {
           this.fadeThrough(result.index);
         }
@@ -1992,7 +1992,7 @@ export class PracticeController {
    * an accompaniment that had already gone would have been answering a note
    * nobody had struck yet.
    */
-  private readerReaches(stepIndex: number, status: StepStatus): void {
+  private readerReaches(stepIndex: number, status: StepStatus, atMs: number): void {
     const step = this.timeline?.at(stepIndex) ?? null;
     if (
       !this.wantsTheOtherHand() ||
@@ -2002,9 +2002,12 @@ export class PracticeController {
     ) {
       return;
     }
-    const now = this.deps.clock.now();
-    this.otherHandAnchor = { wallMs: now, ticks: step.onsetTicks };
-    this.soundTheOtherHand(step, now);
+    // From the moment the key went down. Over the bridge that is a hop
+    // before the run heard about it, and anchored on the hearing the whole
+    // phrase after it came out that much late - which is exactly what a
+    // reader feels as lag.
+    this.otherHandAnchor = { wallMs: atMs, ticks: step.onsetTicks };
+    this.soundTheOtherHand(step, atMs);
   }
 
   /** Whether there is another hand to hear at all. */

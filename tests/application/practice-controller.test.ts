@@ -1353,6 +1353,20 @@ describe('hearing the hand you are not reading', () => {
     expect(instrument.played.map((note) => note.atMs)).toEqual([5_000, 6_000, 7_000, 8_000]);
   });
 
+  it('counts from the key going down, not from hearing about it', async () => {
+    // Over the bridge those are a hop apart, and the whole phrase after a
+    // press came out that much late - which is what a reader feels as lag.
+    const { controller, midi, instrument, clock } = await readingTheTreble();
+    controller.updateSettings({ handStaff: 2 });
+    controller.start();
+    clock.set(5_000);
+
+    // The key went down 80 ms ago; the page is only hearing about it now.
+    midi.noteOn(p('C3').midi, 4_920);
+
+    expect(instrument.played.map((note) => note.atMs)).toEqual([4_920, 5_920, 6_920, 7_920]);
+  });
+
   it('holds each note for as long as it is written', async () => {
     const { controller, midi, instrument, clock } = await readingTheTreble();
     controller.start();

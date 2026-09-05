@@ -26,6 +26,16 @@ export interface StepEnteredEvent {
 
 export interface StepCompletedEvent {
   readonly result: StepResult;
+  /**
+   * When the step was actually finished, on this page's clock.
+   *
+   * The moment the *key went down*, and not the moment the run heard about
+   * it: over the bridge those are a hop apart, and anything laid out from
+   * here - an accompaniment placed in the time it is written in - would be
+   * that hop late for the whole phrase after it. Where nothing was played,
+   * the moment the run passed through.
+   */
+  readonly atMs: number;
 }
 
 /**

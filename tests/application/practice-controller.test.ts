@@ -1424,6 +1424,106 @@ describe('hearing the hand you are not reading', () => {
   });
 });
 
+describe('being reminded to rest', () => {
+  /**
+   * Plays a note a minute until that many minutes have gone by.
+   *
+   * A minute apart because the timer counts the gaps between notes: anything
+   * shorter than a break is time at the keyboard, so a note a minute counts
+   * the minutes exactly and costs the suite a few dozen events instead of a
+   * few thousand.
+   */
+  function playFor(rig: ReturnType<typeof createController>, minutes: number): void {
+    for (let at = 0; at <= minutes * 60_000; at += 60_000) {
+      rig.midi.noteOn(60, at);
+    }
+  }
+
+  it('says nothing until the reader has been at it long enough', async () => {
+    const rig = createController(true, undefined, { restEveryMinutes: 30 });
+    await rig.controller.loadNewExercise();
+    let said = 0;
+    rig.controller.events.on('restDue', () => {
+      said += 1;
+    });
+
+    playFor(rig, 20);
+
+    expect(said).toBe(0);
+    expect(rig.controller.sittingMs).toBe(20 * 60_000);
+  });
+
+  it('says so once the time is up and nothing is playing', async () => {
+    const rig = createController(true, undefined, { restEveryMinutes: 30 });
+    await rig.controller.loadNewExercise();
+    const said: number[] = [];
+    rig.controller.events.on('restDue', ({ sittingMs }) => {
+      said.push(sittingMs);
+    });
+
+    playFor(rig, 31);
+
+    // Once, and not once for every note played after it fell due.
+    expect(said).toHaveLength(1);
+    expect(said[0]).toBeGreaterThanOrEqual(30 * 60_000);
+  });
+
+  it('waits for the run to end rather than interrupting it', async () => {
+    // His own note about this says the important half: never in the middle of
+    // playing. A reminder that interrupts a run is one to be resented and
+    // then turned off for good.
+    const rig = createController(true, undefined, { restEveryMinutes: 30 });
+    await rig.controller.loadNewExercise();
+    let said = 0;
+    rig.controller.events.on('restDue', () => {
+      said += 1;
+    });
+    rig.controller.start();
+
+    playFor(rig, 31);
+    expect(said).toBe(0);
+
+    rig.controller.stop();
+
+    expect(said).toBe(1);
+  });
+
+  it('starts the clock again when the rest is taken', async () => {
+    const rig = createController(true, undefined, { restEveryMinutes: 30 });
+    await rig.controller.loadNewExercise();
+    playFor(rig, 31);
+
+    rig.controller.restTaken();
+
+    expect(rig.controller.sittingMs).toBe(0);
+  });
+
+  it('keeps what it has when the rest is put off', async () => {
+    // They have still been playing for half an hour. The next quiet moment
+    // should say so again rather than start the half hour over.
+    const rig = createController(true, undefined, { restEveryMinutes: 30 });
+    await rig.controller.loadNewExercise();
+    playFor(rig, 31);
+
+    rig.controller.restPutOff();
+
+    expect(rig.controller.sittingMs).toBeGreaterThanOrEqual(30 * 60_000);
+  });
+
+  it('says nothing at all when the reader has turned it off', async () => {
+    const rig = createController(true, undefined, { restEveryMinutes: 0 });
+    await rig.controller.loadNewExercise();
+    let said = 0;
+    rig.controller.events.on('restDue', () => {
+      said += 1;
+    });
+
+    playFor(rig, 60);
+
+    expect(said).toBe(0);
+  });
+});
+
 describe('ruling the bars', () => {
   it('makes room in the page it prints, and keeps it out of the music', async () => {
     // The engraver is given a score with rests nobody sees in it, so the

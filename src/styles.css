@@ -301,6 +301,61 @@ textarea {
   font-size: 14px;
 }
 
+/*
+ * The rest card, and the ring that counts one down.
+ *
+ * The ring is drawn from a circle whose dash runs out over the length of the
+ * rest, so the border thins away by itself: a thing to glance at from across
+ * the room, with no number to read and nothing to keep looking at.
+ */
+.score-card__rest {
+  justify-items: center;
+  text-align: center;
+}
+
+.rest-ring {
+  width: 132px;
+  height: 132px;
+  transform: rotate(-90deg);
+}
+
+.rest-ring__track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 6px;
+}
+
+.rest-ring__arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6px;
+  stroke-linecap: round;
+  /* Set from the length of the rest; the circumference is 2 pi r, r = 52. */
+  stroke-dasharray: 326.7;
+  animation: rest-ring-empties linear forwards;
+}
+
+@keyframes rest-ring-empties {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 326.7;
+  }
+}
+
+.rest-ring__left {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rest-ring__arc {
+    animation: none;
+  }
+}
+
 .score-card__count {
   font-size: clamp(72px, 22vmin, 200px);
   font-weight: 700;

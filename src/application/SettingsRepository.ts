@@ -287,6 +287,7 @@ export function decodePracticeSettings(
     rhythmRuler: readRuler(value['rhythmRuler']),
     rulerCursor: readBoolean(value['rulerCursor']),
     rulerStrength: readNumber(value['rulerStrength'], 0, 1),
+    restEveryMinutes: readInteger(value['restEveryMinutes'], 0, 180),
   } as PracticeSettings);
 }
 
@@ -332,6 +333,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     rhythmRuler: settings.rhythmRuler,
     rulerCursor: settings.rulerCursor,
     rulerStrength: settings.rulerStrength,
+    restEveryMinutes: settings.restEveryMinutes,
   };
 }
 

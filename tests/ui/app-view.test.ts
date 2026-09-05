@@ -1074,6 +1074,59 @@ describe('AppView', () => {
       }
     });
 
+    it('offers a rest, and counts one down when it is taken', async () => {
+      // His own idea. The card appears in the middle of the page, where
+      // everything the page has to say is said, and the only thing it insists
+      // on is being easy to put off.
+      vi.useFakeTimers();
+      try {
+        const { view, runtime, midi } = createRig();
+        await view.initialize();
+        runtime.controller.updateSettings({ restEveryMinutes: 30 });
+        expect(element('score-rest').hidden).toBe(true);
+
+        // A note a minute: the timer counts the gaps between notes, and
+        // anything shorter than a break is time at the keyboard.
+        for (let at = 0; at <= 31 * 60_000; at += 60_000) {
+          midi.noteOn(60, at);
+        }
+
+        expect(element('score-rest').hidden).toBe(false);
+        expect(element('score-card').hidden).toBe(false);
+        // Said the moment it fell due, which is at the half hour itself.
+        expect(element('rest-heading').textContent).toContain('30 minutes');
+        expect(element('rest-tip').textContent).not.toBe('');
+
+        element<HTMLButtonElement>('rest-take').click();
+
+        // The clock starts again at once - the rest has begun - and the ring
+        // is what says how much of it is left.
+        expect(runtime.controller.sittingMs).toBe(0);
+        expect(element('rest-ring').hasAttribute('hidden')).toBe(false);
+        expect(element<HTMLButtonElement>('rest-take').hidden).toBe(true);
+
+        vi.advanceTimersByTime(3 * 60_000 + 500);
+
+        expect(element('score-rest').hidden).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('lets the reader put it off without losing the hour they have played', async () => {
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ restEveryMinutes: 30 });
+      for (let at = 0; at <= 31 * 60_000; at += 60_000) {
+        midi.noteOn(60, at);
+      }
+
+      element<HTMLButtonElement>('rest-later').click();
+
+      expect(element('score-rest').hidden).toBe(true);
+      expect(runtime.controller.sittingMs).toBeGreaterThanOrEqual(30 * 60_000);
+    });
+
     it('says the page is being drawn while it is being drawn', async () => {
       // Engraving a long score is seconds - more of them since the bars can
       // be ruled - and the page it replaces stays on screen while it works.

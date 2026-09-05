@@ -47,6 +47,23 @@ import { calibrationExercise } from '../domain/generation/calibrationExercise.js
 /** How often the bridge pill may redraw while he plays. */
 const HOP_REFRESH_MS = 1_000;
 
+/** How long a rest lasts, once the reader asks for one to be counted. */
+const REST_LENGTH_MS = 3 * 60_000;
+
+/**
+ * What to do with a rest, in his own words.
+ *
+ * Given in turn rather than at random, so the same one is not offered twice
+ * running - a reminder that repeats itself is one that stops being read.
+ */
+const REST_TIPS: readonly string[] = [
+  'Stand up and walk about for a minute.',
+  'Shake your hands out, and let the wrists hang.',
+  'Look at something far away for twenty seconds, and blink.',
+  'Drink something.',
+  'Rest your eyes instead: put the playback on and play along without reading.',
+];
+
 const TEMPO_REDRAW_DELAY_MS = 350;
 
 /**
@@ -635,6 +652,9 @@ export class AppView {
   private previewTimer: ReturnType<typeof setInterval> | null = null;
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
+  private restTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Which tip to give next, so the same one is not given twice running. */
+  private restTipAt = 0;
   /** Beats promised but not yet reached; see {@link runTheBeats}. */
   private beatTimers: ReturnType<typeof setTimeout>[] = [];
   /** Pending return of the pill to what the run is saying. */
@@ -673,6 +693,15 @@ export class AppView {
     scoreCard: HTMLElement;
     scoreCount: HTMLElement;
     scoreEngraving: HTMLElement;
+    scoreRest: HTMLElement;
+    restHeading: HTMLElement;
+    restTip: HTMLElement;
+    restRing: SVGElement;
+    restRingArc: SVGCircleElement;
+    restLeft: HTMLOutputElement;
+    restEvery: HTMLSelectElement;
+    restTake: HTMLButtonElement;
+    restLater: HTMLButtonElement;
     scoreVerdict: HTMLElement;
     focusPlay: HTMLButtonElement;
     focusPlayIcon: SVGPathElement;
@@ -839,6 +868,15 @@ export class AppView {
       scoreCard: requireElement(doc, 'score-card'),
       scoreCount: requireElement(doc, 'score-count'),
       scoreEngraving: requireElement(doc, 'score-engraving'),
+      scoreRest: requireElement(doc, 'score-rest'),
+      restHeading: requireElement(doc, 'rest-heading'),
+      restTip: requireElement(doc, 'rest-tip'),
+      restRing: requireElement(doc, 'rest-ring'),
+      restRingArc: requireElement(doc, 'rest-ring-arc'),
+      restLeft: requireElement(doc, 'rest-left'),
+      restEvery: requireElement(doc, 'rest-every'),
+      restTake: requireElement(doc, 'rest-take'),
+      restLater: requireElement(doc, 'rest-later'),
       scoreVerdict: requireElement(doc, 'score-verdict'),
       focusPlay: requireElement(doc, 'focus-play'),
       focusPlayIcon: requireElement(doc, 'focus-play-icon'),
@@ -1025,6 +1063,10 @@ export class AppView {
     if (this.tempoRedraw !== null) {
       clearTimeout(this.tempoRedraw);
       this.tempoRedraw = null;
+    }
+    if (this.restTimer !== null) {
+      clearTimeout(this.restTimer);
+      this.restTimer = null;
     }
     if (this.takeTick !== null) {
       clearInterval(this.takeTick);
@@ -1764,6 +1806,24 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    this.listen(this.el.restTake, 'click', () => {
+      this.takeTheRest();
+    });
+
+    this.listen(this.el.restLater, 'click', () => {
+      controller.restPutOff();
+      this.hideTheRest();
+    });
+
+    this.listen(this.el.restEvery, 'change', () => {
+      controller.updateSettings({ restEveryMinutes: Number(this.el.restEvery.value) });
+      this.syncControlsFromSettings();
+      if (Number(this.el.restEvery.value) === 0) {
+        controller.restTaken();
+        this.hideTheRest();
+      }
+    });
+
     this.listen(this.el.rulerStrength, 'input', () => {
       controller.updateSettings({ rulerStrength: Number(this.el.rulerStrength.value) / 100 });
       this.syncControlsFromSettings();
@@ -2176,7 +2236,74 @@ export class AppView {
    */
   private syncCard(): void {
     this.el.scoreCard.hidden =
-      this.el.scoreCount.hidden && this.el.scoreVerdict.hidden && this.el.scoreEngraving.hidden;
+      this.el.scoreCount.hidden &&
+      this.el.scoreVerdict.hidden &&
+      this.el.scoreEngraving.hidden &&
+      this.el.scoreRest.hidden;
+  }
+
+  /**
+   * Puts the reminder up, with one thing to do about it.
+   *
+   * The tips are his own: stand up, shake the hands out, look at something
+   * far off, drink something - and one that is still practice, because a
+   * break from *reading* is worth having on its own.
+   */
+  private showTheRest(sittingMs: number): void {
+    const minutes = Math.round(sittingMs / 60_000);
+    this.el.restHeading.textContent =
+      minutes >= 1 ? `You have been playing for ${minutes} minutes` : 'Time for a rest';
+    this.el.restTip.textContent = REST_TIPS[this.restTipAt % REST_TIPS.length] ?? '';
+    this.restTipAt += 1;
+    this.el.restRing.setAttribute('hidden', '');
+    this.el.restLeft.hidden = true;
+    this.el.restTake.hidden = false;
+    this.el.restLater.hidden = false;
+    this.el.scoreRest.hidden = false;
+    this.syncCard();
+  }
+
+  /**
+   * Counts the rest down, and says so when it is over.
+   *
+   * The ring is the whole of it - a border that thins away by itself, to be
+   * glanced at from across the room with no number to read. The sound at the
+   * end is what lets the reader stop watching it, which is rather the point
+   * of a rest.
+   */
+  private takeTheRest(): void {
+    this.runtime.controller.restTaken();
+    this.el.restTake.hidden = true;
+    this.el.restLater.hidden = true;
+    this.el.restRing.removeAttribute('hidden');
+    this.el.restLeft.hidden = false;
+    this.el.restLeft.value = `${Math.round(REST_LENGTH_MS / 60_000)} minutes`;
+    // Restarted rather than merely set: an animation whose duration changes
+    // does not begin again on its own.
+    this.el.restRingArc.style.animation = 'none';
+    void this.el.restRingArc.getBoundingClientRect();
+    this.el.restRingArc.style.animation = `rest-ring-empties ${REST_LENGTH_MS}ms linear forwards`;
+    if (this.restTimer !== null) {
+      clearTimeout(this.restTimer);
+    }
+    this.restTimer = setTimeout(() => {
+      this.restTimer = null;
+      this.hideTheRest();
+      this.chime();
+    }, REST_LENGTH_MS);
+  }
+
+  /** Two notes, so the reader can look away and still be told. */
+  private chime(): void {
+    this.runtime.pitchPlayer.play(76, 0.5);
+    setTimeout(() => this.runtime.pitchPlayer.play(83, 0.45), 240);
+  }
+
+  private hideTheRest(): void {
+    this.el.scoreRest.hidden = true;
+    this.el.restRing.setAttribute('hidden', '');
+    this.el.restLeft.hidden = true;
+    this.syncCard();
   }
 
   /**
@@ -2649,6 +2776,12 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      controller.events.on('restDue', ({ sittingMs }) => {
+        this.showTheRest(sittingMs);
+      }),
+    );
+
+    this.subscriptions.push(
       controller.events.on('engraving', ({ busy }) => {
         this.el.scoreEngraving.hidden = !busy;
         this.syncCard();
@@ -2754,6 +2887,13 @@ export class AppView {
         // made, and the application layer has no timer to defer with.
         if (status === 'completed' && this.runtime.controller.settings.repeatRange) {
           setTimeout(() => {
+            // Not over a rest that is owed: going round again is starting
+            // something new, and his own note asks for the repeat to be held
+            // when it is time to stop. The reading that was going finishes -
+            // nothing is cut off - and then the page says so.
+            if (this.runtime.controller.restIsOwed) {
+              return;
+            }
             if (this.runtime.controller.settings.repeatRange) {
               this.runtime.controller.start();
             }
@@ -3198,6 +3338,7 @@ export class AppView {
     this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.el.previewNextPage.checked = settings.previewNextPage;
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
+    this.el.restEvery.value = String(settings.restEveryMinutes);
     this.el.rulerCursor.checked = settings.rulerCursor;
     this.el.rulerStrength.value = String(Math.round(settings.rulerStrength * 100));
     this.el.rulerStrengthValue.value = this.el.rulerStrength.value;

@@ -80,6 +80,36 @@
           -->
           <p id="score-engraving" class="score-card__busy" hidden>Engraving…</p>
           <output id="score-count" class="score-card__count" hidden></output>
+          <!--
+            His own idea, and his own note about it says the important half:
+            never in the middle of playing. So this appears at the first
+            moment nothing is going, and the only thing it insists on is
+            being easy to put off.
+          -->
+          <div id="score-rest" class="score-card__verdict score-card__rest" hidden>
+            <strong id="rest-heading">Time for a rest</strong>
+            <p id="rest-tip" class="hint"></p>
+            <svg id="rest-ring" class="rest-ring" viewBox="0 0 120 120" hidden aria-hidden="true">
+              <circle class="rest-ring__track" cx="60" cy="60" r="52" />
+              <circle id="rest-ring-arc" class="rest-ring__arc" cx="60" cy="60" r="52" />
+            </svg>
+            <output id="rest-left" class="rest-ring__left" hidden></output>
+            <div class="control-group">
+              <label for="rest-every">Remind me every</label>
+              <select id="rest-every">
+                <option value="20">20 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="45">45 minutes</option>
+                <option value="60">60 minutes</option>
+                <option value="0">Never</option>
+              </select>
+            </div>
+            <div class="control-group control-group--actions">
+              <button id="rest-take" type="button" class="button button--primary">Rest</button>
+              <button id="rest-later" type="button" class="button button--ghost">Later</button>
+            </div>
+          </div>
+
           <div id="score-verdict" class="score-card__verdict" hidden>
             <div id="result" class="result"></div>
             <button id="drill" type="button" class="button" hidden>Drill the worst bars</button>

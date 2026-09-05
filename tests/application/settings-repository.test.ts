@@ -57,6 +57,7 @@ const SETTINGS: PracticeSettings = {
   rhythmRuler: 'eighth',
   rulerCursor: true,
   rulerStrength: 0.5,
+  restEveryMinutes: 45,
 };
 
 describe('practice settings codec', () => {

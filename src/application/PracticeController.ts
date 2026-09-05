@@ -27,6 +27,7 @@ import type { PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type { ClickWhen, ClickPattern } from './ports/IMetronome.js';
 import { clickFollowsTheReader } from './ports/IMetronome.js';
+import { PracticeTimer } from './PracticeTimer.js';
 import {
   rulerMarks,
   rulerMarksBetween,
@@ -378,6 +379,15 @@ export interface PracticeSettings {
    * say where the beats are on it.
    */
   readonly rulerStrength: number;
+  /**
+   * How long to play before being reminded to rest, in minutes; `0` for never.
+   *
+   * The reminder is the reader's own idea and their own note about it says
+   * the important half: never in the middle of playing. So this settles when
+   * a rest falls *due*, and nothing else - when it is actually said is a
+   * question about what is happening, not about the clock.
+   */
+  readonly restEveryMinutes: number;
 }
 
 export interface ExerciseLoadedEvent {
@@ -409,6 +419,14 @@ export interface ControllerEventMap {
    * the reader has asked for something and nothing whatever has happened.
    */
   engraving: { readonly busy: boolean };
+  /**
+   * The reader has been at it long enough, and nothing is happening.
+   *
+   * Both halves matter. A rest falls due on the clock; it is *said* at the
+   * first moment the music is not going, because a reminder that interrupts
+   * a run is a reminder to be resented and then turned off.
+   */
+  restDue: { readonly sittingMs: number };
   /**
    * The beats about to pass, and when each of them falls.
    *
@@ -517,6 +535,13 @@ export class PracticeController {
    */
   private otherHandAnchor: { readonly wallMs: number; readonly ticks: number } | null = null;
   private readonly meter: HealthMeter;
+  /** How long the reader has been at the keyboard; see {@link PracticeTimer}. */
+  private readonly timer = new PracticeTimer();
+  /** Whether a rest is owed but has not been said yet. */
+  private restOwed = false;
+  /** Whether the reader has been told about this one already. */
+  private restSaid = false;
+  private hearingNotes: Unsubscribe | null = null;
   private lastBeatTicks = 0;
   private readonly judged: JudgedPress[] = [];
   private finishedReport: PerformanceReport | null = null;
@@ -526,6 +551,7 @@ export class PracticeController {
   constructor(dependencies: PracticeControllerDependencies) {
     this.deps = dependencies;
     this.meter = new HealthMeter(dependencies.health);
+    this.hearNotesForTheTimer();
     // Defaults come from the preset that is actually about to be used, not
     // from the first one registered: restored settings name a preset but may
     // predate a field, and that field has to default to something coherent
@@ -578,6 +604,7 @@ export class PracticeController {
       rhythmRuler: 'off',
       rulerCursor: false,
       rulerStrength: 1,
+      restEveryMinutes: 30,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();
@@ -1395,7 +1422,10 @@ export class PracticeController {
         instrument: this.deps.instrument,
         cursor: this.deps.cursor,
       });
-      this.player.events.on('finished', () => this.applyCursorVisibility());
+      this.player.events.on('finished', () => {
+        this.applyCursorVisibility();
+        this.considerARest();
+      });
       // A performance keeps time, so the beats between one step and the next
       // fall where they are written - the same reckoning a mode under a pulse
       // uses, and for the same reason.
@@ -1698,6 +1728,9 @@ export class PracticeController {
         // answered for by a different one of the reader's three answers.
         this.watchForTheOpening();
         this.applyCursorVisibility();
+        // And it is the first moment a rest that fell due mid-run may be
+        // mentioned without interrupting anything.
+        this.considerARest();
       }),
     );
 
@@ -1723,6 +1756,8 @@ export class PracticeController {
   }
 
   dispose(): void {
+    this.hearingNotes?.();
+    this.hearingNotes = null;
     this.listeningForTheOpening?.();
     this.listeningForTheOpening = null;
     this.player?.dispose();
@@ -2338,6 +2373,88 @@ export class PracticeController {
     } else {
       this.deps.cursor.hide();
     }
+  }
+
+  /**
+   * Counts the reader's playing, wherever it happens.
+   *
+   * Not through a session: most of the wear on a pair of hands is put there
+   * outside a graded run - trying a bar over, hunting a chord, playing for
+   * the pleasure of it - and none of that reaches a session at all.
+   */
+  private hearNotesForTheTimer(): void {
+    this.hearingNotes = this.deps.midi.subscribe((event) => {
+      if (event.type !== 'noteon') {
+        return;
+      }
+      this.timer.noteHeard(event.timestampMs);
+      this.considerARest();
+    });
+  }
+
+  /**
+   * Works out whether a rest is owed, and says so when it may be said.
+   *
+   * Asked from both directions: when a note is played, which is what moves
+   * the clock, and when the music stops, which is what makes it sayable.
+   */
+  private considerARest(): void {
+    const every = Math.max(0, this.currentSettings.restEveryMinutes) * 60_000;
+    if (every > 0 && this.timer.sittingMs >= every) {
+      this.restOwed = true;
+    }
+    if (!this.restOwed || this.restSaid || !this.nothingIsHappening) {
+      return;
+    }
+    this.restSaid = true;
+    this.emitter.emit('restDue', { sittingMs: this.timer.sittingMs });
+  }
+
+  /** Whether the music is standing still, so a word would interrupt nothing. */
+  private get nothingIsHappening(): boolean {
+    const status = this.currentSession?.status;
+    return (
+      status !== 'running' &&
+      status !== 'counting-in' &&
+      status !== 'paused' &&
+      !this.isListening &&
+      !this.isListeningPaused
+    );
+  }
+
+  /**
+   * The reader has taken their rest, or put it off.
+   *
+   * Taken, the clock starts again from nothing. Put off, it keeps what it
+   * has: they have still been playing for an hour, and the next quiet moment
+   * should say so again rather than start the hour over.
+   */
+  restTaken(): void {
+    this.timer.reset();
+    this.restOwed = false;
+    this.restSaid = false;
+  }
+
+  /** Says nothing more about this one until the reader has played on. */
+  restPutOff(): void {
+    this.restSaid = true;
+  }
+
+  /**
+   * Whether a rest is owed, said or not.
+   *
+   * Different from having been told: a rest falls due in the middle of a run
+   * as easily as anywhere, and the run goes on. What this is for is the
+   * things that would *start something new* - a repeat coming round again -
+   * which should not, with a reader already owed a break.
+   */
+  get restIsOwed(): boolean {
+    return this.restOwed;
+  }
+
+  /** How long the reader has been at the keyboard, for anything showing it. */
+  get sittingMs(): number {
+    return this.timer.sittingMs;
   }
 
   private createProvider(): IExerciseProvider {

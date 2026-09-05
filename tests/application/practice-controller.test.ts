@@ -838,6 +838,55 @@ describe('what you played, drawn over the score', () => {
     expect(renderer.cursor.visible).toBe(false);
   });
 
+  it('forgets the trouble when the run is over', async () => {
+    // Reported from the page: the marker stayed red after the run finished.
+    // It says "you are stuck here, now", and a run that is over has neither -
+    // what is left of it is the report and the marks. Both ways a run can end
+    // come through the same place, so stopping one clears it too.
+    const { controller, renderer, midi } = createController(true, undefined, {
+      showCursor: false,
+    });
+    await controller.openScore(twoBarExercise());
+    // A passage of one bar, so that the step he misses is the *last* one the
+    // run has: every step entered clears the trouble on the one before it, so
+    // the only trouble a finished run can leave behind is on the step nothing
+    // follows.
+    controller.updateSettings({ rangeFromBar: 1, rangeToBar: 1 });
+    const steps = controller.currentTimeline?.steps ?? [];
+    const inBar = steps.filter((step) => step.measureIndex === 0);
+    const last = inBar[inBar.length - 1]?.index ?? 0;
+    expect((steps[last]?.expectedMidi ?? []).length).toBeGreaterThan(0);
+    controller.start();
+
+    // Up to the last step, playing it right. Every step entered clears the
+    // trouble on the one before it - so the only trouble a finished run can
+    // leave behind is the trouble on its *last* step, which nothing enters a
+    // step after.
+    for (let guard = 0; guard < 64; guard += 1) {
+      const step = controller.session?.currentStep;
+      if (step === null || step === undefined || step.index >= last) {
+        break;
+      }
+      for (const midiNote of step.expectedMidi) {
+        midi.noteOn(midiNote, 0);
+      }
+    }
+    expect(controller.session?.currentStep?.index).toBe(last);
+
+    const wanted = controller.session?.currentStep?.expectedMidi ?? [];
+    midi.noteOn((wanted[0] ?? 60) + 1, 0);
+    expect(renderer.trouble).toBe(1);
+
+    for (const midiNote of wanted) {
+      midi.noteOn(midiNote, 0);
+    }
+
+    expect(controller.session?.status).toBe('completed');
+    expect(renderer.trouble).toBe(0);
+    // And the marker goes back to being put away, as the reader had it.
+    expect(renderer.cursor.visible).toBe(false);
+  });
+
   it('says nothing in a mode that walks on without the reader', async () => {
     // Under the pulse the marker has moved on by the next beat, so reddening
     // it would be a flash rather than a place - and a reader who hid the

@@ -1515,6 +1515,12 @@ export class PracticeController {
       session.events.on('finished', ({ report, score }) => {
         this.finishedReport = report;
         this.drawHeldMarks();
+        // The marker reddens to say "you are stuck *here*, now". A run that
+        // is over has no here and no now: what is left of it is the report
+        // and the marks, and a marker still glowing red over the last chord
+        // would be saying the reader is stuck on music they have finished.
+        // Said for both ways a run can end, which both arrive here.
+        this.forgetTheTrouble();
         this.deps.history?.record(this.practiceKey(), {
           atMs: this.deps.clock.now(),
           overall: score.overall,

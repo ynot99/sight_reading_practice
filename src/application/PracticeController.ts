@@ -30,6 +30,7 @@ import type {
   IPlayedNoteOverlay,
   IScoreCursor,
   IScoreFade,
+  IStuckMarker,
   IScoreRenderer,
   IScoreZoom,
 } from './ports/IScoreRenderer.js';
@@ -358,6 +359,8 @@ export interface PracticeControllerDependencies {
   readonly cursor: IScoreCursor;
   readonly overlay: IPlayedNoteOverlay;
   readonly fade: IScoreFade;
+  /** Says how much trouble the step under the marker is giving the reader. */
+  readonly stuck: IStuckMarker;
   readonly zoom: IScoreZoom;
   readonly midi: IMidiSource;
   readonly metronome: IMetronome;
@@ -409,6 +412,8 @@ export class PracticeController {
   private fadedThrough = -1;
   /** Marks waiting for the run to end, when that is when they are drawn. */
   private heldMarks: PlayedNote[] = [];
+  /** Wrong notes played at the step the marker is standing on. */
+  private missteps = 0;
   private readonly meter: HealthMeter;
   private lastBeatTicks = 0;
   private readonly judged: JudgedPress[] = [];
@@ -1004,6 +1009,7 @@ export class PracticeController {
     });
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
+    this.forgetTheTrouble();
     if (newMusic) {
       // And the marker goes back to the top of it. On music already on the
       // stand it stays where the reader put it: a tempo nudge is not a
@@ -1457,6 +1463,9 @@ export class PracticeController {
           drawn: why === '',
           why,
         });
+        // Before the marks have their say, and deliberately: this exists for
+        // the reader who has turned them off.
+        this.noteTheTrouble(verdict);
         if (this.currentSettings.playedNotes === 'hidden' || verdict === 'duplicate') {
           return;
         }
@@ -1495,6 +1504,8 @@ export class PracticeController {
       session.events.on('stepEntered', ({ step }) => {
         this.deps.cursor.moveTo(step.index);
         this.fadeAhead(step.index);
+        // A new step is nobody's fault yet.
+        this.forgetTheTrouble();
       }),
     );
     this.sessionSubscriptions.push(
@@ -1563,6 +1574,7 @@ export class PracticeController {
       unsubscribe();
     }
     this.sessionSubscriptions = [];
+    this.forgetTheTrouble();
     const had = this.currentSession !== null;
     this.currentSession?.dispose();
     this.currentSession = null;
@@ -1838,10 +1850,49 @@ export class PracticeController {
    * Re-engraving used to run this and take the marker away mid-playback -
    * which is what changing the tempo from the stand does.
    */
+  /**
+   * Counts a wrong note against the step the marker is standing on.
+   *
+   * Only where the music waits for the reader. Under the pulse the marker has
+   * moved on by the next beat, so reddening it there would be a flash rather
+   * than a place - and the reader who turned the marker off would have it
+   * blink back at them on every slip.
+   */
+  private noteTheTrouble(verdict: NoteVerdict): void {
+    if (verdict !== 'wrong' || this.deps.modes.get(this.currentSettings.modeId).requiresMetronome) {
+      return;
+    }
+    this.missteps += 1;
+    this.deps.stuck.showTrouble(this.missteps);
+    // Shown though the reader hid it: see {@link applyCursorVisibility}.
+    this.applyCursorVisibility();
+  }
+
+  /** Puts the marker back to itself, the trouble being over or elsewhere. */
+  private forgetTheTrouble(): void {
+    if (this.missteps === 0) {
+      return;
+    }
+    this.missteps = 0;
+    this.deps.stuck.showTrouble(0);
+    this.applyCursorVisibility();
+  }
+
   private applyCursorVisibility(): void {
     // A held performance keeps its marker: taking it away would lose the one
     // thing on the page saying where the music will pick up.
-    if (this.currentSettings.showCursor || this.isListening || this.isListeningPaused) {
+    //
+    // And so does a step that keeps going wrong. A reader practising with
+    // every colour off is reading blind on purpose, but blind they cannot
+    // tell *where* it went wrong - only that it did. The marker comes back
+    // for exactly as long as there is something to say, and it says it by
+    // reddening rather than by adding anything to the page.
+    if (
+      this.missteps > 0 ||
+      this.currentSettings.showCursor ||
+      this.isListening ||
+      this.isListeningPaused
+    ) {
       this.deps.cursor.show();
     } else {
       this.deps.cursor.hide();

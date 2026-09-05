@@ -125,6 +125,25 @@ describe('the stylesheet', () => {
     expect(waiting?.body).toMatch(/display\s*:\s*none/);
   });
 
+  it('reddens the marker where the reader keeps missing', () => {
+    // The engraver owns that element, so the state is written on the page it
+    // stands on and the colour is taken from there. jsdom applies no
+    // stylesheet, so nothing in the view tests can see this.
+    const steps = rules().filter((rule) => rule.selector.includes('[data-trouble='));
+
+    expect(steps.length).toBeGreaterThanOrEqual(4);
+    for (const step of steps) {
+      expect(step.selector).toContain('cursorImg');
+      expect(step.body).toMatch(/filter\s*:/);
+    }
+    // Stronger and stronger, so the ladder says how much rather than only
+    // that something is wrong.
+    const strength = steps.map((step) => Number.parseFloat(/saturate\(([\d.]+)\)/.exec(step.body)?.[1] ?? '0'));
+    for (let at = 1; at < strength.length; at += 1) {
+      expect(strength[at]).toBeGreaterThan(strength[at - 1] ?? 0);
+    }
+  });
+
   it('lets a touch through the middle of the page to the music under it', () => {
     // The card covering the score is transparent and covers all of it, so
     // taking touches would kill the two gestures the page is read with - a

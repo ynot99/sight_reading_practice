@@ -205,6 +205,44 @@ textarea {
 }
 
 /*
+ * The marker reddens where the reader keeps missing.
+ *
+ * Practising with every colour turned off is reading blind on purpose, and
+ * then there is no way to tell *where* it went wrong - only that it did. The
+ * marker is already standing on the place, so it is the thing that can say
+ * so: once for each wrong note played at the step it is on, and back to
+ * itself when the music moves on.
+ *
+ * A filter over the engraver's own marker rather than a marker of ours. It
+ * makes that element, it moves it, and it replaces it whenever the page is
+ * drawn again - so what is remembered is written on the page the marker
+ * stands on, which is ours, and the colour is taken from there.
+ *
+ * Turning up the saturation rather than the opacity: the marker is a wash
+ * over the notes and has to stay one, and a stronger wash that hides the
+ * chord being read would take away the thing the reader is stuck on.
+ */
+.score__surface img[id^='cursorImg'] {
+  transition: filter 140ms linear;
+}
+
+.score__surface[data-trouble='1'] img[id^='cursorImg'] {
+  filter: hue-rotate(140deg) saturate(1.6);
+}
+
+.score__surface[data-trouble='2'] img[id^='cursorImg'] {
+  filter: hue-rotate(140deg) saturate(2.4);
+}
+
+.score__surface[data-trouble='3'] img[id^='cursorImg'] {
+  filter: hue-rotate(140deg) saturate(3.4);
+}
+
+.score__surface[data-trouble='4'] img[id^='cursorImg'] {
+  filter: hue-rotate(140deg) saturate(5);
+}
+
+/*
  * The middle of the page: a number counting down, or the verdict on a run.
  *
  * Over the score and centred on it, which in fullscreen is centred on the

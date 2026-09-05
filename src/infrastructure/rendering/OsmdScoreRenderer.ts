@@ -8,6 +8,7 @@ import type {
   IScoreCursor,
   IScoreFade,
   IScoreRenderer,
+  IStuckMarker,
   ScoreReading,
   IScoreZoom,
   OverlayContext,
@@ -356,6 +357,14 @@ interface MeasureNotes {
   readonly owners: ReadonlySet<string>;
 }
 
+/**
+ * How red the marker gets, at most.
+ *
+ * Four misses is already "I cannot read this chord"; counting higher would
+ * make the last steps of the ladder indistinguishable and say nothing new.
+ */
+const TROUBLE_LEVELS = 4;
+
 /** Class that dims the notes of a step already played. */
 const FADED_CLASS = 'note--passed';
 /** What the run will not ask for: another hand, or outside the passage. */
@@ -455,7 +464,8 @@ export class OsmdScoreRenderer
     IScoreFade,
     IScoreZoom,
     IPassageMarkers,
-    IScorePages
+    IScorePages,
+    IStuckMarker
 {
   private readonly container: HTMLElement;
   private readonly options: OsmdRendererOptions;
@@ -661,6 +671,24 @@ export class OsmdScoreRenderer
   dispose(): void {
     this.observer?.disconnect();
     this.observer = null;
+  }
+
+  /**
+   * Reddens the marker for the step it is standing on.
+   *
+   * Said on the surface rather than on the marker itself, and left to the
+   * stylesheet from there. The engraver owns that element - it makes it, it
+   * moves it, and it replaces it whenever the page is drawn again - so an
+   * attribute written on it would be lost at the next engraving, while one
+   * written on the page it stands on cannot be.
+   */
+  showTrouble(missteps: number): void {
+    const level = Math.min(Math.max(Math.round(missteps), 0), TROUBLE_LEVELS);
+    if (level <= 0) {
+      delete this.container.dataset['trouble'];
+      return;
+    }
+    this.container.dataset['trouble'] = String(level);
   }
 
   refresh(): void {

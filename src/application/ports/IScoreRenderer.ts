@@ -184,6 +184,23 @@ export interface IHandSwitches {
 }
 
 /**
+ * How much trouble the step under the marker is giving the reader.
+ *
+ * A reader practising with every colour turned off is reading blind on
+ * purpose - and then has no way to tell *where* it went wrong, only that it
+ * did. The marker is already standing on the place, so it is the thing that
+ * can say so: it reddens with each wrong note played at the step it is on,
+ * and goes back to itself when the music moves on.
+ *
+ * A count and not a colour. What red means, and how much of it each miss is
+ * worth, is the drawing's business; the run only knows how many times the
+ * reader has missed here.
+ */
+export interface IStuckMarker {
+  showTrouble(missteps: number): void;
+}
+
+/**
  * Position marker on the rendered score.
  *
  * Positions are timeline step indices, and the renderer is responsible for

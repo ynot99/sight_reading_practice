@@ -268,6 +268,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     cursor: renderer.cursor,
     overlay: renderer,
     fade: renderer,
+    stuck: renderer,
     zoom: renderer,
     midi,
     metronome,

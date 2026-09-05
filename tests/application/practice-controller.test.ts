@@ -80,6 +80,7 @@ function createController(
     cursor: renderer.cursor,
     overlay: renderer,
     fade: renderer,
+    stuck: renderer,
     zoom: renderer,
     midi,
     metronome,
@@ -793,6 +794,66 @@ describe('what you played, drawn over the score', () => {
         offset: 0,
       })),
     );
+  });
+
+  it('reddens the marker as the misses pile up on one step', async () => {
+    // His idea, and the reason for it: practising with every colour off is
+    // reading blind on purpose, but blind he cannot tell *where* he came
+    // unstuck - only that he did. The marker is standing on the place.
+    const { controller, renderer, midi } = createController(true, undefined, {
+      playedNotes: 'hidden',
+      showCursor: false,
+    });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const wrong = (session?.currentStep?.expectedMidi[0] ?? 60) + 1;
+    expect(renderer.trouble).toBe(0);
+
+    midi.noteOn(wrong, 0);
+    expect(renderer.trouble).toBe(1);
+    // And it comes back even though he put it away: for exactly as long as
+    // there is something to say, and nothing is added to the page to say it.
+    expect(renderer.cursor.visible).toBe(true);
+
+    midi.noteOn(wrong + 2, 0);
+    expect(renderer.trouble).toBe(2);
+  });
+
+  it('forgets the trouble when the music moves on', async () => {
+    const { controller, renderer, midi } = createController(true, undefined, {
+      showCursor: false,
+    });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const step = session?.currentStep;
+    midi.noteOn((step?.expectedMidi[0] ?? 60) + 1, 0);
+    expect(renderer.trouble).toBe(1);
+
+    for (const midiNote of step?.expectedMidi ?? []) {
+      midi.noteOn(midiNote, 0);
+    }
+
+    expect(renderer.trouble).toBe(0);
+    // And the marker goes back where the reader had put it.
+    expect(renderer.cursor.visible).toBe(false);
+  });
+
+  it('says nothing in a mode that walks on without the reader', async () => {
+    // Under the pulse the marker has moved on by the next beat, so reddening
+    // it would be a flash rather than a place - and a reader who hid the
+    // marker would have it blink back at them on every slip.
+    const { controller, renderer, midi, metronome } = createController(true, undefined, {
+      modeId: FLOW_MODE_ID,
+      showCursor: false,
+    });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    metronome.advanceSubdivisions(1);
+
+    midi.noteOn((session?.currentStep?.expectedMidi[0] ?? 60) + 1, 0);
+
+    expect(renderer.trouble).toBe(0);
+    expect(renderer.cursor.visible).toBe(false);
   });
 
   it('draws a wrong press at the pitch that was actually struck', async () => {

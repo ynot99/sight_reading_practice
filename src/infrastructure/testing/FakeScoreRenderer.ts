@@ -7,6 +7,7 @@ import type {
   ScorePageState,
   IPlayedNoteOverlay,
   IScoreFade,
+  IStuckMarker,
   IScoreCursor,
   IScoreRenderer,
   IScoreZoom,
@@ -60,7 +61,8 @@ export class FakeScoreRenderer
     IScoreZoom,
     IPassageMarkers,
     IScorePages,
-    IHandSwitches
+    IHandSwitches,
+    IStuckMarker
 {
   readonly cursor = new FakeScoreCursor();
   loadedXml: string | null = null;
@@ -73,6 +75,13 @@ export class FakeScoreRenderer
   overlayContext: OverlayContext | null = null;
   clearPlayedCount = 0;
   zoom = 0.85;
+
+  /** How much trouble the marker has been told to show. */
+  trouble = 0;
+
+  showTrouble(missteps: number): void {
+    this.trouble = missteps;
+  }
 
   configureOverlay(context: OverlayContext): void {
     this.overlayContext = context;

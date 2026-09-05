@@ -204,6 +204,28 @@ describe('played notes drawn over a real engraving', () => {
     expect(noteheads(container)).toHaveLength(0);
   });
 
+  describe('the marker where the reader keeps missing', () => {
+    it('says how much trouble the step is giving, on the page it stands on', () => {
+      // Written on the surface and not on the marker: the engraver makes that
+      // element, moves it, and replaces it whenever the page is drawn again.
+      renderer.showTrouble(2);
+      expect(container.dataset['trouble']).toBe('2');
+
+      // And it survives the page being drawn again, which the marker itself
+      // would not.
+      renderer.refresh();
+      expect(container.dataset['trouble']).toBe('2');
+
+      renderer.showTrouble(0);
+      expect(container.dataset['trouble']).toBeUndefined();
+    });
+
+    it('stops counting where more red would say nothing new', () => {
+      renderer.showTrouble(99);
+      expect(container.dataset['trouble']).toBe('4');
+    });
+  });
+
   describe('dimming what the run will not ask for', () => {
     /** Every note group that is currently dimmed as unplayed. */
     function dimmed(): Element[] {

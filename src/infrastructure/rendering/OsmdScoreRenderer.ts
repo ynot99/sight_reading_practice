@@ -1835,9 +1835,13 @@ export class OsmdScoreRenderer
   private readMeasures(): DrawnMeasure[] {
     const sheet = (this.osmd as unknown as { GraphicSheet?: DrawnSheet } | null)?.GraphicSheet;
     const byIndex = new Map<number, DrawnMeasure>();
+    const printed = this.readSystems();
     for (const [pageAt, page] of (sheet?.MusicPages ?? []).entries()) {
-      for (const system of page.MusicSystems ?? []) {
-        const extent = systemExtent(system);
+      for (const [systemAt, system] of (page.MusicSystems ?? []).entries()) {
+        // The printed lines where they can be read, and the engraver's own
+        // reckoning where they cannot - which is only before anything has
+        // been drawn.
+        const extent = printed.get(`${pageAt}:${systemAt}`) ?? systemExtent(system);
         if (extent === null) {
           continue;
         }
@@ -2169,6 +2173,36 @@ export class OsmdScoreRenderer
       }
     }
     return staves;
+  }
+
+  /**
+   * How far each system reaches, top line to bottom line.
+   *
+   * Off the printed lines, for the reason the hand switches are: the
+   * engraver's box for a staff is drawn round what is *on* it, so a marker
+   * measured from it runs past the staves where an inner voice hangs below
+   * and stops short of them where the music sits high. On the fixture it
+   * overran the bottom line by twenty pixels - two staff spaces - and the
+   * amount changes with the notes.
+   *
+   * Keyed by page and by which system of it, which is the order both this and
+   * the engraver's own model walk in.
+   */
+  private readSystems(): Map<string, { top: number; bottom: number }> {
+    const perSystem = Math.max(1, this.stavesPerSystem());
+    const found = new Map<string, { top: number; bottom: number }>();
+    const seen = new Map<number, number>();
+    for (const staff of this.readStaves()) {
+      const at = seen.get(staff.page) ?? 0;
+      seen.set(staff.page, at + 1);
+      const key = `${staff.page}:${Math.floor(at / perSystem)}`;
+      const known = found.get(key);
+      found.set(key, {
+        top: known === undefined ? staff.top : Math.min(known.top, staff.top),
+        bottom: known === undefined ? staff.bottom : Math.max(known.bottom, staff.bottom),
+      });
+    }
+    return found;
   }
 
   /** How many staves each system carries, which is the same for every one. */

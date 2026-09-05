@@ -525,6 +525,35 @@ describe('passage markers over a real engraving', () => {
     });
   });
 
+  it('stands the markers on the staves, top line to bottom line', async () => {
+    // The complaint this answers: the markers were a little short of the
+    // staves on a generated exercise. They were measured from the engraver's
+    // box for each staff, and that box is drawn round what is *on* it - so
+    // the span ran past the staves where an inner voice hung below and fell
+    // short where the music sat high. Measured on the fixture it overran the
+    // bottom line by twenty pixels, and the amount changes with the notes.
+    await renderer.load(new MusicXmlSerializer().serialize(twoBarExercise()));
+    showAt(renderer, container);
+    renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 1 });
+
+    const lines = [...container.querySelectorAll('.staffline')]
+      .flatMap((group) => [...group.querySelectorAll('path')])
+      .map((path) => /^M([\d.]+) ([\d.]+)L([\d.]+) ([\d.]+)$/.exec(path.getAttribute('d') ?? ''))
+      .filter((drawn): drawn is RegExpExecArray => drawn !== null && drawn[2] === drawn[4])
+      .map((drawn) => ({
+        y: Number.parseFloat(drawn[2] ?? '0'),
+        width: Number.parseFloat(drawn[3] ?? '0') - Number.parseFloat(drawn[1] ?? '0'),
+      }));
+    const widest = Math.max(...lines.map((line) => line.width));
+    const full = lines.filter((line) => line.width >= widest / 2).map((line) => line.y);
+
+    for (const marker of markers(container)) {
+      const bar = barOf(marker);
+      expect(bar.top).toBeCloseTo(Math.min(...full), 5);
+      expect(bar.bottom).toBeCloseTo(Math.max(...full), 5);
+    }
+  });
+
   it('marks the bar the music will start from, quietly', () => {
     // A sign and not a control: nothing to take hold of, and it must not
     // swallow a touch aimed at the music or at a marker beside it.

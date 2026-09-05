@@ -431,6 +431,41 @@ describe('passage markers over a real engraving', () => {
       }
     });
 
+    it('is not fooled by a bracket running under the staff', async () => {
+      // The complaint this answers: on a piece with the pedal written out,
+      // the upper switch sat below its staff and the lower one did not.
+      //
+      // A pedal bracket is drawn in the same group as the staff's own lines
+      // and runs most of the system, so telling the lines apart by width
+      // alone let it in - and it lies well below the staff, so it dragged the
+      // middle down with it. Measured on the reader's own copy of City of
+      // Tears the switch was 21.8 pixels low.
+      const pedalled: Exercise = {
+        ...twoBarExercise(),
+        pedalMarks: [
+          { measureIndex: 0, offsetTicks: 0, type: 'start', line: true },
+          { measureIndex: 1, offsetTicks: Duration.WHOLE.ticks - 1, type: 'stop', line: true },
+        ],
+      };
+      await renderer.load(new MusicXmlSerializer().serialize(pedalled));
+      showAt(renderer, container);
+      renderer.showHands([1, 2]);
+
+      const staves = printedStaves();
+      const tabs = [...container.querySelectorAll('rect.hand-switch__tab')];
+      expect(tabs).toHaveLength(staves.length);
+
+      for (const [at, tab] of tabs.entries()) {
+        const lines = staves[at] ?? [];
+        // Five lines and no more: the bracket is not one of them.
+        expect(lines).toHaveLength(5);
+        const middle = ((lines[0] ?? 0) + (lines[4] ?? 0)) / 2;
+        const y = Number.parseFloat(tab.getAttribute('y') ?? 'NaN');
+        const height = Number.parseFloat(tab.getAttribute('height') ?? 'NaN');
+        expect(y + height / 2).toBeCloseTo(middle, 5);
+      }
+    });
+
     it('draws both switches the same size, whatever is on their staves', async () => {
       // Two controls that do the same thing have to look the same, and one of
       // these staves is carrying ledger lines the other is not.

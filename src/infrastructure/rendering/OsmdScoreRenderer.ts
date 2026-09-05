@@ -137,6 +137,9 @@ const HAND_SWITCH_GAP = 6;
  */
 const HAND_SWITCH_HEIGHT = 30;
 
+/** A staff is five lines. This is that sentence, used as arithmetic. */
+const STAFF_LINES = 5;
+
 /**
  * A title cut to {@link TITLE_LIMIT}, with an ellipsis where it was cut.
  *
@@ -144,10 +147,59 @@ const HAND_SWITCH_HEIGHT = 30;
  * off the side of the page and out of the drawing.
  */
 /**
+ * The five lines of the staff, among everything horizontal drawn with them.
+ *
+ * Two other things share that group, and each defeats one test on its own.
+ * A **ledger line** sits exactly on the staff's own grid - that is what a
+ * ledger *is* - so spacing alone cannot tell it apart; its length can, being
+ * a couple of note-widths against a line that runs a whole measure. A
+ * **bracket** - the pedal's above all, and this reader's library is two
+ * thousand of them - runs most of a system, so length alone cannot tell that
+ * apart; its spacing can, since it lies nowhere on the staff's grid.
+ *
+ * So both, and neither as a threshold: among every run of five evenly spaced
+ * lines, the one whose shortest line is longest. A staff is five equally
+ * spaced lines that run the width of the music, and that sentence is the
+ * whole of the rule. No number in it has to be guessed, which matters -
+ * measured against the widest line in the group, a bracket that happened to
+ * outrun every staff line would have thrown all five of them away.
+ */
+export function staffLinesIn(
+  rules: readonly { readonly y: number; readonly from: number; readonly to: number }[],
+): number[] {
+  const longest = new Map<number, number>();
+  for (const rule of rules) {
+    const y = rule.y;
+    longest.set(y, Math.max(longest.get(y) ?? 0, rule.to - rule.from));
+  }
+  const ys = [...longest.keys()].sort((left, right) => left - right);
+
+  let best: number[] = [];
+  let bestShortest = -1;
+  for (let at = 0; at + STAFF_LINES <= ys.length; at += 1) {
+    const run = ys.slice(at, at + STAFF_LINES);
+    const gap = (run[1] ?? 0) - (run[0] ?? 0);
+    const even =
+      gap > 0 && run.every((y, index) => Math.abs(y - (run[0] ?? 0) - index * gap) < 0.5);
+    if (!even) {
+      continue;
+    }
+    // The shortest line in the run, which is what a ledger gives itself away
+    // by: the staff's own five all run the length of a measure.
+    const shortest = Math.min(...run.map((y) => longest.get(y) ?? 0));
+    if (shortest > bestShortest) {
+      best = run;
+      bestShortest = shortest;
+    }
+  }
+  return best;
+}
+
+/**
  * Every horizontal line drawn inside an element, with the span it covers.
  *
- * The engraver draws a staff line and a ledger line the same way; what tells
- * them apart is how far they run.
+ * The engraver draws a staff line, a ledger line and a bracket the same way;
+ * what tells them apart is how far they run and where they fall.
  */
 function horizontalRules(group: Element): { y: number; from: number; to: number }[] {
   const found: { y: number; from: number; to: number }[] = [];
@@ -2061,13 +2113,11 @@ export class OsmdScoreRenderer
     for (const [pageAt, sheet] of this.sheets.entries()) {
       const drawn = [...sheet.querySelectorAll('.staffline')];
       for (const [at, group] of drawn.entries()) {
-        const lines = horizontalRules(group);
-        const widest = Math.max(...lines.map((line) => line.to - line.from), 0);
-        const full = lines.filter((line) => line.to - line.from >= widest / 2);
-        if (full.length === 0) {
+        const ys = staffLinesIn(horizontalRules(group));
+        if (ys.length === 0) {
           continue;
         }
-        const ys = full.map((line) => line.y);
+        const full = horizontalRules(group).filter((line) => ys.includes(line.y));
         staves.push({
           // Counted from the top down within each system, which is how the
           // score numbers them and how the reader would: the right hand is

@@ -115,6 +115,39 @@ describe('staffForDiatonic', () => {
     expect(staffForDiatonic(geometry!, 0, Pitch.parse('E2').diatonicIndex, grandStaff)).toBe(2);
   });
 
+  it('puts a note where the page prints it, whatever the clefs would say', () => {
+    // Ordinary piano writing: the left hand reaches up to D4, printed on the
+    // bass stave with a ledger line. D4 is one position from the treble's
+    // lines and three from the bass's, so by the clefs alone the mark went to
+    // the other hand - a hundred and twenty notes of City of Tears, the first
+    // note of the piece among them, and sixty-eight of Bone Bottom.
+    const written = fitStaffGeometry([
+      ...TREBLE,
+      {
+        stepIndex: 0,
+        page: 0,
+        system: 0,
+        staffNumber: 2,
+        diatonicIndex: Pitch.parse('D4').diatonicIndex,
+        y: 200.5,
+      },
+      {
+        stepIndex: 1,
+        page: 0,
+        system: 0,
+        staffNumber: 2,
+        diatonicIndex: Pitch.parse('G2').diatonicIndex,
+        y: 225.5,
+      },
+    ]);
+
+    expect(staffForDiatonic(written!, 0, Pitch.parse('D4').diatonicIndex, grandStaff)).toBe(2);
+    // And the mark then stands exactly where that note is printed.
+    expect(yForDiatonic(written!, 2, 0, Pitch.parse('D4').diatonicIndex)).toBe(200.5);
+    // A pitch the page does not print here is still the clefs' to place.
+    expect(staffForDiatonic(written!, 0, Pitch.parse('G4').diatonicIndex, grandStaff)).toBe(1);
+  });
+
   it('keeps a wildly wrong note on the nearer staff rather than dropping it', () => {
     expect(staffForDiatonic(geometry!, 0, Pitch.parse('C7').diatonicIndex, grandStaff)).toBe(1);
     expect(staffForDiatonic(geometry!, 0, Pitch.parse('A0').diatonicIndex, grandStaff)).toBe(2);

@@ -54,6 +54,14 @@ export interface StaffGeometry {
    * nothing at this step still be placed on the right line.
    */
   readonly systemOfStep: ReadonlyMap<number, number>;
+  /**
+   * The staff each printed note stands on, by step and staff position.
+   *
+   * The page's own answer to "which hand is this note written for", and the
+   * only one that cannot be argued with: the note is *there*, on that stave,
+   * in that bar.
+   */
+  readonly printedOn: ReadonlyMap<number, ReadonlyMap<number, number>>;
 }
 
 /** Semitone value of each letter, which is what the engraver reports. */
@@ -152,7 +160,30 @@ export function fitStaffGeometry(samples: readonly DrawnNoteSample[]): StaffGeom
     );
   }
 
-  return { stepHeight, byStaff: sorted, systemOfStep: systemsByStep(samples) };
+  return {
+    stepHeight,
+    byStaff: sorted,
+    systemOfStep: systemsByStep(samples),
+    printedOn: printedByStep(samples),
+  };
+}
+
+/** Where each note of the page is printed: step, then position, then staff. */
+function printedByStep(
+  samples: readonly DrawnNoteSample[],
+): ReadonlyMap<number, ReadonlyMap<number, number>> {
+  const printed = new Map<number, Map<number, number>>();
+  for (const sample of samples) {
+    const atStep = printed.get(sample.stepIndex) ?? new Map<number, number>();
+    // The first staff that printed it. Two staves may notate one sounding
+    // pitch at one instant - a unison written in both hands - and then either
+    // is the right answer, because the reader played the note that is on both.
+    if (!atStep.has(sample.diatonicIndex)) {
+      atStep.set(sample.diatonicIndex, sample.staffNumber);
+    }
+    printed.set(sample.stepIndex, atStep);
+  }
+  return printed;
 }
 
 /**
@@ -260,13 +291,21 @@ function distanceToClef(clef: ClefKind, diatonicIndex: number): number {
 /**
  * The staff a played note belongs on.
  *
- * By the *clef*, which is the thing on the page that says which pitches a
- * staff is for. Judged instead against whatever note each staff happened to
- * draw nearby, the answer turned on an accident: where both hands are written
- * close together, one staff wins by a single position and a bass note is
- * marked on the treble stave - and in a bar where the left hand climbs, the
- * bass staff's nearest note can be higher than the treble's, so a low note
- * loses to the staff it least belongs on.
+ * **Where the page prints that note, when it prints it.** The reader played a
+ * note the score asks for at this step, and the score has already put it on a
+ * stave - so there is nothing to work out. Asked by clef instead, an ordinary
+ * left hand reaching up to D4 was marked on the treble stave, D4 being one
+ * position from the treble's lines and three from the bass's: a hundred and
+ * twenty notes of City of Tears went to the wrong hand, the first note of the
+ * piece among them, and sixty-eight of Bone Bottom.
+ *
+ * Only a note printed nowhere at this step - a wrong one - needs deciding,
+ * and then the *clef* decides, which is the thing on the page that says which
+ * pitches a staff is for. Judged instead against whatever note each staff
+ * happened to draw nearby, the answer turned on an accident: where both hands
+ * are written close together, one staff wins by a single position, and in a
+ * bar where the left hand climbs the bass staff's nearest note can be higher
+ * than the treble's.
  *
  * Distance to the printed lines rather than to their middle, so a note below
  * the bass stave is nearer to it than to the treble by the margin a reader
@@ -279,6 +318,10 @@ export function staffForDiatonic(
   diatonicIndex: number,
   clefOf: (staffNumber: number) => ClefKind,
 ): number | null {
+  const printed = geometry.printedOn.get(stepIndex)?.get(diatonicIndex);
+  if (printed !== undefined) {
+    return printed;
+  }
   let best: { staffNumber: number; clef: number; pitch: number } | null = null;
   for (const staffNumber of geometry.byStaff.keys()) {
     const anchor = anchorFor(geometry, staffNumber, stepIndex);

@@ -1,5 +1,10 @@
 import { TimeSignature } from '../../domain/model/TimeSignature.js';
-import type { IMetronome, MetronomeConfig, MetronomeTick } from '../../application/ports/IMetronome.js';
+import type {
+  BeatWeight,
+  IMetronome,
+  MetronomeConfig,
+  MetronomeTick,
+} from '../../application/ports/IMetronome.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
 import {
@@ -232,7 +237,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
    * this is asked for by a mode that never starts the pulse at all, and the
    * two clocks drift apart over a practice session anyway.
    */
-  click(atMs?: number, downbeat = false): void {
+  click(atMs?: number, weight: BeatWeight = 'beat'): void {
     const context = this.ensureContext();
     void context.resume();
     const epoch = performance.now() - context.currentTime * 1000;
@@ -240,7 +245,12 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     // Kept, so that stopping can take back the ones that have not sounded.
     // These are laid out as far ahead as the reader's next entry, which on a
     // held note is a bar or more of beats waiting to be heard.
-    const pending = this.sound(context, Math.max(context.currentTime, at), downbeat, true);
+    const pending = this.sound(
+      context,
+      Math.max(context.currentTime, at),
+      weight === 'downbeat',
+      weight !== 'division',
+    );
     if (pending !== null) {
       this.pending.push(pending);
     }

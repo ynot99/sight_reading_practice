@@ -1440,10 +1440,10 @@ describe('the click in a mode that waits', () => {
     midi.noteOn(p('C3').midi, clock.now());
 
     expect(metronome.clicks).toEqual([
-      { atMs: 5_000, downbeat: true },
-      { atMs: 6_000, downbeat: false },
-      { atMs: 7_000, downbeat: false },
-      { atMs: 8_000, downbeat: false },
+      { atMs: 5_000, weight: 'downbeat' },
+      { atMs: 6_000, weight: 'beat' },
+      { atMs: 7_000, weight: 'beat' },
+      { atMs: 8_000, weight: 'beat' },
     ]);
   });
 
@@ -1462,6 +1462,45 @@ describe('the click in a mode that waits', () => {
     // own answer has always meant.
     expect(metronome.currentConfig.dropout).toEqual({ kind: 'silent-from', fromBar: 1 });
     expect(metronome.currentConfig.muted).toBe(false);
+  });
+
+  it('marks the divisions when the reader asked to hear them', async () => {
+    // Reported from the page: the subdivisions he had turned on were ignored
+    // by the click he places. They were never offered to it - only the felt
+    // beats were - and a click he places is still the click he chose the
+    // pattern for.
+    const { controller, midi, metronome, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickPattern: 'division' });
+    controller.start();
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+
+    // Eighths through a bar of four four: the beats where they were, and a
+    // division between each pair of them.
+    expect(metronome.clicks).toEqual([
+      { atMs: 5_000, weight: 'downbeat' },
+      { atMs: 5_500, weight: 'division' },
+      { atMs: 6_000, weight: 'beat' },
+      { atMs: 6_500, weight: 'division' },
+      { atMs: 7_000, weight: 'beat' },
+      { atMs: 7_500, weight: 'division' },
+      { atMs: 8_000, weight: 'beat' },
+      { atMs: 8_500, weight: 'division' },
+    ]);
+  });
+
+  it('marks only the bar when that is all the reader asked for', async () => {
+    const { controller, midi, metronome, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickPattern: 'downbeat' });
+    controller.start();
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+
+    expect(metronome.clicks).toEqual([{ atMs: 5_000, weight: 'downbeat' }]);
   });
 
   it('stops at the beat the reader comes in on', async () => {

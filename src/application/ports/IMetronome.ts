@@ -31,6 +31,14 @@ export interface MetronomeTick {
  */
 export const CLICK_PATTERNS = ['downbeat', 'pulse', 'division', 'subdivision'] as const;
 
+/**
+ * What a click marks: the bar beginning, a beat falling, or a part of one.
+ *
+ * The same three the ruler draws, and for the same reason - they are the
+ * three things a reader hears in a bar, and they are not equal.
+ */
+export type BeatWeight = 'downbeat' | 'beat' | 'division';
+
 export type ClickPattern = (typeof CLICK_PATTERNS)[number];
 
 /** Audible clicks in one felt beat, for a given pattern. */
@@ -269,6 +277,6 @@ export interface IMetronome {
    *
    * `atMs` is on the same clock the ticks carry; omitted means now.
    */
-  click(atMs?: number, downbeat?: boolean): void;
+  click(atMs?: number, weight?: BeatWeight): void;
   onTick(listener: (tick: MetronomeTick) => void): Unsubscribe;
 }

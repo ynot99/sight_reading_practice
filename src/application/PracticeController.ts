@@ -2046,16 +2046,17 @@ export class PracticeController {
     if (!clickFollowsTheReader(this.currentSettings.clickWhen) || exercise === null) {
       return;
     }
-    const here = beatAt(exercise, step.onsetTicks);
+    // At the resolution the reader asked to hear. A click they place is still
+    // the click they chose the pattern for, and the subdivisions they had
+    // turned on were simply never offered to it.
+    const pattern = this.currentSettings.clickPattern;
+    const here = beatAt(exercise, step.onsetTicks, pattern);
     if (here !== null) {
-      this.deps.metronome.click(atMs, here.downbeat);
+      this.deps.metronome.click(atMs, here.weight);
     }
     const until = this.nextOwedTicks(step.index);
-    for (const beat of beatsBetween(exercise, step.onsetTicks, until)) {
-      this.deps.metronome.click(
-        atMs + spanMs(exercise, step.onsetTicks, beat.ticks),
-        beat.downbeat,
-      );
+    for (const beat of beatsBetween(exercise, step.onsetTicks, until, pattern)) {
+      this.deps.metronome.click(atMs + spanMs(exercise, step.onsetTicks, beat.ticks), beat.weight);
     }
   }
 

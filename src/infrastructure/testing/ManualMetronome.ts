@@ -1,4 +1,9 @@
-import type { IMetronome, MetronomeConfig, MetronomeTick } from '../../application/ports/IMetronome.js';
+import type {
+  BeatWeight,
+  IMetronome,
+  MetronomeConfig,
+  MetronomeTick,
+} from '../../application/ports/IMetronome.js';
 import { TimeSignature } from '../../domain/model/TimeSignature.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
 import {
@@ -46,10 +51,10 @@ export class ManualMetronome implements IMetronome {
   /** Every tick emitted so far, for assertions. */
   readonly emitted: MetronomeTick[] = [];
   /** Every one-off click asked for, as the moment it was asked to sound at. */
-  readonly clicks: { readonly atMs: number | undefined; readonly downbeat: boolean }[] = [];
+  readonly clicks: { readonly atMs: number | undefined; readonly weight: BeatWeight }[] = [];
 
-  click(atMs?: number, downbeat = false): void {
-    this.clicks.push({ atMs, downbeat });
+  click(atMs?: number, weight: BeatWeight = 'beat'): void {
+    this.clicks.push({ atMs, weight });
   }
 
   constructor(clock?: ManualClock) {

@@ -52,15 +52,15 @@ describe('the beats of the music', () => {
       Duration.HALF.ticks,
       Duration.HALF.ticks + Duration.QUARTER.ticks,
     ]);
-    expect(beats.every((beat) => !beat.downbeat)).toBe(true);
+    expect(beats.every((beat) => beat.weight === 'beat')).toBe(true);
   });
 
   it('crosses a bar line and says which beat begins the bar', () => {
     const beats = beatsBetween(twoBarExercise(), Duration.HALF.ticks, Duration.WHOLE.ticks * 2);
     const opening = beats.find((beat) => beat.ticks === Duration.WHOLE.ticks);
 
-    expect(opening?.downbeat).toBe(true);
-    expect(beats.filter((beat) => beat.downbeat)).toHaveLength(1);
+    expect(opening?.weight).toBe('downbeat');
+    expect(beats.filter((beat) => beat.weight === 'downbeat')).toHaveLength(1);
   });
 
   it('feels a compound bar in its dotted beats, not in its eighths', () => {
@@ -75,9 +75,12 @@ describe('the beats of the music', () => {
   it('answers whether a moment is a beat at all', () => {
     const exercise = twoBarExercise();
 
-    expect(beatAt(exercise, 0)?.downbeat).toBe(true);
-    expect(beatAt(exercise, Duration.QUARTER.ticks)?.downbeat).toBe(false);
+    expect(beatAt(exercise, 0)?.weight).toBe('downbeat');
+    expect(beatAt(exercise, Duration.QUARTER.ticks)?.weight).toBe('beat');
     expect(beatAt(exercise, Duration.EIGHTH.ticks)).toBeNull();
+
+    // Unless the reader asked to hear the divisions, and then it marks one.
+    expect(beatAt(exercise, Duration.EIGHTH.ticks, 'division')?.weight).toBe('division');
   });
 });
 

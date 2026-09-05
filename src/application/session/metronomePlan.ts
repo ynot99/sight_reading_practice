@@ -40,10 +40,13 @@ function leastCommonMultiple(left: number, right: number): number {
  * count-in's metre, since there is no bar line to hang a new one on until
  * the next one comes round.
  */
-/** A beat of the music, and whether it is the one a bar begins on. */
+/** What a moment of the music is: the bar's start, a beat, or a part of one. */
+export type BeatWeight = 'downbeat' | 'beat' | 'division';
+
+/** A moment the click marks, and how much of a moment it is. */
 export interface WrittenBeat {
   readonly ticks: number;
-  readonly downbeat: boolean;
+  readonly weight: BeatWeight;
 }
 
 /**
@@ -57,6 +60,7 @@ export function beatsBetween(
   exercise: Exercise,
   fromTicks: number,
   toTicks: number,
+  pattern: ClickPattern = 'pulse',
 ): readonly WrittenBeat[] {
   const beats: WrittenBeat[] = [];
   for (const bar of barLines(exercise)) {
@@ -67,25 +71,56 @@ export function beatsBetween(
     if (bar.startTicks >= toTicks) {
       break;
     }
-    for (let at = bar.startTicks; at < end; at += bar.timeSignature.ticksPerPulse) {
-      if (at > fromTicks && at < toTicks) {
-        beats.push({ ticks: at, downbeat: at === bar.startTicks });
+    for (const beat of beatsOf(bar.startTicks, bar.timeSignature, pattern)) {
+      if (beat.ticks > fromTicks && beat.ticks < toTicks) {
+        beats.push(beat);
       }
     }
   }
   return beats;
 }
 
-/** The beat a moment falls on, or `null` where it falls between two. */
-export function beatAt(exercise: Exercise, ticks: number): WrittenBeat | null {
+/**
+ * One bar's worth of moments, at the resolution the pattern asks for.
+ *
+ * The pattern says how finely the beat is divided, so it says how finely the
+ * bar is walked: a reader who asked to hear the subdivisions is asking for
+ * them wherever the click sounds, and a click they place themselves is no
+ * exception - which is what it had become, since only the felt beats were
+ * ever offered to it.
+ */
+function beatsOf(
+  startTicks: number,
+  timeSignature: TimeSignature,
+  pattern: ClickPattern,
+): readonly WrittenBeat[] {
+  const pulse = timeSignature.ticksPerPulse;
+  const step = pulse / Math.max(1, clicksPerPulse(pattern, timeSignature));
+  const beats: WrittenBeat[] = [];
+  for (let at = startTicks; at < startTicks + timeSignature.ticksPerMeasure; at += step) {
+    const into = at - startTicks;
+    beats.push({
+      ticks: at,
+      weight: into === 0 ? 'downbeat' : into % pulse === 0 ? 'beat' : 'division',
+    });
+  }
+  // Only the first of the bar, when that is all the reader asked to hear.
+  return pattern === 'downbeat' ? beats.filter((beat) => beat.weight === 'downbeat') : beats;
+}
+
+/** The moment a tick falls on, or `null` where the click marks nothing there. */
+export function beatAt(
+  exercise: Exercise,
+  ticks: number,
+  pattern: ClickPattern = 'pulse',
+): WrittenBeat | null {
   const bar = [...barLines(exercise)].reverse().find((each) => each.startTicks <= ticks);
   if (bar === undefined) {
     return null;
   }
-  const into = ticks - bar.startTicks;
-  return into % bar.timeSignature.ticksPerPulse === 0
-    ? { ticks, downbeat: into === 0 }
-    : null;
+  return (
+    beatsOf(bar.startTicks, bar.timeSignature, pattern).find((beat) => beat.ticks === ticks) ?? null
+  );
 }
 
 export function metronomeBars(

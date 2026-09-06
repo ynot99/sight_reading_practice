@@ -558,7 +558,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         nextWord += 1;
       }
       while (nextClef < clefs.length && (clefs[nextClef]?.offsetTicks ?? 0) <= offset) {
-        this.writeClefChange(writer, clefs[nextClef], staff.staffNumber);
+        this.writeClefChange(writer, clefs[nextClef], staff.staffNumber, offset);
         nextClef += 1;
       }
       this.writeHairpins(writer, hairpins, measureIndex, offset, staff.staffNumber, drawn);
@@ -589,7 +589,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       nextWord += 1;
     }
     while (nextClef < clefs.length) {
-      this.writeClefChange(writer, clefs[nextClef], staff.staffNumber);
+      this.writeClefChange(writer, clefs[nextClef], staff.staffNumber, offset);
       nextClef += 1;
     }
     this.writeHairpins(writer, hairpins, measureIndex, offset, staff.staffNumber, drawn);
@@ -921,14 +921,29 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
    * Its own `<attributes>` among the notes, which is the format's way of
    * saying where it happens and the engraver's cue to draw the small clef
    * mid-bar rather than a full-sized one on the bar line.
+   *
+   * A clef can change in the middle of a note that another voice is holding,
+   * and the voice this is written into may have no boundary there at all:
+   * bar 36 of his Minecraft arrangement changes back to the bass under a
+   * chord the upper voice holds to the end of the bar, and written at the
+   * next boundary the clef came out a beat and a half late - at the bar line.
+   * So the cursor is walked back to the moment the writer chose and walked
+   * forward again, which is how the file we read it from says it too.
    */
   private writeClefChange(
     writer: XmlWriter,
     change: ClefChange | undefined,
     staffNumber: number,
+    cursorTicks: number,
   ): void {
     if (change === undefined) {
       return;
+    }
+    const back = Math.max(0, cursorTicks - change.offsetTicks);
+    if (back > 0) {
+      writer.element('backup', undefined, () => {
+        writer.leaf('duration', back);
+      });
     }
     const definition = CLEF_DEFINITIONS[change.clef];
     writer.element('attributes', undefined, () => {
@@ -937,6 +952,11 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         writer.leaf('line', definition.line);
       });
     });
+    if (back > 0) {
+      writer.element('forward', undefined, () => {
+        writer.leaf('duration', back);
+      });
+    }
   }
 
   private writeDynamic(

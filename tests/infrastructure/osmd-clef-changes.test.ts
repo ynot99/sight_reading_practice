@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
 import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
 import { createScoreContainer, installCanvasStub } from '../support/osmdHarness.js';
 
@@ -32,8 +33,48 @@ const crossing = `<?xml version="1.0" encoding="UTF-8"?>
   </part>
 </score-partwise>`;
 
+/** The same bar, with the change falling inside a note the upper voice holds. */
+const heldOver = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>24</divisions><key><fifths>0</fifths></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time><staves>1</staves>
+      <clef number="1"><sign>G</sign><line>2</line></clef></attributes>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>48</duration>
+      <voice>1</voice><type>half</type><staff>1</staff></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>48</duration>
+      <voice>1</voice><type>half</type><staff>1</staff></note>
+      <backup><duration>96</duration></backup>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>24</duration>
+      <voice>2</voice><type>quarter</type><staff>1</staff></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>24</duration>
+      <voice>2</voice><type>quarter</type><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>24</duration>
+      <voice>2</voice><type>quarter</type><staff>1</staff></note>
+      <attributes><clef number="1"><sign>F</sign><line>4</line></clef></attributes>
+      <note><pitch><step>F</step><octave>3</octave></pitch><duration>24</duration>
+      <voice>2</voice><type>quarter</type><staff>1</staff></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
 const importer = new DomScoreImporter();
 const serializer = new MusicXmlSerializer();
+
+/** Where every glyph the engraver drew begins, left to right. */
+async function glyphsAcross(exercise: Exercise): Promise<readonly number[]> {
+  document.body.replaceChildren();
+  const container = createScoreContainer();
+  const renderer = new OsmdScoreRenderer(container, { zoom: 1 });
+  await renderer.load(serializer.serialize(exercise));
+  return [...container.querySelectorAll('path')]
+    .map((path) => path.getAttribute('d') ?? '')
+    .filter((d) => d.length > 200)
+    .map((d) => Number(/^M([\d.]+)/.exec(d)?.[1] ?? NaN))
+    .sort((left, right) => left - right);
+}
 
 /** What the engraver actually put on the page. */
 interface Drawn {
@@ -85,5 +126,29 @@ describe('a clef that changes partway through a bar', () => {
 
     expect(kept.glyphs).toBe(lost.glyphs + 2);
     expect(kept.ledgerLines).toBeLessThan(lost.ledgerLines);
+  });
+
+  it('is drawn where it happens, not where the held voice next lets go', async () => {
+    // The engraver reads the cursor, so a clef wrapped in a backup lands where
+    // the writer put it. Written instead at the next boundary of the voice it
+    // shares a stream with, it is drawn against the bar line - a whole beat
+    // late, governing notes that have already gone by.
+    const exercise = importer.read(heldOver).exercise;
+    const atTheBarLine: Exercise = {
+      ...exercise,
+      staves: exercise.staves.map((staff) => ({
+        ...staff,
+        clefChanges: staff.clefChanges.map((change) => ({
+          ...change,
+          offsetTicks: Duration.WHOLE.ticks,
+        })),
+      })),
+    };
+
+    const asWritten = await glyphsAcross(exercise);
+    const late = await glyphsAcross(atTheBarLine);
+
+    expect(asWritten).toHaveLength(late.length);
+    expect(asWritten[asWritten.length - 1]).toBeLessThan(late[late.length - 1] ?? 0);
   });
 });

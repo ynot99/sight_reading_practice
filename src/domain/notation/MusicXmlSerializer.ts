@@ -241,8 +241,15 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         // Words about the speed belong to the piece rather than to a staff,
         // so they are written once, with the first voice - the same place
         // the pedal and the tempo marks go.
+        // What is printed is what is obeyed. `rit.` and its kind have to
+        // survive being written and read again - a score kept in the library
+        // holds the file *this* program wrote, so a word left out would be a
+        // slowing that happened once and never again. The rest of what a
+        // writer says over the music - "dolce", the tempo text over bar one -
+        // is carried in the piece and left off the page: it says nothing to
+        // the clock, and he asked for the engraving to stay as it was.
         const words = exercise.tempoWords.filter(
-          (word) => word.measureIndex === measureIndex,
+          (word) => word.measureIndex === measureIndex && word.kind !== 'other',
         );
         const firstOfStaff = new Map<number, number>();
         present.forEach((staff, index) => {
@@ -353,7 +360,12 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     barTicks: number,
     anyStaffWritten: boolean,
   ): void {
-    const ordered = [...tempos].sort((left, right) => left.offsetTicks - right.offsetTicks);
+    // Only the marks the writer made. The rest are this program's way of
+    // saying "getting slower" to its own clock, and a row of numbers across
+    // the bar is not what the writer wrote.
+    const ordered = [...tempos]
+      .filter((change) => change.implied !== true)
+      .sort((left, right) => left.offsetTicks - right.offsetTicks);
     if (ordered.length === 0) {
       return;
     }

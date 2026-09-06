@@ -504,6 +504,15 @@ export interface TempoChange {
   /** Offset from the start of that measure, in divisions. */
   readonly offsetTicks: number;
   readonly tempoBpm: number;
+  /**
+   * Worked out rather than written, and therefore never printed.
+   *
+   * A gradual change is kept as a run of small constant ones, because that
+   * is the only language this program's clock speaks - but they are not
+   * marks the writer made, and printing them turns one `rit.` into a row of
+   * numbers across the bar. What the reader sees is what the file said.
+   */
+  readonly implied?: boolean;
 }
 
 export interface Exercise {

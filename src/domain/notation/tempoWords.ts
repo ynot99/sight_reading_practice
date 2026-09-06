@@ -84,10 +84,18 @@ export function withTempoWordsPlayed(exercise: Exercise): Exercise {
   // `a tempo` is a change in its own right: the speed goes back at once.
   for (const word of aTempo) {
     const ticks = atTicks(exercise, word.measureIndex, word.offsetTicks);
+    const already = exercise.tempoChanges.some(
+      (change) => atTicks(exercise, change.measureIndex, change.offsetTicks) === ticks,
+    );
+    if (already) {
+      // The file already says a number here, and it is the writer's own.
+      continue;
+    }
     added.push({
       measureIndex: word.measureIndex,
       offsetTicks: word.offsetTicks,
       tempoBpm: tempoAt(exercise, ticks - 1),
+      implied: true,
     });
   }
 
@@ -124,6 +132,7 @@ export function withTempoWordsPlayed(exercise: Exercise): Exercise {
         measureIndex: barIndex,
         offsetTicks: at - (bars[barIndex]?.startTicks ?? 0),
         tempoBpm: bpm,
+        implied: true,
       });
     }
   }

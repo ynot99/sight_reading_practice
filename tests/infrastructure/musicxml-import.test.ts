@@ -93,6 +93,45 @@ describe('the dynamics on the page', () => {
     expect(loudest / softest).toBeGreaterThan(4);
   });
 
+  it('prints the words it obeys and no others', () => {
+    // Reported from the page: a rit. turned into a row of tempo numbers
+    // across the bar, and text appeared over bar one that the reader had
+    // not asked for. What is printed is what is obeyed - the rest is
+    // carried in the piece and left off the page.
+    const spoken = {
+      ...twoBarExercise(),
+      tempoWords: [
+        { measureIndex: 0, offsetTicks: 0, text: 'Andante', kind: 'other' as const },
+        { measureIndex: 1, offsetTicks: 0, text: 'rit.', kind: 'ritardando' as const },
+      ],
+    };
+
+    const printed = serializer.serialize(spoken);
+
+    expect(printed).toContain('rit.');
+    expect(printed).not.toContain('Andante');
+  });
+
+  it('keeps the numbers it worked out to itself', () => {
+    // A gradual change is a run of small constant ones because that is the
+    // only language the clock speaks; printing them turns one word into a
+    // row of numbers.
+    const slowing = {
+      ...twoBarExercise(),
+      tempoChanges: [
+        { measureIndex: 0, offsetTicks: 0, tempoBpm: 60 },
+        { measureIndex: 1, offsetTicks: 0, tempoBpm: 52, implied: true },
+      ],
+    };
+
+    const printed = serializer.serialize(slowing);
+
+    // The written sixty is there - twice, since the opening tempo is stated
+    // with the attributes as well - and the fifty-two nobody wrote is not.
+    expect(printed).toContain('<per-minute>60</per-minute>');
+    expect(printed).not.toContain('52');
+  });
+
   it('says nothing about loudness where the writer said nothing', () => {
     const { exercise } = importer.read(serializer.serialize(twoBarExercise()));
 

@@ -968,6 +968,35 @@ describe('what you played, drawn over the score', () => {
     expect(renderer.played.every((mark) => mark.settled === true)).toBe(true);
   });
 
+  it('ends the run at the first wrong note, when asked to', async () => {
+    // His line 112: counting a rhythm is worth nothing if a slip can be
+    // played over. And it does not start again by itself - a run nobody
+    // decided to make is not a reading.
+    const { controller, midi, renderer } = createController(true);
+    controller.updateSettings({ stopAtAMistake: true });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const wrong = (session?.currentStep?.expectedMidi[0] ?? 60) + 1;
+
+    midi.noteOn(wrong, 0);
+
+    expect(session?.status).toBe('aborted');
+    // And the note that ended it is on the page, not swallowed by the
+    // stopping: a reader has to be able to see what they hit.
+    expect(renderer.played.map((mark) => mark.midi)).toEqual([wrong]);
+  });
+
+  it('plays on through a slip while nobody asked for that', async () => {
+    const { controller, midi } = createController(true);
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const wrong = (session?.currentStep?.expectedMidi[0] ?? 60) + 1;
+
+    midi.noteOn(wrong, 0);
+
+    expect(session?.status).toBe('running');
+  });
+
   it('lends a wrong mark to the page for as long as the key is down', async () => {
     // His line 48: hunting for an accidental leaves a wrong note behind on
     // every try, and by the tenth the note being hunted for is underneath

@@ -891,6 +891,7 @@ export class AppView {
     focusHandRight: SVGElement;
     focusHealthFill: HTMLElement;
     survival: HTMLInputElement;
+    stopAtMistake: HTMLInputElement;
     immediateStart: HTMLInputElement;
     dimUnplayed: HTMLInputElement;
     pageTurns: HTMLSelectElement;
@@ -1085,6 +1086,7 @@ export class AppView {
       focusHandRight: requireElement(doc, 'focus-hand-right'),
       focusHealthFill: requireElement(doc, 'focus-health-fill'),
       survival: requireElement(doc, 'survival'),
+      stopAtMistake: requireElement(doc, 'stop-at-mistake'),
       immediateStart: requireElement(doc, 'immediate-start'),
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
       pageTurns: requireElement(doc, 'page-turns'),
@@ -2092,6 +2094,11 @@ export class AppView {
     this.listen(this.el.survival, 'change', () => {
       controller.updateSettings({ survival: this.el.survival.checked });
       this.renderHealth(controller.health);
+    });
+
+    this.listen(this.el.stopAtMistake, 'change', () => {
+      controller.updateSettings({ stopAtAMistake: this.el.stopAtMistake.checked });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.rhythmOnly, 'change', () => {
@@ -3815,6 +3822,7 @@ export class AppView {
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.survival.checked = settings.survival;
+    this.el.stopAtMistake.checked = settings.stopAtAMistake;
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;

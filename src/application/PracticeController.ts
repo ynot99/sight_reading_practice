@@ -335,6 +335,18 @@ export interface PracticeSettings {
    */
   readonly survival: boolean;
   /**
+   * End the run at the first wrong note.
+   *
+   * His line 112, and his reason for it: counting a rhythm is worth nothing
+   * if a slip can be played over, so the run stops and has to be started
+   * again on purpose. Which is also why it does not restart itself - a run
+   * that began again by itself would be one nobody had decided to make.
+   *
+   * The marker goes back where a stopped run always puts it: the beginning
+   * of the passage being practised, not the top of the piece.
+   */
+  readonly stopAtAMistake: boolean;
+  /**
    * Where the veil sits relative to the cursor, in steps, or `null` for none.
    *
    * One axis, because dimming what is behind and hiding what is under your
@@ -629,6 +641,7 @@ export class PracticeController {
       pagedScore: false,
       playedNotes: 'live',
       survival: false,
+      stopAtAMistake: false,
       readAheadSteps: null,
       zoom: 0.85,
       immediateStart: false,
@@ -1734,6 +1747,12 @@ export class PracticeController {
         // Before the marks have their say, and deliberately: this exists for
         // the reader who has turned them off.
         this.noteTheTrouble(verdict);
+        if (verdict === 'wrong' && this.currentSettings.stopAtAMistake) {
+          // After the mark is noted and before it is drawn: stopping fires
+          // `finished`, which puts up everything the run was holding back -
+          // so the note that ended it is on the page with the rest.
+          this.currentSession?.abort();
+        }
         if (this.currentSettings.playedNotes === 'hidden' || verdict === 'duplicate') {
           return;
         }

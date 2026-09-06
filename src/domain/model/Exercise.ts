@@ -597,6 +597,16 @@ export interface DynamicHairpin {
    * which of the two lines each belongs to.
    */
   readonly placement?: 'above' | 'below';
+  /**
+   * The word it was written as, where it was written as one.
+   *
+   * `cresc.` over a dashed line and a wedge say the same thing to a player
+   * and different things to a reader: the word crosses a page break and a
+   * wedge does not, which is why a writer choosing between them means it.
+   * So this is heard exactly as a wedge is - it is the same crescendo - and
+   * printed as what it was, the way the beams and the stems are.
+   */
+  readonly text?: string;
 }
 
 /**

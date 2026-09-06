@@ -842,12 +842,29 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         }
         drawn.add(key);
         writer.element('direction', { placement: hairpin.placement ?? 'below' }, () => {
-          writer.element('direction-type', undefined, () => {
-            writer.leaf('wedge', undefined, {
-              type: end === 'start' ? hairpin.kind : 'stop',
-              number: at + 1,
+          if (hairpin.text === undefined) {
+            writer.element('direction-type', undefined, () => {
+              writer.leaf('wedge', undefined, {
+                type: end === 'start' ? hairpin.kind : 'stop',
+                number: at + 1,
+              });
             });
-          });
+          } else {
+            // Written back as what it was: the word, and the dashed line the
+            // format draws under it. A wedge here would be this program
+            // deciding the engraving, which is the one thing it does not do.
+            if (end === 'start') {
+              writer.element('direction-type', undefined, () => {
+                writer.leaf('words', hairpin.text, { 'font-style': 'italic' });
+              });
+            }
+            writer.element('direction-type', undefined, () => {
+              writer.leaf('dashes', undefined, {
+                type: end === 'start' ? 'start' : 'stop',
+                number: at + 1,
+              });
+            });
+          }
           writer.leaf('staff', hairpin.staffNumber ?? staffNumber);
         });
       }

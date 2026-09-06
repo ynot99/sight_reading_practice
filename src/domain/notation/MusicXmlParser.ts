@@ -777,6 +777,16 @@ interface RawWedge {
   readonly number: number;
   readonly staffNumber: number | null;
   readonly placement?: 'above' | 'below';
+  /** The word it was written as, where a dashed `cresc.` stands for a wedge. */
+  readonly text?: string;
+  /**
+   * Which of the format's two numbering spaces this end was numbered in.
+   *
+   * `<wedge>` and `<dashes>` count separately, so a wedge numbered 2 and a
+   * dashed `cresc.` numbered 2 can be open at once and are not two ends of
+   * one thing.
+   */
+  readonly channel: 'wedge' | 'dashes';
 }
 
 /**
@@ -791,7 +801,7 @@ function pairWedges(
   wedges: readonly RawWedge[],
   barTicks: (bar: number) => number,
 ): DynamicHairpin[] {
-  const open = new Map<number, RawWedge>();
+  const open = new Map<string, RawWedge>();
   const paired: DynamicHairpin[] = [];
   const started = (from: RawWedge, untilBar: number, untilTicks: number): DynamicHairpin => ({
     measureIndex: from.measureIndex,
@@ -800,20 +810,22 @@ function pairWedges(
     untilMeasureIndex: untilBar,
     untilOffsetTicks: untilTicks,
     staffNumber: from.staffNumber,
-    // The opening end says which side it is drawn on; the stop is the same
-    // hairpin and has nothing of its own to add.
+    // The opening end says which side it is drawn on and what word it was
+    // written as; the stop is the same hairpin and has nothing to add.
     ...(from.placement === undefined ? {} : { placement: from.placement }),
+    ...(from.text === undefined ? {} : { text: from.text }),
   });
+  const keyOf = (wedge: RawWedge): string => `${wedge.channel}:${wedge.number}`;
   for (const wedge of wedges) {
     if (wedge.type !== 'stop') {
-      open.set(wedge.number, wedge);
+      open.set(keyOf(wedge), wedge);
       continue;
     }
-    const from = open.get(wedge.number);
+    const from = open.get(keyOf(wedge));
     if (from === undefined) {
       continue;
     }
-    open.delete(wedge.number);
+    open.delete(keyOf(wedge));
     paired.push(started(from, wedge.measureIndex, wedge.offsetTicks));
   }
   for (const from of open.values()) {
@@ -851,6 +863,37 @@ function readWords(node: XmlNode): string {
 function sideOf(node: XmlNode): { placement?: 'above' | 'below' } {
   const placement = attribute(node, 'placement');
   return placement === 'above' || placement === 'below' ? { placement } : {};
+}
+
+/**
+ * A child of any of a direction's `direction-type` blocks.
+ *
+ * A direction can hold several, and a dashed `cresc.` uses two of them - the
+ * word in one and the dashes in the next - so looking only in the first
+ * finds the word and never the line it is written over.
+ */
+function inDirection(node: XmlNode, name: string): XmlNode | null {
+  for (const type of childrenNamed(node, 'direction-type')) {
+    const found = child(type, name);
+    if (found !== null) {
+      return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether a word says the music gets louder or softer across a stretch.
+ *
+ * Only the two that a dashed line is drawn under. `sf` and its kind are
+ * accents on one note, and `piu forte` is a level rather than a journey.
+ */
+function gradualDynamicKind(said: string): 'crescendo' | 'diminuendo' | null {
+  const word = said.toLowerCase();
+  if (word.includes('decresc') || word.includes('dim')) {
+    return 'diminuendo';
+  }
+  return word.includes('cresc') ? 'crescendo' : null;
 }
 
 /** What a writer calls nothing at all, at the end of a dying phrase. */
@@ -979,10 +1022,31 @@ function readMeasureNotes(
           number: Number(attribute(wedge, 'number') ?? '1') || 1,
           staffNumber: childNumber(node, 'staff') ?? null,
           ...sideOf(node),
+          channel: 'wedge',
         });
       }
       const said = readWords(node);
-      if (said !== '') {
+      // `cresc.` over a dashed line is the wedge written out in words, and
+      // it is played as one. Read here rather than left among the words
+      // this program prints and ignores: a crescendo that nothing gets
+      // louder for is only half of what the page says.
+      const dashes = inDirection(node, 'dashes');
+      const dashType = attribute(dashes, 'type');
+      const growing = gradualDynamicKind(said);
+      const dashed = dashes !== null && (dashType === 'stop' || growing !== null);
+      if (dashed) {
+        wedges.push({
+          measureIndex,
+          offsetTicks: Math.max(0, cursor),
+          type: dashType === 'stop' ? 'stop' : (growing ?? 'crescendo'),
+          number: Number(attribute(dashes, 'number') ?? '1') || 1,
+          staffNumber: childNumber(node, 'staff') ?? null,
+          ...sideOf(node),
+          ...(said === '' ? {} : { text: said }),
+          channel: 'dashes',
+        });
+      }
+      if (said !== '' && !dashed) {
         const height = Number(
           attribute(child(child(node, 'direction-type'), 'words'), 'default-y') ?? '',
         );

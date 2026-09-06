@@ -283,6 +283,111 @@ describe('the dynamics on the page', () => {
     ]);
   });
 
+  it('reads a crescendo written as a word over a dashed line', () => {
+    // Bars 188 to 189 of his Minecraft arrangement say `cresc.` with a dashed
+    // line rather than drawing a wedge. It is the same crescendo, and read as
+    // a word this program printed nothing and played nothing.
+    const worded = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>24</divisions><key><fifths>0</fifths></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time><staves>1</staves>
+      <clef number="1"><sign>G</sign><line>2</line></clef></attributes>
+      <direction placement="below">
+        <direction-type><dynamics><p/></dynamics></direction-type>
+        <staff>1</staff>
+      </direction>
+      <direction placement="below">
+        <direction-type><words font-style="italic">cresc.</words></direction-type>
+        <direction-type><dashes type="start" number="1"/></direction-type>
+        <staff>1</staff>
+      </direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>48</duration>
+      <voice>1</voice><type>half</type><staff>1</staff></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>48</duration>
+      <voice>1</voice><type>half</type><staff>1</staff></note>
+      <direction placement="below">
+        <direction-type><dashes type="stop" number="1"/></direction-type>
+        <staff>1</staff>
+      </direction>
+    </measure>
+  </part>
+</score-partwise>`;
+    const { exercise } = importer.read(worded);
+
+    expect(exercise.hairpins).toEqual([
+      {
+        measureIndex: 0,
+        offsetTicks: 0,
+        kind: 'crescendo',
+        untilMeasureIndex: 0,
+        untilOffsetTicks: Duration.WHOLE.ticks,
+        staffNumber: 1,
+        placement: 'below',
+        text: 'cresc.',
+      },
+    ]);
+
+    // Heard as a crescendo is: the second half of the bar is louder.
+    expect(velocityAt(exercise, 0, Duration.HALF.ticks, 1)).toBeGreaterThan(
+      velocityAt(exercise, 0, 0, 1),
+    );
+
+    // And printed back as the word it was. A wedge here would be this
+    // program choosing the engraving, which is the one thing it does not do.
+    const printed = serializer.serialize(exercise);
+
+    expect(printed).toContain('<words font-style="italic">cresc.</words>');
+    expect(printed).toContain('<dashes type="start"');
+    expect(printed).not.toContain('<wedge');
+    expect(importer.read(printed).exercise.hairpins).toEqual(exercise.hairpins);
+  });
+
+  it('does not pair a wedge with a dashed word that shares its number', () => {
+    // The format counts wedges and dashes separately, so both can be number
+    // one at once. Paired by the number alone, a `cresc.` closing on a
+    // wedge's stop makes one hairpin out of two and loses the other.
+    const both = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>24</divisions><key><fifths>0</fifths></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time><staves>1</staves>
+      <clef number="1"><sign>G</sign><line>2</line></clef></attributes>
+      <direction placement="below">
+        <direction-type><words font-style="italic">cresc.</words></direction-type>
+        <direction-type><dashes type="start" number="1"/></direction-type>
+        <staff>1</staff>
+      </direction>
+      <direction placement="above">
+        <direction-type><wedge type="diminuendo" number="1"/></direction-type>
+        <staff>1</staff>
+      </direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>48</duration>
+      <voice>1</voice><type>half</type><staff>1</staff></note>
+      <direction placement="above">
+        <direction-type><wedge type="stop" number="1"/></direction-type>
+        <staff>1</staff>
+      </direction>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>48</duration>
+      <voice>1</voice><type>half</type><staff>1</staff></note>
+      <direction placement="below">
+        <direction-type><dashes type="stop" number="1"/></direction-type>
+        <staff>1</staff>
+      </direction>
+    </measure>
+  </part>
+</score-partwise>`;
+    const { exercise } = importer.read(both);
+
+    expect(
+      exercise.hairpins.map((one) => `${one.kind} ${one.text ?? 'wedge'}`).sort(),
+    ).toEqual(['crescendo cresc.', 'diminuendo wedge']);
+  });
+
   it('keeps two hairpins on the sides the writer drew them on', () => {
     // One line swelling above the staff while another fades below it is
     // ordinary piano writing. Both forced below, they are stacked one

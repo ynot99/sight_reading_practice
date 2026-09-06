@@ -86,6 +86,37 @@ describe('two hairpins under one staff', () => {
     expect(arms.filter((y) => y > top)).toHaveLength(2);
   });
 
+  it('draws a crescendo written as a word as that word', async () => {
+    // What he sees in his arrangement at bars 188 to 189 and did not see
+    // here: the page says `cresc.`, so the page has to say `cresc.`
+    const container = await drawn('below');
+    const worded = {
+      ...twoBarExercise(),
+      hairpins: [
+        {
+          measureIndex: 0,
+          offsetTicks: 0,
+          kind: 'crescendo' as const,
+          untilMeasureIndex: 1,
+          untilOffsetTicks: 0,
+          staffNumber: 1,
+          placement: 'below' as const,
+          text: 'cresc.',
+        },
+      ],
+    };
+    document.body.replaceChildren();
+    const page = createScoreContainer();
+    const renderer = new OsmdScoreRenderer(page, { zoom: 1 });
+    await renderer.load(new MusicXmlSerializer().serialize(worded));
+
+    const said = [...page.querySelectorAll('text')].map((node) => node.textContent ?? '');
+
+    expect(said).toContain('cresc.');
+    // And it is a word instead of a wedge, not as well as one.
+    expect(slanted(page).length).toBeLessThan(slanted(container).length);
+  });
+
   it('puts both below the staff where the writer said below', async () => {
     // The state this program was in for every file: nothing is lost, but the
     // second hairpin is pushed further down under the first, and the page

@@ -8,6 +8,7 @@ import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
+import { installCanvasStub } from '../support/osmdHarness.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
 import {
@@ -41,6 +42,11 @@ function createDisplay(): OpenSheetMusicDisplay {
     autoResize: false,
     drawTitle: false,
     drawingParameters: 'compact',
+    // With a cursor, because one of these tests counts the places the
+    // *cursor* stops - which is what this program walks - and not every
+    // place the file mentions.
+    disableCursor: false,
+    cursorsOptions: [{ type: 0, color: '#000000', alpha: 0.4, follow: false }],
   });
 }
 
@@ -53,9 +59,11 @@ function createDisplay(): OpenSheetMusicDisplay {
  */
 describe('OSMD accepts the MusicXML we produce', () => {
   beforeAll(() => {
-    // OSMD probes for a canvas to measure text; jsdom has no 2D context and
-    // logs a warning for every probe. Parsing does not need one.
-    HTMLCanvasElement.prototype.getContext = () => null;
+    // OSMD probes for a canvas to measure text. Parsing needs none, but one
+    // of these tests draws - it counts the places the cursor stops, and a
+    // cursor exists only over a drawing - so the harness's stub goes in
+    // rather than the null this file used to hand back.
+    installCanvasStub();
   });
 
   it('parses a grand staff exercise into the expected structure', async () => {
@@ -312,10 +320,11 @@ describe('OSMD accepts the MusicXML we produce', () => {
   });
 
   it('agrees on the cursor when a voice is absent for part of a bar', async () => {
-    // A silence is written as `<forward>`, which is the format's way of saying
-    // that time passes with nothing drawn. The engraver has to make no cursor
-    // position of it - otherwise the reader is stopped in front of blank
-    // staff, and our timeline and the page no longer count the same places.
+    // A silence is a rest the writer did not draw: it takes its time and
+    // makes no place on the page. Counted with the *cursor* rather than with
+    // the raw iterator, because the cursor is what this program walks - it
+    // steps over what is not drawn, and the raw iterator counts what is
+    // written. The two differ by exactly the silences, which is the point.
     const exercise = partialVoiceExercise([
       silenceEntry(Duration.EIGHTH),
       noteEntry(p('G3'), Duration.HALF),
@@ -325,14 +334,17 @@ describe('OSMD accepts the MusicXML we produce', () => {
     const osmd = createDisplay();
 
     await osmd.load(serializer.serialize(exercise));
+    // A cursor exists once there is a drawing for it to stand on.
+    osmd.render();
 
-    const iterator = osmd.Sheet.MusicPartManager.getIterator();
+    const cursor = osmd.cursor;
+    cursor.reset();
     let positions = 0;
     let guard = timeline.length * 4 + 10;
-    while (!iterator.EndReached && guard > 0) {
+    while (!cursor.iterator.EndReached && guard > 0) {
       guard -= 1;
       positions += 1;
-      iterator.moveToNext();
+      cursor.next();
     }
 
     // Four quarters plus the one place only the inner voice moves.

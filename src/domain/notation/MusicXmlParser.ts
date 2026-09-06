@@ -93,6 +93,15 @@ interface RawNote {
   readonly breath: boolean;
   /** Ornaments leaning on this note, which take none of its time. */
   readonly graces: readonly GraceNote[];
+  /**
+   * A rest the file says is not to be drawn.
+   *
+   * Which is time passing with nothing on the page - a silence, in this
+   * model's terms - and how every engraver writes a voice that is absent for
+   * part of a bar. The alternative in the format, `<forward>`, is what this
+   * program used to write and what OSMD lays out wrongly.
+   */
+  readonly invisible: boolean;
 }
 
 const XML_TYPE_NAMES: Readonly<Record<string, NoteTypeName>> = {
@@ -902,6 +911,7 @@ function readMeasureNotes(
 
     const staff = childNumber(node, 'staff') ?? 1;
     const voice = childNumber(node, 'voice') ?? 1;
+    const invisible = attribute(node, 'print-object') === 'no';
 
     // The ornaments waiting in front of this note belong *to* it, and take no
     // time from anybody: they are carried on the entry and drawn where the
@@ -948,6 +958,7 @@ function readMeasureNotes(
       fermata: hasChild(child(node, 'notations'), 'fermata'),
       breath: hasChild(child(child(node, 'notations'), 'articulations'), 'breath-mark'),
       graces,
+      invisible,
     };
     notes.push(pushed);
 
@@ -1032,7 +1043,9 @@ function buildMeasure(
     const values = soundedValues(first);
     if (pitches.length === 0) {
       for (const value of values) {
-        entries.push(restEntry(value));
+        // A rest the writer hid is a silence: it takes its time and draws
+        // nothing, which is what this model means by one.
+        entries.push(first.invisible ? silenceEntry(value) : restEntry(value));
       }
     } else {
       const tied = group

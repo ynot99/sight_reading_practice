@@ -67,7 +67,12 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
 - A rest is drawn and a silence is not, so the two are different entries. An
   empty measure means the voice is absent from that whole bar; a `silence`
   entry means it is absent for part of one, takes its time so the bar still
-  adds up, and is written as `<forward>`. Neither may leave the *staff* blank:
+  adds up, and is written as a rest carrying `print-object="no"`. It was
+  `<forward>`, which is the format's own word for the same thing and which
+  OSMD lays out wrongly: measured on Clair de Lune bar 47, a voice entering
+  at the end of the bar had its notes drawn at the *beginning* of it. Read
+  back, an invisible rest is a silence again - otherwise a score kept in the
+  library gains rests nobody wrote. Neither may leave the *staff* blank:
   `validateStaffCoverage` walks every bar and demands that its voices between
   them draw something across the whole of it, and the importer gives a rest
   back wherever they do not.

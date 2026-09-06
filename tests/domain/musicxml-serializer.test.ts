@@ -364,18 +364,25 @@ describe('a tie in one voice of a shared staff', () => {
 describe('a voice that is absent for part of a bar', () => {
   const serializer = new MusicXmlSerializer();
 
-  it('says so with <forward> rather than drawing a rest', () => {
+  it('says so with a rest nobody draws', () => {
+    // It was `<forward>`, which is the format's own word for time passing
+    // with nothing in it - and which the engraver this program actually uses
+    // lays out wrongly: measured on Clair de Lune bar 47, a voice entering
+    // at the end of the bar had its notes drawn at the *beginning* of it. An
+    // invisible rest says the same thing and is laid out where it belongs.
     const xml = serializer.serialize(partialVoiceExercise());
-    const forwards = all(parse(xml), 'forward');
+    const rests = all(parse(xml), 'note').filter((node) => all(node, 'rest').length > 0);
 
-    expect(all(parse(xml), 'rest')).toHaveLength(0);
-    expect(forwards).toHaveLength(2);
-    expect(forwards.map((node) => text(node, 'duration'))).toEqual([
+    expect(all(parse(xml), 'forward')).toHaveLength(0);
+    expect(rests).toHaveLength(2);
+    // Not drawn: the writer wrote no rest here, and this is only time.
+    expect(rests.map((node) => node.getAttribute('print-object'))).toEqual(['no', 'no']);
+    expect(rests.map((node) => text(node, 'duration'))).toEqual([
       String(Duration.QUARTER.ticks),
       String(Duration.QUARTER.ticks),
     ]);
     // Named, so a part of several staves knows which line the time belongs to.
-    expect(forwards.map((node) => text(node, 'voice'))).toEqual(['2', '2']);
-    expect(forwards.map((node) => text(node, 'staff'))).toEqual(['1', '1']);
+    expect(rests.map((node) => text(node, 'voice'))).toEqual(['2', '2']);
+    expect(rests.map((node) => text(node, 'staff'))).toEqual(['1', '1']);
   });
 });

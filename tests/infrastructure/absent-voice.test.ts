@@ -49,8 +49,11 @@ describe('a voice that is absent for part of a bar', () => {
     expect(() => validateExercise(exercise)).not.toThrow();
 
     const printed = serializer.serialize(exercise);
-    expect(printed).not.toContain('<rest');
-    expect(printed).toContain('<forward>');
+    // Written as a rest nobody draws rather than as `<forward>`: the format
+    // means the same by both, and the engraver lays only one of them out
+    // where it belongs. Measured on Clair de Lune bar 47.
+    expect(printed).toContain('<note print-object="no">');
+    expect(printed).not.toContain('<forward>');
   });
 
   it('does the same for a voice that enters late', () => {
@@ -62,7 +65,11 @@ describe('a voice that is absent for part of a bar', () => {
       'silence',
       'note',
     ]);
-    expect(serializer.serialize(exercise)).not.toContain('<rest');
+    // A rest, and not one anybody sees: the page has no more ink on it than
+    // the writer put there.
+    const printed = serializer.serialize(exercise);
+    expect(printed).toContain('<note print-object="no">');
+    expect(printed).not.toContain('<forward>');
   });
 
   it('holds no cursor position where nothing is drawn', () => {

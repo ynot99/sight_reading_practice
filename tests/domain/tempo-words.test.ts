@@ -31,6 +31,11 @@ describe('what a word about the speed means', () => {
     // Printed and left alone.
     expect(tempoWordKind('dolce')).toBe('other');
     expect(tempoWordKind('espressivo')).toBe('other');
+    // These two look like relatives of accel. and rit. and are not: each
+    // names a new speed taken up at once, which the file writes as a number
+    // beside them if it wants it heard.
+    expect(tempoWordKind('Più mosso')).toBe('other');
+    expect(tempoWordKind('Meno mosso')).toBe('other');
   });
 });
 
@@ -76,6 +81,33 @@ describe('a piece with its words played', () => {
       spanMs(exercise, 0, Duration.WHOLE.ticks * 4);
 
     expect(toTheEnd(slowing)).toBeGreaterThan(toTheEnd(even));
+  });
+
+  it('leaves the clock alone where the next mark is the wrong way', () => {
+    // A rit. followed by a faster mark is not a rit. towards it: the piece
+    // holds its speed and the new number arrives when it is written.
+    const wrongWay = piece([word(1, 'rit.')], [
+      { measureIndex: 2, offsetTicks: 0, tempoBpm: 90 },
+    ]);
+
+    expect(withTempoWordsPlayed(wrongWay).tempoChanges).toEqual([
+      { measureIndex: 2, offsetTicks: 0, tempoBpm: 90 },
+    ]);
+  });
+
+  it('leaves the clock alone where the next mark is too far off', () => {
+    // Twelve bars away, and so not this word's destination. Read as one, the
+    // whole stretch between comes out gradually slowing - which is what a
+    // Minecraft arrangement did across sixty-three bars of itself.
+    const distant: Exercise = {
+      ...longExercise({ bars: 16, tempoBpm: 60 }),
+      tempoWords: [word(1, 'rit.')],
+      tempoChanges: [{ measureIndex: 13, offsetTicks: 0, tempoBpm: 30 }],
+    };
+
+    expect(withTempoWordsPlayed(distant).tempoChanges).toEqual([
+      { measureIndex: 13, offsetTicks: 0, tempoBpm: 30 },
+    ]);
   });
 
   it('puts the speed back where "a tempo" says so', () => {

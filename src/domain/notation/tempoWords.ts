@@ -12,6 +12,19 @@ import { barLines } from '../model/Exercise.js';
  */
 const STEPS_PER_BEAT = 1;
 
+/**
+ * How far ahead a gradual word is allowed to look for its destination.
+ *
+ * `accel.` and `rit.` name no distance, so the next written speed is the
+ * only candidate - and in a piece that writes few numbers the next one can
+ * be most of the score away. Measured on a Minecraft arrangement: `Più
+ * mosso` at bar 133, nothing else named until bar 196, and sixty-three bars
+ * of the piece came out gradually slowing towards it. A word covers about a
+ * phrase and then stops; a writer who means more says `a tempo`, or writes
+ * the new speed. Anything further off belongs to something else.
+ */
+const REACH_BARS = 4;
+
 /** Where a word sits, in ticks from the beginning of the piece. */
 function atTicks(exercise: Exercise, measureIndex: number, offsetTicks: number): number {
   const bars = barLines(exercise);
@@ -58,9 +71,9 @@ function anchorsOf(exercise: Exercise): readonly { ticks: number; bpm: number }[
  *
  * `accel.` and `rit.` say to move, and say nothing about how far: the
  * distance is the next thing that names a speed - a metronome mark, or `a
- * tempo`. Where nothing follows to move *to*, the word is drawn on the page
- * and does nothing, which is the honest reading of an instruction with no
- * destination.
+ * tempo` - provided it lies the way the word points and within `REACH_BARS`
+ * of it. Where nothing does, the word is drawn on the page and does nothing,
+ * which is the honest reading of an instruction with no destination.
  *
  * Written out as a run of ordinary tempo changes rather than as a new kind of
  * thing, so that everything downstream - the metronome's plan, the timeline's
@@ -111,6 +124,17 @@ export function withTempoWordsPlayed(exercise: Exercise): Exercise {
     if (target.bpm === startBpm || target.ticks <= from) {
       continue;
     }
+    // Only the way the word points. The next written speed is not always
+    // where the word is heading: the same arrangement says `rit.` at bar 24
+    // and names nothing until a *faster* mark twenty-three bars later, and
+    // reading that as the destination turns a slowing into a speeding up.
+    if (target.bpm > startBpm !== (word.kind === 'accelerando')) {
+      continue;
+    }
+    const last = bars[Math.min(word.measureIndex + REACH_BARS - 1, bars.length - 1)];
+    if (last === undefined || target.ticks > last.startTicks + last.timeSignature.ticksPerMeasure) {
+      continue;
+    }
     const pulse = bars[word.measureIndex]?.timeSignature.ticksPerPulse ?? 0;
     const step = pulse > 0 ? Math.round(pulse / STEPS_PER_BEAT) : 0;
     if (step <= 0) {
@@ -154,16 +178,16 @@ export function tempoWordKind(text: string): TempoWord['kind'] {
   if (said.startsWith('a tempo') || said.startsWith('tempo primo') || said.startsWith('tempo i')) {
     return 'a-tempo';
   }
-  if (said.startsWith('accel') || said.startsWith('string') || said.startsWith('più mosso')) {
+  if (said.startsWith('accel') || said.startsWith('string')) {
     return 'accelerando';
   }
-  if (
-    said.startsWith('rit') ||
-    said.startsWith('rall') ||
-    said.startsWith('allarg') ||
-    said.startsWith('meno mosso')
-  ) {
+  if (said.startsWith('rit') || said.startsWith('rall') || said.startsWith('allarg')) {
     return 'ritardando';
   }
+  // `più mosso` and `meno mosso` are left out on purpose. They read like
+  // relatives of `accel.` and `rit.` and are nothing of the kind: they name
+  // a new speed to take up at once, the way `Allegro` does, rather than a
+  // journey towards one. A file that means them to be heard writes the
+  // number beside them, and that number is read like any other.
   return 'other';
 }

@@ -256,7 +256,9 @@ export class SampledPitchPlayer
     source.buffer = buffer;
     source.playbackRate.value = playbackRateFor(choice.semitones);
 
-    const peak = level * Math.max(0.15, velocity);
+    // The floor is where a note stops being heard at all rather than where
+    // it stops being loud: `ppp` is meant to be nearly nothing.
+    const peak = level * Math.max(0.05, velocity);
     // Brightness with loudness. The recordings are one velocity layer, so a
     // quiet note is the same recording turned down - which the ear hears as
     // the same note, not as a quieter touch. Rolling the top off it is the

@@ -77,7 +77,9 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
     oscillator.type = 'triangle';
     oscillator.frequency.value = frequencyOf(midi);
 
-    const peak = Math.max(0.001, level * Math.max(0.2, velocity));
+    // The same floor the sampled player keeps: low enough that ppp is nearly
+    // nothing, high enough that a note is still heard.
+    const peak = Math.max(0.001, level * Math.max(0.05, velocity));
     envelope.gain.setValueAtTime(0.0001, now);
     envelope.gain.exponentialRampToValueAtTime(peak, now + 0.012);
     envelope.gain.exponentialRampToValueAtTime(peak * 0.55, now + 0.35);

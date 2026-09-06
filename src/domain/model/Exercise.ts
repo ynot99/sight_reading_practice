@@ -400,12 +400,12 @@ export interface DynamicMark {
  * imitate; the layers themselves are a download, not a rule.
  */
 export const DYNAMIC_VELOCITY: Readonly<Record<DynamicLevel, number>> = {
-  ppp: 0.18,
-  pp: 0.28,
-  p: 0.4,
-  mp: 0.52,
-  mf: 0.66,
-  f: 0.8,
+  ppp: 0.1,
+  pp: 0.2,
+  p: 0.33,
+  mp: 0.47,
+  mf: 0.62,
+  f: 0.78,
   ff: 0.92,
   fff: 1,
 };
@@ -425,26 +425,49 @@ export function dynamicAt(
   offsetTicks: number,
   staffNumber: number | null,
 ): DynamicLevel | null {
-  let found: DynamicMark | null = null;
+  const isBefore = (mark: DynamicMark): boolean =>
+    mark.measureIndex < measureIndex ||
+    (mark.measureIndex === measureIndex && mark.offsetTicks <= offsetTicks);
+  const isLater = (mark: DynamicMark, than: DynamicMark | null): boolean =>
+    than === null ||
+    mark.measureIndex > than.measureIndex ||
+    (mark.measureIndex === than.measureIndex && mark.offsetTicks >= than.offsetTicks);
+
+  let latest: DynamicMark | null = null;
+  let mine: DynamicMark | null = null;
   for (const mark of exercise.dynamicMarks) {
-    if (mark.measureIndex > measureIndex) {
+    if (!isBefore(mark)) {
       continue;
     }
-    if (mark.measureIndex === measureIndex && mark.offsetTicks > offsetTicks) {
-      continue;
-    }
-    if (mark.staffNumber !== null && staffNumber !== null && mark.staffNumber !== staffNumber) {
-      continue;
+    if (isLater(mark, latest)) {
+      latest = mark;
     }
     if (
-      found === null ||
-      mark.measureIndex > found.measureIndex ||
-      (mark.measureIndex === found.measureIndex && mark.offsetTicks >= found.offsetTicks)
+      (mark.staffNumber === null || staffNumber === null || mark.staffNumber === staffNumber) &&
+      isLater(mark, mine)
     ) {
-      found = mark;
+      mine = mark;
     }
   }
-  return found?.level ?? null;
+  // A dynamic written under one staff of a piano part is an instruction to
+  // the player, not to that hand alone: one `pp` under the treble means the
+  // whole texture. Measured on his own score and it is what was wrong - the
+  // left hand went on at `mf` under a right hand playing `pp`, which is
+  // exactly "I hear no difference".
+  //
+  // A hand that has been marked separately keeps its own where the two sit
+  // at the same moment, which is how `f` over `p` is written; after that the
+  // later instruction governs, whichever staff it was written under.
+  if (mine === null) {
+    return latest?.level ?? null;
+  }
+  if (latest === null) {
+    return mine.level;
+  }
+  const mineIsLater =
+    mine.measureIndex > latest.measureIndex ||
+    (mine.measureIndex === latest.measureIndex && mine.offsetTicks >= latest.offsetTicks);
+  return (mineIsLater ? mine : latest).level;
 }
 
 export interface PedalMark {

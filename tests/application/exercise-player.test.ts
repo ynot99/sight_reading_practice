@@ -75,6 +75,32 @@ describe('listening to an exercise', () => {
     );
   });
 
+  it('plays the whole texture at a dynamic written under one staff', () => {
+    // Measured on his own score, and it is what "I hear no difference" was:
+    // a `pp` written under the treble left the bass playing at `mf`, so half
+    // the notes - the loudest and longest of them - ignored the mark.
+    const marked = {
+      ...twoBarExercise({ tempoBpm: 60 }),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'pp' as const, staffNumber: 1 },
+      ],
+    };
+    const { player, metronome, instrument } = rig(marked);
+    player.start(buildTimeline(marked), {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+    });
+    metronome.advanceSubdivisions(4);
+
+    const quiet = instrument.played.map((note) => note.velocity);
+    expect(quiet.length).toBeGreaterThan(1);
+    // Every note of it, the bass included.
+    for (const velocity of quiet) {
+      expect(velocity).toBeLessThan(0.4);
+    }
+  });
+
   it('takes a hand its own marks before those of the piece', () => {
     // A piano part with the left hand marked p under a melody marked f is
     // ordinary writing, and one number for both would be the wrong one twice.

@@ -991,6 +991,159 @@ describe('what you played, drawn over the score', () => {
     expect(renderer.played.every((mark) => mark.settled === true)).toBe(true);
   });
 
+  it('gives the speed back a little at a time for a clean reading', async () => {
+    // Never above what the reader asked for, and in smaller steps than it
+    // took away: getting through something at 70 does not prove 90.
+    const { controller, midi, metronome, clock } = createController(true);
+    controller.updateSettings({
+      modeId: FLOW_MODE_ID,
+      easeTheTempo: true,
+      countInBars: 0,
+      // Any note satisfies a step, so what is being tested is the rule about
+      // speed rather than this test's ability to play in time.
+      rhythmOnly: true,
+    });
+    await controller.openScore(longExercise({ bars: 4, tempoBpm: 60 }));
+    controller.updateSettings({ tempoPercent: 80 });
+    // Two readings that came apart, so there is something to give back.
+    for (let run = 0; run < 2; run += 1) {
+      controller.start();
+      metronome.advanceSubdivisions(80);
+    }
+    expect(controller.settings.tempoPercent).toBe(60);
+
+    // A run played as written, note by note, on the pulse.
+    const session = controller.start();
+    metronome.advanceSubdivisions(1);
+    for (let guard = 0; guard < 100 && session?.status === 'running'; guard += 1) {
+      for (const note of session?.currentStep?.expectedMidi ?? []) {
+        midi.noteOn(note, clock.now());
+      }
+      // One tick is one beat here, and one beat is one step: four would
+      // walk past three of them and call them missed.
+      metronome.advanceSubdivisions(1);
+    }
+
+    // Five back, not the twenty it took: one clean reading at sixty does not
+    // prove eighty. The eighty he asked for is the ceiling, not the target
+    // of a single run.
+    expect(controller.settings.tempoPercent).toBe(65);
+  });
+
+  it('takes some speed away when a reading comes apart', async () => {
+    const { controller, metronome } = createController(true);
+    controller.updateSettings({ modeId: FLOW_MODE_ID, easeTheTempo: true, countInBars: 0 });
+    await controller.openScore(longExercise({ bars: 4, tempoBpm: 60 }));
+
+    // Nothing played at all: the music goes past and every step is missed.
+    controller.start();
+    metronome.advanceSubdivisions(80);
+
+    expect(controller.settings.tempoPercent).toBe(90);
+  });
+
+  it('stops taking it away at half the written tempo', async () => {
+    const { controller, metronome } = createController(true);
+    controller.updateSettings({ modeId: FLOW_MODE_ID, easeTheTempo: true, countInBars: 0 });
+    await controller.openScore(longExercise({ bars: 4, tempoBpm: 60 }));
+
+    for (let run = 0; run < 8; run += 1) {
+      controller.start();
+      metronome.advanceSubdivisions(80);
+    }
+
+    // Below half, a piece stops being the piece.
+    expect(controller.settings.tempoPercent).toBe(50);
+  });
+
+  it('says nothing about the speed where the music waits for the reader', async () => {
+    // There is no speed to be behind in Wait mode, so a reading that came
+    // apart there is not evidence about the tempo. A long reading, and a
+    // properly bad one - a wrong note on every step - so that nothing but
+    // the mode is keeping the speed where it is.
+    const { controller, midi } = createController(true);
+    controller.updateSettings({ easeTheTempo: true });
+    await controller.openScore(longExercise({ bars: 4, tempoBpm: 60 }));
+    const session = controller.start();
+
+    for (let guard = 0; guard < 12 && session?.status === 'running'; guard += 1) {
+      const step = session?.currentStep;
+      if (step === null || step === undefined) {
+        break;
+      }
+      midi.noteOn((step.expectedMidi[0] ?? 60) + 1, 0);
+      for (const note of step.expectedMidi) {
+        midi.noteOn(note, 0);
+      }
+    }
+    session?.abort();
+
+    const report = controller.lastReport;
+    expect((report?.totals.incorrect ?? 0) + (report?.totals.correct ?? 0)).toBeGreaterThanOrEqual(
+      6,
+    );
+    expect(report?.totals.incorrect ?? 0).toBeGreaterThan(0);
+    expect(controller.settings.tempoPercent).toBe(100);
+  });
+
+  it('is not moved by a run that barely started', async () => {
+    // With "one wrong note ends the run" every failure is two notes long,
+    // and two notes are not evidence about a tempo.
+    const { controller, metronome } = createController(true);
+    controller.updateSettings({ modeId: FLOW_MODE_ID, easeTheTempo: true, countInBars: 0 });
+    await controller.openScore(longExercise({ bars: 4, tempoBpm: 60 }));
+
+    const session = controller.start();
+    metronome.advanceSubdivisions(2);
+    session?.abort();
+
+    expect(controller.settings.tempoPercent).toBe(100);
+  });
+
+  it('leaves the speed alone unless it was asked to', async () => {
+    const { controller, metronome } = createController(true);
+    controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+    await controller.openScore(longExercise({ bars: 4, tempoBpm: 60 }));
+
+    controller.start();
+    metronome.advanceSubdivisions(80);
+
+    expect(controller.settings.tempoPercent).toBe(100);
+  });
+
+  it('never hands back more speed than the plan is asking for', async () => {
+    // The plan sets the speed for each of its steps, and the easing must not
+    // climb out of it: what the plan asked for is what the reader asked for.
+    const { controller, midi, metronome, clock } = createController(true);
+    controller.updateSettings({
+      modeId: FLOW_MODE_ID,
+      easeTheTempo: true,
+      countInBars: 0,
+      rhythmOnly: true,
+    });
+    await controller.openScore(longExercise({ bars: 8, tempoBpm: 60 }));
+    controller.startTheDrill(4);
+    expect(controller.settings.tempoPercent).toBe(70);
+
+    // One reading that came apart, then one played through.
+    controller.start();
+    metronome.advanceSubdivisions(80);
+    expect(controller.settings.tempoPercent).toBe(60);
+
+    const session = controller.start();
+    metronome.advanceSubdivisions(1);
+    for (let guard = 0; guard < 100 && session?.status === 'running'; guard += 1) {
+      for (const note of session?.currentStep?.expectedMidi ?? []) {
+        midi.noteOn(note, clock.now());
+      }
+      metronome.advanceSubdivisions(1);
+    }
+
+    // The plan moved on and set its own speed for the next step; the easing
+    // did not carry sixty-five into it.
+    expect(controller.settings.tempoPercent).toBe(70);
+  });
+
   it('sets the passage, the hand and the speed the drill asks for', async () => {
     // His line 93. Nothing here is new machinery - a section is the passage
     // this trainer has always had - so what it does is set the same settings

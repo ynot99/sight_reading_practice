@@ -816,6 +816,7 @@ export class AppView {
   private weekShown: string | null = null;
   private timeTick: ReturnType<typeof setInterval> | null = null;
   private survivalTick: ReturnType<typeof setInterval> | null = null;
+  private easedFlash: ReturnType<typeof setTimeout> | null = null;
   /** When the stretch being counted began, or `null` while the page is away. */
   private timeCountedAtMs: number | null = null;
   /** Which tip to give next, so the same one is not given twice running. */
@@ -898,6 +899,7 @@ export class AppView {
     focusHealthFill: HTMLElement;
     survival: HTMLInputElement;
     stopAtMistake: HTMLInputElement;
+    easeTempo: HTMLInputElement;
     immediateStart: HTMLInputElement;
     dimUnplayed: HTMLInputElement;
     pageTurns: HTMLSelectElement;
@@ -1099,6 +1101,7 @@ export class AppView {
       focusHealthFill: requireElement(doc, 'focus-health-fill'),
       survival: requireElement(doc, 'survival'),
       stopAtMistake: requireElement(doc, 'stop-at-mistake'),
+      easeTempo: requireElement(doc, 'ease-tempo'),
       immediateStart: requireElement(doc, 'immediate-start'),
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
       pageTurns: requireElement(doc, 'page-turns'),
@@ -1331,6 +1334,10 @@ export class AppView {
     if (this.survivalTick !== null) {
       clearInterval(this.survivalTick);
       this.survivalTick = null;
+    }
+    if (this.easedFlash !== null) {
+      clearTimeout(this.easedFlash);
+      this.easedFlash = null;
     }
     if (this.silenceWatch !== null) {
       clearTimeout(this.silenceWatch);
@@ -2107,6 +2114,11 @@ export class AppView {
     this.listen(this.el.survival, 'change', () => {
       controller.updateSettings({ survival: this.el.survival.checked });
       this.renderHealth(controller.health);
+    });
+
+    this.listen(this.el.easeTempo, 'change', () => {
+      controller.updateSettings({ easeTheTempo: this.el.easeTempo.checked });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.stopAtMistake, 'change', () => {
@@ -3316,6 +3328,23 @@ export class AppView {
       controller.events.on('drillChanged', () => {
         this.showTheDrill();
       }),
+      // The number moved without anybody touching it, so it says so where it
+      // lives. His own note asks how the reader is to understand a slowdown;
+      // the verdict of the run that caused it is on the page at the same
+      // moment, and covering that to explain this would be a poor trade.
+      controller.events.on('tempoEased', ({ percent, slower }) => {
+        this.el.focusTempo.title = slower
+          ? `Slowed to ${percent}% after that reading`
+          : `Back up to ${percent}% after that reading`;
+        this.el.focusTempo.classList.add('focus-bar__percent--eased');
+        if (this.easedFlash !== null) {
+          clearTimeout(this.easedFlash);
+        }
+        this.easedFlash = setTimeout(() => {
+          this.easedFlash = null;
+          this.el.focusTempo.classList.remove('focus-bar__percent--eased');
+        }, 1_800);
+      }),
     );
 
     this.subscriptions.push(
@@ -3894,6 +3923,7 @@ export class AppView {
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.survival.checked = settings.survival;
     this.el.stopAtMistake.checked = settings.stopAtAMistake;
+    this.el.easeTempo.checked = settings.easeTheTempo;
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;

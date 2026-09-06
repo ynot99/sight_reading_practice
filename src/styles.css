@@ -1721,6 +1721,26 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The speed, when it moved by itself.
+ *
+ * Said where the number lives rather than in the middle of the page: the
+ * card there is holding the verdict of the run that caused it, and covering
+ * that to explain this would be answering one question by hiding another.
+ * Nothing in the row changes size - a colour and a ring, and both go.
+ */
+.focus-bar__percent--eased {
+  color: var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .focus-bar__percent--eased {
+    transition: box-shadow 200ms ease-out;
+  }
+}
+
 .focus-bar__button--step {
   padding: 0 12px;
   font-size: 17px;

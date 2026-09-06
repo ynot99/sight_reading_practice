@@ -679,7 +679,7 @@ export class ExercisePlayer {
    * after it is the whole lap - so the two are asked for separately and the
    * count runs straight through both.
    */
-  private noteAt(index: number): { midi: number; atMs: number; untilMs: number } | null {
+  private noteAt(index: number): ScheduledNote | null {
     const first = this.pending;
     if (index < first.length) {
       return first[index] ?? null;
@@ -694,7 +694,13 @@ export class ExercisePlayer {
       return null;
     }
     const base = this.firstLapMs + Math.floor(after / lap.length) * this.lapMs;
-    return { midi: note.midi, atMs: base + note.atMs, untilMs: base + note.untilMs };
+    // The same note, a lap later: everything but the moment is unchanged, and
+    // how hard it is struck is a property of the note rather than of the lap.
+    return {
+      ...note,
+      atMs: base + note.atMs,
+      untilMs: base + note.untilMs,
+    };
   }
 
   /**

@@ -8,6 +8,7 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY, velocityAt } from '../../src/domain/model/Exercise.js';
 import {
+  clefAt,
   measureTicks,
   noteEntry,
   restEntry,
@@ -835,12 +836,64 @@ describe('files written by other programs', () => {
     const { exercise } = importer.read(changing);
 
     expect(exercise.staves[0]?.clef).toBe('bass');
-    expect(exercise.staves[0]?.clefChanges).toEqual([{ measureIndex: 1, clef: 'treble' }]);
+    expect(exercise.staves[0]?.clefChanges).toEqual([
+      { measureIndex: 1, offsetTicks: 0, clef: 'treble' },
+    ]);
 
     // And it is written back at the head of the bar it takes effect in.
     const printed = serializer.serialize(exercise);
     const secondBar = printed.slice(printed.indexOf('<measure number="2"'));
     expect(secondBar).toMatch(/<attributes>\s*<clef number="1">\s*<sign>G<\/sign>/);
+  });
+
+  it('follows a clef that changes twice inside one bar', () => {
+    // Bar 36 of his Minecraft arrangement: the left hand crosses up for half
+    // a beat and comes back before the bar is out. Read bar by bar the two
+    // changes collapse into one at the bar line, the return is lost, and
+    // every bar from there on is drawn in the wrong clef.
+    const crossing = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>24</divisions><key><fifths>0</fifths></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time><staves>1</staves>
+      <clef number="1"><sign>F</sign><line>4</line></clef></attributes>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>24</duration>
+      <voice>1</voice><type>quarter</type><staff>1</staff></note>
+      <attributes><clef number="1"><sign>G</sign><line>2</line></clef></attributes>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>24</duration>
+      <voice>1</voice><type>quarter</type><staff>1</staff></note>
+      <attributes><clef number="1"><sign>F</sign><line>4</line></clef></attributes>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>48</duration>
+      <voice>1</voice><type>half</type><staff>1</staff></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const { exercise } = importer.read(crossing);
+    const staff = exercise.staves[0];
+    if (staff === undefined) {
+      throw new Error('the file has one staff');
+    }
+
+    expect(staff.clef).toBe('bass');
+    expect(staff.clefChanges).toEqual([
+      { measureIndex: 0, offsetTicks: Duration.QUARTER.ticks, clef: 'treble' },
+      { measureIndex: 0, offsetTicks: Duration.HALF.ticks, clef: 'bass' },
+    ]);
+
+    // In force from where it is written, not from the bar line: the bar opens
+    // and ends in the bass, and is in the treble only in between.
+    expect(clefAt(staff, 0, 0)).toBe('bass');
+    expect(clefAt(staff, 0, Duration.QUARTER.ticks)).toBe('treble');
+    expect(clefAt(staff, 0, Duration.HALF.ticks)).toBe('bass');
+
+    // Written back among the notes rather than at the head of the bar, which
+    // is the format's way of saying where it happens - and read again
+    // unchanged.
+    const printed = serializer.serialize(exercise);
+    expect(printed.indexOf('<sign>G</sign>')).toBeGreaterThan(printed.indexOf('<note>'));
+    expect(importer.read(printed).exercise.staves[0]?.clefChanges).toEqual(staff.clefChanges);
   });
 
   it('follows a modulation instead of spelling it out', () => {

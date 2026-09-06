@@ -163,9 +163,19 @@ export interface Measure {
  * beats flattening the two into one line - a held note under moving notes
  * stays a held note instead of becoming a chain of tied fragments.
  */
-/** A clef the staff changes to, from the given measure onwards. */
+/**
+ * A clef the staff changes to, from this moment onwards.
+ *
+ * Placed like a pedal mark or a dynamic - a bar and an offset into it -
+ * because a clef can change partway through a bar and often does: a left
+ * hand crossing up for half a beat is written in the treble clef and back
+ * in the bass before the bar is out. Kept to whole bars, the two changes
+ * become one at the bar line, the return is lost, and a page of the left
+ * hand is drawn in the wrong clef.
+ */
 export interface ClefChange {
   readonly measureIndex: number;
+  readonly offsetTicks: number;
   readonly clef: ClefKind;
 }
 
@@ -325,8 +335,39 @@ export function keyAtMeasure(exercise: Exercise, measureIndex: number): KeySigna
   return current;
 }
 
-/** The clef in force on a staff at a given measure. */
+/** The clef in force on a staff at a given moment. */
+export function clefAt(staff: StaffPart, measureIndex: number, offsetTicks: number): ClefKind {
+  let current = staff.clef;
+  for (const change of staff.clefChanges) {
+    const reached =
+      change.measureIndex < measureIndex ||
+      (change.measureIndex === measureIndex && change.offsetTicks <= offsetTicks);
+    if (reached) {
+      current = change.clef;
+    }
+  }
+  return current;
+}
+
+/**
+ * The clef a staff is read in as a bar begins.
+ *
+ * What most callers want: the clef a bar opens in is the clef its reader
+ * meets. A change partway through governs from where it is written, which
+ * `clefAt` answers.
+ */
 export function clefAtMeasure(staff: StaffPart, measureIndex: number): ClefKind {
+  return clefAt(staff, measureIndex, 0);
+}
+
+/**
+ * The clef a staff is left in once a bar is over.
+ *
+ * Every change inside the bar included, which is what the bar after it
+ * inherits. Written out repeats need this and the opening clef both: a bar
+ * read a second time may follow a different bar than it did the first time.
+ */
+export function clefAfterMeasure(staff: StaffPart, measureIndex: number): ClefKind {
   let current = staff.clef;
   for (const change of staff.clefChanges) {
     if (change.measureIndex <= measureIndex) {

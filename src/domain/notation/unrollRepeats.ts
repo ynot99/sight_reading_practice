@@ -9,6 +9,7 @@ import type {
 } from '../model/Exercise.js';
 import {
   barNumberOf,
+  clefAfterMeasure,
   clefAtMeasure,
   keyAtMeasure,
   measureCount,
@@ -176,10 +177,19 @@ export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exe
       const clefChanges: ClefChange[] = [];
       order.forEach((from, at) => {
         const previous = at === 0 ? null : (order[at - 1] ?? null);
-        const clef = clefAtMeasure(staff, from);
-        const before = previous === null ? staff.clef : clefAtMeasure(staff, previous);
-        if (clef !== before) {
-          clefChanges.push({ measureIndex: at, clef });
+        const inside = staff.clefChanges.filter((change) => change.measureIndex === from);
+        // What the bar is read in as it opens, against what the bar before it
+        // left behind: a re-read bar meets a different clef than it did the
+        // first time round, so the change has to be stated again.
+        const opening = clefAtMeasure(staff, from);
+        const before = previous === null ? staff.clef : clefAfterMeasure(staff, previous);
+        if (opening !== before && !inside.some((change) => change.offsetTicks === 0)) {
+          clefChanges.push({ measureIndex: at, offsetTicks: 0, clef: opening });
+        }
+        // Then everything the writer put inside the bar, at its own place in
+        // it - a hand crossing up for half a beat crosses up on every reading.
+        for (const change of inside) {
+          clefChanges.push({ measureIndex: at, offsetTicks: change.offsetTicks, clef: change.clef });
         }
       });
       return {

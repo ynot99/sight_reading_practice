@@ -16,7 +16,6 @@ import type {
   BarLabel,
   Beam,
   BeamType,
-  ClefChange,
   DynamicHairpin,
   DynamicMark,
   OctaveShift,
@@ -368,8 +367,6 @@ interface ScoreHeader {
   /** Metres it changes to later, by the measure each one begins at. */
   readonly timeChanges: readonly TimeChange[];
   readonly clefByStaff: ReadonlyMap<number, ClefKind>;
-  /** Clefs a staff switches to later, keyed by the file's own staff number. */
-  readonly clefChangesByStaff: ReadonlyMap<number, readonly ClefChange[]>;
   readonly keyChanges: readonly KeyChange[];
   readonly staffCount: number;
 }
@@ -434,10 +431,6 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
   const staffCount = childNumber(attributes, 'staves') ?? 1;
   const clefByStaff = readClefs(attributes, warnings);
 
-  // A clef change is followed rather than ignored: a left hand climbing into
-  // the treble is written in the treble clef, and reading it on five ledger
-  // lines instead is exactly the difficulty the change exists to remove.
-  const clefChangesByStaff = new Map<number, ClefChange[]>();
   const keyChanges: KeyChange[] = [];
   const timeChanges: TimeChange[] = [];
   measures.forEach((measure, measureIndex) => {
@@ -447,12 +440,6 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
     const later = child(measure, 'attributes');
     if (later === null) {
       return;
-    }
-    for (const [staffNumber, clef] of readClefs(later, warnings)) {
-      clefChangesByStaff.set(staffNumber, [
-        ...(clefChangesByStaff.get(staffNumber) ?? []),
-        { measureIndex, clef },
-      ]);
     }
     // A modulation has to be followed as well. Held to one key, a piece that
     // changes key comes out correct and unreadable: every note of the new key
@@ -487,7 +474,6 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
     timeSignature: new TimeSignature(beats, beatType),
     timeChanges,
     clefByStaff,
-    clefChangesByStaff,
     keyChanges,
     staffCount: Math.max(1, staffCount),
   };
@@ -769,6 +755,20 @@ function pairShifts(
   return paired;
 }
 
+/**
+ * A clef change as the file states it, before the staves are renumbered.
+ *
+ * Read in the pass that walks the notes, because that is the only pass that
+ * knows where in the bar anything sits - and a clef change that has lost its
+ * place in the bar has lost half of what it says.
+ */
+interface RawClefChange {
+  readonly staffNumber: number;
+  readonly measureIndex: number;
+  readonly offsetTicks: number;
+  readonly clef: ClefKind;
+}
+
 /** One end of a hairpin, as the file states it. */
 interface RawWedge {
   readonly measureIndex: number;
@@ -891,6 +891,7 @@ function readMeasureNotes(
   tempoWords: TempoWord[] = [],
   wedges: RawWedge[] = [],
   shifts: RawShift[] = [],
+  clefChanges: RawClefChange[] = [],
 ): RawNote[] {
   const notes: RawNote[] = [];
   let cursor = 0;
@@ -907,6 +908,24 @@ function readMeasureNotes(
   };
 
   for (const node of measure.children) {
+    if (node.name === 'attributes') {
+      // A bar can hold several of these, and the clefs in the later ones are
+      // the ones a bar-by-bar reading loses: the hand crosses up and comes
+      // back, and only the crossing survives. The very first of the piece is
+      // the staff's opening clef rather than a change to it.
+      const opening = measureIndex === 0 && cursor === 0 && notes.length === 0;
+      if (!opening) {
+        for (const [staffNumber, clef] of readClefs(node, warnings)) {
+          clefChanges.push({
+            staffNumber,
+            measureIndex,
+            offsetTicks: Math.max(0, cursor),
+            clef,
+          });
+        }
+      }
+      continue;
+    }
     if (node.name === 'backup' || node.name === 'forward') {
       const amount = childNumber(node, 'duration') ?? 0;
       const ticks = toTicks(amount, header.divisions, `Bar ${measureIndex + 1}`);
@@ -1324,25 +1343,12 @@ function readEveryPart(
 function readPartAttributes(
   measures: readonly XmlNode[],
   warnings: ImportWarning[],
-): Pick<ScoreHeader, 'divisions' | 'clefByStaff' | 'clefChangesByStaff' | 'staffCount'> {
+): Pick<ScoreHeader, 'divisions' | 'clefByStaff' | 'staffCount'> {
   const attributes = child(measures[0] ?? null, 'attributes');
   const divisions = childNumber(attributes, 'divisions');
-  const clefChangesByStaff = new Map<number, ClefChange[]>();
-  measures.forEach((measure, measureIndex) => {
-    if (measureIndex === 0) {
-      return;
-    }
-    for (const [staffNumber, clef] of readClefs(child(measure, 'attributes'), warnings)) {
-      clefChangesByStaff.set(staffNumber, [
-        ...(clefChangesByStaff.get(staffNumber) ?? []),
-        { measureIndex, clef },
-      ]);
-    }
-  });
   return {
     divisions: divisions === null || divisions <= 0 ? DIVISIONS_PER_QUARTER : divisions,
     clefByStaff: readClefs(attributes, warnings),
-    clefChangesByStaff,
     staffCount: Math.max(1, childNumber(attributes, 'staves') ?? 1),
   };
 }
@@ -1366,6 +1372,7 @@ function buildStaves(
   const tempoWords: TempoWord[] = [];
   const wedges: RawWedge[] = [];
   const shifts: RawShift[] = [];
+  const clefChanges: RawClefChange[] = [];
   const perMeasure = measures.map((measure, index) =>
     readMeasureNotes(
       measure,
@@ -1378,6 +1385,7 @@ function buildStaves(
       tempoWords,
       wedges,
       shifts,
+      clefChanges,
     ),
   );
   const octaveShifts = pairShifts(shifts, (bar) => barTicksAt(header, bar));
@@ -1408,6 +1416,14 @@ function buildStaves(
   const pickup =
     firstBar.length > 0 &&
     firstBar.every((note) => note.onsetTicks + note.ticks < barTicksAt(header, 0));
+
+  // A pickup's notes were moved to the end of its bar, so a mark inside that
+  // bar has to move with the music it marks. The first bar only: everywhere
+  // else the file's own offset is ours.
+  const pickupShift = pickup
+    ? barTicksAt(header, 0) -
+      Math.max(0, ...firstBar.map((note) => note.onsetTicks + note.ticks))
+    : 0;
 
   const ordered = [...pairs.values()].sort(
     (left, right) => left.staff - right.staff || left.voice - right.voice,
@@ -1444,18 +1460,21 @@ function buildStaves(
       clef:
         header.clefByStaff.get(pair.staff) ??
         (staffNumbers.indexOf(pair.staff) === 0 ? 'treble' : 'bass'),
-      clefChanges: header.clefChangesByStaff.get(pair.staff) ?? [],
+      clefChanges: clefChanges
+        .filter((change) => change.staffNumber === pair.staff)
+        .map((change) => ({
+          measureIndex: change.measureIndex,
+          // Moved with the music it governs where a pickup shifted it, the
+          // same way every other mark inside the first bar is.
+          offsetTicks:
+            change.measureIndex === 0 && change.offsetTicks > 0
+              ? change.offsetTicks + pickupShift
+              : change.offsetTicks,
+          clef: change.clef,
+        })),
       measures: dropTiesThatLeadNowhere(built, warnings),
     } satisfies StaffPart;
   });
-
-  // A pickup's notes were moved to the end of its bar, so a mark inside that
-  // bar has to move with the music it marks. The first bar only: everywhere
-  // else the file's own offset is ours.
-  const pickupShift = pickup
-    ? barTicksAt(header, 0) -
-      Math.max(0, ...firstBar.map((note) => note.onsetTicks + note.ticks))
-    : 0;
 
   return {
     staves: restStaffThatFallsSilent(parts, (bar) => barTicksAt(header, bar), warnings),

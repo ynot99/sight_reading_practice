@@ -810,7 +810,7 @@ describe('what you played, drawn over the score', () => {
     }
     await controller.openScore({
       ...base,
-      staves: [treble, { ...bass, clefChanges: [{ measureIndex: 1, clef: 'treble' as const }] }],
+      staves: [treble, { ...bass, clefChanges: [{ measureIndex: 1, offsetTicks: 0, clef: 'treble' as const }] }],
     });
 
     const lastStep = (controller.currentTimeline?.length ?? 1) - 1;

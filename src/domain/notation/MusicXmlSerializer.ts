@@ -3,6 +3,7 @@ import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
 import type { Duration } from '../model/Duration.js';
 import type {
+  ClefChange,
   Exercise,
   MusicalEntry,
   GraceNote,
@@ -297,6 +298,13 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             index === 0 ? words : [],
             index === 0 ? hairpins : [],
             index === 0 ? shifts : [],
+            // A clef belongs to a staff, not to a voice: written once, with
+            // whichever of the staff's voices comes first.
+            firstOfStaff.get(staff.staffNumber) === index
+              ? staff.clefChanges.filter(
+                  (change) => change.measureIndex === measureIndex && change.offsetTicks > 0,
+                )
+              : [],
           );
         });
         this.writeTempoChanges(writer, tempos, barTicks, present.length > 0);
@@ -448,10 +456,12 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
   ): void {
     const key = exercise.keyChanges.find((change) => change.measureIndex === measureIndex);
     const time = exercise.timeChanges.find((change) => change.measureIndex === measureIndex);
+    // Only the ones on the bar line. A clef the writer changed partway
+    // through goes where they put it, in among the notes it governs.
     const changing = new Map<number, ClefKind>();
     for (const staff of exercise.staves) {
       for (const change of staff.clefChanges) {
-        if (change.measureIndex === measureIndex) {
+        if (change.measureIndex === measureIndex && change.offsetTicks === 0) {
           changing.set(staff.staffNumber, change.clef);
         }
       }
@@ -509,6 +519,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     words: readonly TempoWord[] = [],
     hairpins: readonly DynamicHairpin[] = [],
     shifts: readonly OctaveShift[] = [],
+    clefs: readonly ClefChange[] = [],
   ): void {
     const measure = staff.measures[measureIndex];
     if (measure === undefined) {
@@ -527,6 +538,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     let nextMark = 0;
     let nextDynamic = 0;
     let nextWord = 0;
+    let nextClef = 0;
     /** Which ends of which hairpins have been written into this bar. */
     const drawn = new Set<string>();
     measure.entries.forEach((entry, entryIndex) => {
@@ -544,6 +556,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       while (nextWord < words.length && (words[nextWord]?.offsetTicks ?? 0) <= offset) {
         this.writeWords(writer, words[nextWord]);
         nextWord += 1;
+      }
+      while (nextClef < clefs.length && (clefs[nextClef]?.offsetTicks ?? 0) <= offset) {
+        this.writeClefChange(writer, clefs[nextClef], staff.staffNumber);
+        nextClef += 1;
       }
       this.writeHairpins(writer, hairpins, measureIndex, offset, staff.staffNumber, drawn);
       this.writeOctaveShifts(writer, shifts, measureIndex, offset, staff.staffNumber, drawn);
@@ -571,6 +587,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     while (nextWord < words.length) {
       this.writeWords(writer, words[nextWord]);
       nextWord += 1;
+    }
+    while (nextClef < clefs.length) {
+      this.writeClefChange(writer, clefs[nextClef], staff.staffNumber);
+      nextClef += 1;
     }
     this.writeHairpins(writer, hairpins, measureIndex, offset, staff.staffNumber, drawn);
     this.writeOctaveShifts(writer, shifts, measureIndex, offset, staff.staffNumber, drawn);
@@ -891,6 +911,30 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
           word.text,
           word.offsetY === undefined ? undefined : { 'default-y': word.offsetY },
         );
+      });
+    });
+  }
+
+  /**
+   * A clef the writer changed partway through a bar.
+   *
+   * Its own `<attributes>` among the notes, which is the format's way of
+   * saying where it happens and the engraver's cue to draw the small clef
+   * mid-bar rather than a full-sized one on the bar line.
+   */
+  private writeClefChange(
+    writer: XmlWriter,
+    change: ClefChange | undefined,
+    staffNumber: number,
+  ): void {
+    if (change === undefined) {
+      return;
+    }
+    const definition = CLEF_DEFINITIONS[change.clef];
+    writer.element('attributes', undefined, () => {
+      writer.element('clef', { number: staffNumber }, () => {
+        writer.leaf('sign', definition.sign);
+        writer.leaf('line', definition.line);
       });
     });
   }

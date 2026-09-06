@@ -72,6 +72,25 @@ describe('a voice that is absent for part of a bar', () => {
     expect(printed).not.toContain('<forward>');
   });
 
+  it('is absent from a bar it says nothing in at all', () => {
+    // An empty measure is what this model means by "the voice is not in this
+    // bar", and writing the silence out instead costs room on the page:
+    // measured on City of Tears bar 22, an engraver handed a voice of
+    // nothing but silence gave it the width of a whole rest, and the twelve
+    // eighths beside it ran past the bar line at every zoom.
+    const { exercise } = importer.read(
+      bar(
+        `${HALF_G4}<backup><duration>16</duration></backup>` +
+          '<note print-object="no"><rest/><duration>16</duration><voice>3</voice>' +
+          '<type>whole</type><staff>1</staff></note>',
+      ),
+    );
+
+    const silent = exercise.staves.find((staff) => staff.voice === 3);
+    expect(silent?.measures[0]?.entries ?? ['something']).toEqual([]);
+    expect(serializer.serialize(exercise)).not.toContain('<voice>3</voice>');
+  });
+
   it('holds no cursor position where nothing is drawn', () => {
     // The engraver stops where it draws. A rest we invented would be a stop
     // the reader is held at with a blank stave in front of them.

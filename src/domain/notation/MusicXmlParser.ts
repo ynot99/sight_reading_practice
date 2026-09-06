@@ -1101,6 +1101,16 @@ function buildMeasure(
     entries.splice(isPickup ? 0 : entries.length, 0, ...padding);
   }
 
+  // A voice that says nothing for the whole bar is absent from it, which is
+  // what an empty measure means here - and writing it out as time instead
+  // costs room on the page. Measured on City of Tears bar 22: an engraver
+  // handed a voice of nothing but silence gave it the width of a whole rest,
+  // and the twelve eighths of the voice beside it ran past the bar line at
+  // every zoom. Emptied, the same bar fits with room to spare.
+  if (entries.length > 0 && entries.every((entry) => entry.kind === 'silence')) {
+    return measureOf([]);
+  }
+
   return measureOf(entries);
 }
 

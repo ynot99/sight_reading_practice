@@ -97,6 +97,13 @@ export class FakeScoreRenderer
   /** Whether the top of the next page is wanted where the reader has finished. */
   nextPagePreview = true;
 
+  /** Whether the music has been allowed to turn the page. */
+  pagesFollowTheMusic = true;
+
+  turnPagesWithTheMusic(wanted: boolean): void {
+    this.pagesFollowTheMusic = wanted;
+  }
+
   showNextPagePreview(wanted: boolean): void {
     this.nextPagePreview = wanted;
   }

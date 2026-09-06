@@ -1935,6 +1935,72 @@ describe('AppView', () => {
     });
   });
 
+  describe('turning the pages', () => {
+    /** Through the controls themselves: the wiring is the thing being tested. */
+    async function readAsPages(turns: string): Promise<void> {
+      element<HTMLButtonElement>('focus-pages').click();
+      const select = element<HTMLSelectElement>('page-turns');
+      select.value = turns;
+      select.dispatchEvent(new Event('change'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    it('leaves the turning to the reader when asked to', async () => {
+      // For a piece already learned: looking up to find that the page has
+      // turned itself is worse than not looking up at all.
+      const rig = createRig();
+      await rig.view.initialize();
+
+      await readAsPages('manual');
+
+      expect(rig.renderer.pagesFollowTheMusic).toBe(false);
+      expect(element('score-pages').hidden).toBe(false);
+      expect(element('score-page-at').textContent).toBe('1 / 2');
+      // Nowhere to go back to from the first page.
+      expect(element<HTMLButtonElement>('score-page-back').disabled).toBe(true);
+    });
+
+    it('turns a page from the arrows under the score', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await readAsPages('manual');
+
+      element<HTMLButtonElement>('score-page-on').click();
+
+      expect(rig.renderer.pages.at).toBe(1);
+      expect(element('score-page-at').textContent).toBe('2 / 2');
+      // And the far end is the far end.
+      expect(element<HTMLButtonElement>('score-page-on').disabled).toBe(true);
+    });
+
+    it('follows the music, and shows nothing early, when told to turn quietly', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+
+      await readAsPages('automatic');
+
+      expect(rig.renderer.pagesFollowTheMusic).toBe(true);
+      expect(rig.renderer.nextPagePreview).toBe(false);
+      // Arrows would be furniture: nothing is waiting to be turned by hand.
+      expect(element('score-pages').hidden).toBe(true);
+    });
+
+    it('says nothing about page turns while the score is one long strip', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await readAsPages('manual');
+
+      // Back to scrolling.
+      element<HTMLButtonElement>('focus-pages').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Disabled rather than hidden - a control that disappears is one the
+      // reader goes looking for - and no arrows over a score that scrolls.
+      expect(element<HTMLSelectElement>('page-turns').disabled).toBe(true);
+      expect(element('score-pages').hidden).toBe(true);
+    });
+  });
+
   describe('keeping a take', () => {
     function playSomething(rig: Rig): void {
       rig.midi.noteOn(60, rig.clock.now());

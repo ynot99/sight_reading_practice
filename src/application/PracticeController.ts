@@ -16,6 +16,7 @@ import {
 } from '../domain/timeline/Timeline.js';
 import { playedNoteOffset } from './playedNoteOffset.js';
 import type { WhatOpens } from './ScoreLibrary.js';
+import type { PageTurns } from './ports/IScoreRenderer.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
 import type { IClock } from './ports/IClock.js';
@@ -359,8 +360,17 @@ export interface PracticeSettings {
    * than a note already played, which goes altogether.
    */
   readonly dimUnplayed: boolean;
-  /** Show the top of the next page where the reader has finished reading. */
-  readonly previewNextPage: boolean;
+  /**
+   * How the pages are turned, where the score is read as pages at all.
+   *
+   * One question with three answers rather than a switch beside a behaviour
+   * nobody could turn off: `preview` turns the page as the music leaves it
+   * and shows the top of the next one while the last system is being played;
+   * `automatic` turns it and shows nothing; `manual` leaves it to the reader,
+   * which is for a piece already learned, where looking up to find the page
+   * has turned itself is worse than not looking up at all.
+   */
+  readonly pageTurns: PageTurns;
   /** How finely the beat is ruled through the bars, or `off`. */
   readonly rhythmRuler: RulerDivision;
   /**
@@ -610,7 +620,7 @@ export class PracticeController {
       zoom: 0.85,
       immediateStart: false,
       dimUnplayed: true,
-      previewNextPage: true,
+      pageTurns: 'preview',
       rhythmRuler: 'off',
       // A new exercise, which is what opening this has always done.
       whatOpens: 'generated',

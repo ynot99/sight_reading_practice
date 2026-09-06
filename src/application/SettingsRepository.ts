@@ -3,6 +3,7 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { PracticeSettings } from './PracticeController.js';
 import { RULER_DIVISIONS, type RulerDivision } from './rhythmRuler.js';
 import { WHAT_OPENS, type WhatOpens } from './ScoreLibrary.js';
+import { PAGE_TURNS, type PageTurns } from './ports/IScoreRenderer.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { SAMPLE_LOADING_MODES, type SampleLoading } from './ports/IPitchPlayer.js';
 import {
@@ -67,6 +68,24 @@ const STORAGE_VERSION = 1;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+/**
+ * How pages are turned, or what the checkbox this replaced was saying.
+ *
+ * It was one flag over a behaviour that could not be turned off at all: the
+ * page followed the music whatever it said, and the flag only decided whether
+ * the next one was shown early. So a reader who had turned the preview off
+ * meant "turn them, quietly", which is what `automatic` is.
+ */
+function readPageTurns(value: unknown, legacyPreview: unknown): PageTurns | undefined {
+  if (typeof value === 'string' && PAGE_TURNS.includes(value as PageTurns)) {
+    return value as PageTurns;
+  }
+  if (typeof legacyPreview === 'boolean') {
+    return legacyPreview ? 'preview' : 'automatic';
+  }
+  return undefined;
 }
 
 function readWhatOpens(value: unknown): WhatOpens | undefined {
@@ -290,7 +309,7 @@ export function decodePracticeSettings(
     zoom: readNumber(value['zoom'], 0.3, 3),
     immediateStart: readBoolean(value['immediateStart']),
     dimUnplayed: readBoolean(value['dimUnplayed']),
-    previewNextPage: readBoolean(value['previewNextPage']),
+    pageTurns: readPageTurns(value['pageTurns'], value['previewNextPage']),
     rhythmRuler: readRuler(value['rhythmRuler']),
     whatOpens: readWhatOpens(value['whatOpens']),
     rulerCursor: readBoolean(value['rulerCursor']),
@@ -337,7 +356,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     zoom: settings.zoom,
     immediateStart: settings.immediateStart,
     dimUnplayed: settings.dimUnplayed,
-    previewNextPage: settings.previewNextPage,
+    pageTurns: settings.pageTurns,
     rhythmRuler: settings.rhythmRuler,
     whatOpens: settings.whatOpens,
     rulerCursor: settings.rulerCursor,

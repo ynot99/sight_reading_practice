@@ -51,6 +51,24 @@
         <div id="score-scroll" class="score__scroll">
           <div id="score-surface" class="score__surface"></div>
         </div>
+        <!--
+          Turning the page by hand, for a piece already learned. Over the
+          score rather than in the transport row: nothing in that row may
+          change size, and these appear and disappear with a setting.
+
+          Buttons and not a gesture, because a tap on the score already
+          means something - it shows and hides the passage markers - and a
+          reader who has just played a page should not have to remember
+          which part of it is safe to touch.
+        -->
+        <div id="score-pages" class="score__pages" hidden>
+          <button id="score-page-back" type="button" class="score__page-turn"
+            title="Back a page" aria-label="Back a page">‹</button>
+          <output id="score-page-at" class="score__page-at">1 / 1</output>
+          <button id="score-page-on" type="button" class="score__page-turn"
+            title="On a page" aria-label="On a page">›</button>
+        </div>
+
         <div id="score-cover" class="score__cover" hidden>
           <p id="score-cover-text" class="score__cover-text"></p>
         </div>
@@ -435,6 +453,19 @@
           <p class="hint">A scan the run starts itself after, so the look is deliberate.</p>
         </div>
 
+        <!--
+          One question about the pages, where there were a behaviour nobody
+          could turn off and a checkbox beside it. Only says anything while
+          the score is read as pages at all, which is why it says so itself
+          rather than being hidden - a control that vanishes is one the
+          reader goes looking for.
+        -->
+        <div class="control-group">
+          <label for="page-turns">Page turns</label>
+          <select id="page-turns"></select>
+          <p id="page-turns-description" class="hint"></p>
+        </div>
+
         <div class="control-group">
           <label for="tolerance">Chord window: <output id="tolerance-value">250</output> ms</label>
           <input id="tolerance" type="range" min="40" max="800" step="10" value="250" />
@@ -552,7 +583,6 @@
           -->
           <label><input id="immediate-start" type="checkbox" /> Start when you play the first notes</label>
           <label><input id="dim-unplayed" type="checkbox" checked /> Dim what this run will not ask for</label>
-          <label><input id="preview-next-page" type="checkbox" checked /> Show the next page while you finish this one</label>
           <label><input id="hear-other-hand" type="checkbox" /> Hear the hand I am not playing</label>
           <label><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
         </div>

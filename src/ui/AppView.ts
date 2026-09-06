@@ -30,6 +30,7 @@ import {
   type RulerMark,
 } from '../application/rhythmRuler.js';
 import { WHAT_OPENS, type WhatOpens } from '../application/ScoreLibrary.js';
+import { PAGE_TURNS, type PageTurns } from '../application/ports/IScoreRenderer.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
@@ -284,6 +285,22 @@ function countOf(many: number, thing: string): string {
   return `${many} ${thing}${many === 1 ? '' : 's'}`;
 }
 
+const PAGE_TURN_LABELS: Readonly<Record<PageTurns, string>> = {
+  preview: 'Turn them, and show the next page early',
+  automatic: 'Turn them as the music leaves',
+  manual: 'I turn them myself',
+};
+
+const PAGE_TURN_DESCRIPTIONS: Readonly<Record<PageTurns, string>> = {
+  preview:
+    'A page turn is the hardest moment to read across, so the top of the next page ' +
+    'is drawn where the system you have finished used to be.',
+  automatic: 'The page follows the music, and nothing is shown before its time.',
+  manual:
+    'For a piece already learned: the page waits for you, and arrows appear at the ' +
+    'foot of the score. The arrow keys turn it too.',
+};
+
 const OPENING_LABELS: Readonly<Record<WhatOpens, string>> = {
   generated: 'A new exercise',
   last: 'The score I read last',
@@ -306,6 +323,11 @@ const RULER_DESCRIPTIONS: Readonly<Record<RulerDivision, string>> = {
   sixteenth: 'A line at every sixteenth, for a bar that is full of them.',
   'thirty-second': 'Every thirty-second, which is a grid more than a ruler.',
 };
+
+/** The way of turning a stored or typed value names, or the usual one. */
+function readPageTurns(value: string): PageTurns {
+  return PAGE_TURNS.includes(value as PageTurns) ? (value as PageTurns) : 'preview';
+}
 
 /** The opening a stored or typed value names, falling back to generating. */
 function readWhatOpens(value: string): WhatOpens {
@@ -806,7 +828,12 @@ export class AppView {
     survival: HTMLInputElement;
     immediateStart: HTMLInputElement;
     dimUnplayed: HTMLInputElement;
-    previewNextPage: HTMLInputElement;
+    pageTurns: HTMLSelectElement;
+    pageTurnsDescription: HTMLElement;
+    scorePages: HTMLElement;
+    scorePageBack: HTMLButtonElement;
+    scorePageOn: HTMLButtonElement;
+    scorePageAt: HTMLOutputElement;
     hearOtherHand: HTMLInputElement;
     rulerCursor: HTMLInputElement;
     rulerStrength: HTMLInputElement;
@@ -992,7 +1019,12 @@ export class AppView {
       survival: requireElement(doc, 'survival'),
       immediateStart: requireElement(doc, 'immediate-start'),
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
-      previewNextPage: requireElement(doc, 'preview-next-page'),
+      pageTurns: requireElement(doc, 'page-turns'),
+      pageTurnsDescription: requireElement(doc, 'page-turns-description'),
+      scorePages: requireElement(doc, 'score-pages'),
+      scorePageBack: requireElement(doc, 'score-page-back'),
+      scorePageOn: requireElement(doc, 'score-page-on'),
+      scorePageAt: requireElement(doc, 'score-page-at'),
       hearOtherHand: requireElement(doc, 'hear-other-hand'),
       rulerCursor: requireElement(doc, 'ruler-cursor'),
       rulerStrength: requireElement(doc, 'ruler-strength'),
@@ -1604,7 +1636,7 @@ export class AppView {
     const controller = this.runtime.controller;
     const moving =
       this.isPlaying || this.isPreviewing || controller.isListening || controller.isListeningPaused;
-    this.runtime.renderer.showNextPagePreview(controller.settings.previewNextPage && moving);
+    this.runtime.renderer.showNextPagePreview(controller.settings.pageTurns === 'preview' && moving);
   }
 
   /**
@@ -1695,6 +1727,11 @@ export class AppView {
       this.el.rhythmRuler,
       RULER_DIVISIONS.map((choice) => ({ value: choice, label: RULER_LABELS[choice] })),
       this.runtime.controller.settings.rhythmRuler,
+    );
+    fillSelect(
+      this.el.pageTurns,
+      PAGE_TURNS.map((choice) => ({ value: choice, label: PAGE_TURN_LABELS[choice] })),
+      this.runtime.controller.settings.pageTurns,
     );
     fillSelect(
       this.el.whatOpens,
@@ -2043,9 +2080,19 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
-    this.listen(this.el.previewNextPage, 'change', () => {
-      controller.updateSettings({ previewNextPage: this.el.previewNextPage.checked });
+    this.listen(this.el.pageTurns, 'change', () => {
+      controller.updateSettings({ pageTurns: readPageTurns(this.el.pageTurns.value) });
       this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.scorePageBack, 'click', () => {
+      this.runtime.renderer.turnPages(-1);
+      this.showThePages();
+    });
+
+    this.listen(this.el.scorePageOn, 'click', () => {
+      this.runtime.renderer.turnPages(1);
+      this.showThePages();
     });
 
     this.listen(this.el.dimUnplayed, 'change', () => {
@@ -2551,6 +2598,26 @@ export class AppView {
     // counting has nothing left to say.
     this.showCount(null);
     this.updateButtons(this.runtime.controller.session?.status ?? 'idle');
+  }
+
+  /**
+   * The arrows, where the reader has said they will turn the pages.
+   *
+   * Only with a score read as pages and more than one of them: two arrows
+   * over a single page would be furniture that never did anything. The
+   * numbers are there because a reader who turns pages by hand is the one
+   * person who needs to know which page they are on.
+   */
+  private showThePages(): void {
+    const pages = this.runtime.renderer.pages;
+    const wanted = this.runtime.controller.settings.pageTurns === 'manual' && pages.count > 1;
+    this.el.scorePages.hidden = !wanted;
+    if (!wanted) {
+      return;
+    }
+    this.el.scorePageAt.value = `${pages.at + 1} / ${pages.count}`;
+    this.el.scorePageBack.disabled = pages.at <= 0;
+    this.el.scorePageOn.disabled = pages.at >= pages.count - 1;
   }
 
   /** True while the reader is being given their look at the page. */
@@ -3163,6 +3230,15 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      // However the page was turned - the music, the arrows, the arrow keys,
+      // a bar chosen by hand - the numbers under the score have to agree
+      // with it, and so does which arrow is left to press.
+      this.runtime.renderer.onPagesChanged(() => {
+        this.showThePages();
+      }),
+    );
+
+    this.subscriptions.push(
       this.runtime.renderer.onScoreTapped(() => {
         this.passageMarkersWanted = !this.passageMarkersWanted;
         this.showPassageMarkers();
@@ -3537,7 +3613,14 @@ export class AppView {
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
-    this.el.previewNextPage.checked = settings.previewNextPage;
+    this.el.pageTurns.value = settings.pageTurns;
+    this.el.pageTurnsDescription.textContent = PAGE_TURN_DESCRIPTIONS[settings.pageTurns];
+    // Said rather than hidden: the answer means nothing while the score is
+    // one long strip, and a control that disappears is one the reader goes
+    // looking for.
+    this.el.pageTurns.disabled = !settings.pagedScore;
+    this.runtime.renderer.turnPagesWithTheMusic(settings.pageTurns !== 'manual');
+    this.showThePages();
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
     this.el.restEvery.value = String(settings.restEveryMinutes);
     this.el.restEverySettings.value = this.el.restEvery.value;

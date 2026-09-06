@@ -567,6 +567,8 @@ export class OsmdScoreRenderer
    */
   private pageSurplusWindow = 0;
   private pageAt = 0;
+  /** Whether the music may turn the page, or only the reader. */
+  private pagesFollowTheMusic = true;
   /** The page whose top is being shown in place of this one's, if any. */
   private previewShown: number | null = null;
   private previewGroup: SVGGElement | null = null;
@@ -1151,7 +1153,7 @@ export class OsmdScoreRenderer
       return;
     }
     const page = this.pageOfStep(stepIndex);
-    if (byTheMusic && this.paged && page !== this.pageAt) {
+    if (byTheMusic && this.pagesFollowTheMusic && this.paged && page !== this.pageAt) {
       this.turnToPage(page);
       return;
     }
@@ -1412,6 +1414,10 @@ export class OsmdScoreRenderer
   }
 
   /** Turns the preview on or off, the reader having said which they want. */
+  turnPagesWithTheMusic(wanted: boolean): void {
+    this.pagesFollowTheMusic = wanted;
+  }
+
   showNextPagePreview(wanted: boolean): void {
     if (this.previewWanted === wanted) {
       return;

@@ -70,8 +70,29 @@ export interface IScorePages {
    * on screen, standing where the first system has finished being needed.
    */
   showNextPagePreview(wanted: boolean): void;
+  /**
+   * Whether the page turns itself as the music leaves it.
+   *
+   * Off for a piece already learned: a reader playing one from memory looks
+   * up to check where they are, and a page that has turned itself under them
+   * is worse than no page at all. Everything else that turns pages is a
+   * reader asking for it - the arrows, a bar chosen by hand, going back to
+   * the beginning - and those go on working.
+   */
+  turnPagesWithTheMusic(wanted: boolean): void;
   onPagesChanged(listener: (state: ScorePageState) => void): () => void;
 }
+
+/**
+ * How the pages of a score are turned.
+ *
+ * `preview` and `automatic` both follow the music; the first also shows the
+ * top of the next page while the last system of this one is being played.
+ * `manual` leaves the turning to the reader, for a piece already learned.
+ */
+export const PAGE_TURNS = ['preview', 'automatic', 'manual'] as const;
+
+export type PageTurns = (typeof PAGE_TURNS)[number];
 
 /** Which end of the passage a gesture was aimed at. */
 export type PassageEnd = 'from' | 'to';

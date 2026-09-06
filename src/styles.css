@@ -994,6 +994,56 @@ select {
 }
 
 /*
+ * Turning the page by hand.
+ *
+ * At the foot of the score and out of the way of the music: a reader using
+ * these has both hands on the keys and looks up once, so the targets are
+ * large and in the same place every time. Quiet until touched - they are
+ * furniture standing in front of notation the rest of the time.
+ */
+.score__pages {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.score__page-turn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 26px;
+  line-height: 1;
+  padding: 2px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.score__page-turn:disabled {
+  color: var(--text-muted);
+  opacity: 0.4;
+  cursor: default;
+}
+
+.score__page-at {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  min-width: 46px;
+  text-align: center;
+}
+
+/*
  * Room on a screen that has room.
  *
  * The panel is sized for a phone and for the tablet held upright, where

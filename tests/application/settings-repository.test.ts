@@ -52,7 +52,7 @@ const SETTINGS: PracticeSettings = {
   zoom: 1.2,
   immediateStart: false,
   dimUnplayed: true,
-  previewNextPage: true,
+  pageTurns: 'manual',
   hearTheOtherHand: true,
   rhythmRuler: 'eighth',
   rulerCursor: true,
@@ -77,8 +77,31 @@ describe('practice settings codec', () => {
     expect(restored.pitchClassOnly).toBe(true);
     expect(restored.cursorWhileRunning).toBe(false);
     expect(restored.strictTiming).toBe(true);
+    expect(restored.pageTurns).toBe('manual');
     expect(restored.whatOpens).toBe('random');
     expect(restored.clickWhen).toBe('cycle-2');
+  });
+
+  it('reads the checkbox that page turns used to be', () => {
+    // It was one flag over a behaviour nobody could turn off: the page
+    // followed the music whatever it said, and the flag only decided whether
+    // the next page was shown early. So a reader who had turned it off meant
+    // "turn them, quietly".
+    const stored = encodePracticeSettings(SETTINGS) as Record<string, unknown>;
+    const asBefore = (previewNextPage: boolean): Record<string, unknown> => ({
+      ...stored,
+      pageTurns: undefined,
+      previewNextPage,
+    });
+
+    expect(decodePracticeSettings(asBefore(true), KNOWN).pageTurns).toBe('preview');
+    expect(decodePracticeSettings(asBefore(false), KNOWN).pageTurns).toBe('automatic');
+    // And a device that stored neither says nothing, rather than inventing
+    // an answer here: the defaults live with the other defaults.
+    expect(
+      decodePracticeSettings({ ...stored, pageTurns: undefined, previewNextPage: undefined }, KNOWN)
+        .pageTurns,
+    ).toBeUndefined();
   });
 
   it('reads the two settings this one used to be', () => {

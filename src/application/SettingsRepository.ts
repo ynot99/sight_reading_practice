@@ -4,6 +4,7 @@ import type { PracticeSettings } from './PracticeController.js';
 import { RULER_DIVISIONS, type RulerDivision } from './rhythmRuler.js';
 import { WHAT_OPENS, type WhatOpens } from './ScoreLibrary.js';
 import { PAGE_TURNS, type PageTurns } from './ports/IScoreRenderer.js';
+import { COUNT_IN_WHEN, type CountInWhen } from './ports/IMetronome.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { SAMPLE_LOADING_MODES, type SampleLoading } from './ports/IPitchPlayer.js';
 import {
@@ -86,6 +87,12 @@ function readPageTurns(value: unknown, legacyPreview: unknown): PageTurns | unde
     return legacyPreview ? 'preview' : 'automatic';
   }
   return undefined;
+}
+
+function readCountIn(value: unknown): CountInWhen | undefined {
+  return typeof value === 'string' && COUNT_IN_WHEN.includes(value as CountInWhen)
+    ? (value as CountInWhen)
+    : undefined;
 }
 
 function readWhatOpens(value: unknown): WhatOpens | undefined {
@@ -314,6 +321,8 @@ export function decodePracticeSettings(
     whatOpens: readWhatOpens(value['whatOpens']),
     stopAtAMistake: readBoolean(value['stopAtAMistake']),
     easeTheTempo: readBoolean(value['easeTheTempo']),
+    countInRun: readCountIn(value['countInRun']),
+    countInPlayback: readCountIn(value['countInPlayback']),
     rulerCursor: readBoolean(value['rulerCursor']),
     rulerStrength: readNumber(value['rulerStrength'], 0, 1),
     restEveryMinutes: readInteger(value['restEveryMinutes'], 0, 180),
@@ -363,6 +372,8 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     whatOpens: settings.whatOpens,
     stopAtAMistake: settings.stopAtAMistake,
     easeTheTempo: settings.easeTheTempo,
+    countInRun: settings.countInRun,
+    countInPlayback: settings.countInPlayback,
     rulerCursor: settings.rulerCursor,
     rulerStrength: settings.rulerStrength,
     restEveryMinutes: settings.restEveryMinutes,

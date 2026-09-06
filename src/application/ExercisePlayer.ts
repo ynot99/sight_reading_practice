@@ -1,5 +1,5 @@
 
-import { pedalSpans, positionOfTick, spanMs } from '../domain/model/Exercise.js';
+import { barLines, pedalSpans, positionOfTick, spanMs } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import type { PositionEvent } from './session/SessionEvents.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
@@ -47,6 +47,14 @@ export interface ListeningOptions {
    * because the same button worked perfectly the moment they pressed Start.
    */
   readonly click: ClickPattern;
+  /**
+   * Bars of pulse before the music, so the reader can come in with it.
+   *
+   * His line 84, and the point of it is playing *along*: a performance that
+   * begins on the first tick can be listened to, but it cannot be joined.
+   * Zero is what a playback has always done.
+   */
+  readonly countInBars?: number;
   /**
    * The stretch to play, as the first and last step of it.
    *
@@ -254,6 +262,9 @@ export class ExercisePlayer {
   private hand: ListeningHand = null;
   /** Last bar and beat announced, so an unchanged one is not announced again. */
   private publishedPosition: PositionEvent | null = null;
+  /** Bars of pulse in front of the music, and where they end in plan ticks. */
+  private countInBars = 0;
+  private countInTicks = 0;
 
   /** Where the stretch ends, in the timeline's own ticks. */
   private endOf(toIndex: number | undefined): number {
@@ -442,6 +453,16 @@ export class ExercisePlayer {
     this.clickWhen = options.clickWhen;
     this.hand = options.staffNumber;
     this.publishedPosition = null;
+    this.countInBars = Math.max(0, Math.round(options.countInBars ?? 0));
+    // Where the count-in ends, in the plan's own ticks. The plan measures
+    // its count-in in bars of the metre the music starts in, which is what
+    // `metronomeBars` lays down in front of it.
+    const startsIn =
+      [...barLines(timeline.exercise)]
+        .reverse()
+        .find((bar) => bar.startTicks <= (timeline.at(Math.max(0, Math.round(options.fromIndex ?? 0)))?.onsetTicks ?? 0))
+        ?.timeSignature ?? timeline.exercise.timeSignature;
+    this.countInTicks = this.countInBars * startsIn.ticksPerMeasure;
     const first = timeline.at(Math.max(0, Math.round(options.fromIndex ?? 0)));
     this.fromTicks = first?.onsetTicks ?? 0;
     this.atIndex = first?.index ?? 0;
@@ -519,9 +540,9 @@ export class ExercisePlayer {
       throw new Error('A plan needs music.');
     }
     const timeSignature = timeline.exercise.timeSignature;
-    // No count-in in front of a playback, and it starts wherever the reader
-    // put their place.
-    const of = { countInBars: 0, fromTicks: this.fromTicks };
+    // Where the reader put their place, with whatever count-in was asked for
+    // in front of it.
+    const of = { countInBars: this.countInBars, fromTicks: this.fromTicks };
     const bars = metronomeBars(timeline.exercise, of);
     const tempos = metronomeTempos(timeline.exercise, of);
     // The lap's own plan, for every time round after the first. Picked up
@@ -543,11 +564,13 @@ export class ExercisePlayer {
       // Nothing to end at while it goes round: the end of a lap is the
       // beginning of the next one, and a click that stopped there would stop
       // for good.
-      endsAtTicks: this.endsAtTicks,
+      // Shifted by the count-in, since the plan's ticks now begin before the
+      // music does. `null` while it goes round: the end of a lap is the
+      // beginning of the next one.
+      endsAtTicks: this.endsAtTicks === null ? null : this.endsAtTicks + this.countInTicks,
       subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, this.click),
       click: this.click,
-      // From bar zero, because there is no count-in in front of a playback.
-      dropout: resolveDropout(this.clickWhen, 0),
+      dropout: resolveDropout(this.clickWhen, this.countInBars),
       muted: clickIsSilent(this.clickWhen),
     };
   }
@@ -669,7 +692,9 @@ export class ExercisePlayer {
    * performance began and every one after it from where the lap does, which
    * are the same place unless the reader picked the music up mid-lap.
    */
-  private lapAt(elapsed: number): { lap: number; position: number } {
+  private lapAt(planTicks: number): { lap: number; position: number } {
+    // The plan's ticks start with the count-in; the music's start after it.
+    const elapsed = Math.max(0, planTicks - this.countInTicks);
     if (!this.laidInLaps || this.lapTicks <= 0 || elapsed < this.firstLapTicks) {
       return { lap: 0, position: elapsed + this.fromTicks };
     }
@@ -758,8 +783,16 @@ export class ExercisePlayer {
     if (!this.playing || this.timeline === null) {
       return;
     }
-    // Musical zero is the first tick, so every note is timed from it.
-    this.startedAtMs ??= tick.scheduledTimeMs;
+    // Musical zero is the first tick *of the music*, which with a count-in
+    // in front is not the first tick of the plan. Taken off the same clock
+    // the clicks are on rather than worked out from the tempo, so a count-in
+    // in front of a piece that changes speed needs no arithmetic at all.
+    if (this.startedAtMs === null) {
+      if (tick.positionTicks < this.countInTicks) {
+        return;
+      }
+      this.startedAtMs = tick.scheduledTimeMs;
+    }
     const from = this.startedAtMs;
 
     // Scheduled straight through the seam, which is the whole of being

@@ -31,6 +31,7 @@ import {
 } from '../application/rhythmRuler.js';
 import { WHAT_OPENS, type WhatOpens } from '../application/ScoreLibrary.js';
 import { PAGE_TURNS, type PageTurns } from '../application/ports/IScoreRenderer.js';
+import { COUNT_IN_WHEN, type CountInWhen } from '../application/ports/IMetronome.js';
 import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
@@ -339,6 +340,21 @@ function countOf(many: number, thing: string): string {
   return `${many} ${thing}${many === 1 ? '' : 's'}`;
 }
 
+/** When a count-in happens, said for a run and for a playback. */
+const COUNT_IN_RUN_LABELS: Readonly<Record<CountInWhen, string>> = {
+  never: 'Never',
+  once: 'The first time only',
+  every: 'Every time round',
+};
+
+const COUNT_IN_PLAYBACK_DESCRIPTIONS: Readonly<Record<CountInWhen, string>> = {
+  never: 'The playback begins on its first note.',
+  once: 'A count-in before it starts, so you can come in with it.',
+  every:
+    'And again before every repeat - which means each time round starts afresh rather than ' +
+    'running straight on.',
+};
+
 const PAGE_TURN_LABELS: Readonly<Record<PageTurns, string>> = {
   preview: 'Turn them, and show the next page early',
   automatic: 'Turn them as the music leaves',
@@ -377,6 +393,11 @@ const RULER_DESCRIPTIONS: Readonly<Record<RulerDivision, string>> = {
   sixteenth: 'A line at every sixteenth, for a bar that is full of them.',
   'thirty-second': 'Every thirty-second, which is a grid more than a ruler.',
 };
+
+/** When a stored or typed value says to count in, or the given fallback. */
+function readCountIn(value: string, fallback: CountInWhen): CountInWhen {
+  return COUNT_IN_WHEN.includes(value as CountInWhen) ? (value as CountInWhen) : fallback;
+}
 
 /** The way of turning a stored or typed value names, or the usual one. */
 function readPageTurns(value: string): PageTurns {
@@ -1052,6 +1073,9 @@ export class AppView {
     preview: HTMLInputElement;
     previewValue: HTMLOutputElement;
     countIn: HTMLInputElement;
+    countInRun: HTMLSelectElement;
+    countInPlayback: HTMLSelectElement;
+    countInPlaybackDescription: HTMLElement;
     countInValue: HTMLOutputElement;
     tolerance: HTMLInputElement;
     latency: HTMLInputElement;
@@ -1260,6 +1284,9 @@ export class AppView {
       preview: requireElement(doc, 'preview'),
       previewValue: requireElement(doc, 'preview-value'),
       countIn: requireElement(doc, 'count-in'),
+      countInRun: requireElement(doc, 'count-in-run'),
+      countInPlayback: requireElement(doc, 'count-in-playback'),
+      countInPlaybackDescription: requireElement(doc, 'count-in-playback-description'),
       countInValue: requireElement(doc, 'count-in-value'),
       tolerance: requireElement(doc, 'tolerance'),
       latency: requireElement(doc, 'latency'),
@@ -1914,6 +1941,21 @@ export class AppView {
       RULER_DIVISIONS.map((choice) => ({ value: choice, label: RULER_LABELS[choice] })),
       this.runtime.controller.settings.rhythmRuler,
     );
+    // "Never" belongs to the length rather than to the when: nought bars is
+    // no count-in, and two answers for one thing would let them disagree.
+    fillSelect(
+      this.el.countInRun,
+      (['once', 'every'] as const).map((choice) => ({
+        value: choice,
+        label: COUNT_IN_RUN_LABELS[choice],
+      })),
+      this.runtime.controller.settings.countInRun,
+    );
+    fillSelect(
+      this.el.countInPlayback,
+      COUNT_IN_WHEN.map((choice) => ({ value: choice, label: COUNT_IN_RUN_LABELS[choice] })),
+      this.runtime.controller.settings.countInPlayback,
+    );
     fillSelect(
       this.el.pageTurns,
       PAGE_TURNS.map((choice) => ({ value: choice, label: PAGE_TURN_LABELS[choice] })),
@@ -2220,6 +2262,18 @@ export class AppView {
 
     this.listen(this.el.whatOpens, 'change', () => {
       controller.updateSettings({ whatOpens: readWhatOpens(this.el.whatOpens.value) });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.countInRun, 'change', () => {
+      controller.updateSettings({ countInRun: readCountIn(this.el.countInRun.value, 'every') });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.countInPlayback, 'change', () => {
+      controller.updateSettings({
+        countInPlayback: readCountIn(this.el.countInPlayback.value, 'never'),
+      });
       this.syncControlsFromSettings();
     });
 
@@ -3484,6 +3538,25 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      controller.playbackEvents.on('finished', () => {
+        // A playback that counts itself in on every lap goes round from
+        // here rather than inside the player: a count-in between laps is a
+        // break by definition, and starting again is how a break is made.
+        // Deferred for the reason the run's repeat is - beginning a
+        // performance from inside its own finish is how re-entrancy bugs are
+        // made, and this layer is the one with a timer.
+        if (!controller.countsInEveryLap || !controller.settings.repeatRange) {
+          return;
+        }
+        setTimeout(() => {
+          if (controller.countsInEveryLap && controller.settings.repeatRange) {
+            controller.listen();
+          }
+        }, 0);
+      }),
+    );
+
+    this.subscriptions.push(
       // Nothing to restart here any more. A repeating performance goes round
       // inside itself and never finishes, so this fires only when the music
       // has actually run out - and starting it again from here is where the
@@ -3566,7 +3639,12 @@ export class AppView {
               return;
             }
             if (this.runtime.controller.settings.repeatRange) {
-              this.runtime.controller.start();
+              // Counted in again only where he asked for that: the first time
+              // round is always counted in, and every one after it is a
+              // question about how a passage is drilled.
+              this.runtime.controller.start({
+                countIn: this.runtime.controller.settings.countInRun === 'every',
+              });
             }
           }, 0);
         }
@@ -4018,6 +4096,10 @@ export class AppView {
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
+    this.el.countInRun.value = settings.countInRun;
+    this.el.countInPlayback.value = settings.countInPlayback;
+    this.el.countInPlaybackDescription.textContent =
+      COUNT_IN_PLAYBACK_DESCRIPTIONS[settings.countInPlayback];
     this.el.pageTurns.value = settings.pageTurns;
     this.el.pageTurnsDescription.textContent = PAGE_TURN_DESCRIPTIONS[settings.pageTurns];
     // Said rather than hidden: the answer means nothing while the score is

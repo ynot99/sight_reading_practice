@@ -119,6 +119,18 @@ export const CLICK_WHEN = [
 
 export type ClickWhen = (typeof CLICK_WHEN)[number];
 
+/**
+ * How often the count-in happens, where there is one.
+ *
+ * Asked separately of a run and of a playback, because they are different
+ * habits: counting yourself in every time you go round is how a passage is
+ * drilled, and hearing four bars of clicks before every repeat of a playback
+ * is how a reader stops using the playback.
+ */
+export const COUNT_IN_WHEN = ['never', 'once', 'every'] as const;
+
+export type CountInWhen = (typeof COUNT_IN_WHEN)[number];
+
 /** Silent throughout - the pulse still runs, since the loop rides on it. */
 export function clickIsSilent(when: ClickWhen): boolean {
   return when === 'never';

@@ -28,7 +28,7 @@ import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
 import type { PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
-import type { ClickWhen, ClickPattern } from './ports/IMetronome.js';
+import type { ClickWhen, ClickPattern, CountInWhen } from './ports/IMetronome.js';
 import { clickFollowsTheReader } from './ports/IMetronome.js';
 import { PracticeTimer } from './PracticeTimer.js';
 import {
@@ -210,6 +210,15 @@ export interface PracticeSettings {
   readonly tempoPercent: number;
   /** Bars of click before the first note. */
   readonly countInBars: number;
+  /**
+   * Whether a run counts in every time it goes round, or only the first.
+   *
+   * `never` is said with the bars rather than here: nought bars is no
+   * count-in, and two answers for one thing would let them disagree.
+   */
+  readonly countInRun: CountInWhen;
+  /** And the same question of a playback, which has never had one at all. */
+  readonly countInPlayback: CountInWhen;
   /**
    * How much of the pulse is sounded.
    *
@@ -680,6 +689,11 @@ export class PracticeController {
       measures: preset.defaults.measures,
       tempoPercent: 100,
       countInBars: 1,
+      // Every time round, which is what a run has always done: each lap of a
+      // repeat is a new run, and each one counted itself in.
+      countInRun: 'every',
+      // And a playback has never had one.
+      countInPlayback: 'never',
       clickPattern: 'pulse',
       handStaff: null,
       hearTheOtherHand: false,
@@ -1356,7 +1370,13 @@ export class PracticeController {
       // Round again inside the one performance, rather than by starting
       // another: stopping and starting is where the gap on a repeat came
       // from.
-      repeat: this.currentSettings.repeatRange,
+      // Round inside the performance, unless every lap is to be counted in -
+      // a count-in *between* laps is a break by definition, and a seam that
+      // is meant to be there is better made by starting again than by
+      // teaching the player's clock to stop in the middle.
+      repeat: this.currentSettings.repeatRange && !this.countsInEveryLap,
+      countInBars:
+        this.currentSettings.countInPlayback === 'never' ? 0 : this.currentSettings.countInBars,
       // And round to the *passage*, wherever this performance was picked up.
       // A pause halfway through the bar being looped otherwise made that half
       // bar the loop.
@@ -1710,6 +1730,20 @@ export class PracticeController {
     return this.player?.pausedAt !== null && this.player?.pausedAt !== undefined;
   }
 
+  /**
+   * Whether a playback counts itself in on every lap of a repeat.
+   *
+   * Which the page needs to know, because it is the page that starts the
+   * next lap where this is true: the application layer has no timer to
+   * defer with, and starting a performance from inside its own finish is how
+   * re-entrancy bugs are made.
+   */
+  get countsInEveryLap(): boolean {
+    return (
+      this.currentSettings.countInPlayback === 'every' && this.currentSettings.countInBars > 0
+    );
+  }
+
   /** Fires when a playback reaches the end on its own. */
   get playbackEvents(): IEventSource<PlayerEventMap> {
     return this.ensurePlayer().events;
@@ -1824,8 +1858,16 @@ export class PracticeController {
     this.beginRun(0, this.openingPresses);
   }
 
-  start(): PracticeSession | null {
-    return this.beginRun(this.currentSettings.countInBars, []);
+  /**
+   * Starts a run, counting in unless told not to.
+   *
+   * The going-round is the view's, so it is the view that says whether this
+   * time is the first: a repeat that counts itself in every time is one
+   * setting, and a passage that goes round without a break is the other.
+   */
+  start(options: { readonly countIn?: boolean } = {}): PracticeSession | null {
+    const bars = options.countIn === false ? 0 : this.currentSettings.countInBars;
+    return this.beginRun(bars, []);
   }
 
   private beginRun(

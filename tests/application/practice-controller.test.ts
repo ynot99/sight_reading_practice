@@ -1144,6 +1144,47 @@ describe('what you played, drawn over the score', () => {
     expect(controller.settings.tempoPercent).toBe(70);
   });
 
+  it('counts a playback in when it is asked to, and not otherwise', async () => {
+    // His line 84: a performance that begins on the first tick can be
+    // listened to, but it cannot be played along with.
+    const { controller, metronome, instrument } = createController(true);
+    controller.updateSettings({ countInBars: 1, countInPlayback: 'never' });
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+
+    controller.listen();
+    metronome.advanceSubdivisions(1);
+    expect(instrument.played.length).toBeGreaterThan(0);
+
+    controller.stopListening();
+    instrument.played.length = 0;
+    controller.updateSettings({ countInPlayback: 'once' });
+
+    controller.listen();
+    metronome.advanceSubdivisions(4);
+
+    // A bar of counting, and no music in it.
+    expect(instrument.played).toEqual([]);
+    metronome.advanceSubdivisions(1);
+    expect(instrument.played.length).toBeGreaterThan(0);
+  });
+
+  it('does not go round inside the player when every lap is counted in', async () => {
+    // A count-in between laps is a break by definition, and the player's
+    // repeat exists precisely to leave no gap. So the page starts each lap.
+    const { controller } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+
+    controller.updateSettings({ countInBars: 1, repeatRange: true, countInPlayback: 'every' });
+    expect(controller.countsInEveryLap).toBe(true);
+
+    controller.updateSettings({ countInPlayback: 'once' });
+    expect(controller.countsInEveryLap).toBe(false);
+
+    // And nought bars is no count-in, whatever the answer says.
+    controller.updateSettings({ countInBars: 0, countInPlayback: 'every' });
+    expect(controller.countsInEveryLap).toBe(false);
+  });
+
   it('sets the passage, the hand and the speed the drill asks for', async () => {
     // His line 93. Nothing here is new machinery - a section is the passage
     // this trainer has always had - so what it does is set the same settings

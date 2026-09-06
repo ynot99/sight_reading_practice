@@ -47,6 +47,52 @@ describe('listening to an exercise', () => {
     );
   });
 
+  it('counts in before the music, where it is asked to', () => {
+    // His line 84: a performance that begins on the first tick can be
+    // listened to, but it cannot be joined.
+    const { player, metronome, instrument, timeline } = rig();
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'always',
+      countInBars: 1,
+    });
+
+    // One bar of 4/4 at 60 bpm: four beats of pulse and no music.
+    metronome.advanceSubdivisions(4);
+    expect(instrument.played).toEqual([]);
+
+    metronome.advanceSubdivisions(4);
+    expect(instrument.played.length).toBeGreaterThan(0);
+  });
+
+  it('times the music from its own first beat, not the count-in', () => {
+    // Anchored on the tick the music starts on, so a count-in in front of a
+    // piece that changes speed needs no arithmetic at all.
+    const plain = rig();
+    plain.player.start(plain.timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+    });
+    plain.metronome.advanceSubdivisions(8);
+    const withoutCountIn = plain.instrument.played.map((note) => note.atMs);
+
+    const counted = rig();
+    counted.player.start(counted.timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      countInBars: 1,
+    });
+    counted.metronome.advanceSubdivisions(12);
+    const bar = 4 * 1_000;
+    const afterCountIn = counted.instrument.played.map((note) => (note.atMs ?? 0) - bar);
+
+    // The same notes at the same distances, a bar later.
+    expect(afterCountIn).toEqual(withoutCountIn);
+  });
+
   it('changes hands without stopping', () => {
     // Reported from the page: switching hands during a playback did nothing
     // until it was stopped and started again, because the hand was read once

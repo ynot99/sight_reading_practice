@@ -2052,6 +2052,53 @@ describe('AppView', () => {
     });
   });
 
+  describe('counting in', () => {
+    /**
+     * A Flow run played by nobody, from Start to the end of the music.
+     *
+     * Counted by the beats the count-in announces rather than by the status:
+     * a run always passes through `counting-in`, even with nought bars of it,
+     * because the pulse has to be established before the music. What the
+     * setting changes is whether anything is counted there.
+     */
+    async function beatsCountedOnTheNextLap(rig: Rig, countInRun: 'once' | 'every'): Promise<number> {
+      rig.runtime.controller.updateSettings({
+        modeId: FLOW_MODE_ID,
+        countInBars: 1,
+        repeatRange: true,
+        countInRun,
+      });
+      rig.runtime.controller.start();
+      rig.metronome.advanceSubdivisions(200);
+      let counted = 0;
+      rig.runtime.controller.events.on('sessionCreated', ({ session }) => {
+        session.events.on('countIn', () => {
+          counted += 1;
+        });
+      });
+      // The lap the view starts for us, and a few ticks for it to count in.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      rig.metronome.advanceSubdivisions(8);
+      return counted;
+    }
+
+    it('counts every time round, which is what a repeat has always done', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+
+      expect(await beatsCountedOnTheNextLap(rig, 'every')).toBeGreaterThan(0);
+    });
+
+    it('counts only the first time, when asked', async () => {
+      // Drilling a passage wants counting every time; playing it through
+      // wants counting once and then no interruption.
+      const rig = createRig();
+      await rig.view.initialize();
+
+      expect(await beatsCountedOnTheNextLap(rig, 'once')).toBe(0);
+    });
+  });
+
   describe('the readings that have been played', () => {
     it('lists them, newest first, with how they were played', async () => {
       const rig = createRig();

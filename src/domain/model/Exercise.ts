@@ -520,6 +520,18 @@ export interface TempoWord {
   /** Exactly as written, since that is what gets printed. */
   readonly text: string;
   readonly kind: 'accelerando' | 'ritardando' | 'a-tempo' | 'other';
+  /**
+   * Which side of the staff the writer put it on, where the file said.
+   *
+   * Carried rather than chosen, like the beams and the stems: a `rit.` and a
+   * metronome mark both go above by default, and forcing ours above put the
+   * two on top of each other in a bar that had them together. Where the file
+   * says nothing this says nothing, and the engraver decides as it always
+   * has.
+   */
+  readonly placement?: 'above' | 'below';
+  /** How far off the staff the writer put it, in tenths, where they said. */
+  readonly offsetY?: number;
 }
 
 export interface TempoChange {

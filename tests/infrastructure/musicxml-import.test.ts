@@ -112,6 +112,33 @@ describe('the dynamics on the page', () => {
     expect(printed).not.toContain('Andante');
   });
 
+  it('puts a word back where its writer put it', () => {
+    // Reported from Avatar, bar 59: a `rit.` printed on top of the metronome
+    // mark. Both go above when nobody says otherwise, and we were saying
+    // "above" for every word rather than carrying what the file said.
+    const placed = {
+      ...twoBarExercise(),
+      tempoWords: [
+        {
+          measureIndex: 1,
+          offsetTicks: 0,
+          text: 'rit.',
+          kind: 'ritardando' as const,
+          placement: 'below' as const,
+          offsetY: -40,
+        },
+      ],
+    };
+
+    const printed = serializer.serialize(placed);
+    const { exercise } = importer.read(printed);
+
+    expect(printed).toContain('placement="below"');
+    expect(printed).toContain('default-y="-40"');
+    expect(exercise.tempoWords[0]?.placement).toBe('below');
+    expect(exercise.tempoWords[0]?.offsetY).toBe(-40);
+  });
+
   it('keeps the numbers it worked out to itself', () => {
     // A gradual change is a run of small constant ones because that is the
     // only language the clock speaks; printing them turns one word into a

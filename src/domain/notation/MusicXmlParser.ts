@@ -788,11 +788,17 @@ function readMeasureNotes(
       }
       const said = readWords(node);
       if (said !== '') {
+        const placement = attribute(node, 'placement');
+        const height = Number(
+          attribute(child(child(node, 'direction-type'), 'words'), 'default-y') ?? '',
+        );
         tempoWords.push({
           measureIndex,
           offsetTicks: Math.max(0, cursor),
           text: said,
           kind: tempoWordKind(said),
+          ...(placement === 'above' || placement === 'below' ? { placement } : {}),
+          ...(Number.isFinite(height) ? { offsetY: height } : {}),
         });
       }
       const level = readDynamicMark(node);

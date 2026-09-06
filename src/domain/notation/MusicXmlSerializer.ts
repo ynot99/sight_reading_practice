@@ -774,9 +774,17 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     if (word === undefined || word.text === '') {
       return;
     }
-    writer.element('direction', { placement: 'above' }, () => {
+    // Where the writer put it, and only where they did not, above - which is
+    // where a direction goes when nobody has said otherwise. Their own height
+    // travels with it, since two directions at one moment are laid out by
+    // whatever each of them says about itself.
+    writer.element('direction', { placement: word.placement ?? 'above' }, () => {
       writer.element('direction-type', undefined, () => {
-        writer.leaf('words', word.text);
+        writer.leaf(
+          'words',
+          word.text,
+          word.offsetY === undefined ? undefined : { 'default-y': word.offsetY },
+        );
       });
     });
   }

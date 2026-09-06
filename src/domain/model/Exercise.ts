@@ -384,6 +384,16 @@ export interface DynamicMark {
   /** The staff it was written under, or `null` where the file did not say. */
   readonly staffNumber: number | null;
   /**
+   * Which side of the staff the writer put it on, where the file said.
+   *
+   * Carried rather than chosen, like the beams and the stems and the words.
+   * Below is where a piano dynamic usually goes and so is what this defaults
+   * to - but a staff carrying two lines marks the upper one above, and
+   * forcing every mark below stacks a row of them under one bar and loses
+   * which line each belongs to.
+   */
+  readonly placement?: 'above' | 'below';
+  /**
    * Worked out from a hairpin rather than written, and never printed.
    *
    * The same rule the implied tempo changes follow: a crescendo is heard as
@@ -504,6 +514,16 @@ export interface DynamicHairpin {
   readonly untilMeasureIndex: number;
   readonly untilOffsetTicks: number;
   readonly staffNumber: number | null;
+  /**
+   * Which side of the staff it was drawn on, where the file said.
+   *
+   * Taken from the end that opens it, since a hairpin is one thing however
+   * many directions state it. Two of them under one staff - the upper line
+   * swelling while the lower one fades - are stacked one beneath the other
+   * when both are forced below: nothing is lost, and the page stops saying
+   * which of the two lines each belongs to.
+   */
+  readonly placement?: 'above' | 'below';
 }
 
 /**

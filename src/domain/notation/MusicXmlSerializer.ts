@@ -821,7 +821,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
           continue;
         }
         drawn.add(key);
-        writer.element('direction', { placement: 'below' }, () => {
+        writer.element('direction', { placement: hairpin.placement ?? 'below' }, () => {
           writer.element('direction-type', undefined, () => {
             writer.leaf('wedge', undefined, {
               type: end === 'start' ? hairpin.kind : 'stop',
@@ -903,7 +903,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     if (mark === undefined) {
       return;
     }
-    writer.element('direction', { placement: 'below' }, () => {
+    // Below unless the writer said otherwise, which is where a piano dynamic
+    // goes; a staff carrying two lines marks the upper one above, and putting
+    // both under it stacks them and loses which line each belongs to.
+    writer.element('direction', { placement: mark.placement ?? 'below' }, () => {
       writer.element('direction-type', undefined, () => {
         writer.element('dynamics', undefined, () => {
           writer.leaf(mark.level);

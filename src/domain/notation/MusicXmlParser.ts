@@ -776,6 +776,7 @@ interface RawWedge {
   readonly type: 'crescendo' | 'diminuendo' | 'stop';
   readonly number: number;
   readonly staffNumber: number | null;
+  readonly placement?: 'above' | 'below';
 }
 
 /**
@@ -799,6 +800,9 @@ function pairWedges(
     untilMeasureIndex: untilBar,
     untilOffsetTicks: untilTicks,
     staffNumber: from.staffNumber,
+    // The opening end says which side it is drawn on; the stop is the same
+    // hairpin and has nothing of its own to add.
+    ...(from.placement === undefined ? {} : { placement: from.placement }),
   });
   for (const wedge of wedges) {
     if (wedge.type !== 'stop') {
@@ -836,6 +840,17 @@ function readWords(node: XmlNode): string {
     }
   }
   return said.join(' ').trim();
+}
+
+/**
+ * Which side of the staff a direction was written on, where it said.
+ *
+ * Spread into whatever is being read, so a file that says nothing leaves the
+ * field absent and the engraver goes on deciding as it always has.
+ */
+function sideOf(node: XmlNode): { placement?: 'above' | 'below' } {
+  const placement = attribute(node, 'placement');
+  return placement === 'above' || placement === 'below' ? { placement } : {};
 }
 
 function readDynamicMark(node: XmlNode): DynamicLevel | null {
@@ -932,11 +947,11 @@ function readMeasureNotes(
           // and the file numbers them so the two ends can be paired.
           number: Number(attribute(wedge, 'number') ?? '1') || 1,
           staffNumber: childNumber(node, 'staff') ?? null,
+          ...sideOf(node),
         });
       }
       const said = readWords(node);
       if (said !== '') {
-        const placement = attribute(node, 'placement');
         const height = Number(
           attribute(child(child(node, 'direction-type'), 'words'), 'default-y') ?? '',
         );
@@ -945,7 +960,7 @@ function readMeasureNotes(
           offsetTicks: Math.max(0, cursor),
           text: said,
           kind: tempoWordKind(said),
-          ...(placement === 'above' || placement === 'below' ? { placement } : {}),
+          ...sideOf(node),
           ...(Number.isFinite(height) ? { offsetY: height } : {}),
         });
       }
@@ -959,6 +974,7 @@ function readMeasureNotes(
           // one staff, and in plenty with two - where it is missing the mark
           // belongs to everything sounding, which is what `null` says.
           staffNumber: childNumber(node, 'staff') ?? null,
+          ...sideOf(node),
         });
       }
       continue;

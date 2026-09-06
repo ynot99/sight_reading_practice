@@ -49,10 +49,32 @@ describe('the dynamics on the page', () => {
 
     const { exercise } = importer.read(serializer.serialize(original));
 
+    // Below, which is where a piano dynamic goes and what a mark that says
+    // nothing about its side is printed as.
     expect(exercise.dynamicMarks).toEqual([
-      { measureIndex: 0, offsetTicks: 0, level: 'pp', staffNumber: 1 },
-      { measureIndex: 1, offsetTicks: 0, level: 'ff', staffNumber: 1 },
+      { measureIndex: 0, offsetTicks: 0, level: 'pp', staffNumber: 1, placement: 'below' },
+      { measureIndex: 1, offsetTicks: 0, level: 'ff', staffNumber: 1, placement: 'below' },
     ]);
+  });
+
+  it('keeps a mark the writer put above the staff above it', () => {
+    // A staff carrying two lines marks the upper one above. Forced below,
+    // every mark in the bar ends up in one row under it and which line each
+    // belongs to is gone - measured on a Minecraft arrangement whose upper
+    // line is marked pp against the lower line's p.
+    const original = {
+      ...twoBarExercise(),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'pp' as const, staffNumber: 1, placement: 'above' as const },
+        { measureIndex: 1, offsetTicks: 0, level: 'p' as const, staffNumber: 1 },
+      ],
+    };
+
+    const printed = serializer.serialize(original);
+    const { exercise } = importer.read(printed);
+
+    expect(printed).toContain('placement="above"');
+    expect(exercise.dynamicMarks.map((mark) => mark.placement)).toEqual(['above', 'below']);
   });
 
   it('writes each mark once, however many voices share the staff', () => {
@@ -201,8 +223,44 @@ describe('the dynamics on the page', () => {
         untilMeasureIndex: 1,
         untilOffsetTicks: 0,
         staffNumber: 1,
+        placement: 'below',
       },
     ]);
+  });
+
+  it('keeps two hairpins on the sides the writer drew them on', () => {
+    // One line swelling above the staff while another fades below it is
+    // ordinary piano writing. Both forced below, they are stacked one
+    // beneath the other and the page no longer says which line each is for.
+    const printed = serializer.serialize({
+      ...twoBarExercise(),
+      hairpins: [
+        {
+          measureIndex: 0,
+          offsetTicks: 0,
+          kind: 'crescendo' as const,
+          untilMeasureIndex: 1,
+          untilOffsetTicks: 0,
+          staffNumber: 1,
+          placement: 'above' as const,
+        },
+        {
+          measureIndex: 0,
+          offsetTicks: 0,
+          kind: 'diminuendo' as const,
+          untilMeasureIndex: 1,
+          untilOffsetTicks: 0,
+          staffNumber: 1,
+          placement: 'below' as const,
+        },
+      ],
+    });
+
+    const { exercise } = importer.read(printed);
+
+    expect(
+      exercise.hairpins.map((hairpin) => `${hairpin.kind} ${hairpin.placement ?? 'unsaid'}`).sort(),
+    ).toEqual(['crescendo above', 'diminuendo below']);
   });
 
   it('is heard as a slope by the time it is read in', () => {

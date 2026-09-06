@@ -1837,6 +1837,17 @@ select {
   fill: none;
 }
 
+/*
+ * A right note in a beat that is not finished yet.
+ *
+ * Paler rather than another colour: it is the same verdict, and what it adds
+ * is only "there is more of this chord to find". It becomes the ordinary
+ * green the moment the beat is complete.
+ */
+.played--unsettled {
+  opacity: 0.42;
+}
+
 .played-accidental.played--correct {
   fill: #15803d;
 }

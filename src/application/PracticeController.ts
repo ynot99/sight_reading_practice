@@ -1679,6 +1679,12 @@ export class PracticeController {
       // well, badly or not at all: the page empties as the music passes.
       session.events.on('stepCompleted', ({ result, atMs }) => {
         this.readerReaches(result.index, result.status, atMs);
+        // The beat is finished, so its right notes stop being provisional.
+        // Said for every step, including one nobody played: telling the
+        // drawing about a step it has no marks for costs nothing, and the
+        // alternative is the controller keeping a second account of which
+        // steps have marks on them.
+        this.deps.overlay.settlePlayed(result.index);
         if (this.currentSettings.readAheadSteps !== null) {
           this.fadeThrough(result.index);
         }
@@ -1725,6 +1731,10 @@ export class PracticeController {
         const mark = {
           stepIndex,
           midi,
+          // Palely until the beat is finished: a chord half found is not a
+          // chord, and the reader should be able to see which of the two
+          // they are looking at without counting noteheads.
+          settled: false,
           // Right against the page, which is what the mark is about: a note
           // the other hand was going to play was read correctly.
           correct: verdict !== 'wrong',

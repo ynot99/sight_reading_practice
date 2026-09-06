@@ -273,6 +273,11 @@ export interface PlayedNote {
   readonly midi: number;
   readonly correct: boolean;
   /**
+   * Whether the beat this belongs to had been played in full when it was
+   * drawn. Absent means yes: a mark drawn after the fact is settled by then.
+   */
+  readonly settled?: boolean;
+  /**
    * How far from its note the press landed, as a fraction of the gap to the
    * neighbouring one: negative is early, positive late, `0` dead on.
    *
@@ -321,6 +326,15 @@ export interface IPlayedNoteOverlay {
    * time they find it they cannot see the note they were looking for.
    */
   hidePlayed(note: { readonly stepIndex: number; readonly midi: number }): void;
+  /**
+   * Says that a step has been played in full.
+   *
+   * Until then its right notes are drawn palely: a chord half found is not a
+   * chord, and the reader wants to know which of the two they are looking at
+   * without counting noteheads. What settles is the drawing only - what was
+   * played, and how it was judged, is settled the moment it is judged.
+   */
+  settlePlayed(stepIndex: number): void;
   clearPlayed(): void;
 }
 

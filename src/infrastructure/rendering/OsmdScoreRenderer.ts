@@ -1966,6 +1966,7 @@ export class OsmdScoreRenderer
       midi: note.midi,
       correct: note.correct,
       offset: note.offset,
+      settled: note.settled,
     };
     this.marks.push(mark);
     // Only the mark just made, onto the page its own note is drawn on.
@@ -2001,6 +2002,26 @@ export class OsmdScoreRenderer
     for (const drawn of sheet?.querySelectorAll(`[data-mark="${note.stepIndex}:${note.midi}"]`) ??
       []) {
       drawn.remove();
+    }
+  }
+
+  settlePlayed(stepIndex: number): void {
+    let changed = false;
+    this.marks = this.marks.map((mark) => {
+      if (mark.stepIndex !== stepIndex || mark.settled) {
+        return mark;
+      }
+      changed = true;
+      return { ...mark, settled: true };
+    });
+    if (!changed) {
+      return;
+    }
+    const sheet = this.sheets[this.pageOfStep(stepIndex)];
+    // Restyled where they stand: the shapes are where they were, and only
+    // what they say about themselves has changed.
+    for (const drawn of sheet?.querySelectorAll(`[data-mark^="${stepIndex}:"]`) ?? []) {
+      drawn.classList.remove('played--unsettled');
     }
   }
 
@@ -2129,6 +2150,9 @@ export class OsmdScoreRenderer
     for (const { shape, mark } of shapes) {
       const drawn = this.createShape(shape, group.ownerDocument);
       drawn.setAttribute('data-mark', `${mark.stepIndex}:${mark.midi}`);
+      if (mark.correct && mark.settled === false) {
+        drawn.classList.add('played--unsettled');
+      }
       group.append(drawn);
     }
   }

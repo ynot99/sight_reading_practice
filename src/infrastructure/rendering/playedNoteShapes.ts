@@ -17,6 +17,8 @@ export interface PlayedMark {
   readonly correct: boolean;
   /** Signed fraction of the gap to the neighbouring note; `0` is dead on. */
   readonly offset: number;
+  /** Whether the beat it belongs to has been played in full. */
+  readonly settled?: boolean;
 }
 
 export interface OverlayLayout {

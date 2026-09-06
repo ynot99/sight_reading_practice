@@ -120,6 +120,18 @@ export class FakeScoreRenderer
     this.played.push(note);
   }
 
+  /** Steps the overlay has been told were played in full. */
+  readonly settled: number[] = [];
+
+  settlePlayed(stepIndex: number): void {
+    this.settled.push(stepIndex);
+    for (const [at, mark] of this.played.entries()) {
+      if (mark.stepIndex === stepIndex) {
+        this.played[at] = { ...mark, settled: true };
+      }
+    }
+  }
+
   hidePlayed(note: { readonly stepIndex: number; readonly midi: number }): void {
     const kept = this.played.filter(
       (mark) => mark.stepIndex !== note.stepIndex || mark.midi !== note.midi,

@@ -808,12 +808,15 @@ describe('what you played, drawn over the score', () => {
       midi.noteOn(note, 0);
     }
 
+    // Settled, the whole beat having been played: right notes are drawn
+    // palely until the chord they belong to is complete.
     expect(renderer.played).toEqual(
       step.expectedMidi.map((midiNote) => ({
         stepIndex: 0,
         midi: midiNote,
         correct: true,
         offset: 0,
+        settled: true,
       })),
     );
   });
@@ -940,7 +943,29 @@ describe('what you played, drawn over the score', () => {
     midi.noteOn(wrong, 0);
 
     // Not "something was wrong here" - the note he actually hit.
-    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false, offset: 0 }]);
+    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false, offset: 0, settled: false }]);
+  });
+
+  it('settles the marks of a chord only once the whole of it is found', async () => {
+    // His line 49: light green until every note of the beat is right, then
+    // the ordinary green. A chord half found is not a chord, and a reader
+    // should see which of the two they are looking at without counting.
+    const { controller, renderer, midi } = createController(true);
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const chord = session?.currentStep?.expectedMidi ?? [];
+    expect(chord.length).toBeGreaterThan(1);
+
+    midi.noteOn(chord[0] ?? 60, 0);
+    expect(renderer.played.map((mark) => mark.settled)).toEqual([false]);
+    expect(renderer.settled).toEqual([]);
+
+    for (const note of chord.slice(1)) {
+      midi.noteOn(note, 0);
+    }
+
+    expect(renderer.settled).toContain(0);
+    expect(renderer.played.every((mark) => mark.settled === true)).toBe(true);
   });
 
   it('lends a wrong mark to the page for as long as the key is down', async () => {
@@ -955,7 +980,7 @@ describe('what you played, drawn over the score', () => {
     const wrong = expected + 1;
 
     midi.noteOn(wrong, 0);
-    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false, offset: 0 }]);
+    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false, offset: 0, settled: false }]);
 
     midi.noteOff(wrong, 100);
     expect(renderer.played).toEqual([]);
@@ -992,7 +1017,7 @@ describe('what you played, drawn over the score', () => {
 
     session?.abort();
 
-    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false, offset: 0 }]);
+    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false, offset: 0, settled: false }]);
   });
 
   it('draws a mistimed press just before the note it was reaching for', async () => {
@@ -1012,7 +1037,7 @@ describe('what you played, drawn over the score', () => {
     midi.noteOn(wrong, 700);
 
     expect(renderer.played).toEqual([
-      { stepIndex: 0, midi: wrong, correct: false, offset: 0.7 },
+      { stepIndex: 0, midi: wrong, correct: false, offset: 0.7, settled: false },
     ]);
   });
 
@@ -1027,7 +1052,10 @@ describe('what you played, drawn over the score', () => {
     clock.set(900);
     midi.noteOn(expected, 900);
 
-    expect(renderer.played).toEqual([{ stepIndex: 0, midi: expected, correct: true, offset: 0 }]);
+    expect(renderer.played).toEqual([
+      // Pale, the rest of the chord not having been found yet.
+      { stepIndex: 0, midi: expected, correct: true, offset: 0, settled: false },
+    ]);
   });
 
   it('does not draw the same note twice for one press', async () => {

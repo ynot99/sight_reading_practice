@@ -8,6 +8,7 @@ import type {
   GraceNote,
   DynamicHairpin,
   DynamicMark,
+  OctaveShift,
   PedalMark,
   TempoWord,
   StaffPart,
@@ -246,6 +247,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
           (hairpin) =>
             hairpin.measureIndex === measureIndex || hairpin.untilMeasureIndex === measureIndex,
         );
+        const shifts = exercise.octaveShifts.filter(
+          (shift) =>
+            shift.measureIndex === measureIndex || shift.untilMeasureIndex === measureIndex,
+        );
         // Words about the speed belong to the piece rather than to a staff,
         // so they are written once, with the first voice - the same place
         // the pedal and the tempo marks go.
@@ -291,6 +296,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             ),
             index === 0 ? words : [],
             index === 0 ? hairpins : [],
+            index === 0 ? shifts : [],
           );
         });
         this.writeTempoChanges(writer, tempos, barTicks, present.length > 0);
@@ -502,6 +508,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     dynamics: readonly DynamicMark[] = [],
     words: readonly TempoWord[] = [],
     hairpins: readonly DynamicHairpin[] = [],
+    shifts: readonly OctaveShift[] = [],
   ): void {
     const measure = staff.measures[measureIndex];
     if (measure === undefined) {
@@ -539,6 +546,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         nextWord += 1;
       }
       this.writeHairpins(writer, hairpins, measureIndex, offset, staff.staffNumber, drawn);
+      this.writeOctaveShifts(writer, shifts, measureIndex, offset, staff.staffNumber, drawn);
       offset += entry.duration.ticks;
       this.writeEntry(
         writer,
@@ -565,6 +573,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       nextWord += 1;
     }
     this.writeHairpins(writer, hairpins, measureIndex, offset, staff.staffNumber, drawn);
+    this.writeOctaveShifts(writer, shifts, measureIndex, offset, staff.staffNumber, drawn);
     heldByVoice.set(staff.voice, held);
   }
 
@@ -820,6 +829,48 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             });
           });
           writer.leaf('staff', hairpin.staffNumber ?? staffNumber);
+        });
+      }
+    }
+  }
+
+  /**
+   * The two ends of an 8va or 15ma, each where the writer put it.
+   *
+   * Written out exactly as it was read, direction and size and all: the
+   * engraver applies the sign and moves the notes onto the staff, and this
+   * program only has to say what the writer wrote. The pitches themselves are
+   * untouched - in this format they always sound what they say.
+   */
+  private writeOctaveShifts(
+    writer: XmlWriter,
+    shifts: readonly OctaveShift[],
+    measureIndex: number,
+    offset: number,
+    staffNumber: number,
+    drawn: Set<string>,
+  ): void {
+    for (const [at, shift] of shifts.entries()) {
+      const starts = shift.measureIndex === measureIndex && shift.offsetTicks <= offset;
+      const stops = shift.untilMeasureIndex === measureIndex && shift.untilOffsetTicks <= offset;
+      for (const [end, wanted] of [
+        ['start', starts],
+        ['stop', stops],
+      ] as const) {
+        const key = `octave${at}:${end}`;
+        if (!wanted || drawn.has(key)) {
+          continue;
+        }
+        drawn.add(key);
+        writer.element('direction', undefined, () => {
+          writer.element('direction-type', undefined, () => {
+            writer.leaf('octave-shift', undefined, {
+              type: end === 'start' ? shift.direction : 'stop',
+              size: shift.size,
+              number: at + 1,
+            });
+          });
+          writer.leaf('staff', shift.staffNumber ?? staffNumber);
         });
       }
     }

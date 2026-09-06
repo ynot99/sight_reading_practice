@@ -112,6 +112,66 @@ describe('the dynamics on the page', () => {
     expect(printed).not.toContain('Andante');
   });
 
+  it('reads an octave sign from its two ends, and writes it back', () => {
+    // 8va and 15ma: a way of writing high music without a thicket of ledger
+    // lines. The pitch in the file is always the sounding one, so this
+    // changes nothing about the music - only what the page looks like.
+    const printed = serializer.serialize({
+      ...twoBarExercise(),
+      octaveShifts: [
+        {
+          measureIndex: 0,
+          offsetTicks: 0,
+          untilMeasureIndex: 1,
+          untilOffsetTicks: 0,
+          direction: 'down' as const,
+          size: 15 as const,
+          staffNumber: 1,
+        },
+      ],
+    });
+
+    const { exercise } = importer.read(printed);
+
+    expect(printed).toContain('<octave-shift type="down" size="15"');
+    expect(printed).toContain('<octave-shift type="stop"');
+    expect(exercise.octaveShifts).toEqual([
+      {
+        measureIndex: 0,
+        offsetTicks: 0,
+        untilMeasureIndex: 1,
+        untilOffsetTicks: 0,
+        direction: 'down',
+        size: 15,
+        staffNumber: 1,
+      },
+    ]);
+  });
+
+  it('does not move a note that is written under one', () => {
+    // The sign is about the drawing. What the reader has to play is what the
+    // file says they play.
+    const written = twoBarExercise();
+    const signed = {
+      ...written,
+      octaveShifts: [
+        {
+          measureIndex: 0,
+          offsetTicks: 0,
+          untilMeasureIndex: 0,
+          untilOffsetTicks: Duration.WHOLE.ticks,
+          direction: 'down' as const,
+          size: 8 as const,
+          staffNumber: 1,
+        },
+      ],
+    };
+
+    const { exercise } = importer.read(serializer.serialize(signed));
+
+    expect(demands(exercise)).toEqual(demands(written));
+  });
+
   it('reads a hairpin from its two ends, and writes it back', () => {
     // The format states a start and a stop as separate directions; what a
     // reader sees is one wedge under the music between them.

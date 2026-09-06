@@ -19,6 +19,7 @@ import type {
   ClefChange,
   DynamicHairpin,
   DynamicMark,
+  OctaveShift,
   DynamicLevel,
   TempoWord,
   GraceNote,
@@ -149,7 +150,15 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   }
 
   const header = readHeader(measures, warnings);
-  const { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords, hairpins } = readEveryPart(
+  const {
+    staves,
+    pedalMarks,
+    tempoMarks,
+    dynamicMarks,
+    tempoWords,
+    hairpins,
+    octaveShifts,
+  } = readEveryPart(
     parts,
     measures.length,
     header,
@@ -177,6 +186,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     dynamicMarks,
     tempoWords,
     hairpins,
+    octaveShifts,
     timeSignature: header.timeSignature,
     tempoBpm: opening.at(-1)?.tempoBpm ?? ASSUMED_TEMPO_BPM,
     staves,
@@ -709,6 +719,56 @@ function readGraces(graces: readonly XmlNode[]): GraceNote[] {
  * than a level to hold, and holding one would be a mistake that lasted until
  * the next mark.
  */
+/** One end of an octave sign, as the file states it. */
+interface RawShift {
+  readonly measureIndex: number;
+  readonly offsetTicks: number;
+  readonly type: 'up' | 'down' | 'stop';
+  readonly size: 8 | 15;
+  readonly number: number;
+  readonly staffNumber: number | null;
+}
+
+/**
+ * Octave signs, paired from their two ends.
+ *
+ * The same shape as the hairpins, and for the same reason: the format writes
+ * a start and a stop as separate directions, numbered so that two of them can
+ * overlap. One left open runs to the end of the bar it began in.
+ */
+function pairShifts(
+  shifts: readonly RawShift[],
+  barTicks: (bar: number) => number,
+): OctaveShift[] {
+  const open = new Map<number, RawShift>();
+  const paired: OctaveShift[] = [];
+  const made = (from: RawShift, untilBar: number, untilTicks: number): OctaveShift => ({
+    measureIndex: from.measureIndex,
+    offsetTicks: from.offsetTicks,
+    untilMeasureIndex: untilBar,
+    untilOffsetTicks: untilTicks,
+    direction: from.type === 'up' ? 'up' : 'down',
+    size: from.size,
+    staffNumber: from.staffNumber,
+  });
+  for (const shift of shifts) {
+    if (shift.type !== 'stop') {
+      open.set(shift.number, shift);
+      continue;
+    }
+    const from = open.get(shift.number);
+    if (from === undefined) {
+      continue;
+    }
+    open.delete(shift.number);
+    paired.push(made(from, shift.measureIndex, shift.offsetTicks));
+  }
+  for (const from of open.values()) {
+    paired.push(made(from, from.measureIndex, barTicks(from.measureIndex)));
+  }
+  return paired;
+}
+
 /** One end of a hairpin, as the file states it. */
 interface RawWedge {
   readonly measureIndex: number;
@@ -803,6 +863,7 @@ function readMeasureNotes(
   dynamicMarks: DynamicMark[] = [],
   tempoWords: TempoWord[] = [],
   wedges: RawWedge[] = [],
+  shifts: RawShift[] = [],
 ): RawNote[] {
   const notes: RawNote[] = [];
   let cursor = 0;
@@ -846,6 +907,19 @@ function readMeasureNotes(
       const tempoBpm = readTempoMark(node);
       if (tempoBpm !== null) {
         tempoMarks.push({ measureIndex, offsetTicks: Math.max(0, cursor), tempoBpm });
+      }
+      const shift = child(child(node, 'direction-type'), 'octave-shift');
+      const shiftType = attribute(shift, 'type');
+      if (shiftType === 'up' || shiftType === 'down' || shiftType === 'stop') {
+        const size = Number(attribute(shift, 'size') ?? '8');
+        shifts.push({
+          measureIndex,
+          offsetTicks: Math.max(0, cursor),
+          type: shiftType,
+          size: size === 15 ? 15 : 8,
+          number: Number(attribute(shift, 'number') ?? '1') || 1,
+          staffNumber: childNumber(node, 'staff') ?? null,
+        });
       }
       const wedge = child(child(node, 'direction-type'), 'wedge');
       const wedgeType = attribute(wedge, 'type');
@@ -1141,6 +1215,7 @@ function readEveryPart(
   readonly dynamicMarks: readonly DynamicMark[];
   readonly tempoWords: readonly TempoWord[];
   readonly hairpins: readonly DynamicHairpin[];
+  readonly octaveShifts: readonly OctaveShift[];
 } {
   const staves: StaffPart[] = [];
   const pedalMarks: PedalMark[] = [];
@@ -1148,6 +1223,7 @@ function readEveryPart(
   const dynamicMarks: DynamicMark[] = [];
   const tempoWords: TempoWord[] = [];
   const hairpins: DynamicHairpin[] = [];
+  const octaveShifts: OctaveShift[] = [];
 
   for (const [index, part] of parts.entries()) {
     const measures = childrenNamed(part, 'measure');
@@ -1193,6 +1269,12 @@ function readEveryPart(
         tempoWords.push(word);
       }
     }
+    octaveShifts.push(
+      ...built.octaveShifts.map((shift) => ({
+        ...shift,
+        staffNumber: shift.staffNumber === null ? null : shift.staffNumber + staffOffset,
+      })),
+    );
     hairpins.push(
       ...built.hairpins.map((hairpin) => ({
         ...hairpin,
@@ -1207,7 +1289,7 @@ function readEveryPart(
     );
   }
 
-  return { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords, hairpins };
+  return { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords, hairpins, octaveShifts };
 }
 
 /** What a part says about itself: how finely it counts, and its clefs. */
@@ -1248,12 +1330,14 @@ function buildStaves(
   readonly dynamicMarks: readonly DynamicMark[];
   readonly tempoWords: readonly TempoWord[];
   readonly hairpins: readonly DynamicHairpin[];
+  readonly octaveShifts: readonly OctaveShift[];
 } {
   const pedalMarks: PedalMark[] = [];
   const tempoMarks: TempoChange[] = [];
   const dynamicMarks: DynamicMark[] = [];
   const tempoWords: TempoWord[] = [];
   const wedges: RawWedge[] = [];
+  const shifts: RawShift[] = [];
   const perMeasure = measures.map((measure, index) =>
     readMeasureNotes(
       measure,
@@ -1265,8 +1349,10 @@ function buildStaves(
       dynamicMarks,
       tempoWords,
       wedges,
+      shifts,
     ),
   );
+  const octaveShifts = pairShifts(shifts, (bar) => barTicksAt(header, bar));
   // Paired here, where the bars of this part are known: a hairpin with no
   // stop of its own runs to the end of the bar it began in.
   const hairpins = pairWedges(wedges, (bar) => barTicksAt(header, bar));
@@ -1350,6 +1436,11 @@ function buildStaves(
       word.measureIndex === 0 && word.offsetTicks > 0
         ? { ...word, offsetTicks: word.offsetTicks + pickupShift }
         : word,
+    ),
+    octaveShifts: octaveShifts.map((shift) =>
+      shift.measureIndex === 0 && shift.offsetTicks > 0
+        ? { ...shift, offsetTicks: shift.offsetTicks + pickupShift }
+        : shift,
     ),
     hairpins: hairpins.map((hairpin) =>
       hairpin.measureIndex === 0 && hairpin.offsetTicks > 0

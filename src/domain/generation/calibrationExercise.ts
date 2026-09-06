@@ -43,6 +43,7 @@ export function calibrationExercise(tempoBpm = 80): Exercise {
     dynamicMarks: [],
     tempoWords: [],
     hairpins: [],
+    octaveShifts: [],
     timeSignature: new TimeSignature(4, 4),
     tempoBpm,
     firstBarNumber: 1,

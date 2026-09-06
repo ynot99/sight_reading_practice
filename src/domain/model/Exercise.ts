@@ -581,6 +581,28 @@ export function velocityAt(
   return markedAt > until ? ground : target;
 }
 
+/**
+ * An 8va or 15ma: notes drawn an octave or two from where they sound.
+ *
+ * The pitch in the file is always the sounding one, so this changes nothing
+ * about the music - it is a way of writing high or low music without a
+ * thicket of ledger lines, and a reader who has learned the sign reads it
+ * faster than they read the lines. Carried whole, with the direction and the
+ * size the writer chose, because the engraver applies it and this program
+ * only has to say what was written.
+ */
+export interface OctaveShift {
+  readonly measureIndex: number;
+  readonly offsetTicks: number;
+  readonly untilMeasureIndex: number;
+  readonly untilOffsetTicks: number;
+  /** As MusicXML says it: `down` draws below the sound, `up` above it. */
+  readonly direction: 'up' | 'down';
+  /** 8 for one octave, 15 for two. */
+  readonly size: 8 | 15;
+  readonly staffNumber: number | null;
+}
+
 export interface PedalMark {
   readonly measureIndex: number;
   /** Offset from the start of that measure, in divisions. */
@@ -694,6 +716,8 @@ export interface Exercise {
   readonly tempoWords: readonly TempoWord[];
   /** Hairpins: getting louder, getting quieter. */
   readonly hairpins: readonly DynamicHairpin[];
+  /** Stretches drawn an octave or two from where they sound. */
+  readonly octaveShifts: readonly OctaveShift[];
   readonly timeSignature: TimeSignature;
   /**
    * Metres the score changes to partway through.

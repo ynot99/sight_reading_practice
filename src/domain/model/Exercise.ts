@@ -358,11 +358,14 @@ export interface ExerciseMetadata {
 /**
  * How loud the writer asked for it to be, from here on.
  *
- * The six a piano piece is actually written in. `sf` and the rest are
+ * The eight a piano piece is actually written in. Clair de Lune opens in
+ * `pp` and asks for `ppp` before the first page is out, so stopping at two
+ * p's would have played its quietest music at the same loudness as its
+ * merely quiet music. `sf` and the rest are left out on purpose: they are
  * accents on one note rather than a level to keep, and a level is what this
- * is: it holds until the next one, the way a tempo does.
+ * is - it holds until the next one, the way a tempo does.
  */
-export const DYNAMIC_LEVELS = ['pp', 'p', 'mp', 'mf', 'f', 'ff'] as const;
+export const DYNAMIC_LEVELS = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff'] as const;
 
 export type DynamicLevel = (typeof DYNAMIC_LEVELS)[number];
 
@@ -385,18 +388,20 @@ export interface DynamicMark {
 /**
  * How hard a level is struck, `0..1`.
  *
- * Six steps rather than a curve, because six is what is written. The spread
+ * Steps rather than a curve, because steps are what is written. The spread
  * is deliberately narrower than the full range: at the bottom the sampled
- * piano stops sounding like one, and at the top every level above `mf` would
- * be the same recording played as loudly as it goes.
+ * piano stops sounding like one, and at the top the loudest levels are close
+ * together because the recordings themselves are.
  */
 export const DYNAMIC_VELOCITY: Readonly<Record<DynamicLevel, number>> = {
-  pp: 0.3,
+  ppp: 0.22,
+  pp: 0.32,
   p: 0.45,
   mp: 0.58,
   mf: 0.7,
   f: 0.82,
-  ff: 0.95,
+  ff: 0.9,
+  fff: 0.98,
 };
 
 /**

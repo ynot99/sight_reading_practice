@@ -60,6 +60,23 @@ describe('the dynamics on the page', () => {
     expect([...printed.matchAll(/<dynamics>/g)]).toHaveLength(2);
   });
 
+  it('carries the quietest and the loudest a piano piece is written in', () => {
+    // Clair de Lune opens in pp and asks for ppp before the first page is
+    // out; stopping at two p's would play its quietest music at the same
+    // loudness as its merely quiet music.
+    const original = {
+      ...twoBarExercise(),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'ppp' as const, staffNumber: null },
+        { measureIndex: 1, offsetTicks: 0, level: 'fff' as const, staffNumber: null },
+      ],
+    };
+
+    const { exercise } = importer.read(serializer.serialize(original));
+
+    expect(exercise.dynamicMarks.map((mark) => mark.level)).toEqual(['ppp', 'fff']);
+  });
+
   it('says nothing about loudness where the writer said nothing', () => {
     const { exercise } = importer.read(serializer.serialize(twoBarExercise()));
 

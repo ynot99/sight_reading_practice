@@ -58,6 +58,15 @@ const HOP_REFRESH_MS = 1_000;
  * the gap between two readings of the clock is what is counted, so a slow
  * tick or a throttled one is still the right number of milliseconds.
  */
+/**
+ * How often the waiting bar is drained.
+ *
+ * Ten times a second, which is smooth enough to watch fall and cheap enough
+ * to be doing while somebody plays. The moment is read off the clock rather
+ * than counted in ticks, so a late one loses nothing.
+ */
+const SURVIVAL_TICK_MS = 100;
+
 const TIME_TICK_MS = 5_000;
 
 /** How many days the row of marks shows. */
@@ -806,6 +815,7 @@ export class AppView {
   /** The week as it was last drawn, so seven marks are not redrawn for nothing. */
   private weekShown: string | null = null;
   private timeTick: ReturnType<typeof setInterval> | null = null;
+  private survivalTick: ReturnType<typeof setInterval> | null = null;
   /** When the stretch being counted began, or `null` while the page is away. */
   private timeCountedAtMs: number | null = null;
   /** Which tip to give next, so the same one is not given twice running. */
@@ -1303,6 +1313,10 @@ export class AppView {
     if (this.timeTick !== null) {
       clearInterval(this.timeTick);
       this.timeTick = null;
+    }
+    if (this.survivalTick !== null) {
+      clearInterval(this.survivalTick);
+      this.survivalTick = null;
     }
     if (this.silenceWatch !== null) {
       clearTimeout(this.silenceWatch);
@@ -2783,6 +2797,33 @@ export class AppView {
     );
   }
 
+  /**
+   * Keeps the waiting bar falling, or stops it.
+   *
+   * The page owns the timer because the application layer owns none - the
+   * whole practice loop runs headlessly on a manual clock, and a mode that
+   * waits for the reader has nothing of its own to measure time with.
+   */
+  private keepDrainingWhileWaiting(running: boolean): void {
+    const wanted =
+      running &&
+      this.runtime.controller.survivalRuns &&
+      !this.runtime.controller.survivalKeepsTime;
+    if (!wanted) {
+      if (this.survivalTick !== null) {
+        clearInterval(this.survivalTick);
+        this.survivalTick = null;
+      }
+      return;
+    }
+    if (this.survivalTick !== null) {
+      return;
+    }
+    this.survivalTick = setInterval(() => {
+      this.runtime.controller.drainWhileWaiting();
+    }, SURVIVAL_TICK_MS);
+  }
+
   /** True while the reader is being given their look at the page. */
   get isPreviewing(): boolean {
     return this.previewTimer !== null;
@@ -3289,6 +3330,7 @@ export class AppView {
     this.sessionSubscriptions.push(
       session.events.on('statusChanged', ({ status }) => {
         this.updateButtons(status);
+        this.keepDrainingWhileWaiting(status === 'running');
         // Playing a piece is the plainest way of saying it is the one being
         // worked on - and the only way to say it about a score the program
         // put on the stand by itself.

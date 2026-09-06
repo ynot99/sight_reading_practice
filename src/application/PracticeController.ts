@@ -549,6 +549,8 @@ export class PracticeController {
   private fadedThrough = -1;
   /** Marks waiting for the run to end, when that is when they are drawn. */
   private heldMarks: PlayedNote[] = [];
+  /** When the waiting bar was last drained, on the page's own clock. */
+  private lastWaitDrainMs: number | null = null;
   /** Wrong marks on the page only while their key is down. */
   private lentMarks: PlayedNote[] = [];
   /** Wrong notes played at the step the marker is standing on. */
@@ -1664,6 +1666,7 @@ export class PracticeController {
       this.deps.renderer.scrollToStart();
     }
     this.meter.reset();
+    this.lastWaitDrainMs = this.deps.clock.now();
     this.lastBeatTicks = 0;
     if (this.survivalRuns) {
       this.emitter.emit('healthChanged', { health: this.meter.health, cause: 'settle' });
@@ -1688,13 +1691,19 @@ export class PracticeController {
         if (this.currentSettings.readAheadSteps !== null) {
           this.fadeThrough(result.index);
         }
-        if (this.survivalRuns) {
+        if (this.survivalRuns && this.survivalKeepsTime) {
           // What the step was worth is how long it lasted, so that a bar
           // carries the same weight however many notes are in it.
           this.publishHealth(
             this.meter.settle(result.status, this.beatsIn(this.timeline?.at(result.index))),
             'settle',
           );
+        } else if (this.survivalRuns && result.status !== 'skipped') {
+          // Where nothing keeps time, a beat found fills the bar outright -
+          // and the clock starts again from here rather than from the last
+          // time anybody looked.
+          this.lastWaitDrainMs = this.deps.clock.now();
+          this.publishHealth(this.meter.refill(), 'settle');
         }
       }),
     );
@@ -1760,7 +1769,7 @@ export class PracticeController {
       // The pulse the run already keeps, so the bar needs no clock of its own
       // and a whole game replays headlessly.
       session.events.on('beat', (tick) => {
-        if (!this.survivalRuns) {
+        if (!this.survivalRuns || !this.survivalKeepsTime) {
           return;
         }
         const beats = this.beatsFor(tick.positionTicks - this.lastBeatTicks);
@@ -2088,10 +2097,41 @@ export class PracticeController {
    * reader, so there is nothing to survive and the bar would sit still.
    */
   get survivalRuns(): boolean {
-    return (
-      this.currentSettings.survival &&
-      this.deps.modes.get(this.currentSettings.modeId).requiresMetronome
-    );
+    return this.currentSettings.survival;
+  }
+
+  /**
+   * Whether the bar is drained by the music or by the clock.
+   *
+   * Under a pulse it falls with the beats, so a slow piece is not harder than
+   * a fast one. In a mode that waits there are no beats passing to count, and
+   * the question is not "can you keep up" but "do you know what comes next" -
+   * so it falls with the clock instead, and every beat found fills it.
+   */
+  get survivalKeepsTime(): boolean {
+    return this.deps.modes.get(this.currentSettings.modeId).requiresMetronome;
+  }
+
+  /**
+   * Drains the bar for the time that has passed, where nothing else does.
+   *
+   * Called from outside because this layer owns no timer: the page ticks, and
+   * the moment is read off the clock it is given. Each call is worth at most
+   * a second however long it has really been - a page put away with a run
+   * going should not come back to a run that was lost while nobody watched.
+   */
+  drainWhileWaiting(): void {
+    if (!this.survivalRuns || this.survivalKeepsTime || this.currentSession === null) {
+      return;
+    }
+    const now = this.deps.clock.now();
+    const since = this.lastWaitDrainMs;
+    this.lastWaitDrainMs = now;
+    if (since === null) {
+      return;
+    }
+    const seconds = Math.min(now - since, 1_000) / 1_000;
+    this.publishHealth(this.meter.drainForSeconds(seconds), 'drain');
   }
 
   /** Where the bar stands, `0..1`. */

@@ -2047,6 +2047,64 @@ describe('AppView', () => {
     });
   });
 
+  describe('the bar in a mode that waits', () => {
+    /**
+     * Time passing for both clocks at once.
+     *
+     * The page owns the timer that drives the drain; the moment it drains
+     * *to* is read off the application's own clock, which in here is manual.
+     * A test that moved only one of them would prove nothing about either.
+     */
+    async function waitFor(rig: Rig, ms: number): Promise<void> {
+      for (let at = 0; at < ms; at += 100) {
+        rig.clock.advance(100);
+        await vi.advanceTimersByTimeAsync(100);
+      }
+    }
+
+    it('falls while the page waits', async () => {
+      // The application layer owns no timer - the whole practice loop runs
+      // headlessly on a manual clock - so the page has to drive this one.
+      vi.useFakeTimers();
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.runtime.controller.updateSettings({ survival: true });
+        rig.runtime.controller.start();
+        const drained: number[] = [];
+        rig.runtime.controller.events.on('healthChanged', ({ health }) => drained.push(health));
+
+        await waitFor(rig, 1_000);
+
+        expect(drained.length).toBeGreaterThan(1);
+        expect(rig.runtime.controller.health).toBeLessThan(1);
+        expect(element('focus-health').hidden).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('stops falling once the run is over', async () => {
+      vi.useFakeTimers();
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.runtime.controller.updateSettings({ survival: true });
+        const session = rig.runtime.controller.start();
+        await waitFor(rig, 500);
+        session?.abort();
+        const health = rig.runtime.controller.health;
+        expect(health).toBeLessThan(1);
+
+        await waitFor(rig, 3_000);
+
+        expect(rig.runtime.controller.health).toBe(health);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('turning the pages', () => {
     /** Through the controls themselves: the wiring is the thing being tested. */
     async function readAsPages(turns: string): Promise<void> {

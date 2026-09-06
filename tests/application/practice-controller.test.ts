@@ -2529,11 +2529,74 @@ describe('surviving a piece you already know', () => {
     return { ...rig, readings };
   }
 
-  it('says nothing in Wait mode, where nothing moves without you', async () => {
+  it('is drained by the clock in Wait mode, where the music does not move', async () => {
+    // It used to be switched off here on the reasoning that nothing moves
+    // without the reader, so there is nothing to survive. His line 53 asks
+    // for the other reading of it: a bar that falls while you hunt and fills
+    // completely on every beat you find - room to think, and a reason not to
+    // sit in one place.
     const rig = await survivalRun({ modeId: undefined });
     rig.controller.updateSettings({ modeId: new WaitMode().id });
+    rig.controller.start();
 
-    expect(rig.controller.survivalRuns).toBe(false);
+    expect(rig.controller.survivalRuns).toBe(true);
+    expect(rig.controller.survivalKeepsTime).toBe(false);
+
+    // Three seconds of hunting, drained a tick at a time the way the page
+    // does it.
+    for (let at = 0; at < 6; at += 1) {
+      rig.clock.set(rig.clock.now() + 500);
+      rig.controller.drainWhileWaiting();
+    }
+
+    expect(rig.controller.health).toBeLessThan(1);
+    expect(rig.controller.health).toBeGreaterThan(0);
+  });
+
+  it('fills again on every beat the reader finds', async () => {
+    const rig = await survivalRun({ modeId: undefined });
+    rig.controller.updateSettings({ modeId: new WaitMode().id });
+    const session = rig.controller.start();
+    for (let at = 0; at < 6; at += 1) {
+      rig.clock.set(rig.clock.now() + 500);
+      rig.controller.drainWhileWaiting();
+    }
+    expect(rig.controller.health).toBeLessThan(1);
+
+    for (const note of session?.currentStep?.expectedMidi ?? []) {
+      rig.midi.noteOn(note, rig.clock.now());
+    }
+
+    expect(rig.controller.health).toBe(1);
+  });
+
+  it('ends the run when the hunting has gone on too long', async () => {
+    const rig = await survivalRun({ modeId: undefined });
+    rig.controller.updateSettings({ modeId: new WaitMode().id });
+    const session = rig.controller.start();
+
+    // A minute of nothing, a second at a time.
+    for (let at = 0; at < 60; at += 1) {
+      rig.clock.set(rig.clock.now() + 1_000);
+      rig.controller.drainWhileWaiting();
+    }
+
+    expect(rig.controller.health).toBe(0);
+    expect(session?.status).toBe('aborted');
+  });
+
+  it('is not lost while the page was away', async () => {
+    // One tick is worth at most a second however long it has really been: a
+    // page put away with a run going should not come back to a run that was
+    // lost while nobody was watching.
+    const rig = await survivalRun({ modeId: undefined });
+    rig.controller.updateSettings({ modeId: new WaitMode().id });
+    rig.controller.start();
+
+    rig.clock.set(rig.clock.now() + 10 * 60_000);
+    rig.controller.drainWhileWaiting();
+
+    expect(rig.controller.health).toBeGreaterThan(0.85);
   });
 
   it('drains as the music goes by', async () => {

@@ -23,6 +23,17 @@ export interface HealthMeterOptions {
    * Must exceed the drain, or perfect playing still ends in failure.
    */
   readonly rewardPerBeat?: number;
+  /**
+   * Health lost over a second of *wall-clock* time, where nothing keeps time.
+   *
+   * The other half of this meter, and it has to be measured differently: in
+   * a mode that waits for the reader there are no beats passing to count, and
+   * what the bar is asking is not "can you keep up" but "do you know what
+   * comes next". So it falls with the clock while the reader hunts, and every
+   * beat they find fills it again completely - room to think, and a reason
+   * not to sit in one place.
+   */
+  readonly drainPerSecond?: number;
   /** Taken for a step the music took away. */
   readonly missPenalty?: number;
   /** Taken for a step that was played, but with wrong notes mixed in. */
@@ -31,6 +42,10 @@ export interface HealthMeterOptions {
 
 const DEFAULTS = {
   drainPerBeat: 0.035,
+  // Ten seconds from full to empty, refilled by every beat found. Long
+  // enough to read an unfamiliar chord, short enough that stopping to think
+  // about the whole bar costs something.
+  drainPerSecond: 0.1,
   rewardPerBeat: 0.06,
   missPenalty: 0.12,
   // Set so that at the beat, a wrong note loses what a right one gains.
@@ -52,6 +67,7 @@ const DEFAULTS = {
 export class HealthMeter {
   private readonly drainPerBeat: number;
   private readonly rewardPerBeat: number;
+  private readonly drainPerSecond: number;
   private readonly missPenalty: number;
   private readonly wrongPenalty: number;
   private value = 1;
@@ -59,6 +75,7 @@ export class HealthMeter {
   constructor(options: HealthMeterOptions = {}) {
     this.drainPerBeat = options.drainPerBeat ?? DEFAULTS.drainPerBeat;
     this.rewardPerBeat = options.rewardPerBeat ?? DEFAULTS.rewardPerBeat;
+    this.drainPerSecond = options.drainPerSecond ?? DEFAULTS.drainPerSecond;
     this.missPenalty = options.missPenalty ?? DEFAULTS.missPenalty;
     this.wrongPenalty = options.wrongPenalty ?? DEFAULTS.wrongPenalty;
   }
@@ -78,6 +95,25 @@ export class HealthMeter {
       return this.value;
     }
     return this.set(this.value - this.drainPerBeat * beats);
+  }
+
+  /** Time passing where no music does: seconds, not beats. */
+  drainForSeconds(seconds: number): number {
+    if (seconds <= 0) {
+      return this.value;
+    }
+    return this.set(this.value - this.drainPerSecond * seconds);
+  }
+
+  /**
+   * Filled again, the reader having found the beat.
+   *
+   * All the way, and not by what the step was worth: where nothing is keeping
+   * time there is nothing to have kept up with, and the only question the bar
+   * is asking is whether the reader is moving at all.
+   */
+  refill(): number {
+    return this.set(1);
   }
 
   /**

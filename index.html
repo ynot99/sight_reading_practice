@@ -160,6 +160,26 @@
       </div>
 
       <!--
+        Asking for a name, the same way the deletion asks for a yes. Neither
+        `window.prompt` nor `window.confirm` is implemented in the environment
+        the UI tests run in, so both would be paths no test could take - and
+        this one has to be got right, a name being the thing the reader will
+        look for the score under afterwards.
+      -->
+      <div id="sheet-rename" class="sheet sheet--over" hidden>
+        <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
+          aria-labelledby="rename-text">
+          <p id="rename-text" class="sheet__text"></p>
+          <input id="rename-name" class="sheet__input" type="text" aria-label="Name for this score" />
+          <p id="rename-problem" class="hint" hidden></p>
+          <div class="sheet__actions">
+            <button id="rename-no" type="button" class="button button--ghost">Cancel</button>
+            <button id="rename-yes" type="button" class="button button--primary">Rename</button>
+          </div>
+        </div>
+      </div>
+
+      <!--
         Everything about the click, in one place.
 
         It was in three: two of these were cycle buttons in the fullscreen

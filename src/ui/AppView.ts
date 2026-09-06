@@ -850,6 +850,12 @@ export class AppView {
     confirmNo: HTMLButtonElement;
     scoresList: HTMLUListElement;
     scoresSearch: HTMLInputElement;
+    sheetRename: HTMLElement;
+    renameText: HTMLElement;
+    renameName: HTMLInputElement;
+    renameProblem: HTMLElement;
+    renameYes: HTMLButtonElement;
+    renameNo: HTMLButtonElement;
     whatOpens: HTMLSelectElement;
     whatOpensDescription: HTMLElement;
     scoresClear: HTMLButtonElement;
@@ -1029,6 +1035,12 @@ export class AppView {
       confirmNo: requireElement(doc, 'confirm-no'),
       scoresList: requireElement(doc, 'scores-list'),
       scoresSearch: requireElement(doc, 'scores-search'),
+      sheetRename: requireElement(doc, 'sheet-rename'),
+      renameText: requireElement(doc, 'rename-text'),
+      renameName: requireElement(doc, 'rename-name'),
+      renameProblem: requireElement(doc, 'rename-problem'),
+      renameYes: requireElement(doc, 'rename-yes'),
+      renameNo: requireElement(doc, 'rename-no'),
       whatOpens: requireElement(doc, 'what-opens'),
       whatOpensDescription: requireElement(doc, 'what-opens-description'),
       scoresClear: requireElement(doc, 'scores-clear'),
@@ -1274,6 +1286,15 @@ export class AppView {
         void this.openKeptScore(score.id, score.title);
       });
 
+      const rename = this.doc.createElement('button');
+      rename.type = 'button';
+      rename.textContent = '✎';
+      rename.title = 'Rename this score';
+      rename.setAttribute('aria-label', `Rename ${score.title}`);
+      this.listen(rename, 'click', () => {
+        void this.renameScore(score.id, score.title);
+      });
+
       const remove = this.doc.createElement('button');
       remove.type = 'button';
       remove.textContent = '×';
@@ -1287,7 +1308,9 @@ export class AppView {
         });
       });
 
-      row.append(name, when, open, remove);
+      // Open stays the first button in the row: it is the one thing a reader
+      // reaches for, and it has been in that place since there were rows.
+      row.append(name, when, open, rename, remove);
       this.el.scoresList.append(row);
     }
   }
@@ -3957,6 +3980,95 @@ export class AppView {
    * unimplemented in the environment the UI tests run in - and a deletion no
    * test can take is the wrong one to leave untested.
    */
+  /**
+   * Gives a score the name the reader calls it by.
+   *
+   * The whole point of it is the library and the page agreeing, so the name
+   * goes into the document too and the piece on the stand is opened again
+   * where it is the one being renamed - the title is printed in the corner of
+   * every page, and one that still said the old name would read as a rename
+   * that had not worked.
+   */
+  private async renameScore(id: string, title: string): Promise<void> {
+    const wanted = await this.askForAName(title);
+    if (wanted === null) {
+      return;
+    }
+    const outcome = await this.runtime.scores.rename(id, wanted);
+    if (outcome !== 'renamed') {
+      this.sayInTheMiddle(
+        outcome === 'taken'
+          ? `There is already a score called “${wanted.trim()}”.`
+          : `${title} is no longer stored on this device.`,
+      );
+      this.renderScores();
+      return;
+    }
+    // What the reader has read, and how well, follows the name: renaming a
+    // piece is not starting it again.
+    this.runtime.controller.followTheRename(title, wanted.trim());
+    this.renderScores();
+    if (this.runtime.controller.openedExercise?.title === title) {
+      await this.openKeptScore(this.runtime.scores.list().find(
+        (score) => score.title === wanted.trim(),
+      )?.id ?? id, wanted.trim());
+    }
+  }
+
+  /**
+   * Asks for a name, with the one it has now already in the box.
+   *
+   * Refused rather than obeyed while the box is empty: an unnamed score
+   * cannot be looked for, and there is nothing sensible to fall back to.
+   */
+  private askForAName(current: string): Promise<string | null> {
+    this.el.renameText.textContent = `What should “${current}” be called?`;
+    this.el.renameName.value = current;
+    this.el.renameProblem.hidden = true;
+    this.el.sheetRename.hidden = false;
+    this.el.renameName.focus();
+    this.el.renameName.select();
+
+    return new Promise<string | null>((resolve) => {
+      const answer = (value: string | null): void => {
+        this.el.sheetRename.hidden = true;
+        this.el.renameYes.removeEventListener('click', onYes);
+        this.el.renameNo.removeEventListener('click', onNo);
+        this.el.renameName.removeEventListener('keydown', onKey);
+        this.el.sheetRename.removeEventListener('click', onOutside);
+        resolve(value);
+      };
+      const onYes = (): void => {
+        const wanted = this.el.renameName.value.trim();
+        if (wanted === '') {
+          this.el.renameProblem.textContent = 'A score needs a name to be found under.';
+          this.el.renameProblem.hidden = false;
+          return;
+        }
+        answer(wanted);
+      };
+      const onNo = (): void => answer(null);
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key === 'Enter') {
+          onYes();
+        }
+        if (event.key === 'Escape') {
+          answer(null);
+        }
+      };
+      const onOutside = (event: Event): void => {
+        if (event.target === this.el.sheetRename) {
+          answer(null);
+        }
+      };
+
+      this.el.renameYes.addEventListener('click', onYes);
+      this.el.renameNo.addEventListener('click', onNo);
+      this.el.renameName.addEventListener('keydown', onKey);
+      this.el.sheetRename.addEventListener('click', onOutside);
+    });
+  }
+
   private askToDelete(question: string): Promise<boolean> {
     this.el.confirmText.textContent = question;
     this.el.sheetConfirm.hidden = false;

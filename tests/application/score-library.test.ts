@@ -187,6 +187,63 @@ describe('the scores a reader has kept', () => {
     expect(scores.lastRead).toBeNull();
   });
 
+  it('renames the document and not merely the row', async () => {
+    // The title is printed in the corner of every page, so a library that
+    // called a piece one thing while the page called it another would be
+    // worse than either name on its own.
+    const { scores } = library();
+    const kept = await scores.keep(twoBarExercise({ title: 'Imported score' }), 1_000);
+
+    expect(await scores.rename(kept.id, '  Merry Christmas Mr Lawrence  ')).toBe('renamed');
+
+    const [summary] = scores.list();
+    expect(summary?.title).toBe('Merry Christmas Mr Lawrence');
+    expect(scores.list()).toHaveLength(1);
+    const reopened = await scores.open(summary?.id ?? '');
+    expect(reopened?.title).toBe('Merry Christmas Mr Lawrence');
+  });
+
+  it('keeps when a renamed score arrived and when it was read', async () => {
+    // A rename is not a reading and not an import: a piece does not become
+    // new by being called something else.
+    const { scores } = library();
+    const kept = await scores.keep(twoBarExercise({ title: 'Old' }), 1_000);
+    await scores.markRead('Old', 5_000);
+
+    await scores.rename(kept.id, 'New');
+
+    const [summary] = scores.list();
+    expect(summary?.savedAtMs).toBe(1_000);
+    expect(summary?.openedAtMs).toBe(5_000);
+  });
+
+  it('refuses a name that would write over another score', async () => {
+    // The title is this library's idea of identity - `keep` replaces an
+    // entry of the same name on purpose, so obeying here would silently
+    // delete the other piece.
+    const { scores } = library();
+    const first = await scores.keep(twoBarExercise({ title: 'One' }), 1_000);
+    await scores.keep(twoBarExercise({ title: 'Two' }), 2_000);
+
+    expect(await scores.rename(first.id, 'Two')).toBe('taken');
+    expect(scores.list().map((score) => score.title)).toEqual(['Two', 'One']);
+  });
+
+  it('refuses to leave a score with no name at all', async () => {
+    const { scores } = library();
+    const kept = await scores.keep(twoBarExercise({ title: 'Named' }), 1_000);
+
+    expect(await scores.rename(kept.id, '   ')).toBe('empty');
+    expect(scores.list()[0]?.title).toBe('Named');
+  });
+
+  it('says when there is nothing there to rename', async () => {
+    const { scores } = library();
+    await scores.load();
+
+    expect(await scores.rename('score:Gone', 'Anything')).toBe('missing');
+  });
+
   it('finds a score by any of the words in its name', async () => {
     // His library is arrangements with names like "Hollow Knight - City of
     // Tears", and what he remembers of one is rarely its first word. Every

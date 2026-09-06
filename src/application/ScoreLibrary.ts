@@ -26,11 +26,26 @@ export type WhatOpens = (typeof WHAT_OPENS)[number];
  * without regard to case or to spare spaces, because a search box is not a
  * place to be exact.
  */
+/** What a score of this name is filed under. The title is the identity. */
+function idFor(title: string): string {
+  return `score:${title}`;
+}
+
 export function matchesSearch(title: string, query: string): boolean {
   const words = query.toLowerCase().split(/\s+/).filter((word) => word.length > 0);
   const against = title.toLowerCase();
   return words.every((word) => against.includes(word));
 }
+
+/**
+ * What became of a rename, said rather than thrown.
+ *
+ * None of these is exceptional: a reader clearing the box and pressing save
+ * is asking a question, not making a mistake, and a name already taken has to
+ * be *refused* rather than obeyed - this library treats the title as identity,
+ * so writing one score over another is exactly what obeying would do.
+ */
+export type RenameOutcome = 'renamed' | 'empty' | 'taken' | 'missing';
 
 export interface ScoreLibraryDependencies {
   readonly store: IScoreStore;
@@ -95,7 +110,7 @@ export class ScoreLibrary {
    */
   async keep(exercise: Exercise, savedAtMs: number): Promise<StoredScoreSummary> {
     const summary: StoredScoreSummary = {
-      id: `score:${exercise.title}`,
+      id: idFor(exercise.title),
       title: exercise.title,
       savedAtMs,
       // Importing a file is opening it: the reader is looking at it now, and
@@ -174,6 +189,50 @@ export class ScoreLibrary {
   /** The piece read most recently, which is the one being worked on. */
   get lastRead(): StoredScoreSummary | null {
     return this.list()[0] ?? null;
+  }
+
+  /**
+   * Gives a kept score the name the reader would call it.
+   *
+   * MuseScore arrangements arrive called things nobody says out loud, and six
+   * of his were called "Imported score" until the title was read out of the
+   * credits. The new name goes into the *document*, not merely into the row:
+   * the title is printed in the corner of every page, and a library that
+   * disagreed with the page would be worse than either name alone.
+   *
+   * The record moves, because the title is this library's idea of identity -
+   * which is also why a name already in use is refused instead of obeyed.
+   * What the reader has read and how well is followed across separately, by
+   * whoever holds it; this class knows only the scores.
+   */
+  async rename(id: string, title: string): Promise<RenameOutcome> {
+    const wanted = title.trim();
+    if (wanted === '') {
+      return 'empty';
+    }
+    const stored = await this.deps.store.read(id);
+    if (stored === null) {
+      return 'missing';
+    }
+    if (wanted === stored.title) {
+      return 'renamed';
+    }
+    const nextId = idFor(wanted);
+    if (this.summaries.some((summary) => summary.id === nextId)) {
+      return 'taken';
+    }
+    const exercise = this.deps.importer.read(stored.musicXml).exercise;
+    await this.deps.store.write({
+      ...stored,
+      id: nextId,
+      title: wanted,
+      musicXml: this.deps.serializer.serialize({ ...exercise, title: wanted }),
+    });
+    // Second, and only once the new one is safely written: a rename that
+    // failed halfway should cost a name, never the music.
+    await this.deps.store.remove(id);
+    await this.load();
+    return 'renamed';
   }
 
   async remove(id: string): Promise<void> {

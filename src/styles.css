@@ -658,6 +658,17 @@ select {
   font-size: 13px;
 }
 
+.sheet__input {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  width: 100%;
+}
+
 /* When it was last read: said quietly, and never at the name's expense. */
 .takes__when {
   flex: none;

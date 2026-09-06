@@ -1762,6 +1762,58 @@ describe('AppView', () => {
       expect(rig.runtime.scores.list()[0]?.title).toBe(opened);
     });
 
+    it('gives a score the name the reader calls it by', async () => {
+      // MuseScore arrangements arrive called things nobody says out loud.
+      const rig = createRig();
+      await keepOne(rig, 'Imported score');
+
+      rowButton('scores-list', 'Rename this score').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(element('sheet-rename').hidden).toBe(false);
+      // The name it has now, ready to be edited rather than retyped.
+      expect(element<HTMLInputElement>('rename-name').value).toBe('Imported score');
+
+      element<HTMLInputElement>('rename-name').value = 'Merry Christmas Mr Lawrence';
+      element<HTMLButtonElement>('rename-yes').click();
+      await waitFor(() => element('scores-list').textContent?.includes('Merry Christmas') === true);
+
+      expect(element('sheet-rename').hidden).toBe(true);
+      expect(rig.runtime.scores.list()[0]?.title).toBe('Merry Christmas Mr Lawrence');
+    });
+
+    it('will not leave a score with no name at all', async () => {
+      const rig = createRig();
+      await keepOne(rig, 'Named');
+
+      rowButton('scores-list', 'Rename this score').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      element<HTMLInputElement>('rename-name').value = '   ';
+      element<HTMLButtonElement>('rename-yes').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Still asking, and saying why - a score with no name cannot be looked
+      // for, and there is nothing sensible to fall back to.
+      expect(element('sheet-rename').hidden).toBe(false);
+      expect(element('rename-problem').hidden).toBe(false);
+      expect(rig.runtime.scores.list()[0]?.title).toBe('Named');
+    });
+
+    it('refuses a name that would write over another score', async () => {
+      const rig = createRig();
+      await keepOne(rig, 'One');
+      await keepOne(rig, 'Two');
+
+      rowButton('scores-list', 'Rename this score').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      element<HTMLInputElement>('rename-name').value = 'One';
+      element<HTMLButtonElement>('rename-yes').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // The title is the library's idea of identity, so obeying would delete
+      // the other piece rather than rename this one.
+      expect(rig.runtime.scores.list().map((score) => score.title).sort()).toEqual(['One', 'Two']);
+    });
+
     it('adds a score from the sheet, through the one picker there is', async () => {
       const { view } = createRig();
       await view.initialize();

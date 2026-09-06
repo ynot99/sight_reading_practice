@@ -6,6 +6,32 @@ function attempt(overall: number, atMs = 0): PracticeAttempt {
   return { atMs, overall, grade: 'B', completed: true };
 }
 
+describe('filing what is known under another name', () => {
+  it('moves what the naming moves and leaves the rest', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    history.record('one', attempt(0.8));
+    history.record('two', attempt(0.5));
+
+    history.rekey((key) => (key === 'one' ? 'moved' : key));
+
+    expect(history.summary('moved')?.last).toBeCloseTo(0.8);
+    expect(history.summary('one')).toBeNull();
+    expect(history.summary('two')?.last).toBeCloseTo(0.5);
+  });
+
+  it('keeps it across a visit', () => {
+    const store = new InMemorySettingsStore();
+    const first = new PracticeHistory(store);
+    first.record('one', attempt(0.8));
+    first.rekey((key) => (key === 'one' ? 'moved' : key));
+
+    const next = new PracticeHistory(store);
+    next.load();
+
+    expect(next.summary('moved')?.last).toBeCloseTo(0.8);
+  });
+});
+
 describe('what has been practised before', () => {
   it('answers "again?" and "better?"', () => {
     const history = new PracticeHistory(new InMemorySettingsStore());

@@ -612,6 +612,25 @@ describe('PracticeController', () => {
     expect(controller.practiceKey()).toContain('bars:2-4');
   });
 
+  it('carries a renamed piece through the history, and only that piece', async () => {
+    // Renaming a score is not starting it again. The keys are built here -
+    // the title, and then the passage's bars - so what belongs to a piece is
+    // decided here too: titles have spaces in them, and "Old" is the
+    // beginning of "Old Man" on any reading a store could invent by itself.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller } = createController(true, undefined, {}, history);
+    history.record('score:Old', { atMs: 1, overall: 0.8, grade: 'B', completed: true });
+    history.record('score:Old bars:5-8', { atMs: 2, overall: 0.6, grade: 'C', completed: true });
+    history.record('score:Old Man bars:1-4', { atMs: 3, overall: 0.4, grade: 'D', completed: true });
+
+    controller.followTheRename('Old', 'New');
+
+    expect(history.summary('score:New')?.last).toBeCloseTo(0.8);
+    expect(history.summary('score:New bars:5-8')?.last).toBeCloseTo(0.6);
+    expect(history.summary('score:Old')).toBeNull();
+    expect(history.summary('score:Old Man bars:1-4')?.last).toBeCloseTo(0.4);
+  });
+
   it('remembers how a reading went, and compares it with the last', async () => {
     const history = new PracticeHistory(new InMemorySettingsStore());
     const { controller } = createController(true, undefined, {}, history);

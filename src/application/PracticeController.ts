@@ -1358,6 +1358,30 @@ export class PracticeController {
   }
 
   /**
+   * Follows a renamed score through what remembers it by name.
+   *
+   * Which is the practice history, and only because `practiceKey` writes the
+   * title into its keys - so what belongs to a piece is decided here, where
+   * the keys are built, rather than in the thing that stores them.
+   */
+  followTheRename(fromTitle: string, toTitle: string): void {
+    if (fromTitle === toTitle) {
+      return;
+    }
+    const was = `score:${fromTitle}`;
+    const now = `score:${toTitle}`;
+    this.deps.history?.rekey((key) => {
+      // The whole key is the piece, or the piece and then the passage's bars.
+      // Nothing else counts: titles have spaces in them, so "Old Man" would
+      // be carried off by renaming "Old" on any plainer reading.
+      if (key === was) {
+        return now;
+      }
+      return key.startsWith(`${was} bars:`) ? `${now}${key.slice(was.length)}` : key;
+    });
+  }
+
+  /**
    * The last run that reached an end, whatever has happened since.
    *
    * Not the live session's: that is replaced the moment anything starts

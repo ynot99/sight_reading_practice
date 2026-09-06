@@ -116,6 +116,32 @@ export class PracticeHistory {
     };
   }
 
+  /**
+   * Files everything under whatever name the given function gives it.
+   *
+   * For renaming a piece: a reader who renames one has not started it again,
+   * and the badge on the transport - "Reading 3 · best 82%" - is one of the
+   * few things in here that answers "am I getting better". Losing it silently
+   * would make renaming feel like a thing to be careful with, which for a
+   * name is absurd.
+   *
+   * A function rather than a pair of prefixes, because deciding which keys
+   * belong to a piece needs to know how a key is built, and that is decided
+   * where they are built. Titles have spaces in them, so "Old" is a prefix of
+   * "Old Man" on any reading a store could invent for itself.
+   */
+  rekey(name: (key: string) => string): void {
+    const moved = new Map<string, PracticeAttempt[]>();
+    for (const [key, attempts] of this.passages) {
+      // The order is the order they were last practised in, and the map is
+      // trimmed from its oldest end, so it has to be rebuilt rather than
+      // written into as it is walked.
+      moved.set(name(key), attempts);
+    }
+    this.passages = moved;
+    this.flush();
+  }
+
   forget(): void {
     this.passages = new Map();
     this.store.clear();

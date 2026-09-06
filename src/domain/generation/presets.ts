@@ -223,6 +223,56 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
     },
   },
   {
+    /**
+     * His line 75: chords only, and a plain rhythm.
+     *
+     * Both hands stacked at once, which is a different reading skill from a
+     * melody with chords under it - the eye takes a shape rather than a line,
+     * and there is nothing moving to carry it along. One chord to a bar by
+     * default, so what is being read is the stack.
+     */
+    id: 'chords-only',
+    label: '6 · Chords, both hands',
+    description: 'Nothing but chords, one to a bar: reading a stack rather than a line.',
+    generator: new GrandStaffExerciseGenerator({
+      id: 'gen.chords',
+      label: 'Chords in both hands',
+      staves: [
+        {
+          clef: 'treble',
+          voice: new HarmonyVoiceGenerator({
+            range: range('C4', 'C6'),
+            role: 'lead',
+            shape: 'triad',
+            intervalDegrees: [2, 4],
+            degreePool: [0, 1, 2, 3, 4, 5],
+            harmonyPerMeasure: true,
+          }),
+        },
+        {
+          clef: 'bass',
+          voice: new HarmonyVoiceGenerator({
+            range: range('F2', 'C4'),
+            role: 'accompaniment',
+            shape: 'interval',
+            intervalDegrees: [4],
+            degreePool: [0, 1, 2, 3, 4, 5],
+            harmonyPerMeasure: true,
+          }),
+        },
+      ],
+    }),
+    defaults: {
+      measures: 4,
+      // The plainest of them: what is being read is the chord, not the
+      // rhythm, and a syncopation here would be a second thing to work out.
+      rhythmProfileId: 'calm',
+      timeSignature: new TimeSignature(4, 4),
+      key: KeySignature.major(0),
+      tempoBpm: 60,
+    },
+  },
+  {
     id: 'wide-grand-staff',
     label: '6 · Full grand staff',
     description: 'Wider ranges and larger leaps, with both hands reading at once.',

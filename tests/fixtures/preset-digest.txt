@@ -58,6 +58,18 @@ staff 2 (bass)
   3: F3+A3+C4/half F3+A3+C4/quarter F3+A3+C4/quarter
   4: C3+E3+G3/half C3+E3+G3/quarter C3+E3+G3/quarter
 
+# chords-only
+staff 1 (treble)
+  1: E4+G4+B4/half E4+G4+B4/half
+  2: E4+G4+B4/half E4+G4+B4/quarter E4+G4+B4/quarter
+  3: D4+F4+A4/half D4+F4+A4/quarter D4+F4+A4/quarter
+  4: D4+F4+A4/quarter R/quarter R/quarter D4+F4+A4/quarter
+staff 2 (bass)
+  1: G2+D3/half G2+D3/half
+  2: C3+G3/half C3+G3/half
+  3: F3+C4/whole
+  4: E3+B3/half E3+B3/half
+
 # wide-grand-staff
 staff 1 (treble)
   1: E4/eighth D4/eighth C4/half E4/quarter

@@ -4,6 +4,7 @@ import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
 import {
   BEAM_TYPES,
+  DYNAMIC_LEVELS,
   measureOf,
   noteEntry,
   restEntry,
@@ -15,6 +16,8 @@ import type {
   Beam,
   BeamType,
   ClefChange,
+  DynamicMark,
+  DynamicLevel,
   GraceNote,
   KeyChange,
   PedalMark,
@@ -134,7 +137,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   }
 
   const header = readHeader(measures, warnings);
-  const { staves, pedalMarks, tempoMarks } = readEveryPart(
+  const { staves, pedalMarks, tempoMarks, dynamicMarks } = readEveryPart(
     parts,
     measures.length,
     header,
@@ -159,6 +162,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
       (mark) => !(mark.measureIndex === 0 && mark.offsetTicks === 0),
     ),
     pedalMarks,
+    dynamicMarks,
     timeSignature: header.timeSignature,
     tempoBpm: opening.at(-1)?.tempoBpm ?? ASSUMED_TEMPO_BPM,
     staves,
@@ -678,6 +682,29 @@ function readGraces(graces: readonly XmlNode[]): GraceNote[] {
   return ornaments;
 }
 
+/**
+ * The dynamic a direction states, if it states one.
+ *
+ * Only the six levels a piano piece is written in. A `<dynamics>` element can
+ * hold `sf`, `fp` and a dozen others, but those are accents on a note rather
+ * than a level to hold, and holding one would be a mistake that lasted until
+ * the next mark.
+ */
+function readDynamicMark(node: XmlNode): DynamicLevel | null {
+  for (const type of childrenNamed(node, 'direction-type')) {
+    const dynamics = child(type, 'dynamics');
+    if (dynamics === null) {
+      continue;
+    }
+    for (const level of dynamics.children) {
+      if ((DYNAMIC_LEVELS as readonly string[]).includes(level.name)) {
+        return level.name as DynamicLevel;
+      }
+    }
+  }
+  return null;
+}
+
 function readMeasureNotes(
   measure: XmlNode,
   measureIndex: number,
@@ -685,6 +712,7 @@ function readMeasureNotes(
   warnings: ImportWarning[],
   pedalMarks: PedalMark[] = [],
   tempoMarks: TempoChange[] = [],
+  dynamicMarks: DynamicMark[] = [],
 ): RawNote[] {
   const notes: RawNote[] = [];
   let cursor = 0;
@@ -728,6 +756,18 @@ function readMeasureNotes(
       const tempoBpm = readTempoMark(node);
       if (tempoBpm !== null) {
         tempoMarks.push({ measureIndex, offsetTicks: Math.max(0, cursor), tempoBpm });
+      }
+      const level = readDynamicMark(node);
+      if (level !== null) {
+        dynamicMarks.push({
+          measureIndex,
+          offsetTicks: Math.max(0, cursor),
+          level,
+          // The staff the direction was written under. Absent in a file with
+          // one staff, and in plenty with two - where it is missing the mark
+          // belongs to everything sounding, which is what `null` says.
+          staffNumber: childNumber(node, 'staff') ?? null,
+        });
       }
       continue;
     }
@@ -966,10 +1006,12 @@ function readEveryPart(
   readonly staves: readonly StaffPart[];
   readonly pedalMarks: readonly PedalMark[];
   readonly tempoMarks: readonly TempoChange[];
+  readonly dynamicMarks: readonly DynamicMark[];
 } {
   const staves: StaffPart[] = [];
   const pedalMarks: PedalMark[] = [];
   const tempoMarks: TempoChange[] = [];
+  const dynamicMarks: DynamicMark[] = [];
 
   for (const [index, part] of parts.entries()) {
     const measures = childrenNamed(part, 'measure');
@@ -999,9 +1041,18 @@ function readEveryPart(
     // has one, however many parts repeat the mark.
     pedalMarks.push(...built.pedalMarks);
     tempoMarks.push(...built.tempoMarks);
+    // The dynamics are the part's own: two hands can be marked differently,
+    // and a part that says nothing about loudness is not saying "as loud as
+    // the other one".
+    dynamicMarks.push(
+      ...built.dynamicMarks.map((mark) => ({
+        ...mark,
+        staffNumber: mark.staffNumber === null ? null : mark.staffNumber + staffOffset,
+      })),
+    );
   }
 
-  return { staves, pedalMarks, tempoMarks };
+  return { staves, pedalMarks, tempoMarks, dynamicMarks };
 }
 
 /** What a part says about itself: how finely it counts, and its clefs. */
@@ -1039,11 +1090,13 @@ function buildStaves(
   readonly staves: readonly StaffPart[];
   readonly pedalMarks: readonly PedalMark[];
   readonly tempoMarks: readonly TempoChange[];
+  readonly dynamicMarks: readonly DynamicMark[];
 } {
   const pedalMarks: PedalMark[] = [];
   const tempoMarks: TempoChange[] = [];
+  const dynamicMarks: DynamicMark[] = [];
   const perMeasure = measures.map((measure, index) =>
-    readMeasureNotes(measure, index, header, warnings, pedalMarks, tempoMarks),
+    readMeasureNotes(measure, index, header, warnings, pedalMarks, tempoMarks, dynamicMarks),
   );
 
   // One part per voice of each staff, rather than one per staff. Two voices on
@@ -1121,6 +1174,13 @@ function buildStaves(
   return {
     staves: restStaffThatFallsSilent(parts, (bar) => barTicksAt(header, bar), warnings),
     pedalMarks,
+    // Moved with the music they mark where a pickup shifted it, exactly as
+    // the tempo marks below are.
+    dynamicMarks: dynamicMarks.map((mark) =>
+      mark.measureIndex === 0 && mark.offsetTicks > 0
+        ? { ...mark, offsetTicks: mark.offsetTicks + pickupShift }
+        : mark,
+    ),
     tempoMarks: tempoMarks.map((mark) =>
       mark.measureIndex === 0 && mark.offsetTicks > 0
         ? { ...mark, offsetTicks: mark.offsetTicks + pickupShift }

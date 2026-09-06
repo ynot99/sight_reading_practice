@@ -47,6 +47,59 @@ describe('listening to an exercise', () => {
     );
   });
 
+  it('plays what the dynamics ask for', () => {
+    // A piece marked pp and played at one loudness throughout is being read
+    // with a third of what the writer wrote left out.
+    const quiet = twoBarExercise({ tempoBpm: 60 });
+    const marked = {
+      ...quiet,
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'pp' as const, staffNumber: null },
+        { measureIndex: 1, offsetTicks: 0, level: 'ff' as const, staffNumber: null },
+      ],
+    };
+    const { player, metronome, instrument } = rig(marked);
+    player.start(buildTimeline(marked), {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+    });
+    metronome.advanceSubdivisions(8);
+
+    const first = instrument.played.filter((note) => (note.atMs ?? 0) < 4_000);
+    const later = instrument.played.filter((note) => (note.atMs ?? 0) >= 4_000);
+    expect(first.length).toBeGreaterThan(0);
+    expect(later.length).toBeGreaterThan(0);
+    expect(Math.max(...first.map((note) => note.velocity))).toBeLessThan(
+      Math.min(...later.map((note) => note.velocity)),
+    );
+  });
+
+  it('takes a hand its own marks before those of the piece', () => {
+    // A piano part with the left hand marked p under a melody marked f is
+    // ordinary writing, and one number for both would be the wrong one twice.
+    const marked = {
+      ...twoBarExercise({ tempoBpm: 60 }),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'ff' as const, staffNumber: 1 },
+        { measureIndex: 0, offsetTicks: 0, level: 'pp' as const, staffNumber: 2 },
+      ],
+    };
+    const { player, metronome, instrument } = rig(marked);
+    player.start(buildTimeline(marked), {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+    });
+    metronome.advanceSubdivisions(4);
+
+    // The fixture's opening chord is C4 over C3: the melody loud, the bass
+    // quiet, which is what the page says of each.
+    const treble = instrument.played.find((note) => note.midi === MIDI.C4);
+    const bass = instrument.played.find((note) => note.midi === MIDI.C3);
+    expect(treble?.velocity ?? 0).toBeGreaterThan(bass?.velocity ?? 1);
+  });
+
   it('counts in before the music, where it is asked to', () => {
     // His line 84: a performance that begins on the first tick can be
     // listened to, but it cannot be joined.
@@ -788,6 +841,7 @@ describe('rolling a chord the writer marked', () => {
       timeChanges: [],
       tempoChanges: [],
       pedalMarks: [],
+      dynamicMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 240,
       firstBarNumber: 1,

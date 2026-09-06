@@ -29,6 +29,44 @@ function demands(exercise: Parameters<typeof buildTimeline>[0]): readonly (reado
   return buildTimeline(exercise).steps.map((step) => step.expectedMidi);
 }
 
+describe('the dynamics on the page', () => {
+  /** A piece marked at the start, and again at the second bar. */
+  function marked(): ReturnType<typeof twoBarExercise> {
+    return {
+      ...twoBarExercise(),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'pp' as const, staffNumber: 1 },
+        { measureIndex: 1, offsetTicks: 0, level: 'ff' as const, staffNumber: null },
+      ],
+    };
+  }
+
+  it('writes them where the writer put them, and reads them back', () => {
+    // Notation the writer chose is carried, not recomputed - the same rule
+    // the beams and the stems follow.
+    const original = marked();
+
+    const { exercise } = importer.read(serializer.serialize(original));
+
+    expect(exercise.dynamicMarks).toEqual([
+      { measureIndex: 0, offsetTicks: 0, level: 'pp', staffNumber: 1 },
+      { measureIndex: 1, offsetTicks: 0, level: 'ff', staffNumber: 1 },
+    ]);
+  });
+
+  it('writes each mark once, however many voices share the staff', () => {
+    const printed = serializer.serialize(marked());
+
+    expect([...printed.matchAll(/<dynamics>/g)]).toHaveLength(2);
+  });
+
+  it('says nothing about loudness where the writer said nothing', () => {
+    const { exercise } = importer.read(serializer.serialize(twoBarExercise()));
+
+    expect(exercise.dynamicMarks).toEqual([]);
+  });
+});
+
 describe('reading back what we wrote', () => {
   it('recovers the same music, with nothing to report', () => {
     const original = twoBarExercise();

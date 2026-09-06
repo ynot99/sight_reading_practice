@@ -6,6 +6,7 @@ import type {
   Exercise,
   MusicalEntry,
   GraceNote,
+  DynamicMark,
   PedalMark,
   StaffPart,
   TempoChange,
@@ -229,6 +230,19 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         const tempos = exercise.tempoChanges.filter(
           (change) => change.measureIndex === measureIndex,
         );
+        // Dynamics belong to a staff rather than to a voice, and a staff can
+        // carry several: written once for the first voice of the staff they
+        // were marked under, or with the first voice of all where the file
+        // did not say which staff.
+        const dynamics = exercise.dynamicMarks.filter(
+          (mark) => mark.measureIndex === measureIndex,
+        );
+        const firstOfStaff = new Map<number, number>();
+        present.forEach((staff, index) => {
+          if (!firstOfStaff.has(staff.staffNumber)) {
+            firstOfStaff.set(staff.staffNumber, index);
+          }
+        });
         // Back to the start of *this* bar, which is not the length of the
         // first one once a metre may change partway through. Written as the
         // opening metre, the second staff of a bar in a wider metre began
@@ -248,6 +262,11 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             measureIndex,
             heldByVoice,
             index === 0 ? pedal : [],
+            dynamics.filter((mark) =>
+              mark.staffNumber === null
+                ? index === 0
+                : firstOfStaff.get(mark.staffNumber) === index,
+            ),
           );
         });
         this.writeTempoChanges(writer, tempos, barTicks, present.length > 0);
@@ -451,6 +470,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     measureIndex: number,
     heldByVoice: Map<number, Set<number>>,
     pedal: readonly PedalMark[],
+    dynamics: readonly DynamicMark[] = [],
   ): void {
     const measure = staff.measures[measureIndex];
     if (measure === undefined) {
@@ -467,10 +487,18 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     let held = heldByVoice.get(staff.voice) ?? new Set<number>();
     let offset = 0;
     let nextMark = 0;
+    let nextDynamic = 0;
     measure.entries.forEach((entry, entryIndex) => {
       while (nextMark < pedal.length && (pedal[nextMark]?.offsetTicks ?? 0) <= offset) {
         this.writePedal(writer, pedal[nextMark], staff.staffNumber);
         nextMark += 1;
+      }
+      while (
+        nextDynamic < dynamics.length &&
+        (dynamics[nextDynamic]?.offsetTicks ?? 0) <= offset
+      ) {
+        this.writeDynamic(writer, dynamics[nextDynamic], staff.staffNumber);
+        nextDynamic += 1;
       }
       offset += entry.duration.ticks;
       this.writeEntry(
@@ -488,6 +516,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     while (nextMark < pedal.length) {
       this.writePedal(writer, pedal[nextMark], staff.staffNumber);
       nextMark += 1;
+    }
+    while (nextDynamic < dynamics.length) {
+      this.writeDynamic(writer, dynamics[nextDynamic], staff.staffNumber);
+      nextDynamic += 1;
     }
     heldByVoice.set(staff.voice, held);
   }
@@ -692,6 +724,31 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         });
       });
     }
+  }
+
+  /**
+   * One dynamic, as the writer put it.
+   *
+   * Below the staff, which is where a piano dynamic goes and where every
+   * engraver puts it by default - the file we write is read by the same
+   * engraver that draws it, so saying nothing would move them.
+   */
+  private writeDynamic(
+    writer: XmlWriter,
+    mark: DynamicMark | undefined,
+    staffNumber: number,
+  ): void {
+    if (mark === undefined) {
+      return;
+    }
+    writer.element('direction', { placement: 'below' }, () => {
+      writer.element('direction-type', undefined, () => {
+        writer.element('dynamics', undefined, () => {
+          writer.leaf(mark.level);
+        });
+      });
+      writer.leaf('staff', staffNumber);
+    });
   }
 
   private writePedal(

@@ -1,5 +1,12 @@
 
-import { barLines, pedalSpans, positionOfTick, spanMs } from '../domain/model/Exercise.js';
+import {
+  DYNAMIC_VELOCITY,
+  barLines,
+  dynamicAt,
+  pedalSpans,
+  positionOfTick,
+  spanMs,
+} from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import type { PositionEvent } from './session/SessionEvents.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
@@ -130,6 +137,8 @@ interface ScheduledNote {
   readonly midi: number;
   readonly atMs: number;
   readonly untilMs: number;
+  /** How hard to strike it, `0..1`, from the dynamics on the page. */
+  readonly velocity: number;
 }
 
 const DEFAULT_HORIZON_MS = 250;
@@ -143,7 +152,6 @@ const DEFAULT_HORIZON_MS = 250;
  * safeguard rather than a mechanism.
  */
 const PLANNED_LAPS = 64;
-const LISTENING_VELOCITY = 0.7;
 
 /**
  * Delay between consecutive notes of a rolled chord.
@@ -730,6 +738,7 @@ export class ExercisePlayer {
   ): ScheduledNote[] {
     const exercise = timeline.exercise;
     const spans = pedalSpans(exercise);
+    const bars = barLines(exercise);
     // From where this performance began, and walked rather than multiplied:
     // a piece that changes tempo has no single number to multiply by.
     const at = (ticks: number): number => spanMs(exercise, fromTicks, ticks);
@@ -742,6 +751,10 @@ export class ExercisePlayer {
       const sounding = step.notes.filter(
         (note) => staffNumber === null || note.staffNumber === staffNumber,
       );
+      // Dynamics are placed as a bar and an offset into it, which is how the
+      // format places a direction; the timeline counts from the beginning of
+      // the piece.
+      const measureStart = bars[step.measureIndex]?.startTicks ?? 0;
       // Counted after the hand filter: listening to one hand of a roll
       // written across both is listening to that hand alone, and it starts
       // where the reader's own would.
@@ -778,6 +791,15 @@ export class ExercisePlayer {
             midi: note.midi,
             atMs: startsAt,
             untilMs: Math.max(until, startsAt),
+            // What the page asks for where this note falls, and the old
+            // constant where it asks for nothing. A staff's own marks are
+            // preferred to the piece's, which is how a piano part with the
+            // left hand marked `p` under a melody marked `f` is written.
+            velocity:
+              DYNAMIC_VELOCITY[
+                dynamicAt(exercise, step.measureIndex, step.onsetTicks - measureStart, note.staffNumber) ??
+                  'mf'
+              ],
           });
         }
       }
@@ -822,7 +844,7 @@ export class ExercisePlayer {
       }
       this.nextToSchedule += 1;
       this.scheduledThroughMs = Math.max(this.scheduledThroughMs, from + note.atMs);
-      this.deps.instrument.play(note.midi, LISTENING_VELOCITY, from + note.atMs);
+      this.deps.instrument.play(note.midi, note.velocity, from + note.atMs);
       this.deps.instrument.stop(note.midi, from + note.untilMs);
     }
 

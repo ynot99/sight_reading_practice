@@ -148,6 +148,7 @@ describe('buildTimeline', () => {
       timeChanges: [],
       tempoChanges: [],
       pedalMarks: [],
+      dynamicMarks: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 60,
       firstBarNumber: 1,

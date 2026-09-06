@@ -40,6 +40,7 @@ export function calibrationExercise(tempoBpm = 80): Exercise {
     timeChanges: [],
     tempoChanges: [],
     pedalMarks: [],
+    dynamicMarks: [],
     timeSignature: new TimeSignature(4, 4),
     tempoBpm,
     firstBarNumber: 1,

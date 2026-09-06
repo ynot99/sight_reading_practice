@@ -355,6 +355,87 @@ export interface ExerciseMetadata {
  * Because both derivations start here they can never drift apart.
  */
 /** Where the damper pedal goes down or comes up. */
+/**
+ * How loud the writer asked for it to be, from here on.
+ *
+ * The six a piano piece is actually written in. `sf` and the rest are
+ * accents on one note rather than a level to keep, and a level is what this
+ * is: it holds until the next one, the way a tempo does.
+ */
+export const DYNAMIC_LEVELS = ['pp', 'p', 'mp', 'mf', 'f', 'ff'] as const;
+
+export type DynamicLevel = (typeof DYNAMIC_LEVELS)[number];
+
+/**
+ * One dynamic mark, where the writer put it.
+ *
+ * Placed like a pedal mark - a bar and an offset into it - because that is
+ * where the format puts it: a direction sits between notes, so the cursor is
+ * already where the mark belongs. Kept per staff, since the hands are marked
+ * separately as often as not.
+ */
+export interface DynamicMark {
+  readonly measureIndex: number;
+  readonly offsetTicks: number;
+  readonly level: DynamicLevel;
+  /** The staff it was written under, or `null` where the file did not say. */
+  readonly staffNumber: number | null;
+}
+
+/**
+ * How hard a level is struck, `0..1`.
+ *
+ * Six steps rather than a curve, because six is what is written. The spread
+ * is deliberately narrower than the full range: at the bottom the sampled
+ * piano stops sounding like one, and at the top every level above `mf` would
+ * be the same recording played as loudly as it goes.
+ */
+export const DYNAMIC_VELOCITY: Readonly<Record<DynamicLevel, number>> = {
+  pp: 0.3,
+  p: 0.45,
+  mp: 0.58,
+  mf: 0.7,
+  f: 0.82,
+  ff: 0.95,
+};
+
+/**
+ * How loud the music is where this tick falls, for a given staff.
+ *
+ * The mark in force is the last one at or before the moment, and a mark with
+ * no staff of its own speaks for every staff - which is how a piece with one
+ * line of dynamics under the piano is written. Where nothing has been marked
+ * yet the answer is `null`: silence about loudness is not an instruction, and
+ * the caller has a default of its own.
+ */
+export function dynamicAt(
+  exercise: Exercise,
+  measureIndex: number,
+  offsetTicks: number,
+  staffNumber: number | null,
+): DynamicLevel | null {
+  let found: DynamicMark | null = null;
+  for (const mark of exercise.dynamicMarks) {
+    if (mark.measureIndex > measureIndex) {
+      continue;
+    }
+    if (mark.measureIndex === measureIndex && mark.offsetTicks > offsetTicks) {
+      continue;
+    }
+    if (mark.staffNumber !== null && staffNumber !== null && mark.staffNumber !== staffNumber) {
+      continue;
+    }
+    if (
+      found === null ||
+      mark.measureIndex > found.measureIndex ||
+      (mark.measureIndex === found.measureIndex && mark.offsetTicks >= found.offsetTicks)
+    ) {
+      found = mark;
+    }
+  }
+  return found?.level ?? null;
+}
+
 export interface PedalMark {
   readonly measureIndex: number;
   /** Offset from the start of that measure, in divisions. */
@@ -419,6 +500,14 @@ export interface Exercise {
    * to the matcher.
    */
   readonly pedalMarks: readonly PedalMark[];
+  /**
+   * How loud, and from where.
+   *
+   * Carried rather than guessed at: a piece marked `pp` and played at one
+   * loudness throughout is being read with a third of what the writer wrote
+   * left out.
+   */
+  readonly dynamicMarks: readonly DynamicMark[];
   readonly timeSignature: TimeSignature;
   /**
    * Metres the score changes to partway through.

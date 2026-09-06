@@ -61,6 +61,7 @@ const SETTINGS: PracticeSettings = {
   whatOpens: 'random',
   stopAtAMistake: true,
   easeTheTempo: true,
+  clickSilences: 'the-downbeat',
   countInRun: 'once',
   countInPlayback: 'every',
 };
@@ -84,6 +85,7 @@ describe('practice settings codec', () => {
     expect(restored.pageTurns).toBe('manual');
     expect(restored.stopAtAMistake).toBe(true);
     expect(restored.easeTheTempo).toBe(true);
+    expect(restored.clickSilences).toBe('the-downbeat');
     expect(restored.countInRun).toBe('once');
     expect(restored.countInPlayback).toBe('every');
     expect(restored.whatOpens).toBe('random');

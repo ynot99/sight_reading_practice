@@ -4,7 +4,12 @@ import type { PracticeSettings } from './PracticeController.js';
 import { RULER_DIVISIONS, type RulerDivision } from './rhythmRuler.js';
 import { WHAT_OPENS, type WhatOpens } from './ScoreLibrary.js';
 import { PAGE_TURNS, type PageTurns } from './ports/IScoreRenderer.js';
-import { COUNT_IN_WHEN, type CountInWhen } from './ports/IMetronome.js';
+import {
+  CLICK_SILENCES,
+  COUNT_IN_WHEN,
+  type ClickSilence,
+  type CountInWhen,
+} from './ports/IMetronome.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { SAMPLE_LOADING_MODES, type SampleLoading } from './ports/IPitchPlayer.js';
 import {
@@ -87,6 +92,12 @@ function readPageTurns(value: unknown, legacyPreview: unknown): PageTurns | unde
     return legacyPreview ? 'preview' : 'automatic';
   }
   return undefined;
+}
+
+function readClickSilence(value: unknown): ClickSilence | undefined {
+  return typeof value === 'string' && CLICK_SILENCES.includes(value as ClickSilence)
+    ? (value as ClickSilence)
+    : undefined;
 }
 
 function readCountIn(value: unknown): CountInWhen | undefined {
@@ -321,6 +332,7 @@ export function decodePracticeSettings(
     whatOpens: readWhatOpens(value['whatOpens']),
     stopAtAMistake: readBoolean(value['stopAtAMistake']),
     easeTheTempo: readBoolean(value['easeTheTempo']),
+    clickSilences: readClickSilence(value['clickSilences']),
     countInRun: readCountIn(value['countInRun']),
     countInPlayback: readCountIn(value['countInPlayback']),
     rulerCursor: readBoolean(value['rulerCursor']),
@@ -372,6 +384,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     whatOpens: settings.whatOpens,
     stopAtAMistake: settings.stopAtAMistake,
     easeTheTempo: settings.easeTheTempo,
+    clickSilences: settings.clickSilences,
     countInRun: settings.countInRun,
     countInPlayback: settings.countInPlayback,
     rulerCursor: settings.rulerCursor,

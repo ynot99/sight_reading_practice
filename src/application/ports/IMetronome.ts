@@ -41,6 +41,24 @@ export type BeatWeight = 'downbeat' | 'beat' | 'division';
 
 export type ClickPattern = (typeof CLICK_PATTERNS)[number];
 
+/**
+ * Which of the clicks are taken away again.
+ *
+ * His line 111, and the reason he gives for it: "Inside a House" is hard to
+ * count in the head. A click that marks everything is a click the reader
+ * follows; one with a hole in it is a click they have to keep time *with* -
+ * take the downbeat away and the bar becomes theirs to hold, take the beats
+ * away and only the offbeats are left to place them by, which is the hardest
+ * and the most useful.
+ *
+ * Separate from the pattern, and deliberately: how finely it clicks and which
+ * of those clicks sound are two questions, and a single list of every
+ * combination would be twelve answers to remember instead of four and three.
+ */
+export const CLICK_SILENCES = ['nothing', 'the-downbeat', 'the-beats'] as const;
+
+export type ClickSilence = (typeof CLICK_SILENCES)[number];
+
 /** Audible clicks in one felt beat, for a given pattern. */
 export function clicksPerPulse(pattern: ClickPattern, timeSignature: TimeSignature): number {
   switch (pattern) {
@@ -227,6 +245,8 @@ export interface MetronomeConfig {
    * that never changes metre.
    */
   readonly bars: readonly MetronomeBar[];
+  /** Which clicks are left out, so the reader supplies them. */
+  readonly silences?: ClickSilence;
   /**
    * Ticks emitted per felt beat.
    *

@@ -31,7 +31,12 @@ import {
 } from '../application/rhythmRuler.js';
 import { WHAT_OPENS, type WhatOpens } from '../application/ScoreLibrary.js';
 import { PAGE_TURNS, type PageTurns } from '../application/ports/IScoreRenderer.js';
-import { COUNT_IN_WHEN, type CountInWhen } from '../application/ports/IMetronome.js';
+import {
+  CLICK_SILENCES,
+  COUNT_IN_WHEN,
+  type ClickSilence,
+  type CountInWhen,
+} from '../application/ports/IMetronome.js';
 import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
@@ -341,6 +346,20 @@ function countOf(many: number, thing: string): string {
 }
 
 /** When a count-in happens, said for a run and for a playback. */
+const CLICK_SILENCE_LABELS: Readonly<Record<ClickSilence, string>> = {
+  nothing: 'Nothing - click everything',
+  'the-downbeat': 'The first beat of the bar',
+  'the-beats': 'The beats, leaving the offbeats',
+};
+
+const CLICK_SILENCE_DESCRIPTIONS: Readonly<Record<ClickSilence, string>> = {
+  nothing: 'Every click the pattern asks for is sounded.',
+  'the-downbeat': 'The bar is yours to hold: nothing marks where it begins.',
+  'the-beats':
+    'Only what falls between the beats is sounded, so the beats are yours to place. Needs a ' +
+    'pattern finer than the beat, and says nothing where there is none.',
+};
+
 const COUNT_IN_RUN_LABELS: Readonly<Record<CountInWhen, string>> = {
   never: 'Never',
   once: 'The first time only',
@@ -1073,6 +1092,8 @@ export class AppView {
     preview: HTMLInputElement;
     previewValue: HTMLOutputElement;
     countIn: HTMLInputElement;
+    clickSilences: HTMLSelectElement;
+    clickSilencesDescription: HTMLElement;
     countInRun: HTMLSelectElement;
     countInPlayback: HTMLSelectElement;
     countInPlaybackDescription: HTMLElement;
@@ -1284,6 +1305,8 @@ export class AppView {
       preview: requireElement(doc, 'preview'),
       previewValue: requireElement(doc, 'preview-value'),
       countIn: requireElement(doc, 'count-in'),
+      clickSilences: requireElement(doc, 'click-silences'),
+      clickSilencesDescription: requireElement(doc, 'click-silences-description'),
       countInRun: requireElement(doc, 'count-in-run'),
       countInPlayback: requireElement(doc, 'count-in-playback'),
       countInPlaybackDescription: requireElement(doc, 'count-in-playback-description'),
@@ -1944,6 +1967,11 @@ export class AppView {
     // "Never" belongs to the length rather than to the when: nought bars is
     // no count-in, and two answers for one thing would let them disagree.
     fillSelect(
+      this.el.clickSilences,
+      CLICK_SILENCES.map((choice) => ({ value: choice, label: CLICK_SILENCE_LABELS[choice] })),
+      this.runtime.controller.settings.clickSilences,
+    );
+    fillSelect(
       this.el.countInRun,
       (['once', 'every'] as const).map((choice) => ({
         value: choice,
@@ -2262,6 +2290,14 @@ export class AppView {
 
     this.listen(this.el.whatOpens, 'change', () => {
       controller.updateSettings({ whatOpens: readWhatOpens(this.el.whatOpens.value) });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.clickSilences, 'change', () => {
+      const wanted = this.el.clickSilences.value as ClickSilence;
+      controller.updateSettings({
+        clickSilences: CLICK_SILENCES.includes(wanted) ? wanted : 'nothing',
+      });
       this.syncControlsFromSettings();
     });
 
@@ -4096,6 +4132,9 @@ export class AppView {
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
+    this.el.clickSilences.value = settings.clickSilences;
+    this.el.clickSilencesDescription.textContent =
+      CLICK_SILENCE_DESCRIPTIONS[settings.clickSilences];
     this.el.countInRun.value = settings.countInRun;
     this.el.countInPlayback.value = settings.countInPlayback;
     this.el.countInPlaybackDescription.textContent =

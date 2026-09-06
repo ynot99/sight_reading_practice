@@ -189,6 +189,7 @@ export class PracticeSession {
       ),
       click: this.options.click,
       dropout: resolveDropout(this.clickForThePulse(), Math.max(0, this.options.countInBars)),
+      silences: this.options.clickSilences,
       muted: clickIsSilent(this.clickForThePulse()),
     });
 
@@ -234,6 +235,7 @@ export class PracticeSession {
       ),
       click,
       dropout: resolveDropout(this.clickForThePulse(), Math.max(0, this.options.countInBars)),
+      silences: this.options.clickSilences,
       muted: clickIsSilent(this.clickForThePulse()),
     });
   }

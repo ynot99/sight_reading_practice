@@ -7,6 +7,7 @@ import {
   clickIsSilent,
   resolveDropout,
   type ClickPattern,
+  type ClickSilence,
   type ClickWhen,
   type IMetronome,
   type MetronomeConfig,
@@ -55,6 +56,8 @@ export interface ListeningOptions {
    * Zero is what a playback has always done.
    */
   readonly countInBars?: number;
+  /** Which clicks are left out, so the reader supplies them. */
+  readonly clickSilences?: ClickSilence;
   /**
    * The stretch to play, as the first and last step of it.
    *
@@ -258,6 +261,7 @@ export class ExercisePlayer {
    */
   private scheduledThroughMs = Number.NEGATIVE_INFINITY;
   private click: ClickPattern = 'pulse';
+  private silences: ClickSilence = 'nothing';
   private clickWhen: ClickWhen = 'never';
   private hand: ListeningHand = null;
   /** Last bar and beat announced, so an unchanged one is not announced again. */
@@ -450,6 +454,7 @@ export class ExercisePlayer {
 
     this.timeline = timeline;
     this.click = options.click;
+    this.silences = options.clickSilences ?? 'nothing';
     this.clickWhen = options.clickWhen;
     this.hand = options.staffNumber;
     this.publishedPosition = null;
@@ -570,6 +575,7 @@ export class ExercisePlayer {
       endsAtTicks: this.endsAtTicks === null ? null : this.endsAtTicks + this.countInTicks,
       subdivisionsPerPulse: subdivisionsPerPulseFor(timeline, timeSignature, this.click),
       click: this.click,
+      silences: this.silences,
       dropout: resolveDropout(this.clickWhen, this.countInBars),
       muted: clickIsSilent(this.clickWhen),
     };

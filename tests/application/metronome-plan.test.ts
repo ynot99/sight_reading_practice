@@ -397,6 +397,50 @@ describe('the tempos the metronome will beat at', () => {
   });
 });
 
+describe('leaving part of the click out', () => {
+  /** Every click actually heard over a run of the fixture. */
+  function heardWith(silences: 'nothing' | 'the-downbeat' | 'the-beats', click: 'pulse' | 'division') {
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      options: { countInBars: 0, clickWhen: 'always', click, clickSilences: silences },
+    });
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(20);
+    const config = harness.metronome.currentConfig;
+    return harness.metronome.emitted.filter((tick) => isAudibleClick(tick, config));
+  }
+
+  it('takes the first beat of the bar away, and leaves the rest', () => {
+    // His line 111: a click that marks everything is one the reader follows,
+    // and one with a hole in it is one they keep time with. Without the
+    // downbeat the bar is theirs to hold.
+    const all = heardWith('nothing', 'pulse');
+    const held = heardWith('the-downbeat', 'pulse');
+
+    expect(all).toHaveLength(8);
+    expect(held).toHaveLength(6);
+    expect(held.some((tick) => tick.isDownbeat)).toBe(false);
+  });
+
+  it('leaves only the offbeats where the click is finer than the beat', () => {
+    const all = heardWith('nothing', 'division');
+    const offbeats = heardWith('the-beats', 'division');
+
+    expect(offbeats.length).toBeGreaterThan(0);
+    expect(offbeats.length).toBeLessThan(all.length);
+    expect(offbeats.some((tick) => tick.isPulse)).toBe(false);
+  });
+
+  it('says nothing away where there is nothing between the beats', () => {
+    // A metronome that answers a setting with silence is one the reader will
+    // think broken, so this asks for the impossible and gets the beats.
+    const beatsOnly = heardWith('the-beats', 'pulse');
+
+    expect(beatsOnly).toHaveLength(8);
+  });
+});
+
 describe('where the click stops', () => {
   it('sounds a beat for every beat of the music and no more', () => {
     // The pulse has to run one tick past the last note - that is the tick the

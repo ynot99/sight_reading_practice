@@ -136,6 +136,27 @@ function isInSilentBar(tick: MetronomeTick, config: MetronomeConfig): boolean {
 }
 
 /**
+ * Whether a tick survives the hole the reader asked for in the click.
+ *
+ * Taking the beats away leaves only what falls between them, so it says
+ * nothing at all unless the click is finer than the beat - and a metronome
+ * that answers a setting with silence is one the reader will think broken.
+ * Where there is nothing between the beats, there is nothing to take away.
+ */
+function survivesTheSilence(tick: MetronomeTick, config: MetronomeConfig): boolean {
+  const silences = config.silences ?? 'nothing';
+  if (silences === 'nothing') {
+    return true;
+  }
+  if (silences === 'the-downbeat') {
+    return !tick.isDownbeat;
+  }
+  const bar = barAt(config, tick.positionTicks);
+  const clicks = clicksPerPulse(config.click, bar.timeSignature);
+  return clicks > 1 ? !tick.isPulse : true;
+}
+
+/**
  * Whether a tick is one the reader hears.
  *
  * The metronome always ticks at the resolution the loop needs; this decides
@@ -149,6 +170,9 @@ export function isAudibleClick(tick: MetronomeTick, config: MetronomeConfig): bo
     return false;
   }
   if (isInSilentBar(tick, config)) {
+    return false;
+  }
+  if (!survivesTheSilence(tick, config)) {
     return false;
   }
   if (config.click === 'downbeat') {

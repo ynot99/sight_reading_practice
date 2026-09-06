@@ -2,7 +2,12 @@ import type { ChordMatcher, MatchPolicy, NoteVerdict } from '../../domain/matchi
 import type { StepStatus } from '../../domain/scoring/PerformanceReport.js';
 import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timeline.js';
 import type { IClock } from '../ports/IClock.js';
-import type { ClickWhen, ClickPattern, MetronomeTick } from '../ports/IMetronome.js';
+import type {
+  ClickWhen,
+  ClickPattern,
+  ClickSilence,
+  MetronomeTick,
+} from '../ports/IMetronome.js';
 
 export interface SessionOptions {
   /** How simultaneous presses are collected into chords. */
@@ -46,6 +51,13 @@ export interface SessionOptions {
   readonly expectedStaff: number | null;
   /** How much of the pulse the reader hears. */
   readonly click: ClickPattern;
+  /**
+   * Which of those clicks are taken away again.
+   *
+   * A click with a hole in it is one the reader keeps time *with* rather than
+   * follows - the bar is theirs to hold when its first beat is missing.
+   */
+  readonly clickSilences?: ClickSilence;
   /**
    * How much of the run the click sits out.
    *

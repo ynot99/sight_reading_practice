@@ -28,7 +28,12 @@ import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
 import type { PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
-import type { ClickWhen, ClickPattern, CountInWhen } from './ports/IMetronome.js';
+import type {
+  ClickWhen,
+  ClickPattern,
+  ClickSilence,
+  CountInWhen,
+} from './ports/IMetronome.js';
 import { clickFollowsTheReader } from './ports/IMetronome.js';
 import { PracticeTimer } from './PracticeTimer.js';
 import {
@@ -216,6 +221,8 @@ export interface PracticeSettings {
    * `never` is said with the bars rather than here: nought bars is no
    * count-in, and two answers for one thing would let them disagree.
    */
+  /** Which clicks are left out, so the reader has to supply them. */
+  readonly clickSilences: ClickSilence;
   readonly countInRun: CountInWhen;
   /** And the same question of a playback, which has never had one at all. */
   readonly countInPlayback: CountInWhen;
@@ -691,6 +698,7 @@ export class PracticeController {
       countInBars: 1,
       // Every time round, which is what a run has always done: each lap of a
       // repeat is a new run, and each one counted itself in.
+      clickSilences: 'nothing',
       countInRun: 'every',
       // And a playback has never had one.
       countInPlayback: 'never',
@@ -1359,6 +1367,7 @@ export class PracticeController {
     player.start(timeline, {
       staffNumber: this.currentSettings.handStaff,
       click: this.currentSettings.clickPattern,
+      clickSilences: this.currentSettings.clickSilences,
       clickWhen: this.currentSettings.clickWhen,
       // Where the reader put their place, kept inside the passage they chose.
       // Hearing the music is part of learning the passage, so a playback that
@@ -1910,6 +1919,7 @@ export class PracticeController {
         expectedStaff: this.currentSettings.handStaff,
         inputLatencyMs: this.currentSettings.inputLatencyMs,
         click: this.currentSettings.clickPattern,
+        clickSilences: this.currentSettings.clickSilences,
         clickWhen: this.currentSettings.clickWhen,
       },
     });

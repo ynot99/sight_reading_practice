@@ -298,11 +298,13 @@ sixteenths tick four times as often as quarters and must not cost four times
 as much for a reason no player could name. Busy music is still harder, because
 there are more notes to miss, which is the point rather than an accident.
 
-It needs a pulse to drain against, so it says nothing in Wait mode: where the
-music waits for you, there is nothing to survive. The bar is driven by the run's
-own metronome, so a whole game replays headlessly in a test, and the glide is
-timed from the gap between pulses — a fixed one would stutter on a slow piece
-and lag behind on a fast one.
+Where the music waits for you there are no beats going past to count, so the
+bar is drained by the clock instead and every beat you find fills it outright:
+ten seconds from full to empty, which is room to read a chord you have not met
+and not room to work out the whole bar. Under the pulse the bar is driven by
+the run's own metronome, so a whole game replays headlessly in a test, and the
+glide is timed from the gap between pulses — a fixed one would stutter on a
+slow piece and lag behind on a fast one.
 
 **Rhythm only** judges when and never what: one press satisfies a step
 whatever the pitch, because reading a rhythm before playing the notes is
@@ -357,6 +359,37 @@ otherwise be learned instantly and then never move again. The knob writes
 through the volume slider rather than past it, so the two can never disagree
 about how loud the piano is. Knobs travel over the desktop bridge too — the
 tablet is where the reader is, and it can only learn what reaches it.
+
+### Finding the piece you want
+
+The library is ordered by when each score was last *read*, which took some
+doing: it always said so and always sorted on when the file was imported,
+which is the same order only on the day everything arrived. A score is stamped
+when the reader chooses it or starts a run on it - not when the program opens
+one by itself, since a machine's choice is not a reading and would push
+whatever it offered to the top of the list every visit. Each row says how long
+ago in days, because an order nobody can see the reason for reads as no order
+at all.
+
+A search box narrows the list, matching every word in any order: these are
+MuseScore arrangements called things like "Hollow Knight - City of Tears", and
+what anyone remembers of that is "city tears". A score can be renamed, and the
+new name goes into the *document* rather than only into the row - the title is
+printed in the corner of every page, and a library that disagreed with the
+page would be worse than either name alone. What the reader has read and how
+well follows the name across.
+
+Emptying the whole shelf asks for the word to be typed. It sits a thumb's
+width from the button that forgets one score, and what each costs is not
+remotely the same.
+
+### What is on the stand when you open it
+
+Three answers: a new exercise, the piece you read last, or one of your own
+scores at random - his idea, from osu, that something is in front of you and
+the question becomes whether to play it rather than what to play. Generating
+is the quick way in and stays the default, because the library lives in a
+database that answers later than the page draws.
 
 ### Keeping what you played
 
@@ -413,8 +446,20 @@ and ledger lines so a mark can never claim a pitch that was not played. The
 printed notes are never recoloured - reading black noteheads is the point of
 the exercise.
 
-**When** they appear is a setting of its own: as you play them, only when the
-run ends, or never. Holding them back leaves the page exactly as the engraver
+**When** they appear is a setting of its own: as you play them; as you play
+them with a wrong one lasting only while you hold the key; only when the run
+ends; or never. The third of those is for hunting an accidental, where every
+try leaves a red note behind and by the tenth the note being hunted for is
+underneath them - so a wrong one is *lent* to the page rather than given to
+it, and they all come back when the run ends, which is when they are worth
+reading. Only the red is lent: what was played correctly is the reading
+itself, and a page emptying as the fingers left it would show nothing at all
+by the end of a bar.
+
+A right note is drawn palely until every note of its beat has been found. A
+chord half found is not a chord, and the only other way to tell the two apart
+is to count noteheads against the printed ones - which is the reading the mark
+was supposed to be helping with. Holding them back leaves the page exactly as the engraver
 drew it for the whole reading, which matters because reading is the task — a
 mark arriving under your eyes is an answer to a question you have already
 answered. The whole reading then goes up at once, including when you stop
@@ -495,6 +540,15 @@ with a dashed edge so it reads as a piece of somewhere else. It is a clone of
 the page ahead at the same size, so the notes stand where they will stand when
 the page does turn, and it appears only while there is music moving: nothing is
 about to turn when nothing is playing.
+
+How the pages turn is one question with three answers, since the turning
+itself was never something a reader could decline: turn them and show the next
+page early, turn them quietly, or leave them to me. The last is for a piece
+already learned, where looking up to find that the page has turned itself is
+worse than not looking up at all - two arrows appear against the right edge,
+with the page numbers between them, and the arrow keys go on working at a
+desk. Everything else that turns a page is a reader asking for one, so only
+the music is stopped from doing it.
 
 **Quick replay** is stop and start in one press, and it is the only button in
 the row whose home is a run - between runs the thing that begins one is Start.
@@ -610,6 +664,44 @@ wrong note played there, and back to itself when the music moves on. It comes
 back even for a reader who put it away, and only for as long as there is
 something to say: practising with every colour turned off is reading blind on
 purpose, but blind you cannot tell *where* it went wrong, only that it did.
+
+### Whether you practised today
+
+The corner of the page says how long this has been open today, and seven marks
+under it say which of the last seven days were practised, with the run of them
+in words where there is a run to speak of. It is wall-clock time with the page
+actually in front of you - ten minutes in another app is not ten minutes of
+practice - and it is written down, so a reload, a closed tab or coming back
+after supper carries on the same number.
+
+Deliberately not the question the rest reminder asks. That one counts *notes*,
+because hands are what a rest is for; this one counts sitting down, because a
+reader who spent twenty minutes reading a page without playing it has
+practised. A day counts once it has a minute on it: a run of days that a
+glance can extend is a run worth nothing.
+
+### Learning a piece rather than reading it
+
+Three things exist for music you mean to keep rather than to sight-read.
+
+**The plan** takes the piece apart the way a teacher would set it: each
+section slowly with one hand, then the other, then both; then the sections
+glued together, doubling, until the whole thing holds. Almost none of it is
+new machinery, and that is the point - a section is the passage this trainer
+has always had, a hand is the hand, a slow tempo is the percentage. What was
+missing was the thing that puts them in order and knows when one is done. A
+task is passed by a reading that reached the end and scored 95; short of that
+the same task comes round again.
+
+**One wrong note ends the run**, for when the point is counting a rhythm
+rather than getting through: a slip that can be played over is worth nothing
+to count against. It does not start the run again by itself.
+
+**Survival** now runs in the waiting mode as well as under the pulse, and by a
+different clock in each. Under a pulse the bar falls with the beats, so a slow
+piece is no harder than a fast one. Where the music waits, it falls with the
+seconds and every beat found fills it outright: room to think, and a reason
+not to sit in one place.
 
 ### Being reminded to stop
 
@@ -771,8 +863,13 @@ tolerance window and reports the moment the expected set is complete:
 - notes inside the window accumulate, in any order;
 - a note arriving after the window starts a **fresh attempt** (so a hesitant
   half-chord is not silently completed a second later);
-- `toleranceMs: Infinity` disables that rule, which is the friendly default for
-  slow Wait-mode practice;
+- `toleranceMs: Infinity` disables that rule, and the session hands it to every
+  step of a mode that keeps no time and to any chord the writer marked to be
+  rolled. The window asks whether two notes were struck *together*, which is a
+  question about time: in Wait mode nothing is timing the reader, and a chord
+  being learned is taken slowly - held to 250 ms, the second note restarted the
+  attempt and forgot the first, so a chord found one note at a time could never
+  be completed at all;
 - `pitchClassOnly` ignores octaves, for beginners drilling note names.
 
 ### Modes, and why they are strategies
@@ -955,6 +1052,10 @@ you unless you ask otherwise.
 - Ruling the bars costs about two seconds more to engrave on a long score,
   since room is made in every bar of it. It is paid when the ruling changes
   and when a piece is opened, not while playing.
+- The plan is a plan and nothing more: it says what to play next and waits for
+  you to press Start, and it does not remember where it had got to if the page
+  is closed. Neither is hard to add; both are decisions about how much the
+  program should do for a reader who has not asked.
 
 ## Licence
 

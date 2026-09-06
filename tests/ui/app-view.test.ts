@@ -2099,6 +2099,56 @@ describe('AppView', () => {
     });
   });
 
+  describe('the places marked out in a piece', () => {
+    it('keeps the passage under the score it belongs to, and goes back to it', async () => {
+      // His line 47: a piece is learned in places, and setting the same two
+      // bar numbers by hand every evening is the part that is not practice.
+      const rig = createRig();
+      await rig.view.initialize();
+      const kept = await rig.runtime.scores.keep(longExercise({ bars: 8 }), 1_000);
+      const exercise = await rig.runtime.scores.open(kept.id);
+      await rig.runtime.controller.openScore(exercise as never);
+      rig.runtime.controller.updateSettings({ rangeFromBar: 5, rangeToBar: 8 });
+
+      element<HTMLInputElement>('passage-name').value = 'The left-hand run';
+      element<HTMLButtonElement>('passage-save').click();
+      await waitFor(() => element('passage-list').childElementCount > 0);
+
+      expect(element('passage-list').textContent).toContain('The left-hand run');
+      expect(element('passage-list').textContent).toContain('bars 5-8');
+
+      // Somewhere else entirely, and then back with one tap.
+      rig.runtime.controller.updateSettings({ rangeFromBar: 1, rangeToBar: 2 });
+      rowButton('passage-list', 'Practise bars 5-8').click();
+
+      expect(rig.runtime.controller.settings.rangeFromBar).toBe(5);
+      expect(rig.runtime.controller.settings.rangeToBar).toBe(8);
+    });
+
+    it('names it by its bars where the reader did not', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const kept = await rig.runtime.scores.keep(longExercise({ bars: 8 }), 1_000);
+      await rig.runtime.controller.openScore((await rig.runtime.scores.open(kept.id)) as never);
+      rig.runtime.controller.updateSettings({ rangeFromBar: 3, rangeToBar: 4 });
+
+      element<HTMLButtonElement>('passage-save').click();
+      await waitFor(() => element('passage-list').childElementCount > 0);
+
+      expect(element('passage-list').textContent).toContain('Bars 3-4');
+    });
+
+    it('has nothing to offer while the material is generated', async () => {
+      // An exercise is generated afresh every time, so "bars 5 to 8" of one
+      // says nothing about the next.
+      const rig = createRig();
+      await rig.view.initialize();
+
+      expect(element<HTMLButtonElement>('passage-save').disabled).toBe(true);
+      expect(element('passage-empty').textContent).toContain('Open one of your scores');
+    });
+  });
+
   describe('the readings that have been played', () => {
     it('lists them, newest first, with how they were played', async () => {
       const rig = createRig();

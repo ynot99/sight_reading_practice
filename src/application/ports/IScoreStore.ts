@@ -1,3 +1,16 @@
+/**
+ * A stretch of a piece the reader means to learn, and what they call it.
+ *
+ * His line 47. A piece is learned in places rather than all at once - the
+ * turn on page two, the run in the left hand - and setting the same two bar
+ * numbers by hand every evening is the part of that which is not practice.
+ */
+export interface SavedPassage {
+  readonly name: string;
+  readonly fromBar: number;
+  readonly toBar: number;
+}
+
 /** What the library knows about a score without opening it. */
 export interface StoredScoreSummary {
   readonly id: string;
@@ -15,6 +28,8 @@ export interface StoredScoreSummary {
    */
   readonly openedAtMs: number;
   readonly bars: number;
+  /** Stretches the reader has marked out in it, in the order they saved them. */
+  readonly passages: readonly SavedPassage[];
 }
 
 /**
@@ -43,6 +58,14 @@ export interface IScoreStore {
   list(): Promise<readonly StoredScoreSummary[]>;
   read(id: string): Promise<StoredScore | null>;
   write(score: StoredScore): Promise<void>;
+  /**
+   * Keeps the stretches a reader has marked out in a score.
+   *
+   * Separate from `write` for the same reason `touch` is: the caller is
+   * holding a list of bar numbers, not a hundred kilobytes of MusicXML.
+   */
+  keepPassages(id: string, passages: readonly SavedPassage[]): Promise<void>;
+
   /**
    * Marks a score as opened just now.
    *
@@ -79,6 +102,14 @@ export class InMemoryScoreStore implements IScoreStore {
     const found = this.scores.get(id);
     if (found !== undefined) {
       this.scores.set(id, { ...found, openedAtMs: atMs });
+    }
+    return Promise.resolve();
+  }
+
+  keepPassages(id: string, passages: readonly SavedPassage[]): Promise<void> {
+    const found = this.scores.get(id);
+    if (found !== undefined) {
+      this.scores.set(id, { ...found, passages });
     }
     return Promise.resolve();
   }

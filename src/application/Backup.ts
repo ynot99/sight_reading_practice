@@ -49,7 +49,7 @@ function readScore(value: unknown): StoredScore | null {
   if (!isRecord(value)) {
     return null;
   }
-  const { id, title, savedAtMs, openedAtMs, bars, musicXml } = value;
+  const { id, title, savedAtMs, openedAtMs, bars, musicXml, passages } = value;
   if (typeof id !== 'string' || typeof musicXml !== 'string' || musicXml === '') {
     return null;
   }
@@ -59,6 +59,17 @@ function readScore(value: unknown): StoredScore | null {
     savedAtMs: typeof savedAtMs === 'number' ? savedAtMs : 0,
     // A backup written before scores were stamped carries none, and the
     // moment it was kept is the only thing that file knows.
+    // The stretches a reader marked out travel with the piece, and a backup
+    // written before they existed simply carries none.
+    passages: Array.isArray(passages)
+      ? passages.filter(
+          (passage): passage is { name: string; fromBar: number; toBar: number } =>
+            isRecord(passage) &&
+            typeof passage['name'] === 'string' &&
+            typeof passage['fromBar'] === 'number' &&
+            typeof passage['toBar'] === 'number',
+        )
+      : [],
     openedAtMs:
       typeof openedAtMs === 'number'
         ? openedAtMs

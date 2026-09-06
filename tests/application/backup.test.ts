@@ -10,6 +10,7 @@ function score(id: string, title = id): StoredScore {
     title,
     savedAtMs: 1_000,
     openedAtMs: 1_000,
+    passages: [],
     bars: 8,
     musicXml: `<score-partwise>${id}</score-partwise>`,
   };

@@ -32,6 +32,7 @@ import {
 import { WHAT_OPENS, type WhatOpens } from '../application/ScoreLibrary.js';
 import { PAGE_TURNS, type PageTurns } from '../application/ports/IScoreRenderer.js';
 import { KEYBOARD_SIZES, keysOf, type KeyboardSize } from '../domain/generation/keyboards.js';
+import type { SavedPassage } from '../application/ports/IScoreStore.js';
 import {
   CLICK_SILENCES,
   COUNT_IN_WHEN,
@@ -1104,6 +1105,10 @@ export class AppView {
     preview: HTMLInputElement;
     previewValue: HTMLOutputElement;
     countIn: HTMLInputElement;
+    passageList: HTMLUListElement;
+    passageEmpty: HTMLElement;
+    passageName: HTMLInputElement;
+    passageSave: HTMLButtonElement;
     keyboard: HTMLSelectElement;
     keyboardDescription: HTMLElement;
     clickSilences: HTMLSelectElement;
@@ -1319,6 +1324,10 @@ export class AppView {
       preview: requireElement(doc, 'preview'),
       previewValue: requireElement(doc, 'preview-value'),
       countIn: requireElement(doc, 'count-in'),
+      passageList: requireElement(doc, 'passage-list'),
+      passageEmpty: requireElement(doc, 'passage-empty'),
+      passageName: requireElement(doc, 'passage-name'),
+      passageSave: requireElement(doc, 'passage-save'),
       keyboard: requireElement(doc, 'keyboard'),
       keyboardDescription: requireElement(doc, 'keyboard-description'),
       clickSilences: requireElement(doc, 'click-silences'),
@@ -1505,6 +1514,68 @@ export class AppView {
         error instanceof Error ? `Could not open that file. ${error.message}` : 'Could not open that file.',
       );
     }
+  }
+
+  /**
+   * The stretches marked out in the piece on the stand.
+   *
+   * Only for a kept score: an exercise is generated afresh every time, so
+   * "bars 5 to 8" of one says nothing about the next. Tapping a row sets the
+   * passage exactly as typing the two numbers would, because that is what it
+   * does - there is one passage, and this is a way of reaching it.
+   */
+  private renderPassages(): void {
+    const opened = this.runtime.controller.openedExercise;
+    const saved = opened === null ? [] : this.runtime.scores.passagesOf(opened.title);
+    this.el.passageSave.disabled = opened === null;
+    this.el.passageEmpty.hidden = saved.length > 0;
+    this.el.passageEmpty.textContent =
+      opened === null
+        ? 'Open one of your scores to mark places out in it.'
+        : 'Nothing marked out yet. Choose a passage, name it, and it is kept with the score.';
+    this.el.passageList.replaceChildren();
+
+    for (const [at, passage] of saved.entries()) {
+      const row = this.doc.createElement('li');
+      const name = this.doc.createElement('span');
+      name.className = 'takes__name';
+      name.textContent = `${passage.name} · bars ${passage.fromBar}-${passage.toBar}`;
+
+      const apply = this.doc.createElement('button');
+      apply.type = 'button';
+      apply.textContent = 'Apply';
+      apply.title = `Practise bars ${passage.fromBar}-${passage.toBar}`;
+      this.listen(apply, 'click', () => {
+        this.runtime.controller.updateSettings({
+          rangeFromBar: passage.fromBar,
+          rangeToBar: passage.toBar,
+        });
+        this.syncControlsFromSettings();
+      });
+
+      const remove = this.doc.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.title = 'Forget this passage';
+      remove.setAttribute('aria-label', `Forget ${passage.name}`);
+      this.listen(remove, 'click', () => {
+        void this.keepPassages(saved.filter((_, index) => index !== at));
+      });
+
+      row.append(name, apply, remove);
+      this.el.passageList.append(row);
+    }
+  }
+
+  /** Writes the list back to the score it belongs to, and redraws it. */
+  private async keepPassages(passages: readonly SavedPassage[]): Promise<void> {
+    const opened = this.runtime.controller.openedExercise;
+    const kept = this.runtime.scores.list().find((score) => score.title === opened?.title);
+    if (kept === undefined) {
+      return;
+    }
+    await this.runtime.scores.keepPassages(kept.id, passages);
+    this.renderPassages();
   }
 
   /**
@@ -2312,6 +2383,28 @@ export class AppView {
     this.listen(this.el.whatOpens, 'change', () => {
       controller.updateSettings({ whatOpens: readWhatOpens(this.el.whatOpens.value) });
       this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.passageSave, 'click', () => {
+      const opened = controller.openedExercise;
+      if (opened === null) {
+        return;
+      }
+      // Whatever is set now, with an open end meaning the end of the piece:
+      // what is kept is the stretch the reader is looking at.
+      const first = opened.firstBarNumber;
+      const last = first + Math.max(0, measureCount(opened) - 1);
+      const fromBar = controller.settings.rangeFromBar ?? first;
+      const toBar = controller.settings.rangeToBar ?? last;
+      const name = this.el.passageName.value.trim();
+      void this.keepPassages([
+        ...this.runtime.scores.passagesOf(opened.title),
+        // Named by its bars where the reader did not name it: a list of
+        // "bars 17-24" is still a list they can read.
+        { name: name === '' ? `Bars ${fromBar}-${toBar}` : name, fromBar, toBar },
+      ]).then(() => {
+        this.el.passageName.value = '';
+      });
     });
 
     this.listen(this.el.keyboard, 'change', () => {
@@ -3505,6 +3598,9 @@ export class AppView {
       controller.events.on('exerciseLoaded', ({ exercise }) => {
         this.hasLooked = false;
         this.placedOnBar = null;
+        // The places marked out belong to the piece, so they are drawn again
+        // whenever the piece changes - however it was opened.
+        this.renderPassages();
         // Around whatever was just engraved, which *is* the passage: the
         // markers belong at its two ends after every reload, wherever the
         // reader last left them on the page before it.
@@ -4163,6 +4259,7 @@ export class AppView {
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
+    this.renderPassages();
     this.el.keyboard.value = settings.keyboard;
     const keys = keysOf(settings.keyboard);
     this.el.keyboardDescription.textContent =

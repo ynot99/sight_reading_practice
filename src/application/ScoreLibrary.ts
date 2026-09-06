@@ -2,7 +2,7 @@ import { measureCount } from '../domain/model/Exercise.js';
 import type { Exercise } from '../domain/model/Exercise.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import type { IScoreImporter } from './ports/IScoreImporter.js';
-import type { IScoreStore, StoredScoreSummary } from './ports/IScoreStore.js';
+import type { IScoreStore, SavedPassage, StoredScoreSummary } from './ports/IScoreStore.js';
 
 /**
  * What the reader wants in front of them when the page opens.
@@ -118,6 +118,9 @@ export class ScoreLibrary {
       // would be a strange thing to have just added.
       openedAtMs: savedAtMs,
       bars: measureCount(exercise),
+      // A piece re-imported keeps the stretches its reader marked out: the
+      // file changed, the places they are learning did not.
+      passages: this.summaries.find((summary) => summary.title === exercise.title)?.passages ?? [],
     };
     await this.deps.store.write({
       ...summary,
@@ -233,6 +236,25 @@ export class ScoreLibrary {
     await this.deps.store.remove(id);
     await this.load();
     return 'renamed';
+  }
+
+  /**
+   * Marks a stretch out in a score, or takes one away.
+   *
+   * Kept with the piece rather than with the settings: "bars 17 to 24" means
+   * nothing about a different score, and a reader who opens this one again
+   * next week wants the same places waiting for them.
+   */
+  async keepPassages(id: string, passages: readonly SavedPassage[]): Promise<void> {
+    await this.deps.store.keepPassages(id, passages);
+    this.summaries = this.summaries.map((summary) =>
+      summary.id === id ? { ...summary, passages } : summary,
+    );
+  }
+
+  /** The stretches marked out in a score, or none where it is not kept. */
+  passagesOf(title: string): readonly SavedPassage[] {
+    return this.summaries.find((summary) => summary.title === title)?.passages ?? [];
   }
 
   async remove(id: string): Promise<void> {

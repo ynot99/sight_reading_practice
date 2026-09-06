@@ -1,5 +1,6 @@
 import type {
   IScoreStore,
+  SavedPassage,
   StoredScore,
   StoredScoreSummary,
 } from '../../application/ports/IScoreStore.js';
@@ -13,10 +14,13 @@ import type {
  * happened to them.
  */
 function whenOpened<T extends StoredScoreSummary>(record: T): T {
-  const stamped = record as T & { openedAtMs?: unknown };
-  return typeof stamped.openedAtMs === 'number'
-    ? record
-    : { ...record, openedAtMs: record.savedAtMs };
+  const stamped = record as T & { openedAtMs?: unknown; passages?: unknown };
+  const withStamp =
+    typeof stamped.openedAtMs === 'number' ? record : { ...record, openedAtMs: record.savedAtMs };
+  // A record kept before a reader could mark stretches out has none, and an
+  // absent list is an empty one rather than a missing field to guard against
+  // everywhere it is read.
+  return Array.isArray(stamped.passages) ? withStamp : { ...withStamp, passages: [] };
 }
 
 const DATABASE = 'sight-reading-practice';
@@ -90,6 +94,14 @@ export class IndexedDbScoreStore implements IScoreStore {
       return;
     }
     await this.write({ ...found, openedAtMs: atMs });
+  }
+
+  async keepPassages(id: string, passages: readonly SavedPassage[]): Promise<void> {
+    const found = await this.read(id);
+    if (found === null) {
+      return;
+    }
+    await this.write({ ...found, passages });
   }
 
   async write(score: StoredScore): Promise<void> {

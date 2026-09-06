@@ -3,7 +3,6 @@ import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '../model/Duration.js';
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
 import { tempoWordKind, withTempoWordsPlayed } from './tempoWords.js';
-import { withHairpinsPlayed } from './hairpins.js';
 import {
   BEAM_TYPES,
   DYNAMIC_LEVELS,
@@ -206,7 +205,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   // acts on every reading of it, and before anything is validated: what the
   // words add are ordinary tempo changes, which the rest of the program
   // already understands.
-  const spoken = withHairpinsPlayed(withTempoWordsPlayed(played));
+  const spoken = withTempoWordsPlayed(played);
   validateExercise(spoken);
   return { exercise: spoken, warnings };
 }

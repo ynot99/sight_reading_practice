@@ -434,6 +434,16 @@ export function dynamicAt(
   offsetTicks: number,
   staffNumber: number | null,
 ): DynamicLevel | null {
+  return markInForce(exercise, measureIndex, offsetTicks, staffNumber)?.level ?? null;
+}
+
+/** The same question, answered with the mark itself: where it is matters. */
+function markInForce(
+  exercise: Exercise,
+  measureIndex: number,
+  offsetTicks: number,
+  staffNumber: number | null,
+): DynamicMark | null {
   const isBefore = (mark: DynamicMark): boolean =>
     mark.measureIndex < measureIndex ||
     (mark.measureIndex === measureIndex && mark.offsetTicks <= offsetTicks);
@@ -468,15 +478,15 @@ export function dynamicAt(
   // at the same moment, which is how `f` over `p` is written; after that the
   // later instruction governs, whichever staff it was written under.
   if (mine === null) {
-    return latest?.level ?? null;
+    return latest;
   }
   if (latest === null) {
-    return mine.level;
+    return mine;
   }
   const mineIsLater =
     mine.measureIndex > latest.measureIndex ||
     (mine.measureIndex === latest.measureIndex && mine.offsetTicks >= latest.offsetTicks);
-  return (mineIsLater ? mine : latest).level;
+  return mineIsLater ? mine : latest;
 }
 
 /**
@@ -494,6 +504,81 @@ export interface DynamicHairpin {
   readonly untilMeasureIndex: number;
   readonly untilOffsetTicks: number;
   readonly staffNumber: number | null;
+}
+
+/**
+ * How hard to strike a note here, `0..1`, dynamics and hairpins together.
+ *
+ * The written levels are steps and a hairpin is a slope, so a slope cannot be
+ * said in levels: eight of them across four bars is one change, and a change
+ * at the end of a crescendo is not a crescendo. The level in force gives the
+ * ground, and a hairpin covering this moment lifts or lowers it towards where
+ * it is heading - as smoothly as the notes come.
+ *
+ * Where it is heading is the mark at its far end, and where the writer put
+ * none, one step of the eight: which is what a wedge between two unmarked
+ * stretches means to a player.
+ */
+export function velocityAt(
+  exercise: Exercise,
+  measureIndex: number,
+  offsetTicks: number,
+  staffNumber: number | null,
+): number {
+  const bars = barLines(exercise);
+  const at = (bar: number, offset: number): number => (bars[bar]?.startTicks ?? 0) + offset;
+  const here = at(measureIndex, offsetTicks);
+  const level = dynamicAt(exercise, measureIndex, offsetTicks, staffNumber) ?? 'mf';
+  const ground = DYNAMIC_VELOCITY[level];
+
+  // The latest hairpin that has begun by now, for this staff or for the
+  // whole texture. Later ones have not started; earlier ones have been
+  // answered by this one.
+  let latest: DynamicHairpin | null = null;
+  for (const hairpin of exercise.hairpins) {
+    if (
+      hairpin.staffNumber !== null &&
+      staffNumber !== null &&
+      hairpin.staffNumber !== staffNumber
+    ) {
+      continue;
+    }
+    const from = at(hairpin.measureIndex, hairpin.offsetTicks);
+    if (from > here) {
+      continue;
+    }
+    if (latest === null || from >= at(latest.measureIndex, latest.offsetTicks)) {
+      latest = hairpin;
+    }
+  }
+  if (latest === null) {
+    return ground;
+  }
+
+  const from = at(latest.measureIndex, latest.offsetTicks);
+  const until = at(latest.untilMeasureIndex, latest.untilOffsetTicks);
+  if (until <= from) {
+    return ground;
+  }
+  const ends = dynamicAt(exercise, latest.untilMeasureIndex, latest.untilOffsetTicks, staffNumber);
+  const step = latest.kind === 'crescendo' ? 1 : -1;
+  const next =
+    DYNAMIC_LEVELS[
+      Math.min(DYNAMIC_LEVELS.length - 1, Math.max(0, DYNAMIC_LEVELS.indexOf(level) + step))
+    ];
+  const target =
+    ends !== null && ends !== level ? DYNAMIC_VELOCITY[ends] : DYNAMIC_VELOCITY[next ?? level];
+
+  if (here <= until) {
+    return ground + (target - ground) * ((here - from) / (until - from));
+  }
+  // Past the far end. A player does not fall back to where they began the
+  // moment a wedge stops being drawn - they stay where it left them until
+  // something says otherwise. So the written level wins only if it was
+  // written after the hairpin ended.
+  const marked = markInForce(exercise, measureIndex, offsetTicks, staffNumber);
+  const markedAt = marked === null ? -1 : at(marked.measureIndex, marked.offsetTicks);
+  return markedAt > until ? ground : target;
 }
 
 export interface PedalMark {

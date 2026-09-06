@@ -6,7 +6,7 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY } from '../../src/domain/model/Exercise.js';
+import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY, velocityAt } from '../../src/domain/model/Exercise.js';
 import {
   measureTicks,
   noteEntry,
@@ -145,10 +145,11 @@ describe('the dynamics on the page', () => {
     ]);
   });
 
-  it('is heard as levels by the time it is read in', () => {
-    // The expansion belongs to the import: everything downstream - the
-    // player, the marks, the judging - understands levels and knows nothing
-    // about wedges.
+  it('is heard as a slope by the time it is read in', () => {
+    // Measured and found wanting: expanding a hairpin into the written
+    // levels gave one change, at the very end, which is not a crescendo. The
+    // loudness is worked out at each note instead, so the rise is as smooth
+    // as the notes come.
     const printed = serializer.serialize({
       ...twoBarExercise(),
       dynamicMarks: [
@@ -168,13 +169,18 @@ describe('the dynamics on the page', () => {
     });
 
     const { exercise } = importer.read(printed);
+    const quarter = Duration.QUARTER.ticks;
+    const climbing = [0, quarter, quarter * 2, quarter * 3].map((at) =>
+      velocityAt(exercise, 0, at, 1),
+    );
 
-    const worked = exercise.dynamicMarks.filter((mark) => mark.implied === true);
-    expect(worked.length).toBeGreaterThan(0);
-    // Between the two the writer wrote, and neither of them.
-    for (const mark of worked) {
-      expect(['p', 'mp', 'mf']).toContain(mark.level);
+    // Every step louder than the last, from the pp it starts at towards the
+    // f at the far end.
+    for (let at = 1; at < climbing.length; at += 1) {
+      expect(climbing[at] ?? 0).toBeGreaterThan(climbing[at - 1] ?? 0);
     }
+    expect(climbing[0]).toBeCloseTo(DYNAMIC_VELOCITY.pp, 5);
+    expect(climbing[climbing.length - 1] ?? 0).toBeLessThan(DYNAMIC_VELOCITY.f);
   });
 
   it('keeps the levels a hairpin works out to itself', () => {

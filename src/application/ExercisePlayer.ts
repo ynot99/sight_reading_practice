@@ -1,11 +1,10 @@
 
 import {
-  DYNAMIC_VELOCITY,
   barLines,
-  dynamicAt,
   pedalSpans,
   positionOfTick,
   spanMs,
+  velocityAt,
 } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import type { PositionEvent } from './session/SessionEvents.js';
@@ -797,15 +796,17 @@ export class ExercisePlayer {
             midi: note.midi,
             atMs: startsAt,
             untilMs: Math.max(until, startsAt),
-            // What the page asks for where this note falls, and the old
-            // constant where it asks for nothing. A staff's own marks are
-            // preferred to the piece's, which is how a piano part with the
-            // left hand marked `p` under a melody marked `f` is written.
-            velocity:
-              DYNAMIC_VELOCITY[
-                dynamicAt(exercise, step.measureIndex, step.onsetTicks - measureStart, note.staffNumber) ??
-                  'mf'
-              ],
+            // What the page asks for where this note falls: the level in
+            // force, lifted or lowered by any hairpin drawn over it. A
+            // staff's own marks are preferred to the piece's, which is how a
+            // piano part with the left hand marked `p` under a melody marked
+            // `f` is written.
+            velocity: velocityAt(
+              exercise,
+              step.measureIndex,
+              step.onsetTicks - measureStart,
+              note.staffNumber,
+            ),
           });
         }
       }

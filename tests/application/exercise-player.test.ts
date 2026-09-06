@@ -9,6 +9,7 @@ import {
   MIDI,
   arpeggiatedExercise,
   bar,
+  longExercise,
   p,
   tiedExercise,
   twoBarExercise,
@@ -73,6 +74,47 @@ describe('listening to an exercise', () => {
     expect(Math.max(...first.map((note) => note.velocity))).toBeLessThan(
       Math.min(...later.map((note) => note.velocity)),
     );
+  });
+
+  it('climbs through a crescendo rather than stepping at its end', () => {
+    // What he heard: the wedges were drawn and the sound did not move. A
+    // hairpin is a slope and the written levels are steps, so the loudness
+    // is worked out at each note instead of being said in levels.
+    const swelling = {
+      ...longExercise({ bars: 4, tempoBpm: 60 }),
+      dynamicMarks: [{ measureIndex: 0, offsetTicks: 0, level: 'pp' as const, staffNumber: null }],
+      hairpins: [
+        {
+          measureIndex: 0,
+          offsetTicks: 0,
+          kind: 'crescendo' as const,
+          untilMeasureIndex: 3,
+          untilOffsetTicks: 0,
+          staffNumber: null,
+        },
+      ],
+    };
+    const { player, metronome, instrument } = rig(swelling);
+    player.start(buildTimeline(swelling), {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+    });
+    metronome.advanceSubdivisions(16);
+
+    const played = instrument.played.map((note) => note.velocity);
+    expect(played.length).toBeGreaterThan(8);
+    // Louder at every step of the way under the wedge, not once at its end.
+    const under = played.slice(0, 12);
+    for (let at = 1; at < under.length; at += 1) {
+      expect(under[at] ?? 0).toBeGreaterThan(under[at - 1] ?? 0);
+    }
+    // And past the far end it stays where the wedge left it: a player does
+    // not fall back to where they began the moment it stops being drawn.
+    const reached = under[under.length - 1] ?? 0;
+    for (const velocity of played.slice(12)) {
+      expect(velocity).toBeGreaterThanOrEqual(reached);
+    }
   });
 
   it('plays the whole texture at a dynamic written under one staff', () => {

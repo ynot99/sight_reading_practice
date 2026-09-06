@@ -477,6 +477,22 @@ export interface TimeChange {
  * it applies from. Quarter notes per minute, like {@link Exercise.tempoBpm}
  * and like MusicXML's own `<sound tempo>`.
  */
+/**
+ * A word the writer put over the music about its speed.
+ *
+ * Carried whether or not it means anything to the clock, because it is on the
+ * page and the page is what the reader reads. `accel.` and `rit.` also move
+ * the clock, and `a tempo` puts it back; anything else - "dolce", "espr." -
+ * is printed and left alone.
+ */
+export interface TempoWord {
+  readonly measureIndex: number;
+  readonly offsetTicks: number;
+  /** Exactly as written, since that is what gets printed. */
+  readonly text: string;
+  readonly kind: 'accelerando' | 'ritardando' | 'a-tempo' | 'other';
+}
+
 export interface TempoChange {
   readonly measureIndex: number;
   /** Offset from the start of that measure, in divisions. */
@@ -513,6 +529,8 @@ export interface Exercise {
    * left out.
    */
   readonly dynamicMarks: readonly DynamicMark[];
+  /** Words about the speed, printed and - for some of them - obeyed. */
+  readonly tempoWords: readonly TempoWord[];
   readonly timeSignature: TimeSignature;
   /**
    * Metres the score changes to partway through.

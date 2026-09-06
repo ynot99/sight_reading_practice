@@ -2,6 +2,7 @@ import { DomainError } from '../../shared/errors.js';
 import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '../model/Duration.js';
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
+import { tempoWordKind, withTempoWordsPlayed } from './tempoWords.js';
 import {
   BEAM_TYPES,
   DYNAMIC_LEVELS,
@@ -18,6 +19,7 @@ import type {
   ClefChange,
   DynamicMark,
   DynamicLevel,
+  TempoWord,
   GraceNote,
   KeyChange,
   PedalMark,
@@ -137,7 +139,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   }
 
   const header = readHeader(measures, warnings);
-  const { staves, pedalMarks, tempoMarks, dynamicMarks } = readEveryPart(
+  const { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords } = readEveryPart(
     parts,
     measures.length,
     header,
@@ -163,6 +165,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     ),
     pedalMarks,
     dynamicMarks,
+    tempoWords,
     timeSignature: header.timeSignature,
     tempoBpm: opening.at(-1)?.tempoBpm ?? ASSUMED_TEMPO_BPM,
     staves,
@@ -196,8 +199,13 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     });
   }
 
-  validateExercise(played);
-  return { exercise: played, warnings };
+  // After the repeats are written out, so a word inside a repeated stretch
+  // acts on every reading of it, and before anything is validated: what the
+  // words add are ordinary tempo changes, which the rest of the program
+  // already understands.
+  const spoken = withTempoWordsPlayed(played);
+  validateExercise(spoken);
+  return { exercise: spoken, warnings };
 }
 
 /**
@@ -690,6 +698,26 @@ function readGraces(graces: readonly XmlNode[]): GraceNote[] {
  * than a level to hold, and holding one would be a mistake that lasted until
  * the next mark.
  */
+/**
+ * The words a direction prints, joined.
+ *
+ * A direction can hold several `<words>` in a row - a line broken by the
+ * engraver, or an italic word beside an upright one - and what the reader
+ * sees is the sentence they make.
+ */
+function readWords(node: XmlNode): string {
+  const said: string[] = [];
+  for (const type of childrenNamed(node, 'direction-type')) {
+    for (const words of childrenNamed(type, 'words')) {
+      const text = (words.text ?? '').trim();
+      if (text !== '') {
+        said.push(text);
+      }
+    }
+  }
+  return said.join(' ').trim();
+}
+
 function readDynamicMark(node: XmlNode): DynamicLevel | null {
   for (const type of childrenNamed(node, 'direction-type')) {
     const dynamics = child(type, 'dynamics');
@@ -713,6 +741,7 @@ function readMeasureNotes(
   pedalMarks: PedalMark[] = [],
   tempoMarks: TempoChange[] = [],
   dynamicMarks: DynamicMark[] = [],
+  tempoWords: TempoWord[] = [],
 ): RawNote[] {
   const notes: RawNote[] = [];
   let cursor = 0;
@@ -756,6 +785,15 @@ function readMeasureNotes(
       const tempoBpm = readTempoMark(node);
       if (tempoBpm !== null) {
         tempoMarks.push({ measureIndex, offsetTicks: Math.max(0, cursor), tempoBpm });
+      }
+      const said = readWords(node);
+      if (said !== '') {
+        tempoWords.push({
+          measureIndex,
+          offsetTicks: Math.max(0, cursor),
+          text: said,
+          kind: tempoWordKind(said),
+        });
       }
       const level = readDynamicMark(node);
       if (level !== null) {
@@ -1007,11 +1045,13 @@ function readEveryPart(
   readonly pedalMarks: readonly PedalMark[];
   readonly tempoMarks: readonly TempoChange[];
   readonly dynamicMarks: readonly DynamicMark[];
+  readonly tempoWords: readonly TempoWord[];
 } {
   const staves: StaffPart[] = [];
   const pedalMarks: PedalMark[] = [];
   const tempoMarks: TempoChange[] = [];
   const dynamicMarks: DynamicMark[] = [];
+  const tempoWords: TempoWord[] = [];
 
   for (const [index, part] of parts.entries()) {
     const measures = childrenNamed(part, 'measure');
@@ -1044,6 +1084,19 @@ function readEveryPart(
     // The dynamics are the part's own: two hands can be marked differently,
     // and a part that says nothing about loudness is not saying "as loud as
     // the other one".
+    // A word about the speed is the piece's, however many parts print it -
+    // the same reasoning the tempo marks follow. Kept once.
+    for (const word of built.tempoWords) {
+      const already = tempoWords.some(
+        (seen) =>
+          seen.measureIndex === word.measureIndex &&
+          seen.offsetTicks === word.offsetTicks &&
+          seen.text === word.text,
+      );
+      if (!already) {
+        tempoWords.push(word);
+      }
+    }
     dynamicMarks.push(
       ...built.dynamicMarks.map((mark) => ({
         ...mark,
@@ -1052,7 +1105,7 @@ function readEveryPart(
     );
   }
 
-  return { staves, pedalMarks, tempoMarks, dynamicMarks };
+  return { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords };
 }
 
 /** What a part says about itself: how finely it counts, and its clefs. */
@@ -1091,12 +1144,23 @@ function buildStaves(
   readonly pedalMarks: readonly PedalMark[];
   readonly tempoMarks: readonly TempoChange[];
   readonly dynamicMarks: readonly DynamicMark[];
+  readonly tempoWords: readonly TempoWord[];
 } {
   const pedalMarks: PedalMark[] = [];
   const tempoMarks: TempoChange[] = [];
   const dynamicMarks: DynamicMark[] = [];
+  const tempoWords: TempoWord[] = [];
   const perMeasure = measures.map((measure, index) =>
-    readMeasureNotes(measure, index, header, warnings, pedalMarks, tempoMarks, dynamicMarks),
+    readMeasureNotes(
+      measure,
+      index,
+      header,
+      warnings,
+      pedalMarks,
+      tempoMarks,
+      dynamicMarks,
+      tempoWords,
+    ),
   );
 
   // One part per voice of each staff, rather than one per staff. Two voices on
@@ -1174,6 +1238,11 @@ function buildStaves(
   return {
     staves: restStaffThatFallsSilent(parts, (bar) => barTicksAt(header, bar), warnings),
     pedalMarks,
+    tempoWords: tempoWords.map((word) =>
+      word.measureIndex === 0 && word.offsetTicks > 0
+        ? { ...word, offsetTicks: word.offsetTicks + pickupShift }
+        : word,
+    ),
     // Moved with the music they mark where a pickup shifted it, exactly as
     // the tempo marks below are.
     dynamicMarks: dynamicMarks.map((mark) =>

@@ -8,6 +8,7 @@ import type {
   GraceNote,
   DynamicMark,
   PedalMark,
+  TempoWord,
   StaffPart,
   TempoChange,
 } from '../model/Exercise.js';
@@ -237,6 +238,12 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         const dynamics = exercise.dynamicMarks.filter(
           (mark) => mark.measureIndex === measureIndex,
         );
+        // Words about the speed belong to the piece rather than to a staff,
+        // so they are written once, with the first voice - the same place
+        // the pedal and the tempo marks go.
+        const words = exercise.tempoWords.filter(
+          (word) => word.measureIndex === measureIndex,
+        );
         const firstOfStaff = new Map<number, number>();
         present.forEach((staff, index) => {
           if (!firstOfStaff.has(staff.staffNumber)) {
@@ -267,6 +274,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
                 ? index === 0
                 : firstOfStaff.get(mark.staffNumber) === index,
             ),
+            index === 0 ? words : [],
           );
         });
         this.writeTempoChanges(writer, tempos, barTicks, present.length > 0);
@@ -471,6 +479,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     heldByVoice: Map<number, Set<number>>,
     pedal: readonly PedalMark[],
     dynamics: readonly DynamicMark[] = [],
+    words: readonly TempoWord[] = [],
   ): void {
     const measure = staff.measures[measureIndex];
     if (measure === undefined) {
@@ -488,6 +497,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     let offset = 0;
     let nextMark = 0;
     let nextDynamic = 0;
+    let nextWord = 0;
     measure.entries.forEach((entry, entryIndex) => {
       while (nextMark < pedal.length && (pedal[nextMark]?.offsetTicks ?? 0) <= offset) {
         this.writePedal(writer, pedal[nextMark], staff.staffNumber);
@@ -499,6 +509,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       ) {
         this.writeDynamic(writer, dynamics[nextDynamic], staff.staffNumber);
         nextDynamic += 1;
+      }
+      while (nextWord < words.length && (words[nextWord]?.offsetTicks ?? 0) <= offset) {
+        this.writeWords(writer, words[nextWord]);
+        nextWord += 1;
       }
       offset += entry.duration.ticks;
       this.writeEntry(
@@ -520,6 +534,10 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     while (nextDynamic < dynamics.length) {
       this.writeDynamic(writer, dynamics[nextDynamic], staff.staffNumber);
       nextDynamic += 1;
+    }
+    while (nextWord < words.length) {
+      this.writeWords(writer, words[nextWord]);
+      nextWord += 1;
     }
     heldByVoice.set(staff.voice, held);
   }
@@ -733,6 +751,24 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
    * engraver puts it by default - the file we write is read by the same
    * engraver that draws it, so saying nothing would move them.
    */
+  /**
+   * One direction in words, above the staff where such things are printed.
+   *
+   * Carried rather than recomputed, like everything else the writer chose:
+   * `rit.` is drawn where they drew it, and a piece that says "dolce" goes on
+   * saying it.
+   */
+  private writeWords(writer: XmlWriter, word: TempoWord | undefined): void {
+    if (word === undefined || word.text === '') {
+      return;
+    }
+    writer.element('direction', { placement: 'above' }, () => {
+      writer.element('direction-type', undefined, () => {
+        writer.leaf('words', word.text);
+      });
+    });
+  }
+
   private writeDynamic(
     writer: XmlWriter,
     mark: DynamicMark | undefined,

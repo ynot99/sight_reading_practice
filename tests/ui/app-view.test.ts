@@ -302,6 +302,16 @@ async function confirmDeletion(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/** Emptying a whole shelf is not a button press: the word has to be typed. */
+async function confirmByTyping(word = 'delete'): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const typed = element<HTMLInputElement>('confirm-typed');
+  typed.value = word;
+  typed.dispatchEvent(new Event('input'));
+  element<HTMLButtonElement>('confirm-yes').click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe('AppView', () => {
   beforeEach(() => {
     mountRealMarkup();
@@ -1868,14 +1878,60 @@ describe('AppView', () => {
       expect(rig.runtime.scores.isEmpty).toBe(false);
     });
 
-    it('empties the shelf when asked', async () => {
+    it('empties the shelf when the word is typed', async () => {
       const rig = createRig();
       await keepOne(rig);
 
       element<HTMLButtonElement>('scores-clear').click();
-      await confirmDeletion();
+      await confirmByTyping();
 
       expect(rig.runtime.scores.isEmpty).toBe(true);
+    });
+
+    it('will not empty the shelf for a button press alone', async () => {
+      // A row is one score and a mis-tap costs a file that is still on the
+      // disk; this is the whole library, a thumb's width from that row.
+      const rig = createRig();
+      await keepOne(rig);
+
+      element<HTMLButtonElement>('scores-clear').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(element<HTMLButtonElement>('confirm-yes').disabled).toBe(true);
+      expect(element('confirm-typed').hidden).toBe(false);
+      element<HTMLButtonElement>('confirm-yes').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(element('sheet-confirm').hidden).toBe(false);
+      expect(rig.runtime.scores.isEmpty).toBe(false);
+    });
+
+    it('will not take a word that is not the word', async () => {
+      const rig = createRig();
+      await keepOne(rig);
+
+      element<HTMLButtonElement>('scores-clear').click();
+      await confirmByTyping('yes');
+
+      expect(rig.runtime.scores.isEmpty).toBe(false);
+    });
+
+    it('says how much is about to go, and keeps the row question simple', async () => {
+      const rig = createRig();
+      await keepOne(rig, 'One');
+      await keepOne(rig, 'Two');
+
+      element<HTMLButtonElement>('scores-clear').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(element('confirm-text').textContent).toContain('2 kept scores');
+      element<HTMLButtonElement>('confirm-no').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // One row is still one question with two buttons: what is lost there
+      // is a row, and the file it came from is still on the disk.
+      rowButton('scores-list', 'Forget this score').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(element('confirm-typed').hidden).toBe(true);
+      expect(element<HTMLButtonElement>('confirm-yes').disabled).toBe(false);
     });
   });
 
@@ -2175,7 +2231,7 @@ describe('AppView', () => {
       expect(rig.takes.list()).toHaveLength(2);
 
       element<HTMLButtonElement>('takes-clear').click();
-      await confirmDeletion();
+      await confirmByTyping();
 
       expect(rig.takes.list()).toHaveLength(0);
     });

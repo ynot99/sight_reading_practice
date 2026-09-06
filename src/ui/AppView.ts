@@ -271,6 +271,19 @@ const RULER_LABELS: Readonly<Record<RulerDivision, string>> = {
   'thirty-second': 'Thirty-seconds',
 };
 
+/**
+ * What has to be typed before a whole shelf is emptied.
+ *
+ * English, like the rest of the interface, and read without regard to case
+ * so that a tablet capitalising it is not an argument.
+ */
+const PURGE_WORD = 'DELETE';
+
+/** "1 kept score", "12 kept scores" - so the reader is told what they lose. */
+function countOf(many: number, thing: string): string {
+  return `${many} ${thing}${many === 1 ? '' : 's'}`;
+}
+
 const OPENING_LABELS: Readonly<Record<WhatOpens, string>> = {
   generated: 'A new exercise',
   last: 'The score I read last',
@@ -854,6 +867,7 @@ export class AppView {
     renameText: HTMLElement;
     renameName: HTMLInputElement;
     renameProblem: HTMLElement;
+    confirmTyped: HTMLInputElement;
     renameYes: HTMLButtonElement;
     renameNo: HTMLButtonElement;
     whatOpens: HTMLSelectElement;
@@ -1039,6 +1053,7 @@ export class AppView {
       renameText: requireElement(doc, 'rename-text'),
       renameName: requireElement(doc, 'rename-name'),
       renameProblem: requireElement(doc, 'rename-problem'),
+      confirmTyped: requireElement(doc, 'confirm-typed'),
       renameYes: requireElement(doc, 'rename-yes'),
       renameNo: requireElement(doc, 'rename-no'),
       whatOpens: requireElement(doc, 'what-opens'),
@@ -2063,7 +2078,8 @@ export class AppView {
     });
 
     this.listen(this.el.scoresClear, 'click', () => {
-      void this.askToDelete('Delete every kept score?').then((yes) => {
+      const kept = this.runtime.scores.list().length;
+      void this.askToTypeIt(`Delete ${countOf(kept, 'kept score')}?`).then((yes) => {
         if (yes) {
           void this.runtime.scores.forget().then(() => this.renderScores());
         }
@@ -2071,7 +2087,8 @@ export class AppView {
     });
 
     this.listen(this.el.takesClear, 'click', () => {
-      void this.askToDelete('Delete every kept take?').then((yes) => {
+      const kept = this.runtime.takes.list().length;
+      void this.askToTypeIt(`Delete ${countOf(kept, 'kept take')}?`).then((yes) => {
         if (yes) {
           this.runtime.takes.forget();
           this.renderTakes();
@@ -4070,19 +4087,74 @@ export class AppView {
   }
 
   private askToDelete(question: string): Promise<boolean> {
+    return this.ask(question, null);
+  }
+
+  /**
+   * Asks for everything to go, and makes the reader say so in words.
+   *
+   * A row is one score and a mis-tap on it costs a file that is still on the
+   * disk. The shelf is the whole library, and on a tablet it is a thumb's
+   * width from the row above it - so this one is not a button that can be
+   * pressed by accident at all. Typed rather than held down or pressed
+   * twice: it is the only sort of confirmation that cannot be given without
+   * having read the question.
+   */
+  private askToTypeIt(question: string): Promise<boolean> {
+    return this.ask(`${question} Type ${PURGE_WORD} to confirm.`, PURGE_WORD);
+  }
+
+  /**
+   * One question, asked the same way everywhere.
+   *
+   * `window.confirm` is the alternative and it is not usable here: it is
+   * unimplemented in the environment the UI tests run in, so every deletion
+   * would be a path no test could take.
+   */
+  private ask(question: string, typed: string | null): Promise<boolean> {
     this.el.confirmText.textContent = question;
+    this.el.confirmTyped.value = '';
+    this.el.confirmTyped.hidden = typed === null;
+    // Refused until the word is there, rather than refusing afterwards: the
+    // button says what the state of the question is, and there is nothing to
+    // report about an answer nobody has given yet.
+    this.el.confirmYes.disabled = typed !== null;
     this.el.sheetConfirm.hidden = false;
+    if (typed !== null) {
+      this.el.confirmTyped.focus();
+    }
 
     return new Promise<boolean>((resolve) => {
       const answer = (yes: boolean): void => {
         this.el.sheetConfirm.hidden = true;
+        this.el.confirmYes.disabled = false;
+        this.el.confirmTyped.hidden = true;
         this.el.confirmYes.removeEventListener('click', onYes);
         this.el.confirmNo.removeEventListener('click', onNo);
+        this.el.confirmTyped.removeEventListener('input', onTyped);
+        this.el.confirmTyped.removeEventListener('keydown', onKey);
         this.el.sheetConfirm.removeEventListener('click', onOutside);
         resolve(yes);
       };
-      const onYes = (): void => answer(true);
+      const said = (): boolean =>
+        typed === null || this.el.confirmTyped.value.trim().toLowerCase() === typed.toLowerCase();
+      const onYes = (): void => {
+        if (said()) {
+          answer(true);
+        }
+      };
       const onNo = (): void => answer(false);
+      const onTyped = (): void => {
+        this.el.confirmYes.disabled = !said();
+      };
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key === 'Enter') {
+          onYes();
+        }
+        if (event.key === 'Escape') {
+          answer(false);
+        }
+      };
       const onOutside = (event: Event): void => {
         if (event.target === this.el.sheetConfirm) {
           answer(false);
@@ -4091,6 +4163,8 @@ export class AppView {
 
       this.el.confirmYes.addEventListener('click', onYes);
       this.el.confirmNo.addEventListener('click', onNo);
+      this.el.confirmTyped.addEventListener('input', onTyped);
+      this.el.confirmTyped.addEventListener('keydown', onKey);
       this.el.sheetConfirm.addEventListener('click', onOutside);
     });
   }

@@ -152,6 +152,16 @@
         <div class="sheet__panel sheet__panel--narrow" role="alertdialog" aria-modal="true"
           aria-labelledby="confirm-text">
           <p id="confirm-text" class="sheet__text"></p>
+          <!--
+            Shown only where everything is about to go. A row is one score
+            and a mis-tap costs a file that is still on the disk; the shelf
+            is the whole library, and a thumb-wide "yes" is not a decision.
+            Nothing is capitalised on the way in - iOS would do it anyway,
+            and the word is read without regard to case.
+          -->
+          <input id="confirm-typed" class="sheet__input" type="text" hidden
+            autocapitalize="off" autocorrect="off" spellcheck="false"
+            aria-label="Type the word that confirms this" />
           <div class="sheet__actions">
             <button id="confirm-no" type="button" class="button button--ghost">Cancel</button>
             <button id="confirm-yes" type="button" class="button button--danger">Delete</button>

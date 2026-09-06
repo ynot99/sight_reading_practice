@@ -487,6 +487,21 @@ describe('the stylesheet', () => {
     expect(roomy?.selector).toContain('--wide');
   });
 
+  it('puts nothing of its own along the foot of the score', () => {
+    // The transport bar is fixed to the bottom of the window, so anything
+    // inside the score pinned to its bottom edge ends up behind it. Both the
+    // page-turn arrows and the day counter were put there once, and neither
+    // could be found on the page.
+    const inTheScore = rules().filter((rule) => /^\.score__[a-z-]+$/.test(rule.selector));
+
+    expect(inTheScore.length).toBeGreaterThan(1);
+    for (const rule of inTheScore) {
+      if (/position\s*:\s*absolute/.test(rule.body)) {
+        expect(rule.body, rule.selector).not.toMatch(/\bbottom\s*:/);
+      }
+    }
+  });
+
   it('covers every element the markup starts hidden', () => {
     // A list, so that adding a hidden element to the page cannot silently
     // rely on a guard that only some components have.

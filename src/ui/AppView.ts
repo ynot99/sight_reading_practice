@@ -308,6 +308,11 @@ const PURGE_WORD = 'DELETE';
  */
 function describeSitting(ms: number): string {
   const minutes = Math.floor(ms / 60_000);
+  // Seconds under the first minute, so that a page just opened says what it
+  // is counting instead of appearing out of nowhere a minute later.
+  if (minutes < 1) {
+    return `${Math.floor(ms / 1_000)} s`;
+  }
   if (minutes < 60) {
     return `${minutes} min`;
   }
@@ -2718,7 +2723,7 @@ export class AppView {
   private showToday(): void {
     const ms = this.runtime.timeToday.msOn(Date.now());
     const idle = !this.isPlaying && !this.runtime.controller.isListening;
-    this.el.scoreToday.hidden = ms < 60_000 || !idle;
+    this.el.scoreToday.hidden = ms <= 0 || !idle;
     this.el.scoreToday.value = `Today ${describeSitting(ms)}`;
   }
 

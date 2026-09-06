@@ -996,14 +996,15 @@ select {
 /*
  * Today, in the corner of the page.
  *
- * The foot of the score, opposite the page arrows: the bottom of an engraved
- * page is margin, and this is a thing to catch the eye once rather than
- * something to read while playing.
+ * Top right, which is the one corner nothing else uses: the engraver writes
+ * the title and the page number into the top left of every page, and the
+ * bottom of the window belongs to the transport bar, which is fixed there
+ * and would stand in front of anything put underneath it.
  */
 .score__today {
   position: absolute;
   right: 12px;
-  bottom: 12px;
+  top: 12px;
   z-index: 6;
   padding: 3px 10px;
   border-radius: 999px;
@@ -1017,21 +1018,23 @@ select {
 /*
  * Turning the page by hand.
  *
- * At the foot of the score and out of the way of the music: a reader using
- * these has both hands on the keys and looks up once, so the targets are
- * large and in the same place every time. Quiet until touched - they are
- * furniture standing in front of notation the rest of the time.
+ * Against the right edge, half way down: a reader using these has both hands
+ * on the keys and reaches out once, and the edge is the part of a tablet a
+ * hand finds without looking. Not the foot of the page, which is where the
+ * transport bar stands - it is fixed to the bottom of the window, so
+ * anything put there is behind it.
  */
 .score__pages {
   position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 6;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 4px 8px;
+  gap: 2px;
+  padding: 6px 4px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   border: 1px solid var(--border);
@@ -1045,7 +1048,8 @@ select {
   color: var(--text);
   font-size: 26px;
   line-height: 1;
-  padding: 2px 14px;
+  /* A thumb's width, so it can be hit while looking at the music. */
+  padding: 8px 10px;
   border-radius: 12px;
   cursor: pointer;
 }
@@ -1058,9 +1062,8 @@ select {
 
 .score__page-at {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
-  min-width: 46px;
   text-align: center;
 }
 

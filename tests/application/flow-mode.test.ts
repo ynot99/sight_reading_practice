@@ -93,6 +93,25 @@ describe('Flow mode', () => {
     expect(harness.session.currentIndex).toBe(0);
   });
 
+  it('tells one chord from the next by the window', () => {
+    // The window is what says whether two notes were struck together, and
+    // that is a question only a mode keeping time asks - Wait mode ignores
+    // it, since a chord being learned is taken slowly. Here it stands: two
+    // presses most of a beat apart are two attempts, not one chord.
+    const harness = flowHarness();
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(TICKS_TO_START);
+    expect(harness.session.status).toBe('running');
+
+    harness.midi.noteOn(MIDI.C3, harness.clock.now());
+    harness.clock.set(harness.clock.now() + 600);
+    harness.midi.noteOn(MIDI.C4, harness.clock.now());
+
+    // The second press opened a fresh attempt rather than completing the
+    // first, so the step is still waiting for its other note.
+    expect(harness.of('noteJudged').at(-1)?.remaining).toEqual([MIDI.C3]);
+  });
+
   it('anchors musical position zero to the first beat after the count-in', () => {
     const harness = flowHarness();
     startAndCountIn(harness);

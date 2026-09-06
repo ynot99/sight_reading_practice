@@ -341,7 +341,16 @@ export class PracticeSession {
    */
   private policyFor(step: TimelineStep): MatchPolicy {
     const rolled = step.notes.some((note) => note.arpeggiated);
-    return rolled
+    // A mode that keeps no time asks nothing about simultaneity either.
+    //
+    // Reported from the page, and the comment above this was already saying
+    // it: in Wait mode nothing is timing the reader. The window was applied
+    // all the same, and 250 milliseconds is far less than it takes to find a
+    // chord you are learning - so the second note restarted the attempt, the
+    // first was forgotten, and a chord taken slowly could not be completed at
+    // all. Which is the mode whose whole purpose is taking it slowly.
+    const timed = this.mode.requiresMetronome;
+    return rolled || !timed
       ? { ...this.options.matchPolicy, toleranceMs: Number.POSITIVE_INFINITY }
       : this.options.matchPolicy;
   }

@@ -32,6 +32,36 @@ describe('Wait mode', () => {
     expect(harness.of('stepEntered')[0]?.step.expectedMidi).toEqual([MIDI.C3, MIDI.C4]);
   });
 
+  it('lets a chord be found one note at a time', () => {
+    // Reported from the page, and it is what this mode is *for*: a chord
+    // being learned is taken slowly, and the window that judges whether two
+    // notes were struck together belongs to the mode that keeps time. At 250
+    // milliseconds the second note restarted the attempt and the first was
+    // forgotten, so the chord could never be completed at all.
+    //
+    // A finite window on purpose: the harness above hands every other test an
+    // infinite one, which is exactly why the suite never saw this.
+    const harness = createHarness({
+      exercise: twoBarExercise(),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+    harness.session.start();
+
+    harness.midi.noteOn(MIDI.C3, harness.clock.now());
+    // Longer than any window a reader would set, and nothing like long
+    // enough to find a chord in.
+    harness.clock.set(harness.clock.now() + 3_000);
+    harness.midi.noteOn(MIDI.C4, harness.clock.now());
+
+    expect(harness.session.currentIndex).toBe(1);
+    expect(harness.of('stepCompleted')[0]?.result.status).toBe('correct');
+  });
+
   it('keeps a press that beat the first beat of the count-in', () => {
     // Not a Flow-mode concern: the session was dropping the input before any
     // mode saw it, so waiting for the notes did not help either.
@@ -202,7 +232,10 @@ describe('Wait mode', () => {
   });
 
   describe('with a finite chord window', () => {
-    it('treats a late note as the start of a new attempt', () => {
+    it('pays it no attention, the reader not being timed here', () => {
+      // It used to restart the attempt, which is the rule a mode that keeps
+      // time needs. Flow still has it - see its own tests - and this mode,
+      // whose whole purpose is taking a chord slowly, no longer does.
       const harness = waitHarness({
         exercise: twoBarExercise(),
         mode: new WaitMode(),
@@ -216,10 +249,7 @@ describe('Wait mode', () => {
 
       harness.midi.noteOn(MIDI.C3, 0);
       harness.midi.noteOn(MIDI.C4, 1_000);
-      // The window restarted, so only C4 counts and the step is not complete.
-      expect(harness.session.currentIndex).toBe(0);
 
-      harness.midi.noteOn(MIDI.C3, 1_050);
       expect(harness.session.currentIndex).toBe(1);
     });
   });
@@ -472,27 +502,22 @@ describe('a chord the writer marked to be rolled', () => {
     expect(harness.session.status).toBe('completed');
   });
 
-  it('still holds an ordinary chord to the window', () => {
-    // The freedom is the writer's instruction, not a general loosening: two
-    // chords a beat apart must still be two chords.
-    const harness = createHarness({
-      exercise: twoBarExercise(),
-      mode: new WaitMode(),
-      options: {
-        countInBars: 0,
-        clickWhen: 'never',
-        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
-      },
-    });
+  it('is exempt for its own reason, not as a general loosening', () => {
+    // The freedom the roll gets is an instruction on the page, not a general
+    // loosening - and the mode that keeps time still tells two chords a beat
+    // apart apart. That rule is tested where it now lives, in Flow: this one
+    // says only that the roll is exempt for its own reason.
+    const harness = rolledHarness();
     harness.session.start();
 
-    harness.midi.noteOn(MIDI.C3, harness.clock.now());
-    harness.clock.advance(600);
-    harness.midi.noteOn(MIDI.C4, harness.clock.now());
+    for (const midi of [MIDI.C3, MIDI.G3, MIDI.C4, MIDI.E4]) {
+      harness.midi.noteOn(midi, harness.clock.now());
+      harness.clock.advance(300);
+    }
 
-    // The second press opened a fresh attempt rather than completing the
-    // first, so the step is still waiting for its other note.
-    expect(harness.of('noteJudged').at(-1)?.remaining).toEqual([MIDI.C3]);
+    // Four of the five collected, spread far wider than any window, and the
+    // fifth still owed rather than the attempt having started over.
+    expect(harness.of('noteJudged').at(-1)?.remaining).toEqual([MIDI.G4]);
   });
 });
 

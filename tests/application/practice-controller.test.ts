@@ -1594,6 +1594,36 @@ describe('ruling the bars', () => {
     expect(renderer.ruler).toEqual([]);
   });
 
+  it('changes the hand a playback is sounding, without stopping it', async () => {
+    // His line 76, reported from the page: the hand was read once when the
+    // performance started, so a reader listening to both hands who asked for
+    // one of them went on hearing both until they stopped the music - which
+    // is the one thing they were trying not to do.
+    const { controller, metronome, instrument } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    // The left hand's own notes, read off the fixture rather than typed out.
+    const bass = new Set(
+      twoBarExercise({ tempoBpm: 60 })
+        .staves.filter((staff) => staff.staffNumber === 2)
+        .flatMap((staff) => staff.measures)
+        .flatMap((measure) => measure.entries)
+        .flatMap((entry) => (entry.kind === 'note' ? entry.pitches : []))
+        .map((pitch) => pitch.midi),
+    );
+
+    controller.listen();
+    metronome.advanceSubdivisions(1);
+    const heardBoth = instrument.played.length;
+    expect(instrument.played.some((note) => bass.has(note.midi))).toBe(true);
+
+    controller.updateSettings({ handStaff: 1 });
+    metronome.advanceSubdivisions(6);
+
+    const after = instrument.played.slice(heardBoth);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after.some((note) => bass.has(note.midi))).toBe(false);
+  });
+
   it('says which beats are about to pass, and when', async () => {
     // The marker on the notes stands still under a held note while the beats
     // go on passing, and that gap is where a reader loses count. Nothing in a

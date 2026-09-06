@@ -339,6 +339,38 @@ export class ExercisePlayer {
     this.nextToSchedule = at;
   }
 
+  /**
+   * Changes which hand is sounded, over a performance already going.
+   *
+   * Reported from the page: switching hands during a playback did nothing at
+   * all until it was stopped and started again. The hand was read once, in
+   * `start`, and the notes gathered from it there - so everything after that
+   * was the old answer, however many times the reader pressed the button.
+   *
+   * Gathered again from the same beginning, which keeps every note's moment
+   * where it was: the notes are timed from where this performance started,
+   * not from now. `catchUpSchedule` then finds the place in the new list by
+   * *time* rather than by counting, which is what makes a differently-sized
+   * list safe here - nothing already handed to the instrument is handed over
+   * twice, and nothing between the two lists is skipped.
+   *
+   * What is already scheduled still sounds: the horizon is a quarter of a
+   * second, so the hand changes within that and not on the very next note.
+   * A note already ringing is left to ring, the same as any other.
+   */
+  playWithHand(staffNumber: ListeningHand): void {
+    if (!this.playing || this.timeline === null || staffNumber === this.hand) {
+      return;
+    }
+    this.hand = staffNumber;
+    this.pending = this.collectNotes(this.timeline, this.hand, this.fromTicks);
+    this.lapNotes =
+      this.laidInLaps && this.loopFromTicks !== this.fromTicks
+        ? this.collectNotes(this.timeline, this.hand, this.loopFromTicks)
+        : this.pending;
+    this.catchUpSchedule();
+  }
+
   /** Changes what is heard over a performance, without interrupting it. */
   applyClick(click: ClickPattern, clickWhen: ClickWhen): void {
     if (!this.playing || this.timeline === null) {

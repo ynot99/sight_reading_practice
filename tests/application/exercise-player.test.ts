@@ -47,6 +47,48 @@ describe('listening to an exercise', () => {
     );
   });
 
+  it('changes hands without stopping', () => {
+    // Reported from the page: switching hands during a playback did nothing
+    // until it was stopped and started again, because the hand was read once
+    // and the notes gathered from it there.
+    const clock = new ManualClock();
+    const metronome = new ManualMetronome(clock);
+    const instrument = new RecordingPitchPlayer();
+    const renderer = new FakeScoreRenderer();
+    const player = new ExercisePlayer({
+      metronome,
+      instrument,
+      cursor: renderer.cursor,
+      // Narrow, so that what is scheduled is roughly what has been heard -
+      // a horizon of two seconds would have laid out the whole piece before
+      // the hand could be changed at all.
+      horizonMs: 10,
+    });
+    const timeline = buildTimeline(twoBarExercise({ tempoBpm: 60 }));
+    const bass = new Set(
+      timeline.steps.flatMap((step) =>
+        step.notes.filter((note) => note.staffNumber === 2).map((note) => note.midi),
+      ),
+    );
+
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(2);
+    const heardBoth = instrument.played.length;
+    expect(instrument.played.some((note) => bass.has(note.midi))).toBe(true);
+
+    player.playWithHand(1);
+    metronome.advanceSubdivisions(6);
+
+    const after = instrument.played.slice(heardBoth);
+    expect(after.length).toBeGreaterThan(0);
+    // The left hand is not heard again, and the right hand carries on from
+    // where it was rather than starting the piece over.
+    expect(after.some((note) => bass.has(note.midi))).toBe(false);
+    expect(after.map((note) => note.midi)).toEqual([...after.map((note) => note.midi)].sort(
+      (left, right) => left - right,
+    ));
+  });
+
   it('places them ahead of the tick that scheduled them', () => {
     // A tick arrives after the moment it stands for, so a note played on
     // delivery is late by however long the scheduler slept. Every note carries

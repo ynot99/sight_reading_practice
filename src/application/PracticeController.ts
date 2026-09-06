@@ -767,6 +767,14 @@ export class PracticeController {
       this.player?.setRepeating(changes.repeatRange);
     }
 
+    // And the same for the hand. Reported from the page: it was read once
+    // when the performance started, so a reader listening to both hands who
+    // asked for one of them went on hearing both until they stopped the
+    // music - which is the one thing they were trying not to do.
+    if (changes.handStaff !== undefined) {
+      this.player?.playWithHand(next.handStaff);
+    }
+
     if (changes.zoom !== undefined && changes.zoom !== this.deps.zoom.zoom) {
       this.deps.zoom.setZoom(changes.zoom);
       this.refreshScore();

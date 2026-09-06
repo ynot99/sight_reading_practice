@@ -6,6 +6,7 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
+import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY } from '../../src/domain/model/Exercise.js';
 import {
   measureTicks,
   noteEntry,
@@ -75,6 +76,21 @@ describe('the dynamics on the page', () => {
     const { exercise } = importer.read(serializer.serialize(original));
 
     expect(exercise.dynamicMarks.map((mark) => mark.level)).toEqual(['ppp', 'fff']);
+  });
+
+  it('spreads the levels widely enough to be heard apart', () => {
+    // Reported from the page: he could see f, mf and mp and hear no
+    // difference. Two neighbouring levels three decibels apart is a
+    // difference nobody notices in music; from ppp to fff is now about
+    // fifteen, and the player darkens a quiet note as well as lowering it.
+    const levels = DYNAMIC_LEVELS.map((level) => DYNAMIC_VELOCITY[level]);
+
+    for (let at = 1; at < levels.length; at += 1) {
+      expect(levels[at] ?? 0).toBeGreaterThan(levels[at - 1] ?? 0);
+    }
+    const softest = levels[0] ?? 1;
+    const loudest = levels[levels.length - 1] ?? 1;
+    expect(loudest / softest).toBeGreaterThan(4);
   });
 
   it('says nothing about loudness where the writer said nothing', () => {

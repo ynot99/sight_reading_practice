@@ -75,6 +75,28 @@ interface Voice {
  * any sample that failed to arrive - notes are handed to the fallback player,
  * so a key always makes a sound.
  */
+/**
+ * A filter that opens as the note is struck harder, or `null` where the
+ * device cannot make one.
+ *
+ * Two octaves of brightness between the softest and the loudest, which is
+ * about what a piano gives and well short of what a synthesiser would. Every
+ * older browser that lacks the node simply gets the note it got before.
+ */
+function toneFor(context: AudioContext, velocity: number): BiquadFilterNode | null {
+  if (typeof context.createBiquadFilter !== 'function') {
+    return null;
+  }
+  const how = Math.min(1, Math.max(0, velocity));
+  const filter = context.createBiquadFilter();
+  filter.type = 'lowpass';
+  // 1.4 kHz at the quietest, 18 kHz at the loudest: a curve rather than a
+  // line, because loudness is heard that way and so is brightness.
+  filter.frequency.value = 1_400 * 2 ** (how * 3.7);
+  filter.Q.value = 0.7;
+  return filter;
+}
+
 export class SampledPitchPlayer
   implements IPitchPlayer, IVolumeControl, ISustainPedal, ISampleLibrary
 {
@@ -235,6 +257,12 @@ export class SampledPitchPlayer
     source.playbackRate.value = playbackRateFor(choice.semitones);
 
     const peak = level * Math.max(0.15, velocity);
+    // Brightness with loudness. The recordings are one velocity layer, so a
+    // quiet note is the same recording turned down - which the ear hears as
+    // the same note, not as a quieter touch. Rolling the top off it is the
+    // cheapest honest imitation of the layers this library has and we do not
+    // ship: soft is dull, hard is open.
+    const tone = toneFor(context, velocity);
     // The recording carries its own attack; this only avoids a click.
     envelope.gain.setValueAtTime(0.0001, now);
     envelope.gain.linearRampToValueAtTime(peak, now + 0.006);
@@ -248,7 +276,11 @@ export class SampledPitchPlayer
       envelope.gain.linearRampToValueAtTime(0.0001, now + playedSeconds);
     }
 
-    source.connect(envelope).connect(context.destination);
+    if (tone === null) {
+      source.connect(envelope).connect(context.destination);
+    } else {
+      source.connect(tone).connect(envelope).connect(context.destination);
+    }
     source.start(now);
     source.onended = () => {
       if (this.voices.get(midi)?.source === source) {

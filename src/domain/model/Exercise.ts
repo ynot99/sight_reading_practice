@@ -388,20 +388,26 @@ export interface DynamicMark {
 /**
  * How hard a level is struck, `0..1`.
  *
- * Steps rather than a curve, because steps are what is written. The spread
- * is deliberately narrower than the full range: at the bottom the sampled
- * piano stops sounding like one, and at the top the loudest levels are close
- * together because the recordings themselves are.
+ * Steps rather than a curve, because steps are what is written, and spread
+ * as widely as the instrument allows: from `ppp` to `fff` is about fifteen
+ * decibels here, where two neighbouring levels three decibels apart were
+ * being reported as no difference at all.
+ *
+ * Loudness is only half of it. A piano struck harder is *brighter*, not
+ * merely louder, and one recording per note cannot say that by itself - so
+ * the player darkens a quiet note as well as lowering it. Which is what a
+ * sampler with sixteen velocity layers gets for free and this one has to
+ * imitate; the layers themselves are a download, not a rule.
  */
 export const DYNAMIC_VELOCITY: Readonly<Record<DynamicLevel, number>> = {
-  ppp: 0.22,
-  pp: 0.32,
-  p: 0.45,
-  mp: 0.58,
-  mf: 0.7,
-  f: 0.82,
-  ff: 0.9,
-  fff: 0.98,
+  ppp: 0.18,
+  pp: 0.28,
+  p: 0.4,
+  mp: 0.52,
+  mf: 0.66,
+  f: 0.8,
+  ff: 0.92,
+  fff: 1,
 };
 
 /**

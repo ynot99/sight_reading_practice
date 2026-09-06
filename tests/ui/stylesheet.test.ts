@@ -502,6 +502,17 @@ describe('the stylesheet', () => {
     }
   });
 
+  it('lets everything in a sheet scroll inside it', () => {
+    // The panel has a height and hides what overflows, so a group of
+    // controls taller than the panel is cut off with no way down. This was
+    // the wide panel's rule alone until the metronome sheet outgrew itself.
+    const inSheets = rules().find((rule) => rule.selector === '.sheet__panel .controls');
+
+    expect(inSheets?.body).toMatch(/overflow-y\s*:\s*auto/);
+    // Without this a grid item refuses to shrink and scrolls nothing.
+    expect(inSheets?.body).toMatch(/min-height\s*:\s*0/);
+  });
+
   it('covers every element the markup starts hidden', () => {
     // A list, so that adding a hidden element to the page cannot silently
     // rely on a guard that only some components have.

@@ -973,10 +973,19 @@ select {
   max-height: min(86vh, 900px);
 }
 
-.sheet__panel--wide .controls {
+/*
+ * Anything in a sheet scrolls inside it.
+ *
+ * The panel has a height and hides what overflows it, so a group of controls
+ * taller than the panel was simply cut off - no scrollbar, no way down. It
+ * was the wide panel's rule alone, and the metronome sheet grew past its own
+ * height the moment it gained two questions about the count-in.
+ */
+.sheet__panel .controls {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
+  min-height: 0;
 }
 
 .sheet__panel {

@@ -35,6 +35,140 @@ function rig(exercise = twoBarExercise({ tempoBpm: 60 })) {
   return { player, metronome, instrument, renderer, timeline: buildTimeline(exercise) };
 }
 
+/**
+ * Four quarters a bar, with two grace notes leaning on the second beat.
+ *
+ * One staff, so the ornaments belong to it and to the hand that reads it.
+ */
+function ornamented(slashed: boolean): Exercise {
+  const graces = [
+    { pitches: [p('D4')], duration: Duration.EIGHTH, slashed },
+    { pitches: [p('E4')], duration: Duration.EIGHTH, slashed },
+  ];
+  return {
+    ...twoBarExercise({ tempoBpm: 60 }),
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        clefChanges: [],
+        measures: [
+          bar(
+            noteEntry(p('C4'), Duration.QUARTER),
+            noteEntry(p('F4'), Duration.QUARTER, [], [], null, false, { graces }),
+            noteEntry(p('G4'), Duration.QUARTER),
+            noteEntry(p('A4'), Duration.QUARTER),
+          ),
+        ],
+      },
+      {
+        staffNumber: 2,
+        voice: 2,
+        clef: 'bass',
+        clefChanges: [],
+        measures: [
+          bar(
+            noteEntry(p('C3'), Duration.QUARTER),
+            noteEntry(p('F3'), Duration.QUARTER, [], [], null, false, {
+              graces: [{ pitches: [p('B2')], duration: Duration.EIGHTH, slashed }],
+            }),
+            noteEntry(p('G3'), Duration.QUARTER),
+            noteEntry(p('A3'), Duration.QUARTER),
+          ),
+        ],
+      },
+    ],
+  };
+}
+
+describe('the ornaments on the page', () => {
+  it('sounds a grace note in front of the note it leans on', () => {
+    // They were drawn, forgiven when he played them, and silent when the
+    // piece was played to him. An ornament takes no time from the bar, so
+    // the beat cannot move for one - the room it has is the room in front
+    // of it, which is where an acciaccatura is played in any case.
+    const { player, metronome, instrument } = rig(ornamented(false));
+    player.start(buildTimeline(ornamented(false)), {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+    });
+    metronome.advanceSubdivisions(8);
+
+    const beat = instrument.played.find((note) => note.midi === p('F4').midi);
+    const first = instrument.played.find((note) => note.midi === p('D4').midi);
+    const second = instrument.played.find((note) => note.midi === p('E4').midi);
+
+    // At sixty to the crotchet the second beat falls a second in, and the
+    // ornaments sit in front of it in the order they are written.
+    expect(beat?.atMs).toBe(1_000);
+    expect(first?.atMs ?? 0).toBeLessThan(second?.atMs ?? 0);
+    expect(second?.atMs ?? 0).toBeLessThan(beat?.atMs ?? 0);
+  });
+
+  it('crushes one whose stem is struck through', () => {
+    // The stroke is the writer saying "get it out of the way", and it means
+    // that at any tempo: an eighth at sixty to the crotchet is half a second,
+    // which is not a crush but a note.
+    const played = (slashed: boolean): number => {
+      const exercise = ornamented(slashed);
+      const { player, metronome, instrument } = rig(exercise);
+      player.start(buildTimeline(exercise), {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'never',
+      });
+      metronome.advanceSubdivisions(8);
+      const beat = instrument.played.find((note) => note.midi === p('F4').midi)?.atMs ?? 0;
+      const first = instrument.played.find((note) => note.midi === p('D4').midi)?.atMs ?? 0;
+      return beat - first;
+    };
+
+    expect(played(true)).toBeLessThan(played(false));
+    expect(played(true)).toBeLessThan(200);
+  });
+
+  it('plays the two hands’ ornaments together, not one after the other', () => {
+    // Both hands may ornament the same beat. Laid end to end the left hand's
+    // grace is pushed back past where the right hand's began, and a beat that
+    // two hands decorate arrives sounding like five separate notes.
+    const exercise = ornamented(false);
+    const { player, metronome, instrument } = rig(exercise);
+    player.start(buildTimeline(exercise), {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+    });
+    metronome.advanceSubdivisions(8);
+    const ends = (midi: number): number =>
+      instrument.stopped.find((note) => note.midi === midi)?.atMs ?? -1;
+    const beat = instrument.played.find((note) => note.midi === p('F4').midi)?.atMs ?? 0;
+
+    // Each hand's run finishes against the beat, so the last of each lets go
+    // together: the right hand's second grace and the left hand's only one.
+    expect(ends(p('B2').midi)).toBe(ends(p('E4').midi));
+    expect(ends(p('B2').midi)).toBeLessThan(beat);
+  });
+
+  it('leaves the other hand’s ornaments alone', () => {
+    // Listening to one hand is listening to that hand, ornaments and all -
+    // and to none of the other's.
+    const exercise = ornamented(false);
+    const { player, metronome, instrument } = rig(exercise);
+    player.start(buildTimeline(exercise), {
+      staffNumber: 1,
+      click: 'pulse',
+      clickWhen: 'never',
+    });
+    metronome.advanceSubdivisions(8);
+    const sounded = instrument.played.map((note) => note.midi);
+
+    expect(sounded).toContain(p('D4').midi);
+    expect(sounded).not.toContain(p('B2').midi);
+  });
+});
+
 describe('listening to an exercise', () => {
   it('sounds every note the score asks for', () => {
     const { player, metronome, instrument, timeline } = rig();

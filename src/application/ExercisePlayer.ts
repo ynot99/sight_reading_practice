@@ -6,7 +6,7 @@ import {
   spanMs,
   velocityAt,
 } from '../domain/model/Exercise.js';
-import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
+import type { ExerciseTimeline, TimelineOrnament } from '../domain/timeline/Timeline.js';
 import type { PositionEvent } from './session/SessionEvents.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import {
@@ -141,6 +141,16 @@ interface ScheduledNote {
 }
 
 const DEFAULT_HORIZON_MS = 250;
+/**
+ * The longest a grace note with a stroke through its stem is held.
+ *
+ * An acciaccatura is a flick of the finger and stays one at every tempo. Its
+ * written value is an eighth as often as not, which at forty to the crotchet
+ * is three quarters of a second - a note, and one nobody wrote.
+ */
+const CRUSH_MS = 70;
+/** The gap between an ornament and the note it leans on, so the two are two. */
+const GRACE_GAP_MS = 6;
 
 /**
  * How many laps of a repeating passage the plan is written out for at a time.
@@ -736,6 +746,45 @@ export class ExercisePlayer {
    * simply rings until the pedal comes up, which is the same thing said in the
    * only terms this schedule has.
    */
+  /**
+   * Where a run of grace notes goes, and how long each of them lasts.
+   *
+   * In front of the note they lean on, because that is the only room they
+   * have: an ornament takes no time from the bar, so the beat cannot move for
+   * one - the marker, the metronome and the judging all agree on where it is.
+   * Which is how an acciaccatura is played in any case, and near enough for
+   * the rest that hearing them beats not hearing them.
+   *
+   * A crushed one keeps its flick at every tempo: at forty to the crotchet
+   * its written value would last a third of a second, which is not a crush
+   * but a note. The run is then squeezed into whatever room stands between it
+   * and the note before, so an ornament never swallows the note it leans away
+   * from - and at the very start of a run, where there is nothing before it,
+   * it keeps its length and sounds a moment early.
+   */
+  private graceRun(
+    graces: readonly TimelineOrnament[],
+    onsetMs: number,
+    previousMs: number | null,
+    lengthOf: (ornament: TimelineOrnament) => number,
+  ): readonly { readonly atMs: number; readonly untilMs: number }[] {
+    const wanted = graces.map(lengthOf);
+    const total = wanted.reduce((sum, ms) => sum + ms, 0);
+    const room =
+      previousMs === null
+        ? Number.POSITIVE_INFINITY
+        : Math.max(0, onsetMs - GRACE_GAP_MS - previousMs);
+    const squeeze = total > room && total > 0 ? room / total : 1;
+    const placed: { atMs: number; untilMs: number }[] = [];
+    let atMs = onsetMs - GRACE_GAP_MS - total * squeeze;
+    for (const ms of wanted) {
+      const length = ms * squeeze;
+      placed.push({ atMs, untilMs: atMs + length });
+      atMs += length;
+    }
+    return placed;
+  }
+
   private collectNotes(
     timeline: ExerciseTimeline,
     staffNumber: ListeningHand,
@@ -748,6 +797,8 @@ export class ExercisePlayer {
     // a piece that changes tempo has no single number to multiply by.
     const at = (ticks: number): number => spanMs(exercise, fromTicks, ticks);
     const longest = new Map<string, ScheduledNote>();
+    /** Where the last step sounded, which is as far back as an ornament may reach. */
+    let previousMs: number | null = null;
     for (const step of timeline.steps) {
       // Only the stretch being played, and timed from its own beginning.
       if (step.onsetTicks < fromTicks || step.onsetTicks >= this.untilTicks) {
@@ -810,6 +861,55 @@ export class ExercisePlayer {
           });
         }
       }
+
+      // The ornaments printed here, laid in front of the note they lean on.
+      // Keyed apart from the notes: a grace may be the same key as the note
+      // it decorates, and that is two presses rather than one.
+      const onsetMs = at(step.onsetTicks);
+      // One run per hand. Both may ornament the same beat, and two ornaments
+      // written in two hands are played together rather than one after the
+      // other - laid end to end they would push the left hand's back past
+      // where the right hand's began.
+      const byHand = new Map<number, TimelineOrnament[]>();
+      for (const ornament of step.ornaments) {
+        if (staffNumber !== null && ornament.staffNumber !== staffNumber) {
+          continue;
+        }
+        byHand.set(ornament.staffNumber, [
+          ...(byHand.get(ornament.staffNumber) ?? []),
+          ornament,
+        ]);
+      }
+      for (const [hand, graces] of byHand) {
+        const placed = this.graceRun(graces, onsetMs, previousMs, (ornament) => {
+          const written = spanMs(
+            exercise,
+            step.onsetTicks,
+            step.onsetTicks + ornament.duration.ticks,
+          );
+          return ornament.slashed ? Math.min(written, CRUSH_MS) : written;
+        });
+        for (const [index, ornament] of graces.entries()) {
+          const where = placed[index];
+          if (where === undefined) {
+            continue;
+          }
+          for (const pitch of ornament.pitches) {
+            longest.set(`grace${hand}.${index}:${pitch.midi}@${step.onsetTicks}`, {
+              midi: pitch.midi,
+              atMs: where.atMs,
+              untilMs: where.untilMs,
+              velocity: velocityAt(
+                exercise,
+                step.measureIndex,
+                step.onsetTicks - measureStart,
+                ornament.staffNumber,
+              ),
+            });
+          }
+        }
+      }
+      previousMs = onsetMs;
     }
     return [...longest.values()].sort((left, right) => left.atMs - right.atMs);
   }

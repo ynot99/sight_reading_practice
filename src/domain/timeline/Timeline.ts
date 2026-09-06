@@ -1,6 +1,7 @@
 import { elementAt } from '../../shared/asserts.js';
 import type { Exercise, MusicalEntry } from '../model/Exercise.js';
 import { barLines, exerciseTicks, positionOfTick } from '../model/Exercise.js';
+import type { Duration } from '../model/Duration.js';
 import type { Pitch } from '../model/Pitch.js';
 
 /** A single sounding pitch inside a timeline step. */
@@ -48,6 +49,23 @@ export interface TimelineStep {
    * rather than asked for. So it is neither demanded nor punished.
    */
   readonly ornamentMidi: readonly number[];
+  /**
+   * The same ornaments, whole, for anything that has to sound them.
+   *
+   * `ornamentMidi` says which keys are forgiven here and nothing else, which
+   * is all the judging needs. Playing one needs the rest of what was written:
+   * how long it is, whether its stem is struck through, and which hand it
+   * belongs to.
+   */
+  readonly ornaments: readonly TimelineOrnament[];
+}
+
+/** A grace note printed at a step, with the staff it was written on. */
+export interface TimelineOrnament {
+  readonly pitches: readonly Pitch[];
+  readonly duration: Duration;
+  readonly slashed: boolean;
+  readonly staffNumber: number;
 }
 
 /**
@@ -162,7 +180,7 @@ function soundingTicks(
  */
 export function buildTimeline(exercise: Exercise): ExerciseTimeline {
   const notesByOnset = new Map<number, TimelineNote[]>();
-  const ornamentsByOnset = new Map<number, number[]>();
+  const ornamentsByOnset = new Map<number, TimelineOrnament[]>();
   const onsets = new Set<number>();
   // Where each bar begins, rather than a bar length to multiply by: a metre
   // may change partway through, and from there on the bars are no longer all
@@ -187,9 +205,7 @@ export function buildTimeline(exercise: Exercise): ExerciseTimeline {
       if (entry.kind === 'note' && entry.graces.length > 0) {
         const bucket = ornamentsByOnset.get(onsetTicks) ?? [];
         for (const grace of entry.graces) {
-          for (const pitch of grace.pitches) {
-            bucket.push(pitch.midi);
-          }
+          bucket.push({ ...grace, staffNumber: staff.staffNumber });
         }
         ornamentsByOnset.set(onsetTicks, bucket);
       }
@@ -236,9 +252,16 @@ export function buildTimeline(exercise: Exercise): ExerciseTimeline {
       // Both hands may notate the same sounding pitch; the player still has
       // exactly one key to press for it.
       expectedMidi: [...new Set(notes.map((note) => note.midi))],
+      ornaments: ornamentsByOnset.get(onsetTicks) ?? [],
       // Minus anything the step demands anyway: a grace on the note it is
       // already asking for is that note, and asking for it once is enough.
-      ornamentMidi: [...new Set(ornamentsByOnset.get(onsetTicks) ?? [])]
+      ornamentMidi: [
+        ...new Set(
+          (ornamentsByOnset.get(onsetTicks) ?? []).flatMap((ornament) =>
+            ornament.pitches.map((pitch) => pitch.midi),
+          ),
+        ),
+      ]
         .filter((midi) => !notes.some((note) => note.midi === midi))
         .sort((left, right) => left - right),
     };

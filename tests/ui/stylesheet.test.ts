@@ -459,6 +459,34 @@ describe('the stylesheet', () => {
     expect(picker).not.toMatch(/accept=/);
   });
 
+  it('lets a list fill the sheet it is the whole point of', () => {
+    // The 190px cap belongs to the desk panel, where the list sits under
+    // everything else. Left to apply in a sheet it made a scroll box five
+    // rows tall in the middle of a screen with room for thirty - and no test
+    // that runs in jsdom can see a height, so the rule is checked here.
+    const inSheet = rules().find((rule) => rule.selector === '.sheet .takes__list');
+
+    expect(inSheet?.body).toMatch(/max-height\s*:\s*none/);
+    expect(inSheet?.body).toMatch(/overflow-y\s*:\s*auto/);
+    // Shrinking rather than growing, so three scores stay three rows tall.
+    expect(inSheet?.body).toMatch(/flex\s*:\s*0\s+1\s+auto/);
+  });
+
+  it('gives the sheets room on a screen that has room', () => {
+    // The panel is sized for the tablet held upright; on a desk monitor the
+    // same 520px is a small window in the middle of an empty screen.
+    const roomy = rules().find((rule) =>
+      rule.selector.startsWith('.sheet__panel:not('),
+    );
+
+    expect(roomy).toBeDefined();
+    expect(roomy?.body).toMatch(/width\s*:\s*min\(7[0-9]{2}px/);
+    // And the two panels that have their own sizes are left out of it: a
+    // question with two buttons under it does not want to be 760px wide.
+    expect(roomy?.selector).toContain('--narrow');
+    expect(roomy?.selector).toContain('--wide');
+  });
+
   it('covers every element the markup starts hidden', () => {
     // A list, so that adding a hidden element to the page cannot silently
     // rely on a guard that only some components have.

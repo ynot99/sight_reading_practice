@@ -994,6 +994,24 @@ select {
 }
 
 /*
+ * Room on a screen that has room.
+ *
+ * The panel is sized for a phone and for the tablet held upright, where
+ * 520px is most of the width there is. On a desk monitor that same panel is
+ * a small window in the middle of an empty screen - and the list inside it
+ * is the thing being read.
+ *
+ * The narrow and the wide panels keep their own sizes: one is a question
+ * with two buttons under it, and the other is already as large as it goes.
+ */
+@media (min-width: 900px) and (min-height: 700px) {
+  .sheet__panel:not(.sheet__panel--narrow):not(.sheet__panel--wide) {
+    width: min(760px, 100%);
+    max-height: min(82vh, 900px);
+  }
+}
+
+/*
  * The one sheet that is raised from another, so it has to sit over it.
  *
  * Sharing a stacking level with the list it was opened from put the question
@@ -1081,10 +1099,19 @@ select {
   padding: 4px 12px;
 }
 
+/*
+ * In a sheet the list is not one thing among many - it is what the sheet is
+ * for, so it takes the height the panel has instead of the 190px it is given
+ * on the desk, where it sits under everything else. Shrinking rather than
+ * growing (`flex: 0 1 auto`) keeps a library of three scores three rows
+ * tall, and lets a library of thirty scroll inside the panel.
+ */
 .sheet .takes__list {
   overflow-y: auto;
   overscroll-behavior: contain;
   min-height: 0;
+  max-height: none;
+  flex: 0 1 auto;
 }
 
 

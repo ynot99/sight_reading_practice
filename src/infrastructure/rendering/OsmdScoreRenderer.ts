@@ -68,6 +68,14 @@ const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
  * sliding every mark off its note.
  */
 const UNITS_TO_PIXELS = 10;
+/**
+ * How many times a page may be cut down to fit what is drawn on it.
+ *
+ * Every pass is a whole engraving and the reader is waiting for it, so this
+ * is small on purpose: a score that has not settled in four passes is one
+ * where the room itself is the problem, and cutting further will not find it.
+ */
+const FIT_PASSES = 4;
 /** How wide a passage marker is drawn, in the same pixels. */
 const MARKER_WIDTH = 5;
 /** The circle at each end of a marker, which is what a thumb aims at. */
@@ -908,14 +916,28 @@ export class OsmdScoreRenderer
     if (!this.paged || this.osmd === null) {
       return;
     }
-    const surplus = this.surplusBelowPage();
-    if (surplus <= 0) {
-      return;
+    // Over and over, not once. Taking the surplus off changes which systems
+    // fit on a page, and that changes which page draws furthest past its box
+    // - so a single pass is a guess. It measured as one too: opening a long
+    // score gave two systems to pages that hold one and a half, and the
+    // reader's own fix was to zoom in and out again, each zoom being another
+    // pass at the same arithmetic.
+    for (let pass = 0; pass < FIT_PASSES; pass += 1) {
+      const surplus = this.surplusBelowPage();
+      if (surplus <= 0) {
+        return;
+      }
+      // A page cannot be cut past nothing. Where the room has run out the
+      // next engraving would draw the same thing again, and the reader would
+      // wait for it.
+      if (this.windowHeight() - this.pageSurplusPx - surplus <= 0) {
+        return;
+      }
+      this.pageSurplusPx += surplus;
+      this.applyPageFormat();
+      this.osmd.render();
+      this.forgetSheets();
     }
-    this.pageSurplusPx += surplus;
-    this.applyPageFormat();
-    this.osmd.render();
-    this.forgetSheets();
   }
 
   /**

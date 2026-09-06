@@ -68,6 +68,21 @@ function everyPageDrawsPastItsBox(): void {
     };
 }
 
+/**
+ * Pages that keep drawing past their box until they are given real room.
+ *
+ * Which is what a page does: cutting it down changes which systems fit on
+ * it, so the page that draws furthest past its box afterwards is a different
+ * page. One correction is a guess at where that stops.
+ */
+function pagesOverflowUntilTheyFit(units: number): void {
+  (SVGSVGElement.prototype as unknown as { getBBox: () => DOMRect }).getBBox =
+    function getBBox(this: SVGSVGElement): DOMRect {
+      const box = Number((this.getAttribute('viewBox') ?? '').split(/[\s,]+/)[3] ?? 0);
+      return { x: 0, y: 0, width: 10, height: box > units ? box + 50 : box - 5 } as DOMRect;
+    };
+}
+
 /** How wide the page is, in the units the bars were measured in. */
 function pageWidth(container: HTMLElement): number {
   const svg = sheets(container).find((sheet) => sheet.style.display !== 'none');
@@ -192,6 +207,21 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     const first = asked[0] ?? 0;
     const last = asked[asked.length - 1] ?? 0;
     expect(last).toBeLessThan(first);
+  });
+
+  it('keeps cutting the page down until the drawing fits inside it', () => {
+    // Reported from the tablet: a long score opened with two systems on
+    // pages that hold one and a half, the second one sliced by the bottom of
+    // the page. Zooming in and then out again fixed it - which is the same
+    // arithmetic run twice more, and the reason a single pass was never the
+    // answer.
+    const asked = spyOnPageSizes(renderer);
+    pagesOverflowUntilTheyFit(15);
+
+    renderer.setPaged(true);
+
+    expect(asked[asked.length - 1] ?? 0).toBeLessThanOrEqual(15);
+    expect(asked[asked.length - 1] ?? 0).toBeGreaterThan(0);
   });
 
   it('has the engraver break the music into several pages', () => {

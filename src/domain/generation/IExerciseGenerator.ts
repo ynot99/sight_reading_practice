@@ -2,6 +2,7 @@ import type { Exercise } from '../model/Exercise.js';
 import type { KeySignature } from '../model/KeySignature.js';
 import type { TimeSignature } from '../model/TimeSignature.js';
 import type { RhythmProfile } from './RhythmProfile.js';
+import type { PitchRange } from './voices/IVoiceGenerator.js';
 
 /** Everything the user (or the UI) gets to choose about an exercise. */
 export interface ExerciseRequest {
@@ -13,6 +14,15 @@ export interface ExerciseRequest {
   readonly rhythm: RhythmProfile;
   /** Omit for a fresh exercise; supply to reproduce a previous one exactly. */
   readonly seed?: number;
+  /**
+   * The keys the reader has, where they are fewer than a piano's.
+   *
+   * A fact about the instrument in the room rather than about the exercise,
+   * which is why it travels with the request instead of being written into
+   * every preset: the same level is the same level on a laptop and on a
+   * grand, and only the octaves it can be played in differ.
+   */
+  readonly withinRange?: PitchRange;
 }
 
 /**

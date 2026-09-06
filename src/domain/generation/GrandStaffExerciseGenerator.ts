@@ -47,6 +47,7 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
       timeSignature: request.timeSignature,
       measures: request.measures,
       rhythm: request.rhythm,
+      ...(request.withinRange === undefined ? {} : { withinRange: request.withinRange }),
     };
 
     const staves: StaffPart[] = this.staves.map((plan, index) => ({

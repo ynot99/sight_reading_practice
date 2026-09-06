@@ -18,6 +18,8 @@ import { playedNoteOffset } from './playedNoteOffset.js';
 import { drillTaskPassed, planTheDrill, type DrillTask } from './drill/SectionDrill.js';
 import type { WhatOpens } from './ScoreLibrary.js';
 import type { PageTurns } from './ports/IScoreRenderer.js';
+import { keysOf, type KeyboardSize } from '../domain/generation/keyboards.js';
+import type { PitchRange } from '../domain/generation/voices/IVoiceGenerator.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
 import type { IClock } from './ports/IClock.js';
@@ -223,6 +225,13 @@ export interface PracticeSettings {
    */
   /** Which clicks are left out, so the reader has to supply them. */
   readonly clickSilences: ClickSilence;
+  /**
+   * The keyboard in the room, so exercises are written for keys he has.
+   *
+   * Only generated material: an imported score is what its writer wrote, and
+   * moving it would be rewriting the piece rather than choosing an exercise.
+   */
+  readonly keyboard: KeyboardSize;
   readonly countInRun: CountInWhen;
   /** And the same question of a playback, which has never had one at all. */
   readonly countInPlayback: CountInWhen;
@@ -699,6 +708,7 @@ export class PracticeController {
       // Every time round, which is what a run has always done: each lap of a
       // repeat is a new run, and each one counted itself in.
       clickSilences: 'nothing',
+      keyboard: 'any',
       countInRun: 'every',
       // And a playback has never had one.
       countInPlayback: 'never',
@@ -1231,6 +1241,12 @@ export class PracticeController {
       tempoBpm: this.tempoBpm,
       rhythm: this.deps.rhythms.get(this.currentSettings.rhythmProfileId),
       ...(seed === undefined ? {} : { seed }),
+      // The keys he has. Left out entirely for a whole piano, so a request
+      // for the ordinary case is the request it has always been - which is
+      // what keeps every generated exercise reproducible from its seed.
+      ...(keysOf(this.currentSettings.keyboard) === null
+        ? {}
+        : { withinRange: keysOf(this.currentSettings.keyboard) as PitchRange }),
     };
 
     return this.present(await this.provider.provide(request));

@@ -83,6 +83,76 @@ describe('how long the application has been open today', () => {
     expect(time.msOn(at(2026, 9, 7))).toBe(60_000);
   });
 
+  it('counts the days practised in a row', () => {
+    const time = new TimeToday(new InMemorySettingsStore());
+    for (const day of [4, 5, 6]) {
+      time.add(at(2026, 9, day), 10 * 60_000);
+    }
+
+    expect(time.streakEndingOn(at(2026, 9, 6))).toBe(3);
+  });
+
+  it('breaks the run on a day that was missed', () => {
+    const time = new TimeToday(new InMemorySettingsStore());
+    for (const day of [1, 2, 5, 6]) {
+      time.add(at(2026, 9, day), 10 * 60_000);
+    }
+
+    expect(time.streakEndingOn(at(2026, 9, 6))).toBe(2);
+  });
+
+  it('keeps the run of yesterday standing until today is missed', () => {
+    // A run of days should not read as broken all morning merely because
+    // the reader has not sat down yet.
+    const time = new TimeToday(new InMemorySettingsStore());
+    for (const day of [4, 5]) {
+      time.add(at(2026, 9, day), 10 * 60_000);
+    }
+
+    expect(time.streakEndingOn(at(2026, 9, 6, 9))).toBe(2);
+
+    time.add(at(2026, 9, 6, 10), 10 * 60_000);
+
+    expect(time.streakEndingOn(at(2026, 9, 6, 10))).toBe(3);
+  });
+
+  it('does not count a day the page was merely glanced at', () => {
+    // A run of days that a glance can extend is a run worth nothing.
+    const time = new TimeToday(new InMemorySettingsStore());
+    time.add(at(2026, 9, 5), 10 * 60_000);
+    time.add(at(2026, 9, 6), 20_000);
+
+    expect(time.streakEndingOn(at(2026, 9, 6))).toBe(1);
+    expect(TimeToday.counts(20_000)).toBe(false);
+  });
+
+  it('gives the last seven days, gaps and all', () => {
+    const time = new TimeToday(new InMemorySettingsStore());
+    time.add(at(2026, 9, 1), 10 * 60_000);
+    time.add(at(2026, 9, 6), 10 * 60_000);
+
+    const week = time.lastDays(at(2026, 9, 6), 7);
+
+    expect(week.map((each) => each.day)).toEqual([
+      '2026-08-31',
+      '2026-09-01',
+      '2026-09-02',
+      '2026-09-03',
+      '2026-09-04',
+      '2026-09-05',
+      '2026-09-06',
+    ]);
+    expect(week.map((each) => TimeToday.counts(each.ms))).toEqual([
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+    ]);
+  });
+
   it('names a day the way the reader would', () => {
     expect(dayOf(at(2026, 9, 6))).toBe('2026-09-06');
   });

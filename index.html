@@ -75,7 +75,14 @@
           Only while nothing is running: between runs is when anybody asks,
           and over the music is not where it belongs while it is being read.
         -->
-        <output id="score-today" class="score__today" hidden></output>
+        <div id="score-today" class="score__today" hidden>
+          <output id="score-today-text"></output>
+          <!--
+            The week, as marks rather than as a sentence: seven days is a
+            thing to see at a glance, and the gaps are half of what it says.
+          -->
+          <div id="score-week" class="score__week" role="img" aria-label="This week"></div>
+        </div>
 
         <div id="score-cover" class="score__cover" hidden>
           <p id="score-cover-text" class="score__cover-text"></p>

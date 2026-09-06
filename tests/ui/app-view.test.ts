@@ -1958,6 +1958,49 @@ describe('AppView', () => {
       }
     });
 
+    it('shows the week, and the run of days, beside it', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 8, 6, 10, 0, 0));
+      try {
+        const rig = createRig();
+        // Two days already behind him, so today makes three.
+        rig.runtime.timeToday.add(new Date(2026, 8, 4, 10).getTime(), 20 * 60_000);
+        rig.runtime.timeToday.add(new Date(2026, 8, 5, 10).getTime(), 20 * 60_000);
+        await rig.view.initialize();
+
+        await vi.advanceTimersByTimeAsync(70_000);
+
+        expect(element('score-today').textContent).toContain('3 days in a row');
+        const marks = element('score-week').querySelectorAll('span');
+        expect(marks).toHaveLength(7);
+        // The gaps say as much as the days: nothing before the fourth.
+        expect(
+          [...marks].map((mark) => mark.classList.contains('score__week-day--played')),
+        ).toEqual([false, false, false, false, true, true, true]);
+        expect([...marks].at(-1)?.classList.contains('score__week-day--today')).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('says nothing about a run of one day', async () => {
+      // Everybody who has ever opened this has a day, and a number that can
+      // only say "1" says nothing at all.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 8, 6, 10, 0, 0));
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+
+        await vi.advanceTimersByTimeAsync(70_000);
+
+        expect(element('score-today').textContent).toContain('1 min');
+        expect(element('score-today').textContent).not.toContain('in a row');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('stops while the page is away, and starts again on the way back', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date(2026, 8, 6, 10, 0, 0));

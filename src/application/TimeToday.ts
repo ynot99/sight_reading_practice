@@ -5,6 +5,15 @@ const STORAGE_VERSION = 1;
 /** Days kept, which is enough for a week's worth of looking back later. */
 const KEEP_DAYS = 60;
 
+/**
+ * How long a day needs before it counts as a day of practice.
+ *
+ * A page opened to look something up is not a day at the keyboard, and a run
+ * of days that a glance can extend is a run of days worth nothing. A minute
+ * is low enough that a short honest sitting still counts.
+ */
+const DAY_COUNTS_AFTER_MS = 60_000;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -90,6 +99,54 @@ export class TimeToday {
   /** How long the day holding this moment has had, in milliseconds. */
   msOn(atMs: number): number {
     return this.days.get(dayOf(atMs)) ?? 0;
+  }
+
+  /**
+   * How many days in a row have been practised, ending with this one.
+   *
+   * Counted back from today where today has been practised, and from
+   * yesterday where it has not: a run of days should not read as broken all
+   * morning merely because the reader has not sat down yet. What it says is
+   * "this many days up to now", and playing today adds to it.
+   */
+  streakEndingOn(atMs: number, countsAfterMs = DAY_COUNTS_AFTER_MS): number {
+    const day = 86_400_000;
+    let from = atMs;
+    if (this.msOn(atMs) < countsAfterMs) {
+      from = atMs - day;
+    }
+    let run = 0;
+    // Stepping by whole days from midday, so that a clock going forward or
+    // back an hour cannot land twice on the same date or skip one.
+    for (;;) {
+      const at = new Date(from - run * day);
+      at.setHours(12, 0, 0, 0);
+      if (this.msOn(at.getTime()) < countsAfterMs) {
+        return run;
+      }
+      run += 1;
+    }
+  }
+
+  /**
+   * The last few days ending with this one, oldest first.
+   *
+   * Days with nothing on them are in it too: what this is for is a row of
+   * marks, and the gaps are half of what such a row says.
+   */
+  lastDays(atMs: number, count: number): readonly { readonly day: string; readonly ms: number }[] {
+    const days: { day: string; ms: number }[] = [];
+    for (let back = count - 1; back >= 0; back -= 1) {
+      const at = new Date(atMs - back * 86_400_000);
+      at.setHours(12, 0, 0, 0);
+      days.push({ day: dayOf(at.getTime()), ms: this.msOn(at.getTime()) });
+    }
+    return days;
+  }
+
+  /** Whether a day has enough on it to be called a day of practice. */
+  static counts(ms: number, countsAfterMs = DAY_COUNTS_AFTER_MS): boolean {
+    return ms >= countsAfterMs;
   }
 
   /** Every day that has any time on it, oldest first. */

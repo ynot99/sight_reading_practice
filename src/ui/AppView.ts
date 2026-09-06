@@ -31,6 +31,7 @@ import {
 } from '../application/rhythmRuler.js';
 import { WHAT_OPENS, type WhatOpens } from '../application/ScoreLibrary.js';
 import { PAGE_TURNS, type PageTurns } from '../application/ports/IScoreRenderer.js';
+import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
@@ -58,6 +59,9 @@ const HOP_REFRESH_MS = 1_000;
  * tick or a throttled one is still the right number of milliseconds.
  */
 const TIME_TICK_MS = 5_000;
+
+/** How many days the row of marks shows. */
+const DAYS_IN_THE_ROW = 7;
 
 /**
  * The most one tick may add, however long it has really been.
@@ -794,6 +798,8 @@ export class AppView {
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
   private restTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The week as it was last drawn, so seven marks are not redrawn for nothing. */
+  private weekShown: string | null = null;
   private timeTick: ReturnType<typeof setInterval> | null = null;
   /** When the stretch being counted began, or `null` while the page is away. */
   private timeCountedAtMs: number | null = null;
@@ -874,7 +880,9 @@ export class AppView {
     dimUnplayed: HTMLInputElement;
     pageTurns: HTMLSelectElement;
     pageTurnsDescription: HTMLElement;
-    scoreToday: HTMLOutputElement;
+    scoreToday: HTMLElement;
+    scoreTodayText: HTMLOutputElement;
+    scoreWeek: HTMLElement;
     scorePages: HTMLElement;
     scorePageBack: HTMLButtonElement;
     scorePageOn: HTMLButtonElement;
@@ -1067,6 +1075,8 @@ export class AppView {
       pageTurns: requireElement(doc, 'page-turns'),
       pageTurnsDescription: requireElement(doc, 'page-turns-description'),
       scoreToday: requireElement(doc, 'score-today'),
+      scoreTodayText: requireElement(doc, 'score-today-text'),
+      scoreWeek: requireElement(doc, 'score-week'),
       scorePages: requireElement(doc, 'score-pages'),
       scorePageBack: requireElement(doc, 'score-page-back'),
       scorePageOn: requireElement(doc, 'score-page-on'),
@@ -2721,10 +2731,51 @@ export class AppView {
    * Silent under a minute, since "0 min" is a reproach rather than a fact.
    */
   private showToday(): void {
-    const ms = this.runtime.timeToday.msOn(Date.now());
+    const now = Date.now();
+    const time = this.runtime.timeToday;
+    const ms = time.msOn(now);
     const idle = !this.isPlaying && !this.runtime.controller.isListening;
     this.el.scoreToday.hidden = ms <= 0 || !idle;
-    this.el.scoreToday.value = `Today ${describeSitting(ms)}`;
+    // A run of one day is not a run: everybody who has ever opened this has
+    // a day, and a number that cannot say anything but "1" says nothing.
+    const streak = time.streakEndingOn(now);
+    this.el.scoreTodayText.value =
+      streak > 1
+        ? `Today ${describeSitting(ms)} · ${streak} days in a row`
+        : `Today ${describeSitting(ms)}`;
+    this.showTheWeek(time.lastDays(now, DAYS_IN_THE_ROW));
+  }
+
+  /**
+   * The week, as seven marks.
+   *
+   * Redrawn only when it has actually changed: this runs on every tick of the
+   * counter, and replacing seven elements every five seconds for the sake of
+   * a day that turns over at midnight is work for nothing.
+   */
+  private showTheWeek(days: readonly { readonly day: string; readonly ms: number }[]): void {
+    const shape = days.map((each) => (TimeToday.counts(each.ms) ? '1' : '0')).join('');
+    if (shape === this.weekShown) {
+      return;
+    }
+    this.weekShown = shape;
+    this.el.scoreWeek.replaceChildren();
+    for (const [at, each] of days.entries()) {
+      const mark = this.doc.createElement('span');
+      mark.className = 'score__week-day';
+      if (TimeToday.counts(each.ms)) {
+        mark.classList.add('score__week-day--played');
+      }
+      if (at === days.length - 1) {
+        mark.classList.add('score__week-day--today');
+      }
+      this.el.scoreWeek.append(mark);
+    }
+    const played = days.filter((each) => TimeToday.counts(each.ms)).length;
+    this.el.scoreWeek.setAttribute(
+      'aria-label',
+      `${played} of the last ${days.length} days practised`,
+    );
   }
 
   /** True while the reader is being given their look at the page. */

@@ -2034,10 +2034,14 @@ export class PracticeController {
         // A run that is over takes back what it was still holding.
         this.silenceTheOtherHand();
         this.deps.history?.record(this.practiceKey(), {
-          atMs: this.deps.clock.now(),
+          // The calendar, so a table of readings can say when. `IClock`
+          // counts from an arbitrary zero for measuring music.
+          atMs: Date.now(),
           overall: score.overall,
           grade: score.grade,
           completed: report.completed,
+          tempoPercent: Math.round(this.currentSettings.tempoPercent),
+          hand: this.currentSettings.handStaff,
         });
         this.considerLadderMove(score.overall, report.completed);
         this.judgeTheDrill(report, score);

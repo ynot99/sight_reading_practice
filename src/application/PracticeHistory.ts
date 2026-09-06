@@ -3,6 +3,16 @@ import type { ISettingsStore } from './ports/ISettingsStore.js';
 
 export interface PracticeAttempt {
   readonly atMs: number;
+  /**
+   * What the reading was played at, and with which hand.
+   *
+   * Kept because a score means nothing without them: eighty-two per cent of
+   * a passage at seventy with one hand is a different afternoon's work from
+   * eighty-two at full speed with both. Optional, since everything recorded
+   * before this existed has no answer and inventing one would be worse.
+   */
+  readonly tempoPercent?: number;
+  readonly hand?: number | null;
   /** The strategy's verdict, `0..1`. */
   readonly overall: number;
   readonly grade: Grade;
@@ -36,12 +46,22 @@ function readAttempt(value: unknown): PracticeAttempt | null {
   if (typeof overall !== 'number' || typeof atMs !== 'number' || typeof grade !== 'string') {
     return null;
   }
+  const tempoPercent = value['tempoPercent'];
+  const hand = value['hand'];
   return {
     atMs,
     overall,
     grade: grade as Grade,
     completed: value['completed'] === true,
+    ...(typeof tempoPercent === 'number' ? { tempoPercent } : {}),
+    ...(typeof hand === 'number' || hand === null ? { hand: hand as number | null } : {}),
   };
+}
+
+/** One reading, and the passage it was a reading of. */
+export interface PracticeReading extends PracticeAttempt {
+  /** The key it was filed under, which says the piece and the bars. */
+  readonly key: string;
 }
 
 /**
@@ -100,6 +120,43 @@ export class PracticeHistory {
       this.passages.delete(oldest.value);
     }
     this.flush();
+  }
+
+  /**
+   * Every reading there is, newest first.
+   *
+   * Flattened out of the per-passage lists rather than kept a second time: a
+   * table of the last twenty readings and a table of the best ten are two
+   * views of the same thing, and a second copy would be a second thing to
+   * keep in step with the first.
+   */
+  everyReading(): readonly PracticeReading[] {
+    const all: PracticeReading[] = [];
+    for (const [key, attempts] of this.passages) {
+      for (const attempt of attempts) {
+        all.push({ ...attempt, key });
+      }
+    }
+    return all.sort((left, right) => right.atMs - left.atMs);
+  }
+
+  /** The readings most recently played. */
+  lastReadings(limit = 20): readonly PracticeReading[] {
+    return this.everyReading().slice(0, Math.max(0, limit));
+  }
+
+  /**
+   * The best readings, and only readings that reached the end.
+   *
+   * A run stopped after four notes of a hard passage can score anything at
+   * all, and a table of bests that it could win would be a table of who
+   * stopped soonest.
+   */
+  bestReadings(limit = 10): readonly PracticeReading[] {
+    return this.everyReading()
+      .filter((reading) => reading.completed)
+      .sort((left, right) => right.overall - left.overall || right.atMs - left.atMs)
+      .slice(0, Math.max(0, limit));
   }
 
   summary(key: string): PassageHistory | null {

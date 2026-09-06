@@ -330,6 +330,30 @@
         </div>
       </div>
 
+      <!--
+        Every reading, in two orders. His line 51: he cannot see what the
+        last score was while a repeat is going round, and there is nothing to
+        beat. The same list twice rather than two lists - what is recent and
+        what is best are two questions about one set of readings.
+      -->
+      <div id="sheet-readings" class="sheet" hidden>
+        <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Readings">
+          <div class="sheet__head">
+            <strong class="sheet__title">Readings</strong>
+            <label class="sheet__filter">
+              <input id="readings-best" type="checkbox" />
+              <span>Best first</span>
+            </label>
+            <button id="readings-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+          <ul id="readings-list" class="takes__list"></ul>
+          <p id="readings-empty" class="hint">
+            Nothing read yet. Play something to the end and it is remembered here.
+          </p>
+        </div>
+      </div>
+
       <div id="sheet-takes" class="sheet" hidden>
         <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Kept takes">
           <div class="sheet__head">
@@ -975,6 +999,14 @@
             fullscreen to look at them and coming back is a re-engraving each
             way, which on a long piece is most of a second twice over.
           -->
+          <button id="focus-readings" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Readings" aria-label="Readings">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 19h3v-7H4v7zm6.5 0h3V5h-3v14zM17 19h3v-10h-3v10z" />
+            </svg>
+          </button>
+
           <button id="focus-takes" type="button"
             class="focus-bar__button focus-bar__button--icon"
             title="Kept takes" aria-label="Kept takes">

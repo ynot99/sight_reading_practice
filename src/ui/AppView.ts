@@ -495,6 +495,41 @@ function clockTime(ms: number): string {
  * calendar days rather than in twenty-four hour blocks, so a score read late
  * last night is yesterday's this morning and not "18 hours ago".
  */
+/**
+ * One reading in a line: what was played, how it went, and how.
+ *
+ * The key says the piece and the bars in the shape `practiceKey` writes them,
+ * so it is unpicked here rather than stored twice. A generated level says so
+ * instead of pretending to a name it does not have.
+ */
+function describeReading(reading: {
+  readonly key: string;
+  readonly overall: number;
+  readonly grade: string;
+  readonly completed: boolean;
+  readonly tempoPercent?: number;
+  readonly hand?: number | null;
+}): string {
+  const [what = '', bars = ''] = reading.key.split(' bars:');
+  const piece = what.startsWith('score:')
+    ? what.slice('score:'.length)
+    : what.startsWith('level:')
+      ? 'Exercise'
+      : what;
+  const how: string[] = [`${Math.round(reading.overall * 100)}% ${reading.grade}`];
+  if (!reading.completed) {
+    how.push('stopped');
+  }
+  if (reading.tempoPercent !== undefined && reading.tempoPercent !== 100) {
+    how.push(`${reading.tempoPercent}%`);
+  }
+  if (reading.hand !== undefined && reading.hand !== null) {
+    how.push(reading.hand === 1 ? 'right hand' : 'left hand');
+  }
+  const where = bars === '' ? piece : `${piece} · bars ${bars}`;
+  return `${where} · ${how.join(' · ')}`;
+}
+
 function describeWhen(atMs: number, nowMs: number): string {
   const startOfDay = (ms: number): number => {
     const day = new Date(ms);
@@ -967,6 +1002,12 @@ export class AppView {
     confirmNo: HTMLButtonElement;
     scoresList: HTMLUListElement;
     scoresSearch: HTMLInputElement;
+    sheetReadings: HTMLElement;
+    readingsList: HTMLUListElement;
+    readingsEmpty: HTMLElement;
+    readingsBest: HTMLInputElement;
+    readingsClose: HTMLButtonElement;
+    focusReadings: HTMLButtonElement;
     sheetRename: HTMLElement;
     renameText: HTMLElement;
     renameName: HTMLInputElement;
@@ -1169,6 +1210,12 @@ export class AppView {
       confirmNo: requireElement(doc, 'confirm-no'),
       scoresList: requireElement(doc, 'scores-list'),
       scoresSearch: requireElement(doc, 'scores-search'),
+      sheetReadings: requireElement(doc, 'sheet-readings'),
+      readingsList: requireElement(doc, 'readings-list'),
+      readingsEmpty: requireElement(doc, 'readings-empty'),
+      readingsBest: requireElement(doc, 'readings-best'),
+      readingsClose: requireElement(doc, 'readings-close'),
+      focusReadings: requireElement(doc, 'focus-readings'),
       sheetRename: requireElement(doc, 'sheet-rename'),
       renameText: requireElement(doc, 'rename-text'),
       renameName: requireElement(doc, 'rename-name'),
@@ -1391,6 +1438,42 @@ export class AppView {
       this.sayInTheMiddle(
         error instanceof Error ? `Could not open that file. ${error.message}` : 'Could not open that file.',
       );
+    }
+  }
+
+  /**
+   * Lists what has been read, newest first or best first.
+   *
+   * The score alone says little - eighty-two per cent of a passage at
+   * seventy with one hand is a different afternoon from eighty-two at full
+   * speed with both - so every row carries the speed and the hand it was
+   * played at. Readings from before those were recorded simply do not
+   * mention them, which is the truth about them.
+   */
+  private renderReadings(): void {
+    const history = this.runtime.history;
+    const best = this.el.readingsBest.checked;
+    const readings = best ? history.bestReadings(10) : history.lastReadings(20);
+    this.el.readingsEmpty.hidden = readings.length > 0;
+    this.el.readingsEmpty.textContent = best
+      ? 'Nothing played to the end yet. A reading has to finish to be one of the best.'
+      : 'Nothing read yet. Play something and it is remembered here.';
+    this.el.readingsList.replaceChildren();
+
+    const now = Date.now();
+    for (const reading of readings) {
+      const row = this.doc.createElement('li');
+      const name = this.doc.createElement('span');
+      name.className = 'takes__name';
+      name.textContent = describeReading(reading);
+      name.title = reading.key;
+
+      const when = this.doc.createElement('span');
+      when.className = 'takes__when';
+      when.textContent = describeWhen(reading.atMs, now);
+
+      row.append(name, when);
+      this.el.readingsList.append(row);
     }
   }
 
@@ -2138,6 +2221,14 @@ export class AppView {
     this.listen(this.el.whatOpens, 'change', () => {
       controller.updateSettings({ whatOpens: readWhatOpens(this.el.whatOpens.value) });
       this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.readingsBest, 'change', () => {
+      this.renderReadings();
+    });
+
+    this.listen(this.el.readingsClose, 'click', () => {
+      this.el.sheetReadings.hidden = true;
     });
 
     this.listen(this.el.scoresSearch, 'input', () => {
@@ -4285,6 +4376,11 @@ export class AppView {
         this.el.sheetTakes,
         [this.el.focusTakes],
         () => this.renderTakes(),
+      ],
+      [
+        this.el.sheetReadings,
+        [this.el.focusReadings],
+        () => this.renderReadings(),
       ],
       [
         this.el.sheetScores,

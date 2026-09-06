@@ -6,6 +6,73 @@ function attempt(overall: number, atMs = 0): PracticeAttempt {
   return { atMs, overall, grade: 'B', completed: true };
 }
 
+describe('every reading there has been', () => {
+  it('flattens the passages into one list, newest first', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    history.record('score:A bars:1-4', attempt(0.5, 1_000));
+    history.record('score:B', attempt(0.9, 3_000));
+    history.record('score:A bars:1-4', attempt(0.7, 2_000));
+
+    expect(history.lastReadings().map((reading) => reading.atMs)).toEqual([3_000, 2_000, 1_000]);
+    expect(history.lastReadings()[0]?.key).toBe('score:B');
+  });
+
+  it('keeps only what was asked for', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    for (let at = 0; at < 30; at += 1) {
+      history.record('score:A', attempt(0.5, at));
+    }
+
+    expect(history.lastReadings(5)).toHaveLength(5);
+    expect(history.lastReadings(5)[0]?.atMs).toBe(29);
+  });
+
+  it('lets only finished readings into the best', () => {
+    // A run stopped after four notes of a hard passage can score anything at
+    // all, and a table of bests it could win would be a table of who stopped
+    // soonest.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    history.record('score:A', { atMs: 1, overall: 1, grade: 'A', completed: false });
+    history.record('score:B', { atMs: 2, overall: 0.8, grade: 'B', completed: true });
+
+    expect(history.bestReadings().map((reading) => reading.key)).toEqual(['score:B']);
+  });
+
+  it('puts the best first, and the most recent of equals above the rest', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    history.record('score:A', { atMs: 1, overall: 0.9, grade: 'A', completed: true });
+    history.record('score:B', { atMs: 2, overall: 0.9, grade: 'A', completed: true });
+    history.record('score:C', { atMs: 3, overall: 0.95, grade: 'A', completed: true });
+
+    expect(history.bestReadings().map((reading) => reading.key)).toEqual([
+      'score:C',
+      'score:B',
+      'score:A',
+    ]);
+  });
+
+  it('carries the speed and the hand it was played with', () => {
+    // A score means nothing without them: eighty-two per cent of a passage
+    // at seventy with one hand is a different afternoon's work.
+    const store = new InMemorySettingsStore();
+    const history = new PracticeHistory(store);
+    history.record('score:A', {
+      atMs: 1,
+      overall: 0.8,
+      grade: 'B',
+      completed: true,
+      tempoPercent: 70,
+      hand: 2,
+    });
+
+    const next = new PracticeHistory(store);
+    next.load();
+
+    expect(next.lastReadings()[0]?.tempoPercent).toBe(70);
+    expect(next.lastReadings()[0]?.hand).toBe(2);
+  });
+});
+
 describe('filing what is known under another name', () => {
   it('moves what the naming moves and leaves the rest', () => {
     const history = new PracticeHistory(new InMemorySettingsStore());

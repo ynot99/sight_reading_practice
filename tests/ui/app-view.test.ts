@@ -21,6 +21,7 @@ import { BackupService } from '../../src/application/Backup.js';
 import { ScoreLibrary } from '../../src/application/ScoreLibrary.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { TimeToday } from '../../src/application/TimeToday.js';
+import { PracticeHistory } from '../../src/application/PracticeHistory.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 
@@ -202,8 +203,12 @@ function createRig(
     clock,
   });
 
+  // Its own, so a test can put readings in it and see them listed.
+  const practiceHistory = new PracticeHistory(new InMemorySettingsStore());
+
   const runtime: AppRuntime = {
     controller,
+    history: practiceHistory,
     timeToday: new TimeToday(new InMemorySettingsStore()),
     presets,
     rhythms,
@@ -2044,6 +2049,59 @@ describe('AppView', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe('the readings that have been played', () => {
+    it('lists them, newest first, with how they were played', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:Clair de Lune bars:5-8', {
+        atMs: Date.now(),
+        overall: 0.82,
+        grade: 'B',
+        completed: true,
+        tempoPercent: 70,
+        hand: 2,
+      });
+
+      element<HTMLButtonElement>('focus-readings').click();
+
+      expect(element('sheet-readings').hidden).toBe(false);
+      const row = element('readings-list').textContent ?? '';
+      expect(row).toContain('Clair de Lune');
+      expect(row).toContain('bars 5-8');
+      expect(row).toContain('82% B');
+      // The score alone says little: at seventy with the left hand is a
+      // different afternoon's work from full speed with both.
+      expect(row).toContain('70%');
+      expect(row).toContain('left hand');
+    });
+
+    it('shows the best ones when asked, and only finished ones', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:Stopped', {
+        atMs: Date.now(),
+        overall: 1,
+        grade: 'A',
+        completed: false,
+      });
+      rig.runtime.history.record('score:Finished', {
+        atMs: Date.now(),
+        overall: 0.8,
+        grade: 'B',
+        completed: true,
+      });
+      element<HTMLButtonElement>('focus-readings').click();
+
+      const best = element<HTMLInputElement>('readings-best');
+      best.checked = true;
+      best.dispatchEvent(new Event('change'));
+
+      const rows = element('readings-list').textContent ?? '';
+      expect(rows).toContain('Finished');
+      expect(rows).not.toContain('Stopped');
     });
   });
 

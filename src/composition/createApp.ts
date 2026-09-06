@@ -137,6 +137,14 @@ export interface AppRuntime {
   readonly volumeKnob: ControlBinding;
   readonly takes: TakeLibrary;
   /**
+   * Every reading that has been recorded, for the list of them.
+   *
+   * Handed to the page as well as to the controller: the controller asks it
+   * about the passage in front of the reader, and the page asks it about all
+   * of them at once. One history, two questions.
+   */
+  readonly history: PracticeHistory;
+  /**
    * How long the application has been open today.
    *
    * Not the same question as the rest reminder's: that one counts notes,
@@ -334,6 +342,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     backup,
     volumeKnob,
     takes,
+    history,
     timeToday,
     scores,
     files: options.fileSink ?? new DownloadFileSink(document),

@@ -1656,11 +1656,110 @@ describe('AppView', () => {
       // can see the reason for is read as no order at all.
       const rig = createRig();
       await keepOne(rig, 'Read Yesterday');
-      await rig.runtime.scores.open('score:Read Yesterday', Date.now() - 86_400_000);
+      await rig.runtime.scores.markRead('Read Yesterday', Date.now() - 86_400_000);
 
       element<HTMLButtonElement>('focus-scores').click();
 
       expect(element('scores-list').textContent).toContain('yesterday');
+    });
+
+    it('generates a new exercise unless it is told otherwise', async () => {
+      const rig = createRig();
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Kept Piece' }), 1_000);
+
+      await rig.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // What opening this has always done, and still the default: the
+      // library lives in a database that answers later than the page draws.
+      expect(rig.runtime.controller.openedExercise).toBeNull();
+    });
+
+    it('puts back the piece that was being worked on', async () => {
+      const rig = createRig();
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Imported Later' }), 2_000);
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Read Later' }), 1_000);
+      await rig.runtime.scores.markRead('Read Later', 3_000);
+      rig.runtime.controller.updateSettings({ whatOpens: 'last' });
+
+      await rig.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // The one he read last, not the one that arrived last.
+      expect(rig.runtime.controller.openedExercise?.title).toBe('Read Later');
+    });
+
+    it('offers one of the kept scores at random', async () => {
+      const rig = createRig();
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'One' }), 1_000);
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Two' }), 2_000);
+      rig.runtime.controller.updateSettings({ whatOpens: 'random' });
+
+      await rig.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(['One', 'Two']).toContain(rig.runtime.controller.openedExercise?.title);
+    });
+
+    it('does not count its own choice as a reading', async () => {
+      // Otherwise the random piece would push itself to the top of the
+      // library on every visit, and the piece actually being worked on would
+      // be somewhere down the list by the end of the week.
+      const rig = createRig();
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Older' }), 1_000);
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Newer' }), 2_000);
+      await rig.runtime.scores.markRead('Older', 3_000);
+      rig.runtime.controller.updateSettings({ whatOpens: 'random' });
+      // Every stamp, and not merely the order: whichever of the two is
+      // offered, none of them may move - and an order alone would pass by
+      // luck on every run where the piece chosen was at the top already.
+      const stamps = (): string[] =>
+        rig.runtime.scores.list().map((score) => `${score.title} ${score.openedAtMs}`);
+      const before = stamps();
+
+      await rig.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(stamps()).toEqual(before);
+      expect(before).toEqual(['Older 3000', 'Newer 2000']);
+    });
+
+    it('falls back to an exercise when there is nothing kept', async () => {
+      const rig = createRig();
+      rig.runtime.controller.updateSettings({ whatOpens: 'random' });
+
+      await rig.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // There has to be something to read a moment from now, which is the
+      // whole point of asking for a piece on opening.
+      expect(rig.runtime.controller.openedExercise).toBeNull();
+      expect(rig.runtime.controller.currentExercise).not.toBeNull();
+    });
+
+    it('counts playing a score as reading it', async () => {
+      // The only way a score the program chose by itself can ever become the
+      // piece being worked on.
+      const rig = createRig();
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Older' }), 1_000);
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Newer' }), 2_000);
+      await rig.runtime.scores.markRead('Older', 3_000);
+      rig.runtime.controller.updateSettings({ whatOpens: 'random' });
+      await rig.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const opened = rig.runtime.controller.openedExercise?.title;
+      const stampFor = (title: string | undefined): number =>
+        rig.runtime.scores.list().find((score) => score.title === title)?.openedAtMs ?? 0;
+      const before = stampFor(opened);
+
+      rig.runtime.controller.start();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // The stamp and not the order: whichever of the two was offered, it is
+      // read *now*, and a test that watched the order would pass by luck
+      // whenever the piece chosen happened to be at the top already.
+      expect(stampFor(opened)).toBeGreaterThan(before);
+      expect(rig.runtime.scores.list()[0]?.title).toBe(opened);
     });
 
     it('adds a score from the sheet, through the one picker there is', async () => {

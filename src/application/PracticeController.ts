@@ -15,6 +15,7 @@ import {
   type TimelineStep,
 } from '../domain/timeline/Timeline.js';
 import { playedNoteOffset } from './playedNoteOffset.js';
+import type { WhatOpens } from './ScoreLibrary.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
 import type { IClock } from './ports/IClock.js';
@@ -363,6 +364,15 @@ export interface PracticeSettings {
   /** How finely the beat is ruled through the bars, or `off`. */
   readonly rhythmRuler: RulerDivision;
   /**
+   * What is on the stand when the page opens.
+   *
+   * Kept here with the rest of what the reader has chosen, although nothing
+   * in this controller acts on it: the page reads it once, on the way in, and
+   * a second store for one preference would be a second thing to back up and
+   * restore.
+   */
+  readonly whatOpens: WhatOpens;
+  /**
    * Run a marker along the ruler, beat by beat.
    *
    * Not the same thing as the marker on the notes. Under a held note that one
@@ -602,6 +612,8 @@ export class PracticeController {
       dimUnplayed: true,
       previewNextPage: true,
       rhythmRuler: 'off',
+      // A new exercise, which is what opening this has always done.
+      whatOpens: 'generated',
       rulerCursor: false,
       rulerStrength: 1,
       restEveryMinutes: 30,

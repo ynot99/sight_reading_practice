@@ -29,6 +29,7 @@ import {
   type RulerDivision,
   type RulerMark,
 } from '../application/rhythmRuler.js';
+import { WHAT_OPENS, type WhatOpens } from '../application/ScoreLibrary.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
@@ -270,6 +271,20 @@ const RULER_LABELS: Readonly<Record<RulerDivision, string>> = {
   'thirty-second': 'Thirty-seconds',
 };
 
+const OPENING_LABELS: Readonly<Record<WhatOpens, string>> = {
+  generated: 'A new exercise',
+  last: 'The score I read last',
+  random: 'One of my scores, at random',
+};
+
+const OPENING_DESCRIPTIONS: Readonly<Record<WhatOpens, string>> = {
+  generated: 'Material generated at the level the ladder has reached.',
+  last: 'The piece you were working on, where the library has it.',
+  random:
+    'Something to read is already there, so the question becomes whether to play it. ' +
+    'Falls back to a new exercise while nothing is kept.',
+};
+
 const RULER_DESCRIPTIONS: Readonly<Record<RulerDivision, string>> = {
   off: 'Nothing ruled through the bars.',
   half: 'A line at every half note - the broad shape of a slow piece.',
@@ -278,6 +293,11 @@ const RULER_DESCRIPTIONS: Readonly<Record<RulerDivision, string>> = {
   sixteenth: 'A line at every sixteenth, for a bar that is full of them.',
   'thirty-second': 'Every thirty-second, which is a grid more than a ruler.',
 };
+
+/** The opening a stored or typed value names, falling back to generating. */
+function readWhatOpens(value: string): WhatOpens {
+  return WHAT_OPENS.includes(value as WhatOpens) ? (value as WhatOpens) : 'generated';
+}
 
 /** The ruling a stored or typed value names, or none at all. */
 function readRuler(value: string): RulerDivision {
@@ -830,6 +850,8 @@ export class AppView {
     confirmNo: HTMLButtonElement;
     scoresList: HTMLUListElement;
     scoresSearch: HTMLInputElement;
+    whatOpens: HTMLSelectElement;
+    whatOpensDescription: HTMLElement;
     scoresClear: HTMLButtonElement;
     takesList: HTMLUListElement;
     takesClear: HTMLButtonElement;
@@ -1007,6 +1029,8 @@ export class AppView {
       confirmNo: requireElement(doc, 'confirm-no'),
       scoresList: requireElement(doc, 'scores-list'),
       scoresSearch: requireElement(doc, 'scores-search'),
+      whatOpens: requireElement(doc, 'what-opens'),
+      whatOpensDescription: requireElement(doc, 'what-opens-description'),
       scoresClear: requireElement(doc, 'scores-clear'),
       takesList: requireElement(doc, 'takes-list'),
       takesClear: requireElement(doc, 'takes-clear'),
@@ -1092,10 +1116,7 @@ export class AppView {
     this.describeTake();
     this.renderTakes();
     this.bindVolumeKnob();
-    // The database answers later than the page draws, so the list arrives
-    // when it arrives rather than holding the trainer up for it.
-    void this.runtime.scores.load().then(() => this.renderScores());
-    await this.runtime.controller.loadNewExercise();
+    await this.openWhatWasAskedFor();
     // Again, and after the material this time. Opening material settles
     // things the reader left set on a visit that is over - the passage of a
     // piece not on the stand is not a passage of this one - and the boxes
@@ -1104,6 +1125,43 @@ export class AppView {
     // opened, and the next thing the reader touched wrote them back.
     this.syncControlsFromSettings();
     void this.runtime.webMidi.connect();
+  }
+
+  /**
+   * Puts on the stand whatever the reader asked to find there.
+   *
+   * Generating is the quick way in and stays the default: the library lives
+   * in a database that answers later than the page draws, so anything read
+   * out of it has to be waited for. Where a reader has asked for one of their
+   * own pieces they would rather wait than watch an exercise appear and be
+   * taken away again - two engravings for a piece nobody asked for.
+   *
+   * Nothing here is a *reading*, so nothing here stamps a score: a random
+   * piece the program chose would otherwise push itself to the top of the
+   * library and lose the one actually being worked on.
+   */
+  private async openWhatWasAskedFor(): Promise<void> {
+    const wanted = this.runtime.controller.settings.whatOpens;
+    if (wanted === 'generated') {
+      // The database answers later than the page draws, so the list arrives
+      // when it arrives rather than holding the trainer up for it.
+      void this.runtime.scores.load().then(() => this.renderScores());
+      await this.runtime.controller.loadNewExercise();
+      return;
+    }
+
+    await this.runtime.scores.load();
+    this.renderScores();
+    const chosen =
+      wanted === 'last' ? this.runtime.scores.lastRead : this.runtime.scores.oneAtRandom(Math.random());
+    const exercise = chosen === null ? null : await this.runtime.scores.open(chosen.id);
+    if (exercise === null) {
+      // An empty library, or a score the database no longer has. Either way
+      // there is something to read a moment from now, which is the point.
+      await this.runtime.controller.loadNewExercise();
+      return;
+    }
+    await this.runtime.controller.openScore(exercise);
   }
 
   dispose(): void {
@@ -1236,16 +1294,16 @@ export class AppView {
 
   private async openKeptScore(id: string, title: string): Promise<void> {
     try {
-      // The calendar and not `IClock`: that one counts from an arbitrary
-      // zero, and this is the moment a reader would call "when I last played
-      // it". The same clock `keep` is given when a file is imported.
-      const exercise = await this.runtime.scores.open(id, Date.now());
+      const exercise = await this.runtime.scores.open(id);
       if (exercise === null) {
         this.sayInTheMiddle(`${title} is no longer stored on this device.`);
         this.renderScores();
         return;
       }
       await this.runtime.controller.openScore(exercise);
+      // Choosing one from the sheet is a reading, and the calendar is what
+      // says so - `IClock` counts from an arbitrary zero for measuring music.
+      void this.runtime.scores.markRead(exercise.title, Date.now());
       this.syncControlsFromSettings();
     } catch (error) {
       reportToTheConsole(`Could not open ${title}.`, error);
@@ -1600,6 +1658,11 @@ export class AppView {
       RULER_DIVISIONS.map((choice) => ({ value: choice, label: RULER_LABELS[choice] })),
       this.runtime.controller.settings.rhythmRuler,
     );
+    fillSelect(
+      this.el.whatOpens,
+      WHAT_OPENS.map((choice) => ({ value: choice, label: OPENING_LABELS[choice] })),
+      this.runtime.controller.settings.whatOpens,
+    );
     for (const select of [this.el.restEvery, this.el.restEverySettings]) {
       fillSelect(
         select,
@@ -1881,6 +1944,11 @@ export class AppView {
 
     this.listen(this.el.immediateStart, 'change', () => {
       controller.updateSettings({ immediateStart: this.el.immediateStart.checked });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.whatOpens, 'change', () => {
+      controller.updateSettings({ whatOpens: readWhatOpens(this.el.whatOpens.value) });
       this.syncControlsFromSettings();
     });
 
@@ -2951,6 +3019,13 @@ export class AppView {
     this.sessionSubscriptions.push(
       session.events.on('statusChanged', ({ status }) => {
         this.updateButtons(status);
+        // Playing a piece is the plainest way of saying it is the one being
+        // worked on - and the only way to say it about a score the program
+        // put on the stand by itself.
+        const opened = this.runtime.controller.openedExercise;
+        if (status === 'running' && opened !== null) {
+          void this.runtime.scores.markRead(opened.title, Date.now());
+        }
       }),
       // The number itself and nowhere else. It was said in words beside the
       // bar as well, which is the same count twice - and the words were in
@@ -3435,6 +3510,8 @@ export class AppView {
     this.el.score.style.setProperty('--ruler-strength', String(settings.rulerStrength));
     this.el.rhythmRuler.value = settings.rhythmRuler;
     this.el.rhythmRulerDescription.textContent = RULER_DESCRIPTIONS[settings.rhythmRuler];
+    this.el.whatOpens.value = settings.whatOpens;
+    this.el.whatOpensDescription.textContent = OPENING_DESCRIPTIONS[settings.whatOpens];
     this.applyPreview();
     this.el.focusImmediate.setAttribute('aria-pressed', String(settings.immediateStart));
     this.describeMetronomeButton(settings.clickWhen, settings.clickPattern);

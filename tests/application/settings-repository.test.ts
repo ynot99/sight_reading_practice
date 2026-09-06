@@ -58,6 +58,7 @@ const SETTINGS: PracticeSettings = {
   rulerCursor: true,
   rulerStrength: 0.5,
   restEveryMinutes: 45,
+  whatOpens: 'random',
 };
 
 describe('practice settings codec', () => {
@@ -76,6 +77,7 @@ describe('practice settings codec', () => {
     expect(restored.pitchClassOnly).toBe(true);
     expect(restored.cursorWhileRunning).toBe(false);
     expect(restored.strictTiming).toBe(true);
+    expect(restored.whatOpens).toBe('random');
     expect(restored.clickWhen).toBe('cycle-2');
   });
 

@@ -32,7 +32,7 @@ describe('the scores a reader has kept', () => {
     const original = twoBarExercise({ title: 'Something Borrowed' });
     const kept = await scores.keep(original, 1_000);
 
-    const reopened = await scores.open(kept.id, 2_000);
+    const reopened = await scores.open(kept.id);
     if (reopened === null) {
       throw new Error('expected the score to come back');
     }
@@ -94,7 +94,7 @@ describe('the scores a reader has kept', () => {
     await scores.remove(first.id);
 
     expect(scores.list().map((score) => score.title)).toEqual(['Stays']);
-    expect(await scores.open(first.id, 3_000)).toBeNull();
+    expect(await scores.open(first.id)).toBeNull();
   });
 
   it('forgets everything when asked', async () => {
@@ -108,7 +108,7 @@ describe('the scores a reader has kept', () => {
 
   it('answers for a score that is no longer there', async () => {
     const { scores } = library();
-    expect(await scores.open('score:Never Kept', 1_000)).toBeNull();
+    expect(await scores.open('score:Never Kept')).toBeNull();
   });
 
   it('puts the score read most recently at the top', async () => {
@@ -125,7 +125,7 @@ describe('the scores a reader has kept', () => {
       'Imported First',
     ]);
 
-    await scores.open('score:Imported First', 3_000);
+    await scores.markRead('Imported First', 3_000);
 
     expect(scores.list().map((score) => score.title)).toEqual([
       'Imported First',
@@ -141,12 +141,50 @@ describe('the scores a reader has kept', () => {
     const first = library(store);
     await first.scores.keep(twoBarExercise({ title: 'Older' }), 1_000);
     await first.scores.keep(twoBarExercise({ title: 'Newer' }), 2_000);
-    await first.scores.open('score:Older', 3_000);
+    await first.scores.markRead('Older', 3_000);
 
     const next = library(store);
     await next.scores.load();
 
     expect(next.scores.list().map((score) => score.title)).toEqual(['Older', 'Newer']);
+  });
+
+  it('is read when the reader reads it, not when the program offers it', async () => {
+    // The program can be asked to put a random score on the stand when the
+    // page opens. If merely opening one counted, the machine's own choice
+    // would push itself to the top of the list every visit and lose the
+    // piece actually being worked on - so opening and reading are separate,
+    // and only the second of them is a claim about anything.
+    const { scores } = library();
+    await scores.keep(twoBarExercise({ title: 'Older' }), 1_000);
+    await scores.keep(twoBarExercise({ title: 'Newer' }), 2_000);
+
+    await scores.open('score:Older');
+
+    expect(scores.list().map((score) => score.title)).toEqual(['Newer', 'Older']);
+  });
+
+  it('offers one of the kept scores for a number between nought and one', async () => {
+    // The randomness stays with the caller, so this layer is as testable as
+    // the rest and `Math.random` lives at the edge with the other things the
+    // page has and the rules do not.
+    const { scores } = library();
+    await scores.keep(twoBarExercise({ title: 'First' }), 2_000);
+    await scores.keep(twoBarExercise({ title: 'Second' }), 1_000);
+
+    expect(scores.oneAtRandom(0)?.title).toBe('First');
+    expect(scores.oneAtRandom(0.99)?.title).toBe('Second');
+    // A one is what a random number generator promises never to give, and it
+    // must not fall off the end of the shelf on the day one does.
+    expect(scores.oneAtRandom(1)?.title).toBe('Second');
+  });
+
+  it('has nothing to offer from an empty shelf', async () => {
+    const { scores } = library();
+    await scores.load();
+
+    expect(scores.oneAtRandom(0.5)).toBeNull();
+    expect(scores.lastRead).toBeNull();
   });
 
   it('finds a score by any of the words in its name', async () => {

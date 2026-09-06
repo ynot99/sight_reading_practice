@@ -5,6 +5,19 @@ import type { IScoreImporter } from './ports/IScoreImporter.js';
 import type { IScoreStore, StoredScoreSummary } from './ports/IScoreStore.js';
 
 /**
+ * What the reader wants in front of them when the page opens.
+ *
+ * `generated` is a new exercise, which is what this has always done.
+ * `last` is the piece they were working on, which is the one thing a reader
+ * coming back to a practice tool most often wants. `random` is his own idea,
+ * from osu: something is there, and the question "shall I play this?" gets
+ * asked instead of having to be thought of.
+ */
+export const WHAT_OPENS = ['generated', 'last', 'random'] as const;
+
+export type WhatOpens = (typeof WHAT_OPENS)[number];
+
+/**
  * Whether a score answers to what the reader typed.
  *
  * Every word has to appear, and in any order: his library is thirty-odd
@@ -99,28 +112,68 @@ export class ScoreLibrary {
     return summary;
   }
 
-  /**
-   * Rebuilds a kept score, or `null` when it is no longer there.
-   *
-   * The moment is handed in rather than read from a clock here, the same way
-   * `keep` takes one: this application's `IClock` counts from an arbitrary
-   * zero for measuring music, and "when did I last read this" is a question
-   * about the calendar.
-   */
-  async open(id: string, openedAtMs: number): Promise<Exercise | null> {
+  /** Rebuilds a kept score, or `null` when it is no longer there. */
+  async open(id: string): Promise<Exercise | null> {
     const stored = await this.deps.store.read(id);
     if (stored === null) {
       return null;
     }
-    await this.deps.store.touch(id, openedAtMs);
-    // Kept in step here as well as in the store, so the list re-orders
-    // without reading the database again to redraw rows nobody touched.
-    this.summaries = this.summaries.map((summary) =>
-      summary.id === id ? { ...summary, openedAtMs } : summary,
-    );
     // Through the ordinary parser: a score read back is a score read, and a
     // second way in would be a second set of rules to keep in step.
     return this.deps.importer.read(stored.musicXml).exercise;
+  }
+
+  /**
+   * Notes that the reader has read this piece, which is what orders the list.
+   *
+   * Deliberately not part of `open`. The program opens a score by itself now
+   * - it can be asked to put a random one on the stand when the page loads -
+   * and a machine's choice is not a reading: it would push whatever it
+   * offered to the top and lose the piece actually being worked on. So this
+   * is called where a *reader* is doing something: choosing a score from the
+   * sheet, or starting a run on one.
+   *
+   * By title, because that is what this library means by the same piece: the
+   * id is minted from it, and a file re-exported from MuseScore replaces the
+   * entry rather than sitting beside it.
+   *
+   * The moment is handed in rather than read from a clock, the same way
+   * `keep` takes one: this application's `IClock` counts from an arbitrary
+   * zero for measuring music, and "when did I last read this" is a question
+   * about the calendar.
+   */
+  async markRead(title: string, atMs: number): Promise<void> {
+    const found = this.summaries.find((summary) => summary.title === title);
+    if (found === undefined) {
+      return;
+    }
+    await this.deps.store.touch(found.id, atMs);
+    // Kept in step here as well as in the store, so the list re-orders
+    // without reading the database again to redraw rows nobody touched.
+    this.summaries = this.summaries.map((summary) =>
+      summary.id === found.id ? { ...summary, openedAtMs: atMs } : summary,
+    );
+  }
+
+  /**
+   * One kept score, chosen by the number given, or `null` on an empty shelf.
+   *
+   * The randomness is the caller's: this layer stays as testable as the rest
+   * of the application, and `Math.random` belongs at the edge with the other
+   * things the page has and the rules do not.
+   */
+  oneAtRandom(fraction: number): StoredScoreSummary | null {
+    const all = this.list();
+    if (all.length === 0) {
+      return null;
+    }
+    const at = Math.min(all.length - 1, Math.max(0, Math.floor(fraction * all.length)));
+    return all[at] ?? null;
+  }
+
+  /** The piece read most recently, which is the one being worked on. */
+  get lastRead(): StoredScoreSummary | null {
+    return this.list()[0] ?? null;
   }
 
   async remove(id: string): Promise<void> {

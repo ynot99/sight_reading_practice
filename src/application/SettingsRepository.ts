@@ -2,6 +2,7 @@ import { KeySignature, type KeyMode } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { PracticeSettings } from './PracticeController.js';
 import { RULER_DIVISIONS, type RulerDivision } from './rhythmRuler.js';
+import { WHAT_OPENS, type WhatOpens } from './ScoreLibrary.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { SAMPLE_LOADING_MODES, type SampleLoading } from './ports/IPitchPlayer.js';
 import {
@@ -66,6 +67,12 @@ const STORAGE_VERSION = 1;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function readWhatOpens(value: unknown): WhatOpens | undefined {
+  return typeof value === 'string' && WHAT_OPENS.includes(value as WhatOpens)
+    ? (value as WhatOpens)
+    : undefined;
 }
 
 function readRuler(value: unknown): RulerDivision | undefined {
@@ -285,6 +292,7 @@ export function decodePracticeSettings(
     dimUnplayed: readBoolean(value['dimUnplayed']),
     previewNextPage: readBoolean(value['previewNextPage']),
     rhythmRuler: readRuler(value['rhythmRuler']),
+    whatOpens: readWhatOpens(value['whatOpens']),
     rulerCursor: readBoolean(value['rulerCursor']),
     rulerStrength: readNumber(value['rulerStrength'], 0, 1),
     restEveryMinutes: readInteger(value['restEveryMinutes'], 0, 180),
@@ -331,6 +339,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     dimUnplayed: settings.dimUnplayed,
     previewNextPage: settings.previewNextPage,
     rhythmRuler: settings.rhythmRuler,
+    whatOpens: settings.whatOpens,
     rulerCursor: settings.rulerCursor,
     rulerStrength: settings.rulerStrength,
     restEveryMinutes: settings.restEveryMinutes,

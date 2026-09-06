@@ -909,7 +909,13 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     writer.element('direction', { placement: mark.placement ?? 'below' }, () => {
       writer.element('direction-type', undefined, () => {
         writer.element('dynamics', undefined, () => {
-          writer.leaf(mark.level);
+          // Every level but one is an element named after itself. Niente is
+          // not in the format's list, and goes back the way it came.
+          if (mark.level === 'n') {
+            writer.leaf('other-dynamics', 'n');
+          } else {
+            writer.leaf(mark.level);
+          }
         });
       });
       writer.leaf('staff', staffNumber);

@@ -358,14 +358,32 @@ export interface ExerciseMetadata {
 /**
  * How loud the writer asked for it to be, from here on.
  *
- * The eight a piano piece is actually written in. Clair de Lune opens in
- * `pp` and asks for `ppp` before the first page is out, so stopping at two
- * p's would have played its quietest music at the same loudness as its
- * merely quiet music. `sf` and the rest are left out on purpose: they are
- * accents on one note rather than a level to keep, and a level is what this
- * is - it holds until the next one, the way a tempo does.
+ * Every level a piano piece is actually written in, quietest first. Clair de
+ * Lune opens in `pp` and asks for `ppp` before the first page is out, so
+ * stopping at two p's would have played its quietest music at the same
+ * loudness as its merely quiet music; a Minecraft arrangement asks for
+ * `pppp`, and ends on `n` - niente, nothing - under a diminuendo seven bars
+ * long. A level this program cannot name is dropped, and a dropped one is
+ * not merely unprinted: the music goes on at whatever was in force before,
+ * which is how that ending came out at an even mezzo-piano.
+ *
+ * `sf` and the rest are left out on purpose: they are accents on one note
+ * rather than a level to keep, and a level is what this is - it holds until
+ * the next one, the way a tempo does.
  */
-export const DYNAMIC_LEVELS = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff'] as const;
+export const DYNAMIC_LEVELS = [
+  'n',
+  'pppp',
+  'ppp',
+  'pp',
+  'p',
+  'mp',
+  'mf',
+  'f',
+  'ff',
+  'fff',
+  'ffff',
+] as const;
 
 export type DynamicLevel = (typeof DYNAMIC_LEVELS)[number];
 
@@ -410,7 +428,11 @@ export interface DynamicMark {
  * Steps rather than a curve, because steps are what is written, and spread
  * as widely as the instrument allows: from `ppp` to `fff` is about fifteen
  * decibels here, where two neighbouring levels three decibels apart were
- * being reported as no difference at all.
+ * being reported as no difference at all. The ends are close together on
+ * purpose - the two loudest are a hair apart because the recordings will
+ * not go louder, and the two quietest because the player will not go much
+ * quieter without the note disappearing. Neither end is where the music
+ * lives; they are there so that a mark naming one is heard at all.
  *
  * Loudness is only half of it. A piano struck harder is *brighter*, not
  * merely louder, and one recording per note cannot say that by itself - so
@@ -419,6 +441,8 @@ export interface DynamicMark {
  * imitate; the layers themselves are a download, not a rule.
  */
 export const DYNAMIC_VELOCITY: Readonly<Record<DynamicLevel, number>> = {
+  n: 0.04,
+  pppp: 0.07,
   ppp: 0.1,
   pp: 0.2,
   p: 0.33,
@@ -426,7 +450,8 @@ export const DYNAMIC_VELOCITY: Readonly<Record<DynamicLevel, number>> = {
   mf: 0.62,
   f: 0.78,
   ff: 0.92,
-  fff: 1,
+  fff: 0.93,
+  ffff: 1,
 };
 
 /**
@@ -454,9 +479,16 @@ function markInForce(
   offsetTicks: number,
   staffNumber: number | null,
 ): DynamicMark | null {
-  const isBefore = (mark: DynamicMark): boolean =>
-    mark.measureIndex < measureIndex ||
-    (mark.measureIndex === measureIndex && mark.offsetTicks <= offsetTicks);
+  // Read off the bar lines rather than compared bar by bar: a hairpin that
+  // stops at the end of one bar and a mark written at the start of the next
+  // are the same moment, and the wedge asking what it is heading for has to
+  // find it. That is the ending of his Minecraft arrangement exactly - a
+  // diminuendo closing on the barline with niente under the first note after
+  // it - and spelled the other way the mark was not there.
+  const bars = barLines(exercise);
+  const at = (measure: number, offset: number): number => (bars[measure]?.startTicks ?? 0) + offset;
+  const here = at(measureIndex, offsetTicks);
+  const isBefore = (mark: DynamicMark): boolean => at(mark.measureIndex, mark.offsetTicks) <= here;
   const isLater = (mark: DynamicMark, than: DynamicMark | null): boolean =>
     than === null ||
     mark.measureIndex > than.measureIndex ||

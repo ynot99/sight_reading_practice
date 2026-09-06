@@ -20,7 +20,7 @@ import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
 import { looksZipped } from '../../src/infrastructure/notation/zip.js';
 import { DomainError } from '../../src/shared/errors.js';
-import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import { longExercise, tiedExercise, twoBarExercise } from '../support/fixtures.js';
 
 const importer = new DomScoreImporter();
 const serializer = new MusicXmlSerializer();
@@ -98,6 +98,60 @@ describe('the dynamics on the page', () => {
     const { exercise } = importer.read(serializer.serialize(original));
 
     expect(exercise.dynamicMarks.map((mark) => mark.level)).toEqual(['ppp', 'fff']);
+  });
+
+  it('carries the levels past three p\u2019s, niente included', () => {
+    // His Minecraft arrangement asks for pppp, and ends on n - nothing -
+    // under a seven-bar diminuendo. A level this program cannot name is
+    // dropped, and a dropped one does not merely go unprinted: the music
+    // carries on at whatever was in force before it.
+    const original = {
+      ...twoBarExercise(),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'pppp' as const, staffNumber: 1 },
+        { measureIndex: 1, offsetTicks: 0, level: 'n' as const, staffNumber: 1 },
+      ],
+    };
+
+    const printed = serializer.serialize(original);
+    const { exercise } = importer.read(printed);
+
+    // Niente has no element of its own in the format and goes in the one
+    // kept for what the format did not think of.
+    expect(printed).toContain('<other-dynamics>n</other-dynamics>');
+    expect(exercise.dynamicMarks.map((mark) => mark.level)).toEqual(['pppp', 'n']);
+  });
+
+  it('fades to nothing where a diminuendo closes on the barline', () => {
+    // The ending he reported: seven bars of diminuendo stopping at a
+    // barline, with niente written under the first note after it. The wedge
+    // and the mark are one moment spelled two ways, and asked bar by bar
+    // rather than in ticks the wedge could not see what it was heading for -
+    // so it dropped a single step and the ending stayed loud.
+    const piece = {
+      ...longExercise({ bars: 4, tempoBpm: 60 }),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'p' as const, staffNumber: 1 },
+        { measureIndex: 3, offsetTicks: 0, level: 'n' as const, staffNumber: 1 },
+      ],
+      hairpins: [
+        {
+          measureIndex: 0,
+          offsetTicks: 0,
+          kind: 'diminuendo' as const,
+          untilMeasureIndex: 2,
+          untilOffsetTicks: Duration.WHOLE.ticks,
+          staffNumber: 1,
+        },
+      ],
+    };
+    const heard = [0, 1, 2, 3].map((bar) => velocityAt(piece, bar, 0, 1));
+
+    expect(heard[0]).toBeCloseTo(DYNAMIC_VELOCITY.p, 5);
+    expect(heard[3]).toBeCloseTo(DYNAMIC_VELOCITY.n, 5);
+    for (let at = 1; at < heard.length; at += 1) {
+      expect(heard[at] ?? 1).toBeLessThan(heard[at - 1] ?? 0);
+    }
   });
 
   it('spreads the levels widely enough to be heard apart', () => {

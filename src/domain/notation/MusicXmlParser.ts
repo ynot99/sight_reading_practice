@@ -853,6 +853,12 @@ function sideOf(node: XmlNode): { placement?: 'above' | 'below' } {
   return placement === 'above' || placement === 'below' ? { placement } : {};
 }
 
+/** What a writer calls nothing at all, at the end of a dying phrase. */
+function isNiente(said: string): boolean {
+  const word = said.trim().toLowerCase();
+  return word === 'n' || word === 'niente';
+}
+
 function readDynamicMark(node: XmlNode): DynamicLevel | null {
   for (const type of childrenNamed(node, 'direction-type')) {
     const dynamics = child(type, 'dynamics');
@@ -862,6 +868,12 @@ function readDynamicMark(node: XmlNode): DynamicLevel | null {
     for (const level of dynamics.children) {
       if ((DYNAMIC_LEVELS as readonly string[]).includes(level.name)) {
         return level.name as DynamicLevel;
+      }
+      // Niente has no element of its own in this format, so a writer who
+      // wants the sound to end on nothing says so in the one the format
+      // keeps for anything it did not think of.
+      if (level.name === 'other-dynamics' && isNiente(level.text ?? '')) {
+        return 'n';
       }
     }
   }

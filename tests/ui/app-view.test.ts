@@ -52,7 +52,7 @@ import {
   middle,
   spreadAround,
 } from '../../src/ui/AppView.js';
-import { p, twoBarExercise } from '../support/fixtures.js';
+import { longExercise, p, twoBarExercise } from '../support/fixtures.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -2044,6 +2044,39 @@ describe('AppView', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe('learning a piece a section at a time', () => {
+    it('says what to play, and sets it', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await rig.runtime.controller.openScore(longExercise({ bars: 8 }));
+
+      element<HTMLInputElement>('drill-bars').value = '4';
+      element<HTMLButtonElement>('drill-start').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(element('score-drill').hidden).toBe(false);
+      expect(element('drill-where').textContent).toContain('Step 1 of');
+      expect(element('drill-what').textContent).toContain('Bars 1-4');
+      // The ordinary passage, not a private one: the drawer says it too.
+      expect(element<HTMLInputElement>('focus-to').value).toBe('4');
+      // And it gets out of the way so the reader can play.
+      expect(element('sheet-settings').hidden).toBe(true);
+    });
+
+    it('puts the plan away when asked', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await rig.runtime.controller.openScore(longExercise({ bars: 8 }));
+      element<HTMLButtonElement>('drill-start').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      element<HTMLButtonElement>('drill-stop').click();
+
+      expect(element('score-drill').hidden).toBe(true);
+      expect(rig.runtime.controller.drillTask).toBeNull();
     });
   });
 

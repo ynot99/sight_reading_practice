@@ -15,6 +15,7 @@ import {
   type TimelineStep,
 } from '../domain/timeline/Timeline.js';
 import { playedNoteOffset } from './playedNoteOffset.js';
+import { drillTaskPassed, planTheDrill, type DrillTask } from './drill/SectionDrill.js';
 import type { WhatOpens } from './ScoreLibrary.js';
 import type { PageTurns } from './ports/IScoreRenderer.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
@@ -461,6 +462,18 @@ export interface ControllerEventMap {
    */
   engraving: { readonly busy: boolean };
   /**
+   * What the drill is asking for now, and how far through the plan it is.
+   *
+   * A `null` task with `at` equal to `of` means the piece has been through
+   * the whole plan; a `null` task with both at nought means the reader put
+   * the drill away.
+   */
+  drillChanged: {
+    readonly task: DrillTask | null;
+    readonly at: number;
+    readonly of: number;
+  };
+  /**
    * The reader has been at it long enough, and nothing is happening.
    *
    * Both halves matter. A rest falls due on the clock; it is *said* at the
@@ -561,6 +574,9 @@ export class PracticeController {
   private fadedThrough = -1;
   /** Marks waiting for the run to end, when that is when they are drawn. */
   private heldMarks: PlayedNote[] = [];
+  /** The plan being worked through, or `[]` when nothing is being drilled. */
+  private drill: readonly DrillTask[] = [];
+  private drillAt = 0;
   /** When the waiting bar was last drained, on the page's own clock. */
   private lastWaitDrainMs: number | null = null;
   /** Wrong marks on the page only while their key is down. */
@@ -1407,6 +1423,111 @@ export class PracticeController {
   }
 
   /**
+   * Takes the piece apart and starts learning it, section by section.
+   *
+   * His line 93, the way Piano Marvel does it. Nothing here is new
+   * machinery: a section is the passage this trainer has always had, a hand
+   * is the hand, a slow tempo is the percentage. What was missing is the
+   * thing that puts them in order and knows when one of them is done - so
+   * that is all this is.
+   *
+   * Built from the whole piece rather than from the passage in front of the
+   * reader: the plan *is* a way of cutting the piece up, and starting it
+   * inside somebody else's cut would give sections of a section.
+   */
+  startTheDrill(sectionBars?: number): DrillTask | null {
+    const exercise = this.exercise;
+    if (exercise === null) {
+      return null;
+    }
+    const hands = [...new Set(exercise.staves.map((staff) => staff.staffNumber))].sort(
+      (left, right) => left - right,
+    );
+    this.drill = planTheDrill(measureCount(exercise), {
+      ...(sectionBars === undefined ? {} : { sectionBars }),
+      hands,
+    });
+    this.drillAt = 0;
+    this.emitter.emit('drillChanged', { task: this.drillTask, at: 0, of: this.drill.length });
+    return this.applyTheDrill();
+  }
+
+  /** Puts the drill away. The passage and the hand stay where it left them. */
+  stopTheDrill(): void {
+    if (this.drill.length === 0) {
+      return;
+    }
+    this.drill = [];
+    this.drillAt = 0;
+    this.emitter.emit('drillChanged', { task: null, at: 0, of: 0 });
+  }
+
+  /** What the drill is asking for, or `null` when nothing is being drilled. */
+  get drillTask(): DrillTask | null {
+    return this.drill[this.drillAt] ?? null;
+  }
+
+  /** How far through the plan the reader is, for anything that shows it. */
+  get drillProgress(): { readonly at: number; readonly of: number } {
+    return { at: this.drillAt, of: this.drill.length };
+  }
+
+  /**
+   * Sets the passage, the hand and the speed the current task asks for.
+   *
+   * Through `updateSettings`, so that everything watching them - the boxes in
+   * the drawer, the dimming, the printed page - hears about it exactly as it
+   * would if the reader had set them by hand. There is no second way to be
+   * practising bars 5 to 8 with the left hand.
+   */
+  private applyTheDrill(): DrillTask | null {
+    const task = this.drillTask;
+    if (task === null) {
+      return null;
+    }
+    this.updateSettings({
+      rangeFromBar: task.fromBar,
+      rangeToBar: task.toBar,
+      handStaff: task.hand,
+      tempoPercent: task.tempoPercent,
+    });
+    return task;
+  }
+
+  /**
+   * Decides what a finished reading means for the plan.
+   *
+   * Passed, and the plan moves on; short of it, and the same task is asked
+   * for again - which is the whole of "until it is learned perfectly". The
+   * settings are re-applied either way, since a reader may well have moved
+   * the passage or the hand while they were in the middle of it.
+   */
+  private judgeTheDrill(report: PerformanceReport, score: { readonly overall: number }): void {
+    if (this.drill.length === 0) {
+      return;
+    }
+    const passed = drillTaskPassed({ completed: report.completed, overall: score.overall });
+    if (passed) {
+      this.drillAt += 1;
+    }
+    if (this.drillAt >= this.drill.length) {
+      const of = this.drill.length;
+      this.drill = [];
+      this.drillAt = 0;
+      // Finished, and said so: the piece has been through every stage of the
+      // plan, which is the only ending this has.
+      this.emitter.emit('drillChanged', { task: null, at: of, of });
+      return;
+    }
+    this.applyTheDrill();
+    this.emitter.emit('drillChanged', {
+      task: this.drillTask,
+      at: this.drillAt,
+      of: this.drill.length,
+    });
+  }
+
+  /**
    * Follows a renamed score through what remembers it by name.
    *
    * Which is the practice history, and only because `practiceKey` writes the
@@ -1825,6 +1946,7 @@ export class PracticeController {
           completed: report.completed,
         });
         this.considerLadderMove(score.overall, report.completed);
+        this.judgeTheDrill(report, score);
       }),
     );
     this.sessionSubscriptions.push(

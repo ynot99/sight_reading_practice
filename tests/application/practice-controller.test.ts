@@ -112,6 +112,29 @@ function createController(
   return { controller, renderer, midi, metronome, clock, instrument };
 }
 
+/**
+ * Plays a run from where it stands to the end of it.
+ *
+ * Wait mode moves only when the reader does, so a whole passage is played by
+ * asking each step what it wants and giving it that. Bounded, because a test
+ * that cannot finish is worse than one that fails.
+ */
+function playItThrough(controller: PracticeController, midi: MockMidiAdapter): void {
+  const session = controller.start();
+  if (session === null) {
+    throw new Error('expected a run');
+  }
+  for (let guard = 0; guard < 500 && session.status === 'running'; guard += 1) {
+    const step = session.currentStep;
+    if (step === null) {
+      break;
+    }
+    for (const note of step.expectedMidi) {
+      midi.noteOn(note, 0);
+    }
+  }
+}
+
 describe('PracticeController', () => {
   it('adopts the first registered preset and mode as its defaults', () => {
     const { controller } = createController();
@@ -966,6 +989,87 @@ describe('what you played, drawn over the score', () => {
 
     expect(renderer.settled).toContain(0);
     expect(renderer.played.every((mark) => mark.settled === true)).toBe(true);
+  });
+
+  it('sets the passage, the hand and the speed the drill asks for', async () => {
+    // His line 93. Nothing here is new machinery - a section is the passage
+    // this trainer has always had - so what it does is set the same settings
+    // a reader would have set by hand.
+    const { controller } = createController(true);
+    await controller.openScore(longExercise({ bars: 8 }));
+
+    const task = controller.startTheDrill(4);
+
+    expect(task).toEqual({
+      fromBar: 1,
+      toBar: 4,
+      hand: null,
+      tempoPercent: 70,
+      stage: 'section',
+    });
+    expect(controller.settings.rangeFromBar).toBe(1);
+    expect(controller.settings.rangeToBar).toBe(4);
+    expect(controller.settings.tempoPercent).toBe(70);
+  });
+
+  it('asks again for a passage that was not finished', async () => {
+    // "Until it is learned perfectly": a run that fell apart is the same
+    // bars again, not the next ones.
+    const { controller } = createController(true);
+    await controller.openScore(longExercise({ bars: 8 }));
+    controller.startTheDrill(4);
+
+    controller.start()?.abort();
+
+    expect(controller.drillProgress.at).toBe(0);
+    expect(controller.drillTask?.toBar).toBe(4);
+  });
+
+  it('moves on when the passage was played through', async () => {
+    const { controller, midi } = createController(true);
+    await controller.openScore(longExercise({ bars: 8 }));
+    controller.startTheDrill(4);
+    const said: (number | null)[] = [];
+    controller.events.on('drillChanged', ({ task }) => said.push(task?.fromBar ?? null));
+
+    playItThrough(controller, midi);
+
+    expect(controller.drillProgress.at).toBe(1);
+    expect(said).toEqual([5]);
+    // And the settings followed it: the next section is what is in front of
+    // the reader now.
+    expect(controller.settings.rangeFromBar).toBe(5);
+    expect(controller.settings.rangeToBar).toBe(8);
+  });
+
+  it('says when the whole plan has been played', async () => {
+    const { controller, midi } = createController(true);
+    await controller.openScore(longExercise({ bars: 4 }));
+    controller.startTheDrill(4);
+    const of = controller.drillProgress.of;
+    expect(of).toBe(1);
+    let finished = false;
+    controller.events.on('drillChanged', ({ task, at }) => {
+      finished = task === null && at === of;
+    });
+
+    playItThrough(controller, midi);
+
+    expect(finished).toBe(true);
+    expect(controller.drillTask).toBeNull();
+  });
+
+  it('is put away without disturbing what it set', async () => {
+    const { controller } = createController(true);
+    await controller.openScore(longExercise({ bars: 8 }));
+    controller.startTheDrill(4);
+
+    controller.stopTheDrill();
+
+    expect(controller.drillTask).toBeNull();
+    // The passage stays where the drill left it: taking the plan away is not
+    // a reason to move the reader somewhere they did not ask to be.
+    expect(controller.settings.rangeToBar).toBe(4);
   });
 
   it('ends the run at the first wrong note, when asked to', async () => {

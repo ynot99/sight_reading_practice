@@ -137,6 +137,22 @@
             </div>
           </div>
 
+          <!--
+            What the drill is asking for. In the card because that is where
+            this page says things between runs, and only between runs: it is
+            an instruction to read before playing, not something to watch
+            while playing.
+          -->
+          <div id="score-drill" class="score-card__verdict" hidden>
+            <strong id="drill-where">Section 1 of 1</strong>
+            <p id="drill-what" class="hint"></p>
+            <div class="control-group control-group--actions">
+              <button id="drill-stop" type="button" class="button button--ghost">
+                Stop the plan
+              </button>
+            </div>
+          </div>
+
           <div id="score-verdict" class="score-card__verdict" hidden>
             <div id="result" class="result"></div>
             <button id="drill" type="button" class="button" hidden>Drill the worst bars</button>
@@ -475,6 +491,27 @@
           rather than being hidden - a control that vanishes is one the
           reader goes looking for.
         -->
+        <!--
+          His line 93: the piece taken apart and learned a section at a time,
+          each one slowly with one hand, then the other, then both, and the
+          sections glued together afterwards. Everything it uses is already
+          here - the passage, the hand, the speed - so this is only the thing
+          that puts them in order.
+        -->
+        <div class="control-group">
+          <label for="drill-bars">Learn it section by section</label>
+          <div class="ladder-row">
+            <input id="drill-bars" class="focus-bar__bar" type="number" min="1" max="64"
+              inputmode="numeric" value="4" title="Bars in a section"
+              aria-label="Bars in a section" />
+            <button id="drill-start" type="button" class="button">Start the plan</button>
+          </div>
+          <p id="drill-description" class="hint">
+            Each section slowly with one hand, then the other, then both; then the sections
+            joined up, until the whole piece holds together.
+          </p>
+        </div>
+
         <div class="control-group">
           <label for="page-turns">Page turns</label>
           <select id="page-turns"></select>

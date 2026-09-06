@@ -858,6 +858,12 @@ export class AppView {
     scoreCard: HTMLElement;
     scoreCount: HTMLElement;
     scoreEngraving: HTMLElement;
+    scoreDrill: HTMLElement;
+    drillWhere: HTMLElement;
+    drillWhat: HTMLElement;
+    drillStop: HTMLButtonElement;
+    drillStart: HTMLButtonElement;
+    drillBars: HTMLInputElement;
     scoreRest: HTMLElement;
     restHeading: HTMLElement;
     restTip: HTMLElement;
@@ -1053,6 +1059,12 @@ export class AppView {
       scoreCard: requireElement(doc, 'score-card'),
       scoreCount: requireElement(doc, 'score-count'),
       scoreEngraving: requireElement(doc, 'score-engraving'),
+      scoreDrill: requireElement(doc, 'score-drill'),
+      drillWhere: requireElement(doc, 'drill-where'),
+      drillWhat: requireElement(doc, 'drill-what'),
+      drillStop: requireElement(doc, 'drill-stop'),
+      drillStart: requireElement(doc, 'drill-start'),
+      drillBars: requireElement(doc, 'drill-bars'),
       scoreRest: requireElement(doc, 'score-rest'),
       restHeading: requireElement(doc, 'rest-heading'),
       restTip: requireElement(doc, 'rest-tip'),
@@ -1716,6 +1728,7 @@ export class AppView {
    */
   private applyPreview(): void {
     this.showToday();
+    this.showTheDrill();
     const controller = this.runtime.controller;
     const moving =
       this.isPlaying || this.isPreviewing || controller.isListening || controller.isListeningPaused;
@@ -2117,6 +2130,20 @@ export class AppView {
 
     this.listen(this.el.scoresSearch, 'input', () => {
       this.renderScores();
+    });
+
+    this.listen(this.el.drillStart, 'click', () => {
+      const bars = Math.max(1, Math.round(Number(this.el.drillBars.value) || 4));
+      controller.startTheDrill(bars);
+      this.syncControlsFromSettings();
+      // Straight to the music: the plan is set, and what it asks for is
+      // said in the middle of the page.
+      this.el.sheetSettings.hidden = true;
+    });
+
+    this.listen(this.el.drillStop, 'click', () => {
+      controller.stopTheDrill();
+      this.showTheDrill();
     });
 
     this.listen(this.el.restTake, 'click', () => {
@@ -2568,6 +2595,7 @@ export class AppView {
       this.el.scoreCount.hidden &&
       this.el.scoreVerdict.hidden &&
       this.el.scoreEngraving.hidden &&
+      this.el.scoreDrill.hidden &&
       this.el.scoreRest.hidden;
   }
 
@@ -2829,6 +2857,43 @@ export class AppView {
     this.survivalTick = setInterval(() => {
       this.runtime.controller.drainWhileWaiting();
     }, SURVIVAL_TICK_MS);
+  }
+
+  /**
+   * Says what the drill is asking for, between runs.
+   *
+   * Only between runs: it is an instruction to read before playing, and a
+   * card in the middle of the page while the music is going would be over
+   * the music. What it says is where in the plan the reader is and what this
+   * task is - the bars are in the drawer as well, because the drill sets the
+   * ordinary passage rather than a private one of its own.
+   */
+  private showTheDrill(): void {
+    const controller = this.runtime.controller;
+    const task = controller.drillTask;
+    const { at, of } = controller.drillProgress;
+    const idle = !this.isPlaying && !controller.isListening;
+    if (task === null) {
+      // Finished the whole plan, rather than never started: worth saying, and
+      // it stays until the reader does something else.
+      const done = of > 0 && at >= of;
+      this.el.scoreDrill.hidden = !done || !idle;
+      if (done) {
+        this.el.drillWhere.textContent = 'The whole piece has been through the plan';
+        this.el.drillWhat.textContent = 'Every section, and then all of them together.';
+        this.el.drillStop.textContent = 'Done';
+      }
+      this.syncCard();
+      return;
+    }
+    this.el.drillStop.textContent = 'Stop the plan';
+    this.el.drillWhere.textContent = `Step ${at + 1} of ${of}`;
+    const hand =
+      task.hand === null ? 'both hands' : task.hand === 1 ? 'the right hand' : 'the left hand';
+    const bars = task.fromBar === task.toBar ? `Bar ${task.fromBar}` : `Bars ${task.fromBar}-${task.toBar}`;
+    this.el.drillWhat.textContent = `${bars}, ${hand}, at ${task.tempoPercent}% - play it through cleanly.`;
+    this.el.scoreDrill.hidden = !idle;
+    this.syncCard();
   }
 
   /** True while the reader is being given their look at the page. */
@@ -3244,6 +3309,12 @@ export class AppView {
         // coming round, a drill - so the verdict on the last one is put away
         // in one place rather than at each of them.
         this.showVerdict(false);
+      }),
+    );
+
+    this.subscriptions.push(
+      controller.events.on('drillChanged', () => {
+        this.showTheDrill();
       }),
     );
 

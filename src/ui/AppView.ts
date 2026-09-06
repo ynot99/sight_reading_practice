@@ -376,6 +376,42 @@ function clockTime(ms: number): string {
 }
 
 /** The moment it was kept, which is the only name a take has until it earns one. */
+/**
+ * How long ago a score was last read, in the words a reader would use.
+ *
+ * Days and not hours: a list ordered by when things were last opened is only
+ * confusing if it does not say why, and "yesterday" is the whole of what
+ * anybody wants to know about a piece they might play next. Counted in
+ * calendar days rather than in twenty-four hour blocks, so a score read late
+ * last night is yesterday's this morning and not "18 hours ago".
+ */
+function describeWhen(atMs: number, nowMs: number): string {
+  const startOfDay = (ms: number): number => {
+    const day = new Date(ms);
+    day.setHours(0, 0, 0, 0);
+    return day.getTime();
+  };
+  const days = Math.round((startOfDay(nowMs) - startOfDay(atMs)) / 86_400_000);
+  if (days <= 0) {
+    return 'today';
+  }
+  if (days === 1) {
+    return 'yesterday';
+  }
+  if (days < 7) {
+    return `${days} days ago`;
+  }
+  if (days < 35) {
+    const weeks = Math.round(days / 7);
+    return weeks === 1 ? 'a week ago' : `${weeks} weeks ago`;
+  }
+  const months = Math.round(days / 30);
+  if (months < 12) {
+    return months === 1 ? 'a month ago' : `${months} months ago`;
+  }
+  return 'over a year ago';
+}
+
 function takeName(savedAtMs: number): string {
   const at = new Date(savedAtMs);
   const pad = (value: number): string => String(value).padStart(2, '0');
@@ -793,6 +829,7 @@ export class AppView {
     confirmYes: HTMLButtonElement;
     confirmNo: HTMLButtonElement;
     scoresList: HTMLUListElement;
+    scoresSearch: HTMLInputElement;
     scoresClear: HTMLButtonElement;
     takesList: HTMLUListElement;
     takesClear: HTMLButtonElement;
@@ -969,6 +1006,7 @@ export class AppView {
       confirmYes: requireElement(doc, 'confirm-yes'),
       confirmNo: requireElement(doc, 'confirm-no'),
       scoresList: requireElement(doc, 'scores-list'),
+      scoresSearch: requireElement(doc, 'scores-search'),
       scoresClear: requireElement(doc, 'scores-clear'),
       takesList: requireElement(doc, 'takes-list'),
       takesClear: requireElement(doc, 'takes-clear'),
@@ -1138,11 +1176,26 @@ export class AppView {
     }
   }
 
-  /** Lists the kept scores, each openable and each removable. */
+  /**
+   * Lists the kept scores, each openable and each removable.
+   *
+   * Most recently read first, and the row says how long ago that was - an
+   * order nobody can see the reason for is one they read as no order at all.
+   * The search narrows what is drawn and nothing else: the count on the
+   * opener and the "delete all" button both speak for the whole library,
+   * which is what they delete.
+   */
   private renderScores(): void {
-    const scores = this.runtime.scores.list();
+    const all = this.runtime.scores.list();
+    const query = this.el.scoresSearch.value.trim();
+    const scores = query === '' ? all : this.runtime.scores.search(query);
+    const now = Date.now();
     this.el.scoresEmpty.hidden = scores.length > 0;
-    this.el.scoresClear.disabled = scores.length === 0;
+    this.el.scoresEmpty.textContent =
+      all.length > 0
+        ? `Nothing kept here is called “${query}”.`
+        : 'Nothing kept yet. Open a score and it is remembered here.';
+    this.el.scoresClear.disabled = all.length === 0;
     this.el.scoresList.replaceChildren();
 
     for (const score of scores) {
@@ -1151,6 +1204,10 @@ export class AppView {
       name.className = 'takes__name';
       name.textContent = `${score.title} · ${score.bars} bars`;
       name.title = score.title;
+
+      const when = this.doc.createElement('span');
+      when.className = 'takes__when';
+      when.textContent = describeWhen(score.openedAtMs, now);
 
       const open = this.doc.createElement('button');
       open.type = 'button';
@@ -1172,14 +1229,17 @@ export class AppView {
         });
       });
 
-      row.append(name, open, remove);
+      row.append(name, when, open, remove);
       this.el.scoresList.append(row);
     }
   }
 
   private async openKeptScore(id: string, title: string): Promise<void> {
     try {
-      const exercise = await this.runtime.scores.open(id);
+      // The calendar and not `IClock`: that one counts from an arbitrary
+      // zero, and this is the moment a reader would call "when I last played
+      // it". The same clock `keep` is given when a file is imported.
+      const exercise = await this.runtime.scores.open(id, Date.now());
       if (exercise === null) {
         this.sayInTheMiddle(`${title} is no longer stored on this device.`);
         this.renderScores();
@@ -1822,6 +1882,10 @@ export class AppView {
     this.listen(this.el.immediateStart, 'change', () => {
       controller.updateSettings({ immediateStart: this.el.immediateStart.checked });
       this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.scoresSearch, 'input', () => {
+      this.renderScores();
     });
 
     this.listen(this.el.restTake, 'click', () => {
@@ -3711,7 +3775,10 @@ export class AppView {
       [
         this.el.sheetScores,
         [this.el.focusScores],
-        () => this.renderScores(),
+        () => {
+          this.el.scoresSearch.value = '';
+          this.renderScores();
+        },
       ],
       [
         // Everything about the click, from either place. It was two cycle

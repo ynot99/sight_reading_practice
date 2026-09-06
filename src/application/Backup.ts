@@ -49,7 +49,7 @@ function readScore(value: unknown): StoredScore | null {
   if (!isRecord(value)) {
     return null;
   }
-  const { id, title, savedAtMs, bars, musicXml } = value;
+  const { id, title, savedAtMs, openedAtMs, bars, musicXml } = value;
   if (typeof id !== 'string' || typeof musicXml !== 'string' || musicXml === '') {
     return null;
   }
@@ -57,6 +57,14 @@ function readScore(value: unknown): StoredScore | null {
     id,
     title: typeof title === 'string' ? title : 'Untitled',
     savedAtMs: typeof savedAtMs === 'number' ? savedAtMs : 0,
+    // A backup written before scores were stamped carries none, and the
+    // moment it was kept is the only thing that file knows.
+    openedAtMs:
+      typeof openedAtMs === 'number'
+        ? openedAtMs
+        : typeof savedAtMs === 'number'
+          ? savedAtMs
+          : 0,
     bars: typeof bars === 'number' ? bars : 0,
     musicXml,
   };

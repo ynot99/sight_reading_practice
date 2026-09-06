@@ -639,6 +639,33 @@ select {
   font-style: italic;
 }
 
+/*
+ * The search box in a sheet's head.
+ *
+ * Given room to grow but allowed to shrink, so a narrow tablet keeps the
+ * buttons beside it rather than wrapping them onto a second row.
+ */
+.sheet__search {
+  flex: 1 1 90px;
+  min-width: 60px;
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+/* When it was last read: said quietly, and never at the name's expense. */
+.takes__when {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .takes__name {
   flex: 1;
   min-width: 0;

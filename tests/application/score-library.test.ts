@@ -32,7 +32,7 @@ describe('the scores a reader has kept', () => {
     const original = twoBarExercise({ title: 'Something Borrowed' });
     const kept = await scores.keep(original, 1_000);
 
-    const reopened = await scores.open(kept.id);
+    const reopened = await scores.open(kept.id, 2_000);
     if (reopened === null) {
       throw new Error('expected the score to come back');
     }
@@ -94,7 +94,7 @@ describe('the scores a reader has kept', () => {
     await scores.remove(first.id);
 
     expect(scores.list().map((score) => score.title)).toEqual(['Stays']);
-    expect(await scores.open(first.id)).toBeNull();
+    expect(await scores.open(first.id, 3_000)).toBeNull();
   });
 
   it('forgets everything when asked', async () => {
@@ -108,7 +108,68 @@ describe('the scores a reader has kept', () => {
 
   it('answers for a score that is no longer there', async () => {
     const { scores } = library();
-    expect(await scores.open('score:Never Kept')).toBeNull();
+    expect(await scores.open('score:Never Kept', 1_000)).toBeNull();
+  });
+
+  it('puts the score read most recently at the top', async () => {
+    // The list said "newest first: the score a reader wants is usually the
+    // last one opened" and then sorted on when each was *kept*, which is the
+    // same order only on the day the files arrived. A month later the piece
+    // being worked on sits wherever its file happened to land.
+    const { scores } = library();
+    await scores.keep(twoBarExercise({ title: 'Imported First' }), 1_000);
+    await scores.keep(twoBarExercise({ title: 'Imported Second' }), 2_000);
+
+    expect(scores.list().map((score) => score.title)).toEqual([
+      'Imported Second',
+      'Imported First',
+    ]);
+
+    await scores.open('score:Imported First', 3_000);
+
+    expect(scores.list().map((score) => score.title)).toEqual([
+      'Imported First',
+      'Imported Second',
+    ]);
+  });
+
+  it('remembers what was read last across a visit', async () => {
+    // The stamp is on the score in the store, not in a list held in memory:
+    // a reader who opens something and comes back tomorrow should find it
+    // where they left it.
+    const store = new InMemoryScoreStore();
+    const first = library(store);
+    await first.scores.keep(twoBarExercise({ title: 'Older' }), 1_000);
+    await first.scores.keep(twoBarExercise({ title: 'Newer' }), 2_000);
+    await first.scores.open('score:Older', 3_000);
+
+    const next = library(store);
+    await next.scores.load();
+
+    expect(next.scores.list().map((score) => score.title)).toEqual(['Older', 'Newer']);
+  });
+
+  it('finds a score by any of the words in its name', async () => {
+    // His library is arrangements with names like "Hollow Knight - City of
+    // Tears", and what he remembers of one is rarely its first word. Every
+    // word has to appear; the order they are typed in is not a claim.
+    const { scores } = library();
+    await scores.keep(twoBarExercise({ title: 'Hollow Knight - City of Tears' }), 1_000);
+    await scores.keep(twoBarExercise({ title: 'Clair de Lune' }), 2_000);
+
+    expect(scores.search('city tears').map((score) => score.title)).toEqual([
+      'Hollow Knight - City of Tears',
+    ]);
+    expect(scores.search('TEARS city').map((score) => score.title)).toEqual([
+      'Hollow Knight - City of Tears',
+    ]);
+    expect(scores.search('lune').map((score) => score.title)).toEqual(['Clair de Lune']);
+    expect(scores.search('nocturne')).toEqual([]);
+    // An empty search is not a search: everything, in the order it was in.
+    expect(scores.search('  ').map((score) => score.title)).toEqual([
+      'Clair de Lune',
+      'Hollow Knight - City of Tears',
+    ]);
   });
 
   it('does not carry the documents around in the list', async () => {

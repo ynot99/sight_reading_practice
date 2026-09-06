@@ -5,7 +5,14 @@ import { InMemoryScoreStore, type StoredScore } from '../../src/application/port
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 
 function score(id: string, title = id): StoredScore {
-  return { id, title, savedAtMs: 1_000, bars: 8, musicXml: `<score-partwise>${id}</score-partwise>` };
+  return {
+    id,
+    title,
+    savedAtMs: 1_000,
+    openedAtMs: 1_000,
+    bars: 8,
+    musicXml: `<score-partwise>${id}</score-partwise>`,
+  };
 }
 
 function rig() {

@@ -1610,6 +1610,59 @@ describe('AppView', () => {
       expect(element('scores-list').textContent).toContain('2 bars');
     });
 
+    it('narrows the list to what was typed', async () => {
+      // Thirty-odd arrangements is past the point where a list is read; and
+      // what a reader remembers of a name is rarely its first word, so the
+      // words are matched in any order.
+      const rig = createRig();
+      await keepOne(rig, 'Hollow Knight - City of Tears');
+      await keepOne(rig, 'Clair de Lune');
+
+      const search = element<HTMLInputElement>('scores-search');
+      search.value = 'tears city';
+      search.dispatchEvent(new Event('input'));
+
+      expect(element('scores-list').childElementCount).toBe(1);
+      expect(element('scores-list').textContent).toContain('City of Tears');
+
+      search.value = 'nocturne';
+      search.dispatchEvent(new Event('input'));
+
+      // Said in the reader's own words rather than as "nothing kept yet",
+      // which would be a lie about a library that has two scores in it.
+      expect(element('scores-list').childElementCount).toBe(0);
+      expect(element('scores-empty').hidden).toBe(false);
+      expect(element('scores-empty').textContent).toContain('nocturne');
+    });
+
+    it('forgets what was typed when the sheet is raised again', async () => {
+      const rig = createRig();
+      await keepOne(rig, 'Clair de Lune');
+      const search = element<HTMLInputElement>('scores-search');
+      search.value = 'nothing like this';
+      search.dispatchEvent(new Event('input'));
+      expect(element('scores-list').childElementCount).toBe(0);
+
+      element<HTMLButtonElement>('focus-scores').click();
+
+      // A search left over from yesterday reads as a library that has lost
+      // most of its scores.
+      expect(search.value).toBe('');
+      expect(element('scores-list').childElementCount).toBe(1);
+    });
+
+    it('says how long ago each one was read', async () => {
+      // The list is ordered by that and by nothing else, and an order nobody
+      // can see the reason for is read as no order at all.
+      const rig = createRig();
+      await keepOne(rig, 'Read Yesterday');
+      await rig.runtime.scores.open('score:Read Yesterday', Date.now() - 86_400_000);
+
+      element<HTMLButtonElement>('focus-scores').click();
+
+      expect(element('scores-list').textContent).toContain('yesterday');
+    });
+
     it('adds a score from the sheet, through the one picker there is', async () => {
       const { view } = createRig();
       await view.initialize();

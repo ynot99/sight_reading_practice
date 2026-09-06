@@ -2,8 +2,18 @@
 export interface StoredScoreSummary {
   readonly id: string;
   readonly title: string;
-  /** Wall-clock moment it was kept, for ordering and for saying "when". */
+  /** Wall-clock moment it was kept, for saying how long it has been here. */
   readonly savedAtMs: number;
+  /**
+   * Wall-clock moment it was last opened, which is what "recent" means.
+   *
+   * Not the same question as when it was kept, and the difference is the
+   * whole point: a file imported in March and read every day is the reader's
+   * current piece, and one imported yesterday and never opened again is not.
+   * A store that has only ever seen the older shape answers with the moment
+   * it was kept, which is the truth it has.
+   */
+  readonly openedAtMs: number;
   readonly bars: number;
 }
 
@@ -33,6 +43,15 @@ export interface IScoreStore {
   list(): Promise<readonly StoredScoreSummary[]>;
   read(id: string): Promise<StoredScore | null>;
   write(score: StoredScore): Promise<void>;
+  /**
+   * Marks a score as opened just now.
+   *
+   * Separate from `write` because the caller has no reason to be holding the
+   * document: a reader opening a score has just been given the music back,
+   * and handing the whole of it in again to change one number would be
+   * asking them to carry it twice.
+   */
+  touch(id: string, atMs: number): Promise<void>;
   remove(id: string): Promise<void>;
   clear(): Promise<void>;
 }
@@ -53,6 +72,14 @@ export class InMemoryScoreStore implements IScoreStore {
 
   write(score: StoredScore): Promise<void> {
     this.scores.set(score.id, score);
+    return Promise.resolve();
+  }
+
+  touch(id: string, atMs: number): Promise<void> {
+    const found = this.scores.get(id);
+    if (found !== undefined) {
+      this.scores.set(id, { ...found, openedAtMs: atMs });
+    }
     return Promise.resolve();
   }
 

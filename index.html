@@ -123,6 +123,14 @@
         <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Kept scores">
           <div class="sheet__head">
             <strong class="sheet__title">Scores</strong>
+            <!--
+              Thirty-odd arrangements is more than a list anybody reads. The
+              box is emptied every time the sheet is raised: a search left
+              over from yesterday would look like a library that had lost
+              most of its scores.
+            -->
+            <input id="scores-search" type="search" class="sheet__search"
+              placeholder="Search" aria-label="Search the kept scores" />
             <button id="scores-add" type="button" class="button">Add a score…</button>
             <button id="scores-clear" type="button" class="button button--ghost">Delete all</button>
             <button id="scores-close" type="button" class="button button--ghost sheet__close"

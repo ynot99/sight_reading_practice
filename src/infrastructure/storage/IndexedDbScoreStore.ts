@@ -4,6 +4,21 @@ import type {
   StoredScoreSummary,
 } from '../../application/ports/IScoreStore.js';
 
+/**
+ * What a record written before scores were stamped has to say for itself.
+ *
+ * The database is schemaless, so the field is simply absent on anything kept
+ * by an older version of this program - and the honest answer for those is
+ * the moment they were kept, which is the last thing that is known to have
+ * happened to them.
+ */
+function whenOpened<T extends StoredScoreSummary>(record: T): T {
+  const stamped = record as T & { openedAtMs?: unknown };
+  return typeof stamped.openedAtMs === 'number'
+    ? record
+    : { ...record, openedAtMs: record.savedAtMs };
+}
+
 const DATABASE = 'sight-reading-practice';
 const VERSION = 1;
 const STORE = 'scores';
@@ -49,14 +64,32 @@ export class IndexedDbScoreStore implements IScoreStore {
     );
     // The document is left behind on purpose: a list of ten scores would
     // otherwise carry megabytes of MusicXML nobody is about to read.
-    return (all ?? []).map(({ musicXml: _musicXml, ...summary }) => summary);
+    return (all ?? []).map(({ musicXml: _musicXml, ...summary }) => whenOpened(summary));
   }
 
   async read(id: string): Promise<StoredScore | null> {
     const found = await this.withStore('readonly', (store) =>
       request<StoredScore | undefined>(store.get(id) as IDBRequest<StoredScore | undefined>),
     );
-    return found ?? null;
+    return found === undefined || found === null ? null : whenOpened(found);
+  }
+
+  /**
+   * Stamps a score with the moment it was opened.
+   *
+   * Read and write in two transactions rather than one. A transaction is only
+   * alive while the browser is running the work it was given, and awaiting a
+   * promise in the middle of one has been the wrong side of that rule in
+   * Safari - which is the browser this is read in. Nothing here needs them to
+   * be atomic: one reader, one tab, and the worst a lost race could cost is a
+   * position in a list.
+   */
+  async touch(id: string, atMs: number): Promise<void> {
+    const found = await this.read(id);
+    if (found === null) {
+      return;
+    }
+    await this.write({ ...found, openedAtMs: atMs });
   }
 
   async write(score: StoredScore): Promise<void> {

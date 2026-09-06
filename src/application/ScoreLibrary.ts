@@ -4,6 +4,21 @@ import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.
 import type { IScoreImporter } from './ports/IScoreImporter.js';
 import type { IScoreStore, StoredScoreSummary } from './ports/IScoreStore.js';
 
+/**
+ * Whether a score answers to what the reader typed.
+ *
+ * Every word has to appear, and in any order: his library is thirty-odd
+ * arrangements with names like "Hollow Knight - City of Tears", so "city
+ * tears" has to find it and a plain substring search would not. Matched
+ * without regard to case or to spare spaces, because a search box is not a
+ * place to be exact.
+ */
+export function matchesSearch(title: string, query: string): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter((word) => word.length > 0);
+  const against = title.toLowerCase();
+  return words.every((word) => against.includes(word));
+}
+
 export interface ScoreLibraryDependencies {
   readonly store: IScoreStore;
   readonly serializer: IMusicXmlSerializer;
@@ -36,9 +51,22 @@ export class ScoreLibrary {
     this.summaries = await this.deps.store.list();
   }
 
-  /** Newest first: the score a reader wants is usually the last one opened. */
+  /**
+   * Most recently opened first, and that is meant literally.
+   *
+   * This used to sort on the moment a score was *kept* while saying it was
+   * the last one opened, which is the same order only on the day everything
+   * was imported. The piece a reader is working on is the one they keep
+   * coming back to, and after a month of practice it sits wherever its file
+   * happened to arrive.
+   */
   list(): readonly StoredScoreSummary[] {
-    return [...this.summaries].sort((left, right) => right.savedAtMs - left.savedAtMs);
+    return [...this.summaries].sort((left, right) => right.openedAtMs - left.openedAtMs);
+  }
+
+  /** The kept scores whose names answer to what was typed, in the same order. */
+  search(query: string): readonly StoredScoreSummary[] {
+    return this.list().filter((score) => matchesSearch(score.title, query));
   }
 
   get isEmpty(): boolean {
@@ -57,6 +85,10 @@ export class ScoreLibrary {
       id: `score:${exercise.title}`,
       title: exercise.title,
       savedAtMs,
+      // Importing a file is opening it: the reader is looking at it now, and
+      // a piece that went to the bottom of the list the moment it arrived
+      // would be a strange thing to have just added.
+      openedAtMs: savedAtMs,
       bars: measureCount(exercise),
     };
     await this.deps.store.write({
@@ -67,12 +99,25 @@ export class ScoreLibrary {
     return summary;
   }
 
-  /** Rebuilds a kept score, or `null` when it is no longer there. */
-  async open(id: string): Promise<Exercise | null> {
+  /**
+   * Rebuilds a kept score, or `null` when it is no longer there.
+   *
+   * The moment is handed in rather than read from a clock here, the same way
+   * `keep` takes one: this application's `IClock` counts from an arbitrary
+   * zero for measuring music, and "when did I last read this" is a question
+   * about the calendar.
+   */
+  async open(id: string, openedAtMs: number): Promise<Exercise | null> {
     const stored = await this.deps.store.read(id);
     if (stored === null) {
       return null;
     }
+    await this.deps.store.touch(id, openedAtMs);
+    // Kept in step here as well as in the store, so the list re-orders
+    // without reading the database again to redraw rows nobody touched.
+    this.summaries = this.summaries.map((summary) =>
+      summary.id === id ? { ...summary, openedAtMs } : summary,
+    );
     // Through the ordinary parser: a score read back is a score read, and a
     // second way in would be a second set of rules to keep in step.
     return this.deps.importer.read(stored.musicXml).exercise;

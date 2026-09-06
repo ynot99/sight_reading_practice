@@ -357,6 +357,7 @@ describe('waiting while practising one hand', () => {
       pedalMarks: [],
       dynamicMarks: [],
       tempoWords: [],
+      hairpins: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 60,
       firstBarNumber: 1,

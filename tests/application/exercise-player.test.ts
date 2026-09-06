@@ -869,6 +869,7 @@ describe('rolling a chord the writer marked', () => {
       pedalMarks: [],
       dynamicMarks: [],
       tempoWords: [],
+      hairpins: [],
       timeSignature: new TimeSignature(4, 4),
       tempoBpm: 240,
       firstBarNumber: 1,

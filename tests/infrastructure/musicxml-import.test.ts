@@ -112,6 +112,86 @@ describe('the dynamics on the page', () => {
     expect(printed).not.toContain('Andante');
   });
 
+  it('reads a hairpin from its two ends, and writes it back', () => {
+    // The format states a start and a stop as separate directions; what a
+    // reader sees is one wedge under the music between them.
+    const printed = serializer.serialize({
+      ...twoBarExercise(),
+      hairpins: [
+        {
+          measureIndex: 0,
+          offsetTicks: 0,
+          kind: 'crescendo' as const,
+          untilMeasureIndex: 1,
+          untilOffsetTicks: 0,
+          staffNumber: 1,
+        },
+      ],
+    });
+
+    const { exercise } = importer.read(printed);
+
+    expect(printed).toContain('<wedge type="crescendo"');
+    expect(printed).toContain('<wedge type="stop"');
+    expect(exercise.hairpins).toEqual([
+      {
+        measureIndex: 0,
+        offsetTicks: 0,
+        kind: 'crescendo',
+        untilMeasureIndex: 1,
+        untilOffsetTicks: 0,
+        staffNumber: 1,
+      },
+    ]);
+  });
+
+  it('is heard as levels by the time it is read in', () => {
+    // The expansion belongs to the import: everything downstream - the
+    // player, the marks, the judging - understands levels and knows nothing
+    // about wedges.
+    const printed = serializer.serialize({
+      ...twoBarExercise(),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'pp' as const, staffNumber: null },
+        { measureIndex: 1, offsetTicks: 0, level: 'f' as const, staffNumber: null },
+      ],
+      hairpins: [
+        {
+          measureIndex: 0,
+          offsetTicks: 0,
+          kind: 'crescendo' as const,
+          untilMeasureIndex: 1,
+          untilOffsetTicks: 0,
+          staffNumber: null,
+        },
+      ],
+    });
+
+    const { exercise } = importer.read(printed);
+
+    const worked = exercise.dynamicMarks.filter((mark) => mark.implied === true);
+    expect(worked.length).toBeGreaterThan(0);
+    // Between the two the writer wrote, and neither of them.
+    for (const mark of worked) {
+      expect(['p', 'mp', 'mf']).toContain(mark.level);
+    }
+  });
+
+  it('keeps the levels a hairpin works out to itself', () => {
+    const swelling = {
+      ...twoBarExercise(),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'p' as const, staffNumber: null },
+        { measureIndex: 1, offsetTicks: 0, level: 'mp' as const, staffNumber: null, implied: true },
+      ],
+    };
+
+    const printed = serializer.serialize(swelling);
+
+    // The written p, and not the mp nobody wrote.
+    expect([...printed.matchAll(/<dynamics>/g)]).toHaveLength(1);
+  });
+
   it('puts a word back where its writer put it', () => {
     // Reported from Avatar, bar 59: a `rit.` printed on top of the metronome
     // mark. Both go above when nobody says otherwise, and we were saying

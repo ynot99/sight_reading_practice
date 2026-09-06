@@ -477,6 +477,7 @@ export function midiToExercise(
     pedalMarks,
     dynamicMarks: [],
     tempoWords: [],
+    hairpins: [],
     timeSignature,
     tempoBpm: document.tempoBpm,
     firstBarNumber: 1,

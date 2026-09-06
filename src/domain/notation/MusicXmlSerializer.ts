@@ -6,6 +6,7 @@ import type {
   Exercise,
   MusicalEntry,
   GraceNote,
+  DynamicHairpin,
   DynamicMark,
   PedalMark,
   TempoWord,
@@ -235,8 +236,15 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         // carry several: written once for the first voice of the staff they
         // were marked under, or with the first voice of all where the file
         // did not say which staff.
+        // Only what the writer wrote: the levels worked out from a hairpin
+        // are this program's way of saying "getting louder" to itself, and
+        // printing them would put four dynamic marks under one bar.
         const dynamics = exercise.dynamicMarks.filter(
-          (mark) => mark.measureIndex === measureIndex,
+          (mark) => mark.measureIndex === measureIndex && mark.implied !== true,
+        );
+        const hairpins = exercise.hairpins.filter(
+          (hairpin) =>
+            hairpin.measureIndex === measureIndex || hairpin.untilMeasureIndex === measureIndex,
         );
         // Words about the speed belong to the piece rather than to a staff,
         // so they are written once, with the first voice - the same place
@@ -282,6 +290,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
                 : firstOfStaff.get(mark.staffNumber) === index,
             ),
             index === 0 ? words : [],
+            index === 0 ? hairpins : [],
           );
         });
         this.writeTempoChanges(writer, tempos, barTicks, present.length > 0);
@@ -492,6 +501,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     pedal: readonly PedalMark[],
     dynamics: readonly DynamicMark[] = [],
     words: readonly TempoWord[] = [],
+    hairpins: readonly DynamicHairpin[] = [],
   ): void {
     const measure = staff.measures[measureIndex];
     if (measure === undefined) {
@@ -510,6 +520,8 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     let nextMark = 0;
     let nextDynamic = 0;
     let nextWord = 0;
+    /** Which ends of which hairpins have been written into this bar. */
+    const drawn = new Set<string>();
     measure.entries.forEach((entry, entryIndex) => {
       while (nextMark < pedal.length && (pedal[nextMark]?.offsetTicks ?? 0) <= offset) {
         this.writePedal(writer, pedal[nextMark], staff.staffNumber);
@@ -526,6 +538,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         this.writeWords(writer, words[nextWord]);
         nextWord += 1;
       }
+      this.writeHairpins(writer, hairpins, measureIndex, offset, staff.staffNumber, drawn);
       offset += entry.duration.ticks;
       this.writeEntry(
         writer,
@@ -551,6 +564,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       this.writeWords(writer, words[nextWord]);
       nextWord += 1;
     }
+    this.writeHairpins(writer, hairpins, measureIndex, offset, staff.staffNumber, drawn);
     heldByVoice.set(staff.voice, held);
   }
 
@@ -770,6 +784,46 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
    * `rit.` is drawn where they drew it, and a piece that says "dolce" goes on
    * saying it.
    */
+  /**
+   * The two ends of a hairpin, each where the writer put it.
+   *
+   * Written as the format states them - a start and a stop, numbered so that
+   * overlapping ones can be told apart - and each end only once, however many
+   * entries the bar has: the loop that calls this walks every note.
+   */
+  private writeHairpins(
+    writer: XmlWriter,
+    hairpins: readonly DynamicHairpin[],
+    measureIndex: number,
+    offset: number,
+    staffNumber: number,
+    drawn: Set<string>,
+  ): void {
+    for (const [at, hairpin] of hairpins.entries()) {
+      const starts = hairpin.measureIndex === measureIndex && hairpin.offsetTicks <= offset;
+      const stops = hairpin.untilMeasureIndex === measureIndex && hairpin.untilOffsetTicks <= offset;
+      for (const [end, wanted] of [
+        ['start', starts],
+        ['stop', stops],
+      ] as const) {
+        const key = `${at}:${end}`;
+        if (!wanted || drawn.has(key)) {
+          continue;
+        }
+        drawn.add(key);
+        writer.element('direction', { placement: 'below' }, () => {
+          writer.element('direction-type', undefined, () => {
+            writer.leaf('wedge', undefined, {
+              type: end === 'start' ? hairpin.kind : 'stop',
+              number: at + 1,
+            });
+          });
+          writer.leaf('staff', hairpin.staffNumber ?? staffNumber);
+        });
+      }
+    }
+  }
+
   private writeWords(writer: XmlWriter, word: TempoWord | undefined): void {
     if (word === undefined || word.text === '') {
       return;

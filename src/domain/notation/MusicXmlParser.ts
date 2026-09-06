@@ -3,6 +3,7 @@ import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '../model/Duration.js';
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
 import { tempoWordKind, withTempoWordsPlayed } from './tempoWords.js';
+import { withHairpinsPlayed } from './hairpins.js';
 import {
   BEAM_TYPES,
   DYNAMIC_LEVELS,
@@ -17,6 +18,7 @@ import type {
   Beam,
   BeamType,
   ClefChange,
+  DynamicHairpin,
   DynamicMark,
   DynamicLevel,
   TempoWord,
@@ -139,7 +141,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   }
 
   const header = readHeader(measures, warnings);
-  const { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords } = readEveryPart(
+  const { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords, hairpins } = readEveryPart(
     parts,
     measures.length,
     header,
@@ -166,6 +168,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     pedalMarks,
     dynamicMarks,
     tempoWords,
+    hairpins,
     timeSignature: header.timeSignature,
     tempoBpm: opening.at(-1)?.tempoBpm ?? ASSUMED_TEMPO_BPM,
     staves,
@@ -203,7 +206,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   // acts on every reading of it, and before anything is validated: what the
   // words add are ordinary tempo changes, which the rest of the program
   // already understands.
-  const spoken = withTempoWordsPlayed(played);
+  const spoken = withHairpinsPlayed(withTempoWordsPlayed(played));
   validateExercise(spoken);
   return { exercise: spoken, warnings };
 }
@@ -698,6 +701,55 @@ function readGraces(graces: readonly XmlNode[]): GraceNote[] {
  * than a level to hold, and holding one would be a mistake that lasted until
  * the next mark.
  */
+/** One end of a hairpin, as the file states it. */
+interface RawWedge {
+  readonly measureIndex: number;
+  readonly offsetTicks: number;
+  readonly type: 'crescendo' | 'diminuendo' | 'stop';
+  readonly number: number;
+  readonly staffNumber: number | null;
+}
+
+/**
+ * Hairpins, paired from their two ends.
+ *
+ * The format states a start and a stop as separate directions, numbered so
+ * that overlapping ones can be told apart - one hand swelling while the other
+ * fades is ordinary piano writing. A start with no stop of its own runs to
+ * the end of the bar it began in, which is what an engraver draws for one.
+ */
+function pairWedges(
+  wedges: readonly RawWedge[],
+  barTicks: (bar: number) => number,
+): DynamicHairpin[] {
+  const open = new Map<number, RawWedge>();
+  const paired: DynamicHairpin[] = [];
+  const started = (from: RawWedge, untilBar: number, untilTicks: number): DynamicHairpin => ({
+    measureIndex: from.measureIndex,
+    offsetTicks: from.offsetTicks,
+    kind: from.type === 'crescendo' ? 'crescendo' : 'diminuendo',
+    untilMeasureIndex: untilBar,
+    untilOffsetTicks: untilTicks,
+    staffNumber: from.staffNumber,
+  });
+  for (const wedge of wedges) {
+    if (wedge.type !== 'stop') {
+      open.set(wedge.number, wedge);
+      continue;
+    }
+    const from = open.get(wedge.number);
+    if (from === undefined) {
+      continue;
+    }
+    open.delete(wedge.number);
+    paired.push(started(from, wedge.measureIndex, wedge.offsetTicks));
+  }
+  for (const from of open.values()) {
+    paired.push(started(from, from.measureIndex, barTicks(from.measureIndex)));
+  }
+  return paired;
+}
+
 /**
  * The words a direction prints, joined.
  *
@@ -742,6 +794,7 @@ function readMeasureNotes(
   tempoMarks: TempoChange[] = [],
   dynamicMarks: DynamicMark[] = [],
   tempoWords: TempoWord[] = [],
+  wedges: RawWedge[] = [],
 ): RawNote[] {
   const notes: RawNote[] = [];
   let cursor = 0;
@@ -785,6 +838,19 @@ function readMeasureNotes(
       const tempoBpm = readTempoMark(node);
       if (tempoBpm !== null) {
         tempoMarks.push({ measureIndex, offsetTicks: Math.max(0, cursor), tempoBpm });
+      }
+      const wedge = child(child(node, 'direction-type'), 'wedge');
+      const wedgeType = attribute(wedge, 'type');
+      if (wedgeType === 'crescendo' || wedgeType === 'diminuendo' || wedgeType === 'stop') {
+        wedges.push({
+          measureIndex,
+          offsetTicks: Math.max(0, cursor),
+          type: wedgeType,
+          // Hairpins can overlap - one hand swelling while the other fades -
+          // and the file numbers them so the two ends can be paired.
+          number: Number(attribute(wedge, 'number') ?? '1') || 1,
+          staffNumber: childNumber(node, 'staff') ?? null,
+        });
       }
       const said = readWords(node);
       if (said !== '') {
@@ -1052,12 +1118,14 @@ function readEveryPart(
   readonly tempoMarks: readonly TempoChange[];
   readonly dynamicMarks: readonly DynamicMark[];
   readonly tempoWords: readonly TempoWord[];
+  readonly hairpins: readonly DynamicHairpin[];
 } {
   const staves: StaffPart[] = [];
   const pedalMarks: PedalMark[] = [];
   const tempoMarks: TempoChange[] = [];
   const dynamicMarks: DynamicMark[] = [];
   const tempoWords: TempoWord[] = [];
+  const hairpins: DynamicHairpin[] = [];
 
   for (const [index, part] of parts.entries()) {
     const measures = childrenNamed(part, 'measure');
@@ -1103,6 +1171,12 @@ function readEveryPart(
         tempoWords.push(word);
       }
     }
+    hairpins.push(
+      ...built.hairpins.map((hairpin) => ({
+        ...hairpin,
+        staffNumber: hairpin.staffNumber === null ? null : hairpin.staffNumber + staffOffset,
+      })),
+    );
     dynamicMarks.push(
       ...built.dynamicMarks.map((mark) => ({
         ...mark,
@@ -1111,7 +1185,7 @@ function readEveryPart(
     );
   }
 
-  return { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords };
+  return { staves, pedalMarks, tempoMarks, dynamicMarks, tempoWords, hairpins };
 }
 
 /** What a part says about itself: how finely it counts, and its clefs. */
@@ -1151,11 +1225,13 @@ function buildStaves(
   readonly tempoMarks: readonly TempoChange[];
   readonly dynamicMarks: readonly DynamicMark[];
   readonly tempoWords: readonly TempoWord[];
+  readonly hairpins: readonly DynamicHairpin[];
 } {
   const pedalMarks: PedalMark[] = [];
   const tempoMarks: TempoChange[] = [];
   const dynamicMarks: DynamicMark[] = [];
   const tempoWords: TempoWord[] = [];
+  const wedges: RawWedge[] = [];
   const perMeasure = measures.map((measure, index) =>
     readMeasureNotes(
       measure,
@@ -1166,8 +1242,12 @@ function buildStaves(
       tempoMarks,
       dynamicMarks,
       tempoWords,
+      wedges,
     ),
   );
+  // Paired here, where the bars of this part are known: a hairpin with no
+  // stop of its own runs to the end of the bar it began in.
+  const hairpins = pairWedges(wedges, (bar) => barTicksAt(header, bar));
 
   // One part per voice of each staff, rather than one per staff. Two voices on
   // a staff is how piano writing puts an inner line under a melody, and saying
@@ -1248,6 +1328,11 @@ function buildStaves(
       word.measureIndex === 0 && word.offsetTicks > 0
         ? { ...word, offsetTicks: word.offsetTicks + pickupShift }
         : word,
+    ),
+    hairpins: hairpins.map((hairpin) =>
+      hairpin.measureIndex === 0 && hairpin.offsetTicks > 0
+        ? { ...hairpin, offsetTicks: hairpin.offsetTicks + pickupShift }
+        : hairpin,
     ),
     // Moved with the music they mark where a pickup shifted it, exactly as
     // the tempo marks below are.

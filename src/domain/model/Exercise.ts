@@ -383,6 +383,15 @@ export interface DynamicMark {
   readonly level: DynamicLevel;
   /** The staff it was written under, or `null` where the file did not say. */
   readonly staffNumber: number | null;
+  /**
+   * Worked out from a hairpin rather than written, and never printed.
+   *
+   * The same rule the implied tempo changes follow: a crescendo is heard as
+   * a handful of levels because levels are the only language this program's
+   * loudness speaks, but nobody wrote them and printing them would put four
+   * dynamic marks under one bar.
+   */
+  readonly implied?: boolean;
 }
 
 /**
@@ -468,6 +477,23 @@ export function dynamicAt(
     mine.measureIndex > latest.measureIndex ||
     (mine.measureIndex === latest.measureIndex && mine.offsetTicks >= latest.offsetTicks);
   return (mineIsLater ? mine : latest).level;
+}
+
+/**
+ * A hairpin: the music getting louder or quieter across a stretch.
+ *
+ * Kept as the two ends the writer drew rather than as a level at every note,
+ * for the reason the words are: it is what is on the page. What it does to
+ * the sound is worked out from it, the way a `rit.` is.
+ */
+export interface DynamicHairpin {
+  readonly measureIndex: number;
+  readonly offsetTicks: number;
+  readonly kind: 'crescendo' | 'diminuendo';
+  /** Where it stops, which the file states separately. */
+  readonly untilMeasureIndex: number;
+  readonly untilOffsetTicks: number;
+  readonly staffNumber: number | null;
 }
 
 export interface PedalMark {
@@ -581,6 +607,8 @@ export interface Exercise {
   readonly dynamicMarks: readonly DynamicMark[];
   /** Words about the speed, printed and - for some of them - obeyed. */
   readonly tempoWords: readonly TempoWord[];
+  /** Hairpins: getting louder, getting quieter. */
+  readonly hairpins: readonly DynamicHairpin[];
   readonly timeSignature: TimeSignature;
   /**
    * Metres the score changes to partway through.

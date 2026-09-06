@@ -120,6 +120,14 @@ export class FakeScoreRenderer
     this.played.push(note);
   }
 
+  hidePlayed(note: { readonly stepIndex: number; readonly midi: number }): void {
+    const kept = this.played.filter(
+      (mark) => mark.stepIndex !== note.stepIndex || mark.midi !== note.midi,
+    );
+    this.played.length = 0;
+    this.played.push(...kept);
+  }
+
   clearPlayed(): void {
     this.played.length = 0;
     this.clearPlayedCount += 1;

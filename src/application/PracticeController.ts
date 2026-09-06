@@ -61,7 +61,16 @@ import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMe
 import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
 
 /** When the marks for what was played are put on the page. */
-export const PLAYED_NOTE_DISPLAYS = ['live', 'at-end', 'hidden'] as const;
+/**
+ * When the marks of what was played are on the page.
+ *
+ * `while-held` is his own, from a mode where the page silts up with red: a
+ * reader hunting for an accidental leaves a wrong note behind on every try,
+ * and by the tenth the note they are looking for is under them. So a wrong
+ * one lasts as long as the key does - and every one of them comes back at
+ * the end, which is when they are worth reading.
+ */
+export const PLAYED_NOTE_DISPLAYS = ['live', 'while-held', 'at-end', 'hidden'] as const;
 
 export type PlayedNoteDisplay = (typeof PLAYED_NOTE_DISPLAYS)[number];
 
@@ -540,6 +549,8 @@ export class PracticeController {
   private fadedThrough = -1;
   /** Marks waiting for the run to end, when that is when they are drawn. */
   private heldMarks: PlayedNote[] = [];
+  /** Wrong marks on the page only while their key is down. */
+  private lentMarks: PlayedNote[] = [];
   /** Wrong notes played at the step the marker is standing on. */
   private missteps = 0;
   /** Notes of the other hand still sounding, so a stop can take them back. */
@@ -780,11 +791,16 @@ export class PracticeController {
       this.refreshScore();
     }
 
-    if (changes.playedNotes !== undefined && changes.playedNotes !== 'live') {
+    if (
+      changes.playedNotes !== undefined &&
+      changes.playedNotes !== 'live' &&
+      changes.playedNotes !== 'while-held'
+    ) {
       // Turning them off, or moving them to the end, both mean the page in
       // front of the reader should be clean again now.
       this.deps.overlay.clearPlayed();
       this.heldMarks = [];
+      this.lentMarks = [];
     }
 
     // Any of these changes what the run will ask for, or whether saying so
@@ -1653,6 +1669,7 @@ export class PracticeController {
       this.emitter.emit('healthChanged', { health: this.meter.health, cause: 'settle' });
     }
     this.heldMarks = [];
+    this.lentMarks = [];
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
     this.fadedThrough = -1;
@@ -1716,10 +1733,16 @@ export class PracticeController {
           // still knows the tempo it was played at.
           offset: this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm),
         };
-        if (this.currentSettings.playedNotes === 'live') {
-          this.deps.overlay.showPlayed(mark);
-        } else {
+        if (this.currentSettings.playedNotes === 'at-end') {
           this.heldMarks.push(mark);
+        } else {
+          this.deps.overlay.showPlayed(mark);
+          // Lent to the page rather than given to it: taken back when the
+          // key comes up, and handed over again when the run ends, which is
+          // when a reader wants to see where they kept going wrong.
+          if (this.marksAreLent && !mark.correct) {
+            this.lentMarks.push(mark);
+          }
         }
       }),
     );
@@ -2043,6 +2066,9 @@ export class PracticeController {
       this.deps.overlay.showPlayed(mark);
     }
     this.heldMarks = [];
+    // Whatever is still under a finger as the run ends stays where it is:
+    // it is already drawn, and it is not owed to the page twice.
+    this.lentMarks = [];
   }
 
   /**
@@ -2438,12 +2464,46 @@ export class PracticeController {
    */
   private hearNotesForTheTimer(): void {
     this.hearingNotes = this.deps.midi.subscribe((event) => {
+      if (event.type === 'noteoff') {
+        this.takeBackTheMark(event.midi);
+        return;
+      }
       if (event.type !== 'noteon') {
         return;
       }
       this.timer.noteHeard(event.timestampMs);
       this.considerARest();
     });
+  }
+
+  /** Whether wrong marks are only lent to the page for as long as the key. */
+  private get marksAreLent(): boolean {
+    return this.currentSettings.playedNotes === 'while-held';
+  }
+
+  /**
+   * Takes a wrong mark off the page, the key having come up.
+   *
+   * The key and not the pedal: what this answers is "which note am I holding
+   * down", and a pedal holds the sound rather than the finger. Every mark of
+   * that note goes - two tries at the same wrong note stand in the same
+   * place, so there is nothing to tell them apart on the page anyway.
+   *
+   * They are kept, not forgotten: at the end of the run they all come back.
+   */
+  private takeBackTheMark(midi: number): void {
+    if (this.lentMarks.length === 0) {
+      return;
+    }
+    const going = this.lentMarks.filter((mark) => mark.midi === midi);
+    if (going.length === 0) {
+      return;
+    }
+    this.lentMarks = this.lentMarks.filter((mark) => mark.midi !== midi);
+    for (const mark of going) {
+      this.deps.overlay.hidePlayed(mark);
+      this.heldMarks.push(mark);
+    }
   }
 
   /**

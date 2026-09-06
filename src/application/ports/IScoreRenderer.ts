@@ -313,6 +313,14 @@ export interface IPlayedNoteOverlay {
   /** Supplied whenever the music changes; spelling depends on the key. */
   configureOverlay(context: OverlayContext): void;
   showPlayed(note: PlayedNote): void;
+  /**
+   * Takes one mark off the page again.
+   *
+   * For a wrong note that is only drawn while the key is down: the page
+   * silts up with red while a reader hunts for an accidental, and by the
+   * time they find it they cannot see the note they were looking for.
+   */
+  hidePlayed(note: { readonly stepIndex: number; readonly midi: number }): void;
   clearPlayed(): void;
 }
 

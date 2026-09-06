@@ -943,6 +943,58 @@ describe('what you played, drawn over the score', () => {
     expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false, offset: 0 }]);
   });
 
+  it('lends a wrong mark to the page for as long as the key is down', async () => {
+    // His line 48: hunting for an accidental leaves a wrong note behind on
+    // every try, and by the tenth the note being hunted for is underneath
+    // them. So a wrong one lasts as long as the key does.
+    const { controller, renderer, midi } = createController(true);
+    controller.updateSettings({ playedNotes: 'while-held' });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const expected = session?.currentStep?.expectedMidi[0] ?? 60;
+    const wrong = expected + 1;
+
+    midi.noteOn(wrong, 0);
+    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false, offset: 0 }]);
+
+    midi.noteOff(wrong, 100);
+    expect(renderer.played).toEqual([]);
+  });
+
+  it('keeps a right note on the page when its key comes up', async () => {
+    // Only the red is lent. What was played correctly is the reading itself,
+    // and a page that emptied as the fingers left it would show nothing at
+    // all by the end of a bar.
+    const { controller, renderer, midi } = createController(true);
+    controller.updateSettings({ playedNotes: 'while-held' });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const expected = session?.currentStep?.expectedMidi[0] ?? 60;
+
+    midi.noteOn(expected, 0);
+    midi.noteOff(expected, 100);
+
+    expect(renderer.played.map((mark) => mark.midi)).toEqual([expected]);
+  });
+
+  it('gives every wrong mark back when the run ends', async () => {
+    // The other half of his line 48: at the end they are worth reading, and
+    // that is exactly when a reader asks where they kept going wrong.
+    const { controller, renderer, midi } = createController(true);
+    controller.updateSettings({ playedNotes: 'while-held' });
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const wrong = (session?.currentStep?.expectedMidi[0] ?? 60) + 1;
+
+    midi.noteOn(wrong, 0);
+    midi.noteOff(wrong, 100);
+    expect(renderer.played).toEqual([]);
+
+    session?.abort();
+
+    expect(renderer.played).toEqual([{ stepIndex: 0, midi: wrong, correct: false, offset: 0 }]);
+  });
+
   it('draws a mistimed press just before the note it was reaching for', async () => {
     // The complaint this exists for: a press too early to count for the beat
     // it was aimed at is judged against the beat before, which used to put the

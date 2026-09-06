@@ -3988,15 +3988,20 @@ describe('AppView', () => {
       expect(rig.renderer.pages.at).toBe(1);
     });
 
-    it('cycles the played notes through all three answers from the drawer', async () => {
+    it('cycles the played notes through every answer from the drawer', async () => {
       // One question - when do I see what I played - so one control. A
-      // switch here could only say two of the three, and a reader who chose
-      // "at the end" downstairs found a button up here that could not put it
-      // back.
+      // switch here could only say two of them, and a reader who chose "at
+      // the end" downstairs found a button up here that could not put it
+      // back. There are four answers now, and the button says all four.
       const { view, runtime } = createRig();
       await view.initialize();
       const toggle = element<HTMLButtonElement>('focus-marks');
       expect(toggle.dataset['marks']).toBe('live');
+
+      toggle.click();
+      expect(runtime.controller.settings.playedNotes).toBe('while-held');
+      expect(toggle.dataset['marks']).toBe('while-held');
+      expect(toggle.title).toContain('while held');
 
       toggle.click();
       expect(runtime.controller.settings.playedNotes).toBe('at-end');

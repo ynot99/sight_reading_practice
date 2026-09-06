@@ -1982,6 +1982,28 @@ export class OsmdScoreRenderer
     this.drawMarks([mark], this.overlayGroupFor(sheet), geometry);
   }
 
+  /**
+   * Takes a mark off again, without redrawing the rest.
+   *
+   * Found by what it is a mark *of* rather than by holding a handle to every
+   * element: one mark is a notehead and possibly ledger lines and an
+   * accidental, and a run puts hundreds of them on a page.
+   */
+  hidePlayed(note: { readonly stepIndex: number; readonly midi: number }): void {
+    const before = this.marks.length;
+    this.marks = this.marks.filter(
+      (mark) => mark.stepIndex !== note.stepIndex || mark.midi !== note.midi,
+    );
+    if (this.marks.length === before) {
+      return;
+    }
+    const sheet = this.sheets[this.pageOfStep(note.stepIndex)];
+    for (const drawn of sheet?.querySelectorAll(`[data-mark="${note.stepIndex}:${note.midi}"]`) ??
+      []) {
+      drawn.remove();
+    }
+  }
+
   clearPlayed(): void {
     this.marks = [];
     this.paintOverlay();
@@ -2092,14 +2114,22 @@ export class OsmdScoreRenderer
     if (context === null || marks.length === 0) {
       return;
     }
-    const shapes = buildOverlayShapes(marks, {
-      geometry,
-      stepX: this.stepX,
-      clefAt: context.clefAt,
-      keyAt: context.keyAt,
-    });
-    for (const shape of shapes) {
-      group.append(this.createShape(shape, group.ownerDocument));
+    // One mark at a time, so each element can say which mark it belongs to -
+    // a mark drawn only while a key is held has to be findable again when the
+    // key comes up. The shapes of one mark depend on nothing but that mark,
+    // so this draws exactly what building them all at once did.
+    const shapes = marks.flatMap((mark) =>
+      buildOverlayShapes([mark], {
+        geometry,
+        stepX: this.stepX,
+        clefAt: context.clefAt,
+        keyAt: context.keyAt,
+      }).map((shape) => ({ shape, mark })),
+    );
+    for (const { shape, mark } of shapes) {
+      const drawn = this.createShape(shape, group.ownerDocument);
+      drawn.setAttribute('data-mark', `${mark.stepIndex}:${mark.midi}`);
+      group.append(drawn);
     }
   }
 

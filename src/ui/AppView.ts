@@ -49,6 +49,26 @@ import { calibrationExercise } from '../domain/generation/calibrationExercise.js
 /** How often the bridge pill may redraw while he plays. */
 const HOP_REFRESH_MS = 1_000;
 
+/**
+ * How often the time on the page is added up.
+ *
+ * Often enough that closing the tab loses only a few seconds, rarely enough
+ * that it is nothing on a tablet's battery. Nothing is measured *by* this:
+ * the gap between two readings of the clock is what is counted, so a slow
+ * tick or a throttled one is still the right number of milliseconds.
+ */
+const TIME_TICK_MS = 5_000;
+
+/**
+ * The most one tick may add, however long it has really been.
+ *
+ * A machine that went to sleep with the page open comes back with hours
+ * between two readings of the clock, and none of them were practice. This is
+ * the cheap half of noticing that nobody is there; the other half - a page on
+ * screen that nobody is looking at - is a judgement worth making on its own.
+ */
+const TIME_TICK_CAP_MS = TIME_TICK_MS * 2;
+
 /** How long a rest lasts, once the reader asks for one to be counted. */
 const REST_LENGTH_MS = 3 * 60_000;
 
@@ -279,6 +299,22 @@ const RULER_LABELS: Readonly<Record<RulerDivision, string>> = {
  * so that a tablet capitalising it is not an argument.
  */
 const PURGE_WORD = 'DELETE';
+
+/**
+ * A stretch of practice, in the words somebody would use for it.
+ *
+ * Minutes up to an hour and then hours and minutes: nobody says "94 minutes",
+ * and the point of the number is to be taken in at a glance rather than read.
+ */
+function describeSitting(ms: number): string {
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+}
 
 /** "1 kept score", "12 kept scores" - so the reader is told what they lose. */
 function countOf(many: number, thing: string): string {
@@ -753,6 +789,9 @@ export class AppView {
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
   private restTimer: ReturnType<typeof setTimeout> | null = null;
+  private timeTick: ReturnType<typeof setInterval> | null = null;
+  /** When the stretch being counted began, or `null` while the page is away. */
+  private timeCountedAtMs: number | null = null;
   /** Which tip to give next, so the same one is not given twice running. */
   private restTipAt = 0;
   /** Beats promised but not yet reached; see {@link runTheBeats}. */
@@ -830,6 +869,7 @@ export class AppView {
     dimUnplayed: HTMLInputElement;
     pageTurns: HTMLSelectElement;
     pageTurnsDescription: HTMLElement;
+    scoreToday: HTMLOutputElement;
     scorePages: HTMLElement;
     scorePageBack: HTMLButtonElement;
     scorePageOn: HTMLButtonElement;
@@ -1021,6 +1061,7 @@ export class AppView {
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
       pageTurns: requireElement(doc, 'page-turns'),
       pageTurnsDescription: requireElement(doc, 'page-turns-description'),
+      scoreToday: requireElement(doc, 'score-today'),
       scorePages: requireElement(doc, 'score-pages'),
       scorePageBack: requireElement(doc, 'score-page-back'),
       scorePageOn: requireElement(doc, 'score-page-on'),
@@ -1175,6 +1216,7 @@ export class AppView {
     this.describeTake();
     this.renderTakes();
     this.bindVolumeKnob();
+    this.countTheTime();
     await this.openWhatWasAskedFor();
     // Again, and after the material this time. Opening material settles
     // things the reader left set on a visit that is over - the passage of a
@@ -1237,6 +1279,10 @@ export class AppView {
     if (this.takeTick !== null) {
       clearInterval(this.takeTick);
       this.takeTick = null;
+    }
+    if (this.timeTick !== null) {
+      clearInterval(this.timeTick);
+      this.timeTick = null;
     }
     if (this.silenceWatch !== null) {
       clearTimeout(this.silenceWatch);
@@ -1633,6 +1679,7 @@ export class AppView {
    * them up, and the music will go on from where it is.
    */
   private applyPreview(): void {
+    this.showToday();
     const controller = this.runtime.controller;
     const moving =
       this.isPlaying || this.isPreviewing || controller.isListening || controller.isListeningPaused;
@@ -2618,6 +2665,61 @@ export class AppView {
     this.el.scorePageAt.value = `${pages.at + 1} / ${pages.count}`;
     this.el.scorePageBack.disabled = pages.at <= 0;
     this.el.scorePageOn.disabled = pages.at >= pages.count - 1;
+  }
+
+  /**
+   * Counts the time this has been open, while it is actually on screen.
+   *
+   * Wall clock and not `IClock`: that one counts from an arbitrary zero for
+   * measuring music, and "today" is a question about the calendar. The gap
+   * between two readings is what is added, so a tick that came late - a
+   * throttled tab, a busy machine - still contributes what it should.
+   *
+   * Stopped when the page goes away rather than counted and discarded later:
+   * a tablet suspends timers when the reader leaves, so the stretch that
+   * matters is the one ending at the moment they left.
+   */
+  private countTheTime(): void {
+    const tick = (): void => {
+      const now = Date.now();
+      const since = this.timeCountedAtMs;
+      this.timeCountedAtMs = now;
+      if (since === null || this.doc.visibilityState === 'hidden') {
+        return;
+      }
+      this.runtime.timeToday.add(now, Math.min(now - since, TIME_TICK_CAP_MS));
+      this.showToday();
+    };
+
+    this.timeCountedAtMs = this.doc.visibilityState === 'hidden' ? null : Date.now();
+    this.timeTick = setInterval(tick, TIME_TICK_MS);
+
+    const onVisibility = (): void => {
+      // Both ways: the last stretch before leaving is counted, and coming
+      // back starts a new one rather than swallowing the time away.
+      tick();
+      this.timeCountedAtMs = this.doc.visibilityState === 'hidden' ? null : Date.now();
+      this.showToday();
+    };
+    this.doc.addEventListener('visibilitychange', onVisibility);
+    this.subscriptions.push(() => {
+      this.doc.removeEventListener('visibilitychange', onVisibility);
+    });
+    this.showToday();
+  }
+
+  /**
+   * Says how long today has had, where nothing is running.
+   *
+   * Kept off the page during a run: what it is for is the moment between
+   * runs, and a number over the music while it is being read is furniture.
+   * Silent under a minute, since "0 min" is a reproach rather than a fact.
+   */
+  private showToday(): void {
+    const ms = this.runtime.timeToday.msOn(Date.now());
+    const idle = !this.isPlaying && !this.runtime.controller.isListening;
+    this.el.scoreToday.hidden = ms < 60_000 || !idle;
+    this.el.scoreToday.value = `Today ${describeSitting(ms)}`;
   }
 
   /** True while the reader is being given their look at the page. */

@@ -20,6 +20,7 @@ import { TakePlayer } from '../../src/application/TakePlayer.js';
 import { BackupService } from '../../src/application/Backup.js';
 import { ScoreLibrary } from '../../src/application/ScoreLibrary.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
+import { TimeToday } from '../../src/application/TimeToday.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 
@@ -203,6 +204,7 @@ function createRig(
 
   const runtime: AppRuntime = {
     controller,
+    timeToday: new TimeToday(new InMemorySettingsStore()),
     presets,
     rhythms,
     ladder,
@@ -1932,6 +1934,73 @@ describe('AppView', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(element('confirm-typed').hidden).toBe(true);
       expect(element<HTMLButtonElement>('confirm-yes').disabled).toBe(false);
+    });
+  });
+
+  describe('how long today has had', () => {
+    it('counts the time the page is in front of the reader', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 8, 6, 10, 0, 0));
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        // Wall clock, and only while the page is on screen: this is the
+        // question "have I practised today", not the one the rest reminder
+        // asks about hands.
+        expect(rig.runtime.timeToday.msOn(Date.now())).toBeGreaterThanOrEqual(55_000);
+        expect(element('score-today').hidden).toBe(false);
+        expect(element('score-today').textContent).toContain('1 min');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('stops while the page is away, and starts again on the way back', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 8, 6, 10, 0, 0));
+      const visibility = vi.spyOn(document, 'visibilityState', 'get');
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        await vi.advanceTimersByTimeAsync(30_000);
+        const counted = rig.runtime.timeToday.msOn(Date.now());
+
+        visibility.mockReturnValue('hidden');
+        document.dispatchEvent(new Event('visibilitychange'));
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+
+        // Ten minutes in another app is not ten minutes of practice.
+        expect(rig.runtime.timeToday.msOn(Date.now())).toBeLessThanOrEqual(counted + 1_000);
+
+        visibility.mockReturnValue('visible');
+        document.dispatchEvent(new Event('visibilitychange'));
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        expect(rig.runtime.timeToday.msOn(Date.now())).toBeGreaterThan(counted + 50_000);
+      } finally {
+        visibility.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not count a machine that went to sleep with the page open', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 8, 6, 10, 0, 0));
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+
+        // One tick, but three hours between two readings of the clock.
+        vi.setSystemTime(new Date(2026, 8, 6, 13, 0, 0));
+        await vi.advanceTimersByTimeAsync(5_000);
+
+        expect(rig.runtime.timeToday.msOn(Date.now())).toBeLessThan(60_000);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

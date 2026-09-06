@@ -11,6 +11,9 @@ export const DEFAULT_STORAGE_KEY = 'sight-reading-practice/settings';
 /** Kept apart from the settings so clearing one never takes the other. */
 export const HISTORY_STORAGE_KEY = 'sight-reading-practice/history';
 
+/** How long the application has been open, by the day. */
+export const TIME_STORAGE_KEY = 'sight-reading-practice/time';
+
 /**
  * Settings kept in the browser, on this device only.
  *

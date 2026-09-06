@@ -24,6 +24,7 @@ import type { IVolumeControl } from '../application/ports/IVolumeControl.js';
 import type { ISettingsStore } from '../application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../application/SettingsRepository.js';
 import { PracticeHistory } from '../application/PracticeHistory.js';
+import { TimeToday } from '../application/TimeToday.js';
 import { PerformanceRecorder } from '../application/PerformanceRecorder.js';
 import { ControlBinding } from '../application/ControlBinding.js';
 import { TakeLibrary, TAKES_STORAGE_KEY } from '../application/TakeLibrary.js';
@@ -39,6 +40,7 @@ import { BUILT_IN_LADDER } from '../application/ladder/ladderSteps.js';
 import {
   DEFAULT_STORAGE_KEY,
   HISTORY_STORAGE_KEY,
+  TIME_STORAGE_KEY,
   LocalStorageSettingsStore,
   browserStorage,
 } from '../infrastructure/storage/LocalStorageSettingsStore.js';
@@ -80,6 +82,8 @@ export interface AppRuntimeOptions {
   readonly settingsStore?: ISettingsStore;
   /** Where past readings are kept; browser storage by default. */
   readonly historyStore?: ISettingsStore;
+  /** Where the day counter is kept, so a test can hand it nothing. */
+  readonly timeStore?: ISettingsStore;
   /** Where kept takes live; browser storage by default. */
   readonly takeStore?: ISettingsStore;
   /** Where kept scores live; the browser's database by default. */
@@ -132,6 +136,13 @@ export interface AppRuntime {
   /** The knob the reader taught to drive the note volume, if they have. */
   readonly volumeKnob: ControlBinding;
   readonly takes: TakeLibrary;
+  /**
+   * How long the application has been open today.
+   *
+   * Not the same question as the rest reminder's: that one counts notes,
+   * because hands are what a rest is for.
+   */
+  readonly timeToday: TimeToday;
   /** Plays a kept take back, so an idea can be heard rather than only listed. */
   readonly takePlayer: TakePlayer;
   /** Carries everything off this device, since an installed app cannot see the tab's. */
@@ -261,6 +272,11 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const history = new PracticeHistory(historyStore);
   history.load();
 
+  const timeStore =
+    options.timeStore ?? new LocalStorageSettingsStore(browserStorage(), TIME_STORAGE_KEY);
+  const timeToday = new TimeToday(timeStore);
+  timeToday.load();
+
   // Everything kept between visits, so one file can carry all of it. Keyed by
   // where each blob lives, which is what a restore has to put it back under.
   const backup = new BackupService({
@@ -268,6 +284,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       [DEFAULT_STORAGE_KEY, settingsStore],
       [TAKES_STORAGE_KEY, takeStore],
       [HISTORY_STORAGE_KEY, historyStore],
+      [TIME_STORAGE_KEY, timeStore],
     ]),
     scoreStore,
     clock,
@@ -317,6 +334,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     backup,
     volumeKnob,
     takes,
+    timeToday,
     scores,
     files: options.fileSink ?? new DownloadFileSink(document),
     importer,

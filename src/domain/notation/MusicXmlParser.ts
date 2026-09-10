@@ -2,6 +2,7 @@ import { DomainError } from '../../shared/errors.js';
 import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type NoteTypeName } from '../model/Duration.js';
 import type { Exercise, Measure, MusicalEntry, StaffPart } from '../model/Exercise.js';
+import { withFermatasHeld } from './fermatas.js';
 import { tempoWordKind, withTempoWordsPlayed } from './tempoWords.js';
 import {
   BEAM_TYPES,
@@ -225,8 +226,11 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   // words add are ordinary tempo changes, which the rest of the program
   // already understands.
   const spoken = withTempoWordsPlayed(played);
-  validateExercise(spoken);
-  return { exercise: spoken, warnings };
+  // After the words, so a fermata inside a slowing passage is half of what
+  // that passage had reached rather than half of what the piece opened at.
+  const breathing = withFermatasHeld(spoken);
+  validateExercise(breathing);
+  return { exercise: breathing, warnings };
 }
 
 /**

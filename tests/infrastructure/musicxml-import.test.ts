@@ -1003,6 +1003,61 @@ const heldOver = `<?xml version="1.0" encoding="UTF-8"?>
     expect(importer.read(printed).exercise.staves[0]?.clefChanges).toEqual(changes);
   });
 
+  it('measures the metre off the first bar where the file states none', () => {
+    // His Bad Apple arrangement, written by MuseScore 1.3 with the time
+    // signature hidden: no `<time>` element anywhere in it, and a hundred and
+    // twenty-four bars refused for the want of two numbers the first bar
+    // already answers. A bar is as long as the music in it.
+    const untimed = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>12</divisions><key><fifths>0</fifths></key>
+      <clef><sign>G</sign><line>2</line></clef></attributes>
+      <note><rest/><duration>12</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>12</duration>
+      <voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>24</duration>
+      <voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const { exercise, warnings } = importer.read(untimed);
+
+    expect(exercise.timeSignature.beats).toBe(4);
+    expect(exercise.timeSignature.beatType).toBe(4);
+    // And said out loud, because it is this program's reading rather than
+    // the writer's: what cannot be read is how they would have spelled it.
+    expect(warnings.map((one) => one.kind)).toContain('measured-metre');
+  });
+
+  it('reads a bar that is a whole number of quavers as quavers', () => {
+    // Three eighths is not a whole number of crotchets, and 3/8 is a metre a
+    // reader meets. Rounded to crotchets it would be neither the length of
+    // the bar nor a metre anyone writes.
+    const untimed = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>12</divisions><key><fifths>0</fifths></key>
+      <clef><sign>G</sign><line>2</line></clef></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>6</duration>
+      <voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>6</duration>
+      <voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>6</duration>
+      <voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const { exercise } = importer.read(untimed);
+
+    expect(exercise.timeSignature.beats).toBe(3);
+    expect(exercise.timeSignature.beatType).toBe(8);
+  });
+
   it('follows a clef that changes twice inside one bar', () => {
     // Bar 36 of his Minecraft arrangement: the left hand crosses up for half
     // a beat and comes back before the bar is out. Read bar by bar the two

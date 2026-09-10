@@ -54,6 +54,7 @@ export interface ImportWarning {
     | 'dropped-tie'
     | 'padded-measure'
     | 'repeats-unrolled'
+    | 'measured-metre'
     // What reading a *performance* has to decide rather than read. Kept in one
     // list because the reader meets them the same way: as the page they got
     // differing from the page they expected.
@@ -409,6 +410,65 @@ function readClefs(
   return clefs;
 }
 
+/**
+ * How long the first bar is, in the file's own divisions.
+ *
+ * Walked rather than summed: a bar with two voices in it winds the cursor
+ * back and plays the same time again, so what the bar *is* is the furthest
+ * the cursor reached.
+ */
+function measuredBarTicks(measure: XmlNode, divisions: number): number {
+  let cursor = 0;
+  let furthest = 0;
+  for (const node of measure.children) {
+    if (node.name === 'backup' || node.name === 'forward') {
+      const amount = childNumber(node, 'duration') ?? 0;
+      cursor = Math.max(0, cursor + (node.name === 'backup' ? -amount : amount));
+    } else if (node.name === 'note' && !hasChild(node, 'grace') && !hasChild(node, 'chord')) {
+      const rest = child(node, 'rest');
+      if (rest !== null && attribute(rest, 'measure') === 'yes') {
+        // A whole-bar rest says nothing about how long the bar is; it is the
+        // one note whose length is the answer rather than part of it.
+        continue;
+      }
+      cursor += childNumber(node, 'duration') ?? 0;
+    }
+    furthest = Math.max(furthest, cursor);
+  }
+  return divisions > 0 ? furthest : 0;
+}
+
+/**
+ * The metre of a file that never states one, read off its first bar.
+ *
+ * Not a guess: a bar is as long as the music in it, and that length is in
+ * the file. What cannot be read is how the writer would have *spelled* it -
+ * four crotchets or eight quavers - so the beat is taken as a crotchet where
+ * the bar is a whole number of them, and as a quaver where it is not.
+ *
+ * Worth doing rather than refusing the file. MuseScore 1.3 wrote his Bad
+ * Apple arrangement with the time signature hidden and no `<time>` element
+ * at all, and eight hundred bars of music were unreadable for the want of
+ * two numbers that the first bar already answers.
+ */
+function metreOf(
+  measure: XmlNode | null,
+  divisions: number,
+): { readonly beats: number; readonly beatType: number } | null {
+  if (measure === null) {
+    return null;
+  }
+  const ticks = measuredBarTicks(measure, divisions);
+  if (ticks <= 0) {
+    return null;
+  }
+  if (ticks % divisions === 0) {
+    return { beats: ticks / divisions, beatType: 4 };
+  }
+  const half = divisions / 2;
+  return half > 0 && ticks % half === 0 ? { beats: ticks / half, beatType: 8 } : null;
+}
+
 function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): ScoreHeader {
   const first = measures[0];
   const attributes = child(first ?? null, 'attributes');
@@ -422,8 +482,19 @@ function readHeader(measures: readonly XmlNode[], warnings: ImportWarning[]): Sc
   const mode = childText(keyNode, 'mode') === 'minor' ? 'minor' : 'major';
 
   const timeNode = child(attributes, 'time');
-  const beats = childNumber(timeNode, 'beats');
-  const beatType = childNumber(timeNode, 'beat-type');
+  const written = childNumber(timeNode, 'beats');
+  const writtenType = childNumber(timeNode, 'beat-type');
+  const measured = written === null || writtenType === null ? metreOf(measures[0] ?? null, divisions) : null;
+  if (measured !== null) {
+    warnings.push({
+      kind: 'measured-metre',
+      detail:
+        `The file gives no time signature, so the first bar was measured instead: ` +
+        `${measured.beats}/${measured.beatType}.`,
+    });
+  }
+  const beats = written ?? measured?.beats ?? null;
+  const beatType = writtenType ?? measured?.beatType ?? null;
   if (beats === null || beatType === null) {
     throw new DomainError('The file does not give a time signature.');
   }

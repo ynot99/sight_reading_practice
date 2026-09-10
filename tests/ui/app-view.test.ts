@@ -769,6 +769,39 @@ describe('AppView', () => {
     expect(from.value).toBe('');
   });
 
+  it('gets out of its own way when a file will not open', async () => {
+    // Reported from the tablet: a file that fails to import says nothing at
+    // all. It did say something - in the middle of the page, where every
+    // other failure is said - and the library sheet the file was chosen from
+    // stands over exactly that. So the reader was left looking at a list that
+    // had not changed.
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { view } = createRig();
+    await view.initialize();
+    element<HTMLButtonElement>('focus-scores').click();
+    expect(element('sheet-scores').hidden).toBe(false);
+
+    const input = element<HTMLInputElement>('score-file');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [
+        {
+          name: 'bad-apple.mxl',
+          arrayBuffer: () => Promise.resolve(new TextEncoder().encode('<not-a-score/>').buffer),
+        },
+      ],
+    });
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(element('sheet-scores').hidden).toBe(true);
+    expect(element('score-verdict').hidden).toBe(false);
+    // And it says which file, since a reader adding several at once has no
+    // other way to tell which of them was refused.
+    expect(element('result').textContent).toContain('bad-apple.mxl');
+    expect(logged).toHaveBeenCalled();
+  });
+
   it('explains a file it cannot read instead of going quiet', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { view, runtime } = createRig();

@@ -1510,8 +1510,16 @@ export class AppView {
       }
     } catch (error) {
       reportToTheConsole('Could not open the chosen file.', error);
+      // Out of the way first. The message goes in the middle of the page, and
+      // the library sheet the file was chosen from stands over exactly that -
+      // so a file that would not open said nothing at all, and the reader was
+      // left looking at a list that had not changed. Reported that way: no
+      // error popup when an import fails.
+      this.el.sheetScores.hidden = true;
       this.sayInTheMiddle(
-        error instanceof Error ? `Could not open that file. ${error.message}` : 'Could not open that file.',
+        error instanceof Error
+          ? `Could not open ${file.name}. ${error.message}`
+          : `Could not open ${file.name}.`,
       );
     }
   }

@@ -988,6 +988,8 @@ export class AppView {
     focusHandRight: SVGElement;
     focusHealthFill: HTMLElement;
     survival: HTMLInputElement;
+    survivalRefill: HTMLSelectElement;
+    survivalPunish: HTMLInputElement;
     stopAtMistake: HTMLInputElement;
     easeTempo: HTMLInputElement;
     immediateStart: HTMLInputElement;
@@ -1210,6 +1212,8 @@ export class AppView {
       focusHandRight: requireElement(doc, 'focus-hand-right'),
       focusHealthFill: requireElement(doc, 'focus-health-fill'),
       survival: requireElement(doc, 'survival'),
+      survivalRefill: requireElement(doc, 'survival-refill'),
+      survivalPunish: requireElement(doc, 'survival-punish'),
       stopAtMistake: requireElement(doc, 'stop-at-mistake'),
       easeTempo: requireElement(doc, 'ease-tempo'),
       immediateStart: requireElement(doc, 'immediate-start'),
@@ -2428,6 +2432,16 @@ export class AppView {
     this.listen(this.el.survival, 'change', () => {
       controller.updateSettings({ survival: this.el.survival.checked });
       this.renderHealth(controller.health);
+    });
+
+    this.listen(this.el.survivalRefill, 'change', () => {
+      controller.updateSettings({ survivalRefillPercent: Number(this.el.survivalRefill.value) });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.survivalPunish, 'change', () => {
+      controller.updateSettings({ survivalPunishesMistakes: this.el.survivalPunish.checked });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.easeTempo, 'change', () => {
@@ -4358,6 +4372,8 @@ export class AppView {
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.survival.checked = settings.survival;
+    this.el.survivalRefill.value = String(settings.survivalRefillPercent);
+    this.el.survivalPunish.checked = settings.survivalPunishesMistakes;
     this.el.stopAtMistake.checked = settings.stopAtAMistake;
     this.el.easeTempo.checked = settings.easeTheTempo;
     this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));

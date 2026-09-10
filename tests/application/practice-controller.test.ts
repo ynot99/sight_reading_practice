@@ -2988,6 +2988,58 @@ describe('surviving a piece you already know', () => {
     expect(rig.controller.health).toBe(1);
   });
 
+  it('gives back only the share of the bar the reader asked for', async () => {
+    // His. Filling it outright makes a clock that punishes stopping and
+    // nothing else: find one beat and the bar is full again however long the
+    // last one took.
+    const rig = await survivalRun({ modeId: undefined });
+    rig.controller.updateSettings({
+      modeId: new WaitMode().id,
+      survivalRefillPercent: 30,
+    });
+    const session = rig.controller.start();
+    for (let at = 0; at < 6; at += 1) {
+      rig.clock.set(rig.clock.now() + 500);
+      rig.controller.drainWhileWaiting();
+    }
+    const hunted = rig.controller.health;
+
+    for (const note of session?.currentStep?.expectedMidi ?? []) {
+      rig.midi.noteOn(note, rig.clock.now());
+    }
+
+    expect(rig.controller.health).toBeCloseTo(hunted + 0.3, 5);
+    expect(rig.controller.health).toBeLessThan(1);
+  });
+
+  it('charges for the wrong notes a beat was found through, where asked', async () => {
+    // The hole he named: a beat found through wrong notes filled the bar
+    // exactly as a clean one did, so in Wait mode nothing was ever survived.
+    const played = async (punishes: boolean): Promise<number> => {
+      const rig = await survivalRun({ modeId: undefined });
+      rig.controller.updateSettings({
+        modeId: new WaitMode().id,
+        survivalRefillPercent: 30,
+        survivalPunishesMistakes: punishes,
+      });
+      const session = rig.controller.start();
+      // Hunting first, or there is no room in the bar for a share to land in
+      // and both answers clamp to full.
+      for (let at = 0; at < 6; at += 1) {
+        rig.clock.set(rig.clock.now() + 500);
+        rig.controller.drainWhileWaiting();
+      }
+      const wanted = session?.currentStep?.expectedMidi ?? [];
+      rig.midi.noteOn((wanted[0] ?? 60) + 1, rig.clock.now());
+      for (const note of wanted) {
+        rig.midi.noteOn(note, rig.clock.now());
+      }
+      return rig.controller.health;
+    };
+
+    expect(await played(true)).toBeLessThan(await played(false));
+  });
+
   it('ends the run when the hunting has gone on too long', async () => {
     const rig = await survivalRun({ modeId: undefined });
     rig.controller.updateSettings({ modeId: new WaitMode().id });

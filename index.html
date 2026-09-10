@@ -738,6 +738,28 @@
           <label><input id="rhythm-only" type="checkbox" /> Rhythm only: any note counts</label>
           <label><input id="survival" type="checkbox" /> Survival: keep the bar up</label>
           <!--
+            His, and only where nothing keeps time. Filling the bar outright
+            makes a clock that punishes stopping and nothing else: find one
+            beat and it is full again however long the last one took. A share
+            asks the reader to keep finding them.
+          -->
+          <div class="control-group">
+            <label for="survival-refill">A beat found is worth</label>
+            <select id="survival-refill">
+              <option value="10">10% of the bar</option>
+              <option value="20">20% of the bar</option>
+              <option value="30">30% of the bar</option>
+              <option value="40">40% of the bar</option>
+              <option value="50">50% of the bar</option>
+              <option value="60">60% of the bar</option>
+              <option value="70">70% of the bar</option>
+              <option value="80">80% of the bar</option>
+              <option value="90">90% of the bar</option>
+              <option value="100">All of it</option>
+            </select>
+          </div>
+          <label><input id="survival-punish" type="checkbox" /> Wrong notes cost as well</label>
+          <!--
             His line 112: counting a rhythm is worth nothing if a slip can be
             played over. It does not start the run again by itself - a run
             that began without anybody deciding to make it is not a reading.

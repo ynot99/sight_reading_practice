@@ -140,6 +140,44 @@ describe('the bar that drains while the music runs', () => {
     expect(meter.drainForBeats(-4)).toBe(1);
   });
 
+  it('gives back the share of the bar a beat was said to be worth', () => {
+    // His. Filling it outright makes a clock that punishes stopping and
+    // nothing else: find one beat and the bar is full again however long the
+    // last one took. A share asks the reader to keep finding them.
+    const meter = new HealthMeter({ drainPerSecond: 0.1 });
+    meter.drainForSeconds(6);
+    expect(meter.health).toBeCloseTo(0.4, 5);
+
+    meter.refill(0.3);
+
+    expect(meter.health).toBeCloseTo(0.7, 5);
+  });
+
+  it('fills it outright when that is what a beat is worth', () => {
+    // Which is where this started, and still the default.
+    const meter = new HealthMeter({ drainPerSecond: 0.1 });
+    meter.drainForSeconds(9);
+
+    expect(meter.refill()).toBe(1);
+  });
+
+  it('charges for the wrong notes a beat was found through, where asked', () => {
+    // The hole he named: a beat found through five wrong notes filled the bar
+    // exactly as a clean one did, so in that mode nothing was ever survived.
+    // Found is found, so it is still paid for - the wrong notes cost on top,
+    // exactly as they do when the music keeps its own time.
+    const clean = new HealthMeter({ drainPerSecond: 0.1, wrongPenalty: 0.05 });
+    const hunted = new HealthMeter({ drainPerSecond: 0.1, wrongPenalty: 0.05 });
+    clean.drainForSeconds(6);
+    hunted.drainForSeconds(6);
+
+    clean.refill(0.3, true);
+    hunted.refill(0.3, false);
+
+    expect(clean.health).toBeCloseTo(0.7, 5);
+    expect(hunted.health).toBeCloseTo(0.65, 5);
+  });
+
   it('starts over when the run does', () => {
     const meter = new HealthMeter();
     meter.settle('missed', 1);

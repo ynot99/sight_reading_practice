@@ -401,6 +401,24 @@ export interface PracticeSettings {
    */
   readonly survival: boolean;
   /**
+   * How much of the survival bar a beat found in Wait mode is worth, `10..100`.
+   *
+   * His. Filling it outright makes a clock that only punishes stopping: find
+   * one beat and the bar is full again however long the last one took. A
+   * share asks the reader to keep finding them, and is the difference between
+   * a bar that measures hesitation and one that measures paralysis.
+   */
+  readonly survivalRefillPercent: number;
+  /**
+   * Whether wrong notes cost anything where nothing keeps time.
+   *
+   * His, and the hole he named: a beat found through five wrong notes filled
+   * the bar exactly as a clean one did, so in that mode nothing was ever
+   * survived. Off by default, because hunting for a note is what Wait mode is
+   * for and a reader who wants it held against them should say so.
+   */
+  readonly survivalPunishesMistakes: boolean;
+  /**
    * End the run at the first wrong note.
    *
    * His line 112, and his reason for it: counting a rhythm is worth nothing
@@ -752,6 +770,8 @@ export class PracticeController {
       pagedScore: false,
       playedNotes: 'live',
       survival: false,
+      survivalRefillPercent: 100,
+      survivalPunishesMistakes: false,
       stopAtAMistake: false,
       easeTheTempo: false,
       readAheadSteps: null,
@@ -2016,11 +2036,16 @@ export class PracticeController {
             'settle',
           );
         } else if (this.survivalRuns && result.status !== 'skipped') {
-          // Where nothing keeps time, a beat found fills the bar outright -
-          // and the clock starts again from here rather than from the last
-          // time anybody looked.
+          // Where nothing keeps time, a beat found is worth whatever share of
+          // the bar the reader asked for - and the clock starts again from
+          // here rather than from the last time anybody looked.
           this.lastWaitDrainMs = this.deps.clock.now();
-          this.publishHealth(this.meter.refill(), 'settle');
+          const clean =
+            !this.currentSettings.survivalPunishesMistakes || result.status === 'correct';
+          this.publishHealth(
+            this.meter.refill(this.currentSettings.survivalRefillPercent / 100, clean),
+            'settle',
+          );
         }
       }),
     );

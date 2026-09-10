@@ -106,14 +106,21 @@ export class HealthMeter {
   }
 
   /**
-   * Filled again, the reader having found the beat.
+   * A beat found where nothing is keeping time.
    *
-   * All the way, and not by what the step was worth: where nothing is keeping
-   * time there is nothing to have kept up with, and the only question the bar
-   * is asking is whether the reader is moving at all.
+   * Not by what the step was worth: there is nothing to have kept up with,
+   * and the question the bar is asking is whether the reader is moving at
+   * all. How much of it a beat is worth is theirs to set - the whole bar,
+   * which is a clock that only punishes stopping, or a share of it, which
+   * asks them to keep finding beats rather than to find one and rest.
+   *
+   * `clean` is what the reader asked to be held to. A beat found through
+   * three wrong notes is still found, so it is still paid for; the wrong
+   * notes cost on top, exactly as they do when the music keeps its own time.
    */
-  refill(): number {
-    return this.set(1);
+  refill(share = 1, clean = true): number {
+    const back = clamp(share, 0, 1);
+    return this.set(this.value + back - (clean ? 0 : this.wrongPenalty));
   }
 
   /**

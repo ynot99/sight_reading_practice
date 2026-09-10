@@ -118,20 +118,23 @@ describe('the stylesheet', () => {
     // what stays is named, so anything added to the row goes by default.
     // jsdom applies no stylesheet, so without this the attribute could be set
     // on a bar that still shows everything and the view test would pass.
-    const stripped = rules().find((rule) => rule.selector === ".focus-bar[data-bare='true']");
+    const stripped = rules().find((rule) => rule.selector === "body[data-bare='true'] .focus-bar");
     const row = rules().find(
       (rule) =>
-        rule.selector === ".focus-bar[data-bare='true'] .focus-bar__row > *:not([data-bare])",
+        rule.selector === "body[data-bare='true'] .focus-bar__row > *:not([data-bare])",
     );
 
     expect(stripped?.body).toMatch(/background\s*:\s*transparent/);
     expect(row?.body).toMatch(/display\s*:\s*none/);
-    // And the drawer goes with it, whatever the reader left open.
+    // The drawer goes with it, whatever the reader left open - and so does
+    // the day's clock, which stands over the music from the other side of the
+    // layout and would otherwise be the one thing left on a bare page.
     const hidden = rules().find(
       (rule) =>
         rule.selector.includes("[data-bare='true']") && rule.selector.includes('.focus-bar__drawer'),
     );
     expect(hidden?.body).toMatch(/display\s*:\s*none/);
+    expect(hidden?.selector).toContain('.score__today');
   });
 
   it('keeps quick replay off the bar until there is a run to replay', () => {

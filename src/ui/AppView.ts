@@ -2255,7 +2255,7 @@ export class AppView {
     });
 
     this.listen(this.el.focusBare, 'click', () => {
-      this.showOnlyThePage(this.el.focusBar.dataset['bare'] !== 'true');
+      this.showOnlyThePage(this.doc.body.dataset['bare'] !== 'true');
     });
 
     this.listen(this.el.focusRepeat, 'click', () => {
@@ -2920,7 +2920,11 @@ export class AppView {
    * the one thing on screen, which is the opposite of what was asked for.
    */
   private showOnlyThePage(bare: boolean): void {
-    this.el.focusBar.dataset['bare'] = String(bare);
+    // On the page rather than on the bar. What goes is not the bar's own
+    // business: the day's clock stands over the music from the other side of
+    // the layout, and one flag the whole page can see is what lets the
+    // stylesheet say so without the view listing everything twice.
+    this.doc.body.dataset['bare'] = String(bare);
     this.el.focusBare.setAttribute('aria-pressed', String(bare));
     if (bare) {
       this.setDrawerOpen(false);

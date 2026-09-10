@@ -1192,7 +1192,7 @@ describe('AppView', () => {
 
       element<HTMLButtonElement>('focus-bare').click();
 
-      expect(element('focus-bar').dataset['bare']).toBe('true');
+      expect(document.body.dataset['bare']).toBe('true');
       expect(element('focus-bare').getAttribute('aria-pressed')).toBe('true');
       // A panel left standing would be the one thing on screen, which is the
       // opposite of what was asked for.
@@ -1201,7 +1201,7 @@ describe('AppView', () => {
 
       element<HTMLButtonElement>('focus-bare').click();
 
-      expect(element('focus-bar').dataset['bare']).toBe('false');
+      expect(document.body.dataset['bare']).toBe('false');
     });
 
     it('puts it off by the number on the button that was pressed', async () => {

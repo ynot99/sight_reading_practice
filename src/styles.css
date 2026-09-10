@@ -828,7 +828,7 @@ select {
  * page number belong to the page rather than to the interface, and a reader
  * looking at the music is looking at those too.
  */
-.focus-bar[data-bare='true'] {
+body[data-bare='true'] .focus-bar {
   border-color: transparent;
   background: transparent;
   -webkit-backdrop-filter: none;
@@ -837,26 +837,32 @@ select {
   padding: 0;
 }
 
-.focus-bar[data-bare='true'] .focus-record,
-.focus-bar[data-bare='true'] .focus-bar__handle,
-.focus-bar[data-bare='true'] .focus-bar__drawer,
-.focus-bar[data-bare='true'] .focus-bar__health {
+body[data-bare='true'] .focus-record,
+body[data-bare='true'] .focus-bar__handle,
+body[data-bare='true'] .focus-bar__drawer,
+body[data-bare='true'] .focus-bar__health,
+/*
+ * And the day's clock, which is the other thing standing over the music.
+ * It lives nowhere near the transport row on purpose, so it does not go with
+ * it - and a reader who asked for the page alone did not mean "except that".
+ */
+body[data-bare='true'] .score__today {
   display: none;
 }
 
-.focus-bar[data-bare='true'] .focus-bar__row > *:not([data-bare]) {
+body[data-bare='true'] .focus-bar__row > *:not([data-bare]) {
   display: none;
 }
 
 /* Alone over the staves, it needs the standing it used to borrow from the bar. */
-.focus-bar[data-bare='true'] .focus-bar__row > [data-bare] {
+body[data-bare='true'] .focus-bar__row > [data-bare] {
   box-shadow: 0 6px 24px rgb(16 24 40 / 22%);
   background: var(--surface);
   opacity: 0.55;
 }
 
-.focus-bar[data-bare='true'] .focus-bar__row > [data-bare]:hover,
-.focus-bar[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
+body[data-bare='true'] .focus-bar__row > [data-bare]:hover,
+body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   opacity: 1;
 }
 

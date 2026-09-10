@@ -1713,20 +1713,19 @@ export class AppView {
   /**
    * Takes the passage the markers were dragged around.
    *
-   * The markers report bars of *what is engraved*, which may already be a
-   * passage - so the first drawn bar's own number is what turns them back
-   * into bars of the piece. A drag that reached past the edge comes through
-   * as an index outside the engraving, which is how a passage grows back
-   * wider than the page it was chosen on; the controller clamps it to the
-   * piece, because nothing on the page can.
+   * The markers report bars of what is engraved, which is the whole piece:
+   * a passage no longer cuts it down. So the bar a marker stands on is its
+   * place in the playing, counted from one - never the number printed on it,
+   * which a written-out repeat prints twice. A drag that reached past the
+   * edge comes through as an index outside the engraving; the controller
+   * clamps it to the piece, because nothing on the page can.
    */
   private async choosePassageFrom(drawn: DrawnPassage): Promise<void> {
     const controller = this.runtime.controller;
-    const firstDrawn = controller.barNumber(0);
     const before = controller.settings;
     const passage = controller.choosePassage(
-      firstDrawn + drawn.fromMeasureIndex,
-      firstDrawn + drawn.toMeasureIndex,
+      drawn.fromMeasureIndex + 1,
+      drawn.toMeasureIndex + 1,
     );
     if (
       passage.fromBar === before.rangeFromBar &&
@@ -1804,8 +1803,11 @@ export class AppView {
       return;
     }
     const { rangeFromBar, rangeToBar } = controller.settings;
-    const bar = controller.barNumber(measureIndex);
-    const last = controller.barNumber(Math.max(0, measureCount(exercise) - 1));
+    // Where this bar comes in the playing, which is what a passage is made
+    // of. The number printed on it says something else after a repeat, and
+    // says it about two different bars.
+    const bar = measureIndex + 1;
+    const last = Math.max(1, measureCount(exercise));
     const flagged = this.placedOnBar;
 
     // Inside the passage, with a near end already standing: this is the far
@@ -1849,10 +1851,9 @@ export class AppView {
     if (exercise === null) {
       return;
     }
-    const first = exercise.firstBarNumber;
-    const last = first + Math.max(0, measureCount(exercise) - 1);
+    const last = Math.max(1, measureCount(exercise));
     const { rangeFromBar, rangeToBar } = controller.settings;
-    const bar = end === 'from' ? (rangeFromBar ?? first) : (rangeToBar ?? last);
+    const bar = end === 'from' ? (rangeFromBar ?? 1) : (rangeToBar ?? last);
     this.narrowTo(bar, bar);
   }
 
@@ -1880,11 +1881,10 @@ export class AppView {
     }
     const controller = this.runtime.controller;
     const { rangeFromBar, rangeToBar } = controller.settings;
-    const first = bars.firstBarNumber;
     const last = Math.max(0, measureCount(bars) - 1);
     this.runtime.renderer.showPassage({
-      fromMeasureIndex: rangeFromBar === null ? 0 : Math.min(Math.max(rangeFromBar - first, 0), last),
-      toMeasureIndex: rangeToBar === null ? last : Math.min(Math.max(rangeToBar - first, 0), last),
+      fromMeasureIndex: rangeFromBar === null ? 0 : Math.min(Math.max(rangeFromBar - 1, 0), last),
+      toMeasureIndex: rangeToBar === null ? last : Math.min(Math.max(rangeToBar - 1, 0), last),
       repeating: controller.settings.repeatRange,
       movable: !this.isPlaying,
     });
@@ -1893,7 +1893,7 @@ export class AppView {
     // would be furniture standing on top of the marker that already says it.
     const begins = controller.currentTimeline?.at(controller.beginsAt) ?? null;
     const atThePassageStart =
-      begins === null || begins.measureIndex <= (rangeFromBar === null ? 0 : rangeFromBar - first);
+      begins === null || begins.measureIndex <= (rangeFromBar === null ? 0 : rangeFromBar - 1);
     this.runtime.renderer.showStart(
       controller.beginsAt > 0 && !atThePassageStart ? begins.measureIndex : null,
     );
@@ -2392,9 +2392,8 @@ export class AppView {
       }
       // Whatever is set now, with an open end meaning the end of the piece:
       // what is kept is the stretch the reader is looking at.
-      const first = opened.firstBarNumber;
-      const last = first + Math.max(0, measureCount(opened) - 1);
-      const fromBar = controller.settings.rangeFromBar ?? first;
+      const last = Math.max(1, measureCount(opened));
+      const fromBar = controller.settings.rangeFromBar ?? 1;
       const toBar = controller.settings.rangeToBar ?? last;
       const name = this.el.passageName.value.trim();
       void this.keepPassages([
@@ -3574,15 +3573,15 @@ export class AppView {
 
     this.el.focusFrom.value = rangeFromBar === null ? '' : String(rangeFromBar);
     this.el.focusTo.value = rangeToBar === null ? '' : String(rangeToBar);
-    // The score's own numbers, which is what the reader reads off the page.
-    // A count would be the right answer only for a piece beginning at bar
-    // one, and the boxes would refuse the bar numbers printed on every other
-    // one - an excerpt starting at forty has no bar 3 to type.
+    // Places in the playing, counted from one. It was the number printed on
+    // the page, which reads well until a piece repeats - and then there is no
+    // arithmetic a reader can do in their head, because the printed number
+    // names two bars and the boxes have to mean one.
     for (const box of [this.el.focusFrom, this.el.focusTo]) {
       box.min = String(firstBar);
       box.max = String(lastBar);
     }
-    this.el.focusBars.value = firstBar === 1 ? `of ${total}` : `${firstBar}–${lastBar}`;
+    this.el.focusBars.value = `of ${total}`;
 
     const narrowed = rangeFromBar !== null || rangeToBar !== null;
     this.el.focusHandle.dataset['passage'] = String(narrowed);

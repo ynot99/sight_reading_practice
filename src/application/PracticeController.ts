@@ -262,8 +262,17 @@ export interface PracticeSettings {
   /**
    * Bars to practise, one-based and inclusive, or `null` for the whole thing.
    *
-   * Applied by cutting the passage out as an exercise in its own right, so
-   * everything downstream carries on unaware that a longer piece exists.
+   * Counted in *playing order* rather than by the number printed on the page,
+   * and the two are different the moment a piece repeats: a repeat is written
+   * out, so the page says "5" twice and the sixth bar played is the second
+   * of them. Held to the printed number, a passage could not say which of the
+   * two it meant - and, converted back by subtracting the first bar's number,
+   * it landed as many bars early as the piece had re-read. Measured on City
+   * of Tears: a hold on the thirty-eighth bar put the marker on the
+   * thirty-second, six being exactly the bars read twice before it.
+   *
+   * What the reader sees printed is `barNumber`, and the page carries both -
+   * the writer's number, and this one beside it where they part company.
    */
   readonly rangeFromBar: number | null;
   readonly rangeToBar: number | null;
@@ -796,15 +805,15 @@ export class PracticeController {
   }
 
   /**
-   * The first and last bar of the whole piece, in its own numbering.
+   * The first and last bar of the whole piece, counted in playing order.
    *
-   * What a passage may be widened back out to. The engraving cannot say: a
-   * passage is cut out and engraved on its own, so the bars outside it are
-   * not on the page for anything to measure.
+   * What a passage may be widened back out to. Always from one, because a
+   * position is a count of bars played and the first bar played is the first
+   * - an excerpt whose page begins at forty is still forty bars in, and it
+   * is that page's own first bar that a reader holds a finger on.
    */
   get pieceBarRange(): { readonly firstBar: number; readonly lastBar: number } {
-    const firstBar = this.openedScore?.firstBarNumber ?? 1;
-    return { firstBar, lastBar: firstBar + Math.max(1, this.wholePieceBars) - 1 };
+    return { firstBar: 1, lastBar: Math.max(1, this.wholePieceBars) };
   }
 
   /**
@@ -1014,9 +1023,9 @@ export class PracticeController {
   /**
    * The passage the reader chose, as the first and last step of it.
    *
-   * The whole timeline when nothing is chosen. Bars come in as the score's
-   * own numbers - what is printed on the page and typed into the boxes - and
-   * a step knows which bar it is in, so this is where the two meet.
+   * The whole timeline when nothing is chosen. Bars come in as places in the
+   * playing - the first bar played is one - and a step knows which bar it is
+   * in, so this is where the two meet.
    */
   private get passageSteps(): { readonly from: number; readonly to: number } {
     const timeline = this.timeline;
@@ -1025,9 +1034,8 @@ export class PracticeController {
       return { from: 0, to: 0 };
     }
     const { rangeFromBar, rangeToBar } = this.currentSettings;
-    const first = this.exercise?.firstBarNumber ?? 1;
-    const fromMeasure = rangeFromBar === null ? 0 : rangeFromBar - first;
-    const toMeasure = rangeToBar === null ? Number.POSITIVE_INFINITY : rangeToBar - first;
+    const fromMeasure = rangeFromBar === null ? 0 : rangeFromBar - 1;
+    const toMeasure = rangeToBar === null ? Number.POSITIVE_INFINITY : rangeToBar - 1;
     let from = last;
     let to = 0;
     for (const step of timeline.steps) {
@@ -1462,7 +1470,9 @@ export class PracticeController {
     if (found === null) {
       return null;
     }
-    const passage = { fromBar: this.barNumber(found.fromBar - 1), toBar: this.barNumber(found.toBar - 1) };
+    // The report already counts bars the way a passage does: in playing
+    // order, from one.
+    const passage = { fromBar: found.fromBar, toBar: found.toBar };
     this.updateSettings({ rangeFromBar: passage.fromBar, rangeToBar: passage.toBar });
     return passage;
   }
@@ -1475,7 +1485,7 @@ export class PracticeController {
    * counted in to a beat that is not the first, and the reader would be
    * waiting for a downbeat that never came.
    *
-   * Bars of the whole piece, and clamped to it here.
+   * Places in the playing, counted from one, and clamped to the piece here.
    *
    * Returns the passage now being practised, with `null` on both ends when
    * it turned out to be the whole piece after all.

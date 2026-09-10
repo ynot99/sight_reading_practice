@@ -2869,12 +2869,38 @@ describe('AppView', () => {
 
         // The place is on this bar, so this is the near end.
         rig.renderer.holdBar(1);
-        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(1));
+        expect(controller.settings.rangeFromBar).toBe(2);
         expect(controller.settings.rangeToBar).toBeNull();
 
         // The near end is on this bar, so this is the far end: one bar.
         rig.renderer.holdBar(1);
-        expect(controller.settings.rangeToBar).toBe(controller.barNumber(1));
+        expect(controller.settings.rangeToBar).toBe(2);
+      });
+
+      it('lands on the bar held even where the piece has been read twice', async () => {
+        // His, measured on City of Tears. A repeat is written out, so the
+        // page says "3" twice and the fifth bar played is the second of them.
+        // Held as the number printed on it and turned back into a place by
+        // subtracting the first bar's number, a hold landed as many bars
+        // early as the piece had re-read - the thirty-eighth bar put the
+        // marker on the thirty-second.
+        const rig = createRig();
+        await rig.view.initialize();
+        await rig.runtime.controller.openScore({
+          ...longExercise({ bars: 8 }),
+          barLabels: [1, 2, 3, 4, 3, 4, 5, 6].map((number, at) => ({
+            number,
+            repeated: at === 4 || at === 5,
+          })),
+        });
+        // The seventh bar played, which the page calls 5.
+        expect(rig.runtime.controller.barNumber(6)).toBe(5);
+
+        rig.renderer.holdBar(6);
+        rig.renderer.holdBar(6);
+
+        expect(rig.runtime.controller.settings.rangeFromBar).toBe(7);
+        expect(rig.renderer.shownPassage?.fromMeasureIndex).toBe(6);
       });
 
       it('takes in everything up to a hold further into the passage', async () => {
@@ -2886,12 +2912,12 @@ describe('AppView', () => {
         const { controller } = rig.runtime;
         rig.renderer.holdBar(0);
         rig.renderer.holdBar(0);
-        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(0));
+        expect(controller.settings.rangeFromBar).toBe(1);
 
         rig.renderer.holdBar(1);
 
-        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(0));
-        expect(controller.settings.rangeToBar).toBe(controller.barNumber(1));
+        expect(controller.settings.rangeFromBar).toBe(1);
+        expect(controller.settings.rangeToBar).toBe(2);
       });
 
       it('starts again somewhere new when the hold is outside the passage', async () => {
@@ -2904,8 +2930,8 @@ describe('AppView', () => {
         rig.renderer.holdBar(1);
         rig.renderer.holdBar(1);
         rig.renderer.holdBar(1);
-        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(1));
-        expect(controller.settings.rangeToBar).toBe(controller.barNumber(1));
+        expect(controller.settings.rangeFromBar).toBe(2);
+        expect(controller.settings.rangeToBar).toBe(2);
 
         rig.renderer.holdBar(0);
 
@@ -2941,8 +2967,8 @@ describe('AppView', () => {
 
         rig.renderer.holdMarker('from');
 
-        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(1));
-        expect(controller.settings.rangeToBar).toBe(controller.barNumber(1));
+        expect(controller.settings.rangeFromBar).toBe(2);
+        expect(controller.settings.rangeToBar).toBe(2);
       });
 
       it('shuts it onto the far marker’s bar from the other end', async () => {
@@ -2955,8 +2981,8 @@ describe('AppView', () => {
 
         rig.renderer.holdMarker('to');
 
-        expect(controller.settings.rangeFromBar).toBe(controller.barNumber(3));
-        expect(controller.settings.rangeToBar).toBe(controller.barNumber(3));
+        expect(controller.settings.rangeFromBar).toBe(4);
+        expect(controller.settings.rangeToBar).toBe(4);
       });
 
       it('changes nothing while a run is being graded', async () => {

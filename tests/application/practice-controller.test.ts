@@ -3254,17 +3254,18 @@ describe('choosing a passage with the markers', () => {
     expect(rig.controller.choosePassage(6, 2)).toEqual({ fromBar: 6, toBar: 6 });
   });
 
-  it('practises the bars it was asked for on a score that starts at bar 40', async () => {
-    // A range is in the score's own bar numbers - what the reader reads off
-    // the page - and the run has to begin and end on those bars whatever the
-    // piece calls its first one. The music itself is left whole.
+  it('counts places in the playing, not the numbers printed on the page', async () => {
+    // A score that starts at bar 40 - which is what an excerpt carried out of
+    // a longer piece looks like - is still eight bars of playing, and its
+    // third bar is the third one played. The page goes on saying 40.
     const rig = createController();
     await rig.controller.openScore({ ...longExercise({ bars: 8 }), firstBarNumber: 40 });
 
-    rig.controller.choosePassage(42, 44);
+    expect(rig.controller.pieceBarRange).toEqual({ firstBar: 1, lastBar: 8 });
+
+    rig.controller.choosePassage(3, 5);
     const loaded = await rig.controller.reloadExercise();
 
-    // The page still holds the whole piece, numbered as the score numbers it.
     expect(loaded.firstBarNumber).toBe(40);
     expect(measureCount(loaded)).toBe(8);
     expect(rig.controller.barNumber(0)).toBe(40);
@@ -3274,15 +3275,30 @@ describe('choosing a passage with the markers', () => {
     expect(session?.currentStep?.measureIndex).toBe(2);
   });
 
-  it('counts from the bar numbers the score itself carries', async () => {
-    // A score that starts at bar 40 - which is what a slice carried out of a
-    // longer piece looks like - must not have its passage measured from one.
+  it('lands on the bar held, not on the one its printed number also names', async () => {
+    // His, measured on City of Tears. A repeat is written out, so the page
+    // says "5" twice and the sixth bar played is the second of them. Read as
+    // a printed number and turned back into a place by subtracting the first
+    // bar's number, a passage landed as many bars early as the piece had
+    // re-read - a hold on the thirty-eighth bar put the marker on the
+    // thirty-second.
     const rig = createController();
-    await rig.controller.openScore({ ...longExercise({ bars: 4 }), firstBarNumber: 40 });
+    await rig.controller.openScore({
+      ...longExercise({ bars: 8 }),
+      // Bars three and four read twice, so the last bar played is printed 6.
+      barLabels: [1, 2, 3, 4, 3, 4, 5, 6].map((number, at) => ({
+        number,
+        repeated: at === 4 || at === 5,
+      })),
+    });
 
-    expect(rig.controller.pieceBarRange).toEqual({ firstBar: 40, lastBar: 43 });
-    expect(rig.controller.choosePassage(41, 42)).toEqual({ fromBar: 41, toBar: 42 });
-    expect(rig.controller.choosePassage(1, 900)).toEqual({ fromBar: null, toBar: null });
+    // The seventh bar played, which the page calls 5.
+    rig.controller.choosePassage(7, 7);
+    rig.controller.updateSettings({ countInBars: 0 });
+    const session = rig.controller.start();
+
+    expect(rig.controller.barNumber(6)).toBe(5);
+    expect(session?.currentStep?.measureIndex).toBe(6);
   });
 });
 

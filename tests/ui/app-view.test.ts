@@ -742,6 +742,78 @@ describe('AppView', () => {
     logged.mockRestore();
   });
 
+  it('adds an armful of files without opening any of them', async () => {
+    // His: a multi import that imports and opens nothing. Adding a shelf of
+    // arrangements is a different act from picking up a piece - opening each
+    // in turn engraves every one of them, which on thirty files is minutes
+    // of waiting for pages nobody asked to see.
+    const { view, runtime } = createRig();
+    await view.initialize();
+    const serializer = new MusicXmlSerializer();
+    const asFile = (title: string) => ({
+      name: `${title}.musicxml`,
+      arrayBuffer: () =>
+        Promise.resolve(
+          new TextEncoder().encode(serializer.serialize(twoBarExercise({ title }))).buffer,
+        ),
+    });
+
+    const input = element<HTMLInputElement>('score-file');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [asFile('First'), asFile('Second'), asFile('Third')],
+    });
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(runtime.scores.list().map((score) => score.title).sort()).toEqual([
+      'First',
+      'Second',
+      'Third',
+    ]);
+    // Nothing on the stand: choosing three files is not choosing a piece.
+    expect(runtime.controller.openedExercise).toBeNull();
+    expect(element('scores-added').hidden).toBe(false);
+    expect(element('scores-added').textContent).toContain('3');
+  });
+
+  it('keeps going past a file it cannot read, and names it', async () => {
+    // One bad file in a shelf of thirty must not cost the other twenty-nine,
+    // and the reader has no other way to tell which one was refused.
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { view, runtime } = createRig();
+    await view.initialize();
+    element<HTMLButtonElement>('focus-scores').click();
+    const serializer = new MusicXmlSerializer();
+    const good = (title: string) => ({
+      name: `${title}.musicxml`,
+      arrayBuffer: () =>
+        Promise.resolve(
+          new TextEncoder().encode(serializer.serialize(twoBarExercise({ title }))).buffer,
+        ),
+    });
+
+    const input = element<HTMLInputElement>('score-file');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [
+        good('Fine'),
+        { name: 'broken.mxl', arrayBuffer: () => Promise.resolve(new TextEncoder().encode('<nope/>').buffer) },
+        good('Also fine'),
+      ],
+    });
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(runtime.scores.list().map((score) => score.title).sort()).toEqual(['Also fine', 'Fine']);
+    expect(element('scores-added').textContent).toContain('broken.mxl');
+    // And the sheet stays up, unlike the single-file case: the reader is
+    // adding a shelf, and the list they are watching is the answer.
+    expect(element('sheet-scores').hidden).toBe(false);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
   it('puts the passage boxes back when a file replaces what was on the stand', async () => {
     const { view, runtime } = createRig();
     await view.initialize();

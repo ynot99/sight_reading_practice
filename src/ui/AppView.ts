@@ -1051,6 +1051,7 @@ export class AppView {
     takeDuration: HTMLOutputElement;
     takeScrub: HTMLInputElement;
     scoresEmpty: HTMLElement;
+    scoresAdded: HTMLElement;
     sheetConfirm: HTMLElement;
     confirmText: HTMLElement;
     confirmYes: HTMLButtonElement;
@@ -1272,6 +1273,7 @@ export class AppView {
       takeDuration: requireElement(doc, 'take-duration'),
       takeScrub: requireElement(doc, 'take-scrub'),
       scoresEmpty: requireElement(doc, 'scores-empty'),
+      scoresAdded: requireElement(doc, 'scores-added'),
       sheetConfirm: requireElement(doc, 'sheet-confirm'),
       confirmText: requireElement(doc, 'confirm-text'),
       confirmYes: requireElement(doc, 'confirm-yes'),
@@ -1478,54 +1480,105 @@ export class AppView {
   }
 
   /**
-   * Reads the chosen file and practises it.
+   * Reads whatever was chosen, and practises it if it was one thing.
+   *
+   * Several at once are added and none of them opened. Adding a shelf of
+   * arrangements is a different act from picking up a piece: opening each in
+   * turn engraves every one of them, which on thirty files is minutes of
+   * waiting for pages nobody asked to see, and leaves the stand holding
+   * whichever happened to be last.
+   *
+   * One file is still picked up, because choosing one file is choosing that
+   * piece.
    *
    * Whatever the importer had to drop is shown rather than swallowed: the
    * model is narrower than MusicXML, and a reader who is not told what was
    * lost will blame the trainer for the difference.
    */
   private async openChosenScore(): Promise<void> {
-    const file = this.el.scoreFile.files?.[0];
+    const chosen = [...(this.el.scoreFile.files ?? [])];
     // Cleared so that choosing the same file twice still fires a change.
     this.el.scoreFile.value = '';
-    if (file === undefined) {
+    if (chosen.length === 0) {
       return;
     }
+    const alone = chosen.length === 1;
+    const kept: string[] = [];
+    const refused: { readonly name: string; readonly why: string }[] = [];
 
-    try {
-      const { exercise, warnings } = await this.runtime.importer.readFile(
-        await file.arrayBuffer(),
-        file.name,
-      );
-      await this.runtime.controller.openScore(exercise);
-      // Opening a piece can put the passage back to the two ends, and the
-      // boxes in the sheet are the same setting seen from another chair.
-      this.syncControlsFromSettings();
-      // Kept on the way in, so the file is chosen from the disk once and
-      // afterwards the piece is simply there.
-      await this.runtime.scores.keep(exercise, Date.now());
-      this.renderScores();
-      // What the file did not bring with it goes to the console and no
-      // further. It is worth keeping - several faults here were found through
-      // one of these - and it is not worth a line across the music: the page
-      // says which piece opened by printing its name in the corner.
-      for (const warning of warnings) {
-        reportToTheConsole(`Opening ${exercise.title}:`, warning.detail);
+    for (const file of chosen) {
+      try {
+        const { exercise, warnings } = await this.runtime.importer.readFile(
+          await file.arrayBuffer(),
+          file.name,
+        );
+        // Kept on the way in, so the file is chosen from the disk once and
+        // afterwards the piece is simply there.
+        await this.runtime.scores.keep(exercise, Date.now());
+        kept.push(exercise.title);
+        if (alone) {
+          await this.runtime.controller.openScore(exercise);
+          // Opening a piece can put the passage back to the two ends, and the
+          // boxes in the sheet are the same setting seen from another chair.
+          this.syncControlsFromSettings();
+        }
+        // What the file did not bring with it goes to the console and no
+        // further. It is worth keeping - several faults here were found
+        // through one of these - and it is not worth a line across the music:
+        // the page says which piece opened by printing its name in the corner.
+        for (const warning of warnings) {
+          reportToTheConsole(`Opening ${exercise.title}:`, warning.detail);
+        }
+      } catch (error) {
+        reportToTheConsole(`Could not open ${file.name}.`, error);
+        refused.push({
+          name: file.name,
+          why: error instanceof Error ? error.message : 'It could not be read.',
+        });
       }
-    } catch (error) {
-      reportToTheConsole('Could not open the chosen file.', error);
-      // Out of the way first. The message goes in the middle of the page, and
-      // the library sheet the file was chosen from stands over exactly that -
-      // so a file that would not open said nothing at all, and the reader was
-      // left looking at a list that had not changed. Reported that way: no
-      // error popup when an import fails.
-      this.el.sheetScores.hidden = true;
-      this.sayInTheMiddle(
-        error instanceof Error
-          ? `Could not open ${file.name}. ${error.message}`
-          : `Could not open ${file.name}.`,
-      );
     }
+
+    this.renderScores();
+    this.sayWhatTheFilesDid(kept, refused, alone);
+  }
+
+  /**
+   * What became of an armful of files.
+   *
+   * One that would not open is said in the middle of the page, where every
+   * other failure is said - and the library sheet it was chosen from stands
+   * over exactly that, so the sheet gets out of the way first. Reported that
+   * way: no error popup when an import fails.
+   *
+   * An armful that all went in says so under the list instead, and leaves the
+   * sheet up: the reader is adding a shelf and the list they are watching is
+   * the answer. One file that went in says nothing at all - the piece is on
+   * the stand, which they can see.
+   */
+  private sayWhatTheFilesDid(
+    kept: readonly string[],
+    refused: readonly { readonly name: string; readonly why: string }[],
+    alone: boolean,
+  ): void {
+    this.el.scoresAdded.hidden = true;
+    if (refused.length === 0) {
+      if (!alone) {
+        this.el.scoresAdded.hidden = false;
+        this.el.scoresAdded.textContent = `Added ${String(kept.length)} score${kept.length === 1 ? '' : 's'}.`;
+      }
+      return;
+    }
+    if (alone) {
+      const only = refused[0];
+      this.el.sheetScores.hidden = true;
+      this.sayInTheMiddle(`Could not open ${only?.name ?? 'that file'}. ${only?.why ?? ''}`.trim());
+      return;
+    }
+    // Named, since somebody adding thirty files has no other way to tell
+    // which of them was refused.
+    this.el.scoresAdded.hidden = false;
+    this.el.scoresAdded.textContent =
+      `Added ${String(kept.length)}. Could not open ${refused.map((one) => one.name).join(', ')}.`;
   }
 
   /**
@@ -4694,6 +4747,8 @@ export class AppView {
         [this.el.focusScores],
         () => {
           this.el.scoresSearch.value = '';
+          // Last time's tally is not this time's news.
+          this.el.scoresAdded.hidden = true;
           this.renderScores();
         },
       ],

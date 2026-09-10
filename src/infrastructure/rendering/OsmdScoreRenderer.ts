@@ -89,6 +89,8 @@ const MARKER_WIDTH = 5;
 const BAR_PRINTED_SCALE = 0.75;
 /** How far above the number's own line the writer's number sits. */
 const BAR_PRINTED_RISE = 1.05;
+/** Air between that number and the arrow standing after it. */
+const REPEAT_MARK_GAP = 3;
 /** The circle at each end of a marker, which is what a thumb aims at. */
 const MARKER_GRIP_RADIUS = 9;
 /** How far a repeat dot sits from the marker, and from the line between. */
@@ -2541,9 +2543,9 @@ export class OsmdScoreRenderer
       // A piece that repeats prints one number on two bars, and every bar
       // after a repeat is further into the playing than its number says. The
       // hold, the markers and the boxes all count the playing, so the place
-      // is what the bar is called here - in brackets, because it is this
-      // program's counting and not the writer's - and the number the writer
-      // gave it goes on the line above, where it is still there to be found.
+      // is what the bar is called here, drawn as the engraver draws one, and
+      // the number the writer gave it goes on the line above where it is
+      // still there to be found.
       if (renumbered) {
         number.node.style.display = 'none';
         const said = doc.createElementNS(SVG_NAMESPACE, 'text');
@@ -2551,9 +2553,9 @@ export class OsmdScoreRenderer
         said.setAttribute('x', String(number.x));
         said.setAttribute('y', String(number.y));
         said.setAttribute('font-size', String(number.height));
-        said.textContent = `(${String(place)})`;
+        said.textContent = String(place);
         this.passageGroupFor(sheet).append(said);
-        after = number.x + `(${String(place)})`.length * number.height * 0.5;
+        after = number.x + String(place).length * number.height * 0.5;
       }
 
       if (!repeated) {
@@ -2564,7 +2566,7 @@ export class OsmdScoreRenderer
       // writer called it, and the turning arrow saying why the numbers went
       // back. Only here, because only here is there a question - a bar read
       // once and numbered by its place asks nothing.
-      let markX = after + REPEAT_MARK_RADIUS;
+      let markX = after + REPEAT_MARK_GAP + REPEAT_MARK_RADIUS;
       let markY = number.y - number.height;
       if (renumbered) {
         const height = number.height * BAR_PRINTED_SCALE;
@@ -2576,7 +2578,8 @@ export class OsmdScoreRenderer
         was.setAttribute('font-size', String(height));
         was.textContent = String(printed);
         this.passageGroupFor(sheet).append(was);
-        markX = number.x + String(printed).length * height * 0.5 + REPEAT_MARK_RADIUS;
+        markX =
+          number.x + String(printed).length * height * 0.5 + REPEAT_MARK_GAP + REPEAT_MARK_RADIUS;
         markY = above - height * 0.35;
       }
       const mark = doc.createElementNS(SVG_NAMESPACE, 'g');

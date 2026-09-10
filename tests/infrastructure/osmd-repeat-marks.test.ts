@@ -83,8 +83,8 @@ describe('what the page says about a repeat and a pedal', () => {
     // A repeat is written out, so the page prints "3" on two different bars
     // and every bar after them is further into the playing than its number
     // says. The hold, the markers and the boxes all count the playing, so the
-    // place is what the bar is called here - in brackets, because it is this
-    // program's counting - and the engraver's own number gives way to it.
+    // place is what the bar is called here, drawn as the engraver draws one,
+    // and the engraver's own number gives way to it.
     const repeating = {
       ...longExercise({ bars: 8 }),
       barLabels: [1, 2, 3, 4, 3, 4, 5, 6].map((number, at) => ({
@@ -103,7 +103,7 @@ describe('what the page says about a repeat and a pedal', () => {
 
     // One for each numbered bar whose number is not its place, and none for
     // the bars where the two still agree.
-    expect(places.map((one) => one.said)).toEqual(['(5)', '(7)']);
+    expect(places.map((one) => one.said)).toEqual(['5', '7']);
     // And the engraver's own number is not left standing beside it: two bar
     // numbers on one bar is a question rather than an answer.
     expect(numbers().map((one) => one.text)).toEqual(['3']);
@@ -126,7 +126,7 @@ describe('what the page says about a repeat and a pedal', () => {
     const printed = [...container.querySelectorAll('.bar-printed')];
     const above = printed[0];
     const place = [...container.querySelectorAll('.bar-position')].find(
-      (text) => text.textContent === '(5)',
+      (text) => text.textContent === '5',
     );
 
     // The bar read a second time is the only one of the two that gets it.
@@ -163,9 +163,15 @@ describe('what the page says about a repeat and a pedal', () => {
       /A [\d.]+ [\d.]+ 0 1 1 ([\d.]+) /.exec(ring?.getAttribute('d') ?? '')?.[1] ?? '0',
     );
 
+    const radius = Number.parseFloat(
+      /A ([\d.]+) /.exec(ring?.getAttribute('d') ?? '')?.[1] ?? '0',
+    );
+
     expect(above).not.toBeNull();
     expect(ring).not.toBeNull();
-    expect(centre).toBeGreaterThan(rightEdge);
+    // Clear of the digits rather than touching them: the circle's own left
+    // edge, not its centre, is what stands next to the number.
+    expect(centre - radius).toBeGreaterThan(rightEdge);
   });
 
   it('puts it to the right of the number, as an exponent sits', async () => {

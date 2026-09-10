@@ -1526,10 +1526,11 @@ select {
 /*
  * A bar's place in the playing, standing where its number would.
  *
- * Only where the two differ, which is only in a piece that repeats. As dark
- * as the engraver's own numbers, because it *is* the bar number here: it is
- * what the markers stand on, what the boxes take and what a finger held on
- * the page chooses. The brackets say whose counting it is.
+ * Only where the two differ, which is only in a piece that repeats. Drawn
+ * as the engraver's own numbers are - as dark, in the same spot, with
+ * nothing around it - because it *is* the bar number here: it is what the
+ * markers stand on, what the boxes take and what a finger held on the page
+ * chooses. What the writer called the bar is on the line above.
  */
 .bar-position {
   fill: #000;

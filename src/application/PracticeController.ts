@@ -85,11 +85,12 @@ export type PlayedNoteDisplay = (typeof PLAYED_NOTE_DISPLAYS)[number];
 /** Presses kept for the judging log; a bounded ring, not a history. */
 const JUDGING_LOG_LENGTH = 300;
 /**
- * How long "later" lasts before a rest is offered again.
+ * How long "not now" lasts by default, where nothing says how long.
  *
  * Long enough that the answer is respected and short enough that it is still
- * the same sitting. Not the whole interval over again: they were owed a rest
- * when they said not now, and they still are.
+ * the same sitting. Skipping is the other answer and asks for the whole
+ * interval again; neither restarts the clock, because they have still been
+ * sitting for an hour and that is why it was offered.
  */
 const REST_PUT_OFF_MS = 3 * 60_000;
 
@@ -687,8 +688,8 @@ export class PracticeController {
   private restOwed = false;
   /** Whether the reader has been told about this one already. */
   private restSaid = false;
-  /** How long they had been sitting when they last said "not now", if they did. */
-  private restPutOffAtMs: number | null = null;
+  /** How long they must have been sitting before it is offered again. */
+  private restDueAtMs: number | null = null;
   private hearingNotes: Unsubscribe | null = null;
   private lastBeatTicks = 0;
   private readonly judged: JudgedPress[] = [];
@@ -2895,7 +2896,7 @@ export class PracticeController {
     // Put off, it falls due again a few minutes on rather than at once or
     // never. The clock is not restarted - they have still been sitting for an
     // hour - so the question is only when to ask a second time.
-    const due = this.restPutOffAtMs === null ? every : this.restPutOffAtMs + REST_PUT_OFF_MS;
+    const due = this.restDueAtMs ?? every;
     if (every > 0 && this.timer.sittingMs >= due) {
       this.restOwed = true;
     }
@@ -2929,7 +2930,7 @@ export class PracticeController {
     this.timer.reset();
     this.restOwed = false;
     this.restSaid = false;
-    this.restPutOffAtMs = null;
+    this.restDueAtMs = null;
   }
 
   /**
@@ -2946,10 +2947,22 @@ export class PracticeController {
    * reminder was spent by the first refusal and never came back, which is
    * the other half of the same line.
    */
-  restPutOff(): void {
+  restPutOff(afterMs: number = REST_PUT_OFF_MS): void {
     this.restSaid = false;
     this.restOwed = false;
-    this.restPutOffAtMs = this.timer.sittingMs;
+    this.restDueAtMs = this.timer.sittingMs + Math.max(0, afterMs);
+  }
+
+  /**
+   * Passed over: nothing more about this one until another whole interval.
+   *
+   * Different from putting it off by a few minutes, and the difference is
+   * the reader's to say. The clock still keeps what it has - they have been
+   * sitting an hour and skipping does not undo that - so what a skip buys is
+   * the interval, not the hour.
+   */
+  restSkipped(): void {
+    this.restPutOff(Math.max(0, this.currentSettings.restEveryMinutes) * 60_000);
   }
 
   /**

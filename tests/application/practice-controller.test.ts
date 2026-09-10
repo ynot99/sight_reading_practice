@@ -1963,6 +1963,58 @@ describe('being reminded to rest', () => {
     expect(said[1]).toBeGreaterThan(said[0] ?? 0);
   });
 
+  it('waits exactly as long as the reader asked it to', async () => {
+    // Three snooze buttons, and the number on the button is the answer: two
+    // minutes has to mean two, or the buttons are decoration.
+    const rig = createController(true, undefined, { restEveryMinutes: 30 });
+    await rig.controller.loadNewExercise();
+    const said: number[] = [];
+    rig.controller.events.on('restDue', ({ sittingMs }) => {
+      said.push(sittingMs);
+    });
+    playFor(rig, 31);
+
+    rig.controller.restPutOff(60_000);
+    // Half a minute on, and it holds its tongue.
+    rig.midi.noteOn(60, 31.5 * 60_000);
+    expect(said).toHaveLength(1);
+
+    // A minute and a half on, and the minute they asked for has passed.
+    rig.midi.noteOn(60, 32.5 * 60_000);
+
+    expect(said).toHaveLength(2);
+  });
+
+  it('waits a whole interval again when the rest is skipped', async () => {
+    // The other answer, and the difference is the reader's to say: skipping
+    // passes this one over rather than putting it off a few minutes. The
+    // clock still keeps what it has - they have been sitting half an hour,
+    // and skipping does not undo that - so a skip buys the interval, not the
+    // half hour.
+    const rig = createController(true, undefined, { restEveryMinutes: 30 });
+    await rig.controller.loadNewExercise();
+    const said: number[] = [];
+    rig.controller.events.on('restDue', ({ sittingMs }) => {
+      said.push(sittingMs);
+    });
+    playFor(rig, 31);
+
+    rig.controller.restSkipped();
+    // Twenty more minutes of playing, and still nothing: a skip is worth a
+    // whole interval, not a few minutes.
+    for (let at = 32; at <= 50; at += 1) {
+      rig.midi.noteOn(60, at * 60_000);
+    }
+    expect(said).toHaveLength(1);
+    expect(rig.controller.sittingMs).toBeGreaterThanOrEqual(50 * 60_000);
+
+    for (let at = 51; at <= 62; at += 1) {
+      rig.midi.noteOn(60, at * 60_000);
+    }
+
+    expect(said).toHaveLength(2);
+  });
+
   it('keeps what it has when the rest is put off', async () => {
     // They have still been playing for half an hour. The next quiet moment
     // should say so again rather than start the half hour over.

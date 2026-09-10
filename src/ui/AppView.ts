@@ -963,6 +963,7 @@ export class AppView {
     restEverySettings: HTMLSelectElement;
     restTake: HTMLButtonElement;
     restLater: HTMLButtonElement;
+    restSnooze: HTMLElement;
     scoreVerdict: HTMLElement;
     focusPlay: HTMLButtonElement;
     focusPlayIcon: SVGPathElement;
@@ -1182,6 +1183,7 @@ export class AppView {
       restEverySettings: requireElement(doc, 'rest-every-settings'),
       restTake: requireElement(doc, 'rest-take'),
       restLater: requireElement(doc, 'rest-later'),
+      restSnooze: requireElement(doc, 'rest-snooze'),
       scoreVerdict: requireElement(doc, 'score-verdict'),
       focusPlay: requireElement(doc, 'focus-play'),
       focusPlayIcon: requireElement(doc, 'focus-play-icon'),
@@ -2475,9 +2477,20 @@ export class AppView {
     });
 
     this.listen(this.el.restLater, 'click', () => {
-      controller.restPutOff();
+      controller.restSkipped();
       this.hideTheRest();
     });
+
+    // One handler for the three, because they are one answer with a number
+    // on it. The number is on the button, where the reader can see what they
+    // are choosing rather than being told afterwards.
+    for (const button of this.el.restSnooze.querySelectorAll('button')) {
+      this.listen(button, 'click', () => {
+        const minutes = Number(button.dataset['minutes'] ?? '0');
+        controller.restPutOff(Math.max(0, minutes) * 60_000);
+        this.hideTheRest();
+      });
+    }
 
     for (const select of [this.el.restEvery, this.el.restEverySettings]) {
       this.listen(select, 'change', () => {
@@ -2940,6 +2953,7 @@ export class AppView {
     this.el.restLeft.hidden = true;
     this.el.restTake.hidden = false;
     this.el.restLater.hidden = false;
+    this.el.restSnooze.hidden = false;
     this.el.scoreRest.hidden = false;
     this.syncCard();
   }
@@ -2956,6 +2970,7 @@ export class AppView {
     this.runtime.controller.restTaken();
     this.el.restTake.hidden = true;
     this.el.restLater.hidden = true;
+    this.el.restSnooze.hidden = true;
     this.el.restRing.removeAttribute('hidden');
     this.el.restLeft.hidden = false;
     this.el.restLeft.value = `${Math.round(REST_LENGTH_MS / 60_000)} minutes`;

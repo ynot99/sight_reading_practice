@@ -1181,6 +1181,31 @@ describe('AppView', () => {
       }
     });
 
+    it('puts it off by the number on the button that was pressed', async () => {
+      // His: "later" is not one answer but a length, so the card says three
+      // of them. The number on the button is what the reader is choosing, and
+      // it has to be what they get.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ restEveryMinutes: 30 });
+      const said: number[] = [];
+      runtime.controller.events.on('restDue', ({ sittingMs }) => {
+        said.push(sittingMs);
+      });
+      for (let at = 0; at <= 31 * 60_000; at += 60_000) {
+        midi.noteOn(60, at);
+      }
+      expect(said).toHaveLength(1);
+
+      element<HTMLButtonElement>('rest-snooze-1').click();
+
+      expect(element('score-rest').hidden).toBe(true);
+      midi.noteOn(60, 31.5 * 60_000);
+      expect(said).toHaveLength(1);
+      midi.noteOn(60, 32.5 * 60_000);
+      expect(said).toHaveLength(2);
+    });
+
     it('lets the reader put it off without losing the hour they have played', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();

@@ -131,9 +131,26 @@
               <label for="rest-every">Remind me every</label>
               <select id="rest-every"></select>
             </div>
+            <!--
+              Three answers rather than two, because "not now" has a length.
+              Snoozing names it; skipping passes this one over and waits the
+              whole interval again. Neither restarts the clock: they have
+              still been sitting for an hour, which is why it was offered.
+            -->
+            <div id="rest-snooze" class="control-group">
+              <label>Ask again in</label>
+              <div class="control-group--actions">
+                <button id="rest-snooze-1" type="button" class="button button--ghost"
+                  data-minutes="1">1 min</button>
+                <button id="rest-snooze-2" type="button" class="button button--ghost"
+                  data-minutes="2">2 min</button>
+                <button id="rest-snooze-3" type="button" class="button button--ghost"
+                  data-minutes="3">3 min</button>
+              </div>
+            </div>
             <div class="control-group control-group--actions">
               <button id="rest-take" type="button" class="button button--primary">Rest</button>
-              <button id="rest-later" type="button" class="button button--ghost">Later</button>
+              <button id="rest-later" type="button" class="button button--ghost">Skip</button>
             </div>
           </div>
 

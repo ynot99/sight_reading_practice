@@ -76,6 +76,40 @@ describe('carrying everything off this device', () => {
 });
 
 describe('putting a backup back', () => {
+  it('brings a score back with everything it was kept with', async () => {
+    // The one way this loses data quietly. A backup carries each store's blob
+    // without understanding it, so a setting added anywhere is carried for
+    // free - but a score is rebuilt field by field on the way in, and a field
+    // added to the record and not to that reading is dropped on restore and
+    // nothing says so. It happened once already, when the stretches a reader
+    // marks out were added.
+    //
+    // Every field filled with something of its own, so a field being read
+    // from the wrong place shows up as well: TypeScript makes this fail to
+    // compile until a new one is listed here too.
+    const whole: StoredScore = {
+      id: 'the-piece',
+      title: 'A Piece With Everything',
+      savedAtMs: 111,
+      openedAtMs: 222,
+      bars: 37,
+      musicXml: '<score-partwise>everything</score-partwise>',
+      passages: [
+        { name: 'The left-hand run', fromBar: 5, toBar: 8 },
+        { name: 'The turn on page two', fromBar: 21, toBar: 24 },
+      ],
+    };
+    const { service, scoreStore } = rig();
+    await scoreStore.write(whole);
+
+    // Through a file, since that is the only way it ever travels.
+    const asFile = JSON.stringify(await service.create());
+    const back = rig();
+    await back.service.restore(readBackup(JSON.parse(asFile)));
+
+    expect(await back.scoreStore.read('the-piece')).toEqual(whole);
+  });
+
   it('replaces the settings and adds the scores', async () => {
     const source = rig();
     source.settings.write({ practice: { tempoBpm: 84 } });

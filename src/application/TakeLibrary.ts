@@ -2,8 +2,6 @@ import type { MidiFileEvent } from '../domain/midi/MidiFile.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import type { Take } from './PerformanceRecorder.js';
 
-export const TAKES_STORAGE_KEY = 'sight-reading-practice.takes.v1';
-
 /**
  * Which shelf a take is on.
  *

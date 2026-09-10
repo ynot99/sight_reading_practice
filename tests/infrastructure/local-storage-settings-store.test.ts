@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import * as storage from '../../src/infrastructure/storage/LocalStorageSettingsStore.js';
 import {
   DEFAULT_STORAGE_KEY,
+  KEPT_STORAGE_KEYS,
   LocalStorageSettingsStore,
   type StorageLike,
 } from '../../src/infrastructure/storage/LocalStorageSettingsStore.js';
@@ -97,5 +99,26 @@ describe('LocalStorageSettingsStore', () => {
 
     expect(new LocalStorageSettingsStore(storage, 'one').read()).toEqual({ value: 1 });
     expect(new LocalStorageSettingsStore(storage, 'two').read()).toEqual({ value: 2 });
+  });
+});
+
+describe('what a backup has to carry', () => {
+  it('lists every key anything is kept under', () => {
+    // The backup is what stands between a reader and a browser told to clear
+    // its site data, and the way it would fail is silence: a store added and
+    // not carried loses nothing today and everything on the day it is needed.
+    // So the list is named once, and this says the list is all of them.
+    const declared = Object.entries(storage)
+      .filter(([name, value]) => name.endsWith('_STORAGE_KEY') && typeof value === 'string')
+      .map(([, value]) => value as string);
+
+    expect(declared.length).toBeGreaterThan(0);
+    expect([...KEPT_STORAGE_KEYS].sort()).toEqual(declared.sort());
+  });
+
+  it('gives each of them a key of its own', () => {
+    // Two stores at one key is one store, and the second of them is a blob
+    // the first overwrites.
+    expect(new Set(KEPT_STORAGE_KEYS).size).toBe(KEPT_STORAGE_KEYS.length);
   });
 });

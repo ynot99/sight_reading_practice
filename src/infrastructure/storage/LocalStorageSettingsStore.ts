@@ -14,6 +14,26 @@ export const HISTORY_STORAGE_KEY = 'sight-reading-practice/history';
 /** How long the application has been open, by the day. */
 export const TIME_STORAGE_KEY = 'sight-reading-practice/time';
 
+/** Where the takes live, which is a blob like any other. */
+export const TAKES_STORAGE_KEY = 'sight-reading-practice.takes.v1';
+
+/**
+ * Everything this application keeps between visits, by the key it lives at.
+ *
+ * Named once, because the backup is what stands between a reader and a
+ * browser that has been told to clear site data - and the way it would fail
+ * is silence: a store added and not carried loses nothing today and
+ * everything on the day it is needed. The composition root builds its map
+ * from this list and refuses to start having missed one, and a test here says
+ * the list is all of them.
+ */
+export const KEPT_STORAGE_KEYS: readonly string[] = [
+  DEFAULT_STORAGE_KEY,
+  HISTORY_STORAGE_KEY,
+  TIME_STORAGE_KEY,
+  TAKES_STORAGE_KEY,
+];
+
 /**
  * Settings kept in the browser, on this device only.
  *

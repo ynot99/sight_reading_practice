@@ -27,7 +27,7 @@ import { PracticeHistory } from '../application/PracticeHistory.js';
 import { TimeToday } from '../application/TimeToday.js';
 import { PerformanceRecorder } from '../application/PerformanceRecorder.js';
 import { ControlBinding } from '../application/ControlBinding.js';
-import { TakeLibrary, TAKES_STORAGE_KEY } from '../application/TakeLibrary.js';
+import { TakeLibrary } from '../application/TakeLibrary.js';
 import { TakePlayer } from '../application/TakePlayer.js';
 import { BackupService } from '../application/Backup.js';
 import { ScoreLibrary } from '../application/ScoreLibrary.js';
@@ -40,6 +40,8 @@ import { BUILT_IN_LADDER } from '../application/ladder/ladderSteps.js';
 import {
   DEFAULT_STORAGE_KEY,
   HISTORY_STORAGE_KEY,
+  KEPT_STORAGE_KEYS,
+  TAKES_STORAGE_KEY,
   TIME_STORAGE_KEY,
   LocalStorageSettingsStore,
   browserStorage,
@@ -287,16 +289,21 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
 
   // Everything kept between visits, so one file can carry all of it. Keyed by
   // where each blob lives, which is what a restore has to put it back under.
-  const backup = new BackupService({
-    stores: new Map([
-      [DEFAULT_STORAGE_KEY, settingsStore],
-      [TAKES_STORAGE_KEY, takeStore],
-      [HISTORY_STORAGE_KEY, historyStore],
-      [TIME_STORAGE_KEY, timeStore],
-    ]),
-    scoreStore,
-    clock,
-  });
+  const kept = new Map([
+    [DEFAULT_STORAGE_KEY, settingsStore],
+    [TAKES_STORAGE_KEY, takeStore],
+    [HISTORY_STORAGE_KEY, historyStore],
+    [TIME_STORAGE_KEY, timeStore],
+  ]);
+  // Loudly, and at startup. A store that is kept but not carried costs
+  // nothing until the day the reader needs the file, and then it costs them
+  // whatever was in it - so the one failure this must not have is a quiet
+  // one.
+  const uncarried = KEPT_STORAGE_KEYS.filter((key) => !kept.has(key));
+  if (uncarried.length > 0) {
+    throw new Error(`The backup would not carry: ${uncarried.join(', ')}.`);
+  }
+  const backup = new BackupService({ stores: kept, scoreStore, clock });
 
   const restored = settings.load();
   metronome.setVolume(restored.audio.metronomeVolume);

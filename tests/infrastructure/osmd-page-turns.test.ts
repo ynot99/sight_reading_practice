@@ -120,8 +120,9 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
   });
 
   afterEach(() => {
-    // The stub is on the prototype, so it has to come off again.
+    // The stubs are on the prototypes, so they have to come off again.
     delete (SVGSVGElement.prototype as unknown as { getBBox?: unknown }).getBBox;
+    delete (SVGGElement.prototype as unknown as { getBBox?: unknown }).getBBox;
   });
 
   beforeEach(async () => {
@@ -699,6 +700,80 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
       renderer.refresh();
       expect(renderer.pages.count).toBeGreaterThan(1);
       expect(sheets(container)[0]?.querySelectorAll('.staffline').length ?? 0).toBeGreaterThan(1);
+    });
+
+    /** The staff bands the renderer measured, which it keeps to itself. */
+    function bandsOf(): Map<string, { top: number; bottom: number }> {
+      return (renderer as unknown as {
+        systemBands: Map<string, { top: number; bottom: number }>;
+      }).systemBands;
+    }
+
+    /**
+     * Makes the previewed clone report ink reaching a given way past its staff.
+     *
+     * jsdom lays nothing out, and the placement is a bounding box against the
+     * staff bands - and a band can be answered without a layout engine.
+     */
+    function previewInkReaches(above: number, below: number): void {
+      const target = bandsOf().get('1:0');
+      if (target === undefined) {
+        throw new Error('expected a first system on the page ahead');
+      }
+      (SVGGElement.prototype as unknown as { getBBox: () => DOMRect }).getBBox =
+        () =>
+          ({
+            x: 0,
+            y: target.top - above,
+            width: 10,
+            height: target.bottom - target.top + above + below,
+          }) as DOMRect;
+    }
+
+    /** Where the previewed ink was put, and what it was scaled by. */
+    function placement(): { at: number; scale: number } {
+      const moved = preview()?.querySelector('g[transform]');
+      const said = /translate\(0, ([-\d.]+)\) scale\(([\d.]+)\)/.exec(
+        moved?.getAttribute('transform') ?? '',
+      );
+      return { at: Number(said?.[1] ?? NaN), scale: Number(said?.[2] ?? NaN) };
+    }
+
+    it('keeps the ink above the staff on the page rather than cutting it off', () => {
+      // Reported from the tablet: high notes on ledger lines, and the stems
+      // under them, sliced off along the top edge of the preview. A system
+      // carrying them is pushed down its own page to make room - so the
+      // taller that ink, the further the preview moved the system up, and the
+      // more of the same ink went off the top and was cut away.
+      // Higher above its own staff than the slot it is moved into has room
+      // for, which is the case that was being cut: the further the ink
+      // reaches, the further down its own page the system sits, and the
+      // further up the preview then pulled it.
+      const slot = bandsOf().get('0:0');
+      previewInkReaches((slot?.top ?? 0) + 12, 20);
+      lastStepOnThisPage();
+      renderer.refresh();
+      lastStepOnThisPage();
+
+      const where = placement();
+
+      expect(where.at).toBeGreaterThanOrEqual(8);
+      expect(where.scale).toBe(1);
+    });
+
+    it('draws a system too tall for the space smaller instead of slicing it', () => {
+      // A system with its bottom cut off says as little as one with its top
+      // cut off, and the reader is looking at it precisely because it is hard.
+      previewInkReaches(4000, 20);
+      lastStepOnThisPage();
+      renderer.refresh();
+      lastStepOnThisPage();
+
+      const where = placement();
+
+      expect(where.at).toBeGreaterThanOrEqual(8);
+      expect(where.scale).toBeLessThan(1);
+      expect(where.scale).toBeGreaterThan(0);
     });
 
     it('is not there while the reader is still reading the top of the page', () => {

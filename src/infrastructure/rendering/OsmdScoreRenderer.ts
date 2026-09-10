@@ -335,7 +335,9 @@ function systemExtent(system: DrawnSystem): { top: number; bottom: number } | nu
  * `null` where nothing can measure it: jsdom has no layout engine and an
  * empty page has no box at all.
  */
-function boundingBoxOf(sheet: SVGSVGElement): { readonly y: number; readonly height: number } | null {
+function boundingBoxOf(
+  sheet: SVGGraphicsElement,
+): { readonly y: number; readonly height: number } | null {
   if (typeof sheet.getBBox !== 'function') {
     return null;
   }
@@ -345,6 +347,36 @@ function boundingBoxOf(sheet: SVGSVGElement): { readonly y: number; readonly hei
   } catch {
     return null;
   }
+}
+
+/**
+ * Where the previewed page has to stand, as a transform for its clone.
+ *
+ * Three things decide it. It wants to stand where the finished system stood,
+ * so the notes are where the reader last looked. It may not stand so high
+ * that the ink above its staff - the ledger lines and the stems of the notes
+ * on them - is cut off by the top of the page. And where even that leaves it
+ * hanging past the line it stands on, it is drawn smaller rather than sliced:
+ * a system with its bottom cut off says as little as one with its top cut
+ * off, and the reader is looking at it precisely because it is hard.
+ *
+ * Without a box to ask - no layout engine, nothing drawn - the staff's own
+ * top stands in for the ink, which is the honest floor: there is ink on the
+ * staff lines whatever else the system carries.
+ */
+function previewPlacement(
+  moved: SVGGraphicsElement,
+  slot: { readonly top: number },
+  target: { readonly top: number; readonly bottom: number },
+  bottom: number,
+): string {
+  const inkTop = boundingBoxOf(moved)?.y ?? target.top;
+  const shift = Math.min(target.top - slot.top, inkTop - PREVIEW_TOP_PAD);
+  const placedAt = inkTop - shift;
+  const needs = target.bottom - inkTop;
+  const room = bottom - placedAt;
+  const scale = needs > room && needs > 0 && room > 0 ? room / needs : 1;
+  return `translate(0, ${placedAt}) scale(${scale}) translate(0, ${-inkTop})`;
 }
 
 /**
@@ -405,6 +437,15 @@ const OUR_OWN_MARKS = [
 
 /** The one clip the preview needs; only ever one preview is on the page. */
 const PREVIEW_CLIP_ID = 'page-preview-clip';
+
+/**
+ * How much room the preview keeps above the highest ink it carries.
+ *
+ * Rather less than a staff space. Enough that a ledger line does not sit on
+ * the very edge of the page, which reads as a line that has been cut rather
+ * than one that ends.
+ */
+const PREVIEW_TOP_PAD = 8;
 
 /** Class that dims the notes of a step already played. */
 const FADED_CLASS = 'note--passed';
@@ -1256,6 +1297,13 @@ export class OsmdScoreRenderer
    * out twice. Shifted so that page's first system lands where this page's
    * first system was, and cut off at the line between the two systems it
    * stands in front of.
+   *
+   * Shifted only as far as the ink allows, which is the part that was wrong.
+   * A system carrying high notes is pushed down its own page to make room for
+   * their ledger lines and stems - so the taller that ink, the further this
+   * moved the system up, and the more of that same ink went off the top of
+   * the page and was cut away. The music that was hardest to read was the
+   * music the preview showed least of.
    */
   private drawPreview(next: number): void {
     const sheet = this.sheets[this.pageAt];
@@ -1276,7 +1324,6 @@ export class OsmdScoreRenderer
     // and the tails hanging off the previewed music, and never into the
     // system the reader is actually playing.
     const bottom = (slot.bottom + below.top) / 2;
-    const shift = target.top - slot.top;
 
     const group = doc.createElementNS(SVG_NAMESPACE, 'g');
     group.setAttribute('class', 'page-preview');
@@ -1309,7 +1356,6 @@ export class OsmdScoreRenderer
     const frame = doc.createElementNS(SVG_NAMESPACE, 'g');
     frame.setAttribute('clip-path', `url(#${PREVIEW_CLIP_ID})`);
     const moved = doc.createElementNS(SVG_NAMESPACE, 'g');
-    moved.setAttribute('transform', `translate(0, ${-shift})`);
     for (const child of [...ahead.children]) {
       moved.append(child.cloneNode(true));
     }
@@ -1331,6 +1377,11 @@ export class OsmdScoreRenderer
     group.append(edge);
 
     sheet.append(group);
+    // Placed once it is on the page: a box can only be asked of a drawing the
+    // document is holding, and it is the clone with our own marks taken out
+    // that has to fit - not the page it was taken from, which prints a label
+    // in the corner this does not carry.
+    moved.setAttribute('transform', previewPlacement(moved, slot, target, bottom));
     this.previewGroup = group;
   }
 

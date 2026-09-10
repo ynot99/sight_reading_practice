@@ -1924,6 +1924,45 @@ describe('being reminded to rest', () => {
     expect(rig.controller.sittingMs).toBe(0);
   });
 
+  it('lets the music go round again once the rest has been put off', async () => {
+    // Reported from the tablet: the repeat button stopped working after a
+    // break was offered and declined. A rest still owed holds back the things
+    // that start something new - a passage going round again is one - and
+    // "later" left the debt standing, so it held it back for the rest of the
+    // session.
+    const rig = createController(true, undefined, { restEveryMinutes: 30 });
+    await rig.controller.loadNewExercise();
+    playFor(rig, 31);
+    expect(rig.controller.restIsOwed).toBe(true);
+
+    rig.controller.restPutOff();
+
+    expect(rig.controller.restIsOwed).toBe(false);
+  });
+
+  it('asks again a few minutes after being put off', async () => {
+    // The other half of the same line. Left said and owed, the reminder was
+    // spent by the first refusal and never came back at all.
+    const rig = createController(true, undefined, { restEveryMinutes: 30 });
+    await rig.controller.loadNewExercise();
+    const said: number[] = [];
+    rig.controller.events.on('restDue', ({ sittingMs }) => {
+      said.push(sittingMs);
+    });
+    playFor(rig, 31);
+    expect(said).toHaveLength(1);
+
+    rig.controller.restPutOff();
+    // Not at once, and not never.
+    rig.midi.noteOn(60, 32 * 60_000);
+    expect(said).toHaveLength(1);
+
+    playFor(rig, 36);
+
+    expect(said).toHaveLength(2);
+    expect(said[1]).toBeGreaterThan(said[0] ?? 0);
+  });
+
   it('keeps what it has when the rest is put off', async () => {
     // They have still been playing for half an hour. The next quiet moment
     // should say so again rather than start the half hour over.

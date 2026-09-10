@@ -84,6 +84,14 @@ export type PlayedNoteDisplay = (typeof PLAYED_NOTE_DISPLAYS)[number];
 
 /** Presses kept for the judging log; a bounded ring, not a history. */
 const JUDGING_LOG_LENGTH = 300;
+/**
+ * How long "later" lasts before a rest is offered again.
+ *
+ * Long enough that the answer is respected and short enough that it is still
+ * the same sitting. Not the whole interval over again: they were owed a rest
+ * when they said not now, and they still are.
+ */
+const REST_PUT_OFF_MS = 3 * 60_000;
 
 /** One press, and everything that decided what became of it. */
 export interface JudgedPress {
@@ -679,6 +687,8 @@ export class PracticeController {
   private restOwed = false;
   /** Whether the reader has been told about this one already. */
   private restSaid = false;
+  /** How long they had been sitting when they last said "not now", if they did. */
+  private restPutOffAtMs: number | null = null;
   private hearingNotes: Unsubscribe | null = null;
   private lastBeatTicks = 0;
   private readonly judged: JudgedPress[] = [];
@@ -2882,7 +2892,11 @@ export class PracticeController {
    */
   private considerARest(): void {
     const every = Math.max(0, this.currentSettings.restEveryMinutes) * 60_000;
-    if (every > 0 && this.timer.sittingMs >= every) {
+    // Put off, it falls due again a few minutes on rather than at once or
+    // never. The clock is not restarted - they have still been sitting for an
+    // hour - so the question is only when to ask a second time.
+    const due = this.restPutOffAtMs === null ? every : this.restPutOffAtMs + REST_PUT_OFF_MS;
+    if (every > 0 && this.timer.sittingMs >= due) {
       this.restOwed = true;
     }
     if (!this.restOwed || this.restSaid || !this.nothingIsHappening) {
@@ -2915,11 +2929,27 @@ export class PracticeController {
     this.timer.reset();
     this.restOwed = false;
     this.restSaid = false;
+    this.restPutOffAtMs = null;
   }
 
-  /** Says nothing more about this one until the reader has played on. */
+  /**
+   * Not now: the debt is lifted for a few minutes, and the clock keeps what
+   * it has.
+   *
+   * Lifted, and not merely unsaid. "Later" is the reader saying carry on, and
+   * a debt left standing stops the things that would start something new -
+   * so a passage set to go round again stopped going round, and stayed
+   * stopped for the rest of the session. Reported exactly that way: the
+   * repeat button no longer worked after a break was offered and declined.
+   *
+   * And it is asked again rather than dropped. Left said-and-owed, the
+   * reminder was spent by the first refusal and never came back, which is
+   * the other half of the same line.
+   */
   restPutOff(): void {
-    this.restSaid = true;
+    this.restSaid = false;
+    this.restOwed = false;
+    this.restPutOffAtMs = this.timer.sittingMs;
   }
 
   /**

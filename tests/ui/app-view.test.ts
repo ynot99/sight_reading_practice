@@ -1181,6 +1181,29 @@ describe('AppView', () => {
       }
     });
 
+    it('leaves nothing but the page, and one way back', async () => {
+      // His: sometimes he wants to look at the music with nothing standing
+      // over it. The row empties the way it does mid-run and by the same
+      // rule - what stays is named - so the way out is the one thing left.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+      expect(element('sheet-scores').hidden).toBe(false);
+
+      element<HTMLButtonElement>('focus-bare').click();
+
+      expect(element('focus-bar').dataset['bare']).toBe('true');
+      expect(element('focus-bare').getAttribute('aria-pressed')).toBe('true');
+      // A panel left standing would be the one thing on screen, which is the
+      // opposite of what was asked for.
+      expect(element('sheet-scores').hidden).toBe(true);
+      expect(element('focus-bar').dataset['open']).not.toBe('true');
+
+      element<HTMLButtonElement>('focus-bare').click();
+
+      expect(element('focus-bar').dataset['bare']).toBe('false');
+    });
+
     it('puts it off by the number on the button that was pressed', async () => {
       // His: "later" is not one answer but a length, so the card says three
       // of them. The number on the button is what the reader is choosing, and

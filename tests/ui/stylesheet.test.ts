@@ -113,6 +113,27 @@ describe('the stylesheet', () => {
     expect(hidden?.body).toMatch(/display\s*:\s*none/);
   });
 
+  it('empties the bar down to the way out when only the page is wanted', () => {
+    // The same rule mid-run follows, for the reader's own "just the music":
+    // what stays is named, so anything added to the row goes by default.
+    // jsdom applies no stylesheet, so without this the attribute could be set
+    // on a bar that still shows everything and the view test would pass.
+    const stripped = rules().find((rule) => rule.selector === ".focus-bar[data-bare='true']");
+    const row = rules().find(
+      (rule) =>
+        rule.selector === ".focus-bar[data-bare='true'] .focus-bar__row > *:not([data-bare])",
+    );
+
+    expect(stripped?.body).toMatch(/background\s*:\s*transparent/);
+    expect(row?.body).toMatch(/display\s*:\s*none/);
+    // And the drawer goes with it, whatever the reader left open.
+    const hidden = rules().find(
+      (rule) =>
+        rule.selector.includes("[data-bare='true']") && rule.selector.includes('.focus-bar__drawer'),
+    );
+    expect(hidden?.body).toMatch(/display\s*:\s*none/);
+  });
+
   it('keeps quick replay off the bar until there is a run to replay', () => {
     // The row's one button the other way round: it survives a run like pause
     // and stop, and has nothing to say between runs, where the button that

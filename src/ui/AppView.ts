@@ -976,6 +976,7 @@ export class AppView {
     focusImmediate: HTMLButtonElement;
     focusMetronome: HTMLButtonElement;
     focusRepeat: HTMLButtonElement;
+    focusBare: HTMLButtonElement;
     focusCursor: HTMLButtonElement;
     focusWait: HTMLButtonElement;
     focusMarks: HTMLButtonElement;
@@ -1196,6 +1197,7 @@ export class AppView {
       focusImmediate: requireElement(doc, 'focus-immediate'),
       focusMetronome: requireElement(doc, 'focus-metronome'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
+      focusBare: requireElement(doc, 'focus-bare'),
       focusCursor: requireElement(doc, 'focus-cursor'),
       focusWait: requireElement(doc, 'focus-wait'),
       focusMarks: requireElement(doc, 'focus-marks'),
@@ -2252,6 +2254,10 @@ export class AppView {
       this.showVerdict(false);
     });
 
+    this.listen(this.el.focusBare, 'click', () => {
+      this.showOnlyThePage(this.el.focusBar.dataset['bare'] !== 'true');
+    });
+
     this.listen(this.el.focusRepeat, 'click', () => {
       controller.updateSettings({ repeatRange: !controller.settings.repeatRange });
       this.syncControlsFromSettings();
@@ -2905,6 +2911,25 @@ export class AppView {
     this.el.scoreCount.textContent = count === null ? '' : String(count);
     this.el.scoreCount.hidden = count === null;
     this.syncCard();
+  }
+
+  /**
+   * Takes the interface away, leaving the music and the way back.
+   *
+   * The drawer and every sheet go with it: a panel left standing would be
+   * the one thing on screen, which is the opposite of what was asked for.
+   */
+  private showOnlyThePage(bare: boolean): void {
+    this.el.focusBar.dataset['bare'] = String(bare);
+    this.el.focusBare.setAttribute('aria-pressed', String(bare));
+    if (bare) {
+      this.setDrawerOpen(false);
+      for (const sheet of this.doc.querySelectorAll('.sheet')) {
+        if (sheet instanceof HTMLElement) {
+          sheet.hidden = true;
+        }
+      }
+    }
   }
 
   /**

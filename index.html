@@ -899,6 +899,21 @@
             and reaching past a drawer between each time is the one part of
             that which is not practice.
           -->
+          <!--
+            The page and nothing else. Marked `data-bare` so it survives the
+            emptying it causes - the same trick `data-mid-run` plays, and for
+            the same reason: what stays is named, so anything added to this
+            row is hidden by default.
+          -->
+          <button id="focus-bare" type="button" data-bare
+            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
+            aria-pressed="false" title="Just the page"
+            aria-label="Just the page">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 0h2v5h-5v-2h3v-3z" />
+            </svg>
+          </button>
+
           <button id="focus-repeat" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
             aria-pressed="false" title="Play the passage again and again"

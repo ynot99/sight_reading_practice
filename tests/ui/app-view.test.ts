@@ -1253,6 +1253,27 @@ describe('AppView', () => {
       }
     });
 
+    it('says whether there is a network, by the control it decides', async () => {
+      // The application itself is on the device - a worker keeps it there -
+      // so the only thing a lost network costs is a recording not yet
+      // fetched. Said by the control that asks for them, and read once at the
+      // start as well: a page opened with no network has had no event to hear
+      // and would sit there claiming to be online.
+      const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+      const { view } = createRig();
+      await view.initialize();
+
+      expect(element('network-state').dataset['online']).toBe('false');
+      expect(element('network-state').textContent).toContain('Offline');
+
+      online.mockReturnValue(true);
+      window.dispatchEvent(new Event('online'));
+
+      expect(element('network-state').dataset['online']).toBe('true');
+      expect(element('network-state').textContent).toContain('Online');
+      online.mockRestore();
+    });
+
     it('leaves nothing but the page, and one way back', async () => {
       // His: sometimes he wants to look at the music with nothing standing
       // over it. The row empties the way it does mid-run and by the same

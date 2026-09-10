@@ -38,8 +38,33 @@ function bootstrap(): void {
   });
 }
 
+/**
+ * Keeps the application on the tablet once it has been there.
+ *
+ * His: it should open without the internet. It is practised on an iPad from a
+ * Home Screen icon, and a page that needs a network to draw its own buttons
+ * cannot be practised on a train or with the router off.
+ *
+ * Only in a built copy. A worker in front of the dev server would answer with
+ * yesterday's module every time something was edited, which is a debugging
+ * session nobody wins.
+ */
+function keepItOnTheDevice(): void {
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) {
+    return;
+  }
+  // Relative to the document, so it works both at the site root and under the
+  // project path on GitHub Pages - the same reasoning the samples follow.
+  const url = new URL('service-worker.js', document.baseURI).href;
+  void navigator.serviceWorker.register(url).catch((error: unknown) => {
+    // eslint-disable-next-line no-console -- the app works without it.
+    console.error('Could not keep the trainer on this device', error);
+  });
+}
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootstrap, { once: true });
 } else {
   bootstrap();
 }
+keepItOnTheDevice();

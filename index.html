@@ -721,6 +721,13 @@
             <option value="off">Do not download</option>
           </select>
           <p id="sample-loading-hint" class="hint"></p>
+          <!--
+            Here rather than anywhere glanceable, because this is the one
+            control the answer changes: the recordings are the only thing the
+            application fetches after it has opened. Everything else it needs
+            is already on the device.
+          -->
+          <p id="network-state" class="hint"></p>
         </div>
 
         <div class="control-group control-group--checks">

@@ -1147,6 +1147,7 @@ export class AppView {
     strictTiming: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
     sampleLoadingHint: HTMLElement;
+    networkState: HTMLElement;
     metronomeVolume: HTMLInputElement;
     metronomeVolumeValue: HTMLOutputElement;
     instrumentVolume: HTMLInputElement;
@@ -1371,6 +1372,7 @@ export class AppView {
       strictTiming: requireElement(doc, 'strict-timing'),
       sampleLoading: requireElement(doc, 'sample-loading'),
       sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
+      networkState: requireElement(doc, 'network-state'),
       metronomeVolume: requireElement(doc, 'metronome-volume'),
       metronomeVolumeValue: requireElement(doc, 'metronome-volume-value'),
       instrumentVolume: requireElement(doc, 'instrument-volume'),
@@ -2722,6 +2724,30 @@ export class AppView {
    * answering the same question, and they would disagree the moment one of
    * them was wired up wrong.
    */
+  /**
+   * Watches for the network coming and going.
+   *
+   * On the window, because that is where the browser says it. Read once at
+   * the start as well: a page opened with no network has had no event to
+   * hear, and would sit there claiming to be online.
+   */
+  private bindTheNetwork(): void {
+    const view = this.doc.defaultView;
+    this.showTheNetwork();
+    if (view === null) {
+      return;
+    }
+    const changed = (): void => {
+      this.showTheNetwork();
+    };
+    view.addEventListener('online', changed);
+    view.addEventListener('offline', changed);
+    this.subscriptions.push(() => {
+      view.removeEventListener('online', changed);
+      view.removeEventListener('offline', changed);
+    });
+  }
+
   private bindNarrowLayout(): void {
     const view = this.doc.defaultView;
     if (view === null || typeof view.matchMedia !== 'function') {
@@ -2743,6 +2769,7 @@ export class AppView {
   private bindTransport(): void {
     const { controller } = this.runtime;
     this.bindNarrowLayout();
+    this.bindTheNetwork();
 
     this.listen(this.el.focusPlay, 'click', () => {
       this.togglePlayback();
@@ -4228,6 +4255,23 @@ export class AppView {
     this.el.result.replaceChildren(this.doc.createTextNode(message));
     this.el.drill.hidden = true;
     this.showVerdict(true);
+  }
+
+  /**
+   * Whether there is a network, said where it decides anything.
+   *
+   * The application itself is on the device - it is kept there by a worker,
+   * which is the whole of his "open it without the internet" - so the only
+   * thing a lost network costs is a recording not yet fetched. Said here, by
+   * the control that asks for them, and said plainly rather than as an alarm:
+   * offline is a fact about the room, not a fault.
+   */
+  private showTheNetwork(): void {
+    const online = this.doc.defaultView?.navigator.onLine ?? true;
+    this.el.networkState.textContent = online
+      ? 'Online: recordings not yet fetched can still be downloaded.'
+      : 'Offline: the recordings already fetched still play; the rest will wait.';
+    this.el.networkState.dataset['online'] = String(online);
   }
 
   /** Applies and remembers when the recordings should be fetched. */

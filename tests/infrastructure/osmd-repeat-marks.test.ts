@@ -71,6 +71,71 @@ describe('what the page says about a repeat and a pedal', () => {
     expect(container.querySelectorAll('.repeat-mark')).toHaveLength(drawn.length);
   });
 
+  it('says where a bar falls in the playing when its number is not that', async () => {
+    // A repeat is written out, so the page prints "3" on two different bars
+    // and every bar after them is further into the playing than its number
+    // says. The hold, the markers and the boxes all count the playing, so the
+    // page has to say what to type - beside the writer's own number, which
+    // stays the big one because that is the number the reader speaks in.
+    const repeating = {
+      ...longExercise({ bars: 8 }),
+      barLabels: [1, 2, 3, 4, 3, 4, 5, 6].map((number, at) => ({
+        number,
+        repeated: at === 4 || at === 5,
+      })),
+    };
+    await renderer.load(serializer.serialize(repeating));
+    renderer.showRepeatedBars([4, 5]);
+
+    const drawn = numbers();
+    const places = [...container.querySelectorAll('.bar-position')].map((text) => ({
+      said: text.textContent ?? '',
+      x: Number.parseFloat(text.getAttribute('x') ?? '0'),
+    }));
+
+    // One for each numbered bar whose number is not its place, and none for
+    // the bars where the two still agree.
+    expect(places.map((one) => one.said)).toEqual(['(5)', '(7)']);
+    expect(places.length).toBeLessThan(drawn.length);
+    // And each stands beside a number rather than off on its own.
+    for (const place of places) {
+      const nearest = Math.max(...drawn.filter((one) => one.x < place.x).map((one) => one.x));
+      expect(place.x - nearest).toBeLessThan(40);
+    }
+  });
+
+  it('stands the repeat mark clear of the place it drew beside the number', async () => {
+    // Two things in the one spot above the bar line. Drawn without knowing
+    // about each other they land on top of each other, and the page says
+    // neither.
+    const repeating = {
+      ...longExercise({ bars: 8 }),
+      barLabels: [1, 2, 3, 4, 3, 4, 5, 6].map((number, at) => ({
+        number,
+        repeated: at === 4 || at === 5,
+      })),
+    };
+    await renderer.load(serializer.serialize(repeating));
+    renderer.showRepeatedBars([4, 5]);
+
+    const place = container.querySelector('.bar-position');
+    const ring = container.querySelector('.repeat-mark__ring');
+    // The arc closes at the circle's own centre, so that is where the mark
+    // stands; a glyph is about half its height across, which is the same
+    // reckoning the renderer makes of the number it stands clear of.
+    const size = Number.parseFloat(place?.getAttribute('font-size') ?? '0');
+    const rightEdge =
+      Number.parseFloat(place?.getAttribute('x') ?? '0') +
+      (place?.textContent?.length ?? 0) * size * 0.5;
+    const centre = Number.parseFloat(
+      /A [\d.]+ [\d.]+ 0 1 1 ([\d.]+) /.exec(ring?.getAttribute('d') ?? '')?.[1] ?? '0',
+    );
+
+    expect(place).not.toBeNull();
+    expect(ring).not.toBeNull();
+    expect(centre).toBeGreaterThan(rightEdge);
+  });
+
   it('puts it to the right of the number, as an exponent sits', async () => {
     await renderer.load(new MusicXmlSerializer().serialize(longExercise({ bars: 12 })));
     renderer.showRepeatedBars([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);

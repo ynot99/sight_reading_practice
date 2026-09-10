@@ -78,6 +78,14 @@ const UNITS_TO_PIXELS = 10;
 const FIT_PASSES = 4;
 /** How wide a passage marker is drawn, in the same pixels. */
 const MARKER_WIDTH = 5;
+/**
+ * How big the place in the playing is drawn against the bar's own number.
+ *
+ * Smaller, because it is the second answer to the question and not the
+ * first: the reader looks for the number the writer wrote, and finds this
+ * one only when they want to type it.
+ */
+const BAR_PLACE_SCALE = 0.75;
 /** The circle at each end of a marker, which is what a thumb aims at. */
 const MARKER_GRIP_RADIUS = 9;
 /** How far a repeat dot sits from the marker, and from the line between. */
@@ -390,6 +398,7 @@ const OUR_OWN_MARKS = [
   '.passage-marker',
   '.start-marker',
   '.repeat-mark',
+  '.bar-position',
   '.hand-switch',
   '.page-preview',
 ].join(',');
@@ -2327,7 +2336,7 @@ export class OsmdScoreRenderer
       this.passageGroupFor(sheet).replaceChildren();
     }
     this.paintStart();
-    this.paintRepeats();
+    this.paintBarMarks();
     const showing = this.dragging?.passage ?? this.passage;
     if (showing === null) {
       return;
@@ -2439,16 +2448,21 @@ export class OsmdScoreRenderer
    * a reader who has put the furniture away has put all of it away.
    */
   /**
-   * Marks each bar that is a second reading of one already printed.
+   * What each numbered bar has to say about itself beyond its number.
    *
-   * A turning arrow rather than a repeat sign: the repeat has been written
-   * out, so nothing here turns back, and a sign saying it did would be the
-   * page lying about its own layout. It sits above the bar line, where a
-   * rehearsal mark would, and it is deliberately not in the engraver's
-   * vocabulary - this is ours, not the writer's.
+   * Two things, and they belong together because they stand in the same
+   * place: the bar's own number, then its place in the playing where the two
+   * have parted company, then a turning arrow where this reading is a second
+   * one. Laid out left to right in that order, because otherwise the arrow
+   * and the place are drawn on top of each other.
+   *
+   * Only where the engraver drew a number. It numbers every second bar or
+   * so, and the number is the thing that needs explaining - a bar with no
+   * number asks the reader no question - and it is the one place above the
+   * staff already kept clear, so nothing here can land on a note.
    */
-  private paintRepeats(): void {
-    for (const at of this.repeatedBars) {
+  private paintBarMarks(): void {
+    for (const measure of this.measures) {
       // Every page, not the one being read. `measuresHere` is for aiming a
       // touch, where only the page in front of the reader can be hit; a mark
       // is drawn once and then turned to, so asking that question here meant
@@ -2456,24 +2470,44 @@ export class OsmdScoreRenderer
       // this last ran. Turning to any other page showed none - and zooming
       // in, which cuts the piece into more pages, put nearly every repeated
       // bar on a page that had never been painted.
-      const measure = this.measures.find((each) => each.measureIndex === at);
-      const sheet = measure === undefined ? undefined : this.sheets[measure.page];
-      if (measure === undefined || sheet === undefined) {
+      const sheet = this.sheets[measure.page];
+      if (sheet === undefined) {
         continue;
       }
-      // Beside the number, and only where there is one. The engraver numbers
-      // every second bar or so, and the number is the thing that needs
-      // explaining: a bar with no number asks the reader no question. It is
-      // also the one place above the staff that is already kept clear, so
-      // nothing here can land on a note.
       const number = this.numberTextNear(sheet, measure);
       if (number === null) {
         continue;
       }
+      const repeated = this.repeatedBars.includes(measure.measureIndex);
+      const place = measure.measureIndex + 1;
+      const printed = Number.parseInt(number.text, 10);
       const doc = sheet.ownerDocument;
+      let after = number.x + number.width;
+
+      // A piece that repeats prints one number on two bars, and every bar
+      // after a repeat is further into the playing than its number says. The
+      // hold, the markers and the boxes all count the playing, so the page
+      // has to say what to type - and the writer's own number stays the big
+      // one, because that is the number he and the engraving software and
+      // every conversation about the piece use.
+      if (Number.isFinite(printed) && printed !== place) {
+        const height = number.height * BAR_PLACE_SCALE;
+        const said = doc.createElementNS(SVG_NAMESPACE, 'text');
+        said.setAttribute('class', 'bar-position');
+        said.setAttribute('x', String(after + height * 0.4));
+        said.setAttribute('y', String(number.y));
+        said.setAttribute('font-size', String(height));
+        said.textContent = `(${String(place)})`;
+        this.passageGroupFor(sheet).append(said);
+        after += height * 0.4 + `(${String(place)})`.length * height * 0.5;
+      }
+
+      if (!repeated) {
+        continue;
+      }
       const mark = doc.createElementNS(SVG_NAMESPACE, 'g');
       mark.setAttribute('class', 'repeat-mark');
-      const x = number.x + number.width + REPEAT_MARK_RADIUS;
+      const x = after + REPEAT_MARK_RADIUS;
       const y = number.y - number.height;
 
       const ring = doc.createElementNS(SVG_NAMESPACE, 'path');
@@ -2510,8 +2544,13 @@ export class OsmdScoreRenderer
   private numberTextNear(
     sheet: SVGSVGElement,
     measure: DrawnMeasure,
-  ): { x: number; y: number; width: number; height: number } | null {
+  ): { text: string; x: number; y: number; width: number; height: number } | null {
     for (const text of sheet.querySelectorAll('text')) {
+      // Ours, from the last painting of this same page - digits beside the
+      // number, which is exactly what this is looking for.
+      if (text.getAttribute('class') === 'bar-position') {
+        continue;
+      }
       if (!/^\d+$/.test(text.textContent ?? '')) {
         continue;
       }
@@ -2525,6 +2564,7 @@ export class OsmdScoreRenderer
       }
       const height = Number.parseFloat((text.getAttribute('font-size') ?? '15').replace(/[a-z]+$/i, ''));
       return {
+        text: text.textContent ?? '',
         x,
         y,
         // Its own width, near enough: the digits are what the mark stands

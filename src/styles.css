@@ -1523,6 +1523,20 @@ select {
  * than the passage markers and with nothing to take hold of: it is a sign
  * saying "you have read this before", not a control.
  */
+/*
+ * A bar's place in the playing, beside the number the writer gave it.
+ *
+ * Only where the two differ, which is only in a piece that repeats. Quiet
+ * and in brackets: it is what the boxes and the markers count in, not what
+ * the piece calls the bar.
+ */
+.bar-position {
+  fill: var(--muted, #8a8a8a);
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
 .repeat-mark__ring {
   fill: none;
   stroke: var(--muted, #8a8a8a);

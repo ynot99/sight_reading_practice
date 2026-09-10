@@ -42,10 +42,18 @@ describe('what the page says about a repeat and a pedal', () => {
     renderer = new OsmdScoreRenderer(container, { zoom: 1 });
   });
 
-  /** Where the engraver put each numeric label, by its own coordinates. */
+  /**
+   * Where the engraver put each numeric label, by its own coordinates.
+   *
+   * Its own, and still showing: a bar whose number is not its place has that
+   * number hidden and answered on two lines of this program's own, and both
+   * of those are digits near a bar number too.
+   */
   function numbers(): { text: string; x: number }[] {
     return [...container.querySelectorAll('text')]
       .filter((text) => /^\d+$/.test(text.textContent ?? ''))
+      .filter((text) => !['bar-position', 'bar-printed'].includes(text.getAttribute('class') ?? ''))
+      .filter((text) => (text as SVGTextElement).style.display !== 'none')
       .map((text) => ({
         text: text.textContent ?? '',
         x: Number.parseFloat(text.getAttribute('x') ?? '0'),
@@ -71,12 +79,12 @@ describe('what the page says about a repeat and a pedal', () => {
     expect(container.querySelectorAll('.repeat-mark')).toHaveLength(drawn.length);
   });
 
-  it('says where a bar falls in the playing when its number is not that', async () => {
+  it('calls a bar by its place where the number printed on it is not that', async () => {
     // A repeat is written out, so the page prints "3" on two different bars
     // and every bar after them is further into the playing than its number
     // says. The hold, the markers and the boxes all count the playing, so the
-    // page has to say what to type - beside the writer's own number, which
-    // stays the big one because that is the number the reader speaks in.
+    // place is what the bar is called here - in brackets, because it is this
+    // program's counting - and the engraver's own number gives way to it.
     const repeating = {
       ...longExercise({ bars: 8 }),
       barLabels: [1, 2, 3, 4, 3, 4, 5, 6].map((number, at) => ({
@@ -87,27 +95,24 @@ describe('what the page says about a repeat and a pedal', () => {
     await renderer.load(serializer.serialize(repeating));
     renderer.showRepeatedBars([4, 5]);
 
-    const drawn = numbers();
     const places = [...container.querySelectorAll('.bar-position')].map((text) => ({
       said: text.textContent ?? '',
       x: Number.parseFloat(text.getAttribute('x') ?? '0'),
+      y: Number.parseFloat(text.getAttribute('y') ?? '0'),
     }));
 
     // One for each numbered bar whose number is not its place, and none for
     // the bars where the two still agree.
     expect(places.map((one) => one.said)).toEqual(['(5)', '(7)']);
-    expect(places.length).toBeLessThan(drawn.length);
-    // And each stands beside a number rather than off on its own.
-    for (const place of places) {
-      const nearest = Math.max(...drawn.filter((one) => one.x < place.x).map((one) => one.x));
-      expect(place.x - nearest).toBeLessThan(40);
-    }
+    // And the engraver's own number is not left standing beside it: two bar
+    // numbers on one bar is a question rather than an answer.
+    expect(numbers().map((one) => one.text)).toEqual(['3']);
   });
 
-  it('stands the repeat mark clear of the place it drew beside the number', async () => {
-    // Two things in the one spot above the bar line. Drawn without knowing
-    // about each other they land on top of each other, and the page says
-    // neither.
+  it('puts the writer’s number on the line above a bar read twice', async () => {
+    // Only there. That is where the two numbers part company and the reader
+    // has something to ask - a bar read once and called by its place asks
+    // nothing - and it is how a bar here is found again in MuseScore.
     const repeating = {
       ...longExercise({ bars: 8 }),
       barLabels: [1, 2, 3, 4, 3, 4, 5, 6].map((number, at) => ({
@@ -118,20 +123,47 @@ describe('what the page says about a repeat and a pedal', () => {
     await renderer.load(serializer.serialize(repeating));
     renderer.showRepeatedBars([4, 5]);
 
-    const place = container.querySelector('.bar-position');
+    const printed = [...container.querySelectorAll('.bar-printed')];
+    const above = printed[0];
+    const place = [...container.querySelectorAll('.bar-position')].find(
+      (text) => text.textContent === '(5)',
+    );
+
+    // The bar read a second time is the only one of the two that gets it.
+    expect(printed.map((text) => text.textContent)).toEqual(['3']);
+    expect(Number.parseFloat(above?.getAttribute('y') ?? '0')).toBeLessThan(
+      Number.parseFloat(place?.getAttribute('y') ?? '0'),
+    );
+    expect(above?.getAttribute('x')).toBe(place?.getAttribute('x'));
+  });
+
+  it('stands the repeat mark beside the number on that upper line', async () => {
+    // Two things on the one line above the bar. Drawn without knowing about
+    // each other they land on top of each other, and the page says neither.
+    const repeating = {
+      ...longExercise({ bars: 8 }),
+      barLabels: [1, 2, 3, 4, 3, 4, 5, 6].map((number, at) => ({
+        number,
+        repeated: at === 4 || at === 5,
+      })),
+    };
+    await renderer.load(serializer.serialize(repeating));
+    renderer.showRepeatedBars([4, 5]);
+
+    const above = container.querySelector('.bar-printed');
     const ring = container.querySelector('.repeat-mark__ring');
     // The arc closes at the circle's own centre, so that is where the mark
     // stands; a glyph is about half its height across, which is the same
     // reckoning the renderer makes of the number it stands clear of.
-    const size = Number.parseFloat(place?.getAttribute('font-size') ?? '0');
+    const size = Number.parseFloat(above?.getAttribute('font-size') ?? '0');
     const rightEdge =
-      Number.parseFloat(place?.getAttribute('x') ?? '0') +
-      (place?.textContent?.length ?? 0) * size * 0.5;
+      Number.parseFloat(above?.getAttribute('x') ?? '0') +
+      (above?.textContent?.length ?? 0) * size * 0.5;
     const centre = Number.parseFloat(
       /A [\d.]+ [\d.]+ 0 1 1 ([\d.]+) /.exec(ring?.getAttribute('d') ?? '')?.[1] ?? '0',
     );
 
-    expect(place).not.toBeNull();
+    expect(above).not.toBeNull();
     expect(ring).not.toBeNull();
     expect(centre).toBeGreaterThan(rightEdge);
   });

@@ -1524,13 +1524,29 @@ select {
  * saying "you have read this before", not a control.
  */
 /*
- * A bar's place in the playing, beside the number the writer gave it.
+ * A bar's place in the playing, standing where its number would.
  *
- * Only where the two differ, which is only in a piece that repeats. Quiet
- * and in brackets: it is what the boxes and the markers count in, not what
- * the piece calls the bar.
+ * Only where the two differ, which is only in a piece that repeats. As dark
+ * as the engraver's own numbers, because it *is* the bar number here: it is
+ * what the markers stand on, what the boxes take and what a finger held on
+ * the page chooses. The brackets say whose counting it is.
  */
 .bar-position {
+  fill: #000;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
+/*
+ * What the writer called the same bar, on the line above and quieter.
+ *
+ * Only on a bar being read a second time, which is where the two numbers
+ * part company and the reader has something to ask. It is how a bar here is
+ * found again in MuseScore, and it is not the number anything in this
+ * program counts in.
+ */
+.bar-printed {
   fill: var(--muted, #8a8a8a);
   user-select: none;
   -webkit-user-select: none;

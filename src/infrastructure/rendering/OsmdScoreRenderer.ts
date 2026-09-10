@@ -79,13 +79,16 @@ const FIT_PASSES = 4;
 /** How wide a passage marker is drawn, in the same pixels. */
 const MARKER_WIDTH = 5;
 /**
- * How big the place in the playing is drawn against the bar's own number.
+ * How big the writer's own number is drawn against the place in the playing.
  *
- * Smaller, because it is the second answer to the question and not the
- * first: the reader looks for the number the writer wrote, and finds this
- * one only when they want to type it.
+ * Smaller, and on the line above. It is the second answer to "which bar is
+ * this": the reader works in places - it is what the markers stand on and
+ * what the boxes take - and wants the printed number when they go looking
+ * for the same bar in the file it came from.
  */
-const BAR_PLACE_SCALE = 0.75;
+const BAR_PRINTED_SCALE = 0.75;
+/** How far above the number's own line the writer's number sits. */
+const BAR_PRINTED_RISE = 1.05;
 /** The circle at each end of a marker, which is what a thumb aims at. */
 const MARKER_GRIP_RADIUS = 9;
 /** How far a repeat dot sits from the marker, and from the line between. */
@@ -430,7 +433,6 @@ const OUR_OWN_MARKS = [
   '.passage-marker',
   '.start-marker',
   '.repeat-mark',
-  '.bar-position',
   '.hand-switch',
   '.page-preview',
 ].join(',');
@@ -2532,34 +2534,55 @@ export class OsmdScoreRenderer
       const repeated = this.repeatedBars.includes(measure.measureIndex);
       const place = measure.measureIndex + 1;
       const printed = Number.parseInt(number.text, 10);
+      const renumbered = Number.isFinite(printed) && printed !== place;
       const doc = sheet.ownerDocument;
       let after = number.x + number.width;
 
       // A piece that repeats prints one number on two bars, and every bar
       // after a repeat is further into the playing than its number says. The
-      // hold, the markers and the boxes all count the playing, so the page
-      // has to say what to type - and the writer's own number stays the big
-      // one, because that is the number he and the engraving software and
-      // every conversation about the piece use.
-      if (Number.isFinite(printed) && printed !== place) {
-        const height = number.height * BAR_PLACE_SCALE;
+      // hold, the markers and the boxes all count the playing, so the place
+      // is what the bar is called here - in brackets, because it is this
+      // program's counting and not the writer's - and the number the writer
+      // gave it goes on the line above, where it is still there to be found.
+      if (renumbered) {
+        number.node.style.display = 'none';
         const said = doc.createElementNS(SVG_NAMESPACE, 'text');
         said.setAttribute('class', 'bar-position');
-        said.setAttribute('x', String(after + height * 0.4));
+        said.setAttribute('x', String(number.x));
         said.setAttribute('y', String(number.y));
-        said.setAttribute('font-size', String(height));
+        said.setAttribute('font-size', String(number.height));
         said.textContent = `(${String(place)})`;
         this.passageGroupFor(sheet).append(said);
-        after += height * 0.4 + `(${String(place)})`.length * height * 0.5;
+        after = number.x + `(${String(place)})`.length * number.height * 0.5;
       }
 
       if (!repeated) {
         continue;
       }
+
+      // The line above belongs to the bar being read a second time: what the
+      // writer called it, and the turning arrow saying why the numbers went
+      // back. Only here, because only here is there a question - a bar read
+      // once and numbered by its place asks nothing.
+      let markX = after + REPEAT_MARK_RADIUS;
+      let markY = number.y - number.height;
+      if (renumbered) {
+        const height = number.height * BAR_PRINTED_SCALE;
+        const above = number.y - number.height * BAR_PRINTED_RISE;
+        const was = doc.createElementNS(SVG_NAMESPACE, 'text');
+        was.setAttribute('class', 'bar-printed');
+        was.setAttribute('x', String(number.x));
+        was.setAttribute('y', String(above));
+        was.setAttribute('font-size', String(height));
+        was.textContent = String(printed);
+        this.passageGroupFor(sheet).append(was);
+        markX = number.x + String(printed).length * height * 0.5 + REPEAT_MARK_RADIUS;
+        markY = above - height * 0.35;
+      }
       const mark = doc.createElementNS(SVG_NAMESPACE, 'g');
       mark.setAttribute('class', 'repeat-mark');
-      const x = after + REPEAT_MARK_RADIUS;
-      const y = number.y - number.height;
+      const x = markX;
+      const y = markY;
 
       const ring = doc.createElementNS(SVG_NAMESPACE, 'path');
       ring.setAttribute('class', 'repeat-mark__ring');
@@ -2595,11 +2618,20 @@ export class OsmdScoreRenderer
   private numberTextNear(
     sheet: SVGSVGElement,
     measure: DrawnMeasure,
-  ): { text: string; x: number; y: number; width: number; height: number } | null {
+  ): {
+    node: SVGTextElement;
+    text: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null {
     for (const text of sheet.querySelectorAll('text')) {
-      // Ours, from the last painting of this same page - digits beside the
-      // number, which is exactly what this is looking for.
-      if (text.getAttribute('class') === 'bar-position') {
+      // Ours, from the last painting of this same page: the writer's number
+      // drawn on the line above is digits beside a bar number, which is
+      // exactly what this is looking for.
+      const ours = text.getAttribute('class') ?? '';
+      if (ours === 'bar-position' || ours === 'bar-printed') {
         continue;
       }
       if (!/^\d+$/.test(text.textContent ?? '')) {
@@ -2615,6 +2647,7 @@ export class OsmdScoreRenderer
       }
       const height = Number.parseFloat((text.getAttribute('font-size') ?? '15').replace(/[a-z]+$/i, ''));
       return {
+        node: text,
         text: text.textContent ?? '',
         x,
         y,

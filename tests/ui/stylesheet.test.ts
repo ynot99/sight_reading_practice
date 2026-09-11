@@ -197,21 +197,19 @@ describe('the stylesheet', () => {
     expect(hidden?.selector).toContain('.score__modes');
   });
 
-  it('keeps the way of adding a place at the foot of the sheet', () => {
-    // His: the box and the button should always be in sight. A list long
-    // enough to scroll would otherwise carry off the bottom the one thing
-    // the reader opened the sheet to do. jsdom lays nothing out, so no view
-    // test can see it go.
-    const body = rules().find((rule) => rule.selector === '.places');
-    const keep = rules().find((rule) => rule.selector === '.places__keep');
-    const list = rules().find((rule) => rule.selector === '.places .takes__list');
+  it('lets the list of places scroll itself, and keeps the way in below it', () => {
+    // Reported twice: the sheet would not scroll under the pointer. The list
+    // is the scrolling thing, as it is in every other sheet here - a wheel
+    // over a row turns the list the row is in, which is what a reader tries
+    // first - and being capped is also what keeps the naming row in sight.
+    // jsdom lays nothing out, so no view test can see a wheel do nothing.
+    const list = rules().find((rule) => rule.selector === '.takes__list');
+    const places = rules().find((rule) => rule.selector === '.places__list');
 
-    expect(body?.body).toMatch(/overflow-y\s*:\s*auto/);
-    expect(keep?.body).toMatch(/position\s*:\s*sticky/);
-    expect(keep?.body).toMatch(/bottom\s*:\s*0/);
-    // Sticky to a scrollport it is not in does nothing, so the list must not
-    // be a second one: the sheet's body is the single scrolling surface.
-    expect(list?.body).toMatch(/max-height\s*:\s*none/);
+    expect(list?.body).toMatch(/overflow-y\s*:\s*auto/);
+    expect(places?.body).toMatch(/max-height\s*:\s*min\(/);
+    // Nothing else in the sheet may take the scrolling off it again.
+    expect(rules().find((rule) => rule.selector === '.places')).toBeUndefined();
   });
 
   it('keeps the button in a row on one line, whatever is typed beside it', () => {

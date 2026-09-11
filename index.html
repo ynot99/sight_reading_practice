@@ -483,23 +483,20 @@
             <button id="places-close" type="button" class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
-          <div class="controls controls--stacked places">
-            <div class="control-group">
-              <ul id="passage-list" class="takes__list"></ul>
-              <p id="passage-empty" class="hint">
-                Nothing marked out yet. Choose a passage, name it, and it is kept with the score.
-              </p>
-              <!--
-                Held at the foot of the sheet, because it is what the reader
-                came here to do: a list long enough to scroll would otherwise
-                carry the way of adding to it off the bottom.
-              -->
-              <div class="ladder-row places__keep">
-                <input id="passage-name" type="text" class="sheet__input"
-                  placeholder="The left-hand run" aria-label="What to call this passage" />
-                <button id="passage-save" type="button" class="button">Keep it</button>
-              </div>
-            </div>
+          <!--
+            The list scrolls and nothing else does, which is how every other
+            sheet here works. It also keeps the way of adding a place in
+            sight without pinning anything: a capped list cannot push the row
+            below it off the bottom.
+          -->
+          <ul id="passage-list" class="takes__list places__list"></ul>
+          <p id="passage-empty" class="hint">
+            Nothing marked out yet. Choose a passage, name it, and it is kept with the score.
+          </p>
+          <div class="ladder-row">
+            <input id="passage-name" type="text" class="sheet__input"
+              placeholder="e.g. The left-hand run" aria-label="What to call this passage" />
+            <button id="passage-save" type="button" class="button">Keep it</button>
           </div>
         </div>
       </div>

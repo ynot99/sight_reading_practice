@@ -711,31 +711,20 @@ select {
 }
 
 /*
- * The places sheet: one thing scrolls, and the way in never leaves.
+ * The list of places, given room to be a list.
  *
- * The list used to be capped at its own height inside a panel that clipped
- * whatever did not fit, which on a short screen took the naming row off the
- * bottom - the one thing the reader opened this to use. Now the sheet's body
- * is the single scrolling surface, the list grows into it, and the row that
- * keeps a place is stuck to the foot of it.
+ * It scrolls itself, the way every list in a sheet here does, and it is the
+ * only thing in this one that scrolls: a wheel anywhere over it turns it,
+ * which is what a reader tries first. Making the sheet's body the scrolling
+ * surface instead read as a dialog that could not be scrolled at all.
+ *
+ * Capped rather than pinned, which is also what keeps the row beneath it in
+ * sight: a list that cannot grow past this cannot push anything off the
+ * bottom. The cap is bigger than the shelf-of-takes one because this is the
+ * sheet's whole subject rather than a corner of it.
  */
-.places {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.places .takes__list {
-  max-height: none;
-  overflow: visible;
-}
-
-.places__keep {
-  position: sticky;
-  bottom: 0;
-  padding-top: 8px;
-  background: var(--surface);
+.places__list {
+  max-height: min(46vh, 380px);
 }
 
 /*

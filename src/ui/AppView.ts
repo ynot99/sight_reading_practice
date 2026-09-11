@@ -5839,6 +5839,10 @@ export class AppView {
       controller.isListeningPaused;
     this.applyPreview();
     this.el.focusBar.dataset['playing'] = String(playing);
+    // Said on the page as well as on the bar, because things standing over
+    // the music are not all inside it - the corner that names the modes is
+    // at the other end of the layout and has to fade with the rest.
+    this.doc.body.dataset['playing'] = String(playing);
     // The falling bar belongs to a run, so it comes and goes with one. Health
     // itself only reports when it moves, and a run that has just begun has
     // not moved anything yet.

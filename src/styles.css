@@ -1309,6 +1309,17 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   box-shadow: 0 2px 8px rgb(16 24 40 / 22%);
 }
 
+/*
+ * Fainter while the music is going.
+ *
+ * His: they are a reminder between runs and furniture during one. Not gone -
+ * a reader glancing down mid-piece to check that survival really is on
+ * should find the answer there - but far enough back that the ink wins.
+ */
+body[data-playing='true'] .score__modes {
+  opacity: 0.3;
+}
+
 .score__mode svg {
   display: block;
   width: 15px;

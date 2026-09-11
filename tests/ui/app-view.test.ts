@@ -1377,6 +1377,23 @@ describe('AppView', () => {
       expect(element('focus-play-frame').hidden).toBe(true);
     });
 
+    it('says on the page itself that something is playing', async () => {
+      // The corner that names the modes is at the other end of the layout
+      // from the bar, so the page carries the state too - the stylesheet
+      // takes the marks back from there while the music is going.
+      const { view } = createRig();
+      await view.initialize();
+      expect(document.body.dataset['playing']).toBe('false');
+
+      element<HTMLButtonElement>('focus-play').click();
+
+      expect(document.body.dataset['playing']).toBe('true');
+
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(document.body.dataset['playing']).toBe('false');
+    });
+
     it('says in the corner when the frame is not the one that waits', async () => {
       // Start means something different in each frame, and a reader can be
       // left in one. Unsaid, they could sit down to practise and have the

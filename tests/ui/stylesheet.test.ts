@@ -282,6 +282,21 @@ describe('the stylesheet', () => {
     expect(dimmed?.body).not.toMatch(/display\s*:\s*none/);
   });
 
+  it('takes the modes further back while the music is going', () => {
+    // His: a reminder between runs and furniture during one. Not gone - a
+    // reader glancing down mid-piece to check that survival really is on
+    // should find the answer - but far enough back that the ink wins. jsdom
+    // applies no stylesheet, so the attribute is all a view test can see.
+    const faded = rules().find(
+      (rule) => rule.selector === "body[data-playing='true'] .score__modes",
+    );
+    const opacity = /opacity\s*:\s*(0?\.\d+)/.exec(faded?.body ?? '');
+
+    expect(opacity).not.toBeNull();
+    expect(Number(opacity?.[1])).toBeLessThan(1);
+    expect(Number(opacity?.[1])).toBeGreaterThan(0);
+  });
+
   it('lets the page show through what stands over it', () => {
     // His: a mark in the corner that covers a note should leave enough of it
     // to be seen, and as much of it as the clock beside it does. One number

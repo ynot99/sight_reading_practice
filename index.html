@@ -454,6 +454,26 @@
             <button id="settings-close" type="button" class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
+        <!--
+          Forty-six controls in one scrolling column is a list nobody reads:
+          finding the one you came for meant scrolling past every other. So
+          the sheet asks which question you are answering first.
+
+          Nothing was moved to do it. Every group is where it always was and
+          carries the name of its pane, and the stylesheet decides what is on
+          screen - which is where layout lives here, and which means a control
+          cannot be lost in the sorting.
+        -->
+        <nav id="settings-sections" class="settings-sections" aria-label="Settings sections">
+          <button type="button" class="settings-sections__tab" data-pane="instrument">Instrument</button>
+          <button type="button" class="settings-sections__tab" data-pane="exercise">Exercise</button>
+          <button type="button" class="settings-sections__tab" data-pane="page">Page</button>
+          <button type="button" class="settings-sections__tab" data-pane="playing">Playing</button>
+          <button type="button" class="settings-sections__tab" data-pane="modes">Modes</button>
+          <button type="button" class="settings-sections__tab" data-pane="sound">Sound</button>
+          <button type="button" class="settings-sections__tab" data-pane="practice">Practice</button>
+          <button type="button" class="settings-sections__tab" data-pane="library">Library</button>
+        </nav>
         <div class="controls">
           <!--
             Which keyboard, and whether it is heard from. First, because it
@@ -462,7 +482,7 @@
             fullscreen hid, so at the stand there was no way to see that the
             keyboard had gone.
           -->
-          <div class="control-group">
+          <div class="control-group" data-pane="instrument">
             <label for="midi-input">Keyboard</label>
             <div class="midi-cluster">
           <span id="pedal-status" class="pill pill--pedal" data-down="false"
@@ -484,13 +504,13 @@
           the question "shall I play this?" gets asked rather than having to
           be thought of.
         -->
-        <div class="control-group">
+        <div class="control-group" data-pane="page">
           <label for="what-opens">When I open this page</label>
           <select id="what-opens"></select>
           <p id="what-opens-description" class="hint"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="exercise">
           <label for="ladder-down">Ladder</label>
           <div class="ladder-row">
             <button id="ladder-down" type="button" class="button" aria-label="Down a rung">◀</button>
@@ -505,47 +525,47 @@
           it: an imported score is what its writer wrote, and moving it would
           be rewriting the piece rather than choosing an exercise.
         -->
-        <div class="control-group">
+        <div class="control-group" data-pane="instrument">
           <label for="keyboard">My keyboard</label>
           <select id="keyboard"></select>
           <p id="keyboard-description" class="hint"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="exercise">
           <label for="preset">Level</label>
           <select id="preset"></select>
           <p id="preset-description" class="hint"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="exercise">
           <label for="rhythm">Rhythm</label>
           <select id="rhythm"></select>
           <p id="rhythm-description" class="hint"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="modes">
           <label for="mode">Mode</label>
           <select id="mode"></select>
           <p id="mode-description" class="hint"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="exercise">
           <label for="scoring">Graded on</label>
           <select id="scoring"></select>
           <p id="scoring-description" class="hint"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="exercise">
           <label for="key">Key</label>
           <select id="key"></select>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="exercise">
           <label for="time-signature">Time</label>
           <select id="time-signature"></select>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="exercise">
           <label for="measures">
             Bars:
             <input
@@ -562,12 +582,12 @@
           <input id="measures" type="range" min="1" max="32" step="1" value="4" />
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="exercise">
           <label for="tempo">Tempo: <output id="tempo-value">60</output> bpm</label>
           <input id="tempo" type="range" min="30" max="180" step="1" value="60" />
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="page">
           <label for="preview">Look before playing: <output id="preview-value">0</output> s</label>
           <input id="preview" type="range" min="0" max="20" step="1" value="0" />
           <p class="hint">A scan the run starts itself after, so the look is deliberate.</p>
@@ -587,7 +607,7 @@
           which is not practice. Kept with the piece, so they are waiting
           when it is opened again.
         -->
-        <div class="control-group">
+        <div class="control-group" data-pane="practice">
           <label for="passage-name">Places in this piece</label>
           <ul id="passage-list" class="takes__list"></ul>
           <p id="passage-empty" class="hint">
@@ -607,7 +627,7 @@
           here - the passage, the hand, the speed - so this is only the thing
           that puts them in order.
         -->
-        <div class="control-group">
+        <div class="control-group" data-pane="modes">
           <label for="drill-bars">Learn it section by section</label>
           <div class="ladder-row">
             <input id="drill-bars" class="focus-bar__bar" type="number" min="1" max="64"
@@ -621,18 +641,18 @@
           </p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="page">
           <label for="page-turns">Page turns</label>
           <select id="page-turns"></select>
           <p id="page-turns-description" class="hint"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="playing">
           <label for="tolerance">Chord window: <output id="tolerance-value">250</output> ms</label>
           <input id="tolerance" type="range" min="40" max="800" step="10" value="250" />
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="library">
           <label for="save-backup">Everything on this device</label>
           <div class="ladder-row">
             <button id="save-backup" type="button" class="button">Save a backup</button>
@@ -659,7 +679,7 @@
           </p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="instrument">
           <label for="latency">Input delay: <output id="latency-value">0</output> ms</label>
           <input id="latency" type="range" min="-100" max="600" step="5" value="0" />
           <div class="ladder-row">
@@ -671,7 +691,7 @@
           <p id="latency-description" class="hint"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="instrument">
           <label for="instrument-volume">
             Note sound: <output id="instrument-volume-value">60</output>%
           </label>
@@ -684,18 +704,18 @@
           </div>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="page">
           <label for="zoom">Note size: <output id="zoom-value">85</output>%</label>
           <input id="zoom" type="range" min="40" max="220" step="5" value="85" />
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="page">
           <label for="show-played">Show what I played</label>
           <select id="show-played"></select>
           <p id="show-played-description" class="hint"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="playing">
           <label class="checkbox">
             <input id="strict-timing" type="checkbox" />
             <span>A note off the beat counts as wrong</span>
@@ -707,13 +727,13 @@
           </p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="page">
           <label for="read-ahead">Notes disappear</label>
           <select id="read-ahead"></select>
           <p id="read-ahead-description" class="hint"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-pane="sound">
           <label for="sample-loading">Piano samples</label>
           <select id="sample-loading">
             <option value="eager">Download on open</option>
@@ -730,6 +750,11 @@
           <p id="network-state" class="hint"></p>
         </div>
 
+        <!--
+          The loose checkboxes, which answer five different questions and so
+          belong to five panes. The block itself belongs to none: tagged with
+          one of them it would hide the other four along with itself.
+        -->
         <div class="control-group control-group--checks">
           <!--
             Three answers and not one. A reader may want no marker at all
@@ -738,32 +763,32 @@
             back, where following along is most of the value. The third is
             how they see where they stopped.
           -->
-          <label><input id="cursor-running" type="checkbox" checked /> Cursor while I play</label>
-          <label><input id="cursor-listening" type="checkbox" checked /> Cursor while it plays back</label>
-          <label><input id="cursor-rest" type="checkbox" checked /> Cursor when nothing is playing</label>
-          <label><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
-          <label><input id="rhythm-only" type="checkbox" /> Rhythm only: any note counts</label>
+          <label data-pane="page"><input id="cursor-running" type="checkbox" checked /> Cursor while I play</label>
+          <label data-pane="page"><input id="cursor-listening" type="checkbox" checked /> Cursor while it plays back</label>
+          <label data-pane="page"><input id="cursor-rest" type="checkbox" checked /> Cursor when nothing is playing</label>
+          <label data-pane="playing"><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
+          <label data-pane="playing"><input id="rhythm-only" type="checkbox" /> Rhythm only: any note counts</label>
           <!--
             His, and he asked for both answers: some readers press the next
             note to get to it, and some are learning not to press early at
             all. Where nothing keeps time but the reader, that difference is
             the whole of what the mode is teaching.
           -->
-          <div class="control-group">
+          <div class="control-group" data-pane="playing">
             <label for="playing-ahead">Pressing a note that comes later</label>
             <select id="playing-ahead">
               <option value="a-mistake">Counts as a wrong note</option>
               <option value="moves-on">Moves on to it</option>
             </select>
           </div>
-          <label><input id="survival" type="checkbox" /> Survival: keep the bar up</label>
+          <label data-pane="modes"><input id="survival" type="checkbox" /> Survival: keep the bar up</label>
           <!--
             His, and only where nothing keeps time. Filling the bar outright
             makes a clock that punishes stopping and nothing else: find one
             beat and it is full again however long the last one took. A share
             asks the reader to keep finding them.
           -->
-          <div class="control-group">
+          <div class="control-group" data-pane="modes">
             <label for="survival-refill">A beat found is worth</label>
             <select id="survival-refill">
               <option value="10">10% of the bar</option>
@@ -778,27 +803,27 @@
               <option value="100">All of it</option>
             </select>
           </div>
-          <label><input id="survival-punish" type="checkbox" /> Wrong notes cost as well</label>
+          <label data-pane="modes"><input id="survival-punish" type="checkbox" /> Wrong notes cost as well</label>
           <!--
             His line 112: counting a rhythm is worth nothing if a slip can be
             played over. It does not start the run again by itself - a run
             that began without anybody deciding to make it is not a reading.
           -->
-          <label><input id="stop-at-mistake" type="checkbox" /> One wrong note ends the run</label>
+          <label data-pane="playing"><input id="stop-at-mistake" type="checkbox" /> One wrong note ends the run</label>
           <!--
             His line 80. Between runs and never during one, and never above
             the speed he asked for: what it does is take some away when a
             reading comes apart, and hand it back more slowly than it took.
           -->
-          <label><input id="ease-tempo" type="checkbox" /> Slow down when a run comes apart</label>
+          <label data-pane="modes"><input id="ease-tempo" type="checkbox" /> Slow down when a run comes apart</label>
           <!--
             The same setting as the drawer's button, seen from the desk. One
             question with two editors, the way the tempo has a slider here and
             a percentage in fullscreen.
           -->
-          <label><input id="immediate-start" type="checkbox" /> Start when you play the first notes</label>
-          <label><input id="dim-unplayed" type="checkbox" checked /> Dim what this run will not ask for</label>
-          <label><input id="hear-other-hand" type="checkbox" /> Hear the hand I am not playing</label>
+          <label data-pane="playing"><input id="immediate-start" type="checkbox" /> Start when you play the first notes</label>
+          <label data-pane="page"><input id="dim-unplayed" type="checkbox" checked /> Dim what this run will not ask for</label>
+          <label data-pane="playing"><input id="hear-other-hand" type="checkbox" /> Hear the hand I am not playing</label>
           <!--
             His: he plays along with the playback to check himself, and the
             page said nothing either way. Off by default, because a
@@ -806,14 +831,14 @@
             with red while nobody is being judged would be the program marking
             a reader who never asked to be.
           -->
-          <label><input id="mark-listening" type="checkbox" /> Mark what I play along with a playback</label>
+          <label data-pane="sound"><input id="mark-listening" type="checkbox" /> Mark what I play along with a playback</label>
           <!--
             The other half of the same wish, and a different question: one
             says "check yourself", this says "watch where the music is". The
             marker already names the beat; this names which of its notes.
           -->
-          <label><input id="show-playback-notes" type="checkbox" /> Light the notes a playback is sounding</label>
-          <label><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
+          <label data-pane="sound"><input id="show-playback-notes" type="checkbox" /> Light the notes a playback is sounding</label>
+          <label data-pane="sound"><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
         </div>
 
         <!--
@@ -823,13 +848,21 @@
           Two chairs, one value: both are filled from one list and both are
           drawn from the settings, so they cannot come to disagree.
         -->
-        <div class="control-group">
+        <div class="control-group" data-pane="practice">
           <label for="rest-every-settings">Remind me to rest every</label>
           <select id="rest-every-settings"></select>
           <p class="hint">
             Never in the middle of playing: the reminder waits for the music to stop.
           </p>
-          <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
+          <div class="control-group" data-pane="practice">
+            <!--
+              The same panel the pill opens, not a copy of it. Two sets of the
+              same controls are two editors of one setting, and they disagree
+              the moment one of them is wired up wrong.
+            -->
+            <button id="settings-metronome" type="button" class="button">Metronome…</button>
+          </div>
+          <label data-pane="instrument"><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
         </div>
 
         </div>

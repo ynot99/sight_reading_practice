@@ -1044,6 +1044,8 @@ export class AppView {
     sheetTakes: HTMLElement;
     sheetScores: HTMLElement;
     sheetSettings: HTMLElement;
+    settingsSections: HTMLElement;
+    settingsMetronome: HTMLButtonElement;
     focusSettings: HTMLButtonElement;
     settingsClose: HTMLButtonElement;
     takesClose: HTMLButtonElement;
@@ -1272,6 +1274,8 @@ export class AppView {
       sheetTakes: requireElement(doc, 'sheet-takes'),
       sheetScores: requireElement(doc, 'sheet-scores'),
       sheetSettings: requireElement(doc, 'sheet-settings'),
+      settingsSections: requireElement(doc, 'settings-sections'),
+      settingsMetronome: requireElement(doc, 'settings-metronome'),
       focusSettings: requireElement(doc, 'focus-settings'),
       settingsClose: requireElement(doc, 'settings-close'),
       takesClose: requireElement(doc, 'takes-close'),
@@ -2771,6 +2775,43 @@ export class AppView {
     });
   }
 
+  /**
+   * Binds the sections of the settings sheet.
+   *
+   * The panel carries which one is showing and the stylesheet does the rest,
+   * so this is only "which question is being answered" - and the tabs read
+   * their own answer off the markup rather than from a list kept here, which
+   * would be a second copy of the sections to keep in step.
+   */
+  private bindTheSections(): void {
+    const tabs = [...this.el.settingsSections.querySelectorAll('button[data-pane]')];
+    const show = (pane: string): void => {
+      const panel = this.el.sheetSettings.querySelector('.sheet__panel');
+      if (panel instanceof HTMLElement) {
+        panel.dataset['showing'] = pane;
+      }
+      for (const tab of tabs) {
+        tab.setAttribute('aria-pressed', String(tab.getAttribute('data-pane') === pane));
+      }
+    };
+    for (const tab of tabs) {
+      if (tab instanceof HTMLElement) {
+        this.listen(tab, 'click', () => {
+          show(tab.dataset['pane'] ?? '');
+        });
+      }
+    }
+    show(tabs[0]?.getAttribute('data-pane') ?? '');
+
+    // One panel and two doors to it. A second set of the same controls would
+    // be two editors of one setting, disagreeing the moment one is wired up
+    // wrong - so this opens the panel the pill opens.
+    this.listen(this.el.settingsMetronome, 'click', () => {
+      this.el.sheetSettings.hidden = true;
+      this.el.sheetMetronome.hidden = false;
+    });
+  }
+
   private bindNarrowLayout(): void {
     const view = this.doc.defaultView;
     if (view === null || typeof view.matchMedia !== 'function') {
@@ -2793,6 +2834,7 @@ export class AppView {
     const { controller } = this.runtime;
     this.bindNarrowLayout();
     this.bindTheNetwork();
+    this.bindTheSections();
 
     this.listen(this.el.focusPlay, 'click', () => {
       this.togglePlayback();

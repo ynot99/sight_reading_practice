@@ -1571,6 +1571,62 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 }
 
 /*
+ * Which question the settings sheet is answering.
+ *
+ * Forty-six controls in one column is a list nobody reads. Every group keeps
+ * its place in the document and says which pane it belongs to; this decides
+ * which of them is on screen, because layout is the stylesheet's to hold.
+ */
+.settings-sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 0 10px;
+}
+
+.settings-sections__tab {
+  appearance: none;
+  border: 1px solid var(--line, #d7dbe2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.settings-sections__tab[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/*
+ * Everything belonging to another pane, which is everything else. Written as
+ * "not this one" rather than a rule per pane, so a pane added later needs no
+ * stylesheet at all.
+ */
+.sheet__panel [data-pane] {
+  display: none;
+}
+
+.sheet__panel[data-showing='instrument'] [data-pane='instrument'],
+.sheet__panel[data-showing='exercise'] [data-pane='exercise'],
+.sheet__panel[data-showing='page'] [data-pane='page'],
+.sheet__panel[data-showing='playing'] [data-pane='playing'],
+.sheet__panel[data-showing='modes'] [data-pane='modes'],
+.sheet__panel[data-showing='sound'] [data-pane='sound'],
+.sheet__panel[data-showing='practice'] [data-pane='practice'],
+.sheet__panel[data-showing='library'] [data-pane='library'] {
+  display: revert;
+}
+
+/* The tabs themselves carry the attribute and must not hide each other. */
+.settings-sections__tab[data-pane] {
+  display: inline-block;
+}
+
+/*
  * The mark on a bar that is a second reading of one already printed. Quieter
  * than the passage markers and with nothing to take hold of: it is a sign
  * saying "you have read this before", not a control.

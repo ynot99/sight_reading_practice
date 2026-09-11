@@ -1253,6 +1253,63 @@ describe('AppView', () => {
       }
     });
 
+    it('sorts the settings into sections, losing no control on the way', async () => {
+      // Forty-six controls in one scrolling column is a list nobody reads. The
+      // sorting is the stylesheet's, so the guard is this: every control in
+      // the sheet sits under something that names a pane, and every pane the
+      // tabs offer has something in it. A control added and not sorted is
+      // then a control nobody can reach, and this says so.
+      const { view } = createRig();
+      await view.initialize();
+      const sheet = element('sheet-settings');
+      const tabs = [...element('settings-sections').querySelectorAll('button[data-pane]')];
+      const panes = tabs.map((tab) => tab.getAttribute('data-pane') ?? '');
+
+      expect(panes.length).toBeGreaterThan(1);
+      for (const pane of panes) {
+        expect(sheet.querySelectorAll(`[data-pane="${pane}"]`).length).toBeGreaterThan(0);
+      }
+
+      const orphans = [...sheet.querySelectorAll('input, select')]
+        .filter((control) => control.closest('[data-pane]') === null)
+        .map((control) => control.id);
+
+      expect(orphans).toEqual([]);
+    });
+
+    it('shows one section at a time, and says which', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      const panel = element('sheet-settings').querySelector('.sheet__panel');
+      const tabs = [...element('settings-sections').querySelectorAll('button[data-pane]')];
+      const first = tabs[0];
+      const second = tabs[1];
+
+      expect(panel?.getAttribute('data-showing')).toBe(first?.getAttribute('data-pane'));
+      expect(first?.getAttribute('aria-pressed')).toBe('true');
+
+      (second as HTMLButtonElement).click();
+
+      expect(panel?.getAttribute('data-showing')).toBe(second?.getAttribute('data-pane'));
+      expect(first?.getAttribute('aria-pressed')).toBe('false');
+      expect(second?.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('opens the metronome the pill opens, rather than a copy of it', async () => {
+      // Two sets of the same controls are two editors of one setting, and
+      // they disagree the moment one of them is wired up wrong.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-settings').click();
+
+      element<HTMLButtonElement>('settings-metronome').click();
+
+      expect(element('sheet-metronome').hidden).toBe(false);
+      expect(element('sheet-settings').hidden).toBe(true);
+      // One panel: the controls exist once in the document.
+      expect(document.querySelectorAll('#count-in')).toHaveLength(1);
+    });
+
     it('says whether there is a network, by the control it decides', async () => {
       // The application itself is on the device - a worker keeps it there -
       // so the only thing a lost network costs is a recording not yet

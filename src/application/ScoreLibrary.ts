@@ -66,6 +66,28 @@ export interface ScoreLibraryDependencies {
  * than it changes, and reading a database to redraw a row nobody touched is
  * work for nothing.
  */
+/**
+ * The places in a piece: one to a place, in the order they are played.
+ *
+ * A place *is* its two bars. Marking out bars 17-24 a second time is the
+ * reader naming the same stretch again rather than finding a new one, so the
+ * later name wins and there is still one row - two rows reading "bars 17-24"
+ * are a list the reader has to tell apart by nothing at all.
+ *
+ * And a piece has an order. A list in the order things happened to be marked
+ * out is a list to be searched; in bar order it is the piece itself, and the
+ * row above the one you want is the passage before it.
+ */
+function placesInOrder(passages: readonly SavedPassage[]): readonly SavedPassage[] {
+  const byPlace = new Map<string, SavedPassage>();
+  for (const passage of passages) {
+    byPlace.set(`${passage.fromBar}-${passage.toBar}`, passage);
+  }
+  return [...byPlace.values()].sort(
+    (left, right) => left.fromBar - right.fromBar || left.toBar - right.toBar,
+  );
+}
+
 export class ScoreLibrary {
   private readonly deps: ScoreLibraryDependencies;
   private summaries: readonly StoredScoreSummary[] = [];
@@ -246,15 +268,22 @@ export class ScoreLibrary {
    * next week wants the same places waiting for them.
    */
   async keepPassages(id: string, passages: readonly SavedPassage[]): Promise<void> {
-    await this.deps.store.keepPassages(id, passages);
+    const kept = placesInOrder(passages);
+    await this.deps.store.keepPassages(id, kept);
     this.summaries = this.summaries.map((summary) =>
-      summary.id === id ? { ...summary, passages } : summary,
+      summary.id === id ? { ...summary, passages: kept } : summary,
     );
   }
 
-  /** The stretches marked out in a score, or none where it is not kept. */
+  /**
+   * The stretches marked out in a score, or none where it is not kept.
+   *
+   * Put in order here as well as on the way in, because a score marked out by
+   * an earlier version of this program was written in whatever order the
+   * reader happened to mark it, and that record is still on their device.
+   */
   passagesOf(title: string): readonly SavedPassage[] {
-    return this.summaries.find((summary) => summary.title === title)?.passages ?? [];
+    return placesInOrder(this.summaries.find((summary) => summary.title === title)?.passages ?? []);
   }
 
   async remove(id: string): Promise<void> {

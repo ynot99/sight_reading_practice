@@ -18,6 +18,88 @@ function library(store = new InMemoryScoreStore()) {
   };
 }
 
+describe('the places marked out in a piece', () => {
+  /** A kept score to mark places out in, since a generated one has none. */
+  async function marked(places: readonly { name: string; fromBar: number; toBar: number }[]) {
+    const { scores } = library();
+    const kept = await scores.keep(twoBarExercise({ title: 'Something Borrowed' }), 1_000);
+    await scores.keepPassages(kept.id, places);
+    return scores;
+  }
+
+  it('reads in the order the piece is played, not the order they were marked', async () => {
+    // A list in the order things happened to be marked out is a list to be
+    // searched. In bar order it is the piece, and the row above the one you
+    // want is the passage before it.
+    // Two of them start in the same bar, and in the order that would come
+    // out wrong if only the first bar were compared.
+    const scores = await marked([
+      { name: 'The coda', fromBar: 9, toBar: 12 },
+      { name: 'The whole second half', fromBar: 3, toBar: 12 },
+      { name: 'The turn', fromBar: 3, toBar: 4 },
+    ]);
+
+    expect(scores.passagesOf('Something Borrowed').map((place) => place.name)).toEqual([
+      'The turn',
+      'The whole second half',
+      'The coda',
+    ]);
+  });
+
+  it('keeps one row for one place, however often it is marked out', async () => {
+    // A place is its two bars. Marking out bars 3-4 again is the reader
+    // naming the same stretch, not finding a second one - and two rows
+    // reading "bars 3-4" are a list they could tell apart by nothing at all.
+    const scores = await marked([
+      { name: 'The turn', fromBar: 3, toBar: 4 },
+      { name: 'The awkward turn', fromBar: 3, toBar: 4 },
+    ]);
+
+    expect(scores.passagesOf('Something Borrowed')).toEqual([
+      { name: 'The awkward turn', fromBar: 3, toBar: 4 },
+    ]);
+  });
+
+  it('puts in order what an older version of this program left unordered', async () => {
+    // The reason reading sorts as well as writing: a score marked out before
+    // any of this existed is still on the reader's device, written in
+    // whatever order they happened to mark it out.
+    const { store, scores } = library();
+    const kept = await scores.keep(twoBarExercise({ title: 'Something Borrowed' }), 1_000);
+    const found = await store.read(kept.id);
+    if (found === null) {
+      throw new Error('expected the score to be there');
+    }
+    // Straight past the library, which is how those records were written.
+    await store.write({
+      ...found,
+      passages: [
+        { name: 'The coda', fromBar: 9, toBar: 12 },
+        { name: 'The turn', fromBar: 3, toBar: 4 },
+      ],
+    });
+    await scores.load();
+
+    expect(scores.passagesOf('Something Borrowed').map((place) => place.name)).toEqual([
+      'The turn',
+      'The coda',
+    ]);
+  });
+
+  it('puts them in order on the way in as well, so what is stored is ordered', async () => {
+    const { store, scores } = library();
+    const kept = await scores.keep(twoBarExercise({ title: 'Something Borrowed' }), 1_000);
+
+    await scores.keepPassages(kept.id, [
+      { name: 'The coda', fromBar: 9, toBar: 12 },
+      { name: 'The turn', fromBar: 3, toBar: 4 },
+    ]);
+
+    const stored = await store.read(kept.id);
+    expect(stored?.passages.map((place) => place.fromBar)).toEqual([3, 9]);
+  });
+});
+
 describe('the scores a reader has kept', () => {
   it('says nothing before anything has been opened', async () => {
     const { scores } = library();

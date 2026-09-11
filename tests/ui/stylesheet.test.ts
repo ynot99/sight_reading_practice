@@ -197,6 +197,37 @@ describe('the stylesheet', () => {
     expect(hidden?.selector).toContain('.score__modes');
   });
 
+  it('keeps the way of adding a place at the foot of the sheet', () => {
+    // His: the box and the button should always be in sight. A list long
+    // enough to scroll would otherwise carry off the bottom the one thing
+    // the reader opened the sheet to do. jsdom lays nothing out, so no view
+    // test can see it go.
+    const body = rules().find((rule) => rule.selector === '.places');
+    const keep = rules().find((rule) => rule.selector === '.places__keep');
+    const list = rules().find((rule) => rule.selector === '.places .takes__list');
+
+    expect(body?.body).toMatch(/overflow-y\s*:\s*auto/);
+    expect(keep?.body).toMatch(/position\s*:\s*sticky/);
+    expect(keep?.body).toMatch(/bottom\s*:\s*0/);
+    // Sticky to a scrollport it is not in does nothing, so the list must not
+    // be a second one: the sheet's body is the single scrolling surface.
+    expect(list?.body).toMatch(/max-height\s*:\s*none/);
+  });
+
+  it('keeps the button in a row on one line, whatever is typed beside it', () => {
+    // Reported: "Keep it" broke across two lines. A full-width box in a flex
+    // row takes the row and leaves the button what is left, which in a narrow
+    // sheet was not enough for two words. jsdom lays nothing out, so no view
+    // test can see a button wrap.
+    const button = rules().find((rule) => rule.selector === '.ladder-row .button');
+    const box = rules().find((rule) => rule.selector === '.ladder-row .sheet__input');
+
+    expect(button?.body).toMatch(/white-space\s*:\s*nowrap/);
+    expect(button?.body).toMatch(/flex\s*:\s*none/);
+    // The box is what gives up the room, so it has to be allowed to.
+    expect(box?.body).toMatch(/min-width\s*:\s*0/);
+  });
+
   it('marks the place the reader is in, in the list of places', () => {
     // The only thing that makes "where am I" visible in that list, and jsdom
     // applies no stylesheet, so the view test can see the attribute and

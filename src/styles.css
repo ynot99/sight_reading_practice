@@ -1900,6 +1900,11 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   --mode-ground: #4c1d95;
 }
 
+.mode-card--cursor,
+.score__mode--cursor {
+  --mode-ground: #115e59;
+}
+
 /*
  * The frame, in the accent rather than in a colour of its own.
  *

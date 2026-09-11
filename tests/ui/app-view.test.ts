@@ -1440,6 +1440,33 @@ describe('AppView', () => {
       expect(square('strict').getAttribute('aria-pressed')).toBe('true');
     });
 
+    it('takes the marker away as a square, reading the setting backwards', async () => {
+      // The fifth square, and the one where the square and the setting point
+      // opposite ways: the square is the challenge and the setting is the
+      // comfort, so pressing it turns the cursor *off*. It owns the cursor
+      // for the reader's own run and nothing else - the one while the
+      // machine plays is not a challenge, it is a convenience.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      const square = element('modes-grid').querySelector('[data-mode="cursor"]') as HTMLButtonElement;
+      expect(square.getAttribute('aria-pressed')).toBe('false');
+
+      square.click();
+
+      expect(runtime.controller.settings.cursorWhileRunning).toBe(false);
+      expect(square.getAttribute('aria-pressed')).toBe('true');
+      expect(element<HTMLInputElement>('cursor-running').checked).toBe(false);
+      // Untouched, both of them.
+      expect(runtime.controller.settings.cursorWhileListening).toBe(true);
+      expect(runtime.controller.settings.cursorAtRest).toBe(true);
+
+      square.click();
+
+      expect(runtime.controller.settings.cursorWhileRunning).toBe(true);
+      expect(square.getAttribute('aria-pressed')).toBe('false');
+    });
+
     it('reads the squares back from the settings, however they were set', async () => {
       // One answer, two ways of asking it: a mode set from the drawer has to
       // show on the square, or the two would disagree about the same thing.

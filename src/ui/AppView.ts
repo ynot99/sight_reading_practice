@@ -305,6 +305,11 @@ function modeIsOn(mode: string, settings: PracticeSettings): boolean {
       return settings.rhythmOnly;
     case 'strict':
       return settings.stopAtAMistake;
+    // Read the other way round, because the square is the challenge and the
+    // setting is the comfort: on means the marker is gone and the reader is
+    // keeping the place themselves.
+    case 'cursor':
+      return !settings.cursorWhileRunning;
     default:
       return false;
   }
@@ -325,6 +330,8 @@ function settingsForMode(mode: string, on: boolean): Partial<PracticeSettings> {
       return on ? { rhythmOnly: true, stopAtAMistake: false } : { rhythmOnly: false };
     case 'strict':
       return on ? { stopAtAMistake: true, rhythmOnly: false } : { stopAtAMistake: false };
+    case 'cursor':
+      return { cursorWhileRunning: !on };
     default:
       return {};
   }

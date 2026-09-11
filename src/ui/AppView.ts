@@ -1204,6 +1204,7 @@ export class AppView {
     focusFaster: HTMLButtonElement;
     focusTempo: HTMLOutputElement;
     scoresFresh: HTMLButtonElement;
+    scoresRung: HTMLElement;
     midiStatus: HTMLElement;
     bridgeStatus: HTMLElement;
     pedalStatus: HTMLElement;
@@ -1437,6 +1438,7 @@ export class AppView {
       focusFaster: requireElement(doc, 'focus-faster'),
       focusTempo: requireElement(doc, 'focus-tempo'),
       scoresFresh: requireElement(doc, 'scores-fresh'),
+      scoresRung: requireElement(doc, 'scores-rung'),
       midiStatus: requireElement(doc, 'midi-status'),
       bridgeStatus: requireElement(doc, 'bridge-status'),
       pedalStatus: requireElement(doc, 'pedal-status'),
@@ -4995,12 +4997,14 @@ export class AppView {
       this.el.ladderStep.textContent = 'Off the ladder';
       this.el.ladderDescription.textContent =
         'The settings below were chosen by hand. The arrows put you back on.';
+      this.el.scoresRung.textContent = 'Off the ladder — the settings were chosen by hand';
       this.el.ladderDown.disabled = false;
       this.el.ladderUp.disabled = false;
       return;
     }
     this.el.ladderStep.textContent = `${step.label} · ${ladder.positionOf(step.id)} of ${ladder.list().length}`;
     this.el.ladderDescription.textContent = step.description;
+    this.el.scoresRung.textContent = `${step.label} — ${step.description}`;
     this.el.ladderDown.disabled = !ladder.canStep(step.id, -1);
     this.el.ladderUp.disabled = !ladder.canStep(step.id, 1);
   }

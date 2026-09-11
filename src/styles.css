@@ -625,8 +625,22 @@ select {
 .scores__fresh {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  gap: 10px;
+  text-align: left;
+}
+
+.scores__fresh-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* The rung, said quietly: it is where you are, not what you are pressing. */
+.scores__fresh-rung {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 .scores__fresh svg {

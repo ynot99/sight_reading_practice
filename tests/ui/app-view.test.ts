@@ -5002,6 +5002,28 @@ describe('AppView', () => {
       expect(renderer.cursor.visible).toBe(true);
     });
 
+    it('says which rung the route has reached, where the material is chosen', async () => {
+      // The ladder is the half of this program that is actually sight-reading
+      // - music nobody has seen before - and from the sheet that asks what to
+      // put on the stand it was invisible, which is most of why it goes
+      // unused. Said beside the one row that puts fresh material there.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+
+      // Settings chosen by hand are said plainly, which is where the rig
+      // starts and where a reader who set the level themselves stands.
+      expect(element('scores-rung').textContent).toContain('Off the ladder');
+
+      // On to the route the way a reader gets there: the arrows.
+      element<HTMLButtonElement>('ladder-up').click();
+      element<HTMLButtonElement>('focus-scores').click();
+
+      const said = element('scores-rung').textContent ?? '';
+      expect(said).toContain(runtime.controller.ladderStep?.label ?? 'nothing');
+      expect(said).toContain('Five-finger');
+    });
+
     it('puts away what a repeat says it was called, keeping where it is', async () => {
       // His: knowing a bar is being read again is worth having and worth
       // putting away. What goes is the writer own number and the turning

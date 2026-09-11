@@ -251,6 +251,20 @@ describe('the stylesheet', () => {
     expect(dimmed?.body).not.toMatch(/display\s*:\s*none/);
   });
 
+  it('lets the page show through what stands over it', () => {
+    // His: a mark in the corner that covers a note should leave enough of it
+    // to be seen, and as much of it as the clock beside it does. One number
+    // for both, because "as transparent as that" is one answer. jsdom
+    // applies no stylesheet, so no view test can see through anything.
+    const clock = rules().find((rule) => rule.selector === '.score__today');
+    const mark = rules().find((rule) => rule.selector === '.score__mode');
+
+    for (const rule of [clock, mark]) {
+      expect(rule?.body).toMatch(/background:\s*color-mix\([^;]*var\(--over-the-page\)/);
+      expect(rule?.body).toMatch(/transparent/);
+    }
+  });
+
   it('lets one corner place the clock and the modes beneath it', () => {
     // Asked for beside the pill, and beside is the stylesheet stacking them:
     // a second corner measured in pixels against the first lands on top of it

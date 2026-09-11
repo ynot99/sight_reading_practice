@@ -13,6 +13,15 @@
   --pending: #b45309;
   --radius: 10px;
   --shadow: 0 1px 2px rgb(16 24 40 / 8%), 0 8px 24px rgb(16 24 40 / 6%);
+  /*
+   * How solid anything standing over the music is.
+   *
+   * His, about the modes in the corner and true of everything up there: a
+   * thing that covers a note should leave enough of it to be seen. Named
+   * once, because "as transparent as the clock" is the answer for all of
+   * them, and two numbers would be two answers to that.
+   */
+  --over-the-page: 88%;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1147,7 +1156,7 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   gap: 4px;
   padding: 4px 10px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  background: color-mix(in srgb, var(--surface) var(--over-the-page), transparent);
   border: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 12px;
@@ -1204,7 +1213,9 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   width: 24px;
   height: 24px;
   border-radius: 7px;
-  background: var(--mode-ground, #2a2f3a);
+  /* As much of the page as the clock beside it leaves - his, and the icon
+   * stays solid, since a mark nobody can read is not worth the room. */
+  background: color-mix(in srgb, var(--mode-ground, #2a2f3a) var(--over-the-page), transparent);
   color: #e9edf5;
   box-shadow: 0 2px 8px rgb(16 24 40 / 22%);
 }

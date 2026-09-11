@@ -113,6 +113,24 @@ describe('the stylesheet', () => {
     expect(hidden?.body).toMatch(/display\s*:\s*none/);
   });
 
+  it('stands the settings sections down the side, not across the top', () => {
+    // The shape every settings window has, and his own examples: the system
+    // settings, MuseScore, Reaper. The list stays put while the pane beside
+    // it scrolls, so the reader can see where they are and what else there is
+    // without losing either. jsdom applies no stylesheet, so the view tests
+    // cannot see any of this.
+    const body = rules().find((rule) => rule.selector === '.settings-body');
+    const rail = rules().find((rule) => rule.selector === '.settings-sections');
+    const pane = rules().find((rule) => rule.selector === '.settings-body > .controls');
+
+    expect(body?.body).toMatch(/display\s*:\s*flex/);
+    expect(rail?.body).toMatch(/flex-direction\s*:\s*column/);
+    // A fixed rail and a pane that takes what is left: the list must not
+    // shrink away as the pane fills up.
+    expect(rail?.body).toMatch(/flex\s*:\s*0 0/);
+    expect(pane?.body).toMatch(/overflow-y\s*:\s*auto/);
+  });
+
   it('empties the bar down to the way out when only the page is wanted', () => {
     // The same rule mid-run follows, for the reader's own "just the music":
     // what stays is named, so anything added to the row goes by default.

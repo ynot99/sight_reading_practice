@@ -1577,28 +1577,95 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * its place in the document and says which pane it belongs to; this decides
  * which of them is on screen, because layout is the stylesheet's to hold.
  */
-.settings-sections {
+/*
+ * Two columns: the sections down the left, what they hold on the right.
+ *
+ * The shape every settings window has - his own examples were the system
+ * settings, MuseScore and Reaper - and it is the shape for the reason those
+ * all reached: the list stays put while the panel beside it scrolls, so the
+ * reader can see where they are and what else there is without losing either.
+ */
+.settings-body {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 0 10px;
+  align-items: stretch;
+  gap: 18px;
+  /* Fills what the head left, and lets its two columns do the scrolling. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/*
+ * The pane beside the rail: its own scroll, its own ground. Without a border
+ * of its own it reads as one surface with the rail, which is what a settings
+ * window looks like - the list is part of the window, not a card inside it.
+ */
+.settings-body > .controls {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  border: 0;
+  box-shadow: none;
+  padding: 0 2px 2px 0;
+  align-content: start;
+}
+
+.settings-sections {
+  flex: 0 0 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 14px 0 0;
+  border-right: 1px solid var(--line, #d7dbe2);
+  overflow-y: auto;
 }
 
 .settings-sections__tab {
   appearance: none;
-  border: 1px solid var(--line, #d7dbe2);
-  border-radius: 999px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text);
   font: inherit;
-  padding: 5px 12px;
+  text-align: left;
+  padding: 9px 12px;
   cursor: pointer;
+}
+
+.settings-sections__tab:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 .settings-sections__tab[aria-pressed='true'] {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+/*
+ * On a narrow screen the two columns become one: a rail that took a third of
+ * an iPad held in portrait would leave the settings themselves in a gutter.
+ */
+@media (max-width: 620px) {
+  .settings-body {
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .settings-sections {
+    flex: 0 0 auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 0 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line, #d7dbe2);
+  }
+
+  .settings-sections__tab {
+    border-radius: 999px;
+    padding: 5px 12px;
+  }
 }
 
 /*

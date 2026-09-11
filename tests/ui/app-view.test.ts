@@ -1330,37 +1330,34 @@ describe('AppView', () => {
       expect(runtime.controller.settings.survival).toBe(false);
     });
 
-    it('puts a mode out of reach once another has emptied it', async () => {
-      // Not a choice being withheld: "one wrong note ends the run" under "any
-      // note counts" is a choice with no content, because there is no such
-      // thing as a wrong note there. Accepting it and quietly doing nothing
-      // would be worse than saying so.
+    it('turns off whatever a square empties, either way round', async () => {
+      // His: both squares answer. "One wrong note ends the run" says nothing
+      // while "any note counts", so each of the two turns the other off -
+      // which the reader watches happen, rather than pressing a square that
+      // refuses and explains itself.
       const { view, runtime } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
-      const strict = element('modes-grid').querySelector('[data-mode="strict"]');
-      const rhythm = element('modes-grid').querySelector('[data-mode="rhythm"]');
-      (strict as HTMLButtonElement).click();
+      const square = (mode: string): HTMLButtonElement =>
+        element('modes-grid').querySelector(`[data-mode="${mode}"]`) as HTMLButtonElement;
+
+      square('strict').click();
+
       expect(runtime.controller.settings.stopAtAMistake).toBe(true);
-      expect(strict?.getAttribute('aria-disabled')).toBe('false');
 
-      (rhythm as HTMLButtonElement).click();
+      square('rhythm').click();
 
-      expect(strict?.getAttribute('aria-disabled')).toBe('true');
-      // The reason lives on the square, where the reader is looking when they
-      // ask - and it is not `disabled`, which is the one way a square could
-      // never explain itself: a disabled button receives no events, so a
-      // finger on it on a tablet would reach nothing.
-      expect((strict as HTMLElement).dataset['why']).toContain('no wrong note');
-      expect((strict as HTMLButtonElement).disabled).toBe(false);
-      // And it is turned off rather than left standing meaning nothing.
+      expect(runtime.controller.settings.rhythmOnly).toBe(true);
       expect(runtime.controller.settings.stopAtAMistake).toBe(false);
+      expect(square('strict').getAttribute('aria-pressed')).toBe('false');
 
-      // A tap on it says why instead of answering.
-      (strict as HTMLButtonElement).click();
+      // And back the other way, which is the half that used to refuse.
+      square('strict').click();
 
-      expect((strict as HTMLElement).dataset['showWhy']).toBe('true');
-      expect(runtime.controller.settings.stopAtAMistake).toBe(false);
+      expect(runtime.controller.settings.stopAtAMistake).toBe(true);
+      expect(runtime.controller.settings.rhythmOnly).toBe(false);
+      expect(square('rhythm').getAttribute('aria-pressed')).toBe('false');
+      expect(square('strict').getAttribute('aria-pressed')).toBe('true');
     });
 
     it('reads the squares back from the settings, however they were set', async () => {
@@ -1443,22 +1440,30 @@ describe('AppView', () => {
       expect(carrier('survival-punish').dataset['idle']).toBeUndefined();
     });
 
-    it('gives the drawer the answer the square already gave', async () => {
-      // One question with two editors: the mode square and the switch in the
-      // drawer are the same setting, so they have to be out of reach for the
-      // same reason and in the same words.
-      const { view } = createRig();
+    it('gives the drawer the rule the squares follow', async () => {
+      // One question with two editors. The squares will not let the pair
+      // stand together; the drawer must not be a way round that, or the
+      // reader ends with a state the squares say is impossible.
+      const { view, runtime } = createRig();
       await view.initialize();
-      const strict = element('stop-at-mistake').closest('label') as HTMLElement;
-      expect(strict.dataset['idle']).toBeUndefined();
+      const tick = (id: string, on: boolean): void => {
+        const box = element<HTMLInputElement>(id);
+        box.checked = on;
+        box.dispatchEvent(new Event('change'));
+      };
+      tick('stop-at-mistake', true);
+      expect(runtime.controller.settings.stopAtAMistake).toBe(true);
 
-      const rhythm = element<HTMLInputElement>('rhythm-only');
-      rhythm.checked = true;
-      rhythm.dispatchEvent(new Event('change'));
+      tick('rhythm-only', true);
 
-      expect(strict.dataset['idle']).toBe('true');
-      const card = element('modes-grid').querySelector('[data-mode="strict"]') as HTMLElement;
-      expect(strict.getAttribute('title')).toBe(card.dataset['why']);
+      expect(runtime.controller.settings.rhythmOnly).toBe(true);
+      expect(runtime.controller.settings.stopAtAMistake).toBe(false);
+      expect(element<HTMLInputElement>('stop-at-mistake').checked).toBe(false);
+
+      tick('stop-at-mistake', true);
+
+      expect(runtime.controller.settings.rhythmOnly).toBe(false);
+      expect(element<HTMLInputElement>('rhythm-only').checked).toBe(false);
     });
 
     it('says in the corner which modes are on, with the sheet shut', async () => {

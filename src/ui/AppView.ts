@@ -316,29 +316,17 @@ function settingsForMode(mode: string, on: boolean): Partial<PracticeSettings> {
       return { survival: on };
     case 'blind':
       return { readAheadSteps: on ? 1 : null };
+    // Each of these empties the other, so each turns the other off - "one
+    // wrong note ends the run" and "any note counts" cannot both be the
+    // answer. His: both squares answer, rather than one of them refusing.
+    // Turning either *off* leaves the other alone: it was already off.
     case 'rhythm':
-      // Turning it on takes the other one with it, rather than leaving a
-      // switch standing that now means nothing.
       return on ? { rhythmOnly: true, stopAtAMistake: false } : { rhythmOnly: false };
     case 'strict':
-      return { stopAtAMistake: on };
+      return on ? { stopAtAMistake: true, rhythmOnly: false } : { stopAtAMistake: false };
     default:
       return {};
   }
-}
-
-/**
- * Why a mode cannot be chosen just now, or `null` where it can.
- *
- * Not a choice being withheld: a mode another mode has made meaningless is a
- * choice with no content, and accepting it and quietly doing nothing would be
- * worse than saying so.
- */
-function whyModeIsOut(mode: string, settings: PracticeSettings): string | null {
-  if (mode === 'strict' && settings.rhythmOnly) {
-    return 'One mistake is out while any note counts: there is no wrong note to end the run on.';
-  }
-  return null;
 }
 
 /**
@@ -366,7 +354,6 @@ function frameModeId(frame: string): string {
  * not quietly assumed to be one of them.
  */
 type IdleControl =
-  | 'stop-at-mistake'
   | 'survival-refill'
   | 'survival-punish'
   | 'ease-tempo'
@@ -393,10 +380,6 @@ function whyItIsIdle(
   keepsTime: boolean,
 ): string | null {
   switch (control) {
-    case 'stop-at-mistake':
-      // The one place this is decided, said again here rather than answered
-      // again: the square and the switch are one question.
-      return whyModeIsOut('strict', settings);
     case 'survival-refill':
     case 'survival-punish':
       return !settings.survival
@@ -422,15 +405,6 @@ function whyItIsIdle(
       return null;
   }
 }
-
-/**
- * How long a square keeps saying why it will not answer.
- *
- * Long enough to read one sentence and short enough that it is gone before
- * the reader looks back. A pointer takes it away by leaving; a finger has
- * nothing to leave, so time does it.
- */
-const WHY_SHOWS_FOR_MS = 4_000;
 
 /** An empty box means "no limit", which is a choice and not a missing value. */
 function barValue(input: HTMLInputElement): number | null {
@@ -2686,12 +2660,14 @@ export class AppView {
     });
 
     this.listen(this.el.stopAtMistake, 'change', () => {
-      controller.updateSettings({ stopAtAMistake: this.el.stopAtMistake.checked });
+      controller.updateSettings(settingsForMode('strict', this.el.stopAtMistake.checked));
       this.syncControlsFromSettings();
     });
 
     this.listen(this.el.rhythmOnly, 'change', () => {
-      controller.updateSettings({ rhythmOnly: this.el.rhythmOnly.checked });
+      // Through the squares' own rule, so the drawer cannot make the pair
+      // the squares will not: one switch, one answer, wherever it is asked.
+      controller.updateSettings(settingsForMode('rhythm', this.el.rhythmOnly.checked));
       this.syncControlsFromSettings();
     });
 
@@ -3044,9 +3020,6 @@ export class AppView {
    * playing survival", and this is another way of reading and writing it,
    * not a second copy of it.
    */
-  /** Bubbles waiting to be put away again, by the square each belongs to. */
-  private readonly whyTimers = new Map<HTMLElement, number>();
-
   private bindTheModes(): void {
     // Opening it, and the dimmed ground that closes it, are the list every
     // other sheet is in: bound here as well, this one would have been the
@@ -3075,14 +3048,6 @@ export class AppView {
         continue;
       }
       this.listen(card, 'click', () => {
-        // Refused here rather than by `disabled`, which is what lets the
-        // square say why: a disabled button receives no events at all, so a
-        // finger on it on a tablet - the one way a reader asks - would reach
-        // nothing.
-        if (card.getAttribute('aria-disabled') === 'true') {
-          this.sayWhyItIsOut(card);
-          return;
-        }
         const on = card.getAttribute('aria-pressed') !== 'true';
         this.runtime.controller.updateSettings(settingsForMode(card.dataset['mode'] ?? '', on));
         this.syncControlsFromSettings();
@@ -3091,12 +3056,13 @@ export class AppView {
   }
 
   /**
-   * Draws each square as on, off, or out of reach.
+   * Draws each square as on or off.
    *
-   * Out of reach is not a choice being withheld: "one wrong note ends the
-   * run" under "any note counts" is a choice with no content, because there
-   * is no such thing as a wrong note there. Accepting it and quietly doing
-   * nothing would be worse than saying so.
+   * Nothing is out of reach any more. Two of these empty each other - "one
+   * wrong note ends the run" says nothing while "any note counts" - and the
+   * answer used to be that the second square refused and explained itself.
+   * His, and better: both answer, and turning one on turns the other off,
+   * which the reader watches happen.
    */
   private showTheModes(): void {
     const settings = this.runtime.controller.settings;
@@ -3118,14 +3084,6 @@ export class AppView {
       card.setAttribute('aria-pressed', String(lit));
       if (lit) {
         on.push(card);
-      }
-      const why = whyModeIsOut(mode, settings);
-      card.setAttribute('aria-disabled', String(why !== null));
-      if (why === null) {
-        delete card.dataset['why'];
-        delete card.dataset['showWhy'];
-      } else {
-        card.dataset['why'] = why;
       }
     }
     this.showWhichModesAreOn(on);
@@ -3187,7 +3145,6 @@ export class AppView {
     const settings = this.runtime.controller.settings;
     const keepsTime = this.runtime.controller.survivalKeepsTime;
     const controls: readonly (readonly [IdleControl, HTMLElement])[] = [
-      ['stop-at-mistake', this.el.stopAtMistake],
       ['survival-refill', this.el.survivalRefill],
       ['survival-punish', this.el.survivalPunish],
       ['ease-tempo', this.el.easeTempo],
@@ -3208,31 +3165,6 @@ export class AppView {
         carrier.dataset['idle'] = 'true';
         carrier.title = why;
       }
-    }
-  }
-
-  /**
-   * Shows the reason a square will not answer, and takes it away again.
-   *
-   * On the square rather than in a line underneath, because that is where the
-   * reader is looking when they ask - and asking, on a tablet, is a finger on
-   * the thing. A pointer gets it by hovering, which the stylesheet handles;
-   * this is the other way in.
-   */
-  private sayWhyItIsOut(card: HTMLElement): void {
-    card.dataset['showWhy'] = 'true';
-    const timer = this.doc.defaultView?.setTimeout(() => {
-      delete card.dataset['showWhy'];
-      this.whyTimers.delete(card);
-    }, WHY_SHOWS_FOR_MS);
-    if (timer !== undefined) {
-      // Kept so a second tap does not leave the first tap's timer to put the
-      // bubble away while the reader is still reading it.
-      const already = this.whyTimers.get(card);
-      if (already !== undefined) {
-        this.doc.defaultView?.clearTimeout(already);
-      }
-      this.whyTimers.set(card, timer);
     }
   }
 

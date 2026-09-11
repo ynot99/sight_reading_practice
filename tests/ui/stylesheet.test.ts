@@ -157,17 +157,19 @@ describe('the stylesheet', () => {
     expect(hiding?.body).toMatch(/display\s*:\s*flex/);
   });
 
-  it('keeps a mode square’s reason inside the square', () => {
-    // Hung outside it was cut off: the panel keeps its own overflow hidden,
-    // as every sheet here does, so a bubble reaching past a square reaches
-    // past the panel with it. jsdom lays nothing out, so nothing in the view
-    // tests can see that happen.
-    const bubble = rules().find((rule) => rule.selector === '.mode-card[data-why]::after');
+  it('never lets a square change the size of the sheet it is in', () => {
+    // Reported: pressing a square made the dialog jump. A square that gained
+    // a state also gained 22 pixels of padding, which grew its row and the
+    // whole panel with it - under the finger that had just pressed something
+    // else. So a square's state may be said with paint and movement, never
+    // with its box. jsdom lays nothing out, so no view test can see a jump.
+    const states = rules().filter(
+      (rule) => rule.selector.startsWith('.mode-card[') || rule.selector.includes(' .mode-card['),
+    );
 
-    expect(bubble?.body).toMatch(/position\s*:\s*absolute/);
-    // Anything measured against the square's *outside* edge puts it out
-    // there: `calc(100% + …)` is exactly how it escaped.
-    expect(bubble?.body).not.toMatch(/calc\(100%/);
+    for (const rule of states) {
+      expect(rule.body).not.toMatch(/(^|[;{\s])(padding|margin|width|height|font-size|border-width)\s*:/);
+    }
   });
 
   it('empties the bar down to the way out when only the page is wanted', () => {

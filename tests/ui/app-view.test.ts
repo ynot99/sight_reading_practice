@@ -1377,10 +1377,13 @@ describe('AppView', () => {
     it('marks the Start button with what it will start', async () => {
       // The reader presses Start without looking. What it will start is the
       // one thing it may need to say, and only where the answer is not the
-      // plain one - the badge is the frame's own mark, the same one the
-      // page's corner carries, said again where the finger is.
+      // plain one - the run they get without asking for anything, which is
+      // the frame the app opens in. The badge is that frame's own mark, the
+      // same one the page's corner carries, said where the finger is.
       const { view, runtime } = createRig();
       await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
+      element<HTMLButtonElement>('focus-modes').click();
       expect(element('focus-play-frame').hidden).toBe(true);
 
       runtime.controller.updateSettings({ modeId: LISTEN_MODE_ID });
@@ -1391,7 +1394,7 @@ describe('AppView', () => {
       // On the button itself, so it travels with it into fullscreen.
       expect(element('focus-play').contains(element('focus-play-frame'))).toBe(true);
 
-      runtime.controller.updateSettings({ modeId: new WaitMode().id });
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
       element<HTMLButtonElement>('focus-modes').click();
 
       expect(element('focus-play-frame').hidden).toBe(true);
@@ -1414,17 +1417,19 @@ describe('AppView', () => {
       expect(document.body.dataset['playing']).toBe('false');
     });
 
-    it('says in the corner when the frame is not the one that waits', async () => {
+    it('says in the corner when the frame is not the plain one', async () => {
       // Start means something different in each frame, and a reader can be
       // left in one. Unsaid, they could sit down to practise and have the
-      // machine play at them. The waiting frame is this program at rest, so
-      // it is the two others that the corner is for.
+      // machine play at them. The frame the app opens in is the run nobody
+      // has to be told about; the corner is for the other two.
       const { view, runtime } = createRig();
       await view.initialize();
       const marks = (): string[] =>
         [...element('score-modes').querySelectorAll('[data-mode]')].map(
           (mark) => mark.getAttribute('data-mode') ?? '',
         );
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
+      element<HTMLButtonElement>('focus-modes').click();
       expect(element('score-modes').hidden).toBe(true);
 
       runtime.controller.updateSettings({ modeId: LISTEN_MODE_ID });
@@ -1438,7 +1443,7 @@ describe('AppView', () => {
 
       expect(marks()).toEqual(['listen', 'blind']);
 
-      runtime.controller.updateSettings({ modeId: new WaitMode().id });
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
       element<HTMLButtonElement>('focus-modes').click();
 
       expect(marks()).toEqual(['blind']);
@@ -1634,6 +1639,10 @@ describe('AppView', () => {
       // invisible until it does something.
       const { view, runtime } = createRig();
       await view.initialize();
+      // In the plain frame, which the corner says nothing about, so what it
+      // shows here is the squares alone.
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
+      element<HTMLButtonElement>('focus-modes').click();
       expect(element('score-modes').hidden).toBe(true);
 
       // Set from the drawer rather than from the square, because the corner

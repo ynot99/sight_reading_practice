@@ -344,6 +344,16 @@ function settingsForMode(mode: string, on: boolean): Partial<PracticeSettings> {
  * are two sentences the first time either is edited.
  */
 /**
+ * The frame the app opens in, and so the one it says nothing about.
+ *
+ * A corner mark and a badge on Start exist to say "this is not the run you
+ * last assumed", so the run a reader gets without asking for anything is the
+ * one that needs no saying. Named once because three places ask it, and they
+ * would go out of step the first time the app opened on something else.
+ */
+const PLAIN_FRAME = FLOW_MODE_ID;
+
+/**
  * The frames in the order the one button walks through them.
  *
  * Waiting, then in time, then not played by the reader at all - which is
@@ -3092,14 +3102,14 @@ export class AppView {
     // On means "not the plain one". Flowing in time is where a reader starts
     // and what the app opens with, so it is the state this rests in - and
     // choosing either of the others lights it the way a square lights.
-    this.el.frameCycle.setAttribute('aria-pressed', String(frame !== FLOW_MODE_ID));
+    this.el.frameCycle.setAttribute('aria-pressed', String(frame !== PLAIN_FRAME));
     // The frame first, where it is not the one that waits. That one is the
     // resting state of this program - Start begins a run and the music waits
     // for the reader - and the other two are exactly the cases where Start
     // does something else, which is what a corner is for. Left unsaid, a
     // reader could sit down to practise and have the machine play at them.
     const on: HTMLButtonElement[] = [];
-    const away = settings.modeId !== WAIT_MODE_ID;
+    const away = settings.modeId !== PLAIN_FRAME;
     if (away) {
       on.push(this.el.frameCycle);
     }

@@ -1358,6 +1358,66 @@ describe('AppView', () => {
       expect(runtime.controller.settings.rushingCounts).toBe(true);
     });
 
+    it('dims a control that another setting has emptied', async () => {
+      // His: dim what is incompatible. A switch standing at full strength
+      // while it does nothing whatever it is set to is the program offering
+      // the reader a choice with no content in it.
+      const { view } = createRig();
+      await view.initialize();
+      const carrier = (id: string): HTMLElement =>
+        element(id).closest('label, .control-group') as HTMLElement;
+
+      // Both hands are being read, so there is no other one to hear - and
+      // nothing of it to be ahead of either.
+      expect(carrier('hear-other-hand').dataset['idle']).toBe('true');
+      expect(carrier('hear-other-hand').getAttribute('title')).toContain('no other one');
+      expect(carrier('rushing-counts').dataset['idle']).toBe('true');
+
+      element<HTMLButtonElement>('focus-hands').click();
+
+      expect(carrier('hear-other-hand').dataset['idle']).toBeUndefined();
+      expect(carrier('hear-other-hand').hasAttribute('title')).toBe(false);
+      // One question at a time: a hand has been chosen, but the other one is
+      // still silent, so there is still nothing to be early against.
+      expect(carrier('rushing-counts').dataset['idle']).toBe('true');
+
+      const hear = element<HTMLInputElement>('hear-other-hand');
+      hear.checked = true;
+      hear.dispatchEvent(new Event('change'));
+
+      expect(carrier('rushing-counts').dataset['idle']).toBeUndefined();
+
+      // And the two settings Survival owns, which say nothing while the bar
+      // is not falling. Set from the drawer, so the drawer has to read the
+      // settings again afterwards - it did not, and everything downstream of
+      // one switch went on saying what it had said before.
+      expect(carrier('survival-refill').dataset['idle']).toBe('true');
+      const survival = element<HTMLInputElement>('survival');
+      survival.checked = true;
+      survival.dispatchEvent(new Event('change'));
+
+      expect(carrier('survival-refill').dataset['idle']).toBeUndefined();
+      expect(carrier('survival-punish').dataset['idle']).toBeUndefined();
+    });
+
+    it('gives the drawer the answer the square already gave', async () => {
+      // One question with two editors: the mode square and the switch in the
+      // drawer are the same setting, so they have to be out of reach for the
+      // same reason and in the same words.
+      const { view } = createRig();
+      await view.initialize();
+      const strict = element('stop-at-mistake').closest('label') as HTMLElement;
+      expect(strict.dataset['idle']).toBeUndefined();
+
+      const rhythm = element<HTMLInputElement>('rhythm-only');
+      rhythm.checked = true;
+      rhythm.dispatchEvent(new Event('change'));
+
+      expect(strict.dataset['idle']).toBe('true');
+      const card = element('modes-grid').querySelector('[data-mode="strict"]') as HTMLElement;
+      expect(strict.getAttribute('title')).toBe(card.dataset['why']);
+    });
+
     it('says in the corner which modes are on, with the sheet shut', async () => {
       // His: the sheet that sets them is closed by the time the reader is at
       // the keys, and a mode turned on three pieces ago is otherwise

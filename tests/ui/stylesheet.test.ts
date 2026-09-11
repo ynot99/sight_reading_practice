@@ -197,6 +197,18 @@ describe('the stylesheet', () => {
     expect(hidden?.selector).toContain('.score__modes');
   });
 
+  it('dims a control with nothing to say rather than taking it away', () => {
+    // His words: lower the opacity. Not `display: none` - a reader looking
+    // for a setting that has gone has no way to find out that another one
+    // took it - and not `disabled`, since nothing here contradicts anything
+    // and setting a mode up before turning it on is reasonable. jsdom
+    // applies no stylesheet, so no view test can see this.
+    const dimmed = rules().find((rule) => rule.selector === ".controls [data-idle='true']");
+
+    expect(dimmed?.body).toMatch(/opacity\s*:\s*0?\.\d+/);
+    expect(dimmed?.body).not.toMatch(/display\s*:\s*none/);
+  });
+
   it('lets one corner place the clock and the modes beneath it', () => {
     // Asked for beside the pill, and beside is the stylesheet stacking them:
     // a second corner measured in pixels against the first lands on top of it

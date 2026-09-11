@@ -342,6 +342,71 @@ function whyModeIsOut(mode: string, settings: PracticeSettings): string | null {
 }
 
 /**
+ * A control in the drawer that can have nothing to say.
+ *
+ * Named rather than discovered, because the list is the claim: these are the
+ * settings another setting can empty, and a control added to the drawer is
+ * not quietly assumed to be one of them.
+ */
+type IdleControl =
+  | 'stop-at-mistake'
+  | 'survival-refill'
+  | 'survival-punish'
+  | 'ease-tempo'
+  | 'playing-ahead'
+  | 'hear-other-hand'
+  | 'rushing-counts';
+
+/**
+ * Why a control has nothing to say just now, or `null` where it has.
+ *
+ * His: dim the modes another mode has emptied. The squares already say so,
+ * and the drawer is where the same answers are written down - a switch
+ * standing there at full strength, doing nothing whatever it is set to, is
+ * the program letting the reader decide something that has no content.
+ *
+ * Left usable all the same. Unlike the squares, nothing here contradicts
+ * anything: an answer given early is simply waiting for the setting that
+ * gives it meaning, and refusing it would mean the reader could not set a
+ * mode up before turning it on.
+ */
+function whyItIsIdle(
+  control: IdleControl,
+  settings: PracticeSettings,
+  keepsTime: boolean,
+): string | null {
+  switch (control) {
+    case 'stop-at-mistake':
+      // The one place this is decided, said again here rather than answered
+      // again: the square and the switch are one question.
+      return whyModeIsOut('strict', settings);
+    case 'survival-refill':
+    case 'survival-punish':
+      return !settings.survival
+        ? 'Nothing is falling: Survival is off.'
+        : keepsTime
+          ? 'Under a pulse the bar falls with the beats, and a beat found is worth the beat it took.'
+          : null;
+    case 'ease-tempo':
+      return keepsTime
+        ? null
+        : 'Where the music waits there is no speed to be behind, so a run says nothing about the tempo.';
+    case 'playing-ahead':
+      return keepsTime ? 'Under a pulse the beat says where a press belongs, not the reader.' : null;
+    case 'hear-other-hand':
+      return settings.handStaff === null
+        ? 'Both hands are being read, so there is no other one to hear.'
+        : null;
+    case 'rushing-counts':
+      return settings.hearTheOtherHand && settings.handStaff !== null
+        ? null
+        : 'Nothing of the other hand is sounding to be ahead of.';
+    default:
+      return null;
+  }
+}
+
+/**
  * How long a square keeps saying why it will not answer.
  *
  * Long enough to read one sentence and short enough that it is gone before
@@ -2536,6 +2601,11 @@ export class AppView {
     this.listen(this.el.survival, 'change', () => {
       controller.updateSettings({ survival: this.el.survival.checked });
       this.renderHealth(controller.health);
+      // A mode square and a switch are one question, and the two settings
+      // this empties are a second: both are read from here, so both have to
+      // be told. Set from the drawer and left alone, the square went on
+      // saying the opposite of what the setting said.
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.survivalRefill, 'change', () => {
@@ -2560,6 +2630,7 @@ export class AppView {
 
     this.listen(this.el.rhythmOnly, 'change', () => {
       controller.updateSettings({ rhythmOnly: this.el.rhythmOnly.checked });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.immediateStart, 'change', () => {
@@ -3013,6 +3084,46 @@ export class AppView {
     // Nothing on is nothing to say, rather than an empty strip of furniture.
     this.el.scoreModes.hidden = names.length === 0;
     this.el.scoreModes.setAttribute('aria-label', `Modes on: ${names.join(', ')}`);
+  }
+
+  /**
+   * Dims every control another setting has emptied, and says why.
+   *
+   * His, and the same rule the squares follow: a switch that does nothing
+   * whatever it is set to should not be standing at full strength. The
+   * dimming is the stylesheet's; what is said here is only which controls
+   * have nothing to say, and the reason goes on the label so a pointer can
+   * ask for it.
+   *
+   * The *label* and not the input: a checkbox dimmed on its own leaves its
+   * own sentence bright beside it, which is the half a reader actually reads.
+   */
+  private dimWhatHasNothingToSay(): void {
+    const settings = this.runtime.controller.settings;
+    const keepsTime = this.runtime.controller.survivalKeepsTime;
+    const controls: readonly (readonly [IdleControl, HTMLElement])[] = [
+      ['stop-at-mistake', this.el.stopAtMistake],
+      ['survival-refill', this.el.survivalRefill],
+      ['survival-punish', this.el.survivalPunish],
+      ['ease-tempo', this.el.easeTempo],
+      ['playing-ahead', this.el.playingAhead],
+      ['hear-other-hand', this.el.hearOtherHand],
+      ['rushing-counts', this.el.rushingCounts],
+    ];
+    for (const [name, control] of controls) {
+      const carrier = control.closest('label, .control-group');
+      if (!(carrier instanceof HTMLElement)) {
+        continue;
+      }
+      const why = whyItIsIdle(name, settings, keepsTime);
+      if (why === null) {
+        delete carrier.dataset['idle'];
+        carrier.removeAttribute('title');
+      } else {
+        carrier.dataset['idle'] = 'true';
+        carrier.title = why;
+      }
+    }
   }
 
   /**
@@ -4745,6 +4856,7 @@ export class AppView {
     this.el.rushingCounts.checked = settings.rushingCounts;
     this.el.markListening.checked = settings.markWhileListening;
     this.showTheModes();
+    this.dimWhatHasNothingToSay();
     this.el.showPlaybackNotes.checked = settings.showPlaybackNotes;
     this.el.restEvery.value = String(settings.restEveryMinutes);
     this.el.restEverySettings.value = this.el.restEvery.value;

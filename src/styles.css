@@ -1647,6 +1647,18 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   width: min(720px, 100%);
 }
 
+/*
+ * A control another setting has emptied.
+ *
+ * His: dim what is incompatible. Not disabled - nothing here contradicts
+ * anything, it is simply waiting for the setting that gives it meaning, and
+ * a reader setting a mode up before turning it on is doing something
+ * reasonable. The label carries the reason, so a pointer can ask.
+ */
+.controls [data-idle='true'] {
+  opacity: 0.45;
+}
+
 .modes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

@@ -1836,43 +1836,40 @@ body[data-playing='true'] .score__modes {
 }
 
 /*
- * The one button that says what kind of run this is.
+ * The one button that says what kind of run this is, dressed as a square.
  *
- * Pressed, it goes round rather than settling, so it is never drawn as
- * "chosen": there is nothing beside it to be chosen instead of. It wears the
- * accent all the time, because what it says is always the answer.
+ * His: it is one of them to look at, so it is one of them to look at - the
+ * same ground, the same lift and turn when it comes on. What it means by
+ * "on" is the only difference: the squares are each their own answer, and
+ * this one is on whenever the run is *not* the plain one the app opens with.
+ * Flowing in time is where a reader starts, so that is the state it rests in.
  */
-.frame__choice {
-  appearance: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 12px;
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  background: var(--accent-soft);
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background 140ms ease;
+.frame__choice[data-frame='wait'] {
+  --mode-ground: #78350f;
 }
 
+.frame__choice[data-frame='flow'] {
+  --mode-ground: #1e3a8a;
+}
+
+.frame__choice[data-frame='listen'] {
+  --mode-ground: #3730a3;
+}
+
+/* Solid drawings, where the squares' are drawn with a line. */
 .frame__choice svg {
-  width: 22px;
-  height: 22px;
-  display: block;
   fill: currentColor;
+  stroke: none;
 }
 
 .frame__name {
   font-size: 1rem;
 }
 
+/* The card's own ink, since the card is dark under it now. */
 .frame__what {
   font-size: 0.84rem;
-  color: var(--text-muted);
+  opacity: 0.82;
 }
 
 .modes {
@@ -1951,15 +1948,19 @@ body[data-playing='true'] .score__modes {
   --mode-ground: #115e59;
 }
 
-/*
- * The frame, in the accent rather than in a colour of its own.
- *
- * It is not one of the four - those all say "harder", and this says what the
- * run *is* - so it is marked the way everything else here marks "this one".
- */
-.score__mode--flow,
+/* The mark in the corner is the button's own colour, being its own icon. */
+.score__mode--flow {
+  --mode-ground: #1e3a8a;
+}
+
 .score__mode--listen {
-  --mode-ground: var(--accent);
+  --mode-ground: #3730a3;
+}
+
+.score__mode--flow svg,
+.score__mode--listen svg {
+  fill: currentColor;
+  stroke: none;
 }
 
 /*

@@ -1288,12 +1288,17 @@ describe('AppView', () => {
       const cycle = element<HTMLButtonElement>('frame-cycle');
       const drawn = (): string => element('frame-icon').getAttribute('d') ?? '';
       expect(cycle.dataset['frame']).toBe('wait');
+      // Lit like a square, and for the same reason: this is not the plain
+      // run the app opens with. Flowing in time is, so that is where it
+      // rests - which is the one thing it means differently from the four.
+      expect(cycle.getAttribute('aria-pressed')).toBe('true');
       const waiting = drawn();
 
       cycle.click();
 
       expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
       expect(cycle.dataset['frame']).toBe('flow');
+      expect(cycle.getAttribute('aria-pressed')).toBe('false');
       expect(element('frame-name').textContent).toContain('metronome');
       expect(element('frame-what').textContent).toContain('beat');
       expect(drawn()).not.toBe(waiting);

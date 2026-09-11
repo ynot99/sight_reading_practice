@@ -3082,6 +3082,10 @@ export class AppView {
     this.el.frameName.textContent = FRAME_NAME[frame] ?? '';
     this.el.frameWhat.textContent = FRAME_WHAT[frame] ?? '';
     this.el.frameCycle.title = `${FRAME_NAME[frame] ?? ''} - press for ${FRAME_NAME[frameAfter(frame)] ?? ''}`;
+    // On means "not the plain one". Flowing in time is where a reader starts
+    // and what the app opens with, so it is the state this rests in - and
+    // choosing either of the others lights it the way a square lights.
+    this.el.frameCycle.setAttribute('aria-pressed', String(frame !== FLOW_MODE_ID));
     // The frame first, where it is not the one that waits. That one is the
     // resting state of this program - Start begins a run and the music waits
     // for the reader - and the other two are exactly the cases where Start

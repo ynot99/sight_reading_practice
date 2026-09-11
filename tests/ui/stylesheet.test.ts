@@ -176,6 +176,13 @@ describe('the stylesheet', () => {
     expect(aside?.body).toMatch(/position\s*:\s*absolute/);
     expect(aside?.body).toMatch(/right\s*:\s*100%/);
     expect(record?.body).toMatch(/left\s*:\s*100%/);
+    // One row each, and both aligned to the bar's foot: three pills of one
+    // height along the bottom of the page read as three, and a stack of them
+    // does not.
+    expect(record?.body).not.toMatch(/flex-direction\s*:\s*column/);
+    expect(aside?.body).not.toMatch(/flex-direction\s*:\s*column/);
+    expect(record?.body).toMatch(/bottom\s*:\s*0/);
+    expect(aside?.body).toMatch(/bottom\s*:\s*0/);
     // Nothing is reached for mid-run, and a bare page keeps none of it.
     expect(gone?.selector).toMatch(/data-playing/);
     expect(gone?.selector).toMatch(/data-bare/);

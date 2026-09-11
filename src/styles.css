@@ -1038,10 +1038,10 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 /*
  * The other satellite: the eye, what it reveals, and what has been kept.
  *
- * A column now, because the takes went under the eye - they are the same
- * subject, and the row they used to sit in was the drawer, two taps away
- * from the thing that makes one. Pilled like the aside so the three
- * standing things on this bar read as three.
+ * The takes live here because they are the same subject as the eye - they
+ * used to sit in the drawer, two taps from the button that makes one. In one
+ * row, and bottom-aligned like the aside opposite: three pills of one height
+ * along the foot of the page read as three, and a stack of them does not.
  */
 .focus-record {
   position: absolute;
@@ -1050,8 +1050,7 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   margin-left: 10px;
   z-index: 21;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -1060,13 +1059,6 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   box-shadow: 0 6px 24px rgb(16 24 40 / 18%);
-}
-
-/* The eye and what it reveals stay side by side; only the takes go below. */
-.focus-record__row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .focus-record[data-open='false'] .focus-record__keep {

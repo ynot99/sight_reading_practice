@@ -1066,7 +1066,6 @@
           a thing to watch instead of the music. Under it, what was kept.
         -->
         <div id="focus-record" class="focus-record" data-open="false">
-          <div class="focus-record__row">
           <button id="focus-record-eye" type="button"
             class="focus-bar__button focus-bar__button--icon focus-record__eye"
             title="Show what can be kept" aria-label="Show what can be kept" aria-expanded="false">
@@ -1079,7 +1078,6 @@
             title="Keep what you have just played" aria-label="Keep what you have just played" disabled>
             <span class="button__dot" aria-hidden="true"></span><span id="focus-keep-text">Keep</span>
           </button>
-          </div>
 
           <button id="focus-takes" type="button"
             class="focus-bar__button focus-bar__button--icon"
@@ -1200,21 +1198,27 @@
             the same reason: what stays is named, so anything added to this
             row is hidden by default.
           -->
-          <button id="focus-bare" type="button" data-bare
-            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="false" title="Just the page"
-            aria-label="Just the page">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 0h2v5h-5v-2h3v-3z" />
-            </svg>
-          </button>
-
           <button id="focus-repeat" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
             aria-pressed="false" title="Play the passage again and again"
             aria-label="Play the passage again and again">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
+            </svg>
+          </button>
+
+          <!--
+            Last in the row, which is where a corner is: leaving the page
+            alone is the thing a reader reaches for when they have finished
+            setting everything else, and it is the one button that survives
+            doing so.
+          -->
+          <button id="focus-bare" type="button" data-bare
+            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
+            aria-pressed="false" title="Just the page"
+            aria-label="Just the page">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 0h2v5h-5v-2h3v-3z" />
             </svg>
           </button>
         </div>

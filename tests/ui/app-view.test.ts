@@ -1276,29 +1276,39 @@ describe('AppView', () => {
       expect(element('sheet-modes').hidden).toBe(true);
     });
 
-    it('chooses what kind of run this is above the squares, not among them', async () => {
-      // His: the squares are all "make it harder", and waiting or flowing is
-      // the frame they sit inside. It was a small toggle in the drawer and a
-      // select down the settings sheet, neither of which is where a reader
-      // decides what they are about to do.
+    it('walks one button through the three kinds of run', async () => {
+      // His shape: one button pressed until it says the one you want, above
+      // the squares rather than among them - the squares are all "make it
+      // harder" and this is the frame they sit inside. What it says and what
+      // it is drawn as change with it, and so does the sentence underneath,
+      // which is the half that says what the choice means.
       const { view, runtime } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
-      const choice = (frame: string): HTMLButtonElement =>
-        element('modes-frame').querySelector(`[data-frame="${frame}"]`) as HTMLButtonElement;
-      expect(choice('wait').getAttribute('aria-pressed')).toBe('true');
+      const cycle = element<HTMLButtonElement>('frame-cycle');
+      const drawn = (): string => element('frame-icon').getAttribute('d') ?? '';
+      expect(cycle.dataset['frame']).toBe('wait');
+      const waiting = drawn();
 
-      choice('flow').click();
+      cycle.click();
 
       expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
-      expect(choice('flow').getAttribute('aria-pressed')).toBe('true');
-      expect(choice('wait').getAttribute('aria-pressed')).toBe('false');
+      expect(cycle.dataset['frame']).toBe('flow');
+      expect(element('frame-name').textContent).toContain('metronome');
+      expect(element('frame-what').textContent).toContain('beat');
+      expect(drawn()).not.toBe(waiting);
       // The same setting the select at the desk carries, so it has to follow.
       expect(element<HTMLSelectElement>('mode').value).toBe(FLOW_MODE_ID);
 
-      choice('wait').click();
+      cycle.click();
+
+      expect(runtime.controller.settings.modeId).toBe(LISTEN_MODE_ID);
+
+      // And round again, rather than stopping at the end of the list.
+      cycle.click();
 
       expect(runtime.controller.settings.modeId).toBe(new WaitMode().id);
+      expect(drawn()).toBe(waiting);
     });
 
     it('offers a third frame, in which the machine plays and nothing is judged', async () => {
@@ -1308,12 +1318,13 @@ describe('AppView', () => {
       const { view, runtime } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
-      const listen = element('modes-frame').querySelector('[data-frame="listen"]') as HTMLButtonElement;
+      const cycle = element<HTMLButtonElement>('frame-cycle');
 
-      listen.click();
+      cycle.click();
+      cycle.click();
 
       expect(runtime.controller.machinePlays).toBe(true);
-      expect(listen.getAttribute('aria-pressed')).toBe('true');
+      expect(cycle.dataset['frame']).toBe('listen');
 
       element<HTMLButtonElement>('focus-play').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1394,23 +1405,6 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-modes').click();
 
       expect(marks()).toEqual(['blind']);
-    });
-
-    it('says what each kind of run does in the words the settings use', async () => {
-      // One sentence said in two places is two sentences the first time
-      // either is edited.
-      const { view } = createRig();
-      await view.initialize();
-      element<HTMLButtonElement>('focus-modes').click();
-      const said = (frame: string): string =>
-        element('modes-frame').querySelector(`[data-frame-what="${frame}"]`)?.textContent ?? '';
-
-      expect(said('wait')).toBe(element('mode-description').textContent);
-      expect(said('flow')).not.toBe(said('wait'));
-
-      (element('modes-frame').querySelector('[data-frame="flow"]') as HTMLButtonElement).click();
-
-      expect(said('flow')).toBe(element('mode-description').textContent);
     });
 
     it('turns a mode on from the squares in front of the reader', async () => {

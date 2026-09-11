@@ -343,19 +343,53 @@ function settingsForMode(mode: string, on: boolean): Partial<PracticeSettings> {
  * chosen and the line under the settings select. Two copies of a sentence
  * are two sentences the first time either is edited.
  */
+/**
+ * The frames in the order the one button walks through them.
+ *
+ * Waiting, then in time, then not played by the reader at all - which is
+ * also the order a piece is learned in, so pressing on goes forwards
+ * through the work rather than around a ring of unrelated things.
+ */
+const FRAME_ORDER: readonly string[] = [WAIT_MODE_ID, FLOW_MODE_ID, LISTEN_MODE_ID];
+
+/**
+ * The short name each frame goes by on the page.
+ *
+ * Not the id: this ends up in a class and in the corner's mark, where a dot
+ * in the middle of `mode.listen` would be two class names rather than one.
+ */
+const FRAME_SLUG: Readonly<Record<string, string>> = {
+  [WAIT_MODE_ID]: 'wait',
+  [FLOW_MODE_ID]: 'flow',
+  [LISTEN_MODE_ID]: 'listen',
+};
+
+/** What the button is called while it stands for each of them. */
+const FRAME_NAME: Readonly<Record<string, string>> = {
+  [WAIT_MODE_ID]: 'Wait for the notes',
+  [FLOW_MODE_ID]: 'Flow with the metronome',
+  [LISTEN_MODE_ID]: 'Listen to it',
+};
+
+/** And what it is drawn as, one path each, the way the transport icons are. */
+const FRAME_ICON: Readonly<Record<string, string>> = {
+  [WAIT_MODE_ID]:
+    'M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.3l3.6 2.1-1 1.7L11 13.5V7h2z',
+  [FLOW_MODE_ID]: 'M12 3h2l4 16H6L10 3h2zm-1 3-2.6 11h7.2L13 6h-2z M6 15h12v2H6z',
+  [LISTEN_MODE_ID]: 'M4 9v6h4l5 4V5L8 9H4zm12-.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z',
+};
+
+/** The frame after this one, which is what pressing the button means. */
+function frameAfter(modeId: string): string {
+  const at = FRAME_ORDER.indexOf(modeId);
+  return FRAME_ORDER[(at + 1) % FRAME_ORDER.length] ?? WAIT_MODE_ID;
+}
+
 const FRAME_WHAT: Readonly<Record<string, string>> = {
   [WAIT_MODE_ID]: 'The cursor waits until you play the notes on the page.',
   [FLOW_MODE_ID]: 'The cursor moves with the beat and your timing is scored.',
   [LISTEN_MODE_ID]: 'The machine plays it and nothing is judged. Start plays; stop ends it.',
 };
-
-/** The mode id a square in the frame row stands for. */
-function frameModeId(frame: string): string {
-  if (frame === 'flow') {
-    return FLOW_MODE_ID;
-  }
-  return frame === 'listen' ? LISTEN_MODE_ID : WAIT_MODE_ID;
-}
 
 /**
  * A control in the drawer that can have nothing to say.
@@ -1164,6 +1198,10 @@ export class AppView {
     sheetModes: HTMLElement;
     modesGrid: HTMLElement;
     modesFrame: HTMLElement;
+    frameCycle: HTMLButtonElement;
+    frameIcon: SVGPathElement;
+    frameName: HTMLElement;
+    frameWhat: HTMLElement;
     modesClose: HTMLButtonElement;
     focusModes: HTMLButtonElement;
     settingsMetronome: HTMLButtonElement;
@@ -1399,6 +1437,10 @@ export class AppView {
       sheetModes: requireElement(doc, 'sheet-modes'),
       modesGrid: requireElement(doc, 'modes-grid'),
       modesFrame: requireElement(doc, 'modes-frame'),
+      frameCycle: requireElement(doc, 'frame-cycle'),
+      frameIcon: requireElement(doc, 'frame-icon'),
+      frameName: requireElement(doc, 'frame-name'),
+      frameWhat: requireElement(doc, 'frame-what'),
       modesClose: requireElement(doc, 'modes-close'),
       focusModes: requireElement(doc, 'focus-modes'),
       settingsMetronome: requireElement(doc, 'settings-metronome'),
@@ -3001,21 +3043,16 @@ export class AppView {
     this.listen(this.el.modesClose, 'click', () => {
       this.el.sheetModes.hidden = true;
     });
-    for (const choice of this.el.modesFrame.querySelectorAll('button[data-frame]')) {
-      if (!(choice instanceof HTMLButtonElement)) {
-        continue;
-      }
-      this.listen(choice, 'click', () => {
-        // The same setting the drawer's toggle and the settings select carry.
-        // Several ways to say one thing is how everything here works; what
-        // must not happen is two things saying it differently, which is why
-        // they all read it back through one sync.
-        this.runtime.controller.updateSettings({
-          modeId: frameModeId(choice.dataset['frame'] ?? ''),
-        });
-        this.syncControlsFromSettings();
+    this.listen(this.el.frameCycle, 'click', () => {
+      // The same setting the settings select carries. Several ways to say one
+      // thing is how everything here works; what must not happen is two
+      // things saying it differently, which is why they read it back through
+      // one sync.
+      this.runtime.controller.updateSettings({
+        modeId: frameAfter(this.runtime.controller.settings.modeId),
       });
-    }
+      this.syncControlsFromSettings();
+    });
     for (const card of cards) {
       if (!(card instanceof HTMLButtonElement)) {
         continue;
@@ -3039,32 +3076,27 @@ export class AppView {
    */
   private showTheModes(): void {
     const settings = this.runtime.controller.settings;
-    for (const choice of this.el.modesFrame.querySelectorAll('button[data-frame]')) {
-      const frame = (choice as HTMLElement).dataset['frame'] ?? '';
-      choice.setAttribute('aria-pressed', String(settings.modeId === frameModeId(frame)));
-    }
-    for (const said of this.el.modesFrame.querySelectorAll('[data-frame-what]')) {
-      const frame = (said as HTMLElement).dataset['frameWhat'] ?? '';
-      said.textContent = FRAME_WHAT[frameModeId(frame)] ?? '';
-    }
+    const frame = settings.modeId;
+    this.el.frameCycle.dataset['frame'] = FRAME_SLUG[frame] ?? 'wait';
+    this.el.frameIcon.setAttribute('d', FRAME_ICON[frame] ?? '');
+    this.el.frameName.textContent = FRAME_NAME[frame] ?? '';
+    this.el.frameWhat.textContent = FRAME_WHAT[frame] ?? '';
+    this.el.frameCycle.title = `${FRAME_NAME[frame] ?? ''} - press for ${FRAME_NAME[frameAfter(frame)] ?? ''}`;
     // The frame first, where it is not the one that waits. That one is the
     // resting state of this program - Start begins a run and the music waits
     // for the reader - and the other two are exactly the cases where Start
     // does something else, which is what a corner is for. Left unsaid, a
     // reader could sit down to practise and have the machine play at them.
     const on: HTMLButtonElement[] = [];
-    const frame = this.el.modesFrame.querySelector(
-      `button[data-frame='${settings.modeId === FLOW_MODE_ID ? 'flow' : 'listen'}']`,
-    );
-    const away = settings.modeId !== WAIT_MODE_ID && frame instanceof HTMLButtonElement;
+    const away = settings.modeId !== WAIT_MODE_ID;
     if (away) {
-      on.push(frame as HTMLButtonElement);
+      on.push(this.el.frameCycle);
     }
     // And on the button that acts on it. The reader presses Start without
     // looking; what it will start is the one thing it may need to say, and
     // only where the answer is not the plain one.
     this.el.focusPlayFrame.replaceChildren();
-    const badge = away ? (frame as HTMLButtonElement).querySelector('svg') : null;
+    const badge = away ? this.el.frameCycle.querySelector('svg') : null;
     if (badge !== null) {
       this.el.focusPlayFrame.append(badge.cloneNode(true));
     }
@@ -3099,6 +3131,7 @@ export class AppView {
   private showWhichModesAreOn(cards: readonly HTMLButtonElement[]): void {
     const named = (card: HTMLButtonElement): string =>
       card.dataset['mode'] ?? card.dataset['frame'] ?? '';
+
     const shape = cards.map(named).join(' ');
     if (shape === this.modesShown) {
       return;

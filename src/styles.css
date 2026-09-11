@@ -1819,11 +1819,18 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  */
 .frame {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   padding: 4px 4px 0;
 }
 
+/*
+ * The one button that says what kind of run this is.
+ *
+ * Pressed, it goes round rather than settling, so it is never drawn as
+ * "chosen": there is nothing beside it to be chosen instead of. It wears the
+ * accent all the time, because what it says is always the answer.
+ */
 .frame__choice {
   appearance: none;
   display: flex;
@@ -1831,16 +1838,14 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   align-items: flex-start;
   gap: 4px;
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
   border-radius: 12px;
-  background: var(--surface-strong);
+  background: var(--accent-soft);
   color: var(--text);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    background 140ms ease;
+  transition: background 140ms ease;
 }
 
 .frame__choice svg {
@@ -1848,11 +1853,6 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   height: 22px;
   display: block;
   fill: currentColor;
-}
-
-.frame__choice[aria-pressed='true'] {
-  border-color: var(--accent);
-  background: var(--accent-soft);
 }
 
 .frame__name {

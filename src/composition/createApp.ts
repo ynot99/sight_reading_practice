@@ -246,7 +246,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     new TimingWeightedScoringStrategy(),
     new ContinuityScoringStrategy(),
   ]);
-  const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
+  const modes = new PracticeModeRegistry().registerAll([new FlowMode(), new WaitMode()]);
   const ladder = new PracticeLadder(BUILT_IN_LADDER);
 
   const settingsStore =

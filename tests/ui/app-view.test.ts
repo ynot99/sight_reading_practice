@@ -2631,6 +2631,32 @@ describe('AppView', () => {
       expect(row().getAttribute('aria-pressed')).toBe('true');
     });
 
+    it('goes to where the place begins, not only to its two numbers', async () => {
+      // His: picking one should jump to where it starts. The numbers alone
+      // leave the page wherever it was, which on a long piece is nowhere
+      // near - and a passage the reader cannot see is one they have to go
+      // and find.
+      const rig = createRig();
+      await rig.view.initialize();
+      const kept = await rig.runtime.scores.keep(longExercise({ bars: 8 }), 1_000);
+      await rig.runtime.controller.openScore((await rig.runtime.scores.open(kept.id)) as never);
+      rig.runtime.controller.updateSettings({ rangeFromBar: 5, rangeToBar: 8 });
+      element<HTMLButtonElement>('passage-save').click();
+      await waitFor(() => element('passage-list').childElementCount > 0);
+      rig.runtime.controller.updateSettings({ rangeFromBar: null, rangeToBar: null });
+      rig.renderer.cursor.moves.length = 0;
+      element<HTMLButtonElement>('focus-places').click();
+
+      rowButton('passage-list', 'Practise bars 5-8').click();
+
+      // Four crotchets to the bar, so bar five begins at the seventeenth
+      // step - and the marker is what carries the page with it.
+      expect(rig.renderer.cursor.moves.at(-1)).toBe(16);
+      // And the sheet gets out of the way, since the point of the tap was to
+      // be somewhere.
+      expect(element('sheet-places').hidden).toBe(true);
+    });
+
     it('has nothing to offer while the material is generated', async () => {
       // An exercise is generated afresh every time, so "bars 5 to 8" of one
       // says nothing about the next.

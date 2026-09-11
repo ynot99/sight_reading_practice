@@ -1788,13 +1788,7 @@ export class AppView {
         String(settings.rangeFromBar === passage.fromBar && settings.rangeToBar === passage.toBar),
       );
       this.listen(apply, 'click', () => {
-        this.runtime.controller.updateSettings({
-          rangeFromBar: passage.fromBar,
-          rangeToBar: passage.toBar,
-        });
-        // Which redraws this list too, so the row that was tapped comes back
-        // marked without this having to say so twice.
-        this.syncControlsFromSettings();
+        this.goToThePlace(passage);
       });
 
       const remove = this.doc.createElement('button');
@@ -1809,6 +1803,38 @@ export class AppView {
       row.append(apply, remove);
       this.el.passageList.append(row);
     }
+  }
+
+  /**
+   * Takes the reader to a place they marked out, rather than only to the
+   * settings that describe it.
+   *
+   * His: picking one should jump to where it begins. Setting the two bar
+   * numbers leaves the page wherever it was, which on a long piece is
+   * usually nowhere near - and a passage the reader cannot see is a passage
+   * they have to go and find.
+   *
+   * Everything the way-back button in the drawer already does, for the same
+   * reasons: a run in progress is a run of somewhere else, a place pointed
+   * at belongs to the passage being left, and the brackets on the page have
+   * to move with the numbers or they bracket the old stretch. And the sheet
+   * closes, because the point of the tap was to be somewhere.
+   */
+  private goToThePlace(passage: SavedPassage): void {
+    const controller = this.runtime.controller;
+    const status = controller.session?.status;
+    if (status === 'running' || status === 'counting-in' || status === 'paused') {
+      controller.stop();
+    }
+    controller.updateSettings({ rangeFromBar: passage.fromBar, rangeToBar: passage.toBar });
+    controller.beginAtTheStart();
+    this.placedOnBar = null;
+    controller.cursorToStart();
+    this.showPassageMarkers();
+    // Which redraws the list too, so the row that was tapped comes back
+    // marked without this having to say so twice.
+    this.syncControlsFromSettings();
+    this.el.sheetPlaces.hidden = true;
   }
 
   /** Writes the list back to the score it belongs to, and redraws it. */

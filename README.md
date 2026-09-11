@@ -6,19 +6,34 @@ keyboard in real time. Free, open source, and offline after the first load —
 an alternative to the graded sight-reading drills the subscription trainers
 sell.
 
-Around those two modes are the aids a reader reaches for: a **ruler** of the
+Around those runs are the aids a reader reaches for: a **ruler** of the
 beat drawn through bars spaced by time rather than by an engraver, the **other
 hand** sounded while you read yours, a **click that follows you** instead of
 counting at you, a page that turns **in halves**, and a reminder to **stop**
 that waits for the music to stop first. Each of them is described further
 down; every one of them is off until asked for.
 
-Two practice modes:
+Three kinds of run, which is one question: who moves the cursor.
 
-- **Wait mode** — the cursor waits until you actually play the notated chord.
-  For learning the page.
-- **Flow mode** — the cursor walks with the metronome and grades how close each
-  press was to its beat. For building fluency.
+- **Flow in time** — the cursor walks with the metronome and grades how close
+  each press was to its beat. For building fluency, and what the app opens
+  with.
+- **Wait for me** — the cursor waits until you actually play the notated
+  chord. For learning the page.
+- **Listen to it** — the machine plays and nothing is judged. Start is what
+  plays it; there is no second transport beside the one the bar has.
+
+They are chosen from one button in the **Modes** sheet, pressed until it says
+the one you want. Beside it are five squares, each of which makes reading
+harder on purpose and each of which *is* a setting that also lives at the
+desk: **Survival** (the bar falls while you play), **Blind** (the note goes as
+you reach it), **Rhythm only** (any note counts), **One mistake** (a wrong
+note ends the run) and **No cursor** (keep the place yourself). Rhythm only
+and One mistake empty each other, so turning either on turns the other off.
+
+Whichever kind of run is *not* the one the app opens with is said in the
+corner of the page and on the Start button itself, because Start means
+something different in each and a reader can be left in one.
 
 **The ladder** is a route through those settings rather than a replacement for
 them: twenty-four named rungs from a five-finger position in C to sequences in
@@ -116,9 +131,7 @@ for is the chord the run would actually begin with, so a place put somewhere
 else or a passage chosen moves it too, and it is judged by the same matcher
 the run would use — the reader's tolerance, their octave rule, the ornaments
 the page offers but does not demand. Wrong notes are not punished: nothing is
-being graded yet. It lives in the fullscreen drawer as well as in the
-settings, because a setting whose point is not reaching for the tablet should
-not be two taps deep.
+being graded yet.
 
 **Repeat when it ends** starts the passage over as soon as it finishes. When
 it is *heard* rather than played it goes round inside the one performance:
@@ -152,6 +165,14 @@ stops being asked for. It needs no icon to be understood and no memory to be
 found — it is beside the notes already being looked at — and it takes nothing
 from the transport row. The drawer's button cycles the same setting for
 anyone who prefers a button; they cannot come to hold different answers.
+
+**The transport row is for what a reader presses with their hands on the
+keys**, and everything that turned out not to be that has left it. The cursor,
+the marks, the ruler, starting-by-playing, paged reading, survival, waiting
+and listening were all buttons in the drawer once; they are settings at the
+desk or squares in the Modes sheet now, each in one place. What is left in the
+drawer is the passage and the places kept in it, the note size, and which
+hand.
 
 The setting has three states and the switches are two, so turning off the
 last hand still standing is read as putting them both back: a run that asks
@@ -188,17 +209,27 @@ into the chord after it at speed. The cursor is shown for the performance whatev
 set, since following along is most of the value — and put back the way they
 had it when the performance ends.
 
-The transport is one row of icons: play/pause as a single button, stop,
-listen, the pace, the metronome, and repeat. A drawer under it — opened by
-its handle or by dragging up — holds what you *change* rather than what you
-press mid-run: note size, which hand, the cursor, the marks for what you
-played, survival, a fresh exercise.
+The transport is one row of icons: play/pause as a single button, stop, the
+pace, the metronome, repeat, and the way out to a bare page. A drawer under
+it — opened by its handle or by dragging up — holds what you *change* rather
+than what you press mid-run: the passage and its places, note size, which
+hand.
 
-Repeat is in the row and a fresh exercise is not, which is a swap rather than
-a widening: the row is as short as it was. A new exercise does nothing at all
-while a real score is open — the controller sees the opened piece and
-presents it again — so for most of the reading done here it is a button that
-cannot be pressed usefully, while repeat is how a passage is learned.
+Stop stands only while there is something to stop, the way quick replay does:
+a button greyed out over a page where nothing is happening is furniture. It
+is not redundant, though — play holds a run and stop ends one, and mid-run it
+is one of three buttons left on the bar.
+
+Two smaller pills sit either side of that bar, holding what a reader *opens*
+rather than presses: on the left the kept scores, the Modes sheet, the
+readings and the settings; on the right the eye that reveals a take and the
+takes already kept. They are placed from the bar's own edges rather than laid
+out beside it, because the bar is centred on the window and has to stay
+centred. Both go while the music is playing and on a bare page.
+
+Asking for a fresh exercise is not a button on the bar at all: it is an answer
+to *what goes on the stand*, so it stands at the head of the sheet that asks
+that, above the scores that have been kept.
 
 The metronome is in the row rather than the drawer because it is the thing
 reached for most between runs, and a drawer is a gesture before it is a
@@ -734,6 +765,7 @@ about the application, the application knows nothing about the browser.
                     │    PracticeController                     │
                     │    session/  PracticeSession + FSM        │
                     │    modes/    WaitMode | FlowMode          │
+                    │              + the listening frame            │
                     │    ports/    IMidiSource, IMetronome,     │
                     │              IScoreRenderer, IClock, …    │
                     └───────┬──────────────────────┬───────────┘
@@ -813,6 +845,9 @@ src/
 │       ├── IPracticeMode.ts        #   + BasePracticeMode no-op defaults
 │       ├── WaitMode.ts
 │       ├── FlowMode.ts
+│       ├── ListenFrame.ts          #   the third frame, and *not* a mode:
+│       │                           #   no run, nothing judged, so no class
+│       │                           #   with six empty hooks in the registry
 │       └── PracticeModeRegistry.ts
 │
 ├── infrastructure/                 # the only code that touches the platform

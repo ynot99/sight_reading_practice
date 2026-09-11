@@ -1300,35 +1300,31 @@ describe('AppView', () => {
 
       cycle.click();
 
-      expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
-      expect(cycle.dataset['frame']).toBe('flow');
-      expect(cycle.getAttribute('aria-pressed')).toBe('false');
-      expect(element('frame-name').textContent).toContain('Flow');
-      expect(element('frame-what').textContent).toContain('beat');
-      expect(drawn()).not.toBe(waiting);
-      // The same setting the select at the desk carries, so it has to follow.
-      expect(element<HTMLSelectElement>('mode').value).toBe(FLOW_MODE_ID);
-
-      cycle.click();
-
       expect(runtime.controller.settings.modeId).toBe(LISTEN_MODE_ID);
-      // Two presses running have both left it lit, and both were felt: the
+      expect(cycle.dataset['frame']).toBe('listen');
+      expect(element('frame-name').textContent).toContain('Listen');
+      expect(element('frame-what').textContent).toContain('machine');
+      expect(drawn()).not.toBe(waiting);
+      // Two presses running can both leave it lit, and both are felt: the
       // turn is played again rather than transitioned from a state to
       // itself, which is no movement at all.
       expect(cycle.dataset['turning']).toBe('true');
+      // The same setting the select at the desk carries, so it has to follow.
+      expect(element<HTMLSelectElement>('mode').value).toBe(LISTEN_MODE_ID);
+
+      // On to the frame the app opens in, which is the button going out:
+      // nothing to play there, since going out is the square's own way down.
+      cycle.click();
+
+      expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
+      expect(cycle.getAttribute('aria-pressed')).toBe('false');
+      expect(cycle.dataset['turning']).toBeUndefined();
 
       // And round again, rather than stopping at the end of the list.
       cycle.click();
 
       expect(runtime.controller.settings.modeId).toBe(new WaitMode().id);
       expect(drawn()).toBe(waiting);
-
-      // Back to the plain one, which is the button going out: nothing to
-      // play, since going out is what the square does by itself.
-      cycle.click();
-
-      expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
-      expect(cycle.dataset['turning']).toBeUndefined();
     });
 
     it('offers a third frame, in which the machine plays and nothing is judged', async () => {
@@ -1340,7 +1336,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-modes').click();
       const cycle = element<HTMLButtonElement>('frame-cycle');
 
-      cycle.click();
+      // Waiting is where the rig starts, and listening is the next along.
       cycle.click();
 
       expect(runtime.controller.machinePlays).toBe(true);

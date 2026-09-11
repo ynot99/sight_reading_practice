@@ -356,11 +356,12 @@ const PLAIN_FRAME = FLOW_MODE_ID;
 /**
  * The frames in the order the one button walks through them.
  *
- * Waiting, then in time, then not played by the reader at all - which is
- * also the order a piece is learned in, so pressing on goes forwards
- * through the work rather than around a ring of unrelated things.
+ * His: the one the app opens in first, then the one that waits, then the one
+ * nobody plays. Starting from the resting frame is what makes the ring read
+ * as a list - the first press is always "leave the default", and the reader
+ * is never counting from somewhere arbitrary.
  */
-const FRAME_ORDER: readonly string[] = [WAIT_MODE_ID, FLOW_MODE_ID, LISTEN_MODE_ID];
+const FRAME_ORDER: readonly string[] = [FLOW_MODE_ID, WAIT_MODE_ID, LISTEN_MODE_ID];
 
 /**
  * The short name each frame goes by on the page.

@@ -833,18 +833,6 @@ function readPlayedNotes(value: string): PlayedNoteDisplay {
 }
 
 /** The transport icons, as one path each so only the `d` has to change. */
-const LISTEN_ICON = 'M4 9v6h4l5 4V5L8 9H4zm12-.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z';
-/**
- * The same speaker with a pause beside it, and with a play beside it.
- *
- * Three states rather than two, since the button holds the performance now
- * instead of throwing it away: nothing playing, playing, held. The speaker
- * stays in all three so the button is recognisably the same one - what
- * changes is what pressing it will do next, which is what an icon on a
- * transport says.
- */
-const PAUSE_LISTEN_ICON = 'M4 9v6h4l5 4V5L8 9H4z M16 8h2v8h-2z M20 8h2v8h-2z';
-const RESUME_LISTEN_ICON = 'M4 9v6h4l5 4V5L8 9H4z M16 8l6 4-6 4z';
 const PLAY_ICON = 'M8 5l11 7-11 7z';
 const PAUSE_ICON = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
 
@@ -1107,7 +1095,7 @@ export class AppView {
     focusReplay: HTMLButtonElement;
     focusHandle: HTMLButtonElement;
     focusHealth: HTMLElement;
-    focusListenIcon: SVGPathElement;
+    focusPlayFrame: HTMLElement;
     focusHands: HTMLButtonElement;
     focusImmediate: HTMLButtonElement;
     focusMetronome: HTMLButtonElement;
@@ -1157,7 +1145,6 @@ export class AppView {
     focusSpeed: HTMLElement;
     focusStop: HTMLButtonElement;
     focusRewind: HTMLButtonElement;
-    focusListen: HTMLButtonElement;
     focusSlower: HTMLButtonElement;
     focusFaster: HTMLButtonElement;
     focusTempo: HTMLOutputElement;
@@ -1345,7 +1332,7 @@ export class AppView {
       focusReplay: requireElement(doc, 'focus-replay'),
       focusHandle: requireElement(doc, 'focus-handle'),
       focusHealth: requireElement(doc, 'focus-health'),
-      focusListenIcon: requireElement(doc, 'focus-listen-icon'),
+      focusPlayFrame: requireElement(doc, 'focus-play-frame'),
       focusHands: requireElement(doc, 'focus-hands'),
       focusImmediate: requireElement(doc, 'focus-immediate'),
       focusMetronome: requireElement(doc, 'focus-metronome'),
@@ -1395,7 +1382,6 @@ export class AppView {
       focusSpeed: requireElement(doc, 'focus-speed'),
       focusStop: requireElement(doc, 'focus-stop'),
       focusRewind: requireElement(doc, 'focus-rewind'),
-      focusListen: requireElement(doc, 'focus-listen'),
       focusSlower: requireElement(doc, 'focus-slower'),
       focusFaster: requireElement(doc, 'focus-faster'),
       focusTempo: requireElement(doc, 'focus-tempo'),
@@ -2188,12 +2174,12 @@ export class AppView {
       controller.pauseListening();
       // Held music has no next beat until it is picked up again.
       this.forgetTheBeats();
-      this.describeListening();
+      this.showThePerformance();
       return;
     }
     if (controller.isListeningPaused) {
       controller.resumeListening();
-      this.describeListening();
+      this.showThePerformance();
       return;
     }
     // The recordings download on first use, and playback fires a whole piece
@@ -2209,7 +2195,7 @@ export class AppView {
     // walk through, which the reader asked to watch.
     this.showVerdict(false);
     controller.listen();
-    this.describeListening();
+    this.showThePerformance();
   }
 
   /**
@@ -2247,27 +2233,19 @@ export class AppView {
     );
   }
 
-  private describeListening(): void {
+  /**
+   * Redraws everything a performance moves.
+   *
+   * It had a button of its own with three labels - listen, pause listening,
+   * resume listening - which was a second transport beside the one the bar
+   * already had. Listening is a frame now, so Start is what starts it and
+   * Start is what says so; what is left here is the chrome that follows any
+   * music going, whoever is making it.
+   */
+  private showThePerformance(): void {
     this.describeCursorButton();
-    // A performance going or held is the bar playing, and this is said
-    // wherever one starts, holds or ends - which is the whole list of
-    // moments the chrome has to follow.
     this.applyPlayingChrome();
-    const listening = this.runtime.controller.isListening;
-    const held = this.runtime.controller.isListeningPaused;
-    // Three answers, because there are three states: nothing playing, playing,
-    // and held. "Pause listening" rather than "Pause" alone for the reason
-    // the old label said "Stop listening" - the run's own Pause sits beside
-    // it, and one word would not say which of the two this is.
-    const label = listening ? 'Pause listening' : held ? 'Resume listening' : 'Listen';
-    // The fullscreen one is a picture: writing the label into it would throw
-    // the icon away, which is exactly what it used to do.
-    this.el.focusListen.setAttribute('aria-label', label);
-    this.el.focusListen.title = label;
-    this.el.focusListenIcon.setAttribute(
-      'd',
-      listening ? PAUSE_LISTEN_ICON : held ? RESUME_LISTEN_ICON : LISTEN_ICON,
-    );
+    this.updateButtons(this.runtime.controller.session?.status ?? 'idle');
     this.describeStopping();
   }
 
@@ -3099,9 +3077,19 @@ export class AppView {
     const frame = this.el.modesFrame.querySelector(
       `button[data-frame='${settings.modeId === FLOW_MODE_ID ? 'flow' : 'listen'}']`,
     );
-    if (settings.modeId !== WAIT_MODE_ID && frame instanceof HTMLButtonElement) {
-      on.push(frame);
+    const away = settings.modeId !== WAIT_MODE_ID && frame instanceof HTMLButtonElement;
+    if (away) {
+      on.push(frame as HTMLButtonElement);
     }
+    // And on the button that acts on it. The reader presses Start without
+    // looking; what it will start is the one thing it may need to say, and
+    // only where the answer is not the plain one.
+    this.el.focusPlayFrame.replaceChildren();
+    const badge = away ? (frame as HTMLButtonElement).querySelector('svg') : null;
+    if (badge !== null) {
+      this.el.focusPlayFrame.append(badge.cloneNode(true));
+    }
+    this.el.focusPlayFrame.hidden = badge === null;
     for (const card of this.el.modesGrid.querySelectorAll('button[data-mode]')) {
       if (!(card instanceof HTMLButtonElement)) {
         continue;
@@ -3319,17 +3307,6 @@ export class AppView {
 
     this.listen(this.el.focusFaster, 'click', () => {
       this.nudgeTempo(TEMPO_STEP_PERCENT);
-    });
-
-    this.listen(this.el.focusListen, 'click', () => {
-      // Still one tap. Listening is a frame now rather than a feature beside
-      // the frames, and this says "that one" before it starts - which is the
-      // whole of what it used to do, said properly.
-      if (!controller.machinePlays) {
-        controller.updateSettings({ modeId: LISTEN_MODE_ID });
-        this.syncControlsFromSettings();
-      }
-      void this.toggleListening();
     });
 
     this.listen(this.el.focusNext, 'click', () => {
@@ -3616,7 +3593,7 @@ export class AppView {
     // is a no-op where there is none, which is cheaper than a branch that
     // has to be kept in step with what Stop already did.
     controller.stopListening();
-    this.describeListening();
+    this.showThePerformance();
   }
 
   /** Ends a look in progress, whether it ran out or the reader stopped it. */
@@ -4215,7 +4192,7 @@ export class AppView {
         this.applyScoreCover();
         // A performance does not survive its own score being replaced, so the
         // button that offers to stop one has to stop saying so.
-        this.describeListening();
+        this.showThePerformance();
       }),
     );
 
@@ -4223,7 +4200,7 @@ export class AppView {
       controller.events.on('sessionCreated', ({ session }) => {
         this.bindSession(session);
         // A run takes the pulse from a playback, so the button has to admit it.
-        this.describeListening();
+        this.showThePerformance();
         // Every way of starting a run arrives here - the button, the repeat
         // coming round, a drill - so the verdict on the last one is put away
         // in one place rather than at each of them.
@@ -4278,7 +4255,7 @@ export class AppView {
         // Asked rather than assumed: this fires on the way into starting a
         // run as well as on the way out of one, and the answer differs.
         this.updateButtons(controller.session?.status ?? 'idle');
-        this.describeListening();
+        this.showThePerformance();
       }),
     );
 
@@ -4295,7 +4272,7 @@ export class AppView {
       // transport went back to offering Listen, and Stop went grey, over a
       // performance that was playing.
       controller.playbackEvents.on('started', () => {
-        this.describeListening();
+        this.showThePerformance();
       }),
     );
 
@@ -4328,7 +4305,7 @@ export class AppView {
         // The beats it had promised go with it: they were promises about a
         // performance that is over.
         this.forgetTheBeats();
-        this.describeListening();
+        this.showThePerformance();
       }),
     );
 
@@ -5807,8 +5784,14 @@ export class AppView {
 
   private updateButtons(status: SessionStatus): void {
     this.describeCursorButton();
-    const running = status === 'running' || status === 'counting-in';
-    const paused = status === 'paused';
+    // A performance counts as a run here. It is what Start starts in the
+    // listening frame, so it is what Start has to say next about - the
+    // button used to have a twin beside it saying this for the performance
+    // alone, which is the twin this replaces.
+    const controller = this.runtime.controller;
+    const running =
+      status === 'running' || status === 'counting-in' || controller.isListening;
+    const paused = status === 'paused' || controller.isListeningPaused;
     // What is being practised is settled before a run and not during one: a
     // run is graded, and a passage moved halfway through makes the report a
     // report of nothing in particular. The markers stay on the page saying

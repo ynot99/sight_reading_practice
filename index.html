@@ -1126,6 +1126,13 @@
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path id="focus-play-icon" d="M8 5l11 7-11 7z" />
             </svg>
+            <!--
+              What this will start, where that is not the plain answer. The
+              frame's own mark, small, in the corner of the button that acts
+              on it - the same thing the page's corner says, said again where
+              the finger is.
+            -->
+            <span id="focus-play-frame" class="focus-bar__badge" aria-hidden="true" hidden></span>
           </button>
           <!--
             The one button whose only home is a run: one press where stopping
@@ -1163,12 +1170,6 @@
             title="Stop" aria-label="Stop" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M6 6h12v12H6z" />
-            </svg>
-          </button>
-          <button id="focus-listen" type="button" class="focus-bar__button focus-bar__button--icon"
-            title="Listen" aria-label="Listen">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path id="focus-listen-icon" d="M4 9v6h4l5 4V5L8 9H4zm12-.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z" />
             </svg>
           </button>
 

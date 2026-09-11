@@ -1015,6 +1015,41 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * begin again, and then stands with pause and stop.
  */
 /*
+ * What Start will start, in the corner of the button.
+ *
+ * Only where that is not the plain answer - the waiting frame is this
+ * program at rest - so most of the time there is nothing here at all. The
+ * button is the one thing on the bar a reader presses without looking, and
+ * two icons on it are one more than it should ever need to say.
+ */
+.focus-bar__badge {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.focus-bar__badge svg {
+  width: 9px;
+  height: 9px;
+  display: block;
+  fill: currentColor;
+  stroke: none;
+}
+
+#focus-play {
+  position: relative;
+}
+
+/*
  * Stop, only while there is something to stop.
  *
  * His: with playback folded into a frame, a Stop button standing greyed out

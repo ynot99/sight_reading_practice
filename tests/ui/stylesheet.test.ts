@@ -136,6 +136,16 @@ describe('the stylesheet', () => {
     const icon = rules().find((rule) => rule.selector === '.settings-sections__tab svg');
     expect(icon?.body).toMatch(/fill\s*:\s*none/);
     expect(icon?.body).toMatch(/stroke\s*:\s*currentColor/);
+    // A box of its own rather than a letter on a line: inline, an svg sits on
+    // the text baseline and hangs below the word it belongs to.
+    expect(icon?.body).toMatch(/display\s*:\s*block/);
+
+    // And the panel is wide enough for two columns, which is what it now
+    // holds: the rail takes a fixed slice off the left before the settings
+    // get any of it.
+    const panel = rules().find((rule) => rule.selector === '.sheet__panel--wide');
+    const widest = Number(/min\((\d+)px/.exec(panel?.body ?? '')?.[1] ?? '0');
+    expect(widest).toBeGreaterThan(880);
   });
 
   it('empties the bar down to the way out when only the page is wanted', () => {

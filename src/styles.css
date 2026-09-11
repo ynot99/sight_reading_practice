@@ -1020,9 +1020,16 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * squeezed into a list's width they become one very long column, and the
  * reader scrolls past everything to reach anything.
  */
+/*
+ * Wider and taller than it was, because it now holds two columns.
+ *
+ * The rail takes a fixed slice off the left, and at the old width what was
+ * left for the settings themselves was narrower than the single column they
+ * used to have all to themselves.
+ */
 .sheet__panel--wide {
-  width: min(880px, 100%);
-  max-height: min(86vh, 900px);
+  width: min(1100px, 100%);
+  max-height: min(92vh, 1000px);
 }
 
 /*
@@ -1633,6 +1640,12 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* The name sits on one line beside its mark, however long the name is. */
+  line-height: 1.25;
+}
+
+.settings-sections__tab > span {
+  min-width: 0;
 }
 
 /*
@@ -1653,6 +1666,11 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.75;
+  /*
+   * Its own box rather than a letter on a line: inline, an svg sits on the
+   * text baseline and hangs below the word it belongs to.
+   */
+  display: block;
 }
 
 .settings-sections__tab[aria-pressed='true'] svg {

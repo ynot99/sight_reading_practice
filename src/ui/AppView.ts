@@ -47,7 +47,6 @@ import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { measureCount } from '../domain/model/Exercise.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
-import { elementAt } from '../shared/asserts.js';
 import { readBackup } from '../application/Backup.js';
 import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
 
@@ -600,14 +599,6 @@ const CLICK_WHEN_LABELS: Readonly<Record<ClickWhen, string>> = {
  */
 const CLICK_WHEN_BY_THUMB: readonly ClickWhen[] = ['always', 'count-in-only', 'never'];
 
-/** What the drawer's marks button says it is doing, in words. */
-const MARKS_TITLES: Record<PlayedNoteDisplay, string> = {
-  live: 'Colour the notes as I play',
-  'while-held': 'Colour them as I play, wrong ones only while held',
-  'at-end': 'Colour the notes when the run ends',
-  hidden: 'Never colour the notes',
-};
-
 function dropoutDescription(when: ClickWhen, countInBars: number): string {
   if (when === 'always') {
     return 'The click plays all the way through.';
@@ -1101,8 +1092,6 @@ export class AppView {
     focusMetronome: HTMLButtonElement;
     focusRepeat: HTMLButtonElement;
     focusBare: HTMLButtonElement;
-    focusCursor: HTMLButtonElement;
-    focusMarks: HTMLButtonElement;
     focusPages: HTMLButtonElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
@@ -1338,8 +1327,6 @@ export class AppView {
       focusMetronome: requireElement(doc, 'focus-metronome'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
       focusBare: requireElement(doc, 'focus-bare'),
-      focusCursor: requireElement(doc, 'focus-cursor'),
-      focusMarks: requireElement(doc, 'focus-marks'),
       focusPages: requireElement(doc, 'focus-pages'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
@@ -2226,13 +2213,6 @@ export class AppView {
    * three answers is being shown changes when the music does - the run ends,
    * and the button is suddenly reporting a different one.
    */
-  private describeCursorButton(): void {
-    this.el.focusCursor.setAttribute(
-      'aria-pressed',
-      String(this.runtime.controller.cursorShownNow),
-    );
-  }
-
   /**
    * Redraws everything a performance moves.
    *
@@ -2243,7 +2223,6 @@ export class AppView {
    * music going, whoever is making it.
    */
   private showThePerformance(): void {
-    this.describeCursorButton();
     this.applyPlayingChrome();
     this.updateButtons(this.runtime.controller.session?.status ?? 'idle');
     this.describeStopping();
@@ -3240,29 +3219,8 @@ export class AppView {
       this.showPassageMarkers();
     });
 
-    this.listen(this.el.focusCursor, 'click', () => {
-      // For whatever is happening now, which is what the reader was looking
-      // at when they pressed it. The three answers live in the sheet; this
-      // button moves the one in front of them.
-      controller.toggleCursorNow();
-      this.syncControlsFromSettings();
-    });
-
     this.listen(this.el.focusPages, 'click', () => {
       controller.updateSettings({ pagedScore: !controller.settings.pagedScore });
-      this.syncControlsFromSettings();
-    });
-
-    this.listen(this.el.focusMarks, 'click', () => {
-      // All three, cycled. "When do I see what I played" is one question with
-      // three answers, and answering it in the settings while a switch here
-      // answered two thirds of it was two controls for one decision - the
-      // reader who chose "at the end" downstairs found a switch up here that
-      // could only turn it into something else.
-      const at = PLAYED_NOTE_DISPLAYS.indexOf(controller.settings.playedNotes);
-      controller.updateSettings({
-        playedNotes: elementAt(PLAYED_NOTE_DISPLAYS, (at + 1) % PLAYED_NOTE_DISPLAYS.length),
-      });
       this.syncControlsFromSettings();
     });
 
@@ -4058,7 +4016,11 @@ export class AppView {
    * everything here is measured against the music, not the clock.
    */
   private renderHealth(health: number, cause: 'drain' | 'settle' = 'settle'): void {
-    const running = this.runtime.controller.survivalRuns;
+    // His: only once Start has been pressed. Survival being *chosen* is a
+    // decision about the next run; the falling bar is that run happening,
+    // and a full bar standing over a page nobody is reading yet is the
+    // program showing its working.
+    const running = this.runtime.controller.survivalRuns && this.isPlaying;
     this.el.focusHealth.hidden = !running;
     if (!running) {
       return;
@@ -4839,10 +4801,6 @@ export class AppView {
     // themselves are the same either way, and what was measured about a press
     // does not change because the reader wants stricter colours.
     this.el.score.dataset['strict'] = String(settings.strictTiming);
-    this.describeCursorButton();
-    this.el.focusMarks.dataset['marks'] = settings.playedNotes;
-    this.el.focusMarks.title = MARKS_TITLES[settings.playedNotes];
-    this.el.focusMarks.setAttribute('aria-label', MARKS_TITLES[settings.playedNotes]);
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.playingAhead.value = settings.playingAhead;
@@ -5783,7 +5741,6 @@ export class AppView {
   }
 
   private updateButtons(status: SessionStatus): void {
-    this.describeCursorButton();
     // A performance counts as a run here. It is what Start starts in the
     // listening frame, so it is what Start has to say next about - the
     // button used to have a twin beside it saying this for the performance
@@ -5849,6 +5806,10 @@ export class AppView {
       controller.isListeningPaused;
     this.applyPreview();
     this.el.focusBar.dataset['playing'] = String(playing);
+    // The falling bar belongs to a run, so it comes and goes with one. Health
+    // itself only reports when it moves, and a run that has just begun has
+    // not moved anything yet.
+    this.renderHealth(controller.health);
     if (playing) {
       // Shut rather than merely hidden, so what comes back when the music
       // stops is the bar the reader left, not a drawer they never opened.

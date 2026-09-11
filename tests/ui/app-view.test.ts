@@ -4864,21 +4864,29 @@ describe('AppView', () => {
       expect(runtime.controller.settings.handStaff).toBeNull();
     });
 
-    it('turns survival on from the square, and the bar appears', async () => {
-      // The drawer used to carry its own switch for this, which was a second
-      // copy of half the modes sheet. One place says it now.
+    it('shows the falling bar once the run it belongs to has begun', async () => {
+      // His: only after Start. Choosing survival is a decision about the next
+      // run; the falling bar is that run happening, and a full bar standing
+      // over a page nobody is reading yet is the program showing its working.
       const { view, runtime } = createRig();
       await view.initialize();
       runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
-      expect(element('focus-health').hidden).toBe(true);
 
       element<HTMLButtonElement>('focus-modes').click();
       (element('modes-grid').querySelector('[data-mode="survival"]') as HTMLButtonElement).click();
 
       expect(runtime.controller.settings.survival).toBe(true);
-      expect(element('focus-health').hidden).toBe(false);
       // The switch at the desk is the same value seen from the stand.
       expect(element<HTMLInputElement>('survival').checked).toBe(true);
+      expect(element('focus-health').hidden).toBe(true);
+
+      element<HTMLButtonElement>('focus-play').click();
+
+      expect(element('focus-health').hidden).toBe(false);
+
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(element('focus-health').hidden).toBe(true);
     });
 
     it('keeps what you open out of the row and drawer you press', async () => {
@@ -4909,44 +4917,26 @@ describe('AppView', () => {
       expect(document.getElementById('focus-survival')).toBeNull();
     });
 
-    it('answers for whatever is happening when it is pressed', async () => {
-      // His case: never while he plays, sometimes while the machine plays it
-      // back. One flag could not hold that, so the button in the row moves
-      // the one of the three the reader is looking at.
+    it('shows and hides the cursor from the desk', async () => {
+      // It had a button in the drawer that moved whichever of the three
+      // applied at that moment, which is how it came to overwrite the square
+      // the reader had just set. Each of the three is asked for by name now.
       const { view, runtime, renderer } = createRig();
       await view.initialize();
-      const toggle = element<HTMLButtonElement>('focus-cursor');
+      const box = element<HTMLInputElement>('cursor-rest');
+      expect(box.checked).toBe(true);
 
-      element<HTMLButtonElement>('focus-play').click();
-      toggle.click();
-
-      expect(runtime.controller.settings.cursorWhileRunning).toBe(false);
-      expect(runtime.controller.settings.cursorAtRest).toBe(true);
-      expect(renderer.cursor.visible).toBe(false);
-      expect(element<HTMLInputElement>('cursor-running').checked).toBe(false);
-
-      // And the marker is back the moment the run is over, that being a
-      // different question with a different answer.
-      element<HTMLButtonElement>('focus-stop').click();
-      expect(renderer.cursor.visible).toBe(true);
-      expect(toggle.getAttribute('aria-pressed')).toBe('true');
-    });
-
-    it('shows and hides the cursor from the drawer', async () => {
-      const { view, runtime, renderer } = createRig();
-      await view.initialize();
-      const toggle = element<HTMLButtonElement>('focus-cursor');
-      expect(toggle.getAttribute('aria-pressed')).toBe('true');
-
-      toggle.click();
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
 
       expect(runtime.controller.settings.cursorAtRest).toBe(false);
       expect(renderer.cursor.visible).toBe(false);
-      expect(toggle.getAttribute('aria-pressed')).toBe('false');
-      // The checkbox at the desk is the same value seen elsewhere.
-      expect(element<HTMLInputElement>('cursor-rest').checked).toBe(false);
+      // And the square, which owns a different one of the three, is untouched.
+      expect(runtime.controller.settings.cursorWhileRunning).toBe(true);
 
-      toggle.click();
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+
       expect(renderer.cursor.visible).toBe(true);
     });
 
@@ -4988,47 +4978,21 @@ describe('AppView', () => {
       expect(rig.renderer.pages.at).toBe(1);
     });
 
-    it('cycles the played notes through every answer from the drawer', async () => {
-      // One question - when do I see what I played - so one control. A
-      // switch here could only say two of them, and a reader who chose "at
-      // the end" downstairs found a button up here that could not put it
-      // back. There are four answers now, and the button says all four.
-      const { view, runtime } = createRig();
-      await view.initialize();
-      const toggle = element<HTMLButtonElement>('focus-marks');
-      expect(toggle.dataset['marks']).toBe('live');
-
-      toggle.click();
-      expect(runtime.controller.settings.playedNotes).toBe('while-held');
-      expect(toggle.dataset['marks']).toBe('while-held');
-      expect(toggle.title).toContain('while held');
-
-      toggle.click();
-      expect(runtime.controller.settings.playedNotes).toBe('at-end');
-      expect(toggle.dataset['marks']).toBe('at-end');
-      expect(toggle.title).toContain('when the run ends');
-
-      toggle.click();
-      expect(runtime.controller.settings.playedNotes).toBe('hidden');
-      expect(toggle.dataset['marks']).toBe('hidden');
-
-      toggle.click();
-      expect(runtime.controller.settings.playedNotes).toBe('live');
-    });
-
-    it('says which of the three the desk chose', async () => {
+    it('asks at the desk when the notes are coloured', async () => {
+      // Four answers - as I play, wrong ones while held, when the run ends,
+      // never - so one control with four of them rather than a button that
+      // cycled. The drawer's copy is gone; this is the whole of it now.
       const { view, runtime } = createRig();
       await view.initialize();
       const select = element<HTMLSelectElement>('show-played');
+
       select.value = 'at-end';
       select.dispatchEvent(new Event('change'));
 
-      // The two controls are one setting seen twice, so the drawer has to
-      // hear about a change made at the desk, and say which answer it was.
       expect(runtime.controller.settings.playedNotes).toBe('at-end');
-      expect(element<HTMLButtonElement>('focus-marks').dataset['marks']).toBe('at-end');
 
-      element<HTMLButtonElement>('focus-marks').click();
+      select.value = 'hidden';
+      select.dispatchEvent(new Event('change'));
 
       expect(runtime.controller.settings.playedNotes).toBe('hidden');
     });

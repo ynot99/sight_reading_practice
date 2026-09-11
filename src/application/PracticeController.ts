@@ -3030,27 +3030,6 @@ export class PracticeController {
     return this.wantsCursorNow();
   }
 
-  /**
-   * Turns the marker on or off for whatever is happening now.
-   *
-   * The button beside the music acts on the state the reader is in, the way
-   * every other button in that row does: pressed during a run it answers for
-   * runs, during a playback for playbacks. Which of the three it moved is
-   * not a thing the page has to explain, because it is the one the reader
-   * was looking at when they pressed it.
-   */
-  toggleCursorNow(): PracticeSettings {
-    const wanted = !this.wantsCursorNow();
-    if (this.isListening || this.isListeningPaused) {
-      return this.updateSettings({ cursorWhileListening: wanted });
-    }
-    const status = this.currentSession?.status;
-    const running = status === 'running' || status === 'counting-in' || status === 'paused';
-    return this.updateSettings(
-      running ? { cursorWhileRunning: wanted } : { cursorAtRest: wanted },
-    );
-  }
-
   private applyCursorVisibility(): void {
     // A step that keeps going wrong shows the marker whatever the reader
     // asked for. Practising with every colour off is reading blind on

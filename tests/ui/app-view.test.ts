@@ -1308,12 +1308,23 @@ describe('AppView', () => {
       cycle.click();
 
       expect(runtime.controller.settings.modeId).toBe(LISTEN_MODE_ID);
+      // Two presses running have both left it lit, and both were felt: the
+      // turn is played again rather than transitioned from a state to
+      // itself, which is no movement at all.
+      expect(cycle.dataset['turning']).toBe('true');
 
       // And round again, rather than stopping at the end of the list.
       cycle.click();
 
       expect(runtime.controller.settings.modeId).toBe(new WaitMode().id);
       expect(drawn()).toBe(waiting);
+
+      // Back to the plain one, which is the button going out: nothing to
+      // play, since going out is what the square does by itself.
+      cycle.click();
+
+      expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
+      expect(cycle.dataset['turning']).toBeUndefined();
     });
 
     it('offers a third frame, in which the machine plays and nothing is judged', async () => {

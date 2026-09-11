@@ -282,6 +282,21 @@ describe('the stylesheet', () => {
     expect(dimmed?.body).not.toMatch(/display\s*:\s*none/);
   });
 
+  it('gives the frame button one square of room, and a turn to play', () => {
+    // A lone item in an auto-fit grid is handed every empty track, so the
+    // button came out as wide as the sheet; auto-fill keeps the tracks and it
+    // stands the size of its neighbours. And the turn is an animation rather
+    // than a transition, because two presses running can both leave it lit.
+    // jsdom lays nothing out and runs no animation, so neither of these is
+    // anything a view test can see.
+    const row = rules().find((rule) => rule.selector === '.frame');
+    const turn = rules().find((rule) => rule.selector === ".frame__choice[data-turning='true']");
+
+    expect(row?.body).toMatch(/auto-fill/);
+    expect(row?.body).toMatch(/minmax\(150px/);
+    expect(turn?.body).toMatch(/animation\s*:\s*frame-turn/);
+  });
+
   it('takes the modes further back while the music is going', () => {
     // His: a reminder between runs and furniture during one. Not gone - a
     // reader glancing down mid-piece to check that survival really is on

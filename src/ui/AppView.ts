@@ -3052,6 +3052,7 @@ export class AppView {
         modeId: frameAfter(this.runtime.controller.settings.modeId),
       });
       this.syncControlsFromSettings();
+      this.turnTheFrame();
     });
     for (const card of cards) {
       if (!(card instanceof HTMLButtonElement)) {
@@ -3163,6 +3164,27 @@ export class AppView {
     // Nothing on is nothing to say, rather than an empty strip of furniture.
     this.el.scoreModes.hidden = names.length === 0;
     this.el.scoreModes.setAttribute('aria-label', `Modes on: ${names.join(', ')}`);
+  }
+
+  /**
+   * Plays the turn again, however the press left the button.
+   *
+   * The squares get theirs from a transition, and that is right for two
+   * states: every press moves between them. This button has three, so two
+   * presses running can both leave it lit - and a transition from a state to
+   * itself is nothing at all, which read as a button that had not noticed
+   * being pressed. Taken off and put back on, with the layout read in
+   * between so the browser starts a new animation rather than keeping the
+   * one it thinks is already running.
+   */
+  private turnTheFrame(): void {
+    const card = this.el.frameCycle;
+    delete card.dataset['turning'];
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- reading the layout is the point.
+    void card.offsetWidth;
+    if (card.getAttribute('aria-pressed') === 'true') {
+      card.dataset['turning'] = 'true';
+    }
   }
 
   /**

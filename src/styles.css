@@ -1828,10 +1828,18 @@ body[data-playing='true'] .score__modes {
  * colours rather than in a colour of its own, and the chosen one is said by
  * the accent - the same way everything else here says "this one".
  */
+/*
+ * One square's worth of room, on the same measure as the squares below.
+ *
+ * `auto-fill` rather than `auto-fit`, which is the whole of it: a lone item
+ * in an `auto-fit` grid is handed every track that has nothing in it, and
+ * the button came out as wide as the sheet. Empty tracks are kept here, so
+ * it takes one and stands the size of its neighbours.
+ */
 .frame {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
   padding: 4px 4px 0;
 }
 
@@ -1860,6 +1868,37 @@ body[data-playing='true'] .score__modes {
 .frame__choice svg {
   fill: currentColor;
   stroke: none;
+}
+
+/*
+ * The turn, played again on every press that lands on a lit frame.
+ *
+ * The squares get theirs from a transition, which is right for them: they
+ * have two states and every press moves between them. This one has three,
+ * so two presses in a row can both leave it on - and a transition between
+ * one state and itself is nothing at all, which read as a button that had
+ * not noticed being pressed.
+ */
+@keyframes frame-turn {
+  from {
+    transform: scale(0.97) rotate(0deg);
+    filter: saturate(0.55) brightness(0.72);
+  }
+
+  to {
+    transform: scale(1.04) rotate(-2deg);
+    filter: none;
+  }
+}
+
+.frame__choice[data-turning='true'] {
+  animation: frame-turn 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame__choice[data-turning='true'] {
+    animation: none;
+  }
 }
 
 .frame__name {

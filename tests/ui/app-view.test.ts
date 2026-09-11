@@ -1149,14 +1149,11 @@ describe('AppView', () => {
     });
 
     it('opens the ruler from its own button, and turns it down', async () => {
-      // Its own sheet because it is reached for with a piece open: reading
-      // rhythm off the page is a way of working, not a preference to file.
+      // At the desk with everything else the page is set up by: it had a
+      // sheet of its own reached from the drawer, and the drawer is for what
+      // a reader presses with their hands on the keys.
       const { view, runtime } = createRig();
       await view.initialize();
-      expect(element('sheet-ruler').hidden).toBe(true);
-
-      element<HTMLButtonElement>('focus-ruler').click();
-      expect(element('sheet-ruler').hidden).toBe(false);
 
       const strength = element<HTMLInputElement>('ruler-strength');
       strength.value = '30';
@@ -1992,20 +1989,18 @@ describe('AppView', () => {
       // burying it two taps deep would be its own joke.
       const { view, runtime } = createRig();
       await view.initialize();
+      const box = element<HTMLInputElement>('immediate-start');
       expect(runtime.controller.settings.immediateStart).toBe(false);
 
-      element<HTMLButtonElement>('focus-immediate').click();
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
 
       expect(runtime.controller.settings.immediateStart).toBe(true);
-      expect(element('focus-immediate').getAttribute('aria-pressed')).toBe('true');
-      expect(element<HTMLInputElement>('immediate-start').checked).toBe(true);
 
-      const box = element<HTMLInputElement>('immediate-start');
       box.checked = false;
       box.dispatchEvent(new Event('change'));
 
       expect(runtime.controller.settings.immediateStart).toBe(false);
-      expect(element('focus-immediate').getAttribute('aria-pressed')).toBe('false');
     });
 
     it('lets the reader turn the dimming off, and back on', async () => {
@@ -3055,7 +3050,6 @@ describe('AppView', () => {
   describe('turning the pages', () => {
     /** Through the controls themselves: the wiring is the thing being tested. */
     async function readAsPages(turns: string): Promise<void> {
-      element<HTMLButtonElement>('focus-pages').click();
       const select = element<HTMLSelectElement>('page-turns');
       select.value = turns;
       select.dispatchEvent(new Event('change'));
@@ -3107,8 +3101,10 @@ describe('AppView', () => {
       await rig.view.initialize();
       await readAsPages('manual');
 
-      // Back to scrolling.
-      element<HTMLButtonElement>('focus-pages').click();
+      // Back to scrolling, which is now the thing a reader has to ask for.
+      const box = element<HTMLInputElement>('paged-score');
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Disabled rather than hidden - a control that disappears is one the
@@ -4037,7 +4033,6 @@ describe('AppView', () => {
       const rig = createRig();
       await rig.view.initialize();
       rig.renderer.pageCount = 3;
-      element<HTMLButtonElement>('focus-pages').click();
 
       expect(pressArrow('ArrowRight')).toBe(true);
       expect(rig.renderer.pages.at).toBe(1);
@@ -4052,6 +4047,9 @@ describe('AppView', () => {
       // who never asked for pages expects them to do.
       const rig = createRig();
       await rig.view.initialize();
+      const box = element<HTMLInputElement>('paged-score');
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
       rig.renderer.pageCount = 3;
 
       pressArrow('ArrowRight');
@@ -4066,7 +4064,6 @@ describe('AppView', () => {
       const rig = createRig();
       await rig.view.initialize();
       rig.renderer.pageCount = 3;
-      element<HTMLButtonElement>('focus-pages').click();
       const tempo = element<HTMLInputElement>('tempo');
       tempo.focus();
 
@@ -4976,20 +4973,33 @@ describe('AppView', () => {
       expect(renderer.cursor.visible).toBe(true);
     });
 
-    it('turns the score into pages from the drawer, and back', async () => {
+    it('reads the score as pages unless the reader says otherwise', async () => {
+      // A score is a thing with pages, so that is what the app opens with -
+      // and the switch is at the desk, being set once and left alone rather
+      // than pressed with hands on the keys.
       const { view, runtime, renderer } = createRig();
       await view.initialize();
-      const toggle = element<HTMLButtonElement>('focus-pages');
-      expect(renderer.isPaged).toBe(false);
-
-      toggle.click();
-
-      expect(runtime.controller.settings.pagedScore).toBe(true);
+      const box = element<HTMLInputElement>('paged-score');
+      expect(box.checked).toBe(true);
       expect(renderer.isPaged).toBe(true);
-      expect(toggle.getAttribute('aria-pressed')).toBe('true');
 
-      toggle.click();
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.pagedScore).toBe(false);
       expect(renderer.isPaged).toBe(false);
+
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+
+      expect(renderer.isPaged).toBe(true);
+
+      // And it shows what the settings say, however they were changed: the
+      // sheet is opened onto whatever the run has left behind.
+      runtime.controller.updateSettings({ pagedScore: false });
+      element<HTMLButtonElement>('focus-settings').click();
+
+      expect(box.checked).toBe(false);
     });
 
     it('turns the page when the music leaves it, and not on every beat', async () => {
@@ -5000,7 +5010,6 @@ describe('AppView', () => {
       // Flow mode, because it is the metronome that moves the music there -
       // in Wait mode the page waits for the reader and never leaves the bar.
       rig.runtime.controller.updateSettings({ countInBars: 0, modeId: 'mode.flow' });
-      element<HTMLButtonElement>('focus-pages').click();
       rig.runtime.controller.start();
 
       rig.renderer.shownMeasures.length = 0;

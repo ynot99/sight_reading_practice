@@ -1141,11 +1141,10 @@ export class AppView {
     focusHealth: HTMLElement;
     focusPlayFrame: HTMLElement;
     focusHands: HTMLButtonElement;
-    focusImmediate: HTMLButtonElement;
     focusMetronome: HTMLButtonElement;
     focusRepeat: HTMLButtonElement;
     focusBare: HTMLButtonElement;
-    focusPages: HTMLButtonElement;
+    pagedScore: HTMLInputElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
     focusZoom: HTMLOutputElement;
@@ -1177,9 +1176,6 @@ export class AppView {
     rulerCursor: HTMLInputElement;
     rulerStrength: HTMLInputElement;
     rulerStrengthValue: HTMLOutputElement;
-    sheetRuler: HTMLElement;
-    focusRuler: HTMLButtonElement;
-    rulerClose: HTMLButtonElement;
     rhythmRuler: HTMLSelectElement;
     rhythmRulerDescription: HTMLElement;
     focusDrawer: HTMLElement;
@@ -1379,11 +1375,10 @@ export class AppView {
       focusHealth: requireElement(doc, 'focus-health'),
       focusPlayFrame: requireElement(doc, 'focus-play-frame'),
       focusHands: requireElement(doc, 'focus-hands'),
-      focusImmediate: requireElement(doc, 'focus-immediate'),
       focusMetronome: requireElement(doc, 'focus-metronome'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
       focusBare: requireElement(doc, 'focus-bare'),
-      focusPages: requireElement(doc, 'focus-pages'),
+      pagedScore: requireElement(doc, 'paged-score'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
       focusZoom: requireElement(doc, 'focus-zoom'),
@@ -1415,9 +1410,6 @@ export class AppView {
       rulerCursor: requireElement(doc, 'ruler-cursor'),
       rulerStrength: requireElement(doc, 'ruler-strength'),
       rulerStrengthValue: requireElement(doc, 'ruler-strength-value'),
-      sheetRuler: requireElement(doc, 'sheet-ruler'),
-      focusRuler: requireElement(doc, 'focus-ruler'),
-      rulerClose: requireElement(doc, 'ruler-close'),
       rhythmRuler: requireElement(doc, 'rhythm-ruler'),
       rhythmRulerDescription: requireElement(doc, 'rhythm-ruler-description'),
       focusDrawer: requireElement(doc, 'focus-drawer'),
@@ -3295,13 +3287,8 @@ export class AppView {
       this.showPassageMarkers();
     });
 
-    this.listen(this.el.focusPages, 'click', () => {
-      controller.updateSettings({ pagedScore: !controller.settings.pagedScore });
-      this.syncControlsFromSettings();
-    });
-
-    this.listen(this.el.focusImmediate, 'click', () => {
-      controller.updateSettings({ immediateStart: !controller.settings.immediateStart });
+    this.listen(this.el.pagedScore, 'change', () => {
+      controller.updateSettings({ pagedScore: this.el.pagedScore.checked });
       this.syncControlsFromSettings();
     });
 
@@ -4871,7 +4858,7 @@ export class AppView {
     this.el.cursorListening.checked = settings.cursorWhileListening;
     this.el.cursorRest.checked = settings.cursorAtRest;
     this.el.strictTiming.checked = settings.strictTiming;
-    this.el.focusPages.setAttribute('aria-pressed', String(settings.pagedScore));
+    this.el.pagedScore.checked = settings.pagedScore;
     this.runtime.renderer.setPaged(settings.pagedScore);
     // A display decision, so it is answered in the stylesheet: the marks
     // themselves are the same either way, and what was measured about a press
@@ -4930,7 +4917,6 @@ export class AppView {
     this.el.whatOpens.value = settings.whatOpens;
     this.el.whatOpensDescription.textContent = OPENING_DESCRIPTIONS[settings.whatOpens];
     this.applyPreview();
-    this.el.focusImmediate.setAttribute('aria-pressed', String(settings.immediateStart));
     this.describeMetronomeButton(settings.clickWhen, settings.clickPattern);
     this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
@@ -5290,14 +5276,6 @@ export class AppView {
         () => this.syncControlsFromSettings(),
       ],
       [
-        // The ruler is reached for with a piece open, so it is its own sheet
-        // rather than a row in the settings: reading rhythm off the page is a
-        // way of working, not a preference to be filed away.
-        this.el.sheetRuler,
-        [this.el.focusRuler],
-        () => this.syncControlsFromSettings(),
-      ],
-      [
         // Beside the two bar numbers, which is where a passage is chosen.
         // Down the settings sheet it was nowhere near the thing it is about,
         // and a reader who has just marked a stretch out would have had to
@@ -5359,9 +5337,6 @@ export class AppView {
     this.listen(this.el.metronomeClose, 'click', () => {
       this.el.sheetMetronome.hidden = true;
     });
-    this.listen(this.el.rulerClose, 'click', () => {
-      this.el.sheetRuler.hidden = true;
-    });
     this.listen(this.el.placesClose, 'click', () => {
       this.el.sheetPlaces.hidden = true;
     });
@@ -5377,7 +5352,6 @@ export class AppView {
         this.el.sheetTakes,
         this.el.sheetScores,
         this.el.sheetMetronome,
-        this.el.sheetRuler,
         this.el.sheetSettings,
       ]) {
         if (!sheet.hidden) {

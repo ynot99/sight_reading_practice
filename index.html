@@ -364,38 +364,6 @@
         a thing the reader wants to hunt for down a settings sheet while a
         piece is open in front of them.
       -->
-      <div id="sheet-ruler" class="sheet" hidden>
-        <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
-          aria-label="Rhythm ruler">
-          <div class="sheet__head">
-            <strong class="sheet__title">Rhythm ruler</strong>
-            <button id="ruler-close" type="button" class="button button--ghost sheet__close"
-              title="Close" aria-label="Close">×</button>
-          </div>
-          <div class="controls controls--stacked">
-            <div class="control-group">
-              <label for="rhythm-ruler">Rule the bars in</label>
-              <select id="rhythm-ruler"></select>
-              <p id="rhythm-ruler-description" class="hint"></p>
-            </div>
-
-            <div class="control-group">
-              <label for="ruler-strength">
-                How strongly: <output id="ruler-strength-value">100</output>%
-              </label>
-              <input id="ruler-strength" type="range" min="0" max="100" step="5" value="100" />
-              <p class="hint">
-                At nothing at all the lines go, and the bars stay spaced by time.
-              </p>
-            </div>
-
-            <div class="control-group control-group--checks">
-              <label><input id="ruler-cursor" type="checkbox" /> Run a marker along it</label>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!--
         Every reading, in two orders. His line 51: he cannot see what the
         last score was while a repeat is going round, and there is nothing to
@@ -744,6 +712,37 @@
         <div class="control-group" data-pane="exercise">
           <label for="tempo">Tempo: <output id="tempo-value">60</output> bpm</label>
           <input id="tempo" type="range" min="30" max="180" step="1" value="60" />
+        </div>
+
+        <!--
+          Reading rhythm off the page, which used to be a sheet of its own
+          reached from the drawer. It is a way of working rather than a thing
+          pressed mid-run, so it belongs at the desk with everything else the
+          page is set up by.
+        -->
+        <div class="control-group" data-pane="page">
+          <label for="rhythm-ruler">Rule the bars in</label>
+          <select id="rhythm-ruler"></select>
+          <p id="rhythm-ruler-description" class="hint"></p>
+        </div>
+
+        <div class="control-group" data-pane="page">
+          <label for="ruler-strength">
+            How strongly: <output id="ruler-strength-value">100</output>%
+          </label>
+          <input id="ruler-strength" type="range" min="0" max="100" step="5" value="100" />
+          <p class="hint">At nothing at all the lines go, and the bars stay spaced by time.</p>
+        </div>
+
+        <!--
+          And the page itself: read as pages by default, since that is what a
+          score is. The button that turned it over lived in the drawer, which
+          is for what a reader presses while playing - this is set once and
+          left alone.
+        -->
+        <div class="control-group control-group--checks" data-pane="page">
+          <label><input id="ruler-cursor" type="checkbox" /> Run a marker along the ruler</label>
+          <label><input id="paged-score" type="checkbox" checked /> Read the score as pages</label>
         </div>
 
         <div class="control-group" data-pane="page">
@@ -1312,30 +1311,12 @@
             one setting whose whole point is not having to reach for the
             tablet, so burying it two taps deep would be its own joke.
           -->
-          <button id="focus-immediate" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="false" title="Start by playing the first notes"
-            aria-label="Start by playing the first notes">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M3 15h18v4H3zM6 5h2v9H6zM11 5h2v9h-2zM16 5h2v9h-2z" />
-              <path d="M9.4 3.6 12 1l2.6 2.6-1.4 1.4L12 3.8l-1.2 1.2z" />
-            </svg>
-          </button>
 
           <!--
             Pages instead of a scroll. A reader looking through a piece wants
             to turn a page, read it and turn the next; the column the engraver
             lays out has no pages in it at all, so this makes them.
           -->
-          <button id="focus-pages" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="false" title="Turn pages instead of scrolling"
-            aria-label="Turn pages instead of scrolling">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 4h7v16H4zM13 4h7v16h-7z" />
-              <path d="M11.2 12l3.4-3.4 1.4 1.4-2 2 2 2-1.4 1.4-3.4-3.4z" />
-            </svg>
-          </button>
 
           <!--
             Everything that is chosen rather than done. One button, because
@@ -1347,13 +1328,6 @@
             with a piece open, and reading rhythm off the page is a way of
             working rather than a setting to be filed away.
           -->
-          <button id="focus-ruler" type="button"
-            class="focus-bar__button focus-bar__button--icon"
-            title="Rhythm ruler" aria-label="Rhythm ruler">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 5h1.7v14H4zM9.2 5h1.7v14H9.2zM14.4 5h1.7v14h-1.7zM19.6 5h1.7v14h-1.7z" />
-            </svg>
-          </button>
 
 
           <!--

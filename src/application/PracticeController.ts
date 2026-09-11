@@ -817,7 +817,7 @@ export class PracticeController {
       cursorWhileListening: true,
       cursorAtRest: true,
       strictTiming: false,
-      pagedScore: false,
+      pagedScore: true,
       playedNotes: 'live',
       survival: false,
       survivalRefillPercent: 100,

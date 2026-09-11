@@ -2426,6 +2426,29 @@ describe('cursor visibility', () => {
     expect(renderer.cursor.visible).toBe(true);
   });
 
+  it('takes the marker away while the reader plays, and gives it back after', async () => {
+    // What the No cursor square writes, and the whole of it: the place on
+    // the page is the reader's to keep *while they are playing*. Between
+    // runs the marker is where they are about to begin, which is not a
+    // challenge - and the one the machine drags along while it plays to them
+    // is not one either.
+    const { controller, renderer } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+
+    controller.updateSettings({ cursorWhileRunning: false });
+
+    // Nothing is running, so nothing has changed on the page yet.
+    expect(renderer.cursor.visible).toBe(true);
+
+    controller.start();
+
+    expect(renderer.cursor.visible).toBe(false);
+
+    controller.stop();
+
+    expect(renderer.cursor.visible).toBe(true);
+  });
+
   it('hides the cursor as soon as the setting is turned off', async () => {
     const { controller, renderer } = createController();
     await controller.loadNewExercise();

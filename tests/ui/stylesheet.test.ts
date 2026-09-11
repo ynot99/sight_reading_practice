@@ -157,6 +157,26 @@ describe('the stylesheet', () => {
     expect(hiding?.body).toMatch(/display\s*:\s*flex/);
   });
 
+  it('places the two pills as a pair, and takes the second one away with the bar', () => {
+    // His: a pill of its own, left of the bar. Placed as a pair rather than
+    // each against the window - the bar changes width with its drawer and
+    // with a run, so a second pill measured against that moving edge lands
+    // on top of it. And it is the bar that carries the state, so the dock is
+    // asked about the bar. jsdom lays nothing out and applies no stylesheet,
+    // so no view test can see either of these.
+    const dock = rules().find((rule) => rule.selector === '.dock');
+    const aside = rules().find((rule) => rule.selector === '.focus-aside');
+    const gone = rules().find(
+      (rule) => rule.selector.includes('.focus-aside') && rule.body.includes('none'),
+    );
+
+    expect(dock?.body).toMatch(/position\s*:\s*fixed/);
+    expect(dock?.body).toMatch(/display\s*:\s*flex/);
+    expect(aside?.body).not.toMatch(/position\s*:\s*fixed/);
+    expect(gone?.selector).toMatch(/data-playing/);
+    expect(gone?.selector).toMatch(/data-bare/);
+  });
+
   it('never lets a square change the size of the sheet it is in', () => {
     // Reported: pressing a square made the dialog jump. A square that gained
     // a state also gained 22 pixels of padding, which grew its row and the

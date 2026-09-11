@@ -840,12 +840,62 @@ select {
   -webkit-user-select: text;
 }
 
-.focus-bar {
+/*
+ * Where the bar stands, now that two things stand there.
+ *
+ * The pills are placed as a pair rather than each against the window: the
+ * bar's width changes with the drawer and with a run, and a second pill
+ * measured in pixels against a moving edge lands on top of it. Ends aligned,
+ * because the bar grows upwards when its drawer opens and the aside should
+ * not go with it.
+ */
+.dock {
   position: fixed;
   left: 50%;
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100vw - 24px);
+}
+
+/*
+ * The three things a reader opens rather than presses.
+ *
+ * Its own pill, so the bar stays what it is: the buttons you reach for with
+ * your hands on the keys. These are chosen between runs - what kind of run
+ * this is and how hard, the settings, and how the last ones went - and each
+ * of them raises a sheet over the page.
+ */
+.focus-aside {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) var(--over-the-page), transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 24px rgb(16 24 40 / 18%);
+}
+
+/*
+ * Gone while the music is going, and gone from a bare page.
+ *
+ * The bar says which of those it is, and the aside is its neighbour rather
+ * than its child - so the dock is asked about the bar instead. Nothing here
+ * is reached for mid-run: every one of them raises a sheet over the score.
+ */
+.dock:has(.focus-bar[data-playing='true']) .focus-aside,
+body[data-bare='true'] .focus-aside {
+  display: none;
+}
+
+.focus-bar {
+  position: relative;
 
   display: flex;
   flex-direction: column;

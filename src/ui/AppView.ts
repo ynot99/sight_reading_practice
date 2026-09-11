@@ -1097,13 +1097,11 @@ export class AppView {
     focusHealth: HTMLElement;
     focusListenIcon: SVGPathElement;
     focusHands: HTMLButtonElement;
-    focusSurvival: HTMLButtonElement;
     focusImmediate: HTMLButtonElement;
     focusMetronome: HTMLButtonElement;
     focusRepeat: HTMLButtonElement;
     focusBare: HTMLButtonElement;
     focusCursor: HTMLButtonElement;
-    focusWait: HTMLButtonElement;
     focusMarks: HTMLButtonElement;
     focusPages: HTMLButtonElement;
     focusSmaller: HTMLButtonElement;
@@ -1337,13 +1335,11 @@ export class AppView {
       focusHealth: requireElement(doc, 'focus-health'),
       focusListenIcon: requireElement(doc, 'focus-listen-icon'),
       focusHands: requireElement(doc, 'focus-hands'),
-      focusSurvival: requireElement(doc, 'focus-survival'),
       focusImmediate: requireElement(doc, 'focus-immediate'),
       focusMetronome: requireElement(doc, 'focus-metronome'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
       focusBare: requireElement(doc, 'focus-bare'),
       focusCursor: requireElement(doc, 'focus-cursor'),
-      focusWait: requireElement(doc, 'focus-wait'),
       focusMarks: requireElement(doc, 'focus-marks'),
       focusPages: requireElement(doc, 'focus-pages'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
@@ -3220,15 +3216,6 @@ export class AppView {
       this.showPassageMarkers();
     });
 
-    this.listen(this.el.focusWait, 'click', () => {
-      // The mode, from the stand: whether the music waits for the reader or
-      // walks on without them is the choice they most often want to change
-      // with the instrument already in front of them.
-      const waiting = controller.settings.modeId === WAIT_MODE_ID;
-      controller.updateSettings({ modeId: waiting ? FLOW_MODE_ID : WAIT_MODE_ID });
-      this.syncControlsFromSettings();
-    });
-
     this.listen(this.el.focusCursor, 'click', () => {
       // For whatever is happening now, which is what the reader was looking
       // at when they pressed it. The three answers live in the sheet; this
@@ -3253,12 +3240,6 @@ export class AppView {
         playedNotes: elementAt(PLAYED_NOTE_DISPLAYS, (at + 1) % PLAYED_NOTE_DISPLAYS.length),
       });
       this.syncControlsFromSettings();
-    });
-
-    this.listen(this.el.focusSurvival, 'click', () => {
-      controller.updateSettings({ survival: !controller.settings.survival });
-      this.syncControlsFromSettings();
-      this.renderHealth(controller.health);
     });
 
     this.listen(this.el.focusImmediate, 'click', () => {
@@ -4785,7 +4766,6 @@ export class AppView {
     this.el.preset.value = settings.presetId;
     this.el.rhythm.value = settings.rhythmProfileId;
     this.el.mode.value = settings.modeId;
-    this.el.focusWait.setAttribute('aria-pressed', String(settings.modeId === WAIT_MODE_ID));
     this.el.scoring.value = settings.scoringId;
     this.el.scoringDescription.textContent = SCORING_DESCRIPTIONS[settings.scoringId] ?? '';
     this.el.key.value = keyValue(settings.key);
@@ -4843,7 +4823,6 @@ export class AppView {
     this.el.survivalPunish.checked = settings.survivalPunishesMistakes;
     this.el.stopAtMistake.checked = settings.stopAtAMistake;
     this.el.easeTempo.checked = settings.easeTheTempo;
-    this.el.focusSurvival.setAttribute('aria-pressed', String(settings.survival));
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.renderPassages();

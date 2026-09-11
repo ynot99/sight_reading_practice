@@ -1283,13 +1283,12 @@ describe('AppView', () => {
       expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
       expect(choice('flow').getAttribute('aria-pressed')).toBe('true');
       expect(choice('wait').getAttribute('aria-pressed')).toBe('false');
-      // The same setting the drawer's toggle carries, so it has to follow.
-      expect(element('focus-wait').getAttribute('aria-pressed')).toBe('false');
+      // The same setting the select at the desk carries, so it has to follow.
+      expect(element<HTMLSelectElement>('mode').value).toBe(FLOW_MODE_ID);
 
       choice('wait').click();
 
       expect(runtime.controller.settings.modeId).toBe(new WaitMode().id);
-      expect(element('focus-wait').getAttribute('aria-pressed')).toBe('true');
     });
 
     it('says what each kind of run does in the words the settings use', async () => {
@@ -4738,40 +4737,41 @@ describe('AppView', () => {
       expect(runtime.controller.settings.handStaff).toBeNull();
     });
 
-    it('turns survival on from the drawer, and shows that it is on', async () => {
+    it('turns survival on from the square, and the bar appears', async () => {
+      // The drawer used to carry its own switch for this, which was a second
+      // copy of half the modes sheet. One place says it now.
       const { view, runtime } = createRig();
       await view.initialize();
       runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
-      const toggle = element<HTMLButtonElement>('focus-survival');
-      expect(toggle.getAttribute('aria-pressed')).toBe('false');
       expect(element('focus-health').hidden).toBe(true);
 
-      toggle.click();
+      element<HTMLButtonElement>('focus-modes').click();
+      (element('modes-grid').querySelector('[data-mode="survival"]') as HTMLButtonElement).click();
 
       expect(runtime.controller.settings.survival).toBe(true);
-      // Pressed is the state rather than a second label beside it.
-      expect(toggle.getAttribute('aria-pressed')).toBe('true');
       expect(element('focus-health').hidden).toBe(false);
-      // The switch in the settings footer is the same value seen elsewhere.
+      // The switch at the desk is the same value seen from the stand.
       expect(element<HTMLInputElement>('survival').checked).toBe(true);
     });
 
-    it('switches between waiting and flowing from the drawer', async () => {
-      const { view, runtime } = createRig();
+    it('keeps the three things you open out of the bar you press', async () => {
+      // His: a pill of its own, left of the bar. The bar is what a reader
+      // reaches for with their hands on the keys; these three raise a sheet
+      // over the page and are chosen between runs.
+      const { view } = createRig();
       await view.initialize();
-      const toggle = element<HTMLButtonElement>('focus-wait');
-      // The rig starts in Wait mode, which the switch has to show.
-      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+      const aside = element('focus-aside');
 
-      toggle.click();
-
-      expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
-      expect(toggle.getAttribute('aria-pressed')).toBe('false');
-      // The selector at the desk is the same value seen from the stand.
-      expect(element<HTMLSelectElement>('mode').value).toBe(FLOW_MODE_ID);
-
-      toggle.click();
-      expect(runtime.controller.settings.modeId).toBe(new WaitMode().id);
+      // Standing, and not merely present: hidden, it is three things the
+      // reader can no longer reach at all.
+      expect(aside.hidden).toBe(false);
+      for (const id of ['focus-modes', 'focus-readings', 'focus-settings']) {
+        expect(aside.contains(element(id))).toBe(true);
+      }
+      expect(element('focus-bar').contains(aside)).toBe(false);
+      // And what the sheet now owns is gone from the bar entirely.
+      expect(document.getElementById('focus-wait')).toBeNull();
+      expect(document.getElementById('focus-survival')).toBeNull();
     });
 
     it('answers for whatever is happening when it is pressed', async () => {

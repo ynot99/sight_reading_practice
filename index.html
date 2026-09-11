@@ -1012,7 +1012,43 @@
         </div>
       </div>
 
-      <div id="focus-bar" class="focus-bar" data-open="false">
+      <!--
+        Two pills, centred as one. The bar is what a reader presses while
+        playing; this one holds the three things they *open* - what kind of
+        run this is and how hard, the whole desk of settings, and what the
+        earlier readings came to. They were scattered across the row and the
+        drawer, which is how the drawer came to hold a second copy of half
+        the modes sheet.
+      -->
+      <div class="dock">
+        <div id="focus-aside" class="focus-aside">
+          <button id="focus-modes" type="button"
+            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
+            title="Modes" aria-label="Modes">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
+            </svg>
+          </button>
+
+          <button id="focus-readings" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Readings" aria-label="Readings">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 19h3v-7H4v7zm6.5 0h3V5h-3v14zM17 19h3v-10h-3v10z" />
+            </svg>
+          </button>
+
+          <button id="focus-settings" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+              <path d="M10.6 2h2.8l.4 2.5 1.7.7 2.1-1.4 2 2-1.4 2.1.7 1.7 2.5.4v2.8l-2.5.4-.7 1.7 1.4 2.1-2 2-2.1-1.4-1.7.7-.4 2.5h-2.8l-.4-2.5-1.7-.7-2.1 1.4-2-2 1.4-2.1-.7-1.7L2 13.4v-2.8l2.5-.4.7-1.7-1.4-2.1 2-2 2.1 1.4 1.7-.7L10.6 2z" />
+            </svg>
+          </button>
+        </div>
+
+        <div id="focus-bar" class="focus-bar" data-open="false">
         <!--
           The other side of the bar, and out of its flow for the same reason
           the notice is: what it says is a clock, and a clock changes width.
@@ -1144,19 +1180,6 @@
             the same reason: what stays is named, so anything added to this
             row is hidden by default.
           -->
-          <!--
-            The modes, in front of the reader. Left of the pill because that
-            is where he put it: the row is read from the middle out, and this
-            is a thing you set before playing rather than while.
-          -->
-          <button id="focus-modes" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            title="Modes" aria-label="Modes">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
-            </svg>
-          </button>
-
           <button id="focus-bare" type="button" data-bare
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
             aria-pressed="false" title="Just the page"
@@ -1252,14 +1275,6 @@
             </svg>
           </button>
 
-          <button id="focus-wait" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="false" title="Wait for the notes" aria-label="Wait for the notes">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.3l3.6 2.1-1 1.7L11 13.5V7h2z" />
-            </svg>
-          </button>
-
           <!--
             Start by playing rather than by pressing. In the drawer because it
             is chosen before a run and not reached for during one - and in the
@@ -1310,15 +1325,6 @@
             </svg>
           </button>
 
-          <button id="focus-settings" type="button"
-            class="focus-bar__button focus-bar__button--icon"
-            title="Settings" aria-label="Settings">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-              <path d="M10.6 2h2.8l.4 2.5 1.7.7 2.1-1.4 2 2-1.4 2.1.7 1.7 2.5.4v2.8l-2.5.4-.7 1.7 1.4 2.1-2 2-2.1-1.4-1.7.7-.4 2.5h-2.8l-.4-2.5-1.7-.7-2.1 1.4-2-2 1.4-2.1-.7-1.7L2 13.4v-2.8l2.5-.4.7-1.7-1.4-2.1 2-2 2.1 1.4 1.7-.7L10.6 2z" />
-            </svg>
-          </button>
-
           <button id="focus-cursor" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
             aria-pressed="true" title="Show the cursor" aria-label="Show the cursor">
@@ -1346,27 +1352,11 @@
             </svg>
           </button>
 
-          <button id="focus-survival" type="button"
-            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="false" title="Survival: keep the bar up" aria-label="Survival: keep the bar up">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M12 21s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.6a4.4 4.4 0 0 1 7.5 3.3C19.5 16.4 12 21 12 21z" />
-            </svg>
-          </button>
-
           <!--
             The kept lists, reachable without leaving the stand. Leaving
             fullscreen to look at them and coming back is a re-engraving each
             way, which on a long piece is most of a second twice over.
           -->
-          <button id="focus-readings" type="button"
-            class="focus-bar__button focus-bar__button--icon"
-            title="Readings" aria-label="Readings">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 19h3v-7H4v7zm6.5 0h3V5h-3v14zM17 19h3v-10h-3v10z" />
-            </svg>
-          </button>
-
           <button id="focus-takes" type="button"
             class="focus-bar__button focus-bar__button--icon"
             title="Kept takes" aria-label="Kept takes">
@@ -1394,6 +1384,7 @@
               <path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V10h.5V4.5a1.5 1.5 0 0 1 3 0V10H15V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a5 5 0 0 1-4.1-2.1L4 14.5a1.5 1.5 0 0 1 2.2-2L8 14.5z" />
             </svg>
           </button>
+        </div>
         </div>
       </div>
     </div>

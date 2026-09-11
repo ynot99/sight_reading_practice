@@ -282,18 +282,15 @@ describe('the stylesheet', () => {
     expect(dimmed?.body).not.toMatch(/display\s*:\s*none/);
   });
 
-  it('gives the frame button one square of room, and a turn to play', () => {
-    // A lone item in an auto-fit grid is handed every empty track, so the
-    // button came out as wide as the sheet; auto-fill keeps the tracks and it
-    // stands the size of its neighbours. And the turn is an animation rather
-    // than a transition, because two presses running can both leave it lit.
-    // jsdom lays nothing out and runs no animation, so neither of these is
-    // anything a view test can see.
-    const row = rules().find((rule) => rule.selector === '.frame');
+  it('gives the frame button a turn of its own to play', () => {
+    // It stands in the squares' own grid now, so its size is theirs and
+    // needs no rule. The turn still does: the squares get theirs from a
+    // transition, which is right for two states, and this button has three -
+    // two presses running can both leave it lit, and a transition from a
+    // state to itself is no movement at all. jsdom runs no animation, so
+    // nothing in the view tests can see it.
     const turn = rules().find((rule) => rule.selector === ".frame__choice[data-turning='true']");
 
-    expect(row?.body).toMatch(/auto-fill/);
-    expect(row?.body).toMatch(/minmax\(150px/);
     expect(turn?.body).toMatch(/animation\s*:\s*frame-turn/);
   });
 

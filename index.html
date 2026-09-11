@@ -519,13 +519,14 @@
             What each one says is filled in from the same sentence the
             settings sheet uses, so the two cannot drift apart.
           -->
-          <div id="modes-frame" class="frame" role="group"
-            aria-label="What kind of run this is">
+          <div id="modes-grid" class="modes">
             <!--
-              One button rather than three, pressed until it says the one you
-              want. His shape. The sentence stays, because it is the half
-              that says what the choice *means* - a cycler with nothing but
-              an icon is three answers the reader has to remember.
+              What kind of run this is, first in the row and dressed as one
+              of the squares beside it: one button pressed until it says the
+              one you want. His shape twice over - the cycling, and standing
+              level with the rest. The line under the name stays, because a
+              cycler with nothing but an icon is three answers the reader has
+              to remember.
             -->
             <button id="frame-cycle" type="button" class="mode-card frame__choice"
               data-frame="wait" aria-pressed="false">
@@ -535,9 +536,6 @@
               <strong id="frame-name" class="frame__name"></strong>
               <span id="frame-what" class="frame__what"></span>
             </button>
-          </div>
-
-          <div id="modes-grid" class="modes">
             <button type="button" class="mode-card mode-card--survival" data-mode="survival"
               aria-pressed="false">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

@@ -1829,21 +1829,6 @@ body[data-playing='true'] .score__modes {
  * the accent - the same way everything else here says "this one".
  */
 /*
- * One square's worth of room, on the same measure as the squares below.
- *
- * `auto-fill` rather than `auto-fit`, which is the whole of it: a lone item
- * in an `auto-fit` grid is handed every track that has nothing in it, and
- * the button came out as wide as the sheet. Empty tracks are kept here, so
- * it takes one and stands the size of its neighbours.
- */
-.frame {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 14px;
-  padding: 4px 4px 0;
-}
-
-/*
  * The one button that says what kind of run this is, dressed as a square.
  *
  * His: it is one of them to look at, so it is one of them to look at - the
@@ -1899,16 +1884,6 @@ body[data-playing='true'] .score__modes {
   .frame__choice[data-turning='true'] {
     animation: none;
   }
-}
-
-.frame__name {
-  font-size: 1rem;
-}
-
-/* The card's own ink, since the card is dark under it now. */
-.frame__what {
-  font-size: 0.84rem;
-  opacity: 0.82;
 }
 
 .modes {

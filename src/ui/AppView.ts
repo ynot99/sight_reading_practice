@@ -366,8 +366,8 @@ const FRAME_SLUG: Readonly<Record<string, string>> = {
 
 /** What the button is called while it stands for each of them. */
 const FRAME_NAME: Readonly<Record<string, string>> = {
-  [WAIT_MODE_ID]: 'Wait for the notes',
-  [FLOW_MODE_ID]: 'Flow with the metronome',
+  [WAIT_MODE_ID]: 'Wait for me',
+  [FLOW_MODE_ID]: 'Flow in time',
   [LISTEN_MODE_ID]: 'Listen to it',
 };
 
@@ -385,10 +385,18 @@ function frameAfter(modeId: string): string {
   return FRAME_ORDER[(at + 1) % FRAME_ORDER.length] ?? WAIT_MODE_ID;
 }
 
+/*
+ * One line each, the length the squares say theirs in.
+ *
+ * They stand in one row now, and a card with a sentence on it beside cards
+ * with a phrase is a row that does not line up. Said once and read in two
+ * places - the card and the line under the settings select - so there is one
+ * answer to what each frame does.
+ */
 const FRAME_WHAT: Readonly<Record<string, string>> = {
-  [WAIT_MODE_ID]: 'The cursor waits until you play the notes on the page.',
-  [FLOW_MODE_ID]: 'The cursor moves with the beat and your timing is scored.',
-  [LISTEN_MODE_ID]: 'The machine plays it and nothing is judged. Start plays; stop ends it.',
+  [WAIT_MODE_ID]: 'The cursor waits for you',
+  [FLOW_MODE_ID]: 'The beat carries the music',
+  [LISTEN_MODE_ID]: 'The machine plays it to you',
 };
 
 /**
@@ -1197,7 +1205,6 @@ export class AppView {
     placesClose: HTMLButtonElement;
     sheetModes: HTMLElement;
     modesGrid: HTMLElement;
-    modesFrame: HTMLElement;
     frameCycle: HTMLButtonElement;
     frameIcon: SVGPathElement;
     frameName: HTMLElement;
@@ -1436,7 +1443,6 @@ export class AppView {
       placesClose: requireElement(doc, 'places-close'),
       sheetModes: requireElement(doc, 'sheet-modes'),
       modesGrid: requireElement(doc, 'modes-grid'),
-      modesFrame: requireElement(doc, 'modes-frame'),
       frameCycle: requireElement(doc, 'frame-cycle'),
       frameIcon: requireElement(doc, 'frame-icon'),
       frameName: requireElement(doc, 'frame-name'),

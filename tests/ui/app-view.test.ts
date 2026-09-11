@@ -1286,6 +1286,10 @@ describe('AppView', () => {
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
       const cycle = element<HTMLButtonElement>('frame-cycle');
+      // First in the squares' own row, and dressed as one of them, so it
+      // stands level with the rest rather than in a strip of its own.
+      expect(element('modes-grid').firstElementChild).toBe(cycle);
+      expect(cycle.classList.contains('mode-card')).toBe(true);
       const drawn = (): string => element('frame-icon').getAttribute('d') ?? '';
       expect(cycle.dataset['frame']).toBe('wait');
       // Lit like a square, and for the same reason: this is not the plain
@@ -1299,7 +1303,7 @@ describe('AppView', () => {
       expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
       expect(cycle.dataset['frame']).toBe('flow');
       expect(cycle.getAttribute('aria-pressed')).toBe('false');
-      expect(element('frame-name').textContent).toContain('metronome');
+      expect(element('frame-name').textContent).toContain('Flow');
       expect(element('frame-what').textContent).toContain('beat');
       expect(drawn()).not.toBe(waiting);
       // The same setting the select at the desk carries, so it has to follow.
@@ -2150,7 +2154,7 @@ describe('AppView', () => {
     mode.value = FLOW_MODE_ID;
     mode.dispatchEvent(new Event('change'));
     expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
-    expect(element('mode-description').textContent).toContain('with the beat');
+    expect(element('mode-description').textContent).toContain('beat');
   });
 
   describe('the ladder arrows', () => {

@@ -270,6 +270,15 @@ export interface PracticeSettings {
    */
   readonly hearTheOtherHand: boolean;
   /**
+   * Whether playing along with a performance is marked on the page.
+   *
+   * His: he plays along with the playback and wants to see whether he is
+   * landing on the right notes. Off by default, because a performance is also
+   * how a piece is *listened* to, and a page filling with red while nobody is
+   * being judged would be the program marking a reader who never asked to be.
+   */
+  readonly markWhileListening: boolean;
+  /**
    * Bars to practise, one-based and inclusive, or `null` for the whole thing.
    *
    * Counted in *playing order* rather than by the number printed on the page,
@@ -678,6 +687,10 @@ export class PracticeController {
   private fadedThrough = -1;
   /** Marks waiting for the run to end, when that is when they are drawn. */
   private heldMarks: PlayedNote[] = [];
+  /** The step a performance has reached, which is what playing along is against. */
+  private listeningStep = 0;
+  /** The subscription that marks a reader playing along, while there is one. */
+  private playAlong: Unsubscribe | null = null;
   /**
    * The speed the reader asked for, which is the ceiling for the easing.
    *
@@ -763,6 +776,7 @@ export class PracticeController {
       clickPattern: 'pulse',
       handStaff: null,
       hearTheOtherHand: false,
+      markWhileListening: false,
       rangeFromBar: null,
       rangeToBar: null,
       repeatRange: false,
@@ -1463,6 +1477,9 @@ export class PracticeController {
     // what they had said, this was one of the two places that made "hide the
     // marker" a setting the machine overruled.
     this.applyCursorVisibility();
+    // Each performance is its own: marks left from the last one would be the
+    // page answering a question nobody has asked yet.
+    this.deps.overlay.clearPlayed();
     // Something is happening to the music now, so a press is a press and not
     // the beginning of a run.
     this.watchForTheOpening();
@@ -1841,10 +1858,61 @@ export class PracticeController {
       // fall where they are written - the same reckoning a mode under a pulse
       // uses, and for the same reason.
       this.player.events.on('stepReached', ({ stepIndex, ticks, atMs }) => {
+        this.listeningStep = stepIndex;
         this.announceTheBeats(ticks, this.nextStepTicks(stepIndex), atMs);
       });
     }
     return this.player;
+  }
+
+  /**
+   * Marks what the reader plays along with a performance.
+   *
+   * His, and it is the one thing a playback could not tell him: he plays
+   * along to check himself, and the page said nothing either way. Judged
+   * against the beat the performance has reached, which is the beat he is
+   * hearing - not against a window, because a performance is not a run and
+   * nothing here is being graded. It is a mirror, not a verdict: the marks
+   * are drawn and nothing is counted, reported or held against him.
+   *
+   * Armed and disarmed in one place, like the opening chord, because the
+   * question is always the same one: is a performance going with the reader
+   * asking to be shown.
+   */
+  private watchThePlayAlong(): void {
+    const wanted = this.currentSettings.markWhileListening && this.isListening;
+    if (!wanted) {
+      this.playAlong?.();
+      this.playAlong = null;
+      return;
+    }
+    if (this.playAlong === null) {
+      this.playAlong = this.deps.midi.subscribe((event) => this.hearThePlayAlong(event));
+    }
+  }
+
+  private hearThePlayAlong(event: MidiEvent): void {
+    if (event.type !== 'noteon') {
+      return;
+    }
+    const step = this.timeline?.at(this.listeningStep) ?? null;
+    if (step === null) {
+      return;
+    }
+    // What the reader would have been asked for here, so playing along to one
+    // hand is marked against that hand - the same question the run asks, put
+    // to the beat that is sounding.
+    const wanted = expectedFor(step, this.currentSettings.handStaff);
+    this.deps.overlay.showPlayed({
+      stepIndex: this.listeningStep,
+      midi: event.midi,
+      correct: wanted.includes(event.midi),
+      // Nothing about how early or late: a performance keeps its own time and
+      // the reader is following it by ear, so a number saying they were
+      // forty milliseconds behind the recording would be measuring the wrong
+      // thing and drawing it on their music.
+      offset: 0,
+    });
   }
 
   /**
@@ -1856,6 +1924,10 @@ export class PracticeController {
    * is there music on the page with nothing happening to it.
    */
   private watchForTheOpening(): void {
+    // Asked here because it is the same question at the same moments: what is
+    // happening to the music. Two watchers, one answer, and no chance of one
+    // of them being armed at a moment the other was not.
+    this.watchThePlayAlong();
     const status = this.currentSession?.status;
     const wanted =
       this.currentSettings.immediateStart &&

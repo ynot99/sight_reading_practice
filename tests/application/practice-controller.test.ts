@@ -2443,6 +2443,50 @@ describe('cursor visibility', () => {
     expect(renderer.cursor.visible).toBe(false);
   });
 
+  it('marks what the reader plays along with a performance, where asked', async () => {
+    // His: he plays along with the playback to check himself, and the page
+    // said nothing either way - the only thing a performance could not tell
+    // him. A mirror rather than a verdict: the marks are drawn and nothing is
+    // counted, reported or held against him.
+    const { controller, renderer, midi } = createController(true);
+    controller.updateSettings({ markWhileListening: true });
+    await controller.loadNewExercise();
+    controller.listen();
+    const wanted = controller.currentTimeline?.at(0)?.expectedMidi[0] ?? 60;
+
+    midi.noteOn(wanted, 0);
+    midi.noteOn(wanted + 1, 0);
+
+    expect(renderer.played.map((note) => note.correct)).toEqual([true, false]);
+  });
+
+  it('says nothing about a playback the reader is only listening to', async () => {
+    // Off by default, because a performance is also how a piece is listened
+    // to: a page filling with red while nobody is being judged would be the
+    // program marking a reader who never asked to be.
+    const { controller, renderer, midi } = createController(true);
+    await controller.loadNewExercise();
+    controller.listen();
+
+    midi.noteOn((controller.currentTimeline?.at(0)?.expectedMidi[0] ?? 60) + 1, 0);
+
+    expect(renderer.played).toHaveLength(0);
+  });
+
+  it('stops marking once the performance is over', async () => {
+    // The watch stands down with the music. A press between performances is
+    // the reader trying something out, not an answer to anything.
+    const { controller, renderer, midi } = createController(true);
+    controller.updateSettings({ markWhileListening: true });
+    await controller.loadNewExercise();
+    controller.listen();
+    controller.stopListening();
+
+    midi.noteOn(controller.currentTimeline?.at(0)?.expectedMidi[0] ?? 60, 0);
+
+    expect(renderer.played).toHaveLength(0);
+  });
+
   it('takes the marker off a playback when that is what was asked', async () => {
     // Which the machine used to overrule in two places: "hide the marker" was
     // a setting a playback simply ignored.

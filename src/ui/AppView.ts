@@ -1,5 +1,6 @@
 import type { AppRuntime } from '../composition/createApp.js';
 import { FLOW_MODE_ID } from '../application/modes/FlowMode.js';
+import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { WAIT_MODE_ID } from '../application/modes/WaitMode.js';
 import type { PracticeSession } from '../application/session/PracticeSession.js';
 import type { SessionStatus } from '../application/session/SessionState.js';
@@ -339,11 +340,15 @@ function settingsForMode(mode: string, on: boolean): Partial<PracticeSettings> {
 const FRAME_WHAT: Readonly<Record<string, string>> = {
   [WAIT_MODE_ID]: 'The cursor waits until you play the notes on the page.',
   [FLOW_MODE_ID]: 'The cursor moves with the beat and your timing is scored.',
+  [LISTEN_MODE_ID]: 'The machine plays it and nothing is judged. Start plays; stop ends it.',
 };
 
 /** The mode id a square in the frame row stands for. */
 function frameModeId(frame: string): string {
-  return frame === 'flow' ? FLOW_MODE_ID : WAIT_MODE_ID;
+  if (frame === 'flow') {
+    return FLOW_MODE_ID;
+  }
+  return frame === 'listen' ? LISTEN_MODE_ID : WAIT_MODE_ID;
 }
 
 /**
@@ -2364,7 +2369,12 @@ export class AppView {
     );
     fillSelect(
       this.el.mode,
-      this.runtime.modes.list().map((mode) => ({ value: mode.id, label: mode.label })),
+      [
+        ...this.runtime.modes.list().map((mode) => ({ value: mode.id, label: mode.label })),
+        // Not in the registry, and deliberately: nothing about it is a
+        // practice mode. It is the same question all the same.
+        { value: LISTEN_MODE_ID, label: 'Listen to it' },
+      ],
       this.runtime.controller.settings.modeId,
     );
     fillSelect(
@@ -3286,6 +3296,13 @@ export class AppView {
     });
 
     this.listen(this.el.focusListen, 'click', () => {
+      // Still one tap. Listening is a frame now rather than a feature beside
+      // the frames, and this says "that one" before it starts - which is the
+      // whole of what it used to do, said properly.
+      if (!controller.machinePlays) {
+        controller.updateSettings({ modeId: LISTEN_MODE_ID });
+        this.syncControlsFromSettings();
+      }
       void this.toggleListening();
     });
 
@@ -3302,6 +3319,13 @@ export class AppView {
    */
   private togglePlayback(): void {
     const { controller } = this.runtime;
+    // His: Start replaces playback. In the listening frame there is no
+    // session to ask about - the performance is the run - so the one button
+    // hands over to the one that has always driven it.
+    if (controller.machinePlays) {
+      void this.toggleListening();
+      return;
+    }
     const status = controller.session?.status;
 
     if (status === 'running' || status === 'counting-in') {
@@ -3562,10 +3586,11 @@ export class AppView {
     this.forgetTheBeats();
     this.cancelPreview();
     controller.stop();
-    if (controller.isListening || controller.isListeningPaused) {
-      controller.stopListening();
-      this.describeListening();
-    }
+    // A performance ends too, whichever frame Stop was pressed in - and this
+    // is a no-op where there is none, which is cheaper than a branch that
+    // has to be kept in step with what Stop already did.
+    controller.stopListening();
+    this.describeListening();
   }
 
   /** Ends a look in progress, whether it ran out or the reader stopped it. */

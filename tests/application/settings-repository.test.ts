@@ -12,6 +12,7 @@ import { InMemorySettingsStore, type ISettingsStore } from '../../src/applicatio
 import { volumeToGain } from '../../src/application/ports/IVolumeControl.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
+import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
 
 const KNOWN: KnownIds = {
   presetIds: ['five-finger-c', 'triads-left-hand'],
@@ -144,6 +145,19 @@ describe('practice settings codec', () => {
     expect(when({ dropoutBars: 0 })).toBe('always');
     // A cycle length the menu never offered is dropped rather than invented.
     expect(when({ dropoutBars: 3 })).toBeUndefined();
+  });
+
+  it('keeps the listening frame, which no registry holds', () => {
+    // It is the same setting as the two practice modes and is not one of
+    // them, so anything checking a stored frame against the registry alone
+    // throws it away - and a reader who shut the app watching the machine
+    // play comes back to a run waiting for them. One list says what a frame
+    // may be called, and both the app and this rig read it.
+    const known: KnownIds = { ...KNOWN, modeIds: knownFrameIds(KNOWN.modeIds) };
+
+    const read = decodePracticeSettings({ ...SETTINGS, modeId: LISTEN_MODE_ID }, known);
+
+    expect(read.modeId).toBe(LISTEN_MODE_ID);
   });
 
   it('drops a preset or mode that no longer exists', () => {

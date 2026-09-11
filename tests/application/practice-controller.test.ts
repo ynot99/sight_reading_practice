@@ -7,6 +7,7 @@ import {
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
+import { LISTEN_MODE_ID } from '../../src/application/modes/ListenFrame.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
 import type { ExerciseRequest } from '../../src/domain/generation/IExerciseGenerator.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
@@ -1725,6 +1726,32 @@ describe('hearing the hand you are not reading', () => {
     rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
     return rig;
   }
+
+  it('plays the piece instead of beginning a run, in the listening frame', async () => {
+    // His: Start replaces playback. There is no run to begin where the
+    // machine does the playing, so the one button reaches for the
+    // performance that has always existed.
+    const { controller } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ modeId: LISTEN_MODE_ID });
+
+    const session = controller.start();
+
+    // No session at all, and a performance under way instead.
+    expect(session).toBeNull();
+    expect(controller.session).toBeNull();
+    expect(controller.isListening).toBe(true);
+  });
+
+  it('is still the frame the reader left the app in', async () => {
+    // It is not in the mode registry - nothing about it is a practice mode -
+    // so the restoring code had to be told, or a reader who shut the app
+    // watching the machine play came back to a run waiting for them.
+    const { controller } = createController(true, undefined, { modeId: LISTEN_MODE_ID });
+
+    expect(controller.settings.modeId).toBe(LISTEN_MODE_ID);
+    expect(controller.machinePlays).toBe(true);
+  });
 
   it('waits for the reader before answering them', async () => {
     // Nothing keeps time in this mode but the reader, so an accompaniment

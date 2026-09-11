@@ -65,6 +65,7 @@ import {
 } from '../domain/model/Exercise.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
+import { machineIsPlaying } from './modes/ListenFrame.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMeter.js';
 import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
@@ -919,10 +920,21 @@ export class PracticeController {
     if (changes.modeId !== undefined && changes.modeId !== this.currentSettings.modeId) {
       // Same idea as the preset ladder: a mode brings the grading it is
       // usually judged by, unless the caller said otherwise in the same breath.
-      next = {
-        ...next,
-        scoringId: changes.scoringId ?? this.deps.modes.get(changes.modeId).defaultScoringId,
-      };
+      // The listening frame has no grading of its own to bring: nothing in
+      // it is judged, and the reader's choice is waiting for them when they
+      // come back to a frame that judges.
+      // One frame at a time. Whatever the old one had going belongs to it:
+      // a performance is the listening frame's run, and a session is the
+      // other two frames'. Leaving a frame ends what it was doing, which is
+      // one rule in one place - it used to be a fight between the transport
+      // buttons, with a run taken away by a playback and no session left to
+      // say so.
+      this.stopListening();
+      this.currentSession?.abort();
+      const grading = machineIsPlaying(changes.modeId)
+        ? next.scoringId
+        : this.deps.modes.get(changes.modeId).defaultScoringId;
+      next = { ...next, scoringId: changes.scoringId ?? grading };
     }
 
     if (changes.presetId !== undefined && changes.presetId !== this.currentSettings.presetId) {
@@ -2079,6 +2091,13 @@ export class PracticeController {
    * setting, and a passage that goes round without a break is the other.
    */
   start(options: { readonly countIn?: boolean } = {}): PracticeSession | null {
+    // His: one button. In the listening frame there is no run to begin - the
+    // machine plays and the reader watches - so Start reaches for the
+    // performance that has always existed rather than for a session.
+    if (this.machinePlays) {
+      this.listen();
+      return null;
+    }
     const bars = options.countIn === false ? 0 : this.currentSettings.countInBars;
     return this.beginRun(bars, []);
   }
@@ -2347,14 +2366,26 @@ export class PracticeController {
   }
 
   pause(): void {
+    if (this.machinePlays) {
+      this.pauseListening();
+      return;
+    }
     this.currentSession?.pause();
   }
 
   resume(): void {
+    if (this.machinePlays) {
+      this.resumeListening();
+      return;
+    }
     this.currentSession?.resume();
   }
 
   stop(): void {
+    if (this.machinePlays) {
+      this.stopListening();
+      return;
+    }
     this.currentSession?.abort();
   }
 
@@ -2399,7 +2430,7 @@ export class PracticeController {
     tempoBpm: number,
   ): number {
     const timeline = this.timeline;
-    if (timeline === null || !this.deps.modes.get(this.currentSettings.modeId).requiresMetronome) {
+    if (timeline === null || !this.keepsTime) {
       return 0;
     }
     return playedNoteOffset(timeline, stepIndex, deviationMs, tempoBpm);
@@ -2616,7 +2647,27 @@ export class PracticeController {
    * so it falls with the clock instead, and every beat found fills it.
    */
   get survivalKeepsTime(): boolean {
-    return this.deps.modes.get(this.currentSettings.modeId).requiresMetronome;
+    return this.keepsTime;
+  }
+
+  /**
+   * Whether a pulse carries the music in the frame now chosen.
+   *
+   * The one place that asks. It was seven lookups into the registry spelled
+   * out in seven places, which was fine while every frame was a practice mode
+   * - and the moment one of them was not, every one of those places would
+   * have had to learn about it separately.
+   */
+  private get keepsTime(): boolean {
+    return (
+      !machineIsPlaying(this.currentSettings.modeId) &&
+      this.deps.modes.get(this.currentSettings.modeId).requiresMetronome
+    );
+  }
+
+  /** Whether the frame now chosen is the one the machine plays. */
+  get machinePlays(): boolean {
+    return machineIsPlaying(this.currentSettings.modeId);
   }
 
   /**
@@ -2695,8 +2746,7 @@ export class PracticeController {
    */
   private noteTheTrouble(verdict: NoteVerdict): void {
     if (
-      (verdict !== 'wrong' && verdict !== 'rushed') ||
-      this.deps.modes.get(this.currentSettings.modeId).requiresMetronome
+      (verdict !== 'wrong' && verdict !== 'rushed') || this.keepsTime
     ) {
       return;
     }
@@ -2728,7 +2778,7 @@ export class PracticeController {
     }
     // Under a pulse the music arrives when the beat falls, and the step is
     // entered at that moment: there is nothing to work out.
-    if (this.deps.modes.get(this.currentSettings.modeId).requiresMetronome) {
+    if (this.keepsTime) {
       const now = this.deps.clock.now();
       this.soundTheOtherHand(step, now);
       // As far as the next step and no further: under a pulse the music
@@ -2769,7 +2819,7 @@ export class PracticeController {
     if (
       step === null ||
       status === 'skipped' ||
-      this.deps.modes.get(this.currentSettings.modeId).requiresMetronome
+      this.keepsTime
     ) {
       return;
     }

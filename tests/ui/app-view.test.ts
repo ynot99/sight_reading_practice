@@ -6,6 +6,7 @@ import { PracticeController } from '../../src/application/PracticeController.js'
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
+import { knownFrameIds } from '../../src/application/modes/ListenFrame.js';
 import { SilentPitchPlayer } from '../../src/application/ports/IPitchPlayer.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
@@ -156,7 +157,7 @@ function createRig(
 
   const settings = new SettingsRepository(store, {
     presetIds: presets.list().map((preset) => preset.id),
-    modeIds: modes.list().map((mode) => mode.id),
+    modeIds: knownFrameIds(modes.list().map((mode) => mode.id)),
     rhythmProfileIds: rhythms.list().map((profile) => profile.id),
     scoringIds: scorings.list().map((strategy) => strategy.id),
     ladderStepIds: ladder.list().map((step) => step.id),
@@ -336,7 +337,8 @@ describe('AppView', () => {
     expect(element<HTMLSelectElement>('rhythm').options).toHaveLength(
       BUILT_IN_RHYTHM_PROFILES.length,
     );
-    expect(element<HTMLSelectElement>('mode').options).toHaveLength(2);
+    // Two practice modes and the frame that is not one of them.
+    expect(element<HTMLSelectElement>('mode').options).toHaveLength(3);
     expect(element<HTMLSelectElement>('key').options.length).toBeGreaterThan(5);
     expect(element('preset-description').textContent).not.toBe('');
     expect(element('rhythm-description').textContent).not.toBe('');
@@ -579,36 +581,34 @@ describe('AppView', () => {
     expect(element('focus-listen').getAttribute('aria-label')).toBe('Listen');
   });
 
-  it('gives the transport back when a run is taken away by a playback', async () => {
-    // Listening throws the run away - the same pulse and the same cursor
-    // cannot serve two masters - but a run that is *taken* has no session
-    // left to say so with. The buttons went on believing one was in
-    // progress: Start stayed disabled for good, and Stop and Pause went on
-    // offering to act on something that no longer existed.
+  it('ends what the old frame was doing when the frame changes', async () => {
+    // One frame at a time, and one rule in one place. A performance belongs
+    // to the listening frame and a session to the other two, so leaving a
+    // frame ends what it had going. This used to be a fight between the
+    // transport buttons: a run was *taken away* by a playback and had no
+    // session left to say so with, so Start stayed disabled for good.
     const { view, runtime } = createRig();
     await view.initialize();
 
     element<HTMLButtonElement>('focus-play').click();
-    expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
-
-    element<HTMLButtonElement>('focus-listen').click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(runtime.controller.session).toBeNull();
-    expect(element('focus-play').getAttribute('aria-label')).toBe('Start');
-    // Play offers to start rather than to pause, there being no run. Stop is
-    // not idle: something is playing, and Stop ends whatever is playing.
-    expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
-    expect(element('focus-play').getAttribute('aria-label')).toBe('Start');
-
-    element<HTMLButtonElement>('focus-listen').click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    // And Start still works afterwards, which is the whole complaint.
-    element<HTMLButtonElement>('focus-play').click();
     expect(runtime.controller.session?.status).toBe('running');
-    expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
+
+    // Which is what the listen button does now: it says "that frame" first.
+    element<HTMLButtonElement>('focus-listen').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(runtime.controller.machinePlays).toBe(true);
+    expect(runtime.controller.isListening).toBe(true);
+    expect(runtime.controller.session?.status).not.toBe('running');
+    // Stop is not idle: something is playing, and Stop ends what is playing.
     expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
+
+    // And back again, which ends the performance rather than leaving it
+    // playing under a run.
+    runtime.controller.updateSettings({ modeId: new WaitMode().id });
+
+    expect(runtime.controller.isListening).toBe(false);
+    expect(runtime.controller.isListeningPaused).toBe(false);
   });
 
   it('stops offering to stop a performance its score replaced', async () => {
@@ -675,9 +675,11 @@ describe('AppView', () => {
     expect([...sounded].every((midi) => midi < 60)).toBe(true);
   });
 
-  it('gives up the pulse when a run starts', async () => {
-    // Listening and practising share the metronome and the cursor, so one has
-    // to yield rather than both driving.
+  it('makes Start mean "play it to me" in the frame where the machine plays', async () => {
+    // His: Start replaces playback. There is nothing else for it to mean
+    // here - no run is begun in this frame - so the one button holds the
+    // performance rather than starting a session beside it, which is what
+    // the two of them used to fight over.
     const { view, runtime } = createRig();
     await view.initialize();
     element<HTMLButtonElement>('focus-listen').click();
@@ -685,9 +687,15 @@ describe('AppView', () => {
     expect(runtime.controller.isListening).toBe(true);
 
     element<HTMLButtonElement>('focus-play').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(runtime.controller.isListening).toBe(false);
-    expect(element('focus-listen').getAttribute('aria-label')).toBe('Listen');
+    expect(runtime.controller.isListeningPaused).toBe(true);
+    expect(runtime.controller.session?.status).not.toBe('running');
+
+    element<HTMLButtonElement>('focus-play').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(runtime.controller.isListening).toBe(true);
   });
 
   it('narrows practice to a passage without cutting the music', async () => {
@@ -1289,6 +1297,28 @@ describe('AppView', () => {
       choice('wait').click();
 
       expect(runtime.controller.settings.modeId).toBe(new WaitMode().id);
+    });
+
+    it('offers a third frame, in which the machine plays and nothing is judged', async () => {
+      // His: not a playback beside the modes but a mode of its own - the one
+      // where you sit back and watch the machine play. Start is what plays
+      // it; there is no second transport.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      const listen = element('modes-frame').querySelector('[data-frame="listen"]') as HTMLButtonElement;
+
+      listen.click();
+
+      expect(runtime.controller.machinePlays).toBe(true);
+      expect(listen.getAttribute('aria-pressed')).toBe('true');
+
+      element<HTMLButtonElement>('focus-play').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Start played it rather than beginning a run nobody asked for.
+      expect(runtime.controller.isListening).toBe(true);
+      expect(runtime.controller.session?.status).not.toBe('running');
     });
 
     it('says what each kind of run does in the words the settings use', async () => {

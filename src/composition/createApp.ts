@@ -1,6 +1,7 @@
 import { PracticeController } from '../application/PracticeController.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { FlowMode } from '../application/modes/FlowMode.js';
+import { knownFrameIds } from '../application/modes/ListenFrame.js';
 import { PracticeModeRegistry } from '../application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../application/modes/WaitMode.js';
 import type {
@@ -254,7 +255,10 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     settingsStore,
     {
       presetIds: presets.list().map((preset) => preset.id),
-      modeIds: modes.list().map((mode) => mode.id),
+      // The listening frame among them, though the registry does not hold
+      // it: it is the same setting, and a reader who left the app watching
+      // the machine play should find it there when they come back.
+      modeIds: knownFrameIds(modes.list().map((mode) => mode.id)),
       rhythmProfileIds: rhythms.list().map((profile) => profile.id),
       scoringIds: scorings.list().map((strategy) => strategy.id),
       ladderStepIds: ladder.list().map((step) => step.id),

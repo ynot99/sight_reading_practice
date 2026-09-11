@@ -1709,6 +1709,61 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   opacity: 0.45;
 }
 
+/*
+ * What kind of run this is, above the squares that make one harder.
+ *
+ * Deliberately not one of them: the squares are all "make it harder", and
+ * this is the frame they sit inside. So it is drawn in the sheet's own
+ * colours rather than in a colour of its own, and the chosen one is said by
+ * the accent - the same way everything else here says "this one".
+ */
+.frame {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  padding: 4px 4px 0;
+}
+
+.frame__choice {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-strong);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.frame__choice svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  fill: currentColor;
+}
+
+.frame__choice[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.frame__name {
+  font-size: 1rem;
+}
+
+.frame__what {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
 .modes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

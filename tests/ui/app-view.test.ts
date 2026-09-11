@@ -1266,6 +1266,49 @@ describe('AppView', () => {
       expect(element('sheet-modes').hidden).toBe(true);
     });
 
+    it('chooses what kind of run this is above the squares, not among them', async () => {
+      // His: the squares are all "make it harder", and waiting or flowing is
+      // the frame they sit inside. It was a small toggle in the drawer and a
+      // select down the settings sheet, neither of which is where a reader
+      // decides what they are about to do.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      const choice = (frame: string): HTMLButtonElement =>
+        element('modes-frame').querySelector(`[data-frame="${frame}"]`) as HTMLButtonElement;
+      expect(choice('wait').getAttribute('aria-pressed')).toBe('true');
+
+      choice('flow').click();
+
+      expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
+      expect(choice('flow').getAttribute('aria-pressed')).toBe('true');
+      expect(choice('wait').getAttribute('aria-pressed')).toBe('false');
+      // The same setting the drawer's toggle carries, so it has to follow.
+      expect(element('focus-wait').getAttribute('aria-pressed')).toBe('false');
+
+      choice('wait').click();
+
+      expect(runtime.controller.settings.modeId).toBe(new WaitMode().id);
+      expect(element('focus-wait').getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('says what each kind of run does in the words the settings use', async () => {
+      // One sentence said in two places is two sentences the first time
+      // either is edited.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      const said = (frame: string): string =>
+        element('modes-frame').querySelector(`[data-frame-what="${frame}"]`)?.textContent ?? '';
+
+      expect(said('wait')).toBe(element('mode-description').textContent);
+      expect(said('flow')).not.toBe(said('wait'));
+
+      (element('modes-frame').querySelector('[data-frame="flow"]') as HTMLButtonElement).click();
+
+      expect(said('flow')).toBe(element('mode-description').textContent);
+    });
+
     it('turns a mode on from the squares in front of the reader', async () => {
       // His shape and his reasons: four lines apart in a drawer are four
       // things to remember, and four squares are a state you can see. Each

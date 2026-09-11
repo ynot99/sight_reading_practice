@@ -342,6 +342,23 @@ function whyModeIsOut(mode: string, settings: PracticeSettings): string | null {
 }
 
 /**
+ * What each kind of run does, in one sentence.
+ *
+ * Said in one place because it is said in two: the sheet where the run is
+ * chosen and the line under the settings select. Two copies of a sentence
+ * are two sentences the first time either is edited.
+ */
+const FRAME_WHAT: Readonly<Record<string, string>> = {
+  [WAIT_MODE_ID]: 'The cursor waits until you play the notes on the page.',
+  [FLOW_MODE_ID]: 'The cursor moves with the beat and your timing is scored.',
+};
+
+/** The mode id a square in the frame row stands for. */
+function frameModeId(frame: string): string {
+  return frame === 'flow' ? FLOW_MODE_ID : WAIT_MODE_ID;
+}
+
+/**
  * A control in the drawer that can have nothing to say.
  *
  * Named rather than discovered, because the list is the claim: these are the
@@ -1186,6 +1203,7 @@ export class AppView {
     placesClose: HTMLButtonElement;
     sheetModes: HTMLElement;
     modesGrid: HTMLElement;
+    modesFrame: HTMLElement;
     modesClose: HTMLButtonElement;
     focusModes: HTMLButtonElement;
     settingsMetronome: HTMLButtonElement;
@@ -1425,6 +1443,7 @@ export class AppView {
       placesClose: requireElement(doc, 'places-close'),
       sheetModes: requireElement(doc, 'sheet-modes'),
       modesGrid: requireElement(doc, 'modes-grid'),
+      modesFrame: requireElement(doc, 'modes-frame'),
       modesClose: requireElement(doc, 'modes-close'),
       focusModes: requireElement(doc, 'focus-modes'),
       settingsMetronome: requireElement(doc, 'settings-metronome'),
@@ -3036,6 +3055,21 @@ export class AppView {
     this.listen(this.el.modesClose, 'click', () => {
       this.el.sheetModes.hidden = true;
     });
+    for (const choice of this.el.modesFrame.querySelectorAll('button[data-frame]')) {
+      if (!(choice instanceof HTMLButtonElement)) {
+        continue;
+      }
+      this.listen(choice, 'click', () => {
+        // The same setting the drawer's toggle and the settings select carry.
+        // Several ways to say one thing is how everything here works; what
+        // must not happen is two things saying it differently, which is why
+        // they all read it back through one sync.
+        this.runtime.controller.updateSettings({
+          modeId: frameModeId(choice.dataset['frame'] ?? ''),
+        });
+        this.syncControlsFromSettings();
+      });
+    }
     for (const card of cards) {
       if (!(card instanceof HTMLButtonElement)) {
         continue;
@@ -3066,6 +3100,14 @@ export class AppView {
    */
   private showTheModes(): void {
     const settings = this.runtime.controller.settings;
+    for (const choice of this.el.modesFrame.querySelectorAll('button[data-frame]')) {
+      const frame = (choice as HTMLElement).dataset['frame'] ?? '';
+      choice.setAttribute('aria-pressed', String(settings.modeId === frameModeId(frame)));
+    }
+    for (const said of this.el.modesFrame.querySelectorAll('[data-frame-what]')) {
+      const frame = (said as HTMLElement).dataset['frameWhat'] ?? '';
+      said.textContent = FRAME_WHAT[frameModeId(frame)] ?? '';
+    }
     const on: HTMLButtonElement[] = [];
     for (const card of this.el.modesGrid.querySelectorAll('button[data-mode]')) {
       if (!(card instanceof HTMLButtonElement)) {
@@ -5792,10 +5834,7 @@ export class AppView {
   }
 
   private describeMode(): void {
-    const mode = this.runtime.modes.get(this.runtime.controller.settings.modeId);
-    this.el.modeDescription.textContent = mode.requiresMetronome
-      ? 'The cursor moves with the beat and your timing is scored.'
-      : 'The cursor waits until you play the notes on the page.';
+    this.el.modeDescription.textContent = FRAME_WHAT[this.runtime.controller.settings.modeId] ?? '';
   }
 
   /** True while a run is under way, paused included: it is still that run. */

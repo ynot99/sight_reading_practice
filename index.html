@@ -509,6 +509,35 @@
             <button id="modes-close" type="button" class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
+          <!--
+            Which kind of run this is, above the squares rather than among
+            them: it is the frame they sit inside, not a fifth way of making
+            a run harder. It was a small toggle in the drawer and a select
+            down the settings sheet, and neither is where a reader decides
+            what they are about to do.
+
+            What each one says is filled in from the same sentence the
+            settings sheet uses, so the two cannot drift apart.
+          -->
+          <div id="modes-frame" class="frame" role="group"
+            aria-label="What kind of run this is">
+            <button type="button" class="frame__choice" data-frame="wait" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.3l3.6 2.1-1 1.7L11 13.5V7h2z" />
+              </svg>
+              <strong class="frame__name">Wait for the notes</strong>
+              <span class="frame__what" data-frame-what="wait"></span>
+            </button>
+            <button type="button" class="frame__choice" data-frame="flow" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 3h2l4 16H6L10 3h2zm-1 3-2.6 11h7.2L13 6h-2z" />
+                <path d="M6 15h12v2H6z" />
+              </svg>
+              <strong class="frame__name">Flow with the metronome</strong>
+              <span class="frame__what" data-frame-what="flow"></span>
+            </button>
+          </div>
+
           <div id="modes-grid" class="modes">
             <button type="button" class="mode-card mode-card--survival" data-mode="survival"
               aria-pressed="false">

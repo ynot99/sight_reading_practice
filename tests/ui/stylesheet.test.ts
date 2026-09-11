@@ -157,6 +157,19 @@ describe('the stylesheet', () => {
     expect(hiding?.body).toMatch(/display\s*:\s*flex/);
   });
 
+  it('keeps a mode square’s reason inside the square', () => {
+    // Hung outside it was cut off: the panel keeps its own overflow hidden,
+    // as every sheet here does, so a bubble reaching past a square reaches
+    // past the panel with it. jsdom lays nothing out, so nothing in the view
+    // tests can see that happen.
+    const bubble = rules().find((rule) => rule.selector === '.mode-card[data-why]::after');
+
+    expect(bubble?.body).toMatch(/position\s*:\s*absolute/);
+    // Anything measured against the square's *outside* edge puts it out
+    // there: `calc(100% + …)` is exactly how it escaped.
+    expect(bubble?.body).not.toMatch(/calc\(100%/);
+  });
+
   it('empties the bar down to the way out when only the page is wanted', () => {
     // The same rule mid-run follows, for the reader's own "just the music":
     // what stays is named, so anything added to the row goes by default.

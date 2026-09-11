@@ -1558,6 +1558,29 @@ describe('AppView', () => {
       expect(runtime.controller.settings.rushingCounts).toBe(true);
     });
 
+    it('empties what describes material the program writes, once a score is on the stand', async () => {
+      // Which of the two is being read is a fact rather than a mode, so
+      // nobody declares it: open a score and the settings that write
+      // exercises have nothing to describe. This is what a separate window
+      // for each would have been for, without the window.
+      const rig = createRig();
+      await rig.view.initialize();
+      const carrier = (id: string): HTMLElement =>
+        element(id).closest('label, .control-group') as HTMLElement;
+      expect(carrier('preset').dataset['idle']).toBeUndefined();
+
+      const kept = await rig.runtime.scores.keep(longExercise({ bars: 8 }), 1_000);
+      await rig.runtime.controller.openScore((await rig.runtime.scores.open(kept.id)) as never);
+      element<HTMLButtonElement>('focus-settings').click();
+
+      for (const id of ['preset', 'rhythm', 'key', 'time-signature', 'measures']) {
+        expect(carrier(id).dataset['idle']).toBe('true');
+      }
+      expect(carrier('preset').getAttribute('title')).toContain('on the stand');
+      // And what is about the reading rather than the material stays.
+      expect(carrier('scoring').dataset['idle']).toBeUndefined();
+    });
+
     it('dims a control that another setting has emptied', async () => {
       // His: dim what is incompatible. A switch standing at full strength
       // while it does nothing whatever it is set to is the program offering
@@ -2220,7 +2243,7 @@ describe('AppView', () => {
     await Promise.resolve();
     expect(runtime.controller.settings.rangeFromBar).toBe(2);
 
-    element<HTMLButtonElement>('focus-next').click();
+    element<HTMLButtonElement>('scores-fresh').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     // The boxes have to follow the setting, or they would name a passage of
@@ -3871,7 +3894,7 @@ describe('AppView', () => {
       await view.initialize();
       renderer.tapScore();
 
-      element<HTMLButtonElement>('focus-next').click();
+      element<HTMLButtonElement>('scores-fresh').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(renderer.shownPassage).toBeNull();
@@ -4121,7 +4144,7 @@ describe('AppView', () => {
       const { view, runtime } = createRig();
       await view.initialize();
 
-      const button = element<HTMLButtonElement>('focus-next');
+      const button = element<HTMLButtonElement>('focus-bare');
       button.focus();
       pressSpace(button);
 
@@ -4864,10 +4887,16 @@ describe('AppView', () => {
         // Named for a screen reader, since the label is a picture now.
         expect(element(id).getAttribute('aria-label')).toBeTruthy();
       }
-      // A fresh generated exercise does nothing at all while a real score is
-      // open - the controller sees the opened piece and presents it again -
-      // so for most of the reading here it is not a button worth a slot.
-      expect(element('focus-next').closest('#focus-drawer')).not.toBeNull();
+      // Asking for a fresh exercise is not in here at all any more: it is
+      // an answer to "what goes on the stand", so it stands with the scores
+      // - and it closes that sheet behind itself, the way choosing one does.
+      expect(element('scores-fresh').closest('#sheet-scores')).not.toBeNull();
+      element<HTMLButtonElement>('focus-scores').click();
+      expect(element('sheet-scores').hidden).toBe(false);
+
+      element<HTMLButtonElement>('scores-fresh').click();
+
+      expect(element('sheet-scores').hidden).toBe(true);
       expect(element('focus-hands').parentElement?.id).toBe('focus-drawer');
       expect(element('focus-zoom').closest('#focus-drawer')).not.toBeNull();
     });
@@ -5186,7 +5215,7 @@ describe('AppView', () => {
       const { view, renderer } = createRig();
       await view.initialize();
 
-      element<HTMLButtonElement>('focus-next').click();
+      element<HTMLButtonElement>('scores-fresh').click();
       await Promise.resolve();
       await Promise.resolve();
 

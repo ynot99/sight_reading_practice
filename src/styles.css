@@ -619,6 +619,23 @@ select {
   color: var(--text-muted);
 }
 
+/*
+ * The answer that needs nothing kept, above the shelf of ones that do.
+ */
+.scores__fresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.scores__fresh svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: currentColor;
+}
+
 .takes__list {
   list-style: none;
   margin: 0;

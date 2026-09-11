@@ -418,6 +418,11 @@ const FRAME_WHAT: Readonly<Record<string, string>> = {
  * not quietly assumed to be one of them.
  */
 type IdleControl =
+  | 'preset'
+  | 'rhythm'
+  | 'key'
+  | 'time-signature'
+  | 'measures'
   | 'survival-refill'
   | 'survival-punish'
   | 'ease-tempo'
@@ -442,8 +447,19 @@ function whyItIsIdle(
   control: IdleControl,
   settings: PracticeSettings,
   keepsTime: boolean,
+  opened: boolean,
 ): string | null {
   switch (control) {
+    // These describe material the program writes. With a score on the stand
+    // there is nothing for them to describe - and which of the two is being
+    // read is a fact rather than a mode, so nobody has to declare it: open a
+    // score and they empty, ask for a fresh exercise and they fill again.
+    case 'preset':
+    case 'rhythm':
+    case 'key':
+    case 'time-signature':
+    case 'measures':
+      return opened ? 'A score is on the stand; this writes the exercises.' : null;
     case 'survival-refill':
     case 'survival-punish':
       return !settings.survival
@@ -1186,7 +1202,7 @@ export class AppView {
     focusSlower: HTMLButtonElement;
     focusFaster: HTMLButtonElement;
     focusTempo: HTMLOutputElement;
-    focusNext: HTMLButtonElement;
+    scoresFresh: HTMLButtonElement;
     midiStatus: HTMLElement;
     bridgeStatus: HTMLElement;
     pedalStatus: HTMLElement;
@@ -1420,7 +1436,7 @@ export class AppView {
       focusSlower: requireElement(doc, 'focus-slower'),
       focusFaster: requireElement(doc, 'focus-faster'),
       focusTempo: requireElement(doc, 'focus-tempo'),
-      focusNext: requireElement(doc, 'focus-next'),
+      scoresFresh: requireElement(doc, 'scores-fresh'),
       midiStatus: requireElement(doc, 'midi-status'),
       bridgeStatus: requireElement(doc, 'bridge-status'),
       pedalStatus: requireElement(doc, 'pedal-status'),
@@ -3211,7 +3227,13 @@ export class AppView {
   private dimWhatHasNothingToSay(): void {
     const settings = this.runtime.controller.settings;
     const keepsTime = this.runtime.controller.survivalKeepsTime;
+    const opened = this.runtime.controller.openedExercise !== null;
     const controls: readonly (readonly [IdleControl, HTMLElement])[] = [
+      ['preset', this.el.preset],
+      ['rhythm', this.el.rhythm],
+      ['key', this.el.key],
+      ['time-signature', this.el.timeSignature],
+      ['measures', this.el.measures],
       ['survival-refill', this.el.survivalRefill],
       ['survival-punish', this.el.survivalPunish],
       ['ease-tempo', this.el.easeTempo],
@@ -3224,7 +3246,7 @@ export class AppView {
       if (!(carrier instanceof HTMLElement)) {
         continue;
       }
-      const why = whyItIsIdle(name, settings, keepsTime);
+      const why = whyItIsIdle(name, settings, keepsTime, opened);
       if (why === null) {
         delete carrier.dataset['idle'];
         carrier.removeAttribute('title');
@@ -3330,7 +3352,11 @@ export class AppView {
       this.nudgeTempo(TEMPO_STEP_PERCENT);
     });
 
-    this.listen(this.el.focusNext, 'click', () => {
+    this.listen(this.el.scoresFresh, 'click', () => {
+      // The sheet asks what to put on the stand, and this is the answer that
+      // needs nothing kept - so it closes behind itself the way choosing a
+      // score does.
+      this.el.sheetScores.hidden = true;
       void this.reload(true);
     });
   }
@@ -5820,7 +5846,6 @@ export class AppView {
     this.el.focusPlay.title = label;
     this.el.focusPlayIcon.setAttribute('d', running ? PAUSE_ICON : PLAY_ICON);
     this.describeStopping();
-    this.el.focusNext.disabled = running || paused;
     this.applyPlayingChrome();
   }
 

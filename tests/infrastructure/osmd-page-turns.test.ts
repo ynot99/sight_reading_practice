@@ -825,6 +825,22 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
       expect(clipped?.parentElement?.getAttribute('transform')).not.toBeNull();
     });
 
+    it('keeps the page label above the preview rather than under it', () => {
+      // Reported: it was covered. The label says what the *page* is - which
+      // piece, which page of it - and the preview replaces one system of that
+      // page rather than the page itself, so it went out for exactly the
+      // stretch before a turn, when which page you are on is most alive.
+      lastStepOnThisPage();
+      const sheet = sheets(container)[0];
+      const label = sheet?.querySelector('.page-label');
+      const shown = preview();
+      expect(label).not.toBeNull();
+      expect(shown).not.toBeNull();
+
+      const order = [...(sheet?.children ?? [])];
+      expect(order.indexOf(label as Element)).toBeGreaterThan(order.indexOf(shown as Element));
+    });
+
     it('takes the hand switch off the system it stands on', () => {
       // Reported: the top row's switches looked as though they had fallen
       // onto the row below. They are painted where the staves are and never

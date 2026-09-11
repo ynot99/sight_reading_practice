@@ -1445,6 +1445,15 @@ export class OsmdScoreRenderer
     // in the corner this does not carry.
     moved.setAttribute('transform', previewPlacement(moved, slot, target, bottom));
     this.previewGroup = group;
+    // Over the preview, not under it. The label says what the *page* is -
+    // which piece, which page of it - and the preview replaces one system of
+    // that page rather than the page itself. Painted first it went out for
+    // as long as the preview stood there, which is the stretch just before a
+    // turn, when "which page am I on" is most alive.
+    const label = this.pageLabels.get(sheet);
+    if (label?.parentNode === sheet) {
+      sheet.append(label);
+    }
     // The system this stands on is not on the page while it stands there, so
     // neither is the switch that belongs to it.
     this.coverHandSwitches(bottom);

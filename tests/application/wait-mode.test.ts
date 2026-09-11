@@ -83,6 +83,73 @@ describe('a press aimed at a later beat', () => {
     expect(harness.of('noteJudged')[0]?.verdict).toBe('wrong');
   });
 
+  it('moves on by the hand being practised, not by the other one', () => {
+    // His question: does this fight "hear the other hand"? It cannot - that
+    // setting only *sounds* notes and never reaches the judging - but the two
+    // do meet at the hand filter, which is worth saying out loud. What counts
+    // as the next beat's note is what this hand is asked for there; the other
+    // hand's note of that beat is not the reader's to play, so pressing it is
+    // not moving on.
+    const both: Exercise = {
+      ...twoBarExercise(),
+      staves: [
+        {
+          staffNumber: 1,
+          voice: 1,
+          clef: 'treble',
+          clefChanges: [],
+          measures: [
+            bar(
+              noteEntry(p('C4'), Duration.QUARTER),
+              noteEntry(p('D4'), Duration.QUARTER),
+              noteEntry(p('E4'), Duration.QUARTER),
+              noteEntry(p('F4'), Duration.QUARTER),
+            ),
+          ],
+        },
+        {
+          staffNumber: 2,
+          voice: 2,
+          clef: 'bass',
+          clefChanges: [],
+          measures: [
+            bar(
+              noteEntry(p('C3'), Duration.QUARTER),
+              noteEntry(p('D3'), Duration.QUARTER),
+              noteEntry(p('E3'), Duration.QUARTER),
+              noteEntry(p('F3'), Duration.QUARTER),
+            ),
+          ],
+        },
+      ],
+    };
+    const rightHandOnly = (): Harness =>
+      createHarness({
+        exercise: both,
+        mode: new WaitMode(),
+        options: {
+          countInBars: 0,
+          clickWhen: 'never',
+          matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+          playingAhead: 'moves-on',
+          expectedStaff: 1,
+        },
+      });
+
+    const own = rightHandOnly();
+    own.session.start();
+    own.midi.noteOn(p('D4').midi, own.clock.now());
+
+    expect(own.of('stepCompleted').map((one) => one.result.status)).toEqual(['missed', 'correct']);
+
+    const other = rightHandOnly();
+    other.session.start();
+    other.midi.noteOn(p('D3').midi, other.clock.now());
+
+    expect(other.session.currentIndex).toBe(0);
+    expect(other.of('stepCompleted')).toHaveLength(0);
+  });
+
   it('does not move on past the end of the passage', () => {
     const harness = createHarness({
       exercise: longExercise({ bars: 2, tempoBpm: 60 }),

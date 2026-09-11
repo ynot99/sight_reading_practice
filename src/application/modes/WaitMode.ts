@@ -31,6 +31,12 @@ export class WaitMode extends BasePracticeMode {
   }
 
   override onNoteOn(context: PracticeContext, event: MidiNoteOnEvent): void {
+    // Before the matcher is asked anything, because asking it is what records
+    // a wrong note: a press the reader meant as "on to the next one" is not a
+    // mistake they should have to see marked and then forgiven.
+    if (context.movesOnTo(event.midi)) {
+      context.completeStep();
+    }
     const matcher = context.matcher;
     if (matcher === null) {
       return;

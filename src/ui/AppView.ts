@@ -987,6 +987,7 @@ export class AppView {
     focusHandLeft: SVGElement;
     focusHandRight: SVGElement;
     focusHealthFill: HTMLElement;
+    playingAhead: HTMLSelectElement;
     survival: HTMLInputElement;
     survivalRefill: HTMLSelectElement;
     survivalPunish: HTMLInputElement;
@@ -1212,6 +1213,7 @@ export class AppView {
       focusHandLeft: requireElement(doc, 'focus-hand-left'),
       focusHandRight: requireElement(doc, 'focus-hand-right'),
       focusHealthFill: requireElement(doc, 'focus-health-fill'),
+      playingAhead: requireElement(doc, 'playing-ahead'),
       survival: requireElement(doc, 'survival'),
       survivalRefill: requireElement(doc, 'survival-refill'),
       survivalPunish: requireElement(doc, 'survival-punish'),
@@ -2429,6 +2431,13 @@ export class AppView {
         knob.learn();
       }
       this.describeKnob();
+    });
+
+    this.listen(this.el.playingAhead, 'change', () => {
+      controller.updateSettings({
+        playingAhead: this.el.playingAhead.value === 'moves-on' ? 'moves-on' : 'a-mistake',
+      });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.survival, 'change', () => {
@@ -4415,6 +4424,7 @@ export class AppView {
     this.el.focusMarks.setAttribute('aria-label', MARKS_TITLES[settings.playedNotes]);
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
+    this.el.playingAhead.value = settings.playingAhead;
     this.el.survival.checked = settings.survival;
     this.el.survivalRefill.value = String(settings.survivalRefillPercent);
     this.el.survivalPunish.checked = settings.survivalPunishesMistakes;

@@ -601,6 +601,33 @@ export class PracticeSession {
     this.enterStep(step.index + 1);
   }
 
+  /**
+   * Whether a press is the reader moving on rather than a wrong note.
+   *
+   * One beat and no further, which is the rule the late presses already
+   * follow: the note says which beat was meant, and a note two beats off is a
+   * reader who has lost their place rather than one who is ahead. The beat
+   * left behind is finished the ordinary way, so it comes out `missed` - the
+   * music went past it, which here is exactly what happened.
+   */
+  private movesOnTo(midi: number): boolean {
+    const step = this.currentStep;
+    if (this.options.playingAhead !== 'moves-on' || step === null) {
+      return false;
+    }
+    // Printed here, ornament or not, is not ahead: the other hand's note of
+    // this beat is this beat's, and a grace note is offered rather than asked
+    // for.
+    if (step.expectedMidi.includes(midi) || step.ornamentMidi.includes(midi)) {
+      return false;
+    }
+    if (step.index >= this.lastIndex) {
+      return false;
+    }
+    const next = this.timeline.at(step.index + 1);
+    return next !== null && this.expectedAt(next).includes(midi);
+  }
+
   private deriveStatus(): StepStatus {
     if (this.matcher === null) {
       return 'skipped';
@@ -905,6 +932,7 @@ export class PracticeSession {
       get runStartedAtMs() {
         return session.runStartedAt;
       },
+      movesOnTo: (midi: number) => session.movesOnTo(midi),
       positionTicks: (tick: MetronomeTick) => tick.positionTicks - session.positionOffsetTicks,
       scheduledTimeMs: (ticks: number) => session.runStartedAt + session.elapsedTo(ticks),
       judgeNote: (midi: number, verdict: NoteVerdict, deviationMs: number | null) => {

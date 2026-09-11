@@ -48,6 +48,7 @@ const SETTINGS: PracticeSettings = {
   pagedScore: true,
   playedNotes: 'at-end',
   survival: true,
+  playingAhead: 'moves-on',
   survivalRefillPercent: 40,
   survivalPunishesMistakes: true,
   readAheadSteps: 2,

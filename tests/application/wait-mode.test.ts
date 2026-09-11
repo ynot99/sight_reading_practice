@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
-import { MIDI, arpeggiatedExercise, bar, p, twoBarExercise } from '../support/fixtures.js';
+import { MIDI, arpeggiatedExercise, bar, longExercise, p, twoBarExercise } from '../support/fixtures.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
 import { noteEntry } from '../../src/domain/model/Exercise.js';
 import { Duration } from '../../src/domain/model/Duration.js';
@@ -20,6 +20,89 @@ function waitHarness(overrides: Partial<Parameters<typeof createHarness>[0]> = {
     ...overrides,
   });
 }
+
+describe('a press aimed at a later beat', () => {
+  /** Two bars of crotchets, so there is always a next beat to reach for. */
+  function ahead(playingAhead: 'a-mistake' | 'moves-on'): Harness {
+    return createHarness({
+      exercise: longExercise({ bars: 2, tempoBpm: 60 }),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+        playingAhead,
+      },
+    });
+  }
+
+  it('is a wrong note where the reader is learning not to play early', () => {
+    // What it has always been, and still the default: the beat goes on
+    // waiting and the press is held against it.
+    const harness = ahead('a-mistake');
+    harness.session.start();
+    const next = harness.timeline.steps[1]?.expectedMidi[0] ?? 0;
+
+    harness.midi.noteOn(next, harness.clock.now());
+
+    expect(harness.session.currentIndex).toBe(0);
+    expect(harness.of('noteJudged')[0]?.verdict).toBe('wrong');
+  });
+
+  it('moves on to it where the reader asked for that', () => {
+    // His: pressing the next note to get to it. The beat left behind is
+    // finished the ordinary way, so it comes out missed - the music went past
+    // it, which here is exactly what happened - and the press itself is the
+    // right note of the beat it was aimed at rather than a wrong one.
+    const harness = ahead('moves-on');
+    harness.session.start();
+    const next = harness.timeline.steps[1]?.expectedMidi[0] ?? 0;
+
+    harness.midi.noteOn(next, harness.clock.now());
+
+    // Two beats finish on the one press: the one left behind, and the one it
+    // was aimed at - which is a single note, so playing it completes it.
+    expect(harness.of('stepCompleted').map((one) => one.result.status)).toEqual([
+      'missed',
+      'correct',
+    ]);
+    expect(harness.of('noteJudged')[0]?.verdict).toBe('correct');
+  });
+
+  it('stays where it is for a note belonging to no beat nearby', () => {
+    // One beat and no further, which is the rule the late presses already
+    // follow: a note two beats off is a reader who has lost their place
+    // rather than one who is ahead.
+    const harness = ahead('moves-on');
+    harness.session.start();
+    const far = harness.timeline.steps[2]?.expectedMidi[0] ?? 0;
+
+    harness.midi.noteOn(far, harness.clock.now());
+
+    expect(harness.session.currentIndex).toBe(0);
+    expect(harness.of('noteJudged')[0]?.verdict).toBe('wrong');
+  });
+
+  it('does not move on past the end of the passage', () => {
+    const harness = createHarness({
+      exercise: longExercise({ bars: 2, tempoBpm: 60 }),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+        playingAhead: 'moves-on',
+        stopAfterIndex: 0,
+      },
+    });
+    harness.session.start();
+    const beyond = harness.timeline.steps[1]?.expectedMidi[0] ?? 0;
+
+    harness.midi.noteOn(beyond, harness.clock.now());
+
+    expect(harness.of('noteJudged')[0]?.verdict).toBe('wrong');
+  });
+});
 
 describe('Wait mode', () => {
   it('starts running immediately and without a pulse', () => {

@@ -743,6 +743,19 @@
           <label><input id="cursor-rest" type="checkbox" checked /> Cursor when nothing is playing</label>
           <label><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
           <label><input id="rhythm-only" type="checkbox" /> Rhythm only: any note counts</label>
+          <!--
+            His, and he asked for both answers: some readers press the next
+            note to get to it, and some are learning not to press early at
+            all. Where nothing keeps time but the reader, that difference is
+            the whole of what the mode is teaching.
+          -->
+          <div class="control-group">
+            <label for="playing-ahead">Pressing a note that comes later</label>
+            <select id="playing-ahead">
+              <option value="a-mistake">Counts as a wrong note</option>
+              <option value="moves-on">Moves on to it</option>
+            </select>
+          </div>
           <label><input id="survival" type="checkbox" /> Survival: keep the bar up</label>
           <!--
             His, and only where nothing keeps time. Filling the bar outright

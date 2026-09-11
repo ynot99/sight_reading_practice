@@ -2,6 +2,7 @@ import type { ExercisePresetRegistry } from '../domain/generation/ExercisePreset
 import type { ExerciseRequest, IExerciseGenerator } from '../domain/generation/IExerciseGenerator.js';
 import type { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.js';
 import type { Exercise } from '../domain/model/Exercise.js';
+import type { PlayingAhead } from './session/PracticeContext.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
 import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
@@ -316,6 +317,15 @@ export interface PracticeSettings {
    * their notes travelled.
    */
   readonly inputLatencyMs: number;
+  /**
+   * What a press belonging to a later beat means, where the music waits.
+   *
+   * His, and he asked for both answers: some readers press the next note to
+   * get to it, and some are learning not to press early at all. Where nothing
+   * keeps time but the reader, that difference is the whole of what the mode
+   * is teaching, so it is theirs to say.
+   */
+  readonly playingAhead: PlayingAhead;
   readonly pitchClassOnly: boolean;
   /**
    * Judge the timing and not the notes.
@@ -760,6 +770,7 @@ export class PracticeController {
       clickWhen: 'always',
       matchToleranceMs: 250,
       inputLatencyMs: 0,
+      playingAhead: 'a-mistake',
       pitchClassOnly: false,
       rhythmOnly: false,
       previewSeconds: 0,
@@ -1975,6 +1986,7 @@ export class PracticeController {
         stopAfterIndex: passage.to,
         expectedStaff: this.currentSettings.handStaff,
         inputLatencyMs: this.currentSettings.inputLatencyMs,
+        playingAhead: this.currentSettings.playingAhead,
         click: this.currentSettings.clickPattern,
         clickSilences: this.currentSettings.clickSilences,
         clickWhen: this.currentSettings.clickWhen,

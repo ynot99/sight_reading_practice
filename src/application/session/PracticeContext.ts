@@ -90,7 +90,23 @@ export interface SessionOptions {
    * only honest place.
    */
   readonly inputLatencyMs: number;
+  /**
+   * What a press belonging to a later beat means.
+   *
+   * His, and he asked for both answers: some readers play a note early to
+   * *get* to it, and some are learning not to. Where the music waits, the
+   * difference is the whole of what the mode is teaching - so it is the
+   * reader's to say rather than this program's to decide.
+   *
+   * `a-mistake` is what it has always been: the beat goes on waiting and the
+   * press is a wrong note against it. `moves-on` leaves the beat behind
+   * unplayed and takes the press as the beginning of the next one.
+   */
+  readonly playingAhead: PlayingAhead;
 }
+
+/** @see SessionOptions.playingAhead */
+export type PlayingAhead = 'a-mistake' | 'moves-on';
 
 export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
@@ -100,6 +116,7 @@ export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   clickWhen: 'always',
   earlyWindowMs: 120,
   inputLatencyMs: 0,
+  playingAhead: 'a-mistake',
 };
 
 /**
@@ -128,6 +145,17 @@ export interface PracticeContext {
   positionTicks(tick: MetronomeTick): number;
   /** Clock time at which a musical position is due. */
   scheduledTimeMs(ticks: number): number;
+
+  /**
+   * Whether a press is the reader moving on rather than a wrong note.
+   *
+   * True only where they asked for that, where this beat neither wants the
+   * note nor prints it as an ornament, and where the beat after this one
+   * does. One beat and no further, which is the rule the late presses
+   * already follow: the note says which beat was meant, and a note two beats
+   * off is a reader who has lost their place rather than one who is ahead.
+   */
+  movesOnTo(midi: number): boolean;
 
   /** Reports a judged press; the session records and publishes it. */
   judgeNote(midi: number, verdict: NoteVerdict, deviationMs: number | null): void;

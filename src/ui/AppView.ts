@@ -2242,7 +2242,10 @@ export class AppView {
 
   private describeListening(): void {
     this.describeCursorButton();
-    this.applyPreview();
+    // A performance going or held is the bar playing, and this is said
+    // wherever one starts, holds or ends - which is the whole list of
+    // moments the chrome has to follow.
+    this.applyPlayingChrome();
     const listening = this.runtime.controller.isListening;
     const held = this.runtime.controller.isListeningPaused;
     // Three answers, because there are three states: nothing playing, playing,
@@ -3080,7 +3083,18 @@ export class AppView {
       const frame = (said as HTMLElement).dataset['frameWhat'] ?? '';
       said.textContent = FRAME_WHAT[frameModeId(frame)] ?? '';
     }
+    // The frame first, where it is not the one that waits. That one is the
+    // resting state of this program - Start begins a run and the music waits
+    // for the reader - and the other two are exactly the cases where Start
+    // does something else, which is what a corner is for. Left unsaid, a
+    // reader could sit down to practise and have the machine play at them.
     const on: HTMLButtonElement[] = [];
+    const frame = this.el.modesFrame.querySelector(
+      `button[data-frame='${settings.modeId === FLOW_MODE_ID ? 'flow' : 'listen'}']`,
+    );
+    if (settings.modeId !== WAIT_MODE_ID && frame instanceof HTMLButtonElement) {
+      on.push(frame);
+    }
     for (const card of this.el.modesGrid.querySelectorAll('button[data-mode]')) {
       if (!(card instanceof HTMLButtonElement)) {
         continue;
@@ -3109,7 +3123,9 @@ export class AppView {
    * settings sync, which is most of what the view does.
    */
   private showWhichModesAreOn(cards: readonly HTMLButtonElement[]): void {
-    const shape = cards.map((card) => card.dataset['mode'] ?? '').join(' ');
+    const named = (card: HTMLButtonElement): string =>
+      card.dataset['mode'] ?? card.dataset['frame'] ?? '';
+    const shape = cards.map(named).join(' ');
     if (shape === this.modesShown) {
       return;
     }
@@ -3117,8 +3133,11 @@ export class AppView {
     this.el.scoreModes.replaceChildren();
     const names: string[] = [];
     for (const card of cards) {
-      const mode = card.dataset['mode'] ?? '';
-      const name = card.querySelector('.mode-card__name')?.textContent ?? mode;
+      const mode = named(card);
+      const name =
+        card.querySelector('.mode-card__name')?.textContent ??
+        card.querySelector('.frame__name')?.textContent ??
+        mode;
       const mark = this.doc.createElement('span');
       mark.className = `score__mode score__mode--${mode}`;
       mark.dataset['mode'] = mode;
@@ -5828,7 +5847,16 @@ export class AppView {
    * or moves anything.
    */
   private applyPlayingChrome(): void {
-    const playing = this.isPlaying || this.isPreviewing;
+    // A performance counts as playing. It is not a session, so the bar used
+    // to keep all its chrome over music that was going - and Stop, which now
+    // stands only while there is something to stop, would have been the one
+    // button missing exactly where it is needed.
+    const controller = this.runtime.controller;
+    const playing =
+      this.isPlaying ||
+      this.isPreviewing ||
+      controller.isListening ||
+      controller.isListeningPaused;
     this.applyPreview();
     this.el.focusBar.dataset['playing'] = String(playing);
     if (playing) {

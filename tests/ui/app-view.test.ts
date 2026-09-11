@@ -6,7 +6,7 @@ import { PracticeController } from '../../src/application/PracticeController.js'
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
-import { knownFrameIds } from '../../src/application/modes/ListenFrame.js';
+import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
 import { SilentPitchPlayer } from '../../src/application/ports/IPitchPlayer.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
@@ -1319,6 +1319,57 @@ describe('AppView', () => {
       // Start played it rather than beginning a run nobody asked for.
       expect(runtime.controller.isListening).toBe(true);
       expect(runtime.controller.session?.status).not.toBe('running');
+    });
+
+    it('puts the bar into playing chrome for a performance too', async () => {
+      // A performance is not a session, so the bar kept all its chrome over
+      // music that was going - and Stop, which now stands only while there
+      // is something to stop, would have gone missing exactly where it is
+      // needed. jsdom applies no stylesheet; the attribute is what it reads.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      expect(element('focus-bar').getAttribute('data-playing')).toBe('false');
+
+      element<HTMLButtonElement>('focus-listen').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.isListening).toBe(true);
+      expect(element('focus-bar').getAttribute('data-playing')).toBe('true');
+
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(runtime.controller.isListening).toBe(false);
+      expect(element('focus-bar').getAttribute('data-playing')).toBe('false');
+    });
+
+    it('says in the corner when the frame is not the one that waits', async () => {
+      // Start means something different in each frame, and a reader can be
+      // left in one. Unsaid, they could sit down to practise and have the
+      // machine play at them. The waiting frame is this program at rest, so
+      // it is the two others that the corner is for.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const marks = (): string[] =>
+        [...element('score-modes').querySelectorAll('[data-mode]')].map(
+          (mark) => mark.getAttribute('data-mode') ?? '',
+        );
+      expect(element('score-modes').hidden).toBe(true);
+
+      runtime.controller.updateSettings({ modeId: LISTEN_MODE_ID });
+      element<HTMLButtonElement>('focus-modes').click();
+
+      expect(marks()).toEqual(['listen']);
+      expect(element('score-modes').hidden).toBe(false);
+
+      // And the frame leads whatever else is on.
+      (element('modes-grid').querySelector('[data-mode="blind"]') as HTMLButtonElement).click();
+
+      expect(marks()).toEqual(['listen', 'blind']);
+
+      runtime.controller.updateSettings({ modeId: new WaitMode().id });
+      element<HTMLButtonElement>('focus-modes').click();
+
+      expect(marks()).toEqual(['blind']);
     });
 
     it('says what each kind of run does in the words the settings use', async () => {

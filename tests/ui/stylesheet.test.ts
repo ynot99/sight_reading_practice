@@ -318,10 +318,16 @@ describe('the stylesheet', () => {
     // begins a reading is Start. jsdom applies no stylesheet, so nothing in
     // the view tests can see this.
     const waiting = rules().find(
-      (rule) => rule.selector === ".focus-bar:not([data-playing='true']) #focus-replay",
+      (rule) =>
+        rule.selector.includes('#focus-replay') && rule.selector.includes("data-playing='true'"),
     );
 
     expect(waiting?.body).toMatch(/display\s*:\s*none/);
+    // And Stop keeps the same company: it has nothing to end between runs,
+    // and a button greyed out over a page where nothing is happening is
+    // furniture. It is not redundant, though - Play holds a run and Stop
+    // ends one - so it is hidden rather than taken away.
+    expect(waiting?.selector).toContain('#focus-stop');
   });
 
   it('reddens the marker where the reader keeps missing', () => {

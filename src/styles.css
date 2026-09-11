@@ -1014,6 +1014,16 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * controls answering one question. So it waits until there is a reading to
  * begin again, and then stands with pause and stop.
  */
+/*
+ * Stop, only while there is something to stop.
+ *
+ * His: with playback folded into a frame, a Stop button standing greyed out
+ * over a page where nothing is happening is furniture. It is not redundant
+ * though - Play holds a run and Stop ends one, and mid-run it is one of the
+ * three buttons left on the bar, so taking it away would leave a reader no
+ * way out of a reading but to start it again.
+ */
+.focus-bar:not([data-playing='true']) #focus-stop,
 .focus-bar:not([data-playing='true']) #focus-replay {
   display: none;
 }
@@ -1888,6 +1898,17 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 .mode-card--strict,
 .score__mode--strict {
   --mode-ground: #4c1d95;
+}
+
+/*
+ * The frame, in the accent rather than in a colour of its own.
+ *
+ * It is not one of the four - those all say "harder", and this says what the
+ * run *is* - so it is marked the way everything else here marks "this one".
+ */
+.score__mode--flow,
+.score__mode--listen {
+  --mode-ground: var(--accent);
 }
 
 /*

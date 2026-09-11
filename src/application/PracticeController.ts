@@ -270,6 +270,17 @@ export interface PracticeSettings {
    */
   readonly hearTheOtherHand: boolean;
   /**
+   * Whether beating the hand the reader is hearing counts against them.
+   *
+   * His: late is allowed and early is not. A waiting mode stands still until
+   * the notes arrive, so nothing there can be late - but the accompaniment
+   * placed against the reader's last press does not stand still, and a press
+   * that lands before the music reached it is a reader going past the thing
+   * they asked to play with. Inert without that other hand, where there is
+   * nothing to be early against.
+   */
+  readonly rushingCounts: boolean;
+  /**
    * Whether playing along with a performance is marked on the page.
    *
    * His: he plays along with the playback and wants to see whether he is
@@ -788,6 +799,7 @@ export class PracticeController {
       handStaff: null,
       hearTheOtherHand: false,
       markWhileListening: false,
+      rushingCounts: true,
       showPlaybackNotes: false,
       rangeFromBar: null,
       rangeToBar: null,
@@ -2111,6 +2123,11 @@ export class PracticeController {
         expectedStaff: this.currentSettings.handStaff,
         inputLatencyMs: this.currentSettings.inputLatencyMs,
         playingAhead: this.currentSettings.playingAhead,
+        // Gated on there being an accompaniment at all: without one there is
+        // no sounding music to be ahead of, and a waiting mode's whole
+        // promise is that it does not mind how long the reader takes.
+        rushing:
+          this.currentSettings.rushingCounts && this.wantsTheOtherHand() ? 'a-mistake' : 'allowed',
         click: this.currentSettings.clickPattern,
         clickSilences: this.currentSettings.clickSilences,
         clickWhen: this.currentSettings.clickWhen,
@@ -2212,7 +2229,7 @@ export class PracticeController {
         // Before the marks have their say, and deliberately: this exists for
         // the reader who has turned them off.
         this.noteTheTrouble(verdict);
-        if (verdict === 'wrong' && this.currentSettings.stopAtAMistake) {
+        if ((verdict === 'wrong' || verdict === 'rushed') && this.currentSettings.stopAtAMistake) {
           // After the mark is noted and before it is drawn: stopping fires
           // `finished`, which puts up everything the run was holding back -
           // so the note that ended it is on the page with the rest.
@@ -2230,7 +2247,7 @@ export class PracticeController {
           settled: false,
           // Right against the page, which is what the mark is about: a note
           // the other hand was going to play was read correctly.
-          correct: verdict !== 'wrong',
+          correct: verdict !== 'wrong' && verdict !== 'rushed',
           // Measured now, not at the end: the offset is a fraction of the gap
           // to the neighbouring note, and it is only known while the run
           // still knows the tempo it was played at.
@@ -2677,7 +2694,10 @@ export class PracticeController {
    * blink back at them on every slip.
    */
   private noteTheTrouble(verdict: NoteVerdict): void {
-    if (verdict !== 'wrong' || this.deps.modes.get(this.currentSettings.modeId).requiresMetronome) {
+    if (
+      (verdict !== 'wrong' && verdict !== 'rushed') ||
+      this.deps.modes.get(this.currentSettings.modeId).requiresMetronome
+    ) {
       return;
     }
     this.missteps += 1;

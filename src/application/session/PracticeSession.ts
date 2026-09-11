@@ -79,6 +79,15 @@ export class PracticeSession {
   private stepEnteredAt = 0;
   private stepDeviationMs: number | null = null;
   private stepWrongNotes: number[] = [];
+  /**
+   * Where the written clock was last set, and when.
+   *
+   * The reader is the clock in a waiting mode: they play a step, and every
+   * written moment after it falls where the page says it does relative to
+   * that press. The accompaniment is placed from exactly this anchor, so
+   * anything judged against it is judged against what the reader heard.
+   */
+  private writtenAnchor: { readonly wallMs: number; readonly ticks: number } | null = null;
 
   private runStartedAt = 0;
   private positionOffsetTicks = 0;
@@ -465,6 +474,7 @@ export class PracticeSession {
     this.matcher = null;
     this.stepDeviationMs = null;
     this.stepWrongNotes = [];
+    this.writtenAnchor = null;
     this.runStartedAt = 0;
     this.positionOffsetTicks = 0;
     this.publishedPositionTicks = null;
@@ -592,6 +602,12 @@ export class PracticeSession {
     // walking through: a step of rests is nobody's doing.
     const finishedAt =
       result.status === 'skipped' ? this.clock.now() : (this.lastStruckAtMs ?? this.clock.now());
+    // A step the reader played is where the written clock now stands. A step
+    // that was nobody's to play moves nothing: the music went past it in
+    // written time, which is what the anchor already says.
+    if (result.status !== 'skipped') {
+      this.writtenAnchor = { wallMs: finishedAt, ticks: step.onsetTicks };
+    }
     this.emitter.emit('stepCompleted', { result, atMs: finishedAt });
 
     if (step.index >= this.lastIndex) {
@@ -626,6 +642,22 @@ export class PracticeSession {
     }
     const next = this.timeline.at(step.index + 1);
     return next !== null && this.expectedAt(next).includes(midi);
+  }
+
+  /**
+   * When the current step is written to arrive, in clock time.
+   *
+   * The written distance from the last step the reader played, laid off from
+   * the moment they played it - `spanMs`, so a written change of speed is
+   * honoured and the answer is never a multiplication.
+   */
+  private stepDueAtMs(): number | null {
+    const anchor = this.writtenAnchor;
+    const step = this.currentStep;
+    if (anchor === null || step === null) {
+      return null;
+    }
+    return anchor.wallMs + spanMs(this.timeline.exercise, anchor.ticks, step.onsetTicks);
   }
 
   private deriveStatus(): StepStatus {
@@ -850,10 +882,13 @@ export class PracticeSession {
             ? 'other-hand'
             : 'wrong';
 
-    if (verdict === 'wrong') {
+    // A rushed press is the right note, so it counts against the step
+    // without being a wrong note on the page or in the log: one ledger of
+    // what was held against this step, and the verdict says which it was.
+    if (verdict === 'wrong' || verdict === 'rushed') {
       this.stepWrongNotes.push(midi);
     }
-    if (verdict === 'correct' && this.stepDeviationMs === null) {
+    if ((verdict === 'correct' || verdict === 'rushed') && this.stepDeviationMs === null) {
       this.stepDeviationMs = deviationMs;
     }
     this.emitter.emit('noteJudged', {
@@ -928,6 +963,9 @@ export class PracticeSession {
       },
       get stepEnteredAtMs() {
         return session.stepEnteredAt;
+      },
+      get stepDueAtMs() {
+        return session.stepDueAtMs();
       },
       get runStartedAtMs() {
         return session.runStartedAt;

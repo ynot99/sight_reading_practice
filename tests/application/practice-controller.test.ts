@@ -1834,6 +1834,45 @@ describe('hearing the hand you are not reading', () => {
     expect(instrument.played).toEqual([]);
   });
 
+  it('holds a press that went past the hand it is played against', async () => {
+    // His: late is allowed, early is not. The accompaniment is laid a written
+    // second after the reader's last press, and a note struck at once has
+    // gone by it - so it is marked, though it is the note that was asked for.
+    const { controller, midi, renderer, clock } = await readingTheTreble();
+    controller.start();
+
+    midi.noteOn(p('C4').midi, clock.now());
+    midi.noteOn(p('D4').midi, clock.now());
+
+    expect(renderer.played.map((mark) => mark.midi)).toEqual([p('C4').midi, p('D4').midi]);
+    expect(renderer.played.map((mark) => mark.correct)).toEqual([true, false]);
+  });
+
+  it('holds nothing where no other hand is sounding', async () => {
+    // With the accompaniment silent there is nothing to be early against, and
+    // a waiting mode's whole promise is that it does not mind how long the
+    // reader takes. The setting stays on; it simply has nothing to say.
+    const { controller, midi, renderer, clock } = await readingTheTreble();
+    controller.updateSettings({ hearTheOtherHand: false });
+    controller.start();
+
+    midi.noteOn(p('C4').midi, clock.now());
+    midi.noteOn(p('D4').midi, clock.now());
+
+    expect(renderer.played.map((mark) => mark.correct)).toEqual([true, true]);
+  });
+
+  it('leaves it alone where the reader did not ask to be held to it', async () => {
+    const { controller, midi, renderer, clock } = await readingTheTreble();
+    controller.updateSettings({ rushingCounts: false });
+    controller.start();
+
+    midi.noteOn(p('C4').midi, clock.now());
+    midi.noteOn(p('D4').midi, clock.now());
+
+    expect(renderer.played.map((mark) => mark.correct)).toEqual([true, true]);
+  });
+
   it('takes back what it was holding, and what was still to come', async () => {
     // The accompaniment is laid out ahead of the reader as far as their next
     // entry, so a run stopped in the middle of that would play on alone.

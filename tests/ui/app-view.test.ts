@@ -1337,6 +1337,27 @@ describe('AppView', () => {
       expect(blind?.getAttribute('aria-pressed')).toBe('true');
     });
 
+    it('lets the reader say whether beating the other hand counts', async () => {
+      // His: late is allowed, early is not - but a penalty nobody asked for
+      // is a surprise, so it is a switch, and it sits with the hand it is
+      // about. Inert without that hand, which is the controller's rule and
+      // not this one's.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const rushing = element<HTMLInputElement>('rushing-counts');
+      expect(rushing.checked).toBe(true);
+
+      rushing.checked = false;
+      rushing.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.rushingCounts).toBe(false);
+
+      rushing.checked = true;
+      rushing.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.rushingCounts).toBe(true);
+    });
+
     it('says in the corner which modes are on, with the sheet shut', async () => {
       // His: the sheet that sets them is closed by the time the reader is at
       // the keys, and a mode turned on three pieces ago is otherwise

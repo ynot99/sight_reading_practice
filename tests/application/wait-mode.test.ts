@@ -21,6 +21,145 @@ function waitHarness(overrides: Partial<Parameters<typeof createHarness>[0]> = {
   });
 }
 
+describe('a press that beats the hand the reader is hearing', () => {
+  /**
+   * Two bars of crotchets at 60bpm, so every beat is written a second apart.
+   *
+   * The matching tolerance stays infinite, as it is everywhere in a waiting
+   * mode - a chord being learned takes as long as it takes - which is exactly
+   * why the window here is the early window instead.
+   */
+  function against(rushing: 'allowed' | 'a-mistake'): Harness {
+    return createHarness({
+      exercise: longExercise({ bars: 2, tempoBpm: 60 }),
+      mode: new WaitMode(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        earlyWindowMs: 120,
+        matchPolicy: { toleranceMs: Number.POSITIVE_INFINITY, pitchClassOnly: false },
+        rushing,
+      },
+    });
+  }
+
+  function noteAt(harness: Harness, index: number): number {
+    return harness.timeline.steps[index]?.expectedMidi[0] ?? 0;
+  }
+
+  it('counts against the step where the reader asked for it', () => {
+    // His: late is allowed, early is not. The mode waits for him, but the
+    // hand he is hearing does not - it is placed a written second after his
+    // last press - and a note struck at once has gone past it.
+    const harness = against('a-mistake');
+    harness.session.start();
+    harness.midi.noteOn(noteAt(harness, 0), 0);
+
+    harness.midi.noteOn(noteAt(harness, 1), 0);
+
+    expect(harness.of('noteJudged').map((one) => one.verdict)).toEqual(['correct', 'rushed']);
+    // The note that was asked for, so the run moves on - and held against the
+    // step all the same, which is the whole of what a penalty is.
+    expect(harness.of('stepCompleted').map((one) => one.result.status)).toEqual([
+      'correct',
+      'incorrect',
+    ]);
+  });
+
+  it('leaves the reader as long as they like to be late', () => {
+    // The other half of the same sentence, and the promise a waiting mode
+    // makes: nothing here can be late, so nothing here is punished for it.
+    const harness = against('a-mistake');
+    harness.session.start();
+    harness.midi.noteOn(noteAt(harness, 0), 0);
+
+    harness.midi.noteOn(noteAt(harness, 1), 4_000);
+
+    expect(harness.of('noteJudged').map((one) => one.verdict)).toEqual(['correct', 'correct']);
+    expect(harness.of('stepCompleted').map((one) => one.result.status)).toEqual([
+      'correct',
+      'correct',
+    ]);
+  });
+
+  it('says nothing at all where there is no hand to be ahead of', () => {
+    // Off is off, and off is also what the controller passes whenever the
+    // accompaniment is silent: with nothing sounding there is nothing to be
+    // early against, and a mode that waits has no other clock to offer.
+    const harness = against('allowed');
+    harness.session.start();
+    harness.midi.noteOn(noteAt(harness, 0), 0);
+
+    harness.midi.noteOn(noteAt(harness, 1), 0);
+
+    expect(harness.of('noteJudged').map((one) => one.verdict)).toEqual(['correct', 'correct']);
+  });
+
+  it('cannot rush the note the run opens on', () => {
+    // Nothing has yet said what o'clock the music is at: the written clock is
+    // set by the reader's last press, and there has not been one.
+    const harness = against('a-mistake');
+    harness.session.start();
+
+    harness.midi.noteOn(noteAt(harness, 0), 0);
+
+    expect(harness.of('noteJudged').map((one) => one.verdict)).toEqual(['correct']);
+  });
+
+  it('lets a press land a little ahead without holding it against them', () => {
+    // Nobody plays exactly with anything. The window is the early window,
+    // which is this program's one answer to how far before a moment a press
+    // still counts as aimed at it - and not the matching tolerance, which in
+    // a waiting mode is infinite on purpose.
+    const harness = against('a-mistake');
+    harness.session.start();
+    harness.midi.noteOn(noteAt(harness, 0), 0);
+
+    harness.midi.noteOn(noteAt(harness, 1), 900);
+
+    expect(harness.of('noteJudged').map((one) => one.verdict)).toEqual(['correct', 'correct']);
+  });
+
+  it('holds one that is further ahead than that', () => {
+    const harness = against('a-mistake');
+    harness.session.start();
+    harness.midi.noteOn(noteAt(harness, 0), 0);
+
+    harness.midi.noteOn(noteAt(harness, 1), 600);
+
+    expect(harness.of('noteJudged').map((one) => one.verdict)).toEqual(['correct', 'rushed']);
+  });
+
+  it('holds a press that is early against the reader, not against the page', () => {
+    // The mutation this exists for: due read off the run's own clock instead
+    // of the reader's last press. A reader five seconds behind the page who
+    // then plays the next note a tenth of a second later has gone straight
+    // past the accompaniment - and against the run's clock they are five
+    // seconds late, which would say the opposite.
+    const harness = against('a-mistake');
+    harness.session.start();
+    harness.midi.noteOn(noteAt(harness, 0), 5_000);
+
+    harness.midi.noteOn(noteAt(harness, 1), 5_100);
+
+    expect(harness.of('noteJudged').map((one) => one.verdict)).toEqual(['correct', 'rushed']);
+  });
+
+  it('measures the written second from where the reader put it', () => {
+    // The anchor is the press, not the run's own clock - the same anchor the
+    // accompaniment is placed from. A reader five seconds behind the page is
+    // not rushing the next note; they are playing it in time with the hand
+    // that followed them there.
+    const harness = against('a-mistake');
+    harness.session.start();
+    harness.midi.noteOn(noteAt(harness, 0), 5_000);
+
+    harness.midi.noteOn(noteAt(harness, 1), 6_000);
+
+    expect(harness.of('noteJudged').map((one) => one.verdict)).toEqual(['correct', 'correct']);
+  });
+});
+
 describe('a press aimed at a later beat', () => {
   /** Two bars of crotchets, so there is always a next beat to reach for. */
   function ahead(playingAhead: 'a-mistake' | 'moves-on'): Harness {

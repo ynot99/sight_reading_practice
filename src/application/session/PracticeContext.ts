@@ -103,10 +103,23 @@ export interface SessionOptions {
    * unplayed and takes the press as the beginning of the next one.
    */
   readonly playingAhead: PlayingAhead;
+  /**
+   * What a press before the written moment means.
+   *
+   * His, and only where he is playing one hand and hearing the other: the
+   * music waits for him, so late costs nothing, but the accompaniment does
+   * not wait - and a reader who beats it is not playing with it. Where there
+   * is no other hand sounding there is nothing to be early against, and this
+   * says `allowed`.
+   */
+  readonly rushing: Rushing;
 }
 
 /** @see SessionOptions.playingAhead */
 export type PlayingAhead = 'a-mistake' | 'moves-on';
+
+/** @see SessionOptions.rushing */
+export type Rushing = 'allowed' | 'a-mistake';
 
 export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
@@ -117,6 +130,7 @@ export const DEFAULT_SESSION_OPTIONS: SessionOptions = {
   earlyWindowMs: 120,
   inputLatencyMs: 0,
   playingAhead: 'a-mistake',
+  rushing: 'allowed',
 };
 
 /**
@@ -138,6 +152,15 @@ export interface PracticeContext {
 
   /** Clock time at which the current step became active. */
   readonly stepEnteredAtMs: number;
+  /**
+   * Clock time the current step is *written* to arrive at, or `null`.
+   *
+   * Measured from the last step the reader owed and actually played, which is
+   * the same anchor the accompaniment is placed from: what they hear and what
+   * they are judged by then agree by construction. `null` before there is
+   * such a step, where nothing has yet said what o'clock the music is at.
+   */
+  readonly stepDueAtMs: number | null;
   /** Clock time of musical position zero for this run. */
   readonly runStartedAtMs: number;
 

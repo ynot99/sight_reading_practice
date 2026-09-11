@@ -917,6 +917,14 @@
           <label data-pane="page"><input id="dim-unplayed" type="checkbox" checked /> Dim what this run will not ask for</label>
           <label data-pane="playing"><input id="hear-other-hand" type="checkbox" /> Hear the hand I am not playing</label>
           <!--
+            His: late is allowed, early is not. Where the music waits for the
+            reader nothing can be late - but the hand they are hearing does
+            not wait, and a press before it got there is a reader going past
+            the thing they asked to play with. Nothing to be early against
+            without that other hand, so this does nothing until it is on.
+          -->
+          <label data-pane="playing"><input id="rushing-counts" type="checkbox" checked /> Playing ahead of that hand counts against you</label>
+          <!--
             His: he plays along with the playback to check himself, and the
             page said nothing either way. Off by default, because a
             performance is also how a piece is listened to, and a page filling

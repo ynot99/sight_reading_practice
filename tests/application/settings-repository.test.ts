@@ -57,6 +57,7 @@ const SETTINGS: PracticeSettings = {
   dimUnplayed: true,
   pageTurns: 'manual',
   hearTheOtherHand: true,
+  rushingCounts: false,
   markWhileListening: true,
   showPlaybackNotes: true,
   rhythmRuler: 'eighth',

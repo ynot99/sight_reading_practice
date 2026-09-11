@@ -12,6 +12,28 @@ export const WAIT_MODE_ID = 'mode.wait';
  * are recorded and reported but never block progress once the right ones
  * arrive - stopping the session on every slip would make practice miserable.
  */
+/**
+ * Whether this press beat the music to the note.
+ *
+ * Only where the reader asked for it, which is where they are playing one
+ * hand against the other: the mode waits for them, so late costs nothing,
+ * but the hand they are hearing does not wait - and a reader who is ahead of
+ * it is not playing with it.
+ *
+ * The window is the early window, which is already this program's answer to
+ * "how far before a moment does a press still count as aimed at it". Not the
+ * matching tolerance: in a waiting mode that is deliberately infinite - a
+ * chord being learned takes as long as it takes - so nothing measured against
+ * it could ever be early.
+ */
+function rushed(context: PracticeContext, event: MidiNoteOnEvent): boolean {
+  if (context.options.rushing !== 'a-mistake') {
+    return false;
+  }
+  const due = context.stepDueAtMs;
+  return due !== null && event.timestampMs < due - context.options.earlyWindowMs;
+}
+
 export class WaitMode extends BasePracticeMode {
   readonly id = WAIT_MODE_ID;
   readonly label = 'Wait for the notes';
@@ -45,7 +67,11 @@ export class WaitMode extends BasePracticeMode {
     const outcome = matcher.accept(event.midi, event.timestampMs);
     const deviationMs =
       outcome.verdict === 'correct' ? event.timestampMs - context.stepEnteredAtMs : null;
-    context.judgeNote(event.midi, outcome.verdict, deviationMs);
+    context.judgeNote(
+      event.midi,
+      rushed(context, event) ? 'rushed' : outcome.verdict,
+      deviationMs,
+    );
 
     if (outcome.completed) {
       context.completeStep();

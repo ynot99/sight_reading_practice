@@ -1075,6 +1075,7 @@ export class AppView {
     scorePageOn: HTMLButtonElement;
     scorePageAt: HTMLOutputElement;
     hearOtherHand: HTMLInputElement;
+    rushingCounts: HTMLInputElement;
     markListening: HTMLInputElement;
     showPlaybackNotes: HTMLInputElement;
     rulerCursor: HTMLInputElement;
@@ -1310,6 +1311,7 @@ export class AppView {
       scorePageOn: requireElement(doc, 'score-page-on'),
       scorePageAt: requireElement(doc, 'score-page-at'),
       hearOtherHand: requireElement(doc, 'hear-other-hand'),
+      rushingCounts: requireElement(doc, 'rushing-counts'),
       markListening: requireElement(doc, 'mark-listening'),
       showPlaybackNotes: requireElement(doc, 'show-playback-notes'),
       rulerCursor: requireElement(doc, 'ruler-cursor'),
@@ -2704,6 +2706,11 @@ export class AppView {
 
     this.listen(this.el.hearOtherHand, 'change', () => {
       controller.updateSettings({ hearTheOtherHand: this.el.hearOtherHand.checked });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.rushingCounts, 'change', () => {
+      controller.updateSettings({ rushingCounts: this.el.rushingCounts.checked });
       this.syncControlsFromSettings();
     });
 
@@ -4735,6 +4742,7 @@ export class AppView {
     this.runtime.renderer.turnPagesWithTheMusic(settings.pageTurns !== 'manual');
     this.showThePages();
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
+    this.el.rushingCounts.checked = settings.rushingCounts;
     this.el.markListening.checked = settings.markWhileListening;
     this.showTheModes();
     this.el.showPlaybackNotes.checked = settings.showPlaybackNotes;

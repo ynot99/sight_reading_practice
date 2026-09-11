@@ -2,7 +2,7 @@
 export type StepStatus =
   /** Every expected pitch was played, with no wrong notes. */
   | 'correct'
-  /** Expected pitches were played, but wrong notes were mixed in. */
+  /** Expected pitches were played, but something counted against the step. */
   | 'incorrect'
   /** The step's time elapsed before the expected pitches were complete. */
   | 'missed'
@@ -16,6 +16,14 @@ export interface StepResult {
   readonly beat: number;
   readonly expected: readonly number[];
   readonly played: readonly number[];
+  /**
+   * The presses that counted against this step.
+   *
+   * Notes not printed here, and - where the reader is playing against the
+   * other hand - notes printed here but struck before the music reached
+   * them. One ledger rather than two, because everything downstream is
+   * asking the same question of it: was anything held against this step.
+   */
   readonly wrong: readonly number[];
   readonly missing: readonly number[];
   /**

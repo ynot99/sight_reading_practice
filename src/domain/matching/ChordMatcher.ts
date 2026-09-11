@@ -32,10 +32,11 @@ export const DEFAULT_MATCH_POLICY: MatchPolicy = {
 /**
  * What became of one press.
  *
- * `other-hand` and `late` are never returned by the matcher. It is told only
- * what *this* step expects, and cannot know the rest of the page or the step
- * before. The session knows both, and they are the difference between a note
- * the reader invented and a note that was there to be played.
+ * `other-hand`, `late` and `rushed` are never returned by the matcher. It is
+ * told only what *this* step expects, and cannot know the rest of the page,
+ * the step before, or what o'clock the music is at. The session knows all
+ * three, and they are the difference between a note the reader invented and a
+ * note that was there to be played.
  */
 export type NoteVerdict =
   | 'correct'
@@ -43,6 +44,16 @@ export type NoteVerdict =
   | 'wrong'
   | 'other-hand'
   | 'late'
+  /**
+   * The right note, struck before the music had got to it.
+   *
+   * His: where the reader plays one hand and hears the other, being late is
+   * allowed - the music waits for them - and being early is not, because the
+   * accompaniment does not. It is the note that was asked for, so it is
+   * played and the run moves on; it counts against the step all the same,
+   * which is the whole of what a penalty is.
+   */
+  | 'rushed'
   /**
    * An ornament printed here, which the run neither asked for nor minds.
    *

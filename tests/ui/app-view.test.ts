@@ -1337,6 +1337,47 @@ describe('AppView', () => {
       expect(blind?.getAttribute('aria-pressed')).toBe('true');
     });
 
+    it('says in the corner which modes are on, with the sheet shut', async () => {
+      // His: the sheet that sets them is closed by the time the reader is at
+      // the keys, and a mode turned on three pieces ago is otherwise
+      // invisible until it does something.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      expect(element('score-modes').hidden).toBe(true);
+
+      // Set from the drawer rather than from the square, because the corner
+      // answers the setting and not the button that happened to write it.
+      const veil = element<HTMLSelectElement>('read-ahead');
+      veil.value = '1';
+      veil.dispatchEvent(new Event('change'));
+
+      const marks = () => [...element('score-modes').querySelectorAll('[data-mode]')];
+      expect(element('score-modes').hidden).toBe(false);
+      expect(marks().map((mark) => mark.getAttribute('data-mode'))).toEqual(['blind']);
+      // The square's own drawing, cloned - not a second one kept in here,
+      // which would be a second answer to the same question.
+      expect(marks()[0]?.querySelector('svg')).not.toBeNull();
+      expect(marks()[0]?.getAttribute('title')).toBe('Blind');
+      expect(element('score-modes').getAttribute('aria-label')).toContain('Blind');
+
+      element<HTMLButtonElement>('focus-modes').click();
+      (element('modes-grid').querySelector('[data-mode="survival"]') as HTMLButtonElement).click();
+
+      expect(marks().map((mark) => mark.getAttribute('data-mode'))).toEqual([
+        'survival',
+        'blind',
+      ]);
+
+      // And nothing on is nothing said, rather than an empty strip of
+      // furniture standing over the music.
+      (element('modes-grid').querySelector('[data-mode="survival"]') as HTMLButtonElement).click();
+      veil.value = 'off';
+      veil.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.readAheadSteps).toBeNull();
+      expect(element('score-modes').hidden).toBe(true);
+    });
+
     it('sorts the settings into sections, losing no control on the way', async () => {
       // Forty-six controls in one scrolling column is a list nobody reads. The
       // sorting is the stylesheet's, so the guard is this: every control in

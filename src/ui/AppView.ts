@@ -968,6 +968,9 @@ export class AppView {
   private restTimer: ReturnType<typeof setTimeout> | null = null;
   /** The week as it was last drawn, so seven marks are not redrawn for nothing. */
   private weekShown: string | null = null;
+
+  /** The modes last drawn in the corner, so an unchanged set is left alone. */
+  private modesShown: string | null = null;
   private timeTick: ReturnType<typeof setInterval> | null = null;
   private survivalTick: ReturnType<typeof setInterval> | null = null;
   private easedFlash: ReturnType<typeof setTimeout> | null = null;
@@ -1066,6 +1069,7 @@ export class AppView {
     scoreToday: HTMLElement;
     scoreTodayText: HTMLOutputElement;
     scoreWeek: HTMLElement;
+    scoreModes: HTMLElement;
     scorePages: HTMLElement;
     scorePageBack: HTMLButtonElement;
     scorePageOn: HTMLButtonElement;
@@ -1300,6 +1304,7 @@ export class AppView {
       scoreToday: requireElement(doc, 'score-today'),
       scoreTodayText: requireElement(doc, 'score-today-text'),
       scoreWeek: requireElement(doc, 'score-week'),
+      scoreModes: requireElement(doc, 'score-modes'),
       scorePages: requireElement(doc, 'score-pages'),
       scorePageBack: requireElement(doc, 'score-page-back'),
       scorePageOn: requireElement(doc, 'score-page-on'),
@@ -2940,12 +2945,17 @@ export class AppView {
    */
   private showTheModes(): void {
     const settings = this.runtime.controller.settings;
+    const on: HTMLButtonElement[] = [];
     for (const card of this.el.modesGrid.querySelectorAll('button[data-mode]')) {
       if (!(card instanceof HTMLButtonElement)) {
         continue;
       }
       const mode = card.dataset['mode'] ?? '';
-      card.setAttribute('aria-pressed', String(modeIsOn(mode, settings)));
+      const lit = modeIsOn(mode, settings);
+      card.setAttribute('aria-pressed', String(lit));
+      if (lit) {
+        on.push(card);
+      }
       const why = whyModeIsOut(mode, settings);
       card.setAttribute('aria-disabled', String(why !== null));
       if (why === null) {
@@ -2955,6 +2965,47 @@ export class AppView {
         card.dataset['why'] = why;
       }
     }
+    this.showWhichModesAreOn(on);
+  }
+
+  /**
+   * Which modes are on, in the corner where the day's clock stands.
+   *
+   * His, and asked for there: the sheet that sets them is shut by the time
+   * the reader is at the keys, and a mode turned on three pieces ago is
+   * otherwise invisible until it does something. Each mark is the square's
+   * own icon, its own colour and its own name, cloned rather than drawn
+   * again - a second drawing of a mode is a second answer to one question,
+   * and the two disagree the first time either is changed.
+   *
+   * Redrawn only when the set has actually changed: this runs on every
+   * settings sync, which is most of what the view does.
+   */
+  private showWhichModesAreOn(cards: readonly HTMLButtonElement[]): void {
+    const shape = cards.map((card) => card.dataset['mode'] ?? '').join(' ');
+    if (shape === this.modesShown) {
+      return;
+    }
+    this.modesShown = shape;
+    this.el.scoreModes.replaceChildren();
+    const names: string[] = [];
+    for (const card of cards) {
+      const mode = card.dataset['mode'] ?? '';
+      const name = card.querySelector('.mode-card__name')?.textContent ?? mode;
+      const mark = this.doc.createElement('span');
+      mark.className = `score__mode score__mode--${mode}`;
+      mark.dataset['mode'] = mode;
+      mark.title = name;
+      const icon = card.querySelector('svg');
+      if (icon !== null) {
+        mark.append(icon.cloneNode(true));
+      }
+      this.el.scoreModes.append(mark);
+      names.push(name);
+    }
+    // Nothing on is nothing to say, rather than an empty strip of furniture.
+    this.el.scoreModes.hidden = names.length === 0;
+    this.el.scoreModes.setAttribute('aria-label', `Modes on: ${names.join(', ')}`);
   }
 
   /**

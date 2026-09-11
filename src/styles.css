@@ -846,7 +846,8 @@ body[data-bare='true'] .focus-bar__health,
  * It lives nowhere near the transport row on purpose, so it does not go with
  * it - and a reader who asked for the page alone did not mean "except that".
  */
-body[data-bare='true'] .score__today {
+body[data-bare='true'] .score__today,
+body[data-bare='true'] .score__modes {
   display: none;
 }
 
@@ -1069,11 +1070,27 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * bottom of the window belongs to the transport bar, which is fixed there
  * and would stand in front of anything put underneath it.
  */
-.score__today {
+/*
+ * The top-right corner, and the one thing that places what stands in it.
+ *
+ * Two things do: how long today has had, and which modes are on. The second
+ * was asked for "beside the pill", and beside is the stylesheet stacking
+ * them - a second corner measured in pixels against the first goes wrong the
+ * moment either changes height, which the clock does as soon as a streak
+ * gives it a second line.
+ */
+.score__corner {
   position: absolute;
   right: 12px;
   top: 12px;
   z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.score__today {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1113,6 +1130,44 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 
 .score__week-day--today {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/*
+ * The modes that are on, as their own squares shrunk to marks.
+ *
+ * The sheet that sets them is shut by the time the reader is at the keys, and
+ * a mode is a thing about the run rather than about the day - so unlike the
+ * clock beside it, this stays up while the music is being read. It can
+ * afford to: four small marks that do not move are read once and then
+ * ignored, which is not true of a number that ticks.
+ */
+.score__modes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.score__mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--mode-ground, #2a2f3a);
+  color: #e9edf5;
+  box-shadow: 0 2px 8px rgb(16 24 40 / 22%);
+}
+
+.score__mode svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /*
@@ -1643,19 +1698,23 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 }
 
 /* Each one its own colour, so the state is read from across the room. */
-.mode-card--survival {
+.mode-card--survival,
+.score__mode--survival {
   --mode-ground: #7f1d3a;
 }
 
-.mode-card--blind {
+.mode-card--blind,
+.score__mode--blind {
   --mode-ground: #1e3a5f;
 }
 
-.mode-card--rhythm {
+.mode-card--rhythm,
+.score__mode--rhythm {
   --mode-ground: #14532d;
 }
 
-.mode-card--strict {
+.mode-card--strict,
+.score__mode--strict {
   --mode-ground: #4c1d95;
 }
 

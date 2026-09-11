@@ -75,13 +75,25 @@
           Only while nothing is running: between runs is when anybody asks,
           and over the music is not where it belongs while it is being read.
         -->
-        <div id="score-today" class="score__today" hidden>
-          <output id="score-today-text"></output>
+        <div class="score__corner">
+          <div id="score-today" class="score__today" hidden>
+            <output id="score-today-text"></output>
+            <!--
+              The week, as marks rather than as a sentence: seven days is a
+              thing to see at a glance, and the gaps are half of what it says.
+            -->
+            <div id="score-week" class="score__week" role="img" aria-label="This week"></div>
+          </div>
+
           <!--
-            The week, as marks rather than as a sentence: seven days is a
-            thing to see at a glance, and the gaps are half of what it says.
+            And which modes are on, under it and in the same corner.
+
+            Empty on purpose: every mark here is one of the squares from the
+            Modes sheet, cloned - its own icon, its own colour, its own name.
+            Drawn a second time they would be two answers to one question,
+            and they would disagree the first time either was changed.
           -->
-          <div id="score-week" class="score__week" role="img" aria-label="This week"></div>
+          <div id="score-modes" class="score__modes" role="img" aria-label="Modes on" hidden></div>
         </div>
 
         <div id="score-cover" class="score__cover" hidden>

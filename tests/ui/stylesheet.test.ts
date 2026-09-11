@@ -192,6 +192,25 @@ describe('the stylesheet', () => {
     );
     expect(hidden?.body).toMatch(/display\s*:\s*none/);
     expect(hidden?.selector).toContain('.score__today');
+    // The modes standing in the same corner go with it. A reader who asked
+    // for the page alone did not mean "except those".
+    expect(hidden?.selector).toContain('.score__modes');
+  });
+
+  it('lets one corner place the clock and the modes beneath it', () => {
+    // Asked for beside the pill, and beside is the stylesheet stacking them:
+    // a second corner measured in pixels against the first lands on top of it
+    // the moment either changes height, which the clock does as soon as a
+    // streak gives it a second line. jsdom lays nothing out, so no view test
+    // can see them collide.
+    const corner = rules().find((rule) => rule.selector === '.score__corner');
+    const clock = rules().find((rule) => rule.selector === '.score__today');
+    const modes = rules().find((rule) => rule.selector === '.score__modes');
+
+    expect(corner?.body).toMatch(/position\s*:\s*absolute/);
+    expect(corner?.body).toMatch(/flex-direction\s*:\s*column/);
+    expect(clock?.body).not.toMatch(/position\s*:\s*absolute/);
+    expect(modes?.body).not.toMatch(/position\s*:\s*absolute/);
   });
 
   it('keeps quick replay off the bar until there is a run to replay', () => {

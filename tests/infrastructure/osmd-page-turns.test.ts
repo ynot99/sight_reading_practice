@@ -796,6 +796,35 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
       expect(shown?.closest('svg')).toBe(sheets(container)[0]);
     });
 
+    it('shows one system of the page ahead and cuts the rest away', () => {
+      // Reported: the second system of the page ahead came into view, which
+      // it can whenever the first has to be shrunk to fit - and two rows of
+      // music nobody is playing is the distraction this exists to avoid. The
+      // cut is a second clip, read in that page's own coordinates, which is
+      // the only space in which "where its first system ends" can be said.
+      lastStepOnThisPage();
+      const shown = preview();
+
+      const cut = Number(
+        shown?.querySelector('#page-preview-system-clip rect')?.getAttribute('height'),
+      );
+      const band = Number(
+        shown?.querySelector('#page-preview-clip rect')?.getAttribute('height'),
+      );
+      expect(cut).toBeGreaterThan(0);
+      // Both pages are laid out the same, so where the page ahead ends its
+      // first system is about where this one ends its own. A cut that fell a
+      // system later would be most of a system further down than that.
+      expect(cut).toBeLessThan(band * 1.2);
+
+      // On a group of its own inside the one that is moved, because a clip
+      // on the moved group would travel with the shift.
+      const clipped = shown?.querySelector('[clip-path*="page-preview-system-clip"]');
+      expect(clipped).not.toBeNull();
+      expect(clipped?.getAttribute('transform')).toBeNull();
+      expect(clipped?.parentElement?.getAttribute('transform')).not.toBeNull();
+    });
+
     it('carries the music of the page ahead and none of its furniture', () => {
       lastStepOnThisPage();
       const shown = preview();

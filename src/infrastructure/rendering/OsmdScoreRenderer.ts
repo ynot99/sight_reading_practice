@@ -451,6 +451,9 @@ const PREVIEW_CLIP_ID = 'page-preview-clip';
  */
 const PREVIEW_TOP_PAD = 8;
 
+/** The cut that leaves the previewed page its first system and nothing else. */
+const PREVIEW_SYSTEM_CLIP_ID = 'page-preview-system-clip';
+
 /** Class that dims the notes of a step already played. */
 const FADED_CLASS = 'note--passed';
 /** What the run will not ask for: another hand, or outside the passage. */
@@ -1302,6 +1305,11 @@ export class OsmdScoreRenderer
    * first system was, and cut off at the line between the two systems it
    * stands in front of.
    *
+   * One system of it, and no more. The clone is cut a second time in the
+   * previewed page's own coordinates, because the second system there can
+   * come into view whenever the first has to be shrunk to fit - and two rows
+   * of music nobody is playing is the distraction this exists to avoid.
+   *
    * Shifted only as far as the ink allows, which is the part that was wrong.
    * A system carrying high notes is pushed down its own page to make room for
    * their ledger lines and stems - so the taller that ink, the further this
@@ -1360,12 +1368,36 @@ export class OsmdScoreRenderer
     const frame = doc.createElementNS(SVG_NAMESPACE, 'g');
     frame.setAttribute('clip-path', `url(#${PREVIEW_CLIP_ID})`);
     const moved = doc.createElementNS(SVG_NAMESPACE, 'g');
-    for (const child of [...ahead.children]) {
-      moved.append(child.cloneNode(true));
+    // A third group, carrying no transform of its own, so its clip is read in
+    // the *previewed page's* coordinates - which is the only space in which
+    // "where that page's first system ends" can be said. Reported: the second
+    // system of the page ahead came into view, which it can whenever the
+    // first is shrunk to fit, and two rows of music the reader is not playing
+    // is exactly the distraction this feature exists to avoid.
+    const firstSystem = doc.createElementNS(SVG_NAMESPACE, 'g');
+    const ends = this.systemBands.get(`${next}:1`);
+    if (ends !== undefined) {
+      firstSystem.setAttribute('clip-path', `url(#${PREVIEW_SYSTEM_CLIP_ID})`);
+      const systemClip = doc.createElementNS(SVG_NAMESPACE, 'clipPath');
+      systemClip.setAttribute('id', PREVIEW_SYSTEM_CLIP_ID);
+      const keep = doc.createElementNS(SVG_NAMESPACE, 'rect');
+      keep.setAttribute('x', '0');
+      keep.setAttribute('y', '0');
+      keep.setAttribute('width', String(width));
+      // Halfway to the system underneath it, for the same reason the outer
+      // cut is halfway: the ledger lines and tails hanging off the first
+      // system belong to it, and the second system's do not.
+      keep.setAttribute('height', String((target.bottom + ends.top) / 2));
+      systemClip.append(keep);
+      group.append(systemClip);
     }
-    for (const ours of [...moved.querySelectorAll(OUR_OWN_MARKS)]) {
+    for (const child of [...ahead.children]) {
+      firstSystem.append(child.cloneNode(true));
+    }
+    for (const ours of [...firstSystem.querySelectorAll(OUR_OWN_MARKS)]) {
       ours.remove();
     }
+    moved.append(firstSystem);
     frame.append(moved);
     group.append(frame);
 

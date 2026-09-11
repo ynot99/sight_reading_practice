@@ -1266,6 +1266,12 @@ describe('AppView', () => {
       const panes = tabs.map((tab) => tab.getAttribute('data-pane') ?? '');
 
       expect(panes.length).toBeGreaterThan(1);
+      // Each one drawn as well as named: a rail of eight words is a list to
+      // read, and a rail of eight marks is one to recognise.
+      for (const tab of tabs) {
+        expect(tab.querySelector('svg')).not.toBeNull();
+        expect(tab.textContent?.trim()).not.toBe('');
+      }
       for (const pane of panes) {
         expect(sheet.querySelectorAll(`[data-pane="${pane}"]`).length).toBeGreaterThan(0);
       }

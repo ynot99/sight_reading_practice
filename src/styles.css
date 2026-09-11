@@ -1630,6 +1630,33 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   text-align: left;
   padding: 9px 12px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/*
+ * Drawn rather than filled.
+ *
+ * The rest of this page's icons are solid glyphs the size of a thumb; these
+ * are the size of a word and sit beside one, and a solid shape at that size
+ * reads as a blot. Outlined, they keep their shape - and they take the colour
+ * of the row they are in, so the chosen one turns with it.
+ */
+.settings-sections__tab svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.75;
+}
+
+.settings-sections__tab[aria-pressed='true'] svg {
+  opacity: 1;
 }
 
 .settings-sections__tab:hover {

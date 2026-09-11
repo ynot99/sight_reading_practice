@@ -129,6 +129,13 @@ describe('the stylesheet', () => {
     // shrink away as the pane fills up.
     expect(rail?.body).toMatch(/flex\s*:\s*0 0/);
     expect(pane?.body).toMatch(/overflow-y\s*:\s*auto/);
+
+    // The marks beside the names are drawn rather than filled: the rest of
+    // this page's icons are solid glyphs the size of a thumb, and a solid
+    // shape the size of a word reads as a blot.
+    const icon = rules().find((rule) => rule.selector === '.settings-sections__tab svg');
+    expect(icon?.body).toMatch(/fill\s*:\s*none/);
+    expect(icon?.body).toMatch(/stroke\s*:\s*currentColor/);
   });
 
   it('empties the bar down to the way out when only the page is wanted', () => {

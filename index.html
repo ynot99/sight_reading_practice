@@ -1012,16 +1012,27 @@
         </div>
       </div>
 
-      <!--
-        Two pills, centred as one. The bar is what a reader presses while
-        playing; this one holds the three things they *open* - what kind of
-        run this is and how hard, the whole desk of settings, and what the
-        earlier readings came to. They were scattered across the row and the
-        drawer, which is how the drawer came to hold a second copy of half
-        the modes sheet.
-      -->
-      <div class="dock">
+      <div id="focus-bar" class="focus-bar" data-open="false">
+        <!--
+          What a reader *opens* rather than presses: which score, what kind
+          of run and how hard, how the last ones went, and the whole desk of
+          settings. They were scattered across the row and the drawer, which
+          is how the drawer came to hold a second copy of half the modes
+          sheet.
+
+          Out of the bar's flow, like the record cluster on the other side
+          and for the same reason: the bar is centred on the window and must
+          stay centred, so nothing beside it may push it along.
+        -->
         <div id="focus-aside" class="focus-aside">
+          <button id="focus-scores" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Kept scores" aria-label="Kept scores">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 4h7a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4V4zm16 0h-4a3 3 0 0 0-3 3v13a3 3 0 0 1 3-3h4V4z" />
+            </svg>
+          </button>
+
           <button id="focus-modes" type="button"
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
             title="Modes" aria-label="Modes">
@@ -1048,14 +1059,14 @@
           </button>
         </div>
 
-        <div id="focus-bar" class="focus-bar" data-open="false">
         <!--
-          The other side of the bar, and out of its flow for the same reason
-          the notice is: what it says is a clock, and a clock changes width.
-          Shut, it is an eye and nothing else - a running timer in the corner
-          of the page is a thing to watch instead of the music.
+          The other side of the bar, and out of its flow for the same reason:
+          what it says is a clock, and a clock changes width. Shut, it is an
+          eye and nothing else - a running timer in the corner of the page is
+          a thing to watch instead of the music. Under it, what was kept.
         -->
         <div id="focus-record" class="focus-record" data-open="false">
+          <div class="focus-record__row">
           <button id="focus-record-eye" type="button"
             class="focus-bar__button focus-bar__button--icon focus-record__eye"
             title="Show what can be kept" aria-label="Show what can be kept" aria-expanded="false">
@@ -1067,6 +1078,15 @@
           <button id="focus-keep" type="button" class="focus-bar__button focus-record__keep"
             title="Keep what you have just played" aria-label="Keep what you have just played" disabled>
             <span class="button__dot" aria-hidden="true"></span><span id="focus-keep-text">Keep</span>
+          </button>
+          </div>
+
+          <button id="focus-takes" type="button"
+            class="focus-bar__button focus-bar__button--icon"
+            title="Kept takes" aria-label="Kept takes">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zm0 2a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6z" />
+            </svg>
           </button>
         </div>
 
@@ -1352,27 +1372,6 @@
             </svg>
           </button>
 
-          <!--
-            The kept lists, reachable without leaving the stand. Leaving
-            fullscreen to look at them and coming back is a re-engraving each
-            way, which on a long piece is most of a second twice over.
-          -->
-          <button id="focus-takes" type="button"
-            class="focus-bar__button focus-bar__button--icon"
-            title="Kept takes" aria-label="Kept takes">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zm0 2a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6z" />
-            </svg>
-          </button>
-
-          <button id="focus-scores" type="button"
-            class="focus-bar__button focus-bar__button--icon"
-            title="Kept scores" aria-label="Kept scores">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 4h7a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4V4zm16 0h-4a3 3 0 0 0-3 3v13a3 3 0 0 1 3-3h4V4z" />
-            </svg>
-          </button>
-
           <button id="focus-hands" type="button" class="focus-bar__button focus-bar__hands"
             title="Both hands" aria-label="Both hands">
             <svg id="focus-hand-left" class="focus-bar__hand" viewBox="0 0 24 24"
@@ -1384,7 +1383,6 @@
               <path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V10h.5V4.5a1.5 1.5 0 0 1 3 0V10H15V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a5 5 0 0 1-4.1-2.1L4 14.5a1.5 1.5 0 0 1 2.2-2L8 14.5z" />
             </svg>
           </button>
-        </div>
         </div>
       </div>
     </div>

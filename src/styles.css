@@ -841,35 +841,23 @@ select {
 }
 
 /*
- * Where the bar stands, now that two things stand there.
+ * What a reader opens rather than presses.
  *
- * The pills are placed as a pair rather than each against the window: the
- * bar's width changes with the drawer and with a run, and a second pill
- * measured in pixels against a moving edge lands on top of it. Ends aligned,
- * because the bar grows upwards when its drawer opens and the aside should
- * not go with it.
- */
-.dock {
-  position: fixed;
-  left: 50%;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
-  z-index: 20;
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  max-width: calc(100vw - 24px);
-}
-
-/*
- * The three things a reader opens rather than presses.
+ * Its own pill, so the bar stays what it is: the buttons reached for with
+ * hands on the keys. These are chosen between runs and each raises a sheet
+ * over the page.
  *
- * Its own pill, so the bar stays what it is: the buttons you reach for with
- * your hands on the keys. These are chosen between runs - what kind of run
- * this is and how hard, the settings, and how the last ones went - and each
- * of them raises a sheet over the page.
+ * Out of the bar's flow, like the record cluster on the other side. The bar
+ * is centred on the window and has to stay centred - a reader looks for it
+ * in the middle - so a pill beside it may not be allowed to push it along,
+ * and the bar's width changes anyway with its drawer and with a run.
  */
 .focus-aside {
+  position: absolute;
+  right: 100%;
+  bottom: 0;
+  margin-right: 10px;
+  z-index: 21;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -885,17 +873,20 @@ select {
 /*
  * Gone while the music is going, and gone from a bare page.
  *
- * The bar says which of those it is, and the aside is its neighbour rather
- * than its child - so the dock is asked about the bar instead. Nothing here
- * is reached for mid-run: every one of them raises a sheet over the score.
+ * Nothing in it is reached for mid-run: every one of them raises a sheet
+ * over the score, which is the one thing a reader is looking at.
  */
-.dock:has(.focus-bar[data-playing='true']) .focus-aside,
+.focus-bar[data-playing='true'] .focus-aside,
 body[data-bare='true'] .focus-aside {
   display: none;
 }
 
 .focus-bar {
-  position: relative;
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 20;
 
   display: flex;
   flex-direction: column;
@@ -1044,13 +1035,35 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * page is a thing to watch instead of the music, which is the opposite of
  * what fullscreen is for.
  */
+/*
+ * The other satellite: the eye, what it reveals, and what has been kept.
+ *
+ * A column now, because the takes went under the eye - they are the same
+ * subject, and the row they used to sit in was the drawer, two taps away
+ * from the thing that makes one. Pilled like the aside so the three
+ * standing things on this bar read as three.
+ */
 .focus-record {
   position: absolute;
   left: 100%;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: 0;
   margin-left: 10px;
   z-index: 21;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) var(--over-the-page), transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 24px rgb(16 24 40 / 18%);
+}
+
+/* The eye and what it reveals stay side by side; only the takes go below. */
+.focus-record__row {
   display: flex;
   align-items: center;
   gap: 6px;

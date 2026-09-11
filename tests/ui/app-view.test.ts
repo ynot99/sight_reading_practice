@@ -4754,22 +4754,30 @@ describe('AppView', () => {
       expect(element<HTMLInputElement>('survival').checked).toBe(true);
     });
 
-    it('keeps the three things you open out of the bar you press', async () => {
-      // His: a pill of its own, left of the bar. The bar is what a reader
-      // reaches for with their hands on the keys; these three raise a sheet
-      // over the page and are chosen between runs.
+    it('keeps what you open out of the row and drawer you press', async () => {
+      // His: pills of their own beside the bar. The row and the drawer are
+      // what a reader reaches for with their hands on the keys; these raise
+      // a sheet over the page and are chosen between runs.
       const { view } = createRig();
       await view.initialize();
       const aside = element('focus-aside');
 
-      // Standing, and not merely present: hidden, it is three things the
+      // Standing, and not merely present: hidden, it is four things the
       // reader can no longer reach at all.
       expect(aside.hidden).toBe(false);
-      for (const id of ['focus-modes', 'focus-readings', 'focus-settings']) {
+      for (const id of ['focus-scores', 'focus-modes', 'focus-readings', 'focus-settings']) {
         expect(aside.contains(element(id))).toBe(true);
       }
-      expect(element('focus-bar').contains(aside)).toBe(false);
-      // And what the sheet now owns is gone from the bar entirely.
+      // What was kept goes under the eye that reveals it, on the other side.
+      expect(element('focus-record').contains(element('focus-takes'))).toBe(true);
+      for (const id of ['focus-scores', 'focus-takes', 'focus-settings', 'focus-readings']) {
+        expect(element('focus-row').contains(element(id))).toBe(false);
+        expect(element('focus-drawer').contains(element(id))).toBe(false);
+        // Moved and still standing: a button carried somewhere the reader
+        // cannot see it has been taken away rather than moved.
+        expect(element(id).hidden).toBe(false);
+      }
+      // And what the modes sheet now owns is gone from the bar entirely.
       expect(document.getElementById('focus-wait')).toBeNull();
       expect(document.getElementById('focus-survival')).toBeNull();
     });

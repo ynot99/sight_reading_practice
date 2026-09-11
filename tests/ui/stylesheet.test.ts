@@ -157,22 +157,26 @@ describe('the stylesheet', () => {
     expect(hiding?.body).toMatch(/display\s*:\s*flex/);
   });
 
-  it('places the two pills as a pair, and takes the second one away with the bar', () => {
-    // His: a pill of its own, left of the bar. Placed as a pair rather than
-    // each against the window - the bar changes width with its drawer and
-    // with a run, so a second pill measured against that moving edge lands
-    // on top of it. And it is the bar that carries the state, so the dock is
-    // asked about the bar. jsdom lays nothing out and applies no stylesheet,
-    // so no view test can see either of these.
-    const dock = rules().find((rule) => rule.selector === '.dock');
+  it('hangs both satellites off the bar, which stays in the middle', () => {
+    // His: the middle pill is always in the middle. A reader looks for it
+    // there, and it is the one thing on the page whose place must not depend
+    // on what is beside it - which it did, for one commit, when the two were
+    // laid out as a row and the bar was pushed along by its neighbour. Both
+    // satellites are measured from the bar's own edges instead. jsdom lays
+    // nothing out, so no view test can see the bar move.
+    const bar = rules().find((rule) => rule.selector === '.focus-bar');
     const aside = rules().find((rule) => rule.selector === '.focus-aside');
+    const record = rules().find((rule) => rule.selector === '.focus-record');
     const gone = rules().find(
       (rule) => rule.selector.includes('.focus-aside') && rule.body.includes('none'),
     );
 
-    expect(dock?.body).toMatch(/position\s*:\s*fixed/);
-    expect(dock?.body).toMatch(/display\s*:\s*flex/);
-    expect(aside?.body).not.toMatch(/position\s*:\s*fixed/);
+    expect(bar?.body).toMatch(/position\s*:\s*fixed/);
+    expect(bar?.body).toMatch(/left\s*:\s*50%/);
+    expect(aside?.body).toMatch(/position\s*:\s*absolute/);
+    expect(aside?.body).toMatch(/right\s*:\s*100%/);
+    expect(record?.body).toMatch(/left\s*:\s*100%/);
+    // Nothing is reached for mid-run, and a bare page keeps none of it.
     expect(gone?.selector).toMatch(/data-playing/);
     expect(gone?.selector).toMatch(/data-bare/);
   });

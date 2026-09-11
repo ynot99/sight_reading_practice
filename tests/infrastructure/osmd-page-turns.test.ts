@@ -825,6 +825,31 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
       expect(clipped?.parentElement?.getAttribute('transform')).not.toBeNull();
     });
 
+    it('takes the hand switch off the system it stands on', () => {
+      // Reported: the top row's switches looked as though they had fallen
+      // onto the row below. They are painted where the staves are and never
+      // move, which is right - but this replaces the system they belong to,
+      // and a switch beside music that is no longer on the page is a switch
+      // for the wrong staff.
+      renderer.showHands([1, 2]);
+      lastStepOnThisPage();
+      const sheet = sheets(container)[0];
+      const switches = [...(sheet?.querySelectorAll('g.hand-switch') ?? [])];
+      expect(switches.length).toBeGreaterThan(1);
+
+      const covered = switches.filter((one) => one.getAttribute('data-covered') === 'true');
+      expect(covered.length).toBeGreaterThan(0);
+      // Only the ones the preview stands on: the rows below keep theirs.
+      expect(covered.length).toBeLessThan(switches.length);
+
+      // And they come back when the music they belong to does.
+      renderer.cursor.moveTo(0);
+
+      expect(
+        [...(sheet?.querySelectorAll('g.hand-switch[data-covered]') ?? [])].length,
+      ).toBe(0);
+    });
+
     it('carries the music of the page ahead and none of its furniture', () => {
       lastStepOnThisPage();
       const shown = preview();

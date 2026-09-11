@@ -2246,6 +2246,18 @@ body[data-playing='true'] .score__modes {
   pointer-events: none;
 }
 
+/*
+ * Gone while the preview stands where its staff was.
+ *
+ * The switches are painted where the staves are and never move. The preview
+ * replaces the top system, so the switch beside it would be a switch for a
+ * staff the reader can no longer see - which read as the top row's switch
+ * having fallen onto the row below.
+ */
+.hand-switch[data-covered='true'] {
+  display: none;
+}
+
 .hand-switch[data-on='false'] .hand-switch__tab {
   fill: var(--text-muted);
   opacity: 0.9;

@@ -1284,8 +1284,34 @@ export class OsmdScoreRenderer
     this.previewShown = next;
     this.previewGroup?.remove();
     this.previewGroup = null;
+    this.coverHandSwitches(null);
     if (next !== null) {
       this.drawPreview(next);
+    }
+  }
+
+  /**
+   * Takes the hand switches off the system the preview stands on.
+   *
+   * Reported: the switches of the top row appeared to belong to the row
+   * below. They are painted where the staves are and never move, which is
+   * right - but the preview *replaces* the system they belong to, and a
+   * switch beside music that is not on the page any more is a switch for the
+   * wrong staff. It comes back when the preview does, which is the moment
+   * the music it belongs to is on the page again.
+   */
+  private coverHandSwitches(above: number | null): void {
+    const sheet = this.sheets[this.pageAt];
+    if (sheet === undefined) {
+      return;
+    }
+    for (const switchOn of sheet.querySelectorAll('g.hand-switch')) {
+      const top = Number(switchOn.querySelector('.hand-switch__hit')?.getAttribute('y'));
+      if (above !== null && Number.isFinite(top) && top < above) {
+        (switchOn as SVGGElement).dataset['covered'] = 'true';
+      } else {
+        delete (switchOn as SVGGElement).dataset['covered'];
+      }
     }
   }
 
@@ -1419,6 +1445,9 @@ export class OsmdScoreRenderer
     // in the corner this does not carry.
     moved.setAttribute('transform', previewPlacement(moved, slot, target, bottom));
     this.previewGroup = group;
+    // The system this stands on is not on the page while it stands there, so
+    // neither is the switch that belongs to it.
+    this.coverHandSwitches(bottom);
   }
 
   /**

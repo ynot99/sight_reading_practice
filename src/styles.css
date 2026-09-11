@@ -2192,6 +2192,19 @@ body[data-playing='true'] .score__modes {
  * markers stand on, what the boxes take and what a finger held on the page
  * chooses. What the writer called the bar is on the line above.
  */
+/*
+ * The writer's number and the turning arrow, put away.
+ *
+ * Only those two: the number in the corner says where in the playing this bar
+ * is, and the marker, the report and the passage all count by it. Hidden
+ * rather than not drawn, because the marks belong to the engraving and a
+ * checkbox must not cost a re-engraving.
+ */
+body[data-repeats='hidden'] .bar-printed,
+body[data-repeats='hidden'] .repeat-mark {
+  display: none;
+}
+
 .bar-position {
   fill: #000;
   user-select: none;

@@ -416,6 +416,16 @@ export interface PracticeSettings {
    */
   readonly pagedScore: boolean;
   /**
+   * Whether a repeated bar says what the writer called it.
+   *
+   * His: knowing that a bar is being read a second time is worth having, and
+   * worth being able to put away. What this hides is the writer's own number
+   * and the turning arrow beside it - never the number in the corner, which
+   * says where in the *playing* this bar is and is what the marker, the
+   * report and the passage all count by.
+   */
+  readonly showRepeatNumbers: boolean;
+  /**
    * When the marks for what you played appear.
    *
    * One axis rather than a switch plus a switch: "draw them" and "draw them
@@ -818,6 +828,7 @@ export class PracticeController {
       cursorAtRest: true,
       strictTiming: false,
       pagedScore: true,
+      showRepeatNumbers: true,
       playedNotes: 'live',
       survival: false,
       survivalRefillPercent: 100,

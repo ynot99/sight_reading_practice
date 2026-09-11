@@ -1161,6 +1161,7 @@ export class AppView {
     focusRepeat: HTMLButtonElement;
     focusBare: HTMLButtonElement;
     pagedScore: HTMLInputElement;
+    repeatNumbers: HTMLInputElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
     focusZoom: HTMLOutputElement;
@@ -1283,8 +1284,6 @@ export class AppView {
     presetDescription: HTMLElement;
     rhythm: HTMLSelectElement;
     rhythmDescription: HTMLElement;
-    mode: HTMLSelectElement;
-    modeDescription: HTMLElement;
     scoring: HTMLSelectElement;
     scoringDescription: HTMLElement;
     key: HTMLSelectElement;
@@ -1395,6 +1394,7 @@ export class AppView {
       focusRepeat: requireElement(doc, 'focus-repeat'),
       focusBare: requireElement(doc, 'focus-bare'),
       pagedScore: requireElement(doc, 'paged-score'),
+      repeatNumbers: requireElement(doc, 'repeat-numbers'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
       focusZoom: requireElement(doc, 'focus-zoom'),
@@ -1517,8 +1517,6 @@ export class AppView {
       presetDescription: requireElement(doc, 'preset-description'),
       rhythm: requireElement(doc, 'rhythm'),
       rhythmDescription: requireElement(doc, 'rhythm-description'),
-      mode: requireElement(doc, 'mode'),
-      modeDescription: requireElement(doc, 'mode-description'),
       scoring: requireElement(doc, 'scoring'),
       scoringDescription: requireElement(doc, 'scoring-description'),
       key: requireElement(doc, 'key'),
@@ -2402,16 +2400,6 @@ export class AppView {
       readAheadValue(this.runtime.controller.settings.readAheadSteps),
     );
     fillSelect(
-      this.el.mode,
-      [
-        ...this.runtime.modes.list().map((mode) => ({ value: mode.id, label: mode.label })),
-        // Not in the registry, and deliberately: nothing about it is a
-        // practice mode. It is the same question all the same.
-        { value: LISTEN_MODE_ID, label: 'Listen to it' },
-      ],
-      this.runtime.controller.settings.modeId,
-    );
-    fillSelect(
       this.el.key,
       COMMON_KEYS.map((key) => ({ value: keyValue(key), label: key.name })),
       keyValue(this.runtime.controller.settings.key),
@@ -2455,13 +2443,6 @@ export class AppView {
     this.listen(this.el.dropout, 'change', () => {
       controller.updateSettings({ clickWhen: readClickWhen(this.el.dropout.value) });
       this.syncControlsFromSettings();
-    });
-
-    this.listen(this.el.mode, 'change', () => {
-      controller.updateSettings({ modeId: this.el.mode.value });
-      // The mode brings its own default grading, so the panel has to catch up.
-      this.syncControlsFromSettings();
-      this.describeMode();
     });
 
     this.listen(this.el.key, 'change', () => {
@@ -3307,6 +3288,11 @@ export class AppView {
       this.placedOnBar = null;
       controller.cursorToStart();
       this.showPassageMarkers();
+    });
+
+    this.listen(this.el.repeatNumbers, 'change', () => {
+      controller.updateSettings({ showRepeatNumbers: this.el.repeatNumbers.checked });
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.pagedScore, 'change', () => {
@@ -4844,7 +4830,6 @@ export class AppView {
     const settings = this.runtime.controller.settings;
     this.el.preset.value = settings.presetId;
     this.el.rhythm.value = settings.rhythmProfileId;
-    this.el.mode.value = settings.modeId;
     this.el.scoring.value = settings.scoringId;
     this.el.scoringDescription.textContent = SCORING_DESCRIPTIONS[settings.scoringId] ?? '';
     this.el.key.value = keyValue(settings.key);
@@ -4885,6 +4870,11 @@ export class AppView {
     this.el.cursorRest.checked = settings.cursorAtRest;
     this.el.strictTiming.checked = settings.strictTiming;
     this.el.pagedScore.checked = settings.pagedScore;
+    this.el.repeatNumbers.checked = settings.showRepeatNumbers;
+    // Said on the page rather than drawn again: the marks belong to the
+    // engraving and outlive a setting being changed, so what changes is
+    // whether they are shown - no re-engraving for a checkbox.
+    this.doc.body.dataset['repeats'] = settings.showRepeatNumbers ? 'shown' : 'hidden';
     this.runtime.renderer.setPaged(settings.pagedScore);
     // A display decision, so it is answered in the stylesheet: the marks
     // themselves are the same either way, and what was measured about a press
@@ -4967,7 +4957,6 @@ export class AppView {
     this.el.sampleLoadingHint.textContent = SAMPLE_LOADING_HINTS[mode];
     this.runtime.samples?.setLoading(mode);
 
-    this.describeMode();
   }
 
   /**
@@ -5804,10 +5793,6 @@ export class AppView {
     }
     this.el.learnKnob.textContent = 'Use a knob';
     this.el.knobStatus.textContent = 'Teach the app which control on your keyboard to follow.';
-  }
-
-  private describeMode(): void {
-    this.el.modeDescription.textContent = FRAME_WHAT[this.runtime.controller.settings.modeId] ?? '';
   }
 
   /** True while a run is under way, paused included: it is still that run. */

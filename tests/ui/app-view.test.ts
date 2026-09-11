@@ -351,8 +351,6 @@ describe('AppView', () => {
     expect(element<HTMLSelectElement>('rhythm').options).toHaveLength(
       BUILT_IN_RHYTHM_PROFILES.length,
     );
-    // Two practice modes and the frame that is not one of them.
-    expect(element<HTMLSelectElement>('mode').options).toHaveLength(3);
     expect(element<HTMLSelectElement>('key').options.length).toBeGreaterThan(5);
     expect(element('preset-description').textContent).not.toBe('');
     expect(element('rhythm-description').textContent).not.toBe('');
@@ -360,7 +358,6 @@ describe('AppView', () => {
     expect(element('click-description').textContent).not.toBe('');
     expect(element<HTMLSelectElement>('dropout').options).toHaveLength(7);
     expect(element('dropout-description').textContent).not.toBe('');
-    expect(element('mode-description').textContent).toContain('waits');
     expect(element<HTMLSelectElement>('scoring').options).toHaveLength(3);
     expect(element('scoring-description').textContent).not.toBe('');
   });
@@ -409,11 +406,16 @@ describe('AppView', () => {
     const { view, runtime } = createRig();
     await view.initialize();
 
-    const mode = element<HTMLSelectElement>('mode');
-    mode.value = FLOW_MODE_ID;
-    mode.dispatchEvent(new Event('change'));
+    // From the one place the frame is chosen now: the button in the Modes
+    // sheet, pressed until it says the one wanted.
+    // The rig starts where it waits, and the ring goes on to listening and
+    // then to flowing.
+    const cycle = element<HTMLButtonElement>('frame-cycle');
+    cycle.click();
+    cycle.click();
     await Promise.resolve();
 
+    expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
     expect(runtime.controller.settings.scoringId).toBe('scoring.timing-weighted');
     expect(element<HTMLSelectElement>('scoring').value).toBe('scoring.timing-weighted');
 
@@ -1306,8 +1308,6 @@ describe('AppView', () => {
       // turn is played again rather than transitioned from a state to
       // itself, which is no movement at all.
       expect(cycle.dataset['turning']).toBe('true');
-      // The same setting the select at the desk carries, so it has to follow.
-      expect(element<HTMLSelectElement>('mode').value).toBe(LISTEN_MODE_ID);
 
       // On to the frame the app opens in, which is the button going out:
       // nothing to play there, since going out is the square's own way down.
@@ -2173,11 +2173,11 @@ describe('AppView', () => {
     octaves.dispatchEvent(new Event('change'));
     expect(runtime.controller.settings.pitchClassOnly).toBe(true);
 
-    const mode = element<HTMLSelectElement>('mode');
-    mode.value = FLOW_MODE_ID;
-    mode.dispatchEvent(new Event('change'));
-    expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
-    expect(element('mode-description').textContent).toContain('beat');
+    // The frame is not a control at the desk any more: it is the button in
+    // the Modes sheet, and what it says of itself is said there.
+    element<HTMLButtonElement>('frame-cycle').click();
+    expect(runtime.controller.settings.modeId).toBe(LISTEN_MODE_ID);
+    expect(element('frame-what').textContent).toContain('machine');
   });
 
   describe('the ladder arrows', () => {
@@ -5000,6 +5000,30 @@ describe('AppView', () => {
       box.dispatchEvent(new Event('change'));
 
       expect(renderer.cursor.visible).toBe(true);
+    });
+
+    it('puts away what a repeat says it was called, keeping where it is', async () => {
+      // His: knowing a bar is being read again is worth having and worth
+      // putting away. What goes is the writer own number and the turning
+      // arrow; the number in the corner stays, being where in the playing
+      // this bar is and what everything else counts by. Said on the page
+      // rather than drawn again - a checkbox must not cost a re-engraving.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const box = element<HTMLInputElement>('repeat-numbers');
+      expect(box.checked).toBe(true);
+      expect(document.body.dataset['repeats']).toBe('shown');
+
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.showRepeatNumbers).toBe(false);
+      expect(document.body.dataset['repeats']).toBe('hidden');
+
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+
+      expect(document.body.dataset['repeats']).toBe('shown');
     });
 
     it('reads the score as pages unless the reader says otherwise', async () => {

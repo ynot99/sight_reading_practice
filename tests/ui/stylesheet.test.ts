@@ -294,6 +294,19 @@ describe('the stylesheet', () => {
     expect(turn?.body).toMatch(/animation\s*:\s*frame-turn/);
   });
 
+  it('hides only what a repeat says it was called', () => {
+    // The number in the corner says where in the playing this bar is, and the
+    // marker, the report and the passage all count by it - so it can never be
+    // what this takes away. jsdom applies no stylesheet, so no view test can
+    // see which of the three went.
+    const rule = rules().find((each) => each.selector.includes("data-repeats='hidden'"));
+
+    expect(rule?.body).toMatch(/display\s*:\s*none/);
+    expect(rule?.selector).toContain('.bar-printed');
+    expect(rule?.selector).toContain('.repeat-mark');
+    expect(rule?.selector).not.toContain('.bar-position');
+  });
+
   it('takes the modes further back while the music is going', () => {
     // His: a reminder between runs and furniture during one. Not gone - a
     // reader glancing down mid-piece to check that survival really is on

@@ -683,12 +683,6 @@
           <p id="rhythm-description" class="hint"></p>
         </div>
 
-        <div class="control-group" data-pane="modes">
-          <label for="mode">Mode</label>
-          <select id="mode"></select>
-          <p id="mode-description" class="hint"></p>
-        </div>
-
         <div class="control-group" data-pane="exercise">
           <label for="scoring">Graded on</label>
           <select id="scoring"></select>
@@ -755,6 +749,14 @@
         -->
         <div class="control-group control-group--checks" data-pane="page">
           <label><input id="ruler-cursor" type="checkbox" /> Run a marker along the ruler</label>
+          <!--
+            His: knowing that a bar is being read again is worth having, and
+            worth being able to put away. What goes is the writer's own
+            number and the turning arrow above it - never the number in the
+            corner, which says where in the playing this bar is and is what
+            everything else here counts by.
+          -->
+          <label><input id="repeat-numbers" type="checkbox" checked /> Say which bar a repeat is</label>
           <label><input id="paged-score" type="checkbox" checked /> Read the score as pages</label>
         </div>
 

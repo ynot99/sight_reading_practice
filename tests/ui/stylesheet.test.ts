@@ -197,6 +197,17 @@ describe('the stylesheet', () => {
     expect(hidden?.selector).toContain('.score__modes');
   });
 
+  it('marks the place the reader is in, in the list of places', () => {
+    // The only thing that makes "where am I" visible in that list, and jsdom
+    // applies no stylesheet, so the view test can see the attribute and
+    // nothing at all about whether it shows.
+    const here = rules().find(
+      (rule) => rule.selector === ".takes__list button.places__go[aria-pressed='true']",
+    );
+
+    expect(here?.body).toMatch(/var\(--accent\)/);
+  });
+
   it('dims a control with nothing to say rather than taking it away', () => {
     // His words: lower the opacity. Not `display: none` - a reader looking
     // for a setting that has gone has no way to find out that another one

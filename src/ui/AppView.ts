@@ -1181,6 +1181,9 @@ export class AppView {
     sheetScores: HTMLElement;
     sheetSettings: HTMLElement;
     settingsSections: HTMLElement;
+    sheetPlaces: HTMLElement;
+    focusPlaces: HTMLButtonElement;
+    placesClose: HTMLButtonElement;
     sheetModes: HTMLElement;
     modesGrid: HTMLElement;
     modesClose: HTMLButtonElement;
@@ -1417,6 +1420,9 @@ export class AppView {
       sheetScores: requireElement(doc, 'sheet-scores'),
       sheetSettings: requireElement(doc, 'sheet-settings'),
       settingsSections: requireElement(doc, 'settings-sections'),
+      sheetPlaces: requireElement(doc, 'sheet-places'),
+      focusPlaces: requireElement(doc, 'focus-places'),
+      placesClose: requireElement(doc, 'places-close'),
       sheetModes: requireElement(doc, 'sheet-modes'),
       modesGrid: requireElement(doc, 'modes-grid'),
       modesClose: requireElement(doc, 'modes-close'),
@@ -1762,21 +1768,32 @@ export class AppView {
         : 'Nothing marked out yet. Choose a passage, name it, and it is kept with the score.';
     this.el.passageList.replaceChildren();
 
+    const settings = this.runtime.controller.settings;
     for (const [at, passage] of saved.entries()) {
       const row = this.doc.createElement('li');
-      const name = this.doc.createElement('span');
-      name.className = 'takes__name';
-      name.textContent = `${passage.name} · bars ${passage.fromBar}-${passage.toBar}`;
 
+      // The whole name is the way in, rather than a word beside it: this is
+      // reached for on a tablet with a hand that has just left the keys, and
+      // the row is the target a thumb finds.
       const apply = this.doc.createElement('button');
       apply.type = 'button';
-      apply.textContent = 'Apply';
+      apply.className = 'takes__name places__go';
+      apply.textContent = `${passage.name} · bars ${passage.fromBar}-${passage.toBar}`;
       apply.title = `Practise bars ${passage.fromBar}-${passage.toBar}`;
+      // Which of them the reader is in, said on the row itself. Without it
+      // the list is a set of places with no answer to "where am I", and the
+      // two numbers in the drawer are the only thing that knows.
+      apply.setAttribute(
+        'aria-pressed',
+        String(settings.rangeFromBar === passage.fromBar && settings.rangeToBar === passage.toBar),
+      );
       this.listen(apply, 'click', () => {
         this.runtime.controller.updateSettings({
           rangeFromBar: passage.fromBar,
           rangeToBar: passage.toBar,
         });
+        // Which redraws this list too, so the row that was tapped comes back
+        // marked without this having to say so twice.
         this.syncControlsFromSettings();
       });
 
@@ -1789,7 +1806,7 @@ export class AppView {
         void this.keepPassages(saved.filter((_, index) => index !== at));
       });
 
-      row.append(name, apply, remove);
+      row.append(apply, remove);
       this.el.passageList.append(row);
     }
   }
@@ -5240,6 +5257,15 @@ export class AppView {
         () => this.syncControlsFromSettings(),
       ],
       [
+        // Beside the two bar numbers, which is where a passage is chosen.
+        // Down the settings sheet it was nowhere near the thing it is about,
+        // and a reader who has just marked a stretch out would have had to
+        // leave the page to write it down.
+        this.el.sheetPlaces,
+        [this.el.focusPlaces],
+        () => this.renderPassages(),
+      ],
+      [
         this.el.sheetModes,
         [this.el.focusModes],
         () => this.showTheModes(),
@@ -5294,6 +5320,9 @@ export class AppView {
     });
     this.listen(this.el.rulerClose, 'click', () => {
       this.el.sheetRuler.hidden = true;
+    });
+    this.listen(this.el.placesClose, 'click', () => {
+      this.el.sheetPlaces.hidden = true;
     });
 
     this.listen(this.doc, 'keydown', (event) => {

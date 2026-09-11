@@ -701,6 +701,28 @@ select {
   filter: brightness(1.08);
 }
 
+/*
+ * A place in the piece, as a row rather than a word beside one.
+ *
+ * Reached for on a tablet by a hand that has just left the keys, so the
+ * target is the whole name. Pressed means the reader is in it now - the two
+ * bar numbers in the drawer say the same thing, and this is where they are
+ * asked about by name.
+ */
+.takes__list button.places__go {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.takes__list button.places__go[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .pill {
   border-radius: 999px;
   padding: 5px 11px;

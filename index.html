@@ -468,6 +468,37 @@
         A sheet like the others, so it closes the way everything else does -
         the dimmed ground, the ×, and the same attribute every test can read.
       -->
+      <!--
+        His line 47: a piece is learned in places rather than all at once -
+        the turn on page two, the run in the left hand - and setting the same
+        two bar numbers by hand every evening is the part of that which is
+        not practice. Kept with the piece, so they are waiting when it is
+        opened again.
+      -->
+      <div id="sheet-places" class="sheet" hidden>
+        <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
+          aria-label="Places in this piece">
+          <div class="sheet__head">
+            <strong class="sheet__title">Places in this piece</strong>
+            <button id="places-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+          <div class="controls controls--stacked">
+            <div class="control-group">
+              <ul id="passage-list" class="takes__list"></ul>
+              <p id="passage-empty" class="hint">
+                Nothing marked out yet. Choose a passage, name it, and it is kept with the score.
+              </p>
+              <div class="ladder-row">
+                <input id="passage-name" type="text" class="sheet__input"
+                  placeholder="The left-hand run" aria-label="What to call this passage" />
+                <button id="passage-save" type="button" class="button">Keep it</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="sheet-modes" class="sheet" hidden>
         <div class="sheet__panel sheet__panel--modes" role="dialog" aria-modal="true"
           aria-label="Modes">
@@ -692,26 +723,6 @@
           rather than being hidden - a control that vanishes is one the
           reader goes looking for.
         -->
-        <!--
-          His line 47: a piece is learned in places rather than all at once -
-          the turn on page two, the run in the left hand - and setting the
-          same two bar numbers by hand every evening is the part of that
-          which is not practice. Kept with the piece, so they are waiting
-          when it is opened again.
-        -->
-        <div class="control-group" data-pane="practice">
-          <label for="passage-name">Places in this piece</label>
-          <ul id="passage-list" class="takes__list"></ul>
-          <p id="passage-empty" class="hint">
-            Nothing marked out yet. Choose a passage, name it, and it is kept with the score.
-          </p>
-          <div class="ladder-row">
-            <input id="passage-name" type="text" class="sheet__input" placeholder="The left-hand run"
-              aria-label="What to call this passage" />
-            <button id="passage-save" type="button" class="button">Keep it</button>
-          </div>
-        </div>
-
         <!--
           His line 93: the piece taken apart and learned a section at a time,
           each one slowly with one hand, then the other, then both, and the
@@ -1157,6 +1168,21 @@
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M4 4h2v16H4zM18 4h2v16h-2zM8 11h8v2H8z" />
                 <path d="M11 8l-3 4 3 4zM13 8l3 4-3 4z" />
+              </svg>
+            </button>
+            <!--
+              And the places already marked out, beside the numbers that mark
+              them. It was a list down the settings sheet, which is nowhere
+              near where a passage is chosen: a reader picks out the run in
+              the left hand with a long press on the page and two numbers
+              here, and the list of what they have picked out belongs in the
+              same reach.
+            -->
+            <button id="focus-places" type="button"
+              class="focus-bar__button focus-bar__button--icon" title="Places in this piece"
+              aria-label="Places in this piece">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M7 3h10a1 1 0 0 1 1 1v17l-6-4.2L6 21V4a1 1 0 0 1 1-1z" />
               </svg>
             </button>
           </span>

@@ -2581,6 +2581,56 @@ describe('AppView', () => {
       expect(element('passage-list').textContent).toContain('Bars 3-4');
     });
 
+    it('is reached from the drawer, beside the numbers it is about', async () => {
+      // His: a list of places down the settings sheet is nowhere near where a
+      // place is chosen. A passage is picked out with a long press on the
+      // page and two numbers in the drawer, and this belongs in that reach.
+      const rig = createRig();
+      await rig.view.initialize();
+      expect(element('sheet-places').hidden).toBe(true);
+
+      element<HTMLButtonElement>('focus-places').click();
+
+      expect(element('sheet-places').hidden).toBe(false);
+      expect(element('sheet-places').contains(element('passage-list'))).toBe(true);
+      // And nowhere else: two lists of one thing would disagree the first
+      // time either was used.
+      expect(element('sheet-settings').contains(element('passage-list'))).toBe(false);
+
+      // It closes the way every other sheet does.
+      element('sheet-places').dispatchEvent(new Event('click', { bubbles: true }));
+
+      expect(element('sheet-places').hidden).toBe(true);
+    });
+
+    it('says which of the places the reader is in', async () => {
+      // Without it the list is a set of places with no answer to "where am
+      // I", and the two bar numbers in the drawer are the only thing that
+      // knows - which is what the list exists to save the reader reading.
+      const rig = createRig();
+      await rig.view.initialize();
+      const kept = await rig.runtime.scores.keep(longExercise({ bars: 8 }), 1_000);
+      await rig.runtime.controller.openScore((await rig.runtime.scores.open(kept.id)) as never);
+      rig.runtime.controller.updateSettings({ rangeFromBar: 5, rangeToBar: 8 });
+      element<HTMLButtonElement>('passage-save').click();
+      await waitFor(() => element('passage-list').childElementCount > 0);
+      const row = (): HTMLButtonElement => rowButton('passage-list', 'Practise bars 5-8');
+
+      expect(row().getAttribute('aria-pressed')).toBe('true');
+      // And it is the row itself that is pressed, which is what the
+      // stylesheet marks and what a thumb aims at.
+      expect(row().classList.contains('places__go')).toBe(true);
+
+      rig.runtime.controller.updateSettings({ rangeFromBar: 1, rangeToBar: 2 });
+      element<HTMLButtonElement>('focus-places').click();
+
+      expect(row().getAttribute('aria-pressed')).toBe('false');
+
+      row().click();
+
+      expect(row().getAttribute('aria-pressed')).toBe('true');
+    });
+
     it('has nothing to offer while the material is generated', async () => {
       // An exercise is generated afresh every time, so "bars 5 to 8" of one
       // says nothing about the next.

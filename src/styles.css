@@ -1950,6 +1950,19 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 }
 
 /*
+ * A note a performance is sounding right now.
+ *
+ * Not green and not red, because it is neither: nobody is being judged. Its
+ * own colour so that a reader playing along - who may have both of these on
+ * at once - can tell "this is what you are hearing" from "you got that
+ * right" at the moment it matters most.
+ */
+.played--sounding {
+  stroke: #7c3aed;
+  fill: none;
+}
+
+/*
  * A right note in a beat that is not finished yet.
  *
  * Paler rather than another colour: it is the same verdict, and what it adds

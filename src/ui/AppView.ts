@@ -1006,6 +1006,7 @@ export class AppView {
     scorePageAt: HTMLOutputElement;
     hearOtherHand: HTMLInputElement;
     markListening: HTMLInputElement;
+    showPlaybackNotes: HTMLInputElement;
     rulerCursor: HTMLInputElement;
     rulerStrength: HTMLInputElement;
     rulerStrengthValue: HTMLOutputElement;
@@ -1233,6 +1234,7 @@ export class AppView {
       scorePageAt: requireElement(doc, 'score-page-at'),
       hearOtherHand: requireElement(doc, 'hear-other-hand'),
       markListening: requireElement(doc, 'mark-listening'),
+      showPlaybackNotes: requireElement(doc, 'show-playback-notes'),
       rulerCursor: requireElement(doc, 'ruler-cursor'),
       rulerStrength: requireElement(doc, 'ruler-strength'),
       rulerStrengthValue: requireElement(doc, 'ruler-strength-value'),
@@ -2620,6 +2622,11 @@ export class AppView {
 
     this.listen(this.el.markListening, 'change', () => {
       controller.updateSettings({ markWhileListening: this.el.markListening.checked });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.showPlaybackNotes, 'change', () => {
+      controller.updateSettings({ showPlaybackNotes: this.el.showPlaybackNotes.checked });
       this.syncControlsFromSettings();
     });
 
@@ -4465,6 +4472,7 @@ export class AppView {
     this.showThePages();
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
     this.el.markListening.checked = settings.markWhileListening;
+    this.el.showPlaybackNotes.checked = settings.showPlaybackNotes;
     this.el.restEvery.value = String(settings.restEveryMinutes);
     this.el.restEverySettings.value = this.el.restEvery.value;
     this.el.rulerCursor.checked = settings.rulerCursor;

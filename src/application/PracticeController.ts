@@ -279,6 +279,15 @@ export interface PracticeSettings {
    */
   readonly markWhileListening: boolean;
   /**
+   * Whether the notes a performance is sounding are lit as it passes them.
+   *
+   * A different question from marking what the reader plays, and his own: one
+   * says "check yourself", the other says "watch where the music is". The
+   * marker already says which beat, and this says which notes of it - which
+   * is the part a dense texture hides.
+   */
+  readonly showPlaybackNotes: boolean;
+  /**
    * Bars to practise, one-based and inclusive, or `null` for the whole thing.
    *
    * Counted in *playing order* rather than by the number printed on the page,
@@ -691,6 +700,8 @@ export class PracticeController {
   private listeningStep = 0;
   /** The subscription that marks a reader playing along, while there is one. */
   private playAlong: Unsubscribe | null = null;
+  /** The notes a performance is lighting right now, so they can be put out. */
+  private litNotes: { readonly stepIndex: number; readonly midi: number }[] = [];
   /**
    * The speed the reader asked for, which is the ceiling for the easing.
    *
@@ -777,6 +788,7 @@ export class PracticeController {
       handStaff: null,
       hearTheOtherHand: false,
       markWhileListening: false,
+      showPlaybackNotes: false,
       rangeFromBar: null,
       rangeToBar: null,
       repeatRange: false,
@@ -1859,6 +1871,7 @@ export class PracticeController {
       // uses, and for the same reason.
       this.player.events.on('stepReached', ({ stepIndex, ticks, atMs }) => {
         this.listeningStep = stepIndex;
+        this.lightWhatIsSounding(stepIndex);
         this.announceTheBeats(ticks, this.nextStepTicks(stepIndex), atMs);
       });
     }
@@ -1880,6 +1893,11 @@ export class PracticeController {
    * asking to be shown.
    */
   private watchThePlayAlong(): void {
+    if (!this.isListening) {
+      // The music has stopped, so nothing is sounding: a light left burning
+      // would name a note nobody is playing.
+      this.putOutTheSounding();
+    }
     const wanted = this.currentSettings.markWhileListening && this.isListening;
     if (!wanted) {
       this.playAlong?.();
@@ -1889,6 +1907,40 @@ export class PracticeController {
     if (this.playAlong === null) {
       this.playAlong = this.deps.midi.subscribe((event) => this.hearThePlayAlong(event));
     }
+  }
+
+  /**
+   * Lights the notes a performance is sounding, and puts out the last ones.
+   *
+   * A moving light rather than a trail: what has been played is already said
+   * by the veil, and a page that filled up as the music went would be saying
+   * it twice. Off unless asked for, since a performance is also how a piece
+   * is simply listened to.
+   */
+  private lightWhatIsSounding(stepIndex: number): void {
+    if (!this.currentSettings.showPlaybackNotes) {
+      return;
+    }
+    this.putOutTheSounding();
+    const step = this.timeline?.at(stepIndex) ?? null;
+    if (step === null) {
+      return;
+    }
+    // What the performance is actually sounding, which is the hand it was
+    // asked to play - listening to one hand should not light the other.
+    const midis = expectedFor(step, this.currentSettings.handStaff);
+    this.litNotes = midis.map((midi) => ({ stepIndex, midi }));
+    for (const note of this.litNotes) {
+      this.deps.overlay.showPlayed({ ...note, correct: true, sounding: true, offset: 0 });
+    }
+  }
+
+  /** Takes the light off whatever had it. */
+  private putOutTheSounding(): void {
+    for (const note of this.litNotes) {
+      this.deps.overlay.hidePlayed(note);
+    }
+    this.litNotes = [];
   }
 
   private hearThePlayAlong(event: MidiEvent): void {

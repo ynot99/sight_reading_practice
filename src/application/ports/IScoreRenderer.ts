@@ -273,6 +273,16 @@ export interface PlayedNote {
   readonly midi: number;
   readonly correct: boolean;
   /**
+   * Drawn for a note a performance is sounding rather than one anybody played.
+   *
+   * Its own colour, because it is a different statement: a green ring says
+   * "you got that right" and this says "this is what you are hearing". With
+   * both on at once - which is a reader playing along and watching - one
+   * colour for the two would make the page unreadable at the moment it
+   * matters most.
+   */
+  readonly sounding?: boolean;
+  /**
    * Whether the beat this belongs to had been played in full when it was
    * drawn. Absent means yes: a mark drawn after the fact is settled by then.
    */

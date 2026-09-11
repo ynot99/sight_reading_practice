@@ -2051,6 +2051,7 @@ export class OsmdScoreRenderer
       stepIndex: note.stepIndex,
       midi: note.midi,
       correct: note.correct,
+      sounding: note.sounding,
       offset: note.offset,
       settled: note.settled,
     };
@@ -2288,11 +2289,13 @@ export class OsmdScoreRenderer
   }
 
   private createShape(shape: OverlayShape, doc: Document): SVGElement {
-    const colourClass = !shape.correct
-      ? 'played--wrong'
-      : shape.looseTiming
-        ? 'played--loose'
-        : 'played--correct';
+    const colourClass = shape.sounding
+      ? 'played--sounding'
+      : !shape.correct
+        ? 'played--wrong'
+        : shape.looseTiming
+          ? 'played--loose'
+          : 'played--correct';
     switch (shape.kind) {
       case 'notehead': {
         const element = doc.createElementNS(SVG_NAMESPACE, 'ellipse');

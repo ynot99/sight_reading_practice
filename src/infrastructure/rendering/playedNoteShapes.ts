@@ -15,6 +15,8 @@ export interface PlayedMark {
   readonly stepIndex: number;
   readonly midi: number;
   readonly correct: boolean;
+  /** A note a performance is sounding, rather than one anybody played. */
+  readonly sounding?: boolean;
   /** Signed fraction of the gap to the neighbouring note; `0` is dead on. */
   readonly offset: number;
   /** Whether the beat it belongs to has been played in full. */
@@ -45,6 +47,8 @@ export interface NoteheadShape {
    * pale exactly when it is displaced: the two can never disagree.
    */
   readonly looseTiming: boolean;
+  /** A note a performance is sounding, rather than one anybody played. */
+  readonly sounding?: boolean;
 }
 
 export interface LedgerShape {
@@ -54,6 +58,8 @@ export interface LedgerShape {
   readonly x2: number;
   readonly correct: boolean;
   readonly looseTiming: boolean;
+  /** A note a performance is sounding, rather than one anybody played. */
+  readonly sounding?: boolean;
 }
 
 export interface AccidentalShape {
@@ -64,6 +70,8 @@ export interface AccidentalShape {
   readonly size: number;
   readonly correct: boolean;
   readonly looseTiming: boolean;
+  /** A note a performance is sounding, rather than one anybody played. */
+  readonly sounding?: boolean;
 }
 
 export type OverlayShape = NoteheadShape | LedgerShape | AccidentalShape;
@@ -172,6 +180,7 @@ export function buildOverlayShapes(
           x1: x - radiusX * 1.6,
           x2: x + radiusX * 1.6,
           correct: mark.correct,
+          sounding: mark.sounding,
           looseTiming,
         });
       }
@@ -185,6 +194,7 @@ export function buildOverlayShapes(
         text: ACCIDENTAL_GLYPHS[pitch.alter] ?? '',
         size: step * 3.2,
         correct: mark.correct,
+        sounding: mark.sounding,
         looseTiming,
       });
     }
@@ -196,6 +206,7 @@ export function buildOverlayShapes(
       radiusX,
       radiusY,
       correct: mark.correct,
+      sounding: mark.sounding,
       looseTiming,
     });
   }

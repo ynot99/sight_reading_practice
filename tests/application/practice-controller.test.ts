@@ -2460,6 +2460,50 @@ describe('cursor visibility', () => {
     expect(renderer.played.map((note) => note.correct)).toEqual([true, false]);
   });
 
+  it('lights the notes a performance is sounding, where asked', async () => {
+    // A different question from marking what the reader plays: one says
+    // "check yourself", this says "watch where the music is". The marker
+    // already names the beat; this names which of its notes, which is the
+    // part a dense texture hides.
+    const { controller, renderer, metronome } = createController(true);
+    controller.updateSettings({ showPlaybackNotes: true, countInBars: 0 });
+    await controller.loadNewExercise();
+    controller.listen();
+    metronome.advanceSubdivisions(1);
+
+    const lit = renderer.played.filter((note) => note.sounding === true);
+    expect(lit.length).toBeGreaterThan(0);
+    // Its own statement, not a verdict about anybody: nothing is being judged.
+    expect(lit.every((note) => note.correct)).toBe(true);
+  });
+
+  it('moves the light on rather than leaving a trail behind it', async () => {
+    // What has been played is already said by the veil, and a page that
+    // filled up as the music went would be saying it twice.
+    const { controller, renderer, metronome } = createController(true);
+    controller.updateSettings({ showPlaybackNotes: true, countInBars: 0 });
+    await controller.loadNewExercise();
+    controller.listen();
+
+    metronome.advanceSubdivisions(5);
+
+    // Whatever is lit belongs to one beat: the beat being sounded. The ones
+    // before it were put out as the music passed them.
+    const lit = renderer.played.filter((note) => note.sounding === true);
+    expect(lit.length).toBeGreaterThan(0);
+    expect(new Set(lit.map((note) => note.stepIndex)).size).toBe(1);
+  });
+
+  it('leaves the page dark for a playback nobody asked to watch', async () => {
+    const { controller, renderer, metronome } = createController(true);
+    controller.updateSettings({ countInBars: 0 });
+    await controller.loadNewExercise();
+    controller.listen();
+    metronome.advanceSubdivisions(4);
+
+    expect(renderer.played.filter((note) => note.sounding === true)).toHaveLength(0);
+  });
+
   it('says nothing about a playback the reader is only listening to', async () => {
     // Off by default, because a performance is also how a piece is listened
     // to: a page filling with red while nobody is being judged would be the

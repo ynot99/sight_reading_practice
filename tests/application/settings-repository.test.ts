@@ -58,6 +58,7 @@ const SETTINGS: PracticeSettings = {
   pageTurns: 'manual',
   hearTheOtherHand: true,
   markWhileListening: true,
+  showPlaybackNotes: true,
   rhythmRuler: 'eighth',
   rulerCursor: true,
   rulerStrength: 0.5,

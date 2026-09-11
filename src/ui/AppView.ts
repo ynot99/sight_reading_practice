@@ -341,6 +341,15 @@ function whyModeIsOut(mode: string, settings: PracticeSettings): string | null {
   return null;
 }
 
+/**
+ * How long a square keeps saying why it will not answer.
+ *
+ * Long enough to read one sentence and short enough that it is gone before
+ * the reader looks back. A pointer takes it away by leaving; a finger has
+ * nothing to leave, so time does it.
+ */
+const WHY_SHOWS_FOR_MS = 4_000;
+
 /** An empty box means "no limit", which is a choice and not a missing value. */
 function barValue(input: HTMLInputElement): number | null {
   const parsed = Number.parseInt(input.value, 10);
@@ -1104,7 +1113,6 @@ export class AppView {
     settingsSections: HTMLElement;
     sheetModes: HTMLElement;
     modesGrid: HTMLElement;
-    modesWhy: HTMLElement;
     modesClose: HTMLButtonElement;
     focusModes: HTMLButtonElement;
     settingsMetronome: HTMLButtonElement;
@@ -1339,7 +1347,6 @@ export class AppView {
       settingsSections: requireElement(doc, 'settings-sections'),
       sheetModes: requireElement(doc, 'sheet-modes'),
       modesGrid: requireElement(doc, 'modes-grid'),
-      modesWhy: requireElement(doc, 'modes-why'),
       modesClose: requireElement(doc, 'modes-close'),
       focusModes: requireElement(doc, 'focus-modes'),
       settingsMetronome: requireElement(doc, 'settings-metronome'),
@@ -2892,12 +2899,14 @@ export class AppView {
    * playing survival", and this is another way of reading and writing it,
    * not a second copy of it.
    */
+  /** Bubbles waiting to be put away again, by the square each belongs to. */
+  private readonly whyTimers = new Map<HTMLElement, number>();
+
   private bindTheModes(): void {
+    // Opening it, and the dimmed ground that closes it, are the list every
+    // other sheet is in: bound here as well, this one would have been the
+    // only sheet a tap outside did not close - which is what happened.
     const cards = [...this.el.modesGrid.querySelectorAll('button[data-mode]')];
-    this.listen(this.el.focusModes, 'click', () => {
-      this.showTheModes();
-      this.el.sheetModes.hidden = false;
-    });
     this.listen(this.el.modesClose, 'click', () => {
       this.el.sheetModes.hidden = true;
     });
@@ -2906,6 +2915,14 @@ export class AppView {
         continue;
       }
       this.listen(card, 'click', () => {
+        // Refused here rather than by `disabled`, which is what lets the
+        // square say why: a disabled button receives no events at all, so a
+        // finger on it on a tablet - the one way a reader asks - would reach
+        // nothing.
+        if (card.getAttribute('aria-disabled') === 'true') {
+          this.sayWhyItIsOut(card);
+          return;
+        }
         const on = card.getAttribute('aria-pressed') !== 'true';
         this.runtime.controller.updateSettings(settingsForMode(card.dataset['mode'] ?? '', on));
         this.syncControlsFromSettings();
@@ -2923,7 +2940,6 @@ export class AppView {
    */
   private showTheModes(): void {
     const settings = this.runtime.controller.settings;
-    const reasons: string[] = [];
     for (const card of this.el.modesGrid.querySelectorAll('button[data-mode]')) {
       if (!(card instanceof HTMLButtonElement)) {
         continue;
@@ -2931,13 +2947,39 @@ export class AppView {
       const mode = card.dataset['mode'] ?? '';
       card.setAttribute('aria-pressed', String(modeIsOn(mode, settings)));
       const why = whyModeIsOut(mode, settings);
-      card.disabled = why !== null;
-      if (why !== null) {
-        reasons.push(why);
+      card.setAttribute('aria-disabled', String(why !== null));
+      if (why === null) {
+        delete card.dataset['why'];
+        delete card.dataset['showWhy'];
+      } else {
+        card.dataset['why'] = why;
       }
     }
-    this.el.modesWhy.textContent = reasons.join(' ');
-    this.el.modesWhy.hidden = reasons.length === 0;
+  }
+
+  /**
+   * Shows the reason a square will not answer, and takes it away again.
+   *
+   * On the square rather than in a line underneath, because that is where the
+   * reader is looking when they ask - and asking, on a tablet, is a finger on
+   * the thing. A pointer gets it by hovering, which the stylesheet handles;
+   * this is the other way in.
+   */
+  private sayWhyItIsOut(card: HTMLElement): void {
+    card.dataset['showWhy'] = 'true';
+    const timer = this.doc.defaultView?.setTimeout(() => {
+      delete card.dataset['showWhy'];
+      this.whyTimers.delete(card);
+    }, WHY_SHOWS_FOR_MS);
+    if (timer !== undefined) {
+      // Kept so a second tap does not leave the first tap's timer to put the
+      // bubble away while the reader is still reading it.
+      const already = this.whyTimers.get(card);
+      if (already !== undefined) {
+        this.doc.defaultView?.clearTimeout(already);
+      }
+      this.whyTimers.set(card, timer);
+    }
   }
 
   private bindNarrowLayout(): void {
@@ -5025,6 +5067,11 @@ export class AppView {
         this.el.sheetRuler,
         [this.el.focusRuler],
         () => this.syncControlsFromSettings(),
+      ],
+      [
+        this.el.sheetModes,
+        [this.el.focusModes],
+        () => this.showTheModes(),
       ],
       [
         this.el.sheetSettings,

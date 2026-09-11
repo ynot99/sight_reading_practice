@@ -1253,6 +1253,19 @@ describe('AppView', () => {
       }
     });
 
+    it('closes the modes on a tap outside them, like every other sheet', async () => {
+      // It was bound its own opening and its own ×, which made it the one
+      // sheet a tap on the dimmed ground did not close.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      expect(element('sheet-modes').hidden).toBe(false);
+
+      element('sheet-modes').dispatchEvent(new Event('click', { bubbles: true }));
+
+      expect(element('sheet-modes').hidden).toBe(true);
+    });
+
     it('turns a mode on from the squares in front of the reader', async () => {
       // His shape and his reasons: four lines apart in a drawer are four
       // things to remember, and four squares are a state you can see. Each
@@ -1286,13 +1299,24 @@ describe('AppView', () => {
       const rhythm = element('modes-grid').querySelector('[data-mode="rhythm"]');
       (strict as HTMLButtonElement).click();
       expect(runtime.controller.settings.stopAtAMistake).toBe(true);
-      expect((strict as HTMLButtonElement).disabled).toBe(false);
+      expect(strict?.getAttribute('aria-disabled')).toBe('false');
 
       (rhythm as HTMLButtonElement).click();
 
-      expect((strict as HTMLButtonElement).disabled).toBe(true);
-      expect(element('modes-why').textContent).toContain('no wrong note');
+      expect(strict?.getAttribute('aria-disabled')).toBe('true');
+      // The reason lives on the square, where the reader is looking when they
+      // ask - and it is not `disabled`, which is the one way a square could
+      // never explain itself: a disabled button receives no events, so a
+      // finger on it on a tablet would reach nothing.
+      expect((strict as HTMLElement).dataset['why']).toContain('no wrong note');
+      expect((strict as HTMLButtonElement).disabled).toBe(false);
       // And it is turned off rather than left standing meaning nothing.
+      expect(runtime.controller.settings.stopAtAMistake).toBe(false);
+
+      // A tap on it says why instead of answering.
+      (strict as HTMLButtonElement).click();
+
+      expect((strict as HTMLElement).dataset['showWhy']).toBe('true');
       expect(runtime.controller.settings.stopAtAMistake).toBe(false);
     });
 

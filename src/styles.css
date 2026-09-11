@@ -1678,10 +1678,58 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * the honest thing is to show it as unavailable rather than to accept it and
  * quietly do nothing.
  */
-.mode-card[disabled] {
+.mode-card[aria-disabled='true'] {
   filter: saturate(0.2) brightness(0.5);
   transform: scale(0.95);
   cursor: not-allowed;
+}
+
+/*
+ * Why it will not answer, on the square itself.
+ *
+ * Not `disabled`, which would be the obvious way to say "out of reach" and
+ * is the one way the square could never explain itself: a disabled button
+ * receives no events, so a finger on it on a tablet reaches nothing. It
+ * stays a button, refuses in the handler, and says why - to a pointer by
+ * being hovered, and to a finger by being pressed.
+ */
+.mode-card {
+  position: relative;
+}
+
+.mode-card[data-why]::after {
+  content: attr(data-why);
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% + 8px);
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #11151c;
+  color: #e9edf5;
+  font-size: 0.82rem;
+  line-height: 1.3;
+  text-align: left;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.mode-card[data-why]:hover::after,
+.mode-card[data-why]:focus-visible::after,
+.mode-card[data-why][data-show-why='true']::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* The top row has nothing above it to hang a bubble in. */
+.modes > .mode-card:nth-child(-n + 2)[data-why]::after {
+  bottom: auto;
+  top: calc(100% + 8px);
 }
 
 @media (prefers-reduced-motion: reduce) {

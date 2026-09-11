@@ -446,6 +446,62 @@
         controls, raised from either place, over music that is not re-engraved
         to make room for it.
       -->
+
+      <!--
+        His, and his shape: the modes in front of the reader rather than four
+        lines apart in a drawer. Off is dark and small; pressed, a square
+        comes towards you, turns a little and lights up, and stays that way
+        for as long as it is on.
+
+        A sheet like the others, so it closes the way everything else does -
+        the dimmed ground, the ×, and the same attribute every test can read.
+      -->
+      <div id="sheet-modes" class="sheet" hidden>
+        <div class="sheet__panel sheet__panel--modes" role="dialog" aria-modal="true"
+          aria-label="Modes">
+          <div class="sheet__head">
+            <strong class="sheet__title">Modes</strong>
+            <button id="modes-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+          <div id="modes-grid" class="modes">
+            <button type="button" class="mode-card mode-card--survival" data-mode="survival"
+              aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 21s-7-4.35-7-9.5A3.5 3.5 0 0 1 12 8a3.5 3.5 0 0 1 7 3.5c0 5.15-7 9.5-7 9.5z" />
+              </svg>
+              <strong class="mode-card__name">Survival</strong>
+              <span class="mode-card__what">The bar falls while you play</span>
+            </button>
+            <button type="button" class="mode-card mode-card--blind" data-mode="blind"
+              aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z M4 20 20 4" />
+              </svg>
+              <strong class="mode-card__name">Blind</strong>
+              <span class="mode-card__what">The note goes as you reach it</span>
+            </button>
+            <button type="button" class="mode-card mode-card--rhythm" data-mode="rhythm"
+              aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 12h3l2-5 3 10 2-7 2 4h4" />
+              </svg>
+              <strong class="mode-card__name">Rhythm only</strong>
+              <span class="mode-card__what">Any note counts</span>
+            </button>
+            <button type="button" class="mode-card mode-card--strict" data-mode="strict"
+              aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M9 9l6 6 M15 9l-6 6" />
+              </svg>
+              <strong class="mode-card__name">One mistake</strong>
+              <span class="mode-card__what">A wrong note ends the run</span>
+            </button>
+          </div>
+          <p id="modes-why" class="hint"></p>
+        </div>
+      </div>
+
       <div id="sheet-settings" class="sheet" hidden>
         <div class="sheet__panel sheet__panel--wide" role="dialog" aria-modal="true"
           aria-label="Settings">
@@ -1027,6 +1083,19 @@
             the same reason: what stays is named, so anything added to this
             row is hidden by default.
           -->
+          <!--
+            The modes, in front of the reader. Left of the pill because that
+            is where he put it: the row is read from the middle out, and this
+            is a thing you set before playing rather than while.
+          -->
+          <button id="focus-modes" type="button"
+            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
+            title="Modes" aria-label="Modes">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
+            </svg>
+          </button>
+
           <button id="focus-bare" type="button" data-bare
             class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
             aria-pressed="false" title="Just the page"

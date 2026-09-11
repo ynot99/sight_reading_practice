@@ -24,6 +24,7 @@ import { midiToLabel } from '../domain/model/Pitch.js';
 import { writeMidiFile } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
+import type { PracticeSettings } from '../application/PracticeController.js';
 import {
   RULER_DIVISIONS,
   type RulerDivision,
@@ -282,6 +283,62 @@ function describeBarRange(controller: AppRuntime['controller']): string {
     `   passage: ${controller.settings.rangeFromBar ?? '-'}..${controller.settings.rangeToBar ?? '-'}` +
     `   steps: ${controller.beginsAt}..`
   );
+}
+
+/**
+ * What a mode square is, said once.
+ *
+ * Each is a setting that already exists, read and written through this rather
+ * than duplicated by it: there is one answer to "am I playing survival", and
+ * the square is another way of asking it. `blind` is the veil drawn over the
+ * step under the reader's fingers, which is what makes it blind - the note is
+ * gone by the time they reach it, so it has to have been read already.
+ */
+function modeIsOn(mode: string, settings: PracticeSettings): boolean {
+  switch (mode) {
+    case 'survival':
+      return settings.survival;
+    case 'blind':
+      return settings.readAheadSteps !== null && settings.readAheadSteps >= 1;
+    case 'rhythm':
+      return settings.rhythmOnly;
+    case 'strict':
+      return settings.stopAtAMistake;
+    default:
+      return false;
+  }
+}
+
+/** The settings a square writes when it is turned on or off. */
+function settingsForMode(mode: string, on: boolean): Partial<PracticeSettings> {
+  switch (mode) {
+    case 'survival':
+      return { survival: on };
+    case 'blind':
+      return { readAheadSteps: on ? 1 : null };
+    case 'rhythm':
+      // Turning it on takes the other one with it, rather than leaving a
+      // switch standing that now means nothing.
+      return on ? { rhythmOnly: true, stopAtAMistake: false } : { rhythmOnly: false };
+    case 'strict':
+      return { stopAtAMistake: on };
+    default:
+      return {};
+  }
+}
+
+/**
+ * Why a mode cannot be chosen just now, or `null` where it can.
+ *
+ * Not a choice being withheld: a mode another mode has made meaningless is a
+ * choice with no content, and accepting it and quietly doing nothing would be
+ * worse than saying so.
+ */
+function whyModeIsOut(mode: string, settings: PracticeSettings): string | null {
+  if (mode === 'strict' && settings.rhythmOnly) {
+    return 'One mistake is out while any note counts: there is no wrong note to end the run on.';
+  }
+  return null;
 }
 
 /** An empty box means "no limit", which is a choice and not a missing value. */
@@ -1045,6 +1102,11 @@ export class AppView {
     sheetScores: HTMLElement;
     sheetSettings: HTMLElement;
     settingsSections: HTMLElement;
+    sheetModes: HTMLElement;
+    modesGrid: HTMLElement;
+    modesWhy: HTMLElement;
+    modesClose: HTMLButtonElement;
+    focusModes: HTMLButtonElement;
     settingsMetronome: HTMLButtonElement;
     focusSettings: HTMLButtonElement;
     settingsClose: HTMLButtonElement;
@@ -1275,6 +1337,11 @@ export class AppView {
       sheetScores: requireElement(doc, 'sheet-scores'),
       sheetSettings: requireElement(doc, 'sheet-settings'),
       settingsSections: requireElement(doc, 'settings-sections'),
+      sheetModes: requireElement(doc, 'sheet-modes'),
+      modesGrid: requireElement(doc, 'modes-grid'),
+      modesWhy: requireElement(doc, 'modes-why'),
+      modesClose: requireElement(doc, 'modes-close'),
+      focusModes: requireElement(doc, 'focus-modes'),
       settingsMetronome: requireElement(doc, 'settings-metronome'),
       focusSettings: requireElement(doc, 'focus-settings'),
       settingsClose: requireElement(doc, 'settings-close'),
@@ -2394,6 +2461,10 @@ export class AppView {
     this.listen(this.el.readAhead, 'change', () => {
       controller.updateSettings({ readAheadSteps: parseReadAhead(this.el.readAhead.value) });
       this.el.readAheadDescription.textContent = READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';
+      // The veil is also a mode square, and one answer read in two places has
+      // to be written to both: set here and left alone, the square went on
+      // saying the opposite of what the setting said.
+      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.cursorListening, 'change', () => {
@@ -2812,6 +2883,63 @@ export class AppView {
     });
   }
 
+  /**
+   * The modes, as squares in front of the reader.
+   *
+   * His shape and his reasons: four lines apart in a drawer are four things
+   * to remember, and four squares are a state you can see. Each square is the
+   * setting it names and nothing besides - there is one answer to "am I
+   * playing survival", and this is another way of reading and writing it,
+   * not a second copy of it.
+   */
+  private bindTheModes(): void {
+    const cards = [...this.el.modesGrid.querySelectorAll('button[data-mode]')];
+    this.listen(this.el.focusModes, 'click', () => {
+      this.showTheModes();
+      this.el.sheetModes.hidden = false;
+    });
+    this.listen(this.el.modesClose, 'click', () => {
+      this.el.sheetModes.hidden = true;
+    });
+    for (const card of cards) {
+      if (!(card instanceof HTMLButtonElement)) {
+        continue;
+      }
+      this.listen(card, 'click', () => {
+        const on = card.getAttribute('aria-pressed') !== 'true';
+        this.runtime.controller.updateSettings(settingsForMode(card.dataset['mode'] ?? '', on));
+        this.syncControlsFromSettings();
+      });
+    }
+  }
+
+  /**
+   * Draws each square as on, off, or out of reach.
+   *
+   * Out of reach is not a choice being withheld: "one wrong note ends the
+   * run" under "any note counts" is a choice with no content, because there
+   * is no such thing as a wrong note there. Accepting it and quietly doing
+   * nothing would be worse than saying so.
+   */
+  private showTheModes(): void {
+    const settings = this.runtime.controller.settings;
+    const reasons: string[] = [];
+    for (const card of this.el.modesGrid.querySelectorAll('button[data-mode]')) {
+      if (!(card instanceof HTMLButtonElement)) {
+        continue;
+      }
+      const mode = card.dataset['mode'] ?? '';
+      card.setAttribute('aria-pressed', String(modeIsOn(mode, settings)));
+      const why = whyModeIsOut(mode, settings);
+      card.disabled = why !== null;
+      if (why !== null) {
+        reasons.push(why);
+      }
+    }
+    this.el.modesWhy.textContent = reasons.join(' ');
+    this.el.modesWhy.hidden = reasons.length === 0;
+  }
+
   private bindNarrowLayout(): void {
     const view = this.doc.defaultView;
     if (view === null || typeof view.matchMedia !== 'function') {
@@ -2835,6 +2963,7 @@ export class AppView {
     this.bindNarrowLayout();
     this.bindTheNetwork();
     this.bindTheSections();
+    this.bindTheModes();
 
     this.listen(this.el.focusPlay, 'click', () => {
       this.togglePlayback();
@@ -4514,6 +4643,7 @@ export class AppView {
     this.showThePages();
     this.el.hearOtherHand.checked = settings.hearTheOtherHand;
     this.el.markListening.checked = settings.markWhileListening;
+    this.showTheModes();
     this.el.showPlaybackNotes.checked = settings.showPlaybackNotes;
     this.el.restEvery.value = String(settings.restEveryMinutes);
     this.el.restEverySettings.value = this.el.restEvery.value;

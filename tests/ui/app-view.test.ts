@@ -1253,6 +1253,66 @@ describe('AppView', () => {
       }
     });
 
+    it('turns a mode on from the squares in front of the reader', async () => {
+      // His shape and his reasons: four lines apart in a drawer are four
+      // things to remember, and four squares are a state you can see. Each
+      // square is the setting it names - there is one answer to "am I playing
+      // survival", and this is another way of reading and writing it.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      expect(element('sheet-modes').hidden).toBe(false);
+      const survival = element('modes-grid').querySelector('[data-mode="survival"]');
+
+      (survival as HTMLButtonElement).click();
+
+      expect(runtime.controller.settings.survival).toBe(true);
+      expect(survival?.getAttribute('aria-pressed')).toBe('true');
+
+      (survival as HTMLButtonElement).click();
+
+      expect(runtime.controller.settings.survival).toBe(false);
+    });
+
+    it('puts a mode out of reach once another has emptied it', async () => {
+      // Not a choice being withheld: "one wrong note ends the run" under "any
+      // note counts" is a choice with no content, because there is no such
+      // thing as a wrong note there. Accepting it and quietly doing nothing
+      // would be worse than saying so.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      const strict = element('modes-grid').querySelector('[data-mode="strict"]');
+      const rhythm = element('modes-grid').querySelector('[data-mode="rhythm"]');
+      (strict as HTMLButtonElement).click();
+      expect(runtime.controller.settings.stopAtAMistake).toBe(true);
+      expect((strict as HTMLButtonElement).disabled).toBe(false);
+
+      (rhythm as HTMLButtonElement).click();
+
+      expect((strict as HTMLButtonElement).disabled).toBe(true);
+      expect(element('modes-why').textContent).toContain('no wrong note');
+      // And it is turned off rather than left standing meaning nothing.
+      expect(runtime.controller.settings.stopAtAMistake).toBe(false);
+    });
+
+    it('reads the squares back from the settings, however they were set', async () => {
+      // One answer, two ways of asking it: a mode set from the drawer has to
+      // show on the square, or the two would disagree about the same thing.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const blind = element('modes-grid').querySelector('[data-mode="blind"]');
+      expect(blind?.getAttribute('aria-pressed')).toBe('false');
+
+      // Set from the drawer, where the same thing is called "notes disappear".
+      const veil = element<HTMLSelectElement>('read-ahead');
+      veil.value = '1';
+      veil.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.readAheadSteps).toBe(1);
+      expect(blind?.getAttribute('aria-pressed')).toBe('true');
+    });
+
     it('sorts the settings into sections, losing no control on the way', async () => {
       // Forty-six controls in one scrolling column is a list nobody reads. The
       // sorting is the stylesheet's, so the guard is this: every control in

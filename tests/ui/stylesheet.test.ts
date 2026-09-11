@@ -146,6 +146,15 @@ describe('the stylesheet', () => {
     const panel = rules().find((rule) => rule.selector === '.sheet__panel--wide');
     const widest = Number(/min\((\d+)px/.exec(panel?.body ?? '')?.[1] ?? '0');
     expect(widest).toBeGreaterThan(880);
+
+    // And a tab is a row of two things, whichever rule reaches it last. The
+    // one that hides other panes is a selector heavier than the one that
+    // makes a tab a row, and an inline-block there put every mark on a line
+    // of its own above its name.
+    const hiding = rules().find(
+      (rule) => rule.selector === '.settings-sections__tab[data-pane]',
+    );
+    expect(hiding?.body).toMatch(/display\s*:\s*flex/);
   });
 
   it('empties the bar down to the way out when only the page is wanted', () => {

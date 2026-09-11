@@ -1028,8 +1028,8 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * used to have all to themselves.
  */
 .sheet__panel--wide {
-  width: min(1100px, 100%);
-  max-height: min(92vh, 1000px);
+  width: min(1280px, 100%);
+  max-height: min(96vh, 1100px);
 }
 
 /*
@@ -1578,6 +1578,119 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 }
 
 /*
+ * The modes, as squares.
+ *
+ * His shape, and his reasons: four lines apart in a drawer are four things
+ * to remember, and four squares in front of you are a state you can see. Off
+ * is dark and a little small; pressed, a square comes towards you, turns a
+ * few degrees and lights up, and stays there for as long as it is on.
+ *
+ * The turn is what makes it read as *switched* rather than merely
+ * highlighted - a thing that has been moved into place stays moved.
+ */
+.sheet__panel--modes {
+  width: min(720px, 100%);
+}
+
+.modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  padding: 4px;
+}
+
+.mode-card {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 132px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--mode-ground, #2a2f3a);
+  color: #e9edf5;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  filter: saturate(0.55) brightness(0.72);
+  transform: scale(0.97);
+  transition:
+    transform 180ms ease,
+    filter 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.mode-card svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+}
+
+.mode-card__name {
+  font-size: 1.02rem;
+}
+
+.mode-card__what {
+  font-size: 0.86rem;
+  opacity: 0.82;
+}
+
+/* Each one its own colour, so the state is read from across the room. */
+.mode-card--survival {
+  --mode-ground: #7f1d3a;
+}
+
+.mode-card--blind {
+  --mode-ground: #1e3a5f;
+}
+
+.mode-card--rhythm {
+  --mode-ground: #14532d;
+}
+
+.mode-card--strict {
+  --mode-ground: #4c1d95;
+}
+
+/*
+ * On: nearer, turned, and lit. All three together, because any one of them
+ * alone reads as a hover rather than a decision.
+ */
+.mode-card[aria-pressed='true'] {
+  filter: none;
+  transform: scale(1.04) rotate(-2deg);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 35%);
+}
+
+/*
+ * Out of reach: dimmed, and it does not answer.
+ *
+ * A mode another mode has made meaningless - "one wrong note ends the run"
+ * under "any note counts", where there is no such thing as a wrong note -
+ * is not a choice being withheld. It is a choice that has no content, and
+ * the honest thing is to show it as unavailable rather than to accept it and
+ * quietly do nothing.
+ */
+.mode-card[disabled] {
+  filter: saturate(0.2) brightness(0.5);
+  transform: scale(0.95);
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-card {
+    transition: none;
+  }
+}
+
+/*
  * Which question the settings sheet is answering.
  *
  * Forty-six controls in one column is a list nobody reads. Every group keeps
@@ -1733,9 +1846,16 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   display: revert;
 }
 
-/* The tabs themselves carry the attribute and must not hide each other. */
+/*
+ * The tabs carry the attribute too, and must not hide each other.
+ *
+ * Written as a row on purpose. "Not this pane, so do not show it" is one
+ * selector heavier than the rule that makes a tab a row of two things, so an
+ * `inline-block` here quietly put every mark on a line of its own above its
+ * name - which is what he saw.
+ */
 .settings-sections__tab[data-pane] {
-  display: inline-block;
+  display: flex;
 }
 
 /*

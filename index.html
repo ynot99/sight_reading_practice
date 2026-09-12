@@ -917,7 +917,14 @@
           belong to five panes. The block itself belongs to none: tagged with
           one of them it would hide the other four along with itself.
         -->
-        <div class="control-group control-group--checks">
+        <!--
+          The checkboxes, and the one box in here that four panes share: its
+          labels belong to page, playing, modes and sound, each shown on its
+          own. So it names all four, matched with `~=`. Naming none made it a
+          cell in every pane - an empty one holding a column open, which is
+          what put Practice a third of the way in from the left.
+        -->
+        <div class="control-group control-group--checks" data-pane="page playing modes sound">
           <!--
             Three answers and not one. A reader may want no marker at all
             while *they* play - it is a crutch, and reading without it is the

@@ -42,6 +42,38 @@ function rules(): { selector: string; body: string; at: number }[] {
  * reader's iPad.
  */
 describe('the stylesheet', () => {
+  it('keeps a slider inside the column it is given', () => {
+    // A range input carries `margin: 2px` from the browser's own sheet, and a
+    // margin sits outside a width of 100%: a slider in the last column stood
+    // 2px past the pane, and a pane that scrolls down grew a bar across as
+    // well. Two pixels, under the whole form. Which section it showed up in
+    // followed the column count rather than the pane, which is why it came and
+    // went - measured in a real browser, because jsdom lays nothing out.
+    const stretched = rules().find(
+      (rule) => rule.selector === ".control-group > select, .control-group > input[type='range']",
+    );
+    const slider = rules().find(
+      (rule) => rule.selector === ".control-group > input[type='range']",
+    );
+
+    expect(stretched?.body).toMatch(/width\s*:\s*100%/);
+    expect(slider?.body).toMatch(/margin\s*:\s*0/);
+  });
+
+  it('matches a pane as a list, because one box belongs to four', () => {
+    // The box of checkboxes is shared - its labels are page's, playing's,
+    // modes' and sound's - so it names all four and the showing rules have to
+    // match one word of several. With `=` it could name none, and a box naming
+    // no pane is a cell in *every* pane: an empty one, holding a column of the
+    // grid open, which is what put Practice a third of the way in from the
+    // left. His report.
+    const showing = rules().filter((rule) => rule.selector.includes("[data-showing='"));
+
+    expect(showing).toHaveLength(1);
+    expect(showing[0]?.selector).toContain('[data-pane~=');
+    expect(showing[0]?.selector).not.toContain("[data-pane='");
+  });
+
   it('writes every variant below the rule it varies', () => {
     // A variant of a class weighs exactly what the class weighs, so between
     // `.sheet__panel` and `.sheet__panel--wide` nothing decides but which
@@ -202,14 +234,14 @@ describe('the stylesheet', () => {
     // a fixed slice off the left before the settings get any of it.
     const panel = rules().find((rule) => rule.selector === '.sheet__panel--wide');
     const widest = Number(/width:\s*min\((\d+)px/.exec(panel?.body ?? '')?.[1] ?? '0');
-    expect(widest).toBeGreaterThan(1400);
+    expect(widest).toBeGreaterThan(1000);
 
     // Spent on wider columns rather than more of them, which is the only way
     // a wider sheet reaches the controls: at the old 190px the grid answered
     // every extra 200px with another narrow column. `auto-fill`, not
     // `auto-fit` - Library holds a single group, and a collapsed track would
     // draw its slider across the whole width of the sheet.
-    expect(pane?.body).toMatch(/repeat\(auto-fill,\s*minmax\(300px/);
+    expect(pane?.body).toMatch(/repeat\(auto-fill,\s*minmax\(280px/);
 
     // And it holds one height rather than a ceiling. His report: the sheet
     // changed size as he moved down the rail, which moves the rail under his

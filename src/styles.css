@@ -499,6 +499,21 @@ textarea {
   width: 100%;
 }
 
+/*
+ * And nothing outside that width.
+ *
+ * A range input carries `margin: 2px` from the browser's own sheet, which sits
+ * *outside* a width of 100% - so a slider in the last column of the settings
+ * stood 2px past the pane and the pane, which scrolls down, grew a bar across
+ * as well. Two pixels, under the whole form. It followed the column count
+ * rather than the pane, which is why it came and went between sections and
+ * looked like a fault in Instrument and Exercise in particular: those are
+ * where a slider happens to land last.
+ */
+.control-group > input[type='range'] {
+  margin: 0;
+}
+
 /* Sits inside its label, so it must not stretch like the other controls. */
 .number-input {
   width: 4.5em;
@@ -1244,8 +1259,8 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * the gutter around it is always there.
  */
 .sheet__panel--wide {
-  --sheet-height: min(100%, 1100px);
-  width: min(1600px, 100%);
+  --sheet-height: min(88%, 900px);
+  width: min(1150px, 100%);
   height: var(--sheet-height);
   max-height: var(--sheet-height);
 }
@@ -2071,7 +2086,7 @@ body[data-playing='true'] .score__modes {
    * whole width of the sheet, and every pane would size its controls
    * differently from the last.
    */
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
 .settings-sections {
@@ -2186,14 +2201,22 @@ body[data-playing='true'] .score__modes {
   display: none;
 }
 
-.sheet__panel[data-showing='instrument'] [data-pane='instrument'],
-.sheet__panel[data-showing='exercise'] [data-pane='exercise'],
-.sheet__panel[data-showing='page'] [data-pane='page'],
-.sheet__panel[data-showing='playing'] [data-pane='playing'],
-.sheet__panel[data-showing='modes'] [data-pane='modes'],
-.sheet__panel[data-showing='sound'] [data-pane='sound'],
-.sheet__panel[data-showing='practice'] [data-pane='practice'],
-.sheet__panel[data-showing='library'] [data-pane='library'] {
+/*
+ * Matched as a list, because one box belongs to four panes.
+ *
+ * The box of checkboxes is shared: its labels are page's, playing's, modes'
+ * and sound's, each hidden or shown on its own. Naming no pane made it a cell
+ * in *every* pane - an empty one, holding a column of the grid open, so
+ * Practice began a third of the way in rather than at the left. His report.
+ */
+.sheet__panel[data-showing='instrument'] [data-pane~='instrument'],
+.sheet__panel[data-showing='exercise'] [data-pane~='exercise'],
+.sheet__panel[data-showing='page'] [data-pane~='page'],
+.sheet__panel[data-showing='playing'] [data-pane~='playing'],
+.sheet__panel[data-showing='modes'] [data-pane~='modes'],
+.sheet__panel[data-showing='sound'] [data-pane~='sound'],
+.sheet__panel[data-showing='practice'] [data-pane~='practice'],
+.sheet__panel[data-showing='library'] [data-pane~='library'] {
   display: revert;
 }
 

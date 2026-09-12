@@ -1760,8 +1760,20 @@ describe('AppView', () => {
         expect(tab.textContent?.trim()).not.toBe('');
       }
       for (const pane of panes) {
-        expect(sheet.querySelectorAll(`[data-pane="${pane}"]`).length).toBeGreaterThan(0);
+        // `~=`, because one box belongs to four panes at once.
+        expect(sheet.querySelectorAll(`[data-pane~="${pane}"]`).length).toBeGreaterThan(0);
       }
+
+      // And every box in the grid names a pane, or it is a cell in all of
+      // them. The shared box of checkboxes named none, so Practice - whose own
+      // group comes after it - began a third of the way in from the left, and
+      // three other sections carried an empty column nobody could see.
+      const grid = sheet.querySelector('.settings-body > .controls');
+      const unnamed = [...(grid?.children ?? [])]
+        .filter((child) => !child.hasAttribute('data-pane'))
+        .map((child) => child.className);
+
+      expect(unnamed).toEqual([]);
 
       const orphans = [...sheet.querySelectorAll('input, select')]
         .filter((control) => control.closest('[data-pane]') === null)

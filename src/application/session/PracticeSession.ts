@@ -221,7 +221,12 @@ export class PracticeSession {
     this.theOpeningChord = [...opening];
     this.emitStatus(previous);
 
-    this.configureThePulse();
+    // Silent from the first note onwards where the reader gives that beat:
+    // the count-in still sounds, and nothing past it does until they play.
+    this.configureThePulse(
+      undefined,
+      this.mode.waitsForTheFirstBeat ? this.resumeAtTicks : undefined,
+    );
 
     this.subscriptions.push(this.midi.subscribe((event) => this.handleMidi(event)));
     this.subscriptions.push(this.metronome.onTick((tick) => this.handleTick(tick)));

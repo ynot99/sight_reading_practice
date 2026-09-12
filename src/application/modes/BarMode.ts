@@ -40,6 +40,10 @@ export const BAR_MODE_ID = 'mode.bar';
 export class BarMode extends FlowMode {
   override readonly id = BAR_MODE_ID;
   override readonly label = 'Wait at the bar line';
+  // The gate stands at the first note of the piece as much as at every bar
+  // line after it, and the pulse must be silent there too: his, again -
+  // "перший тік метроному грається навіть якщо я нічого не натискав".
+  override readonly waitsForTheFirstBeat = true;
 
   /** Whether this bar's gate is still to come. */
   private awaitingTheBar = true;

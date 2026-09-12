@@ -21,6 +21,15 @@ export interface IPracticeMode {
   /** When true, the session starts a pulse even if the click is muted. */
   readonly requiresMetronome: boolean;
   /**
+   * Whether the music's own first beat is the reader's to give.
+   *
+   * The pulse is silent until they give it. Asked at the start rather than
+   * discovered from the first hold, because a look-ahead scheduler commits a
+   * click before the run is told the tick exists: by the time a mode could
+   * say "wait here", the beat it wanted silenced has been heard.
+   */
+  readonly waitsForTheFirstBeat: boolean;
+  /**
    * Grading this mode is usually judged by.
    *
    * A default, not a binding: the reader may grade any mode by any registered
@@ -50,6 +59,9 @@ export abstract class BasePracticeMode implements IPracticeMode {
 
   /** Concrete so that adding the field cannot break an existing mode. */
   readonly defaultScoringId: string = 'scoring.accuracy';
+
+  /** Concrete for the same reason: most modes count themselves in. */
+  readonly waitsForTheFirstBeat: boolean = false;
 
   onSessionStart(_context: PracticeContext): void {
     // No-op by default.

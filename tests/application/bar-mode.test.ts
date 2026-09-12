@@ -128,6 +128,31 @@ describe('Bar mode', () => {
     expect(harness.metronome.isRunning).toBe(true);
   });
 
+  it('sounds nothing at the first note until the reader gives that beat', () => {
+    // His: "перший тік метроному грається навіть якщо я нічого не натискав".
+    // The tick the count-in lands on is the music's own first beat, and it has
+    // been heard before the run is told it exists - a look-ahead scheduler
+    // commits the click a tenth of a second early - so no gate closed in
+    // reaction to it can unsound it. The click is given the count-in and
+    // nothing past it, and the reader's press hands it the first bar.
+    const harness = barHarness();
+    harness.session.start();
+
+    const ticks = harness.metronome.advanceSubdivisions(TICKS_TO_START);
+    const config = harness.metronome.currentConfig;
+    const landing = ticks.at(-1);
+
+    expect(landing?.isDownbeat).toBe(true);
+    expect(isAudibleClick(landing!, config)).toBe(false);
+    // The count itself is still beaten: it is the only thing giving the tempo.
+    expect(ticks.slice(0, -1).some((tick) => isAudibleClick(tick, config))).toBe(true);
+
+    press(harness, MIDI.C3, MIDI.C4);
+    const opening = harness.metronome.advanceSubdivisions(1).at(0);
+
+    expect(isAudibleClick(opening!, harness.metronome.currentConfig)).toBe(true);
+  });
+
   it('lets the clock carry the cursor inside the bar', () => {
     // The whole difference from Wait mode, and what makes this a test of
     // rhythm: a note not played while its slice of time is open is missed and

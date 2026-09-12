@@ -257,6 +257,21 @@ describe('Bar mode', () => {
     expect(report?.totals.barsWaitedFor).toBe(1);
   });
 
+  it('says which bars it waited at, not only how many', () => {
+    // The count says how ready the reader is; this says where, which is the
+    // question a strip of cells can answer by being looked at.
+    const harness = barHarness();
+    startAndCountIn(harness);
+    press(harness, MIDI.C3, MIDI.C4);
+    harness.metronome.advanceSubdivisions(TICKS_TO_NEXT_BAR);
+    press(harness, MIDI.G2, MIDI.D3, MIDI.G4);
+    harness.session.abort();
+
+    const report = harness.of('finished').at(-1)?.report;
+    expect(report?.waitedAtBars).toEqual([1]);
+    expect(report?.totals.barsWaitedFor).toBe(1);
+  });
+
   it('counts nothing where the reader keeps up', () => {
     const harness = barHarness();
     startAndCountIn(harness);

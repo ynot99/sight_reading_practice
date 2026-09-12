@@ -420,6 +420,57 @@ textarea {
   color: var(--text);
 }
 
+/*
+ * The run as a strip: one cell per bar, in reading order.
+ *
+ * His, and the reason is his own words - a row of numbers is something to
+ * decode, and after a bad run nobody decodes anything. The cells are the
+ * bars, so the shape of the strip is the shape of the piece: four clean and
+ * then a wall of red says where to practise, and says it without being read.
+ *
+ * The cells share the width evenly and are allowed to become very narrow: a
+ * forty-bar piece is still one glance, and a cell too small to aim at is no
+ * loss because there is nothing to press.
+ */
+.run-strip {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.run-strip__bar {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--ok, #15803d);
+}
+
+.run-strip__bar[data-state='wrong'] {
+  background: var(--bad, #b91c1c);
+}
+
+/*
+ * Bars the run never reached, which are not bars that went well.
+ *
+ * Drawn as an outline rather than a colour: nothing happened there, and the
+ * strip should say so in the one way that cannot be mistaken for a verdict.
+ */
+.run-strip__bar[data-state='unread'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/*
+ * Where the music stopped for the reader, drawn *on* the bar rather than as
+ * its colour. A bar that waited is very often a bar with wrong notes in it,
+ * and one colour ranking the two would lose whichever came second - so this
+ * is a second channel: what you read, and whether you arrived in time.
+ */
+.run-strip__bar[data-waited='true'] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 .controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));

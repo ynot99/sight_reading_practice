@@ -97,6 +97,14 @@ export interface PerformanceReport {
   readonly steps: readonly StepResult[];
   readonly totals: PerformanceTotals;
   readonly timing: PerformanceTiming;
+  /**
+   * Bars whose opening the run stopped and waited at, in reading order.
+   *
+   * Empty in every mode but the one with a gate at the bar line. The count
+   * alone says how ready the reader is; this says *where* - which is the
+   * question that gets answered by looking rather than by reading.
+   */
+  readonly waitedAtBars: readonly number[];
 }
 
 export interface PerformanceReportInput {
@@ -109,8 +117,8 @@ export interface PerformanceReportInput {
   readonly endedAtMs: number;
   readonly completed: boolean;
   readonly steps: readonly StepResult[];
-  /** @see PerformanceTotals.barsWaitedFor */
-  readonly barsWaitedFor?: number;
+  /** @see PerformanceReport.waitedAtBars */
+  readonly waitedAtBars?: readonly number[];
 }
 
 function mean(values: readonly number[]): number {
@@ -134,7 +142,7 @@ export function buildPerformanceReport(input: PerformanceReportInput): Performan
       0,
     ),
     wrongNotes: input.steps.reduce((sum, step) => sum + step.wrong.length, 0),
-    barsWaitedFor: input.barsWaitedFor ?? 0,
+    barsWaitedFor: input.waitedAtBars?.length ?? 0,
   };
 
   const deviations = input.steps
@@ -154,6 +162,7 @@ export function buildPerformanceReport(input: PerformanceReportInput): Performan
     startedAtMs: input.startedAtMs,
     endedAtMs: input.endedAtMs,
     completed: input.completed,
+    waitedAtBars: [...(input.waitedAtBars ?? [])],
     steps: input.steps,
     totals,
     timing: {

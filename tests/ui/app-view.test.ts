@@ -1320,6 +1320,28 @@ describe('AppView', () => {
       expect(element('sheet-modes').hidden).toBe(true);
     });
 
+    it('draws the run as a strip of bars before it explains itself in numbers', async () => {
+      // His: "цифрами іноді мій мозок просто йде у loading". A row of numbers
+      // answers "how well"; the strip answers "where", and answers it without
+      // being read. It stands first in the card for the same reason.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
+
+      const strip = element('result').querySelector('.run-strip');
+      const cells = [...(strip?.querySelectorAll('.run-strip__bar') ?? [])];
+
+      expect(strip).not.toBeNull();
+      expect(element('result').firstElementChild).toBe(strip);
+      // One cell per bar of the run, and each says what it was in a word.
+      expect(cells.length).toBeGreaterThan(1);
+      for (const cell of cells) {
+        expect(cell.getAttribute('title')).toMatch(/^Bar \d+/);
+        expect(['clean', 'wrong', 'unread']).toContain(cell.getAttribute('data-state'));
+      }
+    });
+
     it('says how many bar lines the music waited at, where there are any', async () => {
       // His, and it is the measure of when to leave the mode for Flow: not how
       // many notes were right but how many times the music had to stop. Said

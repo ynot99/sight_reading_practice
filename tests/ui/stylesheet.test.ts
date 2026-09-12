@@ -80,6 +80,28 @@ describe('the stylesheet', () => {
     expect(joined?.body).toMatch(/position\s*:\s*static/);
   });
 
+  it('says two things at once on a strip of bars', () => {
+    // What was read there is the cell's colour; whether the music had to stop
+    // for the reader is a mark on it. A bar that waited is very often a bar
+    // with wrong notes in it, so one colour ranking the two would lose
+    // whichever came second. jsdom applies no stylesheet, so only the rules
+    // can say that these are two channels rather than one.
+    const bar = rules().find((rule) => rule.selector === '.run-strip__bar');
+    const wrong = rules().find((rule) => rule.selector === ".run-strip__bar[data-state='wrong']");
+    const waited = rules().find(
+      (rule) => rule.selector === ".run-strip__bar[data-waited='true']",
+    );
+
+    expect(bar?.body).toMatch(/background/);
+    expect(wrong?.body).toMatch(/background/);
+    // Not a background of its own: that is the second channel, drawn over the
+    // first rather than instead of it.
+    expect(waited?.body).not.toMatch(/background/);
+    expect(waited?.body).toMatch(/box-shadow/);
+    // And the cells share the width, so a forty-bar piece is still one glance.
+    expect(bar?.body).toMatch(/flex\s*:\s*1 1 0/);
+  });
+
   it('keeps a slider inside the column it is given', () => {
     // A range input carries `margin: 2px` from the browser's own sheet, and a
     // margin sits outside a width of 100%: a slider in the last column stood

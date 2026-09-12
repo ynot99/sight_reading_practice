@@ -106,8 +106,8 @@ export class PracticeSession {
    * arriving at it is what releases the hold.
    */
   private heldAtBarTicks: number | null = null;
-  /** How many bar lines this run has stopped at. @see PerformanceTotals */
-  private barsWaitedFor = 0;
+  /** Bar lines this run has stopped at. @see PerformanceReport.waitedAtBars */
+  private waitedAtBars: number[] = [];
   /**
    * Whether the run's opening gate has been opened.
    *
@@ -531,7 +531,7 @@ export class PracticeSession {
     this.runStartedAt = 0;
     this.runBeganAt = 0;
     this.heldAtBarTicks = null;
-    this.barsWaitedFor = 0;
+    this.waitedAtBars = [];
     this.theFirstBarHasBegun = false;
     this.positionOffsetTicks = 0;
     this.publishedPositionTicks = null;
@@ -652,8 +652,9 @@ export class PracticeSession {
       return;
     }
     this.heldAtBarTicks = untilTicks;
-    if (this.theFirstBarHasBegun) {
-      this.barsWaitedFor += 1;
+    const waitingAt = this.currentStep?.measureIndex;
+    if (this.theFirstBarHasBegun && waitingAt !== undefined) {
+      this.waitedAtBars.push(waitingAt);
     }
     this.metronome.stop();
   }
@@ -821,7 +822,7 @@ export class PracticeSession {
       completed,
       playableSteps: this.timeline.steps.filter((step) => this.expectedAt(step).length > 0)
         .length,
-      barsWaitedFor: this.barsWaitedFor,
+      waitedAtBars: [...this.waitedAtBars],
       steps: this.results,
     });
     const score = this.scoring.score(report);

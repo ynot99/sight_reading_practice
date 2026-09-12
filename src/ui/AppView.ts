@@ -428,6 +428,47 @@ const FRAME_WHAT: Readonly<Record<string, string>> = {
 };
 
 /**
+ * One cell per bar of the run, in reading order.
+ *
+ * His: "цифрами іноді мій мозок просто йде у loading, та не хочеться розуміти
+ * що я зараз читаю". A row of numbers answers "how well"; this answers
+ * "where", which is the question a reader actually has - and it answers it
+ * without being read at all. Four clean bars and then a wall of red is a
+ * sentence about the piece that no percentage can say.
+ *
+ * Two things at once, and deliberately not one: the colour is what was read
+ * there, and the mark is where the music had to stop for you. A bar that
+ * waited is very often also a bar with wrong notes in it, so a single colour
+ * ranking one above the other would simply lose whichever came second.
+ */
+function barCells(
+  report: PerformanceReport,
+  bars: number,
+): readonly { readonly label: string; readonly state: string; readonly waited: boolean }[] {
+  const waited = new Set(report.waitedAtBars);
+  return Array.from({ length: bars }, (_unused, measureIndex) => {
+    const steps = report.steps.filter((step) => step.measureIndex === measureIndex);
+    const wrong = steps.reduce((sum, step) => sum + step.wrong.length, 0);
+    const missing = steps.reduce((sum, step) => sum + step.missing.length, 0);
+    const said = [
+      wrong > 0 ? `${wrong} wrong` : '',
+      missing > 0 ? `${missing} missed` : '',
+      waited.has(measureIndex) ? 'waited here' : '',
+    ].filter((part) => part !== '');
+    // The whole piece, not the part that was reached. A run abandoned in bar
+    // three otherwise looks like a flawless piece three bars long, which is
+    // the same lie `playableSteps` exists to stop the percentages telling.
+    const state = steps.length === 0 ? 'unread' : wrong + missing === 0 ? 'clean' : 'wrong';
+    const how = state === 'unread' ? 'not reached' : said.join(', ') || 'clean';
+    return {
+      label: `Bar ${measureIndex + 1} · ${how}`,
+      state,
+      waited: waited.has(measureIndex),
+    };
+  });
+}
+
+/**
  * How often the bar line had to wait, where there is a bar line that waits.
  *
  * Said as a fraction of the bars read, because the number alone means nothing:
@@ -5982,6 +6023,7 @@ export class AppView {
     ];
     // Said once, about the run that caused it.
     this.lastLadderMove = null;
+    this.drawTheBars(report);
     for (const [label, value] of rows) {
       const row = this.doc.createElement('div');
       row.className = 'result__row';
@@ -5992,6 +6034,38 @@ export class AppView {
       row.append(name, strong);
       this.el.result.append(row);
     }
+  }
+
+  /**
+   * The run as a strip, one cell per bar, above the numbers that explain it.
+   *
+   * Drawn rather than written, and drawn first: a reader who has just played
+   * badly is not going to read a table, and this is the one part of the
+   * report that says where to look next.
+   */
+  private drawTheBars(report: PerformanceReport): void {
+    const exercise = this.runtime.controller.currentExercise;
+    const bars =
+      exercise === null
+        ? new Set(report.steps.map((step) => step.measureIndex)).size
+        : exercise.staves[0]?.measures.length ?? 0;
+    const cells = barCells(report, bars);
+    if (cells.length < 2) {
+      // One bar is not a shape, and nothing can be seen in it.
+      return;
+    }
+    const strip = this.doc.createElement('div');
+    strip.className = 'run-strip';
+    strip.id = 'run-strip';
+    for (const cell of cells) {
+      const box = this.doc.createElement('span');
+      box.className = 'run-strip__bar';
+      box.dataset['state'] = cell.state;
+      box.dataset['waited'] = String(cell.waited);
+      box.title = cell.label;
+      strip.append(box);
+    }
+    this.el.result.prepend(strip);
   }
 
   private listen<K extends keyof HTMLElementEventMap>(

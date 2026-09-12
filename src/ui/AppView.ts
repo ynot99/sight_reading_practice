@@ -94,6 +94,10 @@ const TIME_TICK_CAP_MS = TIME_TICK_MS * 2;
 /** How long a rest lasts, once the reader asks for one to be counted. */
 const REST_LENGTH_MS = 3 * 60_000;
 
+/** How long each of the rest's two notes sounds, and the gap between them. */
+const CHIME_NOTE_MS = 900;
+const CHIME_GAP_MS = 260;
+
 /**
  * What to do with a rest, in his own words.
  *
@@ -3577,10 +3581,27 @@ export class AppView {
     }, REST_LENGTH_MS);
   }
 
-  /** Two notes, so the reader can look away and still be told. */
+  /**
+   * Two notes, so the reader can look away and still be told.
+   *
+   * Both ends of both notes are scheduled here, the way a playback schedules
+   * every note it sounds. `play` is a key going down and `stop` is it coming
+   * up: a note nobody releases is held, and the synthesised tone holds it for
+   * ever. With the recordings decoded the buffer runs out on its own, which is
+   * why the missing release went unnoticed until a reader who had not
+   * downloaded them heard the fallback tone ring on past the rest, with
+   * nothing left that would ever end it. Scheduling both ends also leaves no
+   * timer to outlive the view.
+   */
   private chime(): void {
-    this.runtime.pitchPlayer.play(76, 0.5);
-    setTimeout(() => this.runtime.pitchPlayer.play(83, 0.45), 240);
+    const at = this.runtime.clock.now();
+    this.soundTheChime(76, 0.5, at);
+    this.soundTheChime(83, 0.45, at + CHIME_GAP_MS);
+  }
+
+  private soundTheChime(midi: number, velocity: number, atMs: number): void {
+    this.runtime.pitchPlayer.play(midi, velocity, atMs);
+    this.runtime.pitchPlayer.stop(midi, atMs + CHIME_NOTE_MS);
   }
 
   private hideTheRest(): void {

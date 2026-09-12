@@ -7,7 +7,6 @@ import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js'
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
-import { SilentPitchPlayer } from '../../src/application/ports/IPitchPlayer.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
@@ -230,7 +229,10 @@ function createRig(
       document as unknown as KeyboardTarget,
       clock,
     ),
-    pitchPlayer: new SilentPitchPlayer(),
+    // The same object the session sounds through, as in `createApp`: one
+    // instrument stands behind the reader's keys, the playback and the rest's
+    // chime, and splitting it here hid a note that was left ringing.
+    pitchPlayer: instrument,
     sustain,
     samples,
     renderer,
@@ -1257,6 +1259,44 @@ describe('AppView', () => {
         vi.advanceTimersByTime(3 * 60_000 + 500);
 
         expect(element('score-rest').hidden).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('lets go of the two notes that say a rest is over', async () => {
+      // His report: with the recordings not downloaded the fallback tone
+      // sounds, and "як почне грати - так і не завершиться". A synthesised
+      // note is held until it is released - which is right for a key - and
+      // the chime pressed two keys and released neither. A recording runs
+      // out on its own, which is why only a reader without them heard it.
+      vi.useFakeTimers();
+      try {
+        const { view, runtime, midi, instrument } = createRig();
+        await view.initialize();
+        runtime.controller.updateSettings({ restEveryMinutes: 30 });
+        for (let at = 0; at <= 31 * 60_000; at += 60_000) {
+          midi.noteOn(60, at);
+        }
+        element<HTMLButtonElement>('rest-take').click();
+
+        vi.advanceTimersByTime(3 * 60_000 + 500);
+
+        for (const note of [76, 83]) {
+          const struck = instrument.played.find((sounded) => sounded.midi === note);
+          const released = instrument.stopped.find((sounded) => sounded.midi === note);
+          expect(struck, `note ${note} sounded`).toBeDefined();
+          expect(released, `note ${note} released`).toBeDefined();
+          // Both ends handed over at once, so there is no second timer to be
+          // lost - or to outlive the view - with the note still sounding.
+          expect(released?.atMs ?? 0).toBeGreaterThan(struck?.atMs ?? 0);
+        }
+        // Two notes, one after the other: that is what makes it a chime and
+        // not a beep.
+        const [first, second] = [76, 83].map(
+          (note) => instrument.played.find((sounded) => sounded.midi === note)?.atMs ?? 0,
+        );
+        expect(second).toBeGreaterThan(first ?? 0);
       } finally {
         vi.useRealTimers();
       }

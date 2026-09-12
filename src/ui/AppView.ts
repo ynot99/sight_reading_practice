@@ -1,6 +1,7 @@
 import type { AppRuntime } from '../composition/createApp.js';
 import { FLOW_MODE_ID } from '../application/modes/FlowMode.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
+import { BAR_MODE_ID } from '../application/modes/BarMode.js';
 import { WAIT_MODE_ID } from '../application/modes/WaitMode.js';
 import type { PracticeSession } from '../application/session/PracticeSession.js';
 import type { SessionStatus } from '../application/session/SessionState.js';
@@ -360,12 +361,19 @@ const PLAIN_FRAME = FLOW_MODE_ID;
 /**
  * The frames in the order the one button walks through them.
  *
- * His: the one the app opens in first, then the one that waits, then the one
- * nobody plays. Starting from the resting frame is what makes the ring read
- * as a list - the first press is always "leave the default", and the reader
- * is never counting from somewhere arbitrary.
+ * His, and it is a ladder: hardest first and easiest last. Flow gives no help
+ * at all, the bar line gives one place a bar to be found again, waiting gives
+ * one at every note, and listening asks for nothing. Starting from the resting
+ * frame is what makes the ring read as a list - the first press is always
+ * "leave the default", and the reader is never counting from somewhere
+ * arbitrary.
  */
-const FRAME_ORDER: readonly string[] = [FLOW_MODE_ID, WAIT_MODE_ID, LISTEN_MODE_ID];
+const FRAME_ORDER: readonly string[] = [
+  FLOW_MODE_ID,
+  BAR_MODE_ID,
+  WAIT_MODE_ID,
+  LISTEN_MODE_ID,
+];
 
 /**
  * The short name each frame goes by on the page.
@@ -374,6 +382,7 @@ const FRAME_ORDER: readonly string[] = [FLOW_MODE_ID, WAIT_MODE_ID, LISTEN_MODE_
  * in the middle of `mode.listen` would be two class names rather than one.
  */
 const FRAME_SLUG: Readonly<Record<string, string>> = {
+  [BAR_MODE_ID]: 'bar',
   [WAIT_MODE_ID]: 'wait',
   [FLOW_MODE_ID]: 'flow',
   [LISTEN_MODE_ID]: 'listen',
@@ -381,6 +390,7 @@ const FRAME_SLUG: Readonly<Record<string, string>> = {
 
 /** What the button is called while it stands for each of them. */
 const FRAME_NAME: Readonly<Record<string, string>> = {
+  [BAR_MODE_ID]: 'Wait each bar',
   [WAIT_MODE_ID]: 'Wait for me',
   [FLOW_MODE_ID]: 'Flow in time',
   [LISTEN_MODE_ID]: 'Listen to it',
@@ -388,6 +398,8 @@ const FRAME_NAME: Readonly<Record<string, string>> = {
 
 /** And what it is drawn as, one path each, the way the transport icons are. */
 const FRAME_ICON: Readonly<Record<string, string>> = {
+  // Movement, and the line it stops at.
+  [BAR_MODE_ID]: 'M3 11h9V7l6 5-6 5v-4H3v-2z M20 4h2v16h-2z',
   [WAIT_MODE_ID]:
     'M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.3l3.6 2.1-1 1.7L11 13.5V7h2z',
   [FLOW_MODE_ID]: 'M12 3h2l4 16H6L10 3h2zm-1 3-2.6 11h7.2L13 6h-2z M6 15h12v2H6z',
@@ -409,6 +421,7 @@ function frameAfter(modeId: string): string {
  * answer to what each frame does.
  */
 const FRAME_WHAT: Readonly<Record<string, string>> = {
+  [BAR_MODE_ID]: 'The bar line waits for you',
   [WAIT_MODE_ID]: 'The cursor waits for you',
   [FLOW_MODE_ID]: 'The beat carries the music',
   [LISTEN_MODE_ID]: 'The machine plays it to you',

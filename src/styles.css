@@ -1921,6 +1921,10 @@ body[data-playing='true'] .score__modes {
  * this one is on whenever the run is *not* the plain one the app opens with.
  * Flowing in time is where a reader starts, so that is the state it rests in.
  */
+.frame__choice[data-frame='bar'] {
+  --mode-ground: #155e63;
+}
+
 .frame__choice[data-frame='wait'] {
   --mode-ground: #78350f;
 }
@@ -2070,11 +2074,16 @@ body[data-playing='true'] .score__modes {
   --mode-ground: #1e3a8a;
 }
 
+.score__mode--bar {
+  --mode-ground: #155e63;
+}
+
 .score__mode--listen {
   --mode-ground: #3730a3;
 }
 
 .score__mode--flow svg,
+.score__mode--bar svg,
 .score__mode--listen svg {
   fill: currentColor;
   stroke: none;

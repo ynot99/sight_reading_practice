@@ -1,5 +1,6 @@
 import { PracticeController } from '../application/PracticeController.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
+import { BarMode } from '../application/modes/BarMode.js';
 import { FlowMode } from '../application/modes/FlowMode.js';
 import { knownFrameIds } from '../application/modes/ListenFrame.js';
 import { PracticeModeRegistry } from '../application/modes/PracticeModeRegistry.js';
@@ -246,7 +247,11 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     new TimingWeightedScoringStrategy(),
     new ContinuityScoringStrategy(),
   ]);
-  const modes = new PracticeModeRegistry().registerAll([new FlowMode(), new WaitMode()]);
+  const modes = new PracticeModeRegistry().registerAll([
+    new FlowMode(),
+    new BarMode(),
+    new WaitMode(),
+  ]);
   const ladder = new PracticeLadder(BUILT_IN_LADDER);
 
   const settingsStore =

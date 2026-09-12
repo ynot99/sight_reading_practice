@@ -180,6 +180,20 @@ export interface PracticeContext {
    */
   movesOnTo(midi: number): boolean;
 
+  /**
+   * Stops the pulse until the reader reaches `untilTicks`.
+   *
+   * The bar's written time is over and the reader is not at the next bar yet,
+   * so the click goes quiet rather than counting on through music nobody has
+   * played. When the cursor arrives at that position the pulse starts again
+   * and the bar it begins is in tempo from that moment: the same two numbers
+   * that resume a run from a pause, which is the same question asked at a
+   * smaller scale.
+   *
+   * Harmless to call again while it is already holding.
+   */
+  holdForTheBar(untilTicks: number): void;
+
   /** Reports a judged press; the session records and publishes it. */
   judgeNote(midi: number, verdict: NoteVerdict, deviationMs: number | null): void;
   /** Finalises the current step and advances. Status is derived when omitted. */

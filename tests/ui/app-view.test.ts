@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PracticeController } from '../../src/application/PracticeController.js';
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
+import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
@@ -131,7 +132,11 @@ function createRig(
   const metronome = new ManualMetronome(clock);
   const renderer = new FakeScoreRenderer();
   const presets = new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS);
-  const modes = new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]);
+  const modes = new PracticeModeRegistry().registerAll([
+    new WaitMode(),
+    new FlowMode(),
+    new BarMode(),
+  ]);
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const instrument = new RecordingPitchPlayer();
   const ladder = new PracticeLadder(BUILT_IN_LADDER);
@@ -1315,7 +1320,7 @@ describe('AppView', () => {
       expect(element('sheet-modes').hidden).toBe(true);
     });
 
-    it('walks one button through the three kinds of run', async () => {
+    it('walks one button through the four kinds of run', async () => {
       // His shape: one button pressed until it says the one you want, above
       // the squares rather than among them - the squares are all "make it
       // harder" and this is the frame they sit inside. What it says and what
@@ -1356,6 +1361,17 @@ describe('AppView', () => {
       expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
       expect(cycle.getAttribute('aria-pressed')).toBe('false');
       expect(cycle.dataset['turning']).toBeUndefined();
+
+      // On to the one between the two, which is his ladder: the ring runs
+      // from the frame that gives no help at all to the one that asks for
+      // nothing, so the bar line - one place a bar to be found again - sits
+      // between flowing and waiting.
+      cycle.click();
+
+      expect(runtime.controller.settings.modeId).toBe(BAR_MODE_ID);
+      expect(cycle.dataset['frame']).toBe('bar');
+      expect(element('frame-what').textContent).toContain('bar line');
+      expect(cycle.getAttribute('aria-pressed')).toBe('true');
 
       // And round again, rather than stopping at the end of the list.
       cycle.click();

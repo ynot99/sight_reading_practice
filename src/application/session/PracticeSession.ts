@@ -90,6 +90,22 @@ export class PracticeSession {
   private writtenAnchor: { readonly wallMs: number; readonly ticks: number } | null = null;
 
   private runStartedAt = 0;
+  /**
+   * When the music actually began, which `runStartedAt` stops saying.
+   *
+   * `runStartedAt` is the wall time musical position zero maps to, and a run
+   * that picks up partway through - from a pause, or at a bar line - moves it
+   * backwards to keep the written clock honest. The report wants the other
+   * thing: how long the reader was at it.
+   */
+  private runBeganAt = 0;
+  /**
+   * The bar line the pulse is waiting at, or `null` while it is running.
+   *
+   * Only Bar mode ever sets this. It is the tick the *next* bar starts on, so
+   * arriving at it is what releases the hold.
+   */
+  private heldAtBarTicks: number | null = null;
   private positionOffsetTicks = 0;
   /** Musical position last published, so an unchanged one is not republished. */
   private publishedPositionTicks: number | null = null;
@@ -185,22 +201,7 @@ export class PracticeSession {
     this.theOpeningChord = [...opening];
     this.emitStatus(previous);
 
-    this.metronome.configure({
-      bpm: this.tempoBpm,
-      timeSignature: this.timeline.exercise.timeSignature,
-      bars: this.barsToBeat(),
-      tempos: this.temposToBeat(),
-      endsAtTicks: this.endOfTheMusic(),
-      subdivisionsPerPulse: subdivisionsPerPulseFor(
-        this.timeline,
-        this.timeline.exercise.timeSignature,
-        this.options.click,
-      ),
-      click: this.options.click,
-      dropout: resolveDropout(this.clickForThePulse(), Math.max(0, this.options.countInBars)),
-      silences: this.options.clickSilences,
-      muted: clickIsSilent(this.clickForThePulse()),
-    });
+    this.configureThePulse();
 
     this.subscriptions.push(this.midi.subscribe((event) => this.handleMidi(event)));
     this.subscriptions.push(this.metronome.onTick((tick) => this.handleTick(tick)));
@@ -231,6 +232,20 @@ export class PracticeSession {
     if (!this.metronome.isRunning) {
       return;
     }
+    this.configureThePulse();
+  }
+
+  /**
+   * How the pulse is set up, wherever it is set up.
+   *
+   * Read off `resumeAtTicks`, which is where the click is counting *from*:
+   * the bars it accents, the tempos it takes and where it stops all follow
+   * the place the run is picking up at. Written once because there are three
+   * such places now - the start, a change of click mid-run, and the bar line
+   * this mode holds at - and a pulse configured two ways out of three is a
+   * click accenting a beat nobody is on.
+   */
+  private configureThePulse(): void {
     this.metronome.configure({
       bpm: this.tempoBpm,
       timeSignature: this.timeline.exercise.timeSignature,
@@ -240,9 +255,9 @@ export class PracticeSession {
       subdivisionsPerPulse: subdivisionsPerPulseFor(
         this.timeline,
         this.timeline.exercise.timeSignature,
-        click,
+        this.options.click,
       ),
-      click,
+      click: this.options.click,
       dropout: resolveDropout(this.clickForThePulse(), Math.max(0, this.options.countInBars)),
       silences: this.options.clickSilences,
       muted: clickIsSilent(this.clickForThePulse()),
@@ -255,6 +270,8 @@ export class PracticeSession {
       return;
     }
     this.pausedInCountIn = wasCountingIn;
+    // Whatever the run was waiting for, the reader is no longer answering it.
+    this.heldAtBarTicks = null;
     this.metronome.stop();
   }
 
@@ -476,6 +493,8 @@ export class PracticeSession {
     this.stepWrongNotes = [];
     this.writtenAnchor = null;
     this.runStartedAt = 0;
+    this.runBeganAt = 0;
+    this.heldAtBarTicks = null;
     this.positionOffsetTicks = 0;
     this.publishedPositionTicks = null;
     // Where the run begins, which is the top of the piece unless the reader
@@ -503,6 +522,12 @@ export class PracticeSession {
    */
   private beginRunning(atMs: number, tickPositionTicks: number): void {
     this.runStartedAt = atMs - this.elapsedTo(this.resumeAtTicks);
+    // The first time only: a run counted back in after a pause is the same
+    // run, and the report asks how long the reader played rather than how
+    // long since the last interruption.
+    if (this.runBeganAt === 0) {
+      this.runBeganAt = atMs;
+    }
     this.positionOffsetTicks = tickPositionTicks - this.resumeAtTicks;
     this.dispatch('countInComplete');
     this.mode.onSessionStart(this.context);
@@ -557,6 +582,7 @@ export class PracticeSession {
     }
 
     this.stepIndex = index;
+    this.releaseTheBarAt(step);
     const expected = this.expectedAt(step);
     // Ornaments printed here are handed over too: on the page, so playing one
     // is reading correctly, and the performer's to add, so nothing waits for
@@ -573,6 +599,51 @@ export class PracticeSession {
     this.emitter.emit('stepEntered', { step, expectedMidi: expected });
     this.publishPosition(step.onsetTicks);
     this.mode.onStepEntered(this.context, step);
+  }
+
+  /**
+   * Silences the pulse at a bar line the reader has not reached.
+   *
+   * The bar's written time is up and the cursor is still inside it, so the
+   * click has nothing true left to say: counting on would put beats over
+   * music nobody has played. It stops, and the reader finishes the bar in
+   * silence - late, and marked late, because the wait buys the *next* bar
+   * rather than this one.
+   */
+  private holdForTheBar(untilTicks: number): void {
+    if (this.status !== 'running' || this.heldAtBarTicks !== null) {
+      return;
+    }
+    this.heldAtBarTicks = untilTicks;
+    this.metronome.stop();
+  }
+
+  /**
+   * Starts the next bar, in tempo, from the moment the reader arrived at it.
+   *
+   * The same two numbers a resume uses, for the same reason: the pulse begins
+   * counting from nought again, so the offset says where in the piece that
+   * nought is, and the run's origin is moved back by however much of the
+   * piece is already behind. Everything downstream - the scheduled onsets,
+   * the accompaniment, the position published - goes on counting from the
+   * start of the piece as though nothing had happened.
+   */
+  private releaseTheBarAt(step: TimelineStep): void {
+    const line = this.heldAtBarTicks;
+    if (line === null || step.onsetTicks < line) {
+      return;
+    }
+    this.heldAtBarTicks = null;
+    this.resumeAtTicks = step.onsetTicks;
+    this.resumeAtIndex = step.index;
+    this.positionOffsetTicks = -step.onsetTicks;
+    this.runStartedAt = this.clock.now() - this.elapsedTo(step.onsetTicks);
+    if (this.usesPulse()) {
+      // Set up again before it starts: the bars it accents and where it stops
+      // are both counted from where the run is picking up.
+      this.configureThePulse();
+      this.metronome.start();
+    }
   }
 
   private completeStep(status?: StepStatus): void {
@@ -685,7 +756,7 @@ export class PracticeSession {
       exerciseId: this.timeline.exercise.id,
       modeId: this.mode.id,
       tempoBpm: this.tempoBpm,
-      startedAtMs: this.runStartedAt,
+      startedAtMs: this.runBeganAt,
       endedAtMs: this.clock.now(),
       completed,
       playableSteps: this.timeline.steps.filter((step) => this.expectedAt(step).length > 0)
@@ -975,6 +1046,9 @@ export class PracticeSession {
       scheduledTimeMs: (ticks: number) => session.runStartedAt + session.elapsedTo(ticks),
       judgeNote: (midi: number, verdict: NoteVerdict, deviationMs: number | null) => {
         session.judgeNote(midi, verdict, deviationMs);
+      },
+      holdForTheBar: (untilTicks: number) => {
+        session.holdForTheBar(untilTicks);
       },
       completeStep: (status?: StepStatus) => {
         session.completeStep(status);

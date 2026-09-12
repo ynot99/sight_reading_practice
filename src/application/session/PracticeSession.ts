@@ -106,6 +106,16 @@ export class PracticeSession {
    * arriving at it is what releases the hold.
    */
   private heldAtBarTicks: number | null = null;
+  /**
+   * Bumped whenever the pulse is restarted under a run already going.
+   *
+   * A tick describes where the music is only through `positionOffsetTicks`,
+   * and restarting the pulse rewrites that. So a tick delivered before the
+   * restart and still being acted on afterwards is not late news, it is
+   * *wrong* news - it would be read against a mapping made for a different
+   * pulse. This is how such a tick is recognised and dropped.
+   */
+  private pulseGeneration = 0;
   /** Bar lines this run has stopped at. @see PerformanceReport.waitedAtBars */
   private waitedAtBars: number[] = [];
   /**
@@ -533,6 +543,7 @@ export class PracticeSession {
     this.heldAtBarTicks = null;
     this.waitedAtBars = [];
     this.theFirstBarHasBegun = false;
+    this.pulseGeneration = 0;
     this.positionOffsetTicks = 0;
     this.publishedPositionTicks = null;
     // Where the run begins, which is the top of the piece unless the reader
@@ -703,6 +714,7 @@ export class PracticeSession {
       // simply has nothing to say there, and the downbeat the reader hears is
       // the one their own press starts.
       this.configureThePulse(0, this.barEndAfter(step));
+      this.pulseGeneration += 1;
       this.metronome.start();
     }
   }
@@ -884,6 +896,7 @@ export class PracticeSession {
   }
 
   private handleTick(tick: MetronomeTick): void {
+    const pulse = this.pulseGeneration;
     if (this.status === 'counting-in') {
       if (!tick.isPulse) {
         return;
@@ -896,7 +909,15 @@ export class PracticeSession {
       this.beginRunning(tick.scheduledTimeMs, tick.positionTicks);
     }
 
-    if (this.status !== 'running') {
+    // A tick from a pulse that has since been restarted, which is not a late
+    // tick but a wrong one. It happens on the very tick that ends the
+    // count-in: the mode opens its first gate there, a chord played exactly on
+    // the beat arrives with it and opens that gate again, and the pulse is
+    // begun anew - so this tick, still carrying the count-in's own position,
+    // would be read through the new mapping and reported as a whole bar of
+    // music nobody had played. His: "самий перший бар, якщо я точно влучу у
+    // перші ноти - то чомусь я одразу стрибаю на наступний бар".
+    if (this.status !== 'running' || this.pulseGeneration !== pulse) {
       return;
     }
     this.emitter.emit('beat', tick);

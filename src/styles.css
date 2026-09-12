@@ -2043,7 +2043,17 @@ body[data-playing='true'] .score__modes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
-  padding: 4px;
+  /*
+   * Room for the chosen square to grow and lean.
+   *
+   * `aria-pressed` scales it by a twentieth and tilts it two degrees, which
+   * puts some six pixels past the column it sits in - and since this grid
+   * scrolls, a square in the rightmost column put a horizontal bar under the
+   * whole sheet for those six pixels. His report. The padding is where they
+   * go: content that overflows into a scroll container's own padding is not
+   * overflow at all.
+   */
+  padding: 10px;
   flex: 1 1 auto;
   min-height: 0;
   align-content: start;

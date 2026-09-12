@@ -80,6 +80,21 @@ describe('the stylesheet', () => {
     expect(joined?.body).toMatch(/position\s*:\s*static/);
   });
 
+  it('keeps room in the modes grid for the square that is chosen', () => {
+    // The chosen square scales by a twentieth and tilts two degrees, which
+    // puts some six pixels past the column it sits in. The grid scrolls, so a
+    // square in the rightmost column put a horizontal bar under the whole
+    // sheet for those six pixels - his report. Padding is where they go:
+    // content overflowing into a scroll container's own padding is not
+    // overflow. Measured in a real browser; jsdom lays nothing out.
+    const grid = rules().find((rule) => rule.selector === '.modes');
+    const chosen = rules().find((rule) => rule.selector === ".mode-card[aria-pressed='true']");
+    const room = Number(/padding:\s*(\d+)px/.exec(grid?.body ?? '')?.[1] ?? '0');
+
+    expect(chosen?.body).toMatch(/transform\s*:\s*scale/);
+    expect(room).toBeGreaterThanOrEqual(8);
+  });
+
   it('says two things at once on a strip of bars', () => {
     // What was read there is the cell's colour; whether the music had to stop
     // for the reader is a mark on it. A bar that waited is very often a bar

@@ -100,6 +100,34 @@ describe('Bar mode', () => {
     expect(harness.metronome.isRunning).toBe(true);
   });
 
+  it('stays in the first bar when the opening chord lands on the beat', () => {
+    // His: "самий перший бар, якщо я точно влучу у перші ноти - то чомусь я
+    // одразу стрибаю на наступний бар, повністю пропускаючи поточний бар".
+    //
+    // A chord played exactly on the downbeat arrives while the run is still
+    // counting in, and is replayed the moment the music begins - which is the
+    // moment the first gate closes, so it opens it again and the pulse is
+    // started anew. The tick carrying all of that is the count-in's own, and
+    // it was then handed to the mode *after* the restart had rewritten where
+    // ticks sit in the music: it read as one whole bar, and the cursor walked
+    // the first bar in a single step.
+    const harness = barHarness();
+    harness.session.start();
+    // Inside the early window, which is what "exactly" means: the press is
+    // aimed at the downbeat and arrives before the music does.
+    harness.metronome.advanceSubdivisions(TICKS_TO_START - 1);
+    harness.clock.advance(SUBDIVISION_MS - 100);
+    press(harness, MIDI.C3, MIDI.C4);
+
+    harness.metronome.advanceSubdivisions(1);
+
+    expect(harness.of('stepEntered').at(-1)?.step.measureIndex).toBe(0);
+    expect(harness.of('stepEntered').at(-1)?.step.index).toBe(0);
+    expect(harness.of('stepCompleted')).toHaveLength(0);
+    // And the bar it is in is running, because the chord opened its gate.
+    expect(harness.metronome.isRunning).toBe(true);
+  });
+
   it('lets the clock carry the cursor inside the bar', () => {
     // The whole difference from Wait mode, and what makes this a test of
     // rhythm: a note not played while its slice of time is open is missed and

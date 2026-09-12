@@ -57,8 +57,20 @@ export class ManualMetronome implements IMetronome {
     this.clicks.push({ atMs, weight });
   }
 
-  constructor(clock?: ManualClock) {
+  /**
+   * How long after `start()` the first tick falls, in milliseconds.
+   *
+   * Nought by default, which is the convenient fiction most tests want. A real
+   * metronome cannot sound a click the instant it is asked to: the scheduler
+   * needs a moment to place it and the device needs longer to play it, so its
+   * first beat is always a little after the asking. Tests about what a run is
+   * measured *by* have to be able to say so.
+   */
+  private readonly leadMs: number;
+
+  constructor(clock?: ManualClock, leadMs = 0) {
     this.clock = clock ?? null;
+    this.leadMs = leadMs;
   }
 
   get isRunning(): boolean {
@@ -95,7 +107,7 @@ export class ManualMetronome implements IMetronome {
   start(): void {
     this.running = true;
     this.nextIndex = 0;
-    this.nextTimeMs = this.clock?.now() ?? 0;
+    this.nextTimeMs = (this.clock?.now() ?? 0) + this.leadMs;
   }
 
   stop(): void {

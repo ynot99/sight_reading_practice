@@ -116,6 +116,22 @@ export class PracticeSession {
    * pulse. This is how such a tick is recognised and dropped.
    */
   private pulseGeneration = 0;
+  /**
+   * Whether the run's clock is still to be taken from the pulse it restarted.
+   *
+   * A bar opened at a gate is begun by a key press, and a key press carries no
+   * output latency - the note is under the reader's finger the instant they
+   * play it. The click does carry it, and a little scheduling runway besides.
+   * Anchor the bar to the press and the two disagree by that much for the
+   * whole bar: every note read late, every mark drawn to the right of its
+   * notehead, and a reader playing with the click told they are behind it.
+   *
+   * So the bar takes its clock from the first beat of the new pulse, which is
+   * exactly how the count-in hands over to the music. His press still counts
+   * as the downbeat - it is what asked for this beat - but what the bar is
+   * *measured* by is the beat everybody can hear.
+   */
+  private anchorOnTheNextTick = false;
   /** Bar lines this run has stopped at. @see PerformanceReport.waitedAtBars */
   private waitedAtBars: number[] = [];
   /**
@@ -546,6 +562,7 @@ export class PracticeSession {
     this.runStartedAt = 0;
     this.runBeganAt = 0;
     this.heldAtBarTicks = null;
+    this.anchorOnTheNextTick = false;
     this.waitedAtBars = [];
     this.theFirstBarHasBegun = false;
     this.pulseGeneration = 0;
@@ -720,6 +737,7 @@ export class PracticeSession {
       // the one their own press starts.
       this.configureThePulse(0, this.barEndAfter(step));
       this.pulseGeneration += 1;
+      this.anchorOnTheNextTick = true;
       this.metronome.start();
     }
   }
@@ -924,6 +942,13 @@ export class PracticeSession {
     // перші ноти - то чомусь я одразу стрибаю на наступний бар".
     if (this.status !== 'running' || this.pulseGeneration !== pulse) {
       return;
+    }
+    if (this.anchorOnTheNextTick) {
+      // The same arithmetic `beginRunning` does, and for the same reason: this
+      // tick is the music at `resumeAtTicks`, and its stamp is the moment it
+      // is *heard*. Everything the bar is judged by follows from here.
+      this.anchorOnTheNextTick = false;
+      this.runStartedAt = tick.scheduledTimeMs - this.elapsedTo(this.resumeAtTicks);
     }
     this.emitter.emit('beat', tick);
     this.mode.onBeat(this.context, tick);

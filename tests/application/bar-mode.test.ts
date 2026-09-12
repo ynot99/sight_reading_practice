@@ -5,6 +5,12 @@ import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
 import { TimingWeightedScoringStrategy } from '../../src/domain/scoring/strategies.js';
 import { MIDI, bar, p, twoBarExercise } from '../support/fixtures.js';
+import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
+import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
+import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
+import { PracticeSession } from '../../src/application/session/PracticeSession.js';
+import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
+import type { NoteJudgedEvent } from '../../src/application/session/SessionEvents.js';
 import { createHarness, type Harness } from '../support/harness.js';
 
 /** Bar of 4/4 at 60 bpm: one quarter lasts 1000 ms, one subdivision 250 ms. */
@@ -86,7 +92,64 @@ function restFirstExercise() {
   };
 }
 
+/** How long after it is asked for the first click of a pulse is heard. */
+const CLICK_LEAD_MS = 30;
+
 describe('Bar mode', () => {
+  it('measures a bar by the beat that is heard, not by the press that asked for it', () => {
+    // Both of his at once: "метроном дуже маленький проміжок часу трохи тупить"
+    // and "я точно в метроном натиснув правильну клавішу, але кольорова нота
+    // зявилась трохи правіше".
+    //
+    // A key press carries no output latency - the note is under the finger the
+    // instant it is played - and a click carries the device's whole output
+    // path, plus the runway the scheduler needs to place it. Anchor the bar to
+    // the press and the two disagree by that much for the whole bar: a reader
+    // playing exactly with the click is read late on every note, and every
+    // mark is drawn to the right of its notehead. Which is what he saw.
+    const clock = new ManualClock();
+    const midi = new MockMidiAdapter({ clock });
+    const metronome = new ManualMetronome(clock, CLICK_LEAD_MS);
+    const exercise = twoBarExercise({ tempoBpm: 60 });
+    const session = new PracticeSession({
+      timeline: buildTimeline(exercise),
+      mode: new BarMode(),
+      midi,
+      metronome,
+      clock,
+      scoring: new TimingWeightedScoringStrategy(),
+      options: {
+        countInBars: 1,
+        clickWhen: 'never',
+        click: 'subdivision',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false, anyPitch: true },
+      },
+    });
+    const judged: NoteJudgedEvent[] = [];
+    session.events.on('noteJudged', (event) => judged.push(event));
+
+    session.start();
+    metronome.advanceSubdivisions(TICKS_TO_START);
+    // The gate is open and the reader gives the downbeat.
+    const gaveAt = clock.now();
+    midi.noteOn(MIDI.C4, gaveAt);
+
+    // The click that answers is a moment behind the hand that asked for it.
+    const first = metronome.advanceSubdivisions(1).at(0);
+    expect(first?.scheduledTimeMs).toBe(gaveAt + CLICK_LEAD_MS);
+
+    // On to the second beat of the bar, and played exactly with its click.
+    metronome.advanceSubdivisions(SUBDIVISIONS_PER_BEAT);
+    midi.noteOn(MIDI.C4, clock.now());
+
+    const second = judged.at(-1);
+    expect(second?.verdict).toBe('correct');
+    // Dead on. Counted from the press instead, this reads as a reader who is
+    // behind the click by exactly the lead the click was given - and the mark
+    // is drawn that far to the right of its notehead.
+    expect(second?.deviationMs).toBe(0);
+  });
+
   it('waits at the first note of the piece before the pulse runs at all', () => {
     // His: "коли я запускаю гру, то перші ноти мають чекати на мій інпут". The
     // count-in gives the tempo and then stands aside; nothing moves until the

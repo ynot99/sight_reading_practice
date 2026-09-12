@@ -19,6 +19,28 @@ export interface WebAudioMetronomeOptions {
   readonly schedulerIntervalMs?: number;
   /** How far ahead audio is scheduled, in seconds. */
   readonly scheduleAheadSec?: number;
+  /**
+   * Runway the first click of a run is given, in seconds.
+   *
+   * Only the first: every click after it is placed by arithmetic from this
+   * one, and the scheduler is a look-ahead window wide enough to have them
+   * all ready long before they sound. So this is not about keeping the pulse
+   * steady - it is the gap between asking for a pulse and hearing it.
+   *
+   * It used to be a fifteenth of a second, which nobody could hear at the
+   * start of a run: the count-in beginning a breath late is no event. The bar
+   * frame made it audible, because there a run starts again at every bar line
+   * and the thing it starts against is the reader's own key going down - and
+   * a key on their own piano sounds at once. His: "кольорова нота намалювалась
+   * одразу як тільки я натиснув клавішу - але метроном дуже маленький
+   * проміжок часу трохи тупить".
+   *
+   * Two hundredths is a comfortable several render quanta, so the click is
+   * still placed rather than raced for. What remains after it is the device's
+   * own output latency, which cannot be given back: a sound asked for by a
+   * key press cannot leave the speaker at the moment of the press.
+   */
+  readonly firstClickLeadSec?: number;
   readonly downbeatFrequency?: number;
   readonly beatFrequency?: number;
   readonly subdivisionFrequency?: number;
@@ -73,6 +95,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     this.options = {
       schedulerIntervalMs: options.schedulerIntervalMs ?? 20,
       scheduleAheadSec: options.scheduleAheadSec ?? 0.12,
+      firstClickLeadSec: options.firstClickLeadSec ?? 0.02,
       downbeatFrequency: options.downbeatFrequency ?? 1600,
       beatFrequency: options.beatFrequency ?? 1100,
       subdivisionFrequency: options.subdivisionFrequency ?? 800,
@@ -124,7 +147,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
 
     this.queue = [];
     this.nextTickIndex = 0;
-    this.nextTickAudioTime = context.currentTime + 0.06;
+    this.nextTickAudioTime = context.currentTime + this.options.firstClickLeadSec;
     this.audioEpochMs = performance.now() - context.currentTime * 1000;
 
     this.timer = setInterval(() => {

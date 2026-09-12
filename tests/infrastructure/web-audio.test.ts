@@ -129,6 +129,23 @@ describe('WebAudioMetronome', () => {
     expect(ticks[0]?.isDownbeat).toBe(true);
   });
 
+  it('gives the first click the shortest runway it can be placed on', () => {
+    // Every click but the first is arithmetic from the one before, so this is
+    // the only one whose lead is felt - and in the bar frame it is felt at
+    // every bar line, because a run starts again there against the reader's
+    // own key going down. His: the note is drawn at once and the click is a
+    // moment behind it. What is left after this is the device's own output
+    // latency, which no scheduling can give back.
+    metronome.start();
+
+    const first = context.oscillators[0];
+
+    expect(first?.startedAt).not.toBeNull();
+    expect(first?.startedAt ?? 1).toBeLessThanOrEqual(0.03);
+    // And still placed rather than raced for: several render quanta of room.
+    expect(first?.startedAt ?? 0).toBeGreaterThan(0.005);
+  });
+
   it('ticks for the loop but only clicks where the pattern says', () => {
     // Sixteenth-note resolution with a click on the beat: the loop still has
     // to tick four times, and the reader must still hear one sound.
@@ -388,6 +405,10 @@ describe('when the click is actually heard', () => {
     const metronome = new WebAudioMetronome(contextFactory(context), {
       schedulerIntervalMs: 20,
       scheduleAheadSec: 0.12,
+      // Pinned, because these are about *when a click is heard* rather than
+      // about how soon the first one can be placed: the arithmetic below is
+      // in terms of this number, and it should not move when that one does.
+      firstClickLeadSec: 0.06,
     });
     metronome.configure({
       bpm: 60,
@@ -429,6 +450,10 @@ describe('when the click is actually heard', () => {
     const metronome = new WebAudioMetronome(contextFactory(context), {
       schedulerIntervalMs: 20,
       scheduleAheadSec: 0.12,
+      // Pinned, because these are about *when a click is heard* rather than
+      // about how soon the first one can be placed: the arithmetic below is
+      // in terms of this number, and it should not move when that one does.
+      firstClickLeadSec: 0.06,
     });
     metronome.configure({
       bpm: 60,
@@ -467,6 +492,10 @@ describe('when the click is actually heard', () => {
     const metronome = new WebAudioMetronome(contextFactory(context), {
       schedulerIntervalMs: 20,
       scheduleAheadSec: 0.12,
+      // Pinned, because these are about *when a click is heard* rather than
+      // about how soon the first one can be placed: the arithmetic below is
+      // in terms of this number, and it should not move when that one does.
+      firstClickLeadSec: 0.06,
     });
     metronome.configure({
       bpm: 60,

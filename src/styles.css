@@ -1168,21 +1168,65 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 }
 
 /*
- * Above the bar on a narrow screen, and on the left of it.
+ * Above the bar on a narrow screen, one satellite at each end of that line.
  *
  * The notice goes above the bar too, on the right. Both were put in the same
  * corner at first, which is one pill drawn over the other: the two things
  * fullscreen has to say, and neither readable.
+ *
+ * The left pill was left hanging off the bar's left edge, where there is no
+ * room to hang: the bar is centred and as wide as the screen allows, so what
+ * remains beside it is twelve pixels. Measured upright on a phone, it stood
+ * 175px off the side of the screen - which is where he found it, with only
+ * the last of its four buttons showing.
  */
-@media (max-width: 560px) {
-  .focus-record {
-    left: 0;
-    right: auto;
+/*
+ * Each comes in at the width where its own room runs out, which is not the
+ * same width. The bar is centred and about 420px wide, so the room beside it
+ * is half of what the screen has over that - and the left pill is four
+ * buttons to the right pill's two. Measured: the left needs about 890px of
+ * screen and the right about 680, so one crosses over well before the other.
+ * A single breakpoint for both was 560px, and the left pill was hanging 45px
+ * off the side of an 820px window long before anything looked like a phone.
+ */
+@media (max-width: 980px) {
+  .focus-aside {
+    left: auto;
+    right: 0;
     top: auto;
     bottom: 100%;
     transform: none;
-    margin-left: 0;
+    margin-right: 0;
     margin-bottom: 8px;
+  }
+}
+
+/*
+ * Narrower still, and they stop being satellites at all: they become rows of
+ * the column the bar already is.
+ *
+ * Putting both above the bar only moves the collision. Below 560px the tempo
+ * leaves the transport row for the drawer, the bar narrows from 417px to 294,
+ * and two pills anchored to its two edges - four buttons and two - overlap by
+ * 56. Anchoring them to the screen instead would need the bar's height, which
+ * changes when the drawer opens.
+ *
+ * So they join the stack and lose their own chrome with it: what you open on
+ * top, the takes under it, the transport at the bottom, one pill holding all
+ * of it. Nothing here depends on how wide either group happens to be.
+ */
+@media (max-width: 700px) {
+  .focus-aside,
+  .focus-record {
+    position: static;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
@@ -1926,11 +1970,30 @@ body[data-playing='true'] .score__modes {
   }
 }
 
+/*
+ * The squares, and they scroll inside the sheet like every other sheet's
+ * contents.
+ *
+ * The panel has a height and hides what overflows it. `.controls` was given a
+ * scroll of its own when the metronome sheet outgrew its panel; this grid
+ * never was, so on a short window - a phone held upright, or a browser window
+ * not much taller than it is wide - the last row of squares was cut off with
+ * no scrollbar and no way down to it. His report, from a phone.
+ *
+ * `align-content: start` with it: filling the panel's height is what lets the
+ * grid scroll, and without this the rows would stretch to share the room on
+ * any screen where there is room to share.
+ */
 .modes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
   padding: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .mode-card {

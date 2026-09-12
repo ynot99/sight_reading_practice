@@ -42,6 +42,44 @@ function rules(): { selector: string; body: string; at: number }[] {
  * reader's iPad.
  */
 describe('the stylesheet', () => {
+  it('scrolls the squares inside their sheet', () => {
+    // The panel has a height and hides what overflows it. `.controls` was given
+    // a scroll of its own when the metronome sheet outgrew its panel; the modes
+    // grid never was, so on a short window - a phone upright, or a browser
+    // window not much taller than it is wide - the last row of squares was cut
+    // off with no scrollbar and no way down to it. His report, from a phone.
+    const grid = rules().find((rule) => rule.selector === '.modes');
+
+    expect(grid?.body).toMatch(/overflow-y\s*:\s*auto/);
+    // Filling the sheet is what lets it scroll, and without this the rows
+    // would stretch to share the room wherever there is room to share.
+    expect(grid?.body).toMatch(/min-height\s*:\s*0/);
+    expect(grid?.body).toMatch(/align-content\s*:\s*start/);
+  });
+
+  it('brings each satellite in over the bar before it leaves the screen', () => {
+    // The bar is centred and about 420px wide, so the room beside it is half of
+    // whatever the screen has over that - and the left pill is four buttons to
+    // the right pill's two. Measured in a real browser: the left needs some
+    // 890px of screen and the right about 680, so they cross over at different
+    // widths. One breakpoint of 560px served both, and the left pill stood
+    // 175px off the side of a phone held upright, which is where he found it,
+    // and 45px off an 820px window long before anything looked like a phone.
+    const aside = /@media \(max-width: (\d+)px\) \{\s*\.focus-aside \{/.exec(CSS);
+    const both = /@media \(max-width: (\d+)px\) \{\s*\.focus-aside,\s*\.focus-record \{/.exec(
+      CSS,
+    );
+    const joined = rules().find((rule) => rule.selector === '.focus-aside, .focus-record');
+
+    expect(Number(aside?.[1] ?? 0)).toBeGreaterThanOrEqual(890);
+    expect(Number(both?.[1] ?? 0)).toBeGreaterThanOrEqual(680);
+    // And narrower still they hang off nothing at all. Above the bar is no
+    // answer on a phone: below 560px the tempo leaves the transport row, the
+    // bar narrows to 294px, and two pills at its two edges overlap by 56. They
+    // join the column the bar already is instead.
+    expect(joined?.body).toMatch(/position\s*:\s*static/);
+  });
+
   it('keeps a slider inside the column it is given', () => {
     // A range input carries `margin: 2px` from the browser's own sheet, and a
     // margin sits outside a width of 100%: a slider in the last column stood

@@ -194,6 +194,18 @@ export interface PracticeContext {
    */
   holdForTheBar(untilTicks: number): void;
 
+  /**
+   * Starts a bar the pulse is waiting at, with this press as its downbeat.
+   *
+   * His: "сильна доля має гратись як я граю". The waiting ends when the
+   * reader *begins* the new bar, not when they finish the old one - a
+   * downbeat given on the last note of the bar before leaves nowhere to move
+   * to, and the press that starts a bar is the beat, the way a conductor's
+   * hand is. Does nothing unless the pulse is holding and the cursor has
+   * reached the bar it is holding for.
+   */
+  startTheHeldBarAt(atMs: number): void;
+
   /** Reports a judged press; the session records and publishes it. */
   judgeNote(midi: number, verdict: NoteVerdict, deviationMs: number | null): void;
   /** Finalises the current step and advances. Status is derived when omitted. */

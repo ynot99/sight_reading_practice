@@ -87,6 +87,12 @@ export class BarMode extends BasePracticeMode {
   }
 
   override onNoteOn(context: PracticeContext, event: MidiNoteOnEvent): void {
+    // Before anything is judged, because this press may be what decides what
+    // o'clock it is: where the pulse is waiting at a bar line the reader has
+    // reached, starting the bar is the first thing this press does, and the
+    // beat it is measured against is the one it has just given.
+    context.startTheHeldBarAt(event.timestampMs);
+
     // Before the matcher is asked anything, because asking it is what records
     // a wrong note: a press the reader meant as "on to the next one" is not a
     // mistake they should have to see marked and then forgiven.

@@ -55,7 +55,7 @@ describe('Bar mode', () => {
     expect(harness.of('stepEntered')).toHaveLength(1);
   });
 
-  it('silences the pulse at the bar line and starts it again when the bar is played', () => {
+  it('silences the pulse at the bar line until the reader begins the next bar', () => {
     // His: "метроном закінчив грати цей бар - то він просто мовчить поки
     // гравець не дійде до наступного бару". Counting on would put beats over
     // music nobody has played.
@@ -68,9 +68,42 @@ describe('Bar mode', () => {
 
     playTheFirstBar(harness);
 
-    expect(harness.metronome.isRunning).toBe(true);
-    // And the cursor is at the next bar, which is what the silence was for.
+    // Finishing the old bar is not beginning the new one. His second report:
+    // "сильна доля має гратись як я граю" - a downbeat handed over on the
+    // last note of the bar before leaves nowhere to move to.
+    expect(harness.metronome.isRunning).toBe(false);
+    // The cursor is at the next bar, which is what the silence was for.
     expect(harness.of('stepEntered').at(-1)?.step.measureIndex).toBe(1);
+
+    harness.clock.advance(700);
+    harness.midi.noteOn(MIDI.G2, harness.clock.now());
+
+    expect(harness.metronome.isRunning).toBe(true);
+  });
+
+  it('counts nobody in when it starts a bar partway through', () => {
+    // What he actually saw first: the pulse came back and played a whole bar
+    // by itself, downbeat and all, before anything was asked of him. The
+    // restart was set up with the count-in still in it, so the metronome beat
+    // its count while the run read those beats as music - the click ran on
+    // without him and the wait ended up a bar out of place. There is nobody
+    // to count in partway through a piece.
+    const harness = barHarness();
+    startAndCountIn(harness);
+    harness.metronome.advanceSubdivisions(SUBDIVISIONS_PER_BAR);
+    playTheFirstBar(harness);
+    harness.midi.noteOn(MIDI.G2, harness.clock.now());
+
+    // One bar of music is left and no bar of counting in front of it.
+    expect(harness.metronome.currentConfig.bars).toHaveLength(1);
+    expect(harness.metronome.currentConfig.bars[0]?.startTicks).toBe(0);
+
+    // And the beats that follow are the new bar's own, rather than a count
+    // beaten over music nobody has played.
+    harness.metronome.advanceSubdivisions(1);
+
+    expect(harness.of('positionChanged').at(-1)?.measureIndex).toBe(1);
+    expect(harness.metronome.isRunning).toBe(true);
   });
 
   it('marks a note played into that silence late, rather than forgiving it', () => {
@@ -102,6 +135,7 @@ describe('Bar mode', () => {
     // move for this to pass.
     harness.clock.advance(1_500);
     playTheFirstBar(harness);
+    harness.clock.advance(700);
 
     harness.midi.noteOn(MIDI.G4, harness.clock.now());
 
@@ -159,5 +193,22 @@ describe('Bar mode', () => {
     harness.metronome.advanceSubdivisions(SUBDIVISIONS_PER_BAR - 1);
 
     expect(harness.metronome.isRunning).toBe(true);
+  });
+
+  it('gives a held bar its downbeat where the reader put it', () => {
+    // The press that starts the bar *is* the beat, so what follows is counted
+    // from there: the reader who spent three seconds finding the note is in
+    // tempo again from the moment they found it, not three seconds behind.
+    const harness = barHarness();
+    startAndCountIn(harness);
+    harness.metronome.advanceSubdivisions(SUBDIVISIONS_PER_BAR);
+    playTheFirstBar(harness);
+    harness.clock.advance(3_000);
+
+    harness.midi.noteOn(MIDI.G2, harness.clock.now());
+
+    const judged = harness.of('noteJudged').find((event) => event.midi === MIDI.G2);
+    expect(judged?.verdict).toBe('correct');
+    expect(judged?.deviationMs).toBe(0);
   });
 });

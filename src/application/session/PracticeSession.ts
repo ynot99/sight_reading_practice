@@ -245,20 +245,20 @@ export class PracticeSession {
    * this mode holds at - and a pulse configured two ways out of three is a
    * click accenting a beat nobody is on.
    */
-  private configureThePulse(): void {
+  private configureThePulse(countInBars = Math.max(0, this.options.countInBars)): void {
     this.metronome.configure({
       bpm: this.tempoBpm,
       timeSignature: this.timeline.exercise.timeSignature,
-      bars: this.barsToBeat(),
-      tempos: this.temposToBeat(),
-      endsAtTicks: this.endOfTheMusic(),
+      bars: this.barsToBeat(countInBars),
+      tempos: this.temposToBeat(countInBars),
+      endsAtTicks: this.endOfTheMusic(countInBars),
       subdivisionsPerPulse: subdivisionsPerPulseFor(
         this.timeline,
         this.timeline.exercise.timeSignature,
         this.options.click,
       ),
       click: this.options.click,
-      dropout: resolveDropout(this.clickForThePulse(), Math.max(0, this.options.countInBars)),
+      dropout: resolveDropout(this.clickForThePulse(), countInBars),
       silences: this.options.clickSilences,
       muted: clickIsSilent(this.clickForThePulse()),
     });
@@ -396,9 +396,9 @@ export class PracticeSession {
     return elapsedMsAt(this.timeline.exercise, ticks);
   }
 
-  private barsToBeat(): readonly MetronomeBar[] {
+  private barsToBeat(countInBars: number): readonly MetronomeBar[] {
     return metronomeBars(this.timeline.exercise, {
-      countInBars: Math.max(0, this.options.countInBars),
+      countInBars,
       fromTicks: this.resumeAtTicks,
     });
   }
@@ -415,7 +415,7 @@ export class PracticeSession {
    * through the bar with nothing to keep time against, which is the opposite
    * of what asking for a click means.
    */
-  private endOfTheMusic(): number | null {
+  private endOfTheMusic(countInBars: number): number | null {
     if (!this.mode.requiresMetronome) {
       return null;
     }
@@ -424,15 +424,15 @@ export class PracticeSession {
       return null;
     }
     return metronomeEnd(this.timeline.exercise, {
-      countInBars: Math.max(0, this.options.countInBars),
+      countInBars,
       fromTicks: this.resumeAtTicks,
       untilTicks: last.onsetTicks + last.durationTicks,
     });
   }
 
-  private temposToBeat(): readonly MetronomeTempo[] {
+  private temposToBeat(countInBars: number): readonly MetronomeTempo[] {
     return metronomeTempos(this.timeline.exercise, {
-      countInBars: Math.max(0, this.options.countInBars),
+      countInBars,
       fromTicks: this.resumeAtTicks,
     });
   }
@@ -582,7 +582,6 @@ export class PracticeSession {
     }
 
     this.stepIndex = index;
-    this.releaseTheBarAt(step);
     const expected = this.expectedAt(step);
     // Ornaments printed here are handed over too: on the page, so playing one
     // is reading correctly, and the performer's to add, so nothing waits for
@@ -619,7 +618,7 @@ export class PracticeSession {
   }
 
   /**
-   * Starts the next bar, in tempo, from the moment the reader arrived at it.
+   * Starts a held bar, in tempo, with this press as its downbeat.
    *
    * The same two numbers a resume uses, for the same reason: the pulse begins
    * counting from nought again, so the offset says where in the piece that
@@ -627,21 +626,31 @@ export class PracticeSession {
    * piece is already behind. Everything downstream - the scheduled onsets,
    * the accompaniment, the position published - goes on counting from the
    * start of the piece as though nothing had happened.
+   *
+   * Two things this got wrong when he first played it. The bar began the
+   * moment the *previous* one was finished, so the downbeat landed on the
+   * last note of the old bar and there was nowhere to move to; it is the
+   * press that starts the new bar instead. And the pulse was set up again
+   * with the count-in still in it, so the restart spent a whole bar beating
+   * the count while the run read those beats as music - the click ran on
+   * without him, sounded a downbeat he had not played, and left the wait a
+   * bar out of place. There is nobody to count in partway through a piece.
    */
-  private releaseTheBarAt(step: TimelineStep): void {
+  private startTheHeldBarAt(atMs: number): void {
     const line = this.heldAtBarTicks;
-    if (line === null || step.onsetTicks < line) {
+    const step = this.currentStep;
+    if (line === null || step === null || step.onsetTicks < line) {
       return;
     }
     this.heldAtBarTicks = null;
     this.resumeAtTicks = step.onsetTicks;
     this.resumeAtIndex = step.index;
     this.positionOffsetTicks = -step.onsetTicks;
-    this.runStartedAt = this.clock.now() - this.elapsedTo(step.onsetTicks);
+    this.runStartedAt = atMs - this.elapsedTo(step.onsetTicks);
     if (this.usesPulse()) {
       // Set up again before it starts: the bars it accents and where it stops
-      // are both counted from where the run is picking up.
-      this.configureThePulse();
+      // are counted from where the run is picking up, and no count-in.
+      this.configureThePulse(0);
       this.metronome.start();
     }
   }
@@ -1049,6 +1058,9 @@ export class PracticeSession {
       },
       holdForTheBar: (untilTicks: number) => {
         session.holdForTheBar(untilTicks);
+      },
+      startTheHeldBarAt: (atMs: number) => {
+        session.startTheHeldBarAt(atMs);
       },
       completeStep: (status?: StepStatus) => {
         session.completeStep(status);

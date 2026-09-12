@@ -5978,6 +5978,16 @@ export class AppView {
       controller.isListeningPaused;
     this.applyPreview();
     this.el.focusBar.dataset['playing'] = String(playing);
+    // His: hold the screen while there is a run, and let it go when there is
+    // not - including while one is paused, because a reader who has stopped to
+    // work something out is still at the keyboard. Asked here because this is
+    // already the one place that answers "is anything happening to the music",
+    // and a second answer to that question could only disagree with this one.
+    if (playing) {
+      this.runtime.screenWake.hold();
+    } else {
+      this.runtime.screenWake.release();
+    }
     // Said on the page as well as on the bar, because things standing over
     // the music are not all inside it - the corner that names the modes is
     // at the other end of the layout and has to fade with the rest.

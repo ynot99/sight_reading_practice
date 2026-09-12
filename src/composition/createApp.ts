@@ -2,6 +2,8 @@ import { PracticeController } from '../application/PracticeController.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { BarMode } from '../application/modes/BarMode.js';
 import { FlowMode } from '../application/modes/FlowMode.js';
+import { NoScreenWake, type IScreenWake } from '../application/ports/IScreenWake.js';
+import { ScreenWakeLock } from '../infrastructure/screen/ScreenWakeLock.js';
 import { knownFrameIds } from '../application/modes/ListenFrame.js';
 import { PracticeModeRegistry } from '../application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../application/modes/WaitMode.js';
@@ -170,6 +172,8 @@ export interface AppRuntime {
   readonly bridge: IMidiBridge | null;
   readonly computerKeyboard: IMidiSource & IToggleableInput;
   readonly pitchPlayer: IPitchPlayer;
+  /** Keeps the screen up while the reader is playing. */
+  readonly screenWake: IScreenWake;
   /** `null` when the instrument has no dampers to lift. */
   readonly sustain: ISustainPedal | null;
   /** `null` when the instrument needs nothing downloaded. */
@@ -369,6 +373,13 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     bridge,
     computerKeyboard,
     pitchPlayer,
+    // A tablet on a music stand is looked at and not touched: a piece played
+    // through sends every note as MIDI and nothing at all to the screen, so
+    // the device decides nobody is there and turns the page off mid-bar.
+    screenWake:
+      typeof navigator === 'undefined' || typeof document === 'undefined'
+        ? new NoScreenWake()
+        : new ScreenWakeLock(navigator, document),
     sustain: pitchPlayer,
     samples: pitchPlayer,
     renderer,

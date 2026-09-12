@@ -41,7 +41,25 @@ import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
 import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
+
+/** Remembers whether the screen was asked to stay up, and how often. */
+class CountingScreenWake implements IScreenWake {
+  held = false;
+  holds = 0;
+  releases = 0;
+
+  hold(): void {
+    this.held = true;
+    this.holds += 1;
+  }
+
+  release(): void {
+    this.held = false;
+    this.releases += 1;
+  }
+}
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
+import type { IScreenWake } from '../../src/application/ports/IScreenWake.js';
 import { SettingsRepository } from '../../src/application/SettingsRepository.js';
 import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.js';
 import type { SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
@@ -102,6 +120,7 @@ class FakeVolume implements IVolumeControl {
 
 interface Rig {
   readonly runtime: AppRuntime;
+  readonly screenWake: CountingScreenWake;
   readonly view: AppView;
   readonly instrument: RecordingPitchPlayer;
   readonly metronome: ManualMetronome;
@@ -139,6 +158,7 @@ function createRig(
   ]);
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const instrument = new RecordingPitchPlayer();
+  const screenWake = new CountingScreenWake();
   const ladder = new PracticeLadder(BUILT_IN_LADDER);
   const recorder = new PerformanceRecorder(clock);
   recorder.listenTo(midi);
@@ -238,6 +258,7 @@ function createRig(
     // instrument stands behind the reader's keys, the playback and the rest's
     // chime, and splitting it here hid a note that was left ringing.
     pitchPlayer: instrument,
+    screenWake,
     sustain,
     samples,
     renderer,
@@ -251,6 +272,7 @@ function createRig(
   return {
     runtime,
     view: new AppView(runtime, document),
+    screenWake,
     instrument,
     metronome,
     midi,
@@ -4440,6 +4462,28 @@ describe('AppView', () => {
 
       expect(runtime.controller.settings.zoom).toBe(1.5);
       expect(renderer.zoom).toBe(1.5);
+    });
+
+    it('keeps the screen up while there is a run, and lets it go after', async () => {
+      // His: a tablet on a music stand is looked at and not touched. A piece
+      // played through sends every note as MIDI and nothing at all to the
+      // screen, so the device decides nobody is there and turns the page off
+      // mid-bar. A pause counts - a reader who has stopped to work something
+      // out is still at the keyboard.
+      const { view, runtime, screenWake } = createRig();
+      await view.initialize();
+      expect(screenWake.held).toBe(false);
+
+      element<HTMLButtonElement>('focus-play').click();
+      expect(screenWake.held).toBe(true);
+
+      element<HTMLButtonElement>('focus-play').click();
+      expect(runtime.controller.session?.status).toBe('paused');
+      expect(screenWake.held).toBe(true);
+
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(screenWake.held).toBe(false);
     });
 
     it('asks for the keyboard before it asks for the music', async () => {

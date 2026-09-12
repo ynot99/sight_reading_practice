@@ -87,6 +87,39 @@ export class BarMode extends FlowMode {
     super.onBeat(context, tick);
   }
 
+  /**
+   * Whether this press belongs to the beat ahead rather than the one open.
+   *
+   * Flow's answer, widened at a bar line. Its window is narrow on purpose - a
+   * press a moment before the beat is reaching for it, and one much earlier is
+   * a wrong note against the beat still sounding. But where the beat ahead is
+   * a *gate*, the reader is not reaching for a note at all: they are giving
+   * the downbeat, and they may give it whenever they are ready. A bar whose
+   * last step owes nothing has one thing left to be played in it, and that is
+   * the bar after it.
+   *
+   * His, and it is why the run kept stopping at every line: "якщо я влучив
+   * правильно, але трішечки раніше - то гра просто зупиняється допоки я ще раз
+   * не натисну". The press fell outside the window, was spent as a wrong note
+   * against a beat that wanted nothing, and the gate it was meant for closed
+   * on an empty hand.
+   */
+  protected override isAimedAtTheNextStep(
+    context: PracticeContext,
+    event: MidiNoteOnEvent,
+  ): boolean {
+    if (super.isAimedAtTheNextStep(context, event)) {
+      return true;
+    }
+    const step = context.currentStep;
+    const next = step === null ? null : context.timeline.at(step.index + 1);
+    if (step === null || next === null || next.measureIndex === step.measureIndex) {
+      return false;
+    }
+    const matcher = context.matcher;
+    return matcher === null || matcher.remaining.length === 0;
+  }
+
   override onNoteOn(context: PracticeContext, event: MidiNoteOnEvent): void {
     if (!context.holdingAtBarLine) {
       super.onNoteOn(context, event);

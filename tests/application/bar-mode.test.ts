@@ -24,7 +24,10 @@ const SUBDIVISIONS_PER_BEAT = 4;
  */
 const TICKS_TO_NEXT_BAR = SUBDIVISIONS_PER_BAR + 1;
 
-function barHarness(exercise = twoBarExercise({ tempoBpm: 60 })): Harness {
+function barHarness(
+  exercise = twoBarExercise({ tempoBpm: 60 }),
+  anyPitch = false,
+): Harness {
   return createHarness({
     exercise,
     mode: new BarMode(),
@@ -33,7 +36,7 @@ function barHarness(exercise = twoBarExercise({ tempoBpm: 60 })): Harness {
       countInBars: 1,
       clickWhen: 'never',
       click: 'subdivision',
-      matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      matchPolicy: { toleranceMs: 250, pitchClassOnly: false, anyPitch },
     },
   });
 }
@@ -151,6 +154,62 @@ describe('Bar mode', () => {
     const opening = harness.metronome.advanceSubdivisions(1).at(0);
 
     expect(isAudibleClick(opening!, harness.metronome.currentConfig)).toBe(true);
+  });
+
+  it('takes a downbeat given early, however early it is given', () => {
+    // His, in the mode he was testing in: "якщо я влучив правильно, але
+    // трішечки раніше - то гра просто зупиняється допоки я ще раз не натисну".
+    //
+    // Flow keeps a press back for the beat ahead only inside a narrow window,
+    // because earlier than that it is a wrong note against the beat still
+    // sounding. But the beat ahead here is a gate, and the reader is not
+    // reaching for a note - they are giving the downbeat, and may give it
+    // whenever they are ready. Outside the window the press was spent as a
+    // wrong note against a beat that wanted nothing, and the gate closed on an
+    // empty hand.
+    const harness = barHarness(twoBarExercise({ tempoBpm: 60 }), true);
+    startAndCountIn(harness);
+    press(harness, MIDI.C4);
+
+    // Rhythm only: one tap a beat, through the bar. Walked by where the music
+    // is rather than by counting ticks, because a beat is four subdivisions
+    // and five ticks.
+    for (const beat of [1, 2, 3]) {
+      harness.metronome.advanceToTicks(beat * Duration.QUARTER.ticks);
+      press(harness, MIDI.C4);
+    }
+
+    // A quarter of a beat later, which is far outside the early window - and
+    // with nothing left in this bar for the press to have been aimed at.
+    harness.metronome.advanceSubdivisions(1);
+    press(harness, MIDI.C4);
+
+    // By ticks to the line, not by position: opening the gate starts the pulse
+    // afresh, and a walk that asks "where is the music" would go on emitting
+    // through the bar it has just begun.
+    harness.metronome.advanceSubdivisions(3);
+
+    // The bar line came and went on that press: no second one was needed.
+    expect(harness.metronome.isRunning).toBe(true);
+    expect(harness.of('stepEntered').at(-1)?.step.measureIndex).toBe(1);
+  });
+
+  it('widens that window for the bar line and nowhere else', () => {
+    // Inside a bar the narrow rule stands: a press after the chord is
+    // complete is an extra note now, not an early one for the beat ahead.
+    // Only at a bar line is the reader giving a downbeat rather than reaching
+    // for a note, and only there may they give it whenever they like.
+    const harness = barHarness(twoBarExercise({ tempoBpm: 60 }), true);
+    startAndCountIn(harness);
+    press(harness, MIDI.C4);
+
+    // A subdivision later, with this beat already tapped and the next one in
+    // the same bar.
+    harness.metronome.advanceSubdivisions(1);
+    press(harness, MIDI.C4);
+
+    // Judged here rather than kept for the beat ahead.
+    expect(harness.of('noteJudged').at(-1)?.verdict).toBe('duplicate');
   });
 
   it('lets the clock carry the cursor inside the bar', () => {

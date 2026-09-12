@@ -113,7 +113,10 @@ export class FlowMode extends BasePracticeMode {
    * either, so at a brisk tempo it shrinks with the music instead of
    * swallowing whole steps.
    */
-  private isAimedAtTheNextStep(context: PracticeContext, event: MidiNoteOnEvent): boolean {
+  protected isAimedAtTheNextStep(
+    context: PracticeContext,
+    event: MidiNoteOnEvent,
+  ): boolean {
     const step = context.currentStep;
     if (step === null) {
       return false;

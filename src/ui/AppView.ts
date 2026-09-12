@@ -1670,6 +1670,17 @@ export class AppView {
     this.bindTransport();
     this.bindControllerEvents();
     this.bindMidi();
+    // Before the music, because the music is the slow half. Opening what the
+    // reader asked to find on the stand waits on a database and then on an
+    // engraving, and asking for the keyboard waits on neither - so a request
+    // made after all that left the instrument deaf for as long as the page
+    // took to draw. A reader whose hands were already on the keys played into
+    // nothing: his, about the run that starts when you play the first notes.
+    //
+    // Safe here and not before `bindMidi`: the list of inputs is kept by a
+    // subscription rather than read once, so whenever the devices arrive the
+    // picker is told.
+    void this.runtime.webMidi.connect();
     this.syncControlsFromSettings();
     this.updateButtons('idle');
     this.describeTake();
@@ -1684,7 +1695,6 @@ export class AppView {
     // beforehand they went on showing bars 12 to 16 of a piece nobody had
     // opened, and the next thing the reader touched wrote them back.
     this.syncControlsFromSettings();
-    void this.runtime.webMidi.connect();
   }
 
   /**

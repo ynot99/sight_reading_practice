@@ -4442,6 +4442,26 @@ describe('AppView', () => {
       expect(renderer.zoom).toBe(1.5);
     });
 
+    it('asks for the keyboard before it asks for the music', async () => {
+      // The music is the slow half - a database, then an engraving - and the
+      // keyboard waits on neither. Asked for afterwards, the instrument was
+      // deaf for as long as the page took to draw, which is exactly when a
+      // reader with their hands already on the keys plays the first chord.
+      const order: string[] = [];
+      const rig = createRig();
+      const realConnect = rig.runtime.webMidi.connect.bind(rig.runtime.webMidi);
+      rig.runtime.webMidi.connect = async () => {
+        order.push('keyboard');
+        return realConnect();
+      };
+      rig.runtime.controller.events.on('exerciseLoaded', () => order.push('music'));
+
+      await rig.view.initialize();
+
+      expect(order[0]).toBe('keyboard');
+      expect(order).toContain('music');
+    });
+
     it('waits for the opening chord on a page that has only just opened', async () => {
       // His: "старт гри по нотам працює, але не при старті сторінки якось".
       // The watch is armed wherever the answer to "is there music on the page

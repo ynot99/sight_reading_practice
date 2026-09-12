@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BarMode } from '../../src/application/modes/BarMode.js';
+import { isAudibleClick } from '../../src/infrastructure/audio/metronomeMath.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
 import { TimingWeightedScoringStrategy } from '../../src/domain/scoring/strategies.js';
@@ -178,6 +179,36 @@ describe('Bar mode', () => {
 
     expect(harness.of('positionChanged').at(-1)?.measureIndex).toBe(1);
     expect(harness.metronome.isRunning).toBe(true);
+  });
+
+  it('sounds no downbeat the reader has not played', () => {
+    // His: "може сильну долю без мене не грати? Бо наразі на початку кожного
+    // такту сильна доля грається сама". The tick that crosses a bar line *is*
+    // the next downbeat, and a look-ahead scheduler has committed its sound a
+    // tenth of a second before the run is even told about it - so stopping the
+    // pulse when the gate closes cannot unsound it. The click is given this
+    // bar and no more instead, so it has nothing to say at the line.
+    const harness = barHarness();
+    startAndCountIn(harness);
+    press(harness, MIDI.C3, MIDI.C4);
+
+    const ticks = harness.metronome.advanceSubdivisions(TICKS_TO_NEXT_BAR);
+    const config = harness.metronome.currentConfig;
+    const atTheLine = ticks.at(-1);
+
+    // The one that closed the gate, and it is a downbeat.
+    expect(atTheLine?.isDownbeat).toBe(true);
+    expect(isAudibleClick(atTheLine!, config)).toBe(false);
+    // Every beat of the bar before it still sounds: this silences the line,
+    // not the pulse.
+    expect(ticks.filter((tick) => isAudibleClick(tick, config)).length).toBeGreaterThan(0);
+
+    // And the downbeat he does play is heard, because the bar he opens is the
+    // bar the click has then been given.
+    press(harness, MIDI.G2, MIDI.D3, MIDI.G4);
+    const opening = harness.metronome.advanceSubdivisions(1).at(0);
+
+    expect(isAudibleClick(opening!, harness.metronome.currentConfig)).toBe(true);
   });
 
   it('measures a note inside the bar against the page, not against the gate', () => {

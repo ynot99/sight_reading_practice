@@ -245,13 +245,16 @@ export class PracticeSession {
    * this mode holds at - and a pulse configured two ways out of three is a
    * click accenting a beat nobody is on.
    */
-  private configureThePulse(countInBars = Math.max(0, this.options.countInBars)): void {
+  private configureThePulse(
+    countInBars = Math.max(0, this.options.countInBars),
+    stopAtTicks?: number,
+  ): void {
     this.metronome.configure({
       bpm: this.tempoBpm,
       timeSignature: this.timeline.exercise.timeSignature,
       bars: this.barsToBeat(countInBars),
       tempos: this.temposToBeat(countInBars),
-      endsAtTicks: this.endOfTheMusic(countInBars),
+      endsAtTicks: this.endOfTheMusic(countInBars, stopAtTicks),
       subdivisionsPerPulse: subdivisionsPerPulseFor(
         this.timeline,
         this.timeline.exercise.timeSignature,
@@ -415,7 +418,7 @@ export class PracticeSession {
    * through the bar with nothing to keep time against, which is the opposite
    * of what asking for a click means.
    */
-  private endOfTheMusic(countInBars: number): number | null {
+  private endOfTheMusic(countInBars: number, stopAtTicks?: number): number | null {
     if (!this.mode.requiresMetronome) {
       return null;
     }
@@ -423,11 +426,34 @@ export class PracticeSession {
     if (last === null) {
       return null;
     }
+    const runEnds = last.onsetTicks + last.durationTicks;
     return metronomeEnd(this.timeline.exercise, {
       countInBars,
       fromTicks: this.resumeAtTicks,
-      untilTicks: last.onsetTicks + last.durationTicks,
+      untilTicks: stopAtTicks === undefined ? runEnds : Math.min(stopAtTicks, runEnds),
     });
+  }
+
+  /**
+   * The tick the bar this step belongs to ends on.
+   *
+   * Read off the steps rather than counted from the metre: a piece that
+   * changes metre has bars of different lengths from there on, and the
+   * opening metre puts every bar line after the change in the wrong place.
+   * The engraver has already decided where the bars are and every step says
+   * which one it is in.
+   */
+  private barEndAfter(step: TimelineStep): number {
+    for (let index = step.index + 1; index < this.timeline.length; index += 1) {
+      const next = this.timeline.at(index);
+      if (next === null) {
+        break;
+      }
+      if (next.measureIndex !== step.measureIndex) {
+        return next.onsetTicks;
+      }
+    }
+    return this.timeline.totalTicks;
   }
 
   private temposToBeat(countInBars: number): readonly MetronomeTempo[] {
@@ -648,9 +674,18 @@ export class PracticeSession {
     this.positionOffsetTicks = -step.onsetTicks;
     this.runStartedAt = atMs - this.elapsedTo(step.onsetTicks);
     if (this.usesPulse()) {
-      // Set up again before it starts: the bars it accents and where it stops
-      // are counted from where the run is picking up, and no count-in.
-      this.configureThePulse(0);
+      // Set up again before it starts: the bars it accents are counted from
+      // where the run is picking up, there is no count-in, and the click is
+      // given this bar and no more of the piece.
+      //
+      // That last one is his: "може сильну долю без мене не грати?". The tick
+      // that crosses a bar line *is* the next downbeat, and it is heard before
+      // the run has been told about it - a look-ahead scheduler has committed
+      // the sound a tenth of a second earlier - so stopping the pulse when the
+      // gate closes cannot unsound it. Told where the bar ends, the click
+      // simply has nothing to say there, and the downbeat the reader hears is
+      // the one their own press starts.
+      this.configureThePulse(0, this.barEndAfter(step));
       this.metronome.start();
     }
   }

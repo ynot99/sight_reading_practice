@@ -72,6 +72,34 @@ describe('the stylesheet', () => {
     expect(above.map((rule) => rule.selector)).toEqual([]);
   });
 
+  it('draws the transport icons at a size it states, not one left over', () => {
+    // An `<svg>` carries `overflow: hidden` from the browser's own sheet, so
+    // as a flex item its automatic minimum size is zero: squeeze the box it
+    // sits in and it rescales silently, with nothing in the file to say so.
+    // These asked for 26px inside a content box of 14px for as long as they
+    // existed, and were drawn at 14px. Fixing the padding they were squeezed
+    // by nearly doubled every icon on the transport bar, which he saw at once.
+    //
+    // So the mark must fit the box with room to spare: then the number in the
+    // file is the number on screen, and a padding changed later cannot quietly
+    // resize it again.
+    const button = rules().find((rule) => rule.selector === '.focus-bar__button--icon');
+    const icon = rules().find((rule) => rule.selector === '.focus-bar__button--icon svg');
+    const base = rules().find((rule) => rule.selector === '.focus-bar__button');
+    const px = (body: string | undefined, property: string): number =>
+      Number(new RegExp(property + ':\\s*(\\d+)px').exec(body ?? '')?.[1] ?? '0');
+
+    const across = px(button?.body, 'width');
+    const border = px(base?.body, 'border');
+    const drawn = px(icon?.body, 'width');
+
+    expect(across).toBeGreaterThan(0);
+    expect(drawn).toBeGreaterThan(0);
+    // No side padding to squeeze it, and small enough for the box that leaves.
+    expect(button?.body).toMatch(/padding:\s*0;/);
+    expect(drawn).toBeLessThanOrEqual(across - 2 * border);
+  });
+
   it('lets nothing outrank the browser on what hidden means', () => {
     // An author rule that sets a display beats the browser's own
     // `[hidden] { display: none }`. Three components have been made into flex

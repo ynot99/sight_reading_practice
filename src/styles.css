@@ -2551,9 +2551,24 @@ body[data-repeats='hidden'] .repeat-mark {
   flex: none;
 }
 
+/*
+ * 14px, which is the size these have always been drawn at.
+ *
+ * They were drawn at it by accident. The button is 48px across and was being
+ * given the base button's side padding, which left a content box of 14px, and
+ * an `<svg>` has `overflow: hidden` from the browser's own sheet - so its
+ * automatic minimum size as a flex item is zero and it is squeezed without
+ * complaint, the viewBox scaling down to meet whatever is left. Asking for
+ * 26px was therefore asking for nothing, and the moment the padding was put
+ * right the icons nearly doubled. He saw it at once.
+ *
+ * So the number is said outright, and it is the one he has been practising
+ * with. The button stays 48px either way: what changed here was never the
+ * size of the thing to hit, only the size of the mark drawn inside it.
+ */
 .focus-bar__button--icon svg {
-  width: 26px;
-  height: 26px;
+  width: 14px;
+  height: 14px;
   fill: currentcolor;
 }
 

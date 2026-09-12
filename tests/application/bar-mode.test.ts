@@ -292,6 +292,37 @@ describe('Bar mode', () => {
     expect(harness.of('noteJudged').at(-1)?.verdict).toBe('duplicate');
   });
 
+  it('starts on the chord that asked for it, with no count-in to wait through', () => {
+    // "Start when you play the first notes": the reader plays the opening
+    // chord while nothing is running and the run begins on it, uncounted -
+    // they have just given the tempo themselves. The gate at the first note
+    // wants that same chord, and it has already been played, so the run must
+    // open on the presses it was handed rather than ask for them again.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new BarMode(),
+      scoring: new TimingWeightedScoringStrategy(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        click: 'subdivision',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+    const opening = [
+      { type: 'noteon' as const, sourceId: 'test', midi: MIDI.C3, velocity: 100, timestampMs: 0 },
+      { type: 'noteon' as const, sourceId: 'test', midi: MIDI.C4, velocity: 100, timestampMs: 0 },
+    ];
+
+    harness.session.start(opening);
+    harness.metronome.advanceSubdivisions(1);
+
+    // Open and going, without a second chord and without a bar of counting.
+    expect(harness.metronome.isRunning).toBe(true);
+    expect(harness.session.status).toBe('running');
+    expect(harness.of('stepEntered').at(-1)?.step.index).toBe(0);
+  });
+
   it('lets the clock carry the cursor inside the bar', () => {
     // The whole difference from Wait mode, and what makes this a test of
     // rhythm: a note not played while its slice of time is open is missed and

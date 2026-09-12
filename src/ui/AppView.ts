@@ -428,6 +428,23 @@ const FRAME_WHAT: Readonly<Record<string, string>> = {
 };
 
 /**
+ * How often the bar line had to wait, where there is a bar line that waits.
+ *
+ * Said as a fraction of the bars read, because the number alone means nothing:
+ * three in a piece of four bars is a reader who cannot hold the tempo, and
+ * three in forty is one nearly ready to do without the gate. Shown at nought
+ * too - that is the reading worth arriving at, and a row that vanishes when
+ * the news is good is a row nobody trusts.
+ */
+function barsWaitedRow(report: PerformanceReport): readonly (readonly [string, string])[] {
+  if (report.modeId !== BAR_MODE_ID) {
+    return [];
+  }
+  const bars = new Set(report.steps.map((step) => step.measureIndex)).size;
+  return [['Bars it waited at', `${report.totals.barsWaitedFor} of ${bars}`]];
+}
+
+/**
  * A control in the drawer that can have nothing to say.
  *
  * Named rather than discovered, because the list is the claim: these are the
@@ -5952,6 +5969,7 @@ export class AppView {
         'Tendency',
         `${describeTendency(report.timing.meanDeviationMs)} · ± ${Math.round(report.timing.deviationSpreadMs)} ms`,
       ],
+      ...barsWaitedRow(report),
       ...historyRow(this.runtime.controller.passageHistory()),
       ...(this.lastLadderMove === null
         ? []

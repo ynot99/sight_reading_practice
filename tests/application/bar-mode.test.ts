@@ -211,6 +211,32 @@ describe('Bar mode', () => {
     expect(isAudibleClick(opening!, harness.metronome.currentConfig)).toBe(true);
   });
 
+  it('counts the bar lines the music had to wait at', () => {
+    // The one number worth reading off this mode, and the one that says when
+    // to leave it: the gate stops catching you before the notes stop being
+    // wrong. The opening gate is not counted - every run waits there, and a
+    // floor of one under a number whose point is reaching nought is no use.
+    const harness = barHarness();
+    startAndCountIn(harness);
+    press(harness, MIDI.C3, MIDI.C4);
+    harness.metronome.advanceSubdivisions(TICKS_TO_NEXT_BAR);
+    press(harness, MIDI.G2, MIDI.D3, MIDI.G4);
+    harness.session.abort();
+
+    const report = harness.of('finished').at(-1)?.report;
+    expect(report?.totals.barsWaitedFor).toBe(1);
+  });
+
+  it('counts nothing where the reader keeps up', () => {
+    const harness = barHarness();
+    startAndCountIn(harness);
+    press(harness, MIDI.C3, MIDI.C4);
+    harness.session.abort();
+
+    const report = harness.of('finished').at(-1)?.report;
+    expect(report?.totals.barsWaitedFor).toBe(0);
+  });
+
   it('measures a note inside the bar against the page, not against the gate', () => {
     // Once the bar has begun, this is Flow: the second note is due a beat
     // after the first, wherever the reader chose to put the first.

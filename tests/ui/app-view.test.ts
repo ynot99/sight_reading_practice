@@ -1320,6 +1320,35 @@ describe('AppView', () => {
       expect(element('sheet-modes').hidden).toBe(true);
     });
 
+    it('says how many bar lines the music waited at, where there are any', async () => {
+      // His, and it is the measure of when to leave the mode for Flow: not how
+      // many notes were right but how many times the music had to stop. Said
+      // as a fraction of the bars read, because three in four bars and three
+      // in forty are opposite readings - and said at nought too, since that is
+      // the reading worth arriving at.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      const cycle = element<HTMLButtonElement>('frame-cycle');
+      // Waiting is where the rig starts; the bar line is two along.
+      cycle.click();
+      cycle.click();
+      cycle.click();
+      await Promise.resolve();
+      expect(runtime.controller.settings.modeId).toBe(BAR_MODE_ID);
+
+      element<HTMLButtonElement>('sheet-modes').dispatchEvent(
+        new Event('click', { bubbles: true }),
+      );
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(element('result').textContent).toContain('Bars it waited at');
+      // A fraction, because the number alone says nothing: three in four bars
+      // and three in forty are opposite readings.
+      expect(element('result').textContent).toMatch(/Bars it waited at\s*\d+ of \d+/);
+    });
+
     it('walks one button through the four kinds of run', async () => {
       // His shape: one button pressed until it says the one you want, above
       // the squares rather than among them - the squares are all "make it

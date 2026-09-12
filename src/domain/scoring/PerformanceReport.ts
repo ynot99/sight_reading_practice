@@ -51,6 +51,16 @@ export interface PerformanceTotals {
   readonly expectedNotes: number;
   readonly correctNotes: number;
   readonly wrongNotes: number;
+  /**
+   * Bar lines the run stopped at because the reader had not arrived.
+   *
+   * Nought in every mode but the one with a gate at the bar line, where it is
+   * the whole of what the reader wants to know: not how many notes were right
+   * but how many times the music had to wait. It is the measure of when to
+   * leave that mode for Flow - the gate stops catching you before the notes
+   * stop being wrong.
+   */
+  readonly barsWaitedFor: number;
 }
 
 export interface PerformanceTiming {
@@ -99,6 +109,8 @@ export interface PerformanceReportInput {
   readonly endedAtMs: number;
   readonly completed: boolean;
   readonly steps: readonly StepResult[];
+  /** @see PerformanceTotals.barsWaitedFor */
+  readonly barsWaitedFor?: number;
 }
 
 function mean(values: readonly number[]): number {
@@ -122,6 +134,7 @@ export function buildPerformanceReport(input: PerformanceReportInput): Performan
       0,
     ),
     wrongNotes: input.steps.reduce((sum, step) => sum + step.wrong.length, 0),
+    barsWaitedFor: input.barsWaitedFor ?? 0,
   };
 
   const deviations = input.steps

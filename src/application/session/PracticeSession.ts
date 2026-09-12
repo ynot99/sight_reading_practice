@@ -106,6 +106,16 @@ export class PracticeSession {
    * arriving at it is what releases the hold.
    */
   private heldAtBarTicks: number | null = null;
+  /** How many bar lines this run has stopped at. @see PerformanceTotals */
+  private barsWaitedFor = 0;
+  /**
+   * Whether the run's opening gate has been opened.
+   *
+   * The first gate is not a bar line: every run waits there, because that is
+   * where the reader begins. Counting it would put a floor of one under a
+   * number whose whole point is reaching nought.
+   */
+  private theFirstBarHasBegun = false;
   private positionOffsetTicks = 0;
   /** Musical position last published, so an unchanged one is not republished. */
   private publishedPositionTicks: number | null = null;
@@ -521,6 +531,8 @@ export class PracticeSession {
     this.runStartedAt = 0;
     this.runBeganAt = 0;
     this.heldAtBarTicks = null;
+    this.barsWaitedFor = 0;
+    this.theFirstBarHasBegun = false;
     this.positionOffsetTicks = 0;
     this.publishedPositionTicks = null;
     // Where the run begins, which is the top of the piece unless the reader
@@ -640,6 +652,9 @@ export class PracticeSession {
       return;
     }
     this.heldAtBarTicks = untilTicks;
+    if (this.theFirstBarHasBegun) {
+      this.barsWaitedFor += 1;
+    }
     this.metronome.stop();
   }
 
@@ -669,6 +684,7 @@ export class PracticeSession {
       return;
     }
     this.heldAtBarTicks = null;
+    this.theFirstBarHasBegun = true;
     this.resumeAtTicks = step.onsetTicks;
     this.resumeAtIndex = step.index;
     this.positionOffsetTicks = -step.onsetTicks;
@@ -805,6 +821,7 @@ export class PracticeSession {
       completed,
       playableSteps: this.timeline.steps.filter((step) => this.expectedAt(step).length > 0)
         .length,
+      barsWaitedFor: this.barsWaitedFor,
       steps: this.results,
     });
     const score = this.scoring.score(report);

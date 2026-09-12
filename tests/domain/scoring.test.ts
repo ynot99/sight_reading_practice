@@ -57,6 +57,8 @@ describe('buildPerformanceReport', () => {
       expectedNotes: 3,
       correctNotes: 2,
       wrongNotes: 1,
+      // Nought unless the run had a gate at the bar line to stop at.
+      barsWaitedFor: 0,
     });
   });
 

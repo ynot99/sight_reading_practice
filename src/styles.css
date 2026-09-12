@@ -1207,9 +1207,27 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * left for the settings themselves was narrower than the single column they
  * used to have all to themselves.
  */
+/*
+ * A height, not a ceiling.
+ *
+ * His report: the sheet changed size as he moved down the rail. Of course it
+ * did - the panes hold between one group of controls and thirteen - and what
+ * moves with it is the rail under his finger. So it holds one size and the
+ * pane inside it scrolls, which is the bargain the two columns already make.
+ *
+ * One number, written once and used twice: a plain `height` would be cut back
+ * to 640px by the ceiling every sheet carries, and that ceiling is right for
+ * the sheets that really do fit what is in them.
+ *
+ * The width is his too - "все ще він маленький". The rail takes a fixed slice
+ * off the left before the settings get any of it, and what is left is spent
+ * on wider columns rather than more of them; see the pane's own rule.
+ */
 .sheet__panel--wide {
-  width: min(1280px, 100%);
-  max-height: min(96vh, 1100px);
+  --sheet-height: min(100%, 1100px);
+  width: min(1600px, 100%);
+  height: var(--sheet-height);
+  max-height: var(--sheet-height);
 }
 
 /*
@@ -2062,6 +2080,22 @@ body[data-playing='true'] .score__modes {
   box-shadow: none;
   padding: 0 2px 2px 0;
   align-content: start;
+  /*
+   * Wider columns, and only as many of them as that width allows.
+   *
+   * 190px was the right column when the settings were one strip laid across
+   * the whole page. A pane is not that: the widest thing in one is two
+   * buttons side by side whose words do not break, which wants close to
+   * 300px, and a grid that answers a wider sheet with more columns of the
+   * old width never gives it that however wide the sheet gets.
+   *
+   * `auto-fill` rather than `auto-fit`, because the sections are not the same
+   * size. A collapsed track hands its room to whatever is left, so Library -
+   * which holds a single group - would have had a slider drawn across the
+   * whole width of the sheet, and every pane would size its controls
+   * differently from the last.
+   */
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 }
 
 .settings-sections {

@@ -140,12 +140,29 @@ describe('the stylesheet', () => {
     // the text baseline and hangs below the word it belongs to.
     expect(icon?.body).toMatch(/display\s*:\s*block/);
 
-    // And the panel is wide enough for two columns, which is what it now
-    // holds: the rail takes a fixed slice off the left before the settings
-    // get any of it.
+    // And the panel is wide enough for several columns of it: the rail takes
+    // a fixed slice off the left before the settings get any of it.
     const panel = rules().find((rule) => rule.selector === '.sheet__panel--wide');
-    const widest = Number(/min\((\d+)px/.exec(panel?.body ?? '')?.[1] ?? '0');
-    expect(widest).toBeGreaterThan(880);
+    const widest = Number(/width:\s*min\((\d+)px/.exec(panel?.body ?? '')?.[1] ?? '0');
+    expect(widest).toBeGreaterThan(1400);
+
+    // Spent on wider columns rather than more of them, which is the only way
+    // a wider sheet reaches the controls: at the old 190px the grid answered
+    // every extra 200px with another narrow column. `auto-fill`, not
+    // `auto-fit` - Library holds a single group, and a collapsed track would
+    // draw its slider across the whole width of the sheet.
+    expect(pane?.body).toMatch(/repeat\(auto-fill,\s*minmax\(300px/);
+
+    // And it holds one height rather than a ceiling. His report: the sheet
+    // changed size as he moved down the rail, which moves the rail under his
+    // finger - the panes hold between one group and thirteen. Written as one
+    // number used twice, because a plain height would be cut back by the
+    // ceiling every sheet carries, and that ceiling is right for the sheets
+    // that really do fit what is in them.
+    // Spelt so that `max-height` cannot answer for it: a word boundary sits
+    // between the dash and the word, so a bare `\bheight` matches both of them.
+    expect(panel?.body).toMatch(/(?<!-)height:\s*var\(--sheet-height\)/);
+    expect(panel?.body).toMatch(/max-height:\s*var\(--sheet-height\)/);
 
     // And a tab is a row of a mark and a name, which nothing may undo. The
     // rules that decide panes are heavier than the tab's own - a class and

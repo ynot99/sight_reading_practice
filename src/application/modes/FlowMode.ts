@@ -62,8 +62,21 @@ export class FlowMode extends BasePracticeMode {
     const waiting = this.early;
     this.early = [];
     for (const event of waiting) {
-      this.judge(context, event);
+      this.judgeTheHeldPress(context, event);
     }
+  }
+
+  /**
+   * What a press held back for this step is worth, now that it has opened.
+   *
+   * Its own method so that a mode built on this one can do more with it than
+   * grade it. Bar mode has a gate at the first note of each bar, and a press
+   * that arrived a moment before the bar line is exactly the reader opening
+   * that gate: judged and nothing else, it was marked a good hit while the
+   * music went on waiting for a note that had already been played.
+   */
+  protected judgeTheHeldPress(context: PracticeContext, event: MidiNoteOnEvent): void {
+    this.judge(context, event);
   }
 
   override onNoteOn(context: PracticeContext, event: MidiNoteOnEvent): void {

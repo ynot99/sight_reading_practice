@@ -211,6 +211,36 @@ describe('Bar mode', () => {
     expect(isAudibleClick(opening!, harness.metronome.currentConfig)).toBe(true);
   });
 
+  it('opens the gate with a press that arrived just before the bar line', () => {
+    // His, and it was a dead end rather than a blemish: "наступний такт не
+    // реєструє те що я натиснув якщо я натиснув за долю секунди, та кольорова
+    // нота малюється буд-то я влучив дуже гарно, але такт все ще чекає на мій
+    // інпут". Flow holds a press nearer the beat it is reaching for than the
+    // one still sounding and hands it over when that beat arrives; at a bar
+    // line that beat is the gate. Graded and left there, the chord was spent -
+    // so no second attempt could open the gate either, and the run could not
+    // go on at all.
+    const harness = barHarness();
+    startAndCountIn(harness);
+    press(harness, MIDI.C3, MIDI.C4);
+
+    // A quarter of a second before the bar line, reaching for it.
+    harness.metronome.advanceSubdivisions(TICKS_TO_NEXT_BAR - 1);
+    press(harness, MIDI.G2, MIDI.D3, MIDI.G4);
+
+    // Nothing yet: the beat they were aimed at has not arrived.
+    expect(harness.metronome.isRunning).toBe(true);
+
+    harness.metronome.advanceSubdivisions(1);
+
+    // The bar line came, the gate closed on it, and the press that was waiting
+    // is what opens it again.
+    expect(harness.metronome.isRunning).toBe(true);
+    expect(harness.of('stepEntered').at(-1)?.step.measureIndex).toBe(1);
+    const judged = harness.of('noteJudged').filter((event) => event.midi === MIDI.G4);
+    expect(judged.at(-1)?.verdict).toBe('correct');
+  });
+
   it('counts the bar lines the music had to wait at', () => {
     // The one number worth reading off this mode, and the one that says when
     // to leave it: the gate stops catching you before the notes stop being

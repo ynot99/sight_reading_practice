@@ -88,7 +88,32 @@ export class BarMode extends FlowMode {
       super.onNoteOn(context, event);
       return;
     }
+    this.openTheGateWith(context, event);
+  }
 
+  /**
+   * A press kept back for this step, which is how the gate is usually opened.
+   *
+   * Flow holds a press that is nearer the beat it is reaching for than the one
+   * still sounding, and hands it over when that beat arrives. At a bar line
+   * that beat *is* the gate, so the press has to open it: graded and left
+   * there - which is what happened - the note came back marked a good hit
+   * while the music went on waiting for a note the reader had already played,
+   * and the chord it belonged to was spent, so no second attempt could ever
+   * open it either.
+   */
+  protected override judgeTheHeldPress(
+    context: PracticeContext,
+    event: MidiNoteOnEvent,
+  ): void {
+    if (!context.holdingAtBarLine) {
+      super.judgeTheHeldPress(context, event);
+      return;
+    }
+    this.openTheGateWith(context, event);
+  }
+
+  private openTheGateWith(context: PracticeContext, event: MidiNoteOnEvent): void {
     const matcher = context.matcher;
     if (matcher === null) {
       // Nothing is owed here, so there is nothing for the gate to open on.

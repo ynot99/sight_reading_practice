@@ -42,6 +42,36 @@ function rules(): { selector: string; body: string; at: number }[] {
  * reader's iPad.
  */
 describe('the stylesheet', () => {
+  it('writes every variant below the rule it varies', () => {
+    // A variant of a class weighs exactly what the class weighs, so between
+    // `.sheet__panel` and `.sheet__panel--wide` nothing decides but which
+    // comes last. The wide one stood above the base rule from the day it was
+    // written: the settings sheet was 520px wide and 640px tall the whole
+    // time, every number in the variant reached nothing, and the test beside
+    // this one read that losing rule and believed what it said. Two of the
+    // transport's buttons were losing their padding to the same mistake.
+    //
+    // Written over the whole sheet rather than the one component, because the
+    // next variant will be somewhere else. jsdom applies no stylesheet, so
+    // nothing else in the suite can see a declaration that never lands.
+    const bases = new Map<string, number>();
+    for (const rule of rules()) {
+      if (/^\.[A-Za-z0-9_-]+$/.test(rule.selector) && !rule.selector.includes('--')) {
+        if (!bases.has(rule.selector)) {
+          bases.set(rule.selector, rule.at);
+        }
+      }
+    }
+
+    const above = rules().filter((rule) => {
+      const base = /^(\.[A-Za-z0-9_-]+?)--[A-Za-z0-9-]+$/.exec(rule.selector)?.[1];
+      return base !== undefined && bases.has(base) && rule.at < (bases.get(base) ?? 0);
+    });
+
+    expect(bases.size).toBeGreaterThan(20);
+    expect(above.map((rule) => rule.selector)).toEqual([]);
+  });
+
   it('lets nothing outrank the browser on what hidden means', () => {
     // An author rule that sets a display beats the browser's own
     // `[hidden] { display: none }`. Three components have been made into flex

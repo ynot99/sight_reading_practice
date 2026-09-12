@@ -673,12 +673,6 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-/* Filed without being asked for, and first to go when the shelf fills. */
-.takes__name--recent {
-  color: var(--text-muted);
-  font-style: italic;
-}
-
 /*
  * The search box in a sheet's head.
  *
@@ -723,6 +717,12 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Filed without being asked for, and first to go when the shelf fills. */
+.takes__name--recent {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .takes__list button {
@@ -1193,41 +1193,18 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   backdrop-filter: blur(2px);
 }
 
-/*
- * Wider, because the settings are a form and not a list.
- *
- * The controls were laid out as a strip across the page and read in columns;
- * squeezed into a list's width they become one very long column, and the
- * reader scrolls past everything to reach anything.
- */
-/*
- * Wider and taller than it was, because it now holds two columns.
- *
- * The rail takes a fixed slice off the left, and at the old width what was
- * left for the settings themselves was narrower than the single column they
- * used to have all to themselves.
- */
-/*
- * A height, not a ceiling.
- *
- * His report: the sheet changed size as he moved down the rail. Of course it
- * did - the panes hold between one group of controls and thirteen - and what
- * moves with it is the rail under his finger. So it holds one size and the
- * pane inside it scrolls, which is the bargain the two columns already make.
- *
- * One number, written once and used twice: a plain `height` would be cut back
- * to 640px by the ceiling every sheet carries, and that ceiling is right for
- * the sheets that really do fit what is in them.
- *
- * The width is his too - "все ще він маленький". The rail takes a fixed slice
- * off the left before the settings get any of it, and what is left is spent
- * on wider columns rather than more of them; see the pane's own rule.
- */
-.sheet__panel--wide {
-  --sheet-height: min(100%, 1100px);
-  width: min(1600px, 100%);
-  height: var(--sheet-height);
-  max-height: var(--sheet-height);
+.sheet__panel {
+  width: min(520px, 100%);
+  max-height: min(70vh, 640px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
 /*
@@ -1245,18 +1222,32 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   min-height: 0;
 }
 
-.sheet__panel {
-  width: min(520px, 100%);
-  max-height: min(70vh, 640px);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  overflow: hidden;
+/*
+ * The settings sheet: a form rather than a list, and the only one holding two
+ * columns. Wide and tall enough for them, and one size whichever it shows.
+ *
+ * Below the rule it varies, which is the whole of why he saw no change. A
+ * variant of a class weighs exactly what the class weighs, so nothing decides
+ * between `.sheet__panel` and `.sheet__panel--wide` but which comes last - and
+ * this stood above the base rule from the day it was written. Every number in
+ * it was fiction: the settings sheet was 520px wide and 640px tall throughout,
+ * and raising the width from 1280 to 1600 at his asking moved nothing at all.
+ * `--narrow` and `--modes` were always written below the base rule and always
+ * worked, which is how it stayed hidden.
+ *
+ * A height and not a ceiling, because a pane holds between one group of
+ * controls and thirteen: a sheet that fits its contents is a different sheet
+ * for every section, and the rail moves under the finger reaching for it. One
+ * number written once and used twice - a plain `height` would be cut back by
+ * the ceiling above, and that ceiling is right for the sheets that really do
+ * fit what is in them. Measured against the sheet rather than the viewport, so
+ * the gutter around it is always there.
+ */
+.sheet__panel--wide {
+  --sheet-height: min(100%, 1100px);
+  width: min(1600px, 100%);
+  height: var(--sheet-height);
+  max-height: var(--sheet-height);
 }
 
 /*
@@ -1640,21 +1631,6 @@ body[data-playing='true'] .score__modes {
 
 .focus-bar[data-open='true'] .focus-bar__drawer {
   display: flex;
-}
-
-.focus-bar__button--icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  width: 48px;
-  flex: none;
-}
-
-.focus-bar__button--icon svg {
-  width: 26px;
-  height: 26px;
-  fill: currentcolor;
 }
 
 /*
@@ -2509,12 +2485,6 @@ body[data-repeats='hidden'] .repeat-mark {
   }
 }
 
-.focus-bar__button--step {
-  padding: 0 12px;
-  font-size: 17px;
-  line-height: 1;
-}
-
 .focus-bar__button {
   appearance: none;
   border: 1px solid var(--border);
@@ -2561,6 +2531,36 @@ body[data-repeats='hidden'] .repeat-mark {
 
 .focus-bar__button--exit {
   background: transparent;
+}
+
+/*
+ * The button's other kinds, all of them below the rule they vary.
+ *
+ * `--icon` was written up beside the fullscreen drawer and `--step` just above
+ * the base rule, and both ask for a padding the base then set again: a square
+ * icon button was being given the side padding of a worded one, and the step
+ * buttons were 8px wider than the sheet says. Nothing but order decides
+ * between a class and a variant of it.
+ */
+.focus-bar__button--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 48px;
+  flex: none;
+}
+
+.focus-bar__button--icon svg {
+  width: 26px;
+  height: 26px;
+  fill: currentcolor;
+}
+
+.focus-bar__button--step {
+  padding: 0 12px;
+  font-size: 17px;
+  line-height: 1;
 }
 
 /* ---- Action bar -------------------------------------------------------- */

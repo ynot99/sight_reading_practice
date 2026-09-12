@@ -3008,26 +3008,32 @@ export class AppView {
    * so this is only "which question is being answered" - and the tabs read
    * their own answer off the markup rather than from a list kept here, which
    * would be a second copy of the sections to keep in step.
+   *
+   * A tab says which pane it *chooses*, which is not the same claim as being
+   * one. They used to say `data-pane`, the word a group of controls uses of
+   * itself, and so the stylesheet's "show this pane" caught the tab of the
+   * chosen section and laid it out as a pane: its mark on one line and its
+   * name below. One attribute cannot answer two questions.
    */
   private bindTheSections(): void {
-    const tabs = [...this.el.settingsSections.querySelectorAll('button[data-pane]')];
+    const tabs = [...this.el.settingsSections.querySelectorAll('button[data-chooses]')];
     const show = (pane: string): void => {
       const panel = this.el.sheetSettings.querySelector('.sheet__panel');
       if (panel instanceof HTMLElement) {
         panel.dataset['showing'] = pane;
       }
       for (const tab of tabs) {
-        tab.setAttribute('aria-pressed', String(tab.getAttribute('data-pane') === pane));
+        tab.setAttribute('aria-pressed', String(tab.getAttribute('data-chooses') === pane));
       }
     };
     for (const tab of tabs) {
       if (tab instanceof HTMLElement) {
         this.listen(tab, 'click', () => {
-          show(tab.dataset['pane'] ?? '');
+          show(tab.dataset['chooses'] ?? '');
         });
       }
     }
-    show(tabs[0]?.getAttribute('data-pane') ?? '');
+    show(tabs[0]?.getAttribute('data-chooses') ?? '');
 
     // One panel and two doors to it. A second set of the same controls would
     // be two editors of one setting, disagreeing the moment one is wired up

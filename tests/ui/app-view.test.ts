@@ -1743,10 +1743,16 @@ describe('AppView', () => {
       const { view } = createRig();
       await view.initialize();
       const sheet = element('sheet-settings');
-      const tabs = [...element('settings-sections').querySelectorAll('button[data-pane]')];
-      const panes = tabs.map((tab) => tab.getAttribute('data-pane') ?? '');
+      const tabs = [...element('settings-sections').querySelectorAll('button[data-chooses]')];
+      const panes = tabs.map((tab) => tab.getAttribute('data-chooses') ?? '');
 
       expect(panes.length).toBeGreaterThan(1);
+      // A tab says which pane it chooses, which is not the claim to be one.
+      // Saying `data-pane` cost it twice: the stylesheet's "show this pane"
+      // reached the chosen tab and laid it out as a pane - the mark on one
+      // line and the name under it - and the check below had the tab as its
+      // own witness that a pane held anything at all.
+      expect(element('settings-sections').querySelectorAll('[data-pane]')).toHaveLength(0);
       // Each one drawn as well as named: a rail of eight words is a list to
       // read, and a rail of eight marks is one to recognise.
       for (const tab of tabs) {
@@ -1768,16 +1774,16 @@ describe('AppView', () => {
       const { view } = createRig();
       await view.initialize();
       const panel = element('sheet-settings').querySelector('.sheet__panel');
-      const tabs = [...element('settings-sections').querySelectorAll('button[data-pane]')];
+      const tabs = [...element('settings-sections').querySelectorAll('button[data-chooses]')];
       const first = tabs[0];
       const second = tabs[1];
 
-      expect(panel?.getAttribute('data-showing')).toBe(first?.getAttribute('data-pane'));
+      expect(panel?.getAttribute('data-showing')).toBe(first?.getAttribute('data-chooses'));
       expect(first?.getAttribute('aria-pressed')).toBe('true');
 
       (second as HTMLButtonElement).click();
 
-      expect(panel?.getAttribute('data-showing')).toBe(second?.getAttribute('data-pane'));
+      expect(panel?.getAttribute('data-showing')).toBe(second?.getAttribute('data-chooses'));
       expect(first?.getAttribute('aria-pressed')).toBe('false');
       expect(second?.getAttribute('aria-pressed')).toBe('true');
     });

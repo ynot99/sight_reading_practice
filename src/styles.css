@@ -2164,6 +2164,13 @@ body[data-playing='true'] .score__modes {
  * Everything belonging to another pane, which is everything else. Written as
  * "not this one" rather than a rule per pane, so a pane added later needs no
  * stylesheet at all.
+ *
+ * Only a group of controls says `data-pane`. The tabs in the rail say which
+ * pane they *choose*, in a word of their own: when they claimed to be panes,
+ * the rule below laid the chosen one out as one - reverting a button to its
+ * inline-block, which put the mark on a line above the name. A selector
+ * heavier than the tab's own rule cannot be answered by writing the tab's
+ * rule again, so the tab stopped making the claim instead.
  */
 .sheet__panel [data-pane] {
   display: none;
@@ -2178,18 +2185,6 @@ body[data-playing='true'] .score__modes {
 .sheet__panel[data-showing='practice'] [data-pane='practice'],
 .sheet__panel[data-showing='library'] [data-pane='library'] {
   display: revert;
-}
-
-/*
- * The tabs carry the attribute too, and must not hide each other.
- *
- * Written as a row on purpose. "Not this pane, so do not show it" is one
- * selector heavier than the rule that makes a tab a row of two things, so an
- * `inline-block` here quietly put every mark on a line of its own above its
- * name - which is what he saw.
- */
-.settings-sections__tab[data-pane] {
-  display: flex;
 }
 
 /*
@@ -2624,8 +2619,20 @@ body[data-repeats='hidden'] .repeat-mark {
   fill: #15803d;
 }
 
+/*
+ * A row that reads left to right, and gives way downwards rather than sideways.
+ *
+ * Its buttons never break a word - the words are the button - so a row of two
+ * of them has a width it cannot go below. "Copy a judging log" beside "Save it
+ * as a file" wants some 280px and a settings column is about 250, and the pane
+ * scrolls in both directions the moment it scrolls in one: a horizontal bar
+ * under the whole form, for two buttons in one corner of it. A wider sheet is
+ * no answer, because the grid spends more room on more columns of the same
+ * width. Wrapping is the answer, and it costs a line only where it is needed.
+ */
 .ladder-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }

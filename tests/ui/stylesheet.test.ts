@@ -147,14 +147,39 @@ describe('the stylesheet', () => {
     const widest = Number(/min\((\d+)px/.exec(panel?.body ?? '')?.[1] ?? '0');
     expect(widest).toBeGreaterThan(880);
 
-    // And a tab is a row of two things, whichever rule reaches it last. The
-    // one that hides other panes is a selector heavier than the one that
-    // makes a tab a row, and an inline-block there put every mark on a line
-    // of its own above its name.
-    const hiding = rules().find(
-      (rule) => rule.selector === '.settings-sections__tab[data-pane]',
+    // And a tab is a row of a mark and a name, which nothing may undo. The
+    // rules that decide panes are heavier than the tab's own - a class and
+    // two attributes against a class and one - so writing the tab's rule
+    // again does not settle it, which is what a
+    // `.settings-sections__tab[data-pane] { display: flex }` was trying to do
+    // while the chosen tab went on breaking into a column. It is settled by
+    // the rail not claiming to be a pane, so nothing that decides panes can
+    // reach a tab at all.
+    const tab = rules().find((rule) => rule.selector === '.settings-sections__tab');
+    const reaching = rules().filter(
+      (rule) =>
+        rule.selector.includes('.settings-sections__tab') &&
+        rule.selector.includes('[data-pane'),
     );
-    expect(hiding?.body).toMatch(/display\s*:\s*flex/);
+
+    expect(tab?.body).toMatch(/display\s*:\s*flex/);
+    expect(reaching).toEqual([]);
+  });
+
+  it('wraps a row of buttons rather than scrolling the form sideways', () => {
+    // His report: a horizontal scrollbar in the settings, now and then. The
+    // rows of two buttons are what did it. Their words never break - the words
+    // are the button - so "Copy a judging log" beside "Save it as a file"
+    // wants some 280px in a column of about 250, and a pane that scrolls one
+    // way scrolls both. A wider sheet is no answer: the grid spends more room
+    // on more columns of the same width. jsdom lays nothing out, so the rule
+    // is the only place this can be read.
+    const row = rules().find((rule) => rule.selector === '.ladder-row');
+    const button = rules().find((rule) => rule.selector === '.ladder-row .button');
+
+    expect(row?.body).toMatch(/flex-wrap\s*:\s*wrap/);
+    // And the words stay whole: it is the row that gives way, not the label.
+    expect(button?.body).toMatch(/white-space\s*:\s*nowrap/);
   });
 
   it('hangs both satellites off the bar, which stays in the middle', () => {

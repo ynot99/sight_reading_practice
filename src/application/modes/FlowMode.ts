@@ -17,19 +17,22 @@ export const FLOW_MODE_ID = 'mode.flow';
  * jitter never shows up in the player's score.
  */
 export class FlowMode extends BasePracticeMode {
-  readonly id = FLOW_MODE_ID;
-  readonly label = 'Flow with the metronome';
+  // Declared as `string` rather than left to infer the literal: Bar mode is
+  // this mode with a gate at the bar line, and a subclass cannot rename
+  // itself past a type of one value.
+  readonly id: string = FLOW_MODE_ID;
+  readonly label: string = 'Flow with the metronome';
   readonly requiresMetronome = true;
   override readonly defaultScoringId = 'scoring.timing-weighted';
 
   /** Presses that arrived just before the beat they were aimed at. */
   private early: MidiNoteOnEvent[] = [];
 
-  override onSessionStart(): void {
+  override onSessionStart(_context: PracticeContext): void {
     this.early = [];
   }
 
-  override onSessionEnd(): void {
+  override onSessionEnd(_context: PracticeContext): void {
     this.early = [];
   }
 

@@ -20,14 +20,16 @@ nothing.
 - **Flow in time** — the cursor walks with the metronome and grades how close
   each press was to its beat. For building fluency, and what the app opens
   with.
-- **Wait each bar** — the clock runs inside the bar and the bar line waits for
-  you. Every press is judged against where it was written to fall, so the
-  rhythm is tested; a stumble costs the rest of that bar and nothing beyond
-  it, because the pulse falls silent at the bar line and starts the next bar
-  from the moment you reach it. For music you can nearly read: Flow turns one
-  slip into a page of red, and this reports what you misread rather than how
-  long you took to recover. The wait forgives nothing in the bar it is in - a
-  note played into the silence is late, and is marked late.
+- **Wait each bar** — Flow, with a gate at every bar line. Inside the bar the
+  clock carries the cursor and a note not played while its slice is open is
+  missed, exactly as in Flow. At the first note of each bar — and of the piece
+  — the pulse falls silent and nothing moves until you play that note: your
+  press *is* the downbeat, so however long you spent finding your way out of
+  the last bar, you are in tempo again from the moment you arrive. Wrong notes
+  do not open the gate, and the gate never stands on a rest — a bar beginning
+  with one has the rest carried by the clock and waits at the note after it.
+  For music you can nearly read: Flow turns one slip into a page of red, and
+  this reports what you misread rather than how long you took to recover.
 - **Wait for me** — the cursor waits until you actually play the notated
   chord. For learning the page.
 - **Listen to it** — the machine plays and nothing is judged. Start is what
@@ -855,8 +857,8 @@ src/
 │       ├── IPracticeMode.ts        #   + BasePracticeMode no-op defaults
 │       ├── WaitMode.ts
 │       ├── FlowMode.ts
-│       ├── BarMode.ts              #   waits like Wait, judges like Flow, and
-│       │                           #   silences the pulse at the bar line
+│       ├── BarMode.ts              #   FlowMode with a gate at each bar line:
+│       │                           #   the reader's press is the downbeat
 │       ├── ListenFrame.ts          #   the fourth frame, and *not* a mode:
 │       │                           #   no run, nothing judged, so no class
 │       │                           #   with six empty hooks in the registry

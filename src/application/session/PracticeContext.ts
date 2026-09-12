@@ -194,6 +194,9 @@ export interface PracticeContext {
    */
   holdForTheBar(untilTicks: number): void;
 
+  /** Whether the pulse is standing still at a bar line, waiting to be given. */
+  readonly holdingAtBarLine: boolean;
+
   /**
    * Starts a bar the pulse is waiting at, with this press as its downbeat.
    *

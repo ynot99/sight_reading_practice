@@ -1050,6 +1050,9 @@ export class PracticeSession {
       get runStartedAtMs() {
         return session.runStartedAt;
       },
+      get holdingAtBarLine() {
+        return session.heldAtBarTicks !== null;
+      },
       movesOnTo: (midi: number) => session.movesOnTo(midi),
       positionTicks: (tick: MetronomeTick) => tick.positionTicks - session.positionOffsetTicks,
       scheduledTimeMs: (ticks: number) => session.runStartedAt + session.elapsedTo(ticks),

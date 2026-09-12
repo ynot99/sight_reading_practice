@@ -247,14 +247,31 @@ describe('Bar mode', () => {
     harness.metronome.advanceSubdivisions(1);
     press(harness, MIDI.C4);
 
-    // By ticks to the line, not by position: opening the gate starts the pulse
-    // afresh, and a walk that asks "where is the music" would go on emitting
-    // through the bar it has just begun.
-    harness.metronome.advanceSubdivisions(3);
-
-    // The bar line came and went on that press: no second one was needed.
-    expect(harness.metronome.isRunning).toBe(true);
+    // The bar begins here, on the press, with three quarters of a beat of the
+    // old one still unrun. Kept until the written line arrived instead, the
+    // reader would have played their downbeat and then waited for the clock to
+    // reach it - a pause as long as they were early, and a different length
+    // every time.
     expect(harness.of('stepEntered').at(-1)?.step.measureIndex).toBe(1);
+    expect(harness.metronome.isRunning).toBe(true);
+  });
+
+  it('will not take the bar ahead while this one still owes a note', () => {
+    // Taking the next bar early is only the reader leaving a bar they have
+    // finished. With a note of this one still unplayed, a press is that note -
+    // or a wrong one against it - and the bar line is not yet anybody's to
+    // cross.
+    const harness = barHarness(twoBarExercise({ tempoBpm: 60 }), true);
+    startAndCountIn(harness);
+    press(harness, MIDI.C4);
+
+    // To the last beat of the bar, with nothing tapped on the way, so the step
+    // the cursor is on is owed and the next step is across the line.
+    harness.metronome.advanceToTicks(3 * Duration.QUARTER.ticks);
+    press(harness, MIDI.C4);
+
+    expect(harness.of('stepEntered').at(-1)?.step.measureIndex).toBe(0);
+    expect(harness.of('noteJudged').at(-1)?.stepIndex).toBe(3);
   });
 
   it('widens that window for the bar line and nowhere else', () => {

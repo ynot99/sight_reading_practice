@@ -104,13 +104,15 @@ export class BarMode extends FlowMode {
    * against a beat that wanted nothing, and the gate it was meant for closed
    * on an empty hand.
    */
-  protected override isAimedAtTheNextStep(
-    context: PracticeContext,
-    event: MidiNoteOnEvent,
-  ): boolean {
-    if (super.isAimedAtTheNextStep(context, event)) {
-      return true;
-    }
+  /**
+   * Whether this press is the reader taking the bar ahead, early.
+   *
+   * True only where the bar they are in has nothing left owing and the next
+   * step is across a bar line. Then there is one thing left to be played here
+   * and it is the bar after this one, however much of this one's written time
+   * is still to run.
+   */
+  private takesTheBarAhead(context: PracticeContext): boolean {
     const step = context.currentStep;
     const next = step === null ? null : context.timeline.at(step.index + 1);
     if (step === null || next === null || next.measureIndex === step.measureIndex) {
@@ -121,6 +123,20 @@ export class BarMode extends FlowMode {
   }
 
   override onNoteOn(context: PracticeContext, event: MidiNoteOnEvent): void {
+    if (!context.holdingAtBarLine && this.takesTheBarAhead(context)) {
+      // The bar begins *here*, on the press, rather than being kept until the
+      // written line arrives. Held back instead - which is what Flow does with
+      // a press reaching for the beat ahead - the reader played their downbeat
+      // and then waited for the clock to catch up to it, a pause as long as
+      // they were early and a different length every time. His: "буд-то воно
+      // навмисно трохи зупиняється на старті такту", and "ці старти тактів
+      // нестабільно з однаковим таймінгом починаються".
+      //
+      // The bar being left is finished by definition - it owes nothing - so
+      // closing it is the whole of what taking the next one early means.
+      context.completeStep();
+    }
+
     if (!context.holdingAtBarLine) {
       super.onNoteOn(context, event);
       return;

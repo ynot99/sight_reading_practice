@@ -2319,6 +2319,17 @@ export class PracticeController {
       }),
     );
     this.sessionSubscriptions.push(
+      // The bar the run was waiting at has begun, so everything that was
+      // standing still with it comes in - from the moment the reader gave the
+      // beat rather than from the moment the page heard about it.
+      session.events.on('barBegan', ({ stepIndex, atMs }) => {
+        const step = this.timeline?.at(stepIndex) ?? null;
+        if (step !== null) {
+          this.otherHandReaches(step, atMs);
+        }
+      }),
+    );
+    this.sessionSubscriptions.push(
       session.events.on('finished', ({ report, score }) => {
         this.finishedReport = report;
         this.drawHeldMarks();
@@ -2783,14 +2794,22 @@ export class PracticeController {
    * pedal or a rolled chord - both belong to the performance the player
    * gives, and this is an accompaniment rather than a performance.
    */
-  private otherHandReaches(step: TimelineStep): void {
+  private otherHandReaches(step: TimelineStep, atMs?: number): void {
     if (!this.wantsTheOtherHand()) {
       return;
     }
     // Under a pulse the music arrives when the beat falls, and the step is
     // entered at that moment: there is nothing to work out.
     if (this.keepsTime) {
-      const now = this.deps.clock.now();
+      // Unless the beat has not fallen. Where a mode holds at bar lines the
+      // step is entered *at* the line and the bar waits there to be given its
+      // downbeat - so an accompaniment sounding now would be answering a note
+      // nobody has struck. His: "ліва рука на старті бару грається одразу не
+      // чекаючи на мене". It comes in when the bar does.
+      if (this.currentSession?.waitingAtTheBarLine === true) {
+        return;
+      }
+      const now = atMs ?? this.deps.clock.now();
       this.soundTheOtherHand(step, now);
       // As far as the next step and no further: under a pulse the music
       // arrives on its own, and each step will say for itself when it does.

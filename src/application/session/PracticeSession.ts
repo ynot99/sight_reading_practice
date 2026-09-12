@@ -369,6 +369,16 @@ export class PracticeSession {
     this.enterStep(this.resumeAtIndex);
   }
 
+  /**
+   * Whether the music is standing at a bar line waiting to be given its beat.
+   *
+   * Anything that would otherwise move with the clock has to ask: the step has
+   * been entered, but the bar it opens has not begun.
+   */
+  get waitingAtTheBarLine(): boolean {
+    return this.heldAtBarTicks !== null;
+  }
+
   /** Stops the run and publishes the report gathered so far. */
   abort(): void {
     if (!this.dispatch('abort')) {
@@ -666,6 +676,14 @@ export class PracticeSession {
     this.stepDeviationMs = null;
     this.stepWrongNotes = [];
 
+    // Before the step is announced to anything. A gate is part of what this
+    // step *is*, and something told about the step without it - the
+    // accompaniment above all - acts on a beat that has not been given.
+    const hold = this.mode.holdsAt(this.context, step);
+    if (hold !== null) {
+      this.holdForTheBar(hold);
+    }
+
     this.emitter.emit('stepEntered', { step, expectedMidi: expected });
     this.publishPosition(step.onsetTicks);
     this.mode.onStepEntered(this.context, step);
@@ -740,6 +758,7 @@ export class PracticeSession {
       this.anchorOnTheNextTick = true;
       this.metronome.start();
     }
+    this.emitter.emit('barBegan', { stepIndex: step.index, atMs });
   }
 
   private completeStep(status?: StepStatus): void {

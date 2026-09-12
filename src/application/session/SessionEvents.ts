@@ -63,6 +63,18 @@ export interface NoteJudgedEvent {
   readonly remaining: readonly number[];
 }
 
+/**
+ * A bar the run was waiting at has been given its downbeat and begun.
+ *
+ * Only where a mode holds at bar lines. Everything that was standing still
+ * with the music - the accompaniment above all - starts from this moment.
+ */
+export interface BarBeganEvent {
+  readonly stepIndex: number;
+  /** When the reader gave the beat, which is what the bar is counted from. */
+  readonly atMs: number;
+}
+
 export interface SessionFinishedEvent {
   readonly report: PerformanceReport;
   readonly score: SessionScore;
@@ -77,5 +89,6 @@ export interface SessionEventMap {
   positionChanged: PositionEvent;
   noteJudged: NoteJudgedEvent;
   beat: MetronomeTick;
+  barBegan: BarBeganEvent;
   finished: SessionFinishedEvent;
 }

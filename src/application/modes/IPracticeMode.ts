@@ -37,6 +37,17 @@ export interface IPracticeMode {
    */
   readonly defaultScoringId: string;
 
+  /**
+   * Where this step makes the music stand still and wait to be given a beat.
+   *
+   * The tick to hold at, or `null` for a mode that never waits. Asked as a
+   * question rather than done as a side effect of entering the step, because
+   * everything the step is announced to has to know: an accompaniment told
+   * about a step and not about the gate on it comes in by itself, which is
+   * exactly what a reader hears as the other hand running away from them.
+   */
+  holdsAt(context: PracticeContext, step: PracticeStep): number | null;
+
   onSessionStart(context: PracticeContext): void;
   onStepEntered(context: PracticeContext, step: PracticeStep): void;
   onNoteOn(context: PracticeContext, event: MidiNoteOnEvent): void;
@@ -62,6 +73,11 @@ export abstract class BasePracticeMode implements IPracticeMode {
 
   /** Concrete for the same reason: most modes count themselves in. */
   readonly waitsForTheFirstBeat: boolean = false;
+
+  /** Nothing waits, by default: most modes are carried by the clock. */
+  holdsAt(_context: PracticeContext, _step: PracticeStep): number | null {
+    return null;
+  }
 
   onSessionStart(_context: PracticeContext): void {
     // No-op by default.

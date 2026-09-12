@@ -62,7 +62,7 @@ export class BarMode extends FlowMode {
     this.lastMeasure = null;
   }
 
-  override onStepEntered(context: PracticeContext, step: PracticeStep): void {
+  override holdsAt(context: PracticeContext, step: PracticeStep): number | null {
     if (this.lastMeasure !== step.measureIndex) {
       this.lastMeasure = step.measureIndex;
       this.awaitingTheBar = true;
@@ -70,11 +70,11 @@ export class BarMode extends FlowMode {
     // The matcher rather than the step's own notes, for the reason Wait mode
     // gives: a step can hold notes this reader is not being asked for, and a
     // gate on one of those would never open.
-    if (this.awaitingTheBar && context.matcher !== null) {
-      this.awaitingTheBar = false;
-      context.holdForTheBar(step.onsetTicks);
+    if (!this.awaitingTheBar || context.matcher === null) {
+      return null;
     }
-    super.onStepEntered(context, step);
+    this.awaitingTheBar = false;
+    return step.onsetTicks;
   }
 
   override onBeat(context: PracticeContext, tick: MetronomeTick): void {

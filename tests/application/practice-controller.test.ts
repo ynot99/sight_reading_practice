@@ -6,6 +6,7 @@ import {
 } from '../../src/application/PracticeController.js';
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
+import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { LISTEN_MODE_ID } from '../../src/application/modes/ListenFrame.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
@@ -33,7 +34,15 @@ import { RecordingPitchPlayer } from '../../src/infrastructure/testing/Recording
 import { PracticeHistory } from '../../src/application/PracticeHistory.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { DomainError } from '../../src/shared/errors.js';
-import { bar, beamedSixteenths, longExercise, p, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import {
+  MIDI,
+  bar,
+  beamedSixteenths,
+  longExercise,
+  p,
+  tiedExercise,
+  twoBarExercise,
+} from '../support/fixtures.js';
 import { measureCount } from '../../src/domain/model/Exercise.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry } from '../../src/domain/model/Exercise.js';
@@ -77,7 +86,7 @@ function createController(
   const controller = new PracticeController({
     presets: new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS),
     rhythms: new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES),
-    modes: new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode()]),
+    modes: new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode(), new BarMode()]),
     serializer: new MusicXmlSerializer(),
     renderer,
     cursor: renderer.cursor,
@@ -1726,6 +1735,31 @@ describe('hearing the hand you are not reading', () => {
     rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
     return rig;
   }
+
+  it('holds the other hand at a bar line until the reader gives the beat', async () => {
+    // His: "ліва рука на старті бару грається одразу не чекаючи на мене".
+    // Under a pulse the step is entered when the beat falls, so the
+    // accompaniment sounds with it - but where a mode gates at bar lines the
+    // step is entered *at* the line and the bar then waits there. Sounding
+    // then is answering a note nobody has struck.
+    const { controller, instrument, midi, metronome, clock } = await readingTheTreble();
+    controller.updateSettings({ modeId: BAR_MODE_ID, countInBars: 0 });
+    controller.start();
+    // Through the gate at the first note, so the run is properly going.
+    metronome.advanceSubdivisions(1);
+    midi.noteOn(MIDI.C4, clock.now());
+    const beforeTheLine = sounded(instrument).length;
+
+    // To the bar line, where the next bar's step is entered and waits.
+    metronome.advanceToTicks(4 * Duration.QUARTER.ticks);
+
+    expect(sounded(instrument)).toHaveLength(beforeTheLine);
+
+    // Given its beat, the bar begins and the other hand comes in with it.
+    midi.noteOn(MIDI.G4, clock.now());
+
+    expect(sounded(instrument).length).toBeGreaterThan(beforeTheLine);
+  });
 
   it('plays the piece instead of beginning a run, in the listening frame', async () => {
     // His: Start replaces playback. There is no run to begin where the

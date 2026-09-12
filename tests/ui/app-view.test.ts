@@ -4442,6 +4442,33 @@ describe('AppView', () => {
       expect(renderer.zoom).toBe(1.5);
     });
 
+    it('waits for the opening chord on a page that has only just opened', async () => {
+      // His: "старт гри по нотам працює, але не при старті сторінки якось".
+      // The watch is armed wherever the answer to "is there music on the page
+      // with nothing happening to it" can change - and the first time it can
+      // change is the page opening with music already on it.
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      const box = element<HTMLInputElement>('immediate-start');
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      await second.view.initialize();
+      expect(second.runtime.controller.settings.immediateStart).toBe(true);
+      expect(second.runtime.controller.session).toBeNull();
+
+      const opening = second.runtime.controller.currentTimeline?.at(0)?.expectedMidi ?? [];
+      expect(opening.length).toBeGreaterThan(0);
+      for (const note of opening) {
+        second.midi.noteOn(note, second.clock.now());
+      }
+
+      expect(second.runtime.controller.session).not.toBeNull();
+    });
+
     it('remembers the input switches, which used to reset every reload', async () => {
       const store = new InMemorySettingsStore();
       const first = createRig(undefined, store);

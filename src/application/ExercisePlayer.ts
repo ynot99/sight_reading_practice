@@ -629,10 +629,22 @@ export class ExercisePlayer {
     lap: readonly T[],
     from: number,
   ): T[] {
-    const opening = first.filter((entry) => entry.startTicks < this.firstLapTicks);
+    // Where the first time round ends, in the *plan's* ticks. The count-in is
+    // part of them: the opening list is laid out with the count-in in front of
+    // it, so a lap tiled from the lap's own length alone begins a count-in too
+    // early - and everything that plan says about that stretch, the tempo it
+    // is beaten at above all, lands a count-in before the music it belongs to.
+    //
+    // Measured on his own arrangement, whose last bar is slow: with one bar of
+    // count-in the marker went back to the top a whole bar before the music
+    // did, because the pulse had spent that last bar at the wrong speed. On a
+    // piece that never changes tempo it shows instead as a click accenting the
+    // wrong beat, which is the same fault heard rather than seen.
+    const firstEndsAt = this.firstLapTicks + this.countInTicks;
+    const opening = first.filter((entry) => entry.startTicks < firstEndsAt);
     const rounds = laidEndToEnd(lap, this.lapTicks, PLANNED_LAPS, from).map((entry) => ({
       ...entry,
-      startTicks: entry.startTicks + this.firstLapTicks,
+      startTicks: entry.startTicks + firstEndsAt,
     }));
     return [...opening, ...rounds];
   }

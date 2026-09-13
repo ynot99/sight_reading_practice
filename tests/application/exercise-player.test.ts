@@ -574,6 +574,46 @@ describe('listening to an exercise', () => {
       return [...new Set(instrument.played.map((note) => note.atMs ?? 0))].sort((a, b) => a - b);
     }
 
+    it('lays the laps after the first where the music is, count-in and all', () => {
+      // His, found on a 159-bar arrangement whose last bar is slow: on the
+      // repeat the marker went back to the top a whole bar before the music
+      // did. The laps were tiled from the lap's own length alone, while the
+      // first time round is laid out with the count-in in front of it - so
+      // every lap after it began a count-in early, and everything the plan
+      // says about that stretch went with it. The tempo above all: the pulse
+      // spent the last bar at the speed of the bar after it.
+      //
+      // Measured on his own file: a bar of count-in put the seam 1568ms out,
+      // which at 151bpm is four quarters to the millisecond.
+      // A second bar at twice the speed, so the plan has something to place.
+      const { player, metronome, timeline } = rig({
+        ...twoBarExercise({ tempoBpm: 60 }),
+        tempoChanges: [{ measureIndex: 1, offsetTicks: 0, tempoBpm: 120 }],
+      });
+      player.start(timeline, {
+        staffNumber: null,
+        click: 'pulse',
+        clickWhen: 'never',
+        repeat: true,
+        countInBars: 1,
+      });
+
+      const bar = timeline.exercise.timeSignature.ticksPerMeasure;
+      const countIn = bar;
+      const lap = timeline.totalTicks;
+      const tempos = metronome.currentConfig.tempos;
+
+      // The bar grid alone cannot say this: a lap of even bars tiled a
+      // count-in early lands on the same grid. The tempo is where it shows,
+      // which is why it took a piece that changes speed to find it.
+      //
+      // The second bar of the music is faster, and the plan has to say so at
+      // the place the music is - one count-in in.
+      expect(tempos).toContainEqual({ startTicks: countIn + bar, bpm: 120 });
+      // And the lap after the first begins after all of it, at the top again.
+      expect(tempos).toContainEqual({ startTicks: countIn + lap, bpm: 60 });
+    });
+
     it('goes round inside one performance, without stopping', () => {
       // The whole point. A repeat used to be a new performance: the metronome
       // was stopped and started, which re-anchors it to the audio clock a

@@ -1846,6 +1846,16 @@ describe('AppView', () => {
 
       element<HTMLButtonElement>('focus-play').click();
 
+      // Not over music that is playing: the page should be the page, and a
+      // button for something the reader is not looking at is in the way. His:
+      // "коли гра почалась - можеш і пілюлю з last run теж ховати?".
+      expect(element('score-verdict').hidden).toBe(true);
+      expect(element('score-reading').hidden).toBe(true);
+
+      // Stopped, and the verdict put away by hand: now it is the only way back.
+      element<HTMLButtonElement>('focus-stop').click();
+      element('score-verdict').dispatchEvent(new Event('click', { bubbles: true }));
+
       expect(element('score-verdict').hidden).toBe(true);
       expect(element('score-reading').hidden).toBe(false);
     });

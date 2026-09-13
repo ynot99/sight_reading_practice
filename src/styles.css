@@ -647,6 +647,21 @@ textarea {
   grid-column: 2;
 }
 
+/*
+ * How long a bar line waited for the reader.
+ *
+ * The whole height, because the wait belongs to the music rather than to any
+ * one key, and behind the rows rather than over them: the rows the black keys
+ * sit on are a dark wash with the ground showing through, so the band is seen
+ * through them and comes out darker there by itself.
+ */
+.roll__wait {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--pending) 26%, transparent);
+}
+
 .roll__row {
   position: absolute;
   left: 0;
@@ -758,10 +773,24 @@ textarea {
   background: var(--accent);
 }
 
+/*
+ * The pedal, kept in sight.
+ *
+ * Stuck to the foot of the scroller the way the keys are stuck to its side: a
+ * wide range of pitches makes the grid taller than the sheet, and a lane at the
+ * bottom of all of it is a lane nobody sees. His: "чи можеш зробити sticky щоб
+ * її було видно при високому діапазоні нот?".
+ *
+ * Its own ground, because it now has notes passing underneath it rather than
+ * only empty grid.
+ */
 .roll__pedal {
-  position: relative;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   grid-row: 3;
   grid-column: 2;
+  background: var(--surface);
   border-top: 1px solid var(--border);
 }
 

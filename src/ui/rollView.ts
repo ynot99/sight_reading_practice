@@ -108,18 +108,35 @@ function element(tag: string, className: string): HTMLElement {
  * The line a click leaves: heavy for a bar, plain for a beat.
  *
  * A bar line the reader gave late gets a line of its own kind: the metre's own
- * lines say where the beat was, and this one says where they put it. Drawn in
- * the colour of the head, because like the head it is theirs rather than the
- * music's, and it says how late in so many words.
+ * lines say where the beat was, and this one says where they put it, in the
+ * colour of the head because like the head it is theirs rather than the music's.
  */
 function lineFor(beat: MarkedBeat, origin: number): HTMLElement {
   const kind = beat.given ? 'given' : beat.weight;
   const line = element('div', `roll__line roll__line--${kind}`);
   line.style.left = atSecond(beat.atMs - origin);
-  if (beat.lateByMs !== null) {
-    line.title = `Bar line given ${Math.round(beat.lateByMs)} ms late`;
-  }
   return line;
+}
+
+/**
+ * The stretch a bar line waited, from where it fell due to where it was given.
+ *
+ * The band rather than its edge, which is his: "не просто жовту лінію, а всю
+ * секцію малювати жовтим фоном". A line says *that* he was late and the band
+ * says *how* late without anything having to be read - the eye takes a width
+ * where it has to measure a gap.
+ *
+ * `null` for a beat that fell where it was meant to, which is most of them.
+ */
+function waitFor(beat: MarkedBeat, origin: number): HTMLElement | null {
+  if (beat.lateByMs === null) {
+    return null;
+  }
+  const band = element('div', 'roll__wait');
+  band.style.left = atSecond(beat.atMs - beat.lateByMs - origin);
+  band.style.width = atSecond(beat.lateByMs);
+  band.title = `Bar line given ${Math.round(beat.lateByMs)} ms late`;
+  return band;
 }
 
 function noteFor(press: RolledPress, origin: number, high: number, endMs: number): HTMLElement {
@@ -241,6 +258,17 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   }
 
   const grid = element('div', 'roll__grid');
+  // Underneath everything, the rows included, and that is what makes the bands
+  // darker where the black keys are: those rows are a dark wash with the ground
+  // showing through, so a band beneath one is seen through it. Which is what he
+  // asked for - "на чорні ноти також буде темне жовтий колір" - and it falls out
+  // of the order rather than needing a second colour to keep in step.
+  for (const beat of beatsWorthMarking(roll)) {
+    const waited = waitFor(beat, origin);
+    if (waited !== null) {
+      grid.append(waited);
+    }
+  }
   for (let midi = band.high; midi >= band.low; midi -= 1) {
     if (!isBlack(midi)) {
       continue;

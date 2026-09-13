@@ -112,7 +112,7 @@ describe('drawing a run as a piano roll', () => {
     expect(view.querySelectorAll('.roll__line--downbeat')).toHaveLength(1);
   });
 
-  it('draws a bar line the reader gave as theirs, and says how late', () => {
+  it('draws a bar line the reader gave as theirs', () => {
     // Two lines at one bar line is not a fault to be tidied away; drawing them
     // alike was. The metre's line says where the beat was, this one says where
     // the reader put it.
@@ -125,12 +125,54 @@ describe('drawing a run as a piano roll', () => {
       }),
     );
 
-    const lines = [...view.querySelectorAll<HTMLElement>('.roll__line')];
-    expect(lines.map((line) => line.className)).toEqual([
-      'roll__line roll__line--downbeat',
-      'roll__line roll__line--given',
-    ]);
-    expect(lines[1]?.title).toBe('Bar line given 180 ms late');
+    expect([...view.querySelectorAll<HTMLElement>('.roll__line')].map((line) => line.className))
+      .toEqual(['roll__line roll__line--downbeat', 'roll__line roll__line--given']);
+  });
+
+  it('paints the whole wait, from where the beat fell to where it was given', () => {
+    // The band rather than its edge: the eye takes a width where it would have
+    // to measure a gap.
+    const view = draw(
+      roll({
+        beats: [
+          { atMs: 1000, weight: 'downbeat', positionTicks: 0 },
+          { atMs: 1180, weight: 'downbeat', positionTicks: 0 },
+          { atMs: 2000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+        ],
+      }),
+    );
+
+    const bands = [...view.querySelectorAll<HTMLElement>('.roll__wait')];
+    expect(bands).toHaveLength(1);
+    // From the run's own beginning, which is its first event.
+    expect(bands[0]?.style.left).toBe('calc(var(--roll-second) * 0.0000)');
+    expect(bands[0]?.style.width).toBe('calc(var(--roll-second) * 0.1800)');
+    expect(bands[0]?.title).toBe('Bar line given 180 ms late');
+  });
+
+  it('lays the wait under the rows, so the black keys darken it', () => {
+    // Those rows are a dark wash with the ground showing through, so a band
+    // beneath one is seen through it - which is the darker yellow he asked for,
+    // and it falls out of the order rather than needing a second colour.
+    const view = draw(
+      roll({
+        presses: [press({ midi: MIDI.C4 })],
+        beats: [
+          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+          { atMs: 180, weight: 'downbeat', positionTicks: 0 },
+        ],
+      }),
+    );
+
+    const grid = view.querySelector('.roll__grid');
+    const kinds = [...(grid?.children ?? [])].map((child) => child.className.split(' ')[0]);
+    expect(kinds.indexOf('roll__wait')).toBeLessThan(kinds.indexOf('roll__row'));
+  });
+
+  it('paints nothing where every beat fell where it was meant to', () => {
+    const view = draw(roll({ beats: barOfFour(0, 0) }));
+
+    expect(view.querySelectorAll('.roll__wait')).toHaveLength(0);
   });
 
   it('names a bar once, at the line that fell due rather than the one given', () => {

@@ -3723,11 +3723,21 @@ export class AppView {
    */
   private showVerdict(shown: boolean): void {
     this.el.scoreVerdict.hidden = !shown;
-    // Offered exactly when it is the only way to the reading: there is one, and
-    // it is not on screen. Standing beside a verdict already up, it would be a
-    // button for what the reader is looking at.
-    this.el.scoreReading.hidden = shown || this.lastReading === null;
+    this.offerTheLastReading();
     this.syncCard();
+  }
+
+  /**
+   * Whether to offer the way back to the last reading.
+   *
+   * Exactly when it is the only way to one: there is a reading, it is not on
+   * screen, and nothing is playing over the page. Beside a verdict already up it
+   * would be a button for what the reader is looking at; over a run it would be
+   * a button for what they are not.
+   */
+  private offerTheLastReading(): void {
+    this.el.scoreReading.hidden =
+      this.lastReading === null || !this.el.scoreVerdict.hidden || this.somethingIsPlaying();
   }
 
   /**
@@ -6154,18 +6164,35 @@ export class AppView {
    * One attribute, and the stylesheet does the rest - nothing here measures
    * or moves anything.
    */
+  /**
+   * Whether anything is happening to the music.
+   *
+   * One answer, because everything that stands over the page has to agree about
+   * it: a performance counts, and so does a run held part way through - a reader
+   * who stopped to work something out is still at the keyboard.
+   */
+  private somethingIsPlaying(): boolean {
+    const controller = this.runtime.controller;
+    return (
+      this.isPlaying ||
+      this.isPreviewing ||
+      controller.isListening ||
+      controller.isListeningPaused
+    );
+  }
+
   private applyPlayingChrome(): void {
     // A performance counts as playing. It is not a session, so the bar used
     // to keep all its chrome over music that was going - and Stop, which now
     // stands only while there is something to stop, would have been the one
     // button missing exactly where it is needed.
-    const controller = this.runtime.controller;
-    const playing =
-      this.isPlaying ||
-      this.isPreviewing ||
-      controller.isListening ||
-      controller.isListeningPaused;
+    const playing = this.somethingIsPlaying();
     this.applyPreview();
+    // The way back to the last reading goes with the rest of the chrome: over
+    // music that is playing it is a button for something the reader is not
+    // looking at, and the page should be the page. His: "коли гра почалась -
+    // можеш і пілюлю з last run теж ховати?".
+    this.offerTheLastReading();
     this.el.focusBar.dataset['playing'] = String(playing);
     // His: hold the screen while there is a run, and let it go when there is
     // not - including while one is paused, because a reader who has stopped to
@@ -6185,7 +6212,7 @@ export class AppView {
     // The falling bar belongs to a run, so it comes and goes with one. Health
     // itself only reports when it moves, and a run that has just begun has
     // not moved anything yet.
-    this.renderHealth(controller.health);
+    this.renderHealth(this.runtime.controller.health);
     if (playing) {
       // Shut rather than merely hidden, so what comes back when the music
       // stops is the bar the reader left, not a drawer they never opened.

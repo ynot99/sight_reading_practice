@@ -994,3 +994,17 @@ describe('nothing on this page pulls', () => {
     expect(roll?.body).toContain('overscroll-behavior: contain');
   });
 });
+
+describe('the wait a bar line had', () => {
+  it('is painted through, so what is behind it shows', () => {
+    // The whole point of laying the band under the rows: those rows are a dark
+    // wash with the ground showing through, so the band comes out darker where
+    // the black keys are. An opaque band would hide them and the effect with
+    // them, and no test that reads the markup could tell.
+    const band = rules().find((rule) => rule.selector === '.roll__wait');
+    const row = rules().find((rule) => rule.selector === '.roll__row');
+
+    expect(band?.body).toContain('transparent');
+    expect(row?.body).toContain('transparent');
+  });
+});

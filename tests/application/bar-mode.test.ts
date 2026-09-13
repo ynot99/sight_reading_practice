@@ -368,6 +368,46 @@ describe('Bar mode', () => {
     expect(judged.some((event) => event.midi === MIDI.C4)).toBe(true);
   });
 
+  it('never stops the pulse for a gate that opens on the same tick', () => {
+    // His, and it is what was left of the delay once the device was awake:
+    // between the chord and the downbeat the pulse was begun twice. Once by
+    // the run, and again by the gate at the first note - which closed on the
+    // tick that started the music and was opened by the chord replayed an
+    // instant later. Each start costs a scheduling lead, and two of them are a
+    // tenth of a second of silence between the key and the beat it asked for.
+    //
+    // Nothing was ever waiting, so nothing should have stopped.
+    const clock = new ManualClock();
+    const midi = new MockMidiAdapter({ clock });
+    const metronome = new ManualMetronome(clock);
+    const session = new PracticeSession({
+      timeline: buildTimeline(twoBarExercise({ tempoBpm: 60 })),
+      mode: new BarMode(),
+      midi,
+      metronome,
+      clock,
+      scoring: new TimingWeightedScoringStrategy(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        click: 'subdivision',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+
+    session.start([
+      { type: 'noteon', sourceId: 'test', midi: MIDI.C3, velocity: 100, timestampMs: 0 },
+      { type: 'noteon', sourceId: 'test', midi: MIDI.C4, velocity: 100, timestampMs: 0 },
+    ]);
+    metronome.advanceSubdivisions(1);
+
+    expect(session.status).toBe('running');
+    expect(metronome.isRunning).toBe(true);
+    // One tick emitted and counted. A pulse begun again would be back at
+    // nought, which is how the second scheduling lead got in.
+    expect(metronome.nextTickIndex).toBe(1);
+  });
+
   it('lets the clock carry the cursor inside the bar', () => {
     // The whole difference from Wait mode, and what makes this a test of
     // rhythm: a note not played while its slice of time is open is missed and

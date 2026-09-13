@@ -709,6 +709,27 @@ export class PracticeSession {
       return;
     }
     this.heldAtBarTicks = untilTicks;
+    // The pulse is not stopped here. A gate can be closed and opened again
+    // inside one tick - the reader's press was waiting for this beat, or the
+    // chord that began the run is replayed the instant the run exists - and
+    // stopping a pulse only to start it again costs a whole scheduling lead
+    // twice over, which is a tenth of a second of silence between the key and
+    // the downbeat. His, and he could hear it. So the stopping waits until the
+    // end of the tick, by which time a gate that was never really a wait has
+    // opened again and nothing has to happen at all.
+  }
+
+  /**
+   * Stops the pulse for a gate that is still standing, the tick being over.
+   *
+   * Also where a bar is counted as waited at: a gate opened before the pulse
+   * ever stopped held nobody up, and a number meant to say how often the music
+   * had to wait must not count it.
+   */
+  private holdIfStillWaiting(): void {
+    if (this.heldAtBarTicks === null || !this.metronome.isRunning) {
+      return;
+    }
     const waitingAt = this.currentStep?.measureIndex;
     if (this.theFirstBarHasBegun && waitingAt !== undefined) {
       this.waitedAtBars.push(waitingAt);
@@ -742,6 +763,15 @@ export class PracticeSession {
       return;
     }
     this.heldAtBarTicks = null;
+    if (this.metronome.isRunning) {
+      // Nothing ever stopped, so nothing has to start: the pulse is already
+      // this bar's, counting from where it always was. Beginning it again
+      // would only put a scheduling lead of silence between the reader's key
+      // and the downbeat it asked for.
+      this.theFirstBarHasBegun = true;
+      this.emitter.emit('barBegan', { stepIndex: step.index, atMs });
+      return;
+    }
     this.theFirstBarHasBegun = true;
     this.resumeAtTicks = step.onsetTicks;
     this.resumeAtIndex = step.index;
@@ -978,6 +1008,8 @@ export class PracticeSession {
     this.emitter.emit('beat', tick);
     this.mode.onBeat(this.context, tick);
     this.publishPulsePosition(tick);
+    // Last, because everything above can open a gate that was closed in it.
+    this.holdIfStillWaiting();
   }
 
   /**

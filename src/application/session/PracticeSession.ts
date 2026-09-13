@@ -241,10 +241,15 @@ export class PracticeSession {
 
     // Silent from the first note onwards where the reader gives that beat:
     // the count-in still sounds, and nothing past it does until they play.
-    this.configureThePulse(
-      undefined,
-      this.mode.waitsForTheFirstBeat ? this.resumeAtTicks : undefined,
-    );
+    //
+    // Unless the beat has already been given. A run begun by playing arrives
+    // with that chord in hand, so its first bar is earned before the pulse has
+    // ticked once - and the click may have the bar from the start. Which is
+    // the only way that downbeat can ever be heard now: the pulse is no longer
+    // begun again when the gate opens, so its first tick *is* the downbeat,
+    // and a tick already gone by cannot be unmuted afterwards. His: "тепер не
+    // чути сильної долі взагалі".
+    this.configureThePulse(undefined, this.clickIsGivenAtTheStart());
 
     this.subscriptions.push(this.midi.subscribe((event) => this.handleMidi(event)));
     this.subscriptions.push(this.metronome.onTick((tick) => this.handleTick(tick)));
@@ -507,6 +512,25 @@ export class PracticeSession {
    * The engraver has already decided where the bars are and every step says
    * which one it is in.
    */
+  /**
+   * How much of the piece the click may have before anything has been played.
+   *
+   * Nothing to say, for a frame that waits to be given its first beat and has
+   * not been given it. The first bar, where the chord that begins the run is
+   * already in hand. And the whole run for every other frame, which is what
+   * `undefined` means here.
+   */
+  private clickIsGivenAtTheStart(): number | undefined {
+    if (!this.mode.waitsForTheFirstBeat) {
+      return undefined;
+    }
+    const first = this.timeline.at(this.resumeAtIndex);
+    if (this.theOpeningChord.length === 0 || first === null) {
+      return this.resumeAtTicks;
+    }
+    return this.barEndAfter(first);
+  }
+
   private barEndAfter(step: TimelineStep): number {
     for (let index = step.index + 1; index < this.timeline.length; index += 1) {
       const next = this.timeline.at(index);

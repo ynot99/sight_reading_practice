@@ -368,6 +368,36 @@ describe('Bar mode', () => {
     expect(judged.some((event) => event.midi === MIDI.C4)).toBe(true);
   });
 
+  it('silences a first beat only in the frame that waits to be given one', () => {
+    // Flow has no gate: its first click is the music beginning, and the reader
+    // is following it rather than giving it. Silencing that would be silencing
+    // the metronome of a run nobody asked to hold.
+    const clock = new ManualClock();
+    const midi = new MockMidiAdapter({ clock });
+    const metronome = new ManualMetronome(clock);
+    const session = new PracticeSession({
+      timeline: buildTimeline(twoBarExercise({ tempoBpm: 60 })),
+      mode: new FlowMode(),
+      midi,
+      metronome,
+      clock,
+      scoring: new TimingWeightedScoringStrategy(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'always',
+        click: 'subdivision',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+
+    session.start();
+    const plan = metronome.currentConfig;
+    const first = metronome.advanceSubdivisions(1).at(0);
+
+    expect(first?.isDownbeat).toBe(true);
+    expect(isAudibleClick(first!, plan)).toBe(true);
+  });
+
   it('never stops the pulse for a gate that opens on the same tick', () => {
     // His, and it is what was left of the delay once the device was awake:
     // between the chord and the downbeat the pulse was begun twice. Once by
@@ -399,7 +429,11 @@ describe('Bar mode', () => {
       { type: 'noteon', sourceId: 'test', midi: MIDI.C3, velocity: 100, timestampMs: 0 },
       { type: 'noteon', sourceId: 'test', midi: MIDI.C4, velocity: 100, timestampMs: 0 },
     ]);
-    metronome.advanceSubdivisions(1);
+    // The plan in force when that tick is scheduled, which is the only one
+    // that can say whether it sounded. Read afterwards, the gate has already
+    // handed the click its bar and every tick looks audible.
+    const planAtTheStart = metronome.currentConfig;
+    const first = metronome.advanceSubdivisions(1).at(0);
 
     expect(session.status).toBe('running');
     expect(metronome.isRunning).toBe(true);
@@ -407,14 +441,14 @@ describe('Bar mode', () => {
     // nought, which is how the second scheduling lead got in.
     expect(metronome.nextTickIndex).toBe(1);
 
-    // And the click can be heard. The frame silences the pulse from the music's
-    // start, because the reader gives that beat themselves, and a gate hands it
-    // back the bar it has opened. One that opened without stopping and without
-    // saying so left the click mute for the whole run - no metronome at the
-    // start, and sometimes one arriving at the second bar, which is what he
-    // heard.
-    const beat = metronome.advanceSubdivisions(1).at(0);
-    expect(isAudibleClick(beat!, metronome.currentConfig)).toBe(true);
+    // And the downbeat itself was heard. The frame silences the pulse from the
+    // music's start, because the reader gives that beat - but a run begun by
+    // playing arrives with it already given, so the click may have the bar
+    // from the start. It has to: the pulse is no longer begun again when the
+    // gate opens, so its first tick *is* the downbeat, and a tick already gone
+    // by cannot be unmuted afterwards.
+    expect(isAudibleClick(first!, planAtTheStart)).toBe(true);
+    expect(first?.isDownbeat).toBe(true);
   });
 
   it('lets the clock carry the cursor inside the bar', () => {

@@ -1208,6 +1208,25 @@ export class AppView {
   /** A promotion waiting to be reported alongside the run that earned it. */
   private lastLadderMove: { readonly to: LadderStep; readonly direction: 'up' | 'down' } | null =
     null;
+  /**
+   * The last reading, kept so that it can be read after it has been taken away.
+   *
+   * His: "я можу поставити на repeat випадково, та в кінці діалог зявляється та
+   * дуже швидко зникає - тому я пропустив всю статистику". Which is exactly
+   * what happens: the verdict goes up when a run finishes, the repeat begins
+   * the next lap at once, and starting a run is what puts the verdict away - so
+   * the reading is rendered and hidden inside one frame with no way back to it.
+   *
+   * The ladder move is kept with it rather than left in its own field, because
+   * that field is emptied by the render that consumes it. A reader who missed
+   * the reading missed the news that they had moved up, and that is the half of
+   * it worth coming back for.
+   */
+  private lastReading: {
+    readonly score: SessionScore;
+    readonly report: PerformanceReport;
+    readonly move: { readonly to: LadderStep; readonly direction: 'up' | 'down' } | null;
+  } | null = null;
 
   private readonly el: {
     app: HTMLElement;
@@ -1311,6 +1330,7 @@ export class AppView {
     metronomeClose: HTMLButtonElement;
     sheetTakes: HTMLElement;
     sheetScores: HTMLElement;
+    scoreReading: HTMLButtonElement;
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
     rollZoom: HTMLInputElement;
@@ -1553,6 +1573,7 @@ export class AppView {
       metronomeClose: requireElement(doc, 'metronome-close'),
       sheetTakes: requireElement(doc, 'sheet-takes'),
       sheetScores: requireElement(doc, 'sheet-scores'),
+      scoreReading: requireElement(doc, 'score-reading'),
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
       rollZoom: requireElement(doc, 'roll-zoom'),
@@ -3672,7 +3693,27 @@ export class AppView {
    */
   private showVerdict(shown: boolean): void {
     this.el.scoreVerdict.hidden = !shown;
+    // Offered exactly when it is the only way to the reading: there is one, and
+    // it is not on screen. Standing beside a verdict already up, it would be a
+    // button for what the reader is looking at.
+    this.el.scoreReading.hidden = shown || this.lastReading === null;
     this.syncCard();
+  }
+
+  /**
+   * Puts the last reading back up, whole.
+   *
+   * Rendered again rather than merely unhidden: the panel is where messages go
+   * too, so what is in it may be anything by now - and rendering is what builds
+   * the strip, the numbers and the way in to the drawing.
+   */
+  private showTheLastReading(): void {
+    const reading = this.lastReading;
+    if (reading === null) {
+      return;
+    }
+    this.lastLadderMove = reading.move;
+    this.renderResult(reading.score, reading.report);
   }
 
   /**
@@ -4626,6 +4667,8 @@ export class AppView {
         this.followMusic(at);
       }),
       session.events.on('finished', ({ report, score }) => {
+        // Before the render, which empties the ladder move as it uses it.
+        this.lastReading = { score, report, move: this.lastLadderMove };
         this.renderResult(score, report);
         // The run just measured what it measured; the delay control can say
         // so, and offer to settle itself from it.
@@ -5548,6 +5591,9 @@ export class AppView {
     });
     this.listen(this.el.metronomeClose, 'click', () => {
       this.el.sheetMetronome.hidden = true;
+    });
+    this.listen(this.el.scoreReading, 'click', () => {
+      this.showTheLastReading();
     });
     this.listen(this.el.rollClose, 'click', () => {
       this.stopTheRoll();

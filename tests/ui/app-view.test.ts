@@ -1500,6 +1500,57 @@ describe('AppView', () => {
       expect(drawn?.style.getPropertyValue('--roll-second')).toBe('320px');
     });
 
+    it('offers the last reading once it is no longer on screen', async () => {
+      // His: "я можу поставити на repeat випадково, та в кінці діалог зявляється
+      // та дуже швидко зникає - тому я пропустив всю статистику". Starting a run
+      // is what puts the verdict away, and with repeat on that happens in the
+      // same frame it went up - so there has to be a way back to it.
+      const { view } = createRig();
+      await view.initialize();
+      expect(element('score-reading').hidden).toBe(true);
+
+      // A run put the verdict away, and there is still no reading behind it -
+      // so there is nothing to offer a way back to.
+      element<HTMLButtonElement>('focus-play').click();
+      expect(element('score-reading').hidden).toBe(true);
+
+      element<HTMLButtonElement>('focus-stop').click();
+
+      // On screen, so the button for it would be a button for what is already
+      // being looked at.
+      expect(element('score-verdict').hidden).toBe(false);
+      expect(element('score-reading').hidden).toBe(true);
+
+      element<HTMLButtonElement>('focus-play').click();
+
+      expect(element('score-verdict').hidden).toBe(true);
+      expect(element('score-reading').hidden).toBe(false);
+    });
+
+    it('puts the last reading back whole, strip and all', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('focus-play').click();
+      // The panel is where messages go too, so what is in it may be anything.
+      expect(element('score-verdict').hidden).toBe(true);
+
+      const before = element('result').querySelector('.run-strip');
+
+      element<HTMLButtonElement>('score-reading').click();
+
+      expect(element('score-verdict').hidden).toBe(false);
+      expect(element('result').textContent).toContain('Overall');
+      // Built again rather than merely shown again: the panel holds messages
+      // too, so what is in it may be anything by the time the reader asks.
+      const after = element('result').querySelector('.run-strip');
+      expect(after).not.toBeNull();
+      expect(after).not.toBe(before);
+    });
+
     it('draws the run as a strip of bars before it explains itself in numbers', async () => {
       // His: "цифрами іноді мій мозок просто йде у loading". A row of numbers
       // answers "how well"; the strip answers "where", and answers it without

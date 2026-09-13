@@ -88,6 +88,17 @@
             </svg>
             <span id="score-listening-text">Play to start</span>
           </button>
+            <!--
+              The way back to the last reading, which is not always read when
+              it arrives: with repeat on, the next lap begins the moment the
+              verdict is put up and takes it away again in the same frame.
+            -->
+            <button id="score-reading" class="score__reading" type="button" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 5h16v2H4zM4 11h16v2H4zM4 17h10v2H4z" />
+              </svg>
+              <span>Last reading</span>
+            </button>
           <div id="score-today" class="score__today" hidden>
             <output id="score-today-text"></output>
             <!--

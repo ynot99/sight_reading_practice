@@ -1272,6 +1272,7 @@ body[data-bare='true'] .focus-bar__health,
  * it - and a reader who asked for the page alone did not mean "except that".
  */
 body[data-bare='true'] .score__today,
+body[data-bare='true'] .score__reading,
 body[data-bare='true'] .score__modes {
   display: none;
 }
@@ -1632,6 +1633,29 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   display: flex;
   align-items: flex-start;
   gap: 6px;
+}
+
+/*
+ * The way back to the last reading, dressed as the other things that stand in
+ * this corner: small, quiet, and gone the moment what it offers is on screen.
+ */
+.score__reading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface) var(--over-the-page), transparent);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.score__reading svg {
+  width: 12px;
+  height: 12px;
+  fill: currentcolor;
 }
 
 .score__today {

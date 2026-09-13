@@ -258,20 +258,26 @@ export class PracticeSession {
     if (this.usesPulse()) {
       this.countInRemaining = Math.max(0, this.countInPulses());
       this.metronome.start();
-      if (this.countInRemaining > 0) {
+      // Where the reader began by playing, the music begins with them: their
+      // chord is the first beat and there is nothing left to wait for.
+      //
+      // Waiting for the pulse's first tick put the whole run behind whatever
+      // the device took to produce one - and on a tablet that is not a
+      // scheduling lead but an audio context waking up, which can want a touch
+      // it will not get from a key. The reader was two notes into fast music
+      // before the run existed, and those notes, having arrived before it,
+      // were thrown away.
+      //
+      // Only there. A run begun any other way has nothing to be measured from
+      // but the pulse, so it waits for the pulse as it always has. The ticks
+      // still say where the music is either way: the first of them carries
+      // position nought, which is this run's own starting place, exactly as
+      // after a count-in.
+      const begunWith = this.theRunBeganWith();
+      if (this.countInRemaining > 0 || begunWith === null) {
         return;
       }
-      // Nothing to count, so nothing to wait for. The music used to begin on
-      // the pulse's first tick even here, which put the whole run behind
-      // whatever the device took to produce one - and on a tablet that is not
-      // a scheduling lead but an audio context waking up, which can want a
-      // touch it will not get from a key. A reader who begins by playing was
-      // then two notes in before the run existed, and those notes were gone.
-      //
-      // The pulse still starts, and its ticks still say where the music is:
-      // the first of them carries position nought, which is this run's own
-      // starting place, exactly as after a count-in.
-      this.beginRunning(this.theRunBeganWith() ?? this.clock.now(), 0);
+      this.beginRunning(begunWith, 0);
       return;
     }
 

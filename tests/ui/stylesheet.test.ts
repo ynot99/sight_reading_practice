@@ -1008,3 +1008,17 @@ describe('the wait a bar line had', () => {
     expect(row?.body).toContain('transparent');
   });
 });
+
+describe('how fine the grid reads', () => {
+  it('draws what falls between the beats more faintly than a beat', () => {
+    // It is the thing being measured *against* rather than the thing being
+    // counted, and a grid of equals is a wash in which no beat can be found.
+    const beat = rules().find((rule) => rule.selector === '.roll__line');
+    const division = rules().find((rule) => rule.selector === '.roll__line--division');
+    const percent = (body: string | undefined): number =>
+      Number(/var\(--border\) (\d+)%/.exec(body ?? '')?.[1] ?? '0');
+
+    expect(percent(division?.body)).toBeGreaterThan(0);
+    expect(percent(division?.body)).toBeLessThan(percent(beat?.body));
+  });
+});

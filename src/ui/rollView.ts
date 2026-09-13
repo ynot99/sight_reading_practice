@@ -2,6 +2,7 @@ import {
   beatsWorthMarking,
   rollBeganAtMs,
   rollEndedAtMs,
+  type GridFineness,
   type MarkedBeat,
   type RolledPress,
   type RunRoll,
@@ -22,6 +23,8 @@ export interface RollDrawing {
    * where that position is not the start of one.
    */
   readonly barLabel: (positionTicks: number) => string | null;
+  /** How fine a grid to draw. The beats of the music unless asked otherwise. */
+  readonly fineness?: GridFineness;
 }
 
 /** Semitones of air kept above and below what was played. */
@@ -233,7 +236,7 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // One name per bar line, where it fell due rather than where it was given:
   // the number over the grid is the page's, and the page does not move.
   const ruler = element('div', 'roll__ruler');
-  for (const beat of beatsWorthMarking(roll)) {
+  for (const beat of beatsWorthMarking(roll, drawing.fineness)) {
     // Whether a place in the music begins a bar is the namer's question, not
     // this one's; all the drawing knows is that a beat the reader gave is not a
     // second bar to be named.
@@ -263,7 +266,7 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // showing through, so a band beneath one is seen through it. Which is what he
   // asked for - "на чорні ноти також буде темне жовтий колір" - and it falls out
   // of the order rather than needing a second colour to keep in step.
-  for (const beat of beatsWorthMarking(roll)) {
+  for (const beat of beatsWorthMarking(roll, drawing.fineness)) {
     const waited = waitFor(beat, origin);
     if (waited !== null) {
       grid.append(waited);
@@ -279,7 +282,7 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   }
   // The same list a playback sounds its clicks from, so a line and a click can
   // never end up in different places.
-  for (const beat of beatsWorthMarking(roll)) {
+  for (const beat of beatsWorthMarking(roll, drawing.fineness)) {
     grid.append(lineFor(beat, origin));
   }
   for (const press of roll.presses) {

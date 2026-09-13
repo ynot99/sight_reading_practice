@@ -686,6 +686,15 @@ textarea {
   background: color-mix(in srgb, var(--border) 70%, transparent);
 }
 
+/*
+ * What falls between the beats: the eighths or the sixteenths, whichever the run
+ * needed. Fainter than a beat, because it is the thing being measured against
+ * rather than the thing being counted.
+ */
+.roll__line--division {
+  background: color-mix(in srgb, var(--border) 32%, transparent);
+}
+
 .roll__line--downbeat {
   width: 2px;
   background: var(--border);

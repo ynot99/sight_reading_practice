@@ -118,6 +118,20 @@ export interface RunRoll {
  */
 const ROLL_TAIL_MS = 1_000;
 
+/**
+ * How fine a grid is asked for.
+ *
+ * `beats` is the bar lines and the felt beats, which is what a reader counts.
+ * `divisions` is every tick the pulse actually gave - the eighths or the
+ * sixteenths, whichever the run needed to resolve its shortest note - which is
+ * what a reader checks themselves against once the beats are landing.
+ *
+ * Asked of the drawing and of the clicks together, because a line the eye can
+ * see and a click the ear can hear have to be the same grid or neither is
+ * worth anything.
+ */
+export type GridFineness = 'beats' | 'divisions';
+
 /** Presses kept before a run stops recording them. */
 const PRESS_CAPACITY = 20_000;
 /** And clicks, which at the finest resolution outnumber the presses. */
@@ -336,8 +350,14 @@ export function rollEndedAtMs(roll: RunRoll): number {
  * keeps the pulse rather than the volume. This is the beat the music was
  * measured against, which is the question being asked of it afterwards.
  */
-export function beatsWorthMarking(roll: RunRoll): readonly MarkedBeat[] {
-  const marking = roll.beats.filter((beat) => beat.weight !== 'division');
+export function beatsWorthMarking(
+  roll: RunRoll,
+  fineness: GridFineness = 'beats',
+): readonly MarkedBeat[] {
+  const marking =
+    fineness === 'divisions'
+      ? [...roll.beats]
+      : roll.beats.filter((beat) => beat.weight !== 'division');
   return marking.map((beat, index) => {
     // The beat before it at the same place in the music, if there is one. Only
     // ever the one before: a bar line is given once.
@@ -361,8 +381,11 @@ export function beatsWorthMarking(roll: RunRoll): readonly MarkedBeat[] {
  * a tap on the drawing lands on: the beat is the thing worth pointing at, and
  * the beat the reader was late for is where they meant to point.
  */
-export function theMusicsBeats(roll: RunRoll): readonly MarkedBeat[] {
-  return beatsWorthMarking(roll).filter((beat) => !beat.given);
+export function theMusicsBeats(
+  roll: RunRoll,
+  fineness: GridFineness = 'beats',
+): readonly MarkedBeat[] {
+  return beatsWorthMarking(roll, fineness).filter((beat) => !beat.given);
 }
 
 /**
@@ -377,10 +400,16 @@ export function theMusicsBeats(roll: RunRoll): readonly MarkedBeat[] {
  * for the reader there is no pulse to snap to, and moving the head somewhere
  * they did not point would be worse than not snapping.
  */
-export function theBeatNearest(roll: RunRoll, atMs: number): number {
+export function theBeatNearest(
+  roll: RunRoll,
+  atMs: number,
+  fineness: GridFineness = 'beats',
+): number {
   const began = rollBeganAtMs(roll);
   let nearest: number | null = null;
-  for (const beat of theMusicsBeats(roll)) {
+  // Whatever is drawn is what a tap lands on: snapping to a line the reader
+  // cannot see would move the head somewhere they had no way to mean.
+  for (const beat of theMusicsBeats(roll, fineness)) {
     const at = beat.atMs - began;
     if (nearest === null || Math.abs(at - atMs) < Math.abs(nearest - atMs)) {
       nearest = at;
@@ -403,8 +432,9 @@ export function clicksUpTo(
   roll: RunRoll,
   from: number,
   untilMs: number,
+  fineness: GridFineness = 'beats',
 ): readonly MarkedBeat[] {
-  const marking = theMusicsBeats(roll);
+  const marking = theMusicsBeats(roll, fineness);
   const began = rollBeganAtMs(roll);
   const due: MarkedBeat[] = [];
   for (let index = Math.max(0, from); index < marking.length; index += 1) {
@@ -428,9 +458,13 @@ export function clicksUpTo(
  * spent the downbeat before sounding it, and a tap on a bar line lost that
  * bar's click.
  */
-export function clicksBefore(roll: RunRoll, atMs: number): number {
+export function clicksBefore(
+  roll: RunRoll,
+  atMs: number,
+  fineness: GridFineness = 'beats',
+): number {
   const began = rollBeganAtMs(roll);
-  return theMusicsBeats(roll).filter((beat) => beat.atMs - began < atMs).length;
+  return theMusicsBeats(roll, fineness).filter((beat) => beat.atMs - began < atMs).length;
 }
 
 /**

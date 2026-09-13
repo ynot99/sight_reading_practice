@@ -107,7 +107,12 @@ import {
   middle,
   spreadAround,
 } from '../../src/ui/AppView.js';
-import { longExercise, p, twoBarExercise } from '../support/fixtures.js';
+import {
+  beamedSixteenths,
+  longExercise,
+  p,
+  twoBarExercise,
+} from '../support/fixtures.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -1772,6 +1777,56 @@ describe('AppView', () => {
       element<HTMLButtonElement>('roll-play').click();
 
       expect(rig.runtime.takePlayer.speed).toBe(0.5);
+      element<HTMLButtonElement>('roll-stop').click();
+    });
+
+    it('draws and clicks what falls between the beats, when asked', async () => {
+      // His: "чи можеш додати фічу щоб малювати не тільки основні долі, а й
+      // 8мі/16ті? Та щоб метроном теж клікав у них?" - one switch for both,
+      // because a line the eye sees and a click the ear hears have to be the
+      // same grid.
+      const { view, runtime, midi, metronome, clock } = createRig();
+      await view.initialize();
+      // Music with something shorter than a beat in it, because the finer grid
+      // is the ticks the pulse actually gave and a pulse runs no finer than the
+      // shortest note asks for.
+      await runtime.controller.openScore(beamedSixteenths({ tempoBpm: 60 }));
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      metronome.advanceSubdivisions(1);
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(16);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const lines = (): number =>
+        element('roll-body').querySelectorAll('.roll__line').length;
+      const beatsOnly = lines();
+      expect(element('roll-body').querySelectorAll('.roll__line--division')).toHaveLength(0);
+
+      const divisions = element<HTMLInputElement>('roll-divisions');
+      divisions.checked = true;
+      divisions.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // More lines, and the new ones are drawn as what they are.
+      expect(lines()).toBeGreaterThan(beatsOnly);
+      expect(
+        element('roll-body').querySelectorAll('.roll__line--division').length,
+      ).toBeGreaterThan(0);
+
+      // And the metronome is on the same grid: the finer clicks sound too.
+      metronome.clicks.length = 0;
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(400);
+        vi.advanceTimersByTime(100);
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(metronome.clicks.some((asked) => asked.weight === 'division')).toBe(true);
       element<HTMLButtonElement>('roll-stop').click();
     });
 

@@ -380,6 +380,51 @@ describe('the beat a run was measured against', () => {
     expect(theBeatNearest(played, 380)).toBe(0);
   });
 
+  it('marks every tick the pulse gave, where a finer grid is asked for', () => {
+    // The eighths or the sixteenths, whichever the run needed to resolve its
+    // shortest note - and the same list answers for the lines and the clicks,
+    // so the eye and the ear cannot be on different grids.
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 250, weight: 'division', positionTicks: Duration.QUARTER.ticks / 4 },
+        { atMs: 500, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    expect(beatsWorthMarking(played).map((beat) => beat.atMs)).toEqual([0, 500]);
+    expect(beatsWorthMarking(played, 'divisions').map((beat) => beat.atMs)).toEqual([0, 250, 500]);
+    expect(theMusicsBeats(played, 'divisions')).toHaveLength(3);
+  });
+
+  it('snaps to a division only where divisions are drawn', () => {
+    // Snapping to a line the reader cannot see would move the head somewhere
+    // they had no way to mean.
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 250, weight: 'division', positionTicks: Duration.QUARTER.ticks / 4 },
+        { atMs: 1000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    expect(theBeatNearest(played, 240)).toBe(0);
+    expect(theBeatNearest(played, 240, 'divisions')).toBe(250);
+  });
+
+  it('counts the finer clicks as spent too', () => {
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 250, weight: 'division', positionTicks: Duration.QUARTER.ticks / 4 },
+        { atMs: 500, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    expect(clicksBefore(played, 400)).toBe(1);
+    expect(clicksBefore(played, 400, 'divisions')).toBe(2);
+  });
+
   it('hands over only the clicks the window has reached', () => {
     // Laid out in windows the way the notes are: a click has to be placed
     // before it sounds, and a whole run's worth at once could not be taken

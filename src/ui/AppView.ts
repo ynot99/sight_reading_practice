@@ -53,6 +53,7 @@ import {
   rollAsEvents,
   rollBeganAtMs,
   theBeatNearest,
+  type GridFineness,
 } from '../application/session/RunRoll.js';
 import { drawTheRoll, keepTheHeadInView, timeFromTap } from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
@@ -1360,6 +1361,7 @@ export class AppView {
     rollZoom: HTMLInputElement;
     rollSpeed: HTMLSelectElement;
     rollClick: HTMLInputElement;
+    rollDivisions: HTMLInputElement;
     rollPlay: HTMLButtonElement;
     rollPlayIcon: SVGPathElement;
     rollStop: HTMLButtonElement;
@@ -1606,6 +1608,7 @@ export class AppView {
       rollZoom: requireElement(doc, 'roll-zoom'),
       rollSpeed: requireElement(doc, 'roll-speed'),
       rollClick: requireElement(doc, 'roll-click'),
+      rollDivisions: requireElement(doc, 'roll-divisions'),
       rollPlay: requireElement(doc, 'roll-play'),
       rollPlayIcon: requireElement(doc, 'roll-play-icon'),
       rollStop: requireElement(doc, 'roll-stop'),
@@ -5655,6 +5658,15 @@ export class AppView {
     this.listen(this.el.rollZoom, 'input', () => {
       this.applyTheZoom();
     });
+    this.listen(this.el.rollDivisions, 'change', () => {
+      this.drawTheRollInto();
+      // The count of clicks already handed over indexes into a list that just
+      // changed length, so it is asked again rather than carried over.
+      const roll = this.runtime.controller.lastRoll;
+      if (roll !== null) {
+        this.rollClicksSent = clicksBefore(roll, this.headIsAtMs(), this.theRollsGrid());
+      }
+    });
     this.listen(this.el.rollSpeed, 'change', () => {
       this.runtime.takePlayer.setSpeed(this.theRollsSpeed());
       this.describeTheRoll();
@@ -6305,18 +6317,43 @@ export class AppView {
    * the reader who never presses the button should not be paying for them.
    */
   private showTheRoll(): void {
-    const roll = this.runtime.controller.lastRoll;
-    if (roll === null) {
+    if (this.runtime.controller.lastRoll === null) {
       return;
     }
     this.stopTheRoll();
     this.rollAtMs = 0;
+    this.drawTheRollInto();
+    this.el.sheetRoll.hidden = false;
+  }
+
+  /**
+   * Builds the drawing again, leaving the playback alone.
+   *
+   * Separate from opening the sheet because the grid can be made finer while
+   * something is sounding, and that is a redraw rather than a fresh start: the
+   * head stays where it is and the sound goes on.
+   */
+  private drawTheRollInto(): void {
+    const roll = this.runtime.controller.lastRoll;
+    if (roll === null) {
+      return;
+    }
     this.el.rollBody.replaceChildren(
-      drawTheRoll({ roll, barLabel: this.barNamer() }),
+      drawTheRoll({ roll, barLabel: this.barNamer(), fineness: this.theRollsGrid() }),
     );
     this.applyTheZoom();
     this.describeTheRoll();
-    this.el.sheetRoll.hidden = false;
+  }
+
+  /** How fine a grid the reader has asked for, in the drawing and in the click. */
+  private theRollsGrid(): GridFineness {
+    return this.el.rollDivisions.checked ? 'divisions' : 'beats';
+  }
+
+  /** Where the head stands, whether something is sounding or not. */
+  private headIsAtMs(): number {
+    const player = this.runtime.takePlayer;
+    return player.playing === RUN_ROLL_ID ? player.positionMs : this.rollAtMs;
   }
 
   /**
@@ -6363,7 +6400,7 @@ export class AppView {
     this.describeTakeTransport();
     // From wherever the head stands, which is nought unless the reader has put
     // it somewhere - and the clicks behind it are already spent.
-    this.rollClicksSent = clicksBefore(roll, this.rollAtMs);
+    this.rollClicksSent = clicksBefore(roll, this.rollAtMs, this.theRollsGrid());
     this.runtime.takePlayer.setSpeed(this.theRollsSpeed());
     this.runtime.takePlayer.play(RUN_ROLL_ID, rollAsEvents(roll), this.rollAtMs);
     if (this.rollTick === null) {
@@ -6433,9 +6470,9 @@ export class AppView {
     // On the nearest beat rather than under the finger. A finger is worth about
     // a tenth of a second at any readable zoom, and nobody pointing at a run
     // means a moment between two beats - they mean the beat.
-    const at = theBeatNearest(roll, tapped);
+    const at = theBeatNearest(roll, tapped, this.theRollsGrid());
     this.rollAtMs = at;
-    this.rollClicksSent = clicksBefore(roll, at);
+    this.rollClicksSent = clicksBefore(roll, at, this.theRollsGrid());
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
       this.runtime.takePlayer.seek(at);
     }
@@ -6486,7 +6523,12 @@ export class AppView {
     // when the reader stops, so placing a click early costs nothing, and a
     // second conversion here would be a rule with no consequence to test.
     const rate = this.runtime.takePlayer.speed;
-    const due = clicksUpTo(roll, this.rollClicksSent, positionMs + ROLL_CLICK_LEAD_MS);
+    const due = clicksUpTo(
+      roll,
+      this.rollClicksSent,
+      positionMs + ROLL_CLICK_LEAD_MS,
+      this.theRollsGrid(),
+    );
     const now = this.runtime.clock.now();
     const began = rollBeganAtMs(roll);
     for (const beat of due) {
@@ -6526,8 +6568,7 @@ export class AppView {
     // where the reader put it or where the sound stopped, and it is there from
     // the moment the drawing opens. His: "чи можливо мати курсор завжди? Бо він
     // наразі пропадає як тільки робиться stop".
-    const at = sounding ? player.positionMs : this.rollAtMs;
-    drawn.style.setProperty('--roll-at', (at / 1000).toFixed(3));
+    drawn.style.setProperty('--roll-at', (this.headIsAtMs() / 1000).toFixed(3));
     if (!sounding) {
       return;
     }

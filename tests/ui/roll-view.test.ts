@@ -202,6 +202,25 @@ describe('drawing a run as a piano roll', () => {
     expect(view.querySelectorAll('.roll__bar')).toHaveLength(1);
   });
 
+  it('draws what falls between the beats, where it is asked for', () => {
+    const beats = [
+      { atMs: 0, weight: 'downbeat' as const, positionTicks: 0 },
+      { atMs: 250, weight: 'division' as const, positionTicks: Duration.QUARTER.ticks / 4 },
+      { atMs: 500, weight: 'beat' as const, positionTicks: Duration.QUARTER.ticks },
+    ];
+
+    expect(draw(roll({ beats })).querySelectorAll('.roll__line')).toHaveLength(2);
+
+    const finer = drawTheRoll({
+      roll: roll({ beats }),
+      barLabel: () => null,
+      fineness: 'divisions',
+    });
+
+    expect(finer.querySelectorAll('.roll__line')).toHaveLength(3);
+    expect(finer.querySelectorAll('.roll__line--division')).toHaveLength(1);
+  });
+
   it('names each bar once, by what the writer called it', () => {
     // A repeat is written out, so the fifth bar of the playing is not bar five
     // of the page. The drawing asks rather than counts.

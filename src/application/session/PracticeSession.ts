@@ -1081,7 +1081,7 @@ export class PracticeSession {
     // Only the ticks the run acts on. A tick from a superseded pulse would put
     // a line on the grid where no click was heard, and the count-in's own
     // clicks are before the music the grid is of.
-    this.roller.beat(tick);
+    this.roller.beat(tick, tick.positionTicks - this.positionOffsetTicks);
     this.emitter.emit('beat', tick);
     this.mode.onBeat(this.context, tick);
     this.publishPulsePosition(tick);

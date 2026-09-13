@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   RollRecorder,
   beatsWorthMarking,
+  beatsWorthSounding,
   clicksBefore,
   clicksUpTo,
   rollAsEvents,
@@ -180,9 +181,9 @@ describe('writing a run down', () => {
     // The grid draws a downbeat heavier than a beat and a beat heavier than
     // what falls between them, so the weight travels with the moment.
     const roller = new RollRecorder();
-    roller.beat(tick(0));
-    roller.beat(tick(250, { isDownbeat: false, isPulse: false }));
-    roller.beat(tick(500, { isDownbeat: false, isPulse: true, beat: 2 }));
+    roller.beat(tick(0), 0);
+    roller.beat(tick(250, { isDownbeat: false, isPulse: false }), Duration.QUARTER.ticks / 4);
+    roller.beat(tick(500, { isDownbeat: false, isPulse: true, beat: 2 }), Duration.QUARTER.ticks);
 
     expect(roller.roll().beats.map((beat) => beat.weight)).toEqual([
       'downbeat',
@@ -194,7 +195,7 @@ describe('writing a run down', () => {
   it('forgets the last run when the next one begins', () => {
     const roller = new RollRecorder();
     roller.keyDown(down(MIDI.C4, 100));
-    roller.beat(tick(0));
+    roller.beat(tick(0), 0);
     roller.pedal(pedal(true, 50));
     roller.reset();
 
@@ -238,7 +239,7 @@ describe('the run as something to listen to', () => {
     // begins at its first event whatever that event is, so a run whose first
     // click is long before its first press starts from the click.
     const played = roll({
-      beats: [{ atMs: 4000, weight: 'downbeat', measure: 0 }],
+      beats: [{ atMs: 4000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 4 }],
       presses: [pressOf(MIDI.C4, 5000, 5200)],
     });
 
@@ -253,7 +254,7 @@ describe('the run as something to listen to', () => {
     // note its width, and the only length it can be given at all in a mode
     // with no pulse, where a roll is presses and nothing else.
     const played = roll({
-      beats: [{ atMs: 0, weight: 'downbeat', measure: 0 }, { atMs: 3000, weight: 'beat', measure: 0 }],
+      beats: [{ atMs: 0, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 0 }, { atMs: 3000, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 3 }],
       presses: [pressOf(MIDI.C4, 0, null)],
     });
 
@@ -289,9 +290,9 @@ describe('the beat a run was measured against', () => {
     // sake. All four drawn is a grey wash; all four sounded is a rattle.
     const played = roll({
       beats: [
-        { atMs: 0, weight: 'downbeat', measure: 0 },
-        { atMs: 250, weight: 'division', measure: 0 },
-        { atMs: 500, weight: 'beat', measure: 0 },
+        { atMs: 0, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 0 },
+        { atMs: 250, weight: 'division', positionTicks: Duration.QUARTER.ticks * 0.25 },
+        { atMs: 500, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 0.5 },
       ],
     });
 
@@ -301,15 +302,46 @@ describe('the beat a run was measured against', () => {
     ]);
   });
 
+  it('tells a bar line given late from the one that fell due', () => {
+    // The tick where the gate closed and the first tick of the pulse the press
+    // restarted are both that bar's downbeat, recorded at two moments. Same
+    // place in the music, so the second is the reader giving it - and the gap
+    // between them is the wait, which is the thing worth seeing.
+    const played = roll({
+      beats: [
+        { atMs: 4000, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 4120, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 5000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    const marked = beatsWorthMarking(played);
+    expect(marked.map((beat) => beat.given)).toEqual([false, true, false]);
+    expect(marked.map((beat) => beat.lateByMs)).toEqual([null, 120, null]);
+  });
+
+  it('does not click a bar line the reader gave themselves', () => {
+    // They played it, and heard it on their own instrument at the time. A
+    // second click there is the machine agreeing rather than keeping time.
+    const played = roll({
+      beats: [
+        { atMs: 4000, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 4120, weight: 'downbeat', positionTicks: 0 },
+      ],
+    });
+
+    expect(beatsWorthSounding(played).map((beat) => beat.atMs)).toEqual([4000]);
+  });
+
   it('hands over only the clicks the window has reached', () => {
     // Laid out in windows the way the notes are: a click has to be placed
     // before it sounds, and a whole run's worth at once could not be taken
     // back when the reader stops.
     const played = roll({
       beats: [
-        { atMs: 1000, weight: 'downbeat', measure: 0 },
-        { atMs: 2000, weight: 'beat', measure: 0 },
-        { atMs: 3000, weight: 'beat', measure: 0 },
+        { atMs: 1000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 1 },
+        { atMs: 2000, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 2 },
+        { atMs: 3000, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 3 },
       ],
     });
 
@@ -320,8 +352,8 @@ describe('the beat a run was measured against', () => {
   it('does not hand the same click over twice', () => {
     const played = roll({
       beats: [
-        { atMs: 0, weight: 'downbeat', measure: 0 },
-        { atMs: 1000, weight: 'beat', measure: 0 },
+        { atMs: 0, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 0 },
+        { atMs: 1000, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 1 },
       ],
     });
 
@@ -335,9 +367,9 @@ describe('the beat a run was measured against', () => {
     // click.
     const played = roll({
       beats: [
-        { atMs: 0, weight: 'downbeat', measure: 0 },
-        { atMs: 1000, weight: 'beat', measure: 0 },
-        { atMs: 2000, weight: 'beat', measure: 0 },
+        { atMs: 0, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 0 },
+        { atMs: 1000, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 1 },
+        { atMs: 2000, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 2 },
       ],
     });
 
@@ -350,8 +382,8 @@ describe('the beat a run was measured against', () => {
   it('counts what is behind a moment, measured from where the roll began', () => {
     const played = roll({
       beats: [
-        { atMs: 4000, weight: 'downbeat', measure: 0 },
-        { atMs: 5000, weight: 'beat', measure: 0 },
+        { atMs: 4000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 4 },
+        { atMs: 5000, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 5 },
       ],
     });
 
@@ -363,9 +395,9 @@ describe('the beat a run was measured against', () => {
     // it indexes into, and every click after the first subdivision is wrong.
     const played = roll({
       beats: [
-        { atMs: 0, weight: 'downbeat', measure: 0 },
-        { atMs: 250, weight: 'division', measure: 0 },
-        { atMs: 1000, weight: 'beat', measure: 0 },
+        { atMs: 0, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 0 },
+        { atMs: 250, weight: 'division', positionTicks: Duration.QUARTER.ticks * 0.25 },
+        { atMs: 1000, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 1 },
       ],
     });
 

@@ -45,8 +45,38 @@ export interface RolledPress {
 export interface RolledBeat {
   readonly atMs: number;
   readonly weight: BeatWeight;
-  /** Zero-based, on the metronome's own count. */
-  readonly measure: number;
+  /**
+   * Where in the music it fell, in divisions from the start of the piece.
+   *
+   * The music's position, never the metronome's own bar count. A frame with a
+   * gate at every bar line begins its pulse again each time one opens, and a
+   * pulse begun again counts its bars from nought - so the counter runs 1, 0,
+   * 0, 0, 1, 0 through a piece and is no use for naming anything. The music's
+   * position is the one number that keeps meaning the same thing, and a bar
+   * name is read off it.
+   *
+   * It is also what tells the two beats of a bar line apart. The tick where the
+   * gate closed and the first tick of the pulse the reader's press restarted
+   * are both that bar's downbeat and both recorded, at two different moments -
+   * where it fell due, and where it was given. They carry the same position,
+   * which is how the drawing knows to say so.
+   */
+  readonly positionTicks: number;
+}
+
+/** A click, and whether it is a beat the reader gave rather than one that fell. */
+export interface MarkedBeat extends RolledBeat {
+  /**
+   * A second beat at a position already marked, which is the reader giving a
+   * bar line its downbeat after it fell due.
+   *
+   * The gap between the two is the wait, which is the thing worth seeing: his
+   * "коли є подвійні сильні долі - то мої ноти натиснуті не дуже рівно
+   * співпадають з правильною сильною долею".
+   */
+  readonly given: boolean;
+  /** How long after it fell due it was given, or `null` where it fell. */
+  readonly lateByMs: number | null;
 }
 
 /** The sustain pedal down and up again. */
@@ -208,8 +238,13 @@ export class RollRecorder {
     this.pedalDownAt = null;
   }
 
-  /** One click, at the moment it is heard rather than the moment it is placed. */
-  beat(tick: MetronomeTick): void {
+  /**
+   * One click, at the moment it is heard rather than the moment it is placed.
+   *
+   * @param positionTicks Where in the music it fell, which the caller knows and
+   * the tick does not: a tick counts from wherever its pulse began.
+   */
+  beat(tick: MetronomeTick, positionTicks: number): void {
     if (this.beats.length >= BEAT_CAPACITY) {
       this.full = true;
       return;
@@ -217,7 +252,7 @@ export class RollRecorder {
     this.beats.push({
       atMs: tick.scheduledTimeMs,
       weight: tick.isDownbeat ? 'downbeat' : tick.isPulse ? 'beat' : 'division',
-      measure: tick.measure,
+      positionTicks,
     });
   }
 
@@ -301,8 +336,30 @@ export function rollEndedAtMs(roll: RunRoll): number {
  * keeps the pulse rather than the volume. This is the beat the music was
  * measured against, which is the question being asked of it afterwards.
  */
-export function beatsWorthMarking(roll: RunRoll): readonly RolledBeat[] {
-  return roll.beats.filter((beat) => beat.weight !== 'division');
+export function beatsWorthMarking(roll: RunRoll): readonly MarkedBeat[] {
+  const marking = roll.beats.filter((beat) => beat.weight !== 'division');
+  return marking.map((beat, index) => {
+    // The beat before it at the same place in the music, if there is one. Only
+    // ever the one before: a bar line is given once.
+    const fell = index > 0 ? marking[index - 1] : undefined;
+    const given = fell !== undefined && fell.positionTicks === beat.positionTicks;
+    return {
+      ...beat,
+      given,
+      lateByMs: given && fell !== undefined ? beat.atMs - fell.atMs : null,
+    };
+  });
+}
+
+/**
+ * The clicks a playback sounds: one for each beat of the music.
+ *
+ * Never the reader's own giving of a bar line. They played it; they heard it on
+ * their own instrument at the time, and a second click there is the machine
+ * agreeing with them rather than keeping time for them.
+ */
+export function beatsWorthSounding(roll: RunRoll): readonly MarkedBeat[] {
+  return beatsWorthMarking(roll).filter((beat) => !beat.given);
 }
 
 /**
@@ -319,10 +376,10 @@ export function clicksUpTo(
   roll: RunRoll,
   from: number,
   untilMs: number,
-): readonly RolledBeat[] {
-  const marking = beatsWorthMarking(roll);
+): readonly MarkedBeat[] {
+  const marking = beatsWorthSounding(roll);
   const began = rollBeganAtMs(roll);
-  const due: RolledBeat[] = [];
+  const due: MarkedBeat[] = [];
   for (let index = Math.max(0, from); index < marking.length; index += 1) {
     const beat = marking[index];
     if (beat === undefined || beat.atMs - began > untilMs) {
@@ -346,7 +403,7 @@ export function clicksUpTo(
  */
 export function clicksBefore(roll: RunRoll, atMs: number): number {
   const began = rollBeganAtMs(roll);
-  return beatsWorthMarking(roll).filter((beat) => beat.atMs - began < atMs).length;
+  return beatsWorthSounding(roll).filter((beat) => beat.atMs - began < atMs).length;
 }
 
 /**

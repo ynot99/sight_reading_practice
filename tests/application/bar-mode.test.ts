@@ -700,6 +700,38 @@ describe('Bar mode', () => {
     expect(restarted?.beat).toBe(2);
   });
 
+  it('writes the bar line down twice: where it fell, and where it was given', () => {
+    // Which is what the reader sees in the picture of a run, and what he asked
+    // about: "подвійні сильні долі". They are two facts, not one drawn twice -
+    // the beat the music was owed and the beat he gave it - and they are told
+    // apart by carrying the same place in the music at different moments.
+    //
+    // The metronome's own bar counter cannot say this: a pulse begun again at
+    // every gate counts its bars from nought, so it reads 1, 0, 0, 0, 1, 0
+    // through a piece. The music's position is the number that keeps meaning
+    // the same thing.
+    const harness = barHarness();
+    startAndCountIn(harness);
+    press(harness, MIDI.C3, MIDI.C4);
+    // To the next bar line, where the pulse stops and waits.
+    harness.metronome.advanceSubdivisions(TICKS_TO_NEXT_BAR);
+    expect(harness.metronome.isRunning).toBe(false);
+    const waited = harness.clock.now();
+
+    // Given late, by a quarter of a beat, and with what this bar actually asks
+    // for rather than what the last one did.
+    harness.clock.advance(SUBDIVISION_MS);
+    press(harness, ...(harness.session.currentStep?.expectedMidi ?? []));
+    // The restarted pulse's own first tick, which the manual metronome delivers
+    // on the next advance rather than at the asking.
+    harness.metronome.advanceSubdivisions(1);
+
+    const atTheLine = harness.session.roll.beats.filter(
+      (beat) => beat.weight === 'downbeat' && beat.positionTicks === Duration.WHOLE.ticks,
+    );
+    expect(atTheLine.map((beat) => beat.atMs)).toEqual([waited, waited + SUBDIVISION_MS]);
+  });
+
   it('never stops inside a bar, however badly it goes', () => {
     // There is one gate per bar and it stands at the bar line. Nothing the
     // reader does or fails to do in the middle of a bar stops the clock -

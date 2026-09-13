@@ -1637,6 +1637,47 @@ describe('AppView', () => {
       element<HTMLButtonElement>('roll-stop').click();
     });
 
+    it('names the bars of the drawing as the page numbers them', async () => {
+      // Read off the printed bar lines, so a piece that does not begin at bar
+      // one is not renumbered - and so a beat inside a bar, which is not a bar,
+      // gets no name at all.
+      const { view, runtime, midi, metronome } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore({
+        ...twoBarExercise({ tempoBpm: 60 }),
+        firstBarNumber: 5,
+      });
+      // After the score: opening one settles the settings from what it asks for.
+      // No repeat, because a lap nothing was played in has no picture to offer.
+      runtime.controller.updateSettings({
+        modeId: FLOW_MODE_ID,
+        countInBars: 0,
+        repeatRange: false,
+      });
+      element<HTMLButtonElement>('focus-play').click();
+      // One tick to leave the count behind, which a run passes through even
+      // when there is nothing to count.
+      metronome.advanceSubdivisions(1);
+      for (let guard = 0; guard < 40 && runtime.controller.session?.status === 'running'; guard += 1) {
+        for (const note of runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+          midi.noteOn(note, 0);
+        }
+        metronome.advanceSubdivisions(1);
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const named = [...element('roll-body').querySelectorAll('.roll__bar')].map(
+        (mark) => mark.textContent,
+      );
+      const beats = element('roll-body').querySelectorAll('.roll__line').length;
+      // Named as the page names them, which is from five rather than from one.
+      expect(named[0]).toBe('5');
+      // And only the bar lines: a beat inside a bar is not a bar.
+      expect(named.length).toBeGreaterThan(0);
+      expect(named.length).toBeLessThan(beats);
+    });
+
     it('stops the run sounding when its drawing is put away', async () => {
       // A sheet closed on a playback that goes on playing is a note the reader
       // cannot get at to stop.

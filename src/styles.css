@@ -649,6 +649,21 @@ textarea {
   background: var(--border);
 }
 
+/*
+ * A bar line the reader gave after it fell due.
+ *
+ * Two lines at one bar line is not a fault to be tidied away - the gap between
+ * them is how long the music waited, which is the one thing the frame with
+ * gates exists to show. What was a fault was drawing them alike: the metre's
+ * lines say where the beat was, and this says where the reader put it, so it
+ * is drawn in the colour of the head, which is the other thing here that is
+ * theirs rather than the music's.
+ */
+.roll__line--given {
+  width: 2px;
+  background: color-mix(in srgb, var(--pending) 75%, transparent);
+}
+
 .roll__note {
   position: absolute;
   height: var(--roll-row);

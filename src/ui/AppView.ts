@@ -46,13 +46,12 @@ import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { barNumberOf, measureCount } from '../domain/model/Exercise.js';
+import { barLines, barNumberOf, measureCount } from '../domain/model/Exercise.js';
 import {
   clicksBefore,
   clicksUpTo,
   rollAsEvents,
   rollBeganAtMs,
-  type RunRoll,
 } from '../application/session/RunRoll.js';
 import { drawTheRoll, keepTheHeadInView, timeFromTap } from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
@@ -6275,7 +6274,7 @@ export class AppView {
     this.stopTheRoll();
     this.rollAtMs = 0;
     this.el.rollBody.replaceChildren(
-      drawTheRoll({ roll, barLabel: this.barNamer(roll) }),
+      drawTheRoll({ roll, barLabel: this.barNamer() }),
     );
     this.applyTheZoom();
     this.describeTheRoll();
@@ -6283,21 +6282,23 @@ export class AppView {
   }
 
   /**
-   * What the writer called the bar the metronome counted as this measure.
+   * What the writer called the bar a position in the music begins, if it does.
    *
-   * Calibrated off the first click rather than off the count-in's length: the
-   * roll holds only the clicks of the music, so whatever measure its first one
-   * carries is the bar the run began at. Counting from the setting instead
-   * would be a second answer to a question the recording already answers, and
-   * would be wrong for every run that began partway through a piece.
+   * Read off the printed bar lines rather than counted: a repeat is written out
+   * and a re-read bar keeps the number it has in the file. No calibration
+   * either, because the roll carries positions in the music - the arithmetic
+   * that used to be needed here was an attempt to undo the metronome's own bar
+   * counter, which a frame with gates resets at every bar line.
    */
-  private barNamer(roll: RunRoll): (measure: number) => string {
+  private barNamer(): (positionTicks: number) => string | null {
     const exercise = this.runtime.controller.currentExercise;
-    const first = roll.beats[0]?.measure ?? 0;
-    const began = this.runtime.controller.lastRunBeganAtMeasure;
-    return (measure) => {
-      const index = began + measure - first;
-      return exercise === null ? String(index + 1) : String(barNumberOf(exercise, index));
+    if (exercise === null) {
+      return () => null;
+    }
+    const bars = barLines(exercise);
+    return (positionTicks) => {
+      const index = bars.findIndex((bar) => bar.startTicks === positionTicks);
+      return index < 0 ? null : String(barNumberOf(exercise, index));
     };
   }
 

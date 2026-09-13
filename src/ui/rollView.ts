@@ -2,7 +2,7 @@ import {
   beatsWorthMarking,
   rollBeganAtMs,
   rollEndedAtMs,
-  type RolledBeat,
+  type MarkedBeat,
   type RolledPress,
   type RunRoll,
 } from '../application/session/RunRoll.js';
@@ -17,8 +17,11 @@ import { midiToLabel } from '../domain/model/Pitch.js';
  */
 export interface RollDrawing {
   readonly roll: RunRoll;
-  /** What the writer called the bar the metronome counted as this measure. */
-  readonly barLabel: (measure: number) => string;
+  /**
+   * What the writer called the bar a position in the music falls in, or `null`
+   * where that position is not the start of one.
+   */
+  readonly barLabel: (positionTicks: number) => string | null;
 }
 
 /** Semitones of air kept above and below what was played. */
@@ -101,10 +104,21 @@ function element(tag: string, className: string): HTMLElement {
   return made;
 }
 
-/** The line a click leaves: heavy for a bar, plain for a beat. */
-function lineFor(beat: RolledBeat, origin: number): HTMLElement {
-  const line = element('div', `roll__line roll__line--${beat.weight}`);
+/**
+ * The line a click leaves: heavy for a bar, plain for a beat.
+ *
+ * A bar line the reader gave late gets a line of its own kind: the metre's own
+ * lines say where the beat was, and this one says where they put it. Drawn in
+ * the colour of the head, because like the head it is theirs rather than the
+ * music's, and it says how late in so many words.
+ */
+function lineFor(beat: MarkedBeat, origin: number): HTMLElement {
+  const kind = beat.given ? 'given' : beat.weight;
+  const line = element('div', `roll__line roll__line--${kind}`);
   line.style.left = atSecond(beat.atMs - origin);
+  if (beat.lateByMs !== null) {
+    line.title = `Bar line given ${Math.round(beat.lateByMs)} ms late`;
+  }
   return line;
 }
 
@@ -199,16 +213,20 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   view.style.setProperty('--roll-rows', String(rows));
   view.style.setProperty('--roll-length', atSecond(endMs - origin));
 
+  // One name per bar line, where it fell due rather than where it was given:
+  // the number over the grid is the page's, and the page does not move.
   const ruler = element('div', 'roll__ruler');
-  const seen = new Set<number>();
-  for (const beat of roll.beats) {
-    if (beat.weight !== 'downbeat' || seen.has(beat.measure)) {
+  for (const beat of beatsWorthMarking(roll)) {
+    // Whether a place in the music begins a bar is the namer's question, not
+    // this one's; all the drawing knows is that a beat the reader gave is not a
+    // second bar to be named.
+    const name = beat.given ? null : drawing.barLabel(beat.positionTicks);
+    if (name === null) {
       continue;
     }
-    seen.add(beat.measure);
     const mark = element('span', 'roll__bar');
     mark.style.left = atSecond(beat.atMs - origin);
-    mark.textContent = drawing.barLabel(beat.measure);
+    mark.textContent = name;
     ruler.append(mark);
   }
 

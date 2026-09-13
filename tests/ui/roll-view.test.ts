@@ -6,6 +6,7 @@ import {
   timeFromTap,
 } from '../../src/ui/rollView.js';
 import type { RolledPress, RunRoll } from '../../src/application/session/RunRoll.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import { MIDI } from '../support/fixtures.js';
 
 function press(over: Partial<RolledPress> = {}): RolledPress {
@@ -25,17 +26,28 @@ function roll(over: Partial<RunRoll> = {}): RunRoll {
   return { presses: [], beats: [], pedal: [], truncated: false, ...over };
 }
 
-/** A bar of four beats at one second each, starting where the run does. */
+/**
+ * A bar of four beats at one second each, at a bar of the music.
+ *
+ * A second to the quarter, which is sixty to the minute - so the moments and
+ * the places in the music stay in step and the drawing has nothing to reconcile.
+ */
 function barOfFour(measure: number, fromMs: number) {
-  return [
-    { atMs: fromMs, weight: 'downbeat' as const, measure },
-    { atMs: fromMs + 1000, weight: 'beat' as const, measure },
-    { atMs: fromMs + 2000, weight: 'beat' as const, measure },
-    { atMs: fromMs + 3000, weight: 'beat' as const, measure },
-  ];
+  const bar = Duration.QUARTER.ticks * 4;
+  return [0, 1, 2, 3].map((beat) => ({
+    atMs: fromMs + beat * 1000,
+    weight: (beat === 0 ? 'downbeat' : 'beat') as 'downbeat' | 'beat',
+    positionTicks: measure * bar + beat * Duration.QUARTER.ticks,
+  }));
 }
 
-function draw(input: RunRoll, label = (measure: number) => `${measure + 1}`): HTMLElement {
+function draw(
+  input: RunRoll,
+  label: (positionTicks: number) => string | null = (ticks) =>
+    ticks % (Duration.QUARTER.ticks * 4) === 0
+      ? `${ticks / (Duration.QUARTER.ticks * 4) + 1}`
+      : null,
+): HTMLElement {
   return drawTheRoll({ roll: input, barLabel: label });
 }
 
@@ -89,9 +101,9 @@ describe('drawing a run as a piano roll', () => {
     const view = draw(
       roll({
         beats: [
-          { atMs: 0, weight: 'downbeat', measure: 0 },
-          { atMs: 250, weight: 'division', measure: 0 },
-          { atMs: 500, weight: 'beat', measure: 0 },
+          { atMs: 0, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 0 },
+          { atMs: 250, weight: 'division', positionTicks: Duration.QUARTER.ticks * 0.25 },
+          { atMs: 500, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 0.5 },
         ],
       }),
     );
@@ -100,12 +112,66 @@ describe('drawing a run as a piano roll', () => {
     expect(view.querySelectorAll('.roll__line--downbeat')).toHaveLength(1);
   });
 
+  it('draws a bar line the reader gave as theirs, and says how late', () => {
+    // Two lines at one bar line is not a fault to be tidied away; drawing them
+    // alike was. The metre's line says where the beat was, this one says where
+    // the reader put it.
+    const view = draw(
+      roll({
+        beats: [
+          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+          { atMs: 180, weight: 'downbeat', positionTicks: 0 },
+        ],
+      }),
+    );
+
+    const lines = [...view.querySelectorAll<HTMLElement>('.roll__line')];
+    expect(lines.map((line) => line.className)).toEqual([
+      'roll__line roll__line--downbeat',
+      'roll__line roll__line--given',
+    ]);
+    expect(lines[1]?.title).toBe('Bar line given 180 ms late');
+  });
+
+  it('names a bar once, at the line that fell due rather than the one given', () => {
+    // The number over the grid is the page's, and the page does not move.
+    const view = draw(
+      roll({
+        beats: [
+          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+          { atMs: 180, weight: 'downbeat', positionTicks: 0 },
+        ],
+      }),
+      () => '12',
+    );
+
+    const marks = [...view.querySelectorAll<HTMLElement>('.roll__bar')];
+    expect(marks).toHaveLength(1);
+    expect(marks[0]?.style.left).toBe('calc(var(--roll-second) * 0.0000)');
+  });
+
+  it('leaves a beat unnamed where the music has no bar line', () => {
+    // A beat inside a bar is not a bar, and the ruler says nothing about it.
+    const view = draw(
+      roll({ beats: barOfFour(0, 0) }),
+      (ticks) => (ticks === 0 ? '1' : null),
+    );
+
+    expect(view.querySelectorAll('.roll__bar')).toHaveLength(1);
+  });
+
   it('names each bar once, by what the writer called it', () => {
     // A repeat is written out, so the fifth bar of the playing is not bar five
     // of the page. The drawing asks rather than counts.
     const view = draw(
       roll({ beats: [...barOfFour(0, 0), ...barOfFour(1, 4000)] }),
-      (measure) => (measure === 0 ? '8' : '9'),
+      // A namer answers for bar lines and says nothing about anything else.
+      (ticks) => {
+        if (ticks === 0) {
+          return '8';
+        }
+        return ticks === Duration.QUARTER.ticks * 4 ? '9' : null;
+      },
     );
 
     const marks = [...view.querySelectorAll<HTMLElement>('.roll__bar')];

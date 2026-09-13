@@ -52,6 +52,7 @@ import {
   clicksUpTo,
   rollAsEvents,
   rollBeganAtMs,
+  theBeatNearest,
 } from '../application/session/RunRoll.js';
 import { drawTheRoll, keepTheHeadInView, timeFromTap } from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
@@ -6398,10 +6399,14 @@ export class AppView {
       return;
     }
     const box = grid.getBoundingClientRect();
-    const at = timeFromTap(event.clientX - box.left, Number(this.el.rollZoom.value));
-    if (at === null) {
+    const tapped = timeFromTap(event.clientX - box.left, Number(this.el.rollZoom.value));
+    if (tapped === null) {
       return;
     }
+    // On the nearest beat rather than under the finger. A finger is worth about
+    // a tenth of a second at any readable zoom, and nobody pointing at a run
+    // means a moment between two beats - they mean the beat.
+    const at = theBeatNearest(roll, tapped);
     this.rollAtMs = at;
     this.rollClicksSent = clicksBefore(roll, at);
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {

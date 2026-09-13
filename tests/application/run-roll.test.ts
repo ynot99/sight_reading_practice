@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   RollRecorder,
   beatsWorthMarking,
-  beatsWorthSounding,
+  theBeatNearest,
+  theMusicsBeats,
   clicksBefore,
   clicksUpTo,
   rollAsEvents,
@@ -330,7 +331,53 @@ describe('the beat a run was measured against', () => {
       ],
     });
 
-    expect(beatsWorthSounding(played).map((beat) => beat.atMs)).toEqual([4000]);
+    expect(theMusicsBeats(played).map((beat) => beat.atMs)).toEqual([4000]);
+  });
+
+  it('finds the beat nearest a moment, so a tap lands on the grid', () => {
+    // A finger is worth about a tenth of a second at any readable zoom, and
+    // nobody pointing at a run means a moment between two beats.
+    const played = roll({
+      beats: [
+        { atMs: 1000, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 2000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+        { atMs: 3000, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 2 },
+      ],
+    });
+
+    // Measured from the roll's own beginning, which is its first event.
+    expect(theBeatNearest(played, 620)).toBe(1000);
+    expect(theBeatNearest(played, 1400)).toBe(1000);
+    expect(theBeatNearest(played, 5000)).toBe(2000);
+  });
+
+  it('gives a tie to the beat already begun', () => {
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 1000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    expect(theBeatNearest(played, 500)).toBe(0);
+  });
+
+  it('leaves the moment alone where the music has no beats at all', () => {
+    // A frame that waits for the reader runs no pulse, and moving the head
+    // somewhere they did not point would be worse than not snapping.
+    expect(theBeatNearest(roll({}), 640)).toBe(640);
+  });
+
+  it('never snaps to a bar line the reader gave late', () => {
+    // They meant the beat, which is where they were trying to be.
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 400, weight: 'downbeat', positionTicks: 0 },
+      ],
+    });
+
+    expect(theBeatNearest(played, 380)).toBe(0);
   });
 
   it('hands over only the clicks the window has reached', () => {

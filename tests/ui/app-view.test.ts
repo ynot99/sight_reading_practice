@@ -26,6 +26,7 @@ import { PracticeHistory } from '../../src/application/PracticeHistory.js';
 import {
   beatsWorthMarking,
   rollBeganAtMs,
+  theMusicsBeats,
 } from '../../src/application/session/RunRoll.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
@@ -1619,19 +1620,37 @@ describe('AppView', () => {
       }
       grid.getBoundingClientRect = () => ({ left: 0, top: 0, right: 0, bottom: 0,
         width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
-      // Long enough that neither of the moments below is clamped to its end.
-      expect(runtime.controller.lastRoll).not.toBeNull();
 
-      // Half a second in, at a hundred and forty pixels to the second.
-      grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 70 }));
+      // The run's own beats, which is where a tap lands: pointed at rather than
+      // calculated, so the test says nothing about the tempo of the material.
+      const played = runtime.controller.lastRoll;
+      if (played === null) {
+        throw new Error('expected a run to have been written down');
+      }
+      const began = rollBeganAtMs(played);
+      const beats = theMusicsBeats(played).map((beat) => beat.atMs - began);
+      expect(beats.length).toBeGreaterThan(2);
+      const second = beats[1] ?? 0;
+      const third = beats[2] ?? 0;
+
+      // Tapped a little past each beat rather than on it, because landing on
+      // the beat is the claim: a finger does not hit a moment, it hits near one.
+      const nudge = (third - second) / 10;
+      const tapAt = (ms: number): void => {
+        grid.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, clientX: ((ms + nudge) / 1000) * 140 }),
+        );
+      };
+
+      tapAt(second);
       element<HTMLButtonElement>('roll-play').click();
 
-      expect(runtime.takePlayer.positionMs).toBe(500);
+      expect(runtime.takePlayer.positionMs).toBe(second);
 
       // And moved again while it is sounding, the sound goes with it.
-      grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 210 }));
+      tapAt(third);
 
-      expect(runtime.takePlayer.positionMs).toBe(1500);
+      expect(runtime.takePlayer.positionMs).toBe(third);
       expect(runtime.takePlayer.playing).not.toBeNull();
 
       element<HTMLButtonElement>('roll-stop').click();

@@ -352,14 +352,41 @@ export function beatsWorthMarking(roll: RunRoll): readonly MarkedBeat[] {
 }
 
 /**
- * The clicks a playback sounds: one for each beat of the music.
+ * The beats of the music: one for each, and never the reader's own giving of a
+ * bar line.
  *
- * Never the reader's own giving of a bar line. They played it; they heard it on
- * their own instrument at the time, and a second click there is the machine
- * agreeing with them rather than keeping time for them.
+ * Two questions turn out to be this one. What a playback clicks: they played
+ * that bar line and heard it on their own instrument, so a second click there
+ * is the machine agreeing with them rather than keeping time for them. And what
+ * a tap on the drawing lands on: the beat is the thing worth pointing at, and
+ * the beat the reader was late for is where they meant to point.
  */
-export function beatsWorthSounding(roll: RunRoll): readonly MarkedBeat[] {
+export function theMusicsBeats(roll: RunRoll): readonly MarkedBeat[] {
   return beatsWorthMarking(roll).filter((beat) => !beat.given);
+}
+
+/**
+ * The beat nearest a moment, in milliseconds from the roll's beginning.
+ *
+ * So that a tap lands on the grid rather than between its lines. A finger is
+ * worth about a tenth of a second at any readable zoom, and nobody pointing at
+ * a run means "thirty-eight milliseconds after the third beat" - they mean the
+ * beat. Ties go to the earlier one, which is the beat already begun.
+ *
+ * The moment itself where the music has no beats at all. In a frame that waits
+ * for the reader there is no pulse to snap to, and moving the head somewhere
+ * they did not point would be worse than not snapping.
+ */
+export function theBeatNearest(roll: RunRoll, atMs: number): number {
+  const began = rollBeganAtMs(roll);
+  let nearest: number | null = null;
+  for (const beat of theMusicsBeats(roll)) {
+    const at = beat.atMs - began;
+    if (nearest === null || Math.abs(at - atMs) < Math.abs(nearest - atMs)) {
+      nearest = at;
+    }
+  }
+  return nearest ?? atMs;
 }
 
 /**
@@ -377,7 +404,7 @@ export function clicksUpTo(
   from: number,
   untilMs: number,
 ): readonly MarkedBeat[] {
-  const marking = beatsWorthSounding(roll);
+  const marking = theMusicsBeats(roll);
   const began = rollBeganAtMs(roll);
   const due: MarkedBeat[] = [];
   for (let index = Math.max(0, from); index < marking.length; index += 1) {
@@ -403,7 +430,7 @@ export function clicksUpTo(
  */
 export function clicksBefore(roll: RunRoll, atMs: number): number {
   const began = rollBeganAtMs(roll);
-  return beatsWorthSounding(roll).filter((beat) => beat.atMs - began < atMs).length;
+  return theMusicsBeats(roll).filter((beat) => beat.atMs - began < atMs).length;
 }
 
 /**

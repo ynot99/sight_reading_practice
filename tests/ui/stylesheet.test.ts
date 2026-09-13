@@ -977,3 +977,20 @@ describe('the stylesheet', () => {
     expect(rules().some((rule) => rule.selector === '[hidden]')).toBe(true);
   });
 });
+
+describe('nothing on this page pulls', () => {
+  it('says so on the root, which is where the document scroller lives', () => {
+    // On the body alone WebKit ignored it, and an exhausted scroller inside the
+    // page still handed its gesture on: the whole page stretched and sprang
+    // back, which on a tablet is the gesture that means "leave".
+    const root = rules().find((rule) => rule.selector === 'html');
+
+    expect(root?.body).toContain('overscroll-behavior: none');
+  });
+
+  it('stops a drag off the end of the run from reaching the page', () => {
+    const roll = rules().find((rule) => rule.selector === '.roll');
+
+    expect(roll?.body).toContain('overscroll-behavior: contain');
+  });
+});

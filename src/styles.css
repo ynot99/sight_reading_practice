@@ -60,16 +60,30 @@
   display: none !important;
 }
 
+/*
+ * Nothing on this page pulls.
+ *
+ * Said on the root as well as the body, and that is the point rather than
+ * belt-and-braces: the document's own scroller is the *root* element, and
+ * WebKit reads the property from there. On the body alone it was ignored, so an
+ * exhausted scroller inside the page still handed its gesture on and the whole
+ * page stretched and sprang back - his: "якщо скрол у MIDI viewer закінчився -
+ * і я намагаюсь скролити далі - то вся сторінка намагається тягнутись вверх".
+ *
+ * And it is the right answer for this program rather than a patch. A rubber
+ * band is a document telling you that you have reached the end of the reading;
+ * an instrument has no end to reach, and on a tablet that same gesture is the
+ * one the browser reads as "leave".
+ */
+html {
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  /*
-   * No rubber-band at the edges of the document. A drag that runs past the top
-   * of the score used to chain out to the page, and on a tablet that is the
-   * gesture the browser reads as "leave".
-   */
   overscroll-behavior: none;
 }
 
@@ -566,6 +580,9 @@ textarea {
   grid-template-columns: var(--roll-keys) var(--roll-length, 100%);
   grid-template-rows: var(--roll-ruler) calc(var(--roll-row) * var(--roll-rows, 12)) var(--roll-pedal);
   overflow: auto;
+  /* A drag that runs off the end of the run stops there; it is not an
+     instruction to move the page behind it. */
+  overscroll-behavior: contain;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);

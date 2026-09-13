@@ -25,7 +25,10 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { compoundBarExercise, p, twoBarExercise } from '../support/fixtures.js';
 import { createHarness } from '../support/harness.js';
-import { isAudibleClick } from '../../src/infrastructure/audio/metronomeMath.js';
+import {
+  buildMetronomeTick,
+  isAudibleClick,
+} from '../../src/infrastructure/audio/metronomeMath.js';
 
 const COMMON = new TimeSignature(4, 4);
 const COMPOUND = new TimeSignature(6, 8);
@@ -149,6 +152,44 @@ describe('the bars a metronome beats through', () => {
 
     expect(bars.map((bar) => bar.startTicks)).toEqual([0, whole, whole * 2]);
     expect(bars.map((bar) => bar.timeSignature.toString())).toEqual(['4/4', '4/4', '3/4']);
+  });
+
+  it('keeps the bar it is begun in the middle of, behind the pulse', () => {
+    // A pulse picked up mid-bar is inside a bar that began before it did, and
+    // the only way it can count the rest of that bar is to be given where
+    // that bar started - which is a negative number on its own clock. Without
+    // it the ticks up to the next bar line have no bar at all, and are
+    // counted from nought as though the reader's entry were a downbeat.
+    const bars = metronomeBars(twoBarExercise(), {
+      countInBars: 0,
+      fromTicks: Duration.HALF.ticks,
+    });
+
+    expect(bars.map((bar) => bar.startTicks)).toEqual([-Duration.HALF.ticks, Duration.HALF.ticks]);
+  });
+
+  it('says which beat of that bar the pulse actually starts on', () => {
+    // The consequence, at the only place it is heard: what the click accents.
+    const config = {
+      bpm: 60,
+      timeSignature: COMMON,
+      bars: metronomeBars(twoBarExercise(), { countInBars: 0, fromTicks: Duration.HALF.ticks }),
+      tempos: [],
+      subdivisionsPerPulse: 1,
+      click: 'pulse' as const,
+      dropout: null,
+      endsAtTicks: null,
+      muted: false,
+    };
+
+    const first = buildMetronomeTick(0, config, 0);
+    expect(first.isDownbeat).toBe(false);
+    expect(first.beat).toBe(3);
+
+    // And the bar line two beats later is the downbeat, as it always was.
+    const line = buildMetronomeTick(2, config, 0);
+    expect(line.isDownbeat).toBe(true);
+    expect(line.beat).toBe(1);
   });
 
   it('counts the reader in to the metre the music is about to start in', () => {

@@ -676,6 +676,30 @@ describe('Bar mode', () => {
     expect(harness.metronome.isRunning).toBe(true);
   });
 
+  it('counts the rest of a bar it picks up in the middle of', () => {
+    // The gate stands at the first note of a bar, so a bar opening with a
+    // rest is picked up on its second beat - and the pulse restarted there is
+    // inside a bar that began a beat earlier. Counted from nought, as it was,
+    // its first tick came out a downbeat: the reader's own entry accented,
+    // and the rest of the bar numbered from it. His: "якщо зупинка на барі
+    // сталася не на сильну долю - то ... метроном починає саме з сильної
+    // долі ... що resultом стає неправильне рахування метроному з початку".
+    const harness = barHarness(restFirstExercise());
+    startAndCountIn(harness);
+    press(harness, MIDI.C4);
+    // Over the bar line onto the rest, then on to the note after it, where
+    // the pulse stops and waits to be given the beat.
+    harness.metronome.advanceSubdivisions(TICKS_TO_NEXT_BAR + SUBDIVISIONS_PER_BEAT);
+    expect(harness.metronome.isRunning).toBe(false);
+
+    press(harness, MIDI.G4);
+    harness.metronome.advanceSubdivisions(1);
+
+    const restarted = harness.metronome.emitted.at(-1);
+    expect(restarted?.isDownbeat).toBe(false);
+    expect(restarted?.beat).toBe(2);
+  });
+
   it('never stops inside a bar, however badly it goes', () => {
     // There is one gate per bar and it stands at the bar line. Nothing the
     // reader does or fails to do in the middle of a bar stops the clock -

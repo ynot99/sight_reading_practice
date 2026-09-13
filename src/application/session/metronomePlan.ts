@@ -128,9 +128,8 @@ export function metronomeBars(
   options: { readonly countInBars: number; readonly fromTicks: number },
 ): readonly MetronomeBar[] {
   const music = barLines(exercise);
-  const startsIn =
-    [...music].reverse().find((bar) => bar.startTicks <= options.fromTicks)?.timeSignature ??
-    exercise.timeSignature;
+  const begunIn = [...music].reverse().find((bar) => bar.startTicks <= options.fromTicks);
+  const startsIn = begunIn?.timeSignature ?? exercise.timeSignature;
   const countIn = Math.max(0, Math.round(options.countInBars));
   const bars: MetronomeBar[] = Array.from({ length: countIn }, (_, index) => ({
     startTicks: index * startsIn.ticksPerMeasure,
@@ -139,6 +138,28 @@ export function metronomeBars(
 
   const musicStarts = countIn * startsIn.ticksPerMeasure;
   const shift = musicStarts - options.fromTicks;
+  // The bar the pulse begins in the middle of, where it does.
+  //
+  // Its start is behind the pulse, so on the metronome's own clock it is a
+  // negative number - which is exactly the thing that has to be said. Left
+  // out, as it was, every tick from there to the next bar line falls outside
+  // the table altogether, and `barAt` answers those by counting bars from
+  // nought in the opening metre: the pulse's first tick comes out a downbeat
+  // and the bar's remaining beats are numbered from it.
+  //
+  // Which is heard wherever a bar is picked up anywhere but its bar line, and
+  // the bar frame does that by design - its gate stands at the first *note*
+  // of a bar, and a bar beginning with a rest has its first note on a later
+  // beat. His: "якщо зупинка на барі сталася не на сильну долю - то коли я
+  // починаю грати, то чомусь метроном починає саме з сильної долі, та грає у
+  // ритм - що resultом стає неправильне рахування метроному з початку".
+  //
+  // Only where nothing is counted in. A count-in holds the clock from nought,
+  // so a bar reaching back into it would put the metronome in two bars at
+  // once; with no count-in there is nothing behind the pulse to collide with.
+  if (countIn === 0 && begunIn !== undefined && begunIn.startTicks < options.fromTicks) {
+    bars.push({ startTicks: begunIn.startTicks + shift, timeSignature: begunIn.timeSignature });
+  }
   for (const bar of music) {
     if (bar.startTicks >= options.fromTicks) {
       bars.push({ startTicks: bar.startTicks + shift, timeSignature: bar.timeSignature });

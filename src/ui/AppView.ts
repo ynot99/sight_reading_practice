@@ -3212,7 +3212,13 @@ export class AppView {
     // nobody has touched will be a moment late with its first click however
     // early the reader plays - and the honest thing is to ask for the one tap
     // rather than to seem slow. It is asked once a session and never again.
-    const awake = this.runtime.audio.awake();
+    // Only where a run begun now would actually wait on the device. A frame
+    // that keeps time waits for the pulse's first tick and a sleeping device
+    // never gives one; a frame that waits for the reader, with no count and no
+    // click, waits on nothing at all - and asking that reader for a tap is
+    // asking for nothing.
+    const awake =
+      this.runtime.audio.awake() || !this.runtime.controller.needsTheAudioClock;
     this.el.scoreListening.dataset['awake'] = String(awake);
     this.el.scoreListeningText.textContent = awake ? 'Play to start' : 'Tap once, then play';
   }

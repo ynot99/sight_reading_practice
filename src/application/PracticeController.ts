@@ -37,7 +37,7 @@ import type {
   ClickSilence,
   CountInWhen,
 } from './ports/IMetronome.js';
-import { clickFollowsTheReader } from './ports/IMetronome.js';
+import { clickFollowsTheReader, clickIsSilent } from './ports/IMetronome.js';
 import { PracticeTimer } from './PracticeTimer.js';
 import {
   rulerMarks,
@@ -2995,6 +2995,32 @@ export class PracticeController {
    */
   get waitingForTheOpening(): boolean {
     return this.opening !== null;
+  }
+
+  /**
+   * Whether a run begun now would need the audio device before it could move.
+   *
+   * The frames that keep time are carried by the pulse, and a pulse is audio
+   * whether or not anybody hears it: the run waits for its first tick, and a
+   * sleeping device never produces one. A count-in is the same, and so is the
+   * frame where the machine does the playing.
+   *
+   * Where none of that is true - the cursor waiting on the reader, no count
+   * in front of it, no click - nothing waits on the device at all. Asking such
+   * a reader to tap the screen is asking for nothing, and this program does
+   * not ask for nothing.
+   */
+  get needsTheAudioClock(): boolean {
+    if (this.machinePlays) {
+      return true;
+    }
+    if (this.deps.modes.get(this.currentSettings.modeId).requiresMetronome) {
+      return true;
+    }
+    if (this.currentSettings.countInBars > 0) {
+      return true;
+    }
+    return !clickIsSilent(this.currentSettings.clickWhen);
   }
 
   /** Whether this step is one the reader has to play. */

@@ -4539,8 +4539,24 @@ describe('AppView', () => {
       // Asleep, it asks for the one thing only a person can give - and it is
       // itself the thing to press, because a browser will start audio inside a
       // gesture it believes in and the page cannot manufacture one.
+      //
+      // Asked only where a run begun now would wait on the device. A frame
+      // that keeps time waits for the pulse's first tick and a sleeping device
+      // never gives one; that is flow, and the bar line with it.
       audioWaking.asleep();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
       expect(element('score-listening-text').textContent).toBe('Tap once, then play');
+
+      // And not where nothing would wait on it: the cursor waiting for the
+      // reader, with no count in front of it and no click. Asking that reader
+      // to tap the screen is asking for nothing.
+      runtime.controller.updateSettings({
+        modeId: new WaitMode().id,
+        countInBars: 0,
+        clickWhen: 'never',
+      });
+      expect(element('score-listening-text').textContent).toBe('Play to start');
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
 
       element<HTMLButtonElement>('score-listening').click();
 

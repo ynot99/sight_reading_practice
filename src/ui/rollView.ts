@@ -48,6 +48,19 @@ export interface RollDrawing {
    * "щоб легше проаналізувати де я полінився, та натиснув ноти не разом".
    */
   readonly slips?: boolean;
+  /**
+   * Where a note the music asked for belongs, in milliseconds from the roll's
+   * start - or `null` where that cannot be known.
+   *
+   * Supplied rather than worked out here, because there are two honest answers
+   * and only the caller knows which frame the run was in. Where a machine kept
+   * the time, a note belongs where the clicks say: they are the clock it was
+   * measured against. Where nothing kept it - a frame that waits - the clicks
+   * are the reader's own entries, so a note placed at them lands exactly under
+   * the press that played it and nothing can ever look early or late. There the
+   * reference has to be the note *before* it, and the written distance from it.
+   */
+  readonly placeGhost?: (ghost: RollGhost) => { readonly fromMs: number; readonly untilMs: number } | null;
 }
 
 /** One note the music asked for, in the music's own time. */
@@ -411,16 +424,25 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     }
   }
 
+  // Where the clicks put a note, unless the caller has a better reference.
+  // Beginning where the beat was taken and ending where the next one fell: a
+  // note is over when its time is up, not when the reader arrives.
+  const place =
+    drawing.placeGhost ??
+    ((ghost: RollGhost) => {
+      const fromMs = momentOfTicks(roll, ghost.fromTicks, 'starts');
+      const untilMs = momentOfTicks(roll, ghost.untilTicks, 'ends');
+      return fromMs === null || untilMs === null ? null : { fromMs, untilMs };
+    });
+
   // Behind the presses, so what the reader did is what the eye lands on and the
   // music underneath it is something to check against.
   for (const ghost of ghosts) {
-    // Beginning where the beat was taken and ending where the next one fell:
-    // a note is over when its time is up, not when the reader arrives.
-    const from = momentOfTicks(roll, ghost.fromTicks, 'starts');
-    const until = momentOfTicks(roll, ghost.untilTicks, 'ends');
-    if (from === null || until === null) {
+    const where = place(ghost);
+    if (where === null) {
       continue;
     }
+    const { fromMs: from, untilMs: until } = where;
     // Only where the right note was played at the wrong time. No press and the
     // outline says it alone; no note asked for and there is nothing to be off
     // from.

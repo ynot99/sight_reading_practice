@@ -2000,10 +2000,59 @@ describe('AppView', () => {
       expect(element('roll-body').querySelectorAll('.roll__ghost')).toHaveLength(0);
     });
 
+    it('bands a note waited for, and one hurried, in a frame that waits', async () => {
+      // His, of deliberately waiting and deliberately hurrying and seeing
+      // neither: the clicks of that frame *are* his entries, so a note placed at
+      // them lands under the press that played it. Owed from the note before it
+      // instead, the waiting and the hurrying both have somewhere to show.
+      const { view, runtime, midi, clock } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      runtime.controller.updateSettings({
+        modeId: new WaitMode().id,
+        clickWhen: 'with-me',
+        countInBars: 0,
+        repeatRange: false,
+      });
+      element<HTMLButtonElement>('focus-play').click();
+
+      // A written quarter is a second here. The second step is dawdled over and
+      // the third is snatched at.
+      const gaps = [0, 1_800, 400, 1_000, 1_000, 1_000, 1_000, 1_000];
+      let at = 5_000;
+      for (let guard = 0; guard < gaps.length && runtime.controller.session?.status === 'running'; guard += 1) {
+        at += gaps[guard] ?? 1_000;
+        clock.set(at);
+        for (const note of runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+          midi.noteOn(note, clock.now());
+        }
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const said = [...element('roll-body').querySelectorAll<HTMLElement>('.roll__slip')].map(
+        (band) => band.title,
+      );
+      // Eight tenths late where he waited, six tenths early where he did not.
+      expect(said).toContain('Late by 800 ms');
+      expect(said).toContain('Rushed by 600 ms');
+
+      // And the notes asked for keep their written lengths, whatever the reader
+      // did about arriving at them: a quarter here is a second, a half is two.
+      const outlines = [...element('roll-body').querySelectorAll<HTMLElement>('.roll__ghost')];
+      expect(outlines.length).toBeGreaterThan(1);
+      for (const outline of outlines) {
+        expect(outline.style.width).not.toBe('calc(var(--roll-second) * 0.0000)');
+      }
+      expect(outlines.map((outline) => outline.style.width)).toContain(
+        'calc(var(--roll-second) * 1.0000)',
+      );
+    });
+
     it('bands a chord that went down in pieces, in a frame that waits', async () => {
-      // The frame that waits places the beat at the *last* note of a chord, so
-      // the ones before it read as early - which is the picture of a lazy chord,
-      // and the reason to look at one at all.
+      // A note of the chord is owed where the score puts it, so one taken a
+      // hundred and fifty milliseconds after the rest is late with it. Which is
+      // the picture of a lazy chord, and the reason to look at one at all.
       const { view, runtime, midi, clock } = createRig();
       await view.initialize();
       await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
@@ -2038,8 +2087,8 @@ describe('AppView', () => {
       const bands = [...element('roll-body').querySelectorAll('.roll__slip')];
       expect(element('roll-body').querySelectorAll('.roll__ghost').length).toBeGreaterThan(0);
       expect(bands).toHaveLength(1);
-      expect(bands[0]?.className).toBe('roll__slip roll__slip--rushed');
-      expect(bands[0]?.getAttribute('title')).toBe('Rushed by 150 ms');
+      expect(bands[0]?.className).toBe('roll__slip roll__slip--late');
+      expect(bands[0]?.getAttribute('title')).toBe('Late by 150 ms');
     });
 
     it('bands every note of a run played behind the beat', async () => {

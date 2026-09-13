@@ -46,7 +46,12 @@ import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { barLines, barNumberOf, measureCount } from '../domain/model/Exercise.js';
+import {
+  barLines,
+  barNumberOf,
+  elapsedMsAt,
+  measureCount,
+} from '../domain/model/Exercise.js';
 import { expectedFor } from '../domain/timeline/Timeline.js';
 import {
   clicksBefore,
@@ -55,6 +60,7 @@ import {
   rollBeganAtMs,
   theBeatNearest,
   type GridChoice,
+  type RunRoll,
 } from '../application/session/RunRoll.js';
 import {
   drawTheRoll,
@@ -6430,6 +6436,7 @@ export class AppView {
         grid: this.theRollsGrid(),
         ghosts: this.theNotesAskedFor(),
         slips: this.el.rollSlips.checked,
+        placeGhost: this.theNotePlacer(roll),
       }),
     );
     this.applyTheZoom();
@@ -6462,6 +6469,75 @@ export class AppView {
       }
     }
     return asked;
+  }
+
+  /**
+   * Where a note the music asked for belongs in the picture.
+   *
+   * Two answers, and which one is right is a property of the frame the run was
+   * in rather than of anything the reader chose.
+   *
+   * Where a machine kept the time - Flow, or the frame with gates at the bar
+   * lines - the clicks are the clock the reading was measured against, so a note
+   * belongs where they put it. `undefined` leaves the drawing to read them.
+   *
+   * Where nothing kept it, the clicks *are* the reader's entries: a note placed
+   * at them lands under the press that played it, and nothing can look early or
+   * late however long they took. His, of deliberately waiting and deliberately
+   * hurrying and seeing neither: "помаранчевих смужок нема там, де я спеціально
+   * чекав щоб їх настворити, та де я поспішав спеціально - червоних смужок не
+   * малюється". So there the reference is the note *before* - where the reader
+   * actually came in, plus the distance the score puts between them. Local on
+   * purpose: a note taken late says so about itself, and says nothing about
+   * every note after it.
+   */
+  private theNotePlacer(
+    roll: RunRoll,
+  ): ((ghost: RollGhost) => { readonly fromMs: number; readonly untilMs: number } | null) | undefined {
+    const exercise = this.runtime.controller.currentExercise;
+    const timeline = this.runtime.controller.currentTimeline;
+    const frame = this.runtime.controller.lastReport?.modeId;
+    const keepsTime = frame === undefined || this.runtime.modes.get(frame).requiresMetronome;
+    if (keepsTime || exercise === null || timeline === null) {
+      return undefined;
+    }
+    // When the reader came in on each step, which is the earliest press of it.
+    const began = rollBeganAtMs(roll);
+    const entries = new Map<number, number>();
+    for (const press of roll.presses) {
+      if (press.stepIndex === null) {
+        continue;
+      }
+      const at = press.downAtMs - began;
+      const seen = entries.get(press.stepIndex);
+      if (seen === undefined || at < seen) {
+        entries.set(press.stepIndex, at);
+      }
+    }
+    return (ghost) => {
+      // The nearest step before this one that the reader actually played. A step
+      // nobody played is no anchor: it has no moment of its own.
+      for (let index = ghost.stepIndex - 1; index >= 0; index -= 1) {
+        const anchorMs = entries.get(index);
+        const anchor = timeline.at(index);
+        if (anchorMs === undefined || anchor === null) {
+          continue;
+        }
+        const fromMs = anchorMs + (elapsedMsAt(exercise, ghost.fromTicks) - elapsedMsAt(exercise, anchor.onsetTicks));
+        const untilMs = fromMs + (elapsedMsAt(exercise, ghost.untilTicks) - elapsedMsAt(exercise, ghost.fromTicks));
+        return { fromMs, untilMs };
+      }
+      // The first step of the run has nothing before it, so it is owed where it
+      // was played: there is no earlier moment to measure a distance from.
+      const ownMs = entries.get(ghost.stepIndex);
+      return ownMs === undefined
+        ? null
+        : {
+            fromMs: ownMs,
+            untilMs:
+              ownMs + (elapsedMsAt(exercise, ghost.untilTicks) - elapsedMsAt(exercise, ghost.fromTicks)),
+          };
+    };
   }
 
   /**

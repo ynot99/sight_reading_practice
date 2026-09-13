@@ -692,24 +692,38 @@ textarea {
  * theirs rather than the music's.
  */
 /*
- * A line that is not where it should be.
+ * How long a beat was the wrong length for.
  *
- * The beat before it took longer than the music asks, or less. Said on the line
- * itself because nothing else in the picture is *about* the grid - a mark beside
- * it would be a second thing to read - and in the two colours already in use for
- * dragging and hurrying, so the eye learns one vocabulary rather than two.
+ * A width rather than a mark: a coloured line says something was wrong here and
+ * nothing about how long it was wrong for. The band covers the time that should
+ * not have been there - or, where a beat was cut short, the time that is
+ * missing - so reading it needs no measuring.
  *
- * Local, not cumulative: it says this beat was the wrong length, never that
- * everything after a bad bar is wrong too.
+ * Striped, and that is the point of the stripes: a solid band of this colour is
+ * the *machine* waiting at a bar line, and this one is the reader taking longer
+ * than the music asks. One colour for the direction, one texture for whose time
+ * it was.
  */
-.roll__line--dragged {
-  width: 2px;
-  background: var(--pending);
+.roll__stretch {
+  position: absolute;
+  top: 0;
+  bottom: 0;
 }
 
-.roll__line--hurried {
-  width: 2px;
-  background: var(--wrong);
+.roll__stretch--dragged {
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--pending) 30%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+.roll__stretch--hurried {
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--wrong) 30%, transparent) 0 4px,
+    transparent 4px 8px
+  );
 }
 
 .roll__line--given {

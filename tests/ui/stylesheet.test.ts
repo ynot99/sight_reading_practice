@@ -1043,3 +1043,17 @@ describe('who gets the pinch', () => {
     expect(roll?.body).toContain('touch-action: pan-x pan-y');
   });
 });
+
+describe('a wait and a stretch are not the same band', () => {
+  it('stripes the one the reader is answerable for', () => {
+    // Both are amber and both are a width of time. One is the machine waiting at
+    // a bar line and the other is the reader taking longer than the music asks,
+    // and a solid band of the same colour for both is one colour with two
+    // meanings - the fault this interface keeps removing.
+    const wait = rules().find((rule) => rule.selector === '.roll__wait');
+    const dragged = rules().find((rule) => rule.selector === '.roll__stretch--dragged');
+
+    expect(wait?.body).not.toContain('repeating-linear-gradient');
+    expect(dragged?.body).toContain('repeating-linear-gradient');
+  });
+});

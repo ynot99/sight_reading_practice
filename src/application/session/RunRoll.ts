@@ -425,6 +425,8 @@ function placesMarked(
 export interface BeatStretch {
   /** Where the beat is, in the music. */
   readonly positionTicks: number;
+  /** And when it fell, on the clock the roll is drawn on. */
+  readonly atMs: number;
   /** And where the one before it was, or `null` for the first of the run. */
   readonly fromTicks: number | null;
   /**
@@ -453,6 +455,7 @@ export function beatStretches(roll: RunRoll): readonly BeatStretch[] {
     const before = index > 0 ? places[index - 1] : undefined;
     return {
       positionTicks: place.ticks,
+      atMs: place.fell,
       fromTicks: before?.ticks ?? null,
       tookMs: before === undefined ? null : place.fell - before.taken,
     };

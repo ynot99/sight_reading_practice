@@ -644,12 +644,12 @@ describe('how far a note was from where it was owed', () => {
   });
 });
 
-describe('a line that is not where it should be', () => {
+describe('how long a beat was the wrong length for', () => {
   /** A quarter is a second, which is sixty to the minute. */
   const written = (fromTicks: number, toTicks: number): number =>
     ((toTicks - fromTicks) / Duration.QUARTER.ticks) * 1000;
 
-  function linesOf(atMs: readonly number[]): HTMLElement[] {
+  function bandsOf(atMs: readonly number[]): HTMLElement[] {
     const view = drawTheRoll({
       roll: roll({
         beats: atMs.map((at, index) => ({
@@ -661,49 +661,48 @@ describe('a line that is not where it should be', () => {
       barLabel: () => null,
       writtenMsBetween: written,
     });
-    return [...view.querySelectorAll<HTMLElement>('.roll__line')];
+    return [...view.querySelectorAll<HTMLElement>('.roll__stretch')];
   }
 
   it('says nothing where every beat was the length it claims', () => {
-    const lines = linesOf([0, 1000, 2000]);
-
-    expect(lines).toHaveLength(3);
-    for (const line of lines) {
-      expect(line.className).not.toContain('dragged');
-      expect(line.className).not.toContain('hurried');
-    }
+    expect(bandsOf([0, 1000, 2000])).toHaveLength(0);
   });
 
-  it('marks the line after a beat that was dragged', () => {
-    // Half again as long as it should have been.
-    const lines = linesOf([0, 1500, 2500]);
+  it('covers the time a dragged beat should not have taken', () => {
+    // A second and a half over a written second: the band is the extra half,
+    // and it sits where that half was - at the end of the beat.
+    const bands = bandsOf([0, 1500, 2500]);
 
-    expect(lines[1]?.className).toContain('roll__line--dragged');
-    expect(lines[1]?.title).toBe('The beat before this one was 50% longer than written');
-    // And the one after it is innocent: the reading is local, not cumulative.
-    expect(lines[2]?.className).not.toContain('dragged');
+    expect(bands).toHaveLength(1);
+    expect(bands[0]?.className).toBe('roll__stretch roll__stretch--dragged');
+    expect(bands[0]?.style.left).toBe('calc(var(--roll-second) * 1.0000)');
+    expect(bands[0]?.style.width).toBe('calc(var(--roll-second) * 0.5000)');
+    expect(bands[0]?.title).toBe('This beat ran 500 ms over - 50% of its written length');
   });
 
-  it('marks the line after a beat that was hurried', () => {
-    const lines = linesOf([0, 500, 1500]);
+  it('covers the time a hurried beat is missing, after the line', () => {
+    // The beat ended early, so the time that is missing is on the far side of
+    // where it ended.
+    const bands = bandsOf([0, 600, 1600]);
 
-    expect(lines[1]?.className).toContain('roll__line--hurried');
-    expect(lines[1]?.title).toBe('The beat before this one was 50% shorter than written');
+    expect(bands[0]?.className).toBe('roll__stretch roll__stretch--hurried');
+    expect(bands[0]?.style.left).toBe('calc(var(--roll-second) * 0.6000)');
+    expect(bands[0]?.style.width).toBe('calc(var(--roll-second) * 0.4000)');
   });
 
   it('says nothing about a beat that was near enough', () => {
-    // Every beat is out by something; a grid where every line is coloured is a
-    // grid with no reading in it.
-    const lines = linesOf([0, 1050, 2050]);
-
-    expect(lines[1]?.className).not.toContain('dragged');
+    // Every beat is out by something; a run drawn without a floor is one
+    // continuous band saying nothing about anywhere in particular.
+    expect(bandsOf([0, 1030, 2030])).toHaveLength(0);
   });
 
-  it('grows stronger the further out the beat was', () => {
-    const little = linesOf([0, 1200, 2200])[1];
-    const lot = linesOf([0, 2000, 3000])[1];
+  it('reads every beat on its own, not the drift from the first', () => {
+    // A reader who drags one beat and then keeps time is told about that beat,
+    // never about everything after it.
+    const bands = bandsOf([0, 1500, 2500, 3500]);
 
-    expect(Number(little?.style.opacity)).toBeLessThan(Number(lot?.style.opacity));
+    expect(bands).toHaveLength(1);
+    expect(bands[0]?.style.left).toBe('calc(var(--roll-second) * 1.0000)');
   });
 
   it('says nothing at all where nobody has said what the score asks for', () => {
@@ -717,19 +716,18 @@ describe('a line that is not where it should be', () => {
       barLabel: () => null,
     });
 
-    for (const line of view.querySelectorAll('.roll__line')) {
-      expect(line.className).not.toContain('dragged');
-    }
+    expect(view.querySelectorAll('.roll__stretch')).toHaveLength(0);
   });
 
-  it('leaves a bar line the reader gave out of it', () => {
-    // That line is theirs, and says nothing about the length of the beat before
-    // it; the one that fell there already said that.
+  it('leaves the waiting at a bar line out of the beat before it', () => {
+    // Counting it there would call every held bar line a dragged beat, when the
+    // beat itself was exactly the length it should have been. The wait has its
+    // own band, and this is not it.
     const view = drawTheRoll({
       roll: roll({
         beats: [
           { atMs: 0, weight: 'downbeat', positionTicks: 0 },
-          { atMs: 1500, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+          { atMs: 1000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
           { atMs: 1900, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
         ],
       }),
@@ -737,8 +735,7 @@ describe('a line that is not where it should be', () => {
       writtenMsBetween: written,
     });
 
-    const lines = [...view.querySelectorAll<HTMLElement>('.roll__line')];
-    expect(lines[1]?.className).toContain('roll__line--dragged');
-    expect(lines[2]?.className).toBe('roll__line roll__line--given');
+    expect(view.querySelectorAll('.roll__stretch')).toHaveLength(0);
+    expect(view.querySelectorAll('.roll__wait')).toHaveLength(1);
   });
 });

@@ -94,16 +94,13 @@ const SLIP_FULL_MS = 400;
 const SLIP_MOST_SOLID = 0.5;
 
 /**
- * How far out a beat's length has to be before its line says so, as a fraction.
+ * How far out a beat has to be before it is drawn, in milliseconds.
  *
- * A tenth is inside what anybody plays; a fifth is a beat visibly the wrong
- * length. Below the floor nothing is said, because every beat is out by
- * *something* and a grid where every line is coloured is a grid with no reading
- * in it at all.
+ * Below this nobody hears it, and every beat is out by *something*: drawn
+ * without a floor a run is one continuous band saying nothing about anywhere in
+ * particular.
  */
-const STRETCH_FLOOR = 0.12;
-/** And where the colour is as strong as it gets. */
-const STRETCH_FULL = 0.6;
+const STRETCH_FLOOR_MS = 40;
 
 /** Semitones of air kept above and below what was played. */
 const PADDING_ROWS = 2;
@@ -198,39 +195,36 @@ function element(tag: string, className: string): HTMLElement {
  * lines say where the beat was, and this one says where they put it, in the
  * colour of the head because like the head it is theirs rather than the music's.
  */
-function lineFor(beat: GridLine, origin: number, stretch: number | undefined): HTMLElement {
+function lineFor(beat: GridLine, origin: number): HTMLElement {
   const kind = beat.given ? 'given' : beat.weight;
   const line = element('div', `roll__line roll__line--${kind}`);
   line.style.left = atSecond(beat.atMs - origin);
-  // How wrong the beat before it was, where that is known and worth saying. The
-  // line itself carries it: nothing else in the picture is *about* the grid, and
-  // a second mark beside it would be a second thing to read.
-  if (stretch !== undefined && Math.abs(stretch) >= STRETCH_FLOOR) {
-    line.classList.add(`roll__line--${stretch > 0 ? 'dragged' : 'hurried'}`);
-    line.style.opacity = String(
-      Math.min(1, STRETCH_FLOOR / STRETCH_FULL + Math.abs(stretch) / STRETCH_FULL),
-    );
-    const percent = Math.round(Math.abs(stretch) * 100);
-    line.title = `The beat before this one was ${percent}% ${stretch > 0 ? 'longer' : 'shorter'} than written`;
-  }
   return line;
 }
 
 /**
- * How far each beat's length was from the length it is written to be.
+ * The stretch a beat ran over its written length, or fell short of it.
  *
- * A fraction: a fifth longer is `0.2`, a fifth shorter is `-0.2`. Empty where
- * nobody has said what the score asks for, and silent about the first beat of a
- * run, which has nothing before it to have taken any time at all.
+ * A width rather than a mark on the line, which is his: a coloured line says
+ * something was wrong here and nothing about *how long* it was wrong for. The
+ * band runs between where the beat should have ended and where it did, so its
+ * width is exactly the surplus - the same thing the wait at a bar line is drawn
+ * as, for the same reason.
+ *
+ * Whole height, because a beat's length belongs to the music rather than to any
+ * one key. Striped rather than solid, so that it is never taken for a wait: the
+ * colour says which direction, the stripes say who was late - the reader or the
+ * machine waiting for them.
  */
-function stretchesByPlace(
+function stretchBands(
   roll: RunRoll,
   writtenMsBetween: RollDrawing['writtenMsBetween'],
-): Map<number, number> {
-  const out = new Map<number, number>();
+  origin: number,
+): readonly HTMLElement[] {
   if (writtenMsBetween === undefined) {
-    return out;
+    return [];
   }
+  const bands: HTMLElement[] = [];
   for (const beat of beatStretches(roll)) {
     if (beat.tookMs === null || beat.fromTicks === null) {
       continue;
@@ -239,9 +233,24 @@ function stretchesByPlace(
     if (written === null || written <= 0) {
       continue;
     }
-    out.set(beat.positionTicks, beat.tookMs / written - 1);
+    const over = beat.tookMs - written;
+    if (Math.abs(over) < STRETCH_FLOOR_MS) {
+      continue;
+    }
+    // Where it should have ended, and where it did. Over-long and the band sits
+    // before the line, on the time that should not have been there; short and it
+    // sits after, on the time that is missing.
+    const shouldHave = beat.atMs - beat.tookMs + written;
+    const band = element('div', `roll__stretch roll__stretch--${over > 0 ? 'dragged' : 'hurried'}`);
+    band.style.left = atSecond(Math.min(shouldHave, beat.atMs) - origin);
+    band.style.width = atSecond(Math.abs(over));
+    const percent = Math.round((Math.abs(over) / written) * 100);
+    band.title = `This beat ran ${Math.round(Math.abs(over))} ms ${
+      over > 0 ? 'over' : 'short'
+    } - ${percent}% of its written length`;
+    bands.push(band);
   }
-  return out;
+  return bands;
 }
 
 /**
@@ -453,6 +462,11 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
       grid.append(waited);
     }
   }
+  // Beside the waits and under everything else: both are about stretches of time
+  // rather than about notes, and neither may cover what was played.
+  for (const band of stretchBands(roll, drawing.writtenMsBetween, origin)) {
+    grid.append(band);
+  }
   for (let midi = band.high; midi >= band.low; midi -= 1) {
     if (!isBlack(midi)) {
       continue;
@@ -463,13 +477,8 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   }
   // The same list a playback sounds its clicks from, so a line and a click can
   // never end up in different places - cut lines included.
-  const stretches = stretchesByPlace(roll, drawing.writtenMsBetween);
   for (const beat of theGrid(roll, drawing.grid)) {
-    // A bar line the reader gave is theirs, and says nothing about the length of
-    // the beat before it; the one that fell there already said that.
-    const stretch =
-      beat.given || beat.positionTicks === null ? undefined : stretches.get(beat.positionTicks);
-    grid.append(lineFor(beat, origin, stretch));
+    grid.append(lineFor(beat, origin));
   }
   // The press that answered each note the music asked for, by the step it was
   // owed to: a piece returns to the same pitch again and again, so pitch alone

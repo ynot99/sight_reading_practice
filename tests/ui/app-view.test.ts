@@ -2000,7 +2000,7 @@ describe('AppView', () => {
       expect(element('roll-body').querySelectorAll('.roll__ghost')).toHaveLength(0);
     });
 
-    it('marks the lines of a run that dragged, in a frame that waits', async () => {
+    it('shows how long each beat of a dragging run was wrong for', async () => {
       // The reading he was missing: there the beat is wherever he puts it, so the
       // grid stretches with him and nothing can look uneven against it. The lines
       // themselves say it instead - this beat was longer than the music asks.
@@ -2027,11 +2027,15 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
-      const dragged = [...element('roll-body').querySelectorAll<HTMLElement>('.roll__line--dragged')];
+      const dragged = [
+        ...element('roll-body').querySelectorAll<HTMLElement>('.roll__stretch--dragged'),
+      ];
       expect(dragged.length).toBeGreaterThan(0);
-      expect(dragged[0]?.title).toBe('The beat before this one was 50% longer than written');
+      // Half a second over a written second, every time - and the band is that
+      // half second wide, which is the thing a coloured line could not say.
+      expect(dragged[0]?.title).toBe('This beat ran 500 ms over - 50% of its written length');
       // And nothing is called hurried, because nothing was.
-      expect(element('roll-body').querySelectorAll('.roll__line--hurried')).toHaveLength(0);
+      expect(element('roll-body').querySelectorAll('.roll__stretch--hurried')).toHaveLength(0);
     });
 
     it('bands a chord that went down in pieces, in a frame that waits', async () => {

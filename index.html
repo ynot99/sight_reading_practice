@@ -368,32 +368,87 @@
                 <path d="M6 6h12v12H6z" />
               </svg>
             </button>
-            <label class="roll__toggle" for="roll-click">
-              <input id="roll-click" type="checkbox" checked />
-              Click
-            </label>
-            <label class="roll__toggle" for="roll-grid">Grid
+            <button id="roll-options" type="button" class="button button--ghost roll__gear"
+              title="Options" aria-label="Options">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                class="take-transport__icon">
+                <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4z
+                  M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1l-.3-2.6h-4
+                  l-.3 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.6
+                  2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1
+                  2-3.4z" />
+              </svg>
+            </button>
+            <button id="roll-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">&times;</button>
+          </div>
+          <div id="roll-body" class="roll-body"></div>
+        </div>
+      </div>
+
+      <!--
+        What the picture shows, and how fast.
+
+        A sheet of its own rather than a row in the drawing's head: there are
+        five answers here and a phone held upright has no room for five controls
+        beside a transport. His: "я вже підозрюю що ці опції вже на телефоні
+        можуть не влазити: тому може варто це винести як діалог?".
+      -->
+      <div id="sheet-roll-options" class="sheet sheet--over" hidden>
+        <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
+          aria-label="What the picture shows">
+          <div class="sheet__head">
+            <strong class="sheet__title">What the picture shows</strong>
+            <button id="roll-options-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">&times;</button>
+          </div>
+          <div class="controls controls--stacked">
+            <div class="control-group">
+              <label for="roll-grid">Grid</label>
               <select id="roll-grid">
-                <option value="bars">Bars</option>
-                <option value="beats" selected>Beats</option>
-                <option value="divisions">All ticks</option>
+                <option value="bars">Bars only</option>
+                <option value="beats" selected>Bars and beats</option>
+                <option value="divisions">Every tick the pulse gave</option>
               </select>
-            </label>
-            <label class="roll__toggle" for="roll-speed">Speed
+              <p class="hint">The finest grid is as fine as the run was run, which is as
+                fine as the shortest note asks for.</p>
+            </div>
+
+            <div class="control-group">
+              <label class="checkbox" for="roll-click">
+                <input id="roll-click" type="checkbox" checked />
+                Click the beat while it plays
+              </label>
+              <label class="checkbox" for="roll-snap">
+                <input id="roll-snap" type="checkbox" checked />
+                Put the marker on the nearest beat
+              </label>
+              <label class="checkbox" for="roll-ghosts">
+                <input id="roll-ghosts" type="checkbox" />
+                Show the notes that were asked for
+              </label>
+              <p class="hint">A finger is worth about a tenth of a second, so a tap
+                lands on the grid rather than between its lines.</p>
+            </div>
+
+            <div class="control-group">
+              <label for="roll-speed">Speed</label>
               <select id="roll-speed">
                 <option value="25">25%</option>
                 <option value="50">50%</option>
                 <option value="75">75%</option>
                 <option value="100" selected>100%</option>
               </select>
-            </label>
-            <label class="roll__zoom" for="roll-zoom">Zoom
+              <p class="hint">Slowed, the notes keep their pitches and their proportions:
+                a passage at half speed is still the passage.</p>
+            </div>
+
+            <div class="control-group">
+              <label for="roll-zoom">Zoom</label>
               <input id="roll-zoom" type="range" min="40" max="600" step="20" value="140" />
-            </label>
-            <button id="roll-close" type="button" class="button button--ghost sheet__close"
-              title="Close" aria-label="Close">&times;</button>
+              <p class="hint">Two fingers on the drawing do this as well.</p>
+            </div>
           </div>
-          <div id="roll-body" class="roll-body"></div>
         </div>
       </div>
 

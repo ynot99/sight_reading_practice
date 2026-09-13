@@ -1,5 +1,6 @@
 import {
   beatsWorthMarking,
+  momentOfTicks,
   rollBeganAtMs,
   rollEndedAtMs,
   type GridFineness,
@@ -25,6 +26,23 @@ export interface RollDrawing {
   readonly barLabel: (positionTicks: number) => string | null;
   /** How fine a grid to draw. The beats of the music unless asked otherwise. */
   readonly fineness?: GridFineness;
+  /**
+   * The notes the run asked for, to be drawn behind the ones that were played.
+   *
+   * In divisions, because that is how the music knows them; where they fall in
+   * the picture is worked out from the clicks that actually happened. Left out
+   * unless the reader asks for them - most of the time the question is "how did
+   * what I played sit against the beat", and a second layer of notes is in the
+   * way of it.
+   */
+  readonly ghosts?: readonly RollGhost[];
+}
+
+/** One note the music asked for, in the music's own time. */
+export interface RollGhost {
+  readonly midi: number;
+  readonly fromTicks: number;
+  readonly untilTicks: number;
 }
 
 /** Semitones of air kept above and below what was played. */
@@ -61,11 +79,17 @@ function atRow(row: number): string {
  * of which sixty are empty puts the music in a tenth of the screen, and the
  * question being asked is about the horizontal axis.
  */
-function bandOf(presses: readonly RolledPress[]): { readonly low: number; readonly high: number } {
-  if (presses.length === 0) {
+function bandOf(
+  presses: readonly RolledPress[],
+  ghosts: readonly RollGhost[],
+): { readonly low: number; readonly high: number } {
+  // The notes asked for count as much as the ones played: a note that was missed
+  // altogether is the one worth seeing, and a band drawn round the presses alone
+  // would leave it outside the picture.
+  const played = [...presses.map((press) => press.midi), ...ghosts.map((ghost) => ghost.midi)];
+  if (played.length === 0) {
     return { low: 60, high: 60 + LEAST_ROWS - 1 };
   }
-  const played = presses.map((press) => press.midi);
   let low = Math.min(...played) - PADDING_ROWS;
   let high = Math.max(...played) + PADDING_ROWS;
   while (high - low + 1 < LEAST_ROWS) {
@@ -251,7 +275,8 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   const { roll } = drawing;
   const origin = rollBeganAtMs(roll);
   const endMs = rollEndedAtMs(roll);
-  const band = bandOf(roll.presses);
+  const ghosts = drawing.ghosts ?? [];
+  const band = bandOf(roll.presses, ghosts);
   const rows = band.high - band.low + 1;
 
   const view = element('div', 'roll');
@@ -309,6 +334,21 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // never end up in different places.
   for (const beat of beatsWorthMarking(roll, drawing.fineness)) {
     grid.append(lineFor(beat, origin));
+  }
+  // Behind the presses, so what the reader did is what the eye lands on and the
+  // music underneath it is something to check against.
+  for (const ghost of ghosts) {
+    const from = momentOfTicks(roll, ghost.fromTicks);
+    const until = momentOfTicks(roll, ghost.untilTicks);
+    if (from === null || until === null) {
+      continue;
+    }
+    const drawn = element('div', 'roll__ghost');
+    drawn.style.left = atSecond(from);
+    drawn.style.width = atSecond(Math.max(0, until - from));
+    drawn.style.top = atRow(band.high - ghost.midi);
+    drawn.title = `${midiToLabel(ghost.midi)} · asked for here`;
+    grid.append(drawn);
   }
   for (const press of roll.presses) {
     grid.append(noteFor(press, origin, band.high, endMs));

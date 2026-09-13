@@ -1919,6 +1919,84 @@ describe('AppView', () => {
       expect(zoom.value).toBe('280');
     });
 
+    it('keeps the picture options in a sheet of their own', async () => {
+      // Five controls beside a transport is a row that breaks on a phone held
+      // upright, which is the device the rest of this interface was rebuilt
+      // around. His: "може варто це винести як діалог?".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      expect(element('sheet-roll-options').hidden).toBe(true);
+
+      element<HTMLButtonElement>('roll-options').click();
+      expect(element('sheet-roll-options').hidden).toBe(false);
+
+      element<HTMLButtonElement>('roll-options-close').click();
+      expect(element('sheet-roll-options').hidden).toBe(true);
+
+      // And they go away with the picture they are about.
+      element<HTMLButtonElement>('roll-options').click();
+      element<HTMLButtonElement>('roll-close').click();
+
+      expect(element('sheet-roll-options').hidden).toBe(true);
+      expect(element('sheet-roll').hidden).toBe(true);
+    });
+
+    it('points exactly where the reader turns the snapping off', async () => {
+      const { view, runtime, midi, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(16);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
+      const gridEl = drawn?.querySelector<HTMLElement>('.roll__grid');
+      if (gridEl === null || gridEl === undefined) {
+        throw new Error('expected a grid to tap');
+      }
+      gridEl.getBoundingClientRect = () => ({ left: 0, top: 0, right: 0, bottom: 0,
+        width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+
+      element<HTMLInputElement>('roll-snap').checked = false;
+      // Seventy pixels at a hundred and forty to the second is half a second,
+      // which is not where any beat of this run falls.
+      gridEl.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 70 }));
+
+      expect(drawn?.style.getPropertyValue('--roll-at')).toBe('0.500');
+    });
+
+    it('shows the notes that were asked for, when they are asked for', async () => {
+      // Including the ones the run never got, which are the ones worth seeing:
+      // a note nobody played has nothing to colour.
+      const { view, runtime, midi, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(16);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      expect(element('roll-body').querySelectorAll('.roll__ghost')).toHaveLength(0);
+
+      const ghosts = element<HTMLInputElement>('roll-ghosts');
+      ghosts.checked = true;
+      ghosts.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(
+        element('roll-body').querySelectorAll('.roll__ghost').length,
+      ).toBeGreaterThan(0);
+    });
+
     it('stops the run sounding when its drawing is put away', async () => {
       // A sheet closed on a playback that goes on playing is a note the reader
       // cannot get at to stop.

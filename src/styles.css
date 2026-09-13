@@ -498,47 +498,14 @@ textarea {
 }
 
 /*
- * Whether the beat sounds while the run is played back.
+ * The way to what the picture shows, at the right of its head.
  *
- * In the picture rather than in the metronome's settings, because this is
- * decided while looking at the picture - and a setting the reader has to leave
- * what they are doing to reach is the fault this interface keeps removing.
+ * The head holds the transport and this, and nothing else: five controls beside
+ * a transport is a row that breaks on a phone held upright, which is the device
+ * the rest of this interface was rebuilt around.
  */
-.roll__toggle {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+.roll__gear {
   margin-left: auto;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.roll__toggle > input {
-  margin: 0;
-}
-
-.roll__toggle > select {
-  padding: 1px 3px;
-  font-size: 12px;
-}
-
-/* Only the first of them pushes the rest to the right. */
-.roll__toggle ~ .roll__toggle {
-  margin-left: 0;
-}
-
-/* Its own question, so its own control: how much of the run fits on screen. */
-.roll__zoom {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.roll__zoom > input[type='range'] {
-  width: 120px;
-  margin: 0;
 }
 
 /*
@@ -727,6 +694,24 @@ textarea {
 .roll__line--given {
   width: 2px;
   background: color-mix(in srgb, var(--pending) 75%, transparent);
+}
+
+/*
+ * A note the music asked for, behind the ones that were played.
+ *
+ * An outline rather than a fill, and pale: it is the question, not the answer.
+ * Where the reader played it the press covers it and the two edges show how far
+ * apart they were; where they did not, the outline is all there is - which is
+ * the one thing colour alone could never say, because a note nobody played has
+ * nothing to colour.
+ */
+.roll__ghost {
+  position: absolute;
+  height: var(--roll-row);
+  min-width: 2px;
+  border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 40%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
 }
 
 .roll__note {

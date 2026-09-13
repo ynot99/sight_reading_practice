@@ -47,6 +47,7 @@ import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/Pra
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barLines, barNumberOf, measureCount } from '../domain/model/Exercise.js';
+import { expectedFor } from '../domain/timeline/Timeline.js';
 import {
   clicksBefore,
   clicksUpTo,
@@ -55,7 +56,13 @@ import {
   theBeatNearest,
   type GridFineness,
 } from '../application/session/RunRoll.js';
-import { drawTheRoll, keepTheHeadInView, timeFromTap, zoomedBy } from './rollView.js';
+import {
+  drawTheRoll,
+  keepTheHeadInView,
+  timeFromTap,
+  zoomedBy,
+  type RollGhost,
+} from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
 import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
@@ -1376,6 +1383,11 @@ export class AppView {
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
     rollZoom: HTMLInputElement;
+    rollSnap: HTMLInputElement;
+    rollGhosts: HTMLInputElement;
+    rollOptions: HTMLButtonElement;
+    sheetRollOptions: HTMLElement;
+    rollOptionsClose: HTMLButtonElement;
     rollSpeed: HTMLSelectElement;
     rollClick: HTMLInputElement;
     rollGrid: HTMLSelectElement;
@@ -1623,6 +1635,11 @@ export class AppView {
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
       rollZoom: requireElement(doc, 'roll-zoom'),
+      rollSnap: requireElement(doc, 'roll-snap'),
+      rollGhosts: requireElement(doc, 'roll-ghosts'),
+      rollOptions: requireElement(doc, 'roll-options'),
+      sheetRollOptions: requireElement(doc, 'sheet-roll-options'),
+      rollOptionsClose: requireElement(doc, 'roll-options-close'),
       rollSpeed: requireElement(doc, 'roll-speed'),
       rollClick: requireElement(doc, 'roll-click'),
       rollGrid: requireElement(doc, 'roll-grid'),
@@ -5657,7 +5674,16 @@ export class AppView {
     });
     this.listen(this.el.rollClose, 'click', () => {
       this.stopTheRoll();
+      // Its options go with it: a sheet left standing over a picture that has
+      // been put away is a dialog about nothing.
+      this.el.sheetRollOptions.hidden = true;
       this.el.sheetRoll.hidden = true;
+    });
+    this.listen(this.el.rollOptions, 'click', () => {
+      this.el.sheetRollOptions.hidden = false;
+    });
+    this.listen(this.el.rollOptionsClose, 'click', () => {
+      this.el.sheetRollOptions.hidden = true;
     });
     this.listen(this.el.rollPlay, 'click', () => {
       if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
@@ -5695,6 +5721,9 @@ export class AppView {
     }
     this.listen(this.el.rollZoom, 'input', () => {
       this.applyTheZoom();
+    });
+    this.listen(this.el.rollGhosts, 'change', () => {
+      this.drawTheRollInto();
     });
     this.listen(this.el.rollGrid, 'change', () => {
       this.drawTheRollInto();
@@ -6377,10 +6406,42 @@ export class AppView {
       return;
     }
     this.el.rollBody.replaceChildren(
-      drawTheRoll({ roll, barLabel: this.barNamer(), fineness: this.theRollsGrid() }),
+      drawTheRoll({
+        roll,
+        barLabel: this.barNamer(),
+        fineness: this.theRollsGrid(),
+        ghosts: this.theNotesAskedFor(),
+      }),
     );
     this.applyTheZoom();
     this.describeTheRoll();
+  }
+
+  /**
+   * The notes the music asked for, where the reader wants to see them.
+   *
+   * Read off the timeline rather than the run, because that is what the run was
+   * measured against - including the notes it never got, which are the ones
+   * worth seeing. The hand is the one being practised: a reader working the left
+   * hand is not being shown the right hand's notes as something they missed.
+   */
+  private theNotesAskedFor(): readonly RollGhost[] {
+    const timeline = this.runtime.controller.currentTimeline;
+    if (!this.el.rollGhosts.checked || timeline === null) {
+      return [];
+    }
+    const hand = this.runtime.controller.settings.handStaff;
+    const asked: RollGhost[] = [];
+    for (const step of timeline.steps) {
+      for (const midi of expectedFor(step, hand)) {
+        asked.push({
+          midi,
+          fromTicks: step.onsetTicks,
+          untilTicks: step.onsetTicks + step.durationTicks,
+        });
+      }
+    }
+    return asked;
   }
 
   /** How fine a grid the reader has asked for, in the drawing and in the click. */
@@ -6509,7 +6570,10 @@ export class AppView {
     // On the nearest beat rather than under the finger. A finger is worth about
     // a tenth of a second at any readable zoom, and nobody pointing at a run
     // means a moment between two beats - they mean the beat.
-    const at = theBeatNearest(roll, tapped, this.theRollsGrid());
+    // On the nearest beat unless the reader would rather point exactly.
+    const at = this.el.rollSnap.checked
+      ? theBeatNearest(roll, tapped, this.theRollsGrid())
+      : tapped;
     this.rollAtMs = at;
     this.rollClicksSent = clicksBefore(roll, at, this.theRollsGrid());
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {

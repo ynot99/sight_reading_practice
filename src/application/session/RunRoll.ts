@@ -478,6 +478,50 @@ export function clicksBefore(
 }
 
 /**
+ * When a place in the music happened, in milliseconds from the roll's start.
+ *
+ * The whole difficulty of drawing what *should* have been played: the notes are
+ * written in divisions and the picture is in real time, and no tempo can join
+ * the two - where a bar line waited for the reader, time did not pass at the
+ * rate the score says.
+ *
+ * So it is read off the clicks that actually happened, and a bar line the reader
+ * gave late counts at the moment they gave it rather than the moment it fell
+ * due. That is what keeps the notes of a bar on the near side of the wait
+ * instead of stretched across it, which is his own observation: "пауза (жовта
+ * секція) може бути довгою, та буде не зрозуміло як далеко ноти малювати".
+ *
+ * `null` when the run has fewer than two clicks to measure between, which is a
+ * frame that ran no pulse: there is nothing there to place anything against.
+ */
+export function momentOfTicks(roll: RunRoll, positionTicks: number): number | null {
+  const began = rollBeganAtMs(roll);
+  // One moment per place in the music, and where a bar line was given late that
+  // moment is the giving: everything after it is counted from there.
+  const marks = new Map<number, number>();
+  for (const beat of beatsWorthMarking(roll, 'divisions')) {
+    marks.set(beat.positionTicks, beat.atMs - began);
+  }
+  const places = [...marks.keys()].sort((left, right) => left - right);
+  // The pair to measure between: the one the position falls inside, or the
+  // nearest pair at whichever end it lies beyond.
+  let index = places.findIndex((place) => place > positionTicks) - 1;
+  if (index < 0) {
+    index = positionTicks <= (places[0] ?? 0) ? 0 : places.length - 2;
+  }
+  const from = places[index];
+  const to = places[index + 1];
+  // Which is also how a run with fewer than two clicks answers: there is no
+  // pair, so there is nothing to measure between and nothing to say.
+  if (from === undefined || to === undefined || to === from) {
+    return null;
+  }
+  const atFrom = marks.get(from) ?? 0;
+  const atTo = marks.get(to) ?? 0;
+  return atFrom + ((positionTicks - from) * (atTo - atFrom)) / (to - from);
+}
+
+/**
  * The run as a stream something can play.
  *
  * So that hearing a run back is the machinery that already plays a recording

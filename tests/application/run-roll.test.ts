@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   RollRecorder,
   beatsWorthMarking,
+  momentOfTicks,
   theBeatNearest,
   theMusicsBeats,
   clicksBefore,
@@ -440,6 +441,59 @@ describe('the beat a run was measured against', () => {
 
     expect(clicksBefore(played, 400)).toBe(1);
     expect(clicksBefore(played, 400, 'divisions')).toBe(2);
+  });
+
+  it('places a moment in the music between the clicks that happened', () => {
+    // No tempo can join written time to real time: this is read off the clicks.
+    const played = roll({
+      beats: [
+        { atMs: 1000, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 2000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    // Measured from the roll's own beginning, which is its first click.
+    expect(momentOfTicks(played, 0)).toBe(0);
+    expect(momentOfTicks(played, Duration.QUARTER.ticks / 2)).toBe(500);
+    expect(momentOfTicks(played, Duration.QUARTER.ticks)).toBe(1000);
+  });
+
+  it('counts a bar line the reader gave late at the moment they gave it', () => {
+    // Which is what keeps the notes of a bar on the near side of the wait rather
+    // than stretched across it. His own observation.
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+        // The bar line fell at 1000 and was taken at 1400.
+        { atMs: 1000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+        { atMs: 1400, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    expect(momentOfTicks(played, Duration.QUARTER.ticks)).toBe(1400);
+    // And half a beat before it is measured against the wait's near side.
+    expect(momentOfTicks(played, Duration.QUARTER.ticks / 2)).toBe(700);
+  });
+
+  it('runs on past the last click at the rate of the last stretch', () => {
+    // The last bar's notes lie beyond the last click there is, and they have to
+    // be drawn somewhere.
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 1000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    expect(momentOfTicks(played, Duration.QUARTER.ticks * 2)).toBe(2000);
+  });
+
+  it('says nothing where there are no clicks to measure between', () => {
+    // A frame that runs no pulse has nothing to place anything against.
+    expect(momentOfTicks(roll({}), 0)).toBeNull();
+    expect(
+      momentOfTicks(roll({ beats: [{ atMs: 0, weight: 'downbeat', positionTicks: 0 }] }), 0),
+    ).toBeNull();
   });
 
   it('hands over only the clicks the window has reached', () => {

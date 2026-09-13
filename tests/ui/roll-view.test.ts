@@ -394,3 +394,72 @@ describe('the zoom two fingers ask for', () => {
     expect(zoomedBy(140, Number.NaN)).toBe(140);
   });
 });
+
+describe('the notes the music asked for', () => {
+  const grid = [
+    { atMs: 0, weight: 'downbeat' as const, positionTicks: 0 },
+    { atMs: 1000, weight: 'beat' as const, positionTicks: Duration.QUARTER.ticks },
+  ];
+
+  it('draws them behind the ones that were played', () => {
+    // The press is the answer and this is the question: the eye should land on
+    // the answer and find the question underneath it.
+    const view = drawTheRoll({
+      roll: roll({ beats: grid, presses: [press({ midi: MIDI.C4 })] }),
+      barLabel: () => null,
+      ghosts: [
+        { midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    const inGrid = [...(view.querySelector('.roll__grid')?.children ?? [])].map(
+      (child) => child.className.split(' ')[0],
+    );
+    expect(inGrid.indexOf('roll__ghost')).toBeLessThan(inGrid.indexOf('roll__note'));
+  });
+
+  it('places them by the clicks that happened, not by a tempo', () => {
+    const view = drawTheRoll({
+      roll: roll({ beats: grid }),
+      barLabel: () => null,
+      ghosts: [
+        { midi: MIDI.C4, fromTicks: Duration.QUARTER.ticks / 2, untilTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    const ghost = view.querySelector<HTMLElement>('.roll__ghost');
+    expect(ghost?.style.left).toBe('calc(var(--roll-second) * 0.5000)');
+    expect(ghost?.style.width).toBe('calc(var(--roll-second) * 0.5000)');
+  });
+
+  it('keeps a note nobody played inside the band', () => {
+    // Which is the one worth seeing: a band drawn round the presses alone would
+    // leave a missed note outside the picture altogether.
+    const view = drawTheRoll({
+      roll: roll({ beats: grid, presses: [press({ midi: 60 })] }),
+      barLabel: () => null,
+      ghosts: [{ midi: 84, fromTicks: 0, untilTicks: Duration.QUARTER.ticks }],
+    });
+
+    const ghost = view.querySelector<HTMLElement>('.roll__ghost');
+    expect(ghost).not.toBeNull();
+    // Twenty-four semitones apart, plus the air above and below.
+    expect(view.style.getPropertyValue('--roll-rows')).toBe('29');
+  });
+
+  it('draws none of them where the run had no pulse to place them against', () => {
+    const view = drawTheRoll({
+      roll: roll({ presses: [press()] }),
+      barLabel: () => null,
+      ghosts: [{ midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks }],
+    });
+
+    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(0);
+  });
+
+  it('draws none unless they are asked for', () => {
+    const view = draw(roll({ beats: grid, presses: [press()] }));
+
+    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(0);
+  });
+});

@@ -779,6 +779,15 @@ export class PracticeController {
    * session may be gone.
    */
   private finishedRoll: RunRoll | null = null;
+  /**
+   * The bar the last run began at, as an index into the printed score.
+   *
+   * Taken where the run starts rather than read off the session afterwards: a
+   * frame with a gate at every bar line moves the session's own idea of where
+   * it is picking up from each time it opens one, so by the end it says the
+   * last bar rather than the first.
+   */
+  private runBeganAtMeasure = 0;
   private cleanReadings = 0;
   private poorReadings = 0;
 
@@ -1843,6 +1852,11 @@ export class PracticeController {
     return this.finishedRoll;
   }
 
+  /** The bar the last run began at, for anything naming its bars. */
+  get lastRunBeganAtMeasure(): number {
+    return this.runBeganAtMeasure;
+  }
+
   /**
    * What was decided about the last few presses, in order.
    *
@@ -2387,6 +2401,7 @@ export class PracticeController {
     // that started this run would arrive at the watch a second time.
     this.watchForTheOpening();
     const openAt = Math.min(Math.max(this.beginAt, passage.from), passage.to);
+    this.runBeganAtMeasure = timeline.at(openAt)?.measureIndex ?? 0;
     if (openAt > 0) {
       this.deps.cursor.moveTo(openAt);
     } else {

@@ -1377,6 +1377,58 @@ describe('AppView', () => {
       expect(element('sheet-modes').hidden).toBe(true);
     });
 
+    it('offers the picture of a run, and draws it on being asked', async () => {
+      // His: "додати кнопку в кінці у статистиці щоб відчинити цей діалог з
+      // MIDI viewer". The report is read at a glance; a grid of every note
+      // played is the opposite of one, so it waits behind a button.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+
+      const open = element<HTMLButtonElement>('run-roll-open');
+      expect(element('sheet-roll').hidden).toBe(true);
+
+      open.click();
+
+      expect(element('sheet-roll').hidden).toBe(false);
+      const drawn = element('roll-body').querySelector('.roll');
+      expect(drawn).not.toBeNull();
+      expect(drawn?.querySelectorAll('.roll__note').length).toBeGreaterThan(0);
+    });
+
+    it('says nothing about a run nothing was played in', async () => {
+      // A grid with no notes on it is a picture of nothing, and a button that
+      // opens one is a button that lies about having something to show.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(element('result').querySelector('#run-roll-open')).toBeNull();
+    });
+
+    it('zooms the drawing by the one property it is laid out in', async () => {
+      // Which is why zooming is a property changing rather than a redraw: the
+      // browser moves every note, line and label from the same numbers.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const zoom = element<HTMLInputElement>('roll-zoom');
+      zoom.value = '320';
+      zoom.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
+      expect(drawn?.style.getPropertyValue('--roll-second')).toBe('320px');
+    });
+
     it('draws the run as a strip of bars before it explains itself in numbers', async () => {
       // His: "цифрами іноді мій мозок просто йде у loading". A row of numbers
       // answers "how well"; the strip answers "where", and answers it without

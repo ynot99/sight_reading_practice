@@ -472,6 +472,48 @@ textarea {
 }
 
 /*
+ * The way in to the drawing, under the numbers rather than over them.
+ *
+ * Full width because it is the last thing in the panel and the only thing in
+ * it that does something: a small button at the end of a column of readings is
+ * a thing nobody finds.
+ */
+.result__roll {
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* Its own question, so its own control: how much of the run fits on screen. */
+.roll__zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.roll__zoom > input[type='range'] {
+  width: 120px;
+  margin: 0;
+}
+
+/*
+ * The sheet's body is the scroller's parent and must not scroll itself: two
+ * nested scrollers mean a finger that moves the wrong one.
+ */
+.roll-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.roll-body > .roll {
+  flex: 1 1 auto;
+}
+
+/*
  * The run drawn as keys against the clicks it was played to.
  *
  * One scroll container holding four things: a ruler of bar numbers that sticks

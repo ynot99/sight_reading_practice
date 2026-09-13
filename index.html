@@ -332,6 +332,28 @@
         at all, and leaving fullscreen to change the click and coming back is
         a re-engraving each way.
       -->
+      <!--
+        The run drawn as keys against the clicks it was played to.
+
+        Opened from the report and nowhere else: it is a reading of the run
+        that has just finished, and there is nothing to draw before there has
+        been one.
+      -->
+      <div id="sheet-roll" class="sheet" hidden>
+        <div class="sheet__panel sheet__panel--wide" role="dialog" aria-modal="true"
+          aria-label="What you played">
+          <div class="sheet__head">
+            <strong class="sheet__title">What you played</strong>
+            <label class="roll__zoom" for="roll-zoom">Zoom
+              <input id="roll-zoom" type="range" min="40" max="600" step="20" value="140" />
+            </label>
+            <button id="roll-close" type="button" class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">&times;</button>
+          </div>
+          <div id="roll-body" class="roll-body"></div>
+        </div>
+      </div>
+
       <div id="sheet-metronome" class="sheet" hidden>
         <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
           aria-label="Metronome">

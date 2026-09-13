@@ -46,7 +46,9 @@ import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { measureCount } from '../domain/model/Exercise.js';
+import { barNumberOf, measureCount } from '../domain/model/Exercise.js';
+import type { RunRoll } from '../application/session/RunRoll.js';
+import { drawTheRoll } from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
 import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
@@ -1300,6 +1302,10 @@ export class AppView {
     metronomeClose: HTMLButtonElement;
     sheetTakes: HTMLElement;
     sheetScores: HTMLElement;
+    sheetRoll: HTMLElement;
+    rollBody: HTMLElement;
+    rollZoom: HTMLInputElement;
+    rollClose: HTMLElement;
     sheetSettings: HTMLElement;
     settingsSections: HTMLElement;
     sheetPlaces: HTMLElement;
@@ -1536,6 +1542,10 @@ export class AppView {
       metronomeClose: requireElement(doc, 'metronome-close'),
       sheetTakes: requireElement(doc, 'sheet-takes'),
       sheetScores: requireElement(doc, 'sheet-scores'),
+      sheetRoll: requireElement(doc, 'sheet-roll'),
+      rollBody: requireElement(doc, 'roll-body'),
+      rollZoom: requireElement(doc, 'roll-zoom'),
+      rollClose: requireElement(doc, 'roll-close'),
       sheetSettings: requireElement(doc, 'sheet-settings'),
       settingsSections: requireElement(doc, 'settings-sections'),
       sheetPlaces: requireElement(doc, 'sheet-places'),
@@ -5522,6 +5532,12 @@ export class AppView {
     this.listen(this.el.metronomeClose, 'click', () => {
       this.el.sheetMetronome.hidden = true;
     });
+    this.listen(this.el.rollClose, 'click', () => {
+      this.el.sheetRoll.hidden = true;
+    });
+    this.listen(this.el.rollZoom, 'input', () => {
+      this.applyTheZoom();
+    });
     this.listen(this.el.placesClose, 'click', () => {
       this.el.sheetPlaces.hidden = true;
     });
@@ -6103,6 +6119,7 @@ export class AppView {
     // Said once, about the run that caused it.
     this.lastLadderMove = null;
     this.drawTheBars(report);
+    this.offerTheRoll();
     for (const [label, value] of rows) {
       const row = this.doc.createElement('div');
       row.className = 'result__row';
@@ -6112,6 +6129,74 @@ export class AppView {
       strong.textContent = value;
       row.append(name, strong);
       this.el.result.append(row);
+    }
+  }
+
+  /**
+   * The way in to the picture of the run, where there is a run to picture.
+   *
+   * A button rather than the drawing itself: the report is read at a glance
+   * with a verdict on it, and a grid of every note played is the opposite of a
+   * glance. His: "додати кнопку в кінці у статистиці щоб відчинити цей діалог
+   * з MIDI viewer".
+   */
+  private offerTheRoll(): void {
+    const roll = this.runtime.controller.lastRoll;
+    if (roll === null || roll.presses.length === 0) {
+      return;
+    }
+    const open = this.doc.createElement('button');
+    open.type = 'button';
+    open.id = 'run-roll-open';
+    open.className = 'button button--ghost result__roll';
+    open.textContent = 'See what you played';
+    this.listen(open, 'click', () => {
+      this.showTheRoll();
+    });
+    this.el.result.append(open);
+  }
+
+  /**
+   * Draws the last run into its sheet and puts it up.
+   *
+   * Built on opening rather than kept: a roll is a few thousand elements, and
+   * the reader who never presses the button should not be paying for them.
+   */
+  private showTheRoll(): void {
+    const roll = this.runtime.controller.lastRoll;
+    if (roll === null) {
+      return;
+    }
+    this.el.rollBody.replaceChildren(
+      drawTheRoll({ roll, barLabel: this.barNamer(roll) }),
+    );
+    this.applyTheZoom();
+    this.el.sheetRoll.hidden = false;
+  }
+
+  /**
+   * What the writer called the bar the metronome counted as this measure.
+   *
+   * Calibrated off the first click rather than off the count-in's length: the
+   * roll holds only the clicks of the music, so whatever measure its first one
+   * carries is the bar the run began at. Counting from the setting instead
+   * would be a second answer to a question the recording already answers, and
+   * would be wrong for every run that began partway through a piece.
+   */
+  private barNamer(roll: RunRoll): (measure: number) => string {
+    const exercise = this.runtime.controller.currentExercise;
+    const first = roll.beats[0]?.measure ?? 0;
+    const began = this.runtime.controller.lastRunBeganAtMeasure;
+    return (measure) => {
+      const index = began + measure - first;
+      return exercise === null ? String(index + 1) : String(barNumberOf(exercise, index));
+    };
+  }
+
+  private applyTheZoom(): void {
+    const roll = this.el.rollBody.firstElementChild;
+    if (roll instanceof HTMLElement) {
+      roll.style.setProperty('--roll-second', `${this.el.rollZoom.value}px`);
     }
   }
 

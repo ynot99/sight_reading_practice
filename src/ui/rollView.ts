@@ -126,6 +126,24 @@ function noteFor(press: RolledPress, origin: number, high: number, endMs: number
   return note;
 }
 
+/**
+ * The moment a tap on the grid means, in milliseconds from the roll's start.
+ *
+ * The drawing's whole geometry is `--roll-second` times a number of seconds, so
+ * reading a position back is that arithmetic run the other way. Kept here, next
+ * to the function that writes it, because a second copy of the conversion is a
+ * head that lands somewhere other than where the finger did.
+ *
+ * `pxPerSecond` of nought or less means nothing has been laid out and there is
+ * no position to read.
+ */
+export function timeFromTap(offsetPx: number, pxPerSecond: number): number | null {
+  if (pxPerSecond <= 0) {
+    return null;
+  }
+  return Math.max(0, (offsetPx / pxPerSecond) * 1000);
+}
+
 /** Where the head is put when the view is scrolled to it, as a fraction across. */
 const HEAD_RESTS_AT = 0.25;
 /** And how far across it may drift before the view is moved at all. */

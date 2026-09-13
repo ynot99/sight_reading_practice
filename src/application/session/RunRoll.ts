@@ -334,6 +334,22 @@ export function clicksUpTo(
 }
 
 /**
+ * How many clicks fall *before* a moment, and so are behind a playback started
+ * there.
+ *
+ * Its own function rather than `clicksUpTo` read backwards, because the two
+ * questions disagree exactly on the boundary and the boundary is the whole of
+ * it. What to hand over next includes the click due at this instant; what is
+ * already spent does not - counted the other way, a playback from the beginning
+ * spent the downbeat before sounding it, and a tap on a bar line lost that
+ * bar's click.
+ */
+export function clicksBefore(roll: RunRoll, atMs: number): number {
+  const began = rollBeganAtMs(roll);
+  return beatsWorthMarking(roll).filter((beat) => beat.atMs - began < atMs).length;
+}
+
+/**
  * The run as a stream something can play.
  *
  * So that hearing a run back is the machinery that already plays a recording

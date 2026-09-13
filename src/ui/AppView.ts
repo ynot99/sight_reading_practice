@@ -48,12 +48,13 @@ import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barNumberOf, measureCount } from '../domain/model/Exercise.js';
 import {
+  clicksBefore,
   clicksUpTo,
   rollAsEvents,
   rollBeganAtMs,
   type RunRoll,
 } from '../application/session/RunRoll.js';
-import { drawTheRoll, keepTheHeadInView } from './rollView.js';
+import { drawTheRoll, keepTheHeadInView, timeFromTap } from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
 import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
@@ -1201,6 +1202,15 @@ export class AppView {
   private rollTick: ReturnType<typeof setInterval> | null = null;
   /** Clicks of the run already handed to the metronome by this playback. */
   private rollClicksSent = 0;
+  /**
+   * Where the head stands while nothing is sounding, in milliseconds.
+   *
+   * Kept here rather than asked of the player, because the player has no
+   * position until it has been given something to play - and the reader may put
+   * the head somewhere before ever pressing play. It is where a playback starts
+   * from, which is what makes a tap on the grid mean anything at all.
+   */
+  private rollAtMs = 0;
   /** Whether the passage markers are on the page, which a tap turns over. */
   private passageMarkersWanted = true;
   /**
@@ -1351,6 +1361,7 @@ export class AppView {
     rollClick: HTMLInputElement;
     rollPlay: HTMLButtonElement;
     rollPlayIcon: SVGPathElement;
+    rollStop: HTMLButtonElement;
     rollClose: HTMLElement;
     sheetSettings: HTMLElement;
     settingsSections: HTMLElement;
@@ -1595,6 +1606,7 @@ export class AppView {
       rollClick: requireElement(doc, 'roll-click'),
       rollPlay: requireElement(doc, 'roll-play'),
       rollPlayIcon: requireElement(doc, 'roll-play-icon'),
+      rollStop: requireElement(doc, 'roll-stop'),
       rollClose: requireElement(doc, 'roll-close'),
       sheetSettings: requireElement(doc, 'sheet-settings'),
       settingsSections: requireElement(doc, 'settings-sections'),
@@ -5617,10 +5629,16 @@ export class AppView {
     });
     this.listen(this.el.rollPlay, 'click', () => {
       if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
-        this.stopTheRoll();
+        this.holdTheRoll();
         return;
       }
       this.playTheRoll();
+    });
+    this.listen(this.el.rollStop, 'click', () => {
+      this.stopTheRoll();
+    });
+    this.listen(this.el.rollBody, 'click', (event) => {
+      this.putTheHeadWhereItWasTapped(event);
     });
     this.listen(this.el.rollZoom, 'input', () => {
       this.applyTheZoom();
@@ -6255,6 +6273,7 @@ export class AppView {
       return;
     }
     this.stopTheRoll();
+    this.rollAtMs = 0;
     this.el.rollBody.replaceChildren(
       drawTheRoll({ roll, barLabel: this.barNamer(roll) }),
     );
@@ -6303,11 +6322,30 @@ export class AppView {
     }
     this.selectedTakeId = null;
     this.describeTakeTransport();
-    this.rollClicksSent = 0;
-    this.runtime.takePlayer.play(RUN_ROLL_ID, rollAsEvents(roll));
+    // From wherever the head stands, which is nought unless the reader has put
+    // it somewhere - and the clicks behind it are already spent.
+    this.rollClicksSent = clicksBefore(roll, this.rollAtMs);
+    this.runtime.takePlayer.play(RUN_ROLL_ID, rollAsEvents(roll), this.rollAtMs);
     if (this.rollTick === null) {
       this.rollTick = setInterval(() => this.followTheRoll(), TAKE_TICK_MS);
     }
+    this.describeTheRoll();
+  }
+
+  /**
+   * Holds the playback where it is, to be picked up from there.
+   *
+   * The head stays where the sound stopped, which is the whole difference from
+   * stopping: a reader working out what happened in one bar plays it, holds it,
+   * looks, and plays on from the same place.
+   */
+  private holdTheRoll(): void {
+    const player = this.runtime.takePlayer;
+    if (player.playing === RUN_ROLL_ID) {
+      player.pause();
+      this.rollAtMs = player.positionMs;
+    }
+    this.letTheRollTickGo();
     this.describeTheRoll();
   }
 
@@ -6315,9 +6353,47 @@ export class AppView {
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
       this.runtime.takePlayer.stop();
     }
+    // Back to the beginning, which is what stopping means and pausing does not.
+    this.rollAtMs = 0;
+    this.rollClicksSent = 0;
+    this.letTheRollTickGo();
+    this.describeTheRoll();
+  }
+
+  private letTheRollTickGo(): void {
     if (this.rollTick !== null) {
       clearInterval(this.rollTick);
       this.rollTick = null;
+    }
+  }
+
+  /**
+   * Puts the head where the reader tapped, and the sound with it.
+   *
+   * The grid is the one thing in the sheet worth pointing at, and pointing at a
+   * moment is how anybody looks at a recording. Every note is a real element
+   * inside it, so a tap on a note is a tap at that note's moment and needs no
+   * arithmetic of its own.
+   *
+   * The clicks behind the new place count as spent: handed over again they
+   * would sound the first half of the run over the second.
+   */
+  private putTheHeadWhereItWasTapped(event: MouseEvent): void {
+    const drawn = this.el.rollBody.firstElementChild;
+    const grid = drawn?.querySelector<HTMLElement>('.roll__grid') ?? null;
+    const roll = this.runtime.controller.lastRoll;
+    if (grid === null || roll === null) {
+      return;
+    }
+    const box = grid.getBoundingClientRect();
+    const at = timeFromTap(event.clientX - box.left, Number(this.el.rollZoom.value));
+    if (at === null) {
+      return;
+    }
+    this.rollAtMs = at;
+    this.rollClicksSent = clicksBefore(roll, at);
+    if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
+      this.runtime.takePlayer.seek(at);
     }
     this.describeTheRoll();
   }
@@ -6332,8 +6408,11 @@ export class AppView {
     }
     // Something else took the player over, or it has run out. Either way this
     // is no longer following anything.
+    // Something else took the player over, or it ran out. Either way this is no
+    // longer following anything - but the head stays where it got to, because
+    // the reader is about to look at that place.
     if (player.playing !== RUN_ROLL_ID) {
-      this.stopTheRoll();
+      this.holdTheRoll();
       return;
     }
     this.soundTheBeat(player.positionMs);
@@ -6379,16 +6458,23 @@ export class AppView {
     const player = this.runtime.takePlayer;
     const sounding = player.playing === RUN_ROLL_ID;
     this.el.rollPlayIcon.setAttribute('d', sounding ? PAUSE_ICON : PLAY_ICON);
-    const label = sounding ? 'Stop' : 'Play';
+    const label = sounding ? 'Pause' : 'Play';
     this.el.rollPlay.title = label;
     this.el.rollPlay.setAttribute('aria-label', label);
+    // Nothing to stop where the head is already at the beginning and silent.
+    this.el.rollStop.disabled = !sounding && this.rollAtMs === 0;
 
     const drawn = this.el.rollBody.firstElementChild;
     if (!(drawn instanceof HTMLElement)) {
       return;
     }
     drawn.classList.toggle('roll--sounding', sounding);
-    drawn.style.setProperty('--roll-at', (player.positionMs / 1000).toFixed(3));
+    // The head is a place, not a sign that something is playing: it stands
+    // where the reader put it or where the sound stopped, and it is there from
+    // the moment the drawing opens. His: "чи можливо мати курсор завжди? Бо він
+    // наразі пропадає як тільки робиться stop".
+    const at = sounding ? player.positionMs : this.rollAtMs;
+    drawn.style.setProperty('--roll-at', (at / 1000).toFixed(3));
     if (!sounding) {
       return;
     }

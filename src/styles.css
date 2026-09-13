@@ -615,6 +615,7 @@ textarea {
 
 .roll__grid {
   position: relative;
+  cursor: pointer;
   grid-row: 2;
   grid-column: 2;
 }
@@ -692,11 +693,14 @@ textarea {
 }
 
 /*
- * Where a playback has got to.
+ * Where the playback is, or where the reader put it.
  *
- * Hidden until something is sounding: a line standing still in the middle of a
- * drawing looks like a mark on the music rather than a place in time. Its
- * position is one custom property, so following a performance is a write
+ * Always there, because it is a place rather than a sign that something is
+ * sounding: it is what a tap on the grid moves and what a playback starts
+ * from. Paler while nothing is playing, so "here" and "here, now" are not the
+ * same mark.
+ *
+ * Its position is one custom property, so following a performance is a write
  * rather than a redraw.
  */
 .roll__head {
@@ -705,12 +709,11 @@ textarea {
   bottom: 0;
   width: 2px;
   left: calc(var(--roll-second) * var(--roll-at, 0));
-  background: var(--accent);
-  display: none;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .roll--sounding .roll__head {
-  display: block;
+  background: var(--accent);
 }
 
 .roll__pedal {

@@ -1534,6 +1534,109 @@ describe('AppView', () => {
       expect(metronome.clicks).toEqual([]);
     });
 
+    it('holds a playback where it is, and stops it back to the beginning', async () => {
+      // Pausing and stopping are different questions: a reader working out what
+      // happened in one bar plays it, holds it, looks, and plays on from there.
+      const { view, runtime, midi, metronome, clock } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(8);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
+      expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(true);
+
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(300);
+        vi.advanceTimersByTime(100);
+        // Held: the sound stops and the head stays where it stopped.
+        element<HTMLButtonElement>('roll-play').click();
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(runtime.takePlayer.playing).toBeNull();
+      expect(drawn?.style.getPropertyValue('--roll-at')).toBe('0.300');
+      expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(false);
+      expect(element('roll-play').getAttribute('aria-label')).toBe('Play');
+
+      element<HTMLButtonElement>('roll-stop').click();
+
+      // Stopped: back to the beginning, which is what stopping means.
+      expect(drawn?.style.getPropertyValue('--roll-at')).toBe('0.000');
+      expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(true);
+    });
+
+    it('puts the head where the grid was tapped', async () => {
+      // The grid is the one thing in the sheet worth pointing at, and pointing
+      // at a moment is how anybody looks at a recording.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
+      const grid = drawn?.querySelector<HTMLElement>('.roll__grid');
+      if (grid === null || grid === undefined) {
+        throw new Error('expected a grid to tap');
+      }
+      // jsdom lays nothing out, so the one measurement the view takes is given.
+      grid.getBoundingClientRect = () => ({ left: 20, top: 0, right: 0, bottom: 0,
+        width: 0, height: 0, x: 20, y: 0, toJSON: () => ({}) }) as DOMRect;
+
+      // The zoom says a hundred and forty pixels to the second, so two hundred
+      // and ten pixels in is a second and a half.
+      grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 230 }));
+
+      expect(drawn?.style.getPropertyValue('--roll-at')).toBe('1.500');
+    });
+
+    it('plays from where the head was put, and moves the sound when it is moved again', async () => {
+      // Which is the point of being able to place it: a bar is worked out by
+      // hearing it, and hearing it again, from the same place.
+      const { view, runtime, midi, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(16);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
+      const grid = drawn?.querySelector<HTMLElement>('.roll__grid');
+      if (grid === null || grid === undefined) {
+        throw new Error('expected a grid to tap');
+      }
+      grid.getBoundingClientRect = () => ({ left: 0, top: 0, right: 0, bottom: 0,
+        width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+      // Long enough that neither of the moments below is clamped to its end.
+      expect(runtime.controller.lastRoll).not.toBeNull();
+
+      // Half a second in, at a hundred and forty pixels to the second.
+      grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 70 }));
+      element<HTMLButtonElement>('roll-play').click();
+
+      expect(runtime.takePlayer.positionMs).toBe(500);
+
+      // And moved again while it is sounding, the sound goes with it.
+      grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 210 }));
+
+      expect(runtime.takePlayer.positionMs).toBe(1500);
+      expect(runtime.takePlayer.playing).not.toBeNull();
+
+      element<HTMLButtonElement>('roll-stop').click();
+    });
+
     it('stops the run sounding when its drawing is put away', async () => {
       // A sheet closed on a playback that goes on playing is a note the reader
       // cannot get at to stop.

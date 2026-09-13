@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   RollRecorder,
   beatsWorthMarking,
+  clicksBefore,
   clicksUpTo,
   rollAsEvents,
   rollBeganAtMs,
@@ -325,6 +326,36 @@ describe('the beat a run was measured against', () => {
     });
 
     expect(clicksUpTo(played, 1, 5000).map((beat) => beat.atMs)).toEqual([1000]);
+  });
+
+  it('counts a click due at this instant as still to come, not as spent', () => {
+    // The two questions disagree on exactly the boundary, which is the whole of
+    // it: counted the other way, a playback from the beginning spent the
+    // downbeat before sounding it, and a tap on a bar line lost that bar's
+    // click.
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', measure: 0 },
+        { atMs: 1000, weight: 'beat', measure: 0 },
+        { atMs: 2000, weight: 'beat', measure: 0 },
+      ],
+    });
+
+    expect(clicksBefore(played, 0)).toBe(0);
+    expect(clicksUpTo(played, 0, 0).map((beat) => beat.atMs)).toEqual([0]);
+    expect(clicksBefore(played, 1000)).toBe(1);
+    expect(clicksBefore(played, 1001)).toBe(2);
+  });
+
+  it('counts what is behind a moment, measured from where the roll began', () => {
+    const played = roll({
+      beats: [
+        { atMs: 4000, weight: 'downbeat', measure: 0 },
+        { atMs: 5000, weight: 'beat', measure: 0 },
+      ],
+    });
+
+    expect(clicksBefore(played, 500)).toBe(1);
   });
 
   it('counts only the clicks it would sound, never the ones it skips', () => {

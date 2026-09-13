@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { drawTheRoll, keepTheHeadInView } from '../../src/ui/rollView.js';
+import {
+  drawTheRoll,
+  keepTheHeadInView,
+  timeFromTap,
+} from '../../src/ui/rollView.js';
 import type { RolledPress, RunRoll } from '../../src/application/session/RunRoll.js';
 import { MIDI } from '../support/fixtures.js';
 
@@ -217,5 +221,23 @@ describe('keeping a playback on screen', () => {
     // Nothing is laid out - a drawing that has not been measured yet, or a
     // test - and there is no inside for the head to be kept in.
     expect(keepTheHeadInView(500, 0, 0)).toBeNull();
+  });
+});
+
+describe('reading a moment back off the grid', () => {
+  it('turns a distance across the grid into a moment in the run', () => {
+    // The drawing's whole geometry is the zoom times a number of seconds, so
+    // this is that arithmetic run the other way - and it has to be, or the head
+    // lands somewhere other than where the finger did.
+    expect(timeFromTap(140, 140)).toBe(1000);
+    expect(timeFromTap(70, 140)).toBe(500);
+  });
+
+  it('never reads a moment before the run began', () => {
+    expect(timeFromTap(-50, 140)).toBe(0);
+  });
+
+  it('says nothing when nothing has been laid out', () => {
+    expect(timeFromTap(100, 0)).toBeNull();
   });
 });

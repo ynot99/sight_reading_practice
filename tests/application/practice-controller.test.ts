@@ -3823,6 +3823,34 @@ describe('the last run that reached an end', () => {
       expect(controller.session).not.toBeNull();
     });
 
+    it('starts the clock before it scrolls the page back to the top', async () => {
+      // His question, and the right one: a click is placed on the audio graph
+      // the moment the pulse starts, and nothing the main thread does after
+      // that can move it - so work done *before* the start is added in front
+      // of the sound and work done after it is not. Scrolling a long piece
+      // back to its first bar is a layout and a scroll over a whole engraving,
+      // and it used to stand between the key he pressed to begin and the
+      // downbeat he pressed it for.
+      const rig = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+      });
+      await rig.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      const order: string[] = [];
+      const started = rig.metronome.start.bind(rig.metronome);
+      rig.metronome.start = () => {
+        order.push('clock');
+        started();
+      };
+      rig.renderer.onScrollToStart = () => order.push('page');
+
+      for (const midiNote of opening(rig.controller)) {
+        rig.midi.noteOn(midiNote, rig.clock.now());
+      }
+
+      expect(order).toEqual(['clock', 'page']);
+    });
+
     it('starts the run by playing in every frame there is', async () => {
       // His: "ця фіча має працювати у будь якому режимі". It is the
       // controller's and not a mode's - what begins is whatever run the reader

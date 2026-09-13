@@ -237,7 +237,6 @@ export class PracticeSession {
     this.machine.dispatch('start');
     this.resetRunState();
     this.theOpeningChord = [...opening];
-    this.emitStatus(previous);
 
     // Silent from the first note onwards where the reader gives that beat:
     // the count-in still sounds, and nothing past it does until they play.
@@ -257,6 +256,11 @@ export class PracticeSession {
     if (this.usesPulse()) {
       this.countInRemaining = Math.max(0, this.countInPulses());
       this.metronome.start();
+      // Said after the pulse has been given its moment, not before: announcing
+      // a run redraws the page that is watching it, and every millisecond of
+      // that spent in front of the start is a millisecond of silence in front
+      // of the music.
+      this.emitStatus(previous);
       // The music begins on the pulse's first tick, always. It was begun on
       // the reader's own chord for a while, to get out from under an audio
       // context that took its time waking up - but that is a *guess* at where
@@ -266,6 +270,7 @@ export class PracticeSession {
       return;
     }
 
+    this.emitStatus(previous);
     this.beginRunning(this.clock.now(), 0);
   }
 

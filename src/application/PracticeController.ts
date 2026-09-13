@@ -2177,25 +2177,6 @@ export class PracticeController {
     // rather than `moveTo(0)` for the second: moving to a position the
     // navigator believes it is already at asks the engraver for nothing, so
     // nothing is redrawn and nothing is scrolled to.
-    const openAt = Math.min(Math.max(this.beginAt, passage.from), passage.to);
-    if (openAt > 0) {
-      this.deps.cursor.moveTo(openAt);
-    } else {
-      this.deps.cursor.reset();
-      // The page a long piece was left scrolled to is not where bar one is.
-      this.deps.renderer.scrollToStart();
-    }
-    this.meter.reset();
-    this.lastWaitDrainMs = this.deps.clock.now();
-    this.lastBeatTicks = 0;
-    if (this.survivalRuns) {
-      this.emitter.emit('healthChanged', { health: this.meter.health, cause: 'settle' });
-    }
-    this.heldMarks = [];
-    this.lentMarks = [];
-    this.deps.overlay.clearPlayed();
-    this.deps.fade.clearFaded();
-    this.fadedThrough = -1;
 
     this.sessionSubscriptions.push(
       // A step is dimmed the moment it is done with, whether it was played
@@ -2383,7 +2364,52 @@ export class PracticeController {
     // would otherwise both be subscribed to the keyboard, and the presses
     // that started this run would arrive at the watch a second time.
     this.watchForTheOpening();
+    const openAt = Math.min(Math.max(this.beginAt, passage.from), passage.to);
+    if (openAt > 0) {
+      this.deps.cursor.moveTo(openAt);
+    } else {
+      this.deps.cursor.reset();
+    }
+    this.meter.reset();
+    this.lastWaitDrainMs = this.deps.clock.now();
+    this.lastBeatTicks = 0;
+    if (this.survivalRuns) {
+      this.emitter.emit('healthChanged', { health: this.meter.health, cause: 'settle' });
+    }
+    this.heldMarks = [];
+    this.lentMarks = [];
+    this.deps.overlay.clearPlayed();
+    this.deps.fade.clearFaded();
+    this.fadedThrough = -1;
+
+    // The clock first, and the page behind it.
+    //
+    // A click is placed on the audio graph the moment the pulse starts, and
+    // nothing the main thread does afterwards can move it: work done *before*
+    // this call is added in front of the sound, and work done after it is not.
+    // What used to stand here was the page being made ready - the marker sent
+    // back to the top, a long piece scrolled there, every mark of the last run
+    // taken off the engraving - and on his 159-bar arrangement that is real
+    // work, all of it silence between the key he pressed to begin and the
+    // downbeat he pressed it for. The same lesson the playback learned, which
+    // says it in `ExercisePlayer.start`.
+    //
+    // Nothing is missed by drawing afterwards: the first tick is not delivered
+    // until it is due, which is a scheduling lead away, and all of this
+    // finishes long before it.
     session.start(opening);
+
+    // Last of all, and only this. Scrolling a long piece back to its first bar
+    // is the one piece of preparing the page that nothing depends on and that
+    // really costs - it is a layout and a scroll over a whole engraving - so
+    // it is the one piece that waits. Everything above it is the slate being
+    // cleaned, which has to be done before the run draws on it.
+    if (openAt === 0) {
+      // The page a long piece was left scrolled to is not where bar one is.
+      this.deps.renderer.scrollToStart();
+    }
+
+
     return session;
   }
 

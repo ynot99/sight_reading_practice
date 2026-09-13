@@ -180,6 +180,8 @@ export class FakeScoreRenderer
   }
 
   scrollToStartCount = 0;
+  /** Told, so a test can see *when* the page was scrolled among other work. */
+  onScrollToStart: (() => void) | null = null;
   private passageListeners: ((passage: DrawnPassage) => void)[] = [];
 
   /** The bars the markers are standing around, or `null` when hidden. */
@@ -340,6 +342,7 @@ export class FakeScoreRenderer
 
   scrollToStart(): void {
     this.scrollToStartCount += 1;
+    this.onScrollToStart?.();
   }
 
   clear(): void {

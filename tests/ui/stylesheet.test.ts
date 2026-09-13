@@ -1021,4 +1021,14 @@ describe('how fine the grid reads', () => {
     expect(percent(division?.body)).toBeGreaterThan(0);
     expect(percent(division?.body)).toBeLessThan(percent(beat?.body));
   });
+
+  it('dashes it, so faintness is not the only thing telling it from a beat', () => {
+    // With the eye on one bar a faint line over pale ground can read as a beat.
+    // Two channels, because the distinction has to survive both ways of looking.
+    const division = rules().find((rule) => rule.selector === '.roll__line--division');
+
+    expect(division?.body).toContain('dashed');
+    // And no solid fill left behind it, which would hide the dashes.
+    expect(division?.body).toContain('background: none');
+  });
 });

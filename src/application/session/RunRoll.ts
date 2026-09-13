@@ -121,16 +121,22 @@ const ROLL_TAIL_MS = 1_000;
 /**
  * How fine a grid is asked for.
  *
- * `beats` is the bar lines and the felt beats, which is what a reader counts.
- * `divisions` is every tick the pulse actually gave - the eighths or the
- * sixteenths, whichever the run needed to resolve its shortest note - which is
- * what a reader checks themselves against once the beats are landing.
+ * `bars` is the bar lines alone, which is the reading a long run wants: where
+ * the bars fell, and nothing else competing for the eye. `beats` adds the felt
+ * beats, which is what a reader counts. `divisions` adds every tick the pulse
+ * actually gave - the eighths or the sixteenths, whichever the run needed to
+ * resolve its shortest note - which is what a reader checks themselves against
+ * once the beats are landing.
+ *
+ * Three rather than two, because his run is a hundred and fifty bars and
+ * everything at once is a wash: "Divisions чекбокс додає дуже багато смужок -
+ * чому не можна зробити це select".
  *
  * Asked of the drawing and of the clicks together, because a line the eye can
  * see and a click the ear can hear have to be the same grid or neither is
  * worth anything.
  */
-export type GridFineness = 'beats' | 'divisions';
+export type GridFineness = 'bars' | 'beats' | 'divisions';
 
 /** Presses kept before a run stops recording them. */
 const PRESS_CAPACITY = 20_000;
@@ -354,10 +360,14 @@ export function beatsWorthMarking(
   roll: RunRoll,
   fineness: GridFineness = 'beats',
 ): readonly MarkedBeat[] {
-  const marking =
-    fineness === 'divisions'
-      ? [...roll.beats]
-      : roll.beats.filter((beat) => beat.weight !== 'division');
+  // A bar line the reader gave late is a downbeat, so it survives every level:
+  // at the coarsest reading of all it is half of what there is to see.
+  const marking = roll.beats.filter((beat) => {
+    if (fineness === 'divisions') {
+      return true;
+    }
+    return fineness === 'bars' ? beat.weight === 'downbeat' : beat.weight !== 'division';
+  });
   return marking.map((beat, index) => {
     // The beat before it at the same place in the music, if there is one. Only
     // ever the one before: a bar line is given once.

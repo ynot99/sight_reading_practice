@@ -1805,9 +1805,9 @@ describe('AppView', () => {
       const beatsOnly = lines();
       expect(element('roll-body').querySelectorAll('.roll__line--division')).toHaveLength(0);
 
-      const divisions = element<HTMLInputElement>('roll-divisions');
-      divisions.checked = true;
-      divisions.dispatchEvent(new Event('change', { bubbles: true }));
+      const grid = element<HTMLSelectElement>('roll-grid');
+      grid.value = 'divisions';
+      grid.dispatchEvent(new Event('change', { bubbles: true }));
 
       // More lines, and the new ones are drawn as what they are.
       expect(lines()).toBeGreaterThan(beatsOnly);
@@ -1828,6 +1828,13 @@ describe('AppView', () => {
 
       expect(metronome.clicks.some((asked) => asked.weight === 'division')).toBe(true);
       element<HTMLButtonElement>('roll-stop').click();
+
+      // And the coarsest reading is fewer lines than the beats, not more: on a
+      // long run that is the only one that can be read at a glance.
+      grid.value = 'bars';
+      grid.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(lines()).toBeLessThan(beatsOnly);
     });
 
     it('stops the run sounding when its drawing is put away', async () => {

@@ -688,11 +688,18 @@ textarea {
 
 /*
  * What falls between the beats: the eighths or the sixteenths, whichever the run
- * needed. Fainter than a beat, because it is the thing being measured against
- * rather than the thing being counted.
+ * needed.
+ *
+ * Dashed, and fainter than a beat. Two channels for one distinction, because it
+ * has to survive both ways of looking: the weight tells them apart at a glance
+ * across a whole run, and the dashes tell them apart when the eye is on one bar
+ * and a faint line could be a beat drawn over pale ground. His: "8мі та 16ті
+ * можна малювати пунктиром щоб відрізняти ці смужки від основних слабких
+ * долей?".
  */
 .roll__line--division {
-  background: color-mix(in srgb, var(--border) 32%, transparent);
+  background: none;
+  border-left: 1px dashed color-mix(in srgb, var(--border) 32%, transparent);
 }
 
 .roll__line--downbeat {

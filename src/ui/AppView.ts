@@ -1361,7 +1361,7 @@ export class AppView {
     rollZoom: HTMLInputElement;
     rollSpeed: HTMLSelectElement;
     rollClick: HTMLInputElement;
-    rollDivisions: HTMLInputElement;
+    rollGrid: HTMLSelectElement;
     rollPlay: HTMLButtonElement;
     rollPlayIcon: SVGPathElement;
     rollStop: HTMLButtonElement;
@@ -1608,7 +1608,7 @@ export class AppView {
       rollZoom: requireElement(doc, 'roll-zoom'),
       rollSpeed: requireElement(doc, 'roll-speed'),
       rollClick: requireElement(doc, 'roll-click'),
-      rollDivisions: requireElement(doc, 'roll-divisions'),
+      rollGrid: requireElement(doc, 'roll-grid'),
       rollPlay: requireElement(doc, 'roll-play'),
       rollPlayIcon: requireElement(doc, 'roll-play-icon'),
       rollStop: requireElement(doc, 'roll-stop'),
@@ -5658,7 +5658,7 @@ export class AppView {
     this.listen(this.el.rollZoom, 'input', () => {
       this.applyTheZoom();
     });
-    this.listen(this.el.rollDivisions, 'change', () => {
+    this.listen(this.el.rollGrid, 'change', () => {
       this.drawTheRollInto();
       // The count of clicks already handed over indexes into a list that just
       // changed length, so it is asked again rather than carried over.
@@ -6347,7 +6347,8 @@ export class AppView {
 
   /** How fine a grid the reader has asked for, in the drawing and in the click. */
   private theRollsGrid(): GridFineness {
-    return this.el.rollDivisions.checked ? 'divisions' : 'beats';
+    const asked = this.el.rollGrid.value;
+    return asked === 'bars' || asked === 'divisions' ? asked : 'beats';
   }
 
   /** Where the head stands, whether something is sounding or not. */

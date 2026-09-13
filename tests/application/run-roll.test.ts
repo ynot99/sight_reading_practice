@@ -321,6 +321,22 @@ describe('the beat a run was measured against', () => {
     expect(marked.map((beat) => beat.lateByMs)).toEqual([null, 120, null]);
   });
 
+  it('keeps a bar line the reader gave at the coarsest reading of all', () => {
+    // At that level it is half of what there is to see: where the bar fell and
+    // where it was taken.
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 180, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 500, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    const bars = beatsWorthMarking(played, 'bars');
+    expect(bars.map((beat) => beat.atMs)).toEqual([0, 180]);
+    expect(bars.map((beat) => beat.given)).toEqual([false, true]);
+  });
+
   it('does not click a bar line the reader gave themselves', () => {
     // They played it, and heard it on their own instrument at the time. A
     // second click there is the machine agreeing rather than keeping time.
@@ -392,6 +408,7 @@ describe('the beat a run was measured against', () => {
       ],
     });
 
+    expect(beatsWorthMarking(played, 'bars').map((beat) => beat.atMs)).toEqual([0]);
     expect(beatsWorthMarking(played).map((beat) => beat.atMs)).toEqual([0, 500]);
     expect(beatsWorthMarking(played, 'divisions').map((beat) => beat.atMs)).toEqual([0, 250, 500]);
     expect(theMusicsBeats(played, 'divisions')).toHaveLength(3);

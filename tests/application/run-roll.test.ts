@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { RollRecorder } from '../../src/application/session/RunRoll.js';
+import {
+  RollRecorder,
+  rollAsEvents,
+  rollBeganAtMs,
+  type RolledPress,
+  type RunRoll,
+} from '../../src/application/session/RunRoll.js';
 import { FlowMode } from '../../src/application/modes/FlowMode.js';
 import type { MetronomeTick } from '../../src/application/ports/IMetronome.js';
 import type {
@@ -33,6 +39,22 @@ function verdict(midi: number, event: Partial<NoteJudgedEvent> = {}): NoteJudged
     remaining: [],
     ...event,
   };
+}
+
+function pressOf(midi: number, downAtMs: number, upAtMs: number | null): RolledPress {
+  return {
+    midi,
+    downAtMs,
+    upAtMs,
+    velocity: 0.8,
+    verdict: 'correct',
+    stepIndex: 0,
+    deviationMs: null,
+  };
+}
+
+function roll(over: Partial<RunRoll> = {}): RunRoll {
+  return { presses: [], beats: [], pedal: [], truncated: false, ...over };
 }
 
 function tick(at: number, of: Partial<MetronomeTick> = {}): MetronomeTick {
@@ -188,6 +210,73 @@ describe('writing a run down', () => {
     const roll = roller.roll();
     expect(roll.presses).toHaveLength(20_000);
     expect(roll.truncated).toBe(true);
+  });
+});
+
+describe('the run as something to listen to', () => {
+  it('pairs every press into a note that starts and stops', () => {
+    const played = roll({
+      presses: [
+        { ...pressOf(MIDI.C4, 1000, 1400), velocity: 0.5 },
+        pressOf(MIDI.E4, 1200, 1600),
+      ],
+    });
+
+    expect(rollAsEvents(played)).toEqual([
+      { kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.5 },
+      { kind: 'noteOn', atMs: 200, midi: MIDI.E4, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 400, midi: MIDI.C4 },
+      { kind: 'noteOff', atMs: 600, midi: MIDI.E4 },
+    ]);
+  });
+
+  it('measures from the same nought the drawing does', () => {
+    // Otherwise the note that sounds is not the note under the head. The roll
+    // begins at its first event whatever that event is, so a run whose first
+    // click is long before its first press starts from the click.
+    const played = roll({
+      beats: [{ atMs: 4000, weight: 'downbeat', measure: 0 }],
+      presses: [pressOf(MIDI.C4, 5000, 5200)],
+    });
+
+    expect(rollBeganAtMs(played)).toBe(4000);
+    expect(rollAsEvents(played)[0]?.atMs).toBe(1000);
+  });
+
+  it('lets go of a key that was still down at the end', () => {
+    // It has to be let go of somewhere, and the alternative is a note that
+    // sounds for ever. Where it is let go of is where the roll stops, which is
+    // a moment past its last event - the same moment the drawing gives such a
+    // note its width, and the only length it can be given at all in a mode
+    // with no pulse, where a roll is presses and nothing else.
+    const played = roll({
+      beats: [{ atMs: 0, weight: 'downbeat', measure: 0 }, { atMs: 3000, weight: 'beat', measure: 0 }],
+      presses: [pressOf(MIDI.C4, 0, null)],
+    });
+
+    const off = rollAsEvents(played).find((event) => event.kind === 'noteOff');
+    expect(off?.atMs).toBe(4000);
+  });
+
+  it('carries the pedal, down and up', () => {
+    const played = roll({ pedal: [{ downAtMs: 1000, upAtMs: 2000 }] });
+
+    expect(rollAsEvents(played)).toEqual([
+      { kind: 'sustain', atMs: 0, value: 1 },
+      { kind: 'sustain', atMs: 1000, value: 0 },
+    ]);
+  });
+
+  it('hands the events over in time order', () => {
+    // The player walks them forwards and never looks back, so an event out of
+    // order is an event it plays at the wrong moment or not at all.
+    const played = roll({
+      presses: [pressOf(MIDI.C4, 3000, 3100), pressOf(MIDI.E4, 1000, 1100)],
+      pedal: [{ downAtMs: 2000, upAtMs: 2500 }],
+    });
+
+    const times = rollAsEvents(played).map((event) => event.atMs);
+    expect([...times].sort((left, right) => left - right)).toEqual(times);
   });
 });
 

@@ -47,8 +47,8 @@ import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/Pra
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barNumberOf, measureCount } from '../domain/model/Exercise.js';
-import type { RunRoll } from '../application/session/RunRoll.js';
-import { drawTheRoll } from './rollView.js';
+import { rollAsEvents, type RunRoll } from '../application/session/RunRoll.js';
+import { drawTheRoll, keepTheHeadInView } from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
 import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
@@ -205,6 +205,14 @@ const NEWLINE = String.fromCharCode(10);
 
 /** How often the take slider is moved while something is sounding. */
 const TAKE_TICK_MS = 80;
+/**
+ * What the player is asked to call the run it is sounding.
+ *
+ * A roll is not a take and has no id of its own, but the player is addressed by
+ * one - and this is also what lets everything else tell whether the thing
+ * sounding is the drawing's or the shelf's.
+ */
+const RUN_ROLL_ID = 'the run just played';
 /**
  * How often the keep pill's counter is redrawn while a take is open.
  *
@@ -1178,6 +1186,7 @@ export class AppView {
   private selectedTakeId: string | null = null;
   /** Follows a sounding take, so the slider says where it has got to. */
   private takeTick: ReturnType<typeof setInterval> | null = null;
+  private rollTick: ReturnType<typeof setInterval> | null = null;
   /** Whether the passage markers are on the page, which a tap turns over. */
   private passageMarkersWanted = true;
   /**
@@ -1305,6 +1314,8 @@ export class AppView {
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
     rollZoom: HTMLInputElement;
+    rollPlay: HTMLButtonElement;
+    rollPlayIcon: SVGPathElement;
     rollClose: HTMLElement;
     sheetSettings: HTMLElement;
     settingsSections: HTMLElement;
@@ -1545,6 +1556,8 @@ export class AppView {
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
       rollZoom: requireElement(doc, 'roll-zoom'),
+      rollPlay: requireElement(doc, 'roll-play'),
+      rollPlayIcon: requireElement(doc, 'roll-play-icon'),
       rollClose: requireElement(doc, 'roll-close'),
       sheetSettings: requireElement(doc, 'sheet-settings'),
       settingsSections: requireElement(doc, 'settings-sections'),
@@ -1762,6 +1775,10 @@ export class AppView {
     if (this.takeTick !== null) {
       clearInterval(this.takeTick);
       this.takeTick = null;
+    }
+    if (this.rollTick !== null) {
+      clearInterval(this.rollTick);
+      this.rollTick = null;
     }
     if (this.timeTick !== null) {
       clearInterval(this.timeTick);
@@ -5533,7 +5550,15 @@ export class AppView {
       this.el.sheetMetronome.hidden = true;
     });
     this.listen(this.el.rollClose, 'click', () => {
+      this.stopTheRoll();
       this.el.sheetRoll.hidden = true;
+    });
+    this.listen(this.el.rollPlay, 'click', () => {
+      if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
+        this.stopTheRoll();
+        return;
+      }
+      this.playTheRoll();
     });
     this.listen(this.el.rollZoom, 'input', () => {
       this.applyTheZoom();
@@ -6167,10 +6192,12 @@ export class AppView {
     if (roll === null) {
       return;
     }
+    this.stopTheRoll();
     this.el.rollBody.replaceChildren(
       drawTheRoll({ roll, barLabel: this.barNamer(roll) }),
     );
     this.applyTheZoom();
+    this.describeTheRoll();
     this.el.sheetRoll.hidden = false;
   }
 
@@ -6191,6 +6218,96 @@ export class AppView {
       const index = began + measure - first;
       return exercise === null ? String(index + 1) : String(barNumberOf(exercise, index));
     };
+  }
+
+  /**
+   * Sounds the run the drawing is of.
+   *
+   * Through the player that already plays a recording, because a run written
+   * down *is* one: the same stream, the same pedal, the same rebasing to its
+   * own nought. What it is not is a take, so the take shelf's own transport is
+   * let go of first - one player can only be sounding one thing, and a
+   * transport still pointing at a take would be describing a performance that
+   * had been taken away from it.
+   */
+  private playTheRoll(): void {
+    const roll = this.runtime.controller.lastRoll;
+    if (roll === null || roll.presses.length === 0) {
+      return;
+    }
+    if (this.takeTick !== null) {
+      clearInterval(this.takeTick);
+      this.takeTick = null;
+    }
+    this.selectedTakeId = null;
+    this.describeTakeTransport();
+    this.runtime.takePlayer.play(RUN_ROLL_ID, rollAsEvents(roll));
+    if (this.rollTick === null) {
+      this.rollTick = setInterval(() => this.followTheRoll(), TAKE_TICK_MS);
+    }
+    this.describeTheRoll();
+  }
+
+  private stopTheRoll(): void {
+    if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
+      this.runtime.takePlayer.stop();
+    }
+    if (this.rollTick !== null) {
+      clearInterval(this.rollTick);
+      this.rollTick = null;
+    }
+    this.describeTheRoll();
+  }
+
+  private followTheRoll(): void {
+    const player = this.runtime.takePlayer;
+    // The sound before the drawing, as a take's own following does: a frame
+    // late on screen is nothing, a frame late in the ear is a gap.
+    player.pump();
+    if (player.finished) {
+      player.stop();
+    }
+    // Something else took the player over, or it has run out. Either way this
+    // is no longer following anything.
+    if (player.playing !== RUN_ROLL_ID) {
+      this.stopTheRoll();
+      return;
+    }
+    this.describeTheRoll();
+  }
+
+  /**
+   * Puts the head where the sound is, and keeps it on screen.
+   *
+   * Scrolled only when it has left the middle of the view rather than on every
+   * frame: a grid that re-centres continuously is unreadable, and on a long
+   * piece a head that never scrolls is a performance watched off-screen.
+   */
+  private describeTheRoll(): void {
+    const player = this.runtime.takePlayer;
+    const sounding = player.playing === RUN_ROLL_ID;
+    this.el.rollPlayIcon.setAttribute('d', sounding ? PAUSE_ICON : PLAY_ICON);
+    const label = sounding ? 'Stop' : 'Play';
+    this.el.rollPlay.title = label;
+    this.el.rollPlay.setAttribute('aria-label', label);
+
+    const drawn = this.el.rollBody.firstElementChild;
+    if (!(drawn instanceof HTMLElement)) {
+      return;
+    }
+    drawn.classList.toggle('roll--sounding', sounding);
+    drawn.style.setProperty('--roll-at', (player.positionMs / 1000).toFixed(3));
+    if (!sounding) {
+      return;
+    }
+    const head = drawn.querySelector<HTMLElement>('.roll__head');
+    if (head === null) {
+      return;
+    }
+    const to = keepTheHeadInView(head.offsetLeft, drawn.scrollLeft, drawn.clientWidth);
+    if (to !== null) {
+      drawn.scrollLeft = to;
+    }
   }
 
   private applyTheZoom(): void {

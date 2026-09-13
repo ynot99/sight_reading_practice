@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { drawTheRoll } from '../../src/ui/rollView.js';
+import { drawTheRoll, keepTheHeadInView } from '../../src/ui/rollView.js';
 import type { RolledPress, RunRoll } from '../../src/application/session/RunRoll.js';
 import { MIDI } from '../support/fixtures.js';
 
@@ -189,5 +189,33 @@ describe('drawing a run as a piano roll', () => {
 
     expect(view.querySelectorAll('.roll__note')).toHaveLength(0);
     expect(view.style.getPropertyValue('--roll-rows')).toBe('12');
+  });
+});
+
+describe('keeping a playback on screen', () => {
+  it('leaves the view alone while the head is comfortably inside it', () => {
+    // A grid that re-centres on every frame cannot be read.
+    expect(keepTheHeadInView(300, 0, 1000)).toBeNull();
+  });
+
+  it('moves the view once the head has drifted too far across it', () => {
+    // Past three quarters, and then the head lands a quarter of the way in, so
+    // most of the width is what is about to be played.
+    expect(keepTheHeadInView(800, 0, 1000)).toBe(550);
+  });
+
+  it('follows the head back when it is behind the view', () => {
+    // Which is what a seek backwards, or a second playback, looks like.
+    expect(keepTheHeadInView(200, 1000, 1000)).toBe(0);
+  });
+
+  it('does not scroll past the front of the drawing', () => {
+    expect(keepTheHeadInView(100, 400, 1000)).toBe(0);
+  });
+
+  it('says nothing when there is no view to speak of', () => {
+    // Nothing is laid out - a drawing that has not been measured yet, or a
+    // test - and there is no inside for the head to be kept in.
+    expect(keepTheHeadInView(500, 0, 0)).toBeNull();
   });
 });

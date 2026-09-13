@@ -672,6 +672,28 @@ textarea {
   border-bottom-right-radius: 0;
 }
 
+/*
+ * Where a playback has got to.
+ *
+ * Hidden until something is sounding: a line standing still in the middle of a
+ * drawing looks like a mark on the music rather than a place in time. Its
+ * position is one custom property, so following a performance is a write
+ * rather than a redraw.
+ */
+.roll__head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  left: calc(var(--roll-second) * var(--roll-at, 0));
+  background: var(--accent);
+  display: none;
+}
+
+.roll--sounding .roll__head {
+  display: block;
+}
+
 .roll__pedal {
   position: relative;
   grid-row: 3;

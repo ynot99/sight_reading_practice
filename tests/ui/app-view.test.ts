@@ -1399,6 +1399,77 @@ describe('AppView', () => {
       expect(drawn?.querySelectorAll('.roll__note').length).toBeGreaterThan(0);
     });
 
+    it('sounds the run the drawing is of, and follows it with a head', async () => {
+      // Through the player that already plays a recording back: a run written
+      // down is one, pedal and all.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      element<HTMLButtonElement>('roll-play').click();
+
+      const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
+      expect(runtime.takePlayer.playing).not.toBeNull();
+      expect(drawn?.classList.contains('roll--sounding')).toBe(true);
+      expect(drawn?.querySelector('.roll__head')).not.toBeNull();
+
+      element<HTMLButtonElement>('roll-play').click();
+
+      expect(runtime.takePlayer.playing).toBeNull();
+      expect(drawn?.classList.contains('roll--sounding')).toBe(false);
+    });
+
+    it('walks the head along as the run sounds', async () => {
+      // The head is moved by one custom property rather than redrawn, so this
+      // is the only place the number it carries can be checked against where
+      // the sound has actually got to.
+      const { view, runtime, midi, metronome, clock } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      // Long enough that there is a performance to walk over at all.
+      metronome.advanceSubdivisions(8);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        expect(drawn?.style.getPropertyValue('--roll-at')).toBe('0.000');
+
+        clock.advance(400);
+        vi.advanceTimersByTime(100);
+
+        expect(drawn?.style.getPropertyValue('--roll-at')).toBe('0.400');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('stops the run sounding when its drawing is put away', async () => {
+      // A sheet closed on a playback that goes on playing is a note the reader
+      // cannot get at to stop.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      element<HTMLButtonElement>('roll-play').click();
+
+      element<HTMLButtonElement>('roll-close').click();
+
+      expect(runtime.takePlayer.playing).toBeNull();
+      expect(element('sheet-roll').hidden).toBe(true);
+    });
+
     it('says nothing about a run nothing was played in', async () => {
       // A grid with no notes on it is a picture of nothing, and a button that
       // opens one is a button that lies about having something to show.

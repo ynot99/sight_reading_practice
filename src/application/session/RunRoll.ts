@@ -1,4 +1,5 @@
 import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
+import type { MidiFileEvent } from '../../domain/midi/MidiFile.js';
 import type { BeatWeight, MetronomeTick } from '../ports/IMetronome.js';
 import type {
   MidiNoteOffEvent,
@@ -78,6 +79,14 @@ export interface RunRoll {
    */
   readonly truncated: boolean;
 }
+
+/**
+ * How long a roll goes on past its last event.
+ *
+ * Air at the end of the picture, and the length of a note nobody heard the end
+ * of. One second, which is long enough to see and to hear.
+ */
+const ROLL_TAIL_MS = 1_000;
 
 /** Presses kept before a run stops recording them. */
 const PRESS_CAPACITY = 20_000;
@@ -236,4 +245,74 @@ export class RollRecorder {
 /** A roll with nothing in it, for a run that has not been played. */
 export function emptyRoll(): RunRoll {
   return EMPTY;
+}
+
+/**
+ * Where the roll's nought is: the first thing that happened, whatever it was.
+ *
+ * Asked here rather than worked out by whoever needs it, because two answers
+ * would be two pictures. The drawing places every note against this, and so
+ * does the head that says where a playback has got to - a head that measured
+ * from a different nought would drift across the notes it is meant to be
+ * walking over.
+ */
+export function rollBeganAtMs(roll: RunRoll): number {
+  const first = [
+    ...roll.beats.map((beat) => beat.atMs),
+    ...roll.presses.map((press) => press.downAtMs),
+    ...roll.pedal.map((span) => span.downAtMs),
+  ];
+  return first.length === 0 ? 0 : Math.min(...first);
+}
+
+/**
+ * And where it stops: a moment after the last thing that happened.
+ *
+ * The moment is not decoration. A key still down when the run ended has no
+ * release to be drawn or sounded to, and this is where it gets one - so the
+ * drawing gives it a width and the playback gives it a length, from the same
+ * number. Asked separately, the two disagreed: the picture held such a note
+ * for a second and the playback for nothing at all, which in a mode with no
+ * pulse at all - where a roll is presses and nothing else - made the whole
+ * performance silent.
+ */
+export function rollEndedAtMs(roll: RunRoll): number {
+  const last = [
+    ...roll.beats.map((beat) => beat.atMs),
+    ...roll.presses.map((press) => press.upAtMs ?? press.downAtMs),
+    ...roll.pedal.map((span) => span.upAtMs ?? span.downAtMs),
+  ];
+  const began = rollBeganAtMs(roll);
+  return (last.length === 0 ? began : Math.max(...last)) + ROLL_TAIL_MS;
+}
+
+/**
+ * The run as a stream something can play.
+ *
+ * So that hearing a run back is the machinery that already plays a recording
+ * rather than a second one: `TakePlayer` takes exactly this, pedal included.
+ * Rebased to the roll's own nought, which is also the drawing's - so the note
+ * that sounds is the note under the head.
+ *
+ * A key still down at the end is let go of there. It has to be let go of
+ * somewhere, and the alternative is a note that sounds for ever.
+ */
+export function rollAsEvents(roll: RunRoll): readonly MidiFileEvent[] {
+  const origin = rollBeganAtMs(roll);
+  const ends = rollEndedAtMs(roll);
+  const events: MidiFileEvent[] = [];
+  for (const press of roll.presses) {
+    events.push({
+      kind: 'noteOn',
+      atMs: press.downAtMs - origin,
+      midi: press.midi,
+      velocity: press.velocity,
+    });
+    events.push({ kind: 'noteOff', atMs: (press.upAtMs ?? ends) - origin, midi: press.midi });
+  }
+  for (const span of roll.pedal) {
+    events.push({ kind: 'sustain', atMs: span.downAtMs - origin, value: 1 });
+    events.push({ kind: 'sustain', atMs: (span.upAtMs ?? ends) - origin, value: 0 });
+  }
+  return events.sort((left, right) => left.atMs - right.atMs);
 }

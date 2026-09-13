@@ -1,4 +1,10 @@
-import type { RolledBeat, RolledPress, RunRoll } from '../application/session/RunRoll.js';
+import {
+  rollBeganAtMs,
+  rollEndedAtMs,
+  type RolledBeat,
+  type RolledPress,
+  type RunRoll,
+} from '../application/session/RunRoll.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
 
 /**
@@ -18,9 +24,6 @@ export interface RollDrawing {
 const PADDING_ROWS = 2;
 /** Rows drawn however few notes there were, so one note is not one stripe. */
 const LEAST_ROWS = 12;
-/** Seconds of grid kept past the last thing that happened. */
-const TAIL_SECONDS = 1;
-
 /** Pitch classes drawn dark, because on a keyboard they are the black keys. */
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 
@@ -42,26 +45,6 @@ function atSecond(ms: number): string {
 
 function atRow(row: number): string {
   return `calc(var(--roll-row) * ${row})`;
-}
-
-/** Where the drawing's nought is: the first thing that happened, whatever it was. */
-function originOf(roll: RunRoll): number {
-  const first = [
-    ...roll.beats.map((beat) => beat.atMs),
-    ...roll.presses.map((press) => press.downAtMs),
-    ...roll.pedal.map((span) => span.downAtMs),
-  ];
-  return first.length === 0 ? 0 : Math.min(...first);
-}
-
-/** Where it ends, with a key still down or a pedal still held running to the edge. */
-function endOf(roll: RunRoll, origin: number): number {
-  const last = [
-    ...roll.beats.map((beat) => beat.atMs),
-    ...roll.presses.map((press) => press.upAtMs ?? press.downAtMs),
-    ...roll.pedal.map((span) => span.upAtMs ?? span.downAtMs),
-  ];
-  return (last.length === 0 ? origin : Math.max(...last)) + TAIL_SECONDS * 1000;
 }
 
 /**
@@ -148,6 +131,40 @@ function noteFor(press: RolledPress, origin: number, high: number, endMs: number
   return note;
 }
 
+/** Where the head is put when the view is scrolled to it, as a fraction across. */
+const HEAD_RESTS_AT = 0.25;
+/** And how far across it may drift before the view is moved at all. */
+const HEAD_DRIFTS_TO = 0.75;
+
+/**
+ * Where to scroll so a playback stays watchable, or `null` to leave it alone.
+ *
+ * Moved only when the head has left the front three quarters of the view, and
+ * then put a quarter of the way in rather than in the middle: a grid that
+ * re-centres on every frame cannot be read, and one that never moves is a
+ * performance watched off-screen. Landing it at a quarter leaves most of the
+ * width for what is about to be played, which is what the reader is looking
+ * at.
+ *
+ * Separated from the scrolling itself because this is the part with a judgement
+ * in it. The three lines that set `scrollLeft` are layout, which no test here
+ * can see; these numbers are arithmetic, which every test can.
+ */
+export function keepTheHeadInView(
+  headPx: number,
+  scrolledToPx: number,
+  viewWidePx: number,
+): number | null {
+  // Nothing is laid out, so there is no view to keep anything inside of.
+  if (viewWidePx <= 0) {
+    return null;
+  }
+  if (headPx >= scrolledToPx && headPx <= scrolledToPx + viewWidePx * HEAD_DRIFTS_TO) {
+    return null;
+  }
+  return Math.max(0, headPx - viewWidePx * HEAD_RESTS_AT);
+}
+
 /**
  * Draws a run as keys against the clicks it was played to.
  *
@@ -160,8 +177,8 @@ function noteFor(press: RolledPress, origin: number, high: number, endMs: number
  */
 export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   const { roll } = drawing;
-  const origin = originOf(roll);
-  const endMs = endOf(roll, origin);
+  const origin = rollBeganAtMs(roll);
+  const endMs = rollEndedAtMs(roll);
   const band = bandOf(roll.presses);
   const rows = band.high - band.low + 1;
 
@@ -219,6 +236,11 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     held.title = span.upAtMs === null ? 'Pedal, still down' : 'Pedal';
     pedal.append(held);
   }
+
+  // Where a playback has got to, moved by one custom property so following a
+  // performance costs one write a frame rather than a redraw.
+  const head = element('div', 'roll__head');
+  grid.append(head);
 
   view.append(ruler, keys, grid, pedal);
   return view;

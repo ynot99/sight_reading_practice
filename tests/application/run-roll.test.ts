@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   RollRecorder,
+  beatsWorthMarking,
+  clicksUpTo,
   rollAsEvents,
   rollBeganAtMs,
   type RolledPress,
@@ -277,6 +279,66 @@ describe('the run as something to listen to', () => {
 
     const times = rollAsEvents(played).map((event) => event.atMs);
     expect([...times].sort((left, right) => left - right)).toEqual(times);
+  });
+});
+
+describe('the beat a run was measured against', () => {
+  it('marks the bar lines and the beats, and never what falls between', () => {
+    // A pulse may be running at four ticks to the beat for the practice loop's
+    // sake. All four drawn is a grey wash; all four sounded is a rattle.
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', measure: 0 },
+        { atMs: 250, weight: 'division', measure: 0 },
+        { atMs: 500, weight: 'beat', measure: 0 },
+      ],
+    });
+
+    expect(beatsWorthMarking(played).map((beat) => beat.weight)).toEqual([
+      'downbeat',
+      'beat',
+    ]);
+  });
+
+  it('hands over only the clicks the window has reached', () => {
+    // Laid out in windows the way the notes are: a click has to be placed
+    // before it sounds, and a whole run's worth at once could not be taken
+    // back when the reader stops.
+    const played = roll({
+      beats: [
+        { atMs: 1000, weight: 'downbeat', measure: 0 },
+        { atMs: 2000, weight: 'beat', measure: 0 },
+        { atMs: 3000, weight: 'beat', measure: 0 },
+      ],
+    });
+
+    // Measured from the roll's own beginning, which is its first event.
+    expect(clicksUpTo(played, 0, 1100).map((beat) => beat.atMs)).toEqual([1000, 2000]);
+  });
+
+  it('does not hand the same click over twice', () => {
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', measure: 0 },
+        { atMs: 1000, weight: 'beat', measure: 0 },
+      ],
+    });
+
+    expect(clicksUpTo(played, 1, 5000).map((beat) => beat.atMs)).toEqual([1000]);
+  });
+
+  it('counts only the clicks it would sound, never the ones it skips', () => {
+    // Otherwise the count of what has been handed over slides against the list
+    // it indexes into, and every click after the first subdivision is wrong.
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', measure: 0 },
+        { atMs: 250, weight: 'division', measure: 0 },
+        { atMs: 1000, weight: 'beat', measure: 0 },
+      ],
+    });
+
+    expect(clicksUpTo(played, 1, 5000).map((beat) => beat.atMs)).toEqual([1000]);
   });
 });
 

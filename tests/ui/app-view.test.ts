@@ -23,6 +23,10 @@ import { ScoreLibrary } from '../../src/application/ScoreLibrary.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { TimeToday } from '../../src/application/TimeToday.js';
 import { PracticeHistory } from '../../src/application/PracticeHistory.js';
+import {
+  beatsWorthMarking,
+  rollBeganAtMs,
+} from '../../src/application/session/RunRoll.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 
@@ -298,6 +302,7 @@ function createRig(
     renderer,
     clock,
     settings,
+    metronomeClick: metronome,
     metronomeVolume,
     instrumentVolume,
     dispose: () => undefined,
@@ -1450,6 +1455,83 @@ describe('AppView', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it('sounds the beat the run was measured against, where it is asked for', async () => {
+      // Seeing how far off the beat a note was is one thing; hearing it is the
+      // sense that does the work at the keyboard.
+      const { view, runtime, midi, metronome, clock } = createRig();
+      await view.initialize();
+      // A frame the pulse carries, so there is a beat in the roll at all: in
+      // Wait mode the music holds still for the reader and no pulse runs.
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(8);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      metronome.clicks.length = 0;
+
+      const played = runtime.controller.lastRoll;
+      const marking = played === null ? [] : beatsWorthMarking(played);
+      const began = played === null ? 0 : rollBeganAtMs(played);
+
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(200);
+        vi.advanceTimersByTime(100);
+
+        // Asked for at a moment on the page's own clock, not at the moment it
+        // fell in the run: the two clocks share nothing but a duration. The
+        // first beat of the run is already behind the sound by now, and saying
+        // so is what lets the metronome place it at once rather than late.
+        const at = runtime.takePlayer.positionMs;
+        expect(metronome.clicks[0]?.atMs).toBe(clock.now() + ((marking[0]?.atMs ?? 0) - began - at));
+        expect(metronome.clicks[0]?.weight).toBe('downbeat');
+
+        // And every beat of the run exactly once, however many windows it took.
+        for (let guard = 0; guard < 50 && runtime.takePlayer.playing !== null; guard += 1) {
+          clock.advance(200);
+          vi.advanceTimersByTime(100);
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(marking.length).toBeGreaterThan(1);
+      expect(metronome.clicks).toHaveLength(marking.length);
+      for (const asked of metronome.clicks) {
+        expect(asked.weight).not.toBe('division');
+      }
+    });
+
+    it('leaves the beat out of a playback that was not asked to have one', async () => {
+      const { view, runtime, midi, metronome, clock } = createRig();
+      await view.initialize();
+      // A frame the pulse carries, so there is a beat in the roll at all: in
+      // Wait mode the music holds still for the reader and no pulse runs.
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(8);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      element<HTMLInputElement>('roll-click').checked = false;
+      metronome.clicks.length = 0;
+
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(200);
+        vi.advanceTimersByTime(100);
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(metronome.clicks).toEqual([]);
     });
 
     it('stops the run sounding when its drawing is put away', async () => {

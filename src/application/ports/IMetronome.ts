@@ -278,12 +278,39 @@ export interface MetronomeConfig {
 }
 
 /**
+ * A beat that can be sounded once, at a moment.
+ *
+ * Narrow on purpose, and handed out where the whole metronome is not. The page
+ * has two reasons to want a single click - the mode that has no pulse, and
+ * hearing a run back against the beat it was measured by - and neither is a
+ * reason to be able to start or stop the pulse a run is riding on.
+ */
+export interface IClickOnce {
+  /**
+   * Sounds one click, at a moment, without running.
+   *
+   * For the mode that has no pulse of its own. There the music waits for the
+   * reader, so the beat is not something the machine keeps and hands out - it
+   * is something the reader produces, and the click marks it where they put
+   * it. Between their entries, where they owe nothing, the beats are placed
+   * where they are written and go on without them.
+   *
+   * And for hearing a run back: there the moments are recorded rather than
+   * produced, and what they need is sounding at a time rather than a tempo to
+   * be counted at.
+   *
+   * `atMs` is on the same clock the ticks carry; omitted means now.
+   */
+  click(atMs?: number, weight?: BeatWeight): void;
+}
+
+/**
  * The pulse that drives Flow mode.
  *
  * Implementations own their own scheduling: Web Audio look-ahead in the
  * browser, manual stepping in tests.
  */
-export interface IMetronome {
+export interface IMetronome extends IClickOnce {
   readonly isRunning: boolean;
   /**
    * Changes the pulse, which may be done while it is running.
@@ -298,17 +325,5 @@ export interface IMetronome {
   configure(config: MetronomeConfig): void;
   start(): void;
   stop(): void;
-  /**
-   * Sounds one click, at a moment, without running.
-   *
-   * For the mode that has no pulse of its own. There the music waits for the
-   * reader, so the beat is not something the machine keeps and hands out - it
-   * is something the reader produces, and the click marks it where they put
-   * it. Between their entries, where they owe nothing, the beats are placed
-   * where they are written and go on without them.
-   *
-   * `atMs` is on the same clock the ticks carry; omitted means now.
-   */
-  click(atMs?: number, weight?: BeatWeight): void;
   onTick(listener: (tick: MetronomeTick) => void): Unsubscribe;
 }

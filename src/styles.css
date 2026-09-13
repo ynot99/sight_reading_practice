@@ -483,12 +483,31 @@ textarea {
   margin-top: 8px;
 }
 
+/*
+ * Whether the beat sounds while the run is played back.
+ *
+ * In the picture rather than in the metronome's settings, because this is
+ * decided while looking at the picture - and a setting the reader has to leave
+ * what they are doing to reach is the fault this interface keeps removing.
+ */
+.roll__toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.roll__toggle > input {
+  margin: 0;
+}
+
 /* Its own question, so its own control: how much of the run fits on screen. */
 .roll__zoom {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   font-size: 12px;
   color: var(--text-muted);
 }

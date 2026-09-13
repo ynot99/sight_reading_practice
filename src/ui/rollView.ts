@@ -1,4 +1,5 @@
 import {
+  beatsWorthMarking,
   rollBeganAtMs,
   rollEndedAtMs,
   type RolledBeat,
@@ -101,13 +102,7 @@ function element(tag: string, className: string): HTMLElement {
 }
 
 /** The line a click leaves: heavy for a bar, plain for a beat. */
-function lineFor(beat: RolledBeat, origin: number): HTMLElement | null {
-  // Only what the reader asked to see. A click may be running at four to the
-  // beat for the sake of the loop's resolution, and a line for every one of
-  // them is a grey wash rather than a grid.
-  if (beat.weight === 'division') {
-    return null;
-  }
+function lineFor(beat: RolledBeat, origin: number): HTMLElement {
   const line = element('div', `roll__line roll__line--${beat.weight}`);
   line.style.left = atSecond(beat.atMs - origin);
   return line;
@@ -218,11 +213,10 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     row.style.top = atRow(band.high - midi);
     grid.append(row);
   }
-  for (const beat of roll.beats) {
-    const line = lineFor(beat, origin);
-    if (line !== null) {
-      grid.append(line);
-    }
+  // The same list a playback sounds its clicks from, so a line and a click can
+  // never end up in different places.
+  for (const beat of beatsWorthMarking(roll)) {
+    grid.append(lineFor(beat, origin));
   }
   for (const press of roll.presses) {
     grid.append(noteFor(press, origin, band.high, endMs));

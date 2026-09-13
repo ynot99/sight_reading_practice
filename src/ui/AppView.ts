@@ -47,7 +47,12 @@ import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/Pra
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barNumberOf, measureCount } from '../domain/model/Exercise.js';
-import { rollAsEvents, type RunRoll } from '../application/session/RunRoll.js';
+import {
+  clicksUpTo,
+  rollAsEvents,
+  rollBeganAtMs,
+  type RunRoll,
+} from '../application/session/RunRoll.js';
 import { drawTheRoll, keepTheHeadInView } from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
@@ -213,6 +218,13 @@ const TAKE_TICK_MS = 80;
  * sounding is the drawing's or the shelf's.
  */
 const RUN_ROLL_ID = 'the run just played';
+/**
+ * How far ahead of the sound the clicks over a playback are laid out.
+ *
+ * Long enough that a click is placed rather than raced for, short enough that
+ * stopping does not leave one sounding after the picture has gone quiet.
+ */
+const ROLL_CLICK_LEAD_MS = 100;
 /**
  * How often the keep pill's counter is redrawn while a take is open.
  *
@@ -1187,6 +1199,8 @@ export class AppView {
   /** Follows a sounding take, so the slider says where it has got to. */
   private takeTick: ReturnType<typeof setInterval> | null = null;
   private rollTick: ReturnType<typeof setInterval> | null = null;
+  /** Clicks of the run already handed to the metronome by this playback. */
+  private rollClicksSent = 0;
   /** Whether the passage markers are on the page, which a tap turns over. */
   private passageMarkersWanted = true;
   /**
@@ -1334,6 +1348,7 @@ export class AppView {
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
     rollZoom: HTMLInputElement;
+    rollClick: HTMLInputElement;
     rollPlay: HTMLButtonElement;
     rollPlayIcon: SVGPathElement;
     rollClose: HTMLElement;
@@ -1577,6 +1592,7 @@ export class AppView {
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
       rollZoom: requireElement(doc, 'roll-zoom'),
+      rollClick: requireElement(doc, 'roll-click'),
       rollPlay: requireElement(doc, 'roll-play'),
       rollPlayIcon: requireElement(doc, 'roll-play-icon'),
       rollClose: requireElement(doc, 'roll-close'),
@@ -6287,6 +6303,7 @@ export class AppView {
     }
     this.selectedTakeId = null;
     this.describeTakeTransport();
+    this.rollClicksSent = 0;
     this.runtime.takePlayer.play(RUN_ROLL_ID, rollAsEvents(roll));
     if (this.rollTick === null) {
       this.rollTick = setInterval(() => this.followTheRoll(), TAKE_TICK_MS);
@@ -6319,7 +6336,36 @@ export class AppView {
       this.stopTheRoll();
       return;
     }
+    this.soundTheBeat(player.positionMs);
     this.describeTheRoll();
+  }
+
+  /**
+   * Sounds the beat the run was measured against, where the reader wants it.
+   *
+   * The point of hearing a run back beside its own grid: the picture says how
+   * far from the beat a note was, and this is the same fact put to the ear,
+   * which is the sense that will be doing the work at the keyboard.
+   *
+   * Through the metronome's one-off click - the same one a mode without a pulse
+   * places the beat with - because nothing here is running a pulse: these
+   * moments were recorded, and what they need is sounding at a time, not a
+   * tempo to be counted at.
+   */
+  private soundTheBeat(positionMs: number): void {
+    const roll = this.runtime.controller.lastRoll;
+    if (roll === null || !this.el.rollClick.checked) {
+      return;
+    }
+    const due = clicksUpTo(roll, this.rollClicksSent, positionMs + ROLL_CLICK_LEAD_MS);
+    const now = this.runtime.clock.now();
+    const began = rollBeganAtMs(roll);
+    for (const beat of due) {
+      // Where it falls relative to the sound that is already going, not where
+      // it fell in the run: the two clocks share nothing but a duration.
+      this.runtime.metronomeClick.click(now + (beat.atMs - began - positionMs), beat.weight);
+    }
+    this.rollClicksSent += due.length;
   }
 
   /**

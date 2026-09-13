@@ -287,6 +287,53 @@ export function rollEndedAtMs(roll: RunRoll): number {
 }
 
 /**
+ * The clicks worth marking: the bar lines and the beats, never what falls
+ * between them.
+ *
+ * One answer, asked by the drawing for its lines and by a playback for its
+ * clicks, so the eye and the ear cannot disagree about where the beat was. A
+ * pulse may be running at four ticks to the beat for the sake of the practice
+ * loop's resolution, and all four drawn is a grey wash while all four sounded
+ * is a rattle - in both cases the beat stops being visible in it.
+ *
+ * What it cannot claim to be is what the reader *heard*: whether a click
+ * sounded during the run depended on the dropout and the mute, and the roll
+ * keeps the pulse rather than the volume. This is the beat the music was
+ * measured against, which is the question being asked of it afterwards.
+ */
+export function beatsWorthMarking(roll: RunRoll): readonly RolledBeat[] {
+  return roll.beats.filter((beat) => beat.weight !== 'division');
+}
+
+/**
+ * The clicks falling due in the stretch of a playback about to be heard.
+ *
+ * Handed over in windows, the way the notes are: a click has to be placed on
+ * the audio graph before it sounds, and the whole run's worth laid out at once
+ * could not be taken back when the reader stops.
+ *
+ * @param from How many have already been handed over.
+ * @param untilMs How far into the roll the window reaches, from its beginning.
+ */
+export function clicksUpTo(
+  roll: RunRoll,
+  from: number,
+  untilMs: number,
+): readonly RolledBeat[] {
+  const marking = beatsWorthMarking(roll);
+  const began = rollBeganAtMs(roll);
+  const due: RolledBeat[] = [];
+  for (let index = Math.max(0, from); index < marking.length; index += 1) {
+    const beat = marking[index];
+    if (beat === undefined || beat.atMs - began > untilMs) {
+      break;
+    }
+    due.push(beat);
+  }
+  return due;
+}
+
+/**
  * The run as a stream something can play.
  *
  * So that hearing a run back is the machinery that already plays a recording

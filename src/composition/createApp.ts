@@ -25,6 +25,7 @@ import type {
   IScorePages,
   IScoreRenderer,
 } from '../application/ports/IScoreRenderer.js';
+import type { IClickOnce } from '../application/ports/IMetronome.js';
 import type { IVolumeControl } from '../application/ports/IVolumeControl.js';
 import type { ISettingsStore } from '../application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../application/SettingsRepository.js';
@@ -196,6 +197,14 @@ export interface AppRuntime {
    */
   readonly clock: IClock;
   readonly settings: SettingsRepository;
+  /**
+   * One click, on demand, for the page's own reasons.
+   *
+   * Narrowed from the metronome rather than being it: hearing a run back wants
+   * the beat sounded at recorded moments, and nothing in the page has any
+   * business starting or stopping the pulse a run rides on.
+   */
+  readonly metronomeClick: IClickOnce;
   readonly metronomeVolume: IVolumeControl;
   readonly instrumentVolume: IVolumeControl;
   dispose(): void;
@@ -401,6 +410,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     renderer,
     clock,
     settings,
+    metronomeClick: metronome,
     metronomeVolume: metronome,
     instrumentVolume: pitchPlayer,
     dispose(): void {

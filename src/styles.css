@@ -471,6 +471,181 @@ textarea {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
+/*
+ * The run drawn as keys against the clicks it was played to.
+ *
+ * One scroll container holding four things: a ruler of bar numbers that sticks
+ * to the top, a column of keys that sticks to the left, the grid itself, and a
+ * lane for the pedal under it. Both sticky, both by `position: sticky` inside
+ * the one scroller - so the keys stay beside the notes they name and the bar
+ * numbers stay above them with nothing keeping them in step.
+ *
+ * Every position in the grid is a `calc()` over these two custom properties,
+ * which is what makes zooming free: `--roll-second` changes and the browser
+ * moves every note, line and label at once. Nothing is rebuilt, and no
+ * JavaScript holds the layout together.
+ */
+.roll {
+  --roll-second: 140px;
+  --roll-row: 13px;
+  --roll-keys: 44px;
+  --roll-ruler: 20px;
+  --roll-pedal: 16px;
+  display: grid;
+  grid-template-columns: var(--roll-keys) var(--roll-length, 100%);
+  grid-template-rows: var(--roll-ruler) calc(var(--roll-row) * var(--roll-rows, 12)) var(--roll-pedal);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.roll__ruler {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  grid-row: 1;
+  grid-column: 2;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.roll__bar {
+  position: absolute;
+  top: 3px;
+  padding-left: 3px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+/*
+ * The keys, named only at every C.
+ *
+ * A label on all twelve is a column of text nobody reads at thirteen pixels a
+ * row; the black keys are told apart by being dark, which is how they are told
+ * apart on the instrument.
+ */
+.roll__keys {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  grid-row: 2;
+  grid-column: 1;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.roll__key {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--roll-row);
+  padding-left: 3px;
+  font-size: 9px;
+  line-height: var(--roll-row);
+  color: var(--text-muted);
+  border-top: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+.roll__key--black {
+  background: var(--surface-strong);
+}
+
+.roll__grid {
+  position: relative;
+  grid-row: 2;
+  grid-column: 2;
+}
+
+.roll__row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--roll-row);
+  background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
+}
+
+/*
+ * A line where a click was heard.
+ *
+ * Not where a click was due: the bar frame holds the music at a bar line until
+ * the reader gives it its beat, so a bar taken slowly is a wider bar here, and
+ * that width is the wait. A grid computed from the tempo would draw the line
+ * where nobody heard one.
+ */
+.roll__line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.roll__line--downbeat {
+  width: 2px;
+  background: var(--border);
+}
+
+.roll__note {
+  position: absolute;
+  height: var(--roll-row);
+  min-width: 2px;
+  border-radius: 2px;
+  background: var(--text-muted);
+}
+
+.roll__note--correct {
+  background: var(--correct);
+}
+
+.roll__note--wrong {
+  background: var(--wrong);
+}
+
+.roll__note--off-the-beat {
+  background: var(--pending);
+}
+
+/*
+ * A press the run set aside: the same note twice, or the hand that is being
+ * listened to rather than played. It happened, and it was not a fault.
+ */
+.roll__note--aside {
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+
+/*
+ * And one nothing was decided about. Drawn as an outline, because a fill in
+ * any colour is a verdict and there was not one.
+ */
+.roll__note--unjudged {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--text-muted);
+}
+
+/* Still down when the run ended, so it runs to the edge rather than stopping. */
+.roll__note--open {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.roll__pedal {
+  position: relative;
+  grid-row: 3;
+  grid-column: 2;
+  border-top: 1px solid var(--border);
+}
+
+.roll__pedal-span {
+  position: absolute;
+  top: 4px;
+  height: 7px;
+  min-width: 2px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
 .controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));

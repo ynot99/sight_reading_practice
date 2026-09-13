@@ -1,0 +1,193 @@
+// @vitest-environment jsdom
+import { describe, expect, it } from 'vitest';
+import { drawTheRoll } from '../../src/ui/rollView.js';
+import type { RolledPress, RunRoll } from '../../src/application/session/RunRoll.js';
+import { MIDI } from '../support/fixtures.js';
+
+function press(over: Partial<RolledPress> = {}): RolledPress {
+  return {
+    midi: MIDI.C4,
+    downAtMs: 1000,
+    upAtMs: 1500,
+    velocity: 0.8,
+    verdict: 'correct',
+    stepIndex: 0,
+    deviationMs: null,
+    ...over,
+  };
+}
+
+function roll(over: Partial<RunRoll> = {}): RunRoll {
+  return { presses: [], beats: [], pedal: [], truncated: false, ...over };
+}
+
+/** A bar of four beats at one second each, starting where the run does. */
+function barOfFour(measure: number, fromMs: number) {
+  return [
+    { atMs: fromMs, weight: 'downbeat' as const, measure },
+    { atMs: fromMs + 1000, weight: 'beat' as const, measure },
+    { atMs: fromMs + 2000, weight: 'beat' as const, measure },
+    { atMs: fromMs + 3000, weight: 'beat' as const, measure },
+  ];
+}
+
+function draw(input: RunRoll, label = (measure: number) => `${measure + 1}`): HTMLElement {
+  return drawTheRoll({ roll: input, barLabel: label });
+}
+
+describe('drawing a run as a piano roll', () => {
+  it('places a note by when it was struck and let go of', () => {
+    // The grid's nought is the first thing that happened, so a run whose first
+    // click is at four seconds does not start four seconds of empty grid.
+    const view = draw(
+      roll({
+        beats: barOfFour(0, 4000),
+        presses: [press({ downAtMs: 5000, upAtMs: 5500 })],
+      }),
+    );
+
+    const note = view.querySelector<HTMLElement>('.roll__note');
+    expect(note?.style.left).toBe('calc(var(--roll-second) * 1.0000)');
+    expect(note?.style.width).toBe('calc(var(--roll-second) * 0.5000)');
+  });
+
+  it('runs a key still held to the edge and says that is what it is', () => {
+    const view = draw(
+      roll({ beats: barOfFour(0, 0), presses: [press({ downAtMs: 0, upAtMs: null })] }),
+    );
+
+    const note = view.querySelector<HTMLElement>('.roll__note');
+    expect(note?.classList.contains('roll__note--open')).toBe(true);
+    // To the last click plus the tail, which is four seconds of bar and one over.
+    expect(note?.style.width).toBe('calc(var(--roll-second) * 4.0000)');
+  });
+
+  it('stacks the pitches downwards from the top of the band', () => {
+    const view = draw(
+      roll({
+        presses: [press({ midi: MIDI.C4 }), press({ midi: MIDI.C4 + 1 })],
+      }),
+    );
+
+    const tops = [...view.querySelectorAll<HTMLElement>('.roll__note')].map(
+      (note) => note.style.top,
+    );
+    // Pitch runs downwards, so the semitone above sits exactly one row higher.
+    // Both are well inside the band, which has grown around them to the twelve
+    // rows a drawing gets however few notes there were.
+    expect(tops).toEqual([
+      'calc(var(--roll-row) * 6)',
+      'calc(var(--roll-row) * 5)',
+    ]);
+  });
+
+  it('draws a line for a bar and for a beat, and none for a subdivision', () => {
+    const view = draw(
+      roll({
+        beats: [
+          { atMs: 0, weight: 'downbeat', measure: 0 },
+          { atMs: 250, weight: 'division', measure: 0 },
+          { atMs: 500, weight: 'beat', measure: 0 },
+        ],
+      }),
+    );
+
+    expect(view.querySelectorAll('.roll__line')).toHaveLength(2);
+    expect(view.querySelectorAll('.roll__line--downbeat')).toHaveLength(1);
+  });
+
+  it('names each bar once, by what the writer called it', () => {
+    // A repeat is written out, so the fifth bar of the playing is not bar five
+    // of the page. The drawing asks rather than counts.
+    const view = draw(
+      roll({ beats: [...barOfFour(0, 0), ...barOfFour(1, 4000)] }),
+      (measure) => (measure === 0 ? '8' : '9'),
+    );
+
+    const marks = [...view.querySelectorAll<HTMLElement>('.roll__bar')];
+    expect(marks.map((mark) => mark.textContent)).toEqual(['8', '9']);
+    expect(marks[1]?.style.left).toBe('calc(var(--roll-second) * 4.0000)');
+  });
+
+  it('colours a press by the verdict the page was marked with', () => {
+    const view = draw(
+      roll({
+        presses: [
+          press({ midi: MIDI.C4, verdict: 'correct' }),
+          press({ midi: MIDI.C4 + 2, verdict: 'wrong' }),
+          press({ midi: MIDI.C4 + 4, verdict: 'rushed' }),
+          press({ midi: MIDI.C4 + 5, verdict: 'duplicate' }),
+          press({ midi: MIDI.C4 + 7, verdict: null }),
+        ],
+      }),
+    );
+
+    const shades = [...view.querySelectorAll<HTMLElement>('.roll__note')].map(
+      (note) => note.className,
+    );
+    expect(shades).toEqual([
+      'roll__note roll__note--correct',
+      'roll__note roll__note--wrong',
+      'roll__note roll__note--off-the-beat',
+      'roll__note roll__note--aside',
+      'roll__note roll__note--unjudged',
+    ]);
+  });
+
+  it('says how far off the beat a press was, signed the way a reader falls', () => {
+    const view = draw(roll({ presses: [press({ deviationMs: 42.4 })] }));
+
+    expect(view.querySelector<HTMLElement>('.roll__note')?.title).toBe('C4 · correct · +42 ms');
+  });
+
+  it('keeps a band of pitches even for a single note', () => {
+    // One note drawn as one row is a stripe, not a picture.
+    const view = draw(roll({ presses: [press()] }));
+
+    expect(view.style.getPropertyValue('--roll-rows')).toBe('12');
+  });
+
+  it('clamps the band to what was played, with air above and below', () => {
+    // Eighty-eight rows of which sixty are empty puts the music in a tenth of
+    // the screen, and the question being asked is about the other axis.
+    const view = draw(
+      roll({ presses: [press({ midi: 48 }), press({ midi: 72 })] }),
+    );
+
+    expect(view.style.getPropertyValue('--roll-rows')).toBe('29');
+  });
+
+  it('draws the pedal for as long as it was held', () => {
+    const view = draw(
+      roll({ beats: barOfFour(0, 0), pedal: [{ downAtMs: 500, upAtMs: 2500 }] }),
+    );
+
+    const span = view.querySelector<HTMLElement>('.roll__pedal-span');
+    expect(span?.style.left).toBe('calc(var(--roll-second) * 0.5000)');
+    expect(span?.style.width).toBe('calc(var(--roll-second) * 2.0000)');
+  });
+
+  it('runs a pedal still down to the edge, and says so', () => {
+    const view = draw(
+      roll({ beats: barOfFour(0, 0), pedal: [{ downAtMs: 0, upAtMs: null }] }),
+    );
+
+    expect(view.querySelector<HTMLElement>('.roll__pedal-span')?.title).toBe('Pedal, still down');
+  });
+
+  it('shades the rows the black keys are on', () => {
+    // An octave from C to C has five of them, and the band drawn for one note
+    // is an octave.
+    const view = draw(roll({ presses: [press({ midi: MIDI.C4 })] }));
+
+    expect(view.querySelectorAll('.roll__row')).toHaveLength(5);
+    expect(view.querySelectorAll('.roll__key--black')).toHaveLength(5);
+  });
+
+  it('draws an empty run without falling over', () => {
+    const view = draw(roll());
+
+    expect(view.querySelectorAll('.roll__note')).toHaveLength(0);
+    expect(view.style.getPropertyValue('--roll-rows')).toBe('12');
+  });
+});

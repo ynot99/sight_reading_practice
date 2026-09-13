@@ -121,22 +121,46 @@ const ROLL_TAIL_MS = 1_000;
 /**
  * How fine a grid is asked for.
  *
- * `bars` is the bar lines alone, which is the reading a long run wants: where
- * the bars fell, and nothing else competing for the eye. `beats` adds the felt
- * beats, which is what a reader counts. `divisions` adds every tick the pulse
- * actually gave - the eighths or the sixteenths, whichever the run needed to
- * resolve its shortest note - which is what a reader checks themselves against
- * once the beats are landing.
+ * Two questions, because they are two: whether the beats between the bar lines
+ * are drawn at all, and how many parts each beat is cut into.
  *
- * Three rather than two, because his run is a hundred and fifty bars and
- * everything at once is a wash: "Divisions чекбокс додає дуже багато смужок -
- * чому не можна зробити це select".
+ * The cutting is *asked for* rather than read off the run, which is the whole
+ * change here. Drawing every tick the pulse happened to give was
+ * unpredictable - as fine as the shortest note in the piece, which on his
+ * material is sixteenths - so it put sixteen lines in every bar and made the
+ * click a rattle: "ця опція малює дуже багато смужок, та метроном поводить себе
+ * як шалений коли я включаю це. Чому не можна мати опції з кастомними смужками
+ * між вже існуючими?". Cut into two, three or four, a grid is what the reader
+ * chose and a click is what a metronome has always offered.
  *
  * Asked of the drawing and of the clicks together, because a line the eye can
  * see and a click the ear can hear have to be the same grid or neither is
  * worth anything.
  */
-export type GridFineness = 'bars' | 'beats' | 'divisions';
+export interface GridChoice {
+  /** Whether the beats inside a bar are drawn, or only the bar lines. */
+  readonly beats: boolean;
+  /** How many parts each beat is cut into. One leaves it whole. */
+  readonly parts: number;
+}
+
+/** Bars and beats, each beat whole, which is what a reader counts. */
+export const PLAIN_GRID: GridChoice = { beats: true, parts: 1 };
+
+/** A line of the grid, whether the pulse gave it or it was worked out. */
+export interface GridLine {
+  readonly atMs: number;
+  readonly weight: BeatWeight;
+  readonly given: boolean;
+  readonly lateByMs: number | null;
+  /**
+   * Where in the music it falls, or `null` for a line cut between two beats.
+   *
+   * Cut lines have no place of their own in the score: they are a share of the
+   * time between two clicks, which is all anybody wants of them.
+   */
+  readonly positionTicks: number | null;
+}
 
 /** Presses kept before a run stops recording them. */
 const PRESS_CAPACITY = 20_000;
@@ -356,18 +380,10 @@ export function rollEndedAtMs(roll: RunRoll): number {
  * keeps the pulse rather than the volume. This is the beat the music was
  * measured against, which is the question being asked of it afterwards.
  */
-export function beatsWorthMarking(
-  roll: RunRoll,
-  fineness: GridFineness = 'beats',
-): readonly MarkedBeat[] {
-  // A bar line the reader gave late is a downbeat, so it survives every level:
-  // at the coarsest reading of all it is half of what there is to see.
-  const marking = roll.beats.filter((beat) => {
-    if (fineness === 'divisions') {
-      return true;
-    }
-    return fineness === 'bars' ? beat.weight === 'downbeat' : beat.weight !== 'division';
-  });
+export function beatsWorthMarking(roll: RunRoll, everyTick = false): readonly MarkedBeat[] {
+  const marking = everyTick
+    ? [...roll.beats]
+    : roll.beats.filter((beat) => beat.weight !== 'division');
   return marking.map((beat, index) => {
     // The beat before it at the same place in the music, if there is one. Only
     // ever the one before: a bar line is given once.
@@ -382,8 +398,69 @@ export function beatsWorthMarking(
 }
 
 /**
- * The beats of the music: one for each, and never the reader's own giving of a
- * bar line.
+ * Every place in the music a click marked, with the two moments it may have.
+ *
+ * A bar line that waited has both: when it fell, and when the reader took it.
+ * Ordered, one entry per place.
+ */
+function placesMarked(
+  roll: RunRoll,
+): readonly { readonly ticks: number; readonly fell: number; readonly taken: number }[] {
+  const places = new Map<number, { ticks: number; fell: number; taken: number }>();
+  for (const beat of beatsWorthMarking(roll)) {
+    const seen = places.get(beat.positionTicks);
+    if (seen === undefined) {
+      places.set(beat.positionTicks, {
+        ticks: beat.positionTicks,
+        fell: beat.atMs,
+        taken: beat.atMs,
+      });
+      continue;
+    }
+    seen.taken = beat.atMs;
+  }
+  return [...places.values()].sort((left, right) => left.ticks - right.ticks);
+}
+
+/**
+ * The grid: the clicks that marked the music, and the lines cut between them.
+ *
+ * A cut line is a share of the time that really elapsed between two beats,
+ * which runs from where the first was *taken* to where the second *fell* - so
+ * nothing is ever cut inside a wait. A quarter-beat line drawn in the middle of
+ * a bar line's waiting would be a beat that never existed.
+ */
+export function theGrid(roll: RunRoll, choice: GridChoice = PLAIN_GRID): readonly GridLine[] {
+  const lines: GridLine[] = beatsWorthMarking(roll)
+    // A bar line the reader gave late is a downbeat, so it survives the
+    // coarsest reading: there, that pair is half of what there is to see.
+    .filter((beat) => choice.beats || beat.weight === 'downbeat')
+    .map((beat) => ({ ...beat }));
+  const parts = Math.max(1, Math.round(choice.parts));
+  if (parts > 1) {
+    const places = placesMarked(roll);
+    for (let index = 0; index + 1 < places.length; index += 1) {
+      const from = places[index];
+      const to = places[index + 1];
+      if (from === undefined || to === undefined) {
+        continue;
+      }
+      for (let part = 1; part < parts; part += 1) {
+        lines.push({
+          atMs: from.taken + ((to.fell - from.taken) * part) / parts,
+          weight: 'division',
+          given: false,
+          lateByMs: null,
+          positionTicks: null,
+        });
+      }
+    }
+  }
+  return lines.sort((left, right) => left.atMs - right.atMs);
+}
+
+/**
+ * The grid without the reader's own giving of a bar line.
  *
  * Two questions turn out to be this one. What a playback clicks: they played
  * that bar line and heard it on their own instrument, so a second click there
@@ -393,9 +470,9 @@ export function beatsWorthMarking(
  */
 export function theMusicsBeats(
   roll: RunRoll,
-  fineness: GridFineness = 'beats',
-): readonly MarkedBeat[] {
-  return beatsWorthMarking(roll, fineness).filter((beat) => !beat.given);
+  choice: GridChoice = PLAIN_GRID,
+): readonly GridLine[] {
+  return theGrid(roll, choice).filter((line) => !line.given);
 }
 
 /**
@@ -413,13 +490,13 @@ export function theMusicsBeats(
 export function theBeatNearest(
   roll: RunRoll,
   atMs: number,
-  fineness: GridFineness = 'beats',
+  choice: GridChoice = PLAIN_GRID,
 ): number {
   const began = rollBeganAtMs(roll);
   let nearest: number | null = null;
   // Whatever is drawn is what a tap lands on: snapping to a line the reader
   // cannot see would move the head somewhere they had no way to mean.
-  for (const beat of theMusicsBeats(roll, fineness)) {
+  for (const beat of theMusicsBeats(roll, choice)) {
     const at = beat.atMs - began;
     if (nearest === null || Math.abs(at - atMs) < Math.abs(nearest - atMs)) {
       nearest = at;
@@ -442,11 +519,11 @@ export function clicksUpTo(
   roll: RunRoll,
   from: number,
   untilMs: number,
-  fineness: GridFineness = 'beats',
-): readonly MarkedBeat[] {
-  const marking = theMusicsBeats(roll, fineness);
+  choice: GridChoice = PLAIN_GRID,
+): readonly GridLine[] {
+  const marking = theMusicsBeats(roll, choice);
   const began = rollBeganAtMs(roll);
-  const due: MarkedBeat[] = [];
+  const due: GridLine[] = [];
   for (let index = Math.max(0, from); index < marking.length; index += 1) {
     const beat = marking[index];
     if (beat === undefined || beat.atMs - began > untilMs) {
@@ -471,10 +548,10 @@ export function clicksUpTo(
 export function clicksBefore(
   roll: RunRoll,
   atMs: number,
-  fineness: GridFineness = 'beats',
+  choice: GridChoice = PLAIN_GRID,
 ): number {
   const began = rollBeganAtMs(roll);
-  return theMusicsBeats(roll, fineness).filter((beat) => beat.atMs - began < atMs).length;
+  return theMusicsBeats(roll, choice).filter((beat) => beat.atMs - began < atMs).length;
 }
 
 /**
@@ -515,7 +592,7 @@ export function momentOfTicks(
   // They differ only at a bar line that waited, and that is the whole point.
   const fell = new Map<number, number>();
   const taken = new Map<number, number>();
-  for (const beat of beatsWorthMarking(roll, 'divisions')) {
+  for (const beat of beatsWorthMarking(roll, true)) {
     const at = beat.atMs - began;
     if (!fell.has(beat.positionTicks)) {
       fell.set(beat.positionTicks, at);

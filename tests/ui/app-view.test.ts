@@ -107,12 +107,7 @@ import {
   middle,
   spreadAround,
 } from '../../src/ui/AppView.js';
-import {
-  beamedSixteenths,
-  longExercise,
-  p,
-  twoBarExercise,
-} from '../support/fixtures.js';
+import { longExercise, p, twoBarExercise } from '../support/fixtures.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -1787,10 +1782,9 @@ describe('AppView', () => {
       // same grid.
       const { view, runtime, midi, metronome, clock } = createRig();
       await view.initialize();
-      // Music with something shorter than a beat in it, because the finer grid
-      // is the ticks the pulse actually gave and a pulse runs no finer than the
-      // shortest note asks for.
-      await runtime.controller.openScore(beamedSixteenths({ tempoBpm: 60 }));
+      // Any material at all now: the cutting is asked for rather than read off
+      // what the pulse happened to tick.
+      await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
       runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
       element<HTMLButtonElement>('focus-play').click();
       metronome.advanceSubdivisions(1);
@@ -1806,7 +1800,7 @@ describe('AppView', () => {
       expect(element('roll-body').querySelectorAll('.roll__line--division')).toHaveLength(0);
 
       const grid = element<HTMLSelectElement>('roll-grid');
-      grid.value = 'divisions';
+      grid.value = '4';
       grid.dispatchEvent(new Event('change', { bubbles: true }));
 
       // More lines, and the new ones are drawn as what they are.
@@ -1936,6 +1930,13 @@ describe('AppView', () => {
       expect(element('sheet-roll-options').hidden).toBe(false);
 
       element<HTMLButtonElement>('roll-options-close').click();
+      expect(element('sheet-roll-options').hidden).toBe(true);
+
+      // And the dimmed area outside the panel closes it too, which a thumb finds
+      // without aiming.
+      element<HTMLButtonElement>('roll-options').click();
+      element('sheet-roll-options').dispatchEvent(new Event('click', { bubbles: true }));
+
       expect(element('sheet-roll-options').hidden).toBe(true);
 
       // And they go away with the picture they are about.

@@ -3,6 +3,7 @@ import {
   RollRecorder,
   beatsWorthMarking,
   momentOfTicks,
+  theGrid,
   theBeatNearest,
   theMusicsBeats,
   clicksBefore,
@@ -333,9 +334,9 @@ describe('the beat a run was measured against', () => {
       ],
     });
 
-    const bars = beatsWorthMarking(played, 'bars');
-    expect(bars.map((beat) => beat.atMs)).toEqual([0, 180]);
-    expect(bars.map((beat) => beat.given)).toEqual([false, true]);
+    const bars = theGrid(played, { beats: false, parts: 1 });
+    expect(bars.map((line) => line.atMs)).toEqual([0, 180]);
+    expect(bars.map((line) => line.given)).toEqual([false, true]);
   });
 
   it('does not click a bar line the reader gave themselves', () => {
@@ -397,50 +398,84 @@ describe('the beat a run was measured against', () => {
     expect(theBeatNearest(played, 380)).toBe(0);
   });
 
-  it('marks every tick the pulse gave, where a finer grid is asked for', () => {
-    // The eighths or the sixteenths, whichever the run needed to resolve its
-    // shortest note - and the same list answers for the lines and the clicks,
-    // so the eye and the ear cannot be on different grids.
+  it('cuts each beat into the parts that were asked for', () => {
+    // Asked for rather than read off the run: every tick the pulse happened to
+    // give was as fine as the shortest note in the piece, which put sixteen
+    // lines in a bar and made the click a rattle.
     const played = roll({
       beats: [
         { atMs: 0, weight: 'downbeat', positionTicks: 0 },
-        { atMs: 250, weight: 'division', positionTicks: Duration.QUARTER.ticks / 4 },
-        { atMs: 500, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+        { atMs: 1000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
       ],
     });
 
-    expect(beatsWorthMarking(played, 'bars').map((beat) => beat.atMs)).toEqual([0]);
-    expect(beatsWorthMarking(played).map((beat) => beat.atMs)).toEqual([0, 500]);
-    expect(beatsWorthMarking(played, 'divisions').map((beat) => beat.atMs)).toEqual([0, 250, 500]);
-    expect(theMusicsBeats(played, 'divisions')).toHaveLength(3);
+    expect(theGrid(played).map((line) => line.atMs)).toEqual([0, 1000]);
+    expect(theGrid(played, { beats: true, parts: 2 }).map((line) => line.atMs)).toEqual([
+      0, 500, 1000,
+    ]);
+    expect(theGrid(played, { beats: true, parts: 4 }).map((line) => line.atMs)).toEqual([
+      0, 250, 500, 750, 1000,
+    ]);
   });
 
-  it('snaps to a division only where divisions are drawn', () => {
+  it('gives a cut line no place in the score, because it has none', () => {
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+        { atMs: 1000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+      ],
+    });
+
+    const cut = theGrid(played, { beats: true, parts: 2 })[1];
+    expect(cut?.positionTicks).toBeNull();
+    expect(cut?.weight).toBe('division');
+  });
+
+  it('never cuts inside a wait', () => {
+    // A quarter-beat line drawn in the middle of a bar line's waiting would be a
+    // beat that never existed. The stretch cut is from where the first beat was
+    // taken to where the second fell.
+    const played = roll({
+      beats: [
+        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+        // Fell at 1000, taken at 1800.
+        { atMs: 1000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+        { atMs: 1800, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+        { atMs: 2800, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 2 },
+      ],
+    });
+
+    const cuts = theGrid(played, { beats: true, parts: 2 })
+      .filter((line) => line.positionTicks === null)
+      .map((line) => line.atMs);
+    // Halfway to where the bar line fell, then halfway from where it was taken.
+    expect(cuts).toEqual([500, 2300]);
+  });
+
+  it('snaps to a cut line only where the grid is cut', () => {
     // Snapping to a line the reader cannot see would move the head somewhere
     // they had no way to mean.
     const played = roll({
       beats: [
         { atMs: 0, weight: 'downbeat', positionTicks: 0 },
-        { atMs: 250, weight: 'division', positionTicks: Duration.QUARTER.ticks / 4 },
         { atMs: 1000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
       ],
     });
 
-    expect(theBeatNearest(played, 240)).toBe(0);
-    expect(theBeatNearest(played, 240, 'divisions')).toBe(250);
+    expect(theBeatNearest(played, 460)).toBe(0);
+    expect(theBeatNearest(played, 460, { beats: true, parts: 2 })).toBe(500);
   });
 
-  it('counts the finer clicks as spent too', () => {
+  it('counts the cut clicks as spent too', () => {
     const played = roll({
       beats: [
         { atMs: 0, weight: 'downbeat', positionTicks: 0 },
-        { atMs: 250, weight: 'division', positionTicks: Duration.QUARTER.ticks / 4 },
-        { atMs: 500, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+        { atMs: 1000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
       ],
     });
 
-    expect(clicksBefore(played, 400)).toBe(1);
-    expect(clicksBefore(played, 400, 'divisions')).toBe(2);
+    expect(clicksBefore(played, 600)).toBe(1);
+    expect(clicksBefore(played, 600, { beats: true, parts: 2 })).toBe(2);
   });
 
   it('places a moment in the music between the clicks that happened', () => {

@@ -3,7 +3,9 @@ import {
   momentOfTicks,
   rollBeganAtMs,
   rollEndedAtMs,
-  type GridFineness,
+  theGrid,
+  type GridChoice,
+  type GridLine,
   type MarkedBeat,
   type RolledPress,
   type RunRoll,
@@ -24,8 +26,8 @@ export interface RollDrawing {
    * where that position is not the start of one.
    */
   readonly barLabel: (positionTicks: number) => string | null;
-  /** How fine a grid to draw. The beats of the music unless asked otherwise. */
-  readonly fineness?: GridFineness;
+  /** How fine a grid to draw. Bars and whole beats unless asked otherwise. */
+  readonly grid?: GridChoice;
   /**
    * The notes the run asked for, to be drawn behind the ones that were played.
    *
@@ -138,7 +140,7 @@ function element(tag: string, className: string): HTMLElement {
  * lines say where the beat was, and this one says where they put it, in the
  * colour of the head because like the head it is theirs rather than the music's.
  */
-function lineFor(beat: MarkedBeat, origin: number): HTMLElement {
+function lineFor(beat: GridLine, origin: number): HTMLElement {
   const kind = beat.given ? 'given' : beat.weight;
   const line = element('div', `roll__line roll__line--${kind}`);
   line.style.left = atSecond(beat.atMs - origin);
@@ -286,7 +288,7 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // One name per bar line, where it fell due rather than where it was given:
   // the number over the grid is the page's, and the page does not move.
   const ruler = element('div', 'roll__ruler');
-  for (const beat of beatsWorthMarking(roll, drawing.fineness)) {
+  for (const beat of beatsWorthMarking(roll)) {
     // Whether a place in the music begins a bar is the namer's question, not
     // this one's; all the drawing knows is that a beat the reader gave is not a
     // second bar to be named.
@@ -316,7 +318,7 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // showing through, so a band beneath one is seen through it. Which is what he
   // asked for - "на чорні ноти також буде темне жовтий колір" - and it falls out
   // of the order rather than needing a second colour to keep in step.
-  for (const beat of beatsWorthMarking(roll, drawing.fineness)) {
+  for (const beat of beatsWorthMarking(roll)) {
     const waited = waitFor(beat, origin);
     if (waited !== null) {
       grid.append(waited);
@@ -331,8 +333,8 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     grid.append(row);
   }
   // The same list a playback sounds its clicks from, so a line and a click can
-  // never end up in different places.
-  for (const beat of beatsWorthMarking(roll, drawing.fineness)) {
+  // never end up in different places - cut lines included.
+  for (const beat of theGrid(roll, drawing.grid)) {
     grid.append(lineFor(beat, origin));
   }
   // Behind the presses, so what the reader did is what the eye lands on and the

@@ -407,11 +407,13 @@
               <label for="roll-grid">Grid</label>
               <select id="roll-grid">
                 <option value="bars">Bars only</option>
-                <option value="beats" selected>Bars and beats</option>
-                <option value="divisions">Every tick the pulse gave</option>
+                <option value="1" selected>Bars and beats</option>
+                <option value="2">Beats in two</option>
+                <option value="3">Beats in three</option>
+                <option value="4">Beats in four</option>
               </select>
-              <p class="hint">The finest grid is as fine as the run was run, which is as
-                fine as the shortest note asks for.</p>
+              <p class="hint">Cut lines are a share of the time between two beats, so
+                nothing is ever cut inside a wait.</p>
             </div>
 
             <div class="control-group">

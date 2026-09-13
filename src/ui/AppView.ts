@@ -54,7 +54,7 @@ import {
   rollAsEvents,
   rollBeganAtMs,
   theBeatNearest,
-  type GridFineness,
+  type GridChoice,
 } from '../application/session/RunRoll.js';
 import {
   drawTheRoll,
@@ -5622,6 +5622,15 @@ export class AppView {
         () => this.showTheModes(),
       ],
       [
+        // The picture's own options. Listed here rather than wired on their own
+        // so that they get the way out every other sheet has: the dimmed area
+        // outside the panel, which a thumb finds without aiming. His: "чи можна
+        // ховати діалог з опціями при кліку outside цього діалогу?".
+        this.el.sheetRollOptions,
+        [this.el.rollOptions],
+        () => undefined,
+      ],
+      [
         this.el.sheetSettings,
         [this.el.focusSettings],
         // Opened onto whatever the settings actually are, since a run can
@@ -5678,9 +5687,6 @@ export class AppView {
       // been put away is a dialog about nothing.
       this.el.sheetRollOptions.hidden = true;
       this.el.sheetRoll.hidden = true;
-    });
-    this.listen(this.el.rollOptions, 'click', () => {
-      this.el.sheetRollOptions.hidden = false;
     });
     this.listen(this.el.rollOptionsClose, 'click', () => {
       this.el.sheetRollOptions.hidden = true;
@@ -6409,7 +6415,7 @@ export class AppView {
       drawTheRoll({
         roll,
         barLabel: this.barNamer(),
-        fineness: this.theRollsGrid(),
+        grid: this.theRollsGrid(),
         ghosts: this.theNotesAskedFor(),
       }),
     );
@@ -6444,10 +6450,19 @@ export class AppView {
     return asked;
   }
 
-  /** How fine a grid the reader has asked for, in the drawing and in the click. */
-  private theRollsGrid(): GridFineness {
-    const asked = this.el.rollGrid.value;
-    return asked === 'bars' || asked === 'divisions' ? asked : 'beats';
+  /**
+   * How fine a grid the reader has asked for, in the drawing and in the click.
+   *
+   * The bar-line reading and the number of parts are one control because they
+   * are one question - how much detail - and five settings of it are easier to
+   * choose between than two controls making fifteen combinations.
+   */
+  private theRollsGrid(): GridChoice {
+    const asked = Number(this.el.rollGrid.value);
+    if (this.el.rollGrid.value === 'bars') {
+      return { beats: false, parts: 1 };
+    }
+    return { beats: true, parts: Number.isFinite(asked) && asked >= 1 ? asked : 1 };
   }
 
   /** Where the head stands, whether something is sounding or not. */

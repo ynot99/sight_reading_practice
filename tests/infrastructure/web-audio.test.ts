@@ -141,9 +141,11 @@ describe('WebAudioMetronome', () => {
     const first = context.oscillators[0];
 
     expect(first?.startedAt).not.toBeNull();
-    expect(first?.startedAt ?? 1).toBeLessThanOrEqual(0.03);
+    // A hundredth, and the band is narrow on purpose: a wider one passed at
+    // every value this has ever held, so it said nothing about any of them.
+    expect(first?.startedAt ?? 1).toBeLessThanOrEqual(0.015);
     // And still placed rather than raced for: several render quanta of room.
-    expect(first?.startedAt ?? 0).toBeGreaterThan(0.005);
+    expect(first?.startedAt ?? 0).toBeGreaterThan(0.002);
   });
 
   it('ticks for the loop but only clicks where the pattern says', () => {

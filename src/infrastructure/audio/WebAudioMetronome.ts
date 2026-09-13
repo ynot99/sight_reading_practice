@@ -35,10 +35,10 @@ export interface WebAudioMetronomeOptions {
    * одразу як тільки я натиснув клавішу - але метроном дуже маленький
    * проміжок часу трохи тупить".
    *
-   * Two hundredths is a comfortable several render quanta, so the click is
-   * still placed rather than raced for. What remains after it is the device's
-   * own output latency, which cannot be given back: a sound asked for by a
-   * key press cannot leave the speaker at the moment of the press.
+   * A hundredth is three or four render quanta, so the click is still placed
+   * rather than raced for. What remains after it is the device's own output
+   * latency, which cannot be given back: a sound asked for by a key press
+   * cannot leave the speaker at the moment of the press.
    */
   readonly firstClickLeadSec?: number;
   readonly downbeatFrequency?: number;
@@ -95,7 +95,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     this.options = {
       schedulerIntervalMs: options.schedulerIntervalMs ?? 20,
       scheduleAheadSec: options.scheduleAheadSec ?? 0.12,
-      firstClickLeadSec: options.firstClickLeadSec ?? 0.02,
+      firstClickLeadSec: options.firstClickLeadSec ?? 0.01,
       downbeatFrequency: options.downbeatFrequency ?? 1600,
       beatFrequency: options.beatFrequency ?? 1100,
       subdivisionFrequency: options.subdivisionFrequency ?? 800,

@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import {
+  LEAST_ZOOM,
+  MOST_ZOOM,
   drawTheRoll,
   keepTheHeadInView,
   timeFromTap,
+  zoomedBy,
 } from '../../src/ui/rollView.js';
 import type { RolledPress, RunRoll } from '../../src/application/session/RunRoll.js';
 import { Duration } from '../../src/domain/model/Duration.js';
@@ -366,5 +369,28 @@ describe('reading a moment back off the grid', () => {
 
   it('says nothing when nothing has been laid out', () => {
     expect(timeFromTap(100, 0)).toBeNull();
+  });
+});
+
+describe('the zoom two fingers ask for', () => {
+  it('reads a pinch as a ratio, so the gesture means the same at any zoom', () => {
+    expect(zoomedBy(140, 2)).toBe(280);
+    expect(zoomedBy(280, 0.5)).toBe(140);
+  });
+
+  it('snaps to the step its slider moves in', () => {
+    // A slider showing a value it cannot reach is a control lying about itself.
+    expect(zoomedBy(140, 1.07) % 20).toBe(0);
+  });
+
+  it('will not go closer or wider than the drawing allows', () => {
+    expect(zoomedBy(140, 100)).toBe(MOST_ZOOM);
+    expect(zoomedBy(140, 0.001)).toBe(LEAST_ZOOM);
+  });
+
+  it('leaves the zoom alone when the fingers say nothing', () => {
+    // A gap of nought is two fingers in one place, which is not a pinch.
+    expect(zoomedBy(140, 0)).toBe(140);
+    expect(zoomedBy(140, Number.NaN)).toBe(140);
   });
 });

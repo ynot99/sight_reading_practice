@@ -178,6 +178,31 @@ export function timeFromTap(offsetPx: number, pxPerSecond: number): number | nul
   return Math.max(0, (offsetPx / pxPerSecond) * 1000);
 }
 
+/** Closest and widest a run may be drawn, in pixels to the second. */
+export const LEAST_ZOOM = 40;
+export const MOST_ZOOM = 600;
+/** And the step the zoom moves in, which is the one its slider offers. */
+export const ZOOM_STEP = 20;
+
+/**
+ * The zoom two fingers are asking for.
+ *
+ * A ratio of distances rather than a distance: a pinch means "this much more of
+ * it", and the same gesture has to mean the same thing whether the run is drawn
+ * close or wide.
+ *
+ * Snapped to the step the slider moves in, so the two controls always agree
+ * about where the zoom is - a slider showing a value it cannot reach is a
+ * control lying about what it does.
+ */
+export function zoomedBy(from: number, ratio: number): number {
+  if (!Number.isFinite(ratio) || ratio <= 0) {
+    return from;
+  }
+  const asked = Math.round((from * ratio) / ZOOM_STEP) * ZOOM_STEP;
+  return Math.min(MOST_ZOOM, Math.max(LEAST_ZOOM, asked));
+}
+
 /** Where the head is put when the view is scrolled to it, as a fraction across. */
 const HEAD_RESTS_AT = 0.25;
 /** And how far across it may drift before the view is moved at all. */

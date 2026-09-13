@@ -1032,3 +1032,14 @@ describe('how fine the grid reads', () => {
     expect(division?.body).toContain('background: none');
   });
 });
+
+describe('who gets the pinch', () => {
+  it('names the pans, which is what hands two fingers to the drawing', () => {
+    // Left to the browser a pinch magnifies the whole document, which on a
+    // tablet leaves the reader zoomed into a corner of an application with no
+    // way back that they asked for.
+    const roll = rules().find((rule) => rule.selector === '.roll');
+
+    expect(roll?.body).toContain('touch-action: pan-x pan-y');
+  });
+});

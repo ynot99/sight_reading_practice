@@ -1837,6 +1837,88 @@ describe('AppView', () => {
       expect(lines()).toBeLessThan(beatsOnly);
     });
 
+    it('zooms the drawing with two fingers, and moves the slider with them', async () => {
+      // His: "zoom слайдер маленький, та не дуже зручно їм користуватись". The
+      // slider stays - there is no pinch on a desktop - but it follows, because
+      // two controls disagreeing about one answer is the fault we keep removing.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const body = element('roll-body');
+      const drawn = body.querySelector<HTMLElement>('.roll');
+      const finger = (
+        type: string,
+        pointerId: number,
+        clientX: number,
+      ): void => {
+        body.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId, clientX, clientY: 0 }),
+        );
+      };
+
+      finger('pointerdown', 1, 0);
+      finger('pointerdown', 2, 100);
+      // Twice as far apart, so twice as close a drawing.
+      finger('pointermove', 2, 200);
+
+      expect(element<HTMLInputElement>('roll-zoom').value).toBe('280');
+      expect(drawn?.style.getPropertyValue('--roll-second')).toBe('280px');
+
+      // And the fingers coming up is not a tap: the head stays where it was.
+      const at = drawn?.style.getPropertyValue('--roll-at');
+      finger('pointerup', 2, 200);
+      finger('pointerup', 1, 0);
+      body.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 400 }));
+
+      expect(drawn?.style.getPropertyValue('--roll-at')).toBe(at);
+    });
+
+    it('takes two fingers and no more, and lets go when one lifts', async () => {
+      // A third finger on the drawing is a hand resting, not a wider pinch; and
+      // one finger left behind is a scroll, not half a pinch.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const body = element('roll-body');
+      const zoom = element<HTMLInputElement>('roll-zoom');
+      const finger = (type: string, pointerId: number, clientX: number): void => {
+        body.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId, clientX, clientY: 0 }),
+        );
+      };
+      const wasAt = zoom.value;
+
+      finger('pointerdown', 1, 0);
+      finger('pointerdown', 2, 100);
+      finger('pointerdown', 3, 300);
+      // Moving one of the *first* two, which is the move that would zoom if a
+      // third finger were being ignored rather than answered.
+      finger('pointermove', 2, 400);
+
+      expect(zoom.value).toBe(wasAt);
+
+      // Down to two again, so a pinch from here is measured from here.
+      finger('pointerup', 3, 300);
+      finger('pointermove', 2, 800);
+      expect(zoom.value).toBe('280');
+
+      // And one lifted leaves nothing to pinch with.
+      finger('pointerup', 2, 200);
+      finger('pointermove', 1, 900);
+
+      expect(zoom.value).toBe('280');
+    });
+
     it('stops the run sounding when its drawing is put away', async () => {
       // A sheet closed on a playback that goes on playing is a note the reader
       // cannot get at to stop.

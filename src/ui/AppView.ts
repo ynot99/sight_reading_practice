@@ -55,7 +55,7 @@ import {
   theBeatNearest,
   type GridFineness,
 } from '../application/session/RunRoll.js';
-import { drawTheRoll, keepTheHeadInView, timeFromTap } from './rollView.js';
+import { drawTheRoll, keepTheHeadInView, timeFromTap, zoomedBy } from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
 import { calibrationExercise } from '../domain/generation/calibrationExercise.js';
@@ -1203,6 +1203,23 @@ export class AppView {
   private rollTick: ReturnType<typeof setInterval> | null = null;
   /** Clicks of the run already handed to the metronome by this playback. */
   private rollClicksSent = 0;
+  /**
+   * Fingers down on the drawing, and what the zoom was when the second arrived.
+   *
+   * Two are a pinch. Kept by pointer id rather than counted, because a finger
+   * lifted is a particular finger and the one still down has to go on meaning
+   * what it meant.
+   */
+  private readonly rollFingers = new Map<number, { readonly x: number; readonly y: number }>();
+  private pinchedFrom: { readonly gap: number; readonly zoom: number } | null = null;
+  /**
+   * Whether the gesture that is ending was a pinch.
+   *
+   * A pinch ends with fingers coming up, and a finger coming up off an element
+   * is a click as far as the page is concerned - so without this, every pinch
+   * also moved the head to wherever the last finger happened to be.
+   */
+  private pinched = false;
   /**
    * Where the head stands while nothing is sounding, in milliseconds.
    *
@@ -5653,8 +5670,29 @@ export class AppView {
       this.stopTheRoll();
     });
     this.listen(this.el.rollBody, 'click', (event) => {
+      if (this.pinched) {
+        return;
+      }
       this.putTheHeadWhereItWasTapped(event);
     });
+    this.listen(this.el.rollBody, 'pointerdown', (event) => {
+      this.pinched = false;
+      this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      this.beginAPinch();
+    });
+    this.listen(this.el.rollBody, 'pointermove', (event) => {
+      if (!this.rollFingers.has(event.pointerId)) {
+        return;
+      }
+      this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      this.pinchTheRoll();
+    });
+    for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
+      this.listen(this.el.rollBody, ending, (event) => {
+        this.rollFingers.delete(event.pointerId);
+        this.beginAPinch();
+      });
+    }
     this.listen(this.el.rollZoom, 'input', () => {
       this.applyTheZoom();
     });
@@ -6581,6 +6619,50 @@ export class AppView {
     if (to !== null) {
       drawn.scrollLeft = to;
     }
+  }
+
+  /**
+   * The gap between two fingers, or `null` unless there are exactly two.
+   *
+   * Exactly two: a third finger on the drawing is not a wider pinch, it is a
+   * hand resting, and taking a gap from whichever two arrived first would zoom
+   * on a gesture nobody made.
+   */
+  private theFingerGap(): number | null {
+    if (this.rollFingers.size !== 2) {
+      return null;
+    }
+    const [first, second] = [...this.rollFingers.values()];
+    if (first === undefined || second === undefined) {
+      return null;
+    }
+    return Math.hypot(first.x - second.x, first.y - second.y);
+  }
+
+  /** Remembers where a pinch started from, or forgets there is one. */
+  private beginAPinch(): void {
+    const gap = this.theFingerGap();
+    this.pinchedFrom =
+      gap === null || gap <= 0 ? null : { gap, zoom: Number(this.el.rollZoom.value) };
+  }
+
+  /**
+   * Zooms the drawing by how much wider the fingers have got.
+   *
+   * The slider is moved with it rather than left behind: it is the same
+   * question, and two controls disagreeing about the answer is the fault this
+   * interface keeps removing. His: "zoom слайдер маленький, та не дуже зручно
+   * їм користуватись".
+   */
+  private pinchTheRoll(): void {
+    const from = this.pinchedFrom;
+    const gap = this.theFingerGap();
+    if (from === null || gap === null) {
+      return;
+    }
+    this.pinched = true;
+    this.el.rollZoom.value = String(zoomedBy(from.zoom, gap / from.gap));
+    this.applyTheZoom();
   }
 
   /** How fast the reader has asked to hear the run, as a multiple of its own time. */

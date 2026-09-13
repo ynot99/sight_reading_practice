@@ -1,5 +1,4 @@
 import {
-  beatStretches,
   beatsWorthMarking,
   momentOfTicks,
   rollBeganAtMs,
@@ -49,20 +48,6 @@ export interface RollDrawing {
    * "щоб легше проаналізувати де я полінився, та натиснув ноти не разом".
    */
   readonly slips?: boolean;
-  /**
-   * How long a stretch of the music is *written* to last, in milliseconds.
-   *
-   * The only thing the drawing cannot work out for itself, and the only thing it
-   * needs to say whether a beat was the length it claims to be. Supplied by
-   * whoever holds the score.
-   *
-   * Without it the lines say where the clicks were and nothing about whether
-   * they were right - which in a frame that waits is no reading at all, because
-   * there the clicks stand at the reader's own entries and the grid moves with
-   * them. His: "не зрозуміло а як має буде це все вирівняно, та де я помилявся
-   * граючи швидко або повільно".
-   */
-  readonly writtenMsBetween?: (fromTicks: number, toTicks: number) => number | null;
 }
 
 /** One note the music asked for, in the music's own time. */
@@ -92,15 +77,6 @@ const SLIP_FLOOR_MS = 20;
 const SLIP_FULL_MS = 400;
 /** How solid the strongest of them is. */
 const SLIP_MOST_SOLID = 0.5;
-
-/**
- * How far out a beat has to be before it is drawn, in milliseconds.
- *
- * Below this nobody hears it, and every beat is out by *something*: drawn
- * without a floor a run is one continuous band saying nothing about anywhere in
- * particular.
- */
-const STRETCH_FLOOR_MS = 40;
 
 /** Semitones of air kept above and below what was played. */
 const PADDING_ROWS = 2;
@@ -200,57 +176,6 @@ function lineFor(beat: GridLine, origin: number): HTMLElement {
   const line = element('div', `roll__line roll__line--${kind}`);
   line.style.left = atSecond(beat.atMs - origin);
   return line;
-}
-
-/**
- * The stretch a beat ran over its written length, or fell short of it.
- *
- * A width rather than a mark on the line, which is his: a coloured line says
- * something was wrong here and nothing about *how long* it was wrong for. The
- * band runs between where the beat should have ended and where it did, so its
- * width is exactly the surplus - the same thing the wait at a bar line is drawn
- * as, for the same reason.
- *
- * Whole height, because a beat's length belongs to the music rather than to any
- * one key. Striped rather than solid, so that it is never taken for a wait: the
- * colour says which direction, the stripes say who was late - the reader or the
- * machine waiting for them.
- */
-function stretchBands(
-  roll: RunRoll,
-  writtenMsBetween: RollDrawing['writtenMsBetween'],
-  origin: number,
-): readonly HTMLElement[] {
-  if (writtenMsBetween === undefined) {
-    return [];
-  }
-  const bands: HTMLElement[] = [];
-  for (const beat of beatStretches(roll)) {
-    if (beat.tookMs === null || beat.fromTicks === null) {
-      continue;
-    }
-    const written = writtenMsBetween(beat.fromTicks, beat.positionTicks);
-    if (written === null || written <= 0) {
-      continue;
-    }
-    const over = beat.tookMs - written;
-    if (Math.abs(over) < STRETCH_FLOOR_MS) {
-      continue;
-    }
-    // Where it should have ended, and where it did. Over-long and the band sits
-    // before the line, on the time that should not have been there; short and it
-    // sits after, on the time that is missing.
-    const shouldHave = beat.atMs - beat.tookMs + written;
-    const band = element('div', `roll__stretch roll__stretch--${over > 0 ? 'dragged' : 'hurried'}`);
-    band.style.left = atSecond(Math.min(shouldHave, beat.atMs) - origin);
-    band.style.width = atSecond(Math.abs(over));
-    const percent = Math.round((Math.abs(over) / written) * 100);
-    band.title = `This beat ran ${Math.round(Math.abs(over))} ms ${
-      over > 0 ? 'over' : 'short'
-    } - ${percent}% of its written length`;
-    bands.push(band);
-  }
-  return bands;
 }
 
 /**
@@ -461,11 +386,6 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     if (waited !== null) {
       grid.append(waited);
     }
-  }
-  // Beside the waits and under everything else: both are about stretches of time
-  // rather than about notes, and neither may cover what was played.
-  for (const band of stretchBands(roll, drawing.writtenMsBetween, origin)) {
-    grid.append(band);
   }
   for (let midi = band.high; midi >= band.low; midi -= 1) {
     if (!isBlack(midi)) {

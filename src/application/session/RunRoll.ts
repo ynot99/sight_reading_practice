@@ -421,47 +421,6 @@ function placesMarked(
   return [...places.values()].sort((left, right) => left.ticks - right.ticks);
 }
 
-/** One beat of the music, and how long the reader actually took over it. */
-export interface BeatStretch {
-  /** Where the beat is, in the music. */
-  readonly positionTicks: number;
-  /** And when it fell, on the clock the roll is drawn on. */
-  readonly atMs: number;
-  /** And where the one before it was, or `null` for the first of the run. */
-  readonly fromTicks: number | null;
-  /**
-   * Real milliseconds from the beat before, or `null` for the first.
-   *
-   * Measured from where that one was *taken* to where this one *fell*, which is
-   * the music between them: the waiting at a bar line is not part of the beat
-   * before it, and counting it there would call every held bar line a dragged
-   * beat.
-   */
-  readonly tookMs: number | null;
-}
-
-/**
- * How long each beat of the music actually took.
- *
- * The one thing a run can be judged rhythmically against without a machine
- * clock: not "was I late" - in a frame that waits, being late is the point - but
- * "was this beat the length it says it is". Local rather than cumulative, and
- * that matters: a reader who dragged one bar and then kept perfect time would
- * otherwise be told that every beat after it was wrong.
- */
-export function beatStretches(roll: RunRoll): readonly BeatStretch[] {
-  const places = placesMarked(roll);
-  return places.map((place, index) => {
-    const before = index > 0 ? places[index - 1] : undefined;
-    return {
-      positionTicks: place.ticks,
-      atMs: place.fell,
-      fromTicks: before?.ticks ?? null,
-      tookMs: before === undefined ? null : place.fell - before.taken,
-    };
-  });
-}
-
 /**
  * The grid: the clicks that marked the music, and the lines cut between them.
  *

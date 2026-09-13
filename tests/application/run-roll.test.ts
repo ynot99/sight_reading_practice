@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   RollRecorder,
-  beatStretches,
   beatsWorthMarking,
   momentOfTicks,
   theGrid,
@@ -523,37 +522,6 @@ describe('the beat a run was measured against', () => {
     const only = roll({ beats: [{ atMs: 400, weight: 'downbeat', positionTicks: 0 }] });
     expect(momentOfTicks(only, 0)).toBe(0);
     expect(momentOfTicks(only, Duration.QUARTER.ticks)).toBeNull();
-  });
-
-  it('says how long each beat of the music actually took', () => {
-    // Which is the one thing a run can be judged rhythmically against without a
-    // machine clock: not "was I late" but "was this beat the length it claims".
-    const played = roll({
-      beats: [
-        { atMs: 1000, weight: 'downbeat', positionTicks: 0 },
-        { atMs: 2000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
-        { atMs: 3600, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 2 },
-      ],
-    });
-
-    expect(beatStretches(played).map((beat) => beat.tookMs)).toEqual([null, 1000, 1600]);
-  });
-
-  it('leaves a waited bar line out of the beat before it', () => {
-    // Counting the waiting there would call every held bar line a dragged beat,
-    // when the beat itself was exactly the length it should have been.
-    const played = roll({
-      beats: [
-        { atMs: 0, weight: 'downbeat', positionTicks: 0 },
-        // The bar line fell at 1000 and was taken at 1800.
-        { atMs: 1000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
-        { atMs: 1800, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
-        { atMs: 2800, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 2 },
-      ],
-    });
-
-    // A second up to where it fell, then a second on from where it was taken.
-    expect(beatStretches(played).map((beat) => beat.tookMs)).toEqual([null, 1000, 1000]);
   });
 
   it('hands over only the clicks the window has reached', () => {

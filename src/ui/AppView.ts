@@ -46,7 +46,7 @@ import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { barLines, barNumberOf, elapsedMsAt, measureCount } from '../domain/model/Exercise.js';
+import { barLines, barNumberOf, measureCount } from '../domain/model/Exercise.js';
 import { expectedFor } from '../domain/timeline/Timeline.js';
 import {
   clicksBefore,
@@ -6430,7 +6430,6 @@ export class AppView {
         grid: this.theRollsGrid(),
         ghosts: this.theNotesAskedFor(),
         slips: this.el.rollSlips.checked,
-        writtenMsBetween: this.theWrittenLength(),
       }),
     );
     this.applyTheZoom();
@@ -6463,23 +6462,6 @@ export class AppView {
       }
     }
     return asked;
-  }
-
-  /**
-   * How long a stretch of the music is written to last.
-   *
-   * Off the score, at the speed the reader is taking it - the exercise a run is
-   * built from already carries that - so it is what the music asks of them
-   * rather than what its writer asked of everybody. Which is the right question:
-   * a passage taken at seventy is not meant to be played at a hundred.
-   */
-  private theWrittenLength(): ((fromTicks: number, toTicks: number) => number | null) | undefined {
-    const exercise = this.runtime.controller.currentExercise;
-    if (exercise === null) {
-      return undefined;
-    }
-    return (fromTicks, toTicks) =>
-      elapsedMsAt(exercise, toTicks) - elapsedMsAt(exercise, fromTicks);
   }
 
   /**

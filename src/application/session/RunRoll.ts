@@ -1,6 +1,6 @@
 import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
 import type { MidiFileEvent } from '../../domain/midi/MidiFile.js';
-import type { BeatWeight, MetronomeTick } from '../ports/IMetronome.js';
+import type { BeatWeight } from '../ports/IMetronome.js';
 import type {
   MidiNoteOffEvent,
   MidiNoteOnEvent,
@@ -285,19 +285,18 @@ export class RollRecorder {
   /**
    * One click, at the moment it is heard rather than the moment it is placed.
    *
-   * @param positionTicks Where in the music it fell, which the caller knows and
-   * the tick does not: a tick counts from wherever its pulse began.
+   * Told in these three terms rather than handed a tick, because not every beat
+   * of a run comes from a pulse. A frame that waits for the reader runs none:
+   * there the beat they come in on is theirs to place and the beats between
+   * their entries are placed where they are written, and those are as much the
+   * grid of that run as a pulse's ticks are of another's.
    */
-  beat(tick: MetronomeTick, positionTicks: number): void {
+  beat(atMs: number, weight: BeatWeight, positionTicks: number): void {
     if (this.beats.length >= BEAT_CAPACITY) {
       this.full = true;
       return;
     }
-    this.beats.push({
-      atMs: tick.scheduledTimeMs,
-      weight: tick.isDownbeat ? 'downbeat' : tick.isPulse ? 'beat' : 'division',
-      positionTicks,
-    });
+    this.beats.push({ atMs, weight, positionTicks });
   }
 
   /**

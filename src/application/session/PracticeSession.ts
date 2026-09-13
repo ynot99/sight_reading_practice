@@ -21,6 +21,7 @@ import {
   type MetronomeBar,
   type MetronomeTempo,
   type MetronomeTick,
+  type BeatWeight,
 } from '../ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from '../ports/IMidiSource.js';
 import {
@@ -209,6 +210,23 @@ export class PracticeSession {
 
   get stepResults(): readonly StepResult[] {
     return this.results;
+  }
+
+  /**
+   * Writes down a beat that nothing of ours announced.
+   *
+   * In a frame that waits for the reader there is no pulse to hand beats out:
+   * the beat they come in on is theirs to place, and the ones between their
+   * entries are placed where they are written. Whoever places them is the only
+   * thing that knows they happened, so it says so here - otherwise the picture
+   * of such a run has no grid at all, which is what he found: "у wait for notes
+   * все ще не малюється смужок".
+   */
+  writeDownAClick(atMs: number, weight: BeatWeight, positionTicks: number): void {
+    if (this.status !== 'running') {
+      return;
+    }
+    this.roller.beat(atMs, weight, positionTicks);
   }
 
   /**
@@ -1081,7 +1099,11 @@ export class PracticeSession {
     // Only the ticks the run acts on. A tick from a superseded pulse would put
     // a line on the grid where no click was heard, and the count-in's own
     // clicks are before the music the grid is of.
-    this.roller.beat(tick, tick.positionTicks - this.positionOffsetTicks);
+    this.roller.beat(
+      tick.scheduledTimeMs,
+      tick.isDownbeat ? 'downbeat' : tick.isPulse ? 'beat' : 'division',
+      tick.positionTicks - this.positionOffsetTicks,
+    );
     this.emitter.emit('beat', tick);
     this.mode.onBeat(this.context, tick);
     this.publishPulsePosition(tick);

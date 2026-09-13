@@ -2393,6 +2393,36 @@ describe('the click in a mode that waits', () => {
     ]);
   });
 
+  it('writes the beats it places into the picture of the run', async () => {
+    // A frame that waits runs no pulse, so nothing announces its beats - and the
+    // drawing of such a run had no grid at all. His: "у wait for notes все ще не
+    // малюється смужок у midi viewer діалозі". The beats are placed here; they
+    // are as much that run's grid as a pulse's ticks are of another's.
+    const { controller, midi, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    const session = controller.start();
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+
+    const beats = session?.roll.beats ?? [];
+    expect(beats.map((beat) => [beat.atMs, beat.weight])).toEqual([
+      [5_000, 'downbeat'],
+      [6_000, 'beat'],
+      [7_000, 'beat'],
+      [8_000, 'beat'],
+    ]);
+    // And each with its place in the music, which is what names the bars and
+    // puts the notes that were asked for where they belong.
+    expect(beats.map((beat) => beat.positionTicks)).toEqual([
+      0,
+      Duration.QUARTER.ticks,
+      Duration.HALF.ticks,
+      Duration.HALF.ticks + Duration.QUARTER.ticks,
+    ]);
+  });
+
   it('leaves the pulse to count the reader in and no further', async () => {
     // Reported from the page: the metronome went on playing by itself, and
     // every beat he played came out clicked twice. A count-in is asked for by

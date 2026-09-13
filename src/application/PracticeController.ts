@@ -2956,10 +2956,16 @@ export class PracticeController {
     const here = beatAt(exercise, step.onsetTicks, pattern);
     if (here !== null) {
       this.deps.metronome.click(atMs, here.weight);
+      // And written down, because this is the only place that knows the beat
+      // happened: no tick announced it, so the picture of the run would have no
+      // grid without this.
+      this.currentSession?.writeDownAClick(atMs, here.weight, step.onsetTicks);
     }
     const until = this.nextOwedTicks(step.index);
     for (const beat of beatsBetween(exercise, step.onsetTicks, until, pattern)) {
-      this.deps.metronome.click(atMs + spanMs(exercise, step.onsetTicks, beat.ticks), beat.weight);
+      const at = atMs + spanMs(exercise, step.onsetTicks, beat.ticks);
+      this.deps.metronome.click(at, beat.weight);
+      this.currentSession?.writeDownAClick(at, beat.weight, beat.ticks);
     }
   }
 

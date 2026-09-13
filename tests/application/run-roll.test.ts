@@ -14,7 +14,6 @@ import {
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
 import { FlowMode } from '../../src/application/modes/FlowMode.js';
-import type { MetronomeTick } from '../../src/application/ports/IMetronome.js';
 import type {
   MidiNoteOffEvent,
   MidiNoteOnEvent,
@@ -62,19 +61,6 @@ function pressOf(midi: number, downAtMs: number, upAtMs: number | null): RolledP
 
 function roll(over: Partial<RunRoll> = {}): RunRoll {
   return { presses: [], beats: [], pedal: [], truncated: false, ...over };
-}
-
-function tick(at: number, of: Partial<MetronomeTick> = {}): MetronomeTick {
-  return {
-    index: 0,
-    measure: 0,
-    beat: 1,
-    isPulse: true,
-    isDownbeat: true,
-    positionTicks: 0,
-    scheduledTimeMs: at,
-    ...of,
-  };
 }
 
 describe('writing a run down', () => {
@@ -184,9 +170,9 @@ describe('writing a run down', () => {
     // The grid draws a downbeat heavier than a beat and a beat heavier than
     // what falls between them, so the weight travels with the moment.
     const roller = new RollRecorder();
-    roller.beat(tick(0), 0);
-    roller.beat(tick(250, { isDownbeat: false, isPulse: false }), Duration.QUARTER.ticks / 4);
-    roller.beat(tick(500, { isDownbeat: false, isPulse: true, beat: 2 }), Duration.QUARTER.ticks);
+    roller.beat(0, 'downbeat', 0);
+    roller.beat(250, 'division', Duration.QUARTER.ticks / 4);
+    roller.beat(500, 'beat', Duration.QUARTER.ticks);
 
     expect(roller.roll().beats.map((beat) => beat.weight)).toEqual([
       'downbeat',
@@ -198,7 +184,7 @@ describe('writing a run down', () => {
   it('forgets the last run when the next one begins', () => {
     const roller = new RollRecorder();
     roller.keyDown(down(MIDI.C4, 100));
-    roller.beat(tick(0), 0);
+    roller.beat(0, 'downbeat', 0);
     roller.pedal(pedal(true, 50));
     roller.reset();
 
@@ -645,6 +631,25 @@ describe('the roll a run leaves behind', () => {
     harness.midi.pedal(false, harness.clock.now() + 500);
 
     expect(harness.session.roll.pedal).toHaveLength(1);
+  });
+
+  it('takes no click placed after the run is over', () => {
+    // The roll is what *this run* did, and a beat placed after it has ended
+    // belongs to nothing. Said here rather than left to the callers: it is a
+    // public way in, and the next caller has no way to know the rule.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      options: { countInBars: 0 },
+    });
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(1);
+    const during = harness.session.roll.beats.length;
+
+    harness.session.abort();
+    harness.session.writeDownAClick(harness.clock.now(), 'beat', 0);
+
+    expect(harness.session.roll.beats).toHaveLength(during);
   });
 
   it('forgets the run before it', () => {

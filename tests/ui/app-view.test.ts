@@ -2000,6 +2000,48 @@ describe('AppView', () => {
       expect(element('roll-body').querySelectorAll('.roll__ghost')).toHaveLength(0);
     });
 
+    it('bands a chord that went down in pieces, in a frame that waits', async () => {
+      // The frame that waits places the beat at the *last* note of a chord, so
+      // the ones before it read as early - which is the picture of a lazy chord,
+      // and the reason to look at one at all.
+      const { view, runtime, midi, clock } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      runtime.controller.updateSettings({
+        modeId: new WaitMode().id,
+        clickWhen: 'with-me',
+        countInBars: 0,
+        repeatRange: false,
+      });
+      element<HTMLButtonElement>('focus-play').click();
+
+      // The first chord in pieces, then the rest of the bar together: a run has
+      // to reach two places in the music before anything between them can be
+      // put anywhere at all.
+      let at = 5_000;
+      const first = [...(runtime.controller.session?.currentStep?.expectedMidi ?? [])];
+      expect(first.length).toBeGreaterThan(1);
+      first.forEach((note, index) => {
+        clock.set(at + index * 150);
+        midi.noteOn(note, clock.now());
+      });
+      for (let guard = 0; guard < 12 && runtime.controller.session?.status === 'running'; guard += 1) {
+        at += 1_000;
+        clock.set(at);
+        for (const note of runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+          midi.noteOn(note, clock.now());
+        }
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const bands = [...element('roll-body').querySelectorAll('.roll__slip')];
+      expect(element('roll-body').querySelectorAll('.roll__ghost').length).toBeGreaterThan(0);
+      expect(bands).toHaveLength(1);
+      expect(bands[0]?.className).toBe('roll__slip roll__slip--rushed');
+      expect(bands[0]?.getAttribute('title')).toBe('Rushed by 150 ms');
+    });
+
     it('bands every note of a run played behind the beat', async () => {
       // Which is also where the pairing shows: each note asked for is measured
       // against the press that answered *it*. Paired by pitch, a press would be

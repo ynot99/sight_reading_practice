@@ -10,6 +10,11 @@ export interface TakePlayerDependencies {
 }
 
 /** How far ahead of the moment notes are handed to the instrument. */
+/** Slowest a take may be taken: a quarter of its own speed. */
+const LEAST_OF_ITS_SPEED = 0.25;
+/** And fastest, which is its own. Nobody is trying to hear it hurried. */
+const MOST_OF_ITS_SPEED = 1;
+
 const LOOK_AHEAD_MS = 250;
 
 /**
@@ -49,6 +54,16 @@ export class TakePlayer {
   /** When the key now down on each pitch comes up, in take time. */
   private readonly soundingUntil = new Map<number, number>();
   private lengthMs = 0;
+  /**
+   * How fast it plays, as a multiple of the take's own time.
+   *
+   * Kept here rather than by whoever is following, so that `positionMs` stays
+   * in the take's own time: a head walking over a drawing, the clicks laid over
+   * it and a seek all go on meaning the same thing at any speed, and nobody has
+   * to convert anything. A second copy of that conversion is a head that lands
+   * somewhere other than the sound.
+   */
+  private rate = 1;
   private startedAtMs: number | null = null;
   private offsetMs = 0;
   private playingId: string | null = null;
@@ -81,7 +96,36 @@ export class TakePlayer {
     if (this.startedAtMs === null) {
       return this.offsetMs;
     }
-    return Math.min(this.lengthMs, this.offsetMs + (this.clock.now() - this.startedAtMs));
+    return Math.min(
+      this.lengthMs,
+      this.offsetMs + (this.clock.now() - this.startedAtMs) * this.rate,
+    );
+  }
+
+  /** How fast it is playing, as a multiple of the take's own time. */
+  get speed(): number {
+    return this.rate;
+  }
+
+  /**
+   * Takes it slower, or lets it run at its own speed again.
+   *
+   * A MIDI performance slowed is simply a performance with wider gaps: no pitch
+   * moves, and every note keeps its own length in proportion. Which is what
+   * makes this worth having over a recording of sound - a passage taken at half
+   * speed is still the passage.
+   *
+   * Safe while something is sounding: where it has got to is read before the
+   * speed changes and the walk restarts from there, so the note under the head
+   * stays under the head.
+   */
+  setSpeed(rate: number): void {
+    const at = this.positionMs;
+    this.rate = Math.min(MOST_OF_ITS_SPEED, Math.max(LEAST_OF_ITS_SPEED, rate));
+    if (this.startedAtMs === null) {
+      return;
+    }
+    this.seek(at);
   }
 
   /** True once the take has run out, which is what stops a scrubber. */
@@ -117,7 +161,6 @@ export class TakePlayer {
     if (this.startedAtMs === null) {
       return;
     }
-    const origin = this.startedAtMs - this.offsetMs;
     const at = this.positionMs;
     const until = at + LOOK_AHEAD_MS;
 
@@ -157,8 +200,8 @@ export class TakePlayer {
       // listener who drops into the middle of a held chord should hear the
       // chord, not the silence between its attack and its release.
       const startsAt = Math.max(note.startMs, this.offsetMs);
-      this.instrument.play(note.midi, note.velocity, origin + startsAt);
-      this.instrument.stop(note.midi, origin + Math.max(note.endMs, startsAt));
+      this.instrument.play(note.midi, note.velocity, this.whenHeard(startsAt));
+      this.instrument.stop(note.midi, this.whenHeard(Math.max(note.endMs, startsAt)));
       this.soundingUntil.set(note.midi, note.keyUpMs);
       this.handed.add(index);
     }
@@ -203,6 +246,16 @@ export class TakePlayer {
     const from = this.notes.findIndex((note) => note.keyUpMs > at);
     this.rewindTo(from < 0 ? this.notes.length : from);
     this.pump();
+  }
+
+  /**
+   * The moment a place in the take is heard, on the clock.
+   *
+   * The one place the take's own time becomes the room's, which is why a speed
+   * belongs in here: slowing down widens this and nothing else.
+   */
+  private whenHeard(takeMs: number): number {
+    return (this.startedAtMs ?? 0) + (takeMs - this.offsetMs) / this.rate;
   }
 
   /** Puts the walk back to a place, forgetting what was handed over before. */

@@ -346,3 +346,58 @@ describe('a take played with the sustain pedal down', () => {
     expect(instrument.played.map((note) => note.midi)).toEqual([64]);
   });
 });
+
+describe('taking a take slowly', () => {
+  it('advances at the speed it was asked for', () => {
+    const { clock, player } = rig();
+    player.setSpeed(0.5);
+    player.play('take-1', TAKE);
+
+    clock.advance(1_000);
+
+    // A second of room time is half a second of the take.
+    expect(player.positionMs).toBe(500);
+  });
+
+  it('widens the gaps and moves no pitch', () => {
+    // Which is what makes this worth having over a recording of sound: the
+    // notes are the same notes, further apart.
+    const { clock, instrument, player } = rig(5_000);
+    player.setSpeed(0.5);
+    player.play('take-1', TAKE);
+
+    clock.advance(1_800);
+    player.pump();
+
+    expect(instrument.played.map((note) => [note.midi, note.atMs])).toEqual([
+      [60, 5_000],
+      // A second into the take, which at half speed is two seconds of room.
+      [64, 7_000],
+    ]);
+  });
+
+  it('keeps its place when the speed is changed while it sounds', () => {
+    // The note under the head has to stay under the head.
+    const { clock, player } = rig();
+    player.play('take-1', TAKE);
+    clock.advance(600);
+
+    player.setSpeed(0.5);
+
+    expect(player.positionMs).toBe(600);
+    clock.advance(400);
+    expect(player.positionMs).toBe(800);
+  });
+
+  it('refuses a speed nobody could listen at', () => {
+    // Slower than a quarter is a drawing you watch rather than a performance,
+    // and faster than its own is not what anybody asked for.
+    const { player } = rig();
+
+    player.setSpeed(0.01);
+    expect(player.speed).toBe(0.25);
+
+    player.setSpeed(4);
+    expect(player.speed).toBe(1);
+  });
+});

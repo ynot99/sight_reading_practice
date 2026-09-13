@@ -1678,6 +1678,84 @@ describe('AppView', () => {
       expect(named.length).toBeLessThan(beats);
     });
 
+    it('takes the run slower when it is asked to, clicks and all', async () => {
+      // His: "чи можна додати speed щоб перевидитись мою гру повільніше?" - and
+      // a MIDI performance slowed is the same performance with wider gaps, so
+      // the beat has to stretch with it or the picture and the ear part company.
+      const { view, runtime, midi, metronome, clock } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(16);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const speed = element<HTMLSelectElement>('roll-speed');
+      speed.value = '50';
+      speed.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(runtime.takePlayer.speed).toBe(0.5);
+
+      const played = runtime.controller.lastRoll;
+      const marking = played === null ? [] : beatsWorthMarking(played);
+      const began = played === null ? 0 : rollBeganAtMs(played);
+      metronome.clicks.length = 0;
+
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(200);
+        vi.advanceTimersByTime(100);
+      } finally {
+        vi.useRealTimers();
+      }
+
+      // Two hundred milliseconds of room is a hundred of the run.
+      expect(runtime.takePlayer.positionMs).toBe(100);
+      // And a beat a hundred milliseconds further into the run is two hundred
+      // milliseconds of room away, not one.
+      const at = runtime.takePlayer.positionMs;
+      expect(metronome.clicks[0]?.atMs).toBe(
+        clock.now() + ((marking[0]?.atMs ?? 0) - began - at) / 0.5,
+      );
+
+      element<HTMLButtonElement>('roll-stop').click();
+    });
+
+    it('keeps the picture speed out of the shelf, and its own across playbacks', async () => {
+      // One player, two places asking it for something. The shelf offers no
+      // speed of its own, so a take played after the picture was slowed would
+      // come out slow with nothing on screen to explain it.
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = rig.runtime.controller.session?.currentStep;
+      rig.midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      // Something on the shelf to play, kept so the row stays put.
+      rig.midi.noteOn(60, rig.clock.now());
+      rig.clock.advance(200);
+      rig.midi.noteOff(60, rig.clock.now());
+      element<HTMLButtonElement>('focus-keep').click();
+
+      element<HTMLButtonElement>('run-roll-open').click();
+      const speed = element<HTMLSelectElement>('roll-speed');
+      speed.value = '50';
+      speed.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(rig.runtime.takePlayer.speed).toBe(0.5);
+
+      rowButton('takes-list', 'Play this take').click();
+
+      expect(rig.runtime.takePlayer.speed).toBe(1);
+
+      // And the picture remembers what it was asked for.
+      element<HTMLButtonElement>('roll-play').click();
+
+      expect(rig.runtime.takePlayer.speed).toBe(0.5);
+      element<HTMLButtonElement>('roll-stop').click();
+    });
+
     it('stops the run sounding when its drawing is put away', async () => {
       // A sheet closed on a playback that goes on playing is a note the reader
       // cannot get at to stop.

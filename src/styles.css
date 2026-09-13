@@ -503,6 +503,16 @@ textarea {
   margin: 0;
 }
 
+.roll__toggle > select {
+  padding: 1px 3px;
+  font-size: 12px;
+}
+
+/* Only the first of them pushes the rest to the right. */
+.roll__toggle ~ .roll__toggle {
+  margin-left: 0;
+}
+
 /* Its own question, so its own control: how much of the run fits on screen. */
 .roll__zoom {
   display: flex;

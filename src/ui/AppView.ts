@@ -1357,6 +1357,7 @@ export class AppView {
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
     rollZoom: HTMLInputElement;
+    rollSpeed: HTMLSelectElement;
     rollClick: HTMLInputElement;
     rollPlay: HTMLButtonElement;
     rollPlayIcon: SVGPathElement;
@@ -1602,6 +1603,7 @@ export class AppView {
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
       rollZoom: requireElement(doc, 'roll-zoom'),
+      rollSpeed: requireElement(doc, 'roll-speed'),
       rollClick: requireElement(doc, 'roll-click'),
       rollPlay: requireElement(doc, 'roll-play'),
       rollPlayIcon: requireElement(doc, 'roll-play-icon'),
@@ -5642,6 +5644,10 @@ export class AppView {
     this.listen(this.el.rollZoom, 'input', () => {
       this.applyTheZoom();
     });
+    this.listen(this.el.rollSpeed, 'change', () => {
+      this.runtime.takePlayer.setSpeed(this.theRollsSpeed());
+      this.describeTheRoll();
+    });
     this.listen(this.el.placesClose, 'click', () => {
       this.el.sheetPlaces.hidden = true;
     });
@@ -5894,6 +5900,10 @@ export class AppView {
       return;
     }
     this.selectedTakeId = id;
+    // At its own speed. The shelf offers no speed of its own, so a take played
+    // after the picture was slowed would come out slow with nothing on screen
+    // to explain it - one player, two places asking it for something.
+    this.runtime.takePlayer.setSpeed(1);
     this.runtime.takePlayer.play(id, take.events, fromMs);
     if (this.takeTick === null) {
       this.takeTick = setInterval(() => this.followTake(), TAKE_TICK_MS);
@@ -6326,6 +6336,7 @@ export class AppView {
     // From wherever the head stands, which is nought unless the reader has put
     // it somewhere - and the clicks behind it are already spent.
     this.rollClicksSent = clicksBefore(roll, this.rollAtMs);
+    this.runtime.takePlayer.setSpeed(this.theRollsSpeed());
     this.runtime.takePlayer.play(RUN_ROLL_ID, rollAsEvents(roll), this.rollAtMs);
     if (this.rollTick === null) {
       this.rollTick = setInterval(() => this.followTheRoll(), TAKE_TICK_MS);
@@ -6437,13 +6448,22 @@ export class AppView {
     if (roll === null || !this.el.rollClick.checked) {
       return;
     }
+    // The window is a tenth of a second of the *run's* time, which at a slow
+    // speed reaches further ahead in the room than that. Harmless, and left
+    // alone deliberately: the metronome takes back whatever has not sounded
+    // when the reader stops, so placing a click early costs nothing, and a
+    // second conversion here would be a rule with no consequence to test.
+    const rate = this.runtime.takePlayer.speed;
     const due = clicksUpTo(roll, this.rollClicksSent, positionMs + ROLL_CLICK_LEAD_MS);
     const now = this.runtime.clock.now();
     const began = rollBeganAtMs(roll);
     for (const beat of due) {
       // Where it falls relative to the sound that is already going, not where
       // it fell in the run: the two clocks share nothing but a duration.
-      this.runtime.metronomeClick.click(now + (beat.atMs - began - positionMs), beat.weight);
+      this.runtime.metronomeClick.click(
+        now + (beat.atMs - began - positionMs) / rate,
+        beat.weight,
+      );
     }
     this.rollClicksSent += due.length;
   }
@@ -6487,6 +6507,12 @@ export class AppView {
     if (to !== null) {
       drawn.scrollLeft = to;
     }
+  }
+
+  /** How fast the reader has asked to hear the run, as a multiple of its own time. */
+  private theRollsSpeed(): number {
+    const percent = Number(this.el.rollSpeed.value);
+    return Number.isFinite(percent) && percent > 0 ? percent / 100 : 1;
   }
 
   private applyTheZoom(): void {

@@ -2127,7 +2127,7 @@ export class PracticeController {
       return null;
     }
 
-    this.disposeSession();
+    this.disposeSession('another run');
 
     const mode = this.deps.modes.get(this.currentSettings.modeId);
     const passage = this.passageSteps;
@@ -2449,7 +2449,22 @@ export class PracticeController {
     this.emitter.removeAllListeners();
   }
 
-  private disposeSession(): void {
+  /**
+   * Lets go of the running session.
+   *
+   * @param whatFollows Nothing, or the run being built to take its place.
+   * Only the first is worth announcing. A run starting says everything this
+   * would say a moment later and says it correctly - `beginRun` re-arms the
+   * watch against the new run's own opening chord, and `sessionCreated`
+   * tells the page what `sessionDiscarded` was telling it - so on the way
+   * *in* this was the same work done twice, and it sat between the key the
+   * reader pressed to begin and the downbeat answering it. Worse than
+   * wasted: with the session already let go of and the next one not yet
+   * built, the only answer the transport could be painted with was "idle",
+   * so every start repainted itself as a stopped run first. His: "я вже
+   * влучаю у ритм, але трошки раніше, бо є ще якась мізерна затримка".
+   */
+  private disposeSession(whatFollows: 'nothing' | 'another run' = 'nothing'): void {
     for (const unsubscribe of this.sessionSubscriptions) {
       unsubscribe();
     }
@@ -2458,7 +2473,7 @@ export class PracticeController {
     const had = this.currentSession !== null;
     this.currentSession?.dispose();
     this.currentSession = null;
-    if (had) {
+    if (had && whatFollows === 'nothing') {
       // Nothing is running now, so the opening is worth listening for again.
       this.watchForTheOpening();
       this.emitter.emit('sessionDiscarded', {});

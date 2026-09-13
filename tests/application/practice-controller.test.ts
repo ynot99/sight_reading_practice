@@ -1154,6 +1154,31 @@ describe('what you played, drawn over the score', () => {
     expect(controller.settings.tempoPercent).toBe(70);
   });
 
+  it('says a session was discarded only where nothing takes its place', async () => {
+    // The announcement is how the page knows to stop offering a run what it
+    // offers a run, so it has to arrive every time that is true - and only
+    // then. Starting is not one of those times: the last run is being
+    // replaced rather than let go of, and saying so put a repaint of the idle
+    // transport in front of the downbeat.
+    const { controller } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    const discarded = vi.fn();
+    controller.events.on('sessionDiscarded', discarded);
+
+    controller.start();
+    // Stopping keeps the session: the report of the run stays to be read.
+    controller.stop();
+    expect(discarded).not.toHaveBeenCalled();
+
+    // And the next run takes the last one's place rather than discarding it.
+    controller.start();
+    expect(discarded).not.toHaveBeenCalled();
+
+    // A playback does take the session away, with nothing following it.
+    controller.listen();
+    expect(discarded).toHaveBeenCalledTimes(1);
+  });
+
   it('counts a playback in when it is asked to, and not otherwise', async () => {
     // His line 84: a performance that begins on the first tick can be
     // listened to, but it cannot be played along with.

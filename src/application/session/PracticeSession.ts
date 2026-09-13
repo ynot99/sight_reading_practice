@@ -222,11 +222,22 @@ export class PracticeSession {
    * of such a run has no grid at all, which is what he found: "у wait for notes
    * все ще не малюється смужок".
    */
-  writeDownAClick(atMs: number, weight: BeatWeight, positionTicks: number): void {
+  writeDownAClick(atMs: number, weight: BeatWeight, positionTicks: number): boolean {
     if (this.status !== 'running') {
-      return;
+      return false;
+    }
+    // Refused where this beat is already down. A frame that waits runs a pulse
+    // for its count-in, and the tick that ends the count *is* the first beat of
+    // the music - which the reader's own entry then places a second time, at the
+    // same instant. Heard, that was the metronome clicking twice; drawn, it was a
+    // bar line the reader had given nought milliseconds late, complete with an
+    // empty band to show the waiting. His: "є якісь подвійні смужки які і два
+    // рази грають метроном".
+    if (this.roller.hasBeatAt(positionTicks, atMs)) {
+      return false;
     }
     this.roller.beat(atMs, weight, positionTicks);
+    return true;
   }
 
   /**

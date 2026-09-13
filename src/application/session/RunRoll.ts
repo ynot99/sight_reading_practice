@@ -162,6 +162,15 @@ export interface GridLine {
   readonly positionTicks: number | null;
 }
 
+/**
+ * Two moments this close together are the same moment, in milliseconds.
+ *
+ * Small enough that a beat and the reader giving it late are never confused -
+ * that pair is a wait apart - and large enough to cover the one place two
+ * accounts of the same beat arrive from different directions.
+ */
+const ONE_BREATH_MS = 5;
+
 /** Presses kept before a run stops recording them. */
 const PRESS_CAPACITY = 20_000;
 /** And clicks, which at the finest resolution outnumber the presses. */
@@ -193,6 +202,21 @@ export class RollRecorder {
   private readonly unjudged: Open[] = [];
   private pedalDownAt: number | null = null;
   private full = false;
+
+  /**
+   * Whether a beat of the music has already been written down at that moment.
+   *
+   * Same place in the music at the same instant is one beat recorded twice, not
+   * two beats. Told apart from the pair a bar line really does have - where a
+   * beat fell and where the reader gave it - by the moment: those are a wait
+   * apart, and this is the same breath.
+   */
+  hasBeatAt(positionTicks: number, atMs: number): boolean {
+    return this.beats.some(
+      (beat) =>
+        beat.positionTicks === positionTicks && Math.abs(beat.atMs - atMs) <= ONE_BREATH_MS,
+    );
+  }
 
   /** Forgets the last run. Called where a run begins, not where one ends. */
   reset(): void {

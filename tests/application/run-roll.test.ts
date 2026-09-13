@@ -652,6 +652,22 @@ describe('the roll a run leaves behind', () => {
     expect(harness.session.roll.beats).toHaveLength(during);
   });
 
+  it('knows a beat it already has, by its place and its moment together', () => {
+    // Same place at the same instant is one beat written down twice. A bar line
+    // and the reader giving it late are the same place a *wait* apart, and that
+    // pair is the whole of what the picture of a held bar is made of - so the
+    // moment has to count as much as the place.
+    const roller = new RollRecorder();
+    roller.beat(1000, 'downbeat', 0);
+
+    expect(roller.hasBeatAt(0, 1000)).toBe(true);
+    expect(roller.hasBeatAt(0, 1004)).toBe(true);
+    // A wait apart: a different beat, and the picture needs both.
+    expect(roller.hasBeatAt(0, 1800)).toBe(false);
+    // Same instant, elsewhere in the music: also a different beat.
+    expect(roller.hasBeatAt(Duration.QUARTER.ticks, 1000)).toBe(false);
+  });
+
   it('forgets the run before it', () => {
     // The session outlives one run: a roll still carrying the last attempt
     // would draw two performances over one grid, which is the smudge the

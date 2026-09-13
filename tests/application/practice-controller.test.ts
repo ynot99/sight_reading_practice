@@ -2447,6 +2447,35 @@ describe('the click in a mode that waits', () => {
     ]);
   });
 
+  it('writes the first beat of the music down once, not twice', async () => {
+    // A frame that waits runs a pulse for its count-in, and the tick that ends
+    // the count *is* the first beat of the music. The reader's own entry then
+    // placed it a second time, at the same instant: heard, the metronome clicked
+    // twice; drawn, it was a bar line given nought milliseconds late, with an
+    // empty band to show the waiting. His: "є якісь подвійні смужки які і два
+    // рази грають метроном".
+    const { controller, midi, clock, metronome } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({
+      modeId: new WaitMode().id,
+      clickWhen: 'with-me',
+      countInBars: 1,
+    });
+    const session = controller.start();
+    // Through the count, whose last tick is the music's first beat.
+    metronome.advanceSubdivisions(5);
+    metronome.clicks.length = 0;
+
+    for (const note of session?.currentStep?.expectedMidi ?? []) {
+      midi.noteOn(note, clock.now());
+    }
+
+    const first = (session?.roll.beats ?? []).filter((beat) => beat.positionTicks === 0);
+    expect(first).toHaveLength(1);
+    // And it is not clicked again either: the machine does not agree with itself.
+    expect(metronome.clicks.filter((asked) => asked.atMs === clock.now())).toHaveLength(0);
+  });
+
   it('leaves the pulse to count the reader in and no further', async () => {
     // Reported from the page: the metronome went on playing by itself, and
     // every beat he played came out clicked twice. A count-in is asked for by

@@ -2974,12 +2974,11 @@ export class PracticeController {
     // turned on were simply never offered to it.
     const pattern = this.currentSettings.clickPattern;
     const here = beatAt(exercise, step.onsetTicks, pattern);
-    if (here !== null) {
+    // Written down first, and sounded only if it was taken: a beat the run has
+    // already had - the tick that ended a count-in is the music's first beat -
+    // is one beat, and clicking it again is the machine agreeing with itself.
+    if (here !== null && this.currentSession?.writeDownAClick(atMs, here.weight, step.onsetTicks) !== false) {
       this.deps.metronome.click(atMs, here.weight);
-      // And written down, because this is the only place that knows the beat
-      // happened: no tick announced it, so the picture of the run would have no
-      // grid without this.
-      this.currentSession?.writeDownAClick(atMs, here.weight, step.onsetTicks);
     }
     const until = this.nextOwedTicks(step.index);
     for (const beat of beatsBetween(exercise, step.onsetTicks, until, pattern)) {

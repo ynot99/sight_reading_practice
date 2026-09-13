@@ -584,6 +584,20 @@ export interface ExerciseLoadedEvent {
 export interface ControllerEventMap {
   settingsChanged: { readonly settings: PracticeSettings };
   exerciseLoaded: ExerciseLoadedEvent;
+  /**
+   * A run has been built and may be listened to, but has not begun.
+   *
+   * Announced separately from {@link sessionCreated} so that binding to a run
+   * and *drawing* it are two moments. Binding is a handful of subscriptions;
+   * drawing is the transport, the chrome and the verdict being put away, and all
+   * of that used to happen between the reader's key going down and the first
+   * thing the run does with it. On a frame that runs no pulse that first thing
+   * is a click placed at the moment of the press - a moment already gone - so
+   * every millisecond of drawing in front of it was a millisecond the reader
+   * heard as lateness. His: "щось я відчуваю буд-то є якась затримка у wait for
+   * notes режимі".
+   */
+  sessionBuilt: { readonly session: PracticeSession };
   sessionCreated: { readonly session: PracticeSession };
   /**
    * A run was thrown away without finishing.
@@ -2382,7 +2396,8 @@ export class PracticeController {
       }),
     );
 
-    this.emitter.emit('sessionCreated', { session });
+    // Listened to before it begins, so nothing it does is missed.
+    this.emitter.emit('sessionBuilt', { session });
     // Before the session hears anything of its own: the watch and the run
     // would otherwise both be subscribed to the keyboard, and the presses
     // that started this run would arrive at the watch a second time.
@@ -2421,6 +2436,11 @@ export class PracticeController {
     // until it is due, which is a scheduling lead away, and all of this
     // finishes long before it.
     session.start(opening);
+    // Drawn afterwards. Everything the page shows about a run being under way is
+    // the same a moment later, and the run's first act - a click placed where
+    // the reader's key went down - cannot be moved any earlier than it already
+    // is, so nothing may stand in front of it.
+    this.emitter.emit('sessionCreated', { session });
 
     // Last of all, and only this. Scrolling a long piece back to its first bar
     // is the one piece of preparing the page that nothing depends on and that

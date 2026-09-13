@@ -580,6 +580,22 @@ describe('how far a note was from where it was owed', () => {
     expect(Number(most?.style.opacity)).toBe(0.5);
   });
 
+  it('leaves the gaps unfilled where that is not the question', () => {
+    // Whether a chord went down together is read off whether the presses line
+    // up, and bands lying across them are colour between the eye and that line.
+    const view = drawTheRoll({
+      roll: roll({ beats: grid, presses: [press({ midi: MIDI.C4, stepIndex: 0, downAtMs: 300 })] }),
+      barLabel: () => null,
+      ghosts: [owed],
+      slips: false,
+    });
+
+    expect(view.querySelectorAll('.roll__slip')).toHaveLength(0);
+    // And what the question *is* about is still there.
+    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(1);
+    expect(view.querySelectorAll('.roll__note')).toHaveLength(1);
+  });
+
   it('says nothing about a note that was near enough', () => {
     // Every note is off by something; drawn without a floor the whole run is one
     // wash of colour saying nothing about anywhere in particular.

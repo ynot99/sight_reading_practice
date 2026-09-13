@@ -2007,6 +2007,9 @@ describe('AppView', () => {
       // notes would find no press at all and be banded not at all.
       const { view, runtime, midi, metronome, clock } = createRig();
       await view.initialize();
+      // Known material, because the claim counts bands: generated notes differ
+      // from run to run, and a count off that is a test that passes by luck.
+      await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
       runtime.controller.updateSettings({
         modeId: FLOW_MODE_ID,
         countInBars: 0,
@@ -2030,6 +2033,16 @@ describe('AppView', () => {
       for (const band of bands) {
         expect(band.className).toBe('roll__slip roll__slip--late');
       }
+
+      // And they can be put away, for the question they are in the way of.
+      const slips = element<HTMLInputElement>('roll-slips');
+      slips.checked = false;
+      slips.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(element('roll-body').querySelectorAll('.roll__slip')).toHaveLength(0);
+      expect(
+        element('roll-body').querySelectorAll('.roll__note').length,
+      ).toBeGreaterThan(0);
     });
 
     it('stops the run sounding when its drawing is put away', async () => {

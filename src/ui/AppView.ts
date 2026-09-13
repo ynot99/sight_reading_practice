@@ -1385,6 +1385,7 @@ export class AppView {
     rollZoom: HTMLInputElement;
     rollSnap: HTMLInputElement;
     rollGhosts: HTMLInputElement;
+    rollSlips: HTMLInputElement;
     rollOptions: HTMLButtonElement;
     sheetRollOptions: HTMLElement;
     rollOptionsClose: HTMLButtonElement;
@@ -1637,6 +1638,7 @@ export class AppView {
       rollZoom: requireElement(doc, 'roll-zoom'),
       rollSnap: requireElement(doc, 'roll-snap'),
       rollGhosts: requireElement(doc, 'roll-ghosts'),
+      rollSlips: requireElement(doc, 'roll-slips'),
       rollOptions: requireElement(doc, 'roll-options'),
       sheetRollOptions: requireElement(doc, 'sheet-roll-options'),
       rollOptionsClose: requireElement(doc, 'roll-options-close'),
@@ -4546,8 +4548,16 @@ export class AppView {
     );
 
     this.subscriptions.push(
-      controller.events.on('sessionCreated', ({ session }) => {
+      controller.events.on('sessionBuilt', ({ session }) => {
+        // Only the listening, and nothing that draws: this happens before the
+        // run has begun, and what a run does first is the one thing nothing may
+        // be put in front of.
         this.bindSession(session);
+      }),
+    );
+
+    this.subscriptions.push(
+      controller.events.on('sessionCreated', () => {
         // A run takes the pulse from a playback, so the button has to admit it.
         this.showThePerformance();
         // Every way of starting a run arrives here - the button, the repeat
@@ -5728,9 +5738,11 @@ export class AppView {
     this.listen(this.el.rollZoom, 'input', () => {
       this.applyTheZoom();
     });
-    this.listen(this.el.rollGhosts, 'change', () => {
-      this.drawTheRollInto();
-    });
+    for (const layer of [this.el.rollGhosts, this.el.rollSlips]) {
+      this.listen(layer, 'change', () => {
+        this.drawTheRollInto();
+      });
+    }
     this.listen(this.el.rollGrid, 'change', () => {
       this.drawTheRollInto();
       // The count of clicks already handed over indexes into a list that just
@@ -6417,6 +6429,7 @@ export class AppView {
         barLabel: this.barNamer(),
         grid: this.theRollsGrid(),
         ghosts: this.theNotesAskedFor(),
+        slips: this.el.rollSlips.checked,
       }),
     );
     this.applyTheZoom();

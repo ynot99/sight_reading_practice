@@ -156,6 +156,30 @@ describe('PracticeController', () => {
     expect(controller.tempoBpm).toBe(firstPreset?.defaults.tempoBpm);
   });
 
+  it('offers a run to listen to before it begins, and to draw after', async () => {
+    // What a run does first cannot be moved any earlier than it is: on a frame
+    // that runs no pulse it is a click placed at the moment of the press, a
+    // moment already gone. So nothing that draws may stand in front of it, and
+    // the two moments are announced separately to keep them apart.
+    const { controller } = createController(true);
+    await controller.loadNewExercise();
+    const when: { readonly event: string; readonly status: string | undefined }[] = [];
+    controller.events.on('sessionBuilt', ({ session }) => {
+      when.push({ event: 'built', status: session.status });
+    });
+    controller.events.on('sessionCreated', ({ session }) => {
+      when.push({ event: 'created', status: session.status });
+    });
+
+    controller.start();
+
+    expect(when.map((each) => each.event)).toEqual(['built', 'created']);
+    // Bound while it is still idle, so nothing it does is missed; drawn once it
+    // is under way, so the drawing is behind the run rather than in front of it.
+    expect(when[0]?.status).toBe('idle');
+    expect(when[1]?.status).not.toBe('idle');
+  });
+
   it('generates, serialises and renders an exercise', async () => {
     const { controller, renderer } = createController();
     const loaded = vi.fn();

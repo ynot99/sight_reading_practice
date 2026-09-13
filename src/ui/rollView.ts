@@ -38,6 +38,16 @@ export interface RollDrawing {
    * way of it.
    */
   readonly ghosts?: readonly RollGhost[];
+  /**
+   * Whether the gap between a note and where it was owed is filled in.
+   *
+   * On unless asked otherwise, because it is the answer to the question the
+   * picture is usually open for. It is in the way of a different one: whether a
+   * chord went down *together*, which is read off whether the presses line up -
+   * and bands lying across them are colour between the eye and that line. His:
+   * "щоб легше проаналізувати де я полінився, та натиснув ноти не разом".
+   */
+  readonly slips?: boolean;
 }
 
 /** One note the music asked for, in the music's own time. */
@@ -416,7 +426,7 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     // from.
     const press = answered.get(`${ghost.stepIndex}:${ghost.midi}`);
     const slip =
-      press === undefined
+      press === undefined || drawing.slips === false
         ? null
         : slipBetween(from, press.downAtMs - origin, band.high - ghost.midi);
     if (slip !== null) {

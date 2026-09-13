@@ -458,9 +458,10 @@ describe('the beat a run was measured against', () => {
     expect(momentOfTicks(played, Duration.QUARTER.ticks)).toBe(1000);
   });
 
-  it('counts a bar line the reader gave late at the moment they gave it', () => {
-    // Which is what keeps the notes of a bar on the near side of the wait rather
-    // than stretched across it. His own observation.
+  it('gives a waited bar line two moments, one for each direction', () => {
+    // Something beginning there began when the reader gave it; something ending
+    // there was over when the beat fell due. One answer for both drew a note
+    // ending on the bar line all the way to the end of the wait.
     const played = roll({
       beats: [
         { atMs: 0, weight: 'downbeat', positionTicks: 0 },
@@ -470,9 +471,12 @@ describe('the beat a run was measured against', () => {
       ],
     });
 
-    expect(momentOfTicks(played, Duration.QUARTER.ticks)).toBe(1400);
-    // And half a beat before it is measured against the wait's near side.
-    expect(momentOfTicks(played, Duration.QUARTER.ticks / 2)).toBe(700);
+    expect(momentOfTicks(played, Duration.QUARTER.ticks, 'starts')).toBe(1400);
+    expect(momentOfTicks(played, Duration.QUARTER.ticks, 'ends')).toBe(1000);
+    // And the stretch between two places is the music between them, which is
+    // from where the first was taken to where the second fell - the waiting at
+    // the far end is not part of it.
+    expect(momentOfTicks(played, Duration.QUARTER.ticks / 2)).toBe(500);
   });
 
   it('runs on past the last click at the rate of the last stretch', () => {
@@ -491,9 +495,12 @@ describe('the beat a run was measured against', () => {
   it('says nothing where there are no clicks to measure between', () => {
     // A frame that runs no pulse has nothing to place anything against.
     expect(momentOfTicks(roll({}), 0)).toBeNull();
-    expect(
-      momentOfTicks(roll({ beats: [{ atMs: 0, weight: 'downbeat', positionTicks: 0 }] }), 0),
-    ).toBeNull();
+
+    // One click can answer about its own place and about nowhere else: there is
+    // no second moment to measure a rate against.
+    const only = roll({ beats: [{ atMs: 400, weight: 'downbeat', positionTicks: 0 }] });
+    expect(momentOfTicks(only, 0)).toBe(0);
+    expect(momentOfTicks(only, Duration.QUARTER.ticks)).toBeNull();
   });
 
   it('hands over only the clicks the window has reached', () => {

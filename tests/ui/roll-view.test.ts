@@ -457,6 +457,51 @@ describe('the notes the music asked for', () => {
     expect(view.querySelectorAll('.roll__ghost')).toHaveLength(0);
   });
 
+  it('cuts a note off where its beat fell, not where the reader arrived', () => {
+    // A note ending on a bar line that waited was drawn on to the end of the
+    // wait, which made the yellow band look like part of the note.
+    const view = drawTheRoll({
+      roll: roll({
+        beats: [
+          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+          { atMs: 1000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+          { atMs: 1400, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+        ],
+      }),
+      barLabel: () => null,
+      ghosts: [{ midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks }],
+    });
+
+    const ghost = view.querySelector<HTMLElement>('.roll__ghost');
+    expect(ghost?.style.left).toBe('calc(var(--roll-second) * 0.0000)');
+    // One second, which is where the beat fell - not one and four tenths.
+    expect(ghost?.style.width).toBe('calc(var(--roll-second) * 1.0000)');
+  });
+
+  it('begins a note on a waited bar line where the reader took it', () => {
+    const view = drawTheRoll({
+      roll: roll({
+        beats: [
+          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+          { atMs: 1000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+          { atMs: 1400, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+        ],
+      }),
+      barLabel: () => null,
+      ghosts: [
+        {
+          midi: MIDI.C4,
+          fromTicks: Duration.QUARTER.ticks,
+          untilTicks: Duration.QUARTER.ticks * 2,
+        },
+      ],
+    });
+
+    expect(view.querySelector<HTMLElement>('.roll__ghost')?.style.left).toBe(
+      'calc(var(--roll-second) * 1.4000)',
+    );
+  });
+
   it('draws none unless they are asked for', () => {
     const view = draw(roll({ beats: grid, presses: [press()] }));
 

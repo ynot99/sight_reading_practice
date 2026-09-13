@@ -478,6 +478,18 @@ export function clicksBefore(
 }
 
 /**
+ * Which side of a place in the music is being asked about.
+ *
+ * A bar line the reader gave late has two moments, and which one is wanted
+ * depends on the direction: something *beginning* there began when they gave it,
+ * and something *ending* there was over when the beat fell due. Asked one way
+ * for both, a note ending on the bar line was drawn on to the end of the wait -
+ * his: "ghost нота не обрізається на жовтій секції... буде продовжена до кінця
+ * жовтої секції".
+ */
+export type MusicalEdge = 'starts' | 'ends';
+
+/**
  * When a place in the music happened, in milliseconds from the roll's start.
  *
  * The whole difficulty of drawing what *should* have been played: the notes are
@@ -485,24 +497,36 @@ export function clicksBefore(
  * the two - where a bar line waited for the reader, time did not pass at the
  * rate the score says.
  *
- * So it is read off the clicks that actually happened, and a bar line the reader
- * gave late counts at the moment they gave it rather than the moment it fell
- * due. That is what keeps the notes of a bar on the near side of the wait
- * instead of stretched across it, which is his own observation: "пауза (жовта
- * секція) може бути довгою, та буде не зрозуміло як далеко ноти малювати".
+ * So it is read off the clicks that actually happened. Between two places, the
+ * stretch that really elapsed runs from where the earlier one was *taken* to
+ * where the later one *fell*: the waiting at the far end is not part of the
+ * music between them.
  *
- * `null` when the run has fewer than two clicks to measure between, which is a
- * frame that ran no pulse: there is nothing there to place anything against.
+ * `null` when there is no pair to measure between, which is a frame that ran no
+ * pulse: nothing there to place anything against.
  */
-export function momentOfTicks(roll: RunRoll, positionTicks: number): number | null {
+export function momentOfTicks(
+  roll: RunRoll,
+  positionTicks: number,
+  edge: MusicalEdge = 'starts',
+): number | null {
   const began = rollBeganAtMs(roll);
-  // One moment per place in the music, and where a bar line was given late that
-  // moment is the giving: everything after it is counted from there.
-  const marks = new Map<number, number>();
+  // Two moments per place: when the beat fell, and when the reader took it.
+  // They differ only at a bar line that waited, and that is the whole point.
+  const fell = new Map<number, number>();
+  const taken = new Map<number, number>();
   for (const beat of beatsWorthMarking(roll, 'divisions')) {
-    marks.set(beat.positionTicks, beat.atMs - began);
+    const at = beat.atMs - began;
+    if (!fell.has(beat.positionTicks)) {
+      fell.set(beat.positionTicks, at);
+    }
+    taken.set(beat.positionTicks, at);
   }
-  const places = [...marks.keys()].sort((left, right) => left - right);
+  const places = [...fell.keys()].sort((left, right) => left - right);
+  const exactly = edge === 'ends' ? fell.get(positionTicks) : taken.get(positionTicks);
+  if (exactly !== undefined) {
+    return exactly;
+  }
   // The pair to measure between: the one the position falls inside, or the
   // nearest pair at whichever end it lies beyond.
   let index = places.findIndex((place) => place > positionTicks) - 1;
@@ -516,8 +540,8 @@ export function momentOfTicks(roll: RunRoll, positionTicks: number): number | nu
   if (from === undefined || to === undefined || to === from) {
     return null;
   }
-  const atFrom = marks.get(from) ?? 0;
-  const atTo = marks.get(to) ?? 0;
+  const atFrom = taken.get(from) ?? 0;
+  const atTo = fell.get(to) ?? 0;
   return atFrom + ((positionTicks - from) * (atTo - atFrom)) / (to - from);
 }
 

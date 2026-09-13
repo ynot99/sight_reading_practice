@@ -1986,15 +1986,17 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
-      expect(element('roll-body').querySelectorAll('.roll__ghost')).toHaveLength(0);
-
-      const ghosts = element<HTMLInputElement>('roll-ghosts');
-      ghosts.checked = true;
-      ghosts.dispatchEvent(new Event('change', { bubbles: true }));
-
+      // Shown from the start, because he keeps them on: "я думаю що ghost ноти
+      // варто мати включеними постійно".
       expect(
         element('roll-body').querySelectorAll('.roll__ghost').length,
       ).toBeGreaterThan(0);
+
+      const ghosts = element<HTMLInputElement>('roll-ghosts');
+      ghosts.checked = false;
+      ghosts.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(element('roll-body').querySelectorAll('.roll__ghost')).toHaveLength(0);
     });
 
     it('stops the run sounding when its drawing is put away', async () => {

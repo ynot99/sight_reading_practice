@@ -338,8 +338,10 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // Behind the presses, so what the reader did is what the eye lands on and the
   // music underneath it is something to check against.
   for (const ghost of ghosts) {
-    const from = momentOfTicks(roll, ghost.fromTicks);
-    const until = momentOfTicks(roll, ghost.untilTicks);
+    // Beginning where the beat was taken and ending where the next one fell:
+    // a note is over when its time is up, not when the reader arrives.
+    const from = momentOfTicks(roll, ghost.fromTicks, 'starts');
+    const until = momentOfTicks(roll, ghost.untilTicks, 'ends');
     if (from === null || until === null) {
       continue;
     }

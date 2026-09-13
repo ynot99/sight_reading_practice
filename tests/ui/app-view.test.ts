@@ -2000,6 +2000,38 @@ describe('AppView', () => {
       expect(element('roll-body').querySelectorAll('.roll__ghost')).toHaveLength(0);
     });
 
+    it('bands every note of a run played behind the beat', async () => {
+      // Which is also where the pairing shows: each note asked for is measured
+      // against the press that answered *it*. Paired by pitch, a press would be
+      // measured against whichever reading of that note came first, and most
+      // notes would find no press at all and be banded not at all.
+      const { view, runtime, midi, metronome, clock } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({
+        modeId: FLOW_MODE_ID,
+        countInBars: 0,
+        repeatRange: false,
+      });
+      element<HTMLButtonElement>('focus-play').click();
+      metronome.advanceSubdivisions(1);
+      for (let guard = 0; guard < 60 && runtime.controller.session?.status === 'running'; guard += 1) {
+        // A tenth of a second behind each beat, every time.
+        clock.advance(100);
+        for (const note of runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+          midi.noteOn(note, clock.now());
+        }
+        metronome.advanceSubdivisions(1);
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const bands = [...element('roll-body').querySelectorAll('.roll__slip')];
+      expect(bands.length).toBeGreaterThan(1);
+      for (const band of bands) {
+        expect(band.className).toBe('roll__slip roll__slip--late');
+      }
+    });
+
     it('stops the run sounding when its drawing is put away', async () => {
       // A sheet closed on a playback that goes on playing is a note the reader
       // cannot get at to stop.

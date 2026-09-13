@@ -45,7 +45,28 @@ export interface RollGhost {
   readonly midi: number;
   readonly fromTicks: number;
   readonly untilTicks: number;
+  /**
+   * Which step of the run asked for it.
+   *
+   * So that a press can be paired with the note it answered. Pitch alone will
+   * not do it: a piece returns to the same note again and again, and pairing by
+   * pitch would join a press to whichever of them the loop reached first.
+   */
+  readonly stepIndex: number;
 }
+
+/**
+ * Gaps smaller than this are not drawn at all, in milliseconds.
+ *
+ * Below about this nobody hears a rhythmic fault, and every note is off the beat
+ * by *something* - drawn without a floor, a run would be one continuous wash of
+ * colour saying nothing about anywhere in particular.
+ */
+const SLIP_FLOOR_MS = 20;
+/** And the gap at which the colour is as strong as it gets. */
+const SLIP_FULL_MS = 400;
+/** How solid the strongest of them is. */
+const SLIP_MOST_SOLID = 0.5;
 
 /** Semitones of air kept above and below what was played. */
 const PADDING_ROWS = 2;
@@ -264,6 +285,38 @@ export function keepTheHeadInView(
 }
 
 /**
+ * The gap between when a note was owed and when it was taken.
+ *
+ * A band on the note's own row, which is the same argument that made the wait at
+ * a bar line a band: the eye takes a width where it would otherwise have to
+ * measure the space between two edges. It belongs to that one note rather than
+ * to the whole grid, so it is one row tall.
+ *
+ * Coloured by direction, and that is a judgement this program already makes
+ * rather than a decoration: being late is allowed, because the music waits for
+ * the reader, and being early is not, because the accompaniment does not.
+ *
+ * Strength by size, so that "badly rushed" looks worse than "a little early"
+ * without a threshold anybody has to agree on. His: "мабуть червоні у випадку
+ * якщо сильно поспішав з нотою".
+ */
+function slipBetween(dueAt: number, playedAt: number, row: number): HTMLElement | null {
+  const gap = playedAt - dueAt;
+  if (Math.abs(gap) < SLIP_FLOOR_MS) {
+    return null;
+  }
+  const band = element('div', `roll__slip roll__slip--${gap > 0 ? 'late' : 'rushed'}`);
+  band.style.left = atSecond(Math.min(dueAt, playedAt));
+  band.style.width = atSecond(Math.abs(gap));
+  band.style.top = atRow(row);
+  band.style.opacity = String(
+    Math.min(SLIP_MOST_SOLID, (Math.abs(gap) / SLIP_FULL_MS) * SLIP_MOST_SOLID),
+  );
+  band.title = `${gap > 0 ? 'Late' : 'Rushed'} by ${Math.abs(Math.round(gap))} ms`;
+  return band;
+}
+
+/**
  * Draws a run as keys against the clicks it was played to.
  *
  * The horizontal axis is real time and the lines are the moments clicks were
@@ -337,6 +390,17 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   for (const beat of theGrid(roll, drawing.grid)) {
     grid.append(lineFor(beat, origin));
   }
+  // The press that answered each note the music asked for, by the step it was
+  // owed to: a piece returns to the same pitch again and again, so pitch alone
+  // would pair a press with whichever of them came first.
+  const answered = new Map<string, RolledPress>();
+  for (const press of roll.presses) {
+    const key = `${press.stepIndex ?? -1}:${press.midi}`;
+    if (!answered.has(key)) {
+      answered.set(key, press);
+    }
+  }
+
   // Behind the presses, so what the reader did is what the eye lands on and the
   // music underneath it is something to check against.
   for (const ghost of ghosts) {
@@ -346,6 +410,17 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     const until = momentOfTicks(roll, ghost.untilTicks, 'ends');
     if (from === null || until === null) {
       continue;
+    }
+    // Only where the right note was played at the wrong time. No press and the
+    // outline says it alone; no note asked for and there is nothing to be off
+    // from.
+    const press = answered.get(`${ghost.stepIndex}:${ghost.midi}`);
+    const slip =
+      press === undefined
+        ? null
+        : slipBetween(from, press.downAtMs - origin, band.high - ghost.midi);
+    if (slip !== null) {
+      grid.append(slip);
     }
     const drawn = element('div', 'roll__ghost');
     drawn.style.left = atSecond(from);

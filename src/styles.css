@@ -714,6 +714,31 @@ textarea {
   background: color-mix(in srgb, var(--text-muted) 10%, transparent);
 }
 
+/*
+ * How far a note was from where it was owed.
+ *
+ * On that note's own row, between the two edges the eye would otherwise have to
+ * measure between. Orange for late and red for rushed, which is a judgement this
+ * program already makes: the music waits for a reader who is behind, and the
+ * accompaniment does not wait for one who is ahead.
+ *
+ * Over the ghost it belongs to and under the press that answered it, so the
+ * answer stays the thing the eye lands on.
+ */
+.roll__slip {
+  position: absolute;
+  height: var(--roll-row);
+  border-radius: 2px;
+}
+
+.roll__slip--late {
+  background: var(--pending);
+}
+
+.roll__slip--rushed {
+  background: var(--wrong);
+}
+
 .roll__note {
   position: absolute;
   height: var(--roll-row);

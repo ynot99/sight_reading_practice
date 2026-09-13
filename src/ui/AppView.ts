@@ -6444,6 +6444,7 @@ export class AppView {
           midi,
           fromTicks: step.onsetTicks,
           untilTicks: step.onsetTicks + step.durationTicks,
+          stepIndex: step.index,
         });
       }
     }

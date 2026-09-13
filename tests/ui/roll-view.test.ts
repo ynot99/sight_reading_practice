@@ -420,7 +420,7 @@ describe('the notes the music asked for', () => {
       roll: roll({ beats: grid, presses: [press({ midi: MIDI.C4 })] }),
       barLabel: () => null,
       ghosts: [
-        { midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks },
+        { midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 },
       ],
     });
 
@@ -435,7 +435,7 @@ describe('the notes the music asked for', () => {
       roll: roll({ beats: grid }),
       barLabel: () => null,
       ghosts: [
-        { midi: MIDI.C4, fromTicks: Duration.QUARTER.ticks / 2, untilTicks: Duration.QUARTER.ticks },
+        { midi: MIDI.C4, fromTicks: Duration.QUARTER.ticks / 2, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 },
       ],
     });
 
@@ -450,7 +450,7 @@ describe('the notes the music asked for', () => {
     const view = drawTheRoll({
       roll: roll({ beats: grid, presses: [press({ midi: 60 })] }),
       barLabel: () => null,
-      ghosts: [{ midi: 84, fromTicks: 0, untilTicks: Duration.QUARTER.ticks }],
+      ghosts: [{ midi: 84, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 }],
     });
 
     const ghost = view.querySelector<HTMLElement>('.roll__ghost');
@@ -463,7 +463,7 @@ describe('the notes the music asked for', () => {
     const view = drawTheRoll({
       roll: roll({ presses: [press()] }),
       barLabel: () => null,
-      ghosts: [{ midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks }],
+      ghosts: [{ midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 }],
     });
 
     expect(view.querySelectorAll('.roll__ghost')).toHaveLength(0);
@@ -481,7 +481,7 @@ describe('the notes the music asked for', () => {
         ],
       }),
       barLabel: () => null,
-      ghosts: [{ midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks }],
+      ghosts: [{ midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 }],
     });
 
     const ghost = view.querySelector<HTMLElement>('.roll__ghost');
@@ -505,6 +505,7 @@ describe('the notes the music asked for', () => {
           midi: MIDI.C4,
           fromTicks: Duration.QUARTER.ticks,
           untilTicks: Duration.QUARTER.ticks * 2,
+          stepIndex: 0,
         },
       ],
     });
@@ -518,5 +519,111 @@ describe('the notes the music asked for', () => {
     const view = draw(roll({ beats: grid, presses: [press()] }));
 
     expect(view.querySelectorAll('.roll__ghost')).toHaveLength(0);
+  });
+});
+
+describe('how far a note was from where it was owed', () => {
+  const grid = [
+    { atMs: 0, weight: 'downbeat' as const, positionTicks: 0 },
+    { atMs: 1000, weight: 'beat' as const, positionTicks: Duration.QUARTER.ticks },
+  ];
+  const owed = {
+    midi: MIDI.C4,
+    fromTicks: 0,
+    untilTicks: Duration.QUARTER.ticks,
+    stepIndex: 0,
+  };
+
+  function drawnWith(pressed: Partial<RolledPress>): HTMLElement {
+    return drawTheRoll({
+      roll: roll({ beats: grid, presses: [press({ midi: MIDI.C4, stepIndex: 0, ...pressed })] }),
+      barLabel: () => null,
+      ghosts: [owed],
+    });
+  }
+
+  it('fills the gap where the note came late', () => {
+    const band = drawnWith({ downAtMs: 300, upAtMs: 800 }).querySelector<HTMLElement>('.roll__slip');
+
+    expect(band?.className).toBe('roll__slip roll__slip--late');
+    expect(band?.style.left).toBe('calc(var(--roll-second) * 0.0000)');
+    expect(band?.style.width).toBe('calc(var(--roll-second) * 0.3000)');
+    expect(band?.title).toBe('Late by 300 ms');
+  });
+
+  it('fills it the other way where the note was rushed', () => {
+    // The band reaches back from the note to where it was owed, and says so in
+    // the colour this program already uses for a fault.
+    const view = drawTheRoll({
+      roll: roll({
+        beats: grid,
+        presses: [press({ midi: MIDI.C4, stepIndex: 0, downAtMs: -200, upAtMs: 300 })],
+      }),
+      barLabel: () => null,
+      ghosts: [owed],
+    });
+
+    const band = view.querySelector<HTMLElement>('.roll__slip');
+    expect(band?.className).toBe('roll__slip roll__slip--rushed');
+    expect(band?.title).toBe('Rushed by 200 ms');
+  });
+
+  it('grows stronger with the size of the gap, and stops growing', () => {
+    // So that "badly rushed" looks worse than "a little early" without a
+    // threshold anybody has to agree on.
+    const faint = drawnWith({ downAtMs: 60 }).querySelector<HTMLElement>('.roll__slip');
+    const plain = drawnWith({ downAtMs: 200 }).querySelector<HTMLElement>('.roll__slip');
+    const most = drawnWith({ downAtMs: 2_000 }).querySelector<HTMLElement>('.roll__slip');
+
+    expect(Number(faint?.style.opacity)).toBeLessThan(Number(plain?.style.opacity));
+    expect(Number(plain?.style.opacity)).toBeLessThan(Number(most?.style.opacity));
+    expect(Number(most?.style.opacity)).toBe(0.5);
+  });
+
+  it('says nothing about a note that was near enough', () => {
+    // Every note is off by something; drawn without a floor the whole run is one
+    // wash of colour saying nothing about anywhere in particular.
+    expect(drawnWith({ downAtMs: 10 }).querySelectorAll('.roll__slip')).toHaveLength(0);
+  });
+
+  it('says nothing where the note was never played', () => {
+    // The outline says that on its own, and there is no second edge to fill to.
+    const view = drawTheRoll({
+      roll: roll({ beats: grid, presses: [] }),
+      barLabel: () => null,
+      ghosts: [owed],
+    });
+
+    expect(view.querySelectorAll('.roll__slip')).toHaveLength(0);
+    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(1);
+  });
+
+  it('pairs a press with the note it answered, not with the pitch', () => {
+    // A piece returns to the same note again and again. Paired by pitch, the
+    // second C would be measured against the first C's place in the music.
+    const view = drawTheRoll({
+      roll: roll({
+        beats: grid,
+        presses: [
+          press({ midi: MIDI.C4, stepIndex: 0, downAtMs: 0, upAtMs: 100 }),
+          press({ midi: MIDI.C4, stepIndex: 1, downAtMs: 1_300, upAtMs: 1_400 }),
+        ],
+      }),
+      barLabel: () => null,
+      ghosts: [
+        owed,
+        {
+          midi: MIDI.C4,
+          fromTicks: Duration.QUARTER.ticks,
+          untilTicks: Duration.QUARTER.ticks * 2,
+          stepIndex: 1,
+        },
+      ],
+    });
+
+    const bands = [...view.querySelectorAll<HTMLElement>('.roll__slip')];
+    // The first was dead on and says nothing; the second was three tenths late.
+    expect(bands).toHaveLength(1);
+    expect(bands[0]?.title).toBe('Late by 300 ms');
   });
 });

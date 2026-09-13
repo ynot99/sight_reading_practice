@@ -1,4 +1,5 @@
 import {
+  beatStretches,
   beatsWorthMarking,
   momentOfTicks,
   rollBeganAtMs,
@@ -48,6 +49,20 @@ export interface RollDrawing {
    * "щоб легше проаналізувати де я полінився, та натиснув ноти не разом".
    */
   readonly slips?: boolean;
+  /**
+   * How long a stretch of the music is *written* to last, in milliseconds.
+   *
+   * The only thing the drawing cannot work out for itself, and the only thing it
+   * needs to say whether a beat was the length it claims to be. Supplied by
+   * whoever holds the score.
+   *
+   * Without it the lines say where the clicks were and nothing about whether
+   * they were right - which in a frame that waits is no reading at all, because
+   * there the clicks stand at the reader's own entries and the grid moves with
+   * them. His: "не зрозуміло а як має буде це все вирівняно, та де я помилявся
+   * граючи швидко або повільно".
+   */
+  readonly writtenMsBetween?: (fromTicks: number, toTicks: number) => number | null;
 }
 
 /** One note the music asked for, in the music's own time. */
@@ -77,6 +92,18 @@ const SLIP_FLOOR_MS = 20;
 const SLIP_FULL_MS = 400;
 /** How solid the strongest of them is. */
 const SLIP_MOST_SOLID = 0.5;
+
+/**
+ * How far out a beat's length has to be before its line says so, as a fraction.
+ *
+ * A tenth is inside what anybody plays; a fifth is a beat visibly the wrong
+ * length. Below the floor nothing is said, because every beat is out by
+ * *something* and a grid where every line is coloured is a grid with no reading
+ * in it at all.
+ */
+const STRETCH_FLOOR = 0.12;
+/** And where the colour is as strong as it gets. */
+const STRETCH_FULL = 0.6;
 
 /** Semitones of air kept above and below what was played. */
 const PADDING_ROWS = 2;
@@ -171,11 +198,50 @@ function element(tag: string, className: string): HTMLElement {
  * lines say where the beat was, and this one says where they put it, in the
  * colour of the head because like the head it is theirs rather than the music's.
  */
-function lineFor(beat: GridLine, origin: number): HTMLElement {
+function lineFor(beat: GridLine, origin: number, stretch: number | undefined): HTMLElement {
   const kind = beat.given ? 'given' : beat.weight;
   const line = element('div', `roll__line roll__line--${kind}`);
   line.style.left = atSecond(beat.atMs - origin);
+  // How wrong the beat before it was, where that is known and worth saying. The
+  // line itself carries it: nothing else in the picture is *about* the grid, and
+  // a second mark beside it would be a second thing to read.
+  if (stretch !== undefined && Math.abs(stretch) >= STRETCH_FLOOR) {
+    line.classList.add(`roll__line--${stretch > 0 ? 'dragged' : 'hurried'}`);
+    line.style.opacity = String(
+      Math.min(1, STRETCH_FLOOR / STRETCH_FULL + Math.abs(stretch) / STRETCH_FULL),
+    );
+    const percent = Math.round(Math.abs(stretch) * 100);
+    line.title = `The beat before this one was ${percent}% ${stretch > 0 ? 'longer' : 'shorter'} than written`;
+  }
   return line;
+}
+
+/**
+ * How far each beat's length was from the length it is written to be.
+ *
+ * A fraction: a fifth longer is `0.2`, a fifth shorter is `-0.2`. Empty where
+ * nobody has said what the score asks for, and silent about the first beat of a
+ * run, which has nothing before it to have taken any time at all.
+ */
+function stretchesByPlace(
+  roll: RunRoll,
+  writtenMsBetween: RollDrawing['writtenMsBetween'],
+): Map<number, number> {
+  const out = new Map<number, number>();
+  if (writtenMsBetween === undefined) {
+    return out;
+  }
+  for (const beat of beatStretches(roll)) {
+    if (beat.tookMs === null || beat.fromTicks === null) {
+      continue;
+    }
+    const written = writtenMsBetween(beat.fromTicks, beat.positionTicks);
+    if (written === null || written <= 0) {
+      continue;
+    }
+    out.set(beat.positionTicks, beat.tookMs / written - 1);
+  }
+  return out;
 }
 
 /**
@@ -397,8 +463,13 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   }
   // The same list a playback sounds its clicks from, so a line and a click can
   // never end up in different places - cut lines included.
+  const stretches = stretchesByPlace(roll, drawing.writtenMsBetween);
   for (const beat of theGrid(roll, drawing.grid)) {
-    grid.append(lineFor(beat, origin));
+    // A bar line the reader gave is theirs, and says nothing about the length of
+    // the beat before it; the one that fell there already said that.
+    const stretch =
+      beat.given || beat.positionTicks === null ? undefined : stretches.get(beat.positionTicks);
+    grid.append(lineFor(beat, origin, stretch));
   }
   // The press that answered each note the music asked for, by the step it was
   // owed to: a piece returns to the same pitch again and again, so pitch alone

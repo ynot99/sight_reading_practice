@@ -691,6 +691,27 @@ textarea {
  * is drawn in the colour of the head, which is the other thing here that is
  * theirs rather than the music's.
  */
+/*
+ * A line that is not where it should be.
+ *
+ * The beat before it took longer than the music asks, or less. Said on the line
+ * itself because nothing else in the picture is *about* the grid - a mark beside
+ * it would be a second thing to read - and in the two colours already in use for
+ * dragging and hurrying, so the eye learns one vocabulary rather than two.
+ *
+ * Local, not cumulative: it says this beat was the wrong length, never that
+ * everything after a bad bar is wrong too.
+ */
+.roll__line--dragged {
+  width: 2px;
+  background: var(--pending);
+}
+
+.roll__line--hurried {
+  width: 2px;
+  background: var(--wrong);
+}
+
 .roll__line--given {
   width: 2px;
   background: color-mix(in srgb, var(--pending) 75%, transparent);

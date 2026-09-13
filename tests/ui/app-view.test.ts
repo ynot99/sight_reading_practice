@@ -2000,6 +2000,40 @@ describe('AppView', () => {
       expect(element('roll-body').querySelectorAll('.roll__ghost')).toHaveLength(0);
     });
 
+    it('marks the lines of a run that dragged, in a frame that waits', async () => {
+      // The reading he was missing: there the beat is wherever he puts it, so the
+      // grid stretches with him and nothing can look uneven against it. The lines
+      // themselves say it instead - this beat was longer than the music asks.
+      const { view, runtime, midi, clock } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      runtime.controller.updateSettings({
+        modeId: new WaitMode().id,
+        clickWhen: 'with-me',
+        countInBars: 0,
+        repeatRange: false,
+      });
+      element<HTMLButtonElement>('focus-play').click();
+
+      // A second and a half over every quarter, which at sixty is half again.
+      let at = 5_000;
+      for (let guard = 0; guard < 12 && runtime.controller.session?.status === 'running'; guard += 1) {
+        clock.set(at);
+        for (const note of runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+          midi.noteOn(note, clock.now());
+        }
+        at += 1_500;
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const dragged = [...element('roll-body').querySelectorAll<HTMLElement>('.roll__line--dragged')];
+      expect(dragged.length).toBeGreaterThan(0);
+      expect(dragged[0]?.title).toBe('The beat before this one was 50% longer than written');
+      // And nothing is called hurried, because nothing was.
+      expect(element('roll-body').querySelectorAll('.roll__line--hurried')).toHaveLength(0);
+    });
+
     it('bands a chord that went down in pieces, in a frame that waits', async () => {
       // The frame that waits places the beat at the *last* note of a chord, so
       // the ones before it read as early - which is the picture of a lazy chord,

@@ -643,3 +643,102 @@ describe('how far a note was from where it was owed', () => {
     expect(bands[0]?.title).toBe('Late by 300 ms');
   });
 });
+
+describe('a line that is not where it should be', () => {
+  /** A quarter is a second, which is sixty to the minute. */
+  const written = (fromTicks: number, toTicks: number): number =>
+    ((toTicks - fromTicks) / Duration.QUARTER.ticks) * 1000;
+
+  function linesOf(atMs: readonly number[]): HTMLElement[] {
+    const view = drawTheRoll({
+      roll: roll({
+        beats: atMs.map((at, index) => ({
+          atMs: at,
+          weight: (index === 0 ? 'downbeat' : 'beat') as 'downbeat' | 'beat',
+          positionTicks: Duration.QUARTER.ticks * index,
+        })),
+      }),
+      barLabel: () => null,
+      writtenMsBetween: written,
+    });
+    return [...view.querySelectorAll<HTMLElement>('.roll__line')];
+  }
+
+  it('says nothing where every beat was the length it claims', () => {
+    const lines = linesOf([0, 1000, 2000]);
+
+    expect(lines).toHaveLength(3);
+    for (const line of lines) {
+      expect(line.className).not.toContain('dragged');
+      expect(line.className).not.toContain('hurried');
+    }
+  });
+
+  it('marks the line after a beat that was dragged', () => {
+    // Half again as long as it should have been.
+    const lines = linesOf([0, 1500, 2500]);
+
+    expect(lines[1]?.className).toContain('roll__line--dragged');
+    expect(lines[1]?.title).toBe('The beat before this one was 50% longer than written');
+    // And the one after it is innocent: the reading is local, not cumulative.
+    expect(lines[2]?.className).not.toContain('dragged');
+  });
+
+  it('marks the line after a beat that was hurried', () => {
+    const lines = linesOf([0, 500, 1500]);
+
+    expect(lines[1]?.className).toContain('roll__line--hurried');
+    expect(lines[1]?.title).toBe('The beat before this one was 50% shorter than written');
+  });
+
+  it('says nothing about a beat that was near enough', () => {
+    // Every beat is out by something; a grid where every line is coloured is a
+    // grid with no reading in it.
+    const lines = linesOf([0, 1050, 2050]);
+
+    expect(lines[1]?.className).not.toContain('dragged');
+  });
+
+  it('grows stronger the further out the beat was', () => {
+    const little = linesOf([0, 1200, 2200])[1];
+    const lot = linesOf([0, 2000, 3000])[1];
+
+    expect(Number(little?.style.opacity)).toBeLessThan(Number(lot?.style.opacity));
+  });
+
+  it('says nothing at all where nobody has said what the score asks for', () => {
+    const view = drawTheRoll({
+      roll: roll({
+        beats: [
+          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+          { atMs: 1500, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+        ],
+      }),
+      barLabel: () => null,
+    });
+
+    for (const line of view.querySelectorAll('.roll__line')) {
+      expect(line.className).not.toContain('dragged');
+    }
+  });
+
+  it('leaves a bar line the reader gave out of it', () => {
+    // That line is theirs, and says nothing about the length of the beat before
+    // it; the one that fell there already said that.
+    const view = drawTheRoll({
+      roll: roll({
+        beats: [
+          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
+          { atMs: 1500, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+          { atMs: 1900, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+        ],
+      }),
+      barLabel: () => null,
+      writtenMsBetween: written,
+    });
+
+    const lines = [...view.querySelectorAll<HTMLElement>('.roll__line')];
+    expect(lines[1]?.className).toContain('roll__line--dragged');
+    expect(lines[2]?.className).toBe('roll__line roll__line--given');
+  });
+});

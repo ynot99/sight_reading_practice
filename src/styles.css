@@ -1445,6 +1445,52 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   gap: 4px;
 }
 
+/*
+ * Listening for the first notes, said in the corner with everything else.
+ *
+ * A state rather than an instruction, so it is small and quiet and goes away
+ * the moment it stops being true. It pulses gently, because the one thing it
+ * has to say is that something is *live* - a still label saying "play to
+ * start" is indistinguishable from a page that is simply not listening.
+ */
+.score__listening {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) var(--over-the-page), transparent);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(16 24 40 / 22%);
+}
+
+.score__listening svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  display: block;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .score__listening svg {
+    animation: listening-breathes 2s ease-in-out infinite;
+  }
+}
+
+@keyframes listening-breathes {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 .score__mode {
   display: flex;
   align-items: center;

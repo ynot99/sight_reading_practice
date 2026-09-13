@@ -4486,6 +4486,29 @@ describe('AppView', () => {
       expect(screenWake.held).toBe(false);
     });
 
+    it('says in the corner when it is listening for the first notes', async () => {
+      // His: a run can begin by playing, and until it does there is nothing on
+      // the page to say so - a reader who has just opened the app cannot tell
+      // whether it is waiting for them or ignoring them. A state, not an
+      // instruction, so it goes the moment it stops being true.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      expect(element('score-listening').hidden).toBe(true);
+
+      runtime.controller.updateSettings({ immediateStart: true });
+
+      expect(element('score-listening').hidden).toBe(false);
+
+      element<HTMLButtonElement>('focus-play').click();
+
+      // Nothing to listen for while a run is going.
+      expect(element('score-listening').hidden).toBe(true);
+
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(element('score-listening').hidden).toBe(false);
+    });
+
     it('asks for the keyboard before it asks for the music', async () => {
       // The music is the slow half - a database, then an engraving - and the
       // keyboard waits on neither. Asked for afterwards, the instrument was

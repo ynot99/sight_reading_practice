@@ -2986,6 +2986,17 @@ export class PracticeController {
     );
   }
 
+  /**
+   * Whether the page is listening for the chord that would start a run.
+   *
+   * Armed and disarmed in one place already; this is only that answer, asked
+   * from outside. Worth saying on the page: a reader who has just opened the
+   * app cannot otherwise tell whether it is waiting for them or ignoring them.
+   */
+  get waitingForTheOpening(): boolean {
+    return this.opening !== null;
+  }
+
   /** Whether this step is one the reader has to play. */
   private owedByTheReader(step: TimelineStep): boolean {
     return expectedFor(step, this.currentSettings.handStaff).length > 0;

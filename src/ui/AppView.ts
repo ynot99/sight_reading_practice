@@ -1233,6 +1233,7 @@ export class AppView {
     focusPlayFrame: HTMLElement;
     focusHands: HTMLButtonElement;
     focusMetronome: HTMLButtonElement;
+    scoreListening: HTMLElement;
     focusRepeat: HTMLButtonElement;
     focusBare: HTMLButtonElement;
     pagedScore: HTMLInputElement;
@@ -1467,6 +1468,7 @@ export class AppView {
       focusPlayFrame: requireElement(doc, 'focus-play-frame'),
       focusHands: requireElement(doc, 'focus-hands'),
       focusMetronome: requireElement(doc, 'focus-metronome'),
+      scoreListening: requireElement(doc, 'score-listening'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
       focusBare: requireElement(doc, 'focus-bare'),
       pagedScore: requireElement(doc, 'paged-score'),
@@ -3174,6 +3176,17 @@ export class AppView {
    * His, and better: both answer, and turning one on turns the other off,
    * which the reader watches happen.
    */
+  /**
+   * Whether the page is listening for the chord that would begin a run.
+   *
+   * Its own method because two different things change the answer - a run
+   * starting or ending, and the setting itself - and a mark that only follows
+   * one of them is a mark that is wrong half the time.
+   */
+  private showTheListening(): void {
+    this.el.scoreListening.hidden = !this.runtime.controller.waitingForTheOpening;
+  }
+
   private showTheModes(): void {
     const settings = this.runtime.controller.settings;
     const frame = settings.modeId;
@@ -4318,6 +4331,14 @@ export class AppView {
     const { controller } = this.runtime;
 
     this.subscriptions.push(
+      // Whoever changed it. The mark follows the *answer*, not the control
+      // that happened to be pressed: the setting has a checkbox at the desk,
+      // and a run beginning or ending changes it without any control at all.
+      controller.events.on('settingsChanged', () => {
+        this.showTheListening();
+      }),
+    );
+    this.subscriptions.push(
       controller.events.on('exerciseLoaded', ({ exercise }) => {
         this.hasLooked = false;
         this.placedOnBar = null;
@@ -5027,6 +5048,7 @@ export class AppView {
     this.el.rushingCounts.checked = settings.rushingCounts;
     this.el.markListening.checked = settings.markWhileListening;
     this.showTheModes();
+    this.showTheListening();
     this.dimWhatHasNothingToSay();
     this.el.showPlaybackNotes.checked = settings.showPlaybackNotes;
     this.el.restEvery.value = String(settings.restEveryMinutes);
@@ -5992,6 +6014,7 @@ export class AppView {
     // the music are not all inside it - the corner that names the modes is
     // at the other end of the layout and has to fade with the rest.
     this.doc.body.dataset['playing'] = String(playing);
+    this.showTheListening();
     // The falling bar belongs to a run, so it comes and goes with one. Health
     // itself only reports when it moves, and a run that has just begun has
     // not moved anything yet.

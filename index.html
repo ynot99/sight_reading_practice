@@ -94,6 +94,21 @@
             and they would disagree the first time either was changed.
           -->
           <div id="score-modes" class="score__modes" role="img" aria-label="Modes on" hidden></div>
+
+          <!--
+            And that the page is listening for the first notes, where it is.
+
+            His: the run can begin by playing, and until it does there is
+            nothing on the page to say so - a reader who has just opened the
+            app cannot tell whether it is waiting for them or ignoring them.
+            Short, because it is a state and not an instruction.
+          -->
+          <div id="score-listening" class="score__listening" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 3a4 4 0 0 0-4 4v5a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4z M5 11a7 7 0 0 0 14 0h-2a5 5 0 0 1-10 0H5z M11 20h2v2h-2z" />
+            </svg>
+            <span>Play to start</span>
+          </div>
         </div>
 
         <div id="score-cover" class="score__cover" hidden>

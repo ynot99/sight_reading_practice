@@ -1233,7 +1233,7 @@ export class AppView {
     focusPlayFrame: HTMLElement;
     focusHands: HTMLButtonElement;
     focusMetronome: HTMLButtonElement;
-    scoreListening: HTMLElement;
+    scoreListening: HTMLButtonElement;
     scoreListeningText: HTMLElement;
     focusRepeat: HTMLButtonElement;
     focusBare: HTMLButtonElement;
@@ -3030,6 +3030,22 @@ export class AppView {
       this.applyScoreCover();
     });
 
+    // The hint is the thing to press. A browser will only start audio inside a
+    // gesture it believes in, and the page cannot manufacture one - so rather
+    // than ask the reader to tap somewhere and hope, it asks them to tap the
+    // words that are asking.
+    this.listen(this.el.scoreListening, 'click', () => {
+      this.runtime.audio.wake();
+    });
+    // And the words stop asking the moment the device is awake, however it was
+    // woken: a tap anywhere does it, and nothing else on the page changes to
+    // say so.
+    this.subscriptions.push(
+      this.runtime.audio.onChange(() => {
+        this.showTheListening();
+      }),
+    );
+
     this.bindSpaceBar();
 
     this.listen(this.el.connectMidi, 'click', () => {
@@ -3196,7 +3212,7 @@ export class AppView {
     // nobody has touched will be a moment late with its first click however
     // early the reader plays - and the honest thing is to ask for the one tap
     // rather than to seem slow. It is asked once a session and never again.
-    const awake = this.runtime.audioAwake();
+    const awake = this.runtime.audio.awake();
     this.el.scoreListening.dataset['awake'] = String(awake);
     this.el.scoreListeningText.textContent = awake ? 'Play to start' : 'Tap once, then play';
   }

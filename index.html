@@ -76,6 +76,18 @@
           and over the music is not where it belongs while it is being read.
         -->
         <div class="score__corner">
+          <!--
+            The clock and, beside it, whether the page is listening. His: the
+            two belong on one line, and the hint reads as a label on the corner
+            rather than as a thing stacked under it.
+          -->
+          <div class="score__top">
+            <button id="score-listening" class="score__listening" type="button" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 3a4 4 0 0 0-4 4v5a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4z M5 11a7 7 0 0 0 14 0h-2a5 5 0 0 1-10 0H5z M11 20h2v2h-2z" />
+            </svg>
+            <span id="score-listening-text">Play to start</span>
+          </button>
           <div id="score-today" class="score__today" hidden>
             <output id="score-today-text"></output>
             <!--
@@ -83,6 +95,7 @@
               thing to see at a glance, and the gaps are half of what it says.
             -->
             <div id="score-week" class="score__week" role="img" aria-label="This week"></div>
+          </div>
           </div>
 
           <!--
@@ -103,12 +116,6 @@
             app cannot tell whether it is waiting for them or ignoring them.
             Short, because it is a state and not an instruction.
           -->
-          <div id="score-listening" class="score__listening" hidden>
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M12 3a4 4 0 0 0-4 4v5a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4z M5 11a7 7 0 0 0 14 0h-2a5 5 0 0 1-10 0H5z M11 20h2v2h-2z" />
-            </svg>
-            <span id="score-listening-text">Play to start</span>
-          </div>
         </div>
 
         <div id="score-cover" class="score__cover" hidden>

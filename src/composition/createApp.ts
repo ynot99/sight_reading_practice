@@ -2,6 +2,7 @@ import { PracticeController } from '../application/PracticeController.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { BarMode } from '../application/modes/BarMode.js';
 import { FlowMode } from '../application/modes/FlowMode.js';
+import { NoAudioWaking, type IAudioWaking } from '../application/ports/IAudioWaking.js';
 import { NoScreenWake, type IScreenWake } from '../application/ports/IScreenWake.js';
 import { ScreenWakeLock } from '../infrastructure/screen/ScreenWakeLock.js';
 import { knownFrameIds } from '../application/modes/ListenFrame.js';
@@ -175,16 +176,8 @@ export interface AppRuntime {
   readonly pitchPlayer: IPitchPlayer;
   /** Keeps the screen up while the reader is playing. */
   readonly screenWake: IScreenWake;
-  /**
-   * Whether the audio device is awake and can sound something at once.
-   *
-   * A browser will not start audio outside a user gesture, and a key on a MIDI
-   * keyboard is not one. So a reader who opens the page and plays without
-   * touching it - which is exactly what starting a run by playing is for - is
-   * asking for a click the device cannot give yet, and the page has to be able
-   * to say so rather than seem slow.
-   */
-  readonly audioAwake: () => boolean;
+  /** The audio device, and whether it can sound anything yet. */
+  readonly audio: IAudioWaking;
   /** `null` when the instrument has no dampers to lift. */
   readonly sustain: ISustainPedal | null;
   /** `null` when the instrument needs nothing downloaded. */
@@ -398,7 +391,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     // A tablet on a music stand is looked at and not touched: a piece played
     // through sends every note as MIDI and nothing at all to the screen, so
     // the device decides nobody is there and turns the page off mid-bar.
-    audioAwake: () => waking?.awake() ?? true,
+    audio: waking ?? new NoAudioWaking(),
     screenWake:
       typeof navigator === 'undefined' || typeof document === 'undefined'
         ? new NoScreenWake()

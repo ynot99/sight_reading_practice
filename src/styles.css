@@ -1388,6 +1388,13 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   gap: 6px;
 }
 
+/* The clock, and whatever stands beside it: one line across the corner. */
+.score__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .score__today {
   display: flex;
   flex-direction: column;
@@ -1454,6 +1461,10 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * start" is indistinguishable from a page that is simply not listening.
  */
 .score__listening {
+  appearance: none;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font: inherit;
   display: flex;
   align-items: center;
   gap: 6px;

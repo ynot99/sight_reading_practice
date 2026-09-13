@@ -1,3 +1,5 @@
+import type { IAudioWaking } from '../../application/ports/IAudioWaking.js';
+
 /** The corner of an `AudioContext` this needs, named so a test can stand in. */
 export interface WakeableAudioContext {
   readonly state: 'suspended' | 'running' | 'closed' | string;
@@ -51,11 +53,8 @@ const GESTURES = ['pointerdown', 'touchend', 'keydown', 'mousedown'] as const;
  * again whenever the page comes back, because a tablet suspends the audio of
  * a page it has put away and does not resume it on return.
  */
-/** What a caller can ask of the waking, once it is armed. */
-export interface AudioWaking {
-  /** Whether the device is awake and can sound something at once. */
-  awake(): boolean;
-  /** Stops listening. */
+/** The waking, plus the one thing only its owner can do: stop listening. */
+export interface ArmedWaking extends IAudioWaking {
   stop(): void;
 }
 
@@ -63,7 +62,7 @@ export function keepAudioAwake(
   contextFactory: () => WakeableAudioContext,
   page: WakingTarget,
   visibility: WakingTarget = page,
-): AudioWaking {
+): ArmedWaking {
   let context: WakeableAudioContext | null = null;
 
   const wake = (): void => {
@@ -84,8 +83,12 @@ export function keepAudioAwake(
     }
   };
 
+  const listeners: (() => void)[] = [];
   const onGesture = (): void => {
     wake();
+    for (const listener of [...listeners]) {
+      listener();
+    }
   };
   const onVisible = (): void => {
     // Only where something has already asked for sound: waking a device for a
@@ -105,6 +108,16 @@ export function keepAudioAwake(
     // cannot sound anything, and saying otherwise would be the one lie this
     // is for.
     awake: () => context !== null && context.state === 'running',
+    wake: onGesture,
+    onChange: (listener: () => void) => {
+      listeners.push(listener);
+      return () => {
+        const at = listeners.indexOf(listener);
+        if (at >= 0) {
+          listeners.splice(at, 1);
+        }
+      };
+    },
     stop: () => {
       for (const gesture of GESTURES) {
         page.removeEventListener(gesture, onGesture);

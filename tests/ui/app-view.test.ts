@@ -43,6 +43,35 @@ import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapte
 import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
 
 /** Remembers whether the screen was asked to stay up, and how often. */
+/** A device that starts asleep only when a test says so, and can be woken. */
+class TestAudioWaking implements IAudioWaking {
+  private running = true;
+  private readonly listeners: (() => void)[] = [];
+
+  asleep(): void {
+    this.running = false;
+    for (const listener of [...this.listeners]) {
+      listener();
+    }
+  }
+
+  awake(): boolean {
+    return this.running;
+  }
+
+  wake(): void {
+    this.running = true;
+    for (const listener of [...this.listeners]) {
+      listener();
+    }
+  }
+
+  onChange(listener: () => void): () => void {
+    this.listeners.push(listener);
+    return () => undefined;
+  }
+}
+
 class CountingScreenWake implements IScreenWake {
   held = false;
   holds = 0;
@@ -59,6 +88,7 @@ class CountingScreenWake implements IScreenWake {
   }
 }
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
+import type { IAudioWaking } from '../../src/application/ports/IAudioWaking.js';
 import type { IScreenWake } from '../../src/application/ports/IScreenWake.js';
 import { SettingsRepository } from '../../src/application/SettingsRepository.js';
 import type { IVolumeControl } from '../../src/application/ports/IVolumeControl.js';
@@ -121,6 +151,7 @@ class FakeVolume implements IVolumeControl {
 interface Rig {
   readonly runtime: AppRuntime;
   readonly screenWake: CountingScreenWake;
+  readonly audioWaking: TestAudioWaking;
   readonly view: AppView;
   readonly instrument: RecordingPitchPlayer;
   readonly metronome: ManualMetronome;
@@ -160,7 +191,7 @@ function createRig(
   const instrument = new RecordingPitchPlayer();
   const screenWake = new CountingScreenWake();
   // Awake unless a test says otherwise, which is what a desk browser is.
-  const audioAwake = true;
+  const audioWaking = new TestAudioWaking();
   const ladder = new PracticeLadder(BUILT_IN_LADDER);
   const recorder = new PerformanceRecorder(clock);
   recorder.listenTo(midi);
@@ -261,7 +292,7 @@ function createRig(
     // chime, and splitting it here hid a note that was left ringing.
     pitchPlayer: instrument,
     screenWake,
-    audioAwake: () => audioAwake,
+    audio: audioWaking,
     sustain,
     samples,
     renderer,
@@ -276,6 +307,7 @@ function createRig(
     runtime,
     view: new AppView(runtime, document),
     screenWake,
+    audioWaking,
     instrument,
     metronome,
     midi,
@@ -4494,7 +4526,7 @@ describe('AppView', () => {
       // the page to say so - a reader who has just opened the app cannot tell
       // whether it is waiting for them or ignoring them. A state, not an
       // instruction, so it goes the moment it stops being true.
-      const { view, runtime } = createRig();
+      const { view, runtime, audioWaking } = createRig();
       await view.initialize();
       expect(element('score-listening').hidden).toBe(true);
 
@@ -4502,6 +4534,17 @@ describe('AppView', () => {
 
       expect(element('score-listening').hidden).toBe(false);
       // And what it says depends on whether the device can answer at once.
+      expect(element('score-listening-text').textContent).toBe('Play to start');
+
+      // Asleep, it asks for the one thing only a person can give - and it is
+      // itself the thing to press, because a browser will start audio inside a
+      // gesture it believes in and the page cannot manufacture one.
+      audioWaking.asleep();
+      expect(element('score-listening-text').textContent).toBe('Tap once, then play');
+
+      element<HTMLButtonElement>('score-listening').click();
+
+      // Woken, and saying so without anything else on the page changing.
       expect(element('score-listening-text').textContent).toBe('Play to start');
 
       element<HTMLButtonElement>('focus-play').click();

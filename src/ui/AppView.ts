@@ -1234,6 +1234,7 @@ export class AppView {
     focusHands: HTMLButtonElement;
     focusMetronome: HTMLButtonElement;
     scoreListening: HTMLElement;
+    scoreListeningText: HTMLElement;
     focusRepeat: HTMLButtonElement;
     focusBare: HTMLButtonElement;
     pagedScore: HTMLInputElement;
@@ -1469,6 +1470,7 @@ export class AppView {
       focusHands: requireElement(doc, 'focus-hands'),
       focusMetronome: requireElement(doc, 'focus-metronome'),
       scoreListening: requireElement(doc, 'score-listening'),
+      scoreListeningText: requireElement(doc, 'score-listening-text'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
       focusBare: requireElement(doc, 'focus-bare'),
       pagedScore: requireElement(doc, 'paged-score'),
@@ -3184,7 +3186,19 @@ export class AppView {
    * one of them is a mark that is wrong half the time.
    */
   private showTheListening(): void {
-    this.el.scoreListening.hidden = !this.runtime.controller.waitingForTheOpening;
+    const waiting = this.runtime.controller.waitingForTheOpening;
+    this.el.scoreListening.hidden = !waiting;
+    if (!waiting) {
+      return;
+    }
+    // And whether the device can answer at once. A browser will not start
+    // audio outside a user gesture and a key on a piano is not one, so a page
+    // nobody has touched will be a moment late with its first click however
+    // early the reader plays - and the honest thing is to ask for the one tap
+    // rather than to seem slow. It is asked once a session and never again.
+    const awake = this.runtime.audioAwake();
+    this.el.scoreListening.dataset['awake'] = String(awake);
+    this.el.scoreListeningText.textContent = awake ? 'Play to start' : 'Tap once, then play';
   }
 
   private showTheModes(): void {

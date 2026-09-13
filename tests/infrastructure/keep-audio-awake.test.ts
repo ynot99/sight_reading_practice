@@ -125,12 +125,33 @@ describe('keeping the audio device awake', () => {
     expect(made).toBe(0);
   });
 
+  it('calls itself asleep until something has actually woken', () => {
+    // The page has to be able to say which it is: a device nobody has woken
+    // will be a moment late with its first click however early the reader
+    // plays, and asking for one tap is honest where seeming slow is not.
+    const context = new FakeContext();
+    const page = new FakeTarget();
+    const waking = keepAudioAwake(() => context, page);
+
+    expect(waking.awake()).toBe(false);
+
+    page.fire('pointerdown');
+
+    expect(waking.awake()).toBe(true);
+
+    // And asleep again the moment the device says so, rather than for ever
+    // after on the strength of one gesture.
+    context.state = 'suspended';
+
+    expect(waking.awake()).toBe(false);
+  });
+
   it('lets go of every listener it took', () => {
     const page = new FakeTarget();
-    const stop = keepAudioAwake(() => new FakeContext(), page);
+    const waking = keepAudioAwake(() => new FakeContext(), page);
     expect(page.listenerCount()).toBeGreaterThan(0);
 
-    stop();
+    waking.stop();
 
     expect(page.listenerCount()).toBe(0);
   });

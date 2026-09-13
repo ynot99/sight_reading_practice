@@ -159,6 +159,8 @@ function createRig(
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const instrument = new RecordingPitchPlayer();
   const screenWake = new CountingScreenWake();
+  // Awake unless a test says otherwise, which is what a desk browser is.
+  const audioAwake = true;
   const ladder = new PracticeLadder(BUILT_IN_LADDER);
   const recorder = new PerformanceRecorder(clock);
   recorder.listenTo(midi);
@@ -259,6 +261,7 @@ function createRig(
     // chime, and splitting it here hid a note that was left ringing.
     pitchPlayer: instrument,
     screenWake,
+    audioAwake: () => audioAwake,
     sustain,
     samples,
     renderer,
@@ -4498,6 +4501,8 @@ describe('AppView', () => {
       runtime.controller.updateSettings({ immediateStart: true });
 
       expect(element('score-listening').hidden).toBe(false);
+      // And what it says depends on whether the device can answer at once.
+      expect(element('score-listening-text').textContent).toBe('Play to start');
 
       element<HTMLButtonElement>('focus-play').click();
 

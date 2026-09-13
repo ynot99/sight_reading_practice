@@ -51,11 +51,19 @@ const GESTURES = ['pointerdown', 'touchend', 'keydown', 'mousedown'] as const;
  * again whenever the page comes back, because a tablet suspends the audio of
  * a page it has put away and does not resume it on return.
  */
+/** What a caller can ask of the waking, once it is armed. */
+export interface AudioWaking {
+  /** Whether the device is awake and can sound something at once. */
+  awake(): boolean;
+  /** Stops listening. */
+  stop(): void;
+}
+
 export function keepAudioAwake(
   contextFactory: () => WakeableAudioContext,
   page: WakingTarget,
   visibility: WakingTarget = page,
-): () => void {
+): AudioWaking {
   let context: WakeableAudioContext | null = null;
 
   const wake = (): void => {
@@ -92,10 +100,16 @@ export function keepAudioAwake(
   }
   visibility.addEventListener('visibilitychange', onVisible);
 
-  return () => {
-    for (const gesture of GESTURES) {
-      page.removeEventListener(gesture, onGesture);
-    }
-    visibility.removeEventListener('visibilitychange', onVisible);
+  return {
+    // Nothing asked for yet is not awake: a page the reader has not touched
+    // cannot sound anything, and saying otherwise would be the one lie this
+    // is for.
+    awake: () => context !== null && context.state === 'running',
+    stop: () => {
+      for (const gesture of GESTURES) {
+        page.removeEventListener(gesture, onGesture);
+      }
+      visibility.removeEventListener('visibilitychange', onVisible);
+    },
   };
 }

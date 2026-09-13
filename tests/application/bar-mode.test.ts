@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BarMode } from '../../src/application/modes/BarMode.js';
+import { FlowMode } from '../../src/application/modes/FlowMode.js';
 import { isAudibleClick } from '../../src/infrastructure/audio/metronomeMath.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
@@ -321,6 +322,110 @@ describe('Bar mode', () => {
     expect(harness.metronome.isRunning).toBe(true);
     expect(harness.session.status).toBe('running');
     expect(harness.of('stepEntered').at(-1)?.step.index).toBe(0);
+  });
+
+  it('begins where the reader began, not where the speaker caught up', () => {
+    // His: "я вже граю наступний біт, але музика тільки починається коли я вже
+    // граю далі resulting у нотах які вже промазані".
+    //
+    // A run begun by playing used to wait for the pulse's first tick before
+    // any of it existed. On a tablet that is not a scheduling lead, it is an
+    // audio context waking up - and a key press is not the touch it wants. So
+    // the reader was a note or two into fast music before the run began, and
+    // those notes, having arrived before it, were thrown away for being too
+    // early.
+    const clock = new ManualClock();
+    const midi = new MockMidiAdapter({ clock });
+    // A speaker that takes its time, which is the whole of the problem.
+    const metronome = new ManualMetronome(clock, 400);
+    const exercise = twoBarExercise({ tempoBpm: 240 });
+    const session = new PracticeSession({
+      timeline: buildTimeline(exercise),
+      mode: new BarMode(),
+      midi,
+      metronome,
+      clock,
+      scoring: new TimingWeightedScoringStrategy(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        click: 'subdivision',
+        // A press is heard about after it happened, and the run takes that off
+        // every timestamp. The chord that begins a run is no exception: the
+        // beat is where the key went down, not where the page found out.
+        inputLatencyMs: 40,
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+    const judged: NoteJudgedEvent[] = [];
+    session.events.on('noteJudged', (event) => judged.push(event));
+
+    // The chord that starts it, played at nought.
+    session.start([
+      { type: 'noteon', sourceId: 'test', midi: MIDI.C3, velocity: 100, timestampMs: 0 },
+      { type: 'noteon', sourceId: 'test', midi: MIDI.C4, velocity: 100, timestampMs: 0 },
+    ]);
+
+    // Going already, with no tick heard from anybody.
+    expect(session.status).toBe('running');
+
+    // And the chord is the beat: the run is counted from the hand that gave it.
+    const opening = judged.find((event) => event.midi === MIDI.C4);
+    expect(opening?.verdict).toBe('correct');
+    expect(opening?.deviationMs).toBe(0);
+
+    // The next note, played while the speaker is still waking up, is the run's
+    // to keep rather than something that happened before it existed.
+    clock.advance(200);
+    midi.noteOn(MIDI.D4, clock.now());
+    metronome.advanceToTicks(Duration.QUARTER.ticks);
+
+    const next = judged.find((event) => event.midi === MIDI.D4);
+    expect(next).toBeDefined();
+    // And measured from the chord, which is the beat the reader gave. The
+    // gate's own press cannot say this - it is the downbeat by definition and
+    // reads as dead on whatever the clock thinks - so the note after it is
+    // where the run's origin becomes visible: 200ms after the chord, less the
+    // 40ms the press took to arrive, against a beat 250ms wide.
+    expect(next?.deviationMs).toBe(-50);
+  });
+
+  it('counts a run begun by playing from the chord that began it', () => {
+    // In the bar frame the gate overwrites the run's origin with the press
+    // that opened it, so the origin set at the start cannot be seen there.
+    // Everywhere else it is the whole of the answer: flow has no gate, and a
+    // run begun by playing must still begin where the playing did rather than
+    // where the clock happened to stand when the page worked it out.
+    const clock = new ManualClock();
+    const midi = new MockMidiAdapter({ clock });
+    const metronome = new ManualMetronome(clock, 400);
+    const session = new PracticeSession({
+      timeline: buildTimeline(twoBarExercise({ tempoBpm: 240 })),
+      mode: new FlowMode(),
+      midi,
+      metronome,
+      clock,
+      scoring: new TimingWeightedScoringStrategy(),
+      options: {
+        countInBars: 0,
+        clickWhen: 'never',
+        click: 'subdivision',
+        inputLatencyMs: 40,
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+    const judged: NoteJudgedEvent[] = [];
+    session.events.on('noteJudged', (event) => judged.push(event));
+
+    session.start([
+      { type: 'noteon', sourceId: 'test', midi: MIDI.C3, velocity: 100, timestampMs: 0 },
+      { type: 'noteon', sourceId: 'test', midi: MIDI.C4, velocity: 100, timestampMs: 0 },
+    ]);
+
+    expect(session.status).toBe('running');
+    // Dead on: the key went down at nought, the page heard about it 40ms
+    // later, and the beat is where the key went down.
+    expect(judged.find((event) => event.midi === MIDI.C4)?.deviationMs).toBe(0);
   });
 
   it('lets the clock carry the cursor inside the bar', () => {

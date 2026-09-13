@@ -172,13 +172,6 @@ export class PracticeSession {
    * *is* the answer.
    */
   private theOpeningChord: MidiNoteOnEvent[] = [];
-  /**
-   * Whether the reader started this run by playing its first chord.
-   *
-   * Then *they* are the clock at its opening: there was no click before them
-   * to have played against, so the beat they gave is where the music begins.
-   */
-  private begunByPlaying = false;
   private lastReport: PerformanceReport | null = null;
   private lastScore: SessionScore | null = null;
 
@@ -242,7 +235,6 @@ export class PracticeSession {
     this.machine.dispatch('start');
     this.resetRunState();
     this.theOpeningChord = [...opening];
-    this.begunByPlaying = opening.length > 0;
     this.emitStatus(previous);
 
     // Silent from the first note onwards where the reader gives that beat:
@@ -258,26 +250,12 @@ export class PracticeSession {
     if (this.usesPulse()) {
       this.countInRemaining = Math.max(0, this.countInPulses());
       this.metronome.start();
-      // Where the reader began by playing, the music begins with them: their
-      // chord is the first beat and there is nothing left to wait for.
-      //
-      // Waiting for the pulse's first tick put the whole run behind whatever
-      // the device took to produce one - and on a tablet that is not a
-      // scheduling lead but an audio context waking up, which can want a touch
-      // it will not get from a key. The reader was two notes into fast music
-      // before the run existed, and those notes, having arrived before it,
-      // were thrown away.
-      //
-      // Only there. A run begun any other way has nothing to be measured from
-      // but the pulse, so it waits for the pulse as it always has. The ticks
-      // still say where the music is either way: the first of them carries
-      // position nought, which is this run's own starting place, exactly as
-      // after a count-in.
-      const begunWith = this.theRunBeganWith();
-      if (this.countInRemaining > 0 || begunWith === null) {
-        return;
-      }
-      this.beginRunning(begunWith, 0);
+      // The music begins on the pulse's first tick, always. It was begun on
+      // the reader's own chord for a while, to get out from under an audio
+      // context that took its time waking up - but that is a *guess* at where
+      // the beat was, and a reader is meant to play with the metronome rather
+      // than with an estimate of it. The device is kept awake instead, so
+      // there is nothing to get out from under. His, and he is right about it.
       return;
     }
 
@@ -615,7 +593,6 @@ export class PracticeSession {
     this.countInRemaining = 0;
     this.beforeTheMusic = [];
     this.theOpeningChord = [];
-    this.begunByPlaying = false;
     this.lastStruckAtMs = null;
     this.lastReport = null;
     this.lastScore = null;
@@ -643,22 +620,6 @@ export class PracticeSession {
     this.mode.onSessionStart(this.context);
     this.enterStep(this.resumeAtIndex);
     this.replayPressesAimedAtTheFirstBeat(atMs);
-  }
-
-  /**
-   * The moment the chord that started this run was finished, if one did.
-   *
-   * The last of its presses rather than the first: the chord is complete when
-   * its final key goes down, and that is the instant the reader meant as the
-   * beat. Corrected for the way in, like every other press.
-   */
-  private theRunBeganWith(): number | null {
-    let latest: number | null = null;
-    for (const event of this.theOpeningChord) {
-      const at = this.struckAt(event).timestampMs;
-      latest = latest === null ? at : Math.max(latest, at);
-    }
-    return latest;
   }
 
   /**
@@ -780,7 +741,6 @@ export class PracticeSession {
     if (line === null || step === null || step.onsetTicks < line) {
       return;
     }
-    const isTheOpeningGate = !this.theFirstBarHasBegun;
     this.heldAtBarTicks = null;
     this.theFirstBarHasBegun = true;
     this.resumeAtTicks = step.onsetTicks;
@@ -801,10 +761,7 @@ export class PracticeSession {
       // the one their own press starts.
       this.configureThePulse(0, this.barEndAfter(step));
       this.pulseGeneration += 1;
-      // Measured by the beat that is heard, except at the opening of a run the
-      // reader began by playing: there has been no click yet for them to have
-      // been playing with, so their own hand is the only clock there is.
-      this.anchorOnTheNextTick = !(isTheOpeningGate && this.begunByPlaying);
+      this.anchorOnTheNextTick = true;
       this.metronome.start();
     }
     this.emitter.emit('barBegan', { stepIndex: step.index, atMs });

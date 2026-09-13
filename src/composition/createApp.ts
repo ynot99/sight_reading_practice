@@ -63,6 +63,7 @@ import {
   ContinuityScoringStrategy,
   TimingWeightedScoringStrategy,
 } from '../domain/scoring/strategies.js';
+import { keepAudioAwake } from '../infrastructure/audio/keepAudioAwake.js';
 import { WebAudioMetronome, createAudioContextFactory } from '../infrastructure/audio/WebAudioMetronome.js';
 import { WebAudioPitchPlayer } from '../infrastructure/audio/WebAudioPitchPlayer.js';
 import { SampledPitchPlayer } from '../infrastructure/audio/SampledPitchPlayer.js';
@@ -215,6 +216,18 @@ export interface IToggleableInput {
 export function createApp(options: AppRuntimeOptions): AppRuntime {
   const clock = new SystemClock();
   const audioContextFactory = createAudioContextFactory();
+  // Awake from the reader's first touch of the page, and kept awake.
+  //
+  // A browser will not start an audio context outside a user gesture, and a
+  // key on a MIDI keyboard is not one - as far as the page is concerned nobody
+  // has touched it. So the first thing to ask for sound created a context that
+  // was suspended and then waited for it, and a run that begins by playing
+  // stood still until a finger reached the screen. Asking for a click and
+  // hearing one have to be the same moment: that is what playing with a
+  // metronome means.
+  if (typeof document !== 'undefined') {
+    keepAudioAwake(audioContextFactory, document);
+  }
 
   const metronome = new WebAudioMetronome(audioContextFactory);
 

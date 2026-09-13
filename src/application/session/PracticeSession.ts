@@ -36,7 +36,8 @@ import {
   subdivisionsPerPulseFor,
 } from './metronomePlan.js';
 import { DEFAULT_SESSION_OPTIONS, type PracticeContext, type SessionOptions } from './PracticeContext.js';
-import type { SessionEventMap } from './SessionEvents.js';
+import type { NoteJudgedEvent, SessionEventMap } from './SessionEvents.js';
+import { RollRecorder, type RunRoll } from './RunRoll.js';
 import { createSessionMachine, type SessionStatus, type SessionTrigger } from './SessionState.js';
 
 export interface PracticeSessionDependencies {
@@ -136,6 +137,8 @@ export class PracticeSession {
   private anchorOnTheNextTick = false;
   /** Bar lines this run has stopped at. @see PerformanceReport.waitedAtBars */
   private waitedAtBars: number[] = [];
+  /** What the run did, written down for drawing. @see RunRoll */
+  private readonly roller = new RollRecorder();
   /**
    * Whether the run's opening gate has been opened.
    *
@@ -206,6 +209,16 @@ export class PracticeSession {
 
   get stepResults(): readonly StepResult[] {
     return this.results;
+  }
+
+  /**
+   * What the run did, for drawing rather than for scoring.
+   *
+   * Read at any time, including part way through: the roll is a copy of what
+   * has happened so far, and a key still down is left open in it.
+   */
+  get roll(): RunRoll {
+    return this.roller.roll();
   }
 
   get report(): PerformanceReport | null {
@@ -616,6 +629,7 @@ export class PracticeSession {
     this.heldAtBarTicks = null;
     this.anchorOnTheNextTick = false;
     this.waitedAtBars = [];
+    this.roller.reset();
     this.theFirstBarHasBegun = false;
     this.pulseGeneration = 0;
     this.positionOffsetTicks = 0;
@@ -997,6 +1011,13 @@ export class PracticeSession {
       // wrong-note verdict to show for it.
       if (event.type === 'noteon') {
         this.beforeTheMusic.push(event);
+        this.roller.keyDown(event);
+      }
+      // Taken down here too, so a key struck during the count and let go of
+      // before the music starts is drawn as the short note it was rather than
+      // as one still held.
+      if (event.type === 'noteoff') {
+        this.roller.keyUp(event);
       }
       return;
     }
@@ -1006,13 +1027,21 @@ export class PracticeSession {
     switch (event.type) {
       case 'noteon':
         this.lastStruckAtMs = event.timestampMs;
+        // Before it is judged, so the verdict has a press to attach itself to.
+        this.roller.keyDown(event);
         this.mode.onNoteOn(this.context, event);
         return;
       case 'noteoff':
+        this.roller.keyUp(event);
         this.mode.onNoteOff(this.context, event);
         return;
+      case 'pedal':
+        // The pedal changes how the instrument sounds, never what was played,
+        // so the run still has nothing to say about it - but it is part of
+        // what the reader did, and the picture of a run shows it.
+        this.roller.pedal(event);
+        return;
       default:
-        // The pedal changes how the instrument sounds, never what was played.
         return;
     }
   }
@@ -1049,6 +1078,10 @@ export class PracticeSession {
       this.anchorOnTheNextTick = false;
       this.runStartedAt = tick.scheduledTimeMs - this.elapsedTo(this.resumeAtTicks);
     }
+    // Only the ticks the run acts on. A tick from a superseded pulse would put
+    // a line on the grid where no click was heard, and the count-in's own
+    // clicks are before the music the grid is of.
+    this.roller.beat(tick);
     this.emitter.emit('beat', tick);
     this.mode.onBeat(this.context, tick);
     this.publishPulsePosition(tick);
@@ -1176,7 +1209,7 @@ export class PracticeSession {
     if ((verdict === 'correct' || verdict === 'rushed') && this.stepDeviationMs === null) {
       this.stepDeviationMs = deviationMs;
     }
-    this.emitter.emit('noteJudged', {
+    const judged: NoteJudgedEvent = {
       midi,
       verdict,
       // Drawn on the note it was owed to, not on the one that happened to be
@@ -1184,7 +1217,11 @@ export class PracticeSession {
       stepIndex: owed === null ? this.stepIndex : owed.index,
       deviationMs: owed === null ? deviationMs : this.lateBy(owed, deviationMs),
       remaining: this.matcher?.remaining ?? [],
-    });
+    };
+    // Written down and announced from one object, so the picture of the run
+    // and the marks on the page cannot come to different conclusions.
+    this.roller.judged(judged);
+    this.emitter.emit('noteJudged', judged);
   }
 
   /** How late against the step it was owed to, rather than the one now open. */

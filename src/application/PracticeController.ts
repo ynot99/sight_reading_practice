@@ -65,6 +65,7 @@ import {
 } from '../domain/model/Exercise.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
+import type { RunRoll } from './session/RunRoll.js';
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMeter.js';
@@ -768,6 +769,16 @@ export class PracticeController {
   private lastBeatTicks = 0;
   private readonly judged: JudgedPress[] = [];
   private finishedReport: PerformanceReport | null = null;
+  /**
+   * What the last run did, kept past the session that did it.
+   *
+   * The report outlives its session because it is read afterwards, and the
+   * picture of the run is read at exactly the same moment and from the same
+   * panel - so it is kept in the same way. Taken at `finished` rather than
+   * asked of the session later: by the time the reader presses the button the
+   * session may be gone.
+   */
+  private finishedRoll: RunRoll | null = null;
   private cleanReadings = 0;
   private poorReadings = 0;
 
@@ -1823,6 +1834,16 @@ export class PracticeController {
   }
 
   /**
+   * What the last run did, or `null` before there has been one.
+   *
+   * The run in progress answers for itself through `session.roll`; this is the
+   * one that has finished, which is the one there is a report to read beside.
+   */
+  get lastRoll(): RunRoll | null {
+    return this.finishedRoll;
+  }
+
+  /**
    * What was decided about the last few presses, in order.
    *
    * Kept because every fault in this part of the program has been invisible
@@ -2313,6 +2334,7 @@ export class PracticeController {
     this.sessionSubscriptions.push(
       session.events.on('finished', ({ report, score }) => {
         this.finishedReport = report;
+        this.finishedRoll = session.roll;
         this.drawHeldMarks();
         // The marker reddens to say "you are stuck *here*, now". A run that
         // is over has no here and no now: what is left of it is the report

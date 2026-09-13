@@ -1,0 +1,269 @@
+import { describe, expect, it } from 'vitest';
+import { RollRecorder } from '../../src/application/session/RunRoll.js';
+import { FlowMode } from '../../src/application/modes/FlowMode.js';
+import type { MetronomeTick } from '../../src/application/ports/IMetronome.js';
+import type {
+  MidiNoteOffEvent,
+  MidiNoteOnEvent,
+  MidiPedalEvent,
+} from '../../src/application/ports/IMidiSource.js';
+import type { NoteJudgedEvent } from '../../src/application/session/SessionEvents.js';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { MIDI, twoBarExercise } from '../support/fixtures.js';
+import { createHarness } from '../support/harness.js';
+
+function down(midi: number, atMs: number, velocity = 0.8): MidiNoteOnEvent {
+  return { type: 'noteon', midi, velocity, timestampMs: atMs, sourceId: 'test' };
+}
+
+function up(midi: number, atMs: number): MidiNoteOffEvent {
+  return { type: 'noteoff', midi, timestampMs: atMs, sourceId: 'test' };
+}
+
+function pedal(isDown: boolean, atMs: number, value = isDown ? 1 : 0): MidiPedalEvent {
+  return { type: 'pedal', pedal: 'sustain', down: isDown, value, timestampMs: atMs, sourceId: 'test' };
+}
+
+function verdict(midi: number, event: Partial<NoteJudgedEvent> = {}): NoteJudgedEvent {
+  return {
+    midi,
+    verdict: 'correct',
+    stepIndex: 0,
+    deviationMs: null,
+    remaining: [],
+    ...event,
+  };
+}
+
+function tick(at: number, of: Partial<MetronomeTick> = {}): MetronomeTick {
+  return {
+    index: 0,
+    measure: 0,
+    beat: 1,
+    isPulse: true,
+    isDownbeat: true,
+    positionTicks: 0,
+    scheduledTimeMs: at,
+    ...of,
+  };
+}
+
+describe('writing a run down', () => {
+  it('pairs a key going down with the release that ends it', () => {
+    const roller = new RollRecorder();
+    roller.keyDown(down(MIDI.C4, 100, 0.6));
+    roller.keyUp(up(MIDI.C4, 450));
+
+    expect(roller.roll().presses).toEqual([
+      {
+        midi: MIDI.C4,
+        downAtMs: 100,
+        upAtMs: 450,
+        velocity: 0.6,
+        verdict: null,
+        stepIndex: null,
+        deviationMs: null,
+      },
+    ]);
+  });
+
+  it('leaves a key still held when the run ends open', () => {
+    // Inventing a release at the run's end would say the reader let go there.
+    const roller = new RollRecorder();
+    roller.keyDown(down(MIDI.C4, 100));
+
+    expect(roller.roll().presses[0]?.upAtMs).toBeNull();
+  });
+
+  it('releases the oldest press of a pitch, not the newest', () => {
+    // A trill strikes one pitch twice inside a few hundred milliseconds. Close
+    // the newest and the first note of it runs to the end of the piece.
+    const roller = new RollRecorder();
+    roller.keyDown(down(MIDI.C4, 100));
+    roller.keyDown(down(MIDI.C4, 300));
+    roller.keyUp(up(MIDI.C4, 350));
+
+    expect(roller.roll().presses.map((press) => press.upAtMs)).toEqual([350, null]);
+  });
+
+  it('ignores a release of a key that was never pressed', () => {
+    // A key let go of after a run has ended, or held from before it began.
+    const roller = new RollRecorder();
+    roller.keyUp(up(MIDI.C4, 100));
+
+    expect(roller.roll().presses).toEqual([]);
+  });
+
+  it('attaches a verdict to the press it was given for', () => {
+    const roller = new RollRecorder();
+    roller.keyDown(down(MIDI.C4, 100));
+    roller.judged(verdict(MIDI.C4, { verdict: 'rushed', stepIndex: 3, deviationMs: -80 }));
+
+    const press = roller.roll().presses[0];
+    expect(press?.verdict).toBe('rushed');
+    expect(press?.stepIndex).toBe(3);
+    expect(press?.deviationMs).toBe(-80);
+  });
+
+  it('gives a late verdict to the press that was waiting for it', () => {
+    // A note struck before the music reached it is held and judged when the
+    // gate it was reaching for opens - by which time the reader may have
+    // struck the same key again.
+    const roller = new RollRecorder();
+    roller.keyDown(down(MIDI.C4, 100));
+    roller.keyDown(down(MIDI.C4, 500));
+    roller.judged(verdict(MIDI.C4, { verdict: 'correct' }));
+
+    expect(roller.roll().presses.map((press) => press.verdict)).toEqual(['correct', null]);
+  });
+
+  it('keeps a press nothing was decided about', () => {
+    // Saying `null` is how the picture admits no verdict was reached, rather
+    // than quietly calling the press wrong.
+    const roller = new RollRecorder();
+    roller.keyDown(down(MIDI.C4, 100));
+
+    expect(roller.roll().presses[0]?.verdict).toBeNull();
+  });
+
+  it('makes one span of a pedal pressed through many values', () => {
+    // Half-pedalling is a stream of values on the way down. One span.
+    const roller = new RollRecorder();
+    roller.pedal(pedal(true, 100, 0.4));
+    roller.pedal(pedal(true, 120, 0.8));
+    roller.pedal(pedal(true, 140, 1));
+    roller.pedal(pedal(false, 900));
+
+    expect(roller.roll().pedal).toEqual([{ downAtMs: 100, upAtMs: 900 }]);
+  });
+
+  it('leaves the pedal open where it is still down', () => {
+    const roller = new RollRecorder();
+    roller.pedal(pedal(true, 100));
+
+    expect(roller.roll().pedal).toEqual([{ downAtMs: 100, upAtMs: null }]);
+  });
+
+  it('says nothing of a pedal lifted that was never put down', () => {
+    const roller = new RollRecorder();
+    roller.pedal(pedal(false, 100));
+
+    expect(roller.roll().pedal).toEqual([]);
+  });
+
+  it('weighs a click by what it marks', () => {
+    // The grid draws a downbeat heavier than a beat and a beat heavier than
+    // what falls between them, so the weight travels with the moment.
+    const roller = new RollRecorder();
+    roller.beat(tick(0));
+    roller.beat(tick(250, { isDownbeat: false, isPulse: false }));
+    roller.beat(tick(500, { isDownbeat: false, isPulse: true, beat: 2 }));
+
+    expect(roller.roll().beats.map((beat) => beat.weight)).toEqual([
+      'downbeat',
+      'division',
+      'beat',
+    ]);
+  });
+
+  it('forgets the last run when the next one begins', () => {
+    const roller = new RollRecorder();
+    roller.keyDown(down(MIDI.C4, 100));
+    roller.beat(tick(0));
+    roller.pedal(pedal(true, 50));
+    roller.reset();
+
+    expect(roller.roll()).toEqual({ presses: [], beats: [], pedal: [], truncated: false });
+  });
+
+  it('says so where it stopped taking things down', () => {
+    // A run is bounded by the piece and cannot reach this, but a run left
+    // going all afternoon would - and a measuring tool that quietly discards
+    // half its measurements is worse than one that admits it.
+    const roller = new RollRecorder();
+    for (let index = 0; index < 20_001; index += 1) {
+      roller.keyDown(down(MIDI.C4, index));
+    }
+
+    const roll = roller.roll();
+    expect(roll.presses).toHaveLength(20_000);
+    expect(roll.truncated).toBe(true);
+  });
+});
+
+describe('the roll a run leaves behind', () => {
+  it('writes down what was played, with the verdicts the page was marked by', () => {
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      options: { countInBars: 0, clickWhen: 'always', click: 'pulse' },
+    });
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(1);
+    const step = harness.session.currentStep;
+    for (const note of step?.expectedMidi ?? []) {
+      harness.midi.noteOn(note, harness.clock.now());
+    }
+    harness.midi.noteOff(MIDI.C4, harness.clock.now() + 200);
+
+    const roll = harness.session.roll;
+    expect(roll.presses.length).toBeGreaterThan(0);
+    expect(roll.presses.map((press) => press.midi)).toEqual([...(step?.expectedMidi ?? [])]);
+    expect(roll.presses.every((press) => press.verdict !== null)).toBe(true);
+    // And the one key that was let go of is the only one with an end.
+    expect(roll.presses.filter((press) => press.upAtMs !== null)).toHaveLength(1);
+  });
+
+  it('takes the pedal down, which the run itself has nothing to say about', () => {
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      options: { countInBars: 0 },
+    });
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(1);
+    harness.midi.pedal(true, harness.clock.now());
+    harness.midi.pedal(false, harness.clock.now() + 500);
+
+    expect(harness.session.roll.pedal).toHaveLength(1);
+  });
+
+  it('forgets the run before it', () => {
+    // The session outlives one run: a roll still carrying the last attempt
+    // would draw two performances over one grid, which is the smudge the
+    // whole design exists to avoid.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      options: { countInBars: 0 },
+    });
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(1);
+    harness.midi.noteOn(MIDI.C4, harness.clock.now());
+    expect(harness.session.roll.presses).toHaveLength(1);
+
+    // A session may be run again once it has been stopped, which is the one
+    // way the same roll is asked to hold two performances.
+    harness.session.abort();
+    harness.session.start();
+
+    expect(harness.session.roll.presses).toEqual([]);
+  });
+
+  it('draws its grid from the clicks of the music, not of the count', () => {
+    // The count-in is heard before the music the grid is of, and a line there
+    // would put a bar of nothing in front of the first note.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      options: { countInBars: 1, clickWhen: 'always', click: 'pulse' },
+    });
+    harness.session.start();
+    // The whole count, and the tick that ends it.
+    harness.metronome.advanceSubdivisions(5);
+
+    const roll = harness.session.roll;
+    expect(roll.beats).toHaveLength(1);
+    expect(roll.beats[0]?.atMs).toBe(Duration.WHOLE.ticks / Duration.QUARTER.ticks * 1000);
+  });
+});

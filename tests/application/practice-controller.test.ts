@@ -3823,6 +3823,31 @@ describe('the last run that reached an end', () => {
       expect(controller.session).not.toBeNull();
     });
 
+    it('starts the run by playing in every frame there is', async () => {
+      // His: "ця фіча має працювати у будь якому режимі". It is the
+      // controller's and not a mode's - what begins is whatever run the reader
+      // has chosen - but the frame with a gate at the first note is the one
+      // that could have deadlocked, each side waiting for the other, so all
+      // three are said here rather than assumed.
+      for (const modeId of [FLOW_MODE_ID, new WaitMode().id, BAR_MODE_ID]) {
+        const { controller, midi, clock, metronome } = createController(true, undefined, {
+          immediateStart: true,
+          modeId,
+        });
+        await controller.loadNewExercise();
+        expect(controller.session, modeId).toBeNull();
+
+        for (const midiNote of opening(controller)) {
+          midi.noteOn(midiNote, clock.now());
+        }
+        // The pulse, where the frame keeps time, hands the run its first beat.
+        metronome.advanceSubdivisions(1);
+
+        expect(controller.session, modeId).not.toBeNull();
+        expect(controller.session?.status, modeId).toBe('running');
+      }
+    });
+
     it('waits, and does not punish, while the wrong notes are played', async () => {
       // Nothing is being graded yet, so a wrong note is not a mistake - it is
       // simply not the thing being waited for.

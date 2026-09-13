@@ -116,6 +116,8 @@ export class PracticeSession {
    * pulse. This is how such a tick is recognised and dropped.
    */
   private pulseGeneration = 0;
+  /** The count-in the plan now in force was laid out with. */
+  private pulseCountInBars = 0;
   /**
    * Whether the run's clock is still to be taken from the pulse it restarted.
    *
@@ -296,6 +298,11 @@ export class PracticeSession {
     countInBars = Math.max(0, this.options.countInBars),
     stopAtTicks?: number,
   ): void {
+    // Remembered, because a pulse that is re-dressed while it runs has to be
+    // given the same count-in it was laid out with: the plan's ticks are
+    // counted from the front of it, and a different one would move every bar
+    // and every tempo under a pulse that is not going to start again.
+    this.pulseCountInBars = countInBars;
     this.metronome.configure({
       bpm: this.tempoBpm,
       timeSignature: this.timeline.exercise.timeSignature,
@@ -768,6 +775,14 @@ export class PracticeSession {
       // this bar's, counting from where it always was. Beginning it again
       // would only put a scheduling lead of silence between the reader's key
       // and the downbeat it asked for.
+      //
+      // It is still handed the bar, though. The click has nothing to say past
+      // the end of the bar it has been given - that is how a downbeat nobody
+      // played is kept quiet - so a gate that opened without stopping and
+      // without saying this left the click mute for the whole run, until some
+      // later gate did stop and say it. Which is exactly what he heard: no
+      // metronome at the start, and sometimes one arriving at the second bar.
+      this.configureThePulse(this.pulseCountInBars, this.barEndAfter(step));
       this.theFirstBarHasBegun = true;
       this.emitter.emit('barBegan', { stepIndex: step.index, atMs });
       return;

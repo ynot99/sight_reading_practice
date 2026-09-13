@@ -406,6 +406,15 @@ describe('Bar mode', () => {
     // One tick emitted and counted. A pulse begun again would be back at
     // nought, which is how the second scheduling lead got in.
     expect(metronome.nextTickIndex).toBe(1);
+
+    // And the click can be heard. The frame silences the pulse from the music's
+    // start, because the reader gives that beat themselves, and a gate hands it
+    // back the bar it has opened. One that opened without stopping and without
+    // saying so left the click mute for the whole run - no metronome at the
+    // start, and sometimes one arriving at the second bar, which is what he
+    // heard.
+    const beat = metronome.advanceSubdivisions(1).at(0);
+    expect(isAudibleClick(beat!, metronome.currentConfig)).toBe(true);
   });
 
   it('lets the clock carry the cursor inside the bar', () => {

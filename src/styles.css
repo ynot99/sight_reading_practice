@@ -721,16 +721,21 @@ textarea {
   min-width: 2px;
   border-radius: 2px;
   /*
-   * Read against the ground where the note was missed and against a filled note
-   * where it was played, so the edge carries it and the fill stays out of the
-   * way: a fill strong enough to find on its own would take the colour off the
-   * press underneath, which is the other half of what he is reading. Faint
-   * enough to have to be hunted for is no use either - his: "можеш зробити ghost
-   * ноти трішечки менш прозорими - бо наразі не дуже гарно їх видно, та треба
-   * виглядувати їх окремо".
+   * A capsule the press sits inside, which is what he settled on after trying it
+   * himself: "я хочу щоб мої ноти виглядали буд-то вони 'у капсулах' щоб було
+   * видно де правильно я натискав, але наскільки я був off". The fill is what
+   * makes it a container rather than a pair of edges to measure between, so it
+   * is heavy enough to read as one; the border stays heavier still, or the
+   * capsule has no rim and the whole thing is a smudge.
+   *
+   * It costs less than it looks. A capsule only ever lies over a note the music
+   * asked for, and a note played where one was asked for is very nearly always
+   * the right one - so the colour it washes out is the colour that was saying
+   * the least. A wrong note is outside every capsule, which is most of how it
+   * reads as wrong.
    */
   border: 1px solid color-mix(in srgb, var(--text-muted) 85%, transparent);
-  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 50%, transparent);
   /*
    * Drawn over the presses, so it must not take the pointer from them: what a
    * finger on a note is asking is what that note was and how far off the beat

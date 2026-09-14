@@ -1010,17 +1010,18 @@ describe('the wait a bar line had', () => {
 });
 
 describe('the notes the music asked for', () => {
-  it('carries the outline on its edge rather than on its fill', () => {
-    // It is drawn over the presses, so a fill strong enough to find the outline
-    // by would take the colour off the note underneath - and that note's colour
-    // is the other half of what is being read. The edge does the delineating and
-    // the fill only says which side of it is inside.
+  it('keeps a rim on the capsule, whatever it is filled with', () => {
+    // The fill is what makes it a capsule the press sits inside rather than two
+    // edges to measure between, so it is heavy. The border has to stay heavier:
+    // a capsule the same weight as its own rim has no rim, and where the press
+    // fills it edge to edge there is then nothing to say where one ends and the
+    // other begins - which is the one thing it is there to show.
     const body = rules().find((rule) => rule.selector === '.roll__ghost')?.body ?? '';
     const edge = Number(/border:[^;]*--text-muted\) (\d+)%/.exec(body)?.[1] ?? '0');
     const fill = Number(/background:[^;]*--text-muted\) (\d+)%/.exec(body)?.[1] ?? '0');
 
     expect(fill).toBeGreaterThan(0);
-    expect(edge).toBeGreaterThan(fill * 2);
+    expect(edge).toBeGreaterThan(fill);
   });
 
   it('lets the pointer through to the press underneath', () => {

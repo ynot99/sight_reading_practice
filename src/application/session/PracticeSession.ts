@@ -786,7 +786,16 @@ export class PracticeSession {
     // through the door where that is done - the run had no ears yet when they
     // were played.
     for (const event of opening) {
-      this.mode.onNoteOn(this.context, this.struckAt(event));
+      const struck = this.struckAt(event);
+      // Written down as well as judged, and written first so the verdict has a
+      // press to attach itself to - the same order the ordinary door uses. These
+      // are the only presses of a run that never came through it: the run did
+      // not exist when they were played, so nothing recorded them, and the
+      // chord the reader *began* with was missing from the picture of the run
+      // it began. His: "є інша бага при стартових нотах: їх просто нема у MIDI
+      // viewer коли я починаю гру".
+      this.roller.keyDown(struck);
+      this.mode.onNoteOn(this.context, struck);
     }
     for (const event of held) {
       if (runStartedAtMs - event.timestampMs <= this.options.earlyWindowMs) {

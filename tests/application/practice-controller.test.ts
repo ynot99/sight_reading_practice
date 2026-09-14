@@ -2527,6 +2527,33 @@ describe('the click in a mode that waits', () => {
     ]);
   });
 
+  it('writes down the chord the run was begun with', async () => {
+    // The only presses of a run that never come through the ordinary door: the
+    // run did not exist when they were played, so nothing recorded them, and
+    // they were handed straight to the mode to be judged. Judged and invisible -
+    // the chord he began with was missing from the picture of the run it began.
+    // His: "є інша бага при стартових нотах: їх просто нема у MIDI viewer коли я
+    // починаю гру".
+    const { controller, midi, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', immediateStart: true });
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+    clock.set(5_200);
+    midi.noteOff(p('C3').midi, clock.now());
+
+    expect(controller.session?.status).toBe('running');
+    const presses = controller.session?.roll.presses ?? [];
+    expect(presses.map((press) => [press.midi, press.downAtMs, press.upAtMs])).toEqual([
+      [p('C3').midi, 5_000, 5_200],
+    ]);
+    // And with the verdict it was given, because it is written before it is
+    // judged - which is the order the ordinary door uses, and the reason the
+    // verdict has a press to attach itself to.
+    expect(presses[0]?.verdict).toBe('correct');
+  });
+
   it('writes the beats it places into the picture of the run', async () => {
     // A frame that waits runs no pulse, so nothing announces its beats - and the
     // drawing of such a run had no grid at all. His: "у wait for notes все ще не

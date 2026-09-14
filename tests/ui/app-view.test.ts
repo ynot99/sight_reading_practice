@@ -1573,14 +1573,18 @@ describe('AppView', () => {
       expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(true);
     });
 
-    it('puts the head where the grid was tapped', async () => {
+    it('puts the head on the beat nearest where the grid was tapped', async () => {
       // The grid is the one thing in the sheet worth pointing at, and pointing
-      // at a moment is how anybody looks at a recording.
-      const { view, runtime, midi } = createRig();
+      // at a moment is how anybody looks at a recording. Where the tap lands
+      // between two beats it takes the nearer, which is what the reader meant:
+      // a beat is the thing worth pointing at, and a finger is a wide thing.
+      const { view, runtime, midi, metronome } = createRig();
       await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
       element<HTMLButtonElement>('focus-play').click();
       const step = runtime.controller.session?.currentStep;
       midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(16);
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
@@ -1593,11 +1597,11 @@ describe('AppView', () => {
       grid.getBoundingClientRect = () => ({ left: 20, top: 0, right: 0, bottom: 0,
         width: 0, height: 0, x: 20, y: 0, toJSON: () => ({}) }) as DOMRect;
 
-      // The zoom says a hundred and forty pixels to the second, so two hundred
-      // and ten pixels in is a second and a half.
-      grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 230 }));
+      // The zoom says a hundred and forty pixels to the second, so a hundred
+      // and sixty-eight pixels in is a fifth of a second past the first beat.
+      grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 188 }));
 
-      expect(drawn?.style.getPropertyValue('--roll-at')).toBe('1.500');
+      expect(drawn?.style.getPropertyValue('--roll-at')).toBe('1.000');
     });
 
     it('plays from where the head was put, and moves the sound when it is moved again', async () => {
@@ -2038,6 +2042,10 @@ describe('AppView', () => {
         (band) => band.title,
       );
       expect(waits).toContain('The music waited 800 ms');
+      // And the five seconds he took to reach the first note at all: the music
+      // was ready the moment the run began, which is the section that used not
+      // to be in the picture because nothing had written that beat down.
+      expect(waits).toContain('The music waited 5000 ms');
       const early = [
         ...element('roll-body').querySelectorAll<HTMLElement>('.roll__line--rushed'),
       ].map((line) => line.title);

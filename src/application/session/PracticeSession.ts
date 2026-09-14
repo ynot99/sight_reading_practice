@@ -31,6 +31,7 @@ import {
   timeAtMeasure,
 } from '../../domain/model/Exercise.js';
 import {
+  beatAt,
   metronomeBars,
   metronomeEnd,
   metronomeTempos,
@@ -711,10 +712,37 @@ export class PracticeSession {
       this.runBeganAt = atMs;
     }
     this.positionOffsetTicks = tickPositionTicks - this.resumeAtTicks;
+    this.writeDownTheFirstBeat(atMs);
     this.dispatch('countInComplete');
     this.mode.onSessionStart(this.context);
     this.enterStep(this.resumeAtIndex);
     this.replayPressesAimedAtTheFirstBeat(atMs);
+  }
+
+  /**
+   * The beat the music begins on, where nothing else will give it one.
+   *
+   * A frame that waits with the click in the reader's hands runs no pulse at
+   * all, so until they play their first note nothing about the run is written
+   * down - and the time they spent getting to it, which is the thing such a
+   * frame exists to show, was not in the picture at all. His: "якщо на самому
+   * початку я натиснув старт - та гра вже почалась - то якщо я просто чекаю, то
+   * весь цей час має просто замальовуватись жовтою секцією".
+   *
+   * Only where there is no pulse. A count-in ends on the music's first beat and
+   * a running pulse gives it as its first tick, and either written down twice is
+   * a beat drawn as a pair - which is the machinery for a bar line given late,
+   * and would claim a wait that never happened.
+   */
+  private writeDownTheFirstBeat(atMs: number): void {
+    if (this.usesPulse()) {
+      return;
+    }
+    const here = beatAt(this.timeline.exercise, this.resumeAtTicks, this.options.click);
+    if (here === null) {
+      return;
+    }
+    this.roller.beat(atMs, here.weight, this.resumeAtTicks);
   }
 
   /**

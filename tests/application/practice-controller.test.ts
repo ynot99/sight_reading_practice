@@ -2438,6 +2438,8 @@ describe('the click in a mode that waits', () => {
 
     const beats = session?.roll.beats ?? [];
     expect(beats.map((beat) => beat.atMs)).toEqual([
+      // The beat the music began with, which he then took five seconds to reach.
+      0,
       5_000,
       6_000,
       7_000,
@@ -2479,6 +2481,7 @@ describe('the click in a mode that waits', () => {
     const beats = session?.roll.beats ?? [];
     // Seven and eight are gone; his own, and the bar he has just begun, remain.
     expect(beats.map((beat) => beat.atMs)).toEqual([
+      0,
       5_000,
       6_000,
       6_500,
@@ -2486,7 +2489,15 @@ describe('the click in a mode that waits', () => {
       8_500,
       9_500,
     ]);
-    expect(beats.map((beat) => beat.earlyByMs)).toEqual([null, null, 2_500, null, null, null]);
+    expect(beats.map((beat) => beat.earlyByMs)).toEqual([
+      null,
+      null,
+      null,
+      2_500,
+      null,
+      null,
+      null,
+    ]);
   });
 
   it('writes the beats it places into the picture of the run', async () => {
@@ -2504,6 +2515,8 @@ describe('the click in a mode that waits', () => {
 
     const beats = session?.roll.beats ?? [];
     expect(beats.map((beat) => [beat.atMs, beat.weight])).toEqual([
+      // The beat the music began with, and then the four he placed.
+      [0, 'downbeat'],
       [5_000, 'downbeat'],
       [6_000, 'beat'],
       [7_000, 'beat'],
@@ -2512,6 +2525,7 @@ describe('the click in a mode that waits', () => {
     // And each with its place in the music, which is what names the bars and
     // puts the notes that were asked for where they belong.
     expect(beats.map((beat) => beat.positionTicks)).toEqual([
+      0,
       0,
       Duration.QUARTER.ticks,
       Duration.HALF.ticks,

@@ -3048,7 +3048,9 @@ export class PracticeController {
     const last = this.readersLastBeat;
     if (last === null || last.ticks >= onsetTicks) {
       // The first entry of a run has nothing before it to be measured from, and
-      // a step at or behind the last one is a repeat rather than a distance.
+      // needs nothing: it stands on the beat the music began with, which the run
+      // wrote down where it started, so the pair is already there. A step at or
+      // behind the last one is a repeat rather than a distance.
       return null;
     }
     return last.atMs + spanMs(exercise, last.ticks, onsetTicks);

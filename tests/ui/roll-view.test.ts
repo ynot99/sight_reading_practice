@@ -491,9 +491,12 @@ describe('the notes the music asked for', () => {
     beatOf(1000, 'beat', Duration.QUARTER.ticks),
   ];
 
-  it('draws them behind the ones that were played', () => {
-    // The press is the answer and this is the question: the eye should land on
-    // the answer and find the question underneath it.
+  it('draws them over the ones that were played', () => {
+    // An outline underneath the note that answered it is an outline nobody can
+    // see: a note played at all covers most of one, and the outline is the thing
+    // the reader is checking against. His: "чи можеш зробити ghost ноти щоб вони
+    // малювалися поверх моїх нот... бо наразі мої ноти перекривають більшість
+    // ghost нот".
     const view = drawTheRoll({
       roll: roll({ beats: grid, presses: [press({ midi: MIDI.C4 })] }),
       barLabel: () => null,
@@ -505,7 +508,7 @@ describe('the notes the music asked for', () => {
     const inGrid = [...(view.querySelector('.roll__grid')?.children ?? [])].map(
       (child) => child.className.split(' ')[0],
     );
-    expect(inGrid.indexOf('roll__ghost')).toBeLessThan(inGrid.indexOf('roll__note'));
+    expect(inGrid.indexOf('roll__ghost')).toBeGreaterThan(inGrid.indexOf('roll__note'));
   });
 
   it('places them by the clicks that happened, not by a tempo', () => {

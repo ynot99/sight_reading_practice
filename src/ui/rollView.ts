@@ -439,8 +439,12 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     }
   }
 
-  // Behind the presses, so what the reader did is what the eye lands on and the
-  // music underneath it is something to check against.
+  // Where each note the music asked for belongs, worked out once. The bands go
+  // down here and the outlines at the end, because they want opposite sides of
+  // the presses: a band is a stretch of ground and belongs under them, and an
+  // outline is a thing to read against them and was being covered by them.
+  const outlines: { readonly ghost: RollGhost; readonly from: number; readonly until: number }[] =
+    [];
   for (const ghost of ghosts) {
     // Beginning where the beat was taken and ending where the next one fell:
     // a note is over when its time is up, not when the reader arrives. Which
@@ -451,6 +455,7 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     if (from === null || until === null) {
       continue;
     }
+    outlines.push({ ghost, from, until });
     // Only where the right note was played at the wrong time. No press and the
     // outline says it alone; no note asked for and there is nothing to be off
     // from.
@@ -462,15 +467,24 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     if (slip !== null) {
       grid.append(slip);
     }
+  }
+  for (const press of roll.presses) {
+    grid.append(noteFor(press, origin, band.high, endMs));
+  }
+
+  // Over the presses, and that is the whole of what they are for: an outline
+  // underneath the note that answered it is an outline nobody can see, because
+  // a note played at all covers most of one. His: "чи можеш зробити ghost ноти
+  // щоб вони малювалися поверх моїх нот... бо наразі мої ноти перекривають
+  // більшість ghost нот". They stay out of the way of the pointer, so the press
+  // underneath keeps its own reading of how far off the beat it was.
+  for (const { ghost, from, until } of outlines) {
     const drawn = element('div', 'roll__ghost');
     drawn.style.left = atSecond(from);
     drawn.style.width = atSecond(Math.max(0, until - from));
     drawn.style.top = atRow(band.high - ghost.midi);
     drawn.title = `${midiToLabel(ghost.midi)} · asked for here`;
     grid.append(drawn);
-  }
-  for (const press of roll.presses) {
-    grid.append(noteFor(press, origin, band.high, endMs));
   }
 
   const pedal = element('div', 'roll__pedal');

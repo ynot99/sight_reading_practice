@@ -1009,6 +1009,19 @@ describe('the wait a bar line had', () => {
   });
 });
 
+describe('the notes the music asked for', () => {
+  it('lets the pointer through to the press underneath', () => {
+    // The outline is drawn over the presses, which is the only way it can be
+    // seen at all - a note played covers most of one. Over them it would also
+    // take the pointer from them, and what a finger on a note is asking is what
+    // that note was *and* how far off the beat it came. The outline can answer
+    // only the first, and no test that reads the markup could tell.
+    const ghost = rules().find((rule) => rule.selector === '.roll__ghost');
+
+    expect(ghost?.body).toContain('pointer-events: none');
+  });
+});
+
 describe('how fine the grid reads', () => {
   it('draws what falls between the beats more faintly than a beat', () => {
     // It is the thing being measured *against* rather than the thing being

@@ -720,8 +720,14 @@ textarea {
   height: var(--roll-row);
   min-width: 2px;
   border-radius: 2px;
-  border: 1px solid color-mix(in srgb, var(--text-muted) 40%, transparent);
-  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 55%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+  /*
+   * Drawn over the presses, so it must not take the pointer from them: what a
+   * finger on a note is asking is what that note was and how far off the beat
+   * it came, and the outline can only answer the first.
+   */
+  pointer-events: none;
 }
 
 /*

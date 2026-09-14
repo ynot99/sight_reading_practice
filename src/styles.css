@@ -604,7 +604,13 @@ textarea {
   right: 0;
   height: var(--roll-row);
   padding-left: 3px;
-  font-size: 9px;
+  /*
+   * Never taller than the row it names. Squeezed down the page, a nine-pixel
+   * label in a five-pixel row is three labels overlapping in the space of one,
+   * and the column stops being a keyboard and becomes a smear.
+   */
+  font-size: min(9px, calc(var(--roll-row) - 2px));
+  overflow: hidden;
   line-height: var(--roll-row);
   color: var(--text-muted);
   border-top: 1px solid color-mix(in srgb, var(--border) 40%, transparent);

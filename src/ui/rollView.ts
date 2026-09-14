@@ -281,26 +281,79 @@ export function timeFromTap(offsetPx: number, pxPerSecond: number): number | nul
 /** Closest and widest a run may be drawn, in pixels to the second. */
 export const LEAST_ZOOM = 40;
 export const MOST_ZOOM = 600;
-/** And the step the zoom moves in, which is the one its slider offers. */
-export const ZOOM_STEP = 20;
+
+/** How tall a row of pitch may be drawn, in pixels. */
+export const LEAST_ROW = 4;
+export const MOST_ROW = 40;
 
 /**
- * The zoom two fingers are asking for.
+ * A size two fingers are asking for.
  *
  * A ratio of distances rather than a distance: a pinch means "this much more of
  * it", and the same gesture has to mean the same thing whether the run is drawn
  * close or wide.
  *
- * Snapped to the step the slider moves in, so the two controls always agree
- * about where the zoom is - a slider showing a value it cannot reach is a
- * control lying about what it does.
+ * To the pixel, and no coarser. It used to be snapped to the twenty the zoom
+ * slider stepped in, on the grounds that a slider showing a value it cannot
+ * reach is a control lying about what it does - but the answer to that is to let
+ * the slider step in ones as well, not to make the gesture jump in twenty-ninths
+ * of its range. His: "чи можна pinch zoom зробити більш плавним".
  */
-export function zoomedBy(from: number, ratio: number): number {
+export function scaledBy(from: number, ratio: number, least: number, most: number): number {
   if (!Number.isFinite(ratio) || ratio <= 0) {
     return from;
   }
-  const asked = Math.round((from * ratio) / ZOOM_STEP) * ZOOM_STEP;
-  return Math.min(MOST_ZOOM, Math.max(LEAST_ZOOM, asked));
+  return Math.min(most, Math.max(least, Math.round(from * ratio)));
+}
+
+/**
+ * How far apart two fingers are, along each axis separately.
+ *
+ * Two spans rather than one distance, because they are two questions: how much
+ * of the run is on the screen, and how tall the band of pitches is drawn. A
+ * single distance can only answer one of them, and answering the width with a
+ * gesture made down the page is the sort of thing that makes a control feel
+ * unpredictable.
+ */
+export interface FingerSpan {
+  readonly acrossPx: number;
+  readonly downPx: number;
+}
+
+/** The sizes a pinch began from, which it is measured against. */
+export interface PinchedFrom extends FingerSpan {
+  readonly zoom: number;
+  readonly row: number;
+}
+
+/**
+ * How narrow a span may be and still be part of the gesture, in pixels.
+ *
+ * Below it the two fingers are level, or above one another, and the ratio along
+ * that axis is a small number divided by a small number - which is noise, and
+ * would have a pinch straight across the screen changing the height by whatever
+ * the hand wobbled.
+ */
+const PINCH_AXIS_FLOOR_PX = 24;
+
+/**
+ * What a pinch is asking for, in both directions at once.
+ *
+ * Each axis answered from its own span, so a pinch across the screen changes the
+ * width alone, one down it the height alone, and a diagonal one both - which is
+ * what a hand doing it expects, and needs no mode and no choosing between them.
+ */
+export function pinchedTo(from: PinchedFrom, now: FingerSpan): { zoom: number; row: number } {
+  return {
+    zoom:
+      from.acrossPx < PINCH_AXIS_FLOOR_PX
+        ? from.zoom
+        : scaledBy(from.zoom, now.acrossPx / from.acrossPx, LEAST_ZOOM, MOST_ZOOM),
+    row:
+      from.downPx < PINCH_AXIS_FLOOR_PX
+        ? from.row
+        : scaledBy(from.row, now.downPx / from.downPx, LEAST_ROW, MOST_ROW),
+  };
 }
 
 /** Where the head is put when the view is scrolled to it, as a fraction across. */

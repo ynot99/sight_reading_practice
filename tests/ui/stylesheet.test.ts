@@ -1009,6 +1009,18 @@ describe('the wait a bar line had', () => {
   });
 });
 
+describe('the zoom the reader can reach', () => {
+  it('lets its slider step as finely as a pinch answers', () => {
+    // Two controls for one question, so they have to be able to land on the same
+    // values. The slider used to step in twenties and the pinch was snapped to
+    // match, which made the gesture jump in twenty-ninths of its whole range
+    // under a moving hand.
+    const zoom = /<input id="roll-zoom"[^>]*>/.exec(HTML)?.[0] ?? '';
+
+    expect(zoom).toContain('step="1"');
+  });
+});
+
 describe('the notes the music asked for', () => {
   it('keeps a rim on the capsule, whatever it is filled with', () => {
     // The fill is what makes it a capsule the press sits inside rather than two

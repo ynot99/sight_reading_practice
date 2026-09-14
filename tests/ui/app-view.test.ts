@@ -1876,6 +1876,39 @@ describe('AppView', () => {
       expect(drawn?.style.getPropertyValue('--roll-at')).toBe(at);
     });
 
+    it('shortens the rows when the fingers pinch down the page', async () => {
+      // Sixty rows of pitch at thirteen pixels each is most of a tall screen
+      // before a note is drawn. There is no slider for it: the gesture is the
+      // whole of how it is asked for. His: "зробити vertical pinch щоб все
+      // зробити менше по висоті".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const body = element('roll-body');
+      const drawn = body.querySelector<HTMLElement>('.roll');
+      const finger = (type: string, pointerId: number, clientY: number): void => {
+        body.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId, clientX: 0, clientY }),
+        );
+      };
+
+      expect(drawn?.style.getPropertyValue('--roll-row')).toBe('13px');
+
+      finger('pointerdown', 1, 0);
+      finger('pointerdown', 2, 200);
+      // Half as far apart down the page, so half as tall a row.
+      finger('pointermove', 2, 100);
+
+      expect(drawn?.style.getPropertyValue('--roll-row')).toBe('7px');
+      // And the width is left alone: the fingers were never apart across.
+      expect(element<HTMLInputElement>('roll-zoom').value).toBe('140');
+    });
+
     it('takes two fingers and no more, and lets go when one lifts', async () => {
       // A third finger on the drawing is a hand resting, not a wider pinch; and
       // one finger left behind is a scroll, not half a pinch.

@@ -59,8 +59,10 @@ import {
 import {
   drawTheRoll,
   keepTheHeadInView,
+  pinchedTo,
   timeFromTap,
-  zoomedBy,
+  type FingerSpan,
+  type PinchedFrom,
   type RollGhost,
 } from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
@@ -1218,7 +1220,17 @@ export class AppView {
    * what it meant.
    */
   private readonly rollFingers = new Map<number, { readonly x: number; readonly y: number }>();
-  private pinchedFrom: { readonly gap: number; readonly zoom: number } | null = null;
+  private pinchedFrom: PinchedFrom | null = null;
+  /**
+   * How tall a row of pitch is drawn, in pixels.
+   *
+   * Here rather than on a control of its own, because a pinch down the page is
+   * the whole of how it is asked for: the width has a slider because he found
+   * the gesture first and the slider second, and the height has not been asked
+   * for anywhere but under two fingers. The stylesheet's own value is the same
+   * number, and is what is drawn until the first pinch.
+   */
+  private rollRowPx = 13;
   /**
    * Whether the gesture that is ending was a pinch.
    *
@@ -6735,7 +6747,7 @@ export class AppView {
    * hand resting, and taking a gap from whichever two arrived first would zoom
    * on a gesture nobody made.
    */
-  private theFingerGap(): number | null {
+  private theFingerSpan(): FingerSpan | null {
     if (this.rollFingers.size !== 2) {
       return null;
     }
@@ -6743,14 +6755,19 @@ export class AppView {
     if (first === undefined || second === undefined) {
       return null;
     }
-    return Math.hypot(first.x - second.x, first.y - second.y);
+    return {
+      acrossPx: Math.abs(first.x - second.x),
+      downPx: Math.abs(first.y - second.y),
+    };
   }
 
   /** Remembers where a pinch started from, or forgets there is one. */
   private beginAPinch(): void {
-    const gap = this.theFingerGap();
+    const span = this.theFingerSpan();
     this.pinchedFrom =
-      gap === null || gap <= 0 ? null : { gap, zoom: Number(this.el.rollZoom.value) };
+      span === null
+        ? null
+        : { ...span, zoom: Number(this.el.rollZoom.value), row: this.rollRowPx };
   }
 
   /**
@@ -6760,15 +6777,22 @@ export class AppView {
    * question, and two controls disagreeing about the answer is the fault this
    * interface keeps removing. His: "zoom слайдер маленький, та не дуже зручно
    * їм користуватись".
+   *
+   * And down the page as well, which has no slider: "зробити vertical pinch щоб
+   * все зробити менше по висоті". A run of a wide part is sixty rows of pitch,
+   * and at thirteen pixels each that is most of a tall screen before a note is
+   * drawn.
    */
   private pinchTheRoll(): void {
     const from = this.pinchedFrom;
-    const gap = this.theFingerGap();
-    if (from === null || gap === null) {
+    const now = this.theFingerSpan();
+    if (from === null || now === null) {
       return;
     }
     this.pinched = true;
-    this.el.rollZoom.value = String(zoomedBy(from.zoom, gap / from.gap));
+    const asked = pinchedTo(from, now);
+    this.el.rollZoom.value = String(asked.zoom);
+    this.rollRowPx = asked.row;
     this.applyTheZoom();
   }
 
@@ -6782,6 +6806,7 @@ export class AppView {
     const roll = this.el.rollBody.firstElementChild;
     if (roll instanceof HTMLElement) {
       roll.style.setProperty('--roll-second', `${this.el.rollZoom.value}px`);
+      roll.style.setProperty('--roll-row', `${this.rollRowPx}px`);
     }
   }
 

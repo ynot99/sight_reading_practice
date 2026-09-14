@@ -6,7 +6,10 @@ import {
   drawTheRoll,
   keepTheHeadInView,
   timeFromTap,
-  zoomedBy,
+  scaledBy,
+  pinchedTo,
+  LEAST_ROW,
+  MOST_ROW,
 } from '../../src/ui/rollView.js';
 import type {
   RolledBeat,
@@ -451,26 +454,57 @@ describe('reading a moment back off the grid', () => {
   });
 });
 
-describe('the zoom two fingers ask for', () => {
-  it('reads a pinch as a ratio, so the gesture means the same at any zoom', () => {
-    expect(zoomedBy(140, 2)).toBe(280);
-    expect(zoomedBy(280, 0.5)).toBe(140);
+describe('the size two fingers ask for', () => {
+  it('reads a pinch as a ratio, so the gesture means the same at any size', () => {
+    expect(scaledBy(140, 2, LEAST_ZOOM, MOST_ZOOM)).toBe(280);
+    expect(scaledBy(280, 0.5, LEAST_ZOOM, MOST_ZOOM)).toBe(140);
   });
 
-  it('snaps to the step its slider moves in', () => {
-    // A slider showing a value it cannot reach is a control lying about itself.
-    expect(zoomedBy(140, 1.07) % 20).toBe(0);
+  it('answers to the pixel, so the gesture does not move in jumps', () => {
+    // It used to snap to the twenty its slider stepped in, which is
+    // twenty-ninths of the whole range under a moving hand. The slider steps in
+    // ones now instead, so the two still agree. His: "чи можна pinch zoom
+    // зробити більш плавним".
+    expect(scaledBy(140, 1.07, LEAST_ZOOM, MOST_ZOOM)).toBe(150);
+    expect(scaledBy(140, 1.01, LEAST_ZOOM, MOST_ZOOM)).toBe(141);
   });
 
   it('will not go closer or wider than the drawing allows', () => {
-    expect(zoomedBy(140, 100)).toBe(MOST_ZOOM);
-    expect(zoomedBy(140, 0.001)).toBe(LEAST_ZOOM);
+    expect(scaledBy(140, 100, LEAST_ZOOM, MOST_ZOOM)).toBe(MOST_ZOOM);
+    expect(scaledBy(140, 0.001, LEAST_ZOOM, MOST_ZOOM)).toBe(LEAST_ZOOM);
   });
 
-  it('leaves the zoom alone when the fingers say nothing', () => {
+  it('leaves the size alone when the fingers say nothing', () => {
     // A gap of nought is two fingers in one place, which is not a pinch.
-    expect(zoomedBy(140, 0)).toBe(140);
-    expect(zoomedBy(140, Number.NaN)).toBe(140);
+    expect(scaledBy(140, 0, LEAST_ZOOM, MOST_ZOOM)).toBe(140);
+    expect(scaledBy(140, Number.NaN, LEAST_ZOOM, MOST_ZOOM)).toBe(140);
+  });
+
+  it('answers each axis from its own span', () => {
+    // A pinch across the screen is about how much of the run is on it; one down
+    // the page is about how tall the band of pitches is drawn. His: "зробити
+    // vertical pinch щоб все зробити менше по висоті".
+    const from = { acrossPx: 200, downPx: 200, zoom: 140, row: 13 };
+
+    expect(pinchedTo(from, { acrossPx: 400, downPx: 200 })).toEqual({ zoom: 280, row: 13 });
+    expect(pinchedTo(from, { acrossPx: 200, downPx: 100 })).toEqual({ zoom: 140, row: 7 });
+    expect(pinchedTo(from, { acrossPx: 400, downPx: 400 })).toEqual({ zoom: 280, row: 26 });
+  });
+
+  it('ignores an axis the fingers were never apart along', () => {
+    // Two fingers level with each other have a span down the page of a few
+    // pixels of wobble, and a ratio taken from it is noise - so a pinch straight
+    // across would squash the height by whatever the hand happened to do.
+    const from = { acrossPx: 200, downPx: 6, zoom: 140, row: 13 };
+
+    expect(pinchedTo(from, { acrossPx: 400, downPx: 18 })).toEqual({ zoom: 280, row: 13 });
+  });
+
+  it('will not squeeze a row past what can be seen', () => {
+    const from = { acrossPx: 200, downPx: 200, zoom: 140, row: 13 };
+
+    expect(pinchedTo(from, { acrossPx: 200, downPx: 4 }).row).toBe(LEAST_ROW);
+    expect(pinchedTo(from, { acrossPx: 200, downPx: 4_000 }).row).toBe(MOST_ROW);
   });
 });
 

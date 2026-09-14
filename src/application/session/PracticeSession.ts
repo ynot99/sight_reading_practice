@@ -684,13 +684,22 @@ export class PracticeSession {
   }
 
   /**
-   * Whether this run's beats are the reader's own to place.
+   * Whether the music of this run moves with the reader rather than with a pulse.
    *
-   * Asked by whoever places them, so that the one rule lives in the one place
-   * that knows how this run is being kept in time.
+   * The one question the picture of a run is drawn from, and it is a property of
+   * the *mode* alone: what the click is set to decides what is heard and nothing
+   * else. His: "краще взагалі не залежати від метроному, а залежати від flow
+   * самої гри... він має дивитись як йшла музика, та розуміти де були паузи".
+   *
+   * A pulse carries the music in Flow and, between its gates, in the frame that
+   * holds at bar lines - there its ticks are where the music got to. In a frame
+   * that waits on every note it carries nothing: it may be running because the
+   * reader asked to hear a click that counts on regardless, and the music still
+   * stands still until they play. Its ticks are then a thing to keep up with,
+   * not a record of where the music reached.
    */
-  get theReaderPlacesTheBeats(): boolean {
-    return !this.thePulseGoesOn();
+  get musicMovesWithTheReader(): boolean {
+    return !this.mode.requiresMetronome;
   }
 
   /** The step the run ends on: the passage's last, or the piece's. */
@@ -778,13 +787,13 @@ export class PracticeSession {
    * початку я натиснув старт - та гра вже почалась - то якщо я просто чекаю, то
    * весь цей час має просто замальовуватись жовтою секцією".
    *
-   * Only where there is no pulse. A count-in ends on the music's first beat and
-   * a running pulse gives it as its first tick, and either written down twice is
-   * a beat drawn as a pair - which is the machinery for a bar line given late,
-   * and would claim a wait that never happened.
+   * Only where the music moves with the reader. Where a pulse carries it, its
+   * first tick *is* the music's first beat and writing another would be a beat
+   * drawn as a pair - which is the machinery for a bar line given late, and
+   * would claim a wait that never happened.
    */
   private writeDownTheFirstBeat(atMs: number): void {
-    if (this.usesPulse()) {
+    if (!this.musicMovesWithTheReader) {
       return;
     }
     const here = beatAt(this.timeline.exercise, this.resumeAtTicks, this.options.click);
@@ -1209,14 +1218,24 @@ export class PracticeSession {
       this.anchorOnTheNextTick = false;
       this.runStartedAt = tick.scheduledTimeMs - this.elapsedTo(this.resumeAtTicks);
     }
-    // Only the ticks the run acts on. A tick from a superseded pulse would put
-    // a line on the grid where no click was heard, and the count-in's own
-    // clicks are before the music the grid is of.
-    this.roller.beat(
-      tick.scheduledTimeMs,
-      tick.isDownbeat ? 'downbeat' : tick.isPulse ? 'beat' : 'division',
-      tick.positionTicks - this.positionOffsetTicks,
-    );
+    // Only the ticks the run acts on, and only where the pulse is what carries
+    // the music. A tick from a superseded pulse would put a line on the grid
+    // where no click was heard, and the count-in's own clicks are before the
+    // music the grid is of.
+    //
+    // Where the music waits on every note the pulse carries nothing: it may be
+    // running because the reader asked for a click that counts on whatever they
+    // do, and the music stands still until they play regardless. Written down,
+    // those ticks were the machine's own grid drawn over the reader's - measured
+    // on a run taken at a third of the written speed, the notes asked for sat in
+    // the first four seconds and the notes played ran to twelve.
+    if (!this.musicMovesWithTheReader) {
+      this.roller.beat(
+        tick.scheduledTimeMs,
+        tick.isDownbeat ? 'downbeat' : tick.isPulse ? 'beat' : 'division',
+        tick.positionTicks - this.positionOffsetTicks,
+      );
+    }
     this.emitter.emit('beat', tick);
     this.mode.onBeat(this.context, tick);
     this.publishPulsePosition(tick);

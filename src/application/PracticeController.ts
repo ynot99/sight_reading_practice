@@ -2995,14 +2995,12 @@ export class PracticeController {
    */
   private clickTheBeats(step: TimelineStep, atMs: number): void {
     const exercise = this.exercise;
-    // Written wherever the beats of this run are the reader's own to place, and
-    // sounded only where they asked to hear the ones they place. Asked as one
-    // question, a reader who had turned the click off had no grid and no
-    // sections in the picture of their run at all - nothing was written, because
-    // nothing was to be heard. His, on finding it himself: "я тестував без
-    // метроному, тому і лінії не малюються у цьому випадку". The roll keeps the
-    // pulse rather than the volume, and always did say so.
-    if (this.currentSession?.theReaderPlacesTheBeats !== true || exercise === null) {
+    // Written wherever the music moves with the reader, and sounded only where
+    // they asked to hear it. Two questions, and the picture asks only the first:
+    // it follows the flow of the music and never the metronome. His: "краще
+    // взагалі не залежати від метроному, а залежати від flow самої гри... він
+    // має дивитись як йшла музика, та розуміти де були паузи."
+    if (this.currentSession?.musicMovesWithTheReader !== true || exercise === null) {
       return;
     }
     const sounded = clickFollowsTheReader(this.currentSettings.clickWhen);

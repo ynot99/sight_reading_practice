@@ -2597,17 +2597,22 @@ describe('the click in a mode that waits', () => {
     expect(metronome.clicks).toEqual([]);
   });
 
-  it('places none of its own where a pulse is counting on regardless', async () => {
-    // The other half of the same question. A reader who asks for the click to
-    // go on whatever they do is being *measured* against it rather than
-    // followed, so the pulse runs and its ticks are the run's beats. Placing
-    // beats as well would write the grid twice - once where the machine counted
-    // and once where the reader came in - which is two grids at once and is not
-    // a picture of anything.
+  it('follows the music and not the pulse, where the two have parted', async () => {
+    // A reader who asks for the click to go on whatever they do still has the
+    // music waiting for them: the pulse is a thing to keep up with, not a record
+    // of where the music reached. Written down as though it were, its ticks were
+    // the machine's own grid laid over the reader's, and the two walked apart
+    // without limit - measured on a run taken at a third of the written speed,
+    // the notes asked for sat in the first four seconds of the picture and the
+    // notes played ran to twelve.
+    //
+    // His: "краще взагалі не залежати від метроному, а залежати від flow самої
+    // гри... він має дивитись як йшла музика, та розуміти де були паузи".
     const { controller, midi, metronome, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
     controller.updateSettings({ handStaff: 2, clickWhen: 'always', countInBars: 0 });
     const session = controller.start();
+    // Four seconds of pulse, and he plays nothing for any of them.
     for (let guard = 0; guard < 4; guard += 1) {
       metronome.advanceSubdivisions(1);
       clock.advance(1_000);
@@ -2615,12 +2620,15 @@ describe('the click in a mode that waits', () => {
 
     midi.noteOn(p('C3').midi, clock.now());
 
-    const beats = session?.roll.beats ?? [];
-    expect(beats.length).toBeGreaterThan(0);
-    // Every beat at a place of its own: a second at one place is the pair a
-    // waiting frame leaves, and nothing here waits.
-    expect(new Set(beats.map((beat) => beat.positionTicks)).size).toBe(beats.length);
-    expect(session?.roll.waits).toEqual([]);
+    // The music's own beats: where it began, where he took it, and the written
+    // bar laid out from his entry. Nothing at one, two or three seconds, which
+    // is where the pulse was counting while the music stood still.
+    expect((session?.roll.beats ?? []).map((beat) => beat.atMs)).toEqual([
+      0, 4_000, 5_000, 6_000, 7_000,
+    ]);
+    // And the four seconds it stood still for, which is the thing that frame
+    // exists to show and which the pulse knows nothing about.
+    expect(theWaits(session?.roll ?? emptyRoll())).toEqual([{ fromMs: 0, untilMs: 4_000 }]);
   });
 
   it('runs the pulse for a count-in even where nothing else wants one', async () => {

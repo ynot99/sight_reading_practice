@@ -44,6 +44,7 @@ import {
   twoBarExercise,
 } from '../support/fixtures.js';
 import { measureCount } from '../../src/domain/model/Exercise.js';
+import { emptyRoll, theWaits } from '../../src/application/session/RunRoll.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry } from '../../src/domain/model/Exercise.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
@@ -1784,6 +1785,32 @@ describe('hearing the hand you are not reading', () => {
     rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
     return rig;
   }
+
+  it('leaves a frame that keeps time out of the waiting frame\u2019s machinery', async () => {
+    // His, of the work on the waiting frame's picture: "Треба зробити це
+    // separate щоб якщо ми фіксимо wait for notes режим - то це не пошкодить
+    // іншим режимам". It already is, and this is the seam that makes it so: a
+    // frame with a pulse never reaches the placing of clicks at all, so nothing
+    // there is owed from the entry before it, nothing is taken back for being
+    // overtaken, and no waiting is written down outright. The section a gated
+    // bar draws still comes from the pair of beats its gate leaves, which is
+    // where it came from before any of this.
+    const { controller, midi, metronome, clock } = await readingTheTreble();
+    controller.updateSettings({ modeId: BAR_MODE_ID, countInBars: 0 });
+    const session = controller.start();
+    metronome.advanceSubdivisions(1);
+    midi.noteOn(MIDI.C4, clock.now());
+    // To the bar line, and then seven tenths of a second of not giving it.
+    metronome.advanceToTicks(4 * Duration.QUARTER.ticks);
+    clock.advance(700);
+    midi.noteOn(MIDI.G4, clock.now());
+
+    const played = session?.roll ?? emptyRoll();
+    expect(played.waits).toEqual([]);
+    expect(played.beats.every((beat) => beat.earlyByMs === null)).toBe(true);
+    // And the gate's own pair is still there, still saying how long it waited.
+    expect(theWaits(played).length).toBeGreaterThan(0);
+  });
 
   it('holds the other hand at a bar line until the reader gives the beat', async () => {
     // His: "ліва рука на старті бару грається одразу не чекаючи на мене".

@@ -2999,17 +2999,21 @@ export class PracticeController {
       return;
     }
     const owedAtMs = this.whereTheBeatFellDue(exercise, step.onsetTicks);
-    // Kept whether or not this step lands on a beat of the chosen pattern: the
-    // distance to the next entry is written in the score either way, and a step
-    // the click has no opinion about still moved the music on.
-    this.readersLastBeat = { atMs, ticks: step.onsetTicks };
     // At the resolution the reader asked to hear. A click they place is still
     // the click they chose the pattern for, and the subdivisions they had
     // turned on were simply never offered to it.
     const pattern = this.currentSettings.clickPattern;
+    const counted = this.theGapWasCounted(exercise, step.onsetTicks, pattern);
+    // Kept whether or not this step lands on a beat of the chosen pattern: the
+    // distance to the next entry is written in the score either way, and a step
+    // the click has no opinion about still moved the music on. Written down only
+    // once both questions above have been asked of the entry before it.
+    this.readersLastBeat = { atMs, ticks: step.onsetTicks };
     const here = beatAt(exercise, step.onsetTicks, pattern);
     const earlyByMs =
-      owedAtMs !== null && owedAtMs - atMs > ONE_BREATH_MS ? owedAtMs - atMs : null;
+      owedAtMs !== null && owedAtMs - atMs > ONE_BREATH_MS && counted
+        ? owedAtMs - atMs
+        : null;
     if (earlyByMs !== null) {
       this.currentSession?.forgetClicksFrom(atMs);
     } else if (owedAtMs !== null && atMs - owedAtMs > ONE_BREATH_MS) {
@@ -3062,6 +3066,40 @@ export class PracticeController {
       return null;
     }
     return last.atMs + spanMs(exercise, last.ticks, onsetTicks);
+  }
+
+  /**
+   * Whether the machine counted any beats between the reader's last entry and
+   * this one.
+   *
+   * What makes coming in early mean anything. In a frame that waits, the reader
+   * *is* the clock: a note played sooner than the written distance is a faster
+   * pace, not a fault, and there is no tempo there to be judged against. What
+   * they can genuinely be early for is a beat the run laid out ahead of them and
+   * they went past - which is the whole of what he described: "ще можливо
+   * зіграти ноту за два та більше бітів - та це вже занадто рано - і тоді всі
+   * біти посередині теж придеться обрізати".
+   *
+   * So where nothing was counted in the gap - two entries a beat apart or less -
+   * nothing can be early, however fast they take it. Measured before the fix,
+   * reading quarters at four times the written speed turned four grid lines in
+   * nine red, the second bar's downbeat among them, and he read that as the grid
+   * having gone: "тепер лінії взагалі зникли".
+   *
+   * Being *late* is not conditional in the same way, and should not be: the
+   * music standing still is the thing that frame exists to show, and it stood
+   * still whether or not a beat was owed while it did.
+   */
+  private theGapWasCounted(
+    exercise: Exercise,
+    onsetTicks: number,
+    pattern: ClickPattern,
+  ): boolean {
+    const last = this.readersLastBeat;
+    if (last === null || last.ticks >= onsetTicks) {
+      return false;
+    }
+    return beatsBetween(exercise, last.ticks, onsetTicks, pattern).length > 0;
   }
 
   /**

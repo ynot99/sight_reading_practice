@@ -2048,7 +2048,7 @@ describe('AppView', () => {
       expect(body.querySelectorAll('.roll__slip')).toHaveLength(0);
     });
 
-    it('sections a note waited for, and reddens one hurried, in a frame that waits', async () => {
+    it('sections a note waited for, and reddens nothing a reader simply took faster', async () => {
       // The grid of a waiting run is even, and what is not even about the
       // reading goes into the picture as a section the music stood still for -
       // the same mark and the same meaning as the wait at a bar line's gate.
@@ -2090,10 +2090,14 @@ describe('AppView', () => {
       // was ready the moment the run began, which is the section that used not
       // to be in the picture because nothing had written that beat down.
       expect(waits).toContain('The music waited 5000 ms');
-      const early = [
-        ...element('roll-body').querySelectorAll<HTMLElement>('.roll__line--rushed'),
-      ].map((line) => line.title);
-      expect(early).toEqual(['Taken 600 ms early']);
+      // And nothing red, though he took the third note six tenths of a second
+      // sooner than the written distance. In a frame that waits the reader is
+      // the clock: a faster pace is not a fault, and there is no tempo there to
+      // be judged against. Coming in early means going past a beat the run had
+      // counted out, and between two entries a beat apart it counts none. Left
+      // as it was, reading quarters at speed turned every line red, which he
+      // read as the grid having gone: "тепер лінії взагалі зникли".
+      expect(element('roll-body').querySelectorAll('.roll__line--rushed')).toHaveLength(0);
 
       // And the notes asked for keep their written lengths, whatever the reader
       // did about arriving at them: a quarter here is a second, a half is two.

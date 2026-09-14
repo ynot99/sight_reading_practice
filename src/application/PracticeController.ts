@@ -2995,9 +2995,17 @@ export class PracticeController {
    */
   private clickTheBeats(step: TimelineStep, atMs: number): void {
     const exercise = this.exercise;
-    if (!clickFollowsTheReader(this.currentSettings.clickWhen) || exercise === null) {
+    // Written wherever the beats of this run are the reader's own to place, and
+    // sounded only where they asked to hear the ones they place. Asked as one
+    // question, a reader who had turned the click off had no grid and no
+    // sections in the picture of their run at all - nothing was written, because
+    // nothing was to be heard. His, on finding it himself: "я тестував без
+    // метроному, тому і лінії не малюються у цьому випадку". The roll keeps the
+    // pulse rather than the volume, and always did say so.
+    if (this.currentSession?.theReaderPlacesTheBeats !== true || exercise === null) {
       return;
     }
+    const sounded = clickFollowsTheReader(this.currentSettings.clickWhen);
     const owedAtMs = this.whereTheBeatFellDue(exercise, step.onsetTicks);
     // At the resolution the reader asked to hear. A click they place is still
     // the click they chose the pattern for, and the subdivisions they had
@@ -3035,14 +3043,17 @@ export class PracticeController {
     // is one beat, and clicking it again is the machine agreeing with itself.
     if (
       here !== null &&
-      this.currentSession?.writeDownAClick(atMs, here.weight, step.onsetTicks, earlyByMs) !== false
+      this.currentSession?.writeDownAClick(atMs, here.weight, step.onsetTicks, earlyByMs) !== false &&
+      sounded
     ) {
       this.deps.metronome.click(atMs, here.weight);
     }
     const until = this.nextOwedTicks(step.index);
     for (const beat of beatsBetween(exercise, step.onsetTicks, until, pattern)) {
       const at = atMs + spanMs(exercise, step.onsetTicks, beat.ticks);
-      this.deps.metronome.click(at, beat.weight);
+      if (sounded) {
+        this.deps.metronome.click(at, beat.weight);
+      }
       this.currentSession?.writeDownAClick(at, beat.weight, beat.ticks);
     }
   }

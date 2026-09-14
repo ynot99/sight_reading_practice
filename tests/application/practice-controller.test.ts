@@ -2554,6 +2554,87 @@ describe('the click in a mode that waits', () => {
     expect(presses[0]?.verdict).toBe('correct');
   });
 
+  it('writes its beats down even where the reader hears none', async () => {
+    // Two questions, and they had been asked as one: the beats of a waiting run
+    // were written only where the reader had asked to hear them, so practising
+    // without a click left the picture of the run with no grid and no sections
+    // at all. His, on finding it himself: "я тестував без метроному, тому і
+    // лінії не малюються у цьому випадку". The roll keeps the pulse rather than
+    // the volume, and always said so.
+    const { controller, midi, metronome, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'never' });
+    const session = controller.start();
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+    // A written bar is four seconds here, so the second bar fell due at nine.
+    clock.set(10_000);
+    midi.noteOn(p('G2').midi, clock.now());
+    midi.noteOn(p('D3').midi, clock.now());
+
+    expect((session?.roll.beats ?? []).map((beat) => beat.atMs)).toEqual([
+      0,
+      5_000,
+      6_000,
+      7_000,
+      8_000,
+      9_000,
+      10_000,
+      11_000,
+      12_000,
+      13_000,
+    ]);
+    // The second bar fell due at nine and he took it at ten, and the picture
+    // says so - with no click having sounded at any point.
+    expect(theWaits(session?.roll ?? emptyRoll())).toEqual([
+      // The five seconds he took to reach the first note at all,
+      { fromMs: 0, untilMs: 5_000 },
+      // and the second bar, which fell due at nine and which he took at ten.
+      { fromMs: 9_000, untilMs: 10_000 },
+    ]);
+    expect(metronome.clicks).toEqual([]);
+  });
+
+  it('places none of its own where a pulse is counting on regardless', async () => {
+    // The other half of the same question. A reader who asks for the click to
+    // go on whatever they do is being *measured* against it rather than
+    // followed, so the pulse runs and its ticks are the run's beats. Placing
+    // beats as well would write the grid twice - once where the machine counted
+    // and once where the reader came in - which is two grids at once and is not
+    // a picture of anything.
+    const { controller, midi, metronome, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'always', countInBars: 0 });
+    const session = controller.start();
+    for (let guard = 0; guard < 4; guard += 1) {
+      metronome.advanceSubdivisions(1);
+      clock.advance(1_000);
+    }
+
+    midi.noteOn(p('C3').midi, clock.now());
+
+    const beats = session?.roll.beats ?? [];
+    expect(beats.length).toBeGreaterThan(0);
+    // Every beat at a place of its own: a second at one place is the pair a
+    // waiting frame leaves, and nothing here waits.
+    expect(new Set(beats.map((beat) => beat.positionTicks)).size).toBe(beats.length);
+    expect(session?.roll.waits).toEqual([]);
+  });
+
+  it('runs the pulse for a count-in even where nothing else wants one', async () => {
+    // The count-in is the one reason a pulse ever runs for a while and then has
+    // no further part to play, and it is the reason it is asked for separately
+    // from whether the pulse has anything to do afterwards.
+    const { controller, metronome } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', countInBars: 1 });
+
+    controller.start();
+
+    expect(metronome.isRunning).toBe(true);
+  });
+
   it('writes the beats it places into the picture of the run', async () => {
     // A frame that waits runs no pulse, so nothing announces its beats - and the
     // drawing of such a run had no grid at all. His: "у wait for notes все ще не

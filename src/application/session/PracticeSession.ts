@@ -655,15 +655,42 @@ export class PracticeSession {
   }
 
   private usesPulse(): boolean {
+    return this.thePulseGoesOn() || this.options.countInBars > 0;
+  }
+
+  /**
+   * Whether the pulse has anything to do once the music itself has begun.
+   *
+   * The same question as {@link usesPulse} with the count-in taken out of it,
+   * and the count-in is the one reason a pulse ever runs for a while and then
+   * has no further part to play. What is left is the two reasons it has a part:
+   * a mode whose loop rides on it, and a click the reader asked to go on
+   * sounding whatever they do - which is a click they are measured against
+   * rather than one that follows them.
+   *
+   * Where it is false the beats of the run are the reader's own, placed where
+   * they play. Which is what decides whether they are written down, and is a
+   * different question from whether they are heard.
+   */
+  private thePulseGoesOn(): boolean {
     return (
       this.mode.requiresMetronome ||
-      this.options.countInBars > 0 ||
       // A click the reader places needs no pulse to place it - and starting
       // one would be the very thing they asked to be rid of, a machine
       // counting on through music that is waiting for them.
       (!clickIsSilent(this.options.clickWhen) &&
         !clickFollowsTheReader(this.options.clickWhen))
     );
+  }
+
+  /**
+   * Whether this run's beats are the reader's own to place.
+   *
+   * Asked by whoever places them, so that the one rule lives in the one place
+   * that knows how this run is being kept in time.
+   */
+  get theReaderPlacesTheBeats(): boolean {
+    return !this.thePulseGoesOn();
   }
 
   /** The step the run ends on: the passage's last, or the piece's. */

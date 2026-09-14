@@ -731,10 +731,19 @@ export function momentOfTicks(
  * so outright where the reader's entry falls between the clicks. Merged here
  * rather than drawn from two places, so a section means one thing wherever it
  * appears.
+ *
+ * Every tick of them, and not the ones worth *drawing*. A beat too fine to be
+ * given a line of its own is still a beat the reader came in on, and the music
+ * stood still for it exactly as it does at a bar line. Read off the drawn ones,
+ * a run clicking the divisions had a section on its downbeats and its beats and
+ * none at all on anything between them - four of six entries, every one of them
+ * the same distance late. His: "зі слабкими бітами я не дуже
+ * розумію... все одно не бачу жовтих секцій для кожної ноти де я трішечки
+ * тормозив".
  */
 export function theWaits(roll: RunRoll): readonly RolledWait[] {
   const found: RolledWait[] = [...roll.waits];
-  for (const beat of beatsWorthMarking(roll)) {
+  for (const beat of beatsWorthMarking(roll, true)) {
     if (beat.lateByMs !== null) {
       found.push({ fromMs: beat.atMs - beat.lateByMs, untilMs: beat.atMs });
     }

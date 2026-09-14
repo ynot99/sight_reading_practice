@@ -38,6 +38,7 @@ import {
   MIDI,
   bar,
   beamedSixteenths,
+  compoundBarExercise,
   longExercise,
   p,
   tiedExercise,
@@ -2673,6 +2674,44 @@ describe('the click in a mode that waits', () => {
     expect([...moments].sort((left, right) => left - right)).toEqual(moments);
     const places = beats.map((beat) => beat.positionTicks);
     expect([...places].sort((left, right) => left - right)).toEqual(places);
+  });
+
+  it('sections every note that waited, however fine the beat it fell on', async () => {
+    // A section was read off the beats worth *drawing*, and the divisions are
+    // filtered out of those so that a grid clicking them is not a grey wash. But
+    // a beat too fine to be given a line of its own is still a beat he came in
+    // on, and the music stood still for it just the same. Clicking the divisions
+    // of compound time, four of his six entries were the same distance late and
+    // had nothing at all to show for it. His: "не може
+    // бути щоб на кожну ноту я ідеально влучав прямо завжди".
+    const { controller, midi, clock } = createController(true);
+    await controller.openScore(compoundBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({
+      handStaff: 1,
+      clickWhen: 'with-me',
+      countInBars: 0,
+      clickPattern: 'division',
+    });
+    const session = controller.start();
+
+    // Six eighths. A written eighth is half a second here, and he takes one and
+    // three tenths over each - eight hundred milliseconds of standing still.
+    let at = 0;
+    for (let guard = 0; guard < 8 && session?.status === 'running'; guard += 1) {
+      at += 1_300;
+      clock.set(at);
+      for (const note of session?.currentStep?.expectedMidi ?? []) {
+        midi.noteOn(note, clock.now());
+      }
+    }
+
+    const waited = theWaits(session?.roll ?? emptyRoll());
+    expect(waited).toHaveLength(6);
+    // The first is the wait before he came in at all; every one after it is a
+    // note of the music standing still for the same three tenths of a second.
+    expect(waited.slice(1).map((wait) => wait.untilMs - wait.fromMs)).toEqual([
+      800, 800, 800, 800, 800,
+    ]);
   });
 
   it('writes the beats it places into the picture of the run', async () => {

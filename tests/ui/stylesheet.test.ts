@@ -1010,6 +1010,19 @@ describe('the wait a bar line had', () => {
 });
 
 describe('the notes the music asked for', () => {
+  it('carries the outline on its edge rather than on its fill', () => {
+    // It is drawn over the presses, so a fill strong enough to find the outline
+    // by would take the colour off the note underneath - and that note's colour
+    // is the other half of what is being read. The edge does the delineating and
+    // the fill only says which side of it is inside.
+    const body = rules().find((rule) => rule.selector === '.roll__ghost')?.body ?? '';
+    const edge = Number(/border:[^;]*--text-muted\) (\d+)%/.exec(body)?.[1] ?? '0');
+    const fill = Number(/background:[^;]*--text-muted\) (\d+)%/.exec(body)?.[1] ?? '0');
+
+    expect(fill).toBeGreaterThan(0);
+    expect(edge).toBeGreaterThan(fill * 2);
+  });
+
   it('lets the pointer through to the press underneath', () => {
     // The outline is drawn over the presses, which is the only way it can be
     // seen at all - a note played covers most of one. Over them it would also

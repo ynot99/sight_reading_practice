@@ -4,6 +4,7 @@ import {
   beatsWorthMarking,
   momentOfTicks,
   theGrid,
+  theWaits,
   theBeatNearest,
   theMusicsBeats,
   clicksBefore,
@@ -71,8 +72,38 @@ function pressOf(midi: number, downAtMs: number, upAtMs: number | null): RolledP
 }
 
 function roll(over: Partial<RunRoll> = {}): RunRoll {
-  return { presses: [], beats: [], pedal: [], truncated: false, ...over };
+  return { presses: [], beats: [], pedal: [], waits: [], truncated: false, ...over };
 }
+
+describe('the stretches the music stood still in', () => {
+  it('takes the pair a bar line leaves and the waiting written down outright', () => {
+    // Two things know about waiting and they never know about the same stretch:
+    // a gate at a bar line leaves two beats at one place, and a frame that waits
+    // on every note says so outright where the reader came in between clicks.
+    // One answer, so a section means one thing wherever it is drawn.
+    const roller = new RollRecorder();
+    roller.beat(0, 'downbeat', 0);
+    roller.beat(500, 'downbeat', 0);
+    roller.waited(2_000, 2_400);
+
+    expect(theWaits(roller.roll())).toEqual([
+      { fromMs: 0, untilMs: 500 },
+      { fromMs: 2_000, untilMs: 2_400 },
+    ]);
+  });
+
+  it('refuses a wait that says nothing', () => {
+    // A stretch of no length is not the music standing still, and one that runs
+    // backwards is an arithmetic that went wrong somewhere else. Neither is
+    // worth a section a reader has to work out the meaning of.
+    const roller = new RollRecorder();
+    roller.waited(1_000, 1_000);
+    roller.waited(1_000, 1_002);
+    roller.waited(1_000, 900);
+
+    expect(theWaits(roller.roll())).toEqual([]);
+  });
+});
 
 describe('taking back the beats the reader overtook', () => {
   it('keeps the moment itself and forgets what came after it', () => {
@@ -224,10 +255,17 @@ describe('writing a run down', () => {
     const roller = new RollRecorder();
     roller.keyDown(down(MIDI.C4, 100));
     roller.beat(0, 'downbeat', 0);
+    roller.waited(100, 900);
     roller.pedal(pedal(true, 50));
     roller.reset();
 
-    expect(roller.roll()).toEqual({ presses: [], beats: [], pedal: [], truncated: false });
+    expect(roller.roll()).toEqual({
+      presses: [],
+      beats: [],
+      pedal: [],
+      waits: [],
+      truncated: false,
+    });
   });
 
   it('says so where it stopped taking things down', () => {

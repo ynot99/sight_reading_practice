@@ -107,7 +107,7 @@ import {
   middle,
   spreadAround,
 } from '../../src/ui/AppView.js';
-import { longExercise, p, twoBarExercise } from '../support/fixtures.js';
+import { beamedSixteenths, longExercise, p, twoBarExercise } from '../support/fixtures.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -2004,6 +2004,50 @@ describe('AppView', () => {
       expect(element('roll-body').querySelectorAll('.roll__ghost')).toHaveLength(0);
     });
 
+    it('sections every slowdown, including the ones between the clicks', async () => {
+      // The fault he found in the first attempt at this. A waiting run's beats
+      // are the clicks he asked for, so an entry that falls between two of them
+      // has no beat to be recorded twice - and with the section drawn off that
+      // pair, three entries in four on sixteenths had no section and got a band
+      // on the note's own row instead, one row tall and in the wait's own
+      // yellow. His: "чому ти до сих пір малюєш жовті ноти замість жовтих
+      // секцій".
+      const { view, runtime, midi, clock } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(beamedSixteenths({ tempoBpm: 60 }));
+      runtime.controller.updateSettings({
+        modeId: new WaitMode().id,
+        clickWhen: 'with-me',
+        countInBars: 0,
+        repeatRange: false,
+      });
+      element<HTMLButtonElement>('focus-play').click();
+
+      // A written sixteenth is a quarter of a second here. He takes seven
+      // tenths over every one of them, so each is four hundred and fifty
+      // milliseconds of the music standing still.
+      let at = 1_000;
+      for (let guard = 0; guard < 20 && runtime.controller.session?.status === 'running'; guard += 1) {
+        at += 700;
+        clock.set(at);
+        for (const note of runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+          midi.noteOn(note, clock.now());
+        }
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const body = element('roll-body');
+      const said = [...body.querySelectorAll<HTMLElement>('.roll__wait')].map(
+        (band) => band.title,
+      );
+      // One for every entry, and not one for every fourth: the click marks the
+      // beat, and he was reading sixteenths.
+      expect(said.filter((title) => title === 'The music waited 450 ms').length).toBeGreaterThan(3);
+      // And nothing on a note's own row, which is the mark he never asked for.
+      expect(body.querySelectorAll('.roll__slip')).toHaveLength(0);
+    });
+
     it('sections a note waited for, and reddens one hurried, in a frame that waits', async () => {
       // The grid of a waiting run is even, and what is not even about the
       // reading goes into the picture as a section the music stood still for -
@@ -2063,11 +2107,15 @@ describe('AppView', () => {
       );
     });
 
-    it('bands a chord that went down in pieces, in a frame that waits', async () => {
-      // The beat of a waiting frame is placed where the chord was *finished*, so
-      // a note struck a hundred and fifty milliseconds before the rest of it is
-      // that far ahead of the beat it belongs to. Which is the picture of a
-      // chord that went down in pieces, and the reason to look at one at all.
+    it('gives a note no band of its own in a frame that waits', async () => {
+      // The band says how far off the beat one note came, which is the only
+      // mark there is for it under a pulse. Where the music waits, that same gap
+      // is the music standing still and is drawn full height as a section - and
+      // a band as well is the gap drawn twice, the second time as one row of
+      // yellow on the note's own line. Which is a yellow note, and is what he
+      // was still seeing: "чому ти до сих пір малюєш жовті ноти замість жовтих
+      // секцій". A chord that went down in pieces still shows as one: the
+      // presses are drawn where they were struck, and their edges are staggered.
       const { view, runtime, midi, clock } = createRig();
       await view.initialize();
       await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
@@ -2099,11 +2147,14 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
-      const bands = [...element('roll-body').querySelectorAll('.roll__slip')];
       expect(element('roll-body').querySelectorAll('.roll__ghost').length).toBeGreaterThan(0);
-      expect(bands).toHaveLength(1);
-      expect(bands[0]?.className).toBe('roll__slip roll__slip--rushed');
-      expect(bands[0]?.getAttribute('title')).toBe('Rushed by 150 ms');
+      expect(element('roll-body').querySelectorAll('.roll__slip')).toHaveLength(0);
+      // And the chord is still legibly in pieces: two notes, struck a hundred
+      // and fifty milliseconds apart, drawn where they were struck.
+      const struck = [...element('roll-body').querySelectorAll<HTMLElement>('.roll__note')]
+        .map((note) => note.style.left)
+        .slice(0, 2);
+      expect(struck[0]).not.toBe(struck[1]);
     });
 
     it('bands every note of a run played behind the beat', async () => {

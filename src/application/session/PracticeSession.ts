@@ -247,6 +247,17 @@ export class PracticeSession {
   }
 
   /**
+   * Writes down a stretch the music stood still in; see
+   * {@link RollRecorder.waited}.
+   */
+  writeDownAWait(fromMs: number, untilMs: number): void {
+    if (this.status !== 'running') {
+      return;
+    }
+    this.roller.waited(fromMs, untilMs);
+  }
+
+  /**
    * Takes back the clicks from a moment onwards; see
    * {@link RollRecorder.forgetBeatsFrom}.
    */

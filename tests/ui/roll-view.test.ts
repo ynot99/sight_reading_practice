@@ -40,7 +40,7 @@ function press(over: Partial<RolledPress> = {}): RolledPress {
 }
 
 function roll(over: Partial<RunRoll> = {}): RunRoll {
-  return { presses: [], beats: [], pedal: [], truncated: false, ...over };
+  return { presses: [], beats: [], pedal: [], waits: [], truncated: false, ...over };
 }
 
 /**

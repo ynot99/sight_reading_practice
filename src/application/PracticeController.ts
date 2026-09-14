@@ -3012,11 +3012,19 @@ export class PracticeController {
       owedAtMs !== null && owedAtMs - atMs > ONE_BREATH_MS ? owedAtMs - atMs : null;
     if (earlyByMs !== null) {
       this.currentSession?.forgetClicksFrom(atMs);
-    } else if (here !== null && owedAtMs !== null && atMs - owedAtMs > ONE_BREATH_MS) {
-      // The beat the music had ready while it waited for him. Written and not
-      // sounded, and written before his own so the two are in the order they
-      // happened - which is how the pair is read.
-      this.currentSession?.writeDownAClick(owedAtMs, here.weight, step.onsetTicks);
+    } else if (owedAtMs !== null && atMs - owedAtMs > ONE_BREATH_MS) {
+      if (here === null) {
+        // No beat here to be recorded twice: he came in between the clicks he
+        // asked for, which on sixteenths with the click on the beat is three
+        // entries in four. The waiting is written outright instead, because it
+        // happened whether or not the grid has a line to say so.
+        this.currentSession?.writeDownAWait(owedAtMs, atMs);
+      } else {
+        // The beat the music had ready while it waited for him. Written and not
+        // sounded, and written before his own so the two are in the order they
+        // happened - which is how the pair is read.
+        this.currentSession?.writeDownAClick(owedAtMs, here.weight, step.onsetTicks);
+      }
     }
     // Written down first, and sounded only if it was taken: a beat the run has
     // already had - the tick that ended a count-in is the music's first beat -

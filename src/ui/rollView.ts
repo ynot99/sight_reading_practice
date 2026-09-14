@@ -4,10 +4,11 @@ import {
   rollBeganAtMs,
   rollEndedAtMs,
   theGrid,
+  theWaits,
   type GridChoice,
   type GridLine,
-  type MarkedBeat,
   type RolledPress,
+  type RolledWait,
   type RunRoll,
 } from '../application/session/RunRoll.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
@@ -48,6 +49,21 @@ export interface RollDrawing {
    * "щоб легше проаналізувати де я полінився, та натиснув ноти не разом".
    */
   readonly slips?: boolean;
+  /**
+   * Whether a machine kept the time of this run.
+   *
+   * It decides one thing: whether a note is given a band of its own saying how
+   * far off the beat it came. Under a pulse that is the only mark there is for
+   * it, and it belongs on that note's row because being late there holds
+   * nothing up - the music went on without them.
+   *
+   * Where the music *waits*, the same gap is the music standing still, and it
+   * is drawn full height as a section. Drawn both ways it was drawn twice, and
+   * the band - one row tall, in the wait's own yellow - is a yellow note, which
+   * is exactly what he was still seeing after the sections went in: "чому ти до
+   * сих пір малюєш жовті ноти замість жовтих секцій".
+   */
+  readonly keepsTime?: boolean;
 }
 
 /** One note the music asked for, in the music's own time. */
@@ -191,7 +207,7 @@ function lineFor(beat: GridLine, origin: number): HTMLElement {
 }
 
 /**
- * The stretch the music waited, from where a beat fell due to where it was given.
+ * The stretch the music waited, from where it fell due to where it was given.
  *
  * The band rather than its edge, which is his: "не просто жовту лінію, а всю
  * секцію малювати жовтим фоном". A line says *that* he was late and the band
@@ -205,14 +221,12 @@ function lineFor(beat: GridLine, origin: number): HTMLElement {
  *
  * `null` for a beat that fell where it was meant to, which is most of them.
  */
-function waitFor(beat: MarkedBeat, origin: number): HTMLElement | null {
-  if (beat.lateByMs === null) {
-    return null;
-  }
+function waitFor(wait: RolledWait, origin: number): HTMLElement {
+  const held = wait.untilMs - wait.fromMs;
   const band = element('div', 'roll__wait');
-  band.style.left = atSecond(beat.atMs - beat.lateByMs - origin);
-  band.style.width = atSecond(beat.lateByMs);
-  band.title = `The music waited ${Math.round(beat.lateByMs)} ms`;
+  band.style.left = atSecond(wait.fromMs - origin);
+  band.style.width = atSecond(held);
+  band.title = `The music waited ${Math.round(held)} ms`;
   return band;
 }
 
@@ -398,11 +412,8 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // showing through, so a band beneath one is seen through it. Which is what he
   // asked for - "на чорні ноти також буде темне жовтий колір" - and it falls out
   // of the order rather than needing a second colour to keep in step.
-  for (const beat of beatsWorthMarking(roll)) {
-    const waited = waitFor(beat, origin);
-    if (waited !== null) {
-      grid.append(waited);
-    }
+  for (const wait of theWaits(roll)) {
+    grid.append(waitFor(wait, origin));
   }
   for (let midi = band.high; midi >= band.low; midi -= 1) {
     if (!isBlack(midi)) {
@@ -445,7 +456,7 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     // from.
     const press = answered.get(`${ghost.stepIndex}:${ghost.midi}`);
     const slip =
-      press === undefined || drawing.slips === false
+      press === undefined || drawing.slips === false || drawing.keepsTime === false
         ? null
         : slipBetween(from, press.downAtMs - origin, band.high - ghost.midi);
     if (slip !== null) {

@@ -6430,10 +6430,24 @@ export class AppView {
         grid: this.theRollsGrid(),
         ghosts: this.theNotesAskedFor(),
         slips: this.el.rollSlips.checked,
+        keepsTime: this.theRunKeptTime(),
       }),
     );
     this.applyTheZoom();
     this.describeTheRoll();
+  }
+
+  /**
+   * Whether a machine kept the time of the run being drawn.
+   *
+   * A property of the frame it was played in rather than of anything the reader
+   * chose, and read off the report rather than off the current setting, because
+   * the setting may have moved since the run. Unknown counts as keeping time:
+   * that is what every mode but one does.
+   */
+  private theRunKeptTime(): boolean {
+    const frame = this.runtime.controller.lastReport?.modeId;
+    return frame === undefined || this.runtime.modes.get(frame).requiresMetronome;
   }
 
   /**

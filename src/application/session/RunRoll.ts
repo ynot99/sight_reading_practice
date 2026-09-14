@@ -90,6 +90,22 @@ export interface MarkedBeat extends RolledBeat {
   readonly lateByMs: number | null;
 }
 
+/**
+ * A stretch the music stood still in, waiting for the reader.
+ *
+ * Its own record rather than something read off the beats, because it is its
+ * own thing: a bar line's gate leaves two beats at one place and the gap
+ * between them *is* the wait, but a frame that waits on every note has nothing
+ * of the sort where the reader's entry falls between the clicks they chose. On
+ * sixteenths with the click on the beat that is three entries in four, and the
+ * picture had a section for one of them and a one-row band for the rest - which
+ * is what he was looking at when he asked why there were still yellow notes.
+ */
+export interface RolledWait {
+  readonly fromMs: number;
+  readonly untilMs: number;
+}
+
 /** The sustain pedal down and up again. */
 export interface RolledPedal {
   readonly downAtMs: number;
@@ -111,6 +127,13 @@ export interface RunRoll {
   readonly presses: readonly RolledPress[];
   readonly beats: readonly RolledBeat[];
   readonly pedal: readonly RolledPedal[];
+  /**
+   * The stretches the music stood still in, where nothing else says so.
+   *
+   * Only the ones no pair of beats carries; ask {@link theWaits} for all of
+   * them, which is the one place that answers the question.
+   */
+  readonly waits: readonly RolledWait[];
   /**
    * Whether anything was left out for want of room.
    *
@@ -189,7 +212,7 @@ const PRESS_CAPACITY = 20_000;
 /** And clicks, which at the finest resolution outnumber the presses. */
 const BEAT_CAPACITY = 60_000;
 
-const EMPTY: RunRoll = { presses: [], beats: [], pedal: [], truncated: false };
+const EMPTY: RunRoll = { presses: [], beats: [], pedal: [], waits: [], truncated: false };
 
 /** A press whose verdict has not arrived yet, and where it sits. */
 interface Open {
@@ -209,6 +232,7 @@ export class RollRecorder {
   private presses: RolledPress[] = [];
   private beats: RolledBeat[] = [];
   private pedalSpans: RolledPedal[] = [];
+  private waits: RolledWait[] = [];
   /** Keys still down, oldest first, by the press each one belongs to. */
   private readonly held: Open[] = [];
   /** Presses still waiting for a verdict, oldest first. */
@@ -236,6 +260,7 @@ export class RollRecorder {
     this.presses = [];
     this.beats = [];
     this.pedalSpans = [];
+    this.waits = [];
     this.held.length = 0;
     this.unjudged.length = 0;
     this.pedalDownAt = null;
@@ -342,6 +367,20 @@ export class RollRecorder {
   }
 
   /**
+   * Writes down a stretch the music stood still in.
+   *
+   * For the waiting that no pair of beats can carry: the reader came in between
+   * two clicks, so there is no beat at that place to be recorded twice. Refused
+   * where it says nothing - a wait of no length, or one that runs backwards.
+   */
+  waited(fromMs: number, untilMs: number): void {
+    if (untilMs - fromMs <= ONE_BREATH_MS || this.waits.length >= BEAT_CAPACITY) {
+      return;
+    }
+    this.waits.push({ fromMs, untilMs });
+  }
+
+  /**
    * Takes back the beats from a moment onwards, they having been overtaken.
    *
    * A frame that waits lays the beats between two entries out ahead of the
@@ -375,6 +414,7 @@ export class RollRecorder {
       presses: [...this.presses],
       beats: [...this.beats],
       pedal: [...pedal],
+      waits: [...this.waits],
       truncated: this.full,
     };
   }
@@ -680,6 +720,26 @@ export function momentOfTicks(
   const atFrom = taken.get(from) ?? 0;
   const atTo = fell.get(to) ?? 0;
   return atFrom + ((positionTicks - from) * (atTo - atFrom)) / (to - from);
+}
+
+/**
+ * Every stretch the music stood still in, however it came to be known.
+ *
+ * One answer to one question, asked by the drawing for its sections. Two things
+ * know about waiting and they never know about the same stretch: a gate at a bar
+ * line leaves two beats at one place, and a frame that waits on every note says
+ * so outright where the reader's entry falls between the clicks. Merged here
+ * rather than drawn from two places, so a section means one thing wherever it
+ * appears.
+ */
+export function theWaits(roll: RunRoll): readonly RolledWait[] {
+  const found: RolledWait[] = [...roll.waits];
+  for (const beat of beatsWorthMarking(roll)) {
+    if (beat.lateByMs !== null) {
+      found.push({ fromMs: beat.atMs - beat.lateByMs, untilMs: beat.atMs });
+    }
+  }
+  return found.sort((left, right) => left.fromMs - right.fromMs);
 }
 
 /**

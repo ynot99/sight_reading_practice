@@ -223,38 +223,32 @@ export class PracticeSession {
    * of such a run has no grid at all, which is what he found: "у wait for notes
    * все ще не малюється смужок".
    */
-  writeDownAClick(
-    atMs: number,
-    weight: BeatWeight,
-    positionTicks: number,
-    earlyByMs: number | null = null,
-  ): boolean {
+  writeDownAClick(atMs: number, weight: BeatWeight, positionTicks: number): boolean {
     if (this.status !== 'running') {
       return false;
     }
-    // Refused where this beat is already down. A frame that waits runs a pulse
-    // for its count-in, and the tick that ends the count *is* the first beat of
-    // the music - which the reader's own entry then places a second time, at the
-    // same instant. Heard, that was the metronome clicking twice; drawn, it was a
-    // bar line the reader had given nought milliseconds late, complete with an
-    // empty band to show the waiting. His: "є якісь подвійні смужки які і два
-    // рази грають метроном".
+    // Refused where this beat is already down. The music's first beat is written
+    // where a waiting run begins, and the reader's own entry places that same
+    // beat again the moment they play it. Heard, that was the metronome clicking
+    // twice; drawn, it was a bar line given nought milliseconds late, complete
+    // with an empty section to show the waiting. His: "є якісь подвійні смужки
+    // які і два рази грають метроном".
     if (this.roller.hasBeatAt(positionTicks, atMs)) {
       return false;
     }
-    this.roller.beat(atMs, weight, positionTicks, earlyByMs);
+    this.roller.beat(atMs, weight, positionTicks);
     return true;
   }
 
   /**
-   * Writes down a stretch the music stood still in; see
-   * {@link RollRecorder.waited}.
+   * Writes down the reader arriving before the music did; see
+   * {@link RollRecorder.rushed}.
    */
-  writeDownAWait(fromMs: number, untilMs: number): void {
+  writeDownARush(atMs: number, byMs: number): void {
     if (this.status !== 'running') {
       return;
     }
-    this.roller.waited(fromMs, untilMs);
+    this.roller.rushed(atMs, byMs);
   }
 
   /**
@@ -796,11 +790,11 @@ export class PracticeSession {
     if (!this.musicMovesWithTheReader) {
       return;
     }
+    // A beat of the music whatever the click has to say about it: a run that
+    // begins between the clicks the reader chose still begins somewhere, and
+    // without it there is nothing for their first entry to be measured against.
     const here = beatAt(this.timeline.exercise, this.resumeAtTicks, this.options.click);
-    if (here === null) {
-      return;
-    }
-    this.roller.beat(atMs, here.weight, this.resumeAtTicks);
+    this.roller.beat(atMs, here?.weight ?? 'division', this.resumeAtTicks);
   }
 
   /**

@@ -264,6 +264,54 @@ export function singleBarExercise(overrides: ExerciseOverrides = {}): Exercise {
   };
 }
 
+/**
+ * One bar of 4/4 whose third entry falls between the beats, after a long note.
+ *
+ *   C4 (half) | rest (eighth) D4 (eighth) E4 (quarter)
+ *
+ * Exists for the one shape the other fixtures cannot make: an entry the click
+ * has no beat at, with beats of its own counted between it and the entry before
+ * it. Uniform material cannot - two consecutive notes finer than the beat have
+ * nothing between them, and two on the beat are both on it - so nothing else
+ * here can ask what happens to a reader who arrives early *between* the clicks.
+ */
+export function offBeatAfterALongNote(overrides: ExerciseOverrides = {}): Exercise {
+  return {
+    id: overrides.id ?? 'fixture-off-beat',
+    title: overrides.title ?? 'Off-beat fixture',
+    key: overrides.key ?? KeySignature.major(0),
+    keyChanges: [],
+    timeChanges: [],
+    tempoChanges: [],
+    pedalMarks: [],
+    dynamicMarks: [],
+    tempoWords: [],
+    hairpins: [],
+    octaveShifts: [],
+    timeSignature: overrides.timeSignature ?? new TimeSignature(4, 4),
+    tempoBpm: overrides.tempoBpm ?? 60,
+    firstBarNumber: 1,
+    barLabels: [],
+    metadata: { generatorId: 'fixture', seed: 3 },
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        clefChanges: [],
+        measures: [
+          bar(
+            noteEntry(p('C4'), Duration.HALF),
+            restEntry(Duration.EIGHTH),
+            noteEntry(p('D4'), Duration.EIGHTH),
+            noteEntry(p('E4'), Duration.QUARTER),
+          ),
+        ],
+      },
+    ],
+  };
+}
+
 /** MIDI numbers of the fixture pitches, for readable expectations. */
 /**
  * One bar of 6/8: two dotted-quarter beats, each filled with three eighths.

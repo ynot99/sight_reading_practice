@@ -33,6 +33,7 @@ import type { PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type {
   ClickWhen,
+  BeatWeight,
   ClickPattern,
   ClickSilence,
   CountInWhen,
@@ -772,18 +773,18 @@ export class PracticeController {
    */
   private otherHandAnchor: { readonly wallMs: number; readonly ticks: number } | null = null;
   /**
-   * Where the reader last placed a beat, and where the music was then.
+   * Where the reader last took the music to, and when.
    *
    * The whole of what the picture of a waiting run needs, and not held by the
    * other hand's anchor above even though both are read off the same entry: the
    * accompaniment's is taken away when a run is walked away from and seeded
-   * with "now" where there is none, and a beat asked whether it was late wants
-   * neither. Nothing else in a waiting frame knows when a beat *fell due* - the
-   * beat the reader comes in on is theirs to place, so the moment the music had
-   * it ready is only ever the entry before it plus the distance the score puts
-   * between the two.
+   * with "now" where there is none, and an entry asked whether it was late wants
+   * neither. Nothing else in a waiting frame knows when a moment of the music
+   * *fell due* - the reader is the clock there - so the moment it was ready is
+   * only ever the entry before it plus the distance the score puts between the
+   * two.
    */
-  private readersLastBeat: { readonly atMs: number; readonly ticks: number } | null = null;
+  private readersLastEntry: { readonly atMs: number; readonly ticks: number } | null = null;
   private readonly meter: HealthMeter;
   /** How long the reader has been at the keyboard; see {@link PracticeTimer}. */
   private readonly timer = new PracticeTimer();
@@ -2951,7 +2952,7 @@ export class PracticeController {
     ) {
       return;
     }
-    this.clickTheBeats(step, atMs);
+    this.theMusicMovesOn(step, atMs);
     this.announceTheBeats(step.onsetTicks, this.nextOwedTicks(step.index), atMs);
     if (!this.wantsTheOtherHand()) {
       return;
@@ -2993,7 +2994,7 @@ export class PracticeController {
    * waits. The record keeps the beat the music was measured against, which is
    * the question asked of it afterwards.
    */
-  private clickTheBeats(step: TimelineStep, atMs: number): void {
+  private theMusicMovesOn(step: TimelineStep, atMs: number): void {
     const exercise = this.exercise;
     // Written wherever the music moves with the reader, and sounded only where
     // they asked to hear it. Two questions, and the picture asks only the first:
@@ -3014,34 +3015,34 @@ export class PracticeController {
     // distance to the next entry is written in the score either way, and a step
     // the click has no opinion about still moved the music on. Written down only
     // once both questions above have been asked of the entry before it.
-    this.readersLastBeat = { atMs, ticks: step.onsetTicks };
+    this.readersLastEntry = { atMs, ticks: step.onsetTicks };
     const here = beatAt(exercise, step.onsetTicks, pattern);
-    const earlyByMs =
-      owedAtMs !== null && owedAtMs - atMs > ONE_BREATH_MS && counted
-        ? owedAtMs - atMs
-        : null;
-    if (earlyByMs !== null) {
+    // A beat of the music whatever the click has to say about it. An entry
+    // between the clicks the reader chose is a division: not drawn as a line and
+    // not sounded, but there - and being there is what lets the waiting at it be
+    // read, the same pair of beats at one place that a bar line's gate leaves.
+    // Left out where the click had no opinion, three entries in four on
+    // sixteenths had nothing to carry their waiting at all.
+    const weight: BeatWeight = here?.weight ?? 'division';
+    if (owedAtMs !== null && owedAtMs - atMs > ONE_BREATH_MS && counted) {
+      // Arrived before the music got here. The beats laid out ahead of him are
+      // taken back, having been scheduled and never happened, and the arrival is
+      // written down on its own: there is no second beat at that place to
+      // measure it against, the one he overtook never having fallen.
       this.currentSession?.forgetClicksFrom(atMs);
+      this.currentSession?.writeDownARush(atMs, owedAtMs - atMs);
     } else if (owedAtMs !== null && atMs - owedAtMs > ONE_BREATH_MS) {
-      if (here === null) {
-        // No beat here to be recorded twice: he came in between the clicks he
-        // asked for, which on sixteenths with the click on the beat is three
-        // entries in four. The waiting is written outright instead, because it
-        // happened whether or not the grid has a line to say so.
-        this.currentSession?.writeDownAWait(owedAtMs, atMs);
-      } else {
-        // The beat the music had ready while it waited for him. Written and not
-        // sounded, and written before his own so the two are in the order they
-        // happened - which is how the pair is read.
-        this.currentSession?.writeDownAClick(owedAtMs, here.weight, step.onsetTicks);
-      }
+      // The beat the music had ready while it waited for him. Written and not
+      // sounded, and written before his own so the two are in the order they
+      // happened - which is how the pair that makes a section is read.
+      this.currentSession?.writeDownAClick(owedAtMs, weight, step.onsetTicks);
     }
-    // Written down first, and sounded only if it was taken: a beat the run has
-    // already had - the tick that ended a count-in is the music's first beat -
-    // is one beat, and clicking it again is the machine agreeing with itself.
+    // Written down first, and sounded only if it was taken and if he asked to
+    // hear it: a beat the run has already had is one beat, and clicking it again
+    // is the machine agreeing with itself.
     if (
+      this.currentSession?.writeDownAClick(atMs, weight, step.onsetTicks) !== false &&
       here !== null &&
-      this.currentSession?.writeDownAClick(atMs, here.weight, step.onsetTicks, earlyByMs) !== false &&
       sounded
     ) {
       this.deps.metronome.click(atMs, here.weight);
@@ -3066,7 +3067,7 @@ export class PracticeController {
    * total.
    */
   private whereTheBeatFellDue(exercise: Exercise, onsetTicks: number): number | null {
-    const last = this.readersLastBeat;
+    const last = this.readersLastEntry;
     if (last === null || last.ticks >= onsetTicks) {
       // The first entry of a run has nothing before it to be measured from, and
       // needs nothing: it stands on the beat the music began with, which the run
@@ -3104,7 +3105,7 @@ export class PracticeController {
     onsetTicks: number,
     pattern: ClickPattern,
   ): boolean {
-    const last = this.readersLastBeat;
+    const last = this.readersLastEntry;
     if (last === null || last.ticks >= onsetTicks) {
       return false;
     }
@@ -3273,7 +3274,7 @@ export class PracticeController {
     }
     this.sounding.clear();
     this.otherHandAnchor = null;
-    this.readersLastBeat = null;
+    this.readersLastEntry = null;
     // And the beats laid out with them. A run walked away from must not go on
     // counting itself in an empty room.
     this.deps.metronome.stop();

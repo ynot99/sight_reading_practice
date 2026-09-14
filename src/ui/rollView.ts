@@ -4,10 +4,12 @@ import {
   rollBeganAtMs,
   rollEndedAtMs,
   theGrid,
+  theRushes,
   theWaits,
   type GridChoice,
   type GridLine,
   type RolledPress,
+  type RolledRush,
   type RolledWait,
   type RunRoll,
 } from '../application/session/RunRoll.js';
@@ -192,17 +194,27 @@ function element(tag: string, className: string): HTMLElement {
  * colour of the head because like the head it is theirs rather than the music's.
  */
 function lineFor(beat: GridLine, origin: number): HTMLElement {
-  const kind = beat.given ? 'given' : beat.earlyByMs !== null ? 'rushed' : beat.weight;
-  const line = element('div', `roll__line roll__line--${kind}`);
+  const line = element('div', `roll__line roll__line--${beat.given ? 'given' : beat.weight}`);
   line.style.left = atSecond(beat.atMs - origin);
-  if (beat.earlyByMs !== null) {
-    // No band to go with it, and there cannot be one: the music moved on when
-    // they played, so the stretch between here and where the beat was due is
-    // time that never elapsed. The line is the whole of what there is to say.
-    line.title = `Taken ${Math.round(beat.earlyByMs)} ms early`;
-  } else if (beat.lateByMs !== null) {
+  if (beat.lateByMs !== null) {
     line.title = `Given ${Math.round(beat.lateByMs)} ms late`;
   }
+  return line;
+}
+
+/**
+ * Where the reader arrived before the music had got there.
+ *
+ * A line and not a section, and there cannot be one: the music moved on when
+ * they played, so the stretch between here and where the beat was due is time
+ * that never elapsed. Drawn whether or not the grid has a line of its own at
+ * that moment - an entry between the clicks the reader chose is not drawn as a
+ * beat, and hanging this on one left it with no mark at all.
+ */
+function rushFor(rush: RolledRush, origin: number): HTMLElement {
+  const line = element('div', 'roll__line roll__line--rushed');
+  line.style.left = atSecond(rush.atMs - origin);
+  line.title = `Taken ${Math.round(rush.byMs)} ms early`;
   return line;
 }
 
@@ -427,6 +439,9 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // never end up in different places - cut lines included.
   for (const beat of theGrid(roll, drawing.grid)) {
     grid.append(lineFor(beat, origin));
+  }
+  for (const rush of theRushes(roll)) {
+    grid.append(rushFor(rush, origin));
   }
   // The press that answered each note the music asked for, by the step it was
   // owed to: a piece returns to the same pitch again and again, so pitch alone

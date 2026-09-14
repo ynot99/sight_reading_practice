@@ -13,13 +13,8 @@ import type {
   RolledPress,
   RunRoll,
 } from '../../src/application/session/RunRoll.js';
-function beatOf(
-  atMs: number,
-  weight: BeatWeight,
-  positionTicks: number,
-  earlyByMs: number | null = null,
-): RolledBeat {
-  return { atMs, weight, positionTicks, earlyByMs };
+function beatOf(atMs: number, weight: BeatWeight, positionTicks: number): RolledBeat {
+  return { atMs, weight, positionTicks };
 }
 
 import type { BeatWeight } from '../../src/application/ports/IMetronome.js';
@@ -40,7 +35,7 @@ function press(over: Partial<RolledPress> = {}): RolledPress {
 }
 
 function roll(over: Partial<RunRoll> = {}): RunRoll {
-  return { presses: [], beats: [], pedal: [], waits: [], truncated: false, ...over };
+  return { presses: [], beats: [], pedal: [], rushes: [], truncated: false, ...over };
 }
 
 /**
@@ -320,11 +315,8 @@ describe('drawing a run as a piano roll', () => {
     // червоним кольором".
     const view = draw(
       roll({
-        beats: [
-          beatOf(0, 'downbeat', 0),
-          beatOf(1000, 'beat', Duration.QUARTER.ticks),
-          beatOf(1600, 'downbeat', Duration.QUARTER.ticks * 4, 400),
-        ],
+        beats: [beatOf(0, 'downbeat', 0), beatOf(1000, 'beat', Duration.QUARTER.ticks)],
+        rushes: [{ atMs: 1600, byMs: 400 }],
       }),
     );
 
@@ -341,10 +333,7 @@ describe('drawing a run as a piano roll', () => {
     // "якщо ghost нота була достатньо довгою - то придеться її розрізати".
     const view = drawTheRoll({
       roll: roll({
-        beats: [
-          beatOf(0, 'downbeat', 0),
-          beatOf(1600, 'downbeat', Duration.QUARTER.ticks * 4, 400),
-        ],
+        beats: [beatOf(0, 'downbeat', 0), beatOf(1600, 'downbeat', Duration.QUARTER.ticks * 4)],
         presses: [press({ downAtMs: 0, upAtMs: 200 })],
       }),
       barLabel: () => null,

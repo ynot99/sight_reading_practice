@@ -40,6 +40,7 @@ import {
   beamedSixteenths,
   compoundBarExercise,
   longExercise,
+  offBeatAfterALongNote,
   p,
   tiedExercise,
   twoBarExercise,
@@ -1807,8 +1808,7 @@ describe('hearing the hand you are not reading', () => {
     midi.noteOn(MIDI.G4, clock.now());
 
     const played = session?.roll ?? emptyRoll();
-    expect(played.waits).toEqual([]);
-    expect(played.beats.every((beat) => beat.earlyByMs === null)).toBe(true);
+    expect(played.rushes).toEqual([]);
     // And the gate's own pair is still there, still saying how long it waited.
     expect(theWaits(played).length).toBeGreaterThan(0);
   });
@@ -2517,15 +2517,9 @@ describe('the click in a mode that waits', () => {
       8_500,
       9_500,
     ]);
-    expect(beats.map((beat) => beat.earlyByMs)).toEqual([
-      null,
-      null,
-      null,
-      2_500,
-      null,
-      null,
-      null,
-    ]);
+    // And the arrival itself, written on its own: the beat he overtook never
+    // fell, so there is no second beat at that place to measure it against.
+    expect(session?.roll.rushes).toEqual([{ atMs: 6_500, byMs: 2_500 }]);
   });
 
   it('writes down the chord the run was begun with', async () => {
@@ -2720,6 +2714,34 @@ describe('the click in a mode that waits', () => {
     expect(waited.slice(1).map((wait) => wait.untilMs - wait.fromMs)).toEqual([
       800, 800, 800, 800, 800,
     ]);
+  });
+
+  it('marks an entry taken early between the clicks, where no beat is drawn', async () => {
+    // The fault the sections had, from the other side. An early arrival used to
+    // ride on the beat the reader placed, and a beat placed between the clicks
+    // they chose is a division - filtered out of the grid so that clicking the
+    // divisions is not a rattle - so it had nothing to be drawn on and nothing
+    // marked it at all. It is written on its own now, as the waiting it mirrors
+    // is read off a pair of its own.
+    const { controller, midi, clock } = createController(true);
+    await controller.openScore(offBeatAfterALongNote({ tempoBpm: 60 }));
+    controller.updateSettings({
+      handStaff: 1,
+      clickWhen: 'with-me',
+      countInBars: 0,
+      clickPattern: 'pulse',
+    });
+    const session = controller.start();
+
+    clock.set(1_000);
+    midi.noteOn(p('C4').midi, clock.now());
+    // The written distance to the next entry is two beats and a half, so it fell
+    // due at three and a half seconds. He takes it at two - a second and a half
+    // early, and on the second half of a beat, where the click has nothing.
+    clock.set(2_000);
+    midi.noteOn(p('D4').midi, clock.now());
+
+    expect(session?.roll.rushes).toEqual([{ atMs: 2_000, byMs: 1_500 }]);
   });
 
   it('writes the beats it places into the picture of the run', async () => {

@@ -4,6 +4,7 @@ import {
   beatsWorthMarking,
   momentOfTicks,
   theGrid,
+  theRushes,
   theWaits,
   theBeatNearest,
   theMusicsBeats,
@@ -16,6 +17,7 @@ import {
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
 import { FlowMode } from '../../src/application/modes/FlowMode.js';
+import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import type {
   MidiNoteOffEvent,
   MidiNoteOnEvent,
@@ -24,16 +26,11 @@ import type {
 import type { NoteJudgedEvent } from '../../src/application/session/SessionEvents.js';
 import type { BeatWeight } from '../../src/application/ports/IMetronome.js';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { MIDI, twoBarExercise } from '../support/fixtures.js';
+import { MIDI, offBeatAfterALongNote, twoBarExercise } from '../support/fixtures.js';
 import { createHarness } from '../support/harness.js';
 
-function beatOf(
-  atMs: number,
-  weight: BeatWeight,
-  positionTicks: number,
-  earlyByMs: number | null = null,
-): RolledBeat {
-  return { atMs, weight, positionTicks, earlyByMs };
+function beatOf(atMs: number, weight: BeatWeight, positionTicks: number): RolledBeat {
+  return { atMs, weight, positionTicks };
 }
 
 function down(midi: number, atMs: number, velocity = 0.8): MidiNoteOnEvent {
@@ -72,19 +69,42 @@ function pressOf(midi: number, downAtMs: number, upAtMs: number | null): RolledP
 }
 
 function roll(over: Partial<RunRoll> = {}): RunRoll {
-  return { presses: [], beats: [], pedal: [], waits: [], truncated: false, ...over };
+  return { presses: [], beats: [], pedal: [], rushes: [], truncated: false, ...over };
 }
 
+describe('where a run begins', () => {
+  it('gives itself a beat even between the clicks the reader chose', () => {
+    // A passage taken up partway through can begin where the click has nothing
+    // to say, and without a beat of its own there is nothing for the reader's
+    // first entry to be measured against - so the time they took to reach their
+    // first note would not be in the picture at all.
+    const { session } = createHarness({
+      exercise: offBeatAfterALongNote({ tempoBpm: 60 }),
+      mode: new WaitMode(),
+      options: { startAtIndex: 2, clickWhen: 'with-me', countInBars: 0, click: 'pulse' },
+    });
+    session.start();
+
+    // Written as a division, which is what a place the click does not mark is:
+    // not drawn as a line of the grid, and there - which is all it has to be for
+    // the reader's own entry to make a pair with it and a section out of it.
+    expect(session.roll.beats.map((beat) => [beat.atMs, beat.weight])).toEqual([
+      [0, 'division'],
+    ]);
+  });
+});
+
 describe('the stretches the music stood still in', () => {
-  it('takes the pair a bar line leaves and the waiting written down outright', () => {
-    // Two things know about waiting and they never know about the same stretch:
-    // a gate at a bar line leaves two beats at one place, and a frame that waits
-    // on every note says so outright where the reader came in between clicks.
-    // One answer, so a section means one thing wherever it is drawn.
+  it('reads a wait off a pair of beats at one place, however fine they are', () => {
+    // One shape of evidence for one mark: the music was at that place twice -
+    // once when it fell due and once when the reader gave it - and the gap
+    // between them is the waiting. A gate at a bar line leaves that pair, and so
+    // does every entry of a frame that waits on each note.
     const roller = new RollRecorder();
     roller.beat(0, 'downbeat', 0);
     roller.beat(500, 'downbeat', 0);
-    roller.waited(2_000, 2_400);
+    roller.beat(2_000, 'division', Duration.EIGHTH.ticks);
+    roller.beat(2_400, 'division', Duration.EIGHTH.ticks);
 
     expect(theWaits(roller.roll())).toEqual([
       { fromMs: 0, untilMs: 500 },
@@ -92,16 +112,27 @@ describe('the stretches the music stood still in', () => {
     ]);
   });
 
-  it('refuses a wait that says nothing', () => {
-    // A stretch of no length is not the music standing still, and one that runs
-    // backwards is an arithmetic that went wrong somewhere else. Neither is
-    // worth a section a reader has to work out the meaning of.
+  it('keeps a rush apart from a wait, having no width to draw', () => {
+    // The music moved on when the reader played, so the stretch between where
+    // they arrived and where the beat was due is time that never elapsed. There
+    // is also no second beat at that place to measure against: the one they
+    // overtook never fell.
     const roller = new RollRecorder();
-    roller.waited(1_000, 1_000);
-    roller.waited(1_000, 1_002);
-    roller.waited(1_000, 900);
+    roller.rushed(1_600, 400);
 
     expect(theWaits(roller.roll())).toEqual([]);
+    expect(theRushes(roller.roll())).toEqual([{ atMs: 1_600, byMs: 400 }]);
+  });
+
+  it('refuses a rush that says nothing', () => {
+    // An arrival at the moment the music was ready is not early, and one the
+    // music had already passed is a wait.
+    const roller = new RollRecorder();
+    roller.rushed(1_000, 0);
+    roller.rushed(1_000, 2);
+    roller.rushed(1_000, -50);
+
+    expect(theRushes(roller.roll())).toEqual([]);
   });
 });
 
@@ -120,16 +151,6 @@ describe('taking back the beats the reader overtook', () => {
     roller.forgetBeatsFrom(2000);
 
     expect(roller.roll().beats.map((beat) => beat.atMs)).toEqual([0, 1000, 2000]);
-  });
-
-  it('carries how far ahead of the music a beat was taken', () => {
-    // The other half of a beat the reader placed, and the half a pair cannot
-    // say: early, the beat they overtook never happened, so there is no second
-    // beat at that place to measure the gap against.
-    const roller = new RollRecorder();
-    roller.beat(1600, 'downbeat', Duration.QUARTER.ticks * 4, 400);
-
-    expect(theGrid(roller.roll()).map((line) => line.earlyByMs)).toEqual([400]);
   });
 });
 
@@ -255,7 +276,7 @@ describe('writing a run down', () => {
     const roller = new RollRecorder();
     roller.keyDown(down(MIDI.C4, 100));
     roller.beat(0, 'downbeat', 0);
-    roller.waited(100, 900);
+    roller.rushed(100, 800);
     roller.pedal(pedal(true, 50));
     roller.reset();
 
@@ -263,7 +284,7 @@ describe('writing a run down', () => {
       presses: [],
       beats: [],
       pedal: [],
-      waits: [],
+      rushes: [],
       truncated: false,
     });
   });

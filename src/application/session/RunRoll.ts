@@ -62,17 +62,6 @@ export interface RolledBeat {
    * which is how the drawing knows to say so.
    */
   readonly positionTicks: number;
-  /**
-   * How long before the music had it due the reader took it, or `null`.
-   *
-   * The other half of a beat placed by the reader, and the half a pair cannot
-   * say. Late, there are two beats at one place - where it fell and where they
-   * gave it - and the gap between them is the waiting. Early, there is only
-   * one: the music moved on when they played, so the beat they overtook never
-   * happened and is not written down. This is what is left to say about it, and
-   * the drawing says it in the colour of the line.
-   */
-  readonly earlyByMs: number | null;
 }
 
 /** A click, and whether it is a beat the reader gave rather than one that fell. */
@@ -90,20 +79,34 @@ export interface MarkedBeat extends RolledBeat {
   readonly lateByMs: number | null;
 }
 
-/**
- * A stretch the music stood still in, waiting for the reader.
- *
- * Its own record rather than something read off the beats, because it is its
- * own thing: a bar line's gate leaves two beats at one place and the gap
- * between them *is* the wait, but a frame that waits on every note has nothing
- * of the sort where the reader's entry falls between the clicks they chose. On
- * sixteenths with the click on the beat that is three entries in four, and the
- * picture had a section for one of them and a one-row band for the rest - which
- * is what he was looking at when he asked why there were still yellow notes.
- */
+/** A stretch the music stood still in, waiting for the reader. */
 export interface RolledWait {
   readonly fromMs: number;
   readonly untilMs: number;
+}
+
+/**
+ * The reader arriving somewhere before the music had got there.
+ *
+ * Its own record, where a wait is read off a pair of beats, and the asymmetry is
+ * real rather than untidy. Waiting leaves two beats at one place - where it fell
+ * and where the reader gave it - because the music was still there to be given.
+ * Arriving early leaves one: the music moved on when they played, so the beat
+ * they overtook never happened and is not written down, and there is no second
+ * moment to measure against. It also has no width, which is why it is drawn as a
+ * line and a wait as a section.
+ *
+ * Carried here rather than on the beat the reader placed, because that beat is
+ * not always one the grid draws - an entry between the clicks they chose is a
+ * division, and divisions are filtered out of the grid so that clicking them is
+ * not a rattle. Ridden on the beat, an early entry between the clicks left no
+ * mark at all, which is the same fault the sections had.
+ */
+export interface RolledRush {
+  /** When the reader arrived. */
+  readonly atMs: number;
+  /** How long before the music had it ready. */
+  readonly byMs: number;
 }
 
 /** The sustain pedal down and up again. */
@@ -127,13 +130,8 @@ export interface RunRoll {
   readonly presses: readonly RolledPress[];
   readonly beats: readonly RolledBeat[];
   readonly pedal: readonly RolledPedal[];
-  /**
-   * The stretches the music stood still in, where nothing else says so.
-   *
-   * Only the ones no pair of beats carries; ask {@link theWaits} for all of
-   * them, which is the one place that answers the question.
-   */
-  readonly waits: readonly RolledWait[];
+  /** Where the reader arrived before the music did; see {@link RolledRush}. */
+  readonly rushes: readonly RolledRush[];
   /**
    * Whether anything was left out for want of room.
    *
@@ -187,8 +185,6 @@ export interface GridLine {
   readonly weight: BeatWeight;
   readonly given: boolean;
   readonly lateByMs: number | null;
-  /** How far ahead of the music the reader took it; see {@link RolledBeat}. */
-  readonly earlyByMs: number | null;
   /**
    * Where in the music it falls, or `null` for a line cut between two beats.
    *
@@ -212,7 +208,7 @@ const PRESS_CAPACITY = 20_000;
 /** And clicks, which at the finest resolution outnumber the presses. */
 const BEAT_CAPACITY = 60_000;
 
-const EMPTY: RunRoll = { presses: [], beats: [], pedal: [], waits: [], truncated: false };
+const EMPTY: RunRoll = { presses: [], beats: [], pedal: [], rushes: [], truncated: false };
 
 /** A press whose verdict has not arrived yet, and where it sits. */
 interface Open {
@@ -232,7 +228,7 @@ export class RollRecorder {
   private presses: RolledPress[] = [];
   private beats: RolledBeat[] = [];
   private pedalSpans: RolledPedal[] = [];
-  private waits: RolledWait[] = [];
+  private rushes: RolledRush[] = [];
   /** Keys still down, oldest first, by the press each one belongs to. */
   private readonly held: Open[] = [];
   /** Presses still waiting for a verdict, oldest first. */
@@ -260,7 +256,7 @@ export class RollRecorder {
     this.presses = [];
     this.beats = [];
     this.pedalSpans = [];
-    this.waits = [];
+    this.rushes = [];
     this.held.length = 0;
     this.unjudged.length = 0;
     this.pedalDownAt = null;
@@ -353,31 +349,25 @@ export class RollRecorder {
    * their entries are placed where they are written, and those are as much the
    * grid of that run as a pulse's ticks are of another's.
    */
-  beat(
-    atMs: number,
-    weight: BeatWeight,
-    positionTicks: number,
-    earlyByMs: number | null = null,
-  ): void {
+  beat(atMs: number, weight: BeatWeight, positionTicks: number): void {
     if (this.beats.length >= BEAT_CAPACITY) {
       this.full = true;
       return;
     }
-    this.beats.push({ atMs, weight, positionTicks, earlyByMs });
+    this.beats.push({ atMs, weight, positionTicks });
   }
 
   /**
-   * Writes down a stretch the music stood still in.
+   * Writes down the reader arriving before the music did.
    *
-   * For the waiting that no pair of beats can carry: the reader came in between
-   * two clicks, so there is no beat at that place to be recorded twice. Refused
-   * where it says nothing - a wait of no length, or one that runs backwards.
+   * Refused where it says nothing: an arrival at the moment the music was ready
+   * is not early, and one the music had already passed is a wait.
    */
-  waited(fromMs: number, untilMs: number): void {
-    if (untilMs - fromMs <= ONE_BREATH_MS || this.waits.length >= BEAT_CAPACITY) {
+  rushed(atMs: number, byMs: number): void {
+    if (byMs <= ONE_BREATH_MS || this.rushes.length >= BEAT_CAPACITY) {
       return;
     }
-    this.waits.push({ fromMs, untilMs });
+    this.rushes.push({ atMs, byMs });
   }
 
   /**
@@ -414,7 +404,7 @@ export class RollRecorder {
       presses: [...this.presses],
       beats: [...this.beats],
       pedal: [...pedal],
-      waits: [...this.waits],
+      rushes: [...this.rushes],
       truncated: this.full,
     };
   }
@@ -550,7 +540,6 @@ export function theGrid(roll: RunRoll, choice: GridChoice = PLAIN_GRID): readonl
           weight: 'division',
           given: false,
           lateByMs: null,
-          earlyByMs: null,
           positionTicks: null,
         });
       }
@@ -725,30 +714,39 @@ export function momentOfTicks(
 /**
  * Every stretch the music stood still in, however it came to be known.
  *
- * One answer to one question, asked by the drawing for its sections. Two things
- * know about waiting and they never know about the same stretch: a gate at a bar
- * line leaves two beats at one place, and a frame that waits on every note says
- * so outright where the reader's entry falls between the clicks. Merged here
- * rather than drawn from two places, so a section means one thing wherever it
- * appears.
+ * One answer to one question, and one shape of evidence for it: two beats at one
+ * place in the music, where it fell and where the reader gave it. A gate at a bar
+ * line leaves that pair, and so does every entry of a frame that waits on each
+ * note - which is why the run writes a beat for an entry whatever the click has
+ * to say about it.
  *
  * Every tick of them, and not the ones worth *drawing*. A beat too fine to be
  * given a line of its own is still a beat the reader came in on, and the music
  * stood still for it exactly as it does at a bar line. Read off the drawn ones,
  * a run clicking the divisions had a section on its downbeats and its beats and
  * none at all on anything between them - four of six entries, every one of them
- * the same distance late. His: "зі слабкими бітами я не дуже
- * розумію... все одно не бачу жовтих секцій для кожної ноти де я трішечки
- * тормозив".
+ * the same distance late. His: "зі слабкими бітами я не дуже розумію... все одно
+ * не бачу жовтих секцій для кожної ноти де я трішечки тормозив".
  */
 export function theWaits(roll: RunRoll): readonly RolledWait[] {
-  const found: RolledWait[] = [...roll.waits];
+  const found: RolledWait[] = [];
   for (const beat of beatsWorthMarking(roll, true)) {
     if (beat.lateByMs !== null) {
       found.push({ fromMs: beat.atMs - beat.lateByMs, untilMs: beat.atMs });
     }
   }
-  return found.sort((left, right) => left.fromMs - right.fromMs);
+  return found;
+}
+
+/**
+ * Every place the reader arrived at before the music had got there.
+ *
+ * The other half of {@link theWaits} and deliberately not the same shape: this
+ * one has no width, the stretch between where they played and where the beat was
+ * due being time that never elapsed.
+ */
+export function theRushes(roll: RunRoll): readonly RolledRush[] {
+  return roll.rushes;
 }
 
 /**

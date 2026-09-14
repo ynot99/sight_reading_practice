@@ -8,7 +8,21 @@ import {
   timeFromTap,
   zoomedBy,
 } from '../../src/ui/rollView.js';
-import type { RolledPress, RunRoll } from '../../src/application/session/RunRoll.js';
+import type {
+  RolledBeat,
+  RolledPress,
+  RunRoll,
+} from '../../src/application/session/RunRoll.js';
+function beatOf(
+  atMs: number,
+  weight: BeatWeight,
+  positionTicks: number,
+  earlyByMs: number | null = null,
+): RolledBeat {
+  return { atMs, weight, positionTicks, earlyByMs };
+}
+
+import type { BeatWeight } from '../../src/application/ports/IMetronome.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { MIDI } from '../support/fixtures.js';
 
@@ -35,13 +49,15 @@ function roll(over: Partial<RunRoll> = {}): RunRoll {
  * A second to the quarter, which is sixty to the minute - so the moments and
  * the places in the music stay in step and the drawing has nothing to reconcile.
  */
-function barOfFour(measure: number, fromMs: number) {
+function barOfFour(measure: number, fromMs: number): RolledBeat[] {
   const bar = Duration.QUARTER.ticks * 4;
-  return [0, 1, 2, 3].map((beat) => ({
-    atMs: fromMs + beat * 1000,
-    weight: (beat === 0 ? 'downbeat' : 'beat') as 'downbeat' | 'beat',
-    positionTicks: measure * bar + beat * Duration.QUARTER.ticks,
-  }));
+  return [0, 1, 2, 3].map((beat) =>
+    beatOf(
+      fromMs + beat * 1000,
+      beat === 0 ? 'downbeat' : 'beat',
+      measure * bar + beat * Duration.QUARTER.ticks,
+    ),
+  );
 }
 
 function draw(
@@ -104,9 +120,9 @@ describe('drawing a run as a piano roll', () => {
     const view = draw(
       roll({
         beats: [
-          { atMs: 0, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 0 },
-          { atMs: 250, weight: 'division', positionTicks: Duration.QUARTER.ticks * 0.25 },
-          { atMs: 500, weight: 'beat', positionTicks: Duration.QUARTER.ticks * 0.5 },
+          beatOf(0, 'downbeat', Duration.QUARTER.ticks * 0),
+          beatOf(250, 'division', Duration.QUARTER.ticks * 0.25),
+          beatOf(500, 'beat', Duration.QUARTER.ticks * 0.5),
         ],
       }),
     );
@@ -122,8 +138,8 @@ describe('drawing a run as a piano roll', () => {
     const view = draw(
       roll({
         beats: [
-          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
-          { atMs: 180, weight: 'downbeat', positionTicks: 0 },
+          beatOf(0, 'downbeat', 0),
+          beatOf(180, 'downbeat', 0),
         ],
       }),
     );
@@ -138,9 +154,9 @@ describe('drawing a run as a piano roll', () => {
     const view = draw(
       roll({
         beats: [
-          { atMs: 1000, weight: 'downbeat', positionTicks: 0 },
-          { atMs: 1180, weight: 'downbeat', positionTicks: 0 },
-          { atMs: 2000, weight: 'beat', positionTicks: Duration.QUARTER.ticks },
+          beatOf(1000, 'downbeat', 0),
+          beatOf(1180, 'downbeat', 0),
+          beatOf(2000, 'beat', Duration.QUARTER.ticks),
         ],
       }),
     );
@@ -150,7 +166,7 @@ describe('drawing a run as a piano roll', () => {
     // From the run's own beginning, which is its first event.
     expect(bands[0]?.style.left).toBe('calc(var(--roll-second) * 0.0000)');
     expect(bands[0]?.style.width).toBe('calc(var(--roll-second) * 0.1800)');
-    expect(bands[0]?.title).toBe('Bar line given 180 ms late');
+    expect(bands[0]?.title).toBe('The music waited 180 ms');
   });
 
   it('lays the wait under the rows, so the black keys darken it', () => {
@@ -161,8 +177,8 @@ describe('drawing a run as a piano roll', () => {
       roll({
         presses: [press({ midi: MIDI.C4 })],
         beats: [
-          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
-          { atMs: 180, weight: 'downbeat', positionTicks: 0 },
+          beatOf(0, 'downbeat', 0),
+          beatOf(180, 'downbeat', 0),
         ],
       }),
     );
@@ -183,8 +199,8 @@ describe('drawing a run as a piano roll', () => {
     const view = draw(
       roll({
         beats: [
-          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
-          { atMs: 180, weight: 'downbeat', positionTicks: 0 },
+          beatOf(0, 'downbeat', 0),
+          beatOf(180, 'downbeat', 0),
         ],
       }),
       () => '12',
@@ -207,8 +223,8 @@ describe('drawing a run as a piano roll', () => {
 
   it('cuts the beat into the parts that were asked for', () => {
     const beats = [
-      { atMs: 0, weight: 'downbeat' as const, positionTicks: 0 },
-      { atMs: 1000, weight: 'beat' as const, positionTicks: Duration.QUARTER.ticks },
+      beatOf(0, 'downbeat', 0),
+      beatOf(1000, 'beat', Duration.QUARTER.ticks),
     ];
 
     expect(draw(roll({ beats })).querySelectorAll('.roll__line')).toHaveLength(2);
@@ -261,7 +277,6 @@ describe('drawing a run as a piano roll', () => {
         presses: [
           press({ midi: MIDI.C4, verdict: 'correct' }),
           press({ midi: MIDI.C4 + 2, verdict: 'wrong' }),
-          press({ midi: MIDI.C4 + 4, verdict: 'rushed' }),
           press({ midi: MIDI.C4 + 5, verdict: 'duplicate' }),
           press({ midi: MIDI.C4 + 7, verdict: null }),
         ],
@@ -274,10 +289,73 @@ describe('drawing a run as a piano roll', () => {
     expect(shades).toEqual([
       'roll__note roll__note--correct',
       'roll__note roll__note--wrong',
-      'roll__note roll__note--off-the-beat',
       'roll__note roll__note--aside',
       'roll__note roll__note--unjudged',
     ]);
+  });
+
+  it('says nothing about the timing in a note’s colour', () => {
+    // The right note is the right note. How far off the beat it came is the
+    // band's business, and giving the note its own colour for it made one
+    // colour mean three different things.
+    const view = draw(
+      roll({
+        presses: [
+          press({ midi: MIDI.C4, verdict: 'rushed' }),
+          press({ midi: MIDI.C4 + 4, verdict: 'late' }),
+        ],
+      }),
+    );
+
+    const shades = [...view.querySelectorAll<HTMLElement>('.roll__note')].map(
+      (note) => note.className,
+    );
+    expect(shades).toEqual(['roll__note roll__note--correct', 'roll__note roll__note--correct']);
+  });
+
+  it('reddens a beat the reader overtook, and gives it no band', () => {
+    // There is no width to draw: the stretch between where they played and
+    // where the beat was due is time that never elapsed, the music having moved
+    // on when they did. His: "малювати цю ранню вертикальну лінію метроному
+    // червоним кольором".
+    const view = draw(
+      roll({
+        beats: [
+          beatOf(0, 'downbeat', 0),
+          beatOf(1000, 'beat', Duration.QUARTER.ticks),
+          beatOf(1600, 'downbeat', Duration.QUARTER.ticks * 4, 400),
+        ],
+      }),
+    );
+
+    const early = view.querySelectorAll<HTMLElement>('.roll__line--rushed');
+    expect(early).toHaveLength(1);
+    expect(early[0]?.title).toBe('Taken 400 ms early');
+    expect(early[0]?.style.left).toBe('calc(var(--roll-second) * 1.6000)');
+    expect(view.querySelectorAll('.roll__wait')).toHaveLength(0);
+  });
+
+  it('cuts a note the music asked for where the reader came in early', () => {
+    // The beat at the far end is the one they took, so the note ends there
+    // rather than running on through music the reader had already left. His:
+    // "якщо ghost нота була достатньо довгою - то придеться її розрізати".
+    const view = drawTheRoll({
+      roll: roll({
+        beats: [
+          beatOf(0, 'downbeat', 0),
+          beatOf(1600, 'downbeat', Duration.QUARTER.ticks * 4, 400),
+        ],
+        presses: [press({ downAtMs: 0, upAtMs: 200 })],
+      }),
+      barLabel: () => null,
+      ghosts: [
+        { stepIndex: 0, midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks * 4 },
+      ],
+    });
+
+    const outline = view.querySelector<HTMLElement>('.roll__ghost');
+    // A written bar of it, cut at one and six tenths where he came in.
+    expect(outline?.style.width).toBe('calc(var(--roll-second) * 1.6000)');
   });
 
   it('says how far off the beat a press was, signed the way a reader falls', () => {
@@ -409,8 +487,8 @@ describe('the zoom two fingers ask for', () => {
 
 describe('the notes the music asked for', () => {
   const grid = [
-    { atMs: 0, weight: 'downbeat' as const, positionTicks: 0 },
-    { atMs: 1000, weight: 'beat' as const, positionTicks: Duration.QUARTER.ticks },
+    beatOf(0, 'downbeat', 0),
+    beatOf(1000, 'beat', Duration.QUARTER.ticks),
   ];
 
   it('draws them behind the ones that were played', () => {
@@ -475,9 +553,9 @@ describe('the notes the music asked for', () => {
     const view = drawTheRoll({
       roll: roll({
         beats: [
-          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
-          { atMs: 1000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
-          { atMs: 1400, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+          beatOf(0, 'downbeat', 0),
+          beatOf(1000, 'downbeat', Duration.QUARTER.ticks),
+          beatOf(1400, 'downbeat', Duration.QUARTER.ticks),
         ],
       }),
       barLabel: () => null,
@@ -494,9 +572,9 @@ describe('the notes the music asked for', () => {
     const view = drawTheRoll({
       roll: roll({
         beats: [
-          { atMs: 0, weight: 'downbeat', positionTicks: 0 },
-          { atMs: 1000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
-          { atMs: 1400, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks },
+          beatOf(0, 'downbeat', 0),
+          beatOf(1000, 'downbeat', Duration.QUARTER.ticks),
+          beatOf(1400, 'downbeat', Duration.QUARTER.ticks),
         ],
       }),
       barLabel: () => null,
@@ -524,8 +602,8 @@ describe('the notes the music asked for', () => {
 
 describe('how far a note was from where it was owed', () => {
   const grid = [
-    { atMs: 0, weight: 'downbeat' as const, positionTicks: 0 },
-    { atMs: 1000, weight: 'beat' as const, positionTicks: Duration.QUARTER.ticks },
+    beatOf(0, 'downbeat', 0),
+    beatOf(1000, 'beat', Duration.QUARTER.ticks),
   ];
   const owed = {
     midi: MIDI.C4,

@@ -222,7 +222,12 @@ export class PracticeSession {
    * of such a run has no grid at all, which is what he found: "у wait for notes
    * все ще не малюється смужок".
    */
-  writeDownAClick(atMs: number, weight: BeatWeight, positionTicks: number): boolean {
+  writeDownAClick(
+    atMs: number,
+    weight: BeatWeight,
+    positionTicks: number,
+    earlyByMs: number | null = null,
+  ): boolean {
     if (this.status !== 'running') {
       return false;
     }
@@ -236,8 +241,19 @@ export class PracticeSession {
     if (this.roller.hasBeatAt(positionTicks, atMs)) {
       return false;
     }
-    this.roller.beat(atMs, weight, positionTicks);
+    this.roller.beat(atMs, weight, positionTicks, earlyByMs);
     return true;
+  }
+
+  /**
+   * Takes back the clicks from a moment onwards; see
+   * {@link RollRecorder.forgetBeatsFrom}.
+   */
+  forgetClicksFrom(atMs: number): void {
+    if (this.status !== 'running') {
+      return;
+    }
+    this.roller.forgetBeatsFrom(atMs);
   }
 
   /**

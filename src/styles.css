@@ -697,6 +697,16 @@ textarea {
 }
 
 /*
+ * A beat the reader overtook: they played the next note before the music had
+ * got there. Red rather than banded, because there is no width to draw - the
+ * time between here and where the beat was due never elapsed.
+ */
+.roll__line--rushed {
+  background: var(--wrong);
+  width: 2px;
+}
+
+/*
  * A note the music asked for, behind the ones that were played.
  *
  * An outline rather than a fill, and pale: it is the question, not the answer.
@@ -755,9 +765,6 @@ textarea {
   background: var(--wrong);
 }
 
-.roll__note--off-the-beat {
-  background: var(--pending);
-}
 
 /*
  * A press the run set aside: the same note twice, or the hand that is being

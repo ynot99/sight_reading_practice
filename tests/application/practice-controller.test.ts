@@ -2417,6 +2417,78 @@ describe('the click in a mode that waits', () => {
     ]);
   });
 
+  it('writes the beat the music had ready while it waited for him', async () => {
+    // The grid of a waiting run is even, and the waiting goes into the picture
+    // as a section rather than as a gap between two lines that should have been
+    // a beat apart. Which needs the beat that fell due while the music stood
+    // still: written, and never sounded - a click there would be the machine
+    // telling him he is late, which is the opposite of a frame that waits.
+    const { controller, midi, metronome, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    const session = controller.start();
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+    // A written bar is four seconds here, so the second bar fell due at nine.
+    // He takes it at ten.
+    clock.set(10_000);
+    midi.noteOn(p('G2').midi, clock.now());
+    midi.noteOn(p('D3').midi, clock.now());
+
+    const beats = session?.roll.beats ?? [];
+    expect(beats.map((beat) => beat.atMs)).toEqual([
+      5_000,
+      6_000,
+      7_000,
+      8_000,
+      9_000,
+      10_000,
+      // And the bar he has just begun, laid out ahead of him from his own entry.
+      11_000,
+      12_000,
+      13_000,
+    ]);
+    // The pair a bar line's gate leaves, at the same place in the music: where
+    // it fell, and where he gave it. Which is what the section is drawn from.
+    expect(beats.filter((beat) => beat.positionTicks === Duration.QUARTER.ticks * 4)).toHaveLength(
+      2,
+    );
+    expect(metronome.clicks.map((click) => click.atMs)).not.toContain(9_000);
+  });
+
+  it('takes back the beats the reader came in ahead of', async () => {
+    // Come in early and the music moves on from there, so the beats still
+    // standing in the stretch he left were scheduled and never happened. Drawn,
+    // they are lines at no distance from each other in a grid meant to be even.
+    // His: "просто придеться скіпати одразу до наступної ноти яку я натиснув".
+    const { controller, midi, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    const session = controller.start();
+    clock.set(5_000);
+
+    midi.noteOn(p('C3').midi, clock.now());
+    // The whole bar laid out ahead of him at five, six, seven and eight. He
+    // comes in for the second bar at six and a half, which is two and a half
+    // seconds before it was due.
+    clock.set(6_500);
+    midi.noteOn(p('G2').midi, clock.now());
+    midi.noteOn(p('D3').midi, clock.now());
+
+    const beats = session?.roll.beats ?? [];
+    // Seven and eight are gone; his own, and the bar he has just begun, remain.
+    expect(beats.map((beat) => beat.atMs)).toEqual([
+      5_000,
+      6_000,
+      6_500,
+      7_500,
+      8_500,
+      9_500,
+    ]);
+    expect(beats.map((beat) => beat.earlyByMs)).toEqual([null, null, 2_500, null, null, null]);
+  });
+
   it('writes the beats it places into the picture of the run', async () => {
     // A frame that waits runs no pulse, so nothing announces its beats - and the
     // drawing of such a run had no grid at all. His: "у wait for notes все ще не

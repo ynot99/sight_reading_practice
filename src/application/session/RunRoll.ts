@@ -62,6 +62,17 @@ export interface RolledBeat {
    * which is how the drawing knows to say so.
    */
   readonly positionTicks: number;
+  /**
+   * How long before the music had it due the reader took it, or `null`.
+   *
+   * The other half of a beat placed by the reader, and the half a pair cannot
+   * say. Late, there are two beats at one place - where it fell and where they
+   * gave it - and the gap between them is the waiting. Early, there is only
+   * one: the music moved on when they played, so the beat they overtook never
+   * happened and is not written down. This is what is left to say about it, and
+   * the drawing says it in the colour of the line.
+   */
+  readonly earlyByMs: number | null;
 }
 
 /** A click, and whether it is a beat the reader gave rather than one that fell. */
@@ -153,6 +164,8 @@ export interface GridLine {
   readonly weight: BeatWeight;
   readonly given: boolean;
   readonly lateByMs: number | null;
+  /** How far ahead of the music the reader took it; see {@link RolledBeat}. */
+  readonly earlyByMs: number | null;
   /**
    * Where in the music it falls, or `null` for a line cut between two beats.
    *
@@ -169,7 +182,7 @@ export interface GridLine {
  * that pair is a wait apart - and large enough to cover the one place two
  * accounts of the same beat arrive from different directions.
  */
-const ONE_BREATH_MS = 5;
+export const ONE_BREATH_MS = 5;
 
 /** Presses kept before a run stops recording them. */
 const PRESS_CAPACITY = 20_000;
@@ -315,12 +328,35 @@ export class RollRecorder {
    * their entries are placed where they are written, and those are as much the
    * grid of that run as a pulse's ticks are of another's.
    */
-  beat(atMs: number, weight: BeatWeight, positionTicks: number): void {
+  beat(
+    atMs: number,
+    weight: BeatWeight,
+    positionTicks: number,
+    earlyByMs: number | null = null,
+  ): void {
     if (this.beats.length >= BEAT_CAPACITY) {
       this.full = true;
       return;
     }
-    this.beats.push({ atMs, weight, positionTicks });
+    this.beats.push({ atMs, weight, positionTicks, earlyByMs });
+  }
+
+  /**
+   * Takes back the beats from a moment onwards, they having been overtaken.
+   *
+   * A frame that waits lays the beats between two entries out ahead of the
+   * reader, as far as the next note they owe. Come in early and the music moves
+   * on from *there*, so the beats still standing in the stretch they left were
+   * scheduled and never belonged to the run: drawn, they are lines at no
+   * distance from each other in a grid that is meant to be even, which is the
+   * greater part of what he was seeing. His: "просто придеться скіпати одразу
+   * до наступної ноти яку я натиснув".
+   */
+  forgetBeatsFrom(atMs: number): void {
+    // The moment itself survives: a beat scheduled for exactly the instant the
+    // reader came in did sound, and the reader's own is refused separately if
+    // it is the same beat twice.
+    this.beats = this.beats.filter((beat) => beat.atMs <= atMs);
   }
 
   /**
@@ -474,6 +510,7 @@ export function theGrid(roll: RunRoll, choice: GridChoice = PLAIN_GRID): readonl
           weight: 'division',
           given: false,
           lateByMs: null,
+          earlyByMs: null,
           positionTicks: null,
         });
       }

@@ -65,6 +65,7 @@ import {
 } from '../domain/model/Exercise.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
+import { ONE_BREATH_MS } from './session/RunRoll.js';
 import type { RunRoll } from './session/RunRoll.js';
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
@@ -770,6 +771,19 @@ export class PracticeController {
    * arrived as one cluster with no rhythm in it at all.
    */
   private otherHandAnchor: { readonly wallMs: number; readonly ticks: number } | null = null;
+  /**
+   * Where the reader last placed a beat, and where the music was then.
+   *
+   * The whole of what the picture of a waiting run needs, and not held by the
+   * other hand's anchor above even though both are read off the same entry: the
+   * accompaniment's is taken away when a run is walked away from and seeded
+   * with "now" where there is none, and a beat asked whether it was late wants
+   * neither. Nothing else in a waiting frame knows when a beat *fell due* - the
+   * beat the reader comes in on is theirs to place, so the moment the music had
+   * it ready is only ever the entry before it plus the distance the score puts
+   * between the two.
+   */
+  private readersLastBeat: { readonly atMs: number; readonly ticks: number } | null = null;
   private readonly meter: HealthMeter;
   /** How long the reader has been at the keyboard; see {@link PracticeTimer}. */
   private readonly timer = new PracticeTimer();
@@ -2963,21 +2977,54 @@ export class PracticeController {
    * Scheduled as far as his next entry and no further: the beat he comes in
    * on is his to place, and clicking it before he arrives would be the
    * machine playing his part for him.
+   *
+   * And written down with the one thing the sound has no use for: when the
+   * music had that beat *ready*, which is the entry before it plus the written
+   * distance. Late, the beat is written where it fell as well as where he gave
+   * it, and the pair is the same pair a bar line's gate leaves - so the same
+   * yellow section draws it, and the grid up to it stays even. Early, the beats
+   * he overtook are taken back and his own carries how far ahead of the music
+   * it was. His: "прохав щоб сітка виглядала рівно - а там де нерівності
+   * із-за гравця - кожен такий slowdown замальовувати жовтою секцією just like
+   * у wait for bars".
+   *
+   * Nothing new is *sounded*: a click at the moment a beat fell due would be
+   * the machine telling him he is late, which is the opposite of a frame that
+   * waits. The record keeps the beat the music was measured against, which is
+   * the question asked of it afterwards.
    */
   private clickTheBeats(step: TimelineStep, atMs: number): void {
     const exercise = this.exercise;
     if (!clickFollowsTheReader(this.currentSettings.clickWhen) || exercise === null) {
       return;
     }
+    const owedAtMs = this.whereTheBeatFellDue(exercise, step.onsetTicks);
+    // Kept whether or not this step lands on a beat of the chosen pattern: the
+    // distance to the next entry is written in the score either way, and a step
+    // the click has no opinion about still moved the music on.
+    this.readersLastBeat = { atMs, ticks: step.onsetTicks };
     // At the resolution the reader asked to hear. A click they place is still
     // the click they chose the pattern for, and the subdivisions they had
     // turned on were simply never offered to it.
     const pattern = this.currentSettings.clickPattern;
     const here = beatAt(exercise, step.onsetTicks, pattern);
+    const earlyByMs =
+      owedAtMs !== null && owedAtMs - atMs > ONE_BREATH_MS ? owedAtMs - atMs : null;
+    if (earlyByMs !== null) {
+      this.currentSession?.forgetClicksFrom(atMs);
+    } else if (here !== null && owedAtMs !== null && atMs - owedAtMs > ONE_BREATH_MS) {
+      // The beat the music had ready while it waited for him. Written and not
+      // sounded, and written before his own so the two are in the order they
+      // happened - which is how the pair is read.
+      this.currentSession?.writeDownAClick(owedAtMs, here.weight, step.onsetTicks);
+    }
     // Written down first, and sounded only if it was taken: a beat the run has
     // already had - the tick that ended a count-in is the music's first beat -
     // is one beat, and clicking it again is the machine agreeing with itself.
-    if (here !== null && this.currentSession?.writeDownAClick(atMs, here.weight, step.onsetTicks) !== false) {
+    if (
+      here !== null &&
+      this.currentSession?.writeDownAClick(atMs, here.weight, step.onsetTicks, earlyByMs) !== false
+    ) {
       this.deps.metronome.click(atMs, here.weight);
     }
     const until = this.nextOwedTicks(step.index);
@@ -2986,6 +3033,25 @@ export class PracticeController {
       this.deps.metronome.click(at, beat.weight);
       this.currentSession?.writeDownAClick(at, beat.weight, beat.ticks);
     }
+  }
+
+  /**
+   * When the music had the beat at a place ready, or `null` where it cannot say.
+   *
+   * The reader's previous entry plus the distance the score puts between the
+   * two, which in a frame with no pulse is the only clock there is. Local on
+   * purpose: a note taken late says so about itself and says nothing about
+   * every note after it, which is what makes it a reading rather than a running
+   * total.
+   */
+  private whereTheBeatFellDue(exercise: Exercise, onsetTicks: number): number | null {
+    const last = this.readersLastBeat;
+    if (last === null || last.ticks >= onsetTicks) {
+      // The first entry of a run has nothing before it to be measured from, and
+      // a step at or behind the last one is a repeat rather than a distance.
+      return null;
+    }
+    return last.atMs + spanMs(exercise, last.ticks, onsetTicks);
   }
 
   /**
@@ -3150,6 +3216,7 @@ export class PracticeController {
     }
     this.sounding.clear();
     this.otherHandAnchor = null;
+    this.readersLastBeat = null;
     // And the beats laid out with them. A run walked away from must not go on
     // counting itself in an empty room.
     this.deps.metronome.stop();

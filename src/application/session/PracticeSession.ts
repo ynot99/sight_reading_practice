@@ -751,6 +751,17 @@ export class PracticeSession {
     }
     this.positionOffsetTicks = tickPositionTicks - this.resumeAtTicks;
     this.writeDownTheFirstBeat(atMs);
+    // And the pulse is let go of where it has nothing further to do. It was
+    // told to fall *silent* after a count-in and never told to stop, so in a
+    // frame that waits it went on counting the written bars to itself - unheard,
+    // but written into the picture of the run all the same. Drawn, that is the
+    // machine's grid laid over the reader's: two grids at once, their places
+    // disagreeing and their moments interleaved, which is no picture of
+    // anything. This tick is already in hand and is the music's first beat, so
+    // nothing of the music is lost by stopping here.
+    if (!this.thePulseGoesOn() && this.metronome.isRunning) {
+      this.metronome.stop();
+    }
     this.dispatch('countInComplete');
     this.mode.onSessionStart(this.context);
     this.enterStep(this.resumeAtIndex);

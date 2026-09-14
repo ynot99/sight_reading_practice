@@ -2635,6 +2635,46 @@ describe('the click in a mode that waits', () => {
     expect(metronome.isRunning).toBe(true);
   });
 
+  it('lets go of the pulse once a count-in is over and nothing else wants it', async () => {
+    // It was told to fall *silent* after the count and never told to stop, so it
+    // went on counting the written bars to itself - unheard, and written into
+    // the picture of the run all the same. Drawn, that was the machine's grid
+    // laid over the reader's: two at once, their places disagreeing and their
+    // moments interleaved.
+    const { controller, midi, metronome, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', countInBars: 1 });
+    const session = controller.start();
+    // Four beats of counting, and the fifth tick is the music's first beat.
+    for (let guard = 0; guard < 5; guard += 1) {
+      metronome.advanceSubdivisions(1);
+      clock.advance(1_000);
+    }
+
+    expect(metronome.isRunning).toBe(false);
+
+    // And the pulse is asked for more anyway, as a running one would deliver.
+    // Nothing of it reaches the run: the beats are the reader's, in order.
+    for (let guard = 0; guard < 3; guard += 1) {
+      metronome.advanceSubdivisions(1);
+      clock.advance(1_000);
+    }
+    midi.noteOn(p('C3').midi, clock.now());
+    for (let guard = 0; guard < 9; guard += 1) {
+      metronome.advanceSubdivisions(1);
+      clock.advance(1_000);
+    }
+    midi.noteOn(p('G2').midi, clock.now());
+    midi.noteOn(p('D3').midi, clock.now());
+
+    const beats = session?.roll.beats ?? [];
+    expect(beats.length).toBeGreaterThan(4);
+    const moments = beats.map((beat) => beat.atMs);
+    expect([...moments].sort((left, right) => left - right)).toEqual(moments);
+    const places = beats.map((beat) => beat.positionTicks);
+    expect([...places].sort((left, right) => left - right)).toEqual(places);
+  });
+
   it('writes the beats it places into the picture of the run', async () => {
     // A frame that waits runs no pulse, so nothing announces its beats - and the
     // drawing of such a run had no grid at all. His: "у wait for notes все ще не

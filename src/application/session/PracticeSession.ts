@@ -179,6 +179,15 @@ export class PracticeSession {
    * *is* the answer.
    */
   private theOpeningChord: MidiNoteOnEvent[] = [];
+  /**
+   * Whether the sustain pedal is down, as far as this run can tell.
+   *
+   * Kept rather than read off the roll, because the run may begin with it
+   * already down and the roll only knows what it has been told. Seeded at the
+   * start from what the controller heard while nothing was running, and
+   * followed from there.
+   */
+  private pedalIsDown = false;
   private lastReport: PerformanceReport | null = null;
   private lastScore: SessionScore | null = null;
 
@@ -296,11 +305,12 @@ export class PracticeSession {
    * real timestamps and graded as early - so the reader does not have to play
    * the first chord twice.
    */
-  start(opening: readonly MidiNoteOnEvent[] = []): void {
+  start(opening: readonly MidiNoteOnEvent[] = [], pedalWasDown = false): void {
     const previous = this.machine.state;
     this.machine.dispatch('start');
     this.resetRunState();
     this.theOpeningChord = [...opening];
+    this.pedalIsDown = pedalWasDown;
 
     // Silent from the first note onwards where the reader gives that beat:
     // the count-in still sounds, and nothing past it does until they play.
@@ -754,6 +764,11 @@ export class PracticeSession {
     }
     this.positionOffsetTicks = tickPositionTicks - this.resumeAtTicks;
     this.writeDownTheFirstBeat(atMs);
+    // And the foot, which may have been down since before there was a run to
+    // put it in. See {@link RollRecorder.pedalWasAlreadyDown}.
+    if (this.pedalIsDown) {
+      this.roller.pedalWasAlreadyDown(atMs);
+    }
     // And the pulse is let go of where it has nothing further to do. It was
     // told to fall *silent* after a count-in and never told to stop, so in a
     // frame that waits it went on counting the written bars to itself - unheard,
@@ -1153,6 +1168,12 @@ export class PracticeSession {
       if (event.type === 'noteoff') {
         this.roller.keyUp(event);
       }
+      // The foot is followed but not written down: a pedal put down over the
+      // count is part of how the run *begins*, and the run begins where the
+      // music does.
+      if (event.type === 'pedal') {
+        this.pedalIsDown = event.down;
+      }
       return;
     }
     if (this.status !== 'running') {
@@ -1173,6 +1194,7 @@ export class PracticeSession {
         // The pedal changes how the instrument sounds, never what was played,
         // so the run still has nothing to say about it - but it is part of
         // what the reader did, and the picture of a run shows it.
+        this.pedalIsDown = event.down;
         this.roller.pedal(event);
         return;
       default:

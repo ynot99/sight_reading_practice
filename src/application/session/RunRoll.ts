@@ -341,6 +341,29 @@ export class RollRecorder {
   }
 
   /**
+   * The pedal was already down when the music began.
+   *
+   * A run does not start the reader's foot from nothing: it is put down and
+   * then the first chord is played, which in the frame that begins a run *by*
+   * playing that chord means the foot always moves before the run exists. The
+   * lift, when it came, had no down to close and was dropped - so a pedal held
+   * through a whole run was drawn as a pedal never touched at all. His: "якщо
+   * я натискаю його рано, то воно показується що воно з самого початку взагалі
+   * не було натиснуто".
+   *
+   * Opened where the music began rather than where the foot moved, because
+   * that is what the picture is of. A moment spent settling in front of a run
+   * belongs to no run's time, and dated truthfully it would hang seconds of
+   * empty drawing in front of the first note to hold one band.
+   *
+   * Says nothing where a span is already open: told this twice - by a count-in
+   * and then by a resume - it is still the one press.
+   */
+  pedalWasAlreadyDown(atMs: number): void {
+    this.pedalDownAt ??= atMs;
+  }
+
+  /**
    * One click, at the moment it is heard rather than the moment it is placed.
    *
    * Told in these three terms rather than handed a tick, because not every beat

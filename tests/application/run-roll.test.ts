@@ -257,6 +257,31 @@ describe('writing a run down', () => {
     expect(roller.roll().pedal).toEqual([]);
   });
 
+  it('opens a pedal that was already down where the music began', () => {
+    // The foot goes down and *then* the chord is played, which is how the
+    // instrument is played - so the press that began the span can be older
+    // than the run, and the lift that came later had nothing to close. The
+    // whole span was dropped, and a pedal held through a run was drawn as one
+    // never touched. His: "якщо я натискаю його рано, то воно показується що
+    // воно з самого початку взагалі не було натиснуто".
+    const roller = new RollRecorder();
+    roller.pedalWasAlreadyDown(1000);
+    roller.pedal(pedal(false, 1800));
+
+    expect(roller.roll().pedal).toEqual([{ downAtMs: 1000, upAtMs: 1800 }]);
+  });
+
+  it('leaves a pedal already written down where the foot put it', () => {
+    // Said twice - by a count-in and again by a run picked up after a pause -
+    // it is still the one press, and its moment is the reader's own.
+    const roller = new RollRecorder();
+    roller.pedal(pedal(true, 900));
+    roller.pedalWasAlreadyDown(1000);
+    roller.pedal(pedal(false, 1800));
+
+    expect(roller.roll().pedal).toEqual([{ downAtMs: 900, upAtMs: 1800 }]);
+  });
+
   it('weighs a click by what it marks', () => {
     // The grid draws a downbeat heavier than a beat and a beat heavier than
     // what falls between them, so the weight travels with the moment.
@@ -729,6 +754,52 @@ describe('the roll a run leaves behind', () => {
     harness.midi.pedal(false, harness.clock.now() + 500);
 
     expect(harness.session.roll.pedal).toHaveLength(1);
+  });
+
+  it('takes a pedal put down over the count-in, from where the music begins', () => {
+    // The count is not the run. Dated where the foot moved, a pedal put on at
+    // the top of a two-bar count would hang two bars of empty drawing in front
+    // of the first note to hold one band; down when the music began is the
+    // whole of what the picture has to say about it.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      options: { countInBars: 1 },
+    });
+    harness.session.start();
+    harness.midi.pedal(true, 100);
+    harness.metronome.advanceSubdivisions(5);
+    harness.midi.pedal(false, 5000);
+
+    const began = rollBeganAtMs(harness.session.roll);
+    expect(harness.session.roll.pedal).toEqual([{ downAtMs: began, upAtMs: 5000 }]);
+    expect(began).toBeGreaterThan(100);
+  });
+
+  it('does not put the pedal back down for a run picked up after a pause', () => {
+    // The foot is followed through the run and not only up to its start. Lifted
+    // and then paused over, a run that resumed still believed the pedal was
+    // where it had been when the music began, and opened a second span at the
+    // pick-up that no foot had asked for.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      // Counted back in, which is where a resumed run writes its first beat
+      // down again - and where it would put the foot back down with it.
+      options: { countInBars: 1 },
+    });
+    harness.session.start();
+    // Down before the music, which is the state the run is handed - and then
+    // lifted inside it, so what the run was handed has stopped being true.
+    harness.midi.pedal(true, 100);
+    harness.metronome.advanceSubdivisions(5);
+    harness.midi.pedal(false, 4_600);
+    harness.session.pause();
+    harness.session.resume();
+    harness.metronome.advanceSubdivisions(5);
+
+    const began = rollBeganAtMs(harness.session.roll);
+    expect(harness.session.roll.pedal).toEqual([{ downAtMs: began, upAtMs: 4_600 }]);
   });
 
   it('takes no click placed after the run is over', () => {

@@ -795,6 +795,9 @@ export class PracticeController {
   /** How long they must have been sitting before it is offered again. */
   private restDueAtMs: number | null = null;
   private hearingNotes: Unsubscribe | null = null;
+  private watchingThePedal: Unsubscribe | null = null;
+  /** Whether the sustain pedal is down, run or no run; see {@link rememberThePedal}. */
+  private pedalIsDown = false;
   private lastBeatTicks = 0;
   private readonly judged: JudgedPress[] = [];
   private finishedReport: PerformanceReport | null = null;
@@ -815,6 +818,7 @@ export class PracticeController {
     this.deps = dependencies;
     this.meter = new HealthMeter(dependencies.health);
     this.hearNotesForTheTimer();
+    this.rememberThePedal();
     // Defaults come from the preset that is actually about to be used, not
     // from the first one registered: restored settings name a preset but may
     // predate a field, and that field has to default to something coherent
@@ -2450,7 +2454,7 @@ export class PracticeController {
     // Nothing is missed by drawing afterwards: the first tick is not delivered
     // until it is due, which is a scheduling lead away, and all of this
     // finishes long before it.
-    session.start(opening);
+    session.start(opening, this.pedalIsDown);
     // Drawn afterwards. Everything the page shows about a run being under way is
     // the same a moment later, and the run's first act - a click placed where
     // the reader's key went down - cannot be moved any earlier than it already
@@ -2498,6 +2502,8 @@ export class PracticeController {
   dispose(): void {
     this.hearingNotes?.();
     this.hearingNotes = null;
+    this.watchingThePedal?.();
+    this.watchingThePedal = null;
     this.listeningForTheOpening?.();
     this.listeningForTheOpening = null;
     this.player?.dispose();
@@ -3332,6 +3338,24 @@ export class PracticeController {
    * outside a graded run - trying a bar over, hunting a chord, playing for
    * the pleasure of it - and none of that reaches a session at all.
    */
+  /**
+   * Keeps the sustain pedal's state, run or no run.
+   *
+   * Here because this is the part that outlives a run, and a run can begin
+   * with the foot already down: putting the pedal on and then playing is how
+   * the instrument is played, and where the opening chord is what starts the
+   * run, the foot always moves before the session exists to hear it. Handed
+   * over at the start, so the picture of the run opens with what was true when
+   * the music did.
+   */
+  private rememberThePedal(): void {
+    this.watchingThePedal = this.deps.midi.subscribe((event) => {
+      if (event.type === 'pedal') {
+        this.pedalIsDown = event.down;
+      }
+    });
+  }
+
   private hearNotesForTheTimer(): void {
     this.hearingNotes = this.deps.midi.subscribe((event) => {
       if (event.type === 'noteoff') {

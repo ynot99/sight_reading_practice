@@ -31,6 +31,7 @@ import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
 import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
+import { rollBeganAtMs } from '../../src/application/session/RunRoll.js';
 import { PracticeHistory } from '../../src/application/PracticeHistory.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { DomainError } from '../../src/shared/errors.js';
@@ -4312,6 +4313,31 @@ describe('the last run that reached an end', () => {
         expect(controller.session, modeId).not.toBeNull();
         expect(controller.session?.status, modeId).toBe('running');
       }
+    });
+
+    it('begins with the pedal where the foot left it', async () => {
+      // Pedal on, then play: where the opening chord is what starts the run,
+      // the foot always moves before there is a session to hear it, so the
+      // lift had no press to close and the span was dropped entirely. His:
+      // "якщо я натискаю його рано, то воно показується що воно з самого
+      // початку взагалі не було натиснуто".
+      const { controller, midi, clock, metronome } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+      });
+      await controller.loadNewExercise();
+      midi.pedal(true, clock.now());
+
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, clock.now());
+      }
+      metronome.advanceSubdivisions(1);
+      midi.pedal(false, clock.now() + 900);
+
+      const roll = controller.session?.roll ?? null;
+      expect(roll?.pedal).toEqual([
+        { downAtMs: roll === null ? -1 : rollBeganAtMs(roll), upAtMs: 900 },
+      ]);
     });
 
     it('waits, and does not punish, while the wrong notes are played', async () => {

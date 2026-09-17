@@ -6491,14 +6491,26 @@ export class AppView {
    * its own width every time.
    */
   private holdTheZoomAround(drawn: HTMLElement, clientX: number, was: number, now: number): void {
-    const keys = drawn.querySelector<HTMLElement>('.roll__keys')?.clientWidth ?? 0;
-    const across = drawn.scrollWidth - keys;
-    const at = clientX - drawn.getBoundingClientRect().left - keys;
+    // Everything read before anything is written, and nothing read afterwards.
+    // A width or a scroll position asked for *after* a zoom has been written
+    // makes the browser lay the whole drawing out there and then - six thousand
+    // elements of it on a run of his City of Tears - so a moving pinch that
+    // read after each write paid for one of those on every move of a finger
+    // instead of one before each frame. The width that follows from the new
+    // zoom is arithmetic, so nothing has to be asked twice.
+    const widths = this.theRunsWidths(drawn);
+    const scrolledTo = drawn.scrollLeft;
+    const at = clientX - drawn.getBoundingClientRect().left - widths.keysPx;
+
     this.applyTheZoom();
-    if (across > 0 && at >= 0) {
-      drawn.scrollLeft = scrollAfterZoom(drawn.scrollLeft, at, across, (across * now) / was);
-    }
-    this.sayWhereTheViewIs();
+
+    const widened = (widths.wholeWidePx * now) / was;
+    const to =
+      widths.wholeWidePx > 0 && at >= 0
+        ? scrollAfterZoom(scrolledTo, at, widths.wholeWidePx, widened)
+        : scrolledTo;
+    drawn.scrollLeft = to;
+    this.showTheWindow(theWindowOnTheRun(to, widths.viewWidePx, widened));
   }
 
   /**
@@ -6511,10 +6523,20 @@ export class AppView {
   private sayWhereTheViewIs(): void {
     const drawn = this.el.rollBody.firstElementChild;
     const widths = drawn instanceof HTMLElement ? this.theRunsWidths(drawn) : null;
-    const window =
+    this.showTheWindow(
       widths === null
         ? null
-        : theWindowOnTheRun(widths.scrolledToPx, widths.viewWidePx, widths.wholeWidePx);
+        : theWindowOnTheRun(widths.scrolledToPx, widths.viewWidePx, widths.wholeWidePx),
+    );
+  }
+
+  /**
+   * Draws the box, given where it goes.
+   *
+   * Told rather than measuring for itself, so that a zoom can hand it numbers
+   * it has already read and nothing reads the drawing after writing to it.
+   */
+  private showTheWindow(window: { readonly fromShare: number; readonly widthShare: number } | null): void {
     this.el.rollMapWindow.hidden = window === null;
     if (window === null) {
       return;
@@ -6532,8 +6554,9 @@ export class AppView {
     }
     const share = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
     const widths = this.theRunsWidths(drawn);
-    drawn.scrollLeft = scrollForTheWindowAt(share, widths.viewWidePx, widths.wholeWidePx);
-    this.sayWhereTheViewIs();
+    const to = scrollForTheWindowAt(share, widths.viewWidePx, widths.wholeWidePx);
+    drawn.scrollLeft = to;
+    this.showTheWindow(theWindowOnTheRun(to, widths.viewWidePx, widths.wholeWidePx));
   }
 
   /**
@@ -6545,12 +6568,14 @@ export class AppView {
    * the map at places the run never reached.
    */
   private theRunsWidths(drawn: HTMLElement): {
+    readonly keysPx: number;
     readonly scrolledToPx: number;
     readonly viewWidePx: number;
     readonly wholeWidePx: number;
   } {
     const keys = drawn.querySelector<HTMLElement>('.roll__keys')?.clientWidth ?? 0;
     return {
+      keysPx: keys,
       scrolledToPx: drawn.scrollLeft,
       viewWidePx: drawn.clientWidth - keys,
       wholeWidePx: drawn.scrollWidth - keys,

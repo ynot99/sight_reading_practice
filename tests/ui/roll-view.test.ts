@@ -10,11 +10,15 @@ import {
   pinchedTo,
   LEAST_ROW,
   MOST_ROW,
+  theMapOfTheRun,
+  theWindowOnTheRun,
+  scrollForTheWindowAt,
 } from '../../src/ui/rollView.js';
-import type {
-  RolledBeat,
-  RolledPress,
-  RunRoll,
+import {
+  RollRecorder,
+  type RolledBeat,
+  type RolledPress,
+  type RunRoll,
 } from '../../src/application/session/RunRoll.js';
 function beatOf(atMs: number, weight: BeatWeight, positionTicks: number): RolledBeat {
   return { atMs, weight, positionTicks };
@@ -745,5 +749,96 @@ describe('how far a note was from where it was owed', () => {
     // The first was dead on and says nothing; the second was three tenths late.
     expect(bands).toHaveLength(1);
     expect(bands[0]?.title).toBe('Late by 300 ms');
+  });
+});
+
+describe('the whole run on one line', () => {
+  /** A run that stood still twice, once briefly and once for a long time. */
+  function stoppedTwice(): RunRoll {
+    const roller = new RollRecorder();
+    roller.beat(0, 'downbeat', 0);
+    roller.beat(1_000, 'beat', Duration.QUARTER.ticks);
+    // Given late, which is the music standing still: a pair at one place.
+    roller.beat(2_000, 'beat', Duration.QUARTER.ticks * 2);
+    roller.beat(2_200, 'beat', Duration.QUARTER.ticks * 2);
+    roller.beat(3_000, 'beat', Duration.QUARTER.ticks * 3);
+    roller.beat(9_000, 'beat', Duration.QUARTER.ticks * 3);
+    roller.rushed(9_500, 300);
+    return roller.roll();
+  }
+
+  it('draws the stops and nothing else', () => {
+    // A run of a long piece is thousands of notes and none of them is what a
+    // scroll is a search for. His: "звичайним скролингом шукати секції де були
+    // великі затупи - це складно".
+    const marks = theMapOfTheRun(stoppedTwice());
+
+    expect(marks.map((mark) => mark.kind)).toEqual(['wait', 'wait', 'rush']);
+  });
+
+  it('makes the longest stop the widest band, without ranking anything', () => {
+    // His: "самі сильні затупи по ідеї вже повинно бути видно на minimap". The
+    // run is ten seconds long, so a six-second stop is more than half of it and
+    // a fifth of a second is a sliver.
+    const marks = theMapOfTheRun(stoppedTwice());
+    const [brief, long] = marks;
+
+    expect(brief?.widthShare ?? 1).toBeLessThan(0.05);
+    expect(long?.widthShare ?? 0).toBeGreaterThan(0.5);
+    expect(long?.fromShare ?? 0).toBeGreaterThan(brief?.fromShare ?? 1);
+  });
+
+  it('gives a rush no width, having none', () => {
+    const rush = theMapOfTheRun(stoppedTwice()).find((mark) => mark.kind === 'rush');
+
+    expect(rush?.widthShare).toBe(0);
+  });
+
+  it('says nothing about a run with no length', () => {
+    expect(theMapOfTheRun(new RollRecorder().roll())).toEqual([]);
+  });
+});
+
+describe('the window on the run', () => {
+  it('is the share of the drawing that is on the screen', () => {
+    expect(theWindowOnTheRun(0, 400, 2_000)).toEqual({ fromShare: 0, widthShare: 0.2 });
+    expect(theWindowOnTheRun(1_000, 400, 2_000)).toEqual({ fromShare: 0.5, widthShare: 0.2 });
+  });
+
+  it('stops at the far end rather than hanging off it', () => {
+    // A drawing scrolled to its end shows its last screenful, not a window
+    // reaching past where the run stops.
+    expect(theWindowOnTheRun(1_600, 400, 2_000)).toEqual({ fromShare: 0.8, widthShare: 0.2 });
+  });
+
+  it('stays on the strip while the drawing is bounced past its ends', () => {
+    // An iPad rubber-bands a scroll past either end and reports where it has
+    // been pulled to, so without this the box would be drawn hanging off the
+    // side of the map for as long as a flick takes to settle.
+    expect(theWindowOnTheRun(1_900, 400, 2_000)).toEqual({ fromShare: 0.8, widthShare: 0.2 });
+    expect(theWindowOnTheRun(-200, 400, 2_000)).toEqual({ fromShare: 0, widthShare: 0.2 });
+  });
+
+  it('fills itself where the whole run is already on the screen', () => {
+    expect(theWindowOnTheRun(0, 2_000, 1_000)).toEqual({ fromShare: 0, widthShare: 1 });
+  });
+
+  it('says nothing where nothing has been laid out', () => {
+    // jsdom, and a sheet that has not been opened yet. A box claiming to show
+    // the whole run at the moment the reader can see none of it is worse than
+    // no box.
+    expect(theWindowOnTheRun(0, 0, 0)).toBeNull();
+    expect(theWindowOnTheRun(0, 400, 0)).toBeNull();
+  });
+
+  it('centres the view on the place a finger points at', () => {
+    // Started at the finger instead, the thing pointed at would sit against the
+    // left edge with the run into it out of sight.
+    expect(scrollForTheWindowAt(0.5, 400, 2_000)).toBe(800);
+  });
+
+  it('will not scroll past either end for a finger near it', () => {
+    expect(scrollForTheWindowAt(0, 400, 2_000)).toBe(0);
+    expect(scrollForTheWindowAt(1, 400, 2_000)).toBe(1_600);
   });
 });

@@ -513,6 +513,61 @@ textarea {
  * nested scrollers mean a finger that moves the wrong one.
  */
 /*
+ * The whole run on one line, with the part on the screen boxed.
+ *
+ * Only the stops are on it: what a scroll through a long run is a search for is
+ * the places the music stood still, and the longest of them are the widest
+ * bands here without anything having to rank them. His: "самі сильні затупи по
+ * ідеї вже повинно бути видно на minimap".
+ */
+.roll-map {
+  position: relative;
+  height: 14px;
+  margin-top: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  /* The finger moves the view rather than the page under it. */
+  touch-action: none;
+}
+
+.roll-map__marks {
+  position: absolute;
+  inset: 0;
+}
+
+.roll-map__mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+/* A stop of no width is still a stop, so nothing vanishes for being brief. */
+.roll-map__mark--wait {
+  min-width: 1px;
+  background: var(--pending);
+}
+
+.roll-map__mark--rush {
+  width: 2px;
+  background: var(--wrong);
+}
+
+.roll-map__window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  /* The strip takes the finger, not the box: a box too narrow to hit is a
+     control that only works where the run is short. */
+  pointer-events: none;
+}
+
+/*
  * The row under the drawing that chooses what to practise out of it.
  *
  * Wraps rather than shrinks: on a phone the two ends drop onto their own line

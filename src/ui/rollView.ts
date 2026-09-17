@@ -390,6 +390,98 @@ export function keepTheHeadInView(
   return Math.max(0, headPx - viewWidePx * HEAD_RESTS_AT);
 }
 
+/** One thing worth seeing on the map of a run, as shares of its whole length. */
+export interface MapMark {
+  readonly kind: 'wait' | 'rush';
+  readonly fromShare: number;
+  /** Nought for a rush, which is an instant rather than a stretch. */
+  readonly widthShare: number;
+}
+
+/**
+ * The whole run on one line: where it stood still, and where it was overtaken.
+ *
+ * Not the drawing made small. A run of a long piece is thousands of notes and
+ * none of them is what the reader is hunting for when they scroll - they are
+ * looking for the places they stopped, and a shrunken picture of the notes
+ * would bury those under everything that went right. So the map draws only what
+ * a scroll is a search for. His: "звичайним скролингом шукати секції де були
+ * великі затупи - це складно... та самі сильні затупи по ідеї вже повинно бути
+ * видно на minimap".
+ *
+ * Shares rather than pixels, because the strip is as wide as the sheet is and
+ * nothing here knows that.
+ */
+export function theMapOfTheRun(roll: RunRoll): readonly MapMark[] {
+  const began = rollBeganAtMs(roll);
+  const across = rollEndedAtMs(roll) - began;
+  if (across <= 0) {
+    return [];
+  }
+  const shareOf = (atMs: number): number => Math.min(1, Math.max(0, (atMs - began) / across));
+  const marks: MapMark[] = [];
+  for (const wait of theWaits(roll)) {
+    const from = shareOf(wait.fromMs);
+    marks.push({ kind: 'wait', fromShare: from, widthShare: shareOf(wait.untilMs) - from });
+  }
+  for (const rush of theRushes(roll)) {
+    marks.push({ kind: 'rush', fromShare: shareOf(rush.atMs), widthShare: 0 });
+  }
+  return marks;
+}
+
+/**
+ * Which slice of the run is on the screen, as shares of the whole drawing.
+ *
+ * `null` where nothing has been laid out yet, the same answer and for the same
+ * reason as {@link keepTheHeadInView}: a window on a drawing of no width is not
+ * a window on anything, and drawing one would be a box claiming to show the
+ * whole run at the moment the reader can see none of it.
+ */
+export function theWindowOnTheRun(
+  scrolledToPx: number,
+  viewWidePx: number,
+  wholeWidePx: number,
+): { readonly fromShare: number; readonly widthShare: number } | null {
+  if (wholeWidePx <= 0 || viewWidePx <= 0) {
+    return null;
+  }
+  const widthShare = Math.min(1, viewWidePx / wholeWidePx);
+  const fromShare = Math.min(1 - widthShare, Math.max(0, scrolledToPx / wholeWidePx));
+  return { fromShare, widthShare };
+}
+
+/**
+ * Where to scroll so that the window sits under a finger on the map.
+ *
+ * Centred on the finger rather than started at it: a reader pointing at a stop
+ * in the middle of the map means "show me that", and a view that began there
+ * would put the thing they pointed at against its left edge with the run into
+ * it out of sight.
+ */
+export function scrollForTheWindowAt(
+  atShare: number,
+  viewWidePx: number,
+  wholeWidePx: number,
+): number {
+  const most = Math.max(0, wholeWidePx - viewWidePx);
+  return Math.min(most, Math.max(0, atShare * wholeWidePx - viewWidePx / 2));
+}
+
+/** The marks of {@link theMapOfTheRun}, drawn. */
+export function drawTheMap(roll: RunRoll): HTMLElement {
+  const map = element('div', 'roll-map__marks');
+  for (const mark of theMapOfTheRun(roll)) {
+    const drawn = element('div', `roll-map__mark roll-map__mark--${mark.kind}`);
+    drawn.style.left = `${(mark.fromShare * 100).toFixed(3)}%`;
+    if (mark.kind === 'wait') {
+      drawn.style.width = `${(mark.widthShare * 100).toFixed(3)}%`;
+    }
+    map.append(drawn);
+  }
+  return map;
+}
+
 /**
  * The gap between when a note was owed and when it was taken.
  *

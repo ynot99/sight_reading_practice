@@ -1383,6 +1383,21 @@ describe('AppView', () => {
       expect(element('sheet-modes').hidden).toBe(true);
     });
 
+    it('puts the whole run on one line under the drawing', async () => {
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      expect(element('roll-map').querySelector('.roll-map__marks')).not.toBeNull();
+      // jsdom lays nothing out, so there is no window to draw and the box says
+      // so by staying away rather than by claiming the whole strip.
+      expect(element('roll-map-window').hidden).toBe(true);
+    });
+
     it('chooses a passage out of the picture, and goes to it', async () => {
       // The stretch that went wrong is visible in the drawing and nowhere else,
       // so reaching it afterwards meant finding it again on the page by eye.

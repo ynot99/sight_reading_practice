@@ -58,8 +58,11 @@ import {
   type GridChoice,
 } from '../application/session/RunRoll.js';
 import {
+  drawTheMap,
   drawTheRoll,
   keepTheHeadInView,
+  scrollForTheWindowAt,
+  theWindowOnTheRun,
   pinchedTo,
   timeFromTap,
   type FingerSpan,
@@ -1388,6 +1391,8 @@ export class AppView {
     scoreReading: HTMLButtonElement;
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
+    rollMap: HTMLElement;
+    rollMapWindow: HTMLElement;
     rollFrom: HTMLButtonElement;
     rollTo: HTMLButtonElement;
     rollPassageWhat: HTMLElement;
@@ -1644,6 +1649,8 @@ export class AppView {
       scoreReading: requireElement(doc, 'score-reading'),
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
+      rollMap: requireElement(doc, 'roll-map'),
+      rollMapWindow: requireElement(doc, 'roll-map-window'),
       rollFrom: requireElement(doc, 'roll-from'),
       rollTo: requireElement(doc, 'roll-to'),
       rollPassageWhat: requireElement(doc, 'roll-passage-what'),
@@ -5696,6 +5703,16 @@ export class AppView {
     this.listen(this.el.rollStop, 'click', () => {
       this.stopTheRoll();
     });
+    this.listen(this.el.rollMap, 'pointerdown', (event) => {
+      this.el.rollMap.setPointerCapture(event.pointerId);
+      this.showTheRunWhereItWasPointedAt(event);
+    });
+    this.listen(this.el.rollMap, 'pointermove', (event) => {
+      if (!this.el.rollMap.hasPointerCapture(event.pointerId)) {
+        return;
+      }
+      this.showTheRunWhereItWasPointedAt(event);
+    });
     this.listen(this.el.rollFrom, 'click', () => {
       this.takeAnEndFromTheMarker('from');
     });
@@ -6407,6 +6424,39 @@ export class AppView {
   }
 
   /**
+   * Draws the box saying which part of the run is on the screen.
+   *
+   * Hidden rather than guessed at where nothing has been laid out: a box
+   * claiming to show the whole run at the moment the reader can see none of it
+   * is worse than no box.
+   */
+  private sayWhereTheViewIs(): void {
+    const drawn = this.el.rollBody.firstElementChild;
+    const window =
+      drawn instanceof HTMLElement
+        ? theWindowOnTheRun(drawn.scrollLeft, drawn.clientWidth, drawn.scrollWidth)
+        : null;
+    this.el.rollMapWindow.hidden = window === null;
+    if (window === null) {
+      return;
+    }
+    this.el.rollMapWindow.style.left = `${(window.fromShare * 100).toFixed(3)}%`;
+    this.el.rollMapWindow.style.width = `${(window.widthShare * 100).toFixed(3)}%`;
+  }
+
+  /** Scrolls the drawing to the part of the run a finger is on the map. */
+  private showTheRunWhereItWasPointedAt(event: PointerEvent): void {
+    const drawn = this.el.rollBody.firstElementChild;
+    const box = this.el.rollMap.getBoundingClientRect();
+    if (!(drawn instanceof HTMLElement) || box.width <= 0) {
+      return;
+    }
+    const share = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
+    drawn.scrollLeft = scrollForTheWindowAt(share, drawn.clientWidth, drawn.scrollWidth);
+    this.sayWhereTheViewIs();
+  }
+
+  /**
    * Moves one end of the passage to where the marker stands.
    *
    * The marker and not the finger: it is already the one thing in this sheet
@@ -6486,6 +6536,16 @@ export class AppView {
       }),
     );
     this.applyTheZoom();
+    this.el.rollMap.replaceChildren(drawTheMap(roll), this.el.rollMapWindow);
+    // The drawing is thrown away and built again on every redraw, so the watch
+    // on its scrolling goes with it and there is nothing to unsubscribe.
+    const drawn = this.el.rollBody.firstElementChild;
+    if (drawn instanceof HTMLElement) {
+      drawn.addEventListener('scroll', () => {
+        this.sayWhereTheViewIs();
+      });
+    }
+    this.sayWhereTheViewIs();
     this.describeTheRoll();
   }
 
@@ -6848,6 +6908,8 @@ export class AppView {
       roll.style.setProperty('--roll-second', `${this.el.rollZoom.value}px`);
       roll.style.setProperty('--roll-row', `${this.rollRowPx}px`);
     }
+    // The window is a share of a drawing that has just changed width.
+    this.sayWhereTheViewIs();
   }
 
   /**

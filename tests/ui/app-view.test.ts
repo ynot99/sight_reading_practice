@@ -1459,6 +1459,68 @@ describe('AppView', () => {
       expect(element('takes-list').children.length).toBe(1);
     });
 
+    it('says a run has been kept by going grey', async () => {
+      // Pressed again it would file a second copy of the same run under a
+      // second name. His: "коли натискається Keep - можеш зробити щоб кнопка
+      // становилась disabled".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const keep = element<HTMLButtonElement>('roll-keep');
+      expect(keep.disabled).toBe(false);
+
+      keep.click();
+
+      expect(keep.disabled).toBe(true);
+      expect(runtime.takes.list()).toHaveLength(1);
+
+      // A different run is a different thing to keep.
+      element<HTMLButtonElement>('roll-close').click();
+      element<HTMLButtonElement>('focus-play').click();
+      const again = runtime.controller.session?.currentStep;
+      midi.noteOn(again?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      expect(element<HTMLButtonElement>('roll-keep').disabled).toBe(false);
+    });
+
+    it('scrolls on a plain wheel and zooms on a held one', async () => {
+      // A wheel scrolls, which the browser does better than anything written
+      // here - the momentum, the rubber band, the sideways axis a trackpad
+      // gives. Held down it zooms, which is the convention every drawing
+      // program uses and the one a trackpad pinch already arrives as. His:
+      // "горизонтальний та вертикальний скроли зробити звичайними скролами, а
+      // ctrl+скрол зробити zoom in/zoom out".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const zoom = element<HTMLInputElement>('roll-zoom');
+      const was = zoom.value;
+      const wheel = (ctrlKey: boolean): void => {
+        element('roll-body').dispatchEvent(
+          new WheelEvent('wheel', { deltaY: -120, ctrlKey, bubbles: true, cancelable: true }),
+        );
+      };
+
+      wheel(false);
+      expect(zoom.value, 'a plain wheel is the browser’s').toBe(was);
+
+      wheel(true);
+      expect(Number(zoom.value)).toBeGreaterThan(Number(was));
+    });
+
+
     it('opens a kept recording in the same picture', async () => {
       // A recording is presses and pedal against time, which is what the
       // picture draws - so looking at one asks for no second drawing. His:

@@ -589,6 +589,47 @@ textarea {
 }
 
 /*
+ * Scrollbars in the page's own colours.
+ *
+ * Two spellings for one thing: the standard properties, which Firefox and new
+ * Chromium read, and the WebKit pseudo-elements, which are what Safari and the
+ * iPad have. Neither is enough alone.
+ *
+ * Thin and quiet on purpose - a scrollbar here is a place marker on a drawing
+ * rather than a control anybody drags - and it keeps its own width so the
+ * drawing does not change size when one appears.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: var(--border);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+/* Where the two bars meet, which the platform fills with a raised square. */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/*
  * The bar counted out in written time, floating over the drawing.
  *
  * Over it rather than beside it: the drawing is what the sheet is for, and four
@@ -603,8 +644,8 @@ textarea {
   transform: translateX(-50%);
   z-index: 2;
   display: flex;
-  gap: 3px;
-  padding: 3px 5px;
+  gap: 4px;
+  padding: 4px 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   -webkit-backdrop-filter: blur(2px);
@@ -612,11 +653,17 @@ textarea {
   pointer-events: none;
 }
 
+/*
+ * Big enough to fill the pill they sit in. At seven pixels inside a pill of
+ * fourteen they read as specks with a ring of air round them, which is a row
+ * that has to be looked for rather than seen. His: "квадратики метроному
+ * зробити трішки більше щоб вони поміщались у елемент де вони знаходяться".
+ */
 .roll-beats__on,
 .roll-beats__off {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
   border: 1px solid var(--border);
 }
 

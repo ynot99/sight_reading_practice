@@ -6492,6 +6492,8 @@ export class AppView {
    */
   private showTheRoll(): void {
     this.theTakeShowing = null;
+    // A different run is a different thing to keep.
+    this.el.rollKeep.disabled = false;
     if (this.theRoll() === null) {
       return;
     }
@@ -6594,9 +6596,14 @@ export class AppView {
    */
   private zoomTheRollByWheel(event: WheelEvent): void {
     const drawn = this.el.rollBody.firstElementChild;
-    // Left to the browser where the reader asked for a sideways scroll, which
-    // is what a held shift has always meant on a wheel.
-    if (!(drawn instanceof HTMLElement) || event.shiftKey) {
+    // A wheel scrolls, which is what a wheel does, and the browser is better at
+    // it than anything written here - it keeps the momentum, the rubber band
+    // and the sideways axis a trackpad gives. Held down, the same wheel zooms:
+    // the convention every drawing program and the browser's own page zoom use,
+    // and the one a trackpad pinch already arrives as. His: "горизонтальний та
+    // вертикальний скроли зробити звичайними скролами, а ctrl+скрол зробити
+    // zoom in/zoom out".
+    if (!(drawn instanceof HTMLElement) || !(event.ctrlKey || event.metaKey)) {
       return;
     }
     event.preventDefault();
@@ -6725,6 +6732,11 @@ export class AppView {
       return;
     }
     this.runtime.takes.keepTake(take, Date.now());
+    // Kept, and the button says so. Pressed again it would file a second copy
+    // of the same run under a second name, and the list is short enough that
+    // two of everything is the whole of what makes it useless. His: "коли
+    // натискається Keep - можеш зробити щоб кнопка становилась disabled".
+    this.el.rollKeep.disabled = true;
     this.renderTakes();
   }
 

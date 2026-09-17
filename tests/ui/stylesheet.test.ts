@@ -78,6 +78,19 @@ describe('the stylesheet', () => {
     expect([...new Set(bare)].filter((name) => !defined.has(name))).toEqual([]);
   });
 
+  it('dresses the scrollbars in both spellings or in neither', () => {
+    // One thing said twice: the standard properties, which Firefox and new
+    // Chromium read, and the WebKit pseudo-elements, which are what Safari and
+    // the iPad have. Either alone leaves half the readers looking at the
+    // platform's own bar beside a page that has been dressed - which reads as
+    // something broken rather than as a default.
+    const standard = rules().find((rule) => rule.body.includes('scrollbar-color'));
+    const webkit = rules().find((rule) => rule.selector.includes('::-webkit-scrollbar-thumb'));
+
+    expect(standard?.body).toMatch(/scrollbar-width\s*:\s*thin/);
+    expect(webkit?.body ?? '').not.toBe('');
+  });
+
   it('gives the corner of the page one line, not a ragged one', () => {
     // The clock, the listening light and the way back to the last reading are
     // buttons of different heights - one carries two lines of text where

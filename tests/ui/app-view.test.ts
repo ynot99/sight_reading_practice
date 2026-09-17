@@ -1428,6 +1428,13 @@ describe('AppView', () => {
       const practise = element<HTMLButtonElement>('roll-practise');
       expect(practise.disabled).toBe(false);
 
+      // The markers on the score stand round the passage that was just chosen,
+      // and they stand there *now*. Chosen here and nowhere else, the page went
+      // on showing the passage it had before until something else happened to
+      // redraw it. His: "слайси ставляться з MIDI editor - але одразу не
+      // перемальовуються... коли натискаю Practise this".
+      expect(renderer.shownPassage?.toMeasureIndex).toBe(0);
+
       // Where the marker is left by a run that reached its end: on the last
       // thing played, which is the far side of the piece from the passage.
       renderer.cursor.moveTo(4);

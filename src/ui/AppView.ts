@@ -6484,6 +6484,13 @@ export class AppView {
     const from = end === 'from' ? bar : (settings.rangeFromBar ?? firstBar);
     const to = end === 'to' ? bar : (settings.rangeToBar ?? lastBar);
     controller.choosePassage(from, to);
+    // The same as dragging a marker on the score, because it is the same act:
+    // everything that draws the passage is drawn again. Without it the setting
+    // changed and the page did not - the markers stood round the passage that
+    // was there before, and stayed there until something else happened to
+    // redraw them. His: "слайси ставляться з MIDI editor - але одразу не
+    // перемальовуються... коли натискаю Practise this".
+    this.syncControlsFromSettings();
     this.sayWhatWouldBePractised();
   }
 

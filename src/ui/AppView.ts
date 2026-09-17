@@ -4202,12 +4202,33 @@ export class AppView {
    * swipe, so without this a score read as pages could only be turned with a
    * mouse held down and dragged across it.
    */
+  /**
+   * Whether anything is standing over the page.
+   *
+   * Asked of the page rather than of a list kept here, because a list of them
+   * is a thing to forget to add the next sheet to - and the one that got
+   * forgotten would be the one whose keys went through to the music.
+   */
+  private aSheetIsOpen(): boolean {
+    return this.doc.querySelector('.sheet:not([hidden])') !== null;
+  }
+
   private bindSpaceBar(): void {
     const handler = (event: KeyboardEvent): void => {
       if (event.metaKey || event.ctrlKey || event.altKey) {
         return;
       }
       if (isFormControl(this.doc.activeElement)) {
+        return;
+      }
+      // Nor while a sheet stands over the page. These keys belong to whatever
+      // is in front of the reader, and a sheet is in front of everything: he
+      // pressed space over the picture of a run expecting the picture to play,
+      // and started a *run* behind it - with the sheet still hanging there over
+      // music that had begun without him. His: "прибрати пробіл shortcut щоб
+      // почати гру коли відчинені діалоги". The arrows go with it, for the same
+      // reason: turning a page behind a dialog is the same fault.
+      if (this.aSheetIsOpen()) {
         return;
       }
       const turn = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;

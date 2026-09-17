@@ -1459,6 +1459,43 @@ describe('AppView', () => {
       expect(element('takes-list').children.length).toBe(1);
     });
 
+    it('leaves the space bar to whatever is standing over the page', async () => {
+      // He pressed space over the picture of a run expecting the picture to
+      // play, and started a *run* behind it - with the sheet still hanging
+      // there over music that had begun without him. His: "прибрати пробіл
+      // shortcut щоб почати гру коли відчинені діалоги".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      const before = runtime.controller.session?.status;
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true }),
+      );
+
+      expect(element('sheet-roll').hidden).toBe(false);
+      expect(runtime.controller.session?.status).toBe(before);
+    });
+
+    it('gives the space bar back once the page is clear', async () => {
+      // The rule is about what is in front of the reader, not about the key:
+      // with nothing over the page it starts a run as it always has.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      expect(runtime.controller.session).toBeNull();
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true }),
+      );
+
+      expect(runtime.controller.session).not.toBeNull();
+    });
+
+
     it('says a run has been kept by going grey', async () => {
       // Pressed again it would file a second copy of the same run under a
       // second name. His: "коли натискається Keep - можеш зробити щоб кнопка

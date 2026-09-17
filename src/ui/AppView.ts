@@ -2155,6 +2155,23 @@ export class AppView {
     this.el.sheetPlaces.hidden = true;
   }
 
+  /**
+   * Writes the click back to the score it was chosen for.
+   *
+   * The score being read, found the way the passages beside it are found - by
+   * the title of what is open - so that nothing has to carry an id around for
+   * this. Nothing kept, nothing remembered: a generated exercise is not a
+   * piece anybody comes back to.
+   */
+  private async letTheScoreKeepTheClick(pattern: ClickPattern): Promise<void> {
+    const opened = this.runtime.controller.openedExercise;
+    const kept = this.runtime.scores.list().find((score) => score.title === opened?.title);
+    if (kept === undefined) {
+      return;
+    }
+    await this.runtime.scores.keepTheClick(kept.id, pattern);
+  }
+
   /** Writes the list back to the score it belongs to, and redraws it. */
   private async keepPassages(passages: readonly SavedPassage[]): Promise<void> {
     const opened = this.runtime.controller.openedExercise;
@@ -2280,6 +2297,13 @@ export class AppView {
         return;
       }
       await this.runtime.controller.openScore(exercise);
+      // The click this piece was last read with, where it has one. Only where:
+      // a score that has never been chosen for leaves the setting alone, which
+      // is what makes this a memory rather than a default.
+      const asked = this.runtime.scores.theClickFor(exercise.title);
+      if (asked !== null) {
+        this.runtime.controller.updateSettings({ clickPattern: asked });
+      }
       // Choosing one from the sheet is a reading, and the calendar is what
       // says so - `IClock` counts from an arbitrary zero for measuring music.
       void this.runtime.scores.markRead(exercise.title, Date.now());
@@ -2729,7 +2753,11 @@ export class AppView {
     });
 
     this.listen(this.el.click, 'change', () => {
-      controller.updateSettings({ clickPattern: this.el.click.value as ClickPattern });
+      const pattern = this.el.click.value as ClickPattern;
+      controller.updateSettings({ clickPattern: pattern });
+      // And the piece keeps it. Choosing here is the only way this setting
+      // ever moves, so it is the only place that has to remember.
+      void this.letTheScoreKeepTheClick(pattern);
       this.syncControlsFromSettings();
     });
 

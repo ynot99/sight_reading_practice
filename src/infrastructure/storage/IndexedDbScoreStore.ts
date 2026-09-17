@@ -1,3 +1,4 @@
+import type { ClickPattern } from '../../application/ports/IMetronome.js';
 import type {
   IScoreStore,
   SavedPassage,
@@ -102,6 +103,14 @@ export class IndexedDbScoreStore implements IScoreStore {
       return;
     }
     await this.write({ ...found, passages });
+  }
+
+  async keepTheClick(id: string, clickPattern: ClickPattern): Promise<void> {
+    const found = await this.read(id);
+    if (found === null) {
+      return;
+    }
+    await this.write({ ...found, clickPattern });
   }
 
   async write(score: StoredScore): Promise<void> {

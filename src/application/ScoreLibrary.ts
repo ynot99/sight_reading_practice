@@ -1,6 +1,7 @@
 import { measureCount } from '../domain/model/Exercise.js';
 import type { Exercise } from '../domain/model/Exercise.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
+import type { ClickPattern } from './ports/IMetronome.js';
 import type { IScoreImporter } from './ports/IScoreImporter.js';
 import type { IScoreStore, SavedPassage, StoredScoreSummary } from './ports/IScoreStore.js';
 
@@ -273,6 +274,32 @@ export class ScoreLibrary {
     this.summaries = this.summaries.map((summary) =>
       summary.id === id ? { ...summary, passages: kept } : summary,
     );
+  }
+
+  /**
+   * Keeps how finely the click divides for one score.
+   *
+   * Kept with the piece for the same reason the passages are: "four clicks a
+   * bar" is an answer about *this* metre, and a reader coming back to it next
+   * week wants the click they settled on waiting for them rather than whatever
+   * the last piece needed.
+   */
+  async keepTheClick(id: string, clickPattern: ClickPattern): Promise<void> {
+    await this.deps.store.keepTheClick(id, clickPattern);
+    this.summaries = this.summaries.map((summary) =>
+      summary.id === id ? { ...summary, clickPattern } : summary,
+    );
+  }
+
+  /**
+   * The click a score asked for, or `null` where it has never said.
+   *
+   * Null rather than a default: nothing is the instruction to leave the
+   * reader's own setting alone, and a default here would make every score ever
+   * imported quietly override it.
+   */
+  theClickFor(title: string): ClickPattern | null {
+    return this.summaries.find((summary) => summary.title === title)?.clickPattern ?? null;
   }
 
   /**

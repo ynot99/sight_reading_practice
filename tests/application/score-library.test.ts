@@ -18,6 +18,60 @@ function library(store = new InMemoryScoreStore()) {
   };
 }
 
+describe('the click a piece asks for', () => {
+  it('keeps it with the piece, so it is waiting next time', async () => {
+    // His: "choral chambers has two clicks in a base metronome setting, and I
+    // need to choose to hear more clicks, and when I switch to another song -
+    // I don't want to hear that many ticks - and I need to switch again".
+    const { scores } = library();
+    const kept = await scores.keep(twoBarExercise({ title: 'Choral Chambers' }), 1_000);
+
+    await scores.keepTheClick(kept.id, 'subdivision');
+
+    expect(scores.theClickFor('Choral Chambers')).toBe('subdivision');
+  });
+
+  it('says nothing about a piece nobody has chosen for', async () => {
+    // Nothing is the instruction to leave the reader's own setting alone. A
+    // default here would make every score ever imported quietly override it.
+    const { scores } = library();
+    await scores.keep(twoBarExercise({ title: 'Something Borrowed' }), 1_000);
+
+    expect(scores.theClickFor('Something Borrowed')).toBeNull();
+  });
+
+  it('says nothing about a piece that is not kept at all', () => {
+    const { scores } = library();
+
+    expect(scores.theClickFor('A piece nobody imported')).toBeNull();
+  });
+
+  it('keeps one piece answer out of another', async () => {
+    const { scores } = library();
+    const one = await scores.keep(twoBarExercise({ title: 'Choral Chambers' }), 1_000);
+    await scores.keep(twoBarExercise({ title: 'City of Tears' }), 2_000);
+
+    await scores.keepTheClick(one.id, 'division');
+
+    expect(scores.theClickFor('Choral Chambers')).toBe('division');
+    expect(scores.theClickFor('City of Tears')).toBeNull();
+  });
+
+  it('survives the library being read back from the store', async () => {
+    // The point of keeping it: a reader coming back next week, which is a new
+    // library over the same store.
+    const store = new InMemoryScoreStore();
+    const first = library(store);
+    const kept = await first.scores.keep(twoBarExercise({ title: 'Choral Chambers' }), 1_000);
+    await first.scores.keepTheClick(kept.id, 'subdivision');
+
+    const later = library(store);
+    await later.scores.load();
+
+    expect(later.scores.theClickFor('Choral Chambers')).toBe('subdivision');
+  });
+});
+
 describe('the places marked out in a piece', () => {
   /** A kept score to mark places out in, since a generated one has none. */
   async function marked(places: readonly { name: string; fromBar: number; toBar: number }[]) {

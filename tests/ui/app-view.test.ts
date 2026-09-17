@@ -4211,6 +4211,139 @@ describe('AppView', () => {
     expect(element<HTMLInputElement>('focus-to').value).toBe('');
   });
 
+  describe('the click a piece asks for', () => {
+    /** The Open button on the row for one title. */
+    function openRow(title: string): HTMLButtonElement {
+      const rows = [...element('scores-list').querySelectorAll('li')];
+      const row = rows.find(
+        (each) => each.querySelector('.takes__name')?.getAttribute('title') === title,
+      );
+      const open = [...(row?.querySelectorAll('button') ?? [])].find(
+        (button) => button.textContent === 'Open',
+      );
+      if (!(open instanceof HTMLButtonElement)) {
+        throw new Error(`no Open button for ${title}`);
+      }
+      return open;
+    }
+
+    async function shelved(rig: Rig, titles: readonly string[]): Promise<void> {
+      let at = 1_000;
+      for (const title of titles) {
+        await rig.runtime.scores.keep(twoBarExercise({ title }), at);
+        at += 1_000;
+      }
+      await rig.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    it('puts back the click the piece was last read with', async () => {
+      // His: "choral chambers has two clicks in a base metronome setting, and I
+      // need to choose to hear more clicks, and when I switch to another song -
+      // I don't want to hear that many ticks - and I need to switch again".
+      const rig = createRig();
+      await shelved(rig, ['Choral Chambers']);
+      const kept = rig.runtime.scores.list().find((score) => score.title === 'Choral Chambers');
+      await rig.runtime.scores.keepTheClick(kept?.id ?? '', 'subdivision');
+      rig.runtime.controller.updateSettings({ clickPattern: 'pulse' });
+
+      openRow('Choral Chambers').click();
+      await waitFor(() => rig.runtime.controller.openedExercise?.title === 'Choral Chambers');
+
+      expect(rig.runtime.controller.settings.clickPattern).toBe('subdivision');
+      // And the control says so, rather than the setting and the page
+      // disagreeing until something else redraws it.
+      expect(element<HTMLSelectElement>('click').value).toBe('subdivision');
+    });
+
+    it('leaves the click alone for a piece nobody has chosen for', async () => {
+      // Nothing remembered is the instruction to leave the reader's own setting
+      // where it is. A default here would have every score ever imported
+      // quietly override it.
+      const rig = createRig();
+      await shelved(rig, ['Something Borrowed']);
+      rig.runtime.controller.updateSettings({ clickPattern: 'division' });
+
+      openRow('Something Borrowed').click();
+      await waitFor(() => rig.runtime.controller.openedExercise?.title === 'Something Borrowed');
+
+      expect(rig.runtime.controller.settings.clickPattern).toBe('division');
+    });
+
+    it('gives the piece the click chosen while it is open', async () => {
+      const rig = createRig();
+      await shelved(rig, ['Choral Chambers']);
+      openRow('Choral Chambers').click();
+      await waitFor(() => rig.runtime.controller.openedExercise?.title === 'Choral Chambers');
+
+      const control = element<HTMLSelectElement>('click');
+      control.value = 'subdivision';
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      await waitFor(() => rig.runtime.scores.theClickFor('Choral Chambers') === 'subdivision');
+
+      expect(rig.runtime.scores.theClickFor('Choral Chambers')).toBe('subdivision');
+    });
+
+    it('keeps one piece out of another', async () => {
+      // The whole complaint: two pieces wanting different clicks, and switching
+      // between them meaning a trip to the settings each way.
+      const rig = createRig();
+      await shelved(rig, ['Choral Chambers', 'City of Tears']);
+      openRow('Choral Chambers').click();
+      await waitFor(() => rig.runtime.controller.openedExercise?.title === 'Choral Chambers');
+      const control = element<HTMLSelectElement>('click');
+      control.value = 'subdivision';
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      await waitFor(() => rig.runtime.scores.theClickFor('Choral Chambers') === 'subdivision');
+
+      openRow('City of Tears').click();
+      await waitFor(() => rig.runtime.controller.openedExercise?.title === 'City of Tears');
+      control.value = 'downbeat';
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      await waitFor(() => rig.runtime.scores.theClickFor('City of Tears') === 'downbeat');
+
+      openRow('Choral Chambers').click();
+      await waitFor(() => rig.runtime.controller.openedExercise?.title === 'Choral Chambers');
+
+      expect(rig.runtime.controller.settings.clickPattern).toBe('subdivision');
+    });
+
+    it('writes it to the piece being read, not to the top of the shelf', async () => {
+      // The list is ordered by what was opened last, so for most of a session
+      // the piece being read *is* the first row - and a version that wrote to
+      // the first row would pass every test above. Here it is opened without
+      // the shelf being told, so the two come apart.
+      const rig = createRig();
+      await shelved(rig, ['Choral Chambers', 'City of Tears']);
+      expect(rig.runtime.scores.list()[0]?.title).toBe('City of Tears');
+      const older = await rig.runtime.scores.open(
+        rig.runtime.scores.list().find((score) => score.title === 'Choral Chambers')?.id ?? '',
+      );
+      await rig.runtime.controller.openScore(older ?? twoBarExercise());
+
+      const control = element<HTMLSelectElement>('click');
+      control.value = 'subdivision';
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      await waitFor(() => rig.runtime.scores.theClickFor('Choral Chambers') === 'subdivision');
+
+      expect(rig.runtime.scores.theClickFor('City of Tears')).toBeNull();
+    });
+
+    it('remembers nothing for a piece that was never kept', async () => {
+      // A generated exercise is not a piece anybody comes back to.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      expect(runtime.controller.openedExercise).toBeNull();
+
+      const control = element<HTMLSelectElement>('click');
+      control.value = 'subdivision';
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(runtime.controller.settings.clickPattern).toBe('subdivision');
+      expect(runtime.scores.list()).toEqual([]);
+    });
+  });
+
   describe('the scores kept between visits', () => {
     async function keepOne(rig: Rig, title = 'Something Borrowed'): Promise<void> {
       await rig.runtime.scores.keep(twoBarExercise({ title }), 1_000);

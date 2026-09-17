@@ -1,3 +1,5 @@
+import type { ClickPattern } from './IMetronome.js';
+
 /**
  * A stretch of a piece the reader means to learn, and what they call it.
  *
@@ -30,6 +32,22 @@ export interface StoredScoreSummary {
   readonly bars: number;
   /** Stretches the reader has marked out in it, in the order they saved them. */
   readonly passages: readonly SavedPassage[];
+  /**
+   * How finely the click divides for this piece, where the reader has said.
+   *
+   * A property of the music rather than of the session, which is the line
+   * drawn here: how finely a bar wants dividing follows from its metre, and it
+   * is the same answer every time the piece is opened. Whether the click
+   * sounds at all, and which of its beats are taken away, are what the reader
+   * is working on *today* and stay where they are.
+   *
+   * Absent rather than defaulted, and the difference is the whole feature: a
+   * score nobody has chosen for leaves the setting exactly as the reader left
+   * it, and only one that has been chosen for reaches in and changes it. His:
+   * "when I switch to another song - I don't want to hear that many ticks -
+   * and I need to switch again".
+   */
+  readonly clickPattern?: ClickPattern;
 }
 
 /**
@@ -65,6 +83,10 @@ export interface IScoreStore {
    * holding a list of bar numbers, not a hundred kilobytes of MusicXML.
    */
   keepPassages(id: string, passages: readonly SavedPassage[]): Promise<void>;
+
+  /** Keeps how finely the click divides for one score. Separate from `write`
+   * for the same reason the two above are: one word, not a document. */
+  keepTheClick(id: string, pattern: ClickPattern): Promise<void>;
 
   /**
    * Marks a score as opened just now.
@@ -110,6 +132,14 @@ export class InMemoryScoreStore implements IScoreStore {
     const found = this.scores.get(id);
     if (found !== undefined) {
       this.scores.set(id, { ...found, passages });
+    }
+    return Promise.resolve();
+  }
+
+  keepTheClick(id: string, clickPattern: ClickPattern): Promise<void> {
+    const found = this.scores.get(id);
+    if (found !== undefined) {
+      this.scores.set(id, { ...found, clickPattern });
     }
     return Promise.resolve();
   }

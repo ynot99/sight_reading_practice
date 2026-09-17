@@ -355,6 +355,44 @@ describe('a take that begins under the pedal', () => {
     expect(take?.events[0]).toEqual({ kind: 'sustain', atMs: 0, value: 1 });
   });
 
+  it('is not begun by the foot alone', () => {
+    // A foot resting on the pedal sends a stream of messages, and none of them
+    // is playing. They opened a take all the same - a recording shown as
+    // running, offered to be kept, and saved with no notes in it. His: "the
+    // recording is being triggered by a pedal, and it can be saved with 0
+    // notes".
+    const harness = rig({ silenceMs: 1_000 });
+    const closed: number[] = [];
+    harness.recorder.events.on('takeClosed', ({ take }) => closed.push(take.noteCount));
+
+    harness.midi.pedal(true, harness.clock.now());
+    harness.clock.advance(500);
+    harness.midi.pedal(false, harness.clock.now());
+    harness.clock.advance(5_000);
+    harness.midi.pedal(true, harness.clock.now());
+
+    expect(harness.recorder.take()).toBeNull();
+    expect(harness.recorder.takeIsOnOffer).toBe(false);
+    expect(harness.recorder.takeRunningMs).toBe(0);
+    expect(closed).toEqual([]);
+  });
+
+  it('begins at the first key, with the foot that was already down carried in', () => {
+    // Which is the ordinary way of playing: the pedal goes on and then the
+    // hands. What the foot did before the first key is not lost - it is what
+    // the take opens under - it simply is not where the take starts.
+    const harness = rig({ silenceMs: 1_000 });
+    harness.midi.pedal(true, 0);
+    harness.clock.advance(200);
+    playNote(harness, 60);
+
+    const take = harness.recorder.take();
+
+    expect(take?.noteCount).toBe(1);
+    expect(take?.events[0]).toEqual({ kind: 'sustain', atMs: 0, value: 1 });
+    expect(take?.events[1]).toEqual({ kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 });
+  });
+
   it('says nothing when the pedal was up', () => {
     const harness = rig({ silenceMs: 1_000 });
     harness.midi.pedal(true, harness.clock.now());

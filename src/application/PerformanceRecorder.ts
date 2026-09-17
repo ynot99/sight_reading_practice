@@ -129,6 +129,16 @@ export class PerformanceRecorder {
   }
 
   /**
+   * Whether there is a stretch of playing to be kept at all.
+   *
+   * Asked by the button that offers it, which used to ask whether anything had
+   * *arrived* - and a pedal arriving is not something played.
+   */
+  get takeIsOnOffer(): boolean {
+    return this.startOfLastTake() !== null;
+  }
+
+  /**
    * True once the silence has run long enough that the next press begins a
    * new take rather than continuing this one.
    */
@@ -324,17 +334,34 @@ export class PerformanceRecorder {
     return null;
   }
 
-  /** Index of the first event after the last long silence. */
+  /**
+   * Index of the first *key* of the last stretch, or `null` for no playing.
+   *
+   * The stretch is cut at the last long silence, as it always was, and then
+   * walked forward to the first note - because the pedal is not playing. A
+   * foot resting on one sends a stream of messages, and they opened a take of
+   * their own: a recording shown as running, offered to be kept, and saved
+   * with no notes in it. His: "the recording is being triggered by a pedal,
+   * and it can be saved with 0 notes".
+   *
+   * What the foot did in front of the first key is not lost. It is what the
+   * take opens *under*, which {@link pedalBefore} puts back at its beginning -
+   * it simply is not where the take starts.
+   */
   private startOfLastTake(): number | null {
-    if (this.captured.length === 0) {
-      return null;
-    }
+    let start = 0;
     for (let at = this.captured.length - 1; at > 0; at -= 1) {
       const gap = (this.captured[at]?.atMs ?? 0) - (this.captured[at - 1]?.atMs ?? 0);
       if (gap >= this.silenceMs) {
+        start = at;
+        break;
+      }
+    }
+    for (let at = start; at < this.captured.length; at += 1) {
+      if (this.captured[at]?.event.kind === 'noteOn') {
         return at;
       }
     }
-    return 0;
+    return null;
   }
 }

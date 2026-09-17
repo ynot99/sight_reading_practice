@@ -5374,7 +5374,7 @@ export class AppView {
   private describeTake(): void {
     const recorder = this.runtime.recorder;
     const ms = recorder.takeRunningMs;
-    const playing = recorder.pendingEvents > 0;
+    const playing = recorder.takeIsOnOffer;
     // Whether the next key press would go on with this take or begin the
     // next one. Shown rather than left to be learnt: the reader who wanted a
     // clean take was waiting out a silence they could not see, and counting

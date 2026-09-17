@@ -4305,6 +4305,21 @@ describe('AppView', () => {
       expect(element<HTMLButtonElement>('focus-keep').disabled).toBe(true);
     });
 
+    it('stays asleep when only the pedal moves', async () => {
+      // The button said a recording was running because something had arrived,
+      // not because anything had been played. His: "the recording is being
+      // triggered by a pedal".
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.midi.pedal(true, rig.clock.now());
+      rig.clock.advance(200);
+      rig.midi.pedal(false, rig.clock.now());
+
+      const button = element<HTMLButtonElement>('focus-keep');
+      expect(button.disabled).toBe(true);
+      expect(button.textContent?.trim()).toBe('Keep');
+    });
+
     it('wakes up as soon as the keyboard is touched', async () => {
       const rig = createRig();
       await rig.view.initialize();

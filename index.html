@@ -244,7 +244,7 @@
               placeholder="Search" aria-label="Search the kept scores" />
             <button id="scores-add" type="button" class="button">Add a score…</button>
             <button id="scores-clear" type="button" class="button button--ghost">Delete all</button>
-            <button id="scores-close" type="button" class="button button--ghost sheet__close"
+            <button id="scores-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
           <!--
@@ -303,7 +303,7 @@
             autocapitalize="off" autocorrect="off" spellcheck="false"
             aria-label="Type the word that confirms this" />
           <div class="sheet__actions">
-            <button id="confirm-no" type="button" class="button button--ghost">Cancel</button>
+            <button id="confirm-no" type="button" data-shuts class="button button--ghost">Cancel</button>
             <button id="confirm-yes" type="button" class="button button--danger">Delete</button>
           </div>
         </div>
@@ -323,7 +323,7 @@
           <input id="rename-name" class="sheet__input" type="text" aria-label="Name for this score" />
           <p id="rename-problem" class="hint" hidden></p>
           <div class="sheet__actions">
-            <button id="rename-no" type="button" class="button button--ghost">Cancel</button>
+            <button id="rename-no" type="button" data-shuts class="button button--ghost">Cancel</button>
             <button id="rename-yes" type="button" class="button button--primary">Rename</button>
           </div>
         </div>
@@ -387,7 +387,7 @@
                   2-3.4z" />
               </svg>
             </button>
-            <button id="roll-close" type="button" class="button button--ghost sheet__close"
+            <button id="roll-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">&times;</button>
           </div>
           <!--
@@ -455,7 +455,7 @@
           aria-label="What the picture shows">
           <div class="sheet__head">
             <strong class="sheet__title">What the picture shows</strong>
-            <button id="roll-options-close" type="button" class="button button--ghost sheet__close"
+            <button id="roll-options-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">&times;</button>
           </div>
           <div class="controls controls--stacked">
@@ -525,7 +525,7 @@
           aria-label="Metronome">
           <div class="sheet__head">
             <strong class="sheet__title">Metronome</strong>
-            <button id="metronome-close" type="button" class="button button--ghost sheet__close"
+            <button id="metronome-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
           <div class="controls controls--stacked">
@@ -610,7 +610,7 @@
               <input id="readings-best" type="checkbox" />
               <span>Best first</span>
             </label>
-            <button id="readings-close" type="button" class="button button--ghost sheet__close"
+            <button id="readings-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
           <ul id="readings-list" class="takes__list"></ul>
@@ -629,7 +629,7 @@
               <span>Kept only</span>
             </label>
             <button id="takes-clear" type="button" class="button button--ghost">Delete all</button>
-            <button id="takes-close" type="button" class="button button--ghost sheet__close"
+            <button id="takes-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
           <ul id="takes-list" class="takes__list"></ul>
@@ -680,7 +680,7 @@
           aria-label="Places in this piece">
           <div class="sheet__head">
             <strong class="sheet__title">Places in this piece</strong>
-            <button id="places-close" type="button" class="button button--ghost sheet__close"
+            <button id="places-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
           <!--
@@ -706,7 +706,7 @@
           aria-label="Modes">
           <div class="sheet__head">
             <strong class="sheet__title">Modes</strong>
-            <button id="modes-close" type="button" class="button button--ghost sheet__close"
+            <button id="modes-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
           <!--
@@ -785,7 +785,7 @@
           aria-label="Settings">
           <div class="sheet__head">
             <strong class="sheet__title">Settings</strong>
-            <button id="settings-close" type="button" class="button button--ghost sheet__close"
+            <button id="settings-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
         <!--

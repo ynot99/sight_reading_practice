@@ -708,6 +708,88 @@ describe('AppView', () => {
     expect(runtime.controller.isListeningPaused).toBe(false);
   });
 
+  describe('the escape key', () => {
+    function pressEscape(): void {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+    }
+
+    it('gives every sheet one control that shuts it, and only one', () => {
+      // The rule that stops the next sheet being forgotten. Escape used to work
+      // off a list kept in the view, and the list had five of the eleven on it.
+      mountRealMarkup();
+      const sheets = [...document.querySelectorAll('.sheet')];
+
+      expect(sheets.length).toBeGreaterThan(8);
+      for (const sheet of sheets) {
+        expect(sheet.querySelectorAll('[data-shuts]'), sheet.id).toHaveLength(1);
+      }
+    });
+
+    it('shuts the picture of a run, which no list ever had on it', async () => {
+      // His: "чи можеш діалогам додати shortcut esc щоб зачиняти їх?".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      expect(element('sheet-roll').hidden).toBe(false);
+
+      pressEscape();
+
+      expect(element('sheet-roll').hidden).toBe(true);
+    });
+
+    it('shuts it the way the sheet shuts, not by hiding it', async () => {
+      // Several have something to put away first, and a list that hid them
+      // would leave exactly that behind - here, a drawing still playing.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      element<HTMLButtonElement>('roll-play').click();
+      expect(runtime.takePlayer.playing).not.toBeNull();
+
+      pressEscape();
+
+      expect(runtime.takePlayer.playing).toBeNull();
+    });
+
+    it('takes the sheet laid over another before the one underneath', async () => {
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      element<HTMLButtonElement>('roll-options').click();
+      expect(element('sheet-roll-options').hidden).toBe(false);
+
+      pressEscape();
+
+      expect(element('sheet-roll-options').hidden).toBe(true);
+      // And the picture is still there, which is what the reader went back to.
+      expect(element('sheet-roll').hidden).toBe(false);
+    });
+
+    it('leaves the page alone when there is no sheet to shut', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+
+      expect(() => pressEscape()).not.toThrow();
+      // It is not a second Stop: a run behind nothing is a run in progress.
+      expect(runtime.controller.session?.status).toBe('running');
+    });
+  });
+
   describe('the keys the platform has outside this page', () => {
     it('hands them over while a performance plays, and names the piece', async () => {
       // They reach a page nobody is looking at, which is the whole point: he
@@ -4412,6 +4494,27 @@ describe('AppView', () => {
       // whenever the piece chosen happened to be at the top already.
       expect(stampFor(opened)).toBeGreaterThan(before);
       expect(rig.runtime.scores.list()[0]?.title).toBe(opened);
+    });
+
+    it('shuts a rename with Escape, cancelling rather than applying', async () => {
+      // A rename is a promise the page is holding. Hidden and not answered, the
+      // await behind it never returns - which is what a list of sheets that
+      // merely hid them would have done.
+      const rig = createRig();
+      await keepOne(rig, 'Imported score');
+      rowButton('scores-list', 'Rename this score').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(element('sheet-rename').hidden).toBe(false);
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(element('sheet-rename').hidden).toBe(true);
+      // Unchanged: cancelling is not renaming to nothing, and it is not
+      // renaming to the name that was already in the box either.
+      expect(rig.runtime.scores.list()[0]?.title).toBe('Imported score');
     });
 
     it('gives a score the name the reader calls it by', async () => {

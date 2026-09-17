@@ -4283,6 +4283,33 @@ export class AppView {
    * mouse held down and dragged across it.
    */
   /**
+   * Shuts the innermost thing open, and says whether there was one.
+   *
+   * Asked of the page, and shut by the sheet's *own* closing control, for two
+   * reasons that are really one. A list of sheets kept here is a list to forget
+   * the next sheet from - this was such a list, and it had five of the eleven
+   * on it, so Escape did nothing over the picture of a run, over a rename, over
+   * the places, the modes or the readings. And hiding a sheet is not the same
+   * as shutting it: several have something to put away first - a drawing to
+   * stop playing, a question whose answer somebody is still waiting on - and a
+   * list that hides them would leave exactly that behind. Pressing the control
+   * the reader would have pressed does whatever that sheet already does.
+   *
+   * A sheet laid over another goes first, which is the whole of what "innermost"
+   * means here. His: "чи можеш діалогам додати shortcut esc щоб зачиняти їх?".
+   */
+  private shutTheInnermostSheet(): boolean {
+    const over = this.doc.querySelector('.sheet--over:not([hidden])');
+    const sheet = over ?? this.doc.querySelector('.sheet:not([hidden])');
+    const shuts = sheet?.querySelector<HTMLElement>('[data-shuts]') ?? null;
+    if (shuts === null) {
+      return false;
+    }
+    shuts.click();
+    return true;
+  }
+
+  /**
    * Whether anything is standing over the page.
    *
    * Asked of the page rather than of a list kept here, because a list of them
@@ -6014,18 +6041,8 @@ export class AppView {
       }
       // Before focus mode sees it: a sheet is the innermost thing open, and
       // Escape should shut that rather than the layout underneath it.
-      for (const sheet of [
-        this.el.sheetConfirm,
-        this.el.sheetTakes,
-        this.el.sheetScores,
-        this.el.sheetMetronome,
-        this.el.sheetSettings,
-      ]) {
-        if (!sheet.hidden) {
-          sheet.hidden = true;
-          event.stopPropagation();
-          return;
-        }
+      if (this.shutTheInnermostSheet()) {
+        event.stopPropagation();
       }
     });
   }
@@ -6107,12 +6124,11 @@ export class AppView {
         answer(wanted);
       };
       const onNo = (): void => answer(null);
+      // Enter only. Escape is the page's, and shuts this by pressing the
+      // Cancel beside it - which is this same answer, given once.
       const onKey = (event: KeyboardEvent): void => {
         if (event.key === 'Enter') {
           onYes();
-        }
-        if (event.key === 'Escape') {
-          answer(null);
         }
       };
       const onOutside = (event: Event): void => {
@@ -6189,12 +6205,10 @@ export class AppView {
       const onTyped = (): void => {
         this.el.confirmYes.disabled = !said();
       };
+      // Enter only; Escape is the page's. See the rename above.
       const onKey = (event: KeyboardEvent): void => {
         if (event.key === 'Enter') {
           onYes();
-        }
-        if (event.key === 'Escape') {
-          answer(false);
         }
       };
       const onOutside = (event: Event): void => {

@@ -53,6 +53,7 @@ import {
   clicksUpTo,
   rollAsEvents,
   rollBeganAtMs,
+  takeOfTheRun,
   theBeatNearest,
   theMusicsPlaceAt,
   type GridChoice,
@@ -1406,6 +1407,7 @@ export class AppView {
     scoreReading: HTMLButtonElement;
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
+    rollKeep: HTMLButtonElement;
     rollMap: HTMLElement;
     rollMapWindow: HTMLElement;
     rollMapHead: HTMLElement;
@@ -1665,6 +1667,7 @@ export class AppView {
       scoreReading: requireElement(doc, 'score-reading'),
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
+      rollKeep: requireElement(doc, 'roll-keep'),
       rollMap: requireElement(doc, 'roll-map'),
       rollMapWindow: requireElement(doc, 'roll-map-window'),
       rollMapHead: requireElement(doc, 'roll-map-head'),
@@ -5745,6 +5748,9 @@ export class AppView {
       }
       this.showTheRunWhereItWasPointedAt(event);
     });
+    this.listen(this.el.rollKeep, 'click', () => {
+      this.keepTheRun();
+    });
     this.listen(this.el.rollFrom, 'click', () => {
       this.takeAnEndFromTheMarker('from');
     });
@@ -6597,6 +6603,26 @@ export class AppView {
       viewWidePx: drawn.clientWidth - keys,
       wholeWidePx: drawn.scrollWidth - keys,
     };
+  }
+
+  /**
+   * Files the run being looked at with the recordings.
+   *
+   * The same list, the same player and the same file format as anything played
+   * outside a run: what was kept is a stream of notes with times on it, and
+   * where it came from is not something the list has to know.
+   */
+  private keepTheRun(): void {
+    const roll = this.runtime.controller.lastRoll;
+    // Which never refuses from here: the picture cannot be opened for a run
+    // with nothing played in it, so the button is never on offer for one. The
+    // branch is the type's, not a rule of its own.
+    const take = roll === null ? null : takeOfTheRun(roll);
+    if (take === null) {
+      return;
+    }
+    this.runtime.takes.keepTake(take, Date.now());
+    this.renderTakes();
   }
 
   /**

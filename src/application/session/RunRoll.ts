@@ -7,6 +7,7 @@ import type {
   MidiPedalEvent,
 } from '../ports/IMidiSource.js';
 import type { NoteJudgedEvent } from './SessionEvents.js';
+import type { Take } from '../PerformanceRecorder.js';
 
 /**
  * One key going down and coming up again, as it was actually played.
@@ -799,6 +800,30 @@ export function theMusicsPlaceAt(roll: RunRoll, atMs: number): number | null {
     }
   }
   return found;
+}
+
+/**
+ * The run as something the list of recordings can hold, or `null`.
+ *
+ * `null` where nothing was played. A run is kept for what the reader did, and a
+ * recording of no notes is the same nothing the foot on a pedal used to file -
+ * so the rule is said once here and the two ways in agree.
+ *
+ * The events are the roll's own, rebased to its beginning, which is what makes
+ * a kept run and a kept take the same kind of thing: one player, one file
+ * format, one list.
+ */
+export function takeOfTheRun(roll: RunRoll): Take | null {
+  const events = rollAsEvents(roll);
+  const noteCount = events.filter((event) => event.kind === 'noteOn').length;
+  if (noteCount === 0) {
+    return null;
+  }
+  return {
+    events,
+    durationMs: Math.max(0, rollEndedAtMs(roll) - rollBeganAtMs(roll)),
+    noteCount,
+  };
 }
 
 /**

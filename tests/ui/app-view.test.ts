@@ -1425,6 +1425,25 @@ describe('AppView', () => {
     });
 
 
+    it('keeps the run being looked at with the recordings', async () => {
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      expect(runtime.takes.list()).toHaveLength(0);
+
+      element<HTMLButtonElement>('roll-keep').click();
+
+      const kept = runtime.takes.list();
+      expect(kept).toHaveLength(1);
+      expect(kept[0]?.noteCount).toBeGreaterThan(0);
+      // And it is in the list on the page, not only in the store.
+      expect(element('takes-list').children.length).toBe(1);
+    });
+
     it('puts the whole run on one line under the drawing', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();

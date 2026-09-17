@@ -13,6 +13,8 @@ import {
   clicksUpTo,
   rollAsEvents,
   rollBeganAtMs,
+  rollEndedAtMs,
+  takeOfTheRun,
   type RolledBeat,
   type RolledPress,
   type RunRoll,
@@ -907,5 +909,55 @@ describe('the roll a run leaves behind', () => {
     const roll = harness.session.roll;
     expect(roll.beats).toHaveLength(1);
     expect(roll.beats[0]?.atMs).toBe(Duration.WHOLE.ticks / Duration.QUARTER.ticks * 1000);
+  });
+});
+
+describe('a run kept with the recordings', () => {
+  it('is the same kind of thing as anything else in the list', () => {
+    // One player, one file format, one list: where a stream of notes came from
+    // is not something the list has to know. His: "MIDI viewer - додати кнопку
+    // щоб зберегти current performance як MIDI запис у список".
+    const roller = new RollRecorder();
+    roller.beat(0, 'downbeat', 0);
+    roller.keyDown(down(MIDI.C4, 0));
+    roller.keyUp(up(MIDI.C4, 400));
+
+    const take = takeOfTheRun(roller.roll());
+
+    expect(take?.noteCount).toBe(1);
+    expect(take?.events[0]).toMatchObject({ kind: 'noteOn', atMs: 0, midi: MIDI.C4 });
+    // A moment of air past the last thing that happened, the same length the
+    // drawing gives it.
+    expect(take?.durationMs).toBe(rollEndedAtMs(roller.roll()) - rollBeganAtMs(roller.roll()));
+  });
+
+  it('refuses a run with nothing played in it', () => {
+    // The same rule the recorder keeps: a recording of no notes is not a
+    // recording, whichever way in it was filed by.
+    const roller = new RollRecorder();
+    roller.beat(0, 'downbeat', 0);
+    roller.pedal({
+      type: 'pedal',
+      pedal: 'sustain',
+      down: true,
+      value: 1,
+      timestampMs: 0,
+      sourceId: 'test',
+    });
+
+    expect(takeOfTheRun(roller.roll())).toBeNull();
+  });
+
+  it('counts from the run’s own beginning', () => {
+    // A run begun a minute into the page's clock is not a minute long.
+    const roller = new RollRecorder();
+    roller.beat(60_000, 'downbeat', 0);
+    roller.keyDown(down(MIDI.C4, 60_000));
+    roller.keyUp(up(MIDI.C4, 60_400));
+
+    const take = takeOfTheRun(roller.roll());
+
+    expect(take?.events[0]?.atMs).toBe(0);
+    expect(take?.durationMs).toBeLessThan(2_000);
   });
 });

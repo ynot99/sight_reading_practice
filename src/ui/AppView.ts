@@ -5794,11 +5794,16 @@ export class AppView {
       this.showTheLastReading();
     });
     this.listen(this.el.rollClose, 'click', () => {
-      this.stopTheRoll();
-      // Its options go with it: a sheet left standing over a picture that has
-      // been put away is a dialog about nothing.
-      this.el.sheetRollOptions.hidden = true;
-      this.el.sheetRoll.hidden = true;
+      this.closeTheRoll();
+    });
+    // The dimmed area outside the panel, which every other sheet has and this
+    // one had not: it is opened from the report rather than from the transport,
+    // so it was wired on its own and missed the way out a thumb finds without
+    // aiming. His: "клік поза діалог не зачиняє MIDI viewer".
+    this.listen(this.el.sheetRoll, 'click', (event) => {
+      if (event.target === this.el.sheetRoll) {
+        this.closeTheRoll();
+      }
     });
     this.listen(this.el.rollOptionsClose, 'click', () => {
       this.el.sheetRollOptions.hidden = true;
@@ -6551,6 +6556,12 @@ export class AppView {
     this.rollAtMs = 0;
     this.drawTheRollInto();
     this.el.sheetRoll.hidden = false;
+    // Measured after it is on the screen and not before. A hidden sheet has no
+    // width, so the box saying which part of the run is in view was worked out
+    // against nothing, found nothing to say, and stayed away until the first
+    // scroll re-measured it. His: "minimap синій прямокутник не зявляється при
+    // відчинені діалогу, а тільки при першому скролі".
+    this.sayWhereTheViewIs();
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();
   }
@@ -6837,10 +6848,23 @@ export class AppView {
    * перемкнутись на слайс з нот, та гравець міг ще раз спробувати цю частину".
    */
   private goAndPractiseThePassage(): void {
+    this.closeTheRoll();
+    this.runtime.controller.cursorToStart();
+  }
+
+  /**
+   * Puts the picture away, however the reader asked for it to go.
+   *
+   * One place, because closing it is three things and not one: the playback
+   * stops, its own options go with it - a sheet left standing over a picture
+   * that has been put away is a dialog about nothing - and the sheet closes.
+   * Written at each way out instead, the ways out drift apart, which is how
+   * one of them ended up not being a way out at all.
+   */
+  private closeTheRoll(): void {
     this.stopTheRoll();
     this.el.sheetRollOptions.hidden = true;
     this.el.sheetRoll.hidden = true;
-    this.runtime.controller.cursorToStart();
   }
 
   /**
@@ -6923,10 +6947,16 @@ export class AppView {
       return;
     }
     this.stopTheRoll();
+    // The list steps aside. Asking to look at a recording is asking for the
+    // picture, and the sheet it was asked from stood over the thing it had just
+    // opened. His: "діалог з recordings перекриває сам MIDI viewer коли я обрав
+    // look at this take".
+    this.el.sheetTakes.hidden = true;
     this.theTakeShowing = rollOfTheTake(take);
     this.rollAtMs = 0;
     this.drawTheRollInto();
     this.el.sheetRoll.hidden = false;
+    this.sayWhereTheViewIs();
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();
   }

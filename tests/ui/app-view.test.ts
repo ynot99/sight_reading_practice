@@ -1459,6 +1459,98 @@ describe('AppView', () => {
       expect(element('takes-list').children.length).toBe(1);
     });
 
+    it('shows the window on the map the moment the picture opens', async () => {
+      // A hidden sheet has no width, so the box was worked out against nothing,
+      // found nothing to say, and stayed away until the first scroll measured
+      // it again. jsdom lays nothing out either, so a width is lent to it here
+      // for as long as the test takes - which is the only way this suite can
+      // see the difference between measuring before and after. His: "minimap
+      // синій прямокутник не зявляється при відчинені діалогу, а тільки при
+      // першому скролі".
+      const lent = (
+        name: 'clientWidth' | 'scrollWidth',
+        width: (element: HTMLElement) => number,
+      ): (() => void) => {
+        const had = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name);
+        Object.defineProperty(HTMLElement.prototype, name, {
+          configurable: true,
+          get(this: HTMLElement) {
+            return width(this);
+          },
+        });
+        return () => {
+          if (had === undefined) {
+            delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name];
+            return;
+          }
+          Object.defineProperty(HTMLElement.prototype, name, had);
+        };
+      };
+      // The column of key names keeps its own width, because the drawing is
+      // measured as music with that column taken off both ends.
+      const giveBack = [
+        lent('clientWidth', (node) => (node.classList.contains('roll__keys') ? 44 : 400)),
+        lent('scrollWidth', () => 2_000),
+      ];
+      try {
+        const { view, runtime, midi } = createRig();
+        await view.initialize();
+        element<HTMLButtonElement>('focus-play').click();
+        const step = runtime.controller.session?.currentStep;
+        midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+        element<HTMLButtonElement>('focus-stop').click();
+
+        element<HTMLButtonElement>('run-roll-open').click();
+
+        // There before anybody has scrolled anything.
+        expect(element('roll-map-window').hidden).toBe(false);
+        expect(element('roll-map-window').style.width).not.toBe('');
+      } finally {
+        for (const undo of giveBack) {
+          undo();
+        }
+      }
+    });
+
+
+    it('puts the picture away on a click outside its panel', async () => {
+      // The way out every other sheet has and this one had not: it is opened
+      // from the report rather than from the transport, so it was wired on its
+      // own and missed it. His: "клік поза діалог не зачиняє MIDI viewer".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      element<HTMLButtonElement>('roll-play').click();
+      expect(runtime.takePlayer.playing).not.toBeNull();
+
+      element('sheet-roll').dispatchEvent(new Event('click', { bubbles: true }));
+
+      expect(element('sheet-roll').hidden).toBe(true);
+      // Everything closing it means, not only the sheet: the playback stops.
+      expect(runtime.takePlayer.playing).toBeNull();
+    });
+
+    it('stays open for a click on the drawing itself', async () => {
+      // A tap inside the panel is a tap on the run - it is how the marker is
+      // placed - and closing on it would make the picture unusable.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(element('sheet-roll').hidden).toBe(false);
+    });
+
+
     it('leaves the space bar to whatever is standing over the page', async () => {
       // He pressed space over the picture of a run expecting the picture to
       // play, and started a *run* behind it - with the sheet still hanging
@@ -1599,12 +1691,18 @@ describe('AppView', () => {
       element<HTMLButtonElement>('roll-keep').click();
       element<HTMLButtonElement>('roll-close').click();
 
+      // From the list, which is where a recording is actually reached from.
+      element<HTMLButtonElement>('focus-takes').click();
+      expect(element('sheet-takes').hidden).toBe(false);
       const look = element('takes-list').querySelector<HTMLButtonElement>(
         'button[aria-label^="Look at"]',
       );
       look?.click();
 
       expect(element('sheet-roll').hidden).toBe(false);
+      // And the list it was asked from steps aside rather than standing over
+      // the thing it has just opened.
+      expect(element('sheet-takes').hidden).toBe(true);
       expect(element('roll-title').textContent).toBe('A recording');
       const drawn = element('roll-body').querySelector('.roll');
       expect(drawn?.querySelectorAll('.roll__note').length).toBeGreaterThan(0);

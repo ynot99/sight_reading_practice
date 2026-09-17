@@ -517,10 +517,17 @@ export function theSquaresOfTheBar(
   // stopped after one note still stopped inside a bar of four, and a row of one
   // square would be counting what was played rather than what was written.
   // Where the bar *began* is the run's answer, because that is a moment.
+  // In the drawing's own time, like everything else laid against the marker: a
+  // tap and a playback both give it as a distance from the run's left edge, and
+  // the beats keep the page's clock. Compared as they come, a run that began a
+  // few seconds into that clock had no squares at all until the playback had
+  // run that far.
+  const began = rollBeganAtMs(roll);
   let barBegan: number | null = null;
   for (const beat of roll.beats) {
-    if (beat.weight === 'downbeat' && beat.atMs <= atMs && beat.atMs > (barBegan ?? -1)) {
-      barBegan = beat.atMs;
+    const at = beat.atMs - began;
+    if (beat.weight === 'downbeat' && at <= atMs && at > (barBegan ?? -1)) {
+      barBegan = at;
     }
   }
   if (barBegan === null) {

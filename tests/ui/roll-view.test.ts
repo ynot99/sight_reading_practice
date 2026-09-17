@@ -1094,11 +1094,43 @@ describe('the bar as a row of squares', () => {
     expect(late?.filled).toBe(late?.of);
   });
 
-  it('says nothing where no bar line has been passed', () => {
+  it('counts from the run’s own beginning, like everything else drawn', () => {
+    // The marker is a place *in the drawing*: a tap and the playback both give
+    // it as a distance from the run's left edge, and every other thing laid
+    // against it - the head, the map, the notes - is measured the same way. Told
+    // the beats' own moments instead, a run that began a few seconds into the
+    // page's clock showed no squares at all until the playback had run that far.
+    // His: "вони не з'являються на початку MIDI viewer playback".
     const roller = new RollRecorder();
+    const quarter = Duration.QUARTER.ticks;
+    for (let click = 0; click < 4; click += 1) {
+      roller.beat(45_000 + click * 1_000, click === 0 ? 'downbeat' : 'beat', click * quarter);
+    }
+    const late = roller.roll();
+
+    // The head at the very start of the run, which is where a playback opens.
+    expect(theSquaresOfTheBar(late, 0, 1_000, 4)?.filled).toBe(1);
+    expect(theSquaresOfTheBar(late, 2_500, 1_000, 4)?.filled).toBe(3);
+  });
+
+  it('says nothing where no bar line has been passed', () => {
+    // Which needs something in front of the first one: the run begins at the
+    // earliest thing that happened in it, so a bar line reached first *is* the
+    // beginning. A note struck over the count-in is the ordinary way that
+    // happens - it is in the picture, and the bar it belongs to has not begun.
+    const roller = new RollRecorder();
+    roller.keyDown({
+      type: 'noteon',
+      midi: MIDI.C4,
+      velocity: 0.8,
+      timestampMs: 0,
+      sourceId: 'test',
+    });
     roller.beat(5_000, 'downbeat', 0);
 
     expect(theSquaresOfTheBar(roller.roll(), 1_000, 1_000, 4)).toBeNull();
+    // And once it has, they are counted from it.
+    expect(theSquaresOfTheBar(roller.roll(), 5_200, 1_000, 4)?.filled).toBe(1);
   });
 
   it('says nothing about free playing', () => {

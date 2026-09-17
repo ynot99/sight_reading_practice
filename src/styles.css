@@ -519,6 +519,85 @@ textarea {
  * one figure and neither ships without the other. It wraps rather than shrinks:
  * on a phone the numbers drop under the shape at a size they can still be read.
  */
+/*
+ * Where every press of a run landed against the beat.
+ *
+ * The strip is the whole of the window the run was judged in, so its edges are
+ * the reader's own tolerance and its middle is the beat. What is read off it is
+ * the *shape*: the marks are translucent, so where several presses landed
+ * together the line goes dark, and a clump to one side of the middle is the
+ * thing two numbers could never say.
+ */
+.hit-bar {
+  margin-top: 10px;
+}
+
+.hit-bar__strip {
+  position: relative;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/* The beat itself, which is what every mark is placed against. */
+.hit-bar__beat {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  margin-left: -0.5px;
+  background: var(--border);
+}
+
+.hit-bar__tick {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--accent);
+  opacity: 0.45;
+}
+
+/* Past the window it did not count, and it is drawn against the edge it left. */
+.hit-bar__tick[data-beyond='true'] {
+  background: var(--wrong);
+  opacity: 0.75;
+}
+
+/*
+ * The average, standing against the scatter rather than beside it as a number.
+ *
+ * Full height and opaque, so it reads over the marks however many of them have
+ * stacked up: the thing worth seeing is whether the middle of the reading is
+ * off the beat, and a line the marks could bury would only say so sometimes.
+ */
+.hit-bar__mean {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+}
+
+.hit-bar__ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.hit-bar__said {
+  color: var(--text);
+}
+
 .profile-figure {
   display: flex;
   flex-wrap: wrap;

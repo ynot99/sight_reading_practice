@@ -47,7 +47,9 @@ import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/Pra
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barLines, barNumberOf, measureCount, spanMs } from '../domain/model/Exercise.js';
+import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
+import { drawTheHitErrors } from './hitErrorBar.js';
 import { drawTheProfile } from './profileChart.js';
 import { expectedFor } from '../domain/timeline/Timeline.js';
 import {
@@ -6560,6 +6562,7 @@ export class AppView {
     this.lastLadderMove = null;
     this.drawTheBars(report);
     this.drawTheProfileOf(report);
+    this.drawTheHitErrorsOf(report);
     this.offerTheRoll();
     for (const [label, value] of rows) {
       const row = this.doc.createElement('div');
@@ -7561,6 +7564,37 @@ export class AppView {
     }
     figure.append(said);
     this.el.result.append(figure);
+  }
+
+  /**
+   * Draws where the presses of a run landed against the beat.
+   *
+   * Only where a machine kept it. Where the music waits, a "deviation" is how
+   * long the reader took to arrive and not how far off they were - the same
+   * confusion that emptied two axes of the shape beside this one - and a row of
+   * arrival times placed against a tolerance would draw a patient reading as a
+   * wild one, every mark pinned against the late edge.
+   *
+   * Drawn after the run rather than during it, which is the one thing about
+   * this that is not osu!'s answer. There the bar is live because the beatmap
+   * is the whole of what the player is looking at; here the page of music is,
+   * and a strip that twitches under it is an eye taken off the notes - which is
+   * the work the exercise exists for.
+   */
+  private drawTheHitErrorsOf(report: PerformanceReport): void {
+    if (!this.theRunKeptTime()) {
+      return;
+    }
+    const errors = theHitErrors(
+      report.timing.deviations,
+      this.runtime.controller.settings.matchToleranceMs,
+    );
+    if (errors === null) {
+      return;
+    }
+    const drawn = drawTheHitErrors(errors);
+    drawn.id = 'run-hits';
+    this.el.result.append(drawn);
   }
 
   /**

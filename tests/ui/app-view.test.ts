@@ -2973,6 +2973,80 @@ describe('AppView', () => {
       }
     });
 
+    it('draws where the presses landed, after a run that kept the beat', async () => {
+      // Two numbers cannot show a shape: ten presses early and ten late have
+      // the same average as a reading dead on the beat every time. His: "hit
+      // error bar як в osu".
+      const { view, runtime, midi, metronome, clock } = createRig();
+      await view.initialize();
+      // A frame that keeps the beat, which is the only kind this can be read
+      // in: the rig's own is one that waits.
+      runtime.controller.updateSettings({
+        modeId: FLOW_MODE_ID,
+        matchToleranceMs: 250,
+        countInBars: 0,
+      });
+      element<HTMLButtonElement>('focus-play').click();
+      // Each press nudged off the beat it belongs to, so the marks land in
+      // different places: the shape is the whole of what the strip is for.
+      // Through the count-in, which this frame has whatever the setting says.
+      for (let guard = 0; guard < 64 && runtime.controller.session?.status === 'counting-in'; guard += 1) {
+        metronome.advanceSubdivisions(1);
+      }
+      for (const off of [40, -30, 80, -10, 120, 0]) {
+        const step = runtime.controller.session?.currentStep;
+        if (step === null || step === undefined) {
+          break;
+        }
+        clock.advance(off);
+        midi.playChord([...step.expectedMidi]);
+        clock.advance(-off);
+        metronome.advanceSubdivisions(4);
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+
+      const bar = element('result').querySelector('#run-hits');
+      const ticks = bar?.querySelectorAll('.hit-bar__tick') ?? [];
+
+      expect(bar).not.toBeNull();
+      expect(ticks.length).toBeGreaterThanOrEqual(4);
+      // The edges are the window the run was judged in, not a number of this
+      // drawing's own: widen the tolerance and the strip means the same thing
+      // about a looser reading.
+      expect(bar?.textContent).toContain('250 ms early');
+      expect(bar?.textContent).toContain('250 ms late');
+    });
+
+    it('leaves where the presses landed off a frame that waits', async () => {
+      // There a "deviation" is how long they took to arrive and not how far off
+      // they were - the same confusion that emptied two axes of the shape
+      // beside it - and a row of arrival times against a tolerance would draw a
+      // patient reading as a wild one, every mark pinned against the late edge.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({
+        modeId: new WaitMode().id,
+        matchToleranceMs: 250,
+        countInBars: 0,
+        clickWhen: 'never',
+      });
+      element<HTMLButtonElement>('focus-play').click();
+      for (let played = 0; played < 6; played += 1) {
+        const step = runtime.controller.session?.currentStep;
+        if (step === null || step === undefined) {
+          break;
+        }
+        for (const note of step.expectedMidi) {
+          midi.noteOn(note, played * 600);
+        }
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(element('result').querySelector('#run-hits')).toBeNull();
+      // And the run did happen, so this is not an empty report saying nothing.
+      expect(element('result').querySelector('.run-strip')).not.toBeNull();
+    });
+
     it('says how many bar lines the music waited at, where there are any', async () => {
       // His, and it is the measure of when to leave the mode for Flow: not how
       // many notes were right but how many times the music had to stop. Said

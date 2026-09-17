@@ -1264,6 +1264,16 @@ export class AppView {
    */
   private placedOnBar: number | null = null;
   /** Pending redraw of the keep pill: the counter, and the silence closing. */
+  /**
+   * Where the hand the reader is not playing will be, and when.
+   *
+   * Oldest first. The run says this ahead of time - the same numbers the sound
+   * is scheduled on - because the run itself has no clock to wait on: it is
+   * driven by the reader's keys and by a pulse that only exists when they have
+   * asked for a click. The view has one, so the walking is done here.
+   */
+  private theOtherHandsWalk: { readonly stepIndex: number; readonly atMs: number }[] = [];
+  private theOtherHandsStep: ReturnType<typeof setTimeout> | null = null;
   private silenceWatch: ReturnType<typeof setTimeout> | null = null;
   private lastDrainAtMs: number | null = null;
   private healthPaceMs = SETTLE_MS;
@@ -1909,6 +1919,7 @@ export class AppView {
       clearTimeout(this.silenceWatch);
       this.silenceWatch = null;
     }
+    this.stopTheOtherHandsMarker();
     this.runtime.takePlayer.stop();
     for (const unsubscribe of [...this.subscriptions, ...this.sessionSubscriptions]) {
       unsubscribe();
@@ -4591,6 +4602,12 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      controller.events.on('otherHandReached', ({ stepIndex, atMs }) => {
+        this.walkTheOtherHandTo(stepIndex, atMs);
+      }),
+    );
+
+    this.subscriptions.push(
       controller.events.on('restDue', ({ sittingMs }) => {
         this.showTheRest(sittingMs);
       }),
@@ -6633,6 +6650,62 @@ export class AppView {
     this.el.sheetRollOptions.hidden = true;
     this.el.sheetRoll.hidden = true;
     this.runtime.controller.cursorToStart();
+  }
+
+  /**
+   * Remembers where the other hand will be, and starts it walking there.
+   *
+   * A place already reached is taken at once: the reader's own step is
+   * announced for the moment they played it, which is now.
+   */
+  private walkTheOtherHandTo(stepIndex: number, atMs: number): void {
+    this.theOtherHandsWalk.push({ stepIndex, atMs });
+    this.theOtherHandsWalk.sort((left, right) => left.atMs - right.atMs);
+    this.moveTheOtherHandsMarker();
+  }
+
+  /**
+   * Moves the marker to everywhere the other hand has already got to, and sets
+   * one timer for the next place it has not.
+   *
+   * One timer and not one per step: a phrase of the other hand is a dozen
+   * notes, and a dozen timers is a dozen chances to be left running.
+   */
+  private moveTheOtherHandsMarker(): void {
+    if (this.theOtherHandsStep !== null) {
+      clearTimeout(this.theOtherHandsStep);
+      this.theOtherHandsStep = null;
+    }
+    const now = this.runtime.clock.now();
+    let reached: number | null = null;
+    while (this.theOtherHandsWalk.length > 0 && (this.theOtherHandsWalk[0]?.atMs ?? 0) <= now) {
+      reached = this.theOtherHandsWalk.shift()?.stepIndex ?? reached;
+    }
+    if (reached !== null) {
+      this.runtime.renderer.otherHand.moveTo(reached);
+      this.runtime.renderer.otherHand.show();
+    }
+    const next = this.theOtherHandsWalk[0];
+    if (next === undefined) {
+      return;
+    }
+    this.theOtherHandsStep = setTimeout(
+      () => {
+        this.theOtherHandsStep = null;
+        this.moveTheOtherHandsMarker();
+      },
+      Math.max(0, next.atMs - now),
+    );
+  }
+
+  /** Takes the second marker off the page, the run being over. */
+  private stopTheOtherHandsMarker(): void {
+    if (this.theOtherHandsStep !== null) {
+      clearTimeout(this.theOtherHandsStep);
+      this.theOtherHandsStep = null;
+    }
+    this.theOtherHandsWalk = [];
+    this.runtime.renderer.otherHand.hide();
   }
 
   /** Says which bars the buttons have settled on, and whether there is one. */

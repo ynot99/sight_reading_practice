@@ -610,6 +610,17 @@ export interface ControllerEventMap {
    * first moment the music is not going, because a reminder that interrupts
    * a run is a reminder to be resented and then turned off.
    */
+  /**
+   * The hand the reader is not playing arrives at a step, and when.
+   *
+   * A moment in the future, because that is how everything the accompaniment
+   * does is said: the sound is handed to the instrument ahead of time and the
+   * page is told the same number. What acts on it is the view, which is the
+   * layer allowed a timer - the run itself has none by design, and the one
+   * clock it could borrow is a pulse that only exists when the reader has
+   * asked for a click.
+   */
+  otherHandReached: { readonly stepIndex: number; readonly atMs: number };
   restDue: { readonly sittingMs: number };
   /**
    * The beats about to pass, and when each of them falls.
@@ -2944,10 +2955,10 @@ export class PracticeController {
       ticks: step.onsetTicks,
     };
     this.otherHandAnchor = anchor;
-    this.soundTheOtherHand(
-      step,
-      anchor.wallMs + spanMs(this.exercise as Exercise, anchor.ticks, step.onsetTicks),
-    );
+    const reachesAt =
+      anchor.wallMs + spanMs(this.exercise as Exercise, anchor.ticks, step.onsetTicks);
+    this.soundTheOtherHand(step, reachesAt);
+    this.emitter.emit('otherHandReached', { stepIndex: step.index, atMs: reachesAt });
   }
 
   /**
@@ -2978,6 +2989,8 @@ export class PracticeController {
     // reader feels as lag.
     this.otherHandAnchor = { wallMs: atMs, ticks: step.onsetTicks };
     this.soundTheOtherHand(step, atMs);
+    // The reader's own step, reached by the other hand the moment they play it.
+    this.emitter.emit('otherHandReached', { stepIndex: step.index, atMs });
   }
 
   /**

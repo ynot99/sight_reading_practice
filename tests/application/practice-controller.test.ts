@@ -43,6 +43,7 @@ import {
   longExercise,
   offBeatAfterALongNote,
   oneHandOpensAlone,
+  oneHandWalksUnderAHeldNote,
   staccatoInTheBass,
   p,
   partialVoiceExercise,
@@ -1700,6 +1701,36 @@ describe('hearing the hand you are not reading', () => {
     // A whole note at sixty is four seconds, and the writer asked for two.
     expect((letGo?.atMs ?? 0) - (struck?.atMs ?? 0)).toBe(2_000);
   });
+
+  it('says where the other hand will be, and when', async () => {
+    // Where the music waits it is in two places at once: the reader's hand and
+    // the accompaniment going on under it in written time. The run knows both
+    // and only ever said the first, so a marker standing on the reader's next
+    // note claimed to be somewhere the music would not reach for three
+    // seconds. His: "у wait for notes однією рукою також перемикати курсор по
+    // нотам іншої руки щоб не забувати про ритм".
+    const rig = createController(true);
+    await rig.controller.openScore(oneHandWalksUnderAHeldNote({ tempoBpm: 60 }));
+    rig.controller.updateSettings({
+      handStaff: 1,
+      hearTheOtherHand: true,
+      modeId: new WaitMode().id,
+      countInBars: 0,
+      clickWhen: 'never',
+    });
+    const reached: string[] = [];
+    rig.controller.events.on('otherHandReached', ({ stepIndex, atMs }) => {
+      reached.push(`${stepIndex}@${atMs}`);
+    });
+
+    rig.controller.start();
+    rig.midi.noteOn(MIDI.C4, 0);
+
+    // The reader's own step now, and the three quarters under their held note
+    // where they are written - a second apart at sixty.
+    expect(reached).toEqual(['0@0', '1@1000', '2@2000', '3@3000']);
+  });
+
 
   it('leaves a frame that keeps time out of the waiting frame\u2019s machinery', async () => {
     // His, of the work on the waiting frame's picture: "Треба зробити це

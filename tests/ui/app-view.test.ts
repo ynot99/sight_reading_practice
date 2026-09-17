@@ -107,7 +107,14 @@ import {
   middle,
   spreadAround,
 } from '../../src/ui/AppView.js';
-import { beamedSixteenths, longExercise, p, twoBarExercise } from '../support/fixtures.js';
+import {
+  MIDI,
+  beamedSixteenths,
+  longExercise,
+  oneHandWalksUnderAHeldNote,
+  p,
+  twoBarExercise,
+} from '../support/fixtures.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -1382,6 +1389,41 @@ describe('AppView', () => {
 
       expect(element('sheet-modes').hidden).toBe(true);
     });
+
+    it('walks the other hand’s marker in time, not all at once', async () => {
+      // The run says where the accompaniment will be and when; the waiting is
+      // done here, because the view is the layer with a clock. Without it the
+      // second marker would arrive wherever the first one did, which is the
+      // fault it exists to answer.
+      vi.useFakeTimers();
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        await rig.runtime.controller.openScore(oneHandWalksUnderAHeldNote({ tempoBpm: 60 }));
+        rig.runtime.controller.updateSettings({
+          handStaff: 1,
+          hearTheOtherHand: true,
+          modeId: new WaitMode().id,
+          countInBars: 0,
+          clickWhen: 'never',
+        });
+        rig.runtime.controller.start();
+        rig.midi.noteOn(MIDI.C4, 0);
+
+        // Only where the music has actually got to, which is the reader's own
+        // step: the three under their held note are still to come.
+        expect(rig.renderer.otherHand.position).toBe(0);
+
+        rig.clock.advance(2_000);
+        vi.advanceTimersByTime(2_000);
+
+        // Two quarters of the bass later, and not the fourth.
+        expect(rig.renderer.otherHand.position).toBe(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
 
     it('puts the whole run on one line under the drawing', async () => {
       const { view, runtime, midi } = createRig();

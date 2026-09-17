@@ -53,6 +53,8 @@ import {
 export interface OsmdRendererOptions {
   readonly zoom?: number;
   readonly cursorColor?: string;
+  /** The second marker's colour; a grey that keeps out of the reader's way. */
+  readonly otherHandColor?: string;
   readonly drawTitle?: boolean;
 }
 
@@ -485,13 +487,17 @@ interface DrawnNote {
 /** Bridges OSMD's forward-only cursor to {@link ICursorPrimitive}. */
 class OsmdCursorPrimitive implements ICursorPrimitive {
   private readonly resolve: () => OpenSheetMusicDisplay | null;
+  /** Which of the engraver's cursors this one drives. */
+  private readonly which: number;
 
-  constructor(resolve: () => OpenSheetMusicDisplay | null) {
+  constructor(resolve: () => OpenSheetMusicDisplay | null, which = 0) {
     this.resolve = resolve;
+    this.which = which;
   }
 
   private get cursor(): OpenSheetMusicDisplay['cursor'] | null {
-    return this.resolve()?.cursor ?? null;
+    const display = this.resolve();
+    return (display?.cursors?.[this.which] ?? (this.which === 0 ? display?.cursor : null)) ?? null;
   }
 
   get endReached(): boolean {
@@ -564,6 +570,8 @@ export class OsmdScoreRenderer
   private readonly container: HTMLElement;
   private readonly options: OsmdRendererOptions;
   private readonly navigator: CursorNavigator;
+  /** The second marker: where the hand the reader is not playing has got to. */
+  private readonly otherNavigator: CursorNavigator;
 
   /** Where each timeline step sits, and the notes drawn there. */
   private stepX = new Map<number, number>();
@@ -683,6 +691,7 @@ export class OsmdScoreRenderer
     this.options = options;
     this.currentZoom = options.zoom ?? 0.85;
     this.navigator = new CursorNavigator(new OsmdCursorPrimitive(() => this.osmd));
+    this.otherNavigator = new CursorNavigator(new OsmdCursorPrimitive(() => this.osmd, 1));
     // The page follows the cursor, in every mode that moves it: practising,
     // listening, a take played back. Told by the page's own driver instead,
     // it would follow only where somebody had remembered to say so - and
@@ -693,6 +702,17 @@ export class OsmdScoreRenderer
 
   get cursor(): IScoreCursor {
     return this.navigator;
+  }
+
+  /**
+   * The second marker; see {@link IOtherHandMarker}.
+   *
+   * It has no `onMoved` of its own on purpose: the page follows what the reader
+   * is reading, and a page that turned itself to keep the accompaniment in view
+   * would take their own music out from under them.
+   */
+  get otherHand(): IScoreCursor {
+    return this.otherNavigator;
   }
 
   get zoom(): number {
@@ -3354,6 +3374,15 @@ export class OsmdScoreRenderer
           color: this.options.cursorColor ?? '#3b82f6',
           alpha: 0.45,
           follow: true,
+        },
+        // The other hand's, and fainter: it says where the music is rather than
+        // where the reader must be, so it must never be the thing the eye goes
+        // to. It does not follow, either - see `otherHand`.
+        {
+          type: 0,
+          color: this.options.otherHandColor ?? '#94a3b8',
+          alpha: 0.28,
+          follow: false,
         },
       ],
     });

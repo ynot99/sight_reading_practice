@@ -68,6 +68,8 @@ export class FakeScoreRenderer
     IRhythmRuler
 {
   readonly cursor = new FakeScoreCursor();
+  /** The other hand's marker; see `IOtherHandMarker`. */
+  readonly otherHand = new FakeScoreCursor();
   loadedXml: string | null = null;
   loadCount = 0;
   refreshCount = 0;

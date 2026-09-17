@@ -20,6 +20,7 @@ import type {
 } from '../application/ports/IMidiSource.js';
 import type {
   IHandSwitches,
+  IOtherHandMarker,
   IPassageMarkers,
   IRhythmRuler,
   IScorePages,
@@ -187,6 +188,7 @@ export interface AppRuntime {
     IPassageMarkers &
     IScorePages &
     IHandSwitches &
+    IOtherHandMarker &
     IRhythmRuler;
   /**
    * The page's own clock, which every moment the run announces is on.

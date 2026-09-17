@@ -555,6 +555,46 @@ export function staccatoInTheBass(overrides: ExerciseOverrides = {}): Exercise {
   };
 }
 
+/**
+ * The treble holds a whole note while the bass walks four quarters under it.
+ *
+ * The shape that shows the two clocks of a waiting mode apart: the reader owes
+ * one note where the music has four to get through, so the marker they read by
+ * and the place the music has reached are three seconds apart in the middle of
+ * it.
+ */
+export function oneHandWalksUnderAHeldNote(overrides: ExerciseOverrides = {}): Exercise {
+  const base = twoBarExercise(overrides);
+  return {
+    ...base,
+    id: 'fixture-walking-bass',
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        clefChanges: [],
+        measures: [bar(noteEntry(p('C4'), Duration.WHOLE)), bar(noteEntry(p('D4'), Duration.WHOLE))],
+      },
+      {
+        staffNumber: 2,
+        voice: 2,
+        clef: 'bass',
+        clefChanges: [],
+        measures: [
+          bar(
+            noteEntry(p('C3'), Duration.QUARTER),
+            noteEntry(p('D3'), Duration.QUARTER),
+            noteEntry(p('E3'), Duration.QUARTER),
+            noteEntry(p('F3'), Duration.QUARTER),
+          ),
+          bar(noteEntry(p('G2'), Duration.WHOLE)),
+        ],
+      },
+    ],
+  };
+}
+
 /** MIDI numbers of the fixture pitches, for readable expectations. */
 export const MIDI = {
   G2: p('G2').midi,

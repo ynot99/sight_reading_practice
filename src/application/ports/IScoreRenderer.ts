@@ -23,6 +23,24 @@ export interface IScoreRenderer {
   clear(): void;
 }
 
+/**
+ * A second marker, for the music the reader is not playing.
+ *
+ * Where the music waits, it is in two places at once: the reader's hand, and
+ * the accompaniment going on under it in written time. One marker cannot show
+ * both, and showing the first while pretending it is the second is what left a
+ * reader with the marker already sitting on their next note while three seconds
+ * of the other hand were still to come - which invites the very press the mode
+ * is teaching them not to make. His: "у wait for notes однією рукою також
+ * перемикати курсор по нотам іншої руки щоб не забувати про ритм".
+ *
+ * Two questions, two marks. This one never turns the page: the reader's does,
+ * because the page belongs to what they are reading.
+ */
+export interface IOtherHandMarker {
+  readonly otherHand: IScoreCursor;
+}
+
 /** Where the reader is in a score that is turned rather than scrolled. */
 export interface ScorePageState {
   /** Zero-based, so `at + 1` is what a reader would be told. */

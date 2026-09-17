@@ -4106,32 +4106,6 @@ describe('AppView', () => {
     });
   });
 
-  describe('the speed moving by itself', () => {
-    it('says so where the number lives', async () => {
-      // His own note asks how a reader is to understand a slowdown. The
-      // verdict of the run that caused it is in the middle of the page at
-      // that moment, so this is said in the transport instead - and nothing
-      // there changes size for it.
-      const rig = createRig();
-      await rig.view.initialize();
-      const easing = element<HTMLInputElement>('ease-tempo');
-      easing.checked = true;
-      easing.dispatchEvent(new Event('change'));
-      rig.runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
-      await rig.runtime.controller.openScore(longExercise({ bars: 4, tempoBpm: 60 }));
-
-      // A reading nobody played: the music goes past and every step is
-      // missed, which is the case this exists for.
-      rig.runtime.controller.start();
-      rig.metronome.advanceSubdivisions(80);
-
-      expect(rig.runtime.controller.settings.tempoPercent).toBe(90);
-      const percent = element('focus-tempo');
-      expect(percent.classList.contains('focus-bar__percent--eased')).toBe(true);
-      expect(percent.title).toContain('Slowed to 90%');
-    });
-  });
-
   describe('learning a piece a section at a time', () => {
     it('says what to play, and sets it', async () => {
       const rig = createRig();

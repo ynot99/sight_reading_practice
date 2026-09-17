@@ -144,28 +144,6 @@ function scaledTempo(writtenBpm: number, percent: number): number {
 const MIN_TEMPO_PERCENT = 25;
 const MAX_TEMPO_PERCENT = 200;
 
-/**
- * How the speed moves itself, when the reader has asked it to.
- *
- * Down in tens and back up in fives: falling behind is worth answering at
- * once, and a reader who has just got through something at 70 has not proved
- * they can hold 90. The floor is a real speed rather than the slider's
- * minimum - below half the written tempo a piece stops being the piece.
- */
-const EASE_DOWN_PERCENT = 10;
-const EASE_UP_PERCENT = 5;
-const EASE_FLOOR_PERCENT = 50;
-/** Below this a reading counts as falling apart; above the other, as clean. */
-const EASE_POOR = 0.7;
-const EASE_CLEAN = 0.9;
-/**
- * Steps a run has to have reached before its score means anything.
- *
- * A run abandoned after two notes is not evidence about a tempo, and with
- * "one wrong note ends the run" every failure is two notes long.
- */
-const EASE_ENOUGH_STEPS = 6;
-
 function clampPercent(percent: number): number {
   return Math.min(MAX_TEMPO_PERCENT, Math.max(MIN_TEMPO_PERCENT, percent));
 }
@@ -484,15 +462,6 @@ export interface PracticeSettings {
    */
   readonly stopAtAMistake: boolean;
   /**
-   * Let the reading speed fall back when a run keeps coming apart.
-   *
-   * His line 80. Between runs and never during one: a tempo that moved under
-   * the reader would be a second thing to follow while they are already
-   * behind on the first. What it moves is the same percentage the slider and
-   * the plan move, so there is one speed rather than two.
-   */
-  readonly easeTheTempo: boolean;
-  /**
    * Where the veil sits relative to the cursor, in steps, or `null` for none.
    *
    * One axis, because dimming what is behind and hiding what is under your
@@ -627,8 +596,6 @@ export interface ControllerEventMap {
    * the whole plan; a `null` task with both at nought means the reader put
    * the drill away.
    */
-  /** The reading speed moved itself after a run, and which way. */
-  tempoEased: { readonly percent: number; readonly slower: boolean };
   drillChanged: {
     readonly task: DrillTask | null;
     readonly at: number;
@@ -743,16 +710,6 @@ export class PracticeController {
   private playAlong: Unsubscribe | null = null;
   /** The notes a performance is lighting right now, so they can be put out. */
   private litNotes: { readonly stepIndex: number; readonly midi: number }[] = [];
-  /**
-   * The speed the reader asked for, which is the ceiling for the easing.
-   *
-   * Written down whenever anything but the easing sets it - the slider, the
-   * plan, a new piece - so that giving speed back can never hand over more
-   * than was asked for in the first place.
-   */
-  private chosenPercent = 100;
-  /** True while the easing itself is writing the speed. */
-  private easingTheTempo = false;
   /** The plan being worked through, or `[]` when nothing is being drilled. */
   private drill: readonly DrillTask[] = [];
   private drillAt = 0;
@@ -880,7 +837,6 @@ export class PracticeController {
       survivalRefillPercent: 100,
       survivalPunishesMistakes: false,
       stopAtAMistake: false,
-      easeTheTempo: false,
       readAheadSteps: null,
       zoom: 0.85,
       immediateStart: false,
@@ -1077,13 +1033,6 @@ export class PracticeController {
       changes.rangeToBar !== undefined
     ) {
       this.applyDimming();
-    }
-
-    if (changes.tempoPercent !== undefined && !this.easingTheTempo) {
-      // Set on purpose - by the slider, by the plan, by a new piece - so it
-      // is the speed the reader is asking for and the most the easing may
-      // ever give back.
-      this.chosenPercent = next.tempoPercent;
     }
 
     if (changes.rhythmRuler !== undefined) {
@@ -1827,49 +1776,6 @@ export class PracticeController {
   }
 
   /**
-   * Moves the reading speed after a run, where the reader asked it to.
-   *
-   * Between runs, and only in a mode that keeps time: where the music waits
-   * there is no speed to be behind, so a reading that came apart there says
-   * nothing about the tempo and must not move it.
-   *
-   * Never above the speed the reader chose. Coming back up is what makes this
-   * different from turning the slider down and forgetting: a clean reading
-   * hands some of it back, in smaller steps than it took away.
-   */
-  private considerEasingTheTempo(report: PerformanceReport, overall: number): void {
-    if (!this.currentSettings.easeTheTempo || !this.survivalKeepsTime) {
-      return;
-    }
-    // A run that barely started is not evidence about a speed.
-    const reached = report.totals.correct + report.totals.incorrect + report.totals.missed;
-    if (reached < EASE_ENOUGH_STEPS) {
-      return;
-    }
-    const now = this.currentSettings.tempoPercent;
-    const wanted =
-      overall < EASE_POOR
-        ? Math.max(EASE_FLOOR_PERCENT, now - EASE_DOWN_PERCENT)
-        : overall >= EASE_CLEAN
-          ? Math.min(this.chosenPercent, now + EASE_UP_PERCENT)
-          : now;
-    if (wanted === now) {
-      return;
-    }
-    this.easingTheTempo = true;
-    try {
-      this.updateSettings({ tempoPercent: wanted });
-    } finally {
-      this.easingTheTempo = false;
-    }
-    // Said, and not only done. His own note asks how the reader is to
-    // understand that it slowed down; the answer is that the page says so, in
-    // the place it says everything else between runs. Turning the metronome
-    // on to explain it would be answering one question with two changes.
-    this.emitter.emit('tempoEased', { percent: wanted, slower: wanted < now });
-  }
-
-  /**
    * Follows a renamed score through what remembers it by name.
    *
    * Which is the practice history, and only because `practiceKey` writes the
@@ -2480,7 +2386,6 @@ export class PracticeController {
         });
         this.considerLadderMove(score.overall, report.completed);
         this.judgeTheDrill(report, score);
-        this.considerEasingTheTempo(report, score.overall);
       }),
     );
     this.sessionSubscriptions.push(

@@ -68,7 +68,6 @@ const SETTINGS: PracticeSettings = {
   restEveryMinutes: 45,
   whatOpens: 'random',
   stopAtAMistake: true,
-  easeTheTempo: true,
   clickSilences: 'the-downbeat',
   keyboard: '61',
   countInRun: 'once',
@@ -93,7 +92,6 @@ describe('practice settings codec', () => {
     expect(restored.strictTiming).toBe(true);
     expect(restored.pageTurns).toBe('manual');
     expect(restored.stopAtAMistake).toBe(true);
-    expect(restored.easeTheTempo).toBe(true);
     expect(restored.clickSilences).toBe('the-downbeat');
     expect(restored.keyboard).toBe('61');
     expect(restored.countInRun).toBe('once');

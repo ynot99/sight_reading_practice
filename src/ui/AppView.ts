@@ -533,7 +533,6 @@ type IdleControl =
   | 'measures'
   | 'survival-refill'
   | 'survival-punish'
-  | 'ease-tempo'
   | 'playing-ahead'
   | 'hear-other-hand'
   | 'rushing-counts';
@@ -575,10 +574,6 @@ function whyItIsIdle(
         : keepsTime
           ? 'Under a pulse the bar falls with the beats, and a beat found is worth the beat it took.'
           : null;
-    case 'ease-tempo':
-      return keepsTime
-        ? null
-        : 'Where the music waits there is no speed to be behind, so a run says nothing about the tempo.';
     case 'playing-ahead':
       return keepsTime ? 'Under a pulse the beat says where a press belongs, not the reader.' : null;
     case 'hear-other-hand':
@@ -1197,7 +1192,6 @@ export class AppView {
   private modesShown: string | null = null;
   private timeTick: ReturnType<typeof setInterval> | null = null;
   private survivalTick: ReturnType<typeof setInterval> | null = null;
-  private easedFlash: ReturnType<typeof setTimeout> | null = null;
   /** When the stretch being counted began, or `null` while the page is away. */
   private timeCountedAtMs: number | null = null;
   /** Which tip to give next, so the same one is not given twice running. */
@@ -1341,7 +1335,6 @@ export class AppView {
     survivalRefill: HTMLSelectElement;
     survivalPunish: HTMLInputElement;
     stopAtMistake: HTMLInputElement;
-    easeTempo: HTMLInputElement;
     immediateStart: HTMLInputElement;
     dimUnplayed: HTMLInputElement;
     pageTurns: HTMLSelectElement;
@@ -1594,7 +1587,6 @@ export class AppView {
       survivalRefill: requireElement(doc, 'survival-refill'),
       survivalPunish: requireElement(doc, 'survival-punish'),
       stopAtMistake: requireElement(doc, 'stop-at-mistake'),
-      easeTempo: requireElement(doc, 'ease-tempo'),
       immediateStart: requireElement(doc, 'immediate-start'),
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
       pageTurns: requireElement(doc, 'page-turns'),
@@ -1889,10 +1881,6 @@ export class AppView {
     if (this.survivalTick !== null) {
       clearInterval(this.survivalTick);
       this.survivalTick = null;
-    }
-    if (this.easedFlash !== null) {
-      clearTimeout(this.easedFlash);
-      this.easedFlash = null;
     }
     if (this.silenceWatch !== null) {
       clearTimeout(this.silenceWatch);
@@ -2895,11 +2883,6 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
-    this.listen(this.el.easeTempo, 'change', () => {
-      controller.updateSettings({ easeTheTempo: this.el.easeTempo.checked });
-      this.syncControlsFromSettings();
-    });
-
     this.listen(this.el.stopAtMistake, 'change', () => {
       controller.updateSettings(settingsForMode('strict', this.el.stopAtMistake.checked));
       this.syncControlsFromSettings();
@@ -3488,7 +3471,6 @@ export class AppView {
       ['measures', this.el.measures],
       ['survival-refill', this.el.survivalRefill],
       ['survival-punish', this.el.survivalPunish],
-      ['ease-tempo', this.el.easeTempo],
       ['playing-ahead', this.el.playingAhead],
       ['hear-other-hand', this.el.hearOtherHand],
       ['rushing-counts', this.el.rushingCounts],
@@ -4583,23 +4565,6 @@ export class AppView {
       controller.events.on('drillChanged', () => {
         this.showTheDrill();
       }),
-      // The number moved without anybody touching it, so it says so where it
-      // lives. His own note asks how the reader is to understand a slowdown;
-      // the verdict of the run that caused it is on the page at the same
-      // moment, and covering that to explain this would be a poor trade.
-      controller.events.on('tempoEased', ({ percent, slower }) => {
-        this.el.focusTempo.title = slower
-          ? `Slowed to ${percent}% after that reading`
-          : `Back up to ${percent}% after that reading`;
-        this.el.focusTempo.classList.add('focus-bar__percent--eased');
-        if (this.easedFlash !== null) {
-          clearTimeout(this.easedFlash);
-        }
-        this.easedFlash = setTimeout(() => {
-          this.easedFlash = null;
-          this.el.focusTempo.classList.remove('focus-bar__percent--eased');
-        }, 1_800);
-      }),
     );
 
     this.subscriptions.push(
@@ -5223,7 +5188,6 @@ export class AppView {
     this.el.survivalRefill.value = String(settings.survivalRefillPercent);
     this.el.survivalPunish.checked = settings.survivalPunishesMistakes;
     this.el.stopAtMistake.checked = settings.stopAtAMistake;
-    this.el.easeTempo.checked = settings.easeTheTempo;
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.renderPassages();

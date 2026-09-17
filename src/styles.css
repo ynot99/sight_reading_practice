@@ -2014,6 +2014,24 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 }
 
 /*
+ * The one sheet whose contents are the whole point of it.
+ *
+ * A drawing of a run is read by its shape across the page and its spread up and
+ * down it, and both of those are room: at half the screen the reader is
+ * scrolling to see what they could have seen. Every other sheet holds controls,
+ * which have a size of their own and look lost in a hall. His: "MIDI viewer
+ * діалог зробити більше, майже на весь екран, бо це важливо саме цьому діалогу
+ * займати багато місця".
+ *
+ * Almost, and not all: the dimmed edge is the way out that a thumb finds without
+ * aiming, so there has to be an edge left to find.
+ */
+.sheet__panel--room {
+  --sheet-height: 96%;
+  width: min(2000px, 100%);
+}
+
+/*
  * Today, in the corner of the page.
  *
  * Top right, which is the one corner nothing else uses: the engraver writes

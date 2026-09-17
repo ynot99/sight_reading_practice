@@ -1902,11 +1902,17 @@ describe('hearing the hand you are not reading', () => {
     metronome.advanceToTicks(4 * Duration.QUARTER.ticks);
     clock.advance(700);
     midi.noteOn(MIDI.G4, clock.now());
+    // The beat the reader has just given is written by the tick that carries
+    // it, so the pair is only in the picture once that tick has been delivered.
+    metronome.advanceSubdivisions(1);
 
     const played = session?.roll ?? emptyRoll();
     expect(played.rushes).toEqual([]);
     // And the gate's own pair is still there, still saying how long it waited.
-    expect(theWaits(played).length).toBeGreaterThan(0);
+    // Read off the *length* of it: this asserted only that a pair existed, and
+    // the pair it was finding was two beats at the very start of the run at one
+    // moment - a wait of no width, which says nothing about a gate at all.
+    expect(theWaits(played).map((wait) => wait.untilMs - wait.fromMs)).toEqual([700]);
   });
 
   it('holds the other hand at a bar line until the reader gives the beat', async () => {

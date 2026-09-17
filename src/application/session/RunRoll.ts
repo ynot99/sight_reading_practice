@@ -204,6 +204,23 @@ export interface GridLine {
  */
 export const ONE_BREATH_MS = 5;
 
+/**
+ * How long the music must stand still before that counts as standing still.
+ *
+ * Every entry in a frame that waits is later than the beat it answers by
+ * *something*: the reader is a hand and not a clock. Drawn without a floor, the
+ * first beat of every counted-in run came out with a section on it - the count
+ * had just told him where the beat was, he arrived eighty milliseconds after it,
+ * and the picture said the music had waited for him. His: "на початку гри є
+ * якась дивна жовта секція, хоча звідки їй там взятись якщо це початок гри".
+ *
+ * Around a reader's own reaction, which is the line between "the music waited"
+ * and "they are not a machine". The same argument the drawing already makes
+ * about the gap between a note and its beat, which it refuses to colour below
+ * twenty milliseconds for fear of becoming one continuous wash.
+ */
+export const A_WAIT_WORTH_DRAWING_MS = 150;
+
 /** Presses kept before a run stops recording them. */
 const PRESS_CAPACITY = 20_000;
 /** And clicks, which at the finest resolution outnumber the presses. */
@@ -755,7 +772,7 @@ export function momentOfTicks(
 export function theWaits(roll: RunRoll): readonly RolledWait[] {
   const found: RolledWait[] = [];
   for (const beat of beatsWorthMarking(roll, true)) {
-    if (beat.lateByMs !== null) {
+    if (beat.lateByMs !== null && beat.lateByMs >= A_WAIT_WORTH_DRAWING_MS) {
       found.push({ fromMs: beat.atMs - beat.lateByMs, untilMs: beat.atMs });
     }
   }

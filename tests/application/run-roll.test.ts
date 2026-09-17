@@ -118,6 +118,31 @@ describe('the stretches the music stood still in', () => {
     ]);
   });
 
+  it('does not call a reader arriving promptly a wait', () => {
+    // Every entry in a frame that waits is later than the beat it answers by
+    // *something* - the reader is a hand and not a clock - so without a floor
+    // the first beat of every counted-in run came out with a section on it. The
+    // count had just told him where the beat was and he arrived eighty
+    // milliseconds after it. His: "на початку гри є якась дивна жовта секція,
+    // хоча звідки їй там взятись якщо це початок гри".
+    const roller = new RollRecorder();
+    roller.beat(4_000, 'downbeat', 0);
+    roller.beat(4_080, 'downbeat', 0);
+
+    expect(theWaits(roller.roll())).toEqual([]);
+  });
+
+  it('still draws a stretch the music really stood still for', () => {
+    // The thing the section exists for, and the floor must not reach it. His,
+    // when he asked for them: "якщо я просто чекаю, то весь цей час має просто
+    // замальовуватись жовтою секцією".
+    const roller = new RollRecorder();
+    roller.beat(4_000, 'downbeat', 0);
+    roller.beat(6_500, 'downbeat', 0);
+
+    expect(theWaits(roller.roll())).toEqual([{ fromMs: 4_000, untilMs: 6_500 }]);
+  });
+
   it('keeps a rush apart from a wait, having no width to draw', () => {
     // The music moved on when the reader played, so the stretch between where
     // they arrived and where the beat was due is time that never elapsed. There

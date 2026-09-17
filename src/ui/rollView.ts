@@ -615,7 +615,18 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     if (from === null || until === null) {
       continue;
     }
-    outlines.push({ ghost, from, until });
+    // And nothing past where the run stopped. A run cut short asked for
+    // nothing beyond its last click, and the notes of the rest of the piece
+    // have no beat here to be placed against - so they were placed by running
+    // that last pair of clicks out over the whole score, which drew a canvas
+    // of notes nobody played and left the drawing scrolling far past the run
+    // it is a picture of. A note the reader stopped in the middle of is theirs
+    // up to where they stopped and no further. His: "MIDI viewer наразі малює
+    // повний канвас нот, навіть якщо я грав тільки слайс".
+    if (from >= endMs - origin) {
+      continue;
+    }
+    outlines.push({ ghost, from, until: Math.min(until, endMs - origin) });
     // Only where the right note was played at the wrong time. No press and the
     // outline says it alone; no note asked for and there is nothing to be off
     // from.

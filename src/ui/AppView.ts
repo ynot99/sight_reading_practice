@@ -6432,10 +6432,11 @@ export class AppView {
    */
   private sayWhereTheViewIs(): void {
     const drawn = this.el.rollBody.firstElementChild;
+    const widths = drawn instanceof HTMLElement ? this.theRunsWidths(drawn) : null;
     const window =
-      drawn instanceof HTMLElement
-        ? theWindowOnTheRun(drawn.scrollLeft, drawn.clientWidth, drawn.scrollWidth)
-        : null;
+      widths === null
+        ? null
+        : theWindowOnTheRun(widths.scrolledToPx, widths.viewWidePx, widths.wholeWidePx);
     this.el.rollMapWindow.hidden = window === null;
     if (window === null) {
       return;
@@ -6452,8 +6453,30 @@ export class AppView {
       return;
     }
     const share = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
-    drawn.scrollLeft = scrollForTheWindowAt(share, drawn.clientWidth, drawn.scrollWidth);
+    const widths = this.theRunsWidths(drawn);
+    drawn.scrollLeft = scrollForTheWindowAt(share, widths.viewWidePx, widths.wholeWidePx);
     this.sayWhereTheViewIs();
+  }
+
+  /**
+   * The drawing measured as music, with the column of key names left out.
+   *
+   * The names are a sticky column inside the same scroller, so they are part of
+   * its width and no part of the run. Counted in, the strip and the drawing
+   * measure two different wholes - and two wholes is exactly what put marks on
+   * the map at places the run never reached.
+   */
+  private theRunsWidths(drawn: HTMLElement): {
+    readonly scrolledToPx: number;
+    readonly viewWidePx: number;
+    readonly wholeWidePx: number;
+  } {
+    const keys = drawn.querySelector<HTMLElement>('.roll__keys')?.clientWidth ?? 0;
+    return {
+      scrolledToPx: drawn.scrollLeft,
+      viewWidePx: drawn.clientWidth - keys,
+      wholeWidePx: drawn.scrollWidth - keys,
+    };
   }
 
   /**

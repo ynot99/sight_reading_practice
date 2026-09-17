@@ -567,6 +567,75 @@ describe('the notes the music asked for', () => {
     expect(view.style.getPropertyValue('--roll-rows')).toBe('29');
   });
 
+  it('draws none of them past where the run stopped', () => {
+    // The picture is of a run. A run that was stopped after two beats asked for
+    // nothing beyond them, and the notes of the rest of the piece have no beat
+    // here to be placed against - so placing them meant running the last pair
+    // of clicks out over the whole score and drawing a canvas of notes nobody
+    // played. His: "MIDI viewer наразі малює повний канвас нот, навіть якщо я
+    // грав тільки слайс".
+    const view = drawTheRoll({
+      roll: roll({ beats: grid }),
+      barLabel: () => null,
+      ghosts: [
+        { midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 },
+        {
+          midi: MIDI.D4,
+          fromTicks: Duration.QUARTER.ticks * 200,
+          untilTicks: Duration.QUARTER.ticks * 201,
+          stepIndex: 200,
+        },
+      ],
+    });
+
+    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(1);
+  });
+
+  it('measures the end of the run from where the run began', () => {
+    // A run that began five seconds into the page's own clock is still a run
+    // two seconds long. Measured against that clock instead, the notes of the
+    // next five seconds of the score would be drawn as though the reader had
+    // reached them.
+    const view = drawTheRoll({
+      roll: roll({
+        beats: [beatOf(5_000, 'downbeat', 0), beatOf(6_000, 'beat', Duration.QUARTER.ticks)],
+      }),
+      barLabel: () => null,
+      ghosts: [
+        { midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 },
+        {
+          midi: MIDI.D4,
+          fromTicks: Duration.QUARTER.ticks * 3,
+          untilTicks: Duration.QUARTER.ticks * 4,
+          stepIndex: 3,
+        },
+      ],
+    });
+
+    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(1);
+  });
+
+  it('cuts one the run stopped in the middle of off at the end', () => {
+    // A note still being asked for when the reader stopped is part of the run;
+    // how much of it there was to play afterwards is not.
+    const view = drawTheRoll({
+      roll: roll({ beats: grid }),
+      barLabel: () => null,
+      ghosts: [
+        {
+          midi: MIDI.C4,
+          fromTicks: Duration.QUARTER.ticks,
+          untilTicks: Duration.QUARTER.ticks * 9,
+          stepIndex: 1,
+        },
+      ],
+    });
+
+    const ghost = view.querySelector<HTMLElement>('.roll__ghost');
+    // The roll ends a second past its last click, and the outline stops there.
+    expect(ghost?.style.width).toBe('calc(var(--roll-second) * 1.0000)');
+  });
+
   it('draws none of them where the run had no pulse to place them against', () => {
     const view = drawTheRoll({
       roll: roll({ presses: [press()] }),

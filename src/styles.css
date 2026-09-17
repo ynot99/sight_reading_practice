@@ -689,11 +689,14 @@ textarea {
  */
 .roll-map {
   position: relative;
-  height: 14px;
-  margin-top: 6px;
+  height: 18px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
+  /* Against the drawing, in the place the scrollbar it replaces stood - so the
+     two corners that meet it are square. */
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
   overflow: hidden;
   cursor: pointer;
   /* The finger moves the view rather than the page under it. */
@@ -790,6 +793,27 @@ textarea {
 }
 
 /*
+ * This drawing has no scrollbars of its own: the map under it is the one.
+ *
+ * They answered the same question and one of them answered it better. A
+ * scrollbar says where in the run the view is; the map says that *and* where
+ * the reader stopped, which is the only reason anybody scrolls a run they have
+ * already played. Two strips for one question is also two strips of a drawing's
+ * height, on a sheet asked to be nearly the whole screen. His: "може варто
+ * горизонтальний скрол замінити на minimap?".
+ *
+ * Nothing is taken from the scrolling itself - the wheel, the trackpad and a
+ * finger all still move the drawing both ways, and the map can be dragged. Both
+ * spellings again, and both are needed: new Chromium reads the standard
+ * property and then ignores the pseudo-elements entirely, and Safari is the
+ * other way round.
+ */
+.roll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/*
  * The run drawn as keys against the clicks it was played to.
  *
  * One scroll container holding four things: a ruler of bar numbers that sticks
@@ -813,6 +837,8 @@ textarea {
   grid-template-columns: var(--roll-keys) var(--roll-length, 100%);
   grid-template-rows: var(--roll-ruler) calc(var(--roll-row) * var(--roll-rows, 12)) var(--roll-pedal);
   overflow: auto;
+  /* No bars of its own; the map under it is the one. See above. */
+  scrollbar-width: none;
   /* A drag that runs off the end of the run stops there; it is not an
      instruction to move the page behind it. */
   overscroll-behavior: contain;

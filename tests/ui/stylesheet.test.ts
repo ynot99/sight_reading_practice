@@ -91,6 +91,37 @@ describe('the stylesheet', () => {
     expect(webkit?.body ?? '').not.toBe('');
   });
 
+  it('leaves the drawing of a run no scrollbars of its own', () => {
+    // The map under it is the one. They answered the same question and the map
+    // answers it better - it says where in the run the view is *and* where the
+    // reader stopped - and two strips for one question is also two strips of a
+    // drawing's height. Said in both spellings for the reason above, and here
+    // that matters more than dressing: new Chromium reads the standard property
+    // and then ignores the pseudo-elements entirely, so a rule written only in
+    // WebKit's spelling would leave the bar showing on the desk. His: "може
+    // варто горизонтальний скрол замінити на minimap?".
+    const roll = rules().find((rule) => rule.selector === '.roll');
+    const webkit = rules().find((rule) => rule.selector === '.roll::-webkit-scrollbar');
+
+    expect(roll?.body).toMatch(/scrollbar-width\s*:\s*none/);
+    expect(webkit?.body).toMatch(/height\s*:\s*0/);
+    // And the scrolling itself is untouched: the wheel, the trackpad and a
+    // finger all still move it, which is what `overflow: auto` says.
+    expect(roll?.body).toMatch(/overflow\s*:\s*auto/);
+  });
+
+  it('stands the map against the drawing, in the place the bar had', () => {
+    // Under it with a gap it read as a third thing on the sheet rather than as
+    // the edge of the drawing. His: "мені не дуже подобається як minimap сидить
+    // під MIDI viewer".
+    const map = rules().find((rule) => rule.selector === '.roll-map');
+
+    expect(map?.body).not.toMatch(/margin-top/);
+    // Square where it meets the drawing, rounded where it does not.
+    expect(map?.body).toMatch(/border-top-left-radius\s*:\s*0/);
+    expect(map?.body).toMatch(/border-top-right-radius\s*:\s*0/);
+  });
+
   it('gives the corner of the page one line, not a ragged one', () => {
     // The clock, the listening light and the way back to the last reading are
     // buttons of different heights - one carries two lines of text where

@@ -1875,9 +1875,20 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 }
 
 /* The clock, and whatever stands beside it: one line across the corner. */
+/*
+ * The clock, the listening light and the way back to the last reading, on one
+ * line.
+ *
+ * Stretched to the tallest of them rather than hung from their tops. They are
+ * buttons of different heights - one carries two lines of text where another
+ * carries one - and lined up by their tops the row came out ragged along the
+ * bottom, which on a corner of the page that is mostly chrome reads as
+ * something having gone wrong rather than as a layout. His: ".score__top
+ * {align-items: stretch;}".
+ */
 .score__top {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 6px;
 }
 

@@ -57,6 +57,20 @@ describe('the stylesheet', () => {
     expect(grid?.body).toMatch(/align-content\s*:\s*start/);
   });
 
+  it('gives the corner of the page one line, not a ragged one', () => {
+    // The clock, the listening light and the way back to the last reading are
+    // buttons of different heights - one carries two lines of text where
+    // another carries one. Hung from their tops they came out ragged along the
+    // bottom, which in a corner that is mostly chrome reads as something having
+    // gone wrong rather than as a layout. His: ".score__top {align-items:
+    // stretch;}".
+    const row = rules().find((rule) => rule.selector === '.score__top');
+
+    expect(row?.body).toMatch(/align-items\s*:\s*stretch/);
+    // It is a row at all, which is what makes the question one worth asking.
+    expect(row?.body).toMatch(/display\s*:\s*flex/);
+  });
+
   it('brings each satellite in over the bar before it leaves the screen', () => {
     // The bar is centred and about 420px wide, so the room beside it is half of
     // whatever the screen has over that - and the left pill is four buttons to

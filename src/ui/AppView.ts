@@ -60,6 +60,11 @@ import {
 import {
   drawTheMap,
   drawTheRoll,
+  scrollAfterZoom,
+  shareOfTheRun,
+  zoomAfterWheel,
+  LEAST_ZOOM,
+  MOST_ZOOM,
   keepTheHeadInView,
   scrollForTheWindowAt,
   theWindowOnTheRun,
@@ -1393,6 +1398,7 @@ export class AppView {
     rollBody: HTMLElement;
     rollMap: HTMLElement;
     rollMapWindow: HTMLElement;
+    rollMapHead: HTMLElement;
     rollFrom: HTMLButtonElement;
     rollTo: HTMLButtonElement;
     rollPassageWhat: HTMLElement;
@@ -1651,6 +1657,7 @@ export class AppView {
       rollBody: requireElement(doc, 'roll-body'),
       rollMap: requireElement(doc, 'roll-map'),
       rollMapWindow: requireElement(doc, 'roll-map-window'),
+      rollMapHead: requireElement(doc, 'roll-map-head'),
       rollFrom: requireElement(doc, 'roll-from'),
       rollTo: requireElement(doc, 'roll-to'),
       rollPassageWhat: requireElement(doc, 'roll-passage-what'),
@@ -5703,6 +5710,14 @@ export class AppView {
     this.listen(this.el.rollStop, 'click', () => {
       this.stopTheRoll();
     });
+    this.el.rollBody.addEventListener(
+      'wheel',
+      (event) => {
+        this.zoomTheRollByWheel(event);
+      },
+      // Said, so that the zoom may keep the page from scrolling under it.
+      { passive: false },
+    );
     this.listen(this.el.rollMap, 'pointerdown', (event) => {
       this.el.rollMap.setPointerCapture(event.pointerId);
       this.showTheRunWhereItWasPointedAt(event);
@@ -6424,6 +6439,69 @@ export class AppView {
   }
 
   /**
+   * Stands the head on the map where it stands in the drawing.
+   *
+   * The map is where the reader looks to find a place; leaving off the one
+   * place they have already chosen made them look back at the drawing to see
+   * where they were. His: "можеш до мінімапу додати позицію курсору".
+   */
+  private sayWhereTheHeadIs(): void {
+    const roll = this.runtime.controller.lastRoll;
+    if (roll === null) {
+      return;
+    }
+    const share = shareOfTheRun(roll, this.headIsAtMs());
+    this.el.rollMapHead.style.left = `${(share * 100).toFixed(3)}%`;
+  }
+
+  /**
+   * Moves the zoom by a wheel, leaving what is under the pointer under it.
+   *
+   * The pointer and not the left edge: pointing at the bar that went wrong and
+   * zooming in used to slide that bar off the screen, so every turn of the
+   * wheel had to be followed by hunting for the place again.
+   *
+   * One turn moves the zoom by a small step whatever the wheel says. A notch
+   * and a trackpad flick arrive as tens against ones, and a zoom taken straight
+   * from either jumps; a flick becomes a run of small steps instead, which is
+   * the same gesture arriving smoothly. His: "по скролу робити зум".
+   */
+  private zoomTheRollByWheel(event: WheelEvent): void {
+    const drawn = this.el.rollBody.firstElementChild;
+    // Left to the browser where the reader asked for a sideways scroll, which
+    // is what a held shift has always meant on a wheel.
+    if (!(drawn instanceof HTMLElement) || event.shiftKey) {
+      return;
+    }
+    event.preventDefault();
+    const was = Number(this.el.rollZoom.value);
+    const now = zoomAfterWheel(was, event.deltaY, LEAST_ZOOM, MOST_ZOOM);
+    if (now === was) {
+      return;
+    }
+    this.el.rollZoom.value = String(now);
+    this.holdTheZoomAround(drawn, event.clientX, was, now);
+  }
+
+  /**
+   * Applies a zoom and scrolls so the music under a point stays under it.
+   *
+   * The widths are the drawing's, so the column of key names is taken off both
+   * - it does not stretch with the music and would drag the anchor sideways by
+   * its own width every time.
+   */
+  private holdTheZoomAround(drawn: HTMLElement, clientX: number, was: number, now: number): void {
+    const keys = drawn.querySelector<HTMLElement>('.roll__keys')?.clientWidth ?? 0;
+    const across = drawn.scrollWidth - keys;
+    const at = clientX - drawn.getBoundingClientRect().left - keys;
+    this.applyTheZoom();
+    if (across > 0 && at >= 0) {
+      drawn.scrollLeft = scrollAfterZoom(drawn.scrollLeft, at, across, (across * now) / was);
+    }
+    this.sayWhereTheViewIs();
+  }
+
+  /**
    * Draws the box saying which part of the run is on the screen.
    *
    * Hidden rather than guessed at where nothing has been laid out: a box
@@ -6566,7 +6644,11 @@ export class AppView {
       }),
     );
     this.applyTheZoom();
-    this.el.rollMap.replaceChildren(drawTheMap(roll), this.el.rollMapWindow);
+    this.el.rollMap.replaceChildren(
+      drawTheMap(roll),
+      this.el.rollMapWindow,
+      this.el.rollMapHead,
+    );
     // The drawing is thrown away and built again on every redraw, so the watch
     // on its scrolling goes with it and there is nothing to unsubscribe.
     const drawn = this.el.rollBody.firstElementChild;
@@ -6857,6 +6939,7 @@ export class AppView {
     // the moment the drawing opens. His: "чи можливо мати курсор завжди? Бо він
     // наразі пропадає як тільки робиться stop".
     drawn.style.setProperty('--roll-at', (this.headIsAtMs() / 1000).toFixed(3));
+    this.sayWhereTheHeadIs();
     if (!sounding) {
       return;
     }
@@ -6921,9 +7004,23 @@ export class AppView {
     }
     this.pinched = true;
     const asked = pinchedTo(from, now);
+    const was = Number(this.el.rollZoom.value);
     this.el.rollZoom.value = String(asked.zoom);
     this.rollRowPx = asked.row;
+    const drawn = this.el.rollBody.firstElementChild;
+    // Held around the point between the fingers, for the same reason the wheel
+    // is held around the pointer: a pinch aimed at a bar means that bar.
+    if (drawn instanceof HTMLElement && asked.zoom !== was) {
+      this.holdTheZoomAround(drawn, this.theMiddleOfTheFingers(), was, asked.zoom);
+      return;
+    }
     this.applyTheZoom();
+  }
+
+  /** Where two fingers are, across the screen, as one number. */
+  private theMiddleOfTheFingers(): number {
+    const [first, second] = [...this.rollFingers.values()];
+    return ((first?.x ?? 0) + (second?.x ?? first?.x ?? 0)) / 2;
   }
 
   /** How fast the reader has asked to hear the run, as a multiple of its own time. */

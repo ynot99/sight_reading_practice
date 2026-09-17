@@ -1398,6 +1398,22 @@ describe('AppView', () => {
       expect(element('roll-map-window').hidden).toBe(true);
     });
 
+    it('stands the marker on the map as well as in the drawing', async () => {
+      // The map is where a place is looked for; leaving off the one place the
+      // reader has already chosen sent them back to the drawing to see where
+      // they were. His: "можеш до мінімапу додати позицію курсору".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      // A run opens with the marker at its beginning, which is the left edge.
+      expect(element('roll-map-head').style.left).toBe('0%');
+    });
+
     it('chooses a passage out of the picture, and goes to it', async () => {
       // The stretch that went wrong is visible in the drawing and nowhere else,
       // so reaching it afterwards meant finding it again on the page by eye.

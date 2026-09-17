@@ -390,6 +390,78 @@ export function keepTheHeadInView(
   return Math.max(0, headPx - viewWidePx * HEAD_RESTS_AT);
 }
 
+/**
+ * How far a single turn of a wheel may move the zoom, as a ratio.
+ *
+ * A wheel notch and a trackpad flick arrive as wildly different numbers - tens
+ * against ones - and a zoom taken straight from either jumps. Held to a small
+ * step per message, a flick becomes a run of small steps instead, which is the
+ * same gesture arriving smoothly.
+ */
+const ZOOM_STEP_MOST = 0.18;
+/** How much of a wheel message counts towards that step. */
+const ZOOM_PER_WHEEL_UNIT = 0.001;
+
+/**
+ * The ratio a wheel message is asking the zoom to move by.
+ *
+ * Grown rather than added to, so that a turn back undoes a turn: added, in and
+ * then out by the same step lands a little below where it started, and a reader
+ * rocking the wheel to settle on a size drifts downwards the whole time.
+ */
+export function zoomFromWheel(deltaPx: number): number {
+  const asked = -deltaPx * ZOOM_PER_WHEEL_UNIT;
+  return Math.exp(Math.min(ZOOM_STEP_MOST, Math.max(-ZOOM_STEP_MOST, asked)));
+}
+
+/**
+ * The zoom a wheel message leaves, in whole pixels.
+ *
+ * A whole pixel at the least, whenever the wheel said anything at all. A
+ * trackpad's finest message asks for a fraction of one, and rounded to the
+ * nearest that is no change - so the gesture would do nothing at all rather
+ * than a little, which is the one thing worse than doing too much.
+ */
+export function zoomAfterWheel(
+  from: number,
+  deltaPx: number,
+  least: number,
+  most: number,
+): number {
+  const ratio = zoomFromWheel(deltaPx);
+  if (ratio === 1) {
+    return from;
+  }
+  const asked = from * ratio;
+  const moved =
+    ratio > 1 ? Math.max(from + 1, Math.round(asked)) : Math.min(from - 1, Math.round(asked));
+  return Math.min(most, Math.max(least, moved));
+}
+
+/**
+ * Where to scroll so that a zoom leaves the music under a finger where it is.
+ *
+ * Without it a zoom moves everything the reader was looking at: they point at
+ * the bar that went wrong, zoom in, and the bar slides off the screen - so the
+ * gesture has to be followed by hunting for the place again, every time.
+ *
+ * Taken in the drawing's own coordinates rather than in music: the finger is at
+ * a number of pixels across the view, that pixel stands over a moment, and the
+ * moment has to come back under that pixel afterwards.
+ */
+export function scrollAfterZoom(
+  scrolledToPx: number,
+  fingerAtPx: number,
+  fromWidePx: number,
+  toWidePx: number,
+): number {
+  if (fromWidePx <= 0) {
+    return scrolledToPx;
+  }
+  const share = (scrolledToPx + fingerAtPx) / fromWidePx;
+  return Math.max(0, share * toWidePx - fingerAtPx);
+}
+
 /** One thing worth seeing on the map of a run, as shares of its whole length. */
 export interface MapMark {
   readonly kind: 'wait' | 'rush';
@@ -413,21 +485,35 @@ export interface MapMark {
  * nothing here knows that.
  */
 export function theMapOfTheRun(roll: RunRoll): readonly MapMark[] {
-  const began = rollBeganAtMs(roll);
-  const across = rollEndedAtMs(roll) - began;
-  if (across <= 0) {
-    return [];
-  }
-  const shareOf = (atMs: number): number => Math.min(1, Math.max(0, (atMs - began) / across));
   const marks: MapMark[] = [];
   for (const wait of theWaits(roll)) {
-    const from = shareOf(wait.fromMs);
-    marks.push({ kind: 'wait', fromShare: from, widthShare: shareOf(wait.untilMs) - from });
+    const from = shareOfTheRun(roll, wait.fromMs);
+    marks.push({
+      kind: 'wait',
+      fromShare: from,
+      widthShare: shareOfTheRun(roll, wait.untilMs) - from,
+    });
   }
   for (const rush of theRushes(roll)) {
-    marks.push({ kind: 'rush', fromShare: shareOf(rush.atMs), widthShare: 0 });
+    marks.push({ kind: 'rush', fromShare: shareOfTheRun(roll, rush.atMs), widthShare: 0 });
   }
   return marks;
+}
+
+/**
+ * How far into the run a moment of it is, as a share of the whole.
+ *
+ * The one place that turns a moment into a place on the map, so the marks and
+ * the marker standing among them cannot disagree about where anything is.
+ *
+ * There is always a whole to be a share of: a roll ends a moment past its last
+ * event, so even one with nothing in it is a second of air long. A moment
+ * outside it is held to the end it lies past rather than running off the strip.
+ */
+export function shareOfTheRun(roll: RunRoll, atMs: number): number {
+  const began = rollBeganAtMs(roll);
+  const across = rollEndedAtMs(roll) - began;
+  return Math.min(1, Math.max(0, (atMs - began) / across));
 }
 
 /**

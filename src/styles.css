@@ -555,6 +555,17 @@ textarea {
   background: var(--wrong);
 }
 
+/* Where the marker stands, on the line that is looked at to find a place. */
+.roll-map__head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent-strong, var(--accent));
+  pointer-events: none;
+}
+
 .roll-map__window {
   position: absolute;
   top: 0;

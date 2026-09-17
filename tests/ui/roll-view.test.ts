@@ -13,6 +13,10 @@ import {
   theMapOfTheRun,
   theWindowOnTheRun,
   scrollForTheWindowAt,
+  scrollAfterZoom,
+  shareOfTheRun,
+  zoomFromWheel,
+  zoomAfterWheel,
 } from '../../src/ui/rollView.js';
 import {
   RollRecorder,
@@ -909,5 +913,111 @@ describe('the window on the run', () => {
   it('will not scroll past either end for a finger near it', () => {
     expect(scrollForTheWindowAt(0, 400, 2_000)).toBe(0);
     expect(scrollForTheWindowAt(1, 400, 2_000)).toBe(1_600);
+  });
+});
+
+describe('where a moment of the run falls on the map', () => {
+  it('is its share of the whole, so the marks and the marker agree', () => {
+    const roller = new RollRecorder();
+    roller.beat(0, 'downbeat', 0);
+    roller.beat(3_000, 'beat', Duration.QUARTER.ticks);
+    // A second of air past the last click, which is where the roll stops.
+    const roll = roller.roll();
+
+    expect(shareOfTheRun(roll, 0)).toBe(0);
+    expect(shareOfTheRun(roll, 2_000)).toBeCloseTo(0.5, 10);
+    expect(shareOfTheRun(roll, 4_000)).toBe(1);
+  });
+
+  it('counts from where the run began, not from the page’s own clock', () => {
+    // A run begun three seconds into the page's clock is still a run three
+    // seconds long, and its middle is its own middle.
+    const roller = new RollRecorder();
+    roller.beat(1_000, 'downbeat', 0);
+    roller.beat(3_000, 'beat', Duration.QUARTER.ticks);
+    const roll = roller.roll();
+
+    expect(shareOfTheRun(roll, 2_500)).toBeCloseTo(0.5, 10);
+  });
+
+  it('holds a moment outside the run to the end it lies past', () => {
+    const roller = new RollRecorder();
+    roller.beat(1_000, 'downbeat', 0);
+    roller.beat(2_000, 'beat', Duration.QUARTER.ticks);
+    const roll = roller.roll();
+
+    expect(shareOfTheRun(roll, 0)).toBe(0);
+    expect(shareOfTheRun(roll, 90_000)).toBe(1);
+  });
+
+  it('has a whole to be a share of even where nothing was played', () => {
+    // A roll ends a moment past its last event, so one with nothing in it is
+    // still a second of air long and there is nothing to divide by nought.
+    expect(shareOfTheRun(new RollRecorder().roll(), 0)).toBe(0);
+    expect(shareOfTheRun(new RollRecorder().roll(), 90_000)).toBe(1);
+  });
+});
+
+describe('a zoom held around a point', () => {
+  it('keeps the moment under a finger under it', () => {
+    // Point at the bar that went wrong, zoom in, and the bar has to stay where
+    // the finger is - otherwise every turn of the wheel is followed by hunting
+    // for the place again.
+    const held = scrollAfterZoom(1_000, 200, 2_000, 4_000);
+
+    // The finger stood over three fifths of the run; it still does.
+    expect((held + 200) / 4_000).toBeCloseTo((1_000 + 200) / 2_000, 10);
+  });
+
+  it('will not scroll behind the beginning to hold one', () => {
+    // Zooming out near the top: there is no run in front of the first note to
+    // put under the finger, so the drawing stops at its own beginning.
+    expect(scrollAfterZoom(100, 200, 2_000, 400)).toBe(0);
+  });
+
+  it('leaves a drawing of no width where it is', () => {
+    expect(scrollAfterZoom(50, 200, 0, 400)).toBe(50);
+  });
+});
+
+describe('the zoom a wheel asks for', () => {
+  it('reads a turn as a step, whichever way it went', () => {
+    expect(zoomFromWheel(-100)).toBeGreaterThan(1);
+    expect(zoomFromWheel(100)).toBeLessThan(1);
+    expect(zoomFromWheel(0)).toBe(1);
+  });
+
+  it('undoes a turn with a turn back', () => {
+    // Added rather than grown, in and then out by the same step lands a little
+    // below where it started, and a reader rocking the wheel to settle on a
+    // size drifts downwards the whole time.
+    expect(zoomFromWheel(-100) * zoomFromWheel(100)).toBeCloseTo(1, 10);
+  });
+
+  it('holds a flick to a step a notch can reach', () => {
+    // A wheel notch and a trackpad flick arrive as tens against ones, and a
+    // zoom taken straight from either jumps. His: "цей зум дуже не responsive,
+    // та є відчуття буд-то він тормозить".
+    const flick = zoomFromWheel(-4_000);
+
+    expect(flick).toBeLessThan(1.2);
+    expect(flick).toBeGreaterThan(zoomFromWheel(-100));
+  });
+
+  it('moves by a pixel at the least, however fine the message', () => {
+    // A trackpad's finest message asks for a fraction of a pixel, and rounded
+    // to the nearest that is no change - so the gesture would do nothing at all
+    // rather than a little.
+    expect(zoomAfterWheel(40, -1, LEAST_ZOOM, MOST_ZOOM)).toBe(41);
+    expect(zoomAfterWheel(41, 1, LEAST_ZOOM, MOST_ZOOM)).toBe(40);
+  });
+
+  it('stands still where the wheel said nothing', () => {
+    expect(zoomAfterWheel(140, 0, LEAST_ZOOM, MOST_ZOOM)).toBe(140);
+  });
+
+  it('will not go closer or wider than the drawing allows', () => {
+    expect(zoomAfterWheel(LEAST_ZOOM, 4_000, LEAST_ZOOM, MOST_ZOOM)).toBe(LEAST_ZOOM);
+    expect(zoomAfterWheel(MOST_ZOOM, -4_000, LEAST_ZOOM, MOST_ZOOM)).toBe(MOST_ZOOM);
   });
 });

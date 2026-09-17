@@ -4211,6 +4211,145 @@ describe('AppView', () => {
     expect(element<HTMLInputElement>('focus-to').value).toBe('');
   });
 
+  describe('how hard a piece is said to be', () => {
+    async function shelved(rig: Rig, titles: readonly string[]): Promise<void> {
+      let at = 1_000;
+      for (const title of titles) {
+        await rig.runtime.scores.keep(twoBarExercise({ title }), at);
+        at += 1_000;
+      }
+      await rig.view.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    function rowTitles(): readonly string[] {
+      return [...element('scores-list').querySelectorAll('.takes__name')].map(
+        (name) => name.getAttribute('title') ?? '',
+      );
+    }
+
+    function marks(): readonly string[] {
+      return [...element('scores-list').querySelectorAll('.scores__stars')].map(
+        (mark) => mark.textContent ?? '',
+      );
+    }
+
+    it('asks the reader, and keeps what they say on the row', async () => {
+      // His: "кнопка щоб редагувати складність знаходиться у списку на кожному
+      // itemі", and the number is his - "від 1 до 10 зірочок... 2.2 2.3 2.7".
+      const rig = createRig();
+      await shelved(rig, ['City of Tears']);
+      expect(marks()).toEqual(['']);
+
+      rowButton('scores-list', 'How hard is this score?').click();
+      element<HTMLInputElement>('stars-value').value = '2.7';
+      element<HTMLButtonElement>('stars-yes').click();
+      await waitFor(() => rig.runtime.scores.theStarsFor('City of Tears') === 2.7);
+
+      expect(marks()).toEqual(['★ 2.7']);
+      expect(element('sheet-stars').hidden).toBe(true);
+    });
+
+    it('takes the mark off again, which is not marking it easy', async () => {
+      const rig = createRig();
+      await shelved(rig, ['City of Tears']);
+      const kept = rig.runtime.scores.list()[0];
+      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4);
+
+      rowButton('scores-list', 'How hard is this score?').click();
+      element<HTMLButtonElement>('stars-none').click();
+      await waitFor(() => rig.runtime.scores.theStarsFor('City of Tears') === null);
+
+      expect(marks()).toEqual(['']);
+    });
+
+    it('leaves the mark alone when the reader backs out', async () => {
+      // Which is the whole difference between Cancel and Unrated. Two ways out
+      // of a dialog that both do nothing would be one too many.
+      const rig = createRig();
+      await shelved(rig, ['City of Tears']);
+      const kept = rig.runtime.scores.list()[0];
+      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4);
+
+      rowButton('scores-list', 'How hard is this score?').click();
+      element<HTMLInputElement>('stars-value').value = '1';
+      element<HTMLButtonElement>('stars-no').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(rig.runtime.scores.theStarsFor('City of Tears')).toBe(9.4);
+      expect(element('sheet-stars').hidden).toBe(true);
+    });
+
+    it('treats Set over an empty box as nothing to say, not as unrated', async () => {
+      // Unrated is a button of its own. Emptying the box and pressing Set is a
+      // reader who has not decided, and the mark they had stands.
+      const rig = createRig();
+      await shelved(rig, ['City of Tears']);
+      const kept = rig.runtime.scores.list()[0];
+      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4);
+
+      rowButton('scores-list', 'How hard is this score?').click();
+      element<HTMLInputElement>('stars-value').value = '';
+      element<HTMLButtonElement>('stars-yes').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(rig.runtime.scores.theStarsFor('City of Tears')).toBe(9.4);
+      expect(element('sheet-stars').hidden).toBe(true);
+    });
+
+    it('opens the box on the mark the piece already has', async () => {
+      const rig = createRig();
+      await shelved(rig, ['City of Tears']);
+      const kept = rig.runtime.scores.list()[0];
+      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4);
+
+      rowButton('scores-list', 'How hard is this score?').click();
+
+      expect(element<HTMLInputElement>('stars-value').value).toBe('9.4');
+    });
+
+    it('orders the shelf by what the reader said, and remembers the order', async () => {
+      // His: "мати можливість сортувати за складністю, та цей фільтр має
+      // запамятовуватись".
+      const rig = createRig();
+      await shelved(rig, ['Gentle', 'Brutal']);
+      const gentle = rig.runtime.scores.list().find((score) => score.title === 'Gentle');
+      const brutal = rig.runtime.scores.list().find((score) => score.title === 'Brutal');
+      await rig.runtime.scores.keepTheStars(gentle?.id ?? '', 2.2);
+      await rig.runtime.scores.keepTheStars(brutal?.id ?? '', 9.4);
+
+      const order = element<HTMLSelectElement>('scores-order');
+      order.value = 'easiest';
+      order.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(rowTitles()).toEqual(['Gentle', 'Brutal']);
+      expect(rig.runtime.controller.settings.scoreOrder).toBe('easiest');
+
+      order.value = 'hardest';
+      order.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(rowTitles()).toEqual(['Brutal', 'Gentle']);
+      expect(rig.runtime.controller.settings.scoreOrder).toBe('hardest');
+    });
+
+    it('opens the shelf in the order it was left in', async () => {
+      // The point of remembering it: a shelf that went back to "recent" every
+      // evening is a control nobody uses twice.
+      const rig = createRig();
+      rig.runtime.controller.updateSettings({ scoreOrder: 'hardest' });
+      await shelved(rig, ['Gentle', 'Brutal']);
+      const gentle = rig.runtime.scores.list().find((score) => score.title === 'Gentle');
+      const brutal = rig.runtime.scores.list().find((score) => score.title === 'Brutal');
+      await rig.runtime.scores.keepTheStars(gentle?.id ?? '', 2.2);
+      await rig.runtime.scores.keepTheStars(brutal?.id ?? '', 9.4);
+
+      element<HTMLButtonElement>('focus-scores').click();
+
+      expect(element<HTMLSelectElement>('scores-order').value).toBe('hardest');
+      expect(rowTitles()).toEqual(['Brutal', 'Gentle']);
+    });
+  });
+
   describe('the click a piece asks for', () => {
     /** The Open button on the row for one title. */
     function openRow(title: string): HTMLButtonElement {

@@ -67,6 +67,7 @@ const SETTINGS: PracticeSettings = {
   rulerStrength: 0.5,
   restEveryMinutes: 45,
   whatOpens: 'random',
+  scoreOrder: 'hardest',
   stopAtAMistake: true,
   clickSilences: 'the-downbeat',
   keyboard: '61',

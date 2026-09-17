@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { ScoreLibrary } from '../../src/application/ScoreLibrary.js';
+import { ScoreLibrary, scoresInOrder, theStarsIn } from '../../src/application/ScoreLibrary.js';
+import type { StoredScoreSummary } from '../../src/application/ports/IScoreStore.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
@@ -17,6 +18,144 @@ function library(store = new InMemoryScoreStore()) {
     }),
   };
 }
+
+describe('how hard a piece is said to be', () => {
+  it('keeps the reader own judgement with the piece', async () => {
+    // Theirs and nothing computed: a number worked out from the notes would be
+    // wrong about what actually makes a piece hard to read, and wrong with an
+    // authority nobody could argue with. His: "як в osu! від 1 до 10 зірочок".
+    const { scores } = library();
+    const kept = await scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
+
+    await scores.keepTheStars(kept.id, 4.5);
+
+    expect(scores.theStarsFor('City of Tears')).toBe(4.5);
+  });
+
+  it('takes the mark off again, which is not the same as nought', async () => {
+    const { scores } = library();
+    const kept = await scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
+    await scores.keepTheStars(kept.id, 4.5);
+
+    await scores.keepTheStars(kept.id, null);
+
+    expect(scores.theStarsFor('City of Tears')).toBeNull();
+  });
+
+  it('says nothing about a piece nobody has judged', async () => {
+    const { scores } = library();
+    await scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
+
+    expect(scores.theStarsFor('City of Tears')).toBeNull();
+  });
+
+  it('survives the library being read back from the store', async () => {
+    const store = new InMemoryScoreStore();
+    const first = library(store);
+    const kept = await first.scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
+    await first.scores.keepTheStars(kept.id, 7.3);
+
+    const later = library(store);
+    await later.scores.load();
+
+    expect(later.scores.theStarsFor('City of Tears')).toBe(7.3);
+  });
+});
+
+describe('reading a difficulty the reader typed', () => {
+  it('keeps the tenth, which is the precision he asked for', () => {
+    // "2.2 2.3 2.7" - and the precision anybody can feel the difference of.
+    expect(theStarsIn('2.7')).toBe(2.7);
+    expect(theStarsIn('2.74')).toBe(2.7);
+    expect(theStarsIn('2.75')).toBe(2.8);
+  });
+
+  it('holds it inside one and ten rather than arguing about it', () => {
+    // A reader who types 15 means the hardest thing there is, and a dialog that
+    // refuses them is a dialog in the way.
+    expect(theStarsIn('15')).toBe(10);
+    expect(theStarsIn('0')).toBe(1);
+    expect(theStarsIn('-3')).toBe(1);
+  });
+
+  it('takes a comma, which is what half a keyboard gives for a decimal', () => {
+    expect(theStarsIn('3,4')).toBe(3.4);
+  });
+
+  it('says nothing about what is not a number', () => {
+    expect(theStarsIn('')).toBeNull();
+    expect(theStarsIn('   ')).toBeNull();
+    expect(theStarsIn('hard')).toBeNull();
+  });
+});
+
+describe('the order the shelf is read in', () => {
+  function shelf(
+    rows: readonly { title: string; openedAtMs: number; stars?: number }[],
+  ): readonly StoredScoreSummary[] {
+    return rows.map((row) => ({
+      id: row.title,
+      title: row.title,
+      savedAtMs: 0,
+      openedAtMs: row.openedAtMs,
+      bars: 8,
+      passages: [],
+      ...(row.stars === undefined ? {} : { stars: row.stars }),
+    }));
+  }
+
+  const SOME = shelf([
+    { title: 'Middling', openedAtMs: 3_000, stars: 5 },
+    { title: 'Unjudged', openedAtMs: 4_000 },
+    { title: 'Gentle', openedAtMs: 1_000, stars: 2.2 },
+    { title: 'Brutal', openedAtMs: 2_000, stars: 9.4 },
+  ]);
+
+  const titles = (order: 'recent' | 'easiest' | 'hardest'): readonly string[] =>
+    scoresInOrder(SOME, order).map((score) => score.title);
+
+  it('leaves the old order alone by default', () => {
+    // The piece being worked on is the one kept coming back to.
+    expect(titles('recent')).toEqual(['Unjudged', 'Middling', 'Brutal', 'Gentle']);
+  });
+
+  it('puts the gentlest first when asked for something readable', () => {
+    expect(titles('easiest').slice(0, 3)).toEqual(['Gentle', 'Middling', 'Brutal']);
+  });
+
+  it('puts the hardest first when asked for something to stretch on', () => {
+    expect(titles('hardest').slice(0, 3)).toEqual(['Brutal', 'Middling', 'Gentle']);
+  });
+
+  it('stands an unjudged piece at the end, never at the easy end', () => {
+    // Unmarked is not easy. Sorted as nought, everything nobody has opened
+    // would be handed to the reader looking for something gentle.
+    expect(titles('easiest')[3]).toBe('Unjudged');
+    expect(titles('hardest')[3]).toBe('Unjudged');
+  });
+
+  it('falls back on the recent order among equals', () => {
+    // Every row still has a reason to be where it is.
+    const tied = shelf([
+      { title: 'Older', openedAtMs: 1_000, stars: 4 },
+      { title: 'Newer', openedAtMs: 2_000, stars: 4 },
+    ]);
+
+    expect(scoresInOrder(tied, 'easiest').map((score) => score.title)).toEqual(['Newer', 'Older']);
+  });
+
+  it('does not reorder the list it was handed', () => {
+    const given = shelf([
+      { title: 'Gentle', openedAtMs: 1_000, stars: 2 },
+      { title: 'Brutal', openedAtMs: 2_000, stars: 9 },
+    ]);
+    const before = given.map((score) => score.title);
+
+    scoresInOrder(given, 'hardest');
+
+    expect(given.map((score) => score.title)).toEqual(before);
+  });
+});
 
 describe('the click a piece asks for', () => {
   it('keeps it with the piece, so it is waiting next time', async () => {

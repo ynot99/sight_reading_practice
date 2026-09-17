@@ -18,7 +18,7 @@ import {
 } from '../domain/timeline/Timeline.js';
 import { playedNoteOffset } from './playedNoteOffset.js';
 import { drillTaskPassed, planTheDrill, type DrillTask } from './drill/SectionDrill.js';
-import type { WhatOpens } from './ScoreLibrary.js';
+import type { ScoreOrder, WhatOpens } from './ScoreLibrary.js';
 import type { PageTurns } from './ports/IScoreRenderer.js';
 import { keysOf, type KeyboardSize } from '../domain/generation/keyboards.js';
 import type { PitchRange } from '../domain/generation/voices/IVoiceGenerator.js';
@@ -521,6 +521,15 @@ export interface PracticeSettings {
    */
   readonly whatOpens: WhatOpens;
   /**
+   * The order the shelf of kept scores is read in.
+   *
+   * Here for the reason `whatOpens` above it is: nothing in this controller
+   * acts on it, the page reads it, and a second store for one preference would
+   * be a second thing to back up and restore. His: "цей фільтр має
+   * запамятовуватись".
+   */
+  readonly scoreOrder: ScoreOrder;
+  /**
    * Run a marker along the ruler, beat by beat.
    *
    * Not the same thing as the marker on the notes. Under a held note that one
@@ -858,6 +867,8 @@ export class PracticeController {
       rhythmRuler: 'off',
       // A new exercise, which is what opening this has always done.
       whatOpens: 'generated',
+      // The order the shelf has always been in.
+      scoreOrder: 'recent',
       rulerCursor: false,
       rulerStrength: 1,
       restEveryMinutes: 30,

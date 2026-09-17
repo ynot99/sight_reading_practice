@@ -113,6 +113,18 @@ export class IndexedDbScoreStore implements IScoreStore {
     await this.write({ ...found, clickPattern });
   }
 
+  async keepTheStars(id: string, stars: number | null): Promise<void> {
+    const found = await this.read(id);
+    if (found === null) {
+      return;
+    }
+    // Taken off rather than written as nothing: absent is what "nobody has
+    // said" is stored as, and a record carrying an empty field would have to
+    // be read as both.
+    const { stars: _taken, ...rest } = found;
+    await this.write(stars === null ? rest : { ...rest, stars });
+  }
+
   async write(score: StoredScore): Promise<void> {
     await this.withStore('readwrite', (store) => request(store.put(score)));
   }

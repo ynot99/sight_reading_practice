@@ -48,6 +48,22 @@ export interface StoredScoreSummary {
    * and I need to switch again".
    */
   readonly clickPattern?: ClickPattern;
+  /**
+   * How hard the reader has said this piece is, from one to ten.
+   *
+   * Their own judgement and nothing computed. A number this program worked out
+   * from the notes would be wrong about the thing that actually makes a piece
+   * hard to read - an awkward key, a hand that has to leap, a rhythm written
+   * across the beat - and it would be wrong with an authority the reader has no
+   * way to argue with. Theirs is the only number that knows what they find
+   * difficult.
+   *
+   * Absent where they have not said, which is not the same as easy: a shelf
+   * ordered by difficulty puts what nobody has judged at the end rather than at
+   * the bottom. His: "як в osu! від 1 до 10 зірочок... можна давати й проміжні
+   * значення як 2.2 2.3 2.7".
+   */
+  readonly stars?: number;
 }
 
 /**
@@ -87,6 +103,9 @@ export interface IScoreStore {
   /** Keeps how finely the click divides for one score. Separate from `write`
    * for the same reason the two above are: one word, not a document. */
   keepTheClick(id: string, pattern: ClickPattern): Promise<void>;
+
+  /** Keeps how hard the reader says a score is; `null` takes the mark off. */
+  keepTheStars(id: string, stars: number | null): Promise<void>;
 
   /**
    * Marks a score as opened just now.
@@ -141,6 +160,16 @@ export class InMemoryScoreStore implements IScoreStore {
     if (found !== undefined) {
       this.scores.set(id, { ...found, clickPattern });
     }
+    return Promise.resolve();
+  }
+
+  keepTheStars(id: string, stars: number | null): Promise<void> {
+    const found = this.scores.get(id);
+    if (found === undefined) {
+      return Promise.resolve();
+    }
+    const { stars: _taken, ...rest } = found;
+    this.scores.set(id, stars === null ? rest : { ...rest, stars });
     return Promise.resolve();
   }
 

@@ -32,7 +32,13 @@ import {
   type RulerDivision,
   type RulerMark,
 } from '../application/rhythmRuler.js';
-import { WHAT_OPENS, type WhatOpens } from '../application/ScoreLibrary.js';
+import {
+  scoresInOrder,
+  theStarsIn,
+  WHAT_OPENS,
+  type ScoreOrder,
+  type WhatOpens,
+} from '../application/ScoreLibrary.js';
 import { PAGE_TURNS, type PageTurns } from '../application/ports/IScoreRenderer.js';
 import { KEYBOARD_SIZES, keysOf, type KeyboardSize } from '../domain/generation/keyboards.js';
 import type { SavedPassage } from '../application/ports/IScoreStore.js';
@@ -1491,6 +1497,13 @@ export class AppView {
     confirmYes: HTMLButtonElement;
     confirmNo: HTMLButtonElement;
     scoresList: HTMLUListElement;
+    scoresOrder: HTMLSelectElement;
+    sheetStars: HTMLElement;
+    starsText: HTMLElement;
+    starsValue: HTMLInputElement;
+    starsNone: HTMLButtonElement;
+    starsNo: HTMLButtonElement;
+    starsYes: HTMLButtonElement;
     scoresSearch: HTMLInputElement;
     sheetReadings: HTMLElement;
     readingsList: HTMLUListElement;
@@ -1754,6 +1767,13 @@ export class AppView {
       confirmYes: requireElement(doc, 'confirm-yes'),
       confirmNo: requireElement(doc, 'confirm-no'),
       scoresList: requireElement(doc, 'scores-list'),
+      scoresOrder: requireElement(doc, 'scores-order'),
+      sheetStars: requireElement(doc, 'sheet-stars'),
+      starsText: requireElement(doc, 'stars-text'),
+      starsValue: requireElement(doc, 'stars-value'),
+      starsNone: requireElement(doc, 'stars-none'),
+      starsNo: requireElement(doc, 'stars-no'),
+      starsYes: requireElement(doc, 'stars-yes'),
       scoresSearch: requireElement(doc, 'scores-search'),
       sheetReadings: requireElement(doc, 'sheet-readings'),
       readingsList: requireElement(doc, 'readings-list'),
@@ -2231,7 +2251,10 @@ export class AppView {
   private renderScores(): void {
     const all = this.runtime.scores.list();
     const query = this.el.scoresSearch.value.trim();
-    const scores = query === '' ? all : this.runtime.scores.search(query);
+    const found = query === '' ? all : this.runtime.scores.search(query);
+    const order = this.runtime.controller.settings.scoreOrder;
+    this.el.scoresOrder.value = order;
+    const scores = scoresInOrder(found, order);
     const now = Date.now();
     this.el.scoresEmpty.hidden = scores.length > 0;
     this.el.scoresEmpty.textContent =
@@ -2252,11 +2275,27 @@ export class AppView {
       when.className = 'takes__when';
       when.textContent = describeWhen(score.openedAtMs, now);
 
+      // Nothing at all where nobody has said, rather than a nought or a dash:
+      // an unmarked piece and an easy one must not look alike, and the column
+      // keeps its width either way so the rows do not go ragged.
+      const stars = this.doc.createElement('span');
+      stars.className = 'scores__stars';
+      stars.textContent = score.stars === undefined ? '' : `★ ${score.stars.toFixed(1)}`;
+
       const open = this.doc.createElement('button');
       open.type = 'button';
       open.textContent = 'Open';
       this.listen(open, 'click', () => {
         void this.openKeptScore(score.id, score.title);
+      });
+
+      const judge = this.doc.createElement('button');
+      judge.type = 'button';
+      judge.textContent = '★';
+      judge.title = 'How hard is this score?';
+      judge.setAttribute('aria-label', `How hard is ${score.title}?`);
+      this.listen(judge, 'click', () => {
+        void this.judgeScore(score.id, score.title);
       });
 
       const rename = this.doc.createElement('button');
@@ -2282,8 +2321,10 @@ export class AppView {
       });
 
       // Open stays the first button in the row: it is the one thing a reader
-      // reaches for, and it has been in that place since there were rows.
-      row.append(name, when, open, rename, remove);
+      // reaches for, and it has been in that place since there were rows. The
+      // mark goes with what the row *says* rather than with what it does, so
+      // it stands before the buttons and not among them.
+      row.append(name, stars, when, open, judge, rename, remove);
       this.el.scoresList.append(row);
     }
   }
@@ -3078,6 +3119,16 @@ export class AppView {
     });
 
     this.listen(this.el.scoresSearch, 'input', () => {
+      this.renderScores();
+    });
+
+    this.listen(this.el.scoresOrder, 'change', () => {
+      // Kept with the rest of what the reader has chosen. A shelf that went
+      // back to "recent" every evening is a control nobody uses twice. His:
+      // "цей фільтр має запамятовуватись".
+      this.runtime.controller.updateSettings({
+        scoreOrder: this.el.scoresOrder.value as ScoreOrder,
+      });
       this.renderScores();
     });
 
@@ -6041,6 +6092,73 @@ export class AppView {
    * every page, and one that still said the old name would read as a rename
    * that had not worked.
    */
+  /**
+   * Asks how hard a piece is, and keeps the answer with the piece.
+   *
+   * Nothing is written where the reader backs out, which is what makes Cancel
+   * different from Unrated: one leaves the mark as it was and the other takes
+   * it off. Two ways out of a dialog that both do nothing would be one too
+   * many. His: "кнопка щоб редагувати складність знаходиться у списку на
+   * кожному itemі".
+   */
+  private async judgeScore(id: string, title: string): Promise<void> {
+    // Read now rather than captured when the row was drawn: the row outlives
+    // the drawing of it, and a box opening on a mark the piece no longer has
+    // is a box that quietly puts it back.
+    const wanted = await this.askHowHard(title, this.runtime.scores.theStarsFor(title));
+    if (wanted === 'left alone') {
+      return;
+    }
+    await this.runtime.scores.keepTheStars(id, wanted);
+    this.renderScores();
+  }
+
+  /**
+   * The sheet that asks, answering with a number, `null` for unrated, or
+   * `'left alone'` where the reader backed out.
+   */
+  private askHowHard(title: string, current: number | null): Promise<number | null | 'left alone'> {
+    this.el.starsText.textContent = `How hard is “${title}”, from one to ten?`;
+    this.el.starsValue.value = current === null ? '' : current.toFixed(1);
+    this.el.sheetStars.hidden = false;
+    this.el.starsValue.focus();
+    this.el.starsValue.select();
+
+    return new Promise<number | null | 'left alone'>((resolve) => {
+      const answer = (value: number | null | 'left alone'): void => {
+        this.el.sheetStars.hidden = true;
+        this.el.starsYes.removeEventListener('click', onYes);
+        this.el.starsNone.removeEventListener('click', onNone);
+        this.el.starsNo.removeEventListener('click', onNo);
+        this.el.starsValue.removeEventListener('keydown', onKey);
+        this.el.sheetStars.removeEventListener('click', onOutside);
+        resolve(value);
+      };
+      // Nothing typed is not nought: it is the reader pressing Set over an
+      // empty box, which means they have nothing to say and is Cancel.
+      const onYes = (): void => answer(theStarsIn(this.el.starsValue.value) ?? 'left alone');
+      const onNone = (): void => answer(null);
+      const onNo = (): void => answer('left alone');
+      // Enter only. Escape is the page's, and shuts this by pressing the
+      // Cancel beside it - which is this same answer, given once.
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key === 'Enter') {
+          onYes();
+        }
+      };
+      const onOutside = (event: Event): void => {
+        if (event.target === this.el.sheetStars) {
+          answer('left alone');
+        }
+      };
+      this.el.starsYes.addEventListener('click', onYes);
+      this.el.starsNone.addEventListener('click', onNone);
+      this.el.starsNo.addEventListener('click', onNo);
+      this.el.starsValue.addEventListener('keydown', onKey);
+      this.el.sheetStars.addEventListener('click', onOutside);
+    });
+  }
+
   private async renameScore(id: string, title: string): Promise<void> {
     const wanted = await this.askForAName(title);
     if (wanted === null) {

@@ -16,6 +16,67 @@ import type { IScoreStore, SavedPassage, StoredScoreSummary } from './ports/ISco
  */
 export const WHAT_OPENS = ['generated', 'last', 'random'] as const;
 
+/**
+ * The orders the shelf can be read in.
+ *
+ * "Recent" is what it has always been and stays the default: the piece being
+ * worked on is the one kept coming back to. The other two are the two questions
+ * a difficulty is asked for - something to stretch on, or something readable
+ * tonight - and they are one control with three answers rather than an order
+ * and a direction, which would be two.
+ */
+export const SCORE_ORDER = ['recent', 'easiest', 'hardest'] as const;
+
+export type ScoreOrder = (typeof SCORE_ORDER)[number];
+
+/** The most a piece can be marked, and the least. */
+export const HARDEST_STARS = 10;
+export const EASIEST_STARS = 1;
+
+/**
+ * The difficulty in something the reader typed, or `null` for no mark at all.
+ *
+ * Held to one decimal place, which is the precision he asked for - "2.2 2.3
+ * 2.7" - and the precision anybody can actually feel the difference of. Kept
+ * inside one and ten rather than refused: a reader who types 15 means the
+ * hardest thing there is, and a dialog that argues with them about it is a
+ * dialog in the way.
+ */
+export function theStarsIn(typed: string): number | null {
+  const wanted = Number.parseFloat(typed.trim().replace(',', '.'));
+  if (!Number.isFinite(wanted)) {
+    return null;
+  }
+  const held = Math.min(HARDEST_STARS, Math.max(EASIEST_STARS, wanted));
+  return Math.round(held * 10) / 10;
+}
+
+/**
+ * The shelf in the order asked for.
+ *
+ * A piece nobody has judged goes last in either difficulty order, never first
+ * and never treated as nought: unmarked is not easy, and the reader looking for
+ * something gentle would be handed the whole of what they have never opened.
+ * Among equals, and among the unmarked, the recent order is what is left -
+ * every row still has a reason to be where it is.
+ */
+export function scoresInOrder(
+  scores: readonly StoredScoreSummary[],
+  order: ScoreOrder,
+): readonly StoredScoreSummary[] {
+  const byRecent = [...scores].sort((left, right) => right.openedAtMs - left.openedAtMs);
+  if (order === 'recent') {
+    return byRecent;
+  }
+  const harder = order === 'hardest' ? -1 : 1;
+  return byRecent.sort((left, right) => {
+    if (left.stars === undefined || right.stars === undefined) {
+      return left.stars === right.stars ? 0 : left.stars === undefined ? 1 : -1;
+    }
+    return (left.stars - right.stars) * harder;
+  });
+}
+
 export type WhatOpens = (typeof WHAT_OPENS)[number];
 
 /**
@@ -300,6 +361,28 @@ export class ScoreLibrary {
    */
   theClickFor(title: string): ClickPattern | null {
     return this.summaries.find((summary) => summary.title === title)?.clickPattern ?? null;
+  }
+
+  /**
+   * Keeps how hard the reader says a score is, or takes the mark off.
+   *
+   * Their judgement, kept with the piece, for the reason the click beside it
+   * is: it is an answer about this music and it is the same answer next week.
+   */
+  async keepTheStars(id: string, stars: number | null): Promise<void> {
+    await this.deps.store.keepTheStars(id, stars);
+    this.summaries = this.summaries.map((summary) => {
+      if (summary.id !== id) {
+        return summary;
+      }
+      const { stars: _taken, ...rest } = summary;
+      return stars === null ? rest : { ...rest, stars };
+    });
+  }
+
+  /** How hard a score is said to be, or `null` where nobody has said. */
+  theStarsFor(title: string): number | null {
+    return this.summaries.find((summary) => summary.title === title)?.stars ?? null;
   }
 
   /**

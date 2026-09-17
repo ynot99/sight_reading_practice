@@ -598,6 +598,21 @@ textarea {
   color: var(--text);
 }
 
+/*
+ * How hard a piece is, on its row in the shelf.
+ *
+ * Quiet, and the same width whatever the number, so a column of rows does not
+ * go ragged where one is marked 10 and its neighbour 2.2. Nothing at all where
+ * nobody has said, because an empty mark and a low one must not look alike.
+ */
+.scores__stars {
+  flex: 0 0 auto;
+  min-width: 3.4em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
 .profile-figure {
   display: flex;
   flex-wrap: wrap;

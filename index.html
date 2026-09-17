@@ -242,6 +242,17 @@
             -->
             <input id="scores-search" type="search" class="sheet__search"
               placeholder="Search" aria-label="Search the kept scores" />
+            <!--
+              One control with three answers rather than an order and a
+              direction, which would be two controls answering one question.
+              What it is set to is remembered, because a shelf that went back
+              to "recent" every evening would be a control nobody used twice.
+            -->
+            <select id="scores-order" class="sheet__search" aria-label="Order the kept scores">
+              <option value="recent">Recently read</option>
+              <option value="easiest">Easiest first</option>
+              <option value="hardest">Hardest first</option>
+            </select>
             <button id="scores-add" type="button" class="button">Add a score…</button>
             <button id="scores-clear" type="button" class="button button--ghost">Delete all</button>
             <button id="scores-close" type="button" data-shuts class="button button--ghost sheet__close"
@@ -325,6 +336,34 @@
           <div class="sheet__actions">
             <button id="rename-no" type="button" data-shuts class="button button--ghost">Cancel</button>
             <button id="rename-yes" type="button" class="button button--primary">Rename</button>
+          </div>
+        </div>
+      </div>
+
+      <!--
+        How hard a piece is, asked of the reader and not worked out.
+
+        A number this program computed from the notes would be wrong about the
+        thing that actually makes a piece hard to read - an awkward key, a hand
+        that has to leap, a rhythm written across the beat - and wrong with an
+        authority nobody could argue with. So it asks, the same way the rename
+        beside it asks, and takes a decimal because the difference between 2.2
+        and 2.7 is a difference he can feel.
+      -->
+      <div id="sheet-stars" class="sheet sheet--over" hidden>
+        <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
+          aria-labelledby="stars-text">
+          <p id="stars-text" class="sheet__text"></p>
+          <input id="stars-value" class="sheet__input" type="number" min="1" max="10" step="0.1"
+            inputmode="decimal" aria-label="How hard this piece is, from one to ten" />
+          <div class="sheet__actions">
+            <!--
+              Unmarked is a real answer and not a nought: a shelf ordered by
+              difficulty puts what nobody has judged at the end.
+            -->
+            <button id="stars-none" type="button" class="button button--ghost">Unrated</button>
+            <button id="stars-no" type="button" data-shuts class="button button--ghost">Cancel</button>
+            <button id="stars-yes" type="button" class="button button--primary">Set</button>
           </div>
         </div>
       </div>

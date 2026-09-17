@@ -2,7 +2,7 @@ import { KeySignature, type KeyMode } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { PracticeSettings } from './PracticeController.js';
 import { RULER_DIVISIONS, type RulerDivision } from './rhythmRuler.js';
-import { WHAT_OPENS, type WhatOpens } from './ScoreLibrary.js';
+import { SCORE_ORDER, WHAT_OPENS, type ScoreOrder, type WhatOpens } from './ScoreLibrary.js';
 import { PAGE_TURNS, type PageTurns } from './ports/IScoreRenderer.js';
 import { KEYBOARD_SIZES, type KeyboardSize } from '../domain/generation/keyboards.js';
 import {
@@ -116,6 +116,12 @@ function readCountIn(value: unknown): CountInWhen | undefined {
 function readWhatOpens(value: unknown): WhatOpens | undefined {
   return typeof value === 'string' && WHAT_OPENS.includes(value as WhatOpens)
     ? (value as WhatOpens)
+    : undefined;
+}
+
+function readScoreOrder(value: unknown): ScoreOrder | undefined {
+  return typeof value === 'string' && SCORE_ORDER.includes(value as ScoreOrder)
+    ? (value as ScoreOrder)
     : undefined;
 }
 
@@ -344,6 +350,7 @@ export function decodePracticeSettings(
     pageTurns: readPageTurns(value['pageTurns'], value['previewNextPage']),
     rhythmRuler: readRuler(value['rhythmRuler']),
     whatOpens: readWhatOpens(value['whatOpens']),
+    scoreOrder: readScoreOrder(value['scoreOrder']),
     stopAtAMistake: readBoolean(value['stopAtAMistake']),
     clickSilences: readClickSilence(value['clickSilences']),
     keyboard: readKeyboard(value['keyboard']),
@@ -403,6 +410,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     pageTurns: settings.pageTurns,
     rhythmRuler: settings.rhythmRuler,
     whatOpens: settings.whatOpens,
+    scoreOrder: settings.scoreOrder,
     stopAtAMistake: settings.stopAtAMistake,
     clickSilences: settings.clickSilences,
     keyboard: settings.keyboard,

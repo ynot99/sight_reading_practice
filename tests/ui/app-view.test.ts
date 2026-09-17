@@ -1514,6 +1514,133 @@ describe('AppView', () => {
     });
 
 
+    /**
+     * Lends the drawing a size, because jsdom lays nothing out.
+     *
+     * Every number the map is drawn from is a measurement of the drawing, so
+     * without one there is no window to move and the box hides itself.
+     */
+    function lendTheDrawingASize(scrolledTo: () => number): () => void {
+      const sizes: Record<string, (node: HTMLElement) => number> = {
+        clientWidth: (node) => (node.classList.contains('roll__keys') ? 44 : 400),
+        scrollWidth: () => 2_000,
+        scrollLeft: () => scrolledTo(),
+      };
+      const giveBack: (() => void)[] = [];
+      for (const [name, width] of Object.entries(sizes)) {
+        const had = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name);
+        Object.defineProperty(HTMLElement.prototype, name, {
+          configurable: true,
+          get(this: HTMLElement) {
+            return width(this);
+          },
+        });
+        giveBack.push(() => {
+          if (had === undefined) {
+            delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name];
+            return;
+          }
+          Object.defineProperty(HTMLElement.prototype, name, had);
+        });
+      }
+      return () => {
+        for (const undo of giveBack) {
+          undo();
+        }
+      };
+    }
+
+    /** Opens the picture of a run with one note in it. */
+    async function openThePictureOfARun(): Promise<ReturnType<typeof createRig>> {
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = rig.runtime.controller.session?.currentStep;
+      rig.midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      return rig;
+    }
+
+    function theDrawing(): HTMLElement {
+      const drawn = element('roll-body').firstElementChild;
+      if (!(drawn instanceof HTMLElement)) {
+        throw new Error('the run was not drawn');
+      }
+      return drawn;
+    }
+
+    const aFrame = async (): Promise<void> =>
+      new Promise((done) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => done()));
+      });
+
+    it('moves the box on the map without laying the page out again', async () => {
+      // A `left` is a layout on the map, and the next thing to measure the
+      // drawing has to wait for one - so following a scroll meant reading a
+      // drawing thousands of notes wide, writing a percentage, and reading it
+      // again, on every scroll event. A transform is the compositor's and
+      // changes no layout at all. His: "чи можна якось швидкість оновлення зони
+      // minimap прискорити? Я хочу щоб все йшло плавно, як в osu!".
+      let scrolledTo = 0;
+      const giveBack = lendTheDrawingASize(() => scrolledTo);
+      try {
+        await openThePictureOfARun();
+        const box = element('roll-map-window');
+        const wide = box.style.width;
+        const at = box.style.transform;
+        expect(wide).not.toBe('');
+
+        scrolledTo = 800;
+        theDrawing().dispatchEvent(new Event('scroll'));
+        await aFrame();
+
+        // Four hundred wide on two thousand of run, less the forty-four the
+        // column of key names keeps: a window of 356 on 1956, which is 18.2 per
+        // cent of the map. Scrolled to 800 it stands 800/356 of its own widths
+        // along - because a transform's per cent is of the element being moved,
+        // and the share it is given is of the map.
+        expect(wide).toBe('18.2%');
+        expect(at).toBe('translateX(0.000%)');
+        expect(box.style.transform).toBe('translateX(224.719%)');
+        expect(box.style.left).toBe('');
+        // The width is a width, and a scroll does not change it.
+        expect(box.style.width).toBe(wide);
+      } finally {
+        giveBack();
+      }
+    });
+
+    it('redraws the box at most once a frame, however much is scrolled', async () => {
+      // A scroll fires many times between two frames, and every one of them
+      // used to redraw the box. The extra ones are thrown away unseen.
+      let scrolledTo = 0;
+      const giveBack = lendTheDrawingASize(() => scrolledTo);
+      try {
+        await openThePictureOfARun();
+        const box = element('roll-map-window');
+        const at = box.style.transform;
+        const drawn = theDrawing();
+        const frames = vi.spyOn(window, 'requestAnimationFrame');
+
+        for (const to of [200, 400, 800]) {
+          scrolledTo = to;
+          drawn.dispatchEvent(new Event('scroll'));
+        }
+
+        // Not yet: the frame is what the scrolling goes through.
+        expect(box.style.transform).toBe(at);
+        expect(frames).toHaveBeenCalledTimes(1);
+        frames.mockRestore();
+
+        await aFrame();
+        expect(box.style.transform).not.toBe(at);
+      } finally {
+        giveBack();
+      }
+    });
+
+
     it('puts the picture away on a click outside its panel', async () => {
       // The way out every other sheet has and this one had not: it is opened
       // from the report rather than from the transport, so it was wired on its
@@ -1806,7 +1933,9 @@ describe('AppView', () => {
       element<HTMLButtonElement>('run-roll-open').click();
 
       // A run opens with the marker at its beginning, which is the left edge.
-      expect(element('roll-map-head').style.left).toBe('0%');
+      // Moved rather than placed, so that following a playback costs no layout.
+      expect(element('roll-map-head').style.transform).toBe('translateX(0.000%)');
+      expect(element('roll-map-head').style.left).toBe('');
     });
 
     it('chooses a passage out of the picture, and goes to it', async () => {

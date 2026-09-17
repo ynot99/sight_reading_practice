@@ -1228,6 +1228,8 @@ export class AppView {
   /** Follows a sounding take, so the slider says where it has got to. */
   private takeTick: ReturnType<typeof setInterval> | null = null;
   private rollTick: ReturnType<typeof setInterval> | null = null;
+  /** A frame asked for to redraw the map's box, and not yet arrived. */
+  private mapFrame: number | null = null;
   /** Clicks of the run already handed to the metronome by this playback. */
   private rollClicksSent = 0;
   /**
@@ -1939,6 +1941,7 @@ export class AppView {
       clearInterval(this.rollTick);
       this.rollTick = null;
     }
+    this.forgetTheMapFrame();
     if (this.timeTick !== null) {
       clearInterval(this.timeTick);
       this.timeTick = null;
@@ -6694,8 +6697,12 @@ export class AppView {
     if (roll === null) {
       return;
     }
+    // Moved, not placed, for the same reason the box beside it is: the head is
+    // written to on every tick of a playback, and `left` is a layout each time.
+    // The element is as wide as the map and all of it is transparent but its
+    // left edge, so a share of the map is a share of the element.
     const share = shareOfTheRun(roll, this.headIsAtMs());
-    this.el.rollMapHead.style.left = `${(share * 100).toFixed(3)}%`;
+    this.el.rollMapHead.style.transform = `translateX(${(share * 100).toFixed(3)}%)`;
   }
 
   /**
@@ -6763,6 +6770,42 @@ export class AppView {
   }
 
   /**
+   * Asks for the box to be redrawn, and at most once a frame.
+   *
+   * A scroll can fire many times between two frames, and every one of them used
+   * to redraw the box. Drawn more often than the screen is painted, the extra
+   * ones are thrown away - and they are not free, because each measures the
+   * drawing again.
+   *
+   * The frame is what the scrolling goes through. Everything else - a zoom, a
+   * redraw, the sheet opening - draws straight away, because those are single
+   * events that have just changed the thing being measured and there is nothing
+   * to coalesce.
+   */
+  private askWhereTheViewIs(): void {
+    const view = this.doc.defaultView;
+    if (view === null || typeof view.requestAnimationFrame !== 'function') {
+      this.sayWhereTheViewIs();
+      return;
+    }
+    if (this.mapFrame !== null) {
+      return;
+    }
+    this.mapFrame = view.requestAnimationFrame(() => {
+      this.mapFrame = null;
+      this.sayWhereTheViewIs();
+    });
+  }
+
+  private forgetTheMapFrame(): void {
+    const view = this.doc.defaultView;
+    if (this.mapFrame !== null && view !== null) {
+      view.cancelAnimationFrame(this.mapFrame);
+    }
+    this.mapFrame = null;
+  }
+
+  /**
    * Draws the box saying which part of the run is on the screen.
    *
    * Hidden rather than guessed at where nothing has been laid out: a box
@@ -6790,8 +6833,22 @@ export class AppView {
     if (window === null) {
       return;
     }
-    this.el.rollMapWindow.style.left = `${(window.fromShare * 100).toFixed(3)}%`;
+    // The width is still a width: it changes when the zoom or the screen does,
+    // and a box whose width were a scale would wear a scaled border with it.
     this.el.rollMapWindow.style.width = `${(window.widthShare * 100).toFixed(3)}%`;
+    // Moved rather than placed. A transform is handed to the compositor and
+    // changes no layout at all, where `left` is a layout on the map and makes
+    // the next measurement of the drawing wait for one. That was the whole of
+    // it: read the drawing, write a percentage, read it again - and each read
+    // after a write had to lay out a drawing that can be thousands of notes
+    // wide, on every scroll event. His: "чи можна якось швидкість оновлення
+    // зони minimap прискорити? Я хочу щоб все йшло плавно".
+    //
+    // The share is of the *map*, and a transform's per cent is of the element
+    // being moved, which is the window - so it is put in the window's own
+    // widths. The division is safe: a window is drawn only where it has width.
+    const along = (window.fromShare / window.widthShare) * 100;
+    this.el.rollMapWindow.style.transform = `translateX(${along.toFixed(3)}%)`;
   }
 
   /** Scrolls the drawing to the part of the run a finger is on the map. */
@@ -7079,7 +7136,7 @@ export class AppView {
     const drawn = this.el.rollBody.firstElementChild;
     if (drawn instanceof HTMLElement) {
       drawn.addEventListener('scroll', () => {
-        this.sayWhereTheViewIs();
+        this.askWhereTheViewIs();
       });
     }
     this.sayWhereTheViewIs();

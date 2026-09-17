@@ -722,27 +722,39 @@ textarea {
   background: var(--wrong);
 }
 
-/* Where the marker stands, on the line that is looked at to find a place. */
+/*
+ * Where the marker stands, on the line that is looked at to find a place.
+ *
+ * As wide as the map, and transparent apart from its left edge. Both boxes here
+ * are moved by a transform rather than placed by `left`, so that following a
+ * scroll or a playback costs the compositor a move and the page no layout at
+ * all - and a transform's per cent is of the element being moved, so the head
+ * has to be the width of the thing it takes its share of.
+ */
 .roll-map__head {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 2px;
+  left: 0;
+  width: 100%;
   margin-left: -1px;
-  background: var(--accent);
+  border-left: 2px solid var(--accent);
   pointer-events: none;
+  will-change: transform;
 }
 
 .roll-map__window {
   position: absolute;
   top: 0;
   bottom: 0;
+  left: 0;
   border: 1px solid var(--accent);
   border-radius: 3px;
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   /* The strip takes the finger, not the box: a box too narrow to hit is a
      control that only works where the run is short. */
   pointer-events: none;
+  will-change: transform;
 }
 
 /*

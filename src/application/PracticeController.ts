@@ -12,6 +12,7 @@ import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyR
 import {
   buildTimeline,
   expectedFor,
+  soundsFor,
   type ExerciseTimeline,
   type TimelineStep,
 } from '../domain/timeline/Timeline.js';
@@ -3266,9 +3267,11 @@ export class PracticeController {
         continue;
       }
       this.deps.instrument.play(note.midi, OTHER_HAND_VELOCITY, atMs);
+      // Sounded for as long as it sounds rather than as long as it is written,
+      // which is the same number unless the writer marked it short.
       this.deps.instrument.stop(
         note.midi,
-        atMs + spanMs(exercise, step.onsetTicks, step.onsetTicks + note.durationTicks),
+        atMs + spanMs(exercise, step.onsetTicks, step.onsetTicks + soundsFor(note)),
       );
       this.sounding.add(note.midi);
     }

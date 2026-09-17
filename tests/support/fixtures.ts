@@ -521,6 +521,40 @@ export function partialVoiceExercise(
   };
 }
 
+/**
+ * Two bars where the bass is marked short and the treble is not.
+ *
+ * The one shape that tells a note's written length from its sounding one: the
+ * treble whole note and the bass whole note are the same length on the page and
+ * must not be the same length in the air.
+ */
+export function staccatoInTheBass(overrides: ExerciseOverrides = {}): Exercise {
+  const base = twoBarExercise(overrides);
+  return {
+    ...base,
+    id: 'fixture-staccato-bass',
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        clefChanges: [],
+        measures: [bar(noteEntry(p('C4'), Duration.WHOLE)), bar(noteEntry(p('D4'), Duration.WHOLE))],
+      },
+      {
+        staffNumber: 2,
+        voice: 2,
+        clef: 'bass',
+        clefChanges: [],
+        measures: [
+          bar(noteEntry(p('C3'), Duration.WHOLE, [], [], null, false, { staccato: true })),
+          bar(noteEntry(p('G2'), Duration.WHOLE)),
+        ],
+      },
+    ],
+  };
+}
+
 /** MIDI numbers of the fixture pitches, for readable expectations. */
 export const MIDI = {
   G2: p('G2').midi,

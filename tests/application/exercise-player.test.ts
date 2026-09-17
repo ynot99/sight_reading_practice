@@ -12,6 +12,7 @@ import {
   longExercise,
   p,
   tiedExercise,
+  staccatoInTheBass,
   twoBarExercise,
 } from '../support/fixtures.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
@@ -128,6 +129,30 @@ describe('the ornaments on the page', () => {
     expect(played(true)).toBeLessThan(played(false));
     expect(played(true)).toBeLessThan(200);
   });
+
+  it('lets a note the writer marked short go halfway through it', () => {
+    // Two whole notes of the same written length, one marked and one not: the
+    // page says they take the same time and the air says they do not. His:
+    // "зроби половину тривалості".
+    const exercise = staccatoInTheBass({ tempoBpm: 60 });
+    const { player, metronome, instrument } = rig(exercise);
+    player.start(buildTimeline(exercise), {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+    });
+    metronome.advanceSubdivisions(8);
+
+    const held = (midi: number): number => {
+      const struck = instrument.played.find((note) => note.midi === midi)?.atMs ?? 0;
+      return (instrument.stopped.find((note) => note.midi === midi)?.atMs ?? 0) - struck;
+    };
+
+    // Four seconds written; two sounded, and the unmarked one keeps all four.
+    expect(held(MIDI.C3)).toBe(2_000);
+    expect(held(MIDI.C4)).toBe(4_000);
+  });
+
 
   it('plays the two hands’ ornaments together, not one after the other', () => {
     // Both hands may ornament the same beat. Laid end to end the left hand's

@@ -20,6 +20,37 @@ export interface TimelineNote {
    * can express once the staves have been merged into one step.
    */
   readonly arpeggiated: boolean;
+  /**
+   * The dot over the head: play it short.
+   *
+   * Per note like the roll, and for the same reason - one hand may be marked
+   * where the other is not, and the staves are one step here.
+   */
+  readonly staccato: boolean;
+}
+
+/**
+ * How much of its written length a note marked short is sounded for.
+ *
+ * Half, which is what he asked for and what the mark is usually taken to mean.
+ * Not a rule about the *page*: the note keeps the whole of its place in the
+ * bar, and nothing after it moves.
+ */
+const STACCATO_SHARE = 2;
+
+/**
+ * How long a note is sounded for, in divisions.
+ *
+ * Which is not how long it is written. A staccato note gives up half its sound
+ * and none of its time, so this is asked wherever the machine plays a written
+ * note - the hand the reader is not reading, and the playback - and nowhere
+ * that decides *position*.
+ *
+ * The pedal still has the last word over it: a note struck under the damper
+ * rings until the damper lifts, dot or no dot, which is what a pedal is.
+ */
+export function soundsFor(note: TimelineNote): number {
+  return note.staccato ? Math.round(note.durationTicks / STACCATO_SHARE) : note.durationTicks;
 }
 
 /**
@@ -227,6 +258,7 @@ export function buildTimeline(exercise: Exercise): ExerciseTimeline {
             staffNumber: staff.staffNumber,
             durationTicks: soundingTicks(entries, index, pitch.midi),
             arpeggiated: entry.arpeggiated,
+            staccato: entry.staccato,
           });
         }
         notesByOnset.set(onsetTicks, bucket);

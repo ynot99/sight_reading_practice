@@ -6,6 +6,7 @@ import {
   spanMs,
   velocityAt,
 } from '../domain/model/Exercise.js';
+import { soundsFor } from '../domain/timeline/Timeline.js';
 import type { ExerciseTimeline, TimelineOrnament } from '../domain/timeline/Timeline.js';
 import type { PositionEvent } from './session/SessionEvents.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
@@ -840,8 +841,11 @@ export class ExercisePlayer {
         const heldUntil = spans.find(
           ([from, to]) => step.onsetTicks >= from && step.onsetTicks < to,
         )?.[1];
+        // As long as it sounds rather than as long as it is written - and the
+        // pedal still wins, because a note struck under the damper rings until
+        // the damper lifts whatever the writer marked it.
         const endTicks = Math.max(
-          step.onsetTicks + note.durationTicks,
+          step.onsetTicks + soundsFor(note),
           heldUntil ?? 0,
         );
         const until = at(endTicks);

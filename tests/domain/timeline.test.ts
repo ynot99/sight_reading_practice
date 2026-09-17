@@ -3,7 +3,8 @@ import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, restEntry, silenceEntry } from '../../src/domain/model/Exercise.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
-import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
+import { buildTimeline, soundsFor } from '../../src/domain/timeline/Timeline.js';
+import type { TimelineNote } from '../../src/domain/timeline/Timeline.js';
 import {
   MIDI,
   bar,
@@ -218,5 +219,38 @@ describe('a silence is not a place the cursor stops', () => {
       q * 2 + Duration.EIGHTH.ticks,
       q * 3,
     ]);
+  });
+});
+
+describe('how long a note is sounded for', () => {
+  /** One note of the given length, marked or not. */
+  function noteOf(marked: boolean): TimelineNote {
+    return {
+      pitch: p('C4'),
+      midi: MIDI.C4,
+      staffNumber: 1,
+      durationTicks: Duration.QUARTER.ticks,
+      arpeggiated: false,
+      staccato: marked,
+    };
+  }
+
+  it('gives a note marked short half its sound', () => {
+    // His: "зроби половину тривалості". Half of what it sounds for, and none
+    // of what it takes: the note keeps its whole place in the bar and nothing
+    // after it moves.
+    expect(soundsFor(noteOf(true))).toBe(Duration.QUARTER.ticks / 2);
+  });
+
+  it('leaves an unmarked note exactly as long as it is written', () => {
+    expect(soundsFor(noteOf(false))).toBe(Duration.QUARTER.ticks);
+  });
+
+  it('keeps the answer in whole divisions', () => {
+    // Musical time is integers here, and a length that came back as a fraction
+    // would be one the rest of the program cannot say.
+    const odd = { ...noteOf(true), durationTicks: Duration.QUARTER.ticks / 3 };
+
+    expect(Number.isInteger(soundsFor(odd))).toBe(true);
   });
 });

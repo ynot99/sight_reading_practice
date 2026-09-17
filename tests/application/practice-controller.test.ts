@@ -43,6 +43,7 @@ import {
   longExercise,
   offBeatAfterALongNote,
   oneHandOpensAlone,
+  staccatoInTheBass,
   p,
   partialVoiceExercise,
   tiedExercise,
@@ -1677,6 +1678,28 @@ describe('hearing the hand you are not reading', () => {
     rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true });
     return rig;
   }
+
+  it('lets go of a note the writer marked short halfway through it', async () => {
+    // The dot is a reading instruction and it is also a sound. Held for its
+    // written length the accompaniment contradicts the page it is played from.
+    // His: "зроби половину тривалості".
+    const rig = createController(true);
+    await rig.controller.openScore(staccatoInTheBass({ tempoBpm: 60 }));
+    rig.controller.updateSettings({
+      handStaff: 1,
+      hearTheOtherHand: true,
+      modeId: FLOW_MODE_ID,
+      countInBars: 0,
+    });
+    rig.controller.start();
+    rig.metronome.advanceSubdivisions(1);
+
+    const struck = rig.instrument.played.find((note) => note.midi === MIDI.C3);
+    const letGo = rig.instrument.stopped.find((note) => note.midi === MIDI.C3);
+
+    // A whole note at sixty is four seconds, and the writer asked for two.
+    expect((letGo?.atMs ?? 0) - (struck?.atMs ?? 0)).toBe(2_000);
+  });
 
   it('leaves a frame that keeps time out of the waiting frame\u2019s machinery', async () => {
     // His, of the work on the waiting frame's picture: "Треба зробити це

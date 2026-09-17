@@ -4387,6 +4387,81 @@ describe('the last run that reached an end', () => {
       expect(controller.session).toBeNull();
     });
 
+    it('hands the run the chord, not the hunt for it', async () => {
+      // Nothing is graded while the watch is listening, so the keys tried on
+      // the way to the opening chord are not mistakes - they are looking for
+      // it. Every press since the watch was armed was handed to the run all
+      // the same, so a run begun this way opened with a row of wrong notes
+      // against its first step, drawn and counted. His: "при play to start -
+      // всі неправильні ноти теж рахуються... щоб перші ноти завжди
+      // рахувалися та малювалися як правильними".
+      const { controller, midi, clock, metronome } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+      });
+      await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+
+      // A hand landing a semitone off, twice, before it finds the chord.
+      midi.noteOn(MIDI.F5, clock.now());
+      midi.noteOn(MIDI.D4, clock.now());
+      for (const midiNote of opening(controller)) {
+        midi.noteOn(midiNote, clock.now());
+      }
+      metronome.advanceSubdivisions(1);
+
+      const played = controller.session?.roll.presses ?? [];
+      expect(played.map((press) => press.midi)).toEqual([...opening(controller)]);
+      expect(played.every((press) => press.verdict !== 'wrong')).toBe(true);
+    });
+
+    it('keeps a note of the chord struck twice, which is playing and not hunting', async () => {
+      // The rule is what the page asked for rather than what the matcher
+      // happened to still need. A chord note pressed again is a press the
+      // reader made - so is an ornament leaning on the chord - and the picture
+      // of the run is poorer for losing either.
+      const { controller, midi, metronome } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+      });
+      await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      const wanted = opening(controller);
+      const first = wanted[0] ?? MIDI.C3;
+      const second = wanted[1] ?? MIDI.C4;
+
+      midi.noteOn(first, 0);
+      midi.noteOn(first, 10);
+      midi.noteOn(second, 20);
+      metronome.advanceSubdivisions(1);
+
+      expect(controller.session?.roll.presses.map((press) => press.midi)).toEqual([
+        first,
+        first,
+        second,
+      ]);
+    });
+
+    it('forgets the chord it had collected when the window ran out', async () => {
+      // Two notes of the chord, then a long wait, then the whole chord: the
+      // matcher throws the first two away and starts the attempt again, so the
+      // run must not be handed them either - they belong to an attempt that
+      // was abandoned.
+      const { controller, midi, metronome } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+        matchToleranceMs: 100,
+      });
+      await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      const wanted = opening(controller);
+
+      midi.noteOn(wanted[0] ?? MIDI.C4, 0);
+      for (const midiNote of wanted) {
+        midi.noteOn(midiNote, 5_000);
+      }
+      metronome.advanceSubdivisions(1);
+
+      expect(controller.session?.roll.presses.map((press) => press.midi)).toEqual([...wanted]);
+    });
+
     it('waits, and does not punish, while the wrong notes are played', async () => {
       // Nothing is being graded yet, so a wrong note is not a mistake - it is
       // simply not the thing being waited for.

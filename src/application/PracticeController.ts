@@ -2174,15 +2174,33 @@ export class PracticeController {
    * the reader's own tolerance, their octave rule, and the ornaments the
    * page offers but does not demand. A wrong note is not punished: nothing
    * is being graded yet, and the matcher simply goes on waiting.
+   *
+   * And it is not punished afterwards either. Only what the matcher took is
+   * kept for the run: hunting for a chord is not playing it, and every press
+   * since the watch was armed used to be handed over - so the keys tried on
+   * the way to the opening arrived as wrong notes against the run's first
+   * step, graded and drawn, for playing done before there was a run to play
+   * in. His: "при play to start - всі неправильні ноти теж рахуються... щоб
+   * перші ноти завжди рахувалися та малювалися як правильними".
    */
   private hearTheOpening(event: MidiEvent): void {
     const matcher = this.opening;
     if (matcher === null || event.type !== 'noteon') {
       return;
     }
-    this.openingPresses.push(event);
-    matcher.accept(event.midi, event.timestampMs);
-    if (!matcher.completed) {
+    const outcome = matcher.accept(event.midi, event.timestampMs);
+    // A press that fell outside the window threw away what the matcher had
+    // collected, and what is kept here goes with it: those notes belong to an
+    // attempt the reader abandoned.
+    if (outcome.windowRestarted) {
+      this.openingPresses = [];
+    }
+    // Everything the page asked for, which is the chord itself, a note of it
+    // struck twice, and an ornament leaning on it. Not the hunting.
+    if (outcome.verdict !== 'wrong') {
+      this.openingPresses.push(event);
+    }
+    if (!outcome.completed) {
       return;
     }
     // No count-in: the reader has just played the tempo themselves, and

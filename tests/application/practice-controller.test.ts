@@ -1209,6 +1209,46 @@ describe('what you played, drawn over the score', () => {
     expect(discarded).toHaveBeenCalledTimes(1);
   });
 
+  it('lets a count-in it was asked for be heard, whatever the click is doing', async () => {
+    // With the click switched off the whole metronome was muted, count-in
+    // included - so asking to be counted in still pushed the music two bars
+    // later and made no sound, which from the reader's seat is the setting
+    // doing nothing at all. His: "'Count-in in the playback' опція нічого не
+    // робить".
+    const { controller, metronome } = createController(true);
+    controller.updateSettings({ countInBars: 2, countInPlayback: 'once', clickWhen: 'never' });
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+
+    controller.listen();
+
+    expect(metronome.currentConfig.muted).toBe(false);
+    // And silent from where the music begins, which is what "never click" was
+    // asked about.
+    expect(metronome.currentConfig.dropout).toEqual({ kind: 'silent-from', fromBar: 2 });
+  });
+
+  it('stays silent through a playback nobody asked to be counted into', async () => {
+    const { controller, metronome } = createController(true);
+    controller.updateSettings({ countInBars: 2, countInPlayback: 'never', clickWhen: 'never' });
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+
+    controller.listen();
+
+    expect(metronome.currentConfig.muted).toBe(true);
+  });
+
+  it('stays silent where the count-in is nought bars long', async () => {
+    // Nought bars is no count-in at all, so there is nothing to be heard and
+    // nothing to unmute the click for.
+    const { controller, metronome } = createController(true);
+    controller.updateSettings({ countInBars: 0, countInPlayback: 'once', clickWhen: 'never' });
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+
+    controller.listen();
+
+    expect(metronome.currentConfig.muted).toBe(true);
+  });
+
   it('counts a playback in when it is asked to, and not otherwise', async () => {
     // His line 84: a performance that begins on the first tick can be
     // listened to, but it cannot be played along with.

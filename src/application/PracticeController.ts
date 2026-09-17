@@ -1583,7 +1583,7 @@ export class PracticeController {
       staffNumber: this.currentSettings.handStaff,
       click: this.currentSettings.clickPattern,
       clickSilences: this.currentSettings.clickSilences,
-      clickWhen: this.currentSettings.clickWhen,
+      clickWhen: this.theClickAPlaybackUses,
       // Where the reader put their place, kept inside the passage they chose.
       // Hearing the music is part of learning the passage, so a playback that
       // always began at bar one made them listen through everything they were
@@ -1599,8 +1599,7 @@ export class PracticeController {
       // is meant to be there is better made by starting again than by
       // teaching the player's clock to stop in the middle.
       repeat: this.currentSettings.repeatRange && !this.countsInEveryLap,
-      countInBars:
-        this.currentSettings.countInPlayback === 'never' ? 0 : this.currentSettings.countInBars,
+      countInBars: this.aPlaybackIsCountedIn ? this.currentSettings.countInBars : 0,
       // And round to the *passage*, wherever this performance was picked up.
       // A pause halfway through the bar being looped otherwise made that half
       // bar the loop.
@@ -1979,9 +1978,38 @@ export class PracticeController {
    * re-entrancy bugs are made.
    */
   get countsInEveryLap(): boolean {
+    return this.currentSettings.countInPlayback === 'every' && this.aPlaybackIsCountedIn;
+  }
+
+  /**
+   * Whether a playback is counted in at all.
+   *
+   * Two settings make the one answer - being asked for, and being more than
+   * nought bars long - and three places wanted it.
+   */
+  private get aPlaybackIsCountedIn(): boolean {
     return (
-      this.currentSettings.countInPlayback === 'every' && this.currentSettings.countInBars > 0
+      this.currentSettings.countInPlayback !== 'never' && this.currentSettings.countInBars > 0
     );
+  }
+
+  /**
+   * What the click does through a playback.
+   *
+   * The reader's own setting, except that a count-in they asked for is heard.
+   * These were two controls with the second quietly answering for the first:
+   * with the click switched off the whole metronome was muted, count-in
+   * included, so asking to be counted in still pushed the music two bars later
+   * and made no sound at all - which from where the reader sits is the setting
+   * doing nothing. His: "'Count-in in the playback' опція нічого не робить".
+   *
+   * A count-in that cannot be heard is not a count-in; it is a delay. What the
+   * click was asked to do about the *music* is untouched: `count-in-only` falls
+   * silent from the bar the music begins at.
+   */
+  private get theClickAPlaybackUses(): ClickWhen {
+    const asked = this.currentSettings.clickWhen;
+    return this.aPlaybackIsCountedIn && clickIsSilent(asked) ? 'count-in-only' : asked;
   }
 
   /** Fires when a playback reaches the end on its own. */

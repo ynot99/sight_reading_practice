@@ -1479,6 +1479,33 @@ describe('AppView', () => {
 
       expect(element('sheet-roll').hidden).toBe(false);
       expect(runtime.controller.session?.status).toBe(before);
+      // It belongs to the drawing instead, which has a transport of its own.
+      expect(runtime.takePlayer.playing).not.toBeNull();
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true }),
+      );
+
+      expect(runtime.takePlayer.playing).toBeNull();
+    });
+
+    it('leaves the space bar to a sheet standing over the picture', async () => {
+      // The options sheet, a confirmation and a rename all lay themselves over
+      // the top, and while one is up the keys are its own.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      element<HTMLButtonElement>('roll-options').click();
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true }),
+      );
+
+      expect(runtime.takePlayer.playing).toBeNull();
     });
 
     it('gives the space bar back once the page is clear', async () => {

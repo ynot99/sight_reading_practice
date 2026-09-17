@@ -4213,6 +4213,30 @@ export class AppView {
     return this.doc.querySelector('.sheet:not([hidden])') !== null;
   }
 
+  /**
+   * Whether the picture of a run is the thing the reader is looking at.
+   *
+   * Open, and with nothing standing over it: its own options sheet, a
+   * confirmation and a rename all lay themselves over the top, and while one of
+   * those is up the keys are its own. Asked of the page for the same reason the
+   * question above it is - a list kept here is a list to forget a sheet from.
+   */
+  private thePictureIsInFront(): boolean {
+    return (
+      !this.el.sheetRoll.hidden &&
+      this.doc.querySelector('.sheet--over:not([hidden])') === null
+    );
+  }
+
+  /** Starts the drawing playing, or holds it where it has got to. */
+  private togglePlayingTheRoll(): void {
+    if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
+      this.holdTheRoll();
+      return;
+    }
+    this.playTheRoll();
+  }
+
   private bindSpaceBar(): void {
     const handler = (event: KeyboardEvent): void => {
       if (event.metaKey || event.ctrlKey || event.altKey) {
@@ -4229,6 +4253,15 @@ export class AppView {
       // почати гру коли відчинені діалоги". The arrows go with it, for the same
       // reason: turning a page behind a dialog is the same fault.
       if (this.aSheetIsOpen()) {
+        // Except over the picture of a run, which has something of its own to
+        // start and stop. The rule is the same one either way - the key belongs
+        // to whatever is in front of the reader - and in front of them here is a
+        // drawing with a transport on it. His: "я думав запустити playback по
+        // space".
+        if (event.code === 'Space' && this.thePictureIsInFront()) {
+          event.preventDefault();
+          this.togglePlayingTheRoll();
+        }
         return;
       }
       const turn = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
@@ -5771,11 +5804,7 @@ export class AppView {
       this.el.sheetRollOptions.hidden = true;
     });
     this.listen(this.el.rollPlay, 'click', () => {
-      if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
-        this.holdTheRoll();
-        return;
-      }
-      this.playTheRoll();
+      this.togglePlayingTheRoll();
     });
     this.listen(this.el.rollStop, 'click', () => {
       this.stopTheRoll();

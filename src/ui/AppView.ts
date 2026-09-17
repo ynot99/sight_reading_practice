@@ -54,6 +54,7 @@ import {
   rollAsEvents,
   rollBeganAtMs,
   theBeatNearest,
+  theMusicsPlaceAt,
   type GridChoice,
 } from '../application/session/RunRoll.js';
 import {
@@ -1387,6 +1388,10 @@ export class AppView {
     scoreReading: HTMLButtonElement;
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
+    rollFrom: HTMLButtonElement;
+    rollTo: HTMLButtonElement;
+    rollPassageWhat: HTMLElement;
+    rollPractise: HTMLButtonElement;
     rollZoom: HTMLInputElement;
     rollSnap: HTMLInputElement;
     rollGhosts: HTMLInputElement;
@@ -1639,6 +1644,10 @@ export class AppView {
       scoreReading: requireElement(doc, 'score-reading'),
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
+      rollFrom: requireElement(doc, 'roll-from'),
+      rollTo: requireElement(doc, 'roll-to'),
+      rollPassageWhat: requireElement(doc, 'roll-passage-what'),
+      rollPractise: requireElement(doc, 'roll-practise'),
       rollZoom: requireElement(doc, 'roll-zoom'),
       rollSnap: requireElement(doc, 'roll-snap'),
       rollGhosts: requireElement(doc, 'roll-ghosts'),
@@ -5687,6 +5696,15 @@ export class AppView {
     this.listen(this.el.rollStop, 'click', () => {
       this.stopTheRoll();
     });
+    this.listen(this.el.rollFrom, 'click', () => {
+      this.takeAnEndFromTheMarker('from');
+    });
+    this.listen(this.el.rollTo, 'click', () => {
+      this.takeAnEndFromTheMarker('to');
+    });
+    this.listen(this.el.rollPractise, 'click', () => {
+      this.goAndPractiseThePassage();
+    });
     this.listen(this.el.rollBody, 'click', (event) => {
       if (this.pinched) {
         return;
@@ -6385,6 +6403,64 @@ export class AppView {
     this.rollAtMs = 0;
     this.drawTheRollInto();
     this.el.sheetRoll.hidden = false;
+    this.sayWhatWouldBePractised();
+  }
+
+  /**
+   * Moves one end of the passage to where the marker stands.
+   *
+   * The marker and not the finger: it is already the one thing in this sheet
+   * that means "here", it snaps to the beat the reader meant, and it is what
+   * the playback is following - so there is one answer to "where" rather than
+   * two that can disagree.
+   *
+   * Applied at once, the way the markers on the score are. There is nothing to
+   * confirm: a passage is a setting, and the button beside these is for going
+   * to it rather than for agreeing to it.
+   */
+  private takeAnEndFromTheMarker(end: 'from' | 'to'): void {
+    const roll = this.runtime.controller.lastRoll;
+    const controller = this.runtime.controller;
+    if (roll === null) {
+      return;
+    }
+    const ticks = theMusicsPlaceAt(roll, this.headIsAtMs());
+    const bar = ticks === null ? null : controller.theBarAtTicks(ticks);
+    if (bar === null) {
+      return;
+    }
+    const { firstBar, lastBar } = controller.pieceBarRange;
+    const settings = controller.settings;
+    const from = end === 'from' ? bar : (settings.rangeFromBar ?? firstBar);
+    const to = end === 'to' ? bar : (settings.rangeToBar ?? lastBar);
+    controller.choosePassage(from, to);
+    this.sayWhatWouldBePractised();
+  }
+
+  /**
+   * Closes the picture and puts the reader in front of the music it named.
+   *
+   * The whole point of choosing a passage here: the stretch that went wrong is
+   * visible in the drawing and nowhere else, and reaching it afterwards meant
+   * finding it again on the page. His: "кнопку apply and jump to the slice щоб
+   * перемкнутись на слайс з нот, та гравець міг ще раз спробувати цю частину".
+   */
+  private goAndPractiseThePassage(): void {
+    this.stopTheRoll();
+    this.el.sheetRollOptions.hidden = true;
+    this.el.sheetRoll.hidden = true;
+    this.runtime.controller.cursorToStart();
+  }
+
+  /** Says which bars the buttons have settled on, and whether there is one. */
+  private sayWhatWouldBePractised(): void {
+    const { rangeFromBar, rangeToBar } = this.runtime.controller.settings;
+    const chosen = rangeFromBar !== null || rangeToBar !== null;
+    const { firstBar, lastBar } = this.runtime.controller.pieceBarRange;
+    this.el.rollPassageWhat.textContent = chosen
+      ? `Bars ${rangeFromBar ?? firstBar}\u2013${rangeToBar ?? lastBar}`
+      : 'The whole piece';
+    this.el.rollPractise.disabled = !chosen;
   }
 
   /**

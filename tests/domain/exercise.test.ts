@@ -5,6 +5,7 @@ import {
   barLines,
   exerciseTicks,
   measureCount,
+  measureIndexAt,
   measureTicks,
   noteEntry,
   restEntry,
@@ -14,7 +15,7 @@ import {
 } from '../../src/domain/model/Exercise.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { ExerciseValidationError } from '../../src/shared/errors.js';
-import { bar, p, partialVoiceExercise, twoBarExercise } from '../support/fixtures.js';
+import { bar, longExercise, p, partialVoiceExercise, twoBarExercise } from '../support/fixtures.js';
 
 function withTrebleMeasures(exercise: Exercise, measures: Exercise['staves'][number]['measures']): Exercise {
   const [treble, ...rest] = exercise.staves;
@@ -257,5 +258,34 @@ describe('a voice that is absent rather than resting', () => {
         ],
       }),
     ).toThrow(/draws nothing/);
+  });
+});
+
+describe('which bar a place in the music falls in', () => {
+  it('reads it off the bar lines, so a change of metre moves it', () => {
+    // One bar of 4/4 and then three of 3/4, so the bars begin at 0, 4, 7 and 10
+    // quarters. Divided by the metre it opens in, the third would begin at
+    // eight - and every answer from there on would name the wrong bar.
+    const exercise = longExercise({ bars: 4 });
+    const metred: Exercise = {
+      ...exercise,
+      timeChanges: [{ measureIndex: 1, timeSignature: new TimeSignature(3, 4) }],
+    };
+    const quarter = Duration.QUARTER.ticks;
+
+    expect(measureIndexAt(metred, 0)).toBe(0);
+    expect(measureIndexAt(metred, quarter * 3)).toBe(0);
+    expect(measureIndexAt(metred, quarter * 4)).toBe(1);
+    expect(measureIndexAt(metred, quarter * 6)).toBe(1);
+    expect(measureIndexAt(metred, quarter * 7)).toBe(2);
+    expect(measureIndexAt(metred, quarter * 10)).toBe(3);
+  });
+
+  it('puts a place past the end in the last bar', () => {
+    // There is no bar after the piece, and the very end of it is still in its
+    // last one.
+    const exercise = twoBarExercise();
+
+    expect(measureIndexAt(exercise, Duration.QUARTER.ticks * 400)).toBe(1);
   });
 });

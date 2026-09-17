@@ -512,6 +512,27 @@ textarea {
  * The sheet's body is the scroller's parent and must not scroll itself: two
  * nested scrollers mean a finger that moves the wrong one.
  */
+/*
+ * The row under the drawing that chooses what to practise out of it.
+ *
+ * Wraps rather than shrinks: on a phone the two ends drop onto their own line
+ * and nothing inside gets narrower than it can be read at.
+ */
+.roll-passage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0 0;
+}
+
+.roll-passage__what {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .roll-body {
   display: flex;
   flex: 1 1 auto;

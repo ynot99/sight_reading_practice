@@ -7,6 +7,7 @@ import {
   theRushes,
   theWaits,
   theBeatNearest,
+  theMusicsPlaceAt,
   theMusicsBeats,
   clicksBefore,
   clicksUpTo,
@@ -133,6 +134,38 @@ describe('the stretches the music stood still in', () => {
     roller.rushed(1_000, -50);
 
     expect(theRushes(roller.roll())).toEqual([]);
+  });
+});
+
+describe('where in the music a moment of the run was', () => {
+  it('reads it off the last beat written at or before that moment', () => {
+    // A place in the picture is a time; a passage is a stretch of music. The
+    // beats are the bridge, because each one carries the place it marks.
+    const roller = new RollRecorder();
+    roller.beat(0, 'downbeat', 0);
+    roller.beat(1_000, 'beat', Duration.QUARTER.ticks);
+    roller.beat(2_000, 'beat', Duration.QUARTER.ticks * 2);
+
+    expect(theMusicsPlaceAt(roller.roll(), 1_400)).toBe(Duration.QUARTER.ticks);
+    expect(theMusicsPlaceAt(roller.roll(), 2_000)).toBe(Duration.QUARTER.ticks * 2);
+  });
+
+  it('takes the last by moment, not the last written down', () => {
+    // A bar line given late is written twice - where it fell due and where the
+    // reader gave it - and those two arrive out of order.
+    const roller = new RollRecorder();
+    roller.beat(0, 'downbeat', 0);
+    roller.beat(2_000, 'beat', Duration.QUARTER.ticks * 2);
+    roller.beat(1_000, 'beat', Duration.QUARTER.ticks);
+
+    expect(theMusicsPlaceAt(roller.roll(), 2_500)).toBe(Duration.QUARTER.ticks * 2);
+  });
+
+  it('says nothing about a moment in front of the music', () => {
+    const roller = new RollRecorder();
+    roller.beat(1_000, 'downbeat', 0);
+
+    expect(theMusicsPlaceAt(roller.roll(), 500)).toBeNull();
   });
 });
 

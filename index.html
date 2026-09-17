@@ -383,6 +383,22 @@
               title="Close" aria-label="Close">&times;</button>
           </div>
           <div id="roll-body" class="roll-body"></div>
+          <!--
+            Choosing what to practise out of the picture of what happened.
+
+            Under the drawing rather than in the head above it: these act on
+            the picture, and the head is already four buttons wide on a phone.
+            The ends are taken from the marker, which is the one place in this
+            sheet that already means "here". His: "додати можливість ставити
+            слайс прямо з MIDI viewer, та кнопку apply and jump to the slice".
+          -->
+          <div class="roll-passage">
+            <button id="roll-from" type="button" class="button">Start here</button>
+            <button id="roll-to" type="button" class="button">End here</button>
+            <span id="roll-passage-what" class="roll-passage__what"></span>
+            <button id="roll-practise" type="button" class="button button--primary"
+              disabled>Practise this</button>
+          </div>
         </div>
       </div>
 

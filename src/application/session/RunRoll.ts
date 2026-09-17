@@ -773,6 +773,35 @@ export function theRushes(roll: RunRoll): readonly RolledRush[] {
 }
 
 /**
+ * Where in the *music* the run had got to at that moment.
+ *
+ * A place in the picture is a time; a passage is a stretch of music. The beats
+ * are the bridge between them, because each one carries the place it marks - so
+ * the last beat at or before the moment says where the music stood.
+ *
+ * The last by *moment* rather than the last in the list: a bar line given late
+ * is written down twice, where it fell due and where the reader gave it, and
+ * those two arrive out of order.
+ *
+ * `null` where no beat had been written yet, which is a moment in front of the
+ * music rather than in it.
+ */
+export function theMusicsPlaceAt(roll: RunRoll, atMs: number): number | null {
+  let foundAt = Number.NEGATIVE_INFINITY;
+  let found: number | null = null;
+  for (const beat of roll.beats) {
+    if (beat.atMs > atMs) {
+      continue;
+    }
+    if (beat.atMs > foundAt || (beat.atMs === foundAt && beat.positionTicks > (found ?? 0))) {
+      foundAt = beat.atMs;
+      found = beat.positionTicks;
+    }
+  }
+  return found;
+}
+
+/**
  * The run as a stream something can play.
  *
  * So that hearing a run back is the machinery that already plays a recording

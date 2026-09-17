@@ -62,6 +62,7 @@ import {
   clefAtMeasure,
   keyAtMeasure,
   measureCount,
+  measureIndexAt,
   spanMs,
 } from '../domain/model/Exercise.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
@@ -896,6 +897,19 @@ export class PracticeController {
     return this.openedScore === null
       ? this.currentSettings.measures
       : measureCount(this.openedScore);
+  }
+
+  /**
+   * Which bar of the playing a place in the music falls in, counted from one.
+   *
+   * The number a passage is chosen in, so that a stretch pointed at in the
+   * picture of a run can be handed straight to {@link choosePassage}. Places in
+   * the playing and not printed bar numbers: a repeat is written out, so one
+   * printed bar can be two of these.
+   */
+  theBarAtTicks(ticks: number): number | null {
+    const exercise = this.exercise;
+    return exercise === null ? null : measureIndexAt(exercise, ticks) + 1;
   }
 
   /**

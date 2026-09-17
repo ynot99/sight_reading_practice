@@ -249,6 +249,26 @@ export function barLines(
   return bars;
 }
 
+/**
+ * Which bar a place in the music falls in, counted from nought.
+ *
+ * Read off {@link barLines} like every other answer about musical position: a
+ * metre change moves the bar lines, so this one cannot be had by dividing
+ * either. A place past the end belongs to the last bar - there is no bar after
+ * the piece, and the very end of it is still in its last one.
+ */
+export function measureIndexAt(exercise: Exercise, ticks: number): number {
+  const bars = barLines(exercise);
+  let found = 0;
+  for (let index = 0; index < bars.length; index += 1) {
+    if ((bars[index]?.startTicks ?? 0) > ticks) {
+      break;
+    }
+    found = index;
+  }
+  return found;
+}
+
 /** One stretch of the piece taken at one tempo, from `startTicks` onwards. */
 export interface TempoSpan {
   readonly startTicks: number;

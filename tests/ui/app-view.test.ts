@@ -1383,6 +1383,47 @@ describe('AppView', () => {
       expect(element('sheet-modes').hidden).toBe(true);
     });
 
+    it('chooses a passage out of the picture, and goes to it', async () => {
+      // The stretch that went wrong is visible in the drawing and nowhere else,
+      // so reaching it afterwards meant finding it again on the page by eye.
+      // His: "додати можливість ставити слайс прямо з MIDI viewer, та кнопку
+      // apply and jump to the slice".
+      const { view, runtime, midi, renderer } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(longExercise({ bars: 6, tempoBpm: 60 }));
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      // Nothing chosen yet, so there is nowhere to be sent.
+      expect(element('roll-passage-what').textContent).toBe('The whole piece');
+      expect(element<HTMLButtonElement>('roll-practise').disabled).toBe(true);
+
+      // The marker stands at the run's own beginning, so this makes the first
+      // bar the whole of the passage. jsdom lays nothing out, so the marker
+      // cannot be moved by tapping here; where a moment of a run falls in the
+      // music is asked of `theMusicsPlaceAt`, which is tested on its own.
+      element<HTMLButtonElement>('roll-to').click();
+
+      expect(runtime.controller.settings.rangeFromBar).toBe(1);
+      expect(runtime.controller.settings.rangeToBar).toBe(1);
+      expect(element('roll-passage-what').textContent).toContain('Bars 1');
+      const practise = element<HTMLButtonElement>('roll-practise');
+      expect(practise.disabled).toBe(false);
+
+      // Where the marker is left by a run that reached its end: on the last
+      // thing played, which is the far side of the piece from the passage.
+      renderer.cursor.moveTo(4);
+
+      practise.click();
+
+      // The picture is put away and the marker has come back to the passage.
+      expect(element('sheet-roll').hidden).toBe(true);
+      expect(renderer.cursor.position).toBe(0);
+    });
+
     it('offers the picture of a run, and draws it on being asked', async () => {
       // His: "додати кнопку в кінці у статистиці щоб відчинити цей діалог з
       // MIDI viewer". The report is read at a glance; a grid of every note

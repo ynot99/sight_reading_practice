@@ -1182,6 +1182,79 @@ const heldOver = `<?xml version="1.0" encoding="UTF-8"?>
     expect(printed).toContain('<breath-mark');
   });
 
+  it('opens no group of articulations for a note that has none', () => {
+    // A fermata is not one of them - it hangs off the notations directly - so a
+    // note carrying only a fermata would otherwise be given an empty group.
+    const held = note('C', 4, 96, 'whole', '<notations><fermata type="upright"/></notations>');
+    const { exercise } = importer.read(scoreXml(held));
+
+    expect(new MusicXmlSerializer().serialize(exercise)).not.toContain('<articulations>');
+  });
+
+  it('carries a staccato dot, and prints it again', () => {
+    // The same kind of thing as the fermata and the comma, and dropped the same
+    // way: sixty of them in his Barret's theme and not one reached the page, so
+    // he was reading a photocopy with the articulation rubbed out. How much
+    // shorter is the performer's, which is why it belongs on the page rather
+    // than being turned into a length here. His: "barret theme doesn't have
+    // 'dot' notes that make the note sound shorter, it was not imported".
+    const marked = note(
+      'C',
+      4,
+      96,
+      'whole',
+      '<notations><articulations><staccato/></articulations></notations>',
+    );
+    const { exercise } = importer.read(scoreXml(marked));
+
+    const entry = exercise.staves[0]?.measures[0]?.entries[0];
+    expect(entry).toMatchObject({ kind: 'note', staccato: true });
+
+    expect(new MusicXmlSerializer().serialize(exercise)).toContain('<staccato/>');
+  });
+
+  it('keeps a dot and a comma on one note in one group', () => {
+    // `articulations` is the group, and two of them side by side is not what
+    // the format means by it.
+    const marked = note(
+      'C',
+      4,
+      96,
+      'whole',
+      '<notations><articulations><staccato/>' +
+        '<breath-mark>comma</breath-mark></articulations></notations>',
+    );
+    const { exercise } = importer.read(scoreXml(marked));
+
+    const printed = new MusicXmlSerializer().serialize(exercise);
+    expect(printed).toContain('<staccato/>');
+    expect(printed).toContain('<breath-mark');
+    expect([...printed.matchAll(/<articulations>/g)]).toHaveLength(1);
+  });
+
+  it('keeps the dot on a note whose tie had to be dropped', () => {
+    // A tie whose other end did not survive the import is let go of rather than
+    // failing the whole file, and the note is built again to do it. Everything
+    // the writer put on that note has to be built again with it.
+    const dangling =
+      '<note><pitch><step>C</step><octave>4</octave></pitch><duration>96</duration>' +
+      '<tie type="start"/><voice>1</voice><type>whole</type>' +
+      '<notations><tied type="start"/><articulations><staccato/></articulations>' +
+      '</notations></note>';
+    const { exercise } = importer.read(scoreXml(dangling));
+
+    const entry = exercise.staves[0]?.measures[0]?.entries[0];
+    expect(entry).toMatchObject({ kind: 'note', staccato: true, tiedForward: [] });
+  });
+
+  it('leaves a note the writer did not mark unmarked', () => {
+    const { exercise } = importer.read(scoreXml(note('C', 4, 96, 'whole')));
+
+    const entry = exercise.staves[0]?.measures[0]?.entries[0];
+    expect(entry).toMatchObject({ kind: 'note', staccato: false });
+    expect(new MusicXmlSerializer().serialize(exercise)).not.toContain('<articulations>');
+  });
+
   it('draws the pedal the way the writer drew it', () => {
     // Notation the writer chose, like the beams and the stems. Rewritten as
     // the sign, a bracket the engraver lays out in twenty units became a

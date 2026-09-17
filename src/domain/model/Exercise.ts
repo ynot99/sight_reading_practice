@@ -99,6 +99,16 @@ export interface NoteEntry {
    */
   readonly fermata: boolean;
   /**
+   * Shorten this note - the dot over the head.
+   *
+   * A reading instruction like the fermata and the comma, and the same kind of
+   * thing: how much shorter is the performer's, so it belongs on the page
+   * rather than being turned into a length here. It takes nothing from the bar
+   * either - a staccato quarter is still a quarter of the bar, and moving the
+   * notes after it would be rewriting the rhythm the writer set down.
+   */
+  readonly staccato: boolean;
+  /**
    * Lift after this note - the comma over the staff.
    *
    * A breath, and the shortest of all the writer's instructions: it takes no
@@ -918,6 +928,7 @@ export function barIsRepeated(exercise: Exercise, measureIndex: number): boolean
 /** The writer's marks on a note that are neither pitch nor rhythm. */
 export interface EntryMarks {
   readonly fermata?: boolean;
+  readonly staccato?: boolean;
   readonly breath?: boolean;
   readonly graces?: readonly GraceNote[];
 }
@@ -941,6 +952,7 @@ export function noteEntry(
     stem,
     arpeggiated,
     fermata: marks.fermata === true,
+    staccato: marks.staccato === true,
     breath: marks.breath === true,
     graces: marks.graces === undefined ? [] : [...marks.graces],
   };

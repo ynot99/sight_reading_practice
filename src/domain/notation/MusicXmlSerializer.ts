@@ -691,7 +691,8 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             }
             // One `<notations>` per note: the tie's slur and the tuplet's
             // bracket are separate marks that share the element.
-            const marked = pitchIndex === 0 && (entry.fermata || entry.breath);
+            const marked =
+              pitchIndex === 0 && (entry.fermata || entry.staccato || entry.breath);
             if (stopping || starting || tuplet !== null || entry.arpeggiated || marked) {
               writer.element('notations', undefined, () => {
                 if (stopping) {
@@ -710,9 +711,17 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
                 if (marked && entry.fermata) {
                   writer.leaf('fermata');
                 }
-                if (marked && entry.breath) {
+                // One `articulations` holding whichever of them the writer
+                // wrote: the element is the group, and two of them side by side
+                // is not what the format means by it.
+                if (marked && (entry.staccato || entry.breath)) {
                   writer.element('articulations', undefined, () => {
-                    writer.leaf('breath-mark');
+                    if (entry.staccato) {
+                      writer.leaf('staccato');
+                    }
+                    if (entry.breath) {
+                      writer.leaf('breath-mark');
+                    }
                   });
                 }
               });

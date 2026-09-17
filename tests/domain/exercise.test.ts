@@ -66,6 +66,7 @@ describe('exercise validation', () => {
         beams: [],
         stem: null,
         fermata: false,
+        staccato: false,
         breath: false,
         arpeggiated: false,
         graces: [],

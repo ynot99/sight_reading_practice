@@ -1957,6 +1957,9 @@ export class AppView {
       this.silenceWatch = null;
     }
     this.stopTheOtherHandsMarker();
+    // Given back before the page goes, or they are swallowed from whatever the
+    // reader plays next by a view that is no longer there to answer them.
+    this.runtime.mediaKeys.sounding(null);
     this.runtime.takePlayer.stop();
     for (const unsubscribe of [...this.subscriptions, ...this.sessionSubscriptions]) {
       unsubscribe();
@@ -2570,6 +2573,55 @@ export class AppView {
     this.applyPlayingChrome();
     this.updateButtons(this.runtime.controller.session?.status ?? 'idle');
     this.describeStopping();
+    this.sayWhatIsSounding();
+  }
+
+  /**
+   * Hands the platform's transport keys to a performance, and takes them back.
+   *
+   * Said from the one place every change to a performance already goes
+   * through, so the panel on a lock screen cannot come to disagree with the
+   * button on the page - the two would drift the first time a way of stopping
+   * was added to one of them.
+   *
+   * Only a performance, and never a run. A reader mid-run who presses pause on
+   * their headphones means the thing they are listening to elsewhere; the run
+   * in front of them is not media and stopping it from another application
+   * would be a practice thrown away by a key press meant for something else.
+   *
+   * Only resuming, too, and never starting. These keys are pressed by somebody
+   * who is not looking at this page, and a fresh performance beginning in a tab
+   * they have forgotten is not what Play means to them.
+   */
+  private sayWhatIsSounding(): void {
+    const { controller } = this.runtime;
+    const playing = controller.isListening;
+    if (!playing && !controller.isListeningPaused) {
+      this.runtime.mediaKeys.sounding(null);
+      return;
+    }
+    this.runtime.mediaKeys.sounding({
+      title: controller.currentExercise?.title ?? 'Sight reading',
+      playing,
+      // Neither asks first whether there is anything to do. The controller
+      // already refuses to resume what is not held and to hold what is not
+      // playing, and a second copy of that question here would be a rule that
+      // reads true because it never runs.
+      play: () => {
+        this.runtime.controller.resumeListening();
+        this.showThePerformance();
+      },
+      pause: () => {
+        this.runtime.controller.pauseListening();
+        // Held music has no next beat until it is picked up again.
+        this.forgetTheBeats();
+        this.showThePerformance();
+      },
+      stop: () => {
+        this.runtime.controller.stopListening();
+        this.showThePerformance();
+      },
+    });
   }
 
   /**

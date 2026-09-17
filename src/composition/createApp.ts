@@ -3,6 +3,8 @@ import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { BarMode } from '../application/modes/BarMode.js';
 import { FlowMode } from '../application/modes/FlowMode.js';
 import { NoAudioWaking, type IAudioWaking } from '../application/ports/IAudioWaking.js';
+import { NoMediaKeys, type IMediaKeys } from '../application/ports/IMediaKeys.js';
+import { theMediaSession } from '../infrastructure/media/MediaSessionKeys.js';
 import { NoScreenWake, type IScreenWake } from '../application/ports/IScreenWake.js';
 import { ScreenWakeLock } from '../infrastructure/screen/ScreenWakeLock.js';
 import { knownFrameIds } from '../application/modes/ListenFrame.js';
@@ -180,6 +182,8 @@ export interface AppRuntime {
   readonly screenWake: IScreenWake;
   /** The audio device, and whether it can sound anything yet. */
   readonly audio: IAudioWaking;
+  /** The transport keys the platform has outside this page. */
+  readonly mediaKeys: IMediaKeys;
   /** `null` when the instrument has no dampers to lift. */
   readonly sustain: ISustainPedal | null;
   /** `null` when the instrument needs nothing downloaded. */
@@ -403,6 +407,9 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     // through sends every note as MIDI and nothing at all to the screen, so
     // the device decides nobody is there and turns the page off mid-bar.
     audio: waking ?? new NoAudioWaking(),
+    // Reached only where there is a platform to ask; everywhere else the keys
+    // are somebody else's and this says nothing about them.
+    mediaKeys: typeof navigator === 'undefined' ? new NoMediaKeys() : theMediaSession(),
     screenWake:
       typeof navigator === 'undefined' || typeof document === 'undefined'
         ? new NoScreenWake()

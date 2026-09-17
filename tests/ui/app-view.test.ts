@@ -5768,13 +5768,71 @@ describe('AppView', () => {
       expect(runtime.controller.session).toBeNull();
     });
 
-    it('ignores a shortcut that happens to include space', async () => {
+    function pressHeldSpace(target: Element = document.body): boolean {
+      const event = new KeyboardEvent('keydown', {
+        code: 'Space',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    }
+
+    it('never starts a run when it is held down', async () => {
+      // Held, it is the square button beside the round one, and the square one
+      // has never started anything.
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      pressHeldSpace();
+
+      expect(runtime.controller.session).toBeNull();
+    });
+
+    it('stops a run that is going, when it is held down', async () => {
+      // His: "ctrl+space шорткат для нот щоб зупиняти гру коли гра у прогресі".
+      //
+      // Stopping and rewinding both end a run, so the place is what tells them
+      // apart: a reader who set one and played from it is stopping, not asking
+      // to be sent back to bar one.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.renderer.holdBar(2);
+      const from = rig.runtime.controller.beginsAt;
+      expect(from).toBeGreaterThan(0);
+      pressSpace();
+      expect(rig.runtime.controller.session?.status).toBe('running');
+
+      expect(pressHeldSpace()).toBe(true);
+
+      expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(true);
+      expect(element('score-verdict').hidden).toBe(false);
+      expect(rig.runtime.controller.beginsAt).toBe(from);
+    });
+
+    it('takes the place back to the top when there is nothing to stop', async () => {
+      // One key for "put me back": the two are never both on offer, so a reader
+      // reaching for the keyboard mid-run does not have to pick. His: "та
+      // rewind коли гра не у прогресі".
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.renderer.holdBar(2);
+      expect(rig.runtime.controller.beginsAt).toBeGreaterThan(0);
+
+      pressHeldSpace();
+
+      expect(rig.runtime.controller.beginsAt).toBe(0);
+      expect(rig.renderer.cursor.position).toBe(0);
+    });
+
+    it('leaves a held alt to whatever the browser does with it', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
 
       const event = new KeyboardEvent('keydown', {
         code: 'Space',
-        ctrlKey: true,
+        altKey: true,
         bubbles: true,
         cancelable: true,
       });
@@ -5782,6 +5840,29 @@ describe('AppView', () => {
 
       expect(runtime.controller.session).toBeNull();
       expect(event.defaultPrevented).toBe(false);
+    });
+
+    it('stops the picture of a run rather than holding it', async () => {
+      // The same pair over the drawing: the plain key plays and holds, the held
+      // one is that sheet's own Stop. His: "у MIDI viewer це має бути stop
+      // кнопка".
+      const { view, runtime, midi, clock } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      pressSpace();
+      clock.advance(300);
+      expect(runtime.takePlayer.positionMs).toBeGreaterThan(0);
+
+      pressHeldSpace();
+
+      expect(runtime.takePlayer.playing).toBeNull();
+      // Back at the beginning, which is the whole difference from holding it:
+      // Stop has nothing left to do and says so.
+      expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(true);
     });
 
     it('agrees with the pill about what play means', async () => {

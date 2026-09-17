@@ -2575,15 +2575,29 @@ export class AppView {
    * this, which was never true - it was only ever not wired to it.
    */
   private describeStopping(): void {
+    this.el.focusStop.disabled = !this.anythingToStop;
+  }
+
+  /**
+   * Whether there is anything going that Stop would end.
+   *
+   * Asked in one place because two things ask it: the button, which greys
+   * itself out when there is not, and the key beside it, which has to choose
+   * between stopping and rewinding. Kept apart they would answer differently
+   * the first time a phase was added to one and not the other - and a look is
+   * exactly such a phase, which the desk's Stop knew about and the music's did
+   * not.
+   */
+  private get anythingToStop(): boolean {
     const status = this.runtime.controller.session?.status;
-    const stoppable =
+    return (
       status === 'running' ||
       status === 'counting-in' ||
       status === 'paused' ||
       this.isPreviewing ||
       this.runtime.controller.isListening ||
-      this.runtime.controller.isListeningPaused;
-    this.el.focusStop.disabled = !stoppable;
+      this.runtime.controller.isListeningPaused
+    );
   }
 
   private populateSelects(): void {
@@ -3557,6 +3571,26 @@ export class AppView {
     }
   }
 
+  /**
+   * Puts where a run would begin back at the top.
+   *
+   * A place can be set anywhere by holding a finger on a bar, so the way back
+   * must not be "find bar one and hold a finger on that". Lifted out of its
+   * button because the key that stops a run does this when there is no run to
+   * stop, and two copies of it would drift.
+   */
+  private rewindToTheStart(): void {
+    const { controller } = this.runtime;
+    if (this.isPlaying) {
+      controller.stop();
+    }
+    controller.beginAtTheStart();
+    // The place is gone, so no bar is standing ready to open a passage.
+    this.placedOnBar = null;
+    controller.cursorToStart();
+    this.showPassageMarkers();
+  }
+
   private bindNarrowLayout(): void {
     const view = this.doc.defaultView;
     if (view === null || typeof view.matchMedia !== 'function') {
@@ -3595,18 +3629,7 @@ export class AppView {
     });
 
     this.listen(this.el.focusRewind, 'click', () => {
-      // Where a run would begin, put back at the top. A place can be set
-      // anywhere by holding a finger on a bar, so the way back must not be
-      // "find bar one and hold a finger on that".
-      const status = controller.session?.status;
-      if (status === 'running' || status === 'counting-in' || status === 'paused') {
-        controller.stop();
-      }
-      controller.beginAtTheStart();
-      // The place is gone, so no bar is standing ready to open a passage.
-      this.placedOnBar = null;
-      controller.cursorToStart();
-      this.showPassageMarkers();
+      this.rewindToTheStart();
     });
 
     this.listen(this.el.repeatNumbers, 'change', () => {
@@ -4237,11 +4260,26 @@ export class AppView {
     this.playTheRoll();
   }
 
+  /**
+   * Space, and space held down with the command key.
+   *
+   * The pair a transport is: the plain key is the one that goes and stops
+   * going, and the held one is the square button beside it. In front of the
+   * music that is Stop where something is going and Rewind where nothing is -
+   * one key for "put me back", because the two are never both on offer and a
+   * reader reaching for the keyboard mid-run does not want to pick. Over the
+   * picture of a run it is that sheet's own Stop. His: "ctrl+space шорткат для
+   * нот щоб зупиняти гру коли гра у прогресі, та rewind коли гра не у
+   * прогресі, та у MIDI viewer це має бути stop кнопка".
+   */
   private bindSpaceBar(): void {
     const handler = (event: KeyboardEvent): void => {
-      if (event.metaKey || event.ctrlKey || event.altKey) {
+      if (event.altKey) {
         return;
       }
+      // Either key, as everywhere else here that takes a held gesture: which
+      // of the two is the command key is the platform's business.
+      const held = event.metaKey || event.ctrlKey;
       if (isFormControl(this.doc.activeElement)) {
         return;
       }
@@ -4260,7 +4298,24 @@ export class AppView {
         // space".
         if (event.code === 'Space' && this.thePictureIsInFront()) {
           event.preventDefault();
-          this.togglePlayingTheRoll();
+          if (held) {
+            this.stopTheRoll();
+          } else {
+            this.togglePlayingTheRoll();
+          }
+        }
+        return;
+      }
+      if (held) {
+        // Nothing else is spoken for while a key is held, so the arrows below
+        // stay the browser's and only space is taken.
+        if (event.code === 'Space') {
+          event.preventDefault();
+          if (this.anythingToStop) {
+            this.stopEverything();
+          } else {
+            this.rewindToTheStart();
+          }
         }
         return;
       }

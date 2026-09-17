@@ -84,7 +84,7 @@ describe('the shape of a reading', () => {
     for (const axis of axes) {
       expect(axis.said, axis.name).not.toBe('');
     }
-    expect(axes.find((axis) => axis.name === 'Flow')?.said).toContain('to arrive');
+    expect(axes.find((axis) => axis.name === 'Flow')?.said).toContain('a note');
   });
 
   it('leaves dynamics off where there is no hand to judge', () => {
@@ -121,5 +121,73 @@ describe('how evenly the presses were struck', () => {
 
   it('says nothing about a handful of presses', () => {
     expect(theEvenness([0.5, 0.9])).toBeNull();
+  });
+});
+
+describe('what a frame that waits can be judged on', () => {
+  /** A reading whose entries fall at these moments from the run's beginning. */
+  function played(moments: readonly number[]) {
+    return reportOf(moments.map((at, index) => step(index, at)));
+  }
+
+  function axis(moments: readonly number[], name: string): number {
+    return theProfile(played(moments), [], false).find((each) => each.name === name)?.of ?? -1;
+  }
+
+  const EVEN = [0, 1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 7_000];
+
+  it('calls a reading in even time a good one', () => {
+    // The fault he found: in a frame that waits, nothing keeps the time, so the
+    // deviations are measured from the run's beginning and come back as a
+    // rising line however well it was played. Both axes drawn straight from
+    // them read as nought for a reading of eight quarters dead on the tempo.
+    // His: "начебто у wait for notes зіграв гарно, але ці метрики просто не
+    // малюються".
+    expect(axis(EVEN, 'Flow')).toBe(1);
+    expect(axis(EVEN, 'Stability')).toBe(1);
+  });
+
+  it('does not mark a reader down for taking it slowly', () => {
+    // There is no tempo but theirs. Quarters at a leisurely two seconds are as
+    // steady as quarters at one, and the axis that said otherwise was scoring
+    // the pace rather than the playing.
+    const slow = EVEN.map((at) => at * 2.2);
+
+    expect(axis(slow, 'Flow')).toBeCloseTo(axis(EVEN, 'Flow'), 10);
+    expect(axis(slow, 'Stability')).toBeCloseTo(axis(EVEN, 'Stability'), 10);
+  });
+
+  it('lets a human hand wobble without calling it a hesitation', () => {
+    const human = EVEN.map((at, index) => at + (index % 2 === 0 ? 90 : -70));
+
+    expect(axis(human, 'Flow')).toBe(1);
+    expect(axis(human, 'Stability')).toBeGreaterThan(0.7);
+  });
+
+  it('counts a stop to find the next note, without emptying the axis for one', () => {
+    const hesitated = EVEN.map((at, index) => (index < 4 ? at : at + 2_500));
+
+    expect(axis(hesitated, 'Flow')).toBeLessThan(1);
+    expect(axis(hesitated, 'Flow')).toBeGreaterThan(0.5);
+  });
+
+  it('is not troubled by a reader getting on with it', () => {
+    // A gap shorter than its neighbours is not a micro-pause.
+    const brisk = [0, 1_000, 1_400, 2_400, 3_400, 4_400, 5_400, 6_400];
+
+    expect(axis(brisk, 'Flow')).toBe(1);
+  });
+
+  it('marks a reading that never found a pace', () => {
+    const ragged = [0, 400, 1_900, 2_100, 4_200, 4_500, 7_000, 7_300];
+
+    expect(axis(ragged, 'Flow')).toBeLessThan(0.6);
+    expect(axis(ragged, 'Stability')).toBeLessThan(0.3);
+  });
+
+  it('says the pace it found, which is the number behind the shape', () => {
+    const said = theProfile(played(EVEN), [], false).find((each) => each.name === 'Flow')?.said;
+
+    expect(said).toBe('1000 ms a note');
   });
 });

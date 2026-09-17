@@ -34,6 +34,88 @@ const TIMING_FLOOR_MS = 250;
  */
 const SPREAD_FLOOR_MS = 120;
 /**
+ * How uneven the reader's own pace may be before it stops being a pace.
+ *
+ * A share of that pace rather than a number of milliseconds, because in a frame
+ * that waits there is no tempo but theirs: quarters taken at a leisurely two
+ * seconds each are as steady as quarters at one, and a floor in milliseconds
+ * would score the slower reading worse for being slower.
+ *
+ * One, meaning the axis empties only where the notes scatter as widely as the
+ * pace itself. Half of that emptied it for a single hang in eight notes, which
+ * is a reading with one hesitation in it rather than a reading with no pace.
+ */
+const PACE_SPREAD_SHARE = 1;
+
+/**
+ * The gaps between one entry and the next, in the order they were played.
+ *
+ * Where the music waits, the deviations are not errors at all: nothing is
+ * keeping time, so each is measured from the moment the run began and they come
+ * back as a rising line - nought, a second, two seconds - however well the
+ * reader played. Measured on a tidy reading of eight quarters at sixty they were
+ * exactly that, and both axes drawn from them read as nought. What is in them is
+ * the *difference* from one to the next, which is the reader's own pace.
+ */
+function theGapsBetween(deviations: readonly number[]): readonly number[] {
+  const gaps: number[] = [];
+  for (let at = 1; at < deviations.length; at += 1) {
+    gaps.push((deviations[at] ?? 0) - (deviations[at - 1] ?? 0));
+  }
+  return gaps;
+}
+
+/**
+ * How much longer than the notes either side of it a gap must be to be a hang.
+ *
+ * A share of the reader's own pace. Taken off the *range* instead - which is
+ * what the velocity knocks are measured against, and rightly, since velocity has
+ * ends of its own - a tight reading scored nought: wobbling ninety milliseconds
+ * either way makes a range of a fifth of a second, and every note is then a long
+ * way outside a fifth of that.
+ */
+const HANG_SHARE = 0.4;
+
+/**
+ * How few of the gaps stopped to find the next note, as a share.
+ *
+ * Only the long ones. A gap shorter than its neighbours is a reader getting on
+ * with it, which is not a fault and is certainly not a micro-pause. His:
+ * "відсутність мікропауз і «зависань» перед тактами".
+ */
+function theFlowOf(gaps: readonly number[]): number | null {
+  if (gaps.length < 3) {
+    return null;
+  }
+  const pace = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
+  if (pace <= 0) {
+    return null;
+  }
+  let hangs = 0;
+  for (let at = 1; at + 1 < gaps.length; at += 1) {
+    const among = ((gaps[at - 1] ?? 0) + (gaps[at + 1] ?? 0)) / 2;
+    if ((gaps[at] ?? 0) - among > pace * HANG_SHARE) {
+      hangs += 1;
+    }
+  }
+  return Math.max(0, 1 - hangs / (gaps.length - 2));
+}
+
+/** How even a run of numbers is about its own average, as a share. */
+function theSteadinessOf(values: readonly number[]): number | null {
+  if (values.length < 2) {
+    return null;
+  }
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  if (mean <= 0) {
+    return null;
+  }
+  const spread = Math.sqrt(
+    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length,
+  );
+  return Math.max(0, 1 - spread / mean / PACE_SPREAD_SHARE);
+}
+/**
  * How far a press may sit from its neighbours before it counts as a knock.
  *
  * A share of the run's own loudness rather than a number of velocity units: a
@@ -50,17 +132,21 @@ function shareBelow(value: number, floor: number): number {
 }
 
 /**
- * How evenly the presses were struck, as a share.
+ * How few of these leap away from the ones either side of them, as a share.
  *
- * Not how *level* they were, which is what he first asked for and which would
- * mark a reader down for playing musically: a piece with a crescendo in it is
- * supposed to come out uneven, and an axis rewarding a flat velocity would give
- * its best score to a machine. What is a fault is the odd press that leaps away
- * from the ones on either side of it - the finger that caught the key too hard
- * - so that is what is counted. His: "плавність велоситі без випадкових ударів
- * по клавішах".
+ * Not how *level* they are. Asked of velocities, that is what he first wanted
+ * and it would mark a reader down for playing musically: a piece with a
+ * crescendo in it is supposed to come out uneven, and an axis rewarding a flat
+ * velocity would give its best score to a machine. Asked of the gaps between
+ * entries it would be worse still - it would score a reader on their tempo.
+ *
+ * What is a fault either way is the odd one that jumps: the finger that caught
+ * the key too hard, and the hand that stopped to find the next note. His:
+ * "плавність велоситі без випадкових ударів по клавішах", and "відсутність
+ * мікропауз і «зависань» перед тактами".
  */
-export function theEvenness(velocities: readonly number[]): number | null {
+export function theEvenness(values: readonly number[]): number | null {
+  const velocities = values;
   if (velocities.length < 3) {
     return null;
   }
@@ -81,6 +167,56 @@ export function theEvenness(velocities: readonly number[]): number | null {
     }
   }
   return Math.max(0, 1 - knocks / (velocities.length - 2));
+}
+
+/**
+ * The two axes a frame that keeps time can answer.
+ *
+ * There the deviations are errors: something else held the beat and the reader
+ * was near it or not. The mean says whether they run late as a habit, and the
+ * spread says whether they are consistent about it, which are two questions.
+ */
+function theTimedAxes(timing: PerformanceReport['timing']): readonly ProfileAxis[] {
+  return [
+    {
+      name: 'Timing',
+      of: shareBelow(timing.meanAbsoluteDeviationMs, TIMING_FLOOR_MS),
+      said: `${Math.round(timing.meanAbsoluteDeviationMs)} ms off the beat`,
+    },
+    {
+      name: 'Stability',
+      of: shareBelow(timing.deviationSpreadMs, SPREAD_FLOOR_MS),
+      said: `${Math.round(timing.deviationSpreadMs)} ms either side`,
+    },
+  ];
+}
+
+/**
+ * And the two a frame that waits can.
+ *
+ * Both off the reader's own pace, because there is no other: nothing keeps the
+ * time, so how *fast* they went is their business and only how *evenly* is worth
+ * marking. Flow counts the entries that stopped to find the next note; Stability
+ * asks whether the pace held at all, as a share of itself rather than in
+ * milliseconds - or a reading taken slowly would score worse for being slow.
+ */
+function theWaitingAxes(timing: PerformanceReport['timing']): readonly ProfileAxis[] {
+  const gaps = theGapsBetween(timing.deviations);
+  const pace = gaps.length === 0 ? 0 : gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
+  const flow = theFlowOf(gaps);
+  const steady = theSteadinessOf(gaps);
+  return [
+    {
+      name: 'Flow',
+      of: flow ?? 1,
+      said: `${Math.round(pace)} ms a note`,
+    },
+    {
+      name: 'Stability',
+      of: steady ?? 1,
+      said: steady === null ? 'too few to say' : `${Math.round((steady ?? 0) * 100)}% steady`,
+    },
+  ];
 }
 
 /**
@@ -111,19 +247,7 @@ export function theProfile(
       of: Math.min(1, totals.correct / owed),
       said: `${totals.correct} of ${totals.playableSteps}`,
     },
-    {
-      // The same measurement either way; what it is a measurement *of* is the
-      // frame's answer. A frame that keeps time is one the reader can be late
-      // against; a frame that waits is one they can only be slow in.
-      name: keepsTime ? 'Timing' : 'Flow',
-      of: shareBelow(timing.meanAbsoluteDeviationMs, TIMING_FLOOR_MS),
-      said: `${Math.round(timing.meanAbsoluteDeviationMs)} ms ${keepsTime ? 'off the beat' : 'to arrive'}`,
-    },
-    {
-      name: 'Stability',
-      of: shareBelow(timing.deviationSpreadMs, SPREAD_FLOOR_MS),
-      said: `${Math.round(timing.deviationSpreadMs)} ms either side`,
-    },
+    ...(keepsTime ? theTimedAxes(timing) : theWaitingAxes(timing)),
   ];
   // Left off rather than drawn at nought where there is nothing to say: three
   // presses are not a hand to judge, and an axis pinned to the middle would

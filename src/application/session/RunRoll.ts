@@ -827,6 +827,72 @@ export function takeOfTheRun(roll: RunRoll): Take | null {
 }
 
 /**
+ * A recording, as something the picture can draw.
+ *
+ * The reverse of {@link takeOfTheRun}, and the reason a kept take can be looked
+ * at rather than only heard: the drawing asks for presses and pedal spans, and
+ * a recording is those written down as a stream.
+ *
+ * With no beats, which is not an omission. A run has a grid because something
+ * was keeping its time - a pulse, or the reader's own entries against the page.
+ * Free playing has neither, and lines drawn across it would be a metre nobody
+ * played claiming to be the one that was. His: "for each recording add a button
+ * to add a MIDI viewer, but without vertical lines to indicate the beat,
+ * because the beat can be gibberish".
+ *
+ * A note still sounding at the end is left open, the same answer the roll gives
+ * for a key still down when a run stops.
+ */
+export function rollOfTheTake(take: Take): RunRoll {
+  const presses: RolledPress[] = [];
+  const pedal: RolledPedal[] = [];
+  const open = new Map<number, number[]>();
+  let pedalDownAt: number | null = null;
+  for (const event of take.events) {
+    if (event.kind === 'noteOn') {
+      const at = presses.length;
+      presses.push({
+        midi: event.midi,
+        downAtMs: event.atMs,
+        upAtMs: null,
+        velocity: event.velocity,
+        verdict: null,
+        stepIndex: null,
+        deviationMs: null,
+      });
+      open.set(event.midi, [...(open.get(event.midi) ?? []), at]);
+      continue;
+    }
+    if (event.kind === 'noteOff') {
+      // The oldest press of that pitch, for the reason the recorder has: one
+      // pitch struck twice inside a trill has two presses waiting, and closing
+      // the newest leaves the first ringing to the end of the piece.
+      const waiting = open.get(event.midi) ?? [];
+      const at = waiting.shift();
+      open.set(event.midi, waiting);
+      const press = at === undefined ? undefined : presses[at];
+      if (at !== undefined && press !== undefined) {
+        presses[at] = { ...press, upAtMs: event.atMs };
+      }
+      continue;
+    }
+    const down = event.value >= 0.5;
+    if (down) {
+      pedalDownAt ??= event.atMs;
+      continue;
+    }
+    if (pedalDownAt !== null) {
+      pedal.push({ downAtMs: pedalDownAt, upAtMs: event.atMs });
+      pedalDownAt = null;
+    }
+  }
+  if (pedalDownAt !== null) {
+    pedal.push({ downAtMs: pedalDownAt, upAtMs: null });
+  }
+  return { presses, beats: [], pedal, rushes: [], truncated: false };
+}
+
+/**
  * The run as a stream something can play.
  *
  * So that hearing a run back is the machinery that already plays a recording

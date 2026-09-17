@@ -14,6 +14,7 @@ import {
   rollAsEvents,
   rollBeganAtMs,
   rollEndedAtMs,
+  rollOfTheTake,
   takeOfTheRun,
   type RolledBeat,
   type RolledPress,
@@ -27,6 +28,8 @@ import type {
   MidiPedalEvent,
 } from '../../src/application/ports/IMidiSource.js';
 import type { NoteJudgedEvent } from '../../src/application/session/SessionEvents.js';
+import type { Take } from '../../src/application/PerformanceRecorder.js';
+import type { MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import type { BeatWeight } from '../../src/application/ports/IMetronome.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { MIDI, offBeatAfterALongNote, twoBarExercise } from '../support/fixtures.js';
@@ -959,5 +962,97 @@ describe('a run kept with the recordings', () => {
 
     expect(take?.events[0]?.atMs).toBe(0);
     expect(take?.durationMs).toBeLessThan(2_000);
+  });
+});
+
+describe('a recording drawn by the same machinery', () => {
+  /** A take as the list holds one: a stream of notes with times on it. */
+  function takeOf(events: readonly MidiFileEvent[]): Take {
+    return {
+      events,
+      durationMs: 2_000,
+      noteCount: events.filter((event) => event.kind === 'noteOn').length,
+    };
+  }
+
+  it('pairs each press with the release that ends it', () => {
+    const roll = rollOfTheTake(
+      takeOf([
+        { kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.7 },
+        { kind: 'noteOff', atMs: 300, midi: MIDI.C4 },
+      ]),
+    );
+
+    expect(roll.presses).toEqual([
+      {
+        midi: MIDI.C4,
+        downAtMs: 0,
+        upAtMs: 300,
+        velocity: 0.7,
+        verdict: null,
+        stepIndex: null,
+        deviationMs: null,
+      },
+    ]);
+  });
+
+  it('releases the oldest press of a pitch, not the newest', () => {
+    // A trill strikes one pitch twice inside a few hundred milliseconds, and
+    // closing the newest leaves the first ringing to the end.
+    const roll = rollOfTheTake(
+      takeOf([
+        { kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.7 },
+        { kind: 'noteOn', atMs: 100, midi: MIDI.C4, velocity: 0.7 },
+        { kind: 'noteOff', atMs: 150, midi: MIDI.C4 },
+      ]),
+    );
+
+    expect(roll.presses.map((press) => press.upAtMs)).toEqual([150, null]);
+  });
+
+  it('draws the pedal as the spans it was held for', () => {
+    const roll = rollOfTheTake(
+      takeOf([
+        { kind: 'sustain', atMs: 0, value: 1 },
+        { kind: 'noteOn', atMs: 10, midi: MIDI.C4, velocity: 0.7 },
+        { kind: 'sustain', atMs: 800, value: 0 },
+        { kind: 'sustain', atMs: 900, value: 1 },
+      ]),
+    );
+
+    // The last one is still down when the recording ends, and says so.
+    expect(roll.pedal).toEqual([
+      { downAtMs: 0, upAtMs: 800 },
+      { downAtMs: 900, upAtMs: null },
+    ]);
+  });
+
+  it('gives it no grid at all', () => {
+    // Not an omission: a run has beats because something kept its time, and
+    // free playing had nothing keeping it. Lines across it would be a metre
+    // nobody played claiming to be the one that was. His: "without vertical
+    // lines to indicate the beat, because the beat can be gibberish".
+    const roll = rollOfTheTake(
+      takeOf([{ kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.7 }]),
+    );
+
+    expect(roll.beats).toEqual([]);
+    expect(roll.rushes).toEqual([]);
+  });
+
+  it('comes back out of a run the same as it went in', () => {
+    // The two halves are one road: a run is kept, and the kept thing is looked
+    // at with the drawing the run was looked at with.
+    const roller = new RollRecorder();
+    roller.beat(0, 'downbeat', 0);
+    roller.keyDown(down(MIDI.C4, 0));
+    roller.keyUp(up(MIDI.C4, 400));
+    const take = takeOfTheRun(roller.roll());
+
+    const again = take === null ? null : rollOfTheTake(take);
+
+    expect(again?.presses.map((press) => [press.midi, press.downAtMs, press.upAtMs])).toEqual([
+      [MIDI.C4, 0, 400],
+    ]);
   });
 });

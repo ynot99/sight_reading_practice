@@ -1444,6 +1444,38 @@ describe('AppView', () => {
       expect(element('takes-list').children.length).toBe(1);
     });
 
+    it('opens a kept recording in the same picture', async () => {
+      // A recording is presses and pedal against time, which is what the
+      // picture draws - so looking at one asks for no second drawing. His:
+      // "можливість відчинити будь який recording у MIDI viewer".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      element<HTMLButtonElement>('roll-keep').click();
+      element<HTMLButtonElement>('roll-close').click();
+
+      const look = element('takes-list').querySelector<HTMLButtonElement>(
+        'button[aria-label^="Look at"]',
+      );
+      look?.click();
+
+      expect(element('sheet-roll').hidden).toBe(false);
+      expect(element('roll-title').textContent).toBe('A recording');
+      const drawn = element('roll-body').querySelector('.roll');
+      expect(drawn?.querySelectorAll('.roll__note').length).toBeGreaterThan(0);
+      // No grid: nothing was keeping the time of free playing.
+      expect(drawn?.querySelectorAll('.roll__line')).toHaveLength(0);
+      // And nothing a recording cannot answer is on offer.
+      expect(element('roll-keep').hidden).toBe(true);
+      expect(element<HTMLButtonElement>('roll-from').disabled).toBe(true);
+      expect(element<HTMLButtonElement>('roll-practise').disabled).toBe(true);
+    });
+
+
     it('puts the whole run on one line under the drawing', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();

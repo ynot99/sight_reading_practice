@@ -53,7 +53,9 @@ import {
   clicksUpTo,
   rollAsEvents,
   rollBeganAtMs,
+  rollOfTheTake,
   takeOfTheRun,
+  type RunRoll,
   theBeatNearest,
   theMusicsPlaceAt,
   type GridChoice,
@@ -1273,6 +1275,15 @@ export class AppView {
    * driven by the reader's keys and by a pulse that only exists when they have
    * asked for a click. The view has one, so the walking is done here.
    */
+  /**
+   * The recording the picture is of, or `null` for the run just played.
+   *
+   * The picture draws presses and pedal spans against time, and a recording is
+   * exactly that written down - so looking at one asks for no second drawing,
+   * only for a different answer to "which roll". His: "можливість відчинити
+   * будь який recording у MIDI viewer".
+   */
+  private theTakeShowing: RunRoll | null = null;
   private theOtherHandsWalk: { readonly stepIndex: number; readonly atMs: number }[] = [];
   private theOtherHandsStep: ReturnType<typeof setTimeout> | null = null;
   private silenceWatch: ReturnType<typeof setTimeout> | null = null;
@@ -1408,6 +1419,7 @@ export class AppView {
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
     rollKeep: HTMLButtonElement;
+    rollTitle: HTMLElement;
     rollMap: HTMLElement;
     rollMapWindow: HTMLElement;
     rollMapHead: HTMLElement;
@@ -1668,6 +1680,7 @@ export class AppView {
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
       rollKeep: requireElement(doc, 'roll-keep'),
+      rollTitle: requireElement(doc, 'roll-title'),
       rollMap: requireElement(doc, 'roll-map'),
       rollMapWindow: requireElement(doc, 'roll-map-window'),
       rollMapHead: requireElement(doc, 'roll-map-head'),
@@ -5796,7 +5809,7 @@ export class AppView {
       this.drawTheRollInto();
       // The count of clicks already handed over indexes into a list that just
       // changed length, so it is asked again rather than carried over.
-      const roll = this.runtime.controller.lastRoll;
+      const roll = this.theRoll();
       if (roll !== null) {
         this.rollClicksSent = clicksBefore(roll, this.headIsAtMs(), this.theRollsGrid());
       }
@@ -6136,6 +6149,13 @@ export class AppView {
       hear.setAttribute('aria-label', `Play the take from ${takeName(take.savedAtMs)}`);
       this.listen(hear, 'click', () => this.playTake(take.id));
 
+      const look = this.doc.createElement('button');
+      look.type = 'button';
+      look.textContent = '▦';
+      look.title = 'Look at this take';
+      look.setAttribute('aria-label', `Look at the take from ${takeName(take.savedAtMs)}`);
+      this.listen(look, 'click', () => this.showTheTake(take.id));
+
       const save = this.doc.createElement('button');
       save.type = 'button';
       save.textContent = 'MIDI';
@@ -6175,7 +6195,7 @@ export class AppView {
         });
       });
 
-      row.append(name, hear, promote, save, remove);
+      row.append(name, hear, look, promote, save, remove);
       this.el.takesList.append(row);
     }
   }
@@ -6451,7 +6471,8 @@ export class AppView {
    * the reader who never presses the button should not be paying for them.
    */
   private showTheRoll(): void {
-    if (this.runtime.controller.lastRoll === null) {
+    this.theTakeShowing = null;
+    if (this.theRoll() === null) {
       return;
     }
     this.stopTheRoll();
@@ -6459,6 +6480,7 @@ export class AppView {
     this.drawTheRollInto();
     this.el.sheetRoll.hidden = false;
     this.sayWhatWouldBePractised();
+    this.sayWhatThePictureIsOf();
   }
 
   /**
@@ -6469,7 +6491,7 @@ export class AppView {
    * where they were. His: "можеш до мінімапу додати позицію курсору".
    */
   private sayWhereTheHeadIs(): void {
-    const roll = this.runtime.controller.lastRoll;
+    const roll = this.theRoll();
     if (roll === null) {
       return;
     }
@@ -6613,7 +6635,7 @@ export class AppView {
    * where it came from is not something the list has to know.
    */
   private keepTheRun(): void {
-    const roll = this.runtime.controller.lastRoll;
+    const roll = this.theRoll();
     // Which never refuses from here: the picture cannot be opened for a run
     // with nothing played in it, so the button is never on offer for one. The
     // branch is the type's, not a rule of its own.
@@ -6638,7 +6660,7 @@ export class AppView {
    * to it rather than for agreeing to it.
    */
   private takeAnEndFromTheMarker(end: 'from' | 'to'): void {
-    const roll = this.runtime.controller.lastRoll;
+    const roll = this.theRoll();
     const controller = this.runtime.controller;
     if (roll === null) {
       return;
@@ -6734,6 +6756,57 @@ export class AppView {
     this.runtime.renderer.otherHand.hide();
   }
 
+  /**
+   * The roll the picture is of: a recording if one was opened, else the run.
+   *
+   * One accessor and not a question asked in nine places, because the answer
+   * has to be the same for the drawing, the marker, the playback and the map.
+   */
+  private theRoll(): RunRoll | null {
+    return this.theTakeShowing ?? this.runtime.controller.lastRoll;
+  }
+
+  /**
+   * Opens the picture on a kept recording instead of on the last run.
+   *
+   * Nothing is drawn differently. What is missing is the grid, and it is
+   * missing by itself: a recording has no beats written down, because nothing
+   * was keeping its time. Lines across free playing would be a metre nobody
+   * played claiming to be the one that was.
+   */
+  private showTheTake(id: string): void {
+    const take = this.runtime.takes.find(id);
+    if (take === null) {
+      return;
+    }
+    this.stopTheRoll();
+    this.theTakeShowing = rollOfTheTake(take);
+    this.rollAtMs = 0;
+    this.drawTheRollInto();
+    this.el.sheetRoll.hidden = false;
+    this.sayWhatWouldBePractised();
+    this.sayWhatThePictureIsOf();
+  }
+
+  /**
+   * Puts away what only a run can answer.
+   *
+   * A recording has no passage to practise and no bar to point at - it is not
+   * of this score, or of any - and keeping it again would file a second copy of
+   * something already in the list.
+   */
+  private sayWhatThePictureIsOf(): void {
+    const aTake = this.theTakeShowing !== null;
+    this.el.rollKeep.hidden = aTake;
+    this.el.rollFrom.disabled = aTake;
+    this.el.rollTo.disabled = aTake;
+    this.el.rollTitle.textContent = aTake ? 'A recording' : 'What you played';
+    if (aTake) {
+      this.el.rollPractise.disabled = true;
+      this.el.rollPassageWhat.textContent = 'Free playing: no bars to practise.';
+    }
+  }
+
   /** Says which bars the buttons have settled on, and whether there is one. */
   private sayWhatWouldBePractised(): void {
     const { rangeFromBar, rangeToBar } = this.runtime.controller.settings;
@@ -6753,7 +6826,7 @@ export class AppView {
    * head stays where it is and the sound goes on.
    */
   private drawTheRollInto(): void {
-    const roll = this.runtime.controller.lastRoll;
+    const roll = this.theRoll();
     if (roll === null) {
       return;
     }
@@ -6879,7 +6952,7 @@ export class AppView {
    * had been taken away from it.
    */
   private playTheRoll(): void {
-    const roll = this.runtime.controller.lastRoll;
+    const roll = this.theRoll();
     if (roll === null || roll.presses.length === 0) {
       return;
     }
@@ -6949,7 +7022,7 @@ export class AppView {
   private putTheHeadWhereItWasTapped(event: MouseEvent): void {
     const drawn = this.el.rollBody.firstElementChild;
     const grid = drawn?.querySelector<HTMLElement>('.roll__grid') ?? null;
-    const roll = this.runtime.controller.lastRoll;
+    const roll = this.theRoll();
     if (grid === null || roll === null) {
       return;
     }
@@ -7007,7 +7080,7 @@ export class AppView {
    * tempo to be counted at.
    */
   private soundTheBeat(positionMs: number): void {
-    const roll = this.runtime.controller.lastRoll;
+    const roll = this.theRoll();
     if (roll === null || !this.el.rollClick.checked) {
       return;
     }

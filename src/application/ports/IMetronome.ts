@@ -323,6 +323,20 @@ export interface IMetronome extends IClickOnce {
    * where in the piece it has got to.
    */
   configure(config: MetronomeConfig): void;
+  /**
+   * Begins the pulse, from its first tick.
+   *
+   * Whether or not it was already running: a tick is a counter *since this
+   * call*, so this is where the count begins and a running pulse told to start
+   * begins again. A frame that hands the reader their own downbeat leans on it
+   * - the bar is set up afresh and started on the press, with the pulse often
+   * still going from the bar before - and an implementation that quietly did
+   * nothing left those clicks counting on against a plan that no longer meant
+   * what they said.
+   *
+   * Nothing of the last pulse survives it: no second scheduler, and no click
+   * left on the audio clock by the pulse that has just been replaced.
+   */
   start(): void;
   stop(): void;
   onTick(listener: (tick: MetronomeTick) => void): Unsubscribe;

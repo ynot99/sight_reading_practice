@@ -139,13 +139,22 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   }
 
   start(): void {
-    if (this.isRunning) {
-      return;
-    }
+    // Told to start while it is already running, a pulse begins again rather
+    // than doing nothing. A tick is "a counter since start()" - the port says
+    // so - and a run leans on it: a bar begun by the reader's own press sets
+    // the pulse up afresh and starts it on that press, with the pulse often
+    // still running from the bar before. Swallowed, the restart left the clicks
+    // counting on from where the last bar had reached, against a plan that no
+    // longer meant what they said.
+    //
+    // Everything the last pulse had in hand goes with it, which is what the
+    // guard that swallowed the restart was really for: two schedulers on one
+    // pulse would be two of every click, and clicks already on the audio clock
+    // belong to the pulse that scheduled them.
+    this.stop();
     const context = this.ensureContext();
     void context.resume();
 
-    this.queue = [];
     this.nextTickIndex = 0;
     this.nextTickAudioTime = context.currentTime + this.options.firstClickLeadSec;
     this.audioEpochMs = performance.now() - context.currentTime * 1000;

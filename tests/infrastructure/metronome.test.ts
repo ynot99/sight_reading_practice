@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   MetronomeConfig,
   MetronomeDropout,
@@ -17,6 +17,7 @@ import {
 import { elementAt } from '../../src/shared/asserts.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ManualMetronome } from '../../src/infrastructure/testing/ManualMetronome.js';
+import { WebAudioMetronome } from '../../src/infrastructure/audio/WebAudioMetronome.js';
 
 const COMMON: MetronomeConfig = {
   bpm: 60,
@@ -472,5 +473,129 @@ describe('a click that outlives the metre it started in', () => {
       sixEight.ticksPerMeasure + eighth * 6,
       sixEight.ticksPerMeasure + eighth * 7,
     ]);
+  });
+});
+
+/**
+ * An audio context that does nothing but keep a clock the test can move.
+ *
+ * Enough for a muted pulse, which is what the scheduling is asked about here:
+ * nothing is sounded, so nothing has to be built to sound it.
+ */
+class StubContext {
+  currentTime = 0;
+
+  resume(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+describe('a pulse told to start while it is already running', () => {
+  /** Once a bar, so a handful of ticks is a handful of bars. */
+  const EVERY_BEAT: MetronomeConfig = { ...COMMON, subdivisionsPerPulse: 1 };
+
+  it('begins its count again, whichever metronome is keeping it', () => {
+    // The tick says it is a "counter since start()", so start() is where the
+    // count begins - and a run leans on it. A bar begun by the reader's own
+    // press sets the pulse up afresh and starts it on that press, with the
+    // pulse often still running from the bar before; told to start and doing
+    // nothing, it goes on counting from where the last bar had got to and the
+    // clicks land against a plan that no longer means what they say. His:
+    // "зявляється подвійний метроном".
+    const manual = new ManualMetronome(new ManualClock());
+    manual.configure(EVERY_BEAT);
+    manual.start();
+    manual.advanceSubdivisions(3);
+
+    manual.start();
+
+    expect(manual.advanceSubdivisions(1)[0]?.index).toBe(0);
+  });
+
+  it('begins its count again on the audio clock as well', () => {
+    vi.useFakeTimers();
+    try {
+      const context = new StubContext();
+      const metronome = new WebAudioMetronome(() => context as unknown as AudioContext, {
+        schedulerIntervalMs: 10,
+        scheduleAheadSec: 0.05,
+        firstClickLeadSec: 0,
+      });
+      const heard: number[] = [];
+      metronome.onTick((tick) => heard.push(tick.index));
+      metronome.configure(EVERY_BEAT);
+
+      metronome.start();
+      context.currentTime = 3;
+      vi.advanceTimersByTime(20);
+      expect(heard.length).toBeGreaterThan(1);
+
+      heard.length = 0;
+      metronome.start();
+      context.currentTime = 6;
+      vi.advanceTimersByTime(20);
+
+      expect(heard[0]).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves no second scheduler running behind it', () => {
+    // Which is what the guard that swallowed the restart was really for, and
+    // what has to survive removing it: two schedulers on one pulse would be two
+    // of every click, arriving interleaved.
+    vi.useFakeTimers();
+    try {
+      const context = new StubContext();
+      const metronome = new WebAudioMetronome(() => context as unknown as AudioContext, {
+        schedulerIntervalMs: 10,
+        scheduleAheadSec: 0.05,
+        firstClickLeadSec: 0,
+      });
+      const heard: number[] = [];
+      metronome.onTick((tick) => heard.push(tick.index));
+      metronome.configure(EVERY_BEAT);
+
+      metronome.start();
+      context.currentTime = 3;
+      vi.advanceTimersByTime(20);
+
+      heard.length = 0;
+      metronome.start();
+      context.currentTime = 7;
+      vi.advanceTimersByTime(20);
+
+      // One pulse counting: nought, one, two, and each of them once.
+      expect(heard).toEqual([...heard.keys()]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves no scheduler behind that a stop cannot reach', () => {
+    // Two schedulers on one pulse do not double the clicks - they share the
+    // count, so the second finds nothing left to schedule - but they are two
+    // timers where one was asked for, and only the newest is remembered. A run
+    // that begins a bar on every press would leave one behind on each of them,
+    // and a stop would silence the pulse while they all went on waking the
+    // page up.
+    vi.useFakeTimers();
+    try {
+      const context = new StubContext();
+      const metronome = new WebAudioMetronome(() => context as unknown as AudioContext, {
+        schedulerIntervalMs: 10,
+      });
+      metronome.configure(EVERY_BEAT);
+
+      metronome.start();
+      metronome.start();
+      metronome.start();
+      metronome.stop();
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

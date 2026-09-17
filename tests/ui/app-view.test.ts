@@ -112,6 +112,7 @@ import {
   MIDI,
   beamedSixteenths,
   longExercise,
+  offBeatAfterALongNote,
   oneHandWalksUnderAHeldNote,
   p,
   twoBarExercise,
@@ -1674,6 +1675,39 @@ describe('AppView', () => {
 
       wheel(true);
       expect(Number(zoom.value)).toBeGreaterThan(Number(was));
+    });
+
+
+    it('reads a waiting run against the pace the music asked for', async () => {
+      // The pairing is the page's: the report says how late each entry was and
+      // the timeline says where it was written, and the shape is drawn from the
+      // two together. Asked without the second, the axis reads the gaps in
+      // milliseconds and comes out in the tens of thousands of per cent - which
+      // is how a flawless reading of real music scored nothing. His: "stability
+      // на 0% постійно".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(offBeatAfterALongNote({ tempoBpm: 60 }));
+      runtime.controller.updateSettings({
+        modeId: new WaitMode().id,
+        countInBars: 0,
+        clickWhen: 'never',
+      });
+      runtime.controller.start();
+
+      // A half, an eighth after a rest, and a quarter - each entry taken at the
+      // moment it is written at, which at sixty is nought, two and a half, and
+      // three seconds.
+      for (const at of [0, 2_500, 3_000]) {
+        const step = runtime.controller.session?.currentStep;
+        for (const midi_ of step?.expectedMidi ?? []) {
+          midi.noteOn(midi_, at);
+        }
+      }
+      element<HTMLButtonElement>('focus-stop').click();
+
+      const said = element('run-profile').textContent ?? '';
+      expect(said).toContain('100% of the written pace');
     });
 
 

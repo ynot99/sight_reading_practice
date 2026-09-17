@@ -48,6 +48,41 @@ const SPREAD_FLOOR_MS = 120;
 const PACE_SPREAD_SHARE = 1;
 
 /**
+ * How fast each note was taken, as a share of the length it was written at.
+ *
+ * Not the gaps themselves. A piece is not made of one value: a half note is
+ * followed four times as slowly as an eighth, so a reading of real music scores
+ * nought on evenness the moment evenness means "all the gaps alike". Measured on
+ * a flawless reading of a half, an eighth and a quarter, it did. Against what
+ * the music asked for, a reader holding one steady tempo comes out as one
+ * number repeated, whatever the notes were.
+ *
+ * `owedAtMs` is where each judged entry falls in written time, in the order the
+ * deviations are in. Where the two do not line up - nothing knew the music, or
+ * the entries and the writing disagree about how many there were - the pace is
+ * read off the gaps alone, which is right for a piece in one value and wrong in
+ * the same way as before for anything else.
+ */
+function thePacesOf(
+  deviations: readonly number[],
+  owedAtMs: readonly number[],
+): readonly number[] {
+  const played = theGapsBetween(deviations);
+  if (owedAtMs.length !== deviations.length) {
+    return played;
+  }
+  const owed = theGapsBetween(owedAtMs);
+  const paces: number[] = [];
+  for (let at = 0; at < played.length; at += 1) {
+    const written = owed[at] ?? 0;
+    if (written > 0) {
+      paces.push((played[at] ?? 0) / written);
+    }
+  }
+  return paces;
+}
+
+/**
  * The gaps between one entry and the next, in the order they were played.
  *
  * Where the music waits, the deviations are not errors at all: nothing is
@@ -83,22 +118,29 @@ const HANG_SHARE = 0.4;
  * with it, which is not a fault and is certainly not a micro-pause. His:
  * "відсутність мікропауз і «зависань» перед тактами".
  */
-function theFlowOf(gaps: readonly number[]): number | null {
-  if (gaps.length < 3) {
-    return null;
+function theHangsIn(paces: readonly number[]): number {
+  if (paces.length < 3) {
+    return 0;
   }
-  const pace = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
-  if (pace <= 0) {
-    return null;
+  const held = paces.reduce((sum, pace) => sum + pace, 0) / paces.length;
+  if (held <= 0) {
+    return 0;
   }
   let hangs = 0;
-  for (let at = 1; at + 1 < gaps.length; at += 1) {
-    const among = ((gaps[at - 1] ?? 0) + (gaps[at + 1] ?? 0)) / 2;
-    if ((gaps[at] ?? 0) - among > pace * HANG_SHARE) {
+  for (let at = 1; at + 1 < paces.length; at += 1) {
+    const among = ((paces[at - 1] ?? 0) + (paces[at + 1] ?? 0)) / 2;
+    if ((paces[at] ?? 0) - among > held * HANG_SHARE) {
       hangs += 1;
     }
   }
-  return Math.max(0, 1 - hangs / (gaps.length - 2));
+  return hangs;
+}
+
+function theFlowOf(paces: readonly number[]): number | null {
+  if (paces.length < 3) {
+    return null;
+  }
+  return Math.max(0, 1 - theHangsIn(paces) / (paces.length - 2));
 }
 
 /** How even a run of numbers is about its own average, as a share. */
@@ -200,21 +242,27 @@ function theTimedAxes(timing: PerformanceReport['timing']): readonly ProfileAxis
  * asks whether the pace held at all, as a share of itself rather than in
  * milliseconds - or a reading taken slowly would score worse for being slow.
  */
-function theWaitingAxes(timing: PerformanceReport['timing']): readonly ProfileAxis[] {
-  const gaps = theGapsBetween(timing.deviations);
-  const pace = gaps.length === 0 ? 0 : gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
-  const flow = theFlowOf(gaps);
-  const steady = theSteadinessOf(gaps);
+function theWaitingAxes(
+  timing: PerformanceReport['timing'],
+  owedAtMs: readonly number[],
+): readonly ProfileAxis[] {
+  const paces = thePacesOf(timing.deviations, owedAtMs);
+  const held = paces.length === 0 ? 1 : paces.reduce((sum, pace) => sum + pace, 0) / paces.length;
+  const flow = theFlowOf(paces);
+  const steady = theSteadinessOf(paces);
   return [
     {
       name: 'Flow',
       of: flow ?? 1,
-      said: `${Math.round(pace)} ms a note`,
+      said: `${theHangsIn(paces)} of ${Math.max(0, paces.length - 2)} held up`,
     },
     {
       name: 'Stability',
       of: steady ?? 1,
-      said: steady === null ? 'too few to say' : `${Math.round((steady ?? 0) * 100)}% steady`,
+      said:
+        steady === null
+          ? 'too few to say'
+          : `${Math.round(held * 100)}% of the written pace, evenly`,
     },
   ];
 }
@@ -237,6 +285,7 @@ export function theProfile(
   report: PerformanceReport,
   velocities: readonly number[],
   keepsTime: boolean,
+  owedAtMs: readonly number[] = [],
 ): readonly ProfileAxis[] {
   const { totals, timing } = report;
   const owed = Math.max(1, totals.playableSteps);
@@ -247,7 +296,7 @@ export function theProfile(
       of: Math.min(1, totals.correct / owed),
       said: `${totals.correct} of ${totals.playableSteps}`,
     },
-    ...(keepsTime ? theTimedAxes(timing) : theWaitingAxes(timing)),
+    ...(keepsTime ? theTimedAxes(timing) : theWaitingAxes(timing, owedAtMs)),
   ];
   // Left off rather than drawn at nought where there is nothing to say: three
   // presses are not a hand to judge, and an axis pinned to the middle would

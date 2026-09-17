@@ -7429,6 +7429,7 @@ export class AppView {
       report,
       (this.runtime.controller.lastRoll?.presses ?? []).map((press) => press.velocity),
       this.theRunKeptTime(),
+      this.whereTheJudgedEntriesFall(report),
     );
     if (axes.length < 3) {
       return;
@@ -7448,6 +7449,29 @@ export class AppView {
     }
     figure.append(said);
     this.el.result.append(figure);
+  }
+
+  /**
+   * Where each judged entry falls in *written* time, in milliseconds.
+   *
+   * What the shape needs to tell a reader holding a steady tempo from one whose
+   * hand keeps stopping: a piece is not made of one value, so the gaps between
+   * their entries are supposed to differ. In the same order and under the same
+   * filter as the report's own deviations, since the two are read as a pair.
+   */
+  private whereTheJudgedEntriesFall(report: PerformanceReport): readonly number[] {
+    const timeline = this.runtime.controller.currentTimeline;
+    const exercise = timeline?.exercise ?? null;
+    if (timeline === null || exercise === null) {
+      return [];
+    }
+    const from = timeline.at(report.steps[0]?.index ?? 0)?.onsetTicks ?? 0;
+    return report.steps
+      .filter((step) => step.deviationMs !== null)
+      .map((step) => {
+        const onset = timeline.at(step.index)?.onsetTicks;
+        return onset === undefined ? 0 : spanMs(exercise, from, onset);
+      });
   }
 
   private drawTheBars(report: PerformanceReport): void {

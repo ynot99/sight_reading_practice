@@ -84,7 +84,7 @@ describe('the shape of a reading', () => {
     for (const axis of axes) {
       expect(axis.said, axis.name).not.toBe('');
     }
-    expect(axes.find((axis) => axis.name === 'Flow')?.said).toContain('a note');
+    expect(axes.find((axis) => axis.name === 'Flow')?.said).toContain('held up');
   });
 
   it('leaves dynamics off where there is no hand to judge', () => {
@@ -185,9 +185,79 @@ describe('what a frame that waits can be judged on', () => {
     expect(axis(ragged, 'Stability')).toBeLessThan(0.3);
   });
 
-  it('says the pace it found, which is the number behind the shape', () => {
+  it('says how many entries held up, which is the number behind the shape', () => {
     const said = theProfile(played(EVEN), [], false).find((each) => each.name === 'Flow')?.said;
 
-    expect(said).toBe('1000 ms a note');
+    expect(said).toBe('0 of 5 held up');
+  });
+});
+
+describe('a reading of music that is not all one value', () => {
+  /** Half, eighth, quarter, eighth, eighth, half - where they fall as written. */
+  const WRITTEN = [0, 2_000, 2_500, 3_500, 4_000, 4_500, 6_500];
+
+  function axis(moments: readonly number[], name: string): number {
+    const report = reportOf(moments.map((at, index) => step(index, at)));
+    return theProfile(report, [], false, WRITTEN).find((each) => each.name === name)?.of ?? -1;
+  }
+
+  it('calls a reading in written time a steady one', () => {
+    // The fault he found second: a piece is not made of one value, so the gaps
+    // between a reader's entries are *supposed* to differ - a half note is
+    // followed four times as slowly as an eighth. Measured against each other,
+    // a flawless reading of a half, an eighth and a quarter scored 0.40, and
+    // real music is all mixed values. His: "stability на 0% постійно".
+    expect(axis(WRITTEN, 'Stability')).toBe(1);
+    expect(axis(WRITTEN, 'Flow')).toBe(1);
+  });
+
+  it('is as steady at a slower tempo, held as evenly', () => {
+    // There is no tempo but theirs, so what is asked is whether they held one.
+    const slower = WRITTEN.map((at) => at * 1.8);
+
+    expect(axis(slower, 'Stability')).toBeCloseTo(1, 10);
+    expect(axis(slower, 'Flow')).toBe(1);
+  });
+
+  it('still sees a hand that stopped to find the next note', () => {
+    // The floor must not reach so far that the thing the axis is for is gone.
+    const hung = WRITTEN.map((at, index) => (index < 3 ? at : at + 2_000));
+
+    expect(axis(hung, 'Flow')).toBeLessThan(1);
+    expect(axis(hung, 'Stability')).toBeLessThan(1);
+  });
+
+  it('falls back to the gaps where nothing knew the music', () => {
+    // Nothing is passed by a caller with no timeline to hand, and the axes are
+    // read off the gaps alone - right for a piece in one value, and wrong in
+    // the old way for anything else. Said rather than left as a silent nought.
+    const even = [0, 1_000, 2_000, 3_000, 4_000, 5_000, 6_000];
+    const report = reportOf(even.map((at, index) => step(index, at)));
+
+    expect(theProfile(report, [], false).find((each) => each.name === 'Stability')?.of).toBe(1);
+  });
+
+  it('passes over an entry the music gave no time to', () => {
+    // A caller hands these in; two of them at one written moment would be a
+    // division by nought, and a pace of infinity draws as a shape with a corner
+    // somewhere off the page.
+    const owed = [0, 1_000, 1_000, 2_000, 3_000, 4_000, 5_000];
+    const played = [0, 1_000, 1_400, 2_400, 3_400, 4_400, 5_400];
+    const report = reportOf(played.map((at, index) => step(index, at)));
+
+    for (const each of theProfile(report, [], false, owed)) {
+      expect(Number.isFinite(each.of), each.name).toBe(true);
+      expect(each.of, each.name).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('says the pace it held, as a share of what was written', () => {
+    const slower = WRITTEN.map((at) => at * 1.5);
+    const report = reportOf(slower.map((at, index) => step(index, at)));
+    const said = theProfile(report, [], false, WRITTEN).find(
+      (each) => each.name === 'Stability',
+    )?.said;
+
+    expect(said).toBe('150% of the written pace, evenly');
   });
 });

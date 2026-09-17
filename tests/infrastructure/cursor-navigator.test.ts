@@ -38,6 +38,43 @@ describe('CursorNavigator', () => {
     expect(primitive.position).toBe(2);
   });
 
+  it('goes back a step at a time when that is the shorter way', () => {
+    // What a passage does: the last run finished at its end, the next begins at
+    // its start, and the two are a few bars apart in a piece of hundreds of
+    // positions. Rewinding to the top and replaying moved the marker across the
+    // whole engraving to get back a few bars, in front of the sound the
+    // reader's chord had just asked for.
+    const primitive = new FakeCursorPrimitive(600);
+    const navigator = new CursorNavigator(primitive);
+    navigator.moveTo(520);
+    primitive.nextCalls = 0;
+
+    navigator.moveTo(480);
+
+    expect(navigator.position).toBe(480);
+    expect(primitive.position).toBe(480);
+    expect(primitive.previousCalls).toBe(40);
+    expect(primitive.resetCalls).toBe(0);
+    expect(primitive.nextCalls).toBe(0);
+  });
+
+  it('still rewinds when the beginning is the nearer end', () => {
+    // Going back is not always the shorter way: a jump from bar three to bar
+    // one is two moves backwards or one reset and one step forward.
+    const primitive = new FakeCursorPrimitive(600);
+    const navigator = new CursorNavigator(primitive);
+    navigator.moveTo(500);
+    primitive.nextCalls = 0;
+
+    navigator.moveTo(3);
+
+    expect(navigator.position).toBe(3);
+    expect(primitive.position).toBe(3);
+    expect(primitive.resetCalls).toBe(1);
+    expect(primitive.nextCalls).toBe(3);
+    expect(primitive.previousCalls).toBe(0);
+  });
+
   it('treats a move to the current position as a no-op', () => {
     const primitive = new FakeCursorPrimitive(10);
     const navigator = new CursorNavigator(primitive);

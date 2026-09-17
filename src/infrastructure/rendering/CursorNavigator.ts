@@ -10,17 +10,24 @@ import type { IScoreCursor } from '../../application/ports/IScoreRenderer.js';
 export interface ICursorPrimitive {
   reset(): void;
   next(): void;
+  previous(): void;
   show(): void;
   hide(): void;
   readonly endReached: boolean;
 }
 
 /**
- * Turns a forward-only cursor into a random-access one.
+ * Turns a one-step-at-a-time cursor into a random-access one.
  *
- * Moving forward steps; moving backwards rewinds and replays. Sight-reading
- * only ever moves forward one step at a time, so the rewind path is a
- * correctness fallback rather than a hot path.
+ * Moving backwards used to mean rewinding to the top of the sheet and
+ * replaying, on the grounds that sight-reading only ever moves forward and the
+ * rewind was a correctness fallback. A passage made that false: every run of
+ * one begins by going back to where it starts, from wherever the last run
+ * finished, and on an eighty-five bar arrangement with a passage two thirds of
+ * the way in that was a rewind of some five hundred positions - each one a move
+ * of the marker on the page - between the reader's chord and the sound it was
+ * meant to start. His: "коли гра закінчується на слайсі - то play to start вже
+ * реагує з сильною затримкою".
  */
 export class CursorNavigator implements IScoreCursor {
   private readonly primitive: ICursorPrimitive;
@@ -93,8 +100,20 @@ export class CursorNavigator implements IScoreCursor {
   moveTo(stepIndex: number): void {
     const target = Math.max(0, stepIndex);
     if (target < this.index) {
-      this.primitive.reset();
-      this.index = 0;
+      // Whichever is fewer moves: back a step at a time, or from the top. Going
+      // back is the shorter way for everything that actually happens - a
+      // passage played again, a bar picked up after a pause - and the rewind
+      // stays for the one case it is really shorter, which is a jump to near
+      // the beginning of a long piece.
+      if (this.index - target <= target) {
+        while (this.index > target) {
+          this.primitive.previous();
+          this.index -= 1;
+        }
+      } else {
+        this.primitive.reset();
+        this.index = 0;
+      }
     }
     // Stops early at the end of the sheet, so the navigator never claims a
     // position the engraver cannot display.

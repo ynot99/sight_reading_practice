@@ -14,6 +14,7 @@ import { Pitch } from '../../src/domain/model/Pitch.js';
 import {
   bar,
   p,
+  longExercise,
   partialVoiceExercise,
   tiedExercise,
   twoBarExercise,
@@ -350,6 +351,35 @@ describe('OSMD accepts the MusicXML we produce', () => {
     // Four quarters plus the one place only the inner voice moves.
     expect(timeline.length).toBe(5);
     expect(positions).toBe(timeline.length);
+  });
+
+  it('steps back to exactly where it stepped forward from', async () => {
+    // The navigator walks a passage back to its start with the engraver's own
+    // backwards step rather than by rewinding the whole sheet, which is only
+    // safe if the two directions agree about what a position is. They are
+    // different calls on a different iterator path - forward handles jumps that
+    // backwards does not - so this asks the real engraver rather than assuming.
+    const exercise = longExercise({ bars: 8 });
+    const osmd = createDisplay();
+
+    await osmd.load(serializer.serialize(exercise));
+    osmd.render();
+
+    const cursor = osmd.cursor;
+    cursor.reset();
+    const stamps: string[] = [cursor.iterator.currentTimeStamp.toString()];
+    for (let step = 0; step < 12; step += 1) {
+      cursor.next();
+      stamps.push(cursor.iterator.currentTimeStamp.toString());
+    }
+
+    const walkedBack: string[] = [cursor.iterator.currentTimeStamp.toString()];
+    for (let step = 0; step < 12; step += 1) {
+      cursor.previous();
+      walkedBack.push(cursor.iterator.currentTimeStamp.toString());
+    }
+
+    expect(walkedBack).toEqual([...stamps].reverse());
   });
 
   it('draws an ornament without giving it a cursor position', async () => {

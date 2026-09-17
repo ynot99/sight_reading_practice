@@ -507,6 +507,10 @@ class OsmdCursorPrimitive implements ICursorPrimitive {
     this.cursor?.next();
   }
 
+  previous(): void {
+    this.cursor?.previous();
+  }
+
   show(): void {
     this.cursor?.show();
   }

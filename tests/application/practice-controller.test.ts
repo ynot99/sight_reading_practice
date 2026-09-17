@@ -42,7 +42,9 @@ import {
   compoundBarExercise,
   longExercise,
   offBeatAfterALongNote,
+  oneHandOpensAlone,
   p,
+  partialVoiceExercise,
   tiedExercise,
   twoBarExercise,
 } from '../support/fixtures.js';
@@ -4338,6 +4340,51 @@ describe('the last run that reached an end', () => {
       expect(roll?.pedal).toEqual([
         { downAtMs: roll === null ? -1 : rollBeganAtMs(roll), upAtMs: 900 },
       ]);
+    });
+
+    it('waits for the first chord this reader owes, not the one on the page', async () => {
+      // A piece that opens with the left hand alone, read with the right hand
+      // only. The step the marker sits on has nothing in it for this reader, so
+      // the watch stood down and no amount of correct playing began the run -
+      // the app was waiting for notes it had itself switched off. His: "у play
+      // to start - якщо якась рука вимкнена - та курсор може стояти на
+      // вимкнених нотах, та чекати на гру вимкнених нот".
+      const { controller, midi, clock, renderer, metronome } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+        handStaff: 1,
+      });
+      await controller.openScore(oneHandOpensAlone());
+
+      midi.noteOn(MIDI.G4, clock.now());
+
+      expect(controller.session).not.toBeNull();
+      // Where the marker goes too, so the place a run begins is a place that
+      // can be seen rather than guessed at.
+      expect(renderer.cursor.position).toBe(1);
+      metronome.advanceSubdivisions(1);
+
+      // And the music begins at that chord rather than a bar in front of it: a
+      // bar this reader cannot play is not a bar they can be counted into.
+      expect(controller.session?.currentStep?.index).toBe(1);
+    });
+
+    it('stands down where the reader has nothing to play in the whole passage', async () => {
+      // Not a run that cannot begin but a passage that cannot be read at all,
+      // and there is no chord to wait for. Starting on the next stray key
+      // would be starting on noise.
+      const { controller, midi, clock } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FLOW_MODE_ID,
+        handStaff: 2,
+      });
+      await controller.openScore(partialVoiceExercise());
+
+      for (const stray of [MIDI.C4, MIDI.D4, MIDI.G3]) {
+        midi.noteOn(stray, clock.now());
+      }
+
+      expect(controller.session).toBeNull();
     });
 
     it('waits, and does not punish, while the wrong notes are played', async () => {

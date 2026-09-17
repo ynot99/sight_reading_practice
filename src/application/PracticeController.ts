@@ -721,6 +721,8 @@ export class PracticeController {
   private lastSeed: number | null = null;
   /** Where the next run begins, which the reader may have moved. */
   private beginAt = 0;
+  /** Which step the chord being waited for belongs to; see {@link armTheOpening}. */
+  private openingBeginsAt: number | null = null;
   /** The opening chord, while it is being waited for; see {@link watchForTheOpening}. */
   private opening: ChordMatcher | null = null;
   private openingPresses: MidiNoteOnEvent[] = [];
@@ -1168,6 +1170,48 @@ export class PracticeController {
   }
 
   /**
+   * Which step a run would really begin at.
+   *
+   * The reader's own place, never outside the passage they chose: a place
+   * pointed at before the passage was narrowed is no longer in the music being
+   * practised. Here rather than at each of the four places that worked it out
+   * for themselves - the run, the marker, the playback and the watch that
+   * listens for the opening chord - because four copies of one answer are four
+   * chances for them to disagree about where the music starts.
+   */
+  private whereARunBegins(from: number = this.beginAt): number {
+    const passage = this.passageSteps;
+    return Math.min(Math.max(from, passage.from), passage.to);
+  }
+
+  /**
+   * The first step from there that this reader owes a note at.
+   *
+   * Only a run begun by *playing* asks: the reader announces it with the chord
+   * it opens on, and where a hand is switched off that chord can be one they
+   * have nothing in - a piece whose left hand opens alone, read with the right.
+   * The watch then had nothing to wait for and stood down, so the app sat
+   * waiting for notes it had itself switched off and no amount of correct
+   * playing began anything. His: "у play to start - якщо якась рука вимкнена -
+   * та курсор може стояти на вимкнених нотах, та чекати на гру вимкнених нот".
+   *
+   * Pressing the button is left alone. There the button announces the run, so
+   * it can perfectly well open on a bar this reader sits out: the other hand is
+   * sounded for them and they come in where they come in.
+   */
+  private theFirstStepTheReaderOwes(fromIndex: number): TimelineStep | null {
+    const timeline = this.timeline;
+    const passage = this.passageSteps;
+    for (let index = fromIndex; index <= passage.to; index += 1) {
+      const step = timeline?.at(index) ?? null;
+      if (step !== null && this.owedByTheReader(step)) {
+        return step;
+      }
+    }
+    return null;
+  }
+
+  /**
    * The passage the reader chose, as the first and last step of it.
    *
    * The whole timeline when nothing is chosen. Bars come in as places in the
@@ -1545,7 +1589,7 @@ export class PracticeController {
       // always began at bar one made them listen through everything they were
       // not working on. Clamped either way, so a performance picked up after
       // a pause still lands inside a passage that moved while it was held.
-      fromIndex: Math.min(Math.max(fromStepIndex ?? this.beginAt, passage.from), passage.to),
+      fromIndex: this.whereARunBegins(fromStepIndex ?? this.beginAt),
       toIndex: passage.to,
       // Round again inside the one performance, rather than by starting
       // another: stopping and starting is where the gap on a repeat came
@@ -2102,25 +2146,23 @@ export class PracticeController {
 
   /** Builds the matcher for whatever the run would now begin with. */
   private armTheOpening(): void {
-    const timeline = this.timeline;
-    const passage = this.passageSteps;
-    const step = timeline?.at(Math.min(Math.max(this.beginAt, passage.from), passage.to)) ?? null;
-    const expected = step === null ? [] : expectedFor(step, this.currentSettings.handStaff);
+    const step = this.theFirstStepTheReaderOwes(this.whereARunBegins());
     this.openingPresses = [];
-    // A step with nothing in it for this hand cannot be played, so there is
-    // nothing to wait for and the watch stands down rather than starting the
-    // run on the reader's next stray key.
+    this.openingBeginsAt = step?.index ?? null;
+    // Nowhere in the passage has anything in it for this hand, so there is no
+    // chord to wait for and the watch stands down rather than starting the run
+    // on the reader's next stray key.
     this.opening =
-      expected.length === 0
+      step === null
         ? null
         : new ChordMatcher(
-            expected,
+            expectedFor(step, this.currentSettings.handStaff),
             {
               toleranceMs: this.currentSettings.matchToleranceMs,
               pitchClassOnly: this.currentSettings.pitchClassOnly,
               anyPitch: this.currentSettings.rhythmOnly,
             },
-            step?.ornamentMidi ?? [],
+            step.ornamentMidi ?? [],
           );
   }
 
@@ -2145,8 +2187,9 @@ export class PracticeController {
     }
     // No count-in: the reader has just played the tempo themselves, and
     // counting them in after that is asking them to wait for a bar they have
-    // already begun.
-    this.beginRun(0, this.openingPresses);
+    // already begun. And from the chord they actually played, which is not
+    // always the one the marker sits on.
+    this.beginRun(0, this.openingPresses, this.openingBeginsAt ?? undefined);
   }
 
   /**
@@ -2171,6 +2214,7 @@ export class PracticeController {
   private beginRun(
     countInBars: number,
     opening: readonly MidiNoteOnEvent[],
+    from?: number,
   ): PracticeSession | null {
     this.stopListening();
     const timeline = this.timeline;
@@ -2186,6 +2230,9 @@ export class PracticeController {
 
     const mode = this.deps.modes.get(this.currentSettings.modeId);
     const passage = this.passageSteps;
+    // Where the reader put the cursor, unless a run begun by playing has
+    // already been told otherwise - and never outside the passage they chose.
+    const beginsAt = this.whereARunBegins(from);
     const session = new PracticeSession({
       timeline,
       mode,
@@ -2200,10 +2247,7 @@ export class PracticeController {
           anyPitch: this.currentSettings.rhythmOnly,
         },
         countInBars,
-        // Where the reader put the cursor, but never outside the passage
-        // they chose: a place pointed at before the passage was narrowed is
-        // no longer in the music being practised.
-        startAtIndex: Math.min(Math.max(this.beginAt, passage.from), passage.to),
+        startAtIndex: beginsAt,
         stopAfterIndex: passage.to,
         expectedStaff: this.currentSettings.handStaff,
         inputLatencyMs: this.currentSettings.inputLatencyMs,
@@ -2421,9 +2465,8 @@ export class PracticeController {
     // would otherwise both be subscribed to the keyboard, and the presses
     // that started this run would arrive at the watch a second time.
     this.watchForTheOpening();
-    const openAt = Math.min(Math.max(this.beginAt, passage.from), passage.to);
-    if (openAt > 0) {
-      this.deps.cursor.moveTo(openAt);
+    if (beginsAt > 0) {
+      this.deps.cursor.moveTo(beginsAt);
     } else {
       this.deps.cursor.reset();
     }
@@ -2466,7 +2509,7 @@ export class PracticeController {
     // really costs - it is a layout and a scroll over a whole engraving - so
     // it is the one piece that waits. Everything above it is the slate being
     // cleaned, which has to be done before the run draws on it.
-    if (openAt === 0) {
+    if (beginsAt === 0) {
       // The page a long piece was left scrolled to is not where bar one is.
       this.deps.renderer.scrollToStart();
     }

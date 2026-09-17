@@ -312,7 +312,53 @@ export function offBeatAfterALongNote(overrides: ExerciseOverrides = {}): Exerci
   };
 }
 
-/** MIDI numbers of the fixture pitches, for readable expectations. */
+/**
+ * Two bars of 4/4 where the treble stands still through the first.
+ *
+ *   treble: (whole rest)  G4 (whole)
+ *   bass:   C3 (whole)    G2 (whole)
+ *
+ * The shape an arrangement has whenever one hand opens alone, and the one that
+ * leaves a reader practising the *other* hand with nothing to play at the place
+ * a run would begin.
+ */
+export function oneHandOpensAlone(overrides: ExerciseOverrides = {}): Exercise {
+  return {
+    id: overrides.id ?? 'fixture-one-hand-opens',
+    title: overrides.title ?? 'One hand opens fixture',
+    key: overrides.key ?? KeySignature.major(0),
+    keyChanges: [],
+    timeChanges: [],
+    tempoChanges: [],
+    pedalMarks: [],
+    dynamicMarks: [],
+    tempoWords: [],
+    hairpins: [],
+    octaveShifts: [],
+    timeSignature: overrides.timeSignature ?? new TimeSignature(4, 4),
+    tempoBpm: overrides.tempoBpm ?? 60,
+    firstBarNumber: 1,
+    barLabels: [],
+    metadata: { generatorId: 'fixture', seed: 4 },
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 1,
+        clef: 'treble',
+        clefChanges: [],
+        measures: [bar(restEntry(Duration.WHOLE)), bar(noteEntry(p('G4'), Duration.WHOLE))],
+      },
+      {
+        staffNumber: 2,
+        voice: 2,
+        clef: 'bass',
+        clefChanges: [],
+        measures: [bar(noteEntry(p('C3'), Duration.WHOLE)), bar(noteEntry(p('G2'), Duration.WHOLE))],
+      },
+    ],
+  };
+}
+
 /**
  * One bar of 6/8: two dotted-quarter beats, each filled with three eighths.
  *
@@ -475,6 +521,7 @@ export function partialVoiceExercise(
   };
 }
 
+/** MIDI numbers of the fixture pitches, for readable expectations. */
 export const MIDI = {
   G2: p('G2').midi,
   C3: p('C3').midi,

@@ -1,0 +1,125 @@
+import { describe, expect, it } from 'vitest';
+import { buildPerformanceReport } from '../../src/domain/scoring/PerformanceReport.js';
+import type { StepResult } from '../../src/domain/scoring/PerformanceReport.js';
+import { theEvenness, theProfile } from '../../src/domain/scoring/theProfile.js';
+
+function step(index: number, deviationMs: number | null, wrong: readonly number[] = []): StepResult {
+  return {
+    index,
+    status: wrong.length > 0 ? 'incorrect' : 'correct',
+    measureIndex: 0,
+    beat: 1,
+    expected: [60],
+    played: [60],
+    wrong: [...wrong],
+    missing: [],
+    deviationMs,
+  };
+}
+
+function reportOf(steps: readonly StepResult[], playableSteps?: number) {
+  return buildPerformanceReport({
+    exerciseId: 'ex',
+    modeId: 'mode.test',
+    tempoBpm: 60,
+    startedAtMs: 0,
+    endedAtMs: 10_000,
+    completed: true,
+    playableSteps: playableSteps ?? steps.length,
+    steps,
+  });
+}
+
+/** Four presses, none of them a knock. */
+const EVEN = [0.5, 0.55, 0.5, 0.52, 0.5];
+
+describe('the shape of a reading', () => {
+  it('names the one timing axis for the frame it was read in', () => {
+    // The same `meanAbsoluteDeviationMs` is how far behind the beat a reader
+    // was where a machine kept the time, and how long they took to arrive where
+    // the music waited for them. One number, two meanings, and the frame
+    // decides which - so it is named rather than drawn twice. His list had both
+    // as separate axes, and one of them would always have been empty.
+    const report = reportOf([step(0, 40), step(1, 60)]);
+
+    expect(theProfile(report, EVEN, true).map((axis) => axis.name)).toContain('Timing');
+    expect(theProfile(report, EVEN, false).map((axis) => axis.name)).toContain('Flow');
+    expect(theProfile(report, EVEN, true).map((axis) => axis.name)).not.toContain('Flow');
+  });
+
+  it('reads every axis as a share of the best it could be', () => {
+    // Milliseconds against a count of notes: a shape drawn from them can only
+    // be read if they agree about what "all the way out" means.
+    const axes = theProfile(reportOf([step(0, 0), step(1, 0)]), EVEN, true);
+
+    for (const axis of axes) {
+      expect(axis.of, axis.name).toBeGreaterThanOrEqual(0);
+      expect(axis.of, axis.name).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('counts accuracy against the music, not against the attempt', () => {
+    // Two steps played out of sixteen is not a flawless reading.
+    const short = reportOf([step(0, 0), step(1, 0)], 16);
+
+    const accuracy = theProfile(short, EVEN, true).find((axis) => axis.name === 'Accuracy');
+    expect(accuracy?.of).toBeCloseTo(2 / 16, 10);
+    expect(accuracy?.said).toBe('2 of 16');
+  });
+
+  it('holds timing against a gap that means something, not against nought', () => {
+    // Against a perfect nought a reader who is human reads as a failure on
+    // every run they ever play, and an axis that is always empty says nothing.
+    const tight = theProfile(reportOf([step(0, 10), step(1, -10)]), EVEN, true);
+    const loose = theProfile(reportOf([step(0, 200), step(1, -200)]), EVEN, true);
+
+    expect(tight.find((axis) => axis.name === 'Timing')?.of ?? 0).toBeGreaterThan(0.9);
+    expect(loose.find((axis) => axis.name === 'Timing')?.of ?? 1).toBeLessThan(0.3);
+  });
+
+  it('carries the number behind each axis', () => {
+    // A shape says which way a reading leans and never what it was.
+    const axes = theProfile(reportOf([step(0, 40), step(1, 60)]), EVEN, false);
+
+    for (const axis of axes) {
+      expect(axis.said, axis.name).not.toBe('');
+    }
+    expect(axes.find((axis) => axis.name === 'Flow')?.said).toContain('to arrive');
+  });
+
+  it('leaves dynamics off where there is no hand to judge', () => {
+    // Three presses are not a hand. Drawn at nought instead, an axis nobody
+    // could score reads as a fault rather than as a silence.
+    const axes = theProfile(reportOf([step(0, 0)]), [0.5, 0.6], true);
+
+    expect(axes.map((axis) => axis.name)).not.toContain('Dynamics');
+    expect(axes).toHaveLength(3);
+  });
+});
+
+describe('how evenly the presses were struck', () => {
+  it('does not mark a reader down for playing musically', () => {
+    // His first wording was the smoothness of the velocity, which a piece with
+    // a crescendo in it is supposed to break: an axis rewarding a flat velocity
+    // gives its best score to a machine. A rising line is not a fault.
+    const crescendo = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
+
+    expect(theEvenness(crescendo) ?? 0).toBe(1);
+  });
+
+  it('counts the press that leaps away from the ones either side of it', () => {
+    // The finger that caught the key too hard, which is what he actually meant.
+    const knocked = [0.4, 0.42, 1, 0.41, 0.4, 0.42, 0.41];
+
+    expect(theEvenness(knocked) ?? 1).toBeLessThan(1);
+    expect(theEvenness(knocked) ?? 1).toBeGreaterThan(0);
+  });
+
+  it('calls a run struck at one strength perfectly even', () => {
+    expect(theEvenness([0.5, 0.5, 0.5, 0.5])).toBe(1);
+  });
+
+  it('says nothing about a handful of presses', () => {
+    expect(theEvenness([0.5, 0.9])).toBeNull();
+  });
+});

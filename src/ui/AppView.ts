@@ -47,6 +47,8 @@ import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/Pra
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barLines, barNumberOf, measureCount, spanMs } from '../domain/model/Exercise.js';
+import { theProfile } from '../domain/scoring/theProfile.js';
+import { drawTheProfile } from './profileChart.js';
 import { expectedFor } from '../domain/timeline/Timeline.js';
 import {
   clicksBefore,
@@ -6444,6 +6446,7 @@ export class AppView {
     // Said once, about the run that caused it.
     this.lastLadderMove = null;
     this.drawTheBars(report);
+    this.drawTheProfileOf(report);
     this.offerTheRoll();
     for (const [label, value] of rows) {
       const row = this.doc.createElement('div');
@@ -7322,6 +7325,39 @@ export class AppView {
    * badly is not going to read a table, and this is the one part of the
    * report that says where to look next.
    */
+  /**
+   * The shape of the reading, and the numbers behind it.
+   *
+   * Both, and not one: a shape says which way a reading leans - what it is good
+   * at and what it is not - and never what it actually was. Read alone it is a
+   * picture with no scale on it.
+   */
+  private drawTheProfileOf(report: PerformanceReport): void {
+    const axes = theProfile(
+      report,
+      (this.runtime.controller.lastRoll?.presses ?? []).map((press) => press.velocity),
+      this.theRunKeptTime(),
+    );
+    if (axes.length < 3) {
+      return;
+    }
+    const figure = this.doc.createElement('div');
+    figure.className = 'profile-figure';
+    figure.id = 'run-profile';
+    figure.append(drawTheProfile(axes));
+    const said = this.doc.createElement('dl');
+    said.className = 'profile-figure__said';
+    for (const axis of axes) {
+      const name = this.doc.createElement('dt');
+      name.textContent = axis.name;
+      const value = this.doc.createElement('dd');
+      value.textContent = axis.said;
+      said.append(name, value);
+    }
+    figure.append(said);
+    this.el.result.append(figure);
+  }
+
   private drawTheBars(report: PerformanceReport): void {
     const exercise = this.runtime.controller.currentExercise;
     const bars =

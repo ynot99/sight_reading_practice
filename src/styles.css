@@ -513,6 +513,68 @@ textarea {
  * nested scrollers mean a finger that moves the wrong one.
  */
 /*
+ * The shape of a reading, with the numbers behind it beside it.
+ *
+ * A shape says which way a reading leans and never what it was, so the two are
+ * one figure and neither ships without the other. It wraps rather than shrinks:
+ * on a phone the numbers drop under the shape at a size they can still be read.
+ */
+.profile-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.profile {
+  width: 132px;
+  height: 132px;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+/* The rings and spokes are the paper the shape is drawn on, not part of it. */
+.profile__ring,
+.profile__spoke {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 0.6;
+}
+
+.profile__shape {
+  fill: color-mix(in srgb, var(--accent) 24%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+/* Text wears the page's ink, never the shape's colour. */
+.profile__name {
+  fill: var(--text-muted);
+  font-size: 6px;
+}
+
+.profile-figure__said {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 10px;
+  margin: 0;
+  flex: 1 1 160px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.profile-figure__said dt {
+  color: var(--text-muted);
+}
+
+.profile-figure__said dd {
+  margin: 0;
+  color: var(--text);
+}
+
+/*
  * Where the drawing stands, so something can float over it.
  *
  * A place and not a variant of the drawing: the squares are laid against this
@@ -620,7 +682,7 @@ textarea {
   bottom: 0;
   width: 2px;
   margin-left: -1px;
-  background: var(--accent-strong, var(--accent));
+  background: var(--accent);
   pointer-events: none;
 }
 
@@ -653,7 +715,7 @@ textarea {
 .roll-passage__what {
   flex: 1 1 auto;
   min-width: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 

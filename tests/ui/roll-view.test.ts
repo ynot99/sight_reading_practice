@@ -32,6 +32,8 @@ function beatOf(atMs: number, weight: BeatWeight, positionTicks: number): Rolled
 import type { BeatWeight } from '../../src/application/ports/IMetronome.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { MIDI } from '../support/fixtures.js';
+import { drawTheProfile } from '../../src/ui/profileChart.js';
+import type { ProfileAxis } from '../../src/domain/scoring/theProfile.js';
 
 function press(over: Partial<RolledPress> = {}): RolledPress {
   return {
@@ -1106,5 +1108,84 @@ describe('the bar as a row of squares', () => {
 
   it('refuses a click of no length', () => {
     expect(theSquaresOfTheBar(twoBarsOfFour(), 0, 0, 4)).toBeNull();
+  });
+});
+
+describe('the shape a reading is drawn as', () => {
+  function axesOf(count: number): ProfileAxis[] {
+    return Array.from({ length: count }, (_unused, at) => ({
+      name: `Axis ${at + 1}`,
+      of: 0.5,
+      said: 'something',
+    }));
+  }
+
+  it('draws as many corners as it is given, whatever the number', () => {
+    // The count decides the angle and nothing else, so there is no version of
+    // this written for four. His: "якщо ми захочемо додати ще одну точку, або
+    // мати динамічну кількість точок".
+    for (const count of [3, 4, 5, 8]) {
+      const shape = drawTheProfile(axesOf(count)).querySelector('.profile__shape');
+      expect(shape?.getAttribute('points')?.split(' '), `${count} axes`).toHaveLength(count);
+      expect(
+        drawTheProfile(axesOf(count)).querySelectorAll('.profile__spoke'),
+        `${count} spokes`,
+      ).toHaveLength(count);
+    }
+  });
+
+  it('names every axis on the page, not only in the shape', () => {
+    const names = [...drawTheProfile(axesOf(5)).querySelectorAll('.profile__name')].map(
+      (node) => node.textContent,
+    );
+
+    expect(names).toEqual(['Axis 1', 'Axis 2', 'Axis 3', 'Axis 4', 'Axis 5']);
+  });
+
+  it('lays a name against its spoke by where the spoke points', () => {
+    // Which is the whole of what keeps the names apart as the axes multiply:
+    // left to one anchor they pile up either side of the vertical.
+    const drawn = [...drawTheProfile(axesOf(4)).querySelectorAll('.profile__name')];
+
+    // Top, right, bottom, left.
+    expect(drawn.map((node) => node.getAttribute('text-anchor'))).toEqual([
+      'middle',
+      'start',
+      'middle',
+      'end',
+    ]);
+  });
+
+  it('draws no shape where there is no shape to draw', () => {
+    // Two axes are a line and one is a dot; neither says anything about a
+    // reading, and drawing something anyway would be a picture of nothing.
+    expect(drawTheProfile(axesOf(2)).querySelector('.profile__shape')).toBeNull();
+    expect(drawTheProfile(axesOf(1)).querySelector('.profile__shape')).toBeNull();
+  });
+
+  it('pulls a corner in as far as its axis fell short', () => {
+    const full = drawTheProfile([
+      { name: 'A', of: 1, said: '' },
+      { name: 'B', of: 1, said: '' },
+      { name: 'C', of: 1, said: '' },
+    ]);
+    const half = drawTheProfile([
+      { name: 'A', of: 0.5, said: '' },
+      { name: 'B', of: 1, said: '' },
+      { name: 'C', of: 1, said: '' },
+    ]);
+    const topOf = (chart: SVGElement): number =>
+      Number(
+        chart.querySelector('.profile__shape')?.getAttribute('points')?.split(' ')[0]?.split(',')[1],
+      );
+
+    // The first corner points straight up, so falling short moves it down.
+    expect(topOf(half)).toBeGreaterThan(topOf(full));
+  });
+
+  it('says what it shows to anything that cannot see it', () => {
+    const said = drawTheProfile(axesOf(3)).getAttribute('aria-label') ?? '';
+
+    expect(said).toContain('Axis 1, something');
   });
 });

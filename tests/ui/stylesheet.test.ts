@@ -57,6 +57,27 @@ describe('the stylesheet', () => {
     expect(grid?.body).toMatch(/align-content\s*:\s*start/);
   });
 
+  it('names no colour the sheet does not define', () => {
+    // A `var()` naming nothing falls through to whatever was inherited, which
+    // on a page of dark text on white is usually *almost* right - so it ships
+    // looking fine and is wrong only where the inherited colour differs. jsdom
+    // applies no stylesheet, so no other test in the suite can see it.
+    //
+    // A name with a fallback after it is excused, and several here are: the
+    // drawing's own lengths are written from the page at run time and the sheet
+    // only says what they are until they arrive. Asked per *occurrence* and not
+    // per name, because one rule spelling a fallback does not make every other
+    // use of that name safe - which is exactly how `--muted` slipped through.
+    const defined = new Set(
+      [...CSS.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1] ?? ''),
+    );
+    const bare = [...CSS.matchAll(/var\(\s*(--[a-z0-9-]+)\s*([,)])/g)]
+      .filter((match) => match[2] === ')')
+      .map((match) => match[1] ?? '');
+
+    expect([...new Set(bare)].filter((name) => !defined.has(name))).toEqual([]);
+  });
+
   it('gives the corner of the page one line, not a ragged one', () => {
     // The clock, the listening light and the way back to the last reading are
     // buttons of different heights - one carries two lines of text where

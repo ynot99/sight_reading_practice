@@ -11,6 +11,7 @@ import {
   LEAST_ROW,
   MOST_ROW,
   theMapOfTheRun,
+  theSquaresOfTheBar,
   theWindowOnTheRun,
   scrollForTheWindowAt,
   scrollAfterZoom,
@@ -1019,5 +1020,91 @@ describe('the zoom a wheel asks for', () => {
   it('will not go closer or wider than the drawing allows', () => {
     expect(zoomAfterWheel(LEAST_ZOOM, 4_000, LEAST_ZOOM, MOST_ZOOM)).toBe(LEAST_ZOOM);
     expect(zoomAfterWheel(MOST_ZOOM, -4_000, LEAST_ZOOM, MOST_ZOOM)).toBe(MOST_ZOOM);
+  });
+});
+
+describe('the bar as a row of squares', () => {
+  /** Two bars of four at sixty: a click a second, a bar every four. */
+  function twoBarsOfFour(): RunRoll {
+    const roller = new RollRecorder();
+    const quarter = Duration.QUARTER.ticks;
+    for (let click = 0; click < 8; click += 1) {
+      roller.beat(click * 1_000, click % 4 === 0 ? 'downbeat' : 'beat', click * quarter);
+    }
+    return roller.roll();
+  }
+
+  it('holds as many squares as the metre says, not as many as were played', () => {
+    // A run stopped after one note still stopped inside a bar of four, and a
+    // row of one square would be counting what was played rather than what was
+    // written. Where the bar *began* is the run's answer, because that is a
+    // moment; how long it is, is the metre's.
+    const oneNote = new RollRecorder();
+    oneNote.beat(0, 'downbeat', 0);
+
+    expect(theSquaresOfTheBar(twoBarsOfFour(), 0, 1_000, 4)?.of).toBe(4);
+    expect(theSquaresOfTheBar(oneNote.roll(), 0, 1_000, 4)?.of).toBe(4);
+  });
+
+  it('refuses a bar of no clicks', () => {
+    expect(theSquaresOfTheBar(twoBarsOfFour(), 0, 1_000, 0)).toBeNull();
+  });
+
+  it('fills one the moment the bar begins', () => {
+    // The downbeat is a click like any other, so a bar of four opens with one
+    // of its four already gone rather than with none.
+    expect(theSquaresOfTheBar(twoBarsOfFour(), 0, 1_000, 4)?.filled).toBe(1);
+  });
+
+  it('counts in written time, not in the time the reader took', () => {
+    // Which is the whole of what it is for: the drawing is the reader's own
+    // time and stretches wherever they waited, so a row counting strictly
+    // beside it makes the gap between the two visible. His: "статичний
+    // метроном який не йде за затримками".
+    const roll = twoBarsOfFour();
+
+    expect(theSquaresOfTheBar(roll, 2_500, 1_000, 4)?.filled).toBe(3);
+    expect(theSquaresOfTheBar(roll, 3_900, 1_000, 4)?.filled).toBe(4);
+  });
+
+  it('starts counting again at every bar line', () => {
+    // His own second answer: "збивався кожного бару (починався з сильної
+    // долі)". Counted on from the top of a piece it would be a bar out by the
+    // middle and would say nothing about the bar in front of the reader.
+    const roll = twoBarsOfFour();
+
+    expect(theSquaresOfTheBar(roll, 4_000, 1_000, 4)?.filled).toBe(1);
+    expect(theSquaresOfTheBar(roll, 6_200, 1_000, 4)?.filled).toBe(3);
+  });
+
+  it('says so once strict time has left the bar behind', () => {
+    // A click over is a whole click late, which is the thing worth seeing
+    // rather than the fractions before it. His: "якщо був зайвий вже клік - то
+    // всі квадратики замальовуються червоним кольором".
+    const roll = twoBarsOfFour();
+
+    expect(theSquaresOfTheBar(roll, 3_999, 1_000, 4)?.overflowed).toBe(false);
+    // The reader is still inside the first bar of the drawing, and the
+    // metronome has gone into the next one.
+    const late = theSquaresOfTheBar({ ...roll, beats: roll.beats.slice(0, 4) }, 4_500, 1_000, 4);
+    expect(late?.overflowed).toBe(true);
+    // And every square is filled, so the red has something to colour.
+    expect(late?.filled).toBe(late?.of);
+  });
+
+  it('says nothing where no bar line has been passed', () => {
+    const roller = new RollRecorder();
+    roller.beat(5_000, 'downbeat', 0);
+
+    expect(theSquaresOfTheBar(roller.roll(), 1_000, 1_000, 4)).toBeNull();
+  });
+
+  it('says nothing about free playing', () => {
+    // A recording has no bar lines, because nothing was keeping its time.
+    expect(theSquaresOfTheBar(new RollRecorder().roll(), 0, 1_000, 4)).toBeNull();
+  });
+
+  it('refuses a click of no length', () => {
+    expect(theSquaresOfTheBar(twoBarsOfFour(), 0, 0, 4)).toBeNull();
   });
 });

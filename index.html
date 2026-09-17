@@ -390,7 +390,19 @@
             <button id="roll-close" type="button" class="button button--ghost sheet__close"
               title="Close" aria-label="Close">&times;</button>
           </div>
-          <div id="roll-body" class="roll-body"></div>
+          <!--
+            The bar as a row of squares, floating over the drawing.
+
+            Over it rather than beside it: the drawing is the thing worth the
+            room, and a strip of four small squares covers almost none of it.
+            His: "може варто їх додати щоб вони були у float стейті прям на
+            viewer десь зверху? Буде перекривати трішки, але це буде займати
+            меньше місця".
+          -->
+          <div class="roll-stage">
+            <div id="roll-body" class="roll-body"></div>
+            <div id="roll-beats" class="roll-beats" hidden aria-hidden="true"></div>
+          </div>
           <!--
             The whole run on one line, and the part of it on the screen.
 
@@ -466,6 +478,10 @@
               <label class="checkbox" for="roll-ghosts">
                 <input id="roll-ghosts" type="checkbox" checked />
                 Show the notes that were asked for
+              </label>
+              <label class="checkbox" for="roll-beats-shown">
+                <input id="roll-beats-shown" type="checkbox" checked />
+                Count the bar out in written time
               </label>
               <label class="checkbox" for="roll-slips">
                 <input id="roll-slips" type="checkbox" checked />

@@ -1476,6 +1476,35 @@ describe('AppView', () => {
     });
 
 
+    it('counts the bar out over the drawing, and can be put away', async () => {
+      // A row of squares saying where written time has got to, over a picture
+      // of where the reader actually got to. His: "квадратики які
+      // репрезентують кліки метроному", and floating: "може варто їх додати
+      // щоб вони були у float стейті прям на viewer десь зверху".
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(longExercise({ bars: 4, tempoBpm: 60 }));
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const squares = element('roll-beats');
+      expect(squares.hidden).toBe(false);
+      // Four to a bar of four, and the downbeat is one of them.
+      expect(squares.children.length).toBe(4);
+      expect(squares.querySelectorAll('.roll-beats__on')).toHaveLength(1);
+
+      // And out of the way for a reader it is in the way of.
+      const shown = element<HTMLInputElement>('roll-beats-shown');
+      shown.checked = false;
+      shown.dispatchEvent(new Event('change'));
+
+      expect(squares.hidden).toBe(true);
+    });
+
+
     it('puts the whole run on one line under the drawing', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();

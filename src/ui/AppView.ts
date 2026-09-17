@@ -46,7 +46,7 @@ import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { barLines, barNumberOf, measureCount } from '../domain/model/Exercise.js';
+import { barLines, barNumberOf, measureCount, spanMs } from '../domain/model/Exercise.js';
 import { expectedFor } from '../domain/timeline/Timeline.js';
 import {
   clicksBefore,
@@ -65,6 +65,7 @@ import {
   drawTheRoll,
   scrollAfterZoom,
   shareOfTheRun,
+  theSquaresOfTheBar,
   zoomAfterWheel,
   LEAST_ZOOM,
   MOST_ZOOM,
@@ -1420,6 +1421,8 @@ export class AppView {
     rollBody: HTMLElement;
     rollKeep: HTMLButtonElement;
     rollTitle: HTMLElement;
+    rollBeats: HTMLElement;
+    rollBeatsShown: HTMLInputElement;
     rollMap: HTMLElement;
     rollMapWindow: HTMLElement;
     rollMapHead: HTMLElement;
@@ -1681,6 +1684,8 @@ export class AppView {
       rollBody: requireElement(doc, 'roll-body'),
       rollKeep: requireElement(doc, 'roll-keep'),
       rollTitle: requireElement(doc, 'roll-title'),
+      rollBeats: requireElement(doc, 'roll-beats'),
+      rollBeatsShown: requireElement(doc, 'roll-beats-shown'),
       rollMap: requireElement(doc, 'roll-map'),
       rollMapWindow: requireElement(doc, 'roll-map-window'),
       rollMapHead: requireElement(doc, 'roll-map-head'),
@@ -5761,6 +5766,9 @@ export class AppView {
       }
       this.showTheRunWhereItWasPointedAt(event);
     });
+    this.listen(this.el.rollBeatsShown, 'change', () => {
+      this.countTheBarOut();
+    });
     this.listen(this.el.rollKeep, 'click', () => {
       this.keepTheRun();
     });
@@ -6484,6 +6492,67 @@ export class AppView {
   }
 
   /**
+   * Counts the bar out in written time, over the drawing.
+   *
+   * A row of squares saying where a metronome would have got to by now, drawn
+   * over a picture of where the reader actually got to - so the gap between the
+   * two is visible without anybody measuring anything. Red once written time
+   * has left the bar behind: a click over is a whole click late.
+   */
+  private countTheBarOut(): void {
+    const roll = this.theRoll();
+    const clickMs = this.theWrittenClickMs();
+    const bar =
+      roll === null || !this.el.rollBeatsShown.checked
+        ? null
+        : theSquaresOfTheBar(roll, this.headIsAtMs(), clickMs, this.theClicksInABar());
+    this.el.rollBeats.hidden = bar === null;
+    if (bar === null) {
+      return;
+    }
+    this.el.rollBeats.classList.toggle('roll-beats--over', bar.overflowed);
+    this.el.rollBeats.replaceChildren(
+      ...Array.from({ length: bar.of }, (_unused, at) => {
+        const square = this.doc.createElement('span');
+        square.className = at < bar.filled ? 'roll-beats__on' : 'roll-beats__off';
+        return square;
+      }),
+    );
+  }
+
+  /**
+   * How long one click of the grid lasts as the piece is written.
+   *
+   * The one thing the roll cannot say: it remembers when things happened, not
+   * how fast they were meant to. Taken from the exercise at the tempo the
+   * reader chose, which is the speed they were reading at.
+   */
+  private theClicksInABar(): number {
+    const exercise = this.runtime.controller.currentTimeline?.exercise ?? null;
+    const metre = exercise === null ? undefined : barLines(exercise)[0]?.timeSignature;
+    if (metre === undefined) {
+      return 0;
+    }
+    const parts = Math.max(1, Math.round(this.theRollsGrid().parts));
+    return Math.max(1, Math.round(metre.ticksPerMeasure / (metre.ticksPerPulse / parts)));
+  }
+
+  private theWrittenClickMs(): number {
+    const timeline = this.runtime.controller.currentTimeline;
+    const exercise = timeline?.exercise ?? null;
+    if (exercise === null) {
+      return 0;
+    }
+    const bars = barLines(exercise);
+    const first = bars[0]?.timeSignature;
+    if (first === undefined) {
+      return 0;
+    }
+    const parts = Math.max(1, Math.round(this.theRollsGrid().parts));
+    return spanMs(exercise, 0, Math.round(first.ticksPerPulse / parts));
+  }
+
+  /**
    * Stands the head on the map where it stands in the drawing.
    *
    * The map is where the reader looks to find a place; leaving off the one
@@ -7137,6 +7206,7 @@ export class AppView {
     // наразі пропадає як тільки робиться stop".
     drawn.style.setProperty('--roll-at', (this.headIsAtMs() / 1000).toFixed(3));
     this.sayWhereTheHeadIs();
+    this.countTheBarOut();
     if (!sounding) {
       return;
     }

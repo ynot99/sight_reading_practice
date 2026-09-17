@@ -462,6 +462,80 @@ export function scrollAfterZoom(
   return Math.max(0, share * toWidePx - fingerAtPx);
 }
 
+/**
+ * The bar the marker stands in, as a row of squares.
+ *
+ * What it is a picture *of*: where strict time has got to in this bar, drawn
+ * over a picture of where the reader actually got to. The drawing itself is the
+ * reader's time - it stretches wherever they waited - so a row counting in
+ * written time beside it makes the gap between the two visible without anybody
+ * having to measure anything. His: "квадратики які репрезентують кліки
+ * метроному... та вони заповнюються із баром по клікам метроному".
+ *
+ * Counted from this bar's own downbeat rather than from the run's beginning,
+ * which is his own second answer: "збивався кожного бару (починався з сильної
+ * долі)". A metronome counting on from the top of a piece would be a bar or two
+ * out by the middle of it and would say nothing about the bar in front of the
+ * reader.
+ */
+export interface TheBarsSquares {
+  /** How many clicks the bar holds. */
+  readonly of: number;
+  /** How many of them strict time has passed, at least one and never more. */
+  readonly filled: number;
+  /**
+   * Strict time has left the bar behind while the reader has not.
+   *
+   * His: "якщо був зайвий вже клік - то всі квадратики замальовуються червоним
+   * кольором". A click over is a whole click late, which on any reading is the
+   * thing worth seeing rather than the fractions before it.
+   */
+  readonly overflowed: boolean;
+}
+
+/**
+ * The squares for the moment the marker stands at.
+ *
+ * `null` where the run has no bar lines to count within - free playing, or a
+ * moment in front of the first of them. Nothing was keeping that time, so there
+ * is no strict count to hold it to.
+ *
+ * `clickMs` is the written length of one click, which is the one thing the roll
+ * cannot know: it remembers when things happened, not how fast they were
+ * supposed to.
+ */
+export function theSquaresOfTheBar(
+  roll: RunRoll,
+  atMs: number,
+  clickMs: number,
+  clicksInBar: number,
+): TheBarsSquares | null {
+  if (clickMs <= 0 || clicksInBar <= 0) {
+    return null;
+  }
+  // How many clicks a bar holds is the metre's answer and not the run's: a run
+  // stopped after one note still stopped inside a bar of four, and a row of one
+  // square would be counting what was played rather than what was written.
+  // Where the bar *began* is the run's answer, because that is a moment.
+  let barBegan: number | null = null;
+  for (const beat of roll.beats) {
+    if (beat.weight === 'downbeat' && beat.atMs <= atMs && beat.atMs > (barBegan ?? -1)) {
+      barBegan = beat.atMs;
+    }
+  }
+  if (barBegan === null) {
+    return null;
+  }
+  // One at the downbeat itself, which is a click like any other: a bar of four
+  // shows four squares and the first is filled the moment the bar begins.
+  const gone = Math.floor((atMs - barBegan) / clickMs) + 1;
+  return {
+    of: clicksInBar,
+    filled: Math.min(clicksInBar, Math.max(1, gone)),
+    overflowed: gone > clicksInBar,
+  };
+}
+
 /** One thing worth seeing on the map of a run, as shares of its whole length. */
 export interface MapMark {
   readonly kind: 'wait' | 'rush';

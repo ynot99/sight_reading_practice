@@ -513,6 +513,64 @@ textarea {
  * nested scrollers mean a finger that moves the wrong one.
  */
 /*
+ * Where the drawing stands, so something can float over it.
+ *
+ * A place and not a variant of the drawing: the squares are laid against this
+ * rather than against the run, so that scrolling the run does not carry them
+ * off the side of it.
+ */
+.roll-stage {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/*
+ * The bar counted out in written time, floating over the drawing.
+ *
+ * Over it rather than beside it: the drawing is what the sheet is for, and four
+ * small squares cover almost none of it. It takes no pointer either - a tap
+ * near the top of the run is a tap on the run.
+ */
+
+.roll-beats {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  gap: 3px;
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+.roll-beats__on,
+.roll-beats__off {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+}
+
+.roll-beats__on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Every square at once: a click over is a whole click late, not a fraction. */
+.roll-beats--over .roll-beats__on,
+.roll-beats--over .roll-beats__off {
+  background: var(--wrong);
+  border-color: var(--wrong);
+}
+
+/*
  * The whole run on one line, with the part on the screen boxed.
  *
  * Only the stops are on it: what a scroll through a long run is a search for is

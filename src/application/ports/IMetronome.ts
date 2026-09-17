@@ -127,6 +127,7 @@ export type MetronomeDropout = MetronomeCycleDropout | MetronomeSilenceFrom;
  */
 export const CLICK_WHEN = [
   'always',
+  'with-my-bars',
   'with-me',
   'count-in-only',
   'cycle-1',
@@ -168,6 +169,23 @@ export function clickIsSilent(when: ClickWhen): boolean {
  */
 export function clickFollowsTheReader(when: ClickWhen): boolean {
   return when === 'with-me';
+}
+
+/**
+ * Whether the pulse is put back on the reader's own downbeat at each bar line.
+ *
+ * Between the other two. All the way through is strict time, which in a frame
+ * that waits has parted company with the reader by the second bar; with them
+ * beat by beat is no pulse at all, and a click that only ever arrives where
+ * they put it gives them nothing to play against. This is a pulse inside the
+ * bar and their own downbeat to start it - which is where a musician re-finds
+ * the beat anyway.
+ *
+ * His: "варіант метроному у wait for xxx щоб сильну долю збивати на початку
+ * кожного бару".
+ */
+export function clickResetsEachBar(when: ClickWhen): boolean {
+  return when === 'with-my-bars';
 }
 
 /** Bars in one sounding half of a cycle, or `null` when there is no cycle. */

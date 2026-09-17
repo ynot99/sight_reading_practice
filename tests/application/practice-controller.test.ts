@@ -53,7 +53,7 @@ import {
 import { measureCount } from '../../src/domain/model/Exercise.js';
 import { emptyRoll, theWaits } from '../../src/application/session/RunRoll.js';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { noteEntry } from '../../src/domain/model/Exercise.js';
+import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
 
 /** Strips the printed tempo so two renderings can be compared note for note. */
@@ -1729,6 +1729,158 @@ describe('hearing the hand you are not reading', () => {
     // The reader's own step now, and the three quarters under their held note
     // where they are written - a second apart at sixty.
     expect(reached).toEqual(['0@0', '1@1000', '2@2000', '3@3000']);
+  });
+
+
+  it('puts the pulse back on the reader’s own downbeat at each bar line', async () => {
+    // Between the other two answers. All the way through is strict time, which
+    // in a frame that waits has parted company with the reader by the second
+    // bar; with them beat by beat is no pulse at all, and a click that only
+    // ever arrives where they put it gives them nothing to play against. His:
+    // "варіант метроному у wait for xxx щоб сильну долю збивати на початку
+    // кожного бару".
+    const rig = createController(true);
+    await rig.controller.openScore(longExercise({ bars: 3, tempoBpm: 60 }));
+    rig.controller.updateSettings({
+      modeId: new WaitMode().id,
+      countInBars: 0,
+      clickWhen: 'with-my-bars',
+      clickPattern: 'pulse',
+    });
+    rig.controller.start();
+    // A pulse runs in this frame, so the music begins on its first tick.
+    rig.metronome.advanceSubdivisions(1);
+    for (let beat = 0; beat < 4; beat += 1) {
+      const step = rig.controller.session?.currentStep;
+      for (const midi of step?.expectedMidi ?? []) {
+        rig.midi.noteOn(midi, beat === 3 ? 5_000 : beat * 1_000);
+      }
+    }
+    // The pulse counts on while the reader takes their time over the bar line.
+    rig.metronome.advanceSubdivisions(3);
+    const before = rig.metronome.nextTickIndex;
+
+    // The downbeat of the second bar, given by the reader wherever they are.
+    const downbeat = rig.controller.session?.currentStep;
+    for (const midi of downbeat?.expectedMidi ?? []) {
+      rig.midi.noteOn(midi, 6_000);
+    }
+
+    // The pulse begins again on it rather than counting on from where strict
+    // time had got to.
+    expect(rig.metronome.isRunning).toBe(true);
+    expect(rig.metronome.nextTickIndex).toBe(0);
+    expect(before).toBeGreaterThan(0);
+
+    // And only at a bar line: the beats inside the bar are the pulse's own, or
+    // there would be no pulse to play against at all.
+    rig.metronome.advanceSubdivisions(2);
+    const inside = rig.controller.session?.currentStep;
+    for (const midi of inside?.expectedMidi ?? []) {
+      rig.midi.noteOn(midi, 7_000);
+    }
+
+    expect(rig.metronome.nextTickIndex).toBeGreaterThan(0);
+  });
+
+  it('leaves the pulse alone in a frame that keeps its own time', async () => {
+    // There the reader is following the pulse rather than the other way about,
+    // so there is nothing to bring back and moving it would move the music.
+    const rig = createController(true);
+    await rig.controller.openScore(longExercise({ bars: 3, tempoBpm: 60 }));
+    rig.controller.updateSettings({
+      modeId: FLOW_MODE_ID,
+      countInBars: 0,
+      clickWhen: 'with-my-bars',
+      clickPattern: 'pulse',
+    });
+    rig.controller.start();
+
+    // Right through the first bar line and a little past it.
+    rig.metronome.advanceSubdivisions(6);
+
+    expect(rig.metronome.nextTickIndex).toBeGreaterThan(4);
+  });
+
+  it('is not put back by a bar the reader had nothing to play in', async () => {
+    // A step that was nobody's to play is not a downbeat anybody gave, so there
+    // is no moment in it to put the pulse back on. Read off the plan and not
+    // off the count: both a given downbeat and a skipped one would leave the
+    // count at nought, and what tells them apart is which bar the pulse was
+    // told it had.
+    const base = twoBarExercise({ tempoBpm: 60 });
+    const bassAloneInBarTwo: Exercise = {
+      ...base,
+      staves: [
+        {
+          staffNumber: 1,
+          voice: 1,
+          clef: 'treble',
+          clefChanges: [],
+          measures: [
+            bar(noteEntry(p('C4'), Duration.WHOLE)),
+            bar(restEntry(Duration.WHOLE)),
+            bar(noteEntry(p('E4'), Duration.WHOLE)),
+          ],
+        },
+        {
+          staffNumber: 2,
+          voice: 2,
+          clef: 'bass',
+          clefChanges: [],
+          measures: [
+            bar(noteEntry(p('C3'), Duration.WHOLE)),
+            bar(noteEntry(p('G2'), Duration.WHOLE)),
+            bar(noteEntry(p('C3'), Duration.WHOLE)),
+          ],
+        },
+      ],
+    };
+    const rig = createController(true);
+    await rig.controller.openScore(bassAloneInBarTwo);
+    rig.controller.updateSettings({
+      modeId: new WaitMode().id,
+      handStaff: 1,
+      countInBars: 0,
+      clickWhen: 'with-my-bars',
+      clickPattern: 'pulse',
+    });
+    rig.controller.start();
+    rig.metronome.advanceSubdivisions(1);
+
+    // Their own downbeat, which takes the pulse; the second bar is the other
+    // hand's alone and is walked past inside the same press.
+    for (const midi of rig.controller.session?.currentStep?.expectedMidi ?? []) {
+      rig.midi.noteOn(midi, 0);
+    }
+
+    // The pulse was given the bar the reader began, and no further.
+    const cfg = rig.metronome.currentConfig;
+    expect(cfg.endsAtTicks).toBe(Duration.QUARTER.ticks * 4);
+  });
+
+  it('leaves the pulse alone where the click was not asked to come back', async () => {
+    // The other two answers are untouched: one is strict time and the other is
+    // no pulse at all, and neither is a thing to be put back.
+    const rig = createController(true);
+    await rig.controller.openScore(longExercise({ bars: 3, tempoBpm: 60 }));
+    rig.controller.updateSettings({
+      modeId: new WaitMode().id,
+      countInBars: 0,
+      clickWhen: 'always',
+      clickPattern: 'pulse',
+    });
+    rig.controller.start();
+    rig.metronome.advanceSubdivisions(3);
+    for (let beat = 0; beat < 5; beat += 1) {
+      const step = rig.controller.session?.currentStep;
+      for (const midi of step?.expectedMidi ?? []) {
+        rig.midi.noteOn(midi, beat * 1_000);
+      }
+    }
+
+    // Still counting on: strict time never went back to anybody.
+    expect(rig.metronome.nextTickIndex).toBeGreaterThan(0);
   });
 
 

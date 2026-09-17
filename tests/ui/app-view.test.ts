@@ -7,6 +7,7 @@ import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js'
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
+import { CLICK_WHEN } from '../../src/application/ports/IMetronome.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
@@ -433,8 +434,22 @@ describe('AppView', () => {
     expect(element('rhythm-description').textContent).not.toBe('');
     expect(element<HTMLSelectElement>('click').options).toHaveLength(4);
     expect(element('click-description').textContent).not.toBe('');
-    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(7);
+    // The list rather than a number kept by hand: a count written out here goes
+    // stale the first time a choice is added, quietly checking less.
+    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(CLICK_WHEN.length);
     expect(element('dropout-description').textContent).not.toBe('');
+
+    // Each choice says what it does, and none of them falls through to a
+    // sentence meant for another: "with me" used to be described as a cycle
+    // and came out promising to leave the reader alone for nought bars.
+    for (const choice of CLICK_WHEN) {
+      const dropout = element<HTMLSelectElement>('dropout');
+      dropout.value = choice;
+      dropout.dispatchEvent(new Event('change'));
+      const said = element('dropout-description').textContent ?? '';
+      expect(said, choice).not.toBe('');
+      expect(said, choice).not.toContain('0 bar');
+    }
     expect(element<HTMLSelectElement>('scoring').options).toHaveLength(3);
     expect(element('scoring-description').textContent).not.toBe('');
   });

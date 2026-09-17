@@ -40,6 +40,7 @@ import {
 import { DEFAULT_SESSION_OPTIONS, type PracticeContext, type SessionOptions } from './PracticeContext.js';
 import type { NoteJudgedEvent, SessionEventMap } from './SessionEvents.js';
 import { RollRecorder, type RunRoll } from './RunRoll.js';
+import { clickResetsEachBar } from '../ports/IMetronome.js';
 import { createSessionMachine, type SessionStatus, type SessionTrigger } from './SessionState.js';
 
 export interface PracticeSessionDependencies {
@@ -567,7 +568,12 @@ export class PracticeSession {
    * of what asking for a click means.
    */
   private endOfTheMusic(countInBars: number, stopAtTicks?: number): number | null {
-    if (!this.mode.requiresMetronome) {
+    // A frame that waits has no end of its own: the music stops when the reader
+    // does, and a pulse told where the piece finishes would fall silent over
+    // music still to be played. Told where to stop outright it stops there,
+    // which is how a bar handed back to the reader is handed to them and no
+    // more of the piece with it.
+    if (!this.mode.requiresMetronome && stopAtTicks === undefined) {
       return null;
     }
     const last = this.timeline.at(this.lastIndex);
@@ -1037,6 +1043,10 @@ export class PracticeSession {
     if (result.status !== 'skipped') {
       this.writtenAnchor = { wallMs: finishedAt, ticks: step.onsetTicks };
     }
+    // The bar the reader has just begun, if they have begun one.
+    if (result.status !== 'skipped') {
+      this.startTheBarsPulseAt(step, finishedAt);
+    }
     this.emitter.emit('stepCompleted', { result, atMs: finishedAt });
 
     if (step.index >= this.lastIndex) {
@@ -1044,6 +1054,33 @@ export class PracticeSession {
       return;
     }
     this.enterStep(step.index + 1);
+  }
+
+  /**
+   * Puts the pulse back on the reader's own downbeat, at each bar line.
+   *
+   * Only where the music waits for them. Under a pulse that keeps the time
+   * there is nothing to bring back - the reader is following it, not the other
+   * way about - and moving it would be moving the music.
+   *
+   * Given this bar and no further, the same way a gated bar is: past the bar's
+   * written end the pulse has nothing true left to say, and the next downbeat
+   * is the reader's to give. See {@link clickResetsEachBar}.
+   */
+  private startTheBarsPulseAt(step: TimelineStep, atMs: number): void {
+    if (
+      !this.musicMovesWithTheReader ||
+      !clickResetsEachBar(this.options.clickWhen) ||
+      step.beat !== 1
+    ) {
+      return;
+    }
+    this.runStartedAt = atMs - this.elapsedTo(step.onsetTicks);
+    this.positionOffsetTicks = -step.onsetTicks;
+    this.configureThePulse(0, this.barEndAfter(step));
+    this.pulseGeneration += 1;
+    this.anchorOnTheNextTick = true;
+    this.metronome.start();
   }
 
   /**

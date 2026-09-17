@@ -766,6 +766,7 @@ function readRuler(value: string): RulerDivision {
 
 const CLICK_WHEN_LABELS: Readonly<Record<ClickWhen, string>> = {
   always: 'All the way through',
+  'with-my-bars': 'With me, bar by bar',
   'with-me': 'With me, beat by beat',
   'count-in-only': 'Only the count-in',
   'cycle-1': '1 bar on, 1 off',
@@ -797,6 +798,14 @@ function dropoutDescription(when: ClickWhen, countInBars: number): string {
     return countInBars > 0
       ? 'You are given the tempo and then left with it for the whole run.'
       : 'There is no count-in to give you the tempo, so nothing will sound at all.';
+  }
+  if (when === 'with-me') {
+    // It fell through to the cycle below, which has no bars to name for it and
+    // said the click would leave the reader alone for nought bars at a time.
+    return 'Every click is where you put it. Nothing sounds until you play.';
+  }
+  if (when === 'with-my-bars') {
+    return 'A steady click inside the bar, started again on your own downbeat at each bar line.';
   }
   const bars = dropoutCycleBars(when) ?? 0;
   return (

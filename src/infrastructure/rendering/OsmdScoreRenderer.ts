@@ -865,11 +865,13 @@ export class OsmdScoreRenderer
     // The engraver may only now exist, and it is made with following on.
     this.followOrTurn();
     this.applyPageFormat();
+    this.markSettled(false);
     const engravedAt = nowMs();
     osmd.render();
     const engravedMs = nowMs() - engravedAt;
     this.forgetSheets();
     this.fitPagesToTheirContent(engravedMs);
+    this.markSettled(true);
     this.loaded = true;
     this.engravedWidth = this.container.offsetWidth;
     this.walking = true;
@@ -952,11 +954,13 @@ export class OsmdScoreRenderer
     // the transport bar appearing - and a page is cut to the window.
     this.markPaged();
     this.applyPageFormat();
+    this.markSettled(false);
     const engravedAt = nowMs();
     this.osmd.render();
     const engravedMs = nowMs() - engravedAt;
     this.forgetSheets();
     this.fitPagesToTheirContent(engravedMs);
+    this.markSettled(true);
     this.engravedWidth = this.container.offsetWidth;
     this.walking = true;
     this.navigator.reset();
@@ -1087,6 +1091,21 @@ export class OsmdScoreRenderer
     const scroller = this.scroller();
     if (scroller instanceof HTMLElement) {
       scroller.dataset['paged'] = String(this.paged);
+    }
+  }
+
+  /**
+   * Says whether the pages have been measured and may now be skipped.
+   *
+   * False while anything is being engraved or fitted, because both read the
+   * pages' own boxes and a page the browser has been told it may skip answers
+   * that differently. True once the drawing has settled, which is when there
+   * is something to skip and nobody measuring.
+   */
+  private markSettled(settled: boolean): void {
+    const scroller = this.scroller();
+    if (scroller instanceof HTMLElement) {
+      scroller.dataset['settled'] = String(settled);
     }
   }
 

@@ -125,6 +125,33 @@ describe('the stylesheet', () => {
     }
   });
 
+  it('lets the browser skip pages only once they have been measured', () => {
+    // Every page of an engraved score is in the document at once, so a long
+    // piece hands the browser the whole of itself to lay out and paint - a
+    // quarter of a million shapes on a thirteen-hundred bar score, which is
+    // enough to have an iPad kill the tab.
+    const skip = rules().find((rule) => rule.selector === ".score__scroll[data-settled='true'] svg");
+
+    expect(skip?.body ?? '').toContain('content-visibility: auto');
+    // The remembered size, which is what keeps the column its true height and
+    // stops the page under the reader's finger jumping. A fixed size here
+    // would be a guess applied to every page of every score.
+    expect(skip?.body ?? '').toMatch(/contain-intrinsic-size:\s*auto /);
+  });
+
+  it('never lets a page be skipped while something is measuring it', () => {
+    // The fitting reads each page's own box against the box it was given, and
+    // a page the browser has been told it may skip answers that differently.
+    // Measure first, skip afterwards - so the rule may not be written without
+    // the flag that says the measuring is done.
+    const skipping = rules().filter((rule) => rule.body.includes('content-visibility'));
+
+    expect(skipping.length).toBeGreaterThan(0);
+    for (const rule of skipping) {
+      expect(rule.selector, rule.selector).toContain("data-settled='true'");
+    }
+  });
+
   it('leaves the drawing of a run no scrollbars of its own', () => {
     // The map under it is the one. They answered the same question and the map
     // answers it better - it says where in the run the view is *and* where the

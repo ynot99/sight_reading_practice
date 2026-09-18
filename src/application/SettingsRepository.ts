@@ -73,6 +73,35 @@ export interface KnownIds {
 
 const STORAGE_VERSION = 1;
 
+/**
+ * Settings that belong to one device and are never carried to another.
+ *
+ * How late this keyboard's notes arrive is a fact about this keyboard and this
+ * cable, how large the page is drawn is a fact about this screen, and the
+ * stretch of bars chosen belongs to whichever score is open here. Carried,
+ * each would be right on one device and wrong on the other.
+ */
+export const SETTINGS_KEPT_ON_THE_DEVICE: readonly string[] = [
+  'inputLatencyMs',
+  'zoom',
+  'traceTheStart',
+  'rangeFromBar',
+  'rangeToBar',
+];
+
+/** The settings another device shares, and when they last changed here. */
+export interface SharedSettings {
+  readonly values: Readonly<Record<string, unknown>>;
+  /** Wall clock; nought where nothing has changed since changes were timed. */
+  readonly changedAtMs: number;
+}
+
+function shared(practice: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(practice).filter(([key]) => !SETTINGS_KEPT_ON_THE_DEVICE.includes(key)),
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -460,6 +489,8 @@ export class SettingsRepository {
   private readonly known: KnownIds;
   private practice: Record<string, unknown> = {};
   private audio: AudioSettings = DEFAULT_AUDIO_SETTINGS;
+  /** When a shared setting last changed; see {@link sharedSettings}. */
+  private changedAtMs = 0;
 
   constructor(store: ISettingsStore, known: KnownIds) {
     this.store = store;
@@ -473,13 +504,50 @@ export class SettingsRepository {
     const practice = decodePracticeSettings(root['practice'], this.known);
     this.audio = decodeAudioSettings(root['audio']);
     this.practice = isRecord(root['practice']) ? root['practice'] : {};
+    const changed = root['changedAtMs'];
+    this.changedAtMs = typeof changed === 'number' && Number.isFinite(changed) ? changed : 0;
 
     return { practice, audio: this.audio };
   }
 
-  savePractice(settings: PracticeSettings): void {
-    this.practice = encodePracticeSettings(settings);
+  /**
+   * Keeps the practice settings, and when a shared one last changed.
+   *
+   * Only when one *did* change: the settings are saved whenever anything
+   * about them is told, which includes opening the page and a change of zoom,
+   * and a device that merely opened would otherwise claim to hold the newest
+   * word and overwrite a real change made elsewhere.
+   */
+  savePractice(settings: PracticeSettings, atMs: number): void {
+    const next = encodePracticeSettings(settings);
+    if (JSON.stringify(shared(next)) !== JSON.stringify(shared(this.practice))) {
+      this.changedAtMs = atMs;
+    }
+    this.practice = next;
     this.flush();
+  }
+
+  /** What another device may share of the practice settings, and when it last changed. */
+  sharedSettings(): SharedSettings {
+    return { values: shared(this.practice), changedAtMs: this.changedAtMs };
+  }
+
+  /**
+   * Takes another device's shared settings, keeping this device's own, and
+   * gives back the whole of them as they now stand.
+   *
+   * With the other device's moment rather than now: taking a word is not
+   * saying one, and a device that had only caught up would otherwise be the
+   * newest, and win against a change made elsewhere before it caught up.
+   */
+  adoptSettings(theirs: SharedSettings): Partial<PracticeSettings> {
+    const own = Object.fromEntries(
+      Object.entries(this.practice).filter(([key]) => SETTINGS_KEPT_ON_THE_DEVICE.includes(key)),
+    );
+    this.practice = { ...shared(theirs.values), ...own };
+    this.changedAtMs = theirs.changedAtMs;
+    this.flush();
+    return decodePracticeSettings(this.practice, this.known);
   }
 
   saveAudio(audio: AudioSettings): void {
@@ -496,6 +564,7 @@ export class SettingsRepository {
       version: STORAGE_VERSION,
       practice: this.practice,
       audio: this.audio,
+      changedAtMs: this.changedAtMs,
     });
   }
 }

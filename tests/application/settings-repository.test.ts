@@ -10,6 +10,8 @@ import {
 import type { PracticeSettings } from '../../src/application/PracticeController.js';
 import { InMemorySettingsStore, type ISettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { volumeToGain } from '../../src/application/ports/IVolumeControl.js';
+import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
+import { SettingsSync } from '../../src/application/SettingsSync.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
@@ -255,7 +257,7 @@ describe('SettingsRepository', () => {
     const store = new InMemorySettingsStore();
     const first = new SettingsRepository(store, KNOWN);
     first.load();
-    first.savePractice(SETTINGS);
+    first.savePractice(SETTINGS, 1_000);
     first.saveAudio({
       metronomeVolume: 0.2,
       instrumentVolume: 0.9,
@@ -284,7 +286,7 @@ describe('SettingsRepository', () => {
     const store = new InMemorySettingsStore();
     const repository = new SettingsRepository(store, KNOWN);
     repository.load();
-    repository.savePractice(SETTINGS);
+    repository.savePractice(SETTINGS, 1_000);
 
     repository.saveAudio({
       metronomeVolume: 0,
@@ -304,7 +306,7 @@ describe('SettingsRepository', () => {
     const store = new InMemorySettingsStore();
     const repository = new SettingsRepository(store, KNOWN);
     repository.load();
-    repository.savePractice(SETTINGS);
+    repository.savePractice(SETTINGS, 1_000);
 
     expect(store.read()).toMatchObject({ version: 1 });
   });
@@ -335,7 +337,7 @@ describe('SettingsRepository', () => {
     );
 
     expect(() => repository.load()).not.toThrow();
-    expect(() => repository.savePractice(SETTINGS)).not.toThrow();
+    expect(() => repository.savePractice(SETTINGS, 1_000)).not.toThrow();
   });
 });
 
@@ -350,5 +352,167 @@ describe('volumeToGain', () => {
   it('clamps values from outside the slider', () => {
     expect(volumeToGain(-1, 0.5)).toBe(0);
     expect(volumeToGain(9, 0.5)).toBeCloseTo(0.5, 10);
+  });
+});
+
+/** A drive folder as a map of names to contents. */
+class FolderDrive implements ICloudDrive {
+  readonly files = new Map<string, { id: string; content: string }>();
+  private made = 0;
+
+  prepare(): void {}
+
+  connect(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  list(): Promise<readonly CloudFile[]> {
+    return Promise.resolve([...this.files].map(([name, file]) => ({ id: file.id, name })));
+  }
+
+  read(id: string): Promise<string> {
+    const found = [...this.files.values()].find((file) => file.id === id);
+    return found === undefined ? Promise.reject(new Error('gone')) : Promise.resolve(found.content);
+  }
+
+  write(name: string, content: string, replacing: string | null): Promise<CloudFile> {
+    const id = replacing ?? `file-${String((this.made += 1))}`;
+    this.files.set(name, { id, content });
+    return Promise.resolve({ id, name });
+  }
+}
+
+describe('settings shared between devices', () => {
+  function repository(): SettingsRepository {
+    const kept = new SettingsRepository(new InMemorySettingsStore(), KNOWN);
+    kept.load();
+    return kept;
+  }
+
+  it('times a change to a shared setting, and nothing else', () => {
+    // A device that only opened, or only zoomed, has said nothing another
+    // device should give way to.
+    const kept = repository();
+    kept.savePractice(SETTINGS, 1_000);
+    kept.savePractice(SETTINGS, 2_000);
+    kept.savePractice({ ...SETTINGS, zoom: 2 }, 3_000);
+    expect(kept.sharedSettings().changedAtMs).toBe(1_000);
+
+    kept.savePractice({ ...SETTINGS, zoom: 2, tempoPercent: 90 }, 4_000);
+
+    expect(kept.sharedSettings().changedAtMs).toBe(4_000);
+  });
+
+  it('keeps that moment across a visit', () => {
+    const store = new InMemorySettingsStore();
+    const first = new SettingsRepository(store, KNOWN);
+    first.load();
+    first.savePractice(SETTINGS, 4_000);
+
+    const again = new SettingsRepository(store, KNOWN);
+    again.load();
+
+    expect(again.sharedSettings().changedAtMs).toBe(4_000);
+  });
+
+  it('shares everything but what belongs to one device', () => {
+    const kept = repository();
+    kept.savePractice(SETTINGS, 1_000);
+
+    const values = kept.sharedSettings().values;
+
+    for (const own of ['inputLatencyMs', 'zoom', 'traceTheStart', 'rangeFromBar', 'rangeToBar']) {
+      expect(values).not.toHaveProperty(own);
+    }
+    expect(values['tempoPercent']).toBe(84);
+  });
+
+  it('takes another device settings, keeping its own, with their moment', () => {
+    // Taking a word is not saying one: a device that has only caught up must
+    // not come out newer than a change made elsewhere before it did.
+    const kept = repository();
+    kept.savePractice(SETTINGS, 1_000);
+
+    const now = kept.adoptSettings({
+      values: { ...kept.sharedSettings().values, tempoPercent: 50, zoom: 2.5 },
+      changedAtMs: 7_000,
+    });
+    kept.savePractice({ ...SETTINGS, ...now }, 9_000);
+
+    expect(now.tempoPercent).toBe(50);
+    expect(now.zoom).toBe(SETTINGS.zoom);
+    expect(kept.sharedSettings().changedAtMs).toBe(7_000);
+  });
+});
+
+describe('syncing the settings through the drive', () => {
+  function device(drive: FolderDrive, changes: Partial<PracticeSettings>, atMs: number) {
+    const settings = new SettingsRepository(new InMemorySettingsStore(), KNOWN);
+    settings.load();
+    if (atMs > 0) {
+      settings.savePractice({ ...SETTINGS, ...changes }, atMs);
+    }
+    const applied: Partial<PracticeSettings>[] = [];
+    const sync = new SettingsSync({ drive, settings, apply: (practice) => applied.push(practice) });
+    return { settings, sync, applied };
+  }
+
+  it('sends them where the drive has none', async () => {
+    const drive = new FolderDrive();
+    const pc = device(drive, { tempoPercent: 70 }, 1_000);
+
+    expect(await pc.sync.sync()).toBe('sent');
+    expect(JSON.parse(drive.files.get('settings.json')?.content ?? '{}')).toMatchObject({
+      changedAtMs: 1_000,
+      practice: { tempoPercent: 70 },
+    });
+  });
+
+  it('brings newer ones here and puts them in front of the reader', async () => {
+    const drive = new FolderDrive();
+    await device(drive, { tempoPercent: 70 }, 5_000).sync.sync();
+    const ipad = device(drive, { tempoPercent: 100, zoom: 2 }, 1_000);
+
+    expect(await ipad.sync.sync()).toBe('brought');
+    expect(ipad.applied[0]?.tempoPercent).toBe(70);
+    expect(ipad.applied[0]?.zoom).toBe(2);
+  });
+
+  it('sends newer ones from here over older ones on the drive', async () => {
+    const drive = new FolderDrive();
+    await device(drive, { tempoPercent: 70 }, 1_000).sync.sync();
+    const pc = device(drive, { tempoPercent: 90 }, 5_000);
+
+    expect(await pc.sync.sync()).toBe('sent');
+    expect(pc.applied).toEqual([]);
+  });
+
+  it('starts a new device from where the others are', async () => {
+    // Nothing changed here since changes were timed, so nothing here can win.
+    const drive = new FolderDrive();
+    await drive.write(
+      'settings.json',
+      JSON.stringify({ version: 1, changedAtMs: 0, practice: { tempoPercent: 70 } }),
+      null,
+    );
+    const ipad = device(drive, {}, 0);
+
+    expect(await ipad.sync.sync()).toBe('brought');
+    expect(ipad.applied[0]?.tempoPercent).toBe(70);
+  });
+
+  it('says so when both already agree', async () => {
+    const drive = new FolderDrive();
+    const pc = device(drive, { tempoPercent: 70 }, 1_000);
+    await pc.sync.sync();
+
+    expect(await pc.sync.sync()).toBe('same');
+  });
+
+  it('reads settings it cannot make sense of as none', async () => {
+    const drive = new FolderDrive();
+    await drive.write('settings.json', 'not json', null);
+
+    expect(await device(drive, { tempoPercent: 70 }, 1_000).sync.sync()).toBe('sent');
   });
 });

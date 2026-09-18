@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
 import { LibrarySync } from '../../src/application/LibrarySync.js';
+import { SettingsSync } from '../../src/application/SettingsSync.js';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PracticeController } from '../../src/application/PracticeController.js';
@@ -318,7 +319,7 @@ function createRig(
     },
   });
   controller.events.on('settingsChanged', ({ settings: current }) => {
-    settings.savePractice(current);
+    settings.savePractice(current, Date.now());
   });
 
   const takePlayer = new TakePlayer({ instrument, clock });
@@ -348,6 +349,13 @@ function createRig(
 
   const drive = new FolderDrive();
   const librarySync = new LibrarySync({ drive, store: scoreStore, reload: () => scores.load() });
+  const settingsSync = new SettingsSync({
+    drive,
+    settings,
+    apply: (practice) => {
+      controller.updateSettings(practice);
+    },
+  });
 
   const runtime: AppRuntime = {
     controller,
@@ -362,6 +370,7 @@ function createRig(
     storage,
     cloudDrive: drive,
     librarySync,
+    settingsSync,
     volumeKnob,
     takes,
     scores,

@@ -45,6 +45,7 @@ import {
 import { openShelf, openShelfDatabase } from '../infrastructure/storage/DatabaseShelf.js';
 import { GoogleDrive, loadGoogleIdentity } from '../infrastructure/cloud/GoogleDrive.js';
 import { LibrarySync } from '../application/LibrarySync.js';
+import { SettingsSync } from '../application/SettingsSync.js';
 import type { ICloudDrive } from '../application/ports/ICloudDrive.js';
 
 /**
@@ -194,6 +195,8 @@ export interface AppRuntime {
   readonly cloudDrive: ICloudDrive;
   /** Keeps the library the same on every device, through that folder. */
   readonly librarySync: LibrarySync;
+  /** And the settings, except what belongs to one device. */
+  readonly settingsSync: SettingsSync;
   /** Scores kept between visits, so a file is chosen from the disk once. */
   readonly scores: ScoreLibrary;
   readonly files: IFileSink;
@@ -444,7 +447,14 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
 
   // Whatever the reader changes is what they will find next time.
   controller.events.on('settingsChanged', ({ settings: current }) => {
-    settings.savePractice(current);
+    settings.savePractice(current, Date.now());
+  });
+  const settingsSync = new SettingsSync({
+    drive: cloudDrive,
+    settings,
+    apply: (practice) => {
+      controller.updateSettings(practice);
+    },
   });
 
   return {
@@ -458,6 +468,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     storage,
     cloudDrive,
     librarySync,
+    settingsSync,
     volumeKnob,
     takes,
     history,

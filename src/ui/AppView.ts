@@ -59,6 +59,14 @@ import { theProfile } from '../domain/scoring/theProfile.js';
 import { drawTheHitErrors } from './hitErrorBar.js';
 import { describeStorage } from './storageReport.js';
 import type { DriveScore } from '../application/LibrarySync.js';
+import type { SettingsSyncOutcome } from '../application/SettingsSync.js';
+
+/** What happened to the settings, as the status line says it. */
+const SETTINGS_WENT: Readonly<Record<SettingsSyncOutcome, string>> = {
+  sent: 'sent',
+  brought: 'brought here',
+  same: 'already the same',
+};
 import { drawTheProfile } from './profileChart.js';
 import { expectedFor } from '../domain/timeline/Timeline.js';
 import {
@@ -5552,7 +5560,8 @@ export class AppView {
       const outcome = await this.runtime.librarySync.sync((done, total) => {
         this.el.driveStatus.textContent = `Syncing… ${String(done)} of ${String(total)}`;
       });
-      this.el.driveStatus.textContent = `Synced. Sent ${String(outcome.sent)}, brought here ${String(outcome.brought)}.`;
+      const settings = await this.runtime.settingsSync.sync();
+      this.el.driveStatus.textContent = `Synced. Sent ${String(outcome.sent)}, brought here ${String(outcome.brought)}. Settings ${SETTINGS_WENT[settings]}.`;
       this.showWhatOnlyTheDriveHas(outcome.onlyOnTheDrive);
       this.renderScores();
     } catch (error) {

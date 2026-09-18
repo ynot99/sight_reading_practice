@@ -353,11 +353,11 @@ export class ScoreLibrary {
    * nothing about a different score, and a reader who opens this one again
    * next week wants the same places waiting for them.
    */
-  async keepPassages(id: string, passages: readonly SavedPassage[]): Promise<void> {
+  async keepPassages(id: string, passages: readonly SavedPassage[], atMs: number): Promise<void> {
     const kept = placesInOrder(passages);
-    await this.deps.store.keepPassages(id, kept);
+    await this.deps.store.keepPassages(id, kept, atMs);
     this.summaries = this.summaries.map((summary) =>
-      summary.id === id ? { ...summary, passages: kept } : summary,
+      summary.id === id ? { ...summary, passages: kept, markedAtMs: atMs } : summary,
     );
   }
 
@@ -369,10 +369,10 @@ export class ScoreLibrary {
    * week wants the click they settled on waiting for them rather than whatever
    * the last piece needed.
    */
-  async keepTheClick(id: string, clickPattern: ClickPattern): Promise<void> {
-    await this.deps.store.keepTheClick(id, clickPattern);
+  async keepTheClick(id: string, clickPattern: ClickPattern, atMs: number): Promise<void> {
+    await this.deps.store.keepTheClick(id, clickPattern, atMs);
     this.summaries = this.summaries.map((summary) =>
-      summary.id === id ? { ...summary, clickPattern } : summary,
+      summary.id === id ? { ...summary, clickPattern, markedAtMs: atMs } : summary,
     );
   }
 
@@ -393,14 +393,14 @@ export class ScoreLibrary {
    * Their judgement, kept with the piece, for the reason the click beside it
    * is: it is an answer about this music and it is the same answer next week.
    */
-  async keepTheStars(id: string, stars: number | null): Promise<void> {
-    await this.deps.store.keepTheStars(id, stars);
+  async keepTheStars(id: string, stars: number | null, atMs: number): Promise<void> {
+    await this.deps.store.keepTheStars(id, stars, atMs);
     this.summaries = this.summaries.map((summary) => {
       if (summary.id !== id) {
         return summary;
       }
       const { stars: _taken, ...rest } = summary;
-      return stars === null ? rest : { ...rest, stars };
+      return stars === null ? { ...rest, markedAtMs: atMs } : { ...rest, stars, markedAtMs: atMs };
     });
   }
 

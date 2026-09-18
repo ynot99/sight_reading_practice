@@ -1399,6 +1399,22 @@ textarea {
   min-height: 2.4em;
 }
 
+/* Scores the drive has and this device does not, each with a way here. */
+.drive-only {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.drive-only li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 /* What the device keeps, a line to each answer. */
 .storage-report {
   padding: 0;

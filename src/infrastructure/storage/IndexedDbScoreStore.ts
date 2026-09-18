@@ -98,23 +98,27 @@ export class IndexedDbScoreStore implements IScoreStore {
     await this.write({ ...found, openedAtMs: atMs });
   }
 
-  async keepPassages(id: string, passages: readonly SavedPassage[]): Promise<void> {
+  async keepPassages(
+    id: string,
+    passages: readonly SavedPassage[],
+    markedAtMs: number,
+  ): Promise<void> {
     const found = await this.read(id);
     if (found === null) {
       return;
     }
-    await this.write({ ...found, passages });
+    await this.write({ ...found, passages, markedAtMs });
   }
 
-  async keepTheClick(id: string, clickPattern: ClickPattern): Promise<void> {
+  async keepTheClick(id: string, clickPattern: ClickPattern, markedAtMs: number): Promise<void> {
     const found = await this.read(id);
     if (found === null) {
       return;
     }
-    await this.write({ ...found, clickPattern });
+    await this.write({ ...found, clickPattern, markedAtMs });
   }
 
-  async keepTheStars(id: string, stars: number | null): Promise<void> {
+  async keepTheStars(id: string, stars: number | null, markedAtMs: number): Promise<void> {
     const found = await this.read(id);
     if (found === null) {
       return;
@@ -123,7 +127,7 @@ export class IndexedDbScoreStore implements IScoreStore {
     // said" is stored as, and a record carrying an empty field would have to
     // be read as both.
     const { stars: _taken, ...rest } = found;
-    await this.write(stars === null ? rest : { ...rest, stars });
+    await this.write(stars === null ? { ...rest, markedAtMs } : { ...rest, stars, markedAtMs });
   }
 
   async write(score: StoredScore): Promise<void> {

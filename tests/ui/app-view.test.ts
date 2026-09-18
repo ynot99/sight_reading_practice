@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
+import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
+import { LibrarySync } from '../../src/application/LibrarySync.js';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PracticeController } from '../../src/application/PracticeController.js';
@@ -203,6 +205,37 @@ interface Rig {
   readonly scores: ScoreLibrary;
   readonly scoreStore: InMemoryScoreStore;
   readonly files: RecordingFileSink;
+  readonly drive: FolderDrive;
+}
+
+/** A drive folder held in memory, standing in for Google's. */
+class FolderDrive implements ICloudDrive {
+  readonly files = new Map<string, { id: string; content: string }>();
+  prepared = 0;
+  private made = 0;
+
+  prepare(): void {
+    this.prepared += 1;
+  }
+
+  connect(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  list(): Promise<readonly CloudFile[]> {
+    return Promise.resolve([...this.files].map(([name, file]) => ({ id: file.id, name })));
+  }
+
+  read(id: string): Promise<string> {
+    const found = [...this.files.values()].find((file) => file.id === id);
+    return found === undefined ? Promise.reject(new Error('gone')) : Promise.resolve(found.content);
+  }
+
+  write(name: string, content: string, replacing: string | null): Promise<CloudFile> {
+    const id = replacing ?? `file-${String((this.made += 1))}`;
+    this.files.set(name, { id, content });
+    return Promise.resolve({ id, name });
+  }
 }
 
 function createRig(
@@ -313,6 +346,9 @@ function createRig(
       }),
   };
 
+  const drive = new FolderDrive();
+  const librarySync = new LibrarySync({ drive, store: scoreStore, reload: () => scores.load() });
+
   const runtime: AppRuntime = {
     controller,
     history: practiceHistory,
@@ -324,6 +360,8 @@ function createRig(
     takePlayer,
     backup,
     storage,
+    cloudDrive: drive,
+    librarySync,
     volumeKnob,
     takes,
     scores,
@@ -377,6 +415,7 @@ function createRig(
     takes,
     scores,
     scoreStore,
+    drive,
     files,
   };
 }
@@ -4326,8 +4365,8 @@ describe('AppView', () => {
       await shelved(rig, ['Gentle', 'Brutal', 'Unjudged']);
       const idOf = (title: string): string =>
         rig.runtime.scores.list().find((score) => score.title === title)?.id ?? '';
-      await rig.runtime.scores.keepTheStars(idOf('Gentle'), 2.7);
-      await rig.runtime.scores.keepTheStars(idOf('Brutal'), 9.4);
+      await rig.runtime.scores.keepTheStars(idOf('Gentle'), 2.7, 1_000);
+      await rig.runtime.scores.keepTheStars(idOf('Brutal'), 9.4, 1_000);
 
       element<HTMLButtonElement>('focus-scores').click();
       const bands = [...element('scores-list').querySelectorAll('.scores__stars')].map(
@@ -4342,7 +4381,7 @@ describe('AppView', () => {
       const rig = createRig();
       await shelved(rig, ['City of Tears']);
       const kept = rig.runtime.scores.list()[0];
-      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4);
+      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4, 1_000);
 
       rowButton('scores-list', 'How hard is this score?').click();
       element<HTMLButtonElement>('stars-none').click();
@@ -4357,7 +4396,7 @@ describe('AppView', () => {
       const rig = createRig();
       await shelved(rig, ['City of Tears']);
       const kept = rig.runtime.scores.list()[0];
-      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4);
+      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4, 1_000);
 
       rowButton('scores-list', 'How hard is this score?').click();
       element<HTMLInputElement>('stars-value').value = '1';
@@ -4374,7 +4413,7 @@ describe('AppView', () => {
       const rig = createRig();
       await shelved(rig, ['City of Tears']);
       const kept = rig.runtime.scores.list()[0];
-      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4);
+      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4, 1_000);
 
       rowButton('scores-list', 'How hard is this score?').click();
       element<HTMLInputElement>('stars-value').value = '';
@@ -4389,7 +4428,7 @@ describe('AppView', () => {
       const rig = createRig();
       await shelved(rig, ['City of Tears']);
       const kept = rig.runtime.scores.list()[0];
-      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4);
+      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 9.4, 1_000);
 
       rowButton('scores-list', 'How hard is this score?').click();
 
@@ -4403,8 +4442,8 @@ describe('AppView', () => {
       await shelved(rig, ['Gentle', 'Brutal']);
       const gentle = rig.runtime.scores.list().find((score) => score.title === 'Gentle');
       const brutal = rig.runtime.scores.list().find((score) => score.title === 'Brutal');
-      await rig.runtime.scores.keepTheStars(gentle?.id ?? '', 2.2);
-      await rig.runtime.scores.keepTheStars(brutal?.id ?? '', 9.4);
+      await rig.runtime.scores.keepTheStars(gentle?.id ?? '', 2.2, 1_000);
+      await rig.runtime.scores.keepTheStars(brutal?.id ?? '', 9.4, 1_000);
 
       const order = element<HTMLSelectElement>('scores-order');
       order.value = 'easiest';
@@ -4428,8 +4467,8 @@ describe('AppView', () => {
       await shelved(rig, ['Gentle', 'Brutal']);
       const gentle = rig.runtime.scores.list().find((score) => score.title === 'Gentle');
       const brutal = rig.runtime.scores.list().find((score) => score.title === 'Brutal');
-      await rig.runtime.scores.keepTheStars(gentle?.id ?? '', 2.2);
-      await rig.runtime.scores.keepTheStars(brutal?.id ?? '', 9.4);
+      await rig.runtime.scores.keepTheStars(gentle?.id ?? '', 2.2, 1_000);
+      await rig.runtime.scores.keepTheStars(brutal?.id ?? '', 9.4, 1_000);
 
       element<HTMLButtonElement>('focus-scores').click();
 
@@ -4489,7 +4528,7 @@ describe('AppView', () => {
       const rig = createRig();
       await shelved(rig, ['Choral Chambers']);
       const kept = rig.runtime.scores.list().find((score) => score.title === 'Choral Chambers');
-      await rig.runtime.scores.keepTheClick(kept?.id ?? '', 'subdivision');
+      await rig.runtime.scores.keepTheClick(kept?.id ?? '', 'subdivision', 1_000);
       rig.runtime.controller.updateSettings({ clickPattern: 'pulse' });
 
       openRow('Choral Chambers').click();
@@ -8184,5 +8223,73 @@ describe('a key that stands for the music', () => {
     rig.midi.noteOn(MIDI.G4);
 
     expect(rig.instrument.played.map((note) => note.midi)).toContain(MIDI.G4);
+  });
+});
+
+describe('the library on Google Drive', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  it('fetches what signing in needs when the library pane opens, not on the press', async () => {
+    // Google's window opens only in answer to a press, and a press that has
+    // to fetch Google's library first has lost the press by the time it asks.
+    const rig = createRig();
+    await rig.view.initialize();
+
+    document.querySelector<HTMLButtonElement>('button[data-chooses="library"]')?.click();
+
+    expect(rig.drive.prepared).toBe(1);
+  });
+
+  it('syncs from the button, and brings a score only the drive has when asked', async () => {
+    // His: a new device connects the drive and takes the scores from it.
+    const rig = createRig();
+    await rig.view.initialize();
+    await rig.drive.write('City of Tears.musicxml', '<score/>', null);
+    await rig.drive.write(
+      'library.json',
+      JSON.stringify({
+        version: 1,
+        scores: [
+          {
+            id: 'score:City of Tears',
+            title: 'City of Tears',
+            bars: 8,
+            savedAtMs: 1_000,
+            openedAtMs: 1_000,
+            markedAtMs: 2_000,
+            passages: [],
+            stars: 4,
+            file: 'City of Tears.musicxml',
+          },
+        ],
+      }),
+      null,
+    );
+
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+
+    const only = element<HTMLUListElement>('drive-only');
+    expect(only.hidden).toBe(false);
+    expect(only.textContent).toContain('City of Tears');
+    expect(await rig.scoreStore.read('score:City of Tears')).toBeNull();
+
+    only.querySelector<HTMLButtonElement>('button')?.click();
+    await waitFor(() => only.hidden === true);
+
+    expect((await rig.scoreStore.read('score:City of Tears'))?.stars).toBe(4);
+  });
+
+  it('says what went wrong rather than nothing', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    rig.drive.connect = () => Promise.reject(new Error('Google could not be reached.'));
+
+    element<HTMLButtonElement>('drive-sync').click();
+    await waitFor(() => element('drive-status').textContent === 'Google could not be reached.');
+
+    expect(element<HTMLButtonElement>('drive-sync').disabled).toBe(false);
   });
 });

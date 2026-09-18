@@ -58,6 +58,7 @@ import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
 import { drawTheHitErrors } from './hitErrorBar.js';
 import { describeStorage } from './storageReport.js';
+import type { DriveScore } from '../application/LibrarySync.js';
 import { drawTheProfile } from './profileChart.js';
 import { expectedFor } from '../domain/timeline/Timeline.js';
 import {
@@ -1420,6 +1421,9 @@ export class AppView {
     repeatNumbers: HTMLInputElement;
     traceTheStart: HTMLInputElement;
     measureStorage: HTMLButtonElement;
+    driveSync: HTMLButtonElement;
+    driveStatus: HTMLElement;
+    driveOnly: HTMLUListElement;
     storageReport: HTMLUListElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
@@ -1694,6 +1698,9 @@ export class AppView {
       repeatNumbers: requireElement(doc, 'repeat-numbers'),
       traceTheStart: requireElement(doc, 'trace-the-start'),
       measureStorage: requireElement(doc, 'measure-storage'),
+      driveSync: requireElement(doc, 'drive-sync'),
+      driveStatus: requireElement(doc, 'drive-status'),
+      driveOnly: requireElement(doc, 'drive-only'),
       storageReport: requireElement(doc, 'storage-report'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
@@ -2238,7 +2245,7 @@ export class AppView {
     if (kept === undefined) {
       return;
     }
-    await this.runtime.scores.keepTheClick(kept.id, pattern);
+    await this.runtime.scores.keepTheClick(kept.id, pattern, Date.now());
   }
 
   /** Writes the list back to the score it belongs to, and redraws it. */
@@ -2248,7 +2255,7 @@ export class AppView {
     if (kept === undefined) {
       return;
     }
-    await this.runtime.scores.keepPassages(kept.id, passages);
+    await this.runtime.scores.keepPassages(kept.id, passages, Date.now());
     this.renderPassages();
   }
 
@@ -3493,7 +3500,14 @@ export class AppView {
     for (const tab of tabs) {
       if (tab instanceof HTMLElement) {
         this.listen(tab, 'click', () => {
-          show(tab.dataset['chooses'] ?? '');
+          const pane = tab.dataset['chooses'] ?? '';
+          // Signing in to the drive opens Google's window, which a browser
+          // allows only in answer to a press - so what it needs is fetched
+          // when the pane with the button is opened, not when it is pressed.
+          if (pane === 'library') {
+            this.runtime.cloudDrive.prepare();
+          }
+          show(pane);
         });
       }
     }
@@ -3815,6 +3829,10 @@ export class AppView {
 
     this.listen(this.el.measureStorage, 'click', () => {
       void this.showWhatIsKept();
+    });
+
+    this.listen(this.el.driveSync, 'click', () => {
+      void this.syncWithTheDrive();
     });
 
     this.listen(this.el.pagedScore, 'change', () => {
@@ -5522,6 +5540,63 @@ export class AppView {
   }
 
   /**
+   * Makes the library the same here as on the drive, and says what happened.
+   *
+   * The scores the drive has and this device does not are listed rather than
+   * brought: what is kept here is the reader's choice.
+   */
+  private async syncWithTheDrive(): Promise<void> {
+    this.el.driveSync.disabled = true;
+    this.el.driveStatus.textContent = 'Syncing…';
+    try {
+      const outcome = await this.runtime.librarySync.sync((done, total) => {
+        this.el.driveStatus.textContent = `Syncing… ${String(done)} of ${String(total)}`;
+      });
+      this.el.driveStatus.textContent = `Synced. Sent ${String(outcome.sent)}, brought here ${String(outcome.brought)}.`;
+      this.showWhatOnlyTheDriveHas(outcome.onlyOnTheDrive);
+      this.renderScores();
+    } catch (error) {
+      this.el.driveStatus.textContent =
+        error instanceof Error ? error.message : 'Google Drive could not be reached.';
+    } finally {
+      this.el.driveSync.disabled = false;
+    }
+  }
+
+  /** The scores only the drive has, each with a button to bring it here. */
+  private showWhatOnlyTheDriveHas(scores: readonly DriveScore[]): void {
+    this.el.driveOnly.replaceChildren(
+      ...scores.map((score) => {
+        const row = this.doc.createElement('li');
+        const title = this.doc.createElement('span');
+        title.textContent = score.stars === undefined ? score.title : `${score.title} · ${String(score.stars)}★`;
+        const bring = this.doc.createElement('button');
+        bring.type = 'button';
+        bring.className = 'button button--ghost';
+        bring.textContent = 'Bring here';
+        bring.addEventListener('click', () => {
+          bring.disabled = true;
+          void this.runtime.librarySync
+            .bringHere(score)
+            .then(() => {
+              row.remove();
+              this.el.driveOnly.hidden = this.el.driveOnly.childElementCount === 0;
+              this.renderScores();
+            })
+            .catch((error: unknown) => {
+              bring.disabled = false;
+              this.el.driveStatus.textContent =
+                error instanceof Error ? error.message : 'That score could not be brought here.';
+            });
+        });
+        row.append(title, bring);
+        return row;
+      }),
+    );
+    this.el.driveOnly.hidden = scores.length === 0;
+  }
+
+  /**
    * Asks the browser what it keeps for the trainer, and lists its answers.
    *
    * Asked when the reader asks, not watched: whether there is room and
@@ -6235,7 +6310,7 @@ export class AppView {
     if (wanted === 'left alone') {
       return;
     }
-    await this.runtime.scores.keepTheStars(id, wanted);
+    await this.runtime.scores.keepTheStars(id, wanted, Date.now());
     this.renderScores();
   }
 

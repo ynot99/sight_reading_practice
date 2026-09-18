@@ -64,6 +64,15 @@ export interface StoredScoreSummary {
    * значення як 2.2 2.3 2.7".
    */
   readonly stars?: number;
+  /**
+   * When the reader last said something about it - its stars, its click, its
+   * passages - on the wall clock.
+   *
+   * What decides between two devices that each have an answer: the newer
+   * word is the reader's word. Absent on anything marked before it was kept,
+   * which a sync reads as the moment the piece was kept.
+   */
+  readonly markedAtMs?: number;
 }
 
 /**
@@ -98,14 +107,14 @@ export interface IScoreStore {
    * Separate from `write` for the same reason `touch` is: the caller is
    * holding a list of bar numbers, not a hundred kilobytes of MusicXML.
    */
-  keepPassages(id: string, passages: readonly SavedPassage[]): Promise<void>;
+  keepPassages(id: string, passages: readonly SavedPassage[], markedAtMs: number): Promise<void>;
 
   /** Keeps how finely the click divides for one score. Separate from `write`
    * for the same reason the two above are: one word, not a document. */
-  keepTheClick(id: string, pattern: ClickPattern): Promise<void>;
+  keepTheClick(id: string, pattern: ClickPattern, markedAtMs: number): Promise<void>;
 
   /** Keeps how hard the reader says a score is; `null` takes the mark off. */
-  keepTheStars(id: string, stars: number | null): Promise<void>;
+  keepTheStars(id: string, stars: number | null, markedAtMs: number): Promise<void>;
 
   /**
    * Marks a score as opened just now.
@@ -147,29 +156,29 @@ export class InMemoryScoreStore implements IScoreStore {
     return Promise.resolve();
   }
 
-  keepPassages(id: string, passages: readonly SavedPassage[]): Promise<void> {
+  keepPassages(id: string, passages: readonly SavedPassage[], markedAtMs: number): Promise<void> {
     const found = this.scores.get(id);
     if (found !== undefined) {
-      this.scores.set(id, { ...found, passages });
+      this.scores.set(id, { ...found, passages, markedAtMs });
     }
     return Promise.resolve();
   }
 
-  keepTheClick(id: string, clickPattern: ClickPattern): Promise<void> {
+  keepTheClick(id: string, clickPattern: ClickPattern, markedAtMs: number): Promise<void> {
     const found = this.scores.get(id);
     if (found !== undefined) {
-      this.scores.set(id, { ...found, clickPattern });
+      this.scores.set(id, { ...found, clickPattern, markedAtMs });
     }
     return Promise.resolve();
   }
 
-  keepTheStars(id: string, stars: number | null): Promise<void> {
+  keepTheStars(id: string, stars: number | null, markedAtMs: number): Promise<void> {
     const found = this.scores.get(id);
     if (found === undefined) {
       return Promise.resolve();
     }
     const { stars: _taken, ...rest } = found;
-    this.scores.set(id, stars === null ? rest : { ...rest, stars });
+    this.scores.set(id, stars === null ? { ...rest, markedAtMs } : { ...rest, stars, markedAtMs });
     return Promise.resolve();
   }
 

@@ -43,6 +43,20 @@ import {
   browserIndexedDb,
 } from '../infrastructure/storage/IndexedDbScoreStore.js';
 import { openShelf, openShelfDatabase } from '../infrastructure/storage/DatabaseShelf.js';
+import { GoogleDrive, loadGoogleIdentity } from '../infrastructure/cloud/GoogleDrive.js';
+import { LibrarySync } from '../application/LibrarySync.js';
+import type { ICloudDrive } from '../application/ports/ICloudDrive.js';
+
+/**
+ * Which program is asking Google for the reader's drive, from the build's
+ * environment: `VITE_GOOGLE_CLIENT_ID`, in `.env` on this machine and a
+ * repository variable for the published site.
+ *
+ * Kept out of the repository at his asking. It is not a secret - it names the
+ * program, it is in every built copy, and Google lets it sign in only from the
+ * addresses registered for it - and a build without it has no drive.
+ */
+const GOOGLE_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
 import type { IScoreStore } from '../application/ports/IScoreStore.js';
 import type { IStorageGauge } from '../application/ports/IStorageGauge.js';
 import { DownloadFileSink } from '../infrastructure/files/DownloadFileSink.js';
@@ -176,6 +190,10 @@ export interface AppRuntime {
   readonly backup: BackupService;
   /** What the device keeps for the trainer, and whether it will be kept. */
   readonly storage: IStorageGauge;
+  /** The reader's Google Drive, one folder of it. */
+  readonly cloudDrive: ICloudDrive;
+  /** Keeps the library the same on every device, through that folder. */
+  readonly librarySync: LibrarySync;
   /** Scores kept between visits, so a file is chosen from the disk once. */
   readonly scores: ScoreLibrary;
   readonly files: IFileSink;
@@ -355,6 +373,17 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     { name: 'takes', key: TAKES_STORAGE_KEY },
   ]);
   const scores = new ScoreLibrary({ store: scoreStore, serializer, importer, keeper: storage });
+  const cloudDrive = new GoogleDrive({
+    clientId: GOOGLE_CLIENT_ID,
+    identity: loadGoogleIdentity(options.scoreContainer.ownerDocument),
+    fetch: (url, init) => fetch(url, init),
+    now: () => Date.now(),
+  });
+  const librarySync = new LibrarySync({
+    drive: cloudDrive,
+    store: scoreStore,
+    reload: () => scores.load(),
+  });
 
   const historyStore =
     options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY);
@@ -427,6 +456,8 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     takePlayer,
     backup,
     storage,
+    cloudDrive,
+    librarySync,
     volumeKnob,
     takes,
     history,

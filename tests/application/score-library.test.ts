@@ -35,7 +35,7 @@ describe('how hard a piece is said to be', () => {
     const { scores } = library();
     const kept = await scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
 
-    await scores.keepTheStars(kept.id, 4.5);
+    await scores.keepTheStars(kept.id, 4.5, 1_000);
 
     expect(scores.theStarsFor('City of Tears')).toBe(4.5);
   });
@@ -43,9 +43,9 @@ describe('how hard a piece is said to be', () => {
   it('takes the mark off again, which is not the same as nought', async () => {
     const { scores } = library();
     const kept = await scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
-    await scores.keepTheStars(kept.id, 4.5);
+    await scores.keepTheStars(kept.id, 4.5, 1_000);
 
-    await scores.keepTheStars(kept.id, null);
+    await scores.keepTheStars(kept.id, null, 1_000);
 
     expect(scores.theStarsFor('City of Tears')).toBeNull();
   });
@@ -61,7 +61,7 @@ describe('how hard a piece is said to be', () => {
     const store = new InMemoryScoreStore();
     const first = library(store);
     const kept = await first.scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
-    await first.scores.keepTheStars(kept.id, 7.3);
+    await first.scores.keepTheStars(kept.id, 7.3, 1_000);
 
     const later = library(store);
     await later.scores.load();
@@ -193,7 +193,7 @@ describe('the click a piece asks for', () => {
     const { scores } = library();
     const kept = await scores.keep(twoBarExercise({ title: 'Choral Chambers' }), 1_000);
 
-    await scores.keepTheClick(kept.id, 'subdivision');
+    await scores.keepTheClick(kept.id, 'subdivision', 1_000);
 
     expect(scores.theClickFor('Choral Chambers')).toBe('subdivision');
   });
@@ -218,7 +218,7 @@ describe('the click a piece asks for', () => {
     const one = await scores.keep(twoBarExercise({ title: 'Choral Chambers' }), 1_000);
     await scores.keep(twoBarExercise({ title: 'City of Tears' }), 2_000);
 
-    await scores.keepTheClick(one.id, 'division');
+    await scores.keepTheClick(one.id, 'division', 1_000);
 
     expect(scores.theClickFor('Choral Chambers')).toBe('division');
     expect(scores.theClickFor('City of Tears')).toBeNull();
@@ -230,7 +230,7 @@ describe('the click a piece asks for', () => {
     const store = new InMemoryScoreStore();
     const first = library(store);
     const kept = await first.scores.keep(twoBarExercise({ title: 'Choral Chambers' }), 1_000);
-    await first.scores.keepTheClick(kept.id, 'subdivision');
+    await first.scores.keepTheClick(kept.id, 'subdivision', 1_000);
 
     const later = library(store);
     await later.scores.load();
@@ -244,7 +244,7 @@ describe('the places marked out in a piece', () => {
   async function marked(places: readonly { name: string; fromBar: number; toBar: number }[]) {
     const { scores } = library();
     const kept = await scores.keep(twoBarExercise({ title: 'Something Borrowed' }), 1_000);
-    await scores.keepPassages(kept.id, places);
+    await scores.keepPassages(kept.id, places, 1_000);
     return scores;
   }
 
@@ -311,10 +311,14 @@ describe('the places marked out in a piece', () => {
     const { store, scores } = library();
     const kept = await scores.keep(twoBarExercise({ title: 'Something Borrowed' }), 1_000);
 
-    await scores.keepPassages(kept.id, [
-      { name: 'The coda', fromBar: 9, toBar: 12 },
-      { name: 'The turn', fromBar: 3, toBar: 4 },
-    ]);
+    await scores.keepPassages(
+      kept.id,
+      [
+        { name: 'The coda', fromBar: 9, toBar: 12 },
+        { name: 'The turn', fromBar: 3, toBar: 4 },
+      ],
+      1_000,
+    );
 
     const stored = await store.read(kept.id);
     expect(stored?.passages.map((place) => place.fromBar)).toEqual([3, 9]);

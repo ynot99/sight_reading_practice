@@ -88,6 +88,16 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   private pending: OscillatorNode[] = [];
   private nextTickIndex = 0;
   private nextTickAudioTime = 0;
+  /**
+   * Where the two clocks stand against each other.
+   *
+   * Kept rather than read each time, and that is not an optimisation: every
+   * tick of one run has to be stamped in the same frame of reference, or the
+   * gap between two of them stops being the gap between two beats. Read afresh
+   * per tick, a pulse at sixty reported its beats a few milliseconds apart.
+   *
+   * Taken again whenever the device wakes - see {@link watchTheDevice}.
+   */
   private audioEpochMs = 0;
   private currentVolume = 1;
 
@@ -178,8 +188,36 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   private ensureContext(): AudioContext {
     if (this.context === null) {
       this.context = this.contextFactory();
+      this.watchTheDevice(this.context);
     }
     return this.context;
+  }
+
+  /**
+   * Takes the clocks' difference again whenever the device wakes.
+   *
+   * A tablet suspends its audio device the moment the screen goes off: its
+   * clock stops while the page's runs on, so a reading taken before the nap is
+   * wrong by the length of it ever after, and every tick is stamped that far
+   * in the past. That is how far out a judgement of the reader's timing would
+   * be - and, once notes from moments that have gone stopped being sounded, it
+   * is how the instrument came to be silent altogether.
+   *
+   * On the device saying so and not on a timer, because that is the event:
+   * waking is the one moment the two clocks part company, and between two of
+   * them the difference is a constant worth keeping.
+   */
+  private watchTheDevice(context: AudioContext): void {
+    if (typeof context.addEventListener !== 'function') {
+      return;
+    }
+    // On every change of state, with no test for which. Asleep, the reading
+    // is of a clock that has stopped and nothing is sounding to be stamped by
+    // it; awake, it is the one that matters and it is taken again. A branch
+    // here would be a rule with no case that reaches it.
+    context.addEventListener('statechange', () => {
+      this.audioEpochMs = performance.now() - context.currentTime * 1000;
+    });
   }
 
   /** Schedules everything due soon, then delivers everything already due. */

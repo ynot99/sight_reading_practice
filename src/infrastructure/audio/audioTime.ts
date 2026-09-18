@@ -25,7 +25,10 @@ export const TOO_LATE_MS = 200;
  * A note from a moment that has gone is not played late. It is not played.
  */
 export function tooLateToSound(atMs: number | undefined, nowMs: number): boolean {
-  return atMs !== undefined && nowMs - atMs > TOO_LATE_MS;
+  if (atMs === undefined) {
+    return false;
+  }
+  return nowMs - atMs > TOO_LATE_MS;
 }
 
 /**

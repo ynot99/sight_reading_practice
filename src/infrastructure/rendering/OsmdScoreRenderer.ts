@@ -77,6 +77,9 @@ const UNITS_TO_PIXELS = 10;
  * is small on purpose: a score that has not settled in four passes is one
  * where the room itself is the problem, and cutting further will not find it.
  */
+/** How long the engraver waits for a paint it may never be given. */
+const PAINT_WAIT_MS = 50;
+
 const FIT_PASSES = 4;
 
 /**
@@ -130,11 +133,27 @@ export function fittingPassesWorth(engravedMs: number): number {
  */
 function afterTheBrowserHasDrawn(): Promise<void> {
   return new Promise((done) => {
-    if (typeof requestAnimationFrame !== 'function') {
-      setTimeout(done, 0);
-      return;
+    let answered = false;
+    const once = (): void => {
+      if (!answered) {
+        answered = true;
+        done();
+      }
+    };
+    // Whichever comes first, and a timer is always one of them. A frame is
+    // not promised: Safari stops giving them to a page it does not consider
+    // visible, and on the iPad that included the moment a score was being
+    // opened - so a wait for two frames was a wait for ever, and the page
+    // simply stopped. His: "на айпаді здається сторінка взагалі поламалась".
+    //
+    // Nothing is lost by the timer winning. The frame is only wanted so the
+    // browser can paint what the page has already said; a turn of the task
+    // queue gives it the same chance, and where it does not, the engraving
+    // goes ahead un-announced rather than not at all.
+    setTimeout(once, PAINT_WAIT_MS);
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => requestAnimationFrame(once));
     }
-    requestAnimationFrame(() => requestAnimationFrame(() => done()));
   });
 }
 

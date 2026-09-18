@@ -50,6 +50,32 @@ class FakeNode {
 class FakeAudioContext {
   currentTime = 0;
   resumeCalls = 0;
+  state: 'suspended' | 'running' = 'running';
+  private readonly watchers = new Set<() => void>();
+
+  addEventListener(type: string, listener: () => void): void {
+    if (type === 'statechange') {
+      this.watchers.add(listener);
+    }
+  }
+
+  /** The device going to sleep and coming back, as a tablet's does. */
+  napFor(seconds: number): void {
+    this.state = 'suspended';
+    this.tellTheWatchers();
+    // The page's clock runs on while the device's stands still, which is the
+    // whole of what a nap is: `currentTime` is deliberately left alone.
+    vi.advanceTimersByTime(seconds * 1000);
+    this.state = 'running';
+    this.tellTheWatchers();
+  }
+
+  private tellTheWatchers(): void {
+    for (const watcher of this.watchers) {
+      watcher();
+    }
+  }
+
   /** Seconds between a sound being scheduled and leaving the device. */
   outputLatency = 0;
   readonly destination = new FakeNode();
@@ -112,6 +138,28 @@ describe('WebAudioMetronome', () => {
   afterEach(() => {
     metronome.stop();
     vi.useRealTimers();
+  });
+
+  it('takes the clocks apart again when the device wakes', () => {
+    // A tablet suspends its audio device the moment the screen goes off: its
+    // clock stops while the page's runs on, so a difference taken before the
+    // nap is wrong by the length of it ever after and every tick is stamped
+    // that far in the past. That is how far out a judgement of the reader's
+    // timing would be, and - once notes from moments that have gone stopped
+    // being sounded - it is how the instrument came to be silent altogether.
+    // His: "на айпаді здається сторінка взагалі поламалась".
+    metronome.start();
+    context.advance(0.06);
+    vi.advanceTimersByTime(20);
+    const before = ticks[0]?.scheduledTimeMs ?? 0;
+
+    context.napFor(30);
+    context.advance(1);
+    vi.advanceTimersByTime(20);
+    const after = ticks[ticks.length - 1]?.scheduledTimeMs ?? 0;
+
+    // Stamped in the page's present, not half a minute behind it.
+    expect(after - before).toBeGreaterThan(25_000);
   });
 
   it('sounds no click whose moment has gone, and still counts it', () => {

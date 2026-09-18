@@ -53,7 +53,13 @@ export function traceTheStart(on: boolean): void {
   }
 }
 
-export function timeTheStart(label: string): void {
+/**
+ * Marks a stage. `detail` is printed with it and is not part of what makes it
+ * a stage: the first note dropped as too late is one stage however late it
+ * was, and saying how late is the whole point of the line. Worked out only
+ * when the line is printed, because some stages are marked on every tick.
+ */
+export function timeTheStart(label: string, detail?: () => string): void {
   if (!tracing) {
     return;
   }
@@ -76,7 +82,7 @@ export function timeTheStart(label: string): void {
   seen.add(label);
   // eslint-disable-next-line no-console -- printing is the whole of it.
   console.log(
-    `[timing] +${String(Math.round(now - began)).padStart(6)} ms   gap ${String(Math.round(now - last)).padStart(6)} ms   ${label}`,
+    `[timing] +${String(Math.round(now - began)).padStart(6)} ms   gap ${String(Math.round(now - last)).padStart(6)} ms   ${label}${detail === undefined ? '' : ` (${detail()})`}`,
   );
   last = now;
 }

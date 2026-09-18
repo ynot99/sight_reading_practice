@@ -171,12 +171,15 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     this.nextTickIndex = 0;
     this.nextTickAudioTime = context.currentTime + this.options.firstClickLeadSec;
     this.audioEpochMs = performance.now() - context.currentTime * 1000;
+    timeTheStart('metronome: the device at the start', () => describeTheDevice(context));
 
     this.timer = setInterval(() => {
       // The first time the page gets back to the clock after starting it.
       // Anything the browser does between - laying the page out again, painting
       // it - is invisible to every other line, and shows here as a late look.
-      timeTheStart('pulse: first look at the clock after starting');
+      timeTheStart('pulse: first look at the clock after starting', () =>
+        describeTheDevice(context),
+      );
       this.pump();
     }, this.options.schedulerIntervalMs);
     this.pump();
@@ -223,6 +226,9 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     // here would be a rule with no case that reaches it.
     context.addEventListener('statechange', () => {
       this.audioEpochMs = performance.now() - context.currentTime * 1000;
+      timeTheStart(`metronome: the device went ${context.state}`, () =>
+        describeTheDevice(context),
+      );
     });
   }
 
@@ -245,6 +251,11 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
 
     while (this.nextTickAudioTime < horizon) {
       const tick = this.buildTick(this.nextTickIndex, this.nextTickAudioTime);
+      timeTheStart(
+        'metronome: first tick placed',
+        () =>
+          `stamped ${String(Math.round(tick.scheduledTimeMs - performance.now()))} ms from now; ${describeTheDevice(context)}`,
+      );
       // A click whose moment has gone is not sounded. When the page stalls -
       // engraving a long score stalls it for seconds - the audio clock goes on
       // without it, and this loop wakes with every click of those seconds to
@@ -282,7 +293,11 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
         break;
       }
       this.queue.shift();
-      timeTheStart('first tick heard');
+      timeTheStart(
+        'first tick heard',
+        () =>
+          `stamped ${String(Math.round(head.tick.scheduledTimeMs - performance.now()))} ms from now; ${describeTheDevice(context)}`,
+      );
       this.emitter.emit('tick', head.tick);
     }
   }
@@ -404,6 +419,30 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     }
     this.pending = [];
   }
+}
+
+/**
+ * Where the device's clocks stand, for the start timings.
+ *
+ * Whether it says it is running, how far its own clock has got, and - where
+ * the browser will say - which moment of that clock is leaving the speaker
+ * and how long ago it did. The first start after a quiet spell was silent on
+ * his desktop with the device reading as running, and these are the numbers
+ * that say which of the clocks stood still.
+ */
+function describeTheDevice(context: AudioContext): string {
+  const parts = [context.state, `clock ${context.currentTime.toFixed(3)} s`];
+  const latency = (context as AudioContext & { outputLatency?: number }).outputLatency;
+  if (typeof latency === 'number') {
+    parts.push(`output latency ${String(Math.round(latency * 1000))} ms`);
+  }
+  if (typeof context.getOutputTimestamp === 'function') {
+    const heard = context.getOutputTimestamp();
+    parts.push(
+      `heard up to ${(heard.contextTime ?? 0).toFixed(3)} s, ${String(Math.round(performance.now() - (heard.performanceTime ?? 0)))} ms ago`,
+    );
+  }
+  return parts.join(', ');
 }
 
 /** Lazily creates a single shared AudioContext, resumed on first use. */

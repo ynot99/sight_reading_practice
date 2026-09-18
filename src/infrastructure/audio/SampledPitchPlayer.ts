@@ -232,6 +232,10 @@ export class SampledPitchPlayer
     // Asked before anything is fetched or decoded, so that a page catching up
     // after a stall does no work at all for the notes it is dropping.
     if (tooLateToSound(atMs, performance.now())) {
+      timeTheStart(
+        'instrument: a note dropped as too late',
+        () => `${String(Math.round(performance.now() - (atMs ?? 0)))} ms late`,
+      );
       return;
     }
     // First key press is what starts the download, so nothing is fetched for
@@ -242,6 +246,7 @@ export class SampledPitchPlayer
     const choice = nearestSample(midi);
     const buffer = this.buffers.get(choice.sample.midi);
     if (buffer === undefined) {
+      timeTheStart('instrument: a note on the stand-in tone, the samples still loading');
       this.onFallback.add(midi);
       this.fallback.play(midi, velocity, atMs);
       return;

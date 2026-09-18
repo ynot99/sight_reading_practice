@@ -61,6 +61,10 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
       return;
     }
     if (tooLateToSound(atMs, performance.now())) {
+      timeTheStart(
+        'stand-in tone: a note dropped as too late',
+        () => `${String(Math.round(performance.now() - (atMs ?? 0)))} ms late`,
+      );
       return;
     }
     const context = this.ensureContext();

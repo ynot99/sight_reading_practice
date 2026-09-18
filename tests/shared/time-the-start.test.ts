@@ -46,6 +46,20 @@ describe('the start timings', () => {
     ]);
   });
 
+  it('prints a detail with its stage, without making it another one', () => {
+    // How late the first dropped note was is the answer; the next one, later
+    // or not, is the same stage.
+    traceTheStart(true);
+    timeTheStart('playback asked for');
+    timeTheStart('a note dropped as too late', () => '560 ms late');
+    timeTheStart('a note dropped as too late', () => '561 ms late');
+
+    expect(stages()).toEqual([
+      '[timing] + 0 ms gap 0 ms playback asked for',
+      '[timing] + 0 ms gap 0 ms a note dropped as too late (560 ms late)',
+    ]);
+  });
+
   it('says each stage once a start, however often it is reached', () => {
     // A tick is heard many times a second; only the first says anything about
     // how long starting took.

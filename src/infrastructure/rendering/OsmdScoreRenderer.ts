@@ -157,6 +157,15 @@ function afterTheBrowserHasDrawn(): Promise<void> {
   });
 }
 
+/** A number the engraver printed, as it was read off the page. */
+interface PrintedNumber {
+  readonly node: SVGTextElement;
+  readonly text: string;
+  readonly x: number;
+  readonly y: number;
+  readonly height: number;
+}
+
 /** The page's own clock, or the calendar's where there is no page. */
 function nowMs(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
@@ -728,6 +737,15 @@ export class OsmdScoreRenderer
   private overlayGroups = new WeakMap<SVGSVGElement, SVGGElement>();
   /** The pages as last engraved; see {@link sheets}. */
   private drawnSheets: SVGSVGElement[] | null = null;
+  /** The staves as last read off {@link drawnSheets}; see `readStaves`. */
+  private drawnStaves: DrawnStaff[] | null = null;
+  /**
+   * The engraver's bar numbers on each page, read once per page.
+   *
+   * Keyed by the page itself, so a page drawn again is a new key and the old
+   * reading goes with the old page - there is nothing to remember to clear.
+   */
+  private readonly numbersOn = new WeakMap<SVGSVGElement, readonly PrintedNumber[]>();
   /** Each page's printed label; see {@link labelPage}. */
   private pageLabels = new WeakMap<SVGSVGElement, Element>();
   private marks: PlayedMark[] = [];
@@ -1197,6 +1215,8 @@ export class OsmdScoreRenderer
   /** Forgets the pages, so the next reader of {@link sheets} finds them again. */
   private forgetSheets(): void {
     this.drawnSheets = null;
+    // What was read off the old pages goes with them.
+    this.drawnStaves = null;
   }
 
   /** The page the reader is looking at. */
@@ -2875,6 +2895,48 @@ export class OsmdScoreRenderer
    * from its repeats says "twenty" twice, which is the whole reason the mark
    * exists, so the text itself cannot tell the two apart.
    */
+  /**
+   * Every number the engraver printed on a page, read once for that page.
+   *
+   * Asked once for each bar that is marked, and it used to query the whole
+   * page's text and read every piece of it attribute by attribute each time:
+   * the bars times the text on the page, all of it through the document. Read
+   * once, the search for a bar is a walk over a short list in memory.
+   *
+   * The engraver's own numbers only. Ours, from the last painting of this same
+   * page, are digits too - the writer's number drawn on the line above is
+   * digits beside a bar number, which is exactly what this is looking for - so
+   * they are passed over by the class this renderer gives them. Hiding one of
+   * the engraver's numbers, which painting does, changes nothing read here.
+   */
+  private numbersPrintedOn(sheet: SVGSVGElement): readonly PrintedNumber[] {
+    const known = this.numbersOn.get(sheet);
+    if (known !== undefined) {
+      return known;
+    }
+    const found: PrintedNumber[] = [];
+    for (const text of sheet.querySelectorAll('text')) {
+      const ours = text.getAttribute('class') ?? '';
+      if (ours === 'bar-position' || ours === 'bar-printed') {
+        continue;
+      }
+      const digits = text.textContent ?? '';
+      if (!/^\d+$/.test(digits)) {
+        continue;
+      }
+      const height = Number.parseFloat((text.getAttribute('font-size') ?? '15').replace(/[a-z]+$/i, ''));
+      found.push({
+        node: text,
+        text: digits,
+        x: Number.parseFloat(text.getAttribute('x') ?? ''),
+        y: Number.parseFloat(text.getAttribute('y') ?? ''),
+        height: Number.isFinite(height) ? height : 15,
+      });
+    }
+    this.numbersOn.set(sheet, found);
+    return found;
+  }
+
   private numberTextNear(
     sheet: SVGSVGElement,
     measure: DrawnMeasure,
@@ -2886,35 +2948,22 @@ export class OsmdScoreRenderer
     width: number;
     height: number;
   } | null {
-    for (const text of sheet.querySelectorAll('text')) {
-      // Ours, from the last painting of this same page: the writer's number
-      // drawn on the line above is digits beside a bar number, which is
-      // exactly what this is looking for.
-      const ours = text.getAttribute('class') ?? '';
-      if (ours === 'bar-position' || ours === 'bar-printed') {
-        continue;
-      }
-      if (!/^\d+$/.test(text.textContent ?? '')) {
-        continue;
-      }
-      const x = Number.parseFloat(text.getAttribute('x') ?? '');
-      const y = Number.parseFloat(text.getAttribute('y') ?? '');
+    for (const printed of this.numbersPrintedOn(sheet)) {
       if (
-        Math.abs(x - measure.left) > NUMBER_REACH ||
-        Math.abs(y - measure.top) > NUMBER_REACH
+        Math.abs(printed.x - measure.left) > NUMBER_REACH ||
+        Math.abs(printed.y - measure.top) > NUMBER_REACH
       ) {
         continue;
       }
-      const height = Number.parseFloat((text.getAttribute('font-size') ?? '15').replace(/[a-z]+$/i, ''));
       return {
-        node: text,
-        text: text.textContent ?? '',
-        x,
-        y,
+        node: printed.node,
+        text: printed.text,
+        x: printed.x,
+        y: printed.y,
         // Its own width, near enough: the digits are what the mark stands
         // clear of, and a glyph is about half its height across.
-        width: (text.textContent?.length ?? 1) * height * 0.5,
-        height: Number.isFinite(height) ? height : 15,
+        width: printed.text.length * printed.height * 0.5,
+        height: printed.height,
       };
     }
     return null;
@@ -2977,7 +3026,22 @@ export class OsmdScoreRenderer
    * treble is exactly this case, and it is the first note of half the
    * fixtures here.
    */
+  /**
+   * Where every staff was drawn, read off the printed lines.
+   *
+   * Read once per engraving and kept with the pages it was read from: it is a
+   * fact about the drawing and nothing else, and it is asked every time the
+   * markers are painted - which happens on every start of a run or a playback,
+   * twice. Each reading walks every staff line on every page and asks the
+   * document for its ends one attribute at a time, and on a long score that was
+   * a quarter of a second of every start, measured with the browser's profiler
+   * on his device. The pages are forgotten whenever they are drawn again, and
+   * this goes with them.
+   */
   private readStaves(): DrawnStaff[] {
+    if (this.drawnStaves !== null) {
+      return this.drawnStaves;
+    }
     const staves: DrawnStaff[] = [];
     for (const [pageAt, sheet] of this.sheets.entries()) {
       const drawn = [...sheet.querySelectorAll('.staffline')];
@@ -2999,6 +3063,7 @@ export class OsmdScoreRenderer
         });
       }
     }
+    this.drawnStaves = staves;
     return staves;
   }
 

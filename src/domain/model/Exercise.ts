@@ -245,10 +245,27 @@ export function timeAtMeasure(exercise: Exercise, measureIndex: number): TimeSig
  * position - how long the piece is, whether a bar is full, which bar a tick
  * falls in - is read off this, because once a metre can change partway
  * through, none of them can be had by multiplying any more.
+ *
+ * Walked once per piece, and kept. Being the one place every answer about
+ * position is read off, it is asked constantly - several times for each note
+ * a playback gathers - and it used to walk every bar every time. On a score of
+ * thirteen hundred bars that made gathering a playback's notes take four
+ * seconds, with the pulse already running, and the beats of those seconds
+ * arrived all at once when it finished: the marker jumped ahead instead of
+ * waiting for the first note. His: "стрибає вперед одразу ніж чекати на першу
+ * ноту". Measured on the device, not guessed at.
+ *
+ * Kept against the exercise itself, which is never changed once made - every
+ * change to a piece is a new exercise - so the answer cannot go stale, and it
+ * goes when the piece does.
  */
 export function barLines(
   exercise: Exercise,
 ): readonly { readonly startTicks: number; readonly timeSignature: TimeSignature }[] {
+  const known = barLinesOf.get(exercise);
+  if (known !== undefined) {
+    return known;
+  }
   const bars: { startTicks: number; timeSignature: TimeSignature }[] = [];
   let startTicks = 0;
   for (let measureIndex = 0; measureIndex < measureCount(exercise); measureIndex += 1) {
@@ -256,8 +273,15 @@ export function barLines(
     bars.push({ startTicks, timeSignature });
     startTicks += timeSignature.ticksPerMeasure;
   }
+  barLinesOf.set(exercise, bars);
   return bars;
 }
+
+/** {@link barLines}, once per piece. */
+const barLinesOf = new WeakMap<
+  Exercise,
+  readonly { readonly startTicks: number; readonly timeSignature: TimeSignature }[]
+>();
 
 /**
  * Which bar a place in the music falls in, counted from nought.
@@ -295,6 +319,13 @@ export interface TempoSpan {
  * force everywhere.
  */
 export function tempoSpans(exercise: Exercise): readonly TempoSpan[] {
+  // Once per piece, for the reason {@link barLines} is: every moment in the
+  // music is timed off this, and it was being rebuilt - mapped and sorted -
+  // for each of them.
+  const known = tempoSpansOf.get(exercise);
+  if (known !== undefined) {
+    return known;
+  }
   const bars = barLines(exercise);
   const spans: TempoSpan[] = [{ startTicks: 0, tempoBpm: exercise.tempoBpm }];
   const marks = exercise.tempoChanges
@@ -313,8 +344,12 @@ export function tempoSpans(exercise: Exercise): readonly TempoSpan[] {
     }
     spans.push(mark);
   }
+  tempoSpansOf.set(exercise, spans);
   return spans;
 }
+
+/** {@link tempoSpans}, once per piece. */
+const tempoSpansOf = new WeakMap<Exercise, readonly TempoSpan[]>();
 
 /** The tempo in force at a given position, in quarter notes per minute. */
 export function tempoAtTick(exercise: Exercise, ticks: number): number {

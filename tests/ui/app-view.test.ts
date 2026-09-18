@@ -1017,6 +1017,12 @@ describe('AppView', () => {
 
     expect(runtime.scores.list().map((score) => score.title).sort()).toEqual(['Also fine', 'Fine']);
     expect(element('scores-added').textContent).toContain('broken.mxl');
+    // And says why, not only which. This line used to stop at the names, so a
+    // shelf that had run out of room looked exactly like a file that was not
+    // music - and the reader was left with "could not open" and nothing to do
+    // about it. His: "насправді я не знаю в чому проблема".
+    expect(element('scores-added').textContent?.replace('broken.mxl', '')).toMatch(/[a-z]{4}/);
+    expect(element('scores-added').textContent).not.toBe('Added 2. Could not open broken.mxl.');
     // And the sheet stays up, unlike the single-file case: the reader is
     // adding a shelf, and the list they are watching is the answer.
     expect(element('sheet-scores').hidden).toBe(false);

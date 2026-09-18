@@ -1143,6 +1143,44 @@ function isFormControl(element: Element | null): boolean {
   );
 }
 
+/**
+ * Why a score could not be taken, in words the reader can act on.
+ *
+ * Every refusal already carried a reason and the page threw most of them away:
+ * one file showed it, several showed only the names, and the reader was left
+ * with "could not open" and nothing to do about it. His: "насправді я не знаю
+ * в чому проблема" - which is the page's fault, not his.
+ *
+ * Running out of room is named rather than repeated. A browser says "the quota
+ * has been exceeded", which is true and tells nobody what to do; a reader whose
+ * device is full needs to know that it is full and that deleting something
+ * fixes it. A score is kept as the whole of its printed music, so one long
+ * piece is megabytes and a shelf of them reaches a limit that a shelf of short
+ * ones never would.
+ */
+export function whyAScoreWasRefused(error: unknown): string {
+  if (isOutOfRoom(error)) {
+    return 'There is no room left on this device. Delete a score and try again.';
+  }
+  if (error instanceof Error && error.message !== '') {
+    return error.message;
+  }
+  return 'It could not be read.';
+}
+
+function isOutOfRoom(error: unknown): boolean {
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+    return error.name === 'QuotaExceededError';
+  }
+  // Not every browser hands back a `DOMException`, and a wrapped one keeps the
+  // name and loses the type.
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { name?: unknown }).name === 'QuotaExceededError'
+  );
+}
+
 function readClickWhen(value: string): ClickWhen {
   return CLICK_WHEN.includes(value as ClickWhen) ? (value as ClickWhen) : 'always';
 }
@@ -2038,10 +2076,7 @@ export class AppView {
         }
       } catch (error) {
         reportToTheConsole(`Could not open ${file.name}.`, error);
-        refused.push({
-          name: file.name,
-          why: error instanceof Error ? error.message : 'It could not be read.',
-        });
+        refused.push({ name: file.name, why: whyAScoreWasRefused(error) });
       }
     }
 
@@ -2081,11 +2116,14 @@ export class AppView {
       this.sayInTheMiddle(`Could not open ${only?.name ?? 'that file'}. ${only?.why ?? ''}`.trim());
       return;
     }
-    // Named, since somebody adding thirty files has no other way to tell
-    // which of them was refused.
+    // Named *and* explained. Somebody adding thirty files has no other way to
+    // tell which of them was refused, and no way at all to tell why - this
+    // line used to stop at the names, so a shelf that had run out of room
+    // looked exactly like a file that was not music.
     this.el.scoresAdded.hidden = false;
-    this.el.scoresAdded.textContent =
-      `Added ${String(kept.length)}. Could not open ${refused.map((one) => one.name).join(', ')}.`;
+    this.el.scoresAdded.textContent = `Added ${String(kept.length)}. ${refused
+      .map((one) => `Could not open ${one.name}. ${one.why}`)
+      .join(' ')}`.trim();
   }
 
   /**
@@ -2366,9 +2404,7 @@ export class AppView {
       this.syncControlsFromSettings();
     } catch (error) {
       reportToTheConsole(`Could not open ${title}.`, error);
-      this.sayInTheMiddle(
-        error instanceof Error ? `Could not open ${title}. ${error.message}` : `Could not open ${title}.`,
-      );
+      this.sayInTheMiddle(`Could not open ${title}. ${whyAScoreWasRefused(error)}`);
     }
   }
 

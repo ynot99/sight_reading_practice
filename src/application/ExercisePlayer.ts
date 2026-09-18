@@ -1,7 +1,8 @@
 
 import {
   barLines,
-  pedalSpans,
+  elapsedMsAt,
+  pedalHeldUntil,
   positionOfTick,
   spanMs,
   velocityAt,
@@ -820,11 +821,12 @@ export class ExercisePlayer {
     fromTicks: number,
   ): ScheduledNote[] {
     const exercise = timeline.exercise;
-    const spans = pedalSpans(exercise);
     const bars = barLines(exercise);
-    // From where this performance began, and walked rather than multiplied:
-    // a piece that changes tempo has no single number to multiply by.
-    const at = (ticks: number): number => spanMs(exercise, fromTicks, ticks);
+    // From where this performance began, and read off the clock rather than
+    // multiplied: a piece that changes tempo has no single number to multiply
+    // by. Where it began is the same for every note, so it is read once.
+    const beganMs = elapsedMsAt(exercise, fromTicks);
+    const at = (ticks: number): number => elapsedMsAt(exercise, ticks) - beganMs;
     const longest = new Map<string, ScheduledNote>();
     /** Where the last step sounded, which is as far back as an ornament may reach. */
     let previousMs: number | null = null;
@@ -847,16 +849,17 @@ export class ExercisePlayer {
         sounding.filter((note) => note.arpeggiated).length,
         spanMs(exercise, step.onsetTicks, step.onsetTicks + step.durationTicks),
       );
+      // The pedal and the clock are facts about the moment, so every note
+      // struck at it shares them.
+      const heldUntil = pedalHeldUntil(exercise, step.onsetTicks);
+      const onsetMs = at(step.onsetTicks);
       let rolled = 0;
       for (const note of sounding) {
         const offset = note.arpeggiated ? (offsets[rolled] ?? 0) : 0;
         if (note.arpeggiated) {
           rolled += 1;
         }
-        const startsAt = at(step.onsetTicks) + offset;
-        const heldUntil = spans.find(
-          ([from, to]) => step.onsetTicks >= from && step.onsetTicks < to,
-        )?.[1];
+        const startsAt = onsetMs + offset;
         // As long as it sounds rather than as long as it is written - and the
         // pedal still wins, because a note struck under the damper rings until
         // the damper lifts whatever the writer marked it.
@@ -897,7 +900,6 @@ export class ExercisePlayer {
       // The ornaments printed here, laid in front of the note they lean on.
       // Keyed apart from the notes: a grace may be the same key as the note
       // it decorates, and that is two presses rather than one.
-      const onsetMs = at(step.onsetTicks);
       // One run per hand. Both may ornament the same beat, and two ornaments
       // written in two hands are played together rather than one after the
       // other - laid end to end they would push the left hand's back past

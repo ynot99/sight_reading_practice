@@ -483,6 +483,25 @@ describe('listening to an exercise', () => {
     expect(heardAfter.sort((a, b) => a - b)).toEqual(expected.sort((a, b) => a - b));
   });
 
+  it('sounds the first note of a playback begun partway through at once', () => {
+    // Timed from where it begins, not from the top of the piece: begun at the
+    // second bar, that bar's first chord is the first thing heard, and it is
+    // heard as the music starts rather than a bar's length after.
+    const { player, metronome, instrument, timeline } = rig();
+    const secondBar = timeline.steps.findIndex((step) => step.measureIndex === 1);
+    expect(secondBar).toBeGreaterThan(0);
+
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      fromIndex: secondBar,
+    });
+    metronome.advanceSubdivisions(1);
+
+    expect(instrument.played.find((note) => note.midi === MIDI.G4)?.atMs).toBe(0);
+  });
+
   it('has everything ready before the clock starts, so nothing is due early', () => {
     // It was the other way round, and a test said so: the first tick is placed
     // a fixed moment ahead of when the clock starts, so every millisecond of
@@ -933,6 +952,28 @@ describe('listening to an exercise', () => {
     const release = instrument.stopped.find((note) => note.midi === MIDI.C4);
     expect(struck?.atMs).toBe(0);
     expect(release?.atMs).toBe(4_000);
+  });
+
+  it('lets a pedal pressed partway through a bar hold only what is struck under it', () => {
+    // The pedal is read where each key goes down, not where its bar begins:
+    // pressed on the third beat, it holds the third and fourth beats to the
+    // bar line and leaves the first two as they were written.
+    const base = twoBarExercise({ tempoBpm: 60 });
+    const pedalled = {
+      ...base,
+      pedalMarks: [
+        { measureIndex: 0, offsetTicks: 2 * Duration.QUARTER.ticks, type: 'start' as const, line: true },
+        { measureIndex: 1, offsetTicks: 0, type: 'stop' as const, line: true },
+      ],
+    };
+    const { player, metronome, instrument } = rig(pedalled);
+    player.start(buildTimeline(pedalled), { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(12);
+
+    const releaseOf = (midi: number): number | undefined =>
+      instrument.stopped.find((note) => note.midi === midi)?.atMs;
+    expect(releaseOf(MIDI.C4)).toBe(1_000);
+    expect(releaseOf(MIDI.E4)).toBe(4_000);
   });
 
   it('can sound one hand alone', () => {

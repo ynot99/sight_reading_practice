@@ -47,7 +47,7 @@ describe('the bars and tempos of a piece, walked once', () => {
   });
 });
 
-describe('how hard a note is struck, once asked', () => {
+describe('how hard a note is struck, from the marks of that piece', () => {
   it('answers each piece from its own marks, never from the last piece asked', () => {
     // Kept per piece, because a playback asks it for every note it gathers
     // and every answer used to scan every dynamic in the piece. Kept any wider,

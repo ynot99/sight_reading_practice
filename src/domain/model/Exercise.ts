@@ -1,5 +1,6 @@
 import { ExerciseValidationError } from '../../shared/errors.js';
-import { assertNever } from '../../shared/asserts.js';
+import { assertNever, elementAt } from '../../shared/asserts.js';
+import { lastOfLeadingRun } from '../../shared/leadingRun.js';
 import type { ClefKind } from './Clef.js';
 import { Duration, ticksToMilliseconds } from './Duration.js';
 import type { KeySignature } from './KeySignature.js';
@@ -227,6 +228,52 @@ export function pedalSpans(exercise: Exercise): readonly (readonly [number, numb
   return spans;
 }
 
+/**
+ * Where the pedal lifts for a key struck at `ticks` - or `null` when the
+ * pedal is not down there.
+ *
+ * The answer is the first of {@link pedalSpans}, in the order they are
+ * listed, that the moment falls inside. Asked for every note a playback
+ * gathers, and it was that walk along every span for each of them: on the
+ * longest score he owns, hundreds of spans and tens of thousands of notes,
+ * and a large part of the wait before the music began.
+ *
+ * The spans are paired in the order the file lists the marks, and a file
+ * writes a bar's directions staff by staff, so they need not be in time order
+ * and may overlap. The answer can only change where a span begins or ends,
+ * though, so it is worked out once at each of those places and read off by
+ * halving - the same answer the walk gave, at every moment.
+ */
+export function pedalHeldUntil(exercise: Exercise, ticks: number): number | null {
+  const stretches = pedalStretches(exercise);
+  return stretches[lastOfLeadingRun(stretches, (stretch) => stretch.from <= ticks)]?.heldUntil ?? null;
+}
+
+/** From `from` until the next one begins, a key struck is held until `heldUntil`. */
+interface PedalStretch {
+  readonly from: number;
+  readonly heldUntil: number | null;
+}
+
+/** The stretches {@link pedalHeldUntil} reads, once per piece. */
+function pedalStretches(exercise: Exercise): readonly PedalStretch[] {
+  const known = pedalStretchesOf.get(exercise);
+  if (known !== undefined) {
+    return known;
+  }
+  const spans = pedalSpans(exercise);
+  const edges = [...new Set(spans.flat())].sort((left, right) => left - right);
+  const stretches = edges.map((from) => ({
+    from,
+    heldUntil: spans.find(([down, up]) => from >= down && from < up)?.[1] ?? null,
+  }));
+  pedalStretchesOf.set(exercise, stretches);
+  return stretches;
+}
+
+/** {@link pedalStretches}, once per piece. */
+const pedalStretchesOf = new WeakMap<Exercise, readonly PedalStretch[]>();
+
 /** The metre in force at a given measure. */
 export function timeAtMeasure(exercise: Exercise, measureIndex: number): TimeSignature {
   let current = exercise.timeSignature;
@@ -371,18 +418,51 @@ export function tempoAtTick(exercise: Exercise, ticks: number): number {
  * what a count-in needs.
  */
 export function elapsedMsAt(exercise: Exercise, ticks: number): number {
+  if (ticks < 0) {
+    return ticksToMilliseconds(ticks, exercise.tempoBpm);
+  }
   const spans = tempoSpans(exercise);
+  const index = lastOfLeadingRun(spans, (span) => span.startTicks < ticks);
+  const span = spans[index];
+  if (span === undefined) {
+    return 0;
+  }
+  return (
+    elementAt(tempoSpanStartsMs(exercise), index) +
+    ticksToMilliseconds(ticks - span.startTicks, span.tempoBpm)
+  );
+}
+
+/**
+ * Milliseconds from the start of the piece to where each tempo span begins.
+ *
+ * Summed once, span after span in the order a walk would add them, so a time
+ * read off it is the same number to the last bit as one walked. It was
+ * walked: every note a playback gathers asks the clock three or four times,
+ * and on a long score with seventy tempo marks that was a sixth of the wait
+ * before the music began.
+ */
+function tempoSpanStartsMs(exercise: Exercise): readonly number[] {
+  const known = tempoSpanStartsMsOf.get(exercise);
+  if (known !== undefined) {
+    return known;
+  }
+  const spans = tempoSpans(exercise);
+  const starts: number[] = [];
   let elapsed = 0;
   for (const [index, span] of spans.entries()) {
-    if (span.startTicks >= ticks) {
-      break;
+    starts.push(elapsed);
+    const next = spans[index + 1];
+    if (next !== undefined) {
+      elapsed += ticksToMilliseconds(next.startTicks - span.startTicks, span.tempoBpm);
     }
-    const next = spans[index + 1]?.startTicks ?? Infinity;
-    const until = Math.min(next, ticks);
-    elapsed += ticksToMilliseconds(until - span.startTicks, span.tempoBpm);
   }
-  return ticks >= 0 ? elapsed : ticksToMilliseconds(ticks, exercise.tempoBpm);
+  tempoSpanStartsMsOf.set(exercise, starts);
+  return starts;
 }
+
+/** {@link tempoSpanStartsMs}, once per piece. */
+const tempoSpanStartsMsOf = new WeakMap<Exercise, readonly number[]>();
 
 /** How long a stretch of the piece lasts, from one position to another. */
 export function spanMs(exercise: Exercise, fromTicks: number, toTicks: number): number {
@@ -592,30 +672,11 @@ function markInForce(
   // diminuendo closing on the barline with niente under the first note after
   // it - and spelled the other way the mark was not there.
   const bars = barLines(exercise);
-  const at = (measure: number, offset: number): number => (bars[measure]?.startTicks ?? 0) + offset;
-  const here = at(measureIndex, offsetTicks);
-  const isBefore = (mark: DynamicMark): boolean => at(mark.measureIndex, mark.offsetTicks) <= here;
-  const isLater = (mark: DynamicMark, than: DynamicMark | null): boolean =>
-    than === null ||
-    mark.measureIndex > than.measureIndex ||
-    (mark.measureIndex === than.measureIndex && mark.offsetTicks >= than.offsetTicks);
-
-  let latest: DynamicMark | null = null;
-  let mine: DynamicMark | null = null;
-  for (const mark of exercise.dynamicMarks) {
-    if (!isBefore(mark)) {
-      continue;
-    }
-    if (isLater(mark, latest)) {
-      latest = mark;
-    }
-    if (
-      (mark.staffNumber === null || staffNumber === null || mark.staffNumber === staffNumber) &&
-      isLater(mark, mine)
-    ) {
-      mine = mark;
-    }
-  }
+  const here = (bars[measureIndex]?.startTicks ?? 0) + offsetTicks;
+  const lastBy = (marks: readonly Placed<DynamicMark>[]): DynamicMark | null =>
+    marks[lastOfLeadingRun(marks, (placed) => placed.at <= here)]?.item ?? null;
+  const latest = lastBy(heardBy(exercise, null).marks);
+  const mine = lastBy(heardBy(exercise, staffNumber).marks);
   // A dynamic written under one staff of a piano part is an instruction to
   // the player, not to that hand alone: one `pp` under the treble means the
   // whole texture. Measured on his own score and it is what was wrong - the
@@ -636,6 +697,71 @@ function markInForce(
     (mine.measureIndex === latest.measureIndex && mine.offsetTicks >= latest.offsetTicks);
   return mineIsLater ? mine : latest;
 }
+
+/** A mark or a hairpin, and where in the piece it begins. */
+interface Placed<T> {
+  readonly item: T;
+  readonly at: number;
+}
+
+/** The dynamics and the hairpins one staff answers to, each in the order they begin. */
+interface Heard {
+  readonly marks: readonly Placed<DynamicMark>[];
+  readonly hairpins: readonly Placed<DynamicHairpin>[];
+}
+
+/**
+ * What a staff answers to, sorted by where each begins - or, asked for no
+ * staff in particular, everything. A mark or a hairpin with no staff of its
+ * own speaks for every staff.
+ *
+ * Kept per piece and per staff. Every note a playback gathers asks what is
+ * in force where it falls, and a walk over every mark and every hairpin in
+ * the piece for each note was half the wait before a long score began: on
+ * the longest one he owns, hundreds of each and tens of thousands of notes.
+ *
+ * Sorted the way the walk chose, so that halving finds what the walk found. A
+ * mark is later than another by where it falls, and at one place by bar and
+ * offset - a mark at the end of a bar sits before one at the start of the
+ * next, though the two are one moment - and, written at the very same place,
+ * by the order the file gives them. A hairpin is later by where it begins
+ * alone, and then by the file's order.
+ */
+function heardBy(exercise: Exercise, staffNumber: number | null): Heard {
+  const byStaff = heardOf.get(exercise) ?? new Map<number | null, Heard>();
+  heardOf.set(exercise, byStaff);
+  const known = byStaff.get(staffNumber);
+  if (known !== undefined) {
+    return known;
+  }
+  const bars = barLines(exercise);
+  const place = <T extends { measureIndex: number; offsetTicks: number; staffNumber: number | null }>(
+    items: readonly T[],
+  ): Placed<T>[] =>
+    items
+      .filter(
+        (item) =>
+          item.staffNumber === null || staffNumber === null || item.staffNumber === staffNumber,
+      )
+      .map((item) => ({
+        item,
+        at: (bars[item.measureIndex]?.startTicks ?? 0) + item.offsetTicks,
+      }));
+  const heard: Heard = {
+    marks: place(exercise.dynamicMarks).sort(
+      (left, right) =>
+        left.at - right.at ||
+        left.item.measureIndex - right.item.measureIndex ||
+        left.item.offsetTicks - right.item.offsetTicks,
+    ),
+    hairpins: place(exercise.hairpins).sort((left, right) => left.at - right.at),
+  };
+  byStaff.set(staffNumber, heard);
+  return heard;
+}
+
+/** {@link heardBy}, per piece and per staff asked for. */
+const heardOf = new WeakMap<Exercise, Map<number | null, Heard>>();
 
 /**
  * A hairpin: the music getting louder or quieter across a stretch.
@@ -687,38 +813,12 @@ export interface DynamicHairpin {
  * none, one step of the eight: which is what a wedge between two unmarked
  * stretches means to a player.
  *
- * Kept once asked, per piece, for the reason {@link barLines} is: a playback
- * asks it for every note it gathers, and each answer scans every dynamic and
- * every hairpin in the piece. On the longest score he owns that was two
- * hundred milliseconds on every start and twice that on a resume, which
- * gathers twice - all of it a pause before the music now that the clock waits
- * for the gathering. The answer is a fact about the piece at that moment, so
- * the second time it is asked it is already known: a resume, a replay and the
- * second lap of a repeat cost nothing. Kept rather than computed differently,
- * so that how loud a note is cannot change by a hair for being fast.
+ * Asked for every note a playback gathers, and quick because every question
+ * in it is a halving of a list kept per piece - see {@link heardBy}. It was a
+ * walk over every dynamic and every hairpin for each note, and then a cache
+ * in front of the walk that spared a second start but never the first.
  */
 export function velocityAt(
-  exercise: Exercise,
-  measureIndex: number,
-  offsetTicks: number,
-  staffNumber: number | null,
-): number {
-  const known = velocitiesOf.get(exercise) ?? new Map<string, number>();
-  velocitiesOf.set(exercise, known);
-  const key = `${String(measureIndex)}:${String(offsetTicks)}:${String(staffNumber)}`;
-  const kept = known.get(key);
-  if (kept !== undefined) {
-    return kept;
-  }
-  const velocity = velocityAtByReading(exercise, measureIndex, offsetTicks, staffNumber);
-  known.set(key, velocity);
-  return velocity;
-}
-
-/** {@link velocityAt}, per piece, by the place and the staff it was asked for. */
-const velocitiesOf = new WeakMap<Exercise, Map<string, number>>();
-
-function velocityAtByReading(
   exercise: Exercise,
   measureIndex: number,
   offsetTicks: number,
@@ -733,23 +833,8 @@ function velocityAtByReading(
   // The latest hairpin that has begun by now, for this staff or for the
   // whole texture. Later ones have not started; earlier ones have been
   // answered by this one.
-  let latest: DynamicHairpin | null = null;
-  for (const hairpin of exercise.hairpins) {
-    if (
-      hairpin.staffNumber !== null &&
-      staffNumber !== null &&
-      hairpin.staffNumber !== staffNumber
-    ) {
-      continue;
-    }
-    const from = at(hairpin.measureIndex, hairpin.offsetTicks);
-    if (from > here) {
-      continue;
-    }
-    if (latest === null || from >= at(latest.measureIndex, latest.offsetTicks)) {
-      latest = hairpin;
-    }
-  }
+  const hairpins = heardBy(exercise, staffNumber).hairpins;
+  const latest = hairpins[lastOfLeadingRun(hairpins, (placed) => placed.at <= here)]?.item ?? null;
   if (latest === null) {
     return ground;
   }

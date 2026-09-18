@@ -3321,7 +3321,8 @@ body[data-playing='true'] .score__modes {
 .sheet__panel[data-showing='modes'] [data-pane~='modes'],
 .sheet__panel[data-showing='sound'] [data-pane~='sound'],
 .sheet__panel[data-showing='practice'] [data-pane~='practice'],
-.sheet__panel[data-showing='library'] [data-pane~='library'] {
+.sheet__panel[data-showing='library'] [data-pane~='library'],
+.sheet__panel[data-showing='developers'] [data-pane~='developers'] {
   display: revert;
 }
 

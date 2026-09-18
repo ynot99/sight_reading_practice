@@ -22,6 +22,7 @@ import {
 } from './ports/IMetronome.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import type { IScoreCursor } from './ports/IScoreRenderer.js';
+import { timeTheStart } from '../shared/timeTheStart.js';
 import {
   laidEndToEnd,
   metronomeBars,
@@ -531,6 +532,7 @@ export class ExercisePlayer {
     // until it is due, which is that fixed moment away, and both of these
     // finish long before it.
     this.deps.metronome.start();
+    timeTheStart('player: metronome started (the clock is now running)');
     this.pending = this.collectNotes(timeline, options.staffNumber, this.fromTicks);
     // The lap's own notes, when a lap is not simply this performance again:
     // picked up after a pause, the first time round is the tail of a lap and
@@ -539,8 +541,11 @@ export class ExercisePlayer {
       this.laidInLaps && this.loopFromTicks !== this.fromTicks
         ? this.collectNotes(timeline, options.staffNumber, this.loopFromTicks)
         : this.pending;
+    timeTheStart(`player: notes collected (${String(this.pending.length)})`);
     this.deps.cursor.moveTo(first?.index ?? 0);
+    timeTheStart('player: cursor at the start');
     this.emitter.emit('started', {});
+    timeTheStart('player: page reacted to the start');
   }
 
   /**

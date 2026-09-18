@@ -74,6 +74,7 @@ import { machineIsPlaying } from './modes/ListenFrame.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMeter.js';
 import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
+import { timeTheStart } from '../shared/timeTheStart.js';
 
 /** When the marks for what was played are put on the page. */
 /**
@@ -530,6 +531,15 @@ export interface PracticeSettings {
    */
   readonly scoreOrder: ScoreOrder;
   /**
+   * Print, in the console, how long each stage of starting took.
+   *
+   * For finding what makes a long score slow to begin; see `timeTheStart`.
+   * Here with the rest of what the reader has chosen, for the reason the two
+   * above are: nothing in this controller acts on it, and a second store for
+   * one preference would be a second thing to back up and restore.
+   */
+  readonly traceTheStart: boolean;
+  /**
    * Run a marker along the ruler, beat by beat.
    *
    * Not the same thing as the marker on the notes. Under a held note that one
@@ -869,6 +879,7 @@ export class PracticeController {
       whatOpens: 'generated',
       // The order the shelf has always been in.
       scoreOrder: 'recent',
+      traceTheStart: false,
       rulerCursor: false,
       rulerStrength: 1,
       restEveryMinutes: 30,
@@ -1558,6 +1569,7 @@ export class PracticeController {
    * machine is giving.
    */
   listen(fromStepIndex?: number): void {
+    timeTheStart('playback asked for');
     const timeline = this.timeline;
     if (timeline === null) {
       return;
@@ -1623,6 +1635,7 @@ export class PracticeController {
 
   /** Picks a held performance up where it left off. */
   resumeListening(): void {
+    timeTheStart('playback resume asked for');
     const at = this.player?.pausedAt ?? null;
     if (at === null) {
       return;
@@ -2205,6 +2218,7 @@ export class PracticeController {
     opening: readonly MidiNoteOnEvent[],
     from?: number,
   ): PracticeSession | null {
+    timeTheStart('run asked for');
     this.stopListening();
     const timeline = this.timeline;
     if (timeline === null) {
@@ -2380,8 +2394,11 @@ export class PracticeController {
 
     this.sessionSubscriptions.push(
       session.events.on('stepEntered', ({ step }) => {
+        timeTheStart('first step entered');
         this.deps.cursor.moveTo(step.index);
+        timeTheStart('first step: cursor moved');
         this.fadeAhead(step.index);
+        timeTheStart('first step: veil caught up');
         // A new step is nobody's fault yet.
         this.forgetTheTrouble();
         this.otherHandReaches(step);
@@ -2448,7 +2465,9 @@ export class PracticeController {
     );
 
     // Listened to before it begins, so nothing it does is missed.
+    timeTheStart('session built');
     this.emitter.emit('sessionBuilt', { session });
+    timeTheStart('page took the session');
     // Before the session hears anything of its own: the watch and the run
     // would otherwise both be subscribed to the keyboard, and the presses
     // that started this run would arrive at the watch a second time.
@@ -2458,6 +2477,7 @@ export class PracticeController {
     } else {
       this.deps.cursor.reset();
     }
+    timeTheStart('cursor at the start');
     this.meter.reset();
     this.lastWaitDrainMs = this.deps.clock.now();
     this.lastBeatTicks = 0;
@@ -2485,12 +2505,15 @@ export class PracticeController {
     // Nothing is missed by drawing afterwards: the first tick is not delivered
     // until it is due, which is a scheduling lead away, and all of this
     // finishes long before it.
+    timeTheStart('pulse about to start');
     session.start(opening, this.pedalIsDown);
+    timeTheStart('pulse started');
     // Drawn afterwards. Everything the page shows about a run being under way is
     // the same a moment later, and the run's first act - a click placed where
     // the reader's key went down - cannot be moved any earlier than it already
     // is, so nothing may stand in front of it.
     this.emitter.emit('sessionCreated', { session });
+    timeTheStart('page drew the run');
 
     // Last of all, and only this. Scrolling a long piece back to its first bar
     // is the one piece of preparing the page that nothing depends on and that
@@ -2515,6 +2538,7 @@ export class PracticeController {
   }
 
   resume(): void {
+    timeTheStart('resume asked for');
     if (this.machinePlays) {
       this.resumeListening();
       return;

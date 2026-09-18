@@ -8,6 +8,7 @@ import type {
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
 import { TOO_LATE_MS } from './audioTime.js';
+import { timeTheStart } from '../../shared/timeTheStart.js';
 import {
   buildMetronomeTick,
   isAudibleClick,
@@ -150,6 +151,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   }
 
   start(): void {
+    timeTheStart('metronome started');
     // Told to start while it is already running, a pulse begins again rather
     // than doing nothing. A tick is "a counter since start()" - the port says
     // so - and a run leans on it: a bar begun by the reader's own press sets
@@ -264,6 +266,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
         break;
       }
       this.queue.shift();
+      timeTheStart('first tick heard');
       this.emitter.emit('tick', head.tick);
     }
   }

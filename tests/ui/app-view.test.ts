@@ -689,6 +689,52 @@ describe('AppView', () => {
     expect(runtime.controller.isListeningPaused).toBe(false);
   });
 
+  describe('the section for developers', () => {
+    it('turns the start timings on from the settings, and keeps them on', async () => {
+      // His: "може їх лишити при опції з settings у розділі for developers".
+      const lines: string[] = [];
+      const logged = vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+        lines.push(String(line));
+      });
+      try {
+        const { view, runtime } = createRig();
+        await view.initialize();
+
+        const box = element<HTMLInputElement>('trace-the-start');
+        expect(box.checked).toBe(false);
+        box.checked = true;
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+
+        expect(runtime.controller.settings.traceTheStart).toBe(true);
+        expect(lines.some((line) => line.startsWith('[timing] on'))).toBe(true);
+
+        // And a run started now is timed: the switch reached the instrument,
+        // not only the setting.
+        element<HTMLButtonElement>('focus-play').click();
+        expect(lines.some((line) => line.includes('run asked for'))).toBe(true);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it('says nothing in the console to a reader who never asked', async () => {
+      const lines: string[] = [];
+      const logged = vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+        lines.push(String(line));
+      });
+      try {
+        const { view } = createRig();
+        await view.initialize();
+
+        element<HTMLButtonElement>('focus-play').click();
+
+        expect(lines.filter((line) => line.startsWith('[timing]'))).toEqual([]);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+  });
+
   describe('the escape key', () => {
     function pressEscape(): void {
       document.dispatchEvent(

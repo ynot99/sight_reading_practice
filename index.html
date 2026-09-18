@@ -871,6 +871,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M5 4h4v16H5z M11 4h4v16h-4z M17 4h3v16h-3z" />
             </svg><span>Library</span></button>
+          <button type="button" class="settings-sections__tab" data-chooses="developers">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 7l1.4-1.4L11.8 12l-6.4 6.4L4 17l5-5z M12 16h8v2h-8z" />
+            </svg><span>For developers</span></button>
         </nav>
         <div class="controls">
           <!--
@@ -1063,6 +1067,19 @@
           <input id="tolerance" type="range" min="40" max="800" step="10" value="250" />
         </div>
 
+        <!--
+          What is only for finding out why something is slow or wrong. Last, and
+          behind its own tab, so that a reader looking for a setting never has to
+          read past it. His: "може їх лишити при опції з settings у розділі for
+          developers".
+        -->
+        <div class="control-group" data-pane="developers">
+          <label><input id="trace-the-start" type="checkbox" /> Print start timings to the console</label>
+          <p class="hint">
+            One line for each stage between asking for music and hearing it, and
+            the gap since the last. The big gap is where the time went.
+          </p>
+        </div>
         <div class="control-group" data-pane="library">
           <label for="save-backup">Everything on this device</label>
           <div class="ladder-row">

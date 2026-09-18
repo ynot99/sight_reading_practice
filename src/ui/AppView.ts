@@ -271,6 +271,7 @@ const TAKE_COUNTER_MS = 500;
 
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
+import { traceTheStart } from '../shared/timeTheStart.js';
 
 const SCORING_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'scoring.accuracy': 'The notes alone. You set the pace, so timing is not judged.',
@@ -1416,6 +1417,7 @@ export class AppView {
     focusBare: HTMLButtonElement;
     pagedScore: HTMLInputElement;
     repeatNumbers: HTMLInputElement;
+    traceTheStart: HTMLInputElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
     focusZoom: HTMLOutputElement;
@@ -1686,6 +1688,7 @@ export class AppView {
       focusBare: requireElement(doc, 'focus-bare'),
       pagedScore: requireElement(doc, 'paged-score'),
       repeatNumbers: requireElement(doc, 'repeat-numbers'),
+      traceTheStart: requireElement(doc, 'trace-the-start'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
       focusZoom: requireElement(doc, 'focus-zoom'),
@@ -3772,6 +3775,11 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    this.listen(this.el.traceTheStart, 'change', () => {
+      controller.updateSettings({ traceTheStart: this.el.traceTheStart.checked });
+      this.syncControlsFromSettings();
+    });
+
     this.listen(this.el.pagedScore, 'change', () => {
       controller.updateSettings({ pagedScore: this.el.pagedScore.checked });
       this.syncControlsFromSettings();
@@ -5515,6 +5523,11 @@ export class AppView {
     this.el.strictTiming.checked = settings.strictTiming;
     this.el.pagedScore.checked = settings.pagedScore;
     this.el.repeatNumbers.checked = settings.showRepeatNumbers;
+    // The switch as well as the box, and from here: this is where every setting
+    // reaches the page, so a reader who left it on finds it on the next visit
+    // without having touched it.
+    this.el.traceTheStart.checked = settings.traceTheStart;
+    traceTheStart(settings.traceTheStart);
     // Said on the page rather than drawn again: the marks belong to the
     // engraving and outlive a setting being changed, so what changes is
     // whether they are shown - no re-engraving for a checkbox.

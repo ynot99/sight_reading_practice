@@ -68,6 +68,7 @@ const SETTINGS: PracticeSettings = {
   restEveryMinutes: 45,
   whatOpens: 'random',
   scoreOrder: 'hardest',
+  traceTheStart: true,
   stopAtAMistake: true,
   clickSilences: 'the-downbeat',
   keyboard: '61',

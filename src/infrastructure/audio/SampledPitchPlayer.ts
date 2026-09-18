@@ -8,6 +8,7 @@ import { SilentPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { PIANO_SAMPLES, nearestSample, playbackRateFor } from './pianoSampleMap.js';
 import { audioTimeFor, beginRelease, tooLateToSound } from './audioTime.js';
+import { timeTheStart } from '../../shared/timeTheStart.js';
 
 export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
 
@@ -289,6 +290,7 @@ export class SampledPitchPlayer
       source.connect(tone).connect(envelope).connect(context.destination);
     }
     source.start(now);
+    timeTheStart('first note sounded');
     source.onended = () => {
       if (this.voices.get(midi)?.source === source) {
         this.voices.delete(midi);

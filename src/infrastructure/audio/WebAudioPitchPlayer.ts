@@ -1,6 +1,7 @@
 import type { IPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { audioTimeFor, beginRelease, tooLateToSound } from './audioTime.js';
+import { timeTheStart } from '../../shared/timeTheStart.js';
 
 export interface WebAudioPitchPlayerOptions {
   readonly gain?: number;
@@ -89,6 +90,7 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
 
     oscillator.connect(envelope).connect(context.destination);
     oscillator.start(now);
+    timeTheStart('first note sounded (fallback tone)');
     this.voices.set(midi, { oscillator, envelope, peak });
   }
 

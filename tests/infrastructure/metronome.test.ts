@@ -484,6 +484,8 @@ describe('a click that outlives the metre it started in', () => {
  */
 class StubContext {
   currentTime = 0;
+  /** Running, as a device is once woken: a pulse counts nothing on one that is not. */
+  state = 'running';
 
   resume(): Promise<void> {
     return Promise.resolve();

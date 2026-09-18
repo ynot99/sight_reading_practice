@@ -76,6 +76,13 @@ class FakeAudioContext {
     this.tellTheWatchers();
   }
 
+  /** A fresh page's device: asleep until the music asks for it, then woken. */
+  wakeAfter(seconds: number): void {
+    vi.advanceTimersByTime(seconds * 1000);
+    this.state = 'running';
+    this.tellTheWatchers();
+  }
+
   private tellTheWatchers(): void {
     for (const watcher of this.watchers) {
       watcher();
@@ -180,6 +187,25 @@ describe('WebAudioMetronome', () => {
 
     // Stamped in the page's present, not half a minute behind it.
     expect(after - before).toBeGreaterThan(25_000);
+  });
+
+  it('stamps the first beat from the moment the device woke', () => {
+    // A fresh page's device is asleep, and the key that starts the music is
+    // what wakes it - which takes a moment. A beat stamped while it slept was
+    // stamped in a moment already gone by the time it could be heard, and the
+    // notes on it were dropped as too late to sound. His: "перший біт лише
+    // пропускається".
+    context.state = 'suspended';
+    metronome.start();
+    context.wakeAfter(0.3);
+    const woke = performance.now();
+    context.advance(0.06);
+    vi.advanceTimersByTime(20);
+
+    expect(ticks[0]?.index).toBe(0);
+    expect(ticks[0]?.scheduledTimeMs ?? 0).toBeGreaterThanOrEqual(woke);
+    // And it is heard, not only counted.
+    expect(context.oscillators.length).toBeGreaterThan(0);
   });
 
   it('sounds no click whose moment has gone, and still counts it', () => {

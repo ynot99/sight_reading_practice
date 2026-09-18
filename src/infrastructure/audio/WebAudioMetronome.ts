@@ -229,6 +229,18 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   /** Schedules everything due soon, then delivers everything already due. */
   private pump(): void {
     const context = this.ensureContext();
+    // Nothing is built against a clock that is not running. A fresh page's
+    // audio device is woken by the very key that starts the music, and it
+    // takes a moment - hundreds of milliseconds, on a desktop - to begin: a
+    // beat stamped while it still stood was stamped with a moment already in
+    // the past by the time it could be heard, and was dropped as too late to
+    // sound. The first beat of every first start went missing that way. His:
+    // "перший біт лише пропускається". Once the device runs, the difference
+    // between the two clocks is taken again (see `watchTheDevice`) and the
+    // first beat is placed from there.
+    if (context.state !== 'running') {
+      return;
+    }
     const horizon = context.currentTime + this.options.scheduleAheadSec;
 
     while (this.nextTickAudioTime < horizon) {

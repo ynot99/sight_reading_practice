@@ -52,6 +52,18 @@ export function theStarsIn(typed: string): number | null {
 }
 
 /**
+ * Which whole star a mark falls in, for the colour it is drawn in.
+ *
+ * The floor rather than the nearest, because that is how anybody says it: a
+ * piece marked 2.7 is "a two", and 2.9 and 2.1 being the same colour while 3.0
+ * moves on is what a band is. The number is printed beside it, so nothing is
+ * lost to the rounding.
+ */
+export function theStarBand(stars: number): number {
+  return Math.min(HARDEST_STARS, Math.max(EASIEST_STARS, Math.floor(stars)));
+}
+
+/**
  * The shelf in the order asked for.
  *
  * A piece nobody has judged goes last in either difficulty order, never first

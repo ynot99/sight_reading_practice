@@ -91,6 +91,40 @@ describe('the stylesheet', () => {
     expect(webkit?.body ?? '').not.toBe('');
   });
 
+  it('gives every star a colour of its own, in both themes', () => {
+    // A band with no rule falls through to whatever the row inherited, which
+    // is a difficulty drawn in the colour of "unjudged" - right-looking and
+    // wrong, and invisible to every other test because jsdom applies no sheet.
+    const all = rules();
+    for (let band = 1; band <= 10; band += 1) {
+      const rule = all.find((each) => each.selector === `.scores__stars[data-band='${band}']`);
+
+      expect(rule?.body ?? '', `band ${band}`).toContain(`color: var(--star-${band});`);
+      // Defined twice: once on the light ground and once on the dark. One
+      // definition is a ramp that disappears into one of the two themes.
+      expect(CSS.split(`--star-${band}:`).length - 1, `--star-${band}`).toBe(2);
+    }
+  });
+
+  it('gives no two stars the same colour', () => {
+    // A ramp with two rungs the same is a ramp that lies: the reader reads a
+    // colour and gets the wrong one of two neighbours, and the sheet still
+    // looks like ten answers.
+    const grounds = rules().filter((rule) => rule.body.includes('--star-1:'));
+
+    // One block per theme, and neither may be short.
+    expect(grounds).toHaveLength(2);
+    for (const ground of grounds) {
+      const colours = [...Array(10).keys()].map((at) => {
+        const found = new RegExp(`--star-${at + 1}:\s*([^;]+);`).exec(ground.body);
+        return (found?.[1] ?? '').trim();
+      });
+
+      expect(colours.filter((colour) => colour === '')).toEqual([]);
+      expect(new Set(colours).size).toBe(10);
+    }
+  });
+
   it('leaves the drawing of a run no scrollbars of its own', () => {
     // The map under it is the one. They answered the same question and the map
     // answers it better - it says where in the run the view is *and* where the

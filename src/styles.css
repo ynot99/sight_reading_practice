@@ -22,6 +22,31 @@
    * them, and two numbers would be two answers to that.
    */
   --over-the-page: 88%;
+  /*
+   * A colour for every star, cool to hot and then off the end.
+   *
+   * The ramp readers of this kind of chart already know: calm at the bottom,
+   * warm through the middle, and the top one out of the spectrum entirely
+   * rather than merely a redder red - "ten" is not a hotter nine, it is the
+   * end. Ten names and not a formula, because the palette belongs in the
+   * sheet: a colour worked out in TypeScript is one the stylesheet cannot be
+   * read for and one no theme can answer back to. His: "чи можливо зірочку
+   * підсвічувати різними кольорами для кожного рівня?".
+   *
+   * Never the only thing said. The number stands beside every one of them, so
+   * this is a second telling of what the row already says in words - which is
+   * what keeps it readable to somebody who cannot tell 7 from 9 by hue.
+   */
+  --star-1: #0e7490;
+  --star-2: #166534;
+  --star-3: #4d7c0f;
+  --star-4: #a16207;
+  --star-5: #b45309;
+  --star-6: #c2410c;
+  --star-7: #b91c1c;
+  --star-8: #a21caf;
+  --star-9: #7e22ce;
+  --star-10: #1e1b4b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -38,6 +63,17 @@
     --wrong: #f87171;
     --pending: #fbbf24;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
+    /* The same ramp, lifted off a dark ground; see the light block above. */
+    --star-1: #22d3ee;
+    --star-2: #4ade80;
+    --star-3: #a3e635;
+    --star-4: #facc15;
+    --star-5: #fbbf24;
+    --star-6: #fb923c;
+    --star-7: #f87171;
+    --star-8: #e879f9;
+    --star-9: #c084fc;
+    --star-10: #a5b4fc;
   }
 }
 
@@ -610,8 +646,50 @@ textarea {
   min-width: 3.4em;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  /* Where nobody has judged, and nothing is drawn anyway. */
   color: var(--text-muted);
 }
+
+.scores__stars[data-band='1'] {
+  color: var(--star-1);
+}
+
+.scores__stars[data-band='2'] {
+  color: var(--star-2);
+}
+
+.scores__stars[data-band='3'] {
+  color: var(--star-3);
+}
+
+.scores__stars[data-band='4'] {
+  color: var(--star-4);
+}
+
+.scores__stars[data-band='5'] {
+  color: var(--star-5);
+}
+
+.scores__stars[data-band='6'] {
+  color: var(--star-6);
+}
+
+.scores__stars[data-band='7'] {
+  color: var(--star-7);
+}
+
+.scores__stars[data-band='8'] {
+  color: var(--star-8);
+}
+
+.scores__stars[data-band='9'] {
+  color: var(--star-9);
+}
+
+.scores__stars[data-band='10'] {
+  color: var(--star-10);
+}
+
 
 .profile-figure {
   display: flex;

@@ -4250,6 +4250,25 @@ describe('AppView', () => {
       expect(element('sheet-stars').hidden).toBe(true);
     });
 
+    it('wears the colour of the star it falls in', async () => {
+      // The page says which rung, and the sheet says what colour that is. His:
+      // "чи можливо зірочку підсвічувати різними кольорами для кожного рівня?".
+      const rig = createRig();
+      await shelved(rig, ['Gentle', 'Brutal', 'Unjudged']);
+      const idOf = (title: string): string =>
+        rig.runtime.scores.list().find((score) => score.title === title)?.id ?? '';
+      await rig.runtime.scores.keepTheStars(idOf('Gentle'), 2.7);
+      await rig.runtime.scores.keepTheStars(idOf('Brutal'), 9.4);
+
+      element<HTMLButtonElement>('focus-scores').click();
+      const bands = [...element('scores-list').querySelectorAll('.scores__stars')].map(
+        (mark) => mark.getAttribute('data-band'),
+      );
+
+      // Newest first, which is the order they were shelved in reverse.
+      expect(bands).toEqual([null, '9', '2']);
+    });
+
     it('takes the mark off again, which is not marking it easy', async () => {
       const rig = createRig();
       await shelved(rig, ['City of Tears']);

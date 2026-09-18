@@ -34,6 +34,7 @@ import {
 } from '../application/rhythmRuler.js';
 import {
   scoresInOrder,
+  theStarBand,
   theStarsIn,
   WHAT_OPENS,
   type ScoreOrder,
@@ -2281,6 +2282,11 @@ export class AppView {
       const stars = this.doc.createElement('span');
       stars.className = 'scores__stars';
       stars.textContent = score.stars === undefined ? '' : `★ ${score.stars.toFixed(1)}`;
+      // Which colour it wears is the sheet's business; this says only which
+      // rung of the ladder the piece is on.
+      if (score.stars !== undefined) {
+        stars.dataset['band'] = String(theStarBand(score.stars));
+      }
 
       const open = this.doc.createElement('button');
       open.type = 'button';

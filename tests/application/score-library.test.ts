@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { ScoreLibrary, scoresInOrder, theStarsIn } from '../../src/application/ScoreLibrary.js';
+import { ScoreLibrary, scoresInOrder, theStarBand, theStarsIn } from '../../src/application/ScoreLibrary.js';
 import type { StoredScoreSummary } from '../../src/application/ports/IScoreStore.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
@@ -86,6 +86,26 @@ describe('reading a difficulty the reader typed', () => {
     expect(theStarsIn('')).toBeNull();
     expect(theStarsIn('   ')).toBeNull();
     expect(theStarsIn('hard')).toBeNull();
+  });
+});
+
+describe('which star a mark falls in', () => {
+  it('takes the whole star, the way anybody says it', () => {
+    // A piece marked 2.7 is "a two". The number is printed beside the colour,
+    // so nothing is lost to the rounding.
+    expect(theStarBand(2.7)).toBe(2);
+    expect(theStarBand(2.1)).toBe(2);
+    expect(theStarBand(3)).toBe(3);
+    expect(theStarBand(9.9)).toBe(9);
+  });
+
+  it('keeps the top mark in the top band', () => {
+    // Ten is the end of the ramp and not one past it: floored alone, a piece
+    // marked exactly 10 would still be a ten, but anything above would fall off
+    // a colour list that stops there.
+    expect(theStarBand(10)).toBe(10);
+    expect(theStarBand(11)).toBe(10);
+    expect(theStarBand(0.5)).toBe(1);
   });
 });
 

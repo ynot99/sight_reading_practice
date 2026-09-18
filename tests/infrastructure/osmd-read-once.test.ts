@@ -23,6 +23,24 @@ function countSearches(selector: string): { readonly count: () => number; readon
   };
 }
 
+/** How often a page is searched for one of our own layers, counted as it happens. */
+function countLayerSearches(): { readonly count: () => number; readonly stop: () => void } {
+  const searched = Element.prototype.querySelector;
+  let count = 0;
+  Element.prototype.querySelector = function (this: Element, wanted: string) {
+    if (wanted === 'g.hand-switches' || wanted === 'g.passage-markers') {
+      count += 1;
+    }
+    return searched.call(this, wanted);
+  } as typeof Element.prototype.querySelector;
+  return {
+    count: () => count,
+    stop: () => {
+      Element.prototype.querySelector = searched;
+    },
+  };
+}
+
 describe('reading the drawing once for each time it is drawn', () => {
   let stop: (() => void) | null = null;
 
@@ -73,6 +91,27 @@ describe('reading the drawing once for each time it is drawn', () => {
     renderer.showHands([1, 2]);
 
     expect(searches.count()).toBeGreaterThan(0);
+  });
+
+  it('finds the layers it paints the hands and the passage into without searching', async () => {
+    // Both are painted on every start, on every page, and each page was
+    // searched for its layer by class - a walk of the whole drawing, since the
+    // layer is appended last and the search never ends early.
+    const renderer = await engraved();
+    renderer.showHands([1, 2]);
+    renderer.showStart(0);
+    const searches = countLayerSearches();
+    stop = searches.stop;
+
+    renderer.showHands([1]);
+    renderer.showStart(1);
+
+    expect(searches.count()).toBe(0);
+    // And still one layer of each to a page, however often they are painted.
+    for (const page of document.querySelectorAll('svg')) {
+      expect(page.querySelectorAll(':scope > g.hand-switches').length).toBeLessThanOrEqual(1);
+      expect(page.querySelectorAll(':scope > g.passage-markers').length).toBeLessThanOrEqual(1);
+    }
   });
 
   it('reads the numbers on a page once, not once for every bar on it', async () => {

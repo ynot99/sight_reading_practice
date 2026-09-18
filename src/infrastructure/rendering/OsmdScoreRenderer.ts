@@ -750,8 +750,8 @@ export class OsmdScoreRenderer
    * the trainer stopped answering partway through.
    */
   private geometryByPage = new Map<number, ReturnType<typeof fitStaffGeometry>>();
-  /** Each page's overlay layer; see {@link overlayGroupFor}. */
-  private overlayGroups = new WeakMap<SVGSVGElement, SVGGElement>();
+  /** Each page's layers of our own, by name; see {@link layerOn}. */
+  private readonly layers = new WeakMap<SVGSVGElement, Map<string, SVGGElement>>();
   /** The pages as last engraved; see {@link sheets}. */
   private drawnSheets: SVGSVGElement[] | null = null;
   /** The staves as last read off {@link drawnSheets}; see `readStaves`. */
@@ -3201,25 +3201,11 @@ export class OsmdScoreRenderer
    * when the music is engraved again.
    */
   private handGroupFor(sheet: SVGSVGElement): SVGGElement {
-    const found = sheet.querySelector('g.hand-switches');
-    if (found !== null) {
-      return found as SVGGElement;
-    }
-    const group = sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
-    group.setAttribute('class', 'hand-switches');
-    sheet.append(group);
-    return group;
+    return this.layerOn(sheet, 'hand-switches');
   }
 
   private passageGroupFor(sheet: SVGSVGElement): SVGGElement {
-    const found = sheet.querySelector('g.passage-markers');
-    if (found !== null) {
-      return found as SVGGElement;
-    }
-    const group = sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
-    group.setAttribute('class', 'passage-markers');
-    sheet.append(group);
-    return group;
+    return this.layerOn(sheet, 'passage-markers');
   }
 
   /** The page a bar was drawn on. */
@@ -3228,33 +3214,38 @@ export class OsmdScoreRenderer
   }
 
 
+  private overlayGroupFor(sheet: SVGSVGElement): SVGGElement {
+    return this.layerOn(sheet, 'played-overlay');
+  }
+
   /**
-   * The overlay layer inside one page's sheet, made if it is not there yet.
+   * A layer of our own inside one page's sheet - the marks played, the hand
+   * switches, the passage - made if it is not there yet, and kept rather than
+   * looked up.
    *
    * One per page rather than one for the score: what is drawn on a page has
-   * to live in that page's SVG or it is drawn in the wrong coordinates on
-   * the wrong sheet.
-   */
-  /**
-   * The layer a page's marks are drawn into, kept rather than looked up.
-   *
-   * Asking the page for it by class walks the whole drawing, and the layer is
-   * appended last so the walk never ends early: on a score of twenty-odd
-   * thousand elements that was the entire cost of showing a played note, paid
-   * again on every keystroke.
+   * to live in that page's SVG or it is drawn in the wrong coordinates on the
+   * wrong sheet. And kept, because asking the page for it by class walks the
+   * whole drawing, and a layer is appended last so the walk never ends early:
+   * on a score of twenty-odd thousand elements that was the entire cost of
+   * showing a played note, paid again on every keystroke. The hands and the
+   * passage are painted on every start, on every page, and on the longest
+   * score he owns their two walks were seventeen milliseconds of each start.
    *
    * Keyed by the page itself, so an engraving that replaces the pages leaves
    * the old entries unreachable and the new pages simply have none.
    */
-  private overlayGroupFor(sheet: SVGSVGElement): SVGGElement {
-    const kept = this.overlayGroups.get(sheet);
+  private layerOn(sheet: SVGSVGElement, name: string): SVGGElement {
+    const onThisPage = this.layers.get(sheet) ?? new Map<string, SVGGElement>();
+    this.layers.set(sheet, onThisPage);
+    const kept = onThisPage.get(name);
     if (kept !== undefined && kept.parentNode === sheet) {
       return kept;
     }
     const group = sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
-    group.setAttribute('class', 'played-overlay');
+    group.setAttribute('class', name);
     sheet.append(group);
-    this.overlayGroups.set(sheet, group);
+    onThisPage.set(name, group);
     return group;
   }
 

@@ -577,6 +577,29 @@ class OsmdCursorPrimitive implements ICursorPrimitive {
     this.cursor?.next();
   }
 
+  /**
+   * The iterator alone, which is what `next` does before it draws.
+   *
+   * Where the engraver has no iterator to offer - it has not rendered yet -
+   * this falls back to the whole of `next`, which is slower and always right.
+   */
+  stepWithoutDrawing(): void {
+    const cursor = this.cursor;
+    if (cursor === null || cursor === undefined) {
+      return;
+    }
+    const iterator = cursor.iterator as { moveToNext?: () => void } | undefined;
+    if (typeof iterator?.moveToNext !== 'function') {
+      cursor.next();
+      return;
+    }
+    iterator.moveToNext();
+  }
+
+  drawWhereItIs(): void {
+    this.cursor?.update();
+  }
+
   previous(): void {
     this.cursor?.previous();
   }

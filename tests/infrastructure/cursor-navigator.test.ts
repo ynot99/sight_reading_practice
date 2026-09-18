@@ -3,6 +3,42 @@ import { CursorNavigator } from '../../src/infrastructure/rendering/CursorNaviga
 import { FakeCursorPrimitive } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
 
 describe('CursorNavigator', () => {
+  it('puts the marker down once for a walk, not at every step on the way', () => {
+    // A walk has one interesting position: the last. An engraver's `next` puts
+    // the marker on the page at every one of them, each a read of the layout
+    // and a write to the drawing - so starting a run eight hundred bars into a
+    // long score dragged the marker through eight thousand positions first. His:
+    // "просунувся до 800 бару - та там затримка ще більше відчувається, бо
+    // стрибає ще далі".
+    const primitive = new FakeCursorPrimitive(2_000);
+    const navigator = new CursorNavigator(primitive);
+
+    navigator.moveTo(1_500);
+
+    expect(primitive.nextCalls).toBe(1_500);
+    expect(primitive.drawn).toBe(1);
+  });
+
+  it('still draws where a single step lands', () => {
+    // Which is every step of a run: one walked position is still a position
+    // the reader has to see the marker at.
+    const primitive = new FakeCursorPrimitive(100);
+    const navigator = new CursorNavigator(primitive);
+
+    navigator.moveTo(1);
+
+    expect(primitive.drawn).toBe(1);
+  });
+
+  it('draws nothing where there was nowhere to walk', () => {
+    const primitive = new FakeCursorPrimitive(100);
+    const navigator = new CursorNavigator(primitive);
+
+    navigator.moveTo(0);
+
+    expect(primitive.drawn).toBe(0);
+  });
+
   it('steps forward one position at a time', () => {
     const primitive = new FakeCursorPrimitive(6);
     const navigator = new CursorNavigator(primitive);

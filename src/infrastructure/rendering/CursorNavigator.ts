@@ -13,6 +13,18 @@ export interface ICursorPrimitive {
   previous(): void;
   show(): void;
   hide(): void;
+  /**
+   * Advances without moving the marker on the page.
+   *
+   * A walk of a thousand steps has one interesting position - the last - and
+   * an engraver's `next` puts the marker on the page at every one of them.
+   * Each of those is a read of the layout and a write to the drawing, and on a
+   * long score the reader watches the marker crawl from the top of the piece to
+   * where they asked to start.
+   */
+  stepWithoutDrawing(): void;
+  /** Puts the marker where the steps have left it, once. */
+  drawWhereItIs(): void;
   readonly endReached: boolean;
 }
 
@@ -117,9 +129,22 @@ export class CursorNavigator implements IScoreCursor {
     }
     // Stops early at the end of the sheet, so the navigator never claims a
     // position the engraver cannot display.
+    //
+    // And the marker is put down once, at the end, rather than dragged through
+    // every position on the way. Measured on a score of thirteen thousand
+    // positions: starting a run eight hundred bars in walked some eight
+    // thousand of them, each one a move of the marker on the page, and the
+    // reader's report was that the further in they began the longer the wait
+    // and the further the music had jumped by the time it was over. One step
+    // costs the same as it ever did; a thousand now cost one drawing.
+    let walked = false;
     while (this.index < target && !this.primitive.endReached) {
-      this.primitive.next();
+      this.primitive.stepWithoutDrawing();
       this.index += 1;
+      walked = true;
+    }
+    if (walked) {
+      this.primitive.drawWhereItIs();
     }
     this.moved?.(this.index, true);
   }

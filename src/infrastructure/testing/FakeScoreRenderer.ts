@@ -360,6 +360,9 @@ export class FakeScoreRenderer
  * verify {@link CursorNavigator} against the engraver contract.
  */
 export class FakeCursorPrimitive implements ICursorPrimitive {
+  /** How many times the marker has actually been put on the page. */
+  drawn = 0;
+
   private index = 0;
   private readonly length: number;
   visible = false;
@@ -385,10 +388,19 @@ export class FakeCursorPrimitive implements ICursorPrimitive {
   }
 
   next(): void {
+    this.stepWithoutDrawing();
+    this.drawWhereItIs();
+  }
+
+  stepWithoutDrawing(): void {
     this.nextCalls += 1;
     if (this.index < this.length - 1) {
       this.index += 1;
     }
+  }
+
+  drawWhereItIs(): void {
+    this.drawn += 1;
   }
 
   previous(): void {

@@ -367,7 +367,7 @@ export class FakeCursorPrimitive implements ICursorPrimitive {
   private readonly length: number;
   visible = false;
   nextCalls = 0;
-  previousCalls = 0;
+  backCalls = 0;
   resetCalls = 0;
 
   constructor(length: number) {
@@ -403,8 +403,8 @@ export class FakeCursorPrimitive implements ICursorPrimitive {
     this.drawn += 1;
   }
 
-  previous(): void {
-    this.previousCalls += 1;
+  stepBackWithoutDrawing(): void {
+    this.backCalls += 1;
     if (this.index > 0) {
       this.index -= 1;
     }

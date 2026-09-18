@@ -10,7 +10,6 @@ import type { IScoreCursor } from '../../application/ports/IScoreRenderer.js';
 export interface ICursorPrimitive {
   reset(): void;
   next(): void;
-  previous(): void;
   show(): void;
   hide(): void;
   /**
@@ -23,6 +22,8 @@ export interface ICursorPrimitive {
    * where they asked to start.
    */
   stepWithoutDrawing(): void;
+  /** The step back that {@link stepWithoutDrawing} is the step forward of. */
+  stepBackWithoutDrawing(): void;
   /** Puts the marker where the steps have left it, once. */
   drawWhereItIs(): void;
   readonly endReached: boolean;
@@ -111,6 +112,7 @@ export class CursorNavigator implements IScoreCursor {
 
   moveTo(stepIndex: number): void {
     const target = Math.max(0, stepIndex);
+    let walked = false;
     if (target < this.index) {
       // Whichever is fewer moves: back a step at a time, or from the top. Going
       // back is the shorter way for everything that actually happens - a
@@ -119,8 +121,9 @@ export class CursorNavigator implements IScoreCursor {
       // the beginning of a long piece.
       if (this.index - target <= target) {
         while (this.index > target) {
-          this.primitive.previous();
+          this.primitive.stepBackWithoutDrawing();
           this.index -= 1;
+          walked = true;
         }
       } else {
         this.primitive.reset();
@@ -137,7 +140,11 @@ export class CursorNavigator implements IScoreCursor {
     // reader's report was that the further in they began the longer the wait
     // and the further the music had jumped by the time it was over. One step
     // costs the same as it ever did; a thousand now cost one drawing.
-    let walked = false;
+    //
+    // Backwards as well, which is what every start of a passage does after
+    // the last run finished at its end: measured on his device, most of the
+    // time the marker took to come back a few bars was spent drawing it at
+    // each of them.
     while (this.index < target && !this.primitive.endReached) {
       this.primitive.stepWithoutDrawing();
       this.index += 1;

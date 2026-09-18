@@ -46,6 +46,46 @@ function aMomentOfNothing(): Exercise {
   };
 }
 
+/**
+ * Two bars with the moment of nothing in the second.
+ *
+ *   treble: C4 (half)  D4 (half)  | E4 (half)                F4 (half)
+ *   bass:   G3 (half)  A3 (half)  | B3 (quarter) (silence)   C3 (half)
+ *
+ * Drawn positions at 0, 0.5, 1 and 1.5; the silence at 1.25 is one the
+ * engraver's iterator stops on and its cursor does not.
+ */
+function nothingInTheSecondBar(): Exercise {
+  const base = partialVoiceExercise();
+  const [treble, bass] = base.staves;
+  if (treble === undefined || bass === undefined) {
+    throw new Error('the fixture has two staves');
+  }
+  return {
+    ...base,
+    staves: [
+      {
+        ...treble,
+        measures: [
+          bar(noteEntry(p('C4'), Duration.HALF), noteEntry(p('D4'), Duration.HALF)),
+          bar(noteEntry(p('E4'), Duration.HALF), noteEntry(p('F4'), Duration.HALF)),
+        ],
+      },
+      {
+        ...bass,
+        measures: [
+          bar(noteEntry(p('G3'), Duration.HALF), noteEntry(p('A3'), Duration.HALF)),
+          bar(
+            noteEntry(p('B3'), Duration.QUARTER),
+            silenceEntry(Duration.QUARTER),
+            noteEntry(p('C3'), Duration.HALF),
+          ),
+        ],
+      },
+    ],
+  };
+}
+
 function engraverOf(renderer: OsmdScoreRenderer): OpenSheetMusicDisplay {
   return (renderer as unknown as { osmd: OpenSheetMusicDisplay }).osmd;
 }
@@ -83,6 +123,29 @@ describe('walking the cursor without drawing it', () => {
     // The second beat is the silence, and the marker does not stand on it: one
     // drawn step from the top is the second half of the bar.
     expect(stepped).toBe(0.5);
+    expect(walked).toBe(stepped);
+  });
+
+  it('lands exactly where stepping back one drawn step at a time would', async () => {
+    // The walk back steps the iterator and draws once, for the reason the walk
+    // forward does - and it has to take the engraver's own step back to do it,
+    // or it stops on the silence the marker never stands on.
+    const renderer = new OsmdScoreRenderer(createScoreContainer(), { zoom: 1 });
+    await renderer.load(new MusicXmlSerializer().serialize(nothingInTheSecondBar()));
+    const osmd = engraverOf(renderer);
+
+    renderer.cursor.moveTo(3);
+    renderer.cursor.moveTo(2);
+    const walked = whereTheCursorIs(osmd);
+
+    osmd.cursor.reset();
+    osmd.cursor.next();
+    osmd.cursor.next();
+    osmd.cursor.next();
+    osmd.cursor.previous();
+    const stepped = whereTheCursorIs(osmd);
+
+    expect(stepped).toBe(1);
     expect(walked).toBe(stepped);
   });
 

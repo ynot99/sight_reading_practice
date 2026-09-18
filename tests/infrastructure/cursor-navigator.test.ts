@@ -89,9 +89,23 @@ describe('CursorNavigator', () => {
 
     expect(navigator.position).toBe(480);
     expect(primitive.position).toBe(480);
-    expect(primitive.previousCalls).toBe(40);
+    expect(primitive.backCalls).toBe(40);
     expect(primitive.resetCalls).toBe(0);
     expect(primitive.nextCalls).toBe(0);
+  });
+
+  it('puts the marker down once for a walk back as well', () => {
+    // The start of a passage after the last run finished at its end: a few
+    // bars back, and each of them drawn was a fresh picture of the marker that
+    // nobody saw.
+    const primitive = new FakeCursorPrimitive(600);
+    const navigator = new CursorNavigator(primitive);
+    navigator.moveTo(520);
+    primitive.drawn = 0;
+
+    navigator.moveTo(480);
+
+    expect(primitive.drawn).toBe(1);
   });
 
   it('still rewinds when the beginning is the nearer end', () => {
@@ -108,7 +122,7 @@ describe('CursorNavigator', () => {
     expect(primitive.position).toBe(3);
     expect(primitive.resetCalls).toBe(1);
     expect(primitive.nextCalls).toBe(3);
-    expect(primitive.previousCalls).toBe(0);
+    expect(primitive.backCalls).toBe(0);
   });
 
   it('treats a move to the current position as a no-op', () => {

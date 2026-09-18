@@ -643,8 +643,24 @@ class OsmdCursorPrimitive implements ICursorPrimitive {
     this.cursor?.update();
   }
 
-  previous(): void {
-    this.cursor?.previous();
+  /**
+   * Exactly the step `previous` takes, without the drawing it does afterwards:
+   * the engraver's `previous` is `moveToPreviousVisibleVoiceEntry(false)` and
+   * then `update()`. See `stepWithoutDrawing` for why exactly.
+   */
+  stepBackWithoutDrawing(): void {
+    const cursor = this.cursor;
+    if (cursor === null || cursor === undefined) {
+      return;
+    }
+    const iterator = cursor.iterator as
+      | { moveToPreviousVisibleVoiceEntry?: (notesOnly: boolean) => void }
+      | undefined;
+    if (typeof iterator?.moveToPreviousVisibleVoiceEntry !== 'function') {
+      cursor.previous();
+      return;
+    }
+    iterator.moveToPreviousVisibleVoiceEntry(false);
   }
 
   show(): void {

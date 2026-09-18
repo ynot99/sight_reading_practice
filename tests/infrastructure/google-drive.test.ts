@@ -122,6 +122,25 @@ describe('the trainer folder on Google Drive', () => {
     expect(signIns).toHaveLength(2);
   });
 
+  it('says so where the build was made without a client id', async () => {
+    // The id comes from the build's environment, and a copy built without it
+    // has no drive - which must be said rather than a Google window that
+    // opens onto an error.
+    let signedIn = 0;
+    const drive = new GoogleDrive({
+      clientId: '',
+      identity: () => {
+        signedIn += 1;
+        return Promise.reject(new Error('never'));
+      },
+      fetch: () => Promise.reject(new Error('never')),
+      now: () => 0,
+    });
+
+    await expect(drive.connect()).rejects.toThrow('not set up');
+    expect(signedIn).toBe(0);
+  });
+
   it('says so when the reader closes the Google window', async () => {
     const { drive } = google({ signIn: 'closed' });
 

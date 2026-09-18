@@ -106,6 +106,9 @@ export class GoogleDrive implements ICloudDrive {
   }
 
   async connect(): Promise<void> {
+    if (this.options.clientId === '') {
+      throw new Error('Google Drive is not set up in this copy of the trainer.');
+    }
     if (this.token === null || this.options.now() >= this.token.expiresAtMs) {
       this.token = await this.signIn();
     }

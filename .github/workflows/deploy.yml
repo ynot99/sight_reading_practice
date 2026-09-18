@@ -40,6 +40,11 @@ jobs:
 
       - name: Build
         run: npx vite build
+        # Which program asks Google for the reader's drive. A repository
+        # variable rather than a line in the source, at his asking; a build
+        # without it simply has no drive.
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
 
       - name: Package the site for Pages
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

@@ -38,7 +38,11 @@ import { TakeLibrary } from '../application/TakeLibrary.js';
 import { TakePlayer } from '../application/TakePlayer.js';
 import { BackupService } from '../application/Backup.js';
 import { ScoreLibrary } from '../application/ScoreLibrary.js';
-import { IndexedDbScoreStore } from '../infrastructure/storage/IndexedDbScoreStore.js';
+import {
+  IndexedDbScoreStore,
+  browserIndexedDb,
+} from '../infrastructure/storage/IndexedDbScoreStore.js';
+import { openShelf, openShelfDatabase } from '../infrastructure/storage/DatabaseShelf.js';
 import type { IScoreStore } from '../application/ports/IScoreStore.js';
 import type { IStorageGauge } from '../application/ports/IStorageGauge.js';
 import { DownloadFileSink } from '../infrastructure/files/DownloadFileSink.js';
@@ -224,6 +228,29 @@ export interface IToggleableInput {
   readonly isEnabled: boolean;
   enable(): void;
   disable(): void;
+}
+
+/** The shelves that outgrew the small store, which take a moment to open. */
+export interface KeptShelves {
+  readonly takes: ISettingsStore;
+  readonly history: ISettingsStore;
+}
+
+/**
+ * Opens the takes and the readings in the browser's database, moving them out
+ * of the small store the first time.
+ *
+ * Before `createApp` rather than inside it: both are read while the
+ * application is built, and a database only answers later. Here all the same,
+ * because this is the one place adapters are made.
+ */
+export async function openTheShelves(): Promise<KeptShelves> {
+  const database = await openShelfDatabase(browserIndexedDb());
+  const local = browserStorage();
+  return {
+    takes: await openShelf(database, local, TAKES_STORAGE_KEY),
+    history: await openShelf(database, local, HISTORY_STORAGE_KEY),
+  };
 }
 
 /**

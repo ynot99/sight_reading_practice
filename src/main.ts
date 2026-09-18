@@ -1,5 +1,5 @@
 import './styles.css';
-import { createApp } from './composition/createApp.js';
+import { createApp, openTheShelves } from './composition/createApp.js';
 import type { KeyboardTarget } from './infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { AppView } from './ui/AppView.js';
 
@@ -8,7 +8,7 @@ import { AppView } from './ui/AppView.js';
  *
  * Builds the object graph, hands it to the view and gets out of the way.
  */
-function bootstrap(): void {
+async function bootstrap(): Promise<void> {
   // The engraver measures its container with offsetWidth, which counts
   // padding and border, so it gets an element that has neither.
   const scoreContainer = document.getElementById('score-surface');
@@ -16,8 +16,13 @@ function bootstrap(): void {
     throw new Error('Missing #score-surface container.');
   }
 
+  // The takes and the readings live in the browser's database, which answers
+  // only later - and both are read while the application is built.
+  const shelves = await openTheShelves();
   const runtime = createApp({
     scoreContainer,
+    takeStore: shelves.takes,
+    historyStore: shelves.history,
     // The DOM's overloaded listener signature is wider than the port needs.
     keyboardTarget: document as unknown as KeyboardTarget,
     location: window.location,
@@ -32,7 +37,11 @@ function bootstrap(): void {
     runtime.dispose();
   });
 
-  void view.initialize().catch((error: unknown) => {
+  await view.initialize();
+}
+
+function start(): void {
+  void bootstrap().catch((error: unknown) => {
     // eslint-disable-next-line no-console -- last-resort surface for boot failures.
     console.error('Failed to start the trainer', error);
   });
@@ -63,8 +72,8 @@ function keepItOnTheDevice(): void {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', bootstrap, { once: true });
+  document.addEventListener('DOMContentLoaded', start, { once: true });
 } else {
-  bootstrap();
+  start();
 }
 keepItOnTheDevice();

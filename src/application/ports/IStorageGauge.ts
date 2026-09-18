@@ -13,7 +13,10 @@ export interface StorageReading {
   readonly usedBytes: number | null;
   /** How much the browser would let the site keep. `null` where it will not say. */
   readonly quotaBytes: number | null;
-  /** The database of scores alone, where the browser breaks it out. */
+  /**
+   * The browser's database alone - the scores, the takes and the readings -
+   * where the browser breaks it out.
+   */
   readonly databaseBytes: number | null;
   /**
    * Whether the browser has promised not to clear it to make room, or after

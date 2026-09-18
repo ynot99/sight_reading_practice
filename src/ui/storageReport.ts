@@ -37,7 +37,7 @@ export function describeStorage(reading: StorageReading): string[] {
     .join(', ');
   return [
     `Everything this site keeps: ${everything}`,
-    `Scores: ${scores}`,
+    `Database (scores, takes, readings): ${scores}`,
     `Kept from being cleared: ${kept}`,
     `Small store: ${sizeOf(small)} of about ${sizeOf(SMALL_STORE_BYTES)} (${shelves})`,
   ];

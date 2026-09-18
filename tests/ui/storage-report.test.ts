@@ -16,7 +16,7 @@ describe('what the device keeps, said to the reader', () => {
 
     expect(lines).toEqual([
       'Everything this site keeps: 42.0 MB of 100 GB allowed',
-      'Scores: 30.0 MB',
+      'Database (scores, takes, readings): 30.0 MB',
       'Kept from being cleared: yes',
       'Small store: 1.5 MB of about 5.0 MB (settings 3 KB, takes 1.5 MB)',
     ]);
@@ -34,7 +34,7 @@ describe('what the device keeps, said to the reader', () => {
     });
 
     expect(lines[0]).toBe('Everything this site keeps: the browser does not say');
-    expect(lines[1]).toBe('Scores: this browser does not break them out');
+    expect(lines[1]).toBe('Database (scores, takes, readings): this browser does not break them out');
     expect(lines[2]).toBe('Kept from being cleared: the browser does not say');
   });
 

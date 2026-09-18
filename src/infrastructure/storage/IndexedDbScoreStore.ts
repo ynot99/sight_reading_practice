@@ -35,7 +35,8 @@ export function browserIndexedDb(): IndexedDbFactory | null {
   return typeof indexedDB === 'undefined' ? null : indexedDB;
 }
 
-function request<T>(source: IDBRequest<T>): Promise<T> {
+/** A database request as a promise. */
+export function request<T>(source: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     source.onsuccess = () => resolve(source.result);
     source.onerror = () => reject(source.error ?? new Error('The score store refused.'));

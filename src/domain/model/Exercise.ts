@@ -686,8 +686,39 @@ export interface DynamicHairpin {
  * Where it is heading is the mark at its far end, and where the writer put
  * none, one step of the eight: which is what a wedge between two unmarked
  * stretches means to a player.
+ *
+ * Kept once asked, per piece, for the reason {@link barLines} is: a playback
+ * asks it for every note it gathers, and each answer scans every dynamic and
+ * every hairpin in the piece. On the longest score he owns that was two
+ * hundred milliseconds on every start and twice that on a resume, which
+ * gathers twice - all of it a pause before the music now that the clock waits
+ * for the gathering. The answer is a fact about the piece at that moment, so
+ * the second time it is asked it is already known: a resume, a replay and the
+ * second lap of a repeat cost nothing. Kept rather than computed differently,
+ * so that how loud a note is cannot change by a hair for being fast.
  */
 export function velocityAt(
+  exercise: Exercise,
+  measureIndex: number,
+  offsetTicks: number,
+  staffNumber: number | null,
+): number {
+  const known = velocitiesOf.get(exercise) ?? new Map<string, number>();
+  velocitiesOf.set(exercise, known);
+  const key = `${String(measureIndex)}:${String(offsetTicks)}:${String(staffNumber)}`;
+  const kept = known.get(key);
+  if (kept !== undefined) {
+    return kept;
+  }
+  const velocity = velocityAtByReading(exercise, measureIndex, offsetTicks, staffNumber);
+  known.set(key, velocity);
+  return velocity;
+}
+
+/** {@link velocityAt}, per piece, by the place and the staff it was asked for. */
+const velocitiesOf = new WeakMap<Exercise, Map<string, number>>();
+
+function velocityAtByReading(
   exercise: Exercise,
   measureIndex: number,
   offsetTicks: number,

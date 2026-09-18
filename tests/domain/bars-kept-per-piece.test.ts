@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { barLines, elapsedMsAt, tempoSpans } from '../../src/domain/model/Exercise.js';
+import { barLines, elapsedMsAt, tempoSpans, velocityAt } from '../../src/domain/model/Exercise.js';
+import type { Exercise } from '../../src/domain/model/Exercise.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { twoBarExercise } from '../support/fixtures.js';
 
@@ -43,5 +44,47 @@ describe('the bars and tempos of a piece, walked once', () => {
     expect(elapsedMsAt(slow, bar)).toBe(4_000);
     expect(elapsedMsAt(fast, bar)).toBe(2_000);
     expect(elapsedMsAt(slow, bar)).toBe(4_000);
+  });
+});
+
+describe('how hard a note is struck, once asked', () => {
+  it('answers each piece from its own marks, never from the last piece asked', () => {
+    // Kept per piece, because a playback asks it for every note it gathers
+    // and every answer used to scan every dynamic in the piece. Kept any wider,
+    // the first piece opened would decide how loud every later one is played.
+    const soft: Exercise = {
+      ...twoBarExercise(),
+      dynamicMarks: [{ measureIndex: 0, offsetTicks: 0, level: 'pp', staffNumber: null }],
+    };
+    const loud: Exercise = {
+      ...twoBarExercise(),
+      dynamicMarks: [{ measureIndex: 0, offsetTicks: 0, level: 'ff', staffNumber: null }],
+    };
+
+    const quietly = velocityAt(soft, 0, 0, 1);
+    const loudly = velocityAt(loud, 0, 0, 1);
+
+    expect(loudly).toBeGreaterThan(quietly);
+    // Asked again, still its own answer.
+    expect(velocityAt(soft, 0, 0, 1)).toBe(quietly);
+  });
+
+  it('keeps each hand its own answer at the same moment', () => {
+    // A hand marked separately keeps its own where the two sit at the same
+    // moment - `f` over `p` - so the place alone is not enough to remember an
+    // answer by.
+    const piece: Exercise = {
+      ...twoBarExercise(),
+      dynamicMarks: [
+        { measureIndex: 0, offsetTicks: 0, level: 'f', staffNumber: 1 },
+        { measureIndex: 0, offsetTicks: 0, level: 'p', staffNumber: 2 },
+      ],
+    };
+
+    const treble = velocityAt(piece, 0, 0, 1);
+    const bass = velocityAt(piece, 0, 0, 2);
+
+    expect(treble).toBeGreaterThan(bass);
+    expect(velocityAt(piece, 0, 0, 1)).toBe(treble);
   });
 });

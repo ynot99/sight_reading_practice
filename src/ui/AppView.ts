@@ -2336,6 +2336,15 @@ export class AppView {
   }
 
   private async openKeptScore(id: string, title: string): Promise<void> {
+    // Out of the way first. Engraving a long score takes the thread for
+    // seconds, and nothing on the page can be drawn or pressed while it does -
+    // so the shelf stayed up, over music the reader had already asked for,
+    // until the browser offered to kill the page. Shutting it here means the
+    // last thing drawn before the wait is the page they asked to see, with the
+    // engraver's own "working" beside it. His: "у scores кнопку open мабуть
+    // зробити асинхронною, зачиняти сам діалог, та показувати loading, бо
+    // сторінка просто зависає".
+    this.el.sheetScores.hidden = true;
     try {
       const exercise = await this.runtime.scores.open(id);
       if (exercise === null) {

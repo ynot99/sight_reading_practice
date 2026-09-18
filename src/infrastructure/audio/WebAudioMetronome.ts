@@ -7,6 +7,7 @@ import type {
 } from '../../application/ports/IMetronome.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
+import { TOO_LATE_MS } from './audioTime.js';
 import {
   buildMetronomeTick,
   isAudibleClick,
@@ -188,7 +189,15 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
 
     while (this.nextTickAudioTime < horizon) {
       const tick = this.buildTick(this.nextTickIndex, this.nextTickAudioTime);
-      if (!this.config.muted && isAudibleClick(tick, this.config)) {
+      // A click whose moment has gone is not sounded. When the page stalls -
+      // engraving a long score stalls it for seconds - the audio clock goes on
+      // without it, and this loop wakes with every click of those seconds to
+      // make: scheduled at times already past, they would all leave the
+      // speaker at once. The same rule the notes keep, and for the same
+      // reason. What the click *means* is untouched: the tick is still built,
+      // still counted and still delivered below.
+      const late = this.nextTickAudioTime < context.currentTime - TOO_LATE_MS / 1000;
+      if (!late && !this.config.muted && isAudibleClick(tick, this.config)) {
         this.playClick(context, tick, this.nextTickAudioTime);
       }
       this.queue.push({ tick, audioTime: this.nextTickAudioTime });

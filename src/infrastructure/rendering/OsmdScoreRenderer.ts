@@ -121,6 +121,23 @@ export function fittingPassesWorth(engravedMs: number): number {
   return Math.min(FIT_PASSES, Math.floor(FIT_BUDGET_MS / engravedMs));
 }
 
+/**
+ * Waits for the browser to have painted whatever was last asked of it.
+ *
+ * Two frames, because one only reaches the frame this change is already in.
+ * Falls back to a turn of the task queue where there are no frames - a
+ * headless test, a hidden tab - which yields just as well and never hangs.
+ */
+function afterTheBrowserHasDrawn(): Promise<void> {
+  return new Promise((done) => {
+    if (typeof requestAnimationFrame !== 'function') {
+      setTimeout(done, 0);
+      return;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => done()));
+  });
+}
+
 /** The page's own clock, or the calendar's where there is no page. */
 function nowMs(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
@@ -774,6 +791,13 @@ export class OsmdScoreRenderer
   }
 
   async load(musicXml: string): Promise<void> {
+    // Before the thread goes. Everything below is one long stretch of work
+    // that the browser cannot paint through, so whatever the page put up to
+    // say it is working - and it does put something up - would otherwise be
+    // drawn only after the work it was announcing. One turn of the event loop
+    // is all it takes, and it is the difference between a page that says
+    // "engraving" and a page that has stopped answering.
+    await afterTheBrowserHasDrawn();
     const osmd = await this.ensureEngraver();
     this.marks = [];
     // Nothing, rather than the engraver's "Untitled Score", for a score that

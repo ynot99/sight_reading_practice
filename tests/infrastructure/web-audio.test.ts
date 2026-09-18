@@ -114,6 +114,27 @@ describe('WebAudioMetronome', () => {
     vi.useRealTimers();
   });
 
+  it('sounds no click whose moment has gone, and still counts it', () => {
+    // When the page stalls - engraving a long score stalls it for seconds -
+    // the audio clock goes on without it, and the scheduler wakes with every
+    // click of those seconds to make. Scheduled at times already past, they
+    // would all leave the speaker at once. What the click *means* is untouched:
+    // the ticks are still built, counted and delivered.
+    metronome.start();
+    const sounded = context.oscillators.length;
+
+    // Four seconds of clock the page never saw.
+    context.advance(4);
+    vi.advanceTimersByTime(20);
+
+    // One: the beat that is actually due now. The four the page slept through
+    // are not sounded at all, where before every one of them would have been.
+    expect(context.oscillators.length).toBe(sounded + 1);
+    // And the music has not lost its place: every beat of those seconds is
+    // still a beat that happened.
+    expect(ticks.length).toBeGreaterThan(3);
+  });
+
   it('schedules audio ahead of time but delivers ticks when they are due', () => {
     metronome.start();
 

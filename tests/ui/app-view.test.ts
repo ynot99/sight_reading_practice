@@ -4395,6 +4395,24 @@ describe('AppView', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
+    it('shuts the shelf the moment a score is asked for', async () => {
+      // Engraving a long score takes the thread for seconds and nothing can be
+      // drawn or pressed while it does, so the shelf stayed up over music the
+      // reader had already asked for until the browser offered to kill the
+      // page. His: "у scores кнопку open мабуть зробити асинхронною, зачиняти
+      // сам діалог, та показувати loading".
+      const rig = createRig();
+      await shelved(rig, ['Choral Chambers']);
+      element<HTMLButtonElement>('focus-scores').click();
+      expect(element('sheet-scores').hidden).toBe(false);
+
+      openRow('Choral Chambers').click();
+
+      // Shut before the waiting starts, not after it ends.
+      expect(element('sheet-scores').hidden).toBe(true);
+      await waitFor(() => rig.runtime.controller.openedExercise?.title === 'Choral Chambers');
+    });
+
     it('puts back the click the piece was last read with', async () => {
       // His: "choral chambers has two clicks in a base metronome setting, and I
       // need to choose to hear more clicks, and when I switch to another song -

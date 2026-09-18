@@ -1,6 +1,6 @@
 import type { IPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
-import { audioTimeFor, beginRelease, tooLateToSound } from './audioTime.js';
+import { audioTimeFor, beginRelease, tooLateToSound, unplug } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 
 export interface WebAudioPitchPlayerOptions {
@@ -89,6 +89,9 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
     envelope.gain.exponentialRampToValueAtTime(peak * 0.55, now + 0.35);
 
     oscillator.connect(envelope).connect(context.destination);
+    oscillator.onended = () => {
+      unplug(oscillator, envelope);
+    };
     oscillator.start(now);
     timeTheStart('first note sounded (fallback tone)');
     this.voices.set(midi, { oscillator, envelope, peak });

@@ -33,9 +33,15 @@ class FakeNode {
   type = '';
   startedAt: number | null = null;
   stoppedAt: number | null = null;
+  onended: (() => void) | null = null;
+  unplugged = false;
 
   connect(target: FakeNode): FakeNode {
     return target;
+  }
+
+  disconnect(): void {
+    this.unplugged = true;
   }
 
   start(at: number): void {
@@ -138,6 +144,20 @@ describe('WebAudioMetronome', () => {
   afterEach(() => {
     metronome.stop();
     vi.useRealTimers();
+  });
+
+  it('unplugs each click once it has sounded', () => {
+    // A click is a chain of its own, and a pulse makes several a second for
+    // as long as the music lasts.
+    metronome.start();
+    const click = context.oscillators[0];
+    const envelope = context.gains[0];
+    expect(click?.unplugged).toBe(false);
+
+    click?.onended?.();
+
+    expect(click?.unplugged).toBe(true);
+    expect(envelope?.unplugged).toBe(true);
   });
 
   it('takes the clocks apart again when the device wakes', () => {
@@ -348,6 +368,18 @@ describe('WebAudioPitchPlayer', () => {
     expect(context.oscillators[0]?.frequency.value).toBeCloseTo(440, 6);
     expect(context.oscillators[0]?.startedAt).toBe(0);
     expect(context.resumeCalls).toBe(1);
+  });
+
+  it('unplugs a note once it has finished, as the sampled one does', () => {
+    const context = new FakeAudioContext();
+    const player = new WebAudioPitchPlayer(contextFactory(context));
+    player.play(69, 0.8);
+    const tone = context.oscillators[0];
+
+    tone?.onended?.();
+
+    expect(tone?.unplugged).toBe(true);
+    expect(context.gains.at(-1)?.unplugged).toBe(true);
   });
 
   it('drops a note whose moment has gone, as the sampled one does', () => {

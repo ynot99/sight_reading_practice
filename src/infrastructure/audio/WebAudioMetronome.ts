@@ -7,7 +7,7 @@ import type {
 } from '../../application/ports/IMetronome.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
-import { TOO_LATE_MS } from './audioTime.js';
+import { TOO_LATE_MS, unplug } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 import {
   buildMetronomeTick,
@@ -372,6 +372,9 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.05);
 
     oscillator.connect(envelope).connect(context.destination);
+    oscillator.onended = () => {
+      unplug(oscillator, envelope);
+    };
     oscillator.start(at);
     oscillator.stop(at + 0.06);
     return oscillator;

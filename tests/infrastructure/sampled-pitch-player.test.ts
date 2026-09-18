@@ -40,9 +40,14 @@ class FakeSource {
   onended: (() => void) | null = null;
   startedAt: number | null = null;
   stoppedAt: number | null = null;
+  unplugged = false;
 
   connect(target: unknown): unknown {
     return target;
+  }
+
+  disconnect(): void {
+    this.unplugged = true;
   }
 
   start(at: number): void {
@@ -56,9 +61,14 @@ class FakeSource {
 
 class FakeGain {
   readonly gain = new FakeParam();
+  unplugged = false;
 
   connect(target: unknown): unknown {
     return target;
+  }
+
+  disconnect(): void {
+    this.unplugged = true;
   }
 }
 
@@ -258,6 +268,37 @@ describe('SampledPitchPlayer', () => {
     player.stop(60, performance.now() - 3_000);
 
     expect(context.sources[0]?.stoppedAt).not.toBeNull();
+  });
+
+  it('unplugs a note from the speaker once it has finished', async () => {
+    // Nothing ever took a finished note's chain down, and a chain left
+    // connected is one the audio thread goes on visiting hundreds of times a
+    // second. One more for every note played: fine at the start, worse the
+    // further in, and by bar a thousand of a long score "вже слухати
+    // неможливо".
+    const { player, context } = createPlayer();
+    await player.load();
+    player.play(60, 1);
+    const source = context.sources[0];
+    const envelope = context.gains[0];
+
+    source?.onended?.();
+
+    expect(source?.unplugged).toBe(true);
+    expect(envelope?.unplugged).toBe(true);
+  });
+
+  it('leaves a note plugged in while it is still sounding', async () => {
+    // Its release is still being heard until the source ends, and unplugging
+    // it any earlier would cut the tail off every note.
+    const { player, context } = createPlayer();
+    await player.load();
+    player.play(60, 1);
+
+    player.stop(60);
+
+    expect(context.sources[0]?.unplugged).toBe(false);
+    expect(context.gains[0]?.unplugged).toBe(false);
   });
 
   it('resamples the notes between the recordings', async () => {

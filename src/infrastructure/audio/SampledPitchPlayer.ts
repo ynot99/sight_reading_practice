@@ -7,7 +7,7 @@ import type {
 import { SilentPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { PIANO_SAMPLES, nearestSample, playbackRateFor } from './pianoSampleMap.js';
-import { audioTimeFor, beginRelease, tooLateToSound } from './audioTime.js';
+import { audioTimeFor, beginRelease, tooLateToSound, unplug } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 
 export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
@@ -295,6 +295,7 @@ export class SampledPitchPlayer
       if (this.voices.get(midi)?.source === source) {
         this.voices.delete(midi);
       }
+      unplug(source, ...(tone === null ? [] : [tone]), envelope);
     };
     this.voices.set(midi, { source, envelope, peak });
   }

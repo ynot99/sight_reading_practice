@@ -51,6 +51,28 @@ export function audioTimeFor(context: BaseAudioContext, atMs: number | undefined
 }
 
 /**
+ * Takes a finished sound's nodes out of the graph.
+ *
+ * Every note and every click is a small chain - a source, perhaps a filter,
+ * an envelope - connected to the speaker, and nothing here ever took one
+ * down. A node left connected is not free: the audio thread walks the graph
+ * hundreds of times a second, and a chain that has finished playing is still
+ * a chain it has to visit. On a long score that is tens of thousands of them
+ * by the end, one more for every note played, which is exactly the shape of
+ * what he heard - fine at the start, worse the further in, and by bar a
+ * thousand "вже слухати неможливо".
+ *
+ * Called when the source has ended, so the chain is silent by then: a release
+ * is scheduled before the source is stopped, and the source is stopped after
+ * the release has finished.
+ */
+export function unplug(...nodes: readonly { disconnect(): void }[]): void {
+  for (const node of nodes) {
+    node.disconnect();
+  }
+}
+
+/**
  * Starts a note's release at `at`, without a step in the envelope.
  *
  * The value to fade *from* has to be the one the envelope will really hold

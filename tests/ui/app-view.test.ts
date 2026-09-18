@@ -3774,8 +3774,13 @@ describe('AppView', () => {
 
       expect(unnamed).toEqual([]);
 
+      // The search stands in the sheet's head, over every pane and always in
+      // view: the one control that belongs to no pane because it is for all.
       const orphans = [...sheet.querySelectorAll('input, select')]
-        .filter((control) => control.closest('[data-pane]') === null)
+        .filter(
+          (control) =>
+            control.closest('[data-pane]') === null && control.closest('.sheet__head') === null,
+        )
         .map((control) => control.id);
 
       expect(orphans).toEqual([]);

@@ -1744,13 +1744,36 @@ export class OsmdScoreRenderer
   }
 
   /** Shows the cursor only where it belongs; the reader's choice still wins. */
+  /**
+   * Shows the marker where it belongs and hides it where it does not - and
+   * does nothing at all where it is already as it should be.
+   *
+   * That last clause is the whole of what makes a playback affordable. This is
+   * asked on every tick of the pulse, several to a note, whether or not the
+   * marker moved; and the engraver's `show` is not a flag but a redraw - it
+   * paints the marker's gradient onto a fresh canvas and encodes it as a PNG
+   * every time. Measured on his device with the browser's profiler, a long
+   * score spent two thirds of every second of playback doing that, for a
+   * marker already standing in the right place, and the pulse had no time
+   * left to keep. A marker that is showing has been put where it goes by the
+   * step that moved it; showing it again moves nothing.
+   */
   private placeCursor(): void {
-    const onThisPage = !this.paged || this.pageOfStep(this.navigator.position) === this.pageAt;
-    if (onThisPage && this.navigator.isWanted) {
-      (this.osmd?.cursor as { show?: () => void } | undefined)?.show?.();
+    const cursor = this.osmd?.cursor as
+      | { hidden?: boolean; show?: () => void; hide?: () => void }
+      | undefined;
+    if (cursor === undefined) {
       return;
     }
-    (this.osmd?.cursor as { hide?: () => void } | undefined)?.hide?.();
+    const onThisPage = !this.paged || this.pageOfStep(this.navigator.position) === this.pageAt;
+    if (onThisPage && this.navigator.isWanted) {
+      if (cursor.hidden !== false) {
+        cursor.show?.();
+      }
+      return;
+    }
+    // Hiding asks for no such care: it is a display flag and nothing more.
+    cursor.hide?.();
   }
 
   private announcePages(): void {

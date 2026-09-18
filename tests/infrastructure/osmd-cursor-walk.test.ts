@@ -85,4 +85,33 @@ describe('walking the cursor without drawing it', () => {
     expect(stepped).toBe(0.5);
     expect(walked).toBe(stepped);
   });
+
+  it('does not redraw a marker that is already showing where it belongs', async () => {
+    // The pulse says where the music is on every tick, several to a note, and
+    // the marker is told each time whether or not it moved. The engraver's
+    // `show` repaints the marker onto a fresh canvas and encodes it as a PNG,
+    // so asking it again of a marker already standing in place cost a long
+    // score two thirds of every second of playback, measured with the
+    // browser's own profiler on his device.
+    const renderer = new OsmdScoreRenderer(createScoreContainer(), { zoom: 1 });
+    await renderer.load(new MusicXmlSerializer().serialize(aMomentOfNothing()));
+    const osmd = engraverOf(renderer);
+    renderer.cursor.show();
+    renderer.cursor.moveTo(1);
+    // The engraver's own redraw, which it keeps private; counted from outside.
+    const cursor = osmd.cursor as unknown as { updateStyle: (...args: unknown[]) => void };
+    let redrawn = 0;
+    const redraw = cursor.updateStyle.bind(cursor);
+    cursor.updateStyle = (...args: unknown[]): void => {
+      redrawn += 1;
+      redraw(...args);
+    };
+
+    // Five ticks inside one note.
+    for (let tick = 0; tick < 5; tick += 1) {
+      renderer.cursor.moveTo(1);
+    }
+
+    expect(redrawn).toBe(0);
+  });
 });

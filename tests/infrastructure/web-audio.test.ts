@@ -281,6 +281,18 @@ describe('WebAudioPitchPlayer', () => {
     expect(context.resumeCalls).toBe(1);
   });
 
+  it('drops a note whose moment has gone, as the sampled one does', () => {
+    // The two players answer the same question and must answer it alike: the
+    // fallback is what sounds while the recordings are still downloading,
+    // which is exactly when a page is busiest and most likely to stall.
+    const context = new FakeAudioContext();
+    const player = new WebAudioPitchPlayer(contextFactory(context));
+
+    player.play(69, 0.8, performance.now() - 3_000);
+
+    expect(context.oscillators).toHaveLength(0);
+  });
+
   it('releases a note when the key comes up', () => {
     const context = new FakeAudioContext();
     const player = new WebAudioPitchPlayer(contextFactory(context), { releaseSec: 0.2 });

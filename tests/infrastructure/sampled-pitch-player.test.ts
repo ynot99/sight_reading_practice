@@ -222,6 +222,44 @@ describe('SampledPitchPlayer', () => {
     expect(fallback.played).toEqual([]);
   });
 
+  it('drops a note whose moment has gone rather than crushing it onto now', async () => {
+    // Everything already past used to become "now", which is right for one
+    // note a hair late and catastrophic for a hundred: a page that stalls
+    // wakes with seconds of them overdue and starts them all at one instant,
+    // each released immediately after. His: "коли стартує таке враження будто
+    // воно грає в 3 рази швидше, та кожна нота обрізається".
+    const { player, context, fallback } = createPlayer();
+    await player.load();
+
+    player.play(60, 1, performance.now() - 3_000);
+
+    expect(context.sources).toHaveLength(0);
+    // And nothing is handed to the fallback either: it is not a note that
+    // could not be sounded, it is a note that should not be.
+    expect(fallback.played).toEqual([]);
+  });
+
+  it('still sounds a note that is merely a little late', async () => {
+    const { player, context } = createPlayer();
+    await player.load();
+
+    player.play(60, 1, performance.now() - 20);
+
+    expect(context.sources).toHaveLength(1);
+  });
+
+  it('stops a sounding note however late the program gets to it', async () => {
+    // A note that is ringing has to be stopped whenever the program gets
+    // round to it; refusing a late stop would leave it sounding for ever.
+    const { player, context } = createPlayer();
+    await player.load();
+    player.play(60, 1);
+
+    player.stop(60, performance.now() - 3_000);
+
+    expect(context.sources[0]?.stoppedAt).not.toBeNull();
+  });
+
   it('resamples the notes between the recordings', async () => {
     const { player, context } = createPlayer();
     await player.load();

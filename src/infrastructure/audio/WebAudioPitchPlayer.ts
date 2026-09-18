@@ -1,6 +1,6 @@
 import type { IPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
-import { audioTimeFor, beginRelease } from './audioTime.js';
+import { audioTimeFor, beginRelease, tooLateToSound } from './audioTime.js';
 
 export interface WebAudioPitchPlayerOptions {
   readonly gain?: number;
@@ -57,6 +57,9 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
   play(midi: number, velocity: number, atMs?: number): void {
     const level = volumeToGain(this.currentVolume, this.options.gain);
     if (level <= 0) {
+      return;
+    }
+    if (tooLateToSound(atMs, performance.now())) {
       return;
     }
     const context = this.ensureContext();

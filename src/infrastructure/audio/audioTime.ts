@@ -1,11 +1,44 @@
 /**
+ * How late a sound may be and still be worth making.
+ *
+ * Generous against ordinary jitter - a scheduler wakes a few milliseconds off
+ * and that is nothing - and well inside any musical value at any tempo the
+ * reader can play, so a note dropped here is one whose moment is genuinely
+ * gone rather than one that is merely a little late.
+ */
+export const TOO_LATE_MS = 200;
+
+/**
+ * Whether a moment has gone by far enough that sounding it would be a lie.
+ *
+ * The thing this exists to prevent is a burst. `audioTimeFor` below turns
+ * anything already past into "now", which is right for one note arriving a
+ * hair late and catastrophic for a hundred: when the page stalls - and
+ * engraving a long score stalls it for seconds - the scheduler wakes with
+ * every note of those seconds overdue, and starts all of them at the same
+ * instant. Their releases are scheduled against the same passed moments, so
+ * each one dies immediately too. What comes out of the speaker is the piece
+ * played many times too fast with every note cut off, which is exactly what he
+ * heard: "коли стартує таке враження будто воно грає в 3 рази швидше, та кожна
+ * нота обрізається".
+ *
+ * A note from a moment that has gone is not played late. It is not played.
+ */
+export function tooLateToSound(atMs: number | undefined, nowMs: number): boolean {
+  return atMs !== undefined && nowMs - atMs > TOO_LATE_MS;
+}
+
+/**
  * Turns a wall-clock moment into a moment on the audio clock.
  *
  * The metronome's ticks carry `performance.now()` times and Web Audio counts
  * in seconds of its own, so playing a note at a stated moment means crossing
  * between the two. Anything already past becomes "now": the audio clock cannot
- * be asked to sound something in the past, and a late note is better than a
- * silent one.
+ * be asked to sound something in the past, and a note a hair late is better
+ * than a silent one. Whether it is only a hair is {@link tooLateToSound}'s
+ * question, and it is asked before a note is begun - never before one is
+ * stopped, because a note that is sounding has to be stopped whenever the
+ * program gets round to it.
  */
 export function audioTimeFor(context: BaseAudioContext, atMs: number | undefined): number {
   if (atMs === undefined) {

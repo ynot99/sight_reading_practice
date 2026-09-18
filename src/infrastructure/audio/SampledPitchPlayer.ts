@@ -7,7 +7,7 @@ import type {
 import { SilentPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { PIANO_SAMPLES, nearestSample, playbackRateFor } from './pianoSampleMap.js';
-import { audioTimeFor, beginRelease } from './audioTime.js';
+import { audioTimeFor, beginRelease, tooLateToSound } from './audioTime.js';
 
 export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
 
@@ -226,6 +226,11 @@ export class SampledPitchPlayer
   play(midi: number, velocity: number, atMs?: number): void {
     const level = volumeToGain(this.currentVolume, this.options.gain);
     if (level <= 0) {
+      return;
+    }
+    // Asked before anything is fetched or decoded, so that a page catching up
+    // after a stall does no work at all for the notes it is dropping.
+    if (tooLateToSound(atMs, performance.now())) {
       return;
     }
     // First key press is what starts the download, so nothing is fetched for

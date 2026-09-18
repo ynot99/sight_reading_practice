@@ -680,9 +680,30 @@ function readDuration(note: XmlNode, ticks: number, where: string, rounding: num
   if (type !== null) {
     return Duration.of(type, dots === 1 ? 1 : 0);
   }
+  // A length and no value: what this program once wrote for a rest nobody
+  // draws. Every score kept in a library before it carried the value has
+  // them, and a third of a beat is the one such length that is no plain
+  // value - so it is read as the triplet it can only have been.
+  const triplet = tripletLasting(ticks);
+  if (triplet !== null) {
+    return triplet;
+  }
   throw new DomainError(
     `${where} is a rhythmic value this trainer cannot write - it reads down to sixty-fourth notes, one dot and triplets.`,
   );
+}
+
+/** The triplet value that lasts exactly this long, if there is one. */
+function tripletLasting(ticks: number): Duration | null {
+  for (const type of NOTE_TYPES) {
+    for (const dots of [0, 1] as const) {
+      const candidate = Duration.of(type, dots, { actual: 3, normal: 2 });
+      if (candidate.ticks === ticks) {
+        return candidate;
+      }
+    }
+  }
+  return null;
 }
 
 function readPitch(note: XmlNode): Pitch | null {

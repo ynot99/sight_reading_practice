@@ -214,3 +214,64 @@ describe('a voice that is absent for part of a bar', () => {
     expect(pickup.at(-1)?.duration.ticks).toBe(Duration.QUARTER.ticks);
   });
 });
+
+describe('a voice that comes in partway through a triplet', () => {
+  /**
+   * One bar of 4/4 at 12 divisions to the quarter: a whole note over a voice
+   * that comes in on the second note of a triplet - his "Those who fight",
+   * bar 128, a score that opened from its file and not from the library.
+   */
+  const late = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>12</divisions><key><fifths>0</fifths></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time>
+      <clef number="1"><sign>G</sign><line>2</line></clef></attributes>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>48</duration>
+      <voice>1</voice><type>whole</type><staff>1</staff></note>
+      <backup><duration>48</duration></backup>
+      <forward><duration>4</duration><voice>2</voice><staff>1</staff></forward>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>2</voice>
+      <type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><staff>1</staff></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>2</voice>
+      <type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><staff>1</staff></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>12</duration><voice>2</voice><type>quarter</type><staff>1</staff></note>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>24</duration><voice>2</voice><type>half</type><staff>1</staff></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+  const inner = (xml: string): readonly [string, number][] =>
+    (importer.read(xml).exercise.staves[1]?.measures[0]?.entries ?? []).map((entry) => [
+      entry.kind,
+      entry.duration.ticks,
+    ]);
+
+  it('keeps the silence a triplet through the library and back', () => {
+    const before = inner(late);
+    expect(before[0]).toEqual(['silence', Duration.TRIPLET_EIGHTH.ticks]);
+
+    const kept = serializer.serialize(importer.read(late).exercise);
+
+    expect(inner(kept)).toEqual(before);
+    // Carried as notation, the way a drawn rest's value is.
+    const invisible = /<note print-object="no">[\s\S]*?<\/note>/.exec(kept)?.[0] ?? '';
+    expect(invisible).toContain('<time-modification>');
+  });
+
+  it('reads a silence kept before it carried its value', () => {
+    // Every score in a library from before carries its silences as a length
+    // alone, and a third of a beat is no plain value.
+    const kept = serializer
+      .serialize(importer.read(late).exercise)
+      .replace(/<note print-object="no">[\s\S]*?<\/note>/g, (silence) =>
+        silence
+          .replace(/<type>[^<]*<\/type>/, '')
+          .replace(/<time-modification>[\s\S]*?<\/time-modification>/, ''),
+      );
+
+    expect(inner(kept)).toEqual(inner(late));
+  });
+});

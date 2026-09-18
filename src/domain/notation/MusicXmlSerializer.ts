@@ -609,13 +609,25 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
   ): void {
     switch (entry.kind) {
       case 'silence': {
-        // The format's own word for time passing with nothing drawn in it.
-        // No `<type>` and no tuplet marks: `<duration>` is in divisions, which
-        // says a third of a beat as exactly as it says half of one.
+        // A rest nobody draws, carrying its value the way a drawn one does.
+        //
+        // It went without `<type>` and `<time-modification>`, on the grounds
+        // that `<duration>` in divisions says a third of a beat as exactly as
+        // half of one. It says the length and not the value: read back, a
+        // silence a third of a beat long had no plain value to be, and a
+        // score kept in the library with one in it would not open again - his
+        // "Those who fight", bar 128, a triplet begun by a voice that came in
+        // late. The ratio is carried like every other piece of notation, and
+        // no tuplet mark is written, since nothing is drawn to bracket.
         writer.element('note', { 'print-object': 'no' }, () => {
           writer.leaf('rest');
           writer.leaf('duration', entry.duration.ticks);
           writer.leaf('voice', staff.voice);
+          writer.leaf('type', entry.duration.type);
+          if (entry.duration.dots === 1) {
+            writer.leaf('dot');
+          }
+          this.writeTimeModification(writer, entry.duration);
           writer.leaf('staff', staff.staffNumber);
         });
         return;

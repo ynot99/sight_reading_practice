@@ -173,6 +173,10 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     this.audioEpochMs = performance.now() - context.currentTime * 1000;
 
     this.timer = setInterval(() => {
+      // The first time the page gets back to the clock after starting it.
+      // Anything the browser does between - laying the page out again, painting
+      // it - is invisible to every other line, and shows here as a late look.
+      timeTheStart('pulse: first look at the clock after starting');
       this.pump();
     }, this.options.schedulerIntervalMs);
     this.pump();

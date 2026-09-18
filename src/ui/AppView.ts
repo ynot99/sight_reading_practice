@@ -271,7 +271,7 @@ const TAKE_COUNTER_MS = 500;
 
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
-import { traceTheStart } from '../shared/timeTheStart.js';
+import { timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
 
 const SCORING_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'scoring.accuracy': 'The notes alone. You set the pace, so timing is not judged.',
@@ -2685,6 +2685,27 @@ export class AppView {
    * Start is what says so; what is left here is the chrome that follows any
    * music going, whoever is making it.
    */
+  /**
+   * Says, in the start timings, when the browser has actually drawn the page.
+   *
+   * Everything the page does in answer to a start is timed as it is done, and
+   * none of it is the browser laying the page out again or painting it - which
+   * happens afterwards, where no line can see it. On a long score that can be
+   * the largest part of the wait. Two frames, because the first is the one the
+   * change is already in.
+   */
+  private markWhenPainted(): void {
+    const view = this.doc.defaultView;
+    if (view === null || typeof view.requestAnimationFrame !== 'function') {
+      return;
+    }
+    view.requestAnimationFrame(() => {
+      view.requestAnimationFrame(() => {
+        timeTheStart('page painted');
+      });
+    });
+  }
+
   private showThePerformance(): void {
     this.applyPlayingChrome();
     this.updateButtons(this.runtime.controller.session?.status ?? 'idle');
@@ -4899,6 +4920,7 @@ export class AppView {
       controller.events.on('sessionCreated', () => {
         // A run takes the pulse from a playback, so the button has to admit it.
         this.showThePerformance();
+        this.markWhenPainted();
         // Every way of starting a run arrives here - the button, the repeat
         // coming round, a drill - so the verdict on the last one is put away
         // in one place rather than at each of them.
@@ -4960,6 +4982,7 @@ export class AppView {
       // performance that was playing.
       controller.playbackEvents.on('started', () => {
         this.showThePerformance();
+        this.markWhenPainted();
       }),
     );
 

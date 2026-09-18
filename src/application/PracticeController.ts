@@ -362,6 +362,11 @@ export interface PracticeSettings {
    */
   readonly rhythmSoundsTheMusic: boolean;
   /**
+   * Whether a Sync button stands by the clock while this device has something
+   * the drive has not had. His, and his to turn on.
+   */
+  readonly offerToSync: boolean;
+  /**
    * Seconds to look at the music before it begins. `0` is off.
    *
    * Real sight-reading starts with a scan - key, metre, range, where the hard
@@ -870,6 +875,7 @@ export class PracticeController {
       pitchClassOnly: false,
       rhythmOnly: false,
       rhythmSoundsTheMusic: false,
+      offerToSync: false,
       previewSeconds: 0,
       cursorWhileRunning: true,
       cursorWhileListening: true,

@@ -99,6 +99,18 @@
               </svg>
               <span>Last reading</span>
             </button>
+            <!--
+              His, and off until he turns it on: what this device has changed
+              since it last synced, one press away. Beside the clock and not in
+              the transport row, nothing in which may change size.
+            -->
+            <button id="score-sync" class="score__reading" type="button" hidden
+              title="Sync with Google Drive">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 4a8 8 0 0 1 7.4 5H17l3.5 4 3.5-4h-2.5A10 10 0 0 0 2.3 10l2 .4A8 8 0 0 1 12 4zm0 16a8 8 0 0 1-7.4-5H7l-3.5-4L0 15h2.5a10 10 0 0 0 19.2 3l-2-.4A8 8 0 0 1 12 20z" />
+              </svg>
+              <span id="score-sync-text">Sync</span>
+            </button>
           <div id="score-today" class="score__today" hidden>
             <output id="score-today-text"></output>
             <!--
@@ -1115,6 +1127,7 @@
             The trainer sees only its own folder on your Drive.
           </p>
           <ul id="drive-only" class="drive-only" hidden></ul>
+          <label><input id="offer-to-sync" type="checkbox" /> A Sync button by the clock when this device has something to send</label>
           <p id="backup-description" class="hint">
             Settings, kept scores, takes and history, in one file. Installing this
             page to the Home Screen gives it a store of its own, separate from the

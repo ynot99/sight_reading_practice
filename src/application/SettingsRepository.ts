@@ -373,6 +373,7 @@ export function decodePracticeSettings(
     survivalRefillPercent: readNumber(value['survivalRefillPercent'], 10, 100),
     survivalPunishesMistakes: readBoolean(value['survivalPunishesMistakes']),
     rhythmSoundsTheMusic: readBoolean(value['rhythmSoundsTheMusic']),
+    offerToSync: readBoolean(value['offerToSync']),
     readAheadSteps: readReadAhead(value['readAheadSteps'], value['fadePassedNotes']),
     zoom: readNumber(value['zoom'], 0.3, 3),
     immediateStart: readBoolean(value['immediateStart']),
@@ -435,6 +436,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     survivalRefillPercent: settings.survivalRefillPercent,
     survivalPunishesMistakes: settings.survivalPunishesMistakes,
     rhythmSoundsTheMusic: settings.rhythmSoundsTheMusic,
+    offerToSync: settings.offerToSync,
     readAheadSteps: settings.readAheadSteps,
     zoom: settings.zoom,
     immediateStart: settings.immediateStart,
@@ -491,6 +493,8 @@ export class SettingsRepository {
   private audio: AudioSettings = DEFAULT_AUDIO_SETTINGS;
   /** When a shared setting last changed; see {@link sharedSettings}. */
   private changedAtMs = 0;
+  /** When this device last synced with the drive, or `null` where it never has. */
+  private syncedAtMs: number | null = null;
 
   constructor(store: ISettingsStore, known: KnownIds) {
     this.store = store;
@@ -506,6 +510,8 @@ export class SettingsRepository {
     this.practice = isRecord(root['practice']) ? root['practice'] : {};
     const changed = root['changedAtMs'];
     this.changedAtMs = typeof changed === 'number' && Number.isFinite(changed) ? changed : 0;
+    const synced = root['syncedAtMs'];
+    this.syncedAtMs = typeof synced === 'number' && Number.isFinite(synced) ? synced : null;
 
     return { practice, audio: this.audio };
   }
@@ -524,6 +530,16 @@ export class SettingsRepository {
       this.changedAtMs = atMs;
     }
     this.practice = next;
+    this.flush();
+  }
+
+  /** When this device last synced with the drive, or `null` where it never has. */
+  get lastSyncedAtMs(): number | null {
+    return this.syncedAtMs;
+  }
+
+  rememberTheSync(atMs: number): void {
+    this.syncedAtMs = atMs;
     this.flush();
   }
 
@@ -565,6 +581,7 @@ export class SettingsRepository {
       practice: this.practice,
       audio: this.audio,
       changedAtMs: this.changedAtMs,
+      syncedAtMs: this.syncedAtMs,
     });
   }
 }

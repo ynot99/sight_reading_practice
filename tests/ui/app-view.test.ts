@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
 import { LibrarySync } from '../../src/application/LibrarySync.js';
 import { SettingsSync } from '../../src/application/SettingsSync.js';
+import { DriveSync } from '../../src/application/DriveSync.js';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PracticeController } from '../../src/application/PracticeController.js';
@@ -349,12 +350,18 @@ function createRig(
 
   const drive = new FolderDrive();
   const librarySync = new LibrarySync({ drive, store: scoreStore, reload: () => scores.load() });
-  const settingsSync = new SettingsSync({
-    drive,
-    settings,
-    apply: (practice) => {
-      controller.updateSettings(practice);
-    },
+  const driveSync = new DriveSync({
+    library: librarySync,
+    settings: new SettingsSync({
+      drive,
+      settings,
+      apply: (practice) => {
+        controller.updateSettings(practice);
+      },
+    }),
+    scores: () => scores.list(),
+    repository: settings,
+    now: () => Date.now(),
   });
 
   const runtime: AppRuntime = {
@@ -370,7 +377,7 @@ function createRig(
     storage,
     cloudDrive: drive,
     librarySync,
-    settingsSync,
+    driveSync,
     volumeKnob,
     takes,
     scores,
@@ -8300,5 +8307,52 @@ describe('the library on Google Drive', () => {
     await waitFor(() => element('drive-status').textContent === 'Google could not be reached.');
 
     expect(element<HTMLButtonElement>('drive-sync').disabled).toBe(false);
+  });
+});
+
+describe('a Sync button by the clock', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  it('stays away unless asked, whatever there is to send', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    await rig.runtime.scores.keep(twoBarExercise({ title: 'Clair de Lune' }), Date.now());
+
+    rig.runtime.controller.updateSettings({ offerToSync: false });
+
+    expect(element<HTMLButtonElement>('score-sync').hidden).toBe(true);
+  });
+
+  it('stands by the clock when asked and something is new, and goes once synced', async () => {
+    // His: a button beside the clock when there is something to sync, and
+    // only if he has turned it on.
+    const rig = createRig();
+    await rig.view.initialize();
+    await rig.runtime.scores.keep(twoBarExercise({ title: 'Clair de Lune' }), Date.now());
+
+    rig.runtime.controller.updateSettings({ offerToSync: true });
+    const button = element<HTMLButtonElement>('score-sync');
+    expect(button.hidden).toBe(false);
+
+    button.click();
+    await waitFor(() => button.hidden === true);
+
+    expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(true);
+  });
+
+  it('keeps the button up and says so when the sync fails', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    await rig.runtime.scores.keep(twoBarExercise({ title: 'Clair de Lune' }), Date.now());
+    rig.runtime.controller.updateSettings({ offerToSync: true });
+    rig.drive.connect = () => Promise.reject(new Error('Google could not be reached.'));
+
+    element<HTMLButtonElement>('score-sync').click();
+    await waitFor(() => element('score-sync-text').textContent === 'Sync failed');
+
+    expect(element<HTMLButtonElement>('score-sync').hidden).toBe(false);
+    expect(element<HTMLButtonElement>('score-sync').title).toBe('Google could not be reached.');
   });
 });

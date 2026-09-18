@@ -1432,6 +1432,9 @@ export class AppView {
     driveSync: HTMLButtonElement;
     driveStatus: HTMLElement;
     driveOnly: HTMLUListElement;
+    offerToSync: HTMLInputElement;
+    scoreSync: HTMLButtonElement;
+    scoreSyncText: HTMLElement;
     storageReport: HTMLUListElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
@@ -1709,6 +1712,9 @@ export class AppView {
       driveSync: requireElement(doc, 'drive-sync'),
       driveStatus: requireElement(doc, 'drive-status'),
       driveOnly: requireElement(doc, 'drive-only'),
+      offerToSync: requireElement(doc, 'offer-to-sync'),
+      scoreSync: requireElement(doc, 'score-sync'),
+      scoreSyncText: requireElement(doc, 'score-sync-text'),
       storageReport: requireElement(doc, 'storage-report'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
@@ -2313,6 +2319,8 @@ export class AppView {
    * which is what they delete.
    */
   private renderScores(): void {
+    // Whatever changed on the shelf may be something the drive has not had.
+    this.offerToSync();
     const all = this.runtime.scores.list();
     const query = this.el.scoresSearch.value.trim();
     const found = query === '' ? all : this.runtime.scores.search(query);
@@ -3843,6 +3851,16 @@ export class AppView {
       void this.syncWithTheDrive();
     });
 
+    this.listen(this.el.scoreSync, 'click', () => {
+      void this.syncWithTheDrive();
+    });
+
+    this.listen(this.el.offerToSync, 'change', () => {
+      controller.updateSettings({ offerToSync: this.el.offerToSync.checked });
+      this.syncControlsFromSettings();
+      this.offerToSync();
+    });
+
     this.listen(this.el.pagedScore, 'change', () => {
       controller.updateSettings({ pagedScore: this.el.pagedScore.checked });
       this.syncControlsFromSettings();
@@ -4311,6 +4329,7 @@ export class AppView {
     const ms = time.msOn(now);
     const idle = !this.isPlaying && !this.runtime.controller.isListening;
     this.el.scoreToday.hidden = ms <= 0 || !idle;
+    this.offerToSync();
     // A run of one day is not a run: everybody who has ever opened this has
     // a day, and a number that cannot say anything but "1" says nothing.
     const streak = time.streakEndingOn(now);
@@ -4921,6 +4940,8 @@ export class AppView {
       // and a run beginning or ending changes it without any control at all.
       controller.events.on('settingsChanged', () => {
         this.showTheListening();
+        // A shared setting changed is something the drive has not had.
+        this.offerToSync();
       }),
     );
     this.subscriptions.push(
@@ -5555,21 +5576,46 @@ export class AppView {
    */
   private async syncWithTheDrive(): Promise<void> {
     this.el.driveSync.disabled = true;
+    this.el.scoreSync.disabled = true;
     this.el.driveStatus.textContent = 'Syncing…';
+    this.el.scoreSyncText.textContent = 'Syncing…';
     try {
-      const outcome = await this.runtime.librarySync.sync((done, total) => {
+      const { library, settings } = await this.runtime.driveSync.sync((done, total) => {
         this.el.driveStatus.textContent = `Syncing… ${String(done)} of ${String(total)}`;
       });
-      const settings = await this.runtime.settingsSync.sync();
-      this.el.driveStatus.textContent = `Synced. Sent ${String(outcome.sent)}, brought here ${String(outcome.brought)}. Settings ${SETTINGS_WENT[settings]}.`;
-      this.showWhatOnlyTheDriveHas(outcome.onlyOnTheDrive);
+      this.el.driveStatus.textContent = `Synced. Sent ${String(library.sent)}, brought here ${String(library.brought)}. Settings ${SETTINGS_WENT[settings]}.`;
+      this.el.scoreSyncText.textContent = 'Sync';
+      this.el.scoreSync.title = 'Sync with Google Drive';
+      this.showWhatOnlyTheDriveHas(library.onlyOnTheDrive);
       this.renderScores();
     } catch (error) {
-      this.el.driveStatus.textContent =
-        error instanceof Error ? error.message : 'Google Drive could not be reached.';
+      const why = error instanceof Error ? error.message : 'Google Drive could not be reached.';
+      this.el.driveStatus.textContent = why;
+      // Said on the button too, where it was pressed, and pressed again to retry.
+      this.el.scoreSyncText.textContent = 'Sync failed';
+      this.el.scoreSync.title = why;
     } finally {
       this.el.driveSync.disabled = false;
+      this.el.scoreSync.disabled = false;
+      this.offerToSync();
     }
+  }
+
+  /**
+   * Stands the Sync button by the clock, or takes it away.
+   *
+   * Where he asked for it, while this device has something the drive has not
+   * had, and only between runs - the corner's rule, since over the music is
+   * not where anything but the music belongs. A sync that failed sent
+   * nothing, so what there was to send is still there and the button stays:
+   * its label says it failed, and pressing it again is the retry.
+   */
+  private offerToSync(): void {
+    const idle = !this.isPlaying && !this.runtime.controller.isListening;
+    this.el.scoreSync.hidden =
+      !this.runtime.controller.settings.offerToSync ||
+      !idle ||
+      !this.runtime.driveSync.hasSomethingToSync;
   }
 
   /** The scores only the drive has, each with a button to bring it here. */
@@ -5689,6 +5735,7 @@ export class AppView {
     this.el.survivalRefill.value = String(settings.survivalRefillPercent);
     this.el.survivalPunish.checked = settings.survivalPunishesMistakes;
     this.el.rhythmSoundsTheMusic.checked = settings.rhythmSoundsTheMusic;
+    this.el.offerToSync.checked = settings.offerToSync;
     this.el.stopAtMistake.checked = settings.stopAtAMistake;
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;

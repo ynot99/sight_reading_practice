@@ -1,14 +1,7 @@
 
-import {
-  barLines,
-  elapsedMsAt,
-  pedalHeldUntil,
-  positionOfTick,
-  spanMs,
-  velocityAt,
-} from '../domain/model/Exercise.js';
-import { soundsFor } from '../domain/timeline/Timeline.js';
-import type { ExerciseTimeline, TimelineOrnament } from '../domain/timeline/Timeline.js';
+import { barLines, positionOfTick, spanMs } from '../domain/model/Exercise.js';
+import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
+import { GatheredNotes, type ScheduledNote } from './GatheredNotes.js';
 import type { PositionEvent } from './session/SessionEvents.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import {
@@ -134,27 +127,7 @@ export interface PlayerEventMap {
   };
 }
 
-/** One note the player still has to start and stop. */
-interface ScheduledNote {
-  readonly midi: number;
-  readonly atMs: number;
-  readonly untilMs: number;
-  /** How hard to strike it, `0..1`, from the dynamics on the page. */
-  readonly velocity: number;
-}
-
 const DEFAULT_HORIZON_MS = 250;
-/**
- * The longest a grace note with a stroke through its stem is held.
- *
- * An acciaccatura is a flick of the finger and stays one at every tempo. Its
- * written value is an eighth as often as not, which at forty to the crotchet
- * is three quarters of a second - a note, and one nobody wrote.
- */
-const CRUSH_MS = 70;
-/** The gap between an ornament and the note it leans on, so the two are two. */
-const GRACE_GAP_MS = 6;
-
 /**
  * How many laps of a repeating passage the plan is written out for at a time.
  *
@@ -164,42 +137,6 @@ const GRACE_GAP_MS = 6;
  * safeguard rather than a mechanism.
  */
 const PLANNED_LAPS = 64;
-
-/**
- * Delay between consecutive notes of a rolled chord.
- *
- * A hand rolls a chord in roughly the time it takes to say it - fast enough
- * to be one gesture, slow enough that the notes are separately heard. Below
- * about 25 ms it is a flam rather than an arpeggio; above about 60 it is a
- * broken chord the writer would have notated as one.
- */
-const ROLL_STEP_MS = 38;
-
-/**
- * How much of a step a roll may occupy.
- *
- * Without a cap the same 38 ms per note that sounds right at 60 bpm runs a
- * five-note chord into the one after it at 160. Half the step keeps the roll
- * inside the beat it belongs to, whatever the tempo.
- */
-const ROLL_SHARE_OF_STEP = 0.5;
-
-/**
- * When each note of a rolled chord sounds, relative to the chord's onset.
- *
- * The roll *starts* on the beat rather than arriving on it: the cursor is at
- * that step and the click sounds there, so a roll that finished on the beat
- * would leave the lowest note - the one carrying the harmony - audibly early
- * against both. Notes are already sorted low to high, which is the direction
- * a hand rolls unless told otherwise.
- */
-function rollOffsets(rolled: number, stepMs: number): number[] {
-  if (rolled <= 1) {
-    return [0];
-  }
-  const perNote = Math.min(ROLL_STEP_MS, (stepMs * ROLL_SHARE_OF_STEP) / (rolled - 1));
-  return Array.from({ length: rolled }, (_, at) => at * perNote);
-}
 
 /**
  * Plays an exercise through, so the reader can hear it rather than read it.
@@ -221,7 +158,8 @@ export class ExercisePlayer {
   private timeline: ExerciseTimeline | null = null;
   private subscription: Unsubscribe | null = null;
   private startedAtMs: number | null = null;
-  private pending: ScheduledNote[] = [];
+  /** The notes of this performance, gathered as the music reaches them. */
+  private pending: GatheredNotes | null = null;
   private nextToSchedule = 0;
   /** The stretch being played, in the timeline's own ticks. */
   private fromTicks = 0;
@@ -270,7 +208,7 @@ export class ExercisePlayer {
   private firstLapTicks = 0;
   private firstLapMs = 0;
   /** The lap's own notes, timed from the lap's start rather than from here. */
-  private lapNotes: ScheduledNote[] = [];
+  private lapNotes: GatheredNotes | null = null;
   private lapsDone = 0;
   /**
    * The furthest moment already handed to the instrument.
@@ -330,10 +268,10 @@ export class ExercisePlayer {
     // - the walk skips anything outside the stretch. Everything before it is
     // gathered identically and in the same order, so what has already been
     // handed to the instrument stays handed over exactly once.
-    this.pending = this.collectNotes(this.timeline, this.hand, this.fromTicks);
+    this.pending = this.gatherNotes(this.timeline, this.hand, this.fromTicks);
     this.lapNotes =
       this.laidInLaps && this.loopFromTicks !== this.fromTicks
-        ? this.collectNotes(this.timeline, this.hand, this.loopFromTicks)
+        ? this.gatherNotes(this.timeline, this.hand, this.loopFromTicks)
         : this.pending;
     this.catchUpSchedule();
     this.applyClick(this.click, this.clickWhen);
@@ -398,10 +336,10 @@ export class ExercisePlayer {
       return;
     }
     this.hand = staffNumber;
-    this.pending = this.collectNotes(this.timeline, this.hand, this.fromTicks);
+    this.pending = this.gatherNotes(this.timeline, this.hand, this.fromTicks);
     this.lapNotes =
       this.laidInLaps && this.loopFromTicks !== this.fromTicks
-        ? this.collectNotes(this.timeline, this.hand, this.loopFromTicks)
+        ? this.gatherNotes(this.timeline, this.hand, this.loopFromTicks)
         : this.pending;
     this.catchUpSchedule();
   }
@@ -495,7 +433,7 @@ export class ExercisePlayer {
     // Whatever was being held, this is now what is happening instead.
     this.pausedAtIndex = null;
     this.untilTicks = this.endOf(options.toIndex);
-    this.pending = [];
+    this.pending = null;
     this.nextToSchedule = 0;
     this.scheduledThroughMs = Number.NEGATIVE_INFINITY;
     this.startedAtMs = null;
@@ -537,15 +475,14 @@ export class ExercisePlayer {
     // is or however slow a device. What the preparation costs becomes a pause
     // before the music rather than a lurch at the beginning of it - and the
     // work that follows is there to make that pause short.
-    this.pending = this.collectNotes(timeline, options.staffNumber, this.fromTicks);
+    this.pending = this.gatherNotes(timeline, options.staffNumber, this.fromTicks);
     // The lap's own notes, when a lap is not simply this performance again:
     // picked up after a pause, the first time round is the tail of a lap and
     // every one after it is the whole thing.
     this.lapNotes =
       this.laidInLaps && this.loopFromTicks !== this.fromTicks
-        ? this.collectNotes(timeline, options.staffNumber, this.loopFromTicks)
+        ? this.gatherNotes(timeline, options.staffNumber, this.loopFromTicks)
         : this.pending;
-    timeTheStart(`player: notes collected (${String(this.pending.length)})`);
     // Where it walked from is said as well as that it arrived: a walk that
     // should have been nothing - the marker already standing there - is a
     // different fault from a walk that is merely long.
@@ -687,7 +624,7 @@ export class ExercisePlayer {
       this.lapNotes =
         this.timeline === null || this.loopFromTicks === this.fromTicks
           ? this.pending
-          : this.collectNotes(this.timeline, this.hand, this.loopFromTicks);
+          : this.gatherNotes(this.timeline, this.hand, this.loopFromTicks);
     }
     this.deps.metronome.configure(this.planFrom(this.lapsDone));
   }
@@ -701,7 +638,7 @@ export class ExercisePlayer {
       // out; silencing what is still held is the most that can be undone.
       this.deps.instrument.stopAll();
     }
-    this.pending = [];
+    this.pending = null;
     this.playing = false;
   }
 
@@ -720,16 +657,22 @@ export class ExercisePlayer {
    */
   private noteAt(index: number): ScheduledNote | null {
     const first = this.pending;
-    if (index < first.length) {
-      return first[index] ?? null;
-    }
-    const lap = this.lapNotes;
-    if (!this.laidInLaps || lap.length === 0) {
+    if (first === null) {
       return null;
     }
+    const inFirst = first.at(index);
+    if (inFirst !== null) {
+      return inFirst;
+    }
+    const lap = this.lapNotes;
+    if (!this.laidInLaps || lap === null || lap.length === 0) {
+      return null;
+    }
+    // Past the end of the first list, which is therefore all gathered and its
+    // length costs nothing to ask.
     const after = index - first.length;
-    const note = lap[after % lap.length];
-    if (note === undefined) {
+    const note = lap.at(after % lap.length);
+    if (note === null) {
       return null;
     }
     const base = this.firstLapMs + Math.floor(after / lap.length) * this.lapMs;
@@ -765,187 +708,15 @@ export class ExercisePlayer {
   }
 
   /**
-   * Every note to sound, flattened and timed.
-   *
-   * `durationTicks` on a timeline note already follows any ties out of it, so
-   * a note held across a bar line is one sound of the right length rather than
-   * two of the wrong one.
-   *
-   * The damper pedal is applied here rather than through the instrument's own
-   * pedal, which belongs to the player's feet: a note struck under the pedal
-   * simply rings until the pedal comes up, which is the same thing said in the
-   * only terms this schedule has.
+   * The notes from `fromTicks` to where this performance ends, gathered as
+   * the music reaches them rather than before it starts.
    */
-  /**
-   * Where a run of grace notes goes, and how long each of them lasts.
-   *
-   * In front of the note they lean on, because that is the only room they
-   * have: an ornament takes no time from the bar, so the beat cannot move for
-   * one - the marker, the metronome and the judging all agree on where it is.
-   * Which is how an acciaccatura is played in any case, and near enough for
-   * the rest that hearing them beats not hearing them.
-   *
-   * A crushed one keeps its flick at every tempo: at forty to the crotchet
-   * its written value would last a third of a second, which is not a crush
-   * but a note. The run is then squeezed into whatever room stands between it
-   * and the note before, so an ornament never swallows the note it leans away
-   * from - and at the very start of a run, where there is nothing before it,
-   * it keeps its length and sounds a moment early.
-   */
-  private graceRun(
-    graces: readonly TimelineOrnament[],
-    onsetMs: number,
-    previousMs: number | null,
-    lengthOf: (ornament: TimelineOrnament) => number,
-  ): readonly { readonly atMs: number; readonly untilMs: number }[] {
-    const wanted = graces.map(lengthOf);
-    const total = wanted.reduce((sum, ms) => sum + ms, 0);
-    const room =
-      previousMs === null
-        ? Number.POSITIVE_INFINITY
-        : Math.max(0, onsetMs - GRACE_GAP_MS - previousMs);
-    const squeeze = total > room && total > 0 ? room / total : 1;
-    const placed: { atMs: number; untilMs: number }[] = [];
-    let atMs = onsetMs - GRACE_GAP_MS - total * squeeze;
-    for (const ms of wanted) {
-      const length = ms * squeeze;
-      placed.push({ atMs, untilMs: atMs + length });
-      atMs += length;
-    }
-    return placed;
-  }
-
-  private collectNotes(
+  private gatherNotes(
     timeline: ExerciseTimeline,
     staffNumber: ListeningHand,
     fromTicks: number,
-  ): ScheduledNote[] {
-    const exercise = timeline.exercise;
-    const bars = barLines(exercise);
-    // From where this performance began, and read off the clock rather than
-    // multiplied: a piece that changes tempo has no single number to multiply
-    // by. Where it began is the same for every note, so it is read once.
-    const beganMs = elapsedMsAt(exercise, fromTicks);
-    const at = (ticks: number): number => elapsedMsAt(exercise, ticks) - beganMs;
-    const longest = new Map<string, ScheduledNote>();
-    /** Where the last step sounded, which is as far back as an ornament may reach. */
-    let previousMs: number | null = null;
-    for (const step of timeline.steps) {
-      // Only the stretch being played, and timed from its own beginning.
-      if (step.onsetTicks < fromTicks || step.onsetTicks >= this.untilTicks) {
-        continue;
-      }
-      const sounding = step.notes.filter(
-        (note) => staffNumber === null || note.staffNumber === staffNumber,
-      );
-      // Dynamics are placed as a bar and an offset into it, which is how the
-      // format places a direction; the timeline counts from the beginning of
-      // the piece.
-      const measureStart = bars[step.measureIndex]?.startTicks ?? 0;
-      // Counted after the hand filter: listening to one hand of a roll
-      // written across both is listening to that hand alone, and it starts
-      // where the reader's own would.
-      const offsets = rollOffsets(
-        sounding.filter((note) => note.arpeggiated).length,
-        spanMs(exercise, step.onsetTicks, step.onsetTicks + step.durationTicks),
-      );
-      // The pedal and the clock are facts about the moment, so every note
-      // struck at it shares them.
-      const heldUntil = pedalHeldUntil(exercise, step.onsetTicks);
-      const onsetMs = at(step.onsetTicks);
-      let rolled = 0;
-      for (const note of sounding) {
-        const offset = note.arpeggiated ? (offsets[rolled] ?? 0) : 0;
-        if (note.arpeggiated) {
-          rolled += 1;
-        }
-        const startsAt = onsetMs + offset;
-        // As long as it sounds rather than as long as it is written - and the
-        // pedal still wins, because a note struck under the damper rings until
-        // the damper lifts whatever the writer marked it.
-        const endTicks = Math.max(
-          step.onsetTicks + soundsFor(note),
-          heldUntil ?? 0,
-        );
-        const until = at(endTicks);
-        // Two voices may notate the same sounding pitch at the same instant.
-        // That is one key on the keyboard and must be one sound here: striking
-        // it twice doubles the attack into an audible knock. The longer of the
-        // two wins, since the key stays down until the last of them lets go.
-        const seen = `${note.midi}@${step.onsetTicks}`;
-        const previous = longest.get(seen);
-        if (previous === undefined || previous.untilMs < until) {
-          // A rolled note is released with the rest of the chord - the hand
-          // lifts once - so only the attack moves. `Math.max` is the guard
-          // for a roll that a very short step has squeezed to nothing.
-          longest.set(seen, {
-            midi: note.midi,
-            atMs: startsAt,
-            untilMs: Math.max(until, startsAt),
-            // What the page asks for where this note falls: the level in
-            // force, lifted or lowered by any hairpin drawn over it. A
-            // staff's own marks are preferred to the piece's, which is how a
-            // piano part with the left hand marked `p` under a melody marked
-            // `f` is written.
-            velocity: velocityAt(
-              exercise,
-              step.measureIndex,
-              step.onsetTicks - measureStart,
-              note.staffNumber,
-            ),
-          });
-        }
-      }
-
-      // The ornaments printed here, laid in front of the note they lean on.
-      // Keyed apart from the notes: a grace may be the same key as the note
-      // it decorates, and that is two presses rather than one.
-      // One run per hand. Both may ornament the same beat, and two ornaments
-      // written in two hands are played together rather than one after the
-      // other - laid end to end they would push the left hand's back past
-      // where the right hand's began.
-      const byHand = new Map<number, TimelineOrnament[]>();
-      for (const ornament of step.ornaments) {
-        if (staffNumber !== null && ornament.staffNumber !== staffNumber) {
-          continue;
-        }
-        byHand.set(ornament.staffNumber, [
-          ...(byHand.get(ornament.staffNumber) ?? []),
-          ornament,
-        ]);
-      }
-      for (const [hand, graces] of byHand) {
-        const placed = this.graceRun(graces, onsetMs, previousMs, (ornament) => {
-          const written = spanMs(
-            exercise,
-            step.onsetTicks,
-            step.onsetTicks + ornament.duration.ticks,
-          );
-          return ornament.slashed ? Math.min(written, CRUSH_MS) : written;
-        });
-        for (const [index, ornament] of graces.entries()) {
-          const where = placed[index];
-          if (where === undefined) {
-            continue;
-          }
-          for (const pitch of ornament.pitches) {
-            longest.set(`grace${hand}.${index}:${pitch.midi}@${step.onsetTicks}`, {
-              midi: pitch.midi,
-              atMs: where.atMs,
-              untilMs: where.untilMs,
-              velocity: velocityAt(
-                exercise,
-                step.measureIndex,
-                step.onsetTicks - measureStart,
-                ornament.staffNumber,
-              ),
-            });
-          }
-        }
-      }
-      previousMs = onsetMs;
-    }
-    return [...longest.values()].sort((left, right) => left.atMs - right.atMs);
+  ): GatheredNotes {
+    return new GatheredNotes(timeline, staffNumber, fromTicks, this.untilTicks);
   }
 
   private handleTick(tick: MetronomeTick): void {
@@ -986,6 +757,10 @@ export class ExercisePlayer {
       this.nextToSchedule += 1;
       this.scheduledThroughMs = Math.max(this.scheduledThroughMs, from + note.atMs);
       this.deps.instrument.play(note.midi, note.velocity, from + note.atMs);
+      timeTheStart(
+        'player: first note handed to the instrument',
+        () => `${String(this.pending?.stepsGathered ?? 0)} steps of the music gathered`,
+      );
       this.deps.instrument.stop(note.midi, from + note.untilMs);
     }
 

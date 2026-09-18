@@ -2617,6 +2617,36 @@ body[data-playing='true'] .score__modes {
   min-width: 0;
 }
 
+/* Searching the settings: a field, where it is in what it found, and the way through. */
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-search input {
+  width: 12em;
+  min-width: 0;
+}
+
+.settings-search__count {
+  min-width: 3.5em;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Every place the words were found, and more strongly the one gone to. */
+::highlight(settings-found) {
+  background-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+::highlight(settings-found-here) {
+  background-color: var(--accent);
+  color: var(--surface);
+}
+
 /* Reads as part of the heading rather than as another control in a row. */
 .sheet__filter {
   display: inline-flex;

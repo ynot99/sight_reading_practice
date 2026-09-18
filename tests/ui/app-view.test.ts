@@ -8356,3 +8356,94 @@ describe('a Sync button by the clock', () => {
     expect(element<HTMLButtonElement>('score-sync').title).toBe('Google could not be reached.');
   });
 });
+
+describe('searching the settings', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  function search(words: string): void {
+    const input = element<HTMLInputElement>('settings-search');
+    input.value = words;
+    input.dispatchEvent(new Event('input'));
+  }
+
+  function press(shiftKey = false): void {
+    element('settings-search').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', shiftKey, bubbles: true }),
+    );
+  }
+
+  const showing = (): string | undefined =>
+    document.querySelector<HTMLElement>('#sheet-settings .sheet__panel')?.dataset['showing'];
+
+  const count = (): string => element<HTMLOutputElement>('settings-search-count').value;
+
+  it('goes to where the words are, opening the pane they are in', async () => {
+    // His: search the settings and show where the words are. Usually in a
+    // pane other than the one being looked at.
+    const rig = createRig();
+    await rig.view.initialize();
+    expect(showing()).not.toBe('modes');
+
+    search('keep the bar up');
+
+    expect(count()).toBe('1 / 1');
+    expect(showing()).toBe('modes');
+  });
+
+  it('goes on with Enter and back with Shift+Enter, round from the end', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+
+    // Three or more, or a step back and a step on land in the same place.
+    search('cursor');
+    const total = Number(count().split(' / ')[1]);
+    expect(total).toBeGreaterThan(2);
+
+    press();
+    expect(count()).toBe(`2 / ${String(total)}`);
+    press(true);
+    expect(count()).toBe(`1 / ${String(total)}`);
+    press(true);
+    expect(count()).toBe(`${String(total)} / ${String(total)}`);
+  });
+
+  it('says so where nothing matches, and nothing where nothing is typed', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+
+    search('zzzz');
+    expect(count()).toBe('None');
+
+    search('');
+    expect(count()).toBe('');
+  });
+
+  it('marks the findings, the one gone to more strongly, where the browser can', async () => {
+    const highlights = new Map<string, { ranges: Range[] }>();
+    const view = window as unknown as { CSS: unknown; Highlight: unknown };
+    const hadCss = view.CSS;
+    view.CSS = { highlights };
+    view.Highlight = class {
+      readonly ranges: Range[];
+      constructor(...ranges: Range[]) {
+        this.ranges = ranges;
+      }
+    };
+    try {
+      const rig = createRig();
+      await rig.view.initialize();
+
+      search('rhythm only');
+
+      const total = Number(count().split(' / ')[1]);
+      expect(highlights.get('settings-found')?.ranges).toHaveLength(total);
+      expect(highlights.get('settings-found-here')?.ranges[0]?.toString().toLowerCase()).toBe(
+        'rhythm only',
+      );
+    } finally {
+      view.CSS = hadCss;
+    }
+  });
+});

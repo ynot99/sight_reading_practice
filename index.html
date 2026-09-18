@@ -836,6 +836,20 @@
           aria-label="Settings">
           <div class="sheet__head">
             <strong class="sheet__title">Settings</strong>
+            <!--
+              His: search the settings, show where the words are, and go from
+              one to the next. Across every pane, since what cannot be found is
+              usually in the pane not being looked at.
+            -->
+            <div class="settings-search" role="search">
+              <input id="settings-search" type="search" placeholder="Search settings"
+                aria-label="Search settings" autocomplete="off" />
+              <output id="settings-search-count" class="settings-search__count"></output>
+              <button id="settings-search-previous" type="button" class="button button--ghost"
+                title="Previous (Shift+Enter)" aria-label="Previous finding">‹</button>
+              <button id="settings-search-next" type="button" class="button button--ghost"
+                title="Next (Enter)" aria-label="Next finding">›</button>
+            </div>
             <button id="settings-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>

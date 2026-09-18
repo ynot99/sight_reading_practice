@@ -58,6 +58,7 @@ import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
 import { drawTheHitErrors } from './hitErrorBar.js';
 import { describeStorage } from './storageReport.js';
+import { findAll, wordsIn, type Found } from './settingsSearch.js';
 import type { DriveScore } from '../application/LibrarySync.js';
 import type { SettingsSyncOutcome } from '../application/SettingsSync.js';
 
@@ -1263,6 +1264,9 @@ export class AppView {
   private readonly subscriptions: Unsubscribe[] = [];
   private sessionSubscriptions: Unsubscribe[] = [];
   private audioFeedbackEnabled = true;
+  /** Where the words searched for in the settings were found, and which one is gone to. */
+  private found: readonly Found[] = [];
+  private foundAt = -1;
   private previewTimer: ReturnType<typeof setInterval> | null = null;
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
@@ -1433,6 +1437,10 @@ export class AppView {
     driveStatus: HTMLElement;
     driveOnly: HTMLUListElement;
     offerToSync: HTMLInputElement;
+    settingsSearch: HTMLInputElement;
+    settingsSearchCount: HTMLOutputElement;
+    settingsSearchPrevious: HTMLButtonElement;
+    settingsSearchNext: HTMLButtonElement;
     scoreSync: HTMLButtonElement;
     scoreSyncText: HTMLElement;
     storageReport: HTMLUListElement;
@@ -1713,6 +1721,10 @@ export class AppView {
       driveStatus: requireElement(doc, 'drive-status'),
       driveOnly: requireElement(doc, 'drive-only'),
       offerToSync: requireElement(doc, 'offer-to-sync'),
+      settingsSearch: requireElement(doc, 'settings-search'),
+      settingsSearchCount: requireElement(doc, 'settings-search-count'),
+      settingsSearchPrevious: requireElement(doc, 'settings-search-previous'),
+      settingsSearchNext: requireElement(doc, 'settings-search-next'),
       scoreSync: requireElement(doc, 'score-sync'),
       scoreSyncText: requireElement(doc, 'score-sync-text'),
       storageReport: requireElement(doc, 'storage-report'),
@@ -3504,30 +3516,15 @@ export class AppView {
    */
   private bindTheSections(): void {
     const tabs = [...this.el.settingsSections.querySelectorAll('button[data-chooses]')];
-    const show = (pane: string): void => {
-      const panel = this.el.sheetSettings.querySelector('.sheet__panel');
-      if (panel instanceof HTMLElement) {
-        panel.dataset['showing'] = pane;
-      }
-      for (const tab of tabs) {
-        tab.setAttribute('aria-pressed', String(tab.getAttribute('data-chooses') === pane));
-      }
-    };
     for (const tab of tabs) {
       if (tab instanceof HTMLElement) {
         this.listen(tab, 'click', () => {
-          const pane = tab.dataset['chooses'] ?? '';
-          // Signing in to the drive opens Google's window, which a browser
-          // allows only in answer to a press - so what it needs is fetched
-          // when the pane with the button is opened, not when it is pressed.
-          if (pane === 'library') {
-            this.runtime.cloudDrive.prepare();
-          }
-          show(pane);
+          this.showTheSettingsPane(tab.dataset['chooses'] ?? '');
         });
       }
     }
-    show(tabs[0]?.getAttribute('data-chooses') ?? '');
+    this.showTheSettingsPane(tabs[0]?.getAttribute('data-chooses') ?? '');
+    this.bindTheSettingsSearch();
 
     // One panel and two doors to it. A second set of the same controls would
     // be two editors of one setting, disagreeing the moment one is wired up
@@ -5566,6 +5563,110 @@ export class AppView {
         instrumentVolume: instrument,
       });
     }
+  }
+
+  /** Puts one pane of the settings in front of the reader, whichever way it was asked for. */
+  private showTheSettingsPane(pane: string): void {
+    const panel = this.el.sheetSettings.querySelector('.sheet__panel');
+    if (panel instanceof HTMLElement) {
+      panel.dataset['showing'] = pane;
+    }
+    for (const tab of this.el.settingsSections.querySelectorAll('button[data-chooses]')) {
+      tab.setAttribute('aria-pressed', String(tab.getAttribute('data-chooses') === pane));
+    }
+    // Signing in to the drive opens Google's window, which a browser allows
+    // only in answer to a press - so what it needs is fetched when the pane
+    // with the button is opened, not when it is pressed.
+    if (pane === 'library') {
+      this.runtime.cloudDrive.prepare();
+    }
+  }
+
+  /**
+   * Searches the settings as the reader types, and goes from one finding to
+   * the next.
+   *
+   * Every pane is searched and the one a finding is in is opened to show it,
+   * because what cannot be found is usually in a pane not being looked at.
+   * The words are marked where the browser can mark text without touching the
+   * page - which leaves every label and checkbox exactly as it was - and
+   * where it cannot, going to them still opens the pane and brings them into
+   * view.
+   */
+  private bindTheSettingsSearch(): void {
+    this.listen(this.el.settingsSearch, 'input', () => {
+      this.searchTheSettings();
+    });
+    this.listen(this.el.settingsSearch, 'keydown', (event) => {
+      if ((event as KeyboardEvent).key !== 'Enter') {
+        return;
+      }
+      event.preventDefault();
+      this.goToFinding((event as KeyboardEvent).shiftKey ? -1 : 1);
+    });
+    this.listen(this.el.settingsSearchNext, 'click', () => {
+      this.goToFinding(1);
+    });
+    this.listen(this.el.settingsSearchPrevious, 'click', () => {
+      this.goToFinding(-1);
+    });
+  }
+
+  private searchTheSettings(): void {
+    const controls = this.el.sheetSettings.querySelector('.controls');
+    this.found = controls === null ? [] : findAll(wordsIn(controls), this.el.settingsSearch.value);
+    this.foundAt = -1;
+    this.goToFinding(1);
+  }
+
+  /** The next finding, or the one before, round from the end to the start. */
+  private goToFinding(step: 1 | -1): void {
+    const count = this.found.length;
+    this.foundAt = count === 0 ? -1 : (this.foundAt + step + count) % count;
+    const here = this.found[this.foundAt];
+    this.el.settingsSearchCount.value =
+      count === 0
+        ? this.el.settingsSearch.value.trim() === ''
+          ? ''
+          : 'None'
+        : `${String(this.foundAt + 1)} / ${String(count)}`;
+    this.markTheFindings(here);
+    if (here === undefined) {
+      return;
+    }
+    const where = here.node.parentElement;
+    const pane = where?.closest<HTMLElement>('[data-pane]')?.dataset['pane']?.split(/\s+/)[0];
+    if (pane !== undefined) {
+      this.showTheSettingsPane(pane);
+    }
+    where?.scrollIntoView?.({ block: 'center' });
+  }
+
+  /** Marks every finding, and the one gone to more strongly - where the browser can. */
+  private markTheFindings(here: Found | undefined): void {
+    const view = this.doc.defaultView as
+      | (Window & {
+          CSS?: { highlights?: Map<string, unknown> };
+          Highlight?: new (...ranges: Range[]) => unknown;
+        })
+      | null;
+    const highlights = view?.CSS?.highlights;
+    const Highlight = view?.Highlight;
+    if (highlights === undefined || Highlight === undefined) {
+      return;
+    }
+    const range = (found: Found): Range => {
+      const made = this.doc.createRange();
+      made.setStart(found.node, found.start);
+      made.setEnd(found.node, found.end);
+      return made;
+    };
+    highlights.set('settings-found', new Highlight(...this.found.map(range)));
+    if (here === undefined) {
+      highlights.delete('settings-found-here');
+      return;
+    }
+    highlights.set('settings-found-here', new Highlight(range(here)));
   }
 
   /**

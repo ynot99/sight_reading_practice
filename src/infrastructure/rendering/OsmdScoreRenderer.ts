@@ -38,6 +38,7 @@ import {
   visibleHeightOf,
   swipeDirection,
 } from './pageTurns.js';
+import { placesToBeginIn, walkEveryPlace } from './cursorWalk.js';
 import { CursorNavigator, type ICursorPrimitive } from './CursorNavigator.js';
 import {
   buildOverlayShapes,
@@ -3258,8 +3259,9 @@ export class OsmdScoreRenderer
   }
 
   private walkDrawnNotes(): void {
-    const cursor = this.osmd?.cursor;
-    if (cursor === undefined || cursor === null) {
+    const osmd = this.osmd;
+    const cursor = osmd?.cursor;
+    if (osmd === null || cursor === undefined || cursor === null) {
       this.stepX = new Map();
       this.samples = [];
       return;
@@ -3273,15 +3275,9 @@ export class OsmdScoreRenderer
     this.stepElements = new Map();
     this.systemNumbers = new Map();
 
-    cursor.reset();
-    let index = 0;
-    let guard = 10_000;
-    while (!cursor.iterator.EndReached && guard > 0) {
-      guard -= 1;
-      this.readStep(cursor, index, stepX, placedByANote, samples);
-      index += 1;
-      cursor.next();
-    }
+    const index = walkEveryPlace(cursor, placesToBeginIn(osmd.Sheet), (step) => {
+      this.readStep(cursor, step, stepX, placedByANote, samples);
+    });
 
     this.carryPagesForward(index);
     this.stepX = stepX;

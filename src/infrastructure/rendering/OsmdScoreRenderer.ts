@@ -78,6 +78,53 @@ const UNITS_TO_PIXELS = 10;
  * where the room itself is the problem, and cutting further will not find it.
  */
 const FIT_PASSES = 4;
+
+/**
+ * How long the page fitting may spend re-engraving before it gives up.
+ *
+ * A pass costs a whole engraving of the whole score, and on a short piece that
+ * is nothing. On a long one it is everything: measured on a thirteen-hundred
+ * bar score, one engraving is twenty-one seconds, so the four passes below it
+ * turned opening the piece into a hundred seconds of drawing - and each one
+ * allocates the whole drawing again before the last is collected, which is
+ * where a page and a half of memory came from. His: "навіть для компютера цей
+ * score для малювання дуже важкий, та також щоб почати це грати - бо воно
+ * досить довго думає як стартувати".
+ *
+ * Set so that nothing the reader actually owns loses a pass. An engraving of
+ * one of his arrangements is a fraction of a second, so all four still fit
+ * inside this and the page goes on being fitted exactly as he asked for it to
+ * be; only a score whose single engraving is measured in seconds spends its
+ * way out, and by then the choice is between a clipped system and a minute and
+ * a half of waiting.
+ */
+const FIT_BUDGET_MS = 2_000;
+
+/**
+ * How many fitting passes are worth paying for, given what one engraving costs.
+ *
+ * The thing being bought is a page that does not clip its last system. It is
+ * worth several engravings when an engraving is a few milliseconds, and worth
+ * none at all when one is twenty seconds: a reader waiting a hundred seconds
+ * for a piece has a worse page than a reader looking at one clipped system, and
+ * they can still zoom, which re-engraves and fits again at a moment of their
+ * choosing rather than at the worst one.
+ *
+ * Its own function because it is the whole of the judgement and none of the
+ * drawing, and a judgement inside a method that needs a browser is a judgement
+ * no test can reach.
+ */
+export function fittingPassesWorth(engravedMs: number): number {
+  if (!Number.isFinite(engravedMs) || engravedMs <= 0) {
+    return FIT_PASSES;
+  }
+  return Math.min(FIT_PASSES, Math.floor(FIT_BUDGET_MS / engravedMs));
+}
+
+/** The page's own clock, or the calendar's where there is no page. */
+function nowMs(): number {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
+}
 /** How wide a passage marker is drawn, in the same pixels. */
 const MARKER_WIDTH = 5;
 /**
@@ -752,9 +799,11 @@ export class OsmdScoreRenderer
     // The engraver may only now exist, and it is made with following on.
     this.followOrTurn();
     this.applyPageFormat();
+    const engravedAt = nowMs();
     osmd.render();
+    const engravedMs = nowMs() - engravedAt;
     this.forgetSheets();
-    this.fitPagesToTheirContent();
+    this.fitPagesToTheirContent(engravedMs);
     this.loaded = true;
     this.engravedWidth = this.container.offsetWidth;
     this.walking = true;
@@ -837,9 +886,11 @@ export class OsmdScoreRenderer
     // the transport bar appearing - and a page is cut to the window.
     this.markPaged();
     this.applyPageFormat();
+    const engravedAt = nowMs();
     this.osmd.render();
+    const engravedMs = nowMs() - engravedAt;
     this.forgetSheets();
-    this.fitPagesToTheirContent();
+    this.fitPagesToTheirContent(engravedMs);
     this.engravedWidth = this.container.offsetWidth;
     this.walking = true;
     this.navigator.reset();
@@ -992,18 +1043,24 @@ export class OsmdScoreRenderer
    * Once only. A second engraving lays the systems out differently and could
    * spill again by a hair; chasing that would re-engrave all night, and the
    * remedy for a hair is not another whole page.
+   *
+   * And how many times at all is decided by what an engraving costs, not by a
+   * number written here: see {@link fittingPassesWorth}. On everything the
+   * reader owns this is the four it always was; on a score long enough for one
+   * engraving to be measured in seconds it is fewer, or none.
    */
-  private fitPagesToTheirContent(): void {
+  private fitPagesToTheirContent(engravedMs: number): void {
     if (!this.paged || this.osmd === null) {
       return;
     }
+    const passes = fittingPassesWorth(engravedMs);
     // Over and over, not once. Taking the surplus off changes which systems
     // fit on a page, and that changes which page draws furthest past its box
     // - so a single pass is a guess. It measured as one too: opening a long
     // score gave two systems to pages that hold one and a half, and the
     // reader's own fix was to zoom in and out again, each zoom being another
     // pass at the same arithmetic.
-    for (let pass = 0; pass < FIT_PASSES; pass += 1) {
+    for (let pass = 0; pass < passes; pass += 1) {
       const surplus = this.surplusBelowPage();
       if (surplus <= 0) {
         return;

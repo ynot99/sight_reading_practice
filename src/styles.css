@@ -3489,33 +3489,6 @@ body[data-repeats='hidden'] .repeat-mark {
 }
 
 /*
- * The pages nobody is looking at, skipped by the browser.
- *
- * Every page of an engraved score is in the document at once - paging scrolls
- * a column, it does not swap a page in - so a long piece hands the browser the
- * whole of itself to lay out and paint. Measured on a thirteen-hundred bar
- * score, that is a quarter of a million SVG shapes, and on an iPad it is
- * enough to have the tab killed. `content-visibility` does not remove them; it
- * lets the browser put off the layout and painting of what is out of view,
- * which is the larger half of what they cost.
- *
- * `auto` on the intrinsic size, and that word is doing the work: the browser
- * uses the size the page had when it was last drawn, so the column keeps its
- * true height and nothing under the reader's finger jumps. It has a remembered
- * size for every page, because this is only switched on once a whole engraving
- * has been through the fitting below.
- *
- * Which is the reason for the flag rather than the rule applying always: the
- * fitting measures each page against its box, and a page the browser has been
- * told it may skip is a page that answers such a question differently. Measure
- * first, skip afterwards.
- */
-.score__scroll[data-settled='true'] svg {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 1200px;
-}
-
-/*
  * When what was played appears, drawn as the state it is in.
  *
  * Three answers, so the same idiom as the click: the picture says which one

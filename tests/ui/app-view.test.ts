@@ -8147,3 +8147,42 @@ describe('what the device keeps', () => {
     expect(lines.some((line) => line?.includes('takes 1.1 MB'))).toBe(true);
   });
 });
+
+describe('a key that stands for the music', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  async function tapping(soundsTheMusic: boolean): Promise<Rig> {
+    const rig = createRig();
+    await rig.view.initialize();
+    await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    rig.runtime.controller.updateSettings({
+      rhythmOnly: true,
+      rhythmSoundsTheMusic: soundsTheMusic,
+      hearTheOtherHand: false,
+    });
+    rig.runtime.controller.start();
+    return rig;
+  }
+
+  it('does not sound the key pressed while the run sounds the written notes', async () => {
+    // Rhythm only, asked to play the music: the key is a tap, and the page
+    // sounding it as well would be a wrong note over every right one.
+    const rig = await tapping(true);
+
+    rig.midi.noteOn(MIDI.G4);
+
+    const heard = rig.instrument.played.map((note) => note.midi);
+    expect(heard).not.toContain(MIDI.G4);
+    expect(heard).toContain(MIDI.C4);
+  });
+
+  it('sounds the key as it always did otherwise', async () => {
+    const rig = await tapping(false);
+
+    rig.midi.noteOn(MIDI.G4);
+
+    expect(rig.instrument.played.map((note) => note.midi)).toContain(MIDI.G4);
+  });
+});

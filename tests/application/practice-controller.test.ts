@@ -4736,3 +4736,62 @@ describe('the last run that reached an end', () => {
     expect(controller.lastReport).not.toBeNull();
   });
 });
+
+describe('rhythm only, sounding the music', () => {
+  /** What the trainer sounded, lowest first. */
+  function soundedNotes(instrument: RecordingPitchPlayer): number[] {
+    return instrument.played.map((note) => note.midi).sort((left, right) => left - right);
+  }
+
+  async function tappingTheRhythm(
+    settings: Partial<PracticeSettings>,
+  ): Promise<ReturnType<typeof createController>> {
+    const rig = createController(true);
+    await rig.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    rig.controller.updateSettings({ rhythmOnly: true, hearTheOtherHand: false, ...settings });
+    rig.controller.start();
+    return rig;
+  }
+
+  it('sounds the notes written at the beat, whatever key was pressed', async () => {
+    // His: tap the rhythm on any key and hear the music. The first beat is
+    // C4 over C3; the key pressed is neither.
+    const rig = await tappingTheRhythm({ rhythmSoundsTheMusic: true });
+    rig.clock.advance(1_234);
+
+    rig.midi.noteOn(MIDI.G4);
+
+    expect(soundedNotes(rig.instrument)).toEqual([MIDI.C3, MIDI.C4]);
+    // At the moment the key went down, so the rhythm heard is the one played.
+    expect(rig.instrument.played.every((note) => note.atMs === 1_234)).toBe(true);
+  });
+
+  it('sounds only the hand being read', async () => {
+    const rig = await tappingTheRhythm({ rhythmSoundsTheMusic: true, handStaff: 1 });
+
+    rig.midi.noteOn(MIDI.G4);
+
+    expect(soundedNotes(rig.instrument)).toEqual([MIDI.C4]);
+  });
+
+  it('sounds nothing of its own where it was not asked to', async () => {
+    const rig = await tappingTheRhythm({ rhythmSoundsTheMusic: false });
+
+    rig.midi.noteOn(MIDI.G4);
+
+    expect(rig.instrument.played).toEqual([]);
+  });
+
+  it('says the reader keys stand for the music only while a run is going', async () => {
+    // The page sounds a keyboard with no voice of its own, and must not while
+    // the run is sounding the written notes in its place.
+    const rig = createController(true);
+    await rig.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    rig.controller.updateSettings({ rhythmOnly: true, rhythmSoundsTheMusic: true });
+    expect(rig.controller.replacesTheReadersKeys).toBe(false);
+
+    rig.controller.start();
+
+    expect(rig.controller.replacesTheReadersKeys).toBe(true);
+  });
+});

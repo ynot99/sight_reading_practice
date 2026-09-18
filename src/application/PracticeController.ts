@@ -59,12 +59,14 @@ import type {
   IScoreZoom,
 } from './ports/IScoreRenderer.js';
 import {
+  barLines,
   barNumberOf,
   clefAtMeasure,
   keyAtMeasure,
   measureCount,
   measureIndexAt,
   spanMs,
+  velocityAt,
 } from '../domain/model/Exercise.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
@@ -349,6 +351,16 @@ export interface PracticeSettings {
    * one of its own, since nothing about *when the cursor moves* changes.
    */
   readonly rhythmOnly: boolean;
+  /**
+   * In rhythm only, whether a press sounds the notes written at that beat
+   * instead of the key that was pressed.
+   *
+   * The key is ignored for judging already; this ignores it for the ear too,
+   * so a rhythm tapped on one key comes out as the music - and a rhythm
+   * tapped wrong comes out as the music gone wrong, which is the lesson. A
+   * piano that sounds its own keys has to be turned down for it. His.
+   */
+  readonly rhythmSoundsTheMusic: boolean;
   /**
    * Seconds to look at the music before it begins. `0` is off.
    *
@@ -857,6 +869,7 @@ export class PracticeController {
       playingAhead: 'a-mistake',
       pitchClassOnly: false,
       rhythmOnly: false,
+      rhythmSoundsTheMusic: false,
       previewSeconds: 0,
       cursorWhileRunning: true,
       cursorWhileListening: true,
@@ -2284,6 +2297,12 @@ export class PracticeController {
       // A step is dimmed the moment it is done with, whether it was played
       // well, badly or not at all: the page empties as the music passes.
       session.events.on('stepCompleted', ({ result, atMs }) => {
+        if (this.soundsTheMusicForTheReader && result.status !== 'skipped') {
+          const step = this.timeline?.at(result.index);
+          if (step !== undefined && step !== null) {
+            this.soundTheWrittenNotes(step, atMs);
+          }
+        }
         this.readerReaches(result.index, result.status, atMs);
         // The beat is finished, so its right notes stop being provisional.
         // Said for every step, including one nobody played: telling the
@@ -3303,6 +3322,62 @@ export class PracticeController {
   /** Whether this step is one the reader has to play. */
   private owedByTheReader(step: TimelineStep): boolean {
     return expectedFor(step, this.currentSettings.handStaff).length > 0;
+  }
+
+  /** Rhythm only, asked to sound the music rather than the reader's keys. */
+  private get soundsTheMusicForTheReader(): boolean {
+    return this.currentSettings.rhythmOnly && this.currentSettings.rhythmSoundsTheMusic;
+  }
+
+  /**
+   * Whether a key pressed now stands for the written notes rather than
+   * sounding as itself: while a run is going, in rhythm only, asked to sound
+   * the music. The page sounds a keyboard that has no voice of its own, and
+   * this is when it must not.
+   */
+  get replacesTheReadersKeys(): boolean {
+    const status = this.currentSession?.status;
+    return this.soundsTheMusicForTheReader && (status === 'running' || status === 'counting-in');
+  }
+
+  /**
+   * The notes written for the reader at this step, sounded when they played it.
+   *
+   * At the moment the key went down, early or late as it was, so the rhythm
+   * heard is the one played. Only the reader's hand: the other one, where it
+   * is heard, is sounded as it always is. As loud as the page asks there, and
+   * as long as each note sounds - a tie is one press and one sound.
+   */
+  private soundTheWrittenNotes(step: TimelineStep, atMs: number): void {
+    const exercise = this.exercise;
+    if (exercise === null) {
+      return;
+    }
+    const hand = this.currentSettings.handStaff;
+    const measureStart = barLines(exercise)[step.measureIndex]?.startTicks ?? 0;
+    // Two voices on one pitch are one key, held as long as the longer of them.
+    const longest = new Map<number, TimelineStep['notes'][number]>();
+    for (const note of step.notes) {
+      if (hand !== null && note.staffNumber !== hand) {
+        continue;
+      }
+      const known = longest.get(note.midi);
+      if (known === undefined || soundsFor(known) < soundsFor(note)) {
+        longest.set(note.midi, note);
+      }
+    }
+    for (const note of longest.values()) {
+      this.deps.instrument.play(
+        note.midi,
+        velocityAt(exercise, step.measureIndex, step.onsetTicks - measureStart, note.staffNumber),
+        atMs,
+      );
+      this.deps.instrument.stop(
+        note.midi,
+        atMs + spanMs(exercise, step.onsetTicks, step.onsetTicks + soundsFor(note)),
+      );
+      this.sounding.add(note.midi);
+    }
   }
 
   private soundTheOtherHand(step: TimelineStep, atMs: number): void {

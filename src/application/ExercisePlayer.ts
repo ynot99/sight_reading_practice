@@ -545,8 +545,14 @@ export class ExercisePlayer {
         ? this.collectNotes(timeline, options.staffNumber, this.loopFromTicks)
         : this.pending;
     timeTheStart(`player: notes collected (${String(this.pending.length)})`);
+    // Where it walked from is said as well as that it arrived: a walk that
+    // should have been nothing - the marker already standing there - is a
+    // different fault from a walk that is merely long.
+    const walkedFrom = this.deps.cursor.position;
     this.deps.cursor.moveTo(first?.index ?? 0);
-    timeTheStart('player: cursor at the start');
+    timeTheStart(
+      `player: cursor at the start (walked ${String(walkedFrom)} -> ${String(first?.index ?? 0)})`,
+    );
     this.emitter.emit('started', {});
     timeTheStart('player: page reacted to the start');
     this.deps.metronome.start();

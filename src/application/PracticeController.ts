@@ -2472,12 +2472,13 @@ export class PracticeController {
     // would otherwise both be subscribed to the keyboard, and the presses
     // that started this run would arrive at the watch a second time.
     this.watchForTheOpening();
+    const walkedFrom = this.deps.cursor.position;
     if (beginsAt > 0) {
       this.deps.cursor.moveTo(beginsAt);
     } else {
       this.deps.cursor.reset();
     }
-    timeTheStart('cursor at the start');
+    timeTheStart(`cursor at the start (walked ${String(walkedFrom)} -> ${String(beginsAt)})`);
     this.meter.reset();
     this.lastWaitDrainMs = this.deps.clock.now();
     this.lastBeatTicks = 0;

@@ -597,7 +597,19 @@ class OsmdCursorPrimitive implements ICursorPrimitive {
   }
 
   /**
-   * The iterator alone, which is what `next` does before it draws.
+   * Exactly the step `next` takes, without the drawing it does afterwards.
+   *
+   * Exactly: the engraver's `next` is `moveToNextVisibleVoiceEntry(false)` and
+   * then `update()`, and this was first written as the iterator's plain
+   * `moveToNext` - which does not skip what is not drawn. This program writes
+   * every silence as a rest the page does not print, so a plain step counts
+   * positions the marker never stands on, and a walk of a thousand of them
+   * fell short of where it was going: measured on the device, a start eight
+   * hundred bars in put the marker a little way back, and further back the
+   * further in. His: "курсор на таких великих дистанціях ставиться кудись
+   * трішки назад". The double in the tests takes the same step both ways, so
+   * only the engraver itself can say whether the two agree; see the test that
+   * asks it.
    *
    * Where the engraver has no iterator to offer - it has not rendered yet -
    * this falls back to the whole of `next`, which is slower and always right.
@@ -607,12 +619,14 @@ class OsmdCursorPrimitive implements ICursorPrimitive {
     if (cursor === null || cursor === undefined) {
       return;
     }
-    const iterator = cursor.iterator as { moveToNext?: () => void } | undefined;
-    if (typeof iterator?.moveToNext !== 'function') {
+    const iterator = cursor.iterator as
+      | { moveToNextVisibleVoiceEntry?: (notesOnly: boolean) => void }
+      | undefined;
+    if (typeof iterator?.moveToNextVisibleVoiceEntry !== 'function') {
       cursor.next();
       return;
     }
-    iterator.moveToNext();
+    iterator.moveToNextVisibleVoiceEntry(false);
   }
 
   drawWhereItIs(): void {

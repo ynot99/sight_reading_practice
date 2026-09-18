@@ -1,0 +1,88 @@
+// @vitest-environment jsdom
+import { beforeAll, describe, expect, it } from 'vitest';
+import type { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { noteEntry, silenceEntry } from '../../src/domain/model/Exercise.js';
+import type { Exercise } from '../../src/domain/model/Exercise.js';
+import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
+import { OsmdScoreRenderer } from '../../src/infrastructure/rendering/OsmdScoreRenderer.js';
+import { bar, p, partialVoiceExercise } from '../support/fixtures.js';
+import { createScoreContainer, installCanvasStub } from '../support/osmdHarness.js';
+
+/**
+ * A bar with a moment in it where nothing is drawn.
+ *
+ *   treble: C4 (half)                 D4 (half)
+ *   bass:   G3 (quarter)  (silence)   A3 (half)
+ *
+ * The bass is silent on the second beat and nothing else starts there, so the
+ * only thing at that moment is a rest the page does not print. The engraver's
+ * iterator stops on it; its visible cursor does not.
+ */
+function aMomentOfNothing(): Exercise {
+  const base = partialVoiceExercise();
+  const [treble, bass] = base.staves;
+  if (treble === undefined || bass === undefined) {
+    throw new Error('the fixture has two staves');
+  }
+  return {
+    ...base,
+    staves: [
+      {
+        ...treble,
+        measures: [bar(noteEntry(p('C4'), Duration.HALF), noteEntry(p('D4'), Duration.HALF))],
+      },
+      {
+        ...bass,
+        measures: [
+          bar(
+            noteEntry(p('G3'), Duration.QUARTER),
+            silenceEntry(Duration.QUARTER),
+            noteEntry(p('A3'), Duration.HALF),
+          ),
+        ],
+      },
+    ],
+  };
+}
+
+function engraverOf(renderer: OsmdScoreRenderer): OpenSheetMusicDisplay {
+  return (renderer as unknown as { osmd: OpenSheetMusicDisplay }).osmd;
+}
+
+function whereTheCursorIs(osmd: OpenSheetMusicDisplay): number {
+  return osmd.cursor.iterator.currentTimeStamp.RealValue;
+}
+
+describe('walking the cursor without drawing it', () => {
+  beforeAll(() => {
+    installCanvasStub();
+  });
+
+  it('lands exactly where stepping it one drawn step at a time would', async () => {
+    // A walk steps the iterator and draws the marker once, at the end. It was
+    // first written with the iterator's plain `moveToNext`, which does not skip
+    // what is not drawn - and every silence here is a rest the page does not
+    // print - so a walk counted positions the marker never stands on and fell
+    // short of where it was going. On the device: a start eight hundred bars
+    // in put the marker "кудись трішки назад", further back the further in.
+    //
+    // Only the engraver can answer this. The test double takes the same step
+    // both ways, which is the contract and is exactly what was not being kept.
+    const renderer = new OsmdScoreRenderer(createScoreContainer(), { zoom: 1 });
+    await renderer.load(new MusicXmlSerializer().serialize(aMomentOfNothing()));
+    const osmd = engraverOf(renderer);
+
+    renderer.cursor.moveTo(1);
+    const walked = whereTheCursorIs(osmd);
+
+    osmd.cursor.reset();
+    osmd.cursor.next();
+    const stepped = whereTheCursorIs(osmd);
+
+    // The second beat is the silence, and the marker does not stand on it: one
+    // drawn step from the top is the second half of the bar.
+    expect(stepped).toBe(0.5);
+    expect(walked).toBe(stepped);
+  });
+});

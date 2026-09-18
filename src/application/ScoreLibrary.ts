@@ -4,6 +4,7 @@ import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.
 import type { ClickPattern } from './ports/IMetronome.js';
 import type { IScoreImporter } from './ports/IScoreImporter.js';
 import type { IScoreStore, SavedPassage, StoredScoreSummary } from './ports/IScoreStore.js';
+import type { IKeepsTheStore } from './ports/IStorageGauge.js';
 
 /**
  * What the reader wants in front of them when the page opens.
@@ -125,6 +126,12 @@ export interface ScoreLibraryDependencies {
   readonly store: IScoreStore;
   readonly serializer: IMusicXmlSerializer;
   readonly importer: IScoreImporter;
+  /**
+   * Asked to keep the store whenever the library is read and holds anything -
+   * on a visit, and after every change to it. Not before: a page with nothing
+   * kept has nothing to ask for, and one browser asks the reader out loud.
+   */
+  readonly keeper: IKeepsTheStore;
 }
 
 /**
@@ -173,6 +180,9 @@ export class ScoreLibrary {
   /** Reads what earlier visits kept. Safe to call before anything is stored. */
   async load(): Promise<void> {
     this.summaries = await this.deps.store.list();
+    if (this.summaries.length > 0) {
+      void this.deps.keeper.askToKeep();
+    }
   }
 
   /**
@@ -222,6 +232,8 @@ export class ScoreLibrary {
       ...summary,
       musicXml: this.deps.serializer.serialize(exercise),
     });
+    // Through `load`, which asks for the store to be kept now that it holds
+    // this.
     await this.load();
     return summary;
   }

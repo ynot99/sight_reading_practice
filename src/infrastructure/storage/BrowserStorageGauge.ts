@@ -1,4 +1,5 @@
 import type {
+  IKeepsTheStore,
   IStorageGauge,
   StorageReading,
   StorageShelf,
@@ -13,6 +14,7 @@ export interface StorageManagerLike {
     readonly usageDetails?: { readonly indexedDB?: number };
   }>;
   persisted?(): Promise<boolean>;
+  persist?(): Promise<boolean>;
 }
 
 /** The corner of `localStorage` this needs. */
@@ -38,7 +40,7 @@ export function browserStorageManager(): StorageManagerLike | null {
  * browser that will not say how much room there is has not said there is
  * none, and the page must not claim it has.
  */
-export class BrowserStorageGauge implements IStorageGauge {
+export class BrowserStorageGauge implements IStorageGauge, IKeepsTheStore {
   private readonly manager: StorageManagerLike | null;
   private readonly local: ReadableStorage | null;
   private readonly shelfKeys: readonly ShelfKey[];
@@ -62,6 +64,23 @@ export class BrowserStorageGauge implements IStorageGauge {
       persisted,
       shelves: this.shelves(),
     };
+  }
+
+  /**
+   * Asks only where it has not been promised already. Chrome and Safari decide
+   * without a word to the reader, by how much the site is used; Firefox asks
+   * them once, and remembers the answer.
+   */
+  async askToKeep(): Promise<boolean | null> {
+    try {
+      if ((await this.manager?.persisted?.()) === true) {
+        return true;
+      }
+      const asked = this.manager?.persist?.();
+      return asked === undefined ? null : await asked;
+    } catch {
+      return null;
+    }
   }
 
   private async estimate(): Promise<Awaited<ReturnType<StorageManagerLike['estimate']>> | null> {

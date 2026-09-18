@@ -84,3 +84,66 @@ describe('reading what the browser keeps for the site', () => {
     expect(reading.shelves.map((shelf) => shelf.characters)).toEqual([0, 0]);
   });
 });
+
+describe('asking the browser to keep the site', () => {
+  it('asks only where it has not been promised already', async () => {
+    let asked = 0;
+    const promised = new BrowserStorageGauge(
+      {
+        estimate: () => Promise.resolve({}),
+        persisted: () => Promise.resolve(true),
+        persist: () => {
+          asked += 1;
+          return Promise.resolve(true);
+        },
+      },
+      null,
+      SHELVES,
+    );
+
+    expect(await promised.askToKeep()).toBe(true);
+    expect(asked).toBe(0);
+  });
+
+  it('passes on what the browser decides', async () => {
+    const refused = new BrowserStorageGauge(
+      {
+        estimate: () => Promise.resolve({}),
+        persisted: () => Promise.resolve(false),
+        persist: () => Promise.resolve(false),
+      },
+      null,
+      SHELVES,
+    );
+    const granted = new BrowserStorageGauge(
+      {
+        estimate: () => Promise.resolve({}),
+        persisted: () => Promise.resolve(false),
+        persist: () => Promise.resolve(true),
+      },
+      null,
+      SHELVES,
+    );
+
+    expect(await refused.askToKeep()).toBe(false);
+    expect(await granted.askToKeep()).toBe(true);
+  });
+
+  it('says nothing where the browser cannot be asked', async () => {
+    const nothing = new BrowserStorageGauge(null, null, SHELVES);
+    const noAsking = new BrowserStorageGauge({ estimate: () => Promise.resolve({}) }, null, SHELVES);
+    const refusing = new BrowserStorageGauge(
+      {
+        estimate: () => Promise.resolve({}),
+        persisted: () => Promise.resolve(false),
+        persist: () => Promise.reject(new Error('no')),
+      },
+      null,
+      SHELVES,
+    );
+
+    expect(await nothing.askToKeep()).toBeNull();
+    expect(await noAsking.askToKeep()).toBeNull();
+    expect(await refusing.askToKeep()).toBeNull();
+  });
+});

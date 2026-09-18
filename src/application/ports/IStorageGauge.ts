@@ -37,3 +37,16 @@ export interface StorageShelf {
 export interface IStorageGauge {
   read(): Promise<StorageReading>;
 }
+
+/**
+ * Asks the browser to keep this site's data rather than clear it.
+ *
+ * A browser may clear a site's store to make room, and Safari clears one the
+ * reader has not visited for a week unless the page was added to the Home
+ * Screen. Nothing in the store is anywhere else: a library of scores with a
+ * difficulty given to each, marked out passages, the click each one likes.
+ */
+export interface IKeepsTheStore {
+  /** Whether it will be kept, or `null` where the browser will not say. */
+  askToKeep(): Promise<boolean | null>;
+}

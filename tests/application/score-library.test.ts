@@ -9,12 +9,20 @@ import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
 
 function library(store = new InMemoryScoreStore()) {
+  const asked: string[] = [];
   return {
     store,
+    asked,
     scores: new ScoreLibrary({
       store,
       serializer: new MusicXmlSerializer(),
       importer: new DomScoreImporter(),
+      keeper: {
+        askToKeep: () => {
+          asked.push('keep');
+          return Promise.resolve(true);
+        },
+      },
     }),
   };
 }
@@ -572,5 +580,31 @@ describe('the scores a reader has kept', () => {
     for (const summary of await store.list()) {
       expect('musicXml' in summary).toBe(false);
     }
+  });
+});
+
+describe('asking the device to keep the library', () => {
+  it('asks once there is a score to keep, and not before', async () => {
+    // A browser may clear a site's store to make room, and Safari clears one
+    // unvisited for a week: a library of scores with a difficulty given to
+    // each is nowhere else. One browser asks the reader out loud, so a page
+    // with nothing in it asks nothing.
+    const { scores, asked } = library();
+    await scores.load();
+    expect(asked).toEqual([]);
+
+    await scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
+
+    expect(asked.length).toBeGreaterThan(0);
+  });
+
+  it('asks on a visit to a library that already holds something', async () => {
+    const store = new InMemoryScoreStore();
+    await library(store).scores.keep(twoBarExercise({ title: 'City of Tears' }), 1_000);
+    const visit = library(store);
+
+    await visit.scores.load();
+
+    expect(visit.asked).toEqual(['keep']);
   });
 });

@@ -238,6 +238,7 @@ function createRig(
     store: scoreStore,
     serializer,
     importer,
+    keeper: { askToKeep: () => Promise.resolve(null) },
   });
   const scorings = new ScoringStrategyRegistry().registerAll([
     new AccuracyScoringStrategy(),

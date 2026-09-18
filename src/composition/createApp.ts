@@ -321,7 +321,13 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   takes.load();
 
   const scoreStore = options.scoreStore ?? new IndexedDbScoreStore();
-  const scores = new ScoreLibrary({ store: scoreStore, serializer, importer });
+  const storage = new BrowserStorageGauge(browserStorageManager(), browserStorage(), [
+    { name: 'settings', key: DEFAULT_STORAGE_KEY },
+    { name: 'readings', key: HISTORY_STORAGE_KEY },
+    { name: 'time today', key: TIME_STORAGE_KEY },
+    { name: 'takes', key: TAKES_STORAGE_KEY },
+  ]);
+  const scores = new ScoreLibrary({ store: scoreStore, serializer, importer, keeper: storage });
 
   const historyStore =
     options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY);
@@ -393,12 +399,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     recorder,
     takePlayer,
     backup,
-    storage: new BrowserStorageGauge(browserStorageManager(), browserStorage(), [
-      { name: 'settings', key: DEFAULT_STORAGE_KEY },
-      { name: 'readings', key: HISTORY_STORAGE_KEY },
-      { name: 'time today', key: TIME_STORAGE_KEY },
-      { name: 'takes', key: TAKES_STORAGE_KEY },
-    ]),
+    storage,
     volumeKnob,
     takes,
     history,

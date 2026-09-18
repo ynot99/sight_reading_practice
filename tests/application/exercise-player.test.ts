@@ -483,15 +483,25 @@ describe('listening to an exercise', () => {
     expect(heardAfter.sort((a, b) => a - b)).toEqual(expected.sort((a, b) => a - b));
   });
 
-  it('anchors the clock before doing anything that takes time', () => {
-    // Starting the metronome is what fixes the performance to the audio
-    // clock: its first tick is placed a fixed moment ahead of *now*, so every
-    // millisecond spent before that call is silence added in front of the
-    // music. Gathering the notes walks the whole timeline and moving the
-    // marker walks the engraver's cursor from wherever it stood. On a
-    // two-hundred-bar piece those two came to about ninety milliseconds
-    // before this order changed, and a reader tapping along could hear them
-    // as a repeat that came in late.
+  it('has everything ready before the clock starts, so nothing is due early', () => {
+    // It was the other way round, and a test said so: the first tick is placed
+    // a fixed moment ahead of when the clock starts, so every millisecond of
+    // preparation before it is silence added in front of the music - about
+    // ninety on a two-hundred-bar piece, heard as a repeat coming in late.
+    //
+    // That held while the moment was generous. It was later cut to ten
+    // milliseconds so that a click could land where a key went down, and from
+    // then on the preparation ran *past* the first tick instead of inside the
+    // gap before it: every beat of it was due by the time the clock was looked
+    // at again, and they arrived together. Measured on his device on a long
+    // score, the clock ran seven hundred milliseconds before anything was
+    // ready, and the marker jumped ahead instead of waiting for the first note.
+    //
+    // Both costs are the length of the preparation, so the choice is only
+    // which one is paid: a pause before the music, or a lurch at its start
+    // with the notes of that lurch dropped as too late to sound. The pause is
+    // the honest one, and the preparation has since been made a small fraction
+    // of what it was, so the pause is short.
     const clock = new ManualClock();
     const metronome = new ManualMetronome(clock);
     const renderer = new FakeScoreRenderer();
@@ -512,6 +522,7 @@ describe('listening to an exercise', () => {
       cursor: renderer.cursor,
       horizonMs: 2_000,
     });
+    player.events.on('started', () => order.push('told'));
 
     player.start(buildTimeline(twoBarExercise({ tempoBpm: 60 })), {
       staffNumber: null,
@@ -519,10 +530,9 @@ describe('listening to an exercise', () => {
       clickWhen: 'never',
     });
 
-    expect(order[0]).toBe('clock');
-    expect(order).toContain('cursor');
-    // And the music still sounds, so nothing was lost by deferring it: the
-    // first tick is not delivered until it is due, which is long after both.
+    // The marker placed and the page told, and only then the clock.
+    expect(order).toEqual(['cursor', 'told', 'clock']);
+    // And the music still sounds from where it was asked to.
     metronome.advanceSubdivisions(8);
     expect(renderer.cursor.position).toBeGreaterThan(0);
   });

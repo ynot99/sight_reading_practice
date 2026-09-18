@@ -518,21 +518,24 @@ export class ExercisePlayer {
     this.deps.metronome.configure(this.planFrom(0));
 
     this.subscription = this.deps.metronome.onTick((tick) => this.handleTick(tick));
-    // The clock first, and everything that takes time after it.
+    // Everything that takes time first, and the clock after it.
     //
-    // Starting the metronome is what anchors the performance to the audio
-    // clock: its first tick is placed a fixed moment ahead of *now*, so every
-    // millisecond spent before this call is a millisecond of silence added in
-    // front of the music. Gathering the notes walks the whole timeline and
-    // moving the marker walks the engraver's cursor from wherever it stood -
-    // on a long piece with the passage well into it, that was most of the gap
-    // a reader tapping along could hear on a repeat.
+    // It was the other way round, on the grounds that the first tick is placed
+    // a fixed moment ahead of when the clock starts and the gathering always
+    // finished long before that moment came. It stopped being true when that
+    // moment was cut to ten milliseconds so that a click could land where a
+    // key went down - two decisions made apart that could not both hold. From
+    // then on every millisecond of gathering, of walking the marker and of the
+    // page answering was a millisecond of beats already due by the time the
+    // clock was looked at again, and they arrived together: the marker jumped
+    // ahead instead of waiting for the first note. Measured on his device, a
+    // playback of a long score had its clock running for seven hundred
+    // milliseconds before anything was ready to follow it.
     //
-    // Nothing is missed by doing them after: the first tick is not delivered
-    // until it is due, which is that fixed moment away, and both of these
-    // finish long before it.
-    this.deps.metronome.start();
-    timeTheStart('player: metronome started (the clock is now running)');
+    // Started last, nothing can be due before it starts, however long a piece
+    // is or however slow a device. What the preparation costs becomes a pause
+    // before the music rather than a lurch at the beginning of it - and the
+    // work that follows is there to make that pause short.
     this.pending = this.collectNotes(timeline, options.staffNumber, this.fromTicks);
     // The lap's own notes, when a lap is not simply this performance again:
     // picked up after a pause, the first time round is the tail of a lap and
@@ -546,6 +549,8 @@ export class ExercisePlayer {
     timeTheStart('player: cursor at the start');
     this.emitter.emit('started', {});
     timeTheStart('player: page reacted to the start');
+    this.deps.metronome.start();
+    timeTheStart('player: metronome started (the clock is now running)');
   }
 
   /**

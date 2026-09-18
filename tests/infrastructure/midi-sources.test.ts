@@ -3,6 +3,7 @@ import type { MidiEvent } from '../../src/application/ports/IMidiSource.js';
 import { CompositeMidiSource } from '../../src/infrastructure/midi/CompositeMidiSource.js';
 import {
   ComputerKeyboardMidiSource,
+  isTypedInto,
   type KeyboardEventLike,
   type KeyboardTarget,
 } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
@@ -46,7 +47,7 @@ class FakeKeyboardTarget implements KeyboardTarget {
     });
   }
 
-  release(code: string): void {
+  release(code: string, overrides: Partial<KeyboardEventLike> = {}): void {
     this.dispatch('keyup', {
       code,
       repeat: false,
@@ -54,9 +55,45 @@ class FakeKeyboardTarget implements KeyboardTarget {
       ctrlKey: false,
       altKey: false,
       preventDefault: () => undefined,
+      ...overrides,
     });
   }
 }
+
+describe('whether a key was typed into something', () => {
+  it('counts what takes text', () => {
+    expect(isTypedInto({ tagName: 'INPUT', type: 'text' })).toBe(true);
+    expect(isTypedInto({ tagName: 'INPUT', type: 'number' })).toBe(true);
+    expect(isTypedInto({ tagName: 'INPUT', type: 'search' })).toBe(true);
+    expect(isTypedInto({ tagName: 'TEXTAREA' })).toBe(true);
+    // A letter jumps to an option, which is close enough to typing.
+    expect(isTypedInto({ tagName: 'SELECT' })).toBe(true);
+    expect(isTypedInto({ tagName: 'DIV', isContentEditable: true })).toBe(true);
+  });
+
+  it('does not count what a letter means nothing to', () => {
+    // Each of these keeps the focus after a click, and counting them would
+    // leave the keyboard dead until the reader thought to click elsewhere.
+    expect(isTypedInto({ tagName: 'BUTTON' })).toBe(false);
+    expect(isTypedInto({ tagName: 'INPUT', type: 'checkbox' })).toBe(false);
+    expect(isTypedInto({ tagName: 'INPUT', type: 'radio' })).toBe(false);
+    expect(isTypedInto({ tagName: 'INPUT', type: 'range' })).toBe(false);
+    expect(isTypedInto({ tagName: 'DIV' })).toBe(false);
+    expect(isTypedInto(null)).toBe(false);
+    expect(isTypedInto(undefined)).toBe(false);
+  });
+
+  it('treats an input type it has never heard of as one that takes text', () => {
+    // The list is of what to let through, that way round on purpose: an
+    // unknown box should swallow a note rather than a name.
+    expect(isTypedInto({ tagName: 'INPUT', type: 'something-new' })).toBe(true);
+    expect(isTypedInto({ tagName: 'INPUT' })).toBe(true);
+  });
+
+  it('is not troubled by a type shouted at it', () => {
+    expect(isTypedInto({ tagName: 'INPUT', type: 'CHECKBOX' })).toBe(false);
+  });
+});
 
 describe('ComputerKeyboardMidiSource', () => {
   function setup(): {
@@ -127,6 +164,51 @@ describe('ComputerKeyboardMidiSource', () => {
       timestampMs: 400,
       sourceId: 'computer-keyboard',
     });
+  });
+
+  it('plays nothing while the reader is typing, and swallows nothing either', () => {
+    // Nearly every letter and digit here is a note, and the ones it takes it
+    // takes with `preventDefault` - so a name typed into a box came out as a
+    // tune with most of its characters missing. His: "щоб клавіатура не грала
+    // піаніно коли я щось вводжу в input? Бо піаніно перехоплює event".
+    const { target, source, events } = setup();
+    source.enable();
+    let swallowed = 0;
+
+    target.press('KeyZ', {
+      target: { tagName: 'INPUT', type: 'text' },
+      preventDefault: () => {
+        swallowed += 1;
+      },
+    });
+
+    expect(events).toEqual([]);
+    expect(swallowed).toBe(0);
+  });
+
+  it('goes on playing with a button or a tick box holding the focus', () => {
+    // The question the space bar asks counts a focused button, because space
+    // presses buttons. This one must not, or the keyboard would go dead the
+    // moment Start was pressed with a mouse and the focus stayed on it.
+    const { target, source, events } = setup();
+    source.enable();
+
+    target.press('KeyZ', { target: { tagName: 'BUTTON' } });
+    target.press('KeyX', { target: { tagName: 'INPUT', type: 'checkbox' } });
+
+    expect(events.map((event) => ('midi' in event ? event.midi : null))).toEqual([48, 50]);
+  });
+
+  it('lets a note go wherever the reader has got to since pressing it', () => {
+    // Begun on the page and released after a box was clicked. Asked about the
+    // focus on the way up as well, this note would never be released at all.
+    const { target, source, events } = setup();
+    source.enable();
+    target.press('KeyZ');
+
+    target.release('KeyZ', { target: { tagName: 'INPUT', type: 'text' } });
+
+    expect(events.map((event) => event.type)).toEqual(['noteon', 'noteoff']);
   });
 
   it('honours a custom base octave', () => {

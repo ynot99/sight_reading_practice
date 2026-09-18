@@ -39,13 +39,73 @@ export interface ComputerKeyboardOptions {
   readonly velocity?: number;
 }
 
+/**
+ * As much of where a key went as this needs to know.
+ *
+ * Shaped rather than taken as an `Element`, for the reason `KeyboardEventLike`
+ * beside it is: nothing here touches the document, and a test can hand it a
+ * plain object.
+ */
+export interface TypedInto {
+  readonly tagName?: string;
+  readonly type?: string;
+  readonly isContentEditable?: boolean;
+}
+
 export interface KeyboardEventLike {
   readonly code: string;
   readonly repeat: boolean;
   readonly metaKey: boolean;
   readonly ctrlKey: boolean;
   readonly altKey: boolean;
+  /** Where the key went, which on a keydown is whatever has the focus. */
+  readonly target?: TypedInto | null;
   preventDefault(): void;
+}
+
+/**
+ * Inputs that letters do nothing in.
+ *
+ * The list is of what to *let through*, not of what to catch, and that way
+ * round on purpose: an input type nobody thought of here is treated as one that
+ * takes text, so an unknown box swallows a note rather than a name.
+ */
+const NOT_TYPED_IN = new Set([
+  'checkbox',
+  'radio',
+  'button',
+  'submit',
+  'reset',
+  'range',
+  'color',
+  'file',
+  'image',
+]);
+
+/**
+ * Whether a key was typed into something that takes text.
+ *
+ * Narrower than the question the space bar asks, and deliberately. That one
+ * counts a focused button, because space presses buttons; this one must not, or
+ * the keyboard would go dead the moment the reader pressed Start with a mouse
+ * and left the focus sitting on it. Same for a checkbox: it keeps the focus
+ * after a tick, and letters mean nothing to it.
+ */
+export function isTypedInto(target: TypedInto | null | undefined): boolean {
+  if (target === null || target === undefined) {
+    return false;
+  }
+  if (target.isContentEditable === true) {
+    return true;
+  }
+  const tag = target.tagName;
+  if (tag === 'TEXTAREA' || tag === 'SELECT') {
+    return true;
+  }
+  if (tag !== 'INPUT') {
+    return false;
+  }
+  return !NOT_TYPED_IN.has((target.type ?? 'text').toLowerCase());
 }
 
 export interface KeyboardTarget {
@@ -77,6 +137,14 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
     if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) {
       return;
     }
+    // Not while the reader is typing. Nearly every letter and digit is a note
+    // here, and this calls `preventDefault` on the ones it takes - so a name
+    // being typed into a box came out as a tune with most of its characters
+    // missing. His: "щоб клавіатура не грала піаніно коли я щось вводжу в
+    // input? Бо піаніно перехоплює event".
+    if (isTypedInto(event.target)) {
+      return;
+    }
     const offset = this.keyMap[event.code];
     if (offset === undefined || this.held.has(event.code)) {
       return;
@@ -92,6 +160,14 @@ export class ComputerKeyboardMidiSource implements IMidiSource {
     });
   };
 
+  /**
+   * Lets a key go, wherever the reader has got to since pressing it.
+   *
+   * No question about the focus here, and that is the point: a note begun on
+   * the page and released after a box was clicked would never be released at
+   * all. Only notes actually started are held, so a key that was let through
+   * while typing finds nothing to stop and stops nothing.
+   */
   private readonly onKeyUp = (event: KeyboardEventLike): void => {
     const offset = this.keyMap[event.code];
     if (offset === undefined || !this.held.delete(event.code)) {

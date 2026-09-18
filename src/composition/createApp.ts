@@ -40,6 +40,7 @@ import { BackupService } from '../application/Backup.js';
 import { ScoreLibrary } from '../application/ScoreLibrary.js';
 import { IndexedDbScoreStore } from '../infrastructure/storage/IndexedDbScoreStore.js';
 import type { IScoreStore } from '../application/ports/IScoreStore.js';
+import type { IStorageGauge } from '../application/ports/IStorageGauge.js';
 import { DownloadFileSink } from '../infrastructure/files/DownloadFileSink.js';
 import type { IFileSink } from '../application/ports/IFileSink.js';
 import { PracticeLadder } from '../application/ladder/PracticeLadder.js';
@@ -53,6 +54,10 @@ import {
   LocalStorageSettingsStore,
   browserStorage,
 } from '../infrastructure/storage/LocalStorageSettingsStore.js';
+import {
+  BrowserStorageGauge,
+  browserStorageManager,
+} from '../infrastructure/storage/BrowserStorageGauge.js';
 import { ExercisePresetRegistry } from '../domain/generation/ExercisePresetRegistry.js';
 import { BUILT_IN_PRESETS } from '../domain/generation/presets.js';
 import type { IScoreImporter } from '../application/ports/IScoreImporter.js';
@@ -165,6 +170,8 @@ export interface AppRuntime {
   readonly takePlayer: TakePlayer;
   /** Carries everything off this device, since an installed app cannot see the tab's. */
   readonly backup: BackupService;
+  /** What the device keeps for the trainer, and whether it will be kept. */
+  readonly storage: IStorageGauge;
   /** Scores kept between visits, so a file is chosen from the disk once. */
   readonly scores: ScoreLibrary;
   readonly files: IFileSink;
@@ -386,6 +393,12 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     recorder,
     takePlayer,
     backup,
+    storage: new BrowserStorageGauge(browserStorageManager(), browserStorage(), [
+      { name: 'settings', key: DEFAULT_STORAGE_KEY },
+      { name: 'readings', key: HISTORY_STORAGE_KEY },
+      { name: 'time today', key: TIME_STORAGE_KEY },
+      { name: 'takes', key: TAKES_STORAGE_KEY },
+    ]),
     volumeKnob,
     takes,
     history,

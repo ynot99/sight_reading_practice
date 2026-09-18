@@ -1399,6 +1399,12 @@ textarea {
   min-height: 2.4em;
 }
 
+/* What the device keeps, a line to each answer. */
+.storage-report {
+  padding: 0;
+  list-style: none;
+}
+
 /*
  * Full width inside a settings column and nowhere else.
  *

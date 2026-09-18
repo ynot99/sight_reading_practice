@@ -297,6 +297,21 @@ function createRig(
   // Its own, so a test can put readings in it and see them listed.
   const practiceHistory = new PracticeHistory(new InMemorySettingsStore());
 
+  // What the device keeps, as a browser that answers everything would say it.
+  const storage = {
+    read: () =>
+      Promise.resolve({
+        usedBytes: 42 * 1024 * 1024,
+        quotaBytes: 100 * 1024 * 1024 * 1024,
+        databaseBytes: 30 * 1024 * 1024,
+        persisted: false,
+        shelves: [
+          { name: 'settings', characters: 3_000 },
+          { name: 'takes', characters: 1_200_000 },
+        ],
+      }),
+  };
+
   const runtime: AppRuntime = {
     controller,
     history: practiceHistory,
@@ -307,6 +322,7 @@ function createRig(
     recorder,
     takePlayer,
     backup,
+    storage,
     volumeKnob,
     takes,
     scores,
@@ -8106,5 +8122,27 @@ describe('measuring how long a press takes to arrive', () => {
     await second.view.initialize();
 
     expect(second.runtime.controller.settings.inputLatencyMs).toBe(480);
+  });
+});
+
+describe('what the device keeps', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  it('lists what the browser says when asked, and not before', async () => {
+    // Settings -> For developers. Whether there is room and whether it will be
+    // kept is a question the reader asks; the page does not ask it for them.
+    const { view } = createRig();
+    await view.initialize();
+    const report = element<HTMLUListElement>('storage-report');
+    expect(report.hidden).toBe(true);
+
+    element<HTMLButtonElement>('measure-storage').click();
+    await waitFor(() => !report.hidden);
+
+    const lines = [...report.querySelectorAll('li')].map((line) => line.textContent);
+    expect(lines).toContain('Kept from being cleared: no');
+    expect(lines.some((line) => line?.includes('takes 1.1 MB'))).toBe(true);
   });
 });

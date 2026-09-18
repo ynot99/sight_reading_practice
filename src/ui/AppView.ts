@@ -57,6 +57,7 @@ import { barLines, barNumberOf, measureCount, spanMs } from '../domain/model/Exe
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
 import { drawTheHitErrors } from './hitErrorBar.js';
+import { describeStorage } from './storageReport.js';
 import { drawTheProfile } from './profileChart.js';
 import { expectedFor } from '../domain/timeline/Timeline.js';
 import {
@@ -1418,6 +1419,8 @@ export class AppView {
     pagedScore: HTMLInputElement;
     repeatNumbers: HTMLInputElement;
     traceTheStart: HTMLInputElement;
+    measureStorage: HTMLButtonElement;
+    storageReport: HTMLUListElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
     focusZoom: HTMLOutputElement;
@@ -1689,6 +1692,8 @@ export class AppView {
       pagedScore: requireElement(doc, 'paged-score'),
       repeatNumbers: requireElement(doc, 'repeat-numbers'),
       traceTheStart: requireElement(doc, 'trace-the-start'),
+      measureStorage: requireElement(doc, 'measure-storage'),
+      storageReport: requireElement(doc, 'storage-report'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
       focusZoom: requireElement(doc, 'focus-zoom'),
@@ -3801,6 +3806,10 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    this.listen(this.el.measureStorage, 'click', () => {
+      void this.showWhatIsKept();
+    });
+
     this.listen(this.el.pagedScore, 'change', () => {
       controller.updateSettings({ pagedScore: this.el.pagedScore.checked });
       this.syncControlsFromSettings();
@@ -5499,6 +5508,24 @@ export class AppView {
         instrumentVolume: instrument,
       });
     }
+  }
+
+  /**
+   * Asks the browser what it keeps for the trainer, and lists its answers.
+   *
+   * Asked when the reader asks, not watched: whether there is room and
+   * whether it will be kept is the question, and it is theirs to ask.
+   */
+  private async showWhatIsKept(): Promise<void> {
+    const reading = await this.runtime.storage.read();
+    this.el.storageReport.replaceChildren(
+      ...describeStorage(reading).map((line) => {
+        const item = this.doc.createElement('li');
+        item.textContent = line;
+        return item;
+      }),
+    );
+    this.el.storageReport.hidden = false;
   }
 
   private syncControlsFromSettings(): void {

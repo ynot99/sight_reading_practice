@@ -213,6 +213,8 @@ interface Rig {
 /** A drive folder held in memory, standing in for Google's. */
 class FolderDrive implements ICloudDrive {
   readonly files = new Map<string, { id: string; content: string }>();
+  /** Out, unless a test signs in: then a Sync button standing by the clock presses itself. */
+  signedIn = false;
   prepared = 0;
   private made = 0;
 
@@ -8470,6 +8472,158 @@ describe('a Sync button by the clock', () => {
 
     expect(element<HTMLButtonElement>('score-sync').hidden).toBe(false);
     expect(element<HTMLButtonElement>('score-sync').title).toBe('Google could not be reached.');
+  });
+});
+
+describe('the Sync button pressing itself', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A rig signed in to its drive, with a score kept and the button asked for. */
+  async function signedInWithAScoreToSend(): Promise<ReturnType<typeof createRig>> {
+    const rig = createRig();
+    rig.drive.signedIn = true;
+    await rig.view.initialize();
+    await rig.runtime.scores.keep(twoBarExercise({ title: 'Clair de Lune' }), Date.now());
+    rig.runtime.controller.updateSettings({ offerToSync: true });
+    return rig;
+  }
+
+  it('presses itself half a minute after the last change', async () => {
+    // His: "я хочу щоб ця кнопка сама натискалася 30 секунд".
+    const rig = await signedInWithAScoreToSend();
+    const button = element<HTMLButtonElement>('score-sync');
+    expect(button.hidden).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.waitFor(() => {
+      expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(true);
+    });
+    expect(button.hidden).toBe(true);
+  });
+
+  it('waits for half a minute of quiet, so a run of changes goes together', async () => {
+    const rig = await signedInWithAScoreToSend();
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    rig.runtime.controller.updateSettings({ previewSeconds: 3 });
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.waitFor(() => {
+      expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(true);
+    });
+  });
+
+  it('says it is syncing on the button while it does', async () => {
+    const rig = await signedInWithAScoreToSend();
+    let answer: (files: readonly CloudFile[]) => void = () => undefined;
+    rig.drive.list = () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      });
+
+    await vi.advanceTimersByTimeAsync(31_000);
+
+    const button = element<HTMLButtonElement>('score-sync');
+    expect(button.hidden).toBe(false);
+    expect(element('score-sync-text').textContent).toBe('Syncing…');
+    expect(button.dataset['sync']).toBe('syncing');
+    answer([]);
+  });
+
+  it('waits for a press, and says so, where Google would have to be asked', async () => {
+    // Signing in opens Google's window, and a browser allows that only in
+    // answer to a press. His: "якось помітити кнопку що auto sync не працює".
+    const rig = await signedInWithAScoreToSend();
+    rig.drive.signedIn = false;
+    rig.runtime.controller.updateSettings({ previewSeconds: 3 });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const button = element<HTMLButtonElement>('score-sync');
+    expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(false);
+    expect(button.hidden).toBe(false);
+    expect(button.dataset['sync']).toBe('by-hand');
+    expect(element('score-sync-text').textContent).toBe('Tap to sync');
+  });
+
+  it('does not try again on a change it failed on, and does on the next', async () => {
+    const rig = await signedInWithAScoreToSend();
+    let tries = 0;
+    rig.drive.connect = () => {
+      tries += 1;
+      return Promise.reject(new Error('Google could not be reached.'));
+    };
+
+    await vi.advanceTimersByTimeAsync(31_000);
+    await vi.waitFor(() => {
+      expect(element('score-sync-text').textContent).toBe('Sync failed');
+    });
+    expect(tries).toBe(1);
+    expect(element<HTMLButtonElement>('score-sync').dataset['sync']).toBe('by-hand');
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(tries).toBe(1);
+
+    rig.runtime.controller.updateSettings({ previewSeconds: 3 });
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(tries).toBe(1);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(tries).toBe(2);
+  });
+
+  it('does not press itself where the button was not asked for', async () => {
+    const rig = await signedInWithAScoreToSend();
+    rig.runtime.controller.updateSettings({ offerToSync: false });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(false);
+  });
+
+  it('does not press itself in a run begun since it was set', async () => {
+    // Set when the button stood by the clock, and due after a run has begun:
+    // whether it may is asked when it goes off, not when it was set.
+    const rig = await signedInWithAScoreToSend();
+    await vi.advanceTimersByTimeAsync(2_000);
+    // Any change the drive has not had, and not one that holds a run back.
+    rig.runtime.controller.updateSettings({
+      dimUnplayed: !rig.runtime.controller.settings.dimUnplayed,
+    });
+    await vi.advanceTimersByTimeAsync(29_000);
+    element<HTMLButtonElement>('focus-play').click();
+    expect(rig.runtime.controller.session).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(false);
+  });
+
+  it('waits for a run to end, and then presses', async () => {
+    // The corner's rule: over the music is not where anything but the music
+    // belongs, and a sync is work the run would share the device with.
+    const rig = await signedInWithAScoreToSend();
+    element<HTMLButtonElement>('focus-play').click();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(false);
+
+    element<HTMLButtonElement>('focus-stop').click();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.waitFor(() => {
+      expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(true);
+    });
   });
 });
 

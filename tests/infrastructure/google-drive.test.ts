@@ -110,6 +110,19 @@ describe('the trainer folder on Google Drive', () => {
     expect(calls[calls.length - 1]?.url).toContain('made-folder');
   });
 
+  it('says it is signed in only while the token lasts', async () => {
+    // What decides whether a sync nobody pressed for can go: after the token,
+    // only a press may open Google's window again.
+    const { drive, later } = google({ folders: ['f'] });
+    expect(drive.signedIn).toBe(false);
+
+    await drive.connect();
+    expect(drive.signedIn).toBe(true);
+
+    later(60 * 60 * 1000);
+    expect(drive.signedIn).toBe(false);
+  });
+
   it('signs in once while the token lasts, and again once it has run out', async () => {
     const { drive, signIns, later } = google({ folders: ['f'] });
 

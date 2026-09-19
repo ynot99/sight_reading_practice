@@ -14,6 +14,13 @@ export interface CloudFile {
  * can rely on it.
  */
 export interface ICloudDrive {
+  /**
+   * Whether the drive can be reached now without asking the reader anything.
+   *
+   * What a sync nobody pressed for depends on: signing in opens the provider's
+   * window, and a browser allows that only in answer to a press.
+   */
+  readonly signedIn: boolean;
   /** Starts fetching what signing in needs, so a press later has it at hand. */
   prepare(): void;
   /** Signs the reader in where they are not, and finds or makes the folder. */

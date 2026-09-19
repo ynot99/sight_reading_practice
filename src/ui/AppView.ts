@@ -1281,6 +1281,18 @@ export class AppView {
   /** The modes last drawn in the corner, so an unchanged set is left alone. */
   private modesShown: string | null = null;
   private timeTick: ReturnType<typeof setInterval> | null = null;
+  /** The Sync button pressing itself, set for half a minute after the last change. */
+  private syncTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether a sync is under way, pressed for or not. */
+  private syncing = false;
+  /**
+   * The last sync that failed, and the change it failed on.
+   *
+   * The button does not press itself again for that change: what failed once
+   * with nothing different will fail again, every half minute, for as long as
+   * the page is open. A new change, or a press, tries again.
+   */
+  private syncFailed: { readonly change: number; readonly why: string } | null = null;
   private survivalTick: ReturnType<typeof setInterval> | null = null;
   /** When the stretch being counted began, or `null` while the page is away. */
   private timeCountedAtMs: number | null = null;
@@ -2061,6 +2073,10 @@ export class AppView {
     if (this.timeTick !== null) {
       clearInterval(this.timeTick);
       this.timeTick = null;
+    }
+    if (this.syncTimer !== null) {
+      clearTimeout(this.syncTimer);
+      this.syncTimer = null;
     }
     if (this.survivalTick !== null) {
       clearInterval(this.survivalTick);
@@ -5688,30 +5704,35 @@ export class AppView {
    * brought: what is kept here is the reader's choice.
    */
   private async syncWithTheDrive(): Promise<void> {
+    this.syncing = true;
+    const change = this.runtime.driveSync.latestChangeAtMs;
     this.el.driveSync.disabled = true;
     this.el.scoreSync.disabled = true;
     this.el.driveStatus.textContent = 'Syncing…';
-    this.el.scoreSyncText.textContent = 'Syncing…';
+    this.offerToSync();
     try {
       const { library, settings } = await this.runtime.driveSync.sync((done, total) => {
         this.el.driveStatus.textContent = `Syncing… ${String(done)} of ${String(total)}`;
       });
       this.el.driveStatus.textContent = `Synced. Sent ${String(library.sent)}, brought here ${String(library.brought)}. Settings ${SETTINGS_WENT[settings]}.`;
-      this.el.scoreSyncText.textContent = 'Sync';
-      this.el.scoreSync.title = 'Sync with Google Drive';
       this.showWhatOnlyTheDriveHas(library.onlyOnTheDrive);
       this.renderScores();
     } catch (error) {
       const why = error instanceof Error ? error.message : 'Google Drive could not be reached.';
       this.el.driveStatus.textContent = why;
-      // Said on the button too, where it was pressed, and pressed again to retry.
-      this.el.scoreSyncText.textContent = 'Sync failed';
-      this.el.scoreSync.title = why;
+      this.syncFailed = { change, why };
     } finally {
+      this.syncing = false;
       this.el.driveSync.disabled = false;
       this.el.scoreSync.disabled = false;
       this.offerToSync();
     }
+  }
+
+  /** Stands the Sync button by the clock or takes it away, and sets it to press itself. */
+  private offerToSync(): void {
+    this.standTheSyncButton();
+    this.pressTheSyncButtonSoon();
   }
 
   /**
@@ -5723,12 +5744,88 @@ export class AppView {
    * nothing, so what there was to send is still there and the button stays:
    * its label says it failed, and pressing it again is the retry.
    */
-  private offerToSync(): void {
+  private standTheSyncButton(): void {
     const idle = !this.isPlaying && !this.runtime.controller.isListening;
     this.el.scoreSync.hidden =
       !this.runtime.controller.settings.offerToSync ||
       !idle ||
       !this.runtime.driveSync.hasSomethingToSync;
+    this.sayWhatTheSyncButtonDoes();
+  }
+
+  /**
+   * Whether the button will press itself, said on it.
+   *
+   * It presses itself only while Google lets the trainer in without asking:
+   * signing in opens Google's window, and a browser allows that only in
+   * answer to a press - so after the page is opened again, or once Google's
+   * hour is up, it waits for one. And not again on a change it already failed
+   * on. In both cases it says so, in the colour of something waiting on the
+   * reader, since a button that looks the same whether or not it will press
+   * itself is a sync he would believe had happened. His: "якось помітити
+   * кнопку що auto sync не працює".
+   */
+  private sayWhatTheSyncButtonDoes(): void {
+    const button = this.el.scoreSync;
+    const failed = this.failedOnThisChange();
+    const [state, text, title] = this.syncing
+      ? ['syncing', 'Syncing…', 'Syncing with Google Drive']
+      : failed !== null
+        ? ['by-hand', 'Sync failed', failed]
+        : !this.runtime.cloudDrive.signedIn
+          ? [
+              'by-hand',
+              'Tap to sync',
+              'Google asks for a press to let the trainer in, so this waits for one before it can sync on its own again.',
+            ]
+          : [
+              'on-its-own',
+              'Sync',
+              'Syncs on its own half a minute after the last change, or now if pressed.',
+            ];
+    button.dataset['sync'] = state;
+    this.el.scoreSyncText.textContent = text;
+    button.title = title;
+  }
+
+  /** Why the last sync failed, while nothing has changed since to try again for. */
+  private failedOnThisChange(): string | null {
+    const failed = this.syncFailed;
+    return failed !== null && failed.change === this.runtime.driveSync.latestChangeAtMs
+      ? failed.why
+      : null;
+  }
+
+  /**
+   * Presses the Sync button half a minute after the last change, where it is
+   * standing and can.
+   *
+   * Set from the moment of the change rather than from whenever this is
+   * asked, so being asked again - which the clock does every few seconds -
+   * never puts it off; only a new change does. His: "я хочу щоб ця кнопка сама
+   * натискалася 30 секунд".
+   */
+  private pressTheSyncButtonSoon(): void {
+    if (this.syncTimer !== null) {
+      clearTimeout(this.syncTimer);
+      this.syncTimer = null;
+    }
+    const due = this.runtime.driveSync.dueAtMs;
+    if (due === null) {
+      return;
+    }
+    this.syncTimer = setTimeout(
+      () => {
+        this.syncTimer = null;
+        // Whether it may is asked when it is due and not before: a run may
+        // have begun, or Google's hour run out, in the half minute between.
+        this.standTheSyncButton();
+        if (!this.el.scoreSync.hidden && this.el.scoreSync.dataset['sync'] === 'on-its-own') {
+          void this.syncWithTheDrive();
+        }
+      },
+      Math.max(0, due - Date.now()),
+    );
   }
 
   /** The scores only the drive has, each with a button to bring it here. */

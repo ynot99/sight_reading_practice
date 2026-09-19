@@ -359,6 +359,7 @@ describe('volumeToGain', () => {
 
 /** A drive folder as a map of names to contents. */
 class FolderDrive implements ICloudDrive {
+  readonly signedIn = true;
   readonly files = new Map<string, { id: string; content: string }>();
   private made = 0;
 

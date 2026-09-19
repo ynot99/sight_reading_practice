@@ -2389,6 +2389,17 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   fill: currentcolor;
 }
 
+/*
+ * The Sync button where it will not press itself: Google wants a press to let
+ * the trainer in, or the last try failed. In the colour of something waiting
+ * on the reader, so a sync that is not going to happen does not look like one
+ * that is.
+ */
+.score__reading[data-sync='by-hand'] {
+  color: var(--pending);
+  border-color: var(--pending);
+}
+
 .score__today {
   display: flex;
   flex-direction: column;

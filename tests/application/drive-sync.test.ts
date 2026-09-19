@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DriveSync } from '../../src/application/DriveSync.js';
+import { DriveSync, SYNC_AFTER_QUIET_MS } from '../../src/application/DriveSync.js';
 import type { StoredScoreSummary } from '../../src/application/ports/IScoreStore.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../../src/application/SettingsRepository.js';
@@ -103,5 +103,35 @@ describe('whether this device has something the drive has not', () => {
 
     expect(again.sync.hasSomethingToSync).toBe(false);
     expect(again.repository.lastSyncedAtMs).toBe(10_000);
+  });
+});
+
+describe('when a sync nobody pressed for is due', () => {
+  it('is half a minute after the last change here', async () => {
+    const pc = device([kept('Clair de Lune')]);
+    await pc.sync.sync();
+
+    pc.shelf.push(kept('Shellwood', { savedAtMs: 20_000 }));
+
+    expect(pc.sync.dueAtMs).toBe(20_000 + SYNC_AFTER_QUIET_MS);
+    expect(SYNC_AFTER_QUIET_MS).toBe(30_000);
+  });
+
+  it('is put off by every change after it', async () => {
+    const pc = device([kept('Clair de Lune')]);
+    await pc.sync.sync();
+    pc.shelf.push(kept('Shellwood', { savedAtMs: 20_000 }));
+
+    pc.shelf.push(kept('Hornet', { savedAtMs: 35_000 }));
+
+    expect(pc.sync.dueAtMs).toBe(35_000 + SYNC_AFTER_QUIET_MS);
+  });
+
+  it('is never while the drive has had everything', async () => {
+    const pc = device([kept('Clair de Lune')]);
+
+    await pc.sync.sync();
+
+    expect(pc.sync.dueAtMs).toBeNull();
   });
 });

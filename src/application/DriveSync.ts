@@ -3,6 +3,15 @@ import type { StoredScoreSummary } from './ports/IScoreStore.js';
 import type { SettingsRepository } from './SettingsRepository.js';
 import type { SettingsSync, SettingsSyncOutcome } from './SettingsSync.js';
 
+/**
+ * How long after the last change here the Sync button presses itself.
+ *
+ * Long enough that a run of changes - stars given to three scores, a setting
+ * tried and put back - goes in one sync rather than one each. His: "auto sync
+ * з debounce у 30 секунд".
+ */
+export const SYNC_AFTER_QUIET_MS = 30_000;
+
 export interface DriveSyncOutcome {
   readonly library: SyncOutcome;
   readonly settings: SettingsSyncOutcome;
@@ -44,6 +53,20 @@ export class DriveSync {
     // whose clock runs ahead would otherwise look like a change made since.
     this.deps.repository.rememberTheSync(Math.max(this.deps.now(), this.latestChange()));
     return { library, settings };
+  }
+
+  /**
+   * When a sync nobody pressed for is due: half a minute after the last change
+   * here, and every change puts it off again. `null` while the drive has had
+   * everything.
+   */
+  get dueAtMs(): number | null {
+    return this.hasSomethingToSync ? this.latestChange() + SYNC_AFTER_QUIET_MS : null;
+  }
+
+  /** The moment of the last change here: a score kept, its marks, a shared setting. */
+  get latestChangeAtMs(): number {
+    return this.latestChange();
   }
 
   get hasSomethingToSync(): boolean {

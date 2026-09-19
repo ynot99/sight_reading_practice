@@ -97,6 +97,11 @@ export class GoogleDrive implements ICloudDrive {
     this.options = options;
   }
 
+  /** While the token lasts: after it, Google's window has to be opened again, by a press. */
+  get signedIn(): boolean {
+    return this.token !== null && this.options.now() < this.token.expiresAtMs;
+  }
+
   prepare(): void {
     this.identity ??= this.options.identity();
     // Asked again on the press that needs it, where a failure can be said.

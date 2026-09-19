@@ -5,6 +5,7 @@ import { InMemoryScoreStore, type StoredScore } from '../../src/application/port
 
 /** A drive folder as a map of names to contents. */
 class FolderDrive implements ICloudDrive {
+  readonly signedIn = true;
   readonly files = new Map<string, { id: string; content: string }>();
   private made = 0;
 

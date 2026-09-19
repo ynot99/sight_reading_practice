@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
+import type { ITimingTrail } from '../../src/application/ports/ITimingTrail.js';
+import { timeTheStart } from '../../src/shared/timeTheStart.js';
 import { LibrarySync } from '../../src/application/LibrarySync.js';
 import { SettingsSync } from '../../src/application/SettingsSync.js';
 import { DriveSync } from '../../src/application/DriveSync.js';
@@ -208,6 +210,20 @@ interface Rig {
   readonly scoreStore: InMemoryScoreStore;
   readonly files: RecordingFileSink;
   readonly drive: FolderDrive;
+  readonly trail: HeldTrail;
+}
+
+/** The timings kept for the next visit, held in memory. */
+class HeldTrail implements ITimingTrail {
+  kept: readonly string[] = [];
+
+  keep(lines: readonly string[]): void {
+    this.kept = [...lines];
+  }
+
+  lastKept(): readonly string[] {
+    return this.kept;
+  }
 }
 
 /** A drive folder held in memory, standing in for Google's. */
@@ -351,6 +367,7 @@ function createRig(
   };
 
   const drive = new FolderDrive();
+  const trail = new HeldTrail();
   const librarySync = new LibrarySync({ drive, store: scoreStore, reload: () => scores.load() });
   const driveSync = new DriveSync({
     library: librarySync,
@@ -377,6 +394,7 @@ function createRig(
     takePlayer,
     backup,
     storage,
+    trail,
     cloudDrive: drive,
     librarySync,
     driveSync,
@@ -435,6 +453,7 @@ function createRig(
     scoreStore,
     drive,
     files,
+    trail,
   };
 }
 
@@ -8624,6 +8643,59 @@ describe('the Sync button pressing itself', () => {
     await vi.waitFor(() => {
       expect(rig.drive.files.has('Clair de Lune.musicxml')).toBe(true);
     });
+  });
+});
+
+describe('the timings the last visit kept', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+  });
+
+  it('shows them for developers the next time the page opens', async () => {
+    // The last line is the last stage the page lived to reach.
+    const rig = createRig();
+    rig.trail.kept = ['[timing] +   0 ms   score asked for', '[timing] + 900 ms   engraver: file read'];
+
+    await rig.view.initialize();
+
+    expect(element('timing-trail').hidden).toBe(false);
+    expect(element('timing-trail-lines').textContent).toBe(
+      '[timing] +   0 ms   score asked for\n[timing] + 900 ms   engraver: file read',
+    );
+  });
+
+  it('shows nothing where nothing was kept', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+
+    expect(element('timing-trail').hidden).toBe(true);
+  });
+
+  it('keeps the timings while they are asked for, and not otherwise', async () => {
+    const rig = createRig();
+    await rig.view.initialize();
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const box = element<HTMLInputElement>('trace-the-start');
+    const tick = (on: boolean): void => {
+      box.checked = on;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    try {
+      timeTheStart('score asked for');
+      expect(rig.trail.kept).toEqual([]);
+
+      tick(true);
+      timeTheStart('score asked for');
+      expect(rig.trail.kept.at(-1) ?? '').toContain('score asked for');
+
+      tick(false);
+      rig.trail.kept = [];
+      timeTheStart('score asked for');
+      expect(rig.trail.kept).toEqual([]);
+    } finally {
+      tick(false);
+      vi.restoreAllMocks();
+    }
   });
 });
 

@@ -1115,9 +1115,16 @@
         <div class="control-group" data-pane="developers">
           <label><input id="trace-the-start" type="checkbox" /> Print start timings to the console</label>
           <p class="hint">
-            One line for each stage between asking for music and hearing it, and
-            the gap since the last. The big gap is where the time went.
+            One line for each stage between asking for music and hearing it, or
+            opening a score and seeing it, and the gap since the last. The big
+            gap is where the time went. Kept as well, and shown below the next
+            time the page opens - so a page the browser closed still says how
+            far it got.
           </p>
+          <div id="timing-trail" hidden>
+            <p class="hint">The last timings before this page was opened again:</p>
+            <pre id="timing-trail-lines" class="timing-trail"></pre>
+          </div>
           <div class="ladder-row">
             <button id="measure-storage" type="button" class="button button--ghost">
               Measure storage

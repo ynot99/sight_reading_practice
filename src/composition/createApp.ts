@@ -74,6 +74,8 @@ import {
   LocalStorageSettingsStore,
   browserStorage,
 } from '../infrastructure/storage/LocalStorageSettingsStore.js';
+import { KeptTrail } from '../infrastructure/storage/KeptTrail.js';
+import type { ITimingTrail } from '../application/ports/ITimingTrail.js';
 import {
   BrowserStorageGauge,
   browserStorageManager,
@@ -192,6 +194,8 @@ export interface AppRuntime {
   readonly backup: BackupService;
   /** What the device keeps for the trainer, and whether it will be kept. */
   readonly storage: IStorageGauge;
+  /** Where the start timings are kept, so a page closed in the middle leaves them. */
+  readonly trail: ITimingTrail;
   /** The reader's Google Drive, one folder of it. */
   readonly cloudDrive: ICloudDrive;
   /** Keeps the library the same on every device, through that folder. */
@@ -473,6 +477,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     takePlayer,
     backup,
     storage,
+    trail: new KeptTrail(browserStorage()),
     cloudDrive,
     librarySync,
     driveSync,

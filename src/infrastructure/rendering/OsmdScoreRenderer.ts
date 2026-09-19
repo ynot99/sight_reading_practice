@@ -40,6 +40,7 @@ import {
   swipeDirection,
 } from './pageTurns.js';
 import { placesToBeginIn, walkEveryPlace } from './cursorWalk.js';
+import { timeTheStart } from '../../shared/timeTheStart.js';
 import { CursorNavigator, type ICursorPrimitive } from './CursorNavigator.js';
 import {
   buildOverlayShapes,
@@ -903,7 +904,9 @@ export class OsmdScoreRenderer
     // is all it takes, and it is the difference between a page that says
     // "engraving" and a page that has stopped answering.
     await afterTheBrowserHasDrawn();
+    timeTheStart('engraver: the page has drawn');
     const osmd = await this.ensureEngraver();
+    timeTheStart('engraver: ready');
     this.marks = [];
     // Nothing, rather than the engraver's "Untitled Score", for a score that
     // does not name itself. The second argument is the name it falls back to,
@@ -911,6 +914,7 @@ export class OsmdScoreRenderer
     // then print in the corner of all thirty pages as though the piece were
     // called that. An empty title is a fact about the file and says so.
     await osmd.load(musicXml, '');
+    timeTheStart('engraver: file read');
     osmd.zoom = this.currentZoom;
     // Before the first engraving, not only when the reader turns pages on.
     // A visit that opens already in pages - because that is how the reader
@@ -932,16 +936,20 @@ export class OsmdScoreRenderer
     const engravedAt = nowMs();
     osmd.render();
     const engravedMs = nowMs() - engravedAt;
+    timeTheStart('engraver: laid out', () => `${String(osmd.pageCount)} pages`);
     this.forgetSheets();
     this.fitPagesToTheirContent(engravedMs);
+    timeTheStart('engraver: pages fitted');
     this.loaded = true;
     this.engravedWidth = this.container.offsetWidth;
     this.walking = true;
     this.navigator.reset();
     this.walking = false;
     this.indexDrawnNotes();
+    timeTheStart('engraver: notes walked', () => `${String(this.stepPage.size)} steps`);
     this.measures = this.readMeasures();
     this.keepThePagesDrawn();
+    timeTheStart('engraver: pages near the reader drawn');
     this.showOnlyCurrentPage();
     this.paintOverlay();
     this.paintFaded();
@@ -952,6 +960,7 @@ export class OsmdScoreRenderer
     this.paintRuler();
     this.paintBeat();
     this.watchContainer();
+    timeTheStart('engraver: done');
   }
 
   /**

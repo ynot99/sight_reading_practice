@@ -3,6 +3,7 @@ import type { Exercise } from '../domain/model/Exercise.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import type { ClickPattern } from './ports/IMetronome.js';
 import type { IScoreImporter } from './ports/IScoreImporter.js';
+import { timeTheStart } from '../shared/timeTheStart.js';
 import type { IScoreStore, SavedPassage, StoredScoreSummary } from './ports/IScoreStore.js';
 import type { IKeepsTheStore } from './ports/IStorageGauge.js';
 
@@ -244,9 +245,12 @@ export class ScoreLibrary {
     if (stored === null) {
       return null;
     }
+    timeTheStart('score: read from the store', () => `${String(stored.musicXml.length)} characters`);
     // Through the ordinary parser: a score read back is a score read, and a
     // second way in would be a second set of rules to keep in step.
-    return this.deps.importer.read(stored.musicXml).exercise;
+    const { exercise } = this.deps.importer.read(stored.musicXml);
+    timeTheStart('score: read as music');
+    return exercise;
   }
 
   /**

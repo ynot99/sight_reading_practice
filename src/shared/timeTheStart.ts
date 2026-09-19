@@ -25,12 +25,40 @@ const RESETS = new Set([
   'resume asked for',
   'playback asked for',
   'playback resume asked for',
+  // Opening a score as well: the stage his Alkan never gets past on the
+  // iPad is the engraving, and a start is never reached to be timed.
+  'score asked for',
 ]);
 
 let tracing = false;
 let began: number | null = null;
 let last = 0;
 const seen = new Set<string>();
+/** The lines printed since the clock last started, for {@link keepTheTrail}. */
+const trail: string[] = [];
+let keeper: ((lines: readonly string[]) => void) | null = null;
+
+/**
+ * Hands every line to somewhere that outlives the page, as it is printed.
+ *
+ * The console goes with the page, and the page whose timings most need
+ * reading is the one the browser closed in the middle of them. `null` stops.
+ */
+export function keepTheTrail(keep: ((lines: readonly string[]) => void) | null): void {
+  keeper = keep;
+}
+
+/**
+ * How much the page is holding, where the browser will say.
+ *
+ * Chrome does and Safari does not, so on the iPad the lines carry times
+ * alone - but measured on the desk, the stage where the memory climbs is the
+ * stage the iPad is most likely to be closed in.
+ */
+function held(): string {
+  const bytes = (performance as { memory?: { usedJSHeapSize?: number } }).memory?.usedJSHeapSize;
+  return bytes === undefined ? '' : `   heap ${String(Math.round(bytes / 1e6))} MB`;
+}
 
 /**
  * Turns the lines on or off. Called by the page, from the setting.
@@ -47,6 +75,7 @@ export function traceTheStart(on: boolean): void {
   tracing = on;
   began = null;
   seen.clear();
+  trail.length = 0;
   if (on) {
     // eslint-disable-next-line no-console -- printing is the whole of it.
     console.log('[timing] on - start a run or a playback and the stages will follow');
@@ -68,6 +97,7 @@ export function timeTheStart(label: string, detail?: () => string): void {
     began = now;
     last = now;
     seen.clear();
+    trail.length = 0;
   }
   // Never silent. The first stage seen starts the clock if nothing else has:
   // it once stayed quiet through a whole playback because the way in was not
@@ -80,9 +110,10 @@ export function timeTheStart(label: string, detail?: () => string): void {
     return;
   }
   seen.add(label);
+  const line = `[timing] +${String(Math.round(now - began)).padStart(6)} ms   gap ${String(Math.round(now - last)).padStart(6)} ms   ${label}${detail === undefined ? '' : ` (${detail()})`}${held()}`;
   // eslint-disable-next-line no-console -- printing is the whole of it.
-  console.log(
-    `[timing] +${String(Math.round(now - began)).padStart(6)} ms   gap ${String(Math.round(now - last)).padStart(6)} ms   ${label}${detail === undefined ? '' : ` (${detail()})`}`,
-  );
+  console.log(line);
+  trail.push(line);
+  keeper?.(trail);
   last = now;
 }

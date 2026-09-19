@@ -2686,6 +2686,18 @@ body[data-playing='true'] .score__modes {
 }
 
 /* Searching the settings: a field, where it is in what it found, and the way through. */
+/* The last timings a closed page left: long lines, read rather than wrapped. */
+.timing-trail {
+  margin: 0;
+  max-height: 16em;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre;
+  color: var(--text-muted);
+  user-select: text;
+}
+
 .settings-search {
   display: flex;
   align-items: center;

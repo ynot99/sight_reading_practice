@@ -1522,9 +1522,11 @@ export class PracticeController {
     // the page, but it is the same piece and the reader is in the same place
     // in it.
     const newMusic = musicXml !== this.engravedXml;
+    timeTheStart('score: written for the engraver', () => `${String(printed.length)} characters`);
 
     this.exercise = exercise;
     this.timeline = buildTimeline(exercise);
+    timeTheStart('score: timeline built', () => `${String(this.timeline?.length ?? 0)} steps`);
     this.lastSeed = exercise.metadata.seed;
     if (newMusic) {
       // New music, so the reader's place in the old music means nothing.

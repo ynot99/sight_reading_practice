@@ -286,7 +286,7 @@ const TAKE_COUNTER_MS = 500;
 
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
-import { timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
+import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
 
 const SCORING_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'scoring.accuracy': 'The notes alone. You set the pace, so timing is not judged.',
@@ -1453,6 +1453,8 @@ export class AppView {
     repeatNumbers: HTMLInputElement;
     traceTheStart: HTMLInputElement;
     measureStorage: HTMLButtonElement;
+    timingTrail: HTMLElement;
+    timingTrailLines: HTMLElement;
     driveSync: HTMLButtonElement;
     driveStatus: HTMLElement;
     driveOnly: HTMLUListElement;
@@ -1739,6 +1741,8 @@ export class AppView {
       repeatNumbers: requireElement(doc, 'repeat-numbers'),
       traceTheStart: requireElement(doc, 'trace-the-start'),
       measureStorage: requireElement(doc, 'measure-storage'),
+      timingTrail: requireElement(doc, 'timing-trail'),
+      timingTrailLines: requireElement(doc, 'timing-trail-lines'),
       driveSync: requireElement(doc, 'drive-sync'),
       driveStatus: requireElement(doc, 'drive-status'),
       driveOnly: requireElement(doc, 'drive-only'),
@@ -1981,6 +1985,14 @@ export class AppView {
   }
 
   async initialize(): Promise<void> {
+    // First, before anything this visit prints over them: what the last one
+    // kept may be the only word there is on why it ended.
+    this.showTheLastTimings();
+    // And every line from here on kept as it is printed - which is only while
+    // the timings are asked for, since nothing is printed otherwise.
+    keepTheTrail((lines) => {
+      this.runtime.trail.keep(lines);
+    });
     this.populateSelects();
     this.bindControls();
     this.bindTransport();
@@ -2124,16 +2136,22 @@ export class AppView {
 
     for (const file of chosen) {
       try {
+        if (alone) {
+          timeTheStart('score asked for', () => file.name);
+        }
         const { exercise, warnings } = await this.runtime.importer.readFile(
           await file.arrayBuffer(),
           file.name,
         );
+        timeTheStart('score: read from the file');
         // Kept on the way in, so the file is chosen from the disk once and
         // afterwards the piece is simply there.
         await this.runtime.scores.keep(exercise, Date.now());
+        timeTheStart('score: kept in the library');
         kept.push(exercise.title);
         if (alone) {
           await this.runtime.controller.openScore(exercise);
+          timeTheStart('score opened');
           // Opening a piece can put the passage back to the two ends, and the
           // boxes in the sheet are the same setting seen from another chair.
           this.syncControlsFromSettings();
@@ -2446,6 +2464,19 @@ export class AppView {
     }
   }
 
+  /**
+   * The timings the last visit kept, where it kept any.
+   *
+   * What a page closed by the browser leaves behind: the last stage in the
+   * list is the last thing it lived to reach. His: "яж крашусь" - there is no
+   * console to copy from a page that is gone.
+   */
+  private showTheLastTimings(): void {
+    const lines = this.runtime.trail.lastKept();
+    this.el.timingTrail.hidden = lines.length === 0;
+    this.el.timingTrailLines.textContent = lines.join('\n');
+  }
+
   private async openKeptScore(id: string, title: string): Promise<void> {
     // Out of the way first. Engraving a long score takes the thread for
     // seconds, and nothing on the page can be drawn or pressed while it does -
@@ -2456,6 +2487,7 @@ export class AppView {
     // зробити асинхронною, зачиняти сам діалог, та показувати loading, бо
     // сторінка просто зависає".
     this.el.sheetScores.hidden = true;
+    timeTheStart('score asked for', () => title);
     try {
       const exercise = await this.runtime.scores.open(id);
       if (exercise === null) {
@@ -2464,6 +2496,7 @@ export class AppView {
         return;
       }
       await this.runtime.controller.openScore(exercise);
+      timeTheStart('score opened');
       // The click this piece was last read with, where it has one. Only where:
       // a score that has never been chosen for leaves the setting alone, which
       // is what makes this a memory rather than a default.

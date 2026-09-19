@@ -3,6 +3,7 @@ import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
 import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
 import type { Duration } from '../model/Duration.js';
 import type {
+  Beam,
   ClefChange,
   Exercise,
   MusicalEntry,
@@ -79,13 +80,98 @@ export interface MusicXmlSerializerOptions {
   readonly partName?: string;
 }
 
+/**
+ * The signs, by how far they move a note.
+ *
+ * The double sharp is `double-sharp`, the one sign; `sharp-sharp` is the
+ * format's word for two sharps side by side, and an engraver that reads the
+ * format as written prints exactly that. The double flat has no sign of its
+ * own, so two flats is what it is.
+ */
 const ACCIDENTAL_NAMES: ReadonlyMap<number, string> = new Map([
   [-2, 'flat-flat'],
   [-1, 'flat'],
   [0, 'natural'],
   [1, 'sharp'],
-  [2, 'sharp-sharp'],
+  [2, 'double-sharp'],
 ]);
+
+/**
+ * The writer's beams for a bar of one voice, with every group closed on its
+ * own last note.
+ *
+ * A group the writer ended on a rest reaches us without its end: a rest here
+ * carries no beam, so the note before it is left saying "continue" to a group
+ * that never closes. An engraver that reads the format as written runs such a
+ * beam on across the bar line and over the other staff - his Alkan, bars 1269
+ * and 1274, beamed flat across two bars under Verovio, and crossed under OSMD.
+ * So each group ends on the last note that belongs to it; a rest inside it
+ * stays under the beam, since the group still runs from its first note to that
+ * one.
+ *
+ * Only malformed groups change. A group of one note is no group and loses its
+ * beam, one only continued is begun, and a shorter beam never outlives the
+ * eighth beam it hangs from.
+ */
+export function closedBeams(entries: readonly MusicalEntry[]): readonly (readonly Beam[])[] {
+  const beams: Beam[][] = entries.map((entry) => (entry.kind === 'note' ? [...entry.beams] : []));
+  const at = (index: number, level: number): Beam | undefined =>
+    beams[index]?.find((beam) => beam.level === level);
+  const retype = (index: number, level: number, type: Beam['type']): void => {
+    beams[index] = (beams[index] ?? []).map((beam) => (beam.level === level ? { level, type } : beam));
+  };
+  const drop = (index: number, level: number): void => {
+    beams[index] = (beams[index] ?? []).filter((beam) => beam.level !== level);
+  };
+  const levels = [...new Set(beams.flat().map((beam) => beam.level))].sort((left, right) => left - right);
+  for (const level of levels) {
+    let open: number[] = [];
+    const close = (): void => {
+      const last = open[open.length - 1];
+      if (open.length === 1 && last !== undefined) {
+        drop(last, level);
+      } else if (last !== undefined) {
+        retype(last, level, 'end');
+      }
+      open = [];
+    };
+    entries.forEach((entry, index) => {
+      // Rests and silences sit inside a group without breaking it.
+      if (entry.kind !== 'note') {
+        return;
+      }
+      // A shorter beam belongs inside the eighth beam over it, so it closes
+      // where that one begins again.
+      if (level > 1 && at(index, 1)?.type === 'begin') {
+        close();
+      }
+      const beam = at(index, level);
+      if (beam === undefined || beam.type === 'forward hook' || beam.type === 'backward hook') {
+        close();
+        return;
+      }
+      if (beam.type === 'begin') {
+        close();
+        open = [index];
+        return;
+      }
+      if (open.length === 0) {
+        if (beam.type === 'end') {
+          drop(index, level);
+          return;
+        }
+        retype(index, level, 'begin');
+      }
+      open.push(index);
+      if (beam.type === 'end') {
+        open = [];
+      }
+    });
+    close();
+  }
+  // A note left without its eighth beam cannot keep the shorter ones.
+  return beams.map((own) => (own.some((beam) => beam.level === 1) ? own : []));
+}
 
 /** Key for the "accidentals last until the end of the measure" rule. */
 function accidentalKey(pitch: Pitch): string {
@@ -533,6 +619,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     const key = keyAtMeasure(exercise, measureIndex);
     const activeAccidentals = new Map<string, Alteration>();
     const tuplets = tupletPositions(measure.entries);
+    const beams = closedBeams(measure.entries);
     let held = heldByVoice.get(staff.voice) ?? new Set<number>();
     let offset = 0;
     let nextMark = 0;
@@ -573,6 +660,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         activeAccidentals,
         held,
         tuplets[entryIndex] ?? null,
+        beams[entryIndex] ?? [],
       );
       held = entry.kind === 'note' ? new Set(entry.tiedForward) : new Set<number>();
     });
@@ -606,6 +694,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     activeAccidentals: Map<string, Alteration>,
     held: ReadonlySet<number>,
     tuplet: TupletPosition | null,
+    beams: readonly Beam[],
   ): void {
     switch (entry.kind) {
       case 'silence': {
@@ -697,7 +786,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             // Beaming belongs to the first note of a chord; the others share
             // its stem and would otherwise repeat the same beam.
             if (pitchIndex === 0) {
-              for (const beam of entry.beams) {
+              for (const beam of beams) {
                 writer.leaf('beam', beam.type, { number: beam.level });
               }
             }

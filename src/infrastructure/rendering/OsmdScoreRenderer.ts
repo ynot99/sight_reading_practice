@@ -1,4 +1,5 @@
 import type { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
+import type { PageByPageEngraver } from './PageByPageEngraver.js';
 import type { RulerMark } from '../../application/rhythmRuler.js';
 import type {
   DrawnPassage,
@@ -834,7 +835,7 @@ export class OsmdScoreRenderer
   private tapFrom: { readonly pointerId: number; readonly x: number; readonly y: number } | null =
     null;
 
-  private osmd: OpenSheetMusicDisplay | null = null;
+  private osmd: PageByPageEngraver | null = null;
   private loaded = false;
   private currentZoom: number;
   private observer: ResizeObserver | null = null;
@@ -3575,11 +3576,11 @@ export class OsmdScoreRenderer
     }
   }
 
-  private async ensureEngraver(): Promise<OpenSheetMusicDisplay> {
+  private async ensureEngraver(): Promise<PageByPageEngraver> {
     if (this.osmd !== null) {
       return this.osmd;
     }
-    const { OpenSheetMusicDisplay: Engraver } = await import('opensheetmusicdisplay');
+    const { PageByPageEngraver: Engraver } = await import('./PageByPageEngraver.js');
     const osmd = new Engraver(this.container, {
       autoResize: false,
       backend: 'svg',

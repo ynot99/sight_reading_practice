@@ -173,6 +173,60 @@ export function closedBeams(entries: readonly MusicalEntry[]): readonly (readonl
   return beams.map((own) => (own.some((beam) => beam.level === 1) ? own : []));
 }
 
+/** Where a line over the music begins and ends. */
+interface Span {
+  readonly measureIndex: number;
+  readonly offsetTicks: number;
+  readonly untilMeasureIndex: number;
+  readonly untilOffsetTicks: number;
+}
+
+/** Each list of spans numbered once: the lists belong to an exercise, which never changes. */
+const NUMBERED = new WeakMap<readonly Span[], ReadonlyMap<Span, number>>();
+
+/**
+ * A number for each span that no other span still open where it begins has.
+ *
+ * The format pairs a line's two ends by this number, so it has to be the
+ * line's own for the whole piece. It was the line's place among the lines
+ * touching the bar being written - a different place in the bar it begins and
+ * the bar it ends, whenever another line touches either - so a diminuendo
+ * begun as 2 was ended as 1, and an engraver that pairs ends by number ran it
+ * on to the next 2 it met: his Alkan, a hairpin from bar 38 drawn to bar 1240
+ * under Verovio. OSMD paired them by order and hid it.
+ *
+ * The lowest number free, so they stay the small numbers the format expects.
+ * A line ending where another begins still counts as open there: its stop and
+ * the other's start are written at the same place, and sharing a number would
+ * leave the order of the two to decide which is which.
+ */
+export function spanNumbers<T extends Span>(spans: readonly T[]): ReadonlyMap<T, number> {
+  const known = NUMBERED.get(spans);
+  if (known !== undefined) {
+    return known as ReadonlyMap<T, number>;
+  }
+  const endsBefore = (open: Span, span: Span): boolean =>
+    open.untilMeasureIndex < span.measureIndex ||
+    (open.untilMeasureIndex === span.measureIndex && open.untilOffsetTicks < span.offsetTicks);
+  const numbers = new Map<T, number>();
+  let open: T[] = [];
+  const inOrder = [...spans].sort(
+    (left, right) => left.measureIndex - right.measureIndex || left.offsetTicks - right.offsetTicks,
+  );
+  for (const span of inOrder) {
+    open = open.filter((each) => !endsBefore(each, span));
+    const taken = new Set(open.map((each) => numbers.get(each)));
+    let number = 1;
+    while (taken.has(number)) {
+      number += 1;
+    }
+    numbers.set(span, number);
+    open.push(span);
+  }
+  NUMBERED.set(spans, numbers);
+  return numbers;
+}
+
 /** Key for the "accidentals last until the end of the measure" rule. */
 function accidentalKey(pitch: Pitch): string {
   return `${pitch.step}${pitch.octave}`;
@@ -648,8 +702,8 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         this.writeClefChange(writer, clefs[nextClef], staff.staffNumber, offset);
         nextClef += 1;
       }
-      this.writeHairpins(writer, hairpins, measureIndex, offset, staff.staffNumber, drawn);
-      this.writeOctaveShifts(writer, shifts, measureIndex, offset, staff.staffNumber, drawn);
+      this.writeHairpins(writer, exercise, hairpins, measureIndex, offset, staff.staffNumber, drawn);
+      this.writeOctaveShifts(writer, exercise, shifts, measureIndex, offset, staff.staffNumber, drawn);
       offset += entry.duration.ticks;
       this.writeEntry(
         writer,
@@ -680,8 +734,8 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       this.writeClefChange(writer, clefs[nextClef], staff.staffNumber, offset);
       nextClef += 1;
     }
-    this.writeHairpins(writer, hairpins, measureIndex, offset, staff.staffNumber, drawn);
-    this.writeOctaveShifts(writer, shifts, measureIndex, offset, staff.staffNumber, drawn);
+    this.writeHairpins(writer, exercise, hairpins, measureIndex, offset, staff.staffNumber, drawn);
+    this.writeOctaveShifts(writer, exercise, shifts, measureIndex, offset, staff.staffNumber, drawn);
     heldByVoice.set(staff.voice, held);
   }
 
@@ -933,13 +987,16 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
    */
   private writeHairpins(
     writer: XmlWriter,
+    exercise: Exercise,
     hairpins: readonly DynamicHairpin[],
     measureIndex: number,
     offset: number,
     staffNumber: number,
     drawn: Set<string>,
   ): void {
+    const numbers = spanNumbers(exercise.hairpins);
     for (const [at, hairpin] of hairpins.entries()) {
+      const number = numbers.get(hairpin) ?? 1;
       const starts = hairpin.measureIndex === measureIndex && hairpin.offsetTicks <= offset;
       const stops = hairpin.untilMeasureIndex === measureIndex && hairpin.untilOffsetTicks <= offset;
       for (const [end, wanted] of [
@@ -956,7 +1013,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             writer.element('direction-type', undefined, () => {
               writer.leaf('wedge', undefined, {
                 type: end === 'start' ? hairpin.kind : 'stop',
-                number: at + 1,
+                number,
               });
             });
           } else {
@@ -971,7 +1028,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             writer.element('direction-type', undefined, () => {
               writer.leaf('dashes', undefined, {
                 type: end === 'start' ? 'start' : 'stop',
-                number: at + 1,
+                number,
               });
             });
           }
@@ -991,12 +1048,14 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
    */
   private writeOctaveShifts(
     writer: XmlWriter,
+    exercise: Exercise,
     shifts: readonly OctaveShift[],
     measureIndex: number,
     offset: number,
     staffNumber: number,
     drawn: Set<string>,
   ): void {
+    const numbers = spanNumbers(exercise.octaveShifts);
     for (const [at, shift] of shifts.entries()) {
       const starts = shift.measureIndex === measureIndex && shift.offsetTicks <= offset;
       const stops = shift.untilMeasureIndex === measureIndex && shift.untilOffsetTicks <= offset;
@@ -1014,7 +1073,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
             writer.leaf('octave-shift', undefined, {
               type: end === 'start' ? shift.direction : 'stop',
               size: shift.size,
-              number: at + 1,
+              number: numbers.get(shift) ?? 1,
             });
           });
           writer.leaf('staff', shift.staffNumber ?? staffNumber);

@@ -117,6 +117,14 @@ describe('laying out every page and drawing only some', () => {
     expect(asDrawn(sheets()[1])).toBe(asDrawn(whole.sheets()[1]));
   });
 
+  it('has no page drawn once the drawing is cleared', async () => {
+    const { engraver } = await engraved(null);
+
+    engraver.clear();
+
+    expect(engraver.isDrawn(0)).toBe(false);
+  });
+
   it('starts from blank pages at every engraving', async () => {
     const { engraver, sheets } = await engraved([0]);
     engraver.drawPage(2);

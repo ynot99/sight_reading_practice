@@ -283,7 +283,10 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
 
     const onThisPage = measuresOf(renderer).filter((measure) => measure.page === 0);
     const last = onThisPage[onThisPage.length - 1];
-    const marker = container.querySelector('g.passage-marker--end');
+    // The marker on the page being read: the end one stands on a page that
+    // is not drawn, and which of the two is held has nothing to do with it.
+    const marker = container.querySelector('g.passage-marker--start');
+    expect(marker).not.toBeNull();
     marker?.dispatchEvent(
       new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, bubbles: true }),
     );
@@ -310,7 +313,10 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     showSheetsAtTheirOwnSize(container);
     const onThisPage = measuresOf(renderer).filter((measure) => measure.page === 0);
     const last = onThisPage[onThisPage.length - 1];
-    const marker = container.querySelector('g.passage-marker--end');
+    // The marker on the page being read: the end one stands on a page that
+    // is not drawn, and which of the two is held has nothing to do with it.
+    const marker = container.querySelector('g.passage-marker--start');
+    expect(marker).not.toBeNull();
     marker?.dispatchEvent(
       new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, bubbles: true }),
     );
@@ -344,6 +350,7 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     });
     showSheetsAtTheirOwnSize(container);
     const marker = container.querySelector('g.passage-marker--end');
+    expect(marker).not.toBeNull();
     marker?.dispatchEvent(
       new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, bubbles: true }),
     );
@@ -369,7 +376,10 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     showSheetsAtTheirOwnSize(container);
     const onThisPage = measuresOf(renderer).filter((measure) => measure.page === 0);
     const last = onThisPage[onThisPage.length - 1];
-    const marker = container.querySelector('g.passage-marker--end');
+    // The marker on the page being read: the end one stands on a page that
+    // is not drawn, and which of the two is held has nothing to do with it.
+    const marker = container.querySelector('g.passage-marker--start');
+    expect(marker).not.toBeNull();
     marker?.dispatchEvent(
       new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, bubbles: true }),
     );
@@ -422,10 +432,12 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     expect(showing(container)).toHaveLength(1);
   });
 
-  it('draws what was played on the page it was played on', () => {
+  it('draws what was played on the page it was played on, once that page is drawn', () => {
     // Every page is an SVG of its own whose coordinates start again at
     // nought, so a mark drawn into the first sheet for a note on the second
     // is a mark on the wrong music - and on the page nobody is looking at.
+    // A page far from the reader is not drawn at all, so the mark is kept and
+    // drawn when the page is.
     renderer.setPaged(true);
     renderer.configureOverlay({
       keyAt: () => KeySignature.major(0),
@@ -437,6 +449,7 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     const step = 4 * 15;
 
     renderer.showPlayed({ stepIndex: step, midi: Pitch.parse('C4').midi, correct: true, offset: 0 });
+    renderer.turnPages(last);
 
     const drawn = sheets(container).map((sheet) => sheet.querySelectorAll('.played-note').length);
     expect(drawn[0]).toBe(0);
@@ -445,9 +458,11 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
 
   it('puts each passage marker on the page its own bar is drawn on', () => {
     // A passage can run across a page break, and then the two markers are
-    // not on the same sheet at all.
+    // not on the same sheet at all. The far one is drawn when its page is,
+    // and the near one stays: the start is where a repeat goes back to.
     renderer.setPaged(true);
     renderer.showPassage({ fromMeasureIndex: 0, toMeasureIndex: 15 });
+    renderer.turnPages(renderer.pages.count - 1);
 
     const markers = sheets(container).map(
       (sheet) => sheet.querySelectorAll('g.passage-marker').length,
@@ -464,13 +479,13 @@ describe('reading a real engraving as pages', { timeout: 30_000 }, () => {
     // vertical room and is answered on every page instead of only the first.
     renderer.setPaged(true);
     const count = renderer.pages.count;
+    const label = (at: number): string =>
+      sheets(container)[at]?.querySelector('text.page-label')?.textContent ?? '';
 
-    const labels = sheets(container).map(
-      (sheet) => sheet.querySelector('text.page-label')?.textContent ?? '',
-    );
-
-    expect(labels[0]).toBe(`Long fixture · Page 1 of ${count}`);
-    expect(labels[count - 1]).toBe(`Long fixture · Page ${count} of ${count}`);
+    expect(label(0)).toBe(`Long fixture · Page 1 of ${count}`);
+    // The last page is labelled when it is drawn, which is when it is reached.
+    renderer.turnPages(count - 1);
+    expect(label(count - 1)).toBe(`Long fixture · Page ${count} of ${count}`);
   });
 
   it('does not scroll after the marker in a mode that turns pages', async () => {

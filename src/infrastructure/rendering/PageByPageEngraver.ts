@@ -49,6 +49,12 @@ export class PageByPageEngraver extends OpenSheetMusicDisplay {
     super.render();
   }
 
+  /** Takes the whole drawing away, every page of it. */
+  override clear(): void {
+    this.drawn.clear();
+    super.clear();
+  }
+
   /** How many pages the piece was laid out on. */
   get pageCount(): number {
     return this.GraphicSheet?.MusicPages.length ?? 0;

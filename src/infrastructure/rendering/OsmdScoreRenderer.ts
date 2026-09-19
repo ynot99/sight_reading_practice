@@ -755,8 +755,21 @@ export class OsmdScoreRenderer
   private readonly layers = new WeakMap<SVGSVGElement, Map<string, SVGGElement>>();
   /** The pages as last engraved; see {@link sheets}. */
   private drawnSheets: SVGSVGElement[] | null = null;
-  /** The staves as last read off {@link drawnSheets}; see `readStaves`. */
-  private drawnStaves: DrawnStaff[] | null = null;
+  /**
+   * The staves read off each page's printed lines, by page.
+   *
+   * Kept for as long as the engraving is, even after a page's drawing has been
+   * let go: where the lines were is a fact about the layout, and the layout
+   * has not changed. A page not drawn yet has no entry, and anything measured
+   * against it falls back on the engraver's own reckoning until it is.
+   */
+  private printedStaves = new Map<number, readonly DrawnStaff[]>();
+  /** The engraver's notes at each step, drawn or not; see {@link collectDrawnNotes}. */
+  private stepNotes = new Map<number, DrawnNote[]>();
+  /** The steps laid out on each page. */
+  private stepsByPage = new Map<number, number[]>();
+  /** The page the marker stood on when the pages kept drawn were last chosen. */
+  private markerPage = -1;
   /**
    * The engraver's bar numbers on each page, read once per page.
    *
@@ -915,6 +928,7 @@ export class OsmdScoreRenderer
     // The engraver may only now exist, and it is made with following on.
     this.followOrTurn();
     this.applyPageFormat();
+    this.drawOnlyNearTheReader();
     const engravedAt = nowMs();
     osmd.render();
     const engravedMs = nowMs() - engravedAt;
@@ -927,6 +941,7 @@ export class OsmdScoreRenderer
     this.walking = false;
     this.indexDrawnNotes();
     this.measures = this.readMeasures();
+    this.keepThePagesDrawn();
     this.showOnlyCurrentPage();
     this.paintOverlay();
     this.paintFaded();
@@ -1002,6 +1017,7 @@ export class OsmdScoreRenderer
     // the transport bar appearing - and a page is cut to the window.
     this.markPaged();
     this.applyPageFormat();
+    this.drawOnlyNearTheReader();
     const engravedAt = nowMs();
     this.osmd.render();
     const engravedMs = nowMs() - engravedAt;
@@ -1169,7 +1185,20 @@ export class OsmdScoreRenderer
     if (!this.paged || this.osmd === null) {
       return;
     }
-    const passes = fittingPassesWorth(engravedMs);
+    // Not even measured where the engraving alone is past what the fitting
+    // may spend: measuring draws every page in turn, and on the longest score
+    // he has that is three hundred pages drawn for a pass that will not run.
+    if (fittingPassesWorth(engravedMs) === 0) {
+      return;
+    }
+    // A pass is an engraving and then every page drawn to be measured. The
+    // engraving draws only a page or two, so what it cost is a part of what a
+    // pass costs, and the measuring is the rest - both are counted, or a
+    // piece whose drawing is the expensive part would be given passes it
+    // cannot afford.
+    const measuredAt = nowMs();
+    const first = this.surplusBelowPage();
+    const passes = fittingPassesWorth(engravedMs + (nowMs() - measuredAt));
     // Over and over, not once. Taking the surplus off changes which systems
     // fit on a page, and that changes which page draws furthest past its box
     // - so a single pass is a guess. It measured as one too: opening a long
@@ -1177,7 +1206,7 @@ export class OsmdScoreRenderer
     // reader's own fix was to zoom in and out again, each zoom being another
     // pass at the same arithmetic.
     for (let pass = 0; pass < passes; pass += 1) {
-      const surplus = this.surplusBelowPage();
+      const surplus = pass === 0 ? first : this.surplusBelowPage();
       if (surplus <= 0) {
         return;
       }
@@ -1189,6 +1218,7 @@ export class OsmdScoreRenderer
       }
       this.pageSurplusPx += surplus;
       this.applyPageFormat();
+      this.drawOnlyNearTheReader();
       this.osmd.render();
       this.forgetSheets();
     }
@@ -1204,8 +1234,17 @@ export class OsmdScoreRenderer
    */
   private surplusBelowPage(): number {
     let worst = 0;
-    for (const sheet of this.sheets) {
+    const osmd = this.osmd;
+    for (const [at, sheet] of this.sheets.entries()) {
+      // Every page, though most are not drawn: what spills is ink, so a page
+      // is drawn for as long as it takes to measure and let go again. One at
+      // a time, which is what keeps this from drawing a long piece whole.
+      const lent =
+        osmd !== null && typeof sheet.getBBox === 'function' && !osmd.isDrawn(at) && osmd.drawPage(at);
       const box = boundingBoxOf(sheet);
+      if (lent) {
+        osmd.forgetPage(at);
+      }
       const page = pageBoxOf(sheet);
       if (box === null || page === null || page.height <= 0) {
         continue;
@@ -1234,7 +1273,163 @@ export class OsmdScoreRenderer
   private forgetSheets(): void {
     this.drawnSheets = null;
     // What was read off the old pages goes with them.
-    this.drawnStaves = null;
+    this.printedStaves = new Map();
+  }
+
+  /** Whether a page has its drawing, which is what anything painted on it needs. */
+  private isDrawn(page: number): boolean {
+    return this.osmd?.isDrawn(page) ?? false;
+  }
+
+  /** A page, if it is drawn; nothing of ours is painted onto a blank one. */
+  private drawnSheet(page: number): SVGSVGElement | undefined {
+    return this.isDrawn(page) ? this.sheets[page] : undefined;
+  }
+
+  /** The pages that are drawn, with where each is in the piece. */
+  private sheetsDrawn(): [number, SVGSVGElement][] {
+    return [...this.sheets.entries()].filter(([at]) => this.isDrawn(at));
+  }
+
+  /**
+   * The pages worth having drawn: the one being read, the ones either side of
+   * it, the one the marker is on, and the one the run starts from.
+   *
+   * Drawing is what a long piece cannot afford - on the Alkan, every page
+   * drawn at once is more than the iPad will hold - and a page is drawn in a
+   * few tens of milliseconds when it is wanted. So only what a reader can
+   * reach in one move is kept: a turn either way, the music the marker is
+   * standing in, and the start a repeat goes back to. His: "не забувай що є
+   * repeat кнопка яка має швидко повернутись на старт де був поставлений
+   * слайс чи курсор".
+   *
+   * `null` for every page, which a single column is.
+   */
+  private pagesWanted(): ReadonlySet<number> | null {
+    if (!this.paged) {
+      return null;
+    }
+    const near = [
+      this.pageAt - 1,
+      this.pageAt,
+      this.pageAt + 1,
+      this.pageOfStep(this.navigator.position),
+    ];
+    if (this.reading !== null) {
+      near.push(this.pageOfStep(this.reading.from));
+    }
+    if (this.startMeasure !== null) {
+      near.push(this.pageOfMeasure(this.startMeasure));
+    }
+    if (this.passage !== null) {
+      near.push(this.pageOfMeasure(this.passage.fromMeasureIndex));
+    }
+    return new Set(near.filter((page) => page >= 0));
+  }
+
+  /**
+   * Tells the engraver which pages its next engraving is to draw.
+   *
+   * The pages around the one being read, and no more: where anything else is
+   * - the marker, the start - is known only once the piece has been laid out,
+   * so those are drawn afterwards, by {@link keepThePagesDrawn}.
+   */
+  private drawOnlyNearTheReader(): void {
+    this.osmd?.drawOnly(
+      this.paged ? [this.pageAt - 1, this.pageAt, this.pageAt + 1].filter((page) => page >= 0) : null,
+    );
+  }
+
+  /**
+   * Draws the pages that are wanted and are not drawn, and lets go of the rest.
+   *
+   * Says whether it drew anything, because a page newly drawn is a page every
+   * layer of ours still has to be painted onto.
+   */
+  private keepThePagesDrawn(): boolean {
+    const osmd = this.osmd;
+    if (osmd === null) {
+      return false;
+    }
+    const wanted = this.pagesWanted();
+    this.markerPage = this.pageOfStep(this.navigator.position);
+    let drew = false;
+    for (const [at, sheet] of this.sheets.entries()) {
+      const want = wanted === null || wanted.has(at);
+      if (want && !osmd.isDrawn(at)) {
+        osmd.drawPage(at);
+        this.collectDrawnNotes(at);
+        drew = true;
+      } else if (!want && osmd.isDrawn(at)) {
+        for (const stepIndex of this.stepsByPage.get(at) ?? []) {
+          this.stepElements.delete(stepIndex);
+        }
+        // Read off text that is going with the drawing. The page keeps its
+        // place, so this is keyed by a page that will be drawn again - with
+        // new text, which the old reading would never find.
+        this.numbersOn.delete(sheet);
+        osmd.forgetPage(at);
+      }
+    }
+    if (drew) {
+      // Its printed lines can be read now, and the bars on it measured by them.
+      this.measures = this.readMeasures();
+    }
+    return drew;
+  }
+
+  /**
+   * Keeps the right pages drawn, and paints ours onto any page just drawn.
+   *
+   * Everything of ours that belongs to a page - what was played, the veil,
+   * the dimming, the markers, the hand switches - is painted only on pages
+   * that are drawn, and kept as the thing it is a picture of: so a page drawn
+   * later is painted from that, as though it had been drawn all along.
+   */
+  private drawThePagesNearTheReader(): void {
+    if (!this.keepThePagesDrawn()) {
+      return;
+    }
+    this.paintOverlay();
+    this.paintFaded();
+    this.paintDimmed();
+    this.paintPassage();
+    this.paintHands();
+  }
+
+  /**
+   * Finds the groups a page's notes were drawn as, now that it is drawn.
+   *
+   * Asked of the engraver's notes kept from the walk, because a page drawn
+   * later is drawn long after the walk has been and gone.
+   */
+  private collectDrawnNotes(page: number): void {
+    const sheet = this.sheets[page];
+    if (sheet === undefined) {
+      return;
+    }
+    const steps = this.stepsByPage.get(page) ?? [];
+    for (const stepIndex of steps) {
+      const drawn: SVGGElement[] = [];
+      for (const note of this.stepNotes.get(stepIndex) ?? []) {
+        const element = typeof note.getSVGGElement === 'function' ? note.getSVGGElement() : null;
+        if (element === null || element === undefined) {
+          continue;
+        }
+        drawn.push(element);
+        // Which hand drew it, for dimming the one that is not being read.
+        const staff = note.sourceNote?.parentStaffEntry?.parentStaff?.id;
+        if (staff !== undefined) {
+          this.elementStaff.set(element, staff);
+        }
+      }
+      if (drawn.length > 0) {
+        this.stepElements.set(stepIndex, drawn);
+      } else {
+        this.stepElements.delete(stepIndex);
+      }
+    }
+    this.attachNoteFurniture(sheet, steps);
   }
 
   /** The page the reader is looking at. */
@@ -1329,6 +1524,7 @@ export class OsmdScoreRenderer
   private turnToPage(index: number): void {
     const sheets = this.sheets;
     this.pageAt = Math.min(Math.max(index, 0), Math.max(0, sheets.length - 1));
+    this.drawThePagesNearTheReader();
     this.showOnlyCurrentPage();
     this.announcePages();
   }
@@ -1343,7 +1539,9 @@ export class OsmdScoreRenderer
       if (sheet.style.display !== shown) {
         sheet.style.display = shown;
       }
-      this.labelPage(sheet, at, this.paged ? sheets.length : 0);
+      if (this.isDrawn(at)) {
+        this.labelPage(sheet, at, this.paged ? sheets.length : 0);
+      }
     }
     this.placeCursor();
     this.paintPreview();
@@ -1434,6 +1632,11 @@ export class OsmdScoreRenderer
     if (byTheMusic && this.pagesFollowTheMusic && this.paged && page !== this.pageAt) {
       this.turnToPage(page);
       return;
+    }
+    // A marker gone on to a page of its own keeps that page drawn, so a
+    // reader who has looked ahead finds the music there when they turn back.
+    if (page !== this.markerPage) {
+      this.drawThePagesNearTheReader();
     }
     // The marker still has to be taken off a page it is no longer on, even
     // when the page is staying where it is.
@@ -1865,11 +2068,13 @@ export class OsmdScoreRenderer
 
   showPassage(passage: DrawnPassage): void {
     this.passage = passage;
+    this.drawThePagesNearTheReader();
     this.paintPassage();
   }
 
   showStart(measureIndex: number | null): void {
     this.startMeasure = measureIndex;
+    this.drawThePagesNearTheReader();
     this.paintPassage();
   }
 
@@ -2321,6 +2526,9 @@ export class OsmdScoreRenderer
     this.marks = [];
     this.stepX = new Map();
     this.stepElements = new Map();
+    this.stepNotes = new Map();
+    this.stepsByPage = new Map();
+    this.printedStaves = new Map();
     this.faded = new Set();
     this.samples = [];
     // The page it stood on has gone, so the group has too - and what is being
@@ -2354,7 +2562,7 @@ export class OsmdScoreRenderer
     // hundred times the drawing for one keystroke, and the trainer stopped
     // answering partway through the score.
     const page = this.pageOfStep(mark.stepIndex);
-    const sheet = this.sheets[page];
+    const sheet = this.drawnSheet(page);
     const geometry = this.geometryByPage.get(page) ?? null;
     if (sheet === undefined || geometry === null) {
       return;
@@ -2428,6 +2636,7 @@ export class OsmdScoreRenderer
   /** Re-dims everything already passed, after the page has been redrawn. */
   dimUnplayed(reading: ScoreReading | null): void {
     this.reading = reading;
+    this.drawThePagesNearTheReader();
     this.paintDimmed();
   }
 
@@ -2481,7 +2690,7 @@ export class OsmdScoreRenderer
       const page = this.pageOfStep(mark.stepIndex);
       byPage.set(page, [...(byPage.get(page) ?? []), mark]);
     }
-    for (const [at, sheet] of this.sheets.entries()) {
+    for (const [at, sheet] of this.sheetsDrawn()) {
       const group = this.overlayGroupFor(sheet);
       while (group.firstChild !== null) {
         group.firstChild.remove();
@@ -2571,13 +2780,6 @@ export class OsmdScoreRenderer
     // The engraver numbers its pages from one; every page index here is from
     // nought, because it indexes the sheets it drew.
     return typeof number === 'number' && number >= 1 ? number - 1 : null;
-  }
-
-  /** The page an element belongs to, by the sheet it is drawn in. */
-  private pageOfElement(element: Element): number {
-    const sheet = element.closest('svg');
-    const at = sheet === null ? -1 : this.sheets.indexOf(sheet as SVGSVGElement);
-    return at < 0 ? 0 : at;
   }
 
   private createShape(shape: OverlayShape, doc: Document): SVGElement {
@@ -2682,7 +2884,7 @@ export class OsmdScoreRenderer
    * is cleared at the start of every run, and the passage is not.
    */
   private paintPassage(): void {
-    for (const sheet of this.sheets) {
+    for (const [, sheet] of this.sheetsDrawn()) {
       this.passageGroupFor(sheet).replaceChildren();
     }
     this.paintStart();
@@ -2699,7 +2901,7 @@ export class OsmdScoreRenderer
       // Each marker on the page its own bar is drawn on: a passage can run
       // across a page break, and then the two markers are not on the same
       // sheet at all.
-      const sheet = this.sheets[this.pageOfMeasure(bracket.measureIndex)];
+      const sheet = this.drawnSheet(this.pageOfMeasure(bracket.measureIndex));
       if (sheet === undefined) {
         continue;
       }
@@ -2820,7 +3022,7 @@ export class OsmdScoreRenderer
       // this last ran. Turning to any other page showed none - and zooming
       // in, which cuts the piece into more pages, put nearly every repeated
       // bar on a page that had never been painted.
-      const sheet = this.sheets[measure.page];
+      const sheet = this.drawnSheet(measure.page);
       if (sheet === undefined) {
         continue;
       }
@@ -2998,7 +3200,7 @@ export class OsmdScoreRenderer
     if (measure === undefined || this.passage === null) {
       return;
     }
-    const sheet = this.sheets[measure.page];
+    const sheet = this.drawnSheet(measure.page);
     if (sheet === undefined) {
       return;
     }
@@ -3047,41 +3249,54 @@ export class OsmdScoreRenderer
   /**
    * Where every staff was drawn, read off the printed lines.
    *
-   * Read once per engraving and kept with the pages it was read from: it is a
-   * fact about the drawing and nothing else, and it is asked every time the
-   * markers are painted - which happens on every start of a run or a playback,
-   * twice. Each reading walks every staff line on every page and asks the
-   * document for its ends one attribute at a time, and on a long score that was
-   * a quarter of a second of every start, measured with the browser's profiler
-   * on his device. The pages are forgotten whenever they are drawn again, and
-   * this goes with them.
+   * Read once for each page and kept, for as long as the layout it was read
+   * from: it is a fact about the drawing and nothing else, and it is asked
+   * every time the markers are painted - which happens on every start of a run
+   * or a playback, twice. Each reading walks every staff line on a page and
+   * asks the document for its ends one attribute at a time, and on a long
+   * score that was a quarter of a second of every start, measured with the
+   * browser's profiler on his device.
+   *
+   * Only the pages that have been drawn can be read, and a page not drawn yet
+   * has nothing here until it is.
    */
   private readStaves(): DrawnStaff[] {
-    if (this.drawnStaves !== null) {
-      return this.drawnStaves;
-    }
     const staves: DrawnStaff[] = [];
     for (const [pageAt, sheet] of this.sheets.entries()) {
-      const drawn = [...sheet.querySelectorAll('.staffline')];
-      for (const [at, group] of drawn.entries()) {
-        const ys = staffLinesIn(horizontalRules(group));
-        if (ys.length === 0) {
+      let onPage = this.printedStaves.get(pageAt);
+      if (onPage === undefined) {
+        if (!this.isDrawn(pageAt)) {
           continue;
         }
-        const full = horizontalRules(group).filter((line) => ys.includes(line.y));
-        staves.push({
-          // Counted from the top down within each system, which is how the
-          // score numbers them and how the reader would: the right hand is
-          // the upper staff.
-          staffNumber: (at % Math.max(1, this.stavesPerSystem())) + 1,
-          page: pageAt,
-          left: Math.min(...full.map((line) => line.from)),
-          top: Math.min(...ys),
-          bottom: Math.max(...ys),
-        });
+        onPage = this.stavesPrintedOn(sheet, pageAt);
+        this.printedStaves.set(pageAt, onPage);
       }
+      staves.push(...onPage);
     }
-    this.drawnStaves = staves;
+    return staves;
+  }
+
+  /** One page's staves, off its printed lines. */
+  private stavesPrintedOn(sheet: SVGSVGElement, pageAt: number): DrawnStaff[] {
+    const staves: DrawnStaff[] = [];
+    const drawn = [...sheet.querySelectorAll('.staffline')];
+    for (const [at, group] of drawn.entries()) {
+      const ys = staffLinesIn(horizontalRules(group));
+      if (ys.length === 0) {
+        continue;
+      }
+      const full = horizontalRules(group).filter((line) => ys.includes(line.y));
+      staves.push({
+        // Counted from the top down within each system, which is how the
+        // score numbers them and how the reader would: the right hand is
+        // the upper staff.
+        staffNumber: (at % Math.max(1, this.stavesPerSystem())) + 1,
+        page: pageAt,
+        left: Math.min(...full.map((line) => line.from)),
+        top: Math.min(...ys),
+        bottom: Math.max(...ys),
+      });
+    }
     return staves;
   }
 
@@ -3152,14 +3367,14 @@ export class OsmdScoreRenderer
    * and nothing else, so nothing here can land on a note.
    */
   private paintHands(): void {
-    for (const sheet of this.sheets) {
+    for (const [, sheet] of this.sheetsDrawn()) {
       this.handGroupFor(sheet).replaceChildren();
     }
     if (this.handsPlaying.length === 0) {
       return;
     }
     for (const staff of this.readStaves()) {
-      const sheet = this.sheets[staff.page];
+      const sheet = this.drawnSheet(staff.page);
       if (sheet === undefined) {
         continue;
       }
@@ -3280,19 +3495,31 @@ export class OsmdScoreRenderer
     /** Steps whose place was read off a note rather than off a rest. */
     const placedByANote = new Set<number>();
     const samples: DrawnNoteSample[] = [];
+    const stepNotes = new Map<number, DrawnNote[]>();
     this.stepElements = new Map();
     this.systemNumbers = new Map();
+    // Found again, every one: the layout they were found in has gone.
+    this.stepPage = new Map();
 
     const index = walkEveryPlace(cursor, placesToBeginIn(osmd.Sheet), (step) => {
-      this.readStep(cursor, step, stepX, placedByANote, samples);
+      this.readStep(cursor, step, stepX, placedByANote, samples, stepNotes);
     });
 
     this.carryPagesForward(index);
+    this.stepNotes = stepNotes;
+    this.stepsByPage = new Map();
+    for (const [stepIndex, page] of this.stepPage) {
+      const onPage = this.stepsByPage.get(page) ?? [];
+      onPage.push(stepIndex);
+      this.stepsByPage.set(page, onPage);
+    }
     this.stepX = stepX;
     this.samples = samples;
     this.measureStaffHeights();
     this.readSystemShape();
-    this.attachNoteFurniture();
+    for (const [page] of this.sheetsDrawn()) {
+      this.collectDrawnNotes(page);
+    }
     this.navigator.reset();
     this.navigator.moveTo(restoreTo);
   }
@@ -3383,10 +3610,10 @@ export class OsmdScoreRenderer
    * `vf-auto1003-stem` and `vf-auto1003ledgers`, and any beam beginning at it
    * is `vf-auto1003-beam0`.
    */
-  private attachNoteFurniture(): void {
+  private attachNoteFurniture(sheet: SVGSVGElement, steps: readonly number[]): void {
     const stepOfNote = new Map<string, number>();
-    for (const [stepIndex, elements] of this.stepElements) {
-      for (const element of elements) {
+    for (const stepIndex of steps) {
+      for (const element of this.stepElements.get(stepIndex) ?? []) {
         if (element.id !== '') {
           stepOfNote.set(element.id, stepIndex);
         }
@@ -3402,17 +3629,17 @@ export class OsmdScoreRenderer
       this.stepElements.set(stepIndex, bucket);
     };
 
-    // One pass over the drawing for each kind of furniture, and a map to look
+    // One pass over the page for each kind of furniture, and a map to look
     // them up in. Asking the document to find one element at a time cost the
     // length of the score times the size of it - thousands of full scans on a
     // long piece, every time it was engraved.
     //
-    // The whole container rather than its first sheet, too: a paged score is
-    // several of them, and stems on every page but the first were being left
-    // behind by the notes they belong to.
+    // One page at a time, since pages are drawn one at a time - and every page
+    // that is drawn, not only the first: stems on every page but the first
+    // were once left behind by the notes they belong to.
     const byId = (selector: string): Map<string, SVGGElement> => {
       const found = new Map<string, SVGGElement>();
-      for (const element of this.container.querySelectorAll<SVGGElement>(selector)) {
+      for (const element of sheet.querySelectorAll<SVGGElement>(selector)) {
         found.set(element.id, element);
       }
       return found;
@@ -3426,7 +3653,7 @@ export class OsmdScoreRenderer
 
     const notes = byId('g.vf-stavenote');
     const inMeasures = new Map<Element, MeasureNotes>();
-    for (const beam of this.container.querySelectorAll<SVGGElement>('g.vf-beam')) {
+    for (const beam of sheet.querySelectorAll<SVGGElement>('g.vf-beam')) {
       const owner = beam.id.replace(/-beam\d+$/, '');
       const lastStep = this.lastStepOfBeam(owner, notes, inMeasures, stepOfNote);
       if (lastStep !== null) {
@@ -3495,6 +3722,7 @@ export class OsmdScoreRenderer
     stepX: Map<number, number>,
     placedByANote: Set<number>,
     samples: DrawnNoteSample[],
+    stepNotes: Map<number, DrawnNote[]>,
   ): void {
     try {
       for (const graphical of cursor.GNotesUnderCursor()) {
@@ -3523,26 +3751,18 @@ export class OsmdScoreRenderer
           }
         }
 
-        const drawn = typeof note.getSVGGElement === 'function' ? note.getSVGGElement() : null;
-        if (drawn !== null && drawn !== undefined) {
-          const bucket = this.stepElements.get(stepIndex) ?? [];
-          bucket.push(drawn);
-          this.stepElements.set(stepIndex, bucket);
-          // Which hand drew it, for dimming the one that is not being read.
-          const staff = note.sourceNote?.parentStaffEntry?.parentStaff?.id;
-          if (staff !== undefined) {
-            this.elementStaff.set(drawn, staff);
-          }
-          // Which sheet the engraver put it on, read off the drawing rather
-          // than worked out: a step's page is the page its notes are on.
-          this.stepPage.set(stepIndex, this.pageOfElement(drawn));
-        } else if (!this.stepPage.has(stepIndex)) {
-          // A rest gets no group of its own in the SVG, so there is nothing
-          // to look the page up from - and skipped for that, a bar of rests
-          // belonged to no page at all, which reads as page one. The page
-          // then turned back to the beginning under a reader in the middle of
-          // the piece, and the marker went with it. The engraver knows where
-          // it laid the bar out, so it is asked.
+        // Kept whether or not it is drawn: most pages are not, and the group
+        // a note is drawn as is looked for when its page is.
+        const kept = stepNotes.get(stepIndex) ?? [];
+        kept.push(note);
+        stepNotes.set(stepIndex, kept);
+        // Which page the engraver laid it out on, asked of the layout rather
+        // than read off the drawing, since most pages are not drawn. Rests are
+        // asked the same way: read off the drawing, a rest - which is given no
+        // group of its own - belonged to no page at all, which reads as page
+        // one, and the page turned back to the beginning under a reader in the
+        // middle of the piece.
+        if (!this.stepPage.has(stepIndex)) {
           const page = this.pageOfGraphical(note);
           if (page !== null) {
             this.stepPage.set(stepIndex, page);

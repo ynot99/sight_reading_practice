@@ -45,6 +45,11 @@ jobs:
         # without it simply has no drive.
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          # The client that signs in by a code, for a browser that will not
+          # open Google's window. Its secret is built into the page like the
+          # id, so a variable too.
+          VITE_GOOGLE_DEVICE_CLIENT_ID: ${{ vars.GOOGLE_DEVICE_CLIENT_ID }}
+          VITE_GOOGLE_DEVICE_CLIENT_SECRET: ${{ vars.GOOGLE_DEVICE_CLIENT_SECRET }}
 
       - name: Package the site for Pages
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

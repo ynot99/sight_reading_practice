@@ -1155,6 +1155,11 @@
           <label for="drive-sync">Google Drive</label>
           <div class="ladder-row">
             <button id="drive-sync" type="button" class="button">Sync with Google Drive</button>
+            <!-- For a browser that will not open Google's window: the iPad's,
+                 the one there with Web MIDI. -->
+            <button id="drive-code" type="button" class="button button--ghost" hidden>
+              Sign in with a code
+            </button>
           </div>
           <p id="drive-status" class="hint">
             Scores, their stars, clicks and passages, the same on every device.

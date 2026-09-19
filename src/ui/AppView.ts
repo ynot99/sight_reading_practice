@@ -1456,6 +1456,7 @@ export class AppView {
     timingTrail: HTMLElement;
     timingTrailLines: HTMLElement;
     driveSync: HTMLButtonElement;
+    driveCode: HTMLButtonElement;
     driveStatus: HTMLElement;
     driveOnly: HTMLUListElement;
     offerToSync: HTMLInputElement;
@@ -1744,6 +1745,7 @@ export class AppView {
       timingTrail: requireElement(doc, 'timing-trail'),
       timingTrailLines: requireElement(doc, 'timing-trail-lines'),
       driveSync: requireElement(doc, 'drive-sync'),
+      driveCode: requireElement(doc, 'drive-code'),
       driveStatus: requireElement(doc, 'drive-status'),
       driveOnly: requireElement(doc, 'drive-only'),
       offerToSync: requireElement(doc, 'offer-to-sync'),
@@ -3909,6 +3911,11 @@ export class AppView {
       void this.syncWithTheDrive();
     });
 
+    this.el.driveCode.hidden = !this.runtime.codeSignIn.available;
+    this.listen(this.el.driveCode, 'click', () => {
+      void this.signInWithACode();
+    });
+
     this.listen(this.el.scoreSync, 'click', () => {
       void this.syncWithTheDrive();
     });
@@ -5736,6 +5743,23 @@ export class AppView {
    * The scores the drive has and this device does not are listed rather than
    * brought: what is kept here is the reader's choice.
    */
+  private async signInWithACode(): Promise<void> {
+    this.el.driveCode.disabled = true;
+    this.el.driveStatus.textContent = 'Asking Google for a code…';
+    try {
+      await this.runtime.codeSignIn.signInWithCode(({ code, url }) => {
+        this.el.driveStatus.textContent = `On a phone or a computer, open ${url} and enter ${code}`;
+      });
+    } catch (error) {
+      this.el.driveStatus.textContent =
+        error instanceof Error ? error.message : 'Google did not let the trainer in.';
+      return;
+    } finally {
+      this.el.driveCode.disabled = false;
+    }
+    await this.syncWithTheDrive();
+  }
+
   private async syncWithTheDrive(): Promise<void> {
     this.syncing = true;
     const change = this.runtime.driveSync.latestChangeAtMs;

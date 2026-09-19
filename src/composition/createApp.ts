@@ -48,6 +48,7 @@ import { LibrarySync } from '../application/LibrarySync.js';
 import { SettingsSync } from '../application/SettingsSync.js';
 import { DriveSync } from '../application/DriveSync.js';
 import type { ICloudDrive } from '../application/ports/ICloudDrive.js';
+import type { ICodeSignIn } from '../application/ports/ICodeSignIn.js';
 
 /**
  * Which program is asking Google for the reader's drive, from the build's
@@ -59,6 +60,13 @@ import type { ICloudDrive } from '../application/ports/ICloudDrive.js';
  * addresses registered for it - and a build without it has no drive.
  */
 const GOOGLE_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
+/**
+ * The second client, which signs in by a code entered on another device - for
+ * the iPad's browser, which refuses Google's window. Found the same way, and
+ * its secret is no more a secret than the id: Google says so of this kind.
+ */
+const GOOGLE_CODE_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_DEVICE_CLIENT_ID ?? '';
+const GOOGLE_CODE_CLIENT_SECRET: string = import.meta.env.VITE_GOOGLE_DEVICE_CLIENT_SECRET ?? '';
 import type { IScoreStore } from '../application/ports/IScoreStore.js';
 import type { IStorageGauge } from '../application/ports/IStorageGauge.js';
 import { DownloadFileSink } from '../infrastructure/files/DownloadFileSink.js';
@@ -198,6 +206,8 @@ export interface AppRuntime {
   readonly trail: ITimingTrail;
   /** The reader's Google Drive, one folder of it. */
   readonly cloudDrive: ICloudDrive;
+  /** The same drive, signed in to by a code where Google's window cannot open. */
+  readonly codeSignIn: ICodeSignIn;
   /** Keeps the library the same on every device, through that folder. */
   readonly librarySync: LibrarySync;
   /** The library and the settings together, and whether there is anything to send. */
@@ -386,6 +396,15 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     identity: loadGoogleIdentity(options.scoreContainer.ownerDocument),
     fetch: (url, init) => fetch(url, init),
     now: () => Date.now(),
+    byCode: {
+      clientId: GOOGLE_CODE_CLIENT_ID,
+      clientSecret: GOOGLE_CODE_CLIENT_SECRET,
+      storage: browserStorage(),
+      wait: (ms) =>
+        new Promise((done) => {
+          setTimeout(done, ms);
+        }),
+    },
   });
   const librarySync = new LibrarySync({
     drive: cloudDrive,
@@ -479,6 +498,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     storage,
     trail: new KeptTrail(browserStorage()),
     cloudDrive,
+    codeSignIn: cloudDrive,
     librarySync,
     driveSync,
     volumeKnob,

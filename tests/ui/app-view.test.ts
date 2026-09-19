@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import type { CloudFile, ICloudDrive } from '../../src/application/ports/ICloudDrive.js';
+import type { ICodeSignIn, SignInCode } from '../../src/application/ports/ICodeSignIn.js';
 import type { ITimingTrail } from '../../src/application/ports/ITimingTrail.js';
 import { timeTheStart } from '../../src/shared/timeTheStart.js';
 import { LibrarySync } from '../../src/application/LibrarySync.js';
@@ -227,11 +228,19 @@ class HeldTrail implements ITimingTrail {
 }
 
 /** A drive folder held in memory, standing in for Google's. */
-class FolderDrive implements ICloudDrive {
+class FolderDrive implements ICloudDrive, ICodeSignIn {
   readonly files = new Map<string, { id: string; content: string }>();
   /** Out, unless a test signs in: then a Sync button standing by the clock presses itself. */
   signedIn = false;
   prepared = 0;
+  /** Built without the client that signs in by a code, unless a test says otherwise. */
+  available = false;
+  /** Confirms the code the moment it is shown, unless a test says otherwise. */
+  signInWithCode = (show: (code: SignInCode) => void): Promise<void> => {
+    show({ code: 'ABCD-EFGH', url: 'https://www.google.com/device' });
+    this.signedIn = true;
+    return Promise.resolve();
+  };
   private made = 0;
 
   prepare(): void {
@@ -396,6 +405,7 @@ function createRig(
     storage,
     trail,
     cloudDrive: drive,
+    codeSignIn: drive,
     librarySync,
     driveSync,
     volumeKnob,
@@ -8444,6 +8454,59 @@ describe('the library on Google Drive', () => {
     await waitFor(() => element('drive-status').textContent === 'Google could not be reached.');
 
     expect(element<HTMLButtonElement>('drive-sync').disabled).toBe(false);
+  });
+
+  it('offers a sign-in by code only where the build has the client for it', async () => {
+    const without = createRig();
+    await without.view.initialize();
+    expect(element('drive-code').hidden).toBe(true);
+
+    const rig = createRig();
+    rig.drive.available = true;
+    await rig.view.initialize();
+    expect(element('drive-code').hidden).toBe(false);
+  });
+
+  it('shows the code while it waits, and syncs once it is entered', async () => {
+    const rig = createRig();
+    rig.drive.available = true;
+    let entered = (): void => undefined;
+    rig.drive.signInWithCode = (show) => {
+      show({ code: 'ABCD-EFGH', url: 'https://www.google.com/device' });
+      return new Promise<void>((done) => {
+        entered = done;
+      });
+    };
+    await rig.view.initialize();
+
+    element<HTMLButtonElement>('drive-code').click();
+    await waitFor(() => element('drive-status').textContent?.includes('ABCD-EFGH') === true);
+    expect(element('drive-status').textContent).toContain('https://www.google.com/device');
+    expect(element<HTMLButtonElement>('drive-code').disabled).toBe(true);
+
+    entered();
+    await waitFor(() => element('drive-status').textContent?.startsWith('Synced') === true);
+    expect(element<HTMLButtonElement>('drive-code').disabled).toBe(false);
+  });
+
+  it('says why a sign-in by code did not happen, and syncs nothing', async () => {
+    const rig = createRig();
+    rig.drive.available = true;
+    let connected = 0;
+    rig.drive.connect = () => {
+      connected += 1;
+      return Promise.resolve();
+    };
+    rig.drive.signInWithCode = () => Promise.reject(new Error('The sign-in was refused on the other device.'));
+    await rig.view.initialize();
+
+    element<HTMLButtonElement>('drive-code').click();
+    await waitFor(
+      () => element('drive-status').textContent === 'The sign-in was refused on the other device.',
+    );
+
+    expect(connected).toBe(0);
+    expect(element<HTMLButtonElement>('drive-code').disabled).toBe(false);
   });
 });
 

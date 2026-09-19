@@ -1,9 +1,20 @@
 import type { CloudFile, ICloudDrive } from '../../application/ports/ICloudDrive.js';
+import type { ICodeSignIn, SignInCode } from '../../application/ports/ICodeSignIn.js';
+import type { StorageLike } from '../storage/LocalStorageSettingsStore.js';
 
 /** Only what this program made, or what the reader opened with it - never the rest of the drive. */
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
+const DEVICE_CODE = 'https://oauth2.googleapis.com/device/code';
+const TOKEN = 'https://oauth2.googleapis.com/token';
+/**
+ * Where the key a sign-in by code hands back is kept, on this device only.
+ *
+ * Not among the stores a backup carries: it opens this device's way to the
+ * drive, and a file taken to another device must not carry it there.
+ */
+export const SIGN_IN_KEY = 'sight-reading-practice/google-sign-in';
 const FOLDER_TYPE = 'application/vnd.google-apps.folder';
 export const FOLDER_NAME = 'Sight Reading Practice';
 /** A token is let go this long before Google says it ends, so no call is made on its last breath. */
@@ -29,6 +40,34 @@ export interface GoogleIdentity {
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
+/** What Google's sign-in by code answers, at each step. */
+interface CodeAnswer {
+  readonly device_code?: string;
+  readonly user_code?: string;
+  readonly verification_url?: string;
+  readonly expires_in?: number;
+  readonly interval?: number;
+  readonly access_token?: string;
+  readonly refresh_token?: string;
+  readonly error?: string;
+  readonly error_description?: string;
+}
+
+/**
+ * The second client, the one that signs in by a code.
+ *
+ * Google gives this kind a secret, and says itself that a program on the
+ * reader's device cannot keep one: it is in every built copy, as the id is.
+ */
+export interface CodeClient {
+  readonly clientId: string;
+  readonly clientSecret: string;
+  /** Where the key it hands back is kept; see `SIGN_IN_KEY`. */
+  readonly storage: StorageLike | null;
+  /** Waits between asking whether the code has been confirmed. */
+  readonly wait: (ms: number) => Promise<void>;
+}
+
 export interface GoogleDriveOptions {
   readonly clientId: string;
   /** Loads Google's sign-in library; the page's own script tag by default. */
@@ -36,6 +75,8 @@ export interface GoogleDriveOptions {
   readonly fetch: Fetch;
   /** Wall-clock milliseconds, for when a token runs out. */
   readonly now: () => number;
+  /** Signing in by a code; a build without it has only Google's window. */
+  readonly byCode?: CodeClient;
 }
 
 /**
@@ -83,11 +124,13 @@ export function loadGoogleIdentity(doc: Document): () => Promise<GoogleIdentity>
  * The reader's Google Drive, through the one folder the trainer makes there.
  *
  * Signed in with Google's own window and a token that lasts about an hour,
- * kept in memory only: nothing that opens the drive is ever written to this
- * device. A press after it has run out signs in again, which Google does
+ * kept in memory only. A press after it has run out signs in again, which Google does
  * without asking once the reader has agreed.
+ *
+ * Or signed in by a code, which leaves a key on the device: a token that has
+ * run out is then renewed with it, without a window and without a press.
  */
-export class GoogleDrive implements ICloudDrive {
+export class GoogleDrive implements ICloudDrive, ICodeSignIn {
   private readonly options: GoogleDriveOptions;
   private identity: Promise<GoogleIdentity> | null = null;
   private token: { readonly value: string; readonly expiresAtMs: number } | null = null;
@@ -97,9 +140,61 @@ export class GoogleDrive implements ICloudDrive {
     this.options = options;
   }
 
-  /** While the token lasts: after it, Google's window has to be opened again, by a press. */
+  /**
+   * While the token lasts, or for as long as a key from a code is kept: after
+   * the token alone, Google's window has to be opened again, by a press.
+   */
   get signedIn(): boolean {
-    return this.token !== null && this.options.now() < this.token.expiresAtMs;
+    return (this.token !== null && this.options.now() < this.token.expiresAtMs) || this.keptKey() !== null;
+  }
+
+  get available(): boolean {
+    return (this.options.byCode?.clientId ?? '') !== '';
+  }
+
+  async signInWithCode(show: (code: SignInCode) => void): Promise<void> {
+    const client = this.options.byCode;
+    if (client === undefined || client.clientId === '') {
+      throw new Error('Signing in by a code is not set up in this copy of the trainer.');
+    }
+    const asked = await this.askGoogle(DEVICE_CODE, { client_id: client.clientId, scope: SCOPE });
+    const { device_code: device, user_code: code, verification_url: url, expires_in: lasts } = asked;
+    if (device === undefined || code === undefined || url === undefined || lasts === undefined) {
+      throw new Error(asked.error_description ?? 'Google gave no code.');
+    }
+    show({ code, url });
+    // Five seconds where Google does not say: the standard's own default.
+    let interval = (asked.interval ?? 5) * 1000;
+    const until = this.options.now() + lasts * 1000;
+    while (this.options.now() < until) {
+      await client.wait(interval);
+      const answer = await this.askGoogle(TOKEN, {
+        client_id: client.clientId,
+        client_secret: client.clientSecret,
+        device_code: device,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      });
+      if (answer.access_token !== undefined) {
+        if (answer.refresh_token !== undefined) {
+          this.keepKey(answer.refresh_token);
+        }
+        this.token = this.tokenFrom(answer.access_token, answer.expires_in);
+        return;
+      }
+      if (answer.error === 'authorization_pending') {
+        continue;
+      }
+      if (answer.error === 'slow_down') {
+        interval += 5000;
+        continue;
+      }
+      throw new Error(
+        answer.error === 'access_denied'
+          ? 'The sign-in was refused on the other device.'
+          : (answer.error_description ?? 'Google did not let the trainer in.'),
+      );
+    }
+    throw new Error('The code ran out before it was entered. Ask for a new one.');
   }
 
   prepare(): void {
@@ -111,11 +206,12 @@ export class GoogleDrive implements ICloudDrive {
   }
 
   async connect(): Promise<void> {
-    if (this.options.clientId === '') {
+    const key = this.keptKey();
+    if (this.options.clientId === '' && key === null) {
       throw new Error('Google Drive is not set up in this copy of the trainer.');
     }
     if (this.token === null || this.options.now() >= this.token.expiresAtMs) {
-      this.token = await this.signIn();
+      this.token = key !== null ? await this.renew(key) : await this.signIn();
     }
     this.folderId ??= await this.findOrMakeTheFolder();
   }
@@ -190,11 +286,7 @@ export class GoogleDrive implements ICloudDrive {
                 reject(new Error(response.error_description ?? 'Google did not let the trainer in.'));
                 return;
               }
-              const seconds = Number(response.expires_in ?? 3600);
-              resolve({
-                value: response.access_token,
-                expiresAtMs: this.options.now() + seconds * 1000 - EXPIRY_MARGIN_MS,
-              });
+              resolve(this.tokenFrom(response.access_token, response.expires_in));
             },
             error_callback: (error) => {
               reject(
@@ -210,6 +302,63 @@ export class GoogleDrive implements ICloudDrive {
           client.requestAccessToken({ prompt: '' });
         }),
     );
+  }
+
+  /** A new token from the key a code left: no window, no press. */
+  private async renew(key: string): Promise<{ value: string; expiresAtMs: number }> {
+    const answer = await this.askGoogle(TOKEN, {
+      client_id: this.options.byCode?.clientId ?? '',
+      client_secret: this.options.byCode?.clientSecret ?? '',
+      refresh_token: key,
+      grant_type: 'refresh_token',
+    });
+    if (answer.access_token !== undefined) {
+      return this.tokenFrom(answer.access_token, answer.expires_in);
+    }
+    if (answer.error === 'invalid_grant') {
+      // Taken back on the account, or run out: only a new code will do.
+      this.keepKey(null);
+      throw new Error('The sign-in by code has run out. Sign in with a code again.');
+    }
+    throw new Error(answer.error_description ?? 'Google did not renew the sign-in.');
+  }
+
+  private tokenFrom(value: string, expiresIn: number | string | undefined): { value: string; expiresAtMs: number } {
+    return {
+      value,
+      expiresAtMs: this.options.now() + Number(expiresIn ?? 3600) * 1000 - EXPIRY_MARGIN_MS,
+    };
+  }
+
+  /** A form sent to Google's sign-in, and its answer - a refusal included, which says why. */
+  private async askGoogle(url: string, fields: Record<string, string>): Promise<CodeAnswer> {
+    const response = await this.options.fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(fields).toString(),
+    });
+    return (await response.json().catch(() => ({}))) as CodeAnswer;
+  }
+
+  private keptKey(): string | null {
+    try {
+      return this.options.byCode?.storage?.getItem(SIGN_IN_KEY) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private keepKey(key: string | null): void {
+    const storage = this.options.byCode?.storage;
+    try {
+      if (key === null) {
+        storage?.removeItem(SIGN_IN_KEY);
+      } else {
+        storage?.setItem(SIGN_IN_KEY, key);
+      }
+    } catch {
+      // Not kept: this device is asked for a code again next time.
+    }
   }
 
   private async findOrMakeTheFolder(): Promise<string> {

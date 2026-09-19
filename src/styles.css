@@ -933,6 +933,62 @@ textarea {
 }
 
 /*
+ * The notes in view by pitch, down the side of the drawing, with the rows on
+ * the screen boxed.
+ *
+ * The drawing's other scrollbar, standing where one would, and square where it
+ * meets the drawing for the same reason the map under it is. Its box is moved
+ * by a transform, as that map's is, so following a scroll costs no layout.
+ */
+.roll-pitch-map {
+  position: relative;
+  flex: 0 0 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.roll-pitch-map__marks {
+  position: absolute;
+  inset: 0;
+}
+
+/* A row can be less than a pixel of the strip, and a note too thin to see is not marked. */
+.roll-pitch-map__mark {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  min-height: 2px;
+  border-radius: 1px;
+  background: var(--text-muted);
+}
+
+.roll-pitch-map__mark--correct {
+  background: var(--correct);
+}
+
+.roll-pitch-map__mark--wrong {
+  background: var(--wrong);
+}
+
+.roll-pitch-map__window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  pointer-events: none;
+  will-change: transform;
+}
+
+/*
  * The row under the drawing that chooses what to practise out of it.
  *
  * Wraps rather than shrinks: on a phone the two ends drop onto their own line
@@ -965,7 +1021,8 @@ textarea {
 }
 
 /*
- * This drawing has no scrollbars of its own: the map under it is the one.
+ * This drawing has no scrollbars of its own: the maps under it and beside it
+ * are the ones.
  *
  * They answered the same question and one of them answered it better. A
  * scrollbar says where in the run the view is; the map says that *and* where
@@ -1009,7 +1066,7 @@ textarea {
   grid-template-columns: var(--roll-keys) var(--roll-length, 100%);
   grid-template-rows: var(--roll-ruler) calc(var(--roll-row) * var(--roll-rows, 12)) var(--roll-pedal);
   overflow: auto;
-  /* No bars of its own; the map under it is the one. See above. */
+  /* No bars of its own; the maps under it and beside it are the ones. See above. */
   scrollbar-width: none;
   /* A drag that runs off the end of the run stops there; it is not an
      instruction to move the page behind it. */

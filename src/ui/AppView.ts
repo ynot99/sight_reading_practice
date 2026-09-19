@@ -84,7 +84,11 @@ import {
 } from '../application/session/RunRoll.js';
 import {
   drawTheMap,
+  drawThePitchMap,
   drawTheRoll,
+  theMapOfThePitches,
+  thePitchesOfTheRun,
+  type RollPitches,
   scrollAfterZoom,
   shareOfTheRun,
   theSquaresOfTheBar,
@@ -1292,6 +1296,10 @@ export class AppView {
   private rollTick: ReturnType<typeof setInterval> | null = null;
   /** A frame asked for to redraw the map's box, and not yet arrived. */
   private mapFrame: number | null = null;
+  /** The notes of the drawing by pitch, for the map down its side. */
+  private rollPitches: RollPitches | null = null;
+  /** What that map last drew, so a scroll that changes nothing on it redraws nothing. */
+  private pitchMarksDrawn = '';
   /** Clicks of the run already handed to the metronome by this playback. */
   private rollClicksSent = 0;
   /**
@@ -1515,6 +1523,8 @@ export class AppView {
     rollMap: HTMLElement;
     rollMapWindow: HTMLElement;
     rollMapHead: HTMLElement;
+    rollPitchMap: HTMLElement;
+    rollPitchMapWindow: HTMLElement;
     rollFrom: HTMLButtonElement;
     rollTo: HTMLButtonElement;
     rollPassageWhat: HTMLElement;
@@ -1799,6 +1809,8 @@ export class AppView {
       rollMap: requireElement(doc, 'roll-map'),
       rollMapWindow: requireElement(doc, 'roll-map-window'),
       rollMapHead: requireElement(doc, 'roll-map-head'),
+      rollPitchMap: requireElement(doc, 'roll-pitch-map'),
+      rollPitchMapWindow: requireElement(doc, 'roll-pitch-map-window'),
       rollFrom: requireElement(doc, 'roll-from'),
       rollTo: requireElement(doc, 'roll-to'),
       rollPassageWhat: requireElement(doc, 'roll-passage-what'),
@@ -6356,6 +6368,16 @@ export class AppView {
       }
       this.showTheRunWhereItWasPointedAt(event);
     });
+    this.listen(this.el.rollPitchMap, 'pointerdown', (event) => {
+      this.el.rollPitchMap.setPointerCapture(event.pointerId);
+      this.showTheRowsWhereTheyWerePointedAt(event);
+    });
+    this.listen(this.el.rollPitchMap, 'pointermove', (event) => {
+      if (!this.el.rollPitchMap.hasPointerCapture(event.pointerId)) {
+        return;
+      }
+      this.showTheRowsWhereTheyWerePointedAt(event);
+    });
     this.listen(this.el.rollBeatsShown, 'change', () => {
       this.countTheBarOut();
     });
@@ -7335,11 +7357,19 @@ export class AppView {
    */
   private sayWhereTheViewIs(): void {
     const drawn = this.el.rollBody.firstElementChild;
+    // Both ways read before either box is written, so neither read waits on a
+    // layout the other's write has asked for.
     const widths = drawn instanceof HTMLElement ? this.theRunsWidths(drawn) : null;
+    const heights = drawn instanceof HTMLElement ? this.theRunsHeights(drawn) : null;
     this.showTheWindow(
       widths === null
         ? null
         : theWindowOnTheRun(widths.scrolledToPx, widths.viewWidePx, widths.wholeWidePx),
+    );
+    this.showTheRowsInView(
+      heights === null
+        ? null
+        : theWindowOnTheRun(heights.scrolledDownPx, heights.viewTallPx, heights.wholeTallPx),
     );
   }
 
@@ -7350,6 +7380,9 @@ export class AppView {
    * it has already read and nothing reads the drawing after writing to it.
    */
   private showTheWindow(window: { readonly fromShare: number; readonly widthShare: number } | null): void {
+    // Whatever moves this box moves the stretch of time on the screen, and
+    // that is what the map down the side marks the notes of.
+    this.markThePitchesIn(window);
     this.el.rollMapWindow.hidden = window === null;
     if (window === null) {
       return;
@@ -7370,6 +7403,58 @@ export class AppView {
     // widths. The division is safe: a window is drawn only where it has width.
     const along = (window.fromShare / window.widthShare) * 100;
     this.el.rollMapWindow.style.transform = `translateX(${along.toFixed(3)}%)`;
+  }
+
+  /**
+   * Marks, down the side, the rows with a note in the stretch of time on the screen.
+   *
+   * Nothing where that stretch is not known: marks for a view nobody can see
+   * would be marks of nothing in particular.
+   */
+  private markThePitchesIn(
+    window: { readonly fromShare: number; readonly widthShare: number } | null,
+  ): void {
+    const marks =
+      window === null || this.rollPitches === null
+        ? []
+        : theMapOfThePitches(this.rollPitches, window);
+    const said = marks.map((mark) => `${mark.kind}@${mark.fromShare}/${mark.heightShare}`).join();
+    if (said === this.pitchMarksDrawn) {
+      return;
+    }
+    this.pitchMarksDrawn = said;
+    // The box stays over the marks, and stays the same element.
+    this.el.rollPitchMap.replaceChildren(drawThePitchMap(marks), this.el.rollPitchMapWindow);
+  }
+
+  /**
+   * Draws the box saying which rows are on the screen.
+   *
+   * The same box as the one under the drawing, turned on its side: a height
+   * where that has a width, and moved by a transform for the same reason.
+   */
+  private showTheRowsInView(window: { readonly fromShare: number; readonly widthShare: number } | null): void {
+    this.el.rollPitchMapWindow.hidden = window === null;
+    if (window === null) {
+      return;
+    }
+    this.el.rollPitchMapWindow.style.height = `${(window.widthShare * 100).toFixed(3)}%`;
+    const along = (window.fromShare / window.widthShare) * 100;
+    this.el.rollPitchMapWindow.style.transform = `translateY(${along.toFixed(3)}%)`;
+  }
+
+  /** Scrolls the drawing up or down to the rows a finger is on, down the side. */
+  private showTheRowsWhereTheyWerePointedAt(event: PointerEvent): void {
+    const drawn = this.el.rollBody.firstElementChild;
+    const box = this.el.rollPitchMap.getBoundingClientRect();
+    if (!(drawn instanceof HTMLElement) || box.height <= 0) {
+      return;
+    }
+    const share = Math.min(1, Math.max(0, (event.clientY - box.top) / box.height));
+    const heights = this.theRunsHeights(drawn);
+    const to = scrollForTheWindowAt(share, heights.viewTallPx, heights.wholeTallPx);
+    drawn.scrollTop = to;
+    this.showTheRowsInView(theWindowOnTheRun(to, heights.viewTallPx, heights.wholeTallPx));
   }
 
   /** Scrolls the drawing to the part of the run a finger is on the map. */
@@ -7406,6 +7491,29 @@ export class AppView {
       scrolledToPx: drawn.scrollLeft,
       viewWidePx: drawn.clientWidth - keys,
       wholeWidePx: drawn.scrollWidth - keys,
+    };
+  }
+
+  /**
+   * The drawing measured as rows of pitch, with the ruler and the pedal left out.
+   *
+   * Both stick to their edges of the same scroller, the bar numbers to the top
+   * and the pedal to the bottom, so the rows are only ever seen between them.
+   * Taken off the view and the whole alike, a scroll down is a scroll through
+   * the rows and nothing else - the same arithmetic as along the run, and so
+   * the same box.
+   */
+  private theRunsHeights(drawn: HTMLElement): {
+    readonly scrolledDownPx: number;
+    readonly viewTallPx: number;
+    readonly wholeTallPx: number;
+  } {
+    const ruler = drawn.querySelector<HTMLElement>('.roll__ruler')?.offsetHeight ?? 0;
+    const pedal = drawn.querySelector<HTMLElement>('.roll__pedal')?.offsetHeight ?? 0;
+    return {
+      scrolledDownPx: drawn.scrollTop,
+      viewTallPx: drawn.clientHeight - ruler - pedal,
+      wholeTallPx: drawn.scrollHeight - ruler - pedal,
     };
   }
 
@@ -7636,16 +7744,18 @@ export class AppView {
     if (roll === null) {
       return;
     }
+    const ghosts = this.theNotesAskedFor();
     this.el.rollBody.replaceChildren(
       drawTheRoll({
         roll,
         barLabel: this.barNamer(),
         grid: this.theRollsGrid(),
-        ghosts: this.theNotesAskedFor(),
+        ghosts,
         slips: this.el.rollSlips.checked,
         keepsTime: this.theRunKeptTime(),
       }),
     );
+    this.rollPitches = thePitchesOfTheRun(roll, ghosts);
     this.applyTheZoom();
     this.el.rollMap.replaceChildren(
       drawTheMap(roll),

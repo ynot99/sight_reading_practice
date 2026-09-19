@@ -11,6 +11,8 @@ import {
   LEAST_ROW,
   MOST_ROW,
   theMapOfTheRun,
+  theMapOfThePitches,
+  thePitchesOfTheRun,
   theSquaresOfTheBar,
   theWindowOnTheRun,
   scrollForTheWindowAt,
@@ -916,6 +918,113 @@ describe('the window on the run', () => {
   it('will not scroll past either end for a finger near it', () => {
     expect(scrollForTheWindowAt(0, 400, 2_000)).toBe(0);
     expect(scrollForTheWindowAt(1, 400, 2_000)).toBe(1_600);
+  });
+});
+
+describe('the notes in view, by pitch', () => {
+  /**
+   * Two notes two octaves apart at the start, and one near the end.
+   *
+   * The run is ten and a half seconds long - the last release and a second of
+   * air - and the band runs from two below C4 to two above C6, which is 29 rows.
+   */
+  function spread(): RunRoll {
+    return roll({
+      presses: [
+        press({ midi: MIDI.C4, downAtMs: 0, upAtMs: 500 }),
+        press({ midi: MIDI.C4 + 24, downAtMs: 0, upAtMs: 500, verdict: 'wrong' }),
+        press({ midi: MIDI.E4, downAtMs: 9_000, upAtMs: 9_500 }),
+      ],
+    });
+  }
+
+  it('marks only the notes in the time on the screen', () => {
+    // His: "щоб бачити які наразі ноти out of view". Every pitch of the run
+    // would fill the strip and say nothing about the part being looked at.
+    const pitches = thePitchesOfTheRun(spread());
+
+    const atTheStart = theMapOfThePitches(pitches, { fromShare: 0, widthShare: 0.1 });
+    const atTheEnd = theMapOfThePitches(pitches, { fromShare: 0.8, widthShare: 0.2 });
+
+    // Top of the band first, which is the highest note.
+    expect(atTheStart.map((mark) => [mark.kind, mark.fromShare])).toEqual([
+      ['wrong', 2 / 29],
+      ['correct', 26 / 29],
+    ]);
+    expect(atTheEnd.map((mark) => [mark.kind, mark.fromShare])).toEqual([['correct', 22 / 29]]);
+  });
+
+  it('counts a note still sounding where the screen begins', () => {
+    const pitches = thePitchesOfTheRun(
+      roll({ presses: [press({ midi: MIDI.C4, downAtMs: 0, upAtMs: 9_000 })] }),
+    );
+
+    expect(theMapOfThePitches(pitches, { fromShare: 0.5, widthShare: 0.5 })).toHaveLength(1);
+  });
+
+  it('gives each mark one row of the band the drawing draws', () => {
+    // The same band, or a mark would stand beside the wrong row. A note nobody
+    // played widens it, in the drawing and here alike.
+    const run = roll({ beats: barOfFour(0, 0), presses: [press({ midi: 60 })] });
+    const ghosts = [{ midi: 84, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 }];
+    const view = drawTheRoll({ roll: run, barLabel: () => null, ghosts });
+
+    const pitches = thePitchesOfTheRun(run, ghosts);
+    const marks = theMapOfThePitches(pitches, { fromShare: 0, widthShare: 1 });
+
+    expect(String(pitches.rows)).toBe(view.style.getPropertyValue('--roll-rows'));
+    expect(marks.map((mark) => mark.heightShare)).toEqual([1 / 29, 1 / 29]);
+  });
+
+  it('puts the wrong note on a row over the right one, whichever came first', () => {
+    // The one worth scrolling to.
+    const both = (first: RolledPress['verdict'], second: RolledPress['verdict']): string[] =>
+      theMapOfThePitches(
+        thePitchesOfTheRun(
+          roll({
+            presses: [
+              press({ downAtMs: 0, upAtMs: 100, verdict: first }),
+              press({ downAtMs: 200, upAtMs: 300, verdict: second }),
+            ],
+          }),
+        ),
+        { fromShare: 0, widthShare: 1 },
+      ).map((mark) => mark.kind);
+
+    expect(both('wrong', 'correct')).toEqual(['wrong']);
+    expect(both('correct', 'wrong')).toEqual(['wrong']);
+    // And a note played right over one nothing was said about.
+    expect(both('correct', 'duplicate')).toEqual(['correct']);
+  });
+
+  it('colours a mark as the drawing colours its note', () => {
+    const kindOf = (verdict: RolledPress['verdict']): string | undefined =>
+      theMapOfThePitches(thePitchesOfTheRun(roll({ presses: [press({ verdict })] })), {
+        fromShare: 0,
+        widthShare: 1,
+      })[0]?.kind;
+
+    // Late is still the right note: when it came is the band's business.
+    expect(kindOf('late')).toBe('correct');
+    expect(kindOf('duplicate')).toBe('plain');
+    expect(kindOf(null)).toBe('plain');
+  });
+
+  it('marks the notes asked for where the drawing draws them, and none past the run', () => {
+    const run = roll({ beats: barOfFour(0, 0) });
+    const pitches = thePitchesOfTheRun(run, [
+      { midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 },
+      {
+        midi: MIDI.D4,
+        fromTicks: Duration.QUARTER.ticks * 200,
+        untilTicks: Duration.QUARTER.ticks * 201,
+        stepIndex: 200,
+      },
+    ]);
+
+    const marks = theMapOfThePitches(pitches, { fromShare: 0, widthShare: 1 });
+
+    expect(marks.map((mark) => mark.kind)).toEqual(['plain']);
   });
 });
 

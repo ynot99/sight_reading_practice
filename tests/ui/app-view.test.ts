@@ -1747,11 +1747,15 @@ describe('AppView', () => {
      * Every number the map is drawn from is a measurement of the drawing, so
      * without one there is no window to move and the box hides itself.
      */
-    function lendTheDrawingASize(scrolledTo: () => number): () => void {
+    function lendTheDrawingASize(
+      scrolledTo: () => number,
+      more: Record<string, (node: HTMLElement) => number> = {},
+    ): () => void {
       const sizes: Record<string, (node: HTMLElement) => number> = {
         clientWidth: (node) => (node.classList.contains('roll__keys') ? 44 : 400),
         scrollWidth: () => 2_000,
         scrollLeft: () => scrolledTo(),
+        ...more,
       };
       const giveBack: (() => void)[] = [];
       for (const [name, width] of Object.entries(sizes)) {
@@ -1834,6 +1838,113 @@ describe('AppView', () => {
         // The width is a width, and a scroll does not change it.
         expect(box.style.width).toBe(wide);
       } finally {
+        giveBack();
+      }
+    });
+
+    it('marks down the side the notes in the time on the screen', async () => {
+      // His: "існують для мене часто ноти які вилазять out of view". The run is
+      // one note, pressed and let go at its start, and a second of air - so
+      // scrolled to the far end the screen shows none of it.
+      let scrolledTo = 0;
+      const giveBack = lendTheDrawingASize(() => scrolledTo);
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        element<HTMLButtonElement>('focus-play').click();
+        const note = rig.runtime.controller.session?.currentStep?.expectedMidi[0] ?? 60;
+        rig.midi.noteOn(note, 0);
+        rig.midi.noteOff(note, 0);
+        element<HTMLButtonElement>('focus-stop').click();
+        element<HTMLButtonElement>('run-roll-open').click();
+        const strip = element('roll-pitch-map');
+
+        expect(strip.querySelectorAll('.roll-pitch-map__mark')).toHaveLength(1);
+        // Nothing is laid out up and down here, so there is no box to claim the strip.
+        expect(element('roll-pitch-map-window').hidden).toBe(true);
+
+        // A scroll that changes nothing on the strip redraws nothing on it:
+        // this is asked on every frame of a playback.
+        const marks = strip.firstElementChild;
+        theDrawing().dispatchEvent(new Event('scroll'));
+        await aFrame();
+        expect(strip.firstElementChild).toBe(marks);
+
+        scrolledTo = 1_600;
+        theDrawing().dispatchEvent(new Event('scroll'));
+        await aFrame();
+
+        expect(strip.querySelectorAll('.roll-pitch-map__mark')).toHaveLength(0);
+        // The box stays, over whatever is marked.
+        expect(strip.lastElementChild).toBe(element('roll-pitch-map-window'));
+      } finally {
+        giveBack();
+      }
+    });
+
+    it('boxes the rows on the screen, leaving out the ruler and the pedal', async () => {
+      // Both stick to their edges, so the rows are only ever seen between them.
+      // Three hundred tall with twenty of ruler and sixteen of pedal is 264 of
+      // rows on the screen, out of 964: 27.4 per cent of the strip.
+      let scrolledDown = 0;
+      const giveBack = lendTheDrawingASize(() => 0, {
+        clientHeight: () => 300,
+        scrollHeight: () => 1_000,
+        scrollTop: () => scrolledDown,
+        offsetHeight: (node) =>
+          node.classList.contains('roll__ruler') ? 20 : node.classList.contains('roll__pedal') ? 16 : 0,
+      });
+      try {
+        await openThePictureOfARun();
+        const box = element('roll-pitch-map-window');
+
+        expect(box.hidden).toBe(false);
+        expect(box.style.height).toBe('27.386%');
+        expect(box.style.transform).toBe('translateY(0.000%)');
+
+        scrolledDown = 350;
+        theDrawing().dispatchEvent(new Event('scroll'));
+        await aFrame();
+
+        // 350 down is 350/264 of its own heights along.
+        expect(box.style.transform).toBe('translateY(132.576%)');
+        expect(box.style.top).toBe('');
+      } finally {
+        giveBack();
+      }
+    });
+
+    it('scrolls up and down to where a finger is on the strip', async () => {
+      // Centred on the finger, as along the run: half way down a strip of 200
+      // is half of 964 rows' worth, less half of the 264 on the screen.
+      let scrolledDown = 0;
+      const giveBack = lendTheDrawingASize(() => 0, {
+        clientHeight: () => 300,
+        scrollHeight: () => 1_000,
+        offsetHeight: (node) =>
+          node.classList.contains('roll__ruler') ? 20 : node.classList.contains('roll__pedal') ? 16 : 0,
+      });
+      Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+        configurable: true,
+        get: () => scrolledDown,
+        set: (to: number) => {
+          scrolledDown = to;
+        },
+      });
+      try {
+        await openThePictureOfARun();
+        const strip = element('roll-pitch-map');
+        strip.getBoundingClientRect = () => ({ top: 100, height: 200 }) as DOMRect;
+        strip.setPointerCapture = () => undefined;
+
+        strip.dispatchEvent(
+          new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, clientX: 5, clientY: 200 }),
+        );
+
+        expect(scrolledDown).toBe(350);
+        expect(element('roll-pitch-map-window').style.transform).toBe('translateY(132.576%)');
+      } finally {
+        delete (HTMLElement.prototype as unknown as Record<string, unknown>)['scrollTop'];
         giveBack();
       }
     });

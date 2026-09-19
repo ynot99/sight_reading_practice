@@ -452,6 +452,19 @@
           -->
           <div class="roll-stage">
             <div id="roll-body" class="roll-body"></div>
+            <!--
+              The notes in view by pitch, and the rows of them on the screen.
+
+              The drawing's other scrollbar, as the map under it is the first:
+              it has none of its own. Marked with the notes of the time on the
+              screen only, because the question up and down is which of the
+              notes here are above or below it. His: "існують для мене часто
+              ноти які вилазять out of view".
+            -->
+            <div id="roll-pitch-map" class="roll-pitch-map"
+              title="The notes in view, by pitch. Drag to move up and down.">
+              <div id="roll-pitch-map-window" class="roll-pitch-map__window" hidden></div>
+            </div>
             <div id="roll-beats" class="roll-beats" hidden aria-hidden="true"></div>
           </div>
           <!--

@@ -152,6 +152,49 @@ function bandOf(
   return { low, high };
 }
 
+/** A note the music asked for, placed in the run: milliseconds from its start. */
+interface PlacedGhost {
+  readonly ghost: RollGhost;
+  readonly from: number;
+  readonly until: number;
+}
+
+/**
+ * Where each note the music asked for falls in the run.
+ *
+ * One place for it, because two things draw these notes - the drawing and the
+ * map of pitches down its side - and a note one of them placed and the other
+ * did not is a mark with nothing beside it.
+ */
+function placedGhosts(roll: RunRoll, ghosts: readonly RollGhost[]): PlacedGhost[] {
+  const lastMs = rollEndedAtMs(roll) - rollBeganAtMs(roll);
+  const placed: PlacedGhost[] = [];
+  for (const ghost of ghosts) {
+    // Beginning where the beat was taken and ending where the next one fell:
+    // a note is over when its time is up, not when the reader arrives. Which
+    // is also what cuts it where the reader came in early - there the only
+    // beat at the far end is the one they took, so the note ends there.
+    const from = momentOfTicks(roll, ghost.fromTicks, 'starts');
+    const until = momentOfTicks(roll, ghost.untilTicks, 'ends');
+    if (from === null || until === null) {
+      continue;
+    }
+    // And nothing past where the run stopped. A run cut short asked for
+    // nothing beyond its last click, and the notes of the rest of the piece
+    // have no beat here to be placed against - so they were placed by running
+    // that last pair of clicks out over the whole score, which drew a canvas
+    // of notes nobody played and left the drawing scrolling far past the run
+    // it is a picture of. A note the reader stopped in the middle of is theirs
+    // up to where they stopped and no further. His: "MIDI viewer наразі малює
+    // повний канвас нот, навіть якщо я грав тільки слайс".
+    if (from >= lastMs) {
+      continue;
+    }
+    placed.push({ ghost, from, until: Math.min(until, lastMs) });
+  }
+  return placed;
+}
+
 /**
  * How a press is coloured.
  *
@@ -635,6 +678,118 @@ export function scrollForTheWindowAt(
   return Math.min(most, Math.max(0, atShare * wholeWidePx - viewWidePx / 2));
 }
 
+/** What a mark down the side says about its row: the colour its notes are drawn in. */
+export type PitchMarkKind = 'wrong' | 'correct' | 'plain';
+
+/** One row with a note on it, as shares of the band from its top. */
+export interface PitchMark {
+  readonly kind: PitchMarkKind;
+  readonly fromShare: number;
+  readonly heightShare: number;
+}
+
+/** A note in the drawing, reduced to its row and when it is there. */
+export interface PitchedNote {
+  readonly row: number;
+  readonly fromMs: number;
+  readonly untilMs: number;
+  readonly kind: PitchMarkKind;
+}
+
+/**
+ * Every note in the drawing by row and by time, worked out once a drawing.
+ *
+ * Once, because the map down the side is asked again on every frame a scroll or
+ * a playback moves the view, and a run of a long piece is thousands of notes.
+ * Where each of them lies in time is the expensive part, and it does not move.
+ */
+export interface RollPitches {
+  /** How many rows the drawing has: the band {@link drawTheRoll} draws. */
+  readonly rows: number;
+  /** How long the run is, which is what a share of the view is a share of. */
+  readonly lengthMs: number;
+  readonly notes: readonly PitchedNote[];
+}
+
+/**
+ * The notes of the drawing, placed as the drawing places them.
+ *
+ * The same band, the same notes asked for and the same colours, so that a
+ * mark on the map and the note it stands for cannot disagree about either
+ * where it is or what it was.
+ */
+export function thePitchesOfTheRun(
+  roll: RunRoll,
+  ghosts: readonly RollGhost[] = [],
+): RollPitches {
+  const origin = rollBeganAtMs(roll);
+  const endMs = rollEndedAtMs(roll);
+  const band = bandOf(roll.presses, ghosts);
+  const notes: PitchedNote[] = roll.presses.map((press) => {
+    const shade = shadeOf(press);
+    return {
+      row: band.high - press.midi,
+      fromMs: press.downAtMs - origin,
+      untilMs: (press.upAtMs ?? endMs) - origin,
+      kind: shade === 'correct' || shade === 'wrong' ? shade : 'plain',
+    };
+  });
+  for (const { ghost, from, until } of placedGhosts(roll, ghosts)) {
+    notes.push({ row: band.high - ghost.midi, fromMs: from, untilMs: until, kind: 'plain' });
+  }
+  return { rows: band.high - band.low + 1, lengthMs: endMs - origin, notes };
+}
+
+/** Which colour a row takes where its notes differ: the fault, then the note played right. */
+const HOW_TELLING: Readonly<Record<PitchMarkKind, number>> = { plain: 0, correct: 1, wrong: 2 };
+
+/**
+ * The rows with a note in the stretch of the run on the screen.
+ *
+ * Down the side of the drawing, and not a copy of the map under it. That one is
+ * the whole run, because what a scroll along the run looks for is a place the
+ * reader stopped. Up and down the question is another one: which of the notes
+ * *here* are above or below the screen. So only the time the screen shows is
+ * marked - every pitch of the run would fill the strip and say nothing about
+ * the part being looked at. His: "щоб бачити які наразі ноти out of view", and
+ * "існують для мене часто ноти які вилазять out of view".
+ *
+ * One mark a row, in the colour its notes are drawn in. Where they differ the
+ * wrong note wins, because it is the one worth scrolling to.
+ */
+export function theMapOfThePitches(
+  pitches: RollPitches,
+  inView: { readonly fromShare: number; readonly widthShare: number },
+): readonly PitchMark[] {
+  const fromMs = inView.fromShare * pitches.lengthMs;
+  const untilMs = (inView.fromShare + inView.widthShare) * pitches.lengthMs;
+  const rows = new Map<number, PitchMarkKind>();
+  for (const note of pitches.notes) {
+    if (note.untilMs < fromMs || note.fromMs > untilMs) {
+      continue;
+    }
+    const had = rows.get(note.row);
+    if (had === undefined || HOW_TELLING[note.kind] > HOW_TELLING[had]) {
+      rows.set(note.row, note.kind);
+    }
+  }
+  return [...rows]
+    .sort(([above], [below]) => above - below)
+    .map(([row, kind]) => ({ kind, fromShare: row / pitches.rows, heightShare: 1 / pitches.rows }));
+}
+
+/** The marks of {@link theMapOfThePitches}, drawn. */
+export function drawThePitchMap(marks: readonly PitchMark[]): HTMLElement {
+  const map = element('div', 'roll-pitch-map__marks');
+  for (const mark of marks) {
+    const drawn = element('div', `roll-pitch-map__mark roll-pitch-map__mark--${mark.kind}`);
+    drawn.style.top = `${(mark.fromShare * 100).toFixed(3)}%`;
+    drawn.style.height = `${(mark.heightShare * 100).toFixed(3)}%`;
+    map.append(drawn);
+  }
+  return map;
+}
+
 /** The marks of {@link theMapOfTheRun}, drawn. */
 export function drawTheMap(roll: RunRoll): HTMLElement {
   const map = element('div', 'roll-map__marks');
@@ -770,30 +925,8 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // down here and the outlines at the end, because they want opposite sides of
   // the presses: a band is a stretch of ground and belongs under them, and an
   // outline is a thing to read against them and was being covered by them.
-  const outlines: { readonly ghost: RollGhost; readonly from: number; readonly until: number }[] =
-    [];
-  for (const ghost of ghosts) {
-    // Beginning where the beat was taken and ending where the next one fell:
-    // a note is over when its time is up, not when the reader arrives. Which
-    // is also what cuts it where the reader came in early - there the only
-    // beat at the far end is the one they took, so the note ends there.
-    const from = momentOfTicks(roll, ghost.fromTicks, 'starts');
-    const until = momentOfTicks(roll, ghost.untilTicks, 'ends');
-    if (from === null || until === null) {
-      continue;
-    }
-    // And nothing past where the run stopped. A run cut short asked for
-    // nothing beyond its last click, and the notes of the rest of the piece
-    // have no beat here to be placed against - so they were placed by running
-    // that last pair of clicks out over the whole score, which drew a canvas
-    // of notes nobody played and left the drawing scrolling far past the run
-    // it is a picture of. A note the reader stopped in the middle of is theirs
-    // up to where they stopped and no further. His: "MIDI viewer наразі малює
-    // повний канвас нот, навіть якщо я грав тільки слайс".
-    if (from >= endMs - origin) {
-      continue;
-    }
-    outlines.push({ ghost, from, until: Math.min(until, endMs - origin) });
+  const outlines = placedGhosts(roll, ghosts);
+  for (const { ghost, from } of outlines) {
     // Only where the right note was played at the wrong time. No press and the
     // outline says it alone; no note asked for and there is nothing to be off
     // from.

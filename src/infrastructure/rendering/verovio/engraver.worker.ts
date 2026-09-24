@@ -27,7 +27,11 @@ scope.onmessage = (event) => {
   const ask = event.data;
   void started.then(
     (core) => {
-      scope.postMessage(replyTo(core, ask));
+      scope.postMessage(
+        replyTo(core, ask, (note) => {
+          scope.postMessage(note);
+        }),
+      );
     },
     (error: unknown) => {
       scope.postMessage({

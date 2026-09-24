@@ -2,7 +2,7 @@ import {
   replyTo,
   type EngraverAsk,
   type EngraverLine,
-  type EngraverReply,
+  type EngraverMessage,
 } from '../../src/infrastructure/rendering/verovio/engraverLine.js';
 import type { VerovioCore } from '../../src/infrastructure/rendering/verovio/VerovioCore.js';
 
@@ -11,14 +11,18 @@ import type { VerovioCore } from '../../src/infrastructure/rendering/verovio/Ver
  * later as a worker would, so nothing can rely on an answer arriving at once.
  */
 export function lineToThe(engraver: VerovioCore): EngraverLine & { readonly sent: EngraverAsk[] } {
-  const replies: ((reply: EngraverReply) => void)[] = [];
+  const replies: ((message: EngraverMessage) => void)[] = [];
   const sent: EngraverAsk[] = [];
   return {
     sent,
     send(ask) {
       sent.push(ask);
       setTimeout(() => {
-        const reply = replyTo(engraver, ask);
+        const reply = replyTo(engraver, ask, (note) => {
+          for (const listener of replies) {
+            listener(note);
+          }
+        });
         for (const listener of replies) {
           listener(reply);
         }

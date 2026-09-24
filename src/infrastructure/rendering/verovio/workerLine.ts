@@ -1,4 +1,4 @@
-import type { EngraverAsk, EngraverLine, EngraverReply } from './engraverLine.js';
+import type { EngraverAsk, EngraverLine, EngraverMessage } from './engraverLine.js';
 
 /**
  * A line to the engraver running in a worker of its own.
@@ -13,8 +13,8 @@ export function engraverInAWorker(): EngraverLine {
     send(ask: EngraverAsk): void {
       worker.postMessage(ask);
     },
-    onReply(listener: (reply: EngraverReply) => void): void {
-      worker.addEventListener('message', (event: MessageEvent<EngraverReply>) => {
+    onReply(listener: (message: EngraverMessage) => void): void {
+      worker.addEventListener('message', (event: MessageEvent<EngraverMessage>) => {
         listener(event.data);
       });
     },

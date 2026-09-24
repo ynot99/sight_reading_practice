@@ -108,9 +108,16 @@ export class VerovioCore {
     }
   }
 
-  /** Reads a score and lays it out; the number of pages it came to. */
-  load(musicXml: string, shape: PageShape): number {
+  /**
+   * Reads a score and lays it out; the number of pages it came to.
+   *
+   * Says how large the heap is once room has been made for the score, and
+   * before it is read: on the iPad a page that closes while a score is opened
+   * has closed in one of the two, and the trail says which.
+   */
+  load(musicXml: string, shape: PageShape, roomMade?: (heapBytes: number) => void): number {
     this.makeRoomFor(musicXml.length);
+    roomMade?.(this.heapBytes);
     this.toolkit.setOptions({ ...EVERY_LAYOUT, ...shape });
     if (!this.toolkit.loadData(musicXml)) {
       throw new Error(`Verovio could not read the score. ${this.toolkit.getLog()}`.trim());

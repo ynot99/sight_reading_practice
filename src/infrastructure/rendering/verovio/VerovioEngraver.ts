@@ -1,8 +1,8 @@
 import type {
   EngraverAnswers,
   EngraverLine,
+  EngraverMessage,
   EngraverQuestion,
-  EngraverReply,
 } from './engraverLine.js';
 import type { PageShape } from './VerovioCore.js';
 
@@ -25,11 +25,12 @@ export class VerovioEngraver {
   private nextId = 1;
   /** Why the line went dead, once it has; every ask after it fails with this. */
   private broken: string | null = null;
+  private roomListeners: ((heapBytes: number) => void)[] = [];
 
   constructor(line: EngraverLine) {
     this.line = line;
-    line.onReply((reply) => {
-      this.settle(reply);
+    line.onReply((message) => {
+      this.settle(message);
     });
     line.onBroken((reason) => {
       this.breakDown(reason);
@@ -54,6 +55,17 @@ export class VerovioEngraver {
   /** The page an element is drawn on, by the name it was printed with. */
   pageOf(elementId: string): Promise<number | null> {
     return this.ask<'pageOf'>({ type: 'pageOf', elementId });
+  }
+
+  /**
+   * Hears how large the engraver's heap is once it has made room for a score
+   * it is about to read - said before the reading, which is the long part.
+   */
+  onRoomMade(listener: (heapBytes: number) => void): () => void {
+    this.roomListeners.push(listener);
+    return () => {
+      this.roomListeners = this.roomListeners.filter((each) => each !== listener);
+    };
   }
 
   /** Lets the engraver go; everything waiting, and anything asked after, fails. */
@@ -83,7 +95,13 @@ export class VerovioEngraver {
     });
   }
 
-  private settle(reply: EngraverReply): void {
+  private settle(reply: EngraverMessage): void {
+    if ('roomMadeBytes' in reply) {
+      for (const listener of [...this.roomListeners]) {
+        listener(reply.roomMadeBytes);
+      }
+      return;
+    }
     const waiting = this.waiting.get(reply.id);
     if (waiting === undefined) {
       return;

@@ -37,9 +37,20 @@ export type EngraverReply =
  * The page holds one end; the worker - or, in a test, the engraver itself -
  * answers at the other.
  */
+/**
+ * Something the engraver says about an ask on the way to answering it: that
+ * room has been made for a score, and how large its heap now is.
+ */
+export interface EngraverNote {
+  readonly id: number;
+  readonly roomMadeBytes: number;
+}
+
+export type EngraverMessage = EngraverReply | EngraverNote;
+
 export interface EngraverLine {
   send(ask: EngraverAsk): void;
-  onReply(listener: (reply: EngraverReply) => void): void;
+  onReply(listener: (message: EngraverMessage) => void): void;
   /** The far end is gone - the worker failed to start, or died - and nothing more will come. */
   onBroken(listener: (reason: string) => void): void;
   /** Lets the far end go: the page that asked is being thrown away. */
@@ -50,10 +61,11 @@ export interface EngraverLine {
 export function answerFor(
   core: VerovioCore,
   question: EngraverQuestion,
+  roomMade?: (heapBytes: number) => void,
 ): EngraverAnswers[keyof EngraverAnswers] {
   switch (question.type) {
     case 'load':
-      return core.load(question.musicXml, question.shape);
+      return core.load(question.musicXml, question.shape, roomMade);
     case 'page':
       return core.page(question.page);
     case 'relayout':
@@ -66,9 +78,16 @@ export function answerFor(
 }
 
 /** The answer to an ask, or its failure put into words, on the engraver's side. */
-export function replyTo(core: VerovioCore, ask: EngraverAsk): EngraverReply {
+export function replyTo(
+  core: VerovioCore,
+  ask: EngraverAsk,
+  tell?: (note: EngraverNote) => void,
+): EngraverReply {
   try {
-    return { id: ask.id, ok: true, value: answerFor(core, ask.question) };
+    const roomMade = tell === undefined ? undefined : (heapBytes: number): void => {
+      tell({ id: ask.id, roomMadeBytes: heapBytes });
+    };
+    return { id: ask.id, ok: true, value: answerFor(core, ask.question, roomMade) };
   } catch (error) {
     return { id: ask.id, ok: false, error: error instanceof Error ? error.message : String(error) };
   }

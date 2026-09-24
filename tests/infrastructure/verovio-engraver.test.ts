@@ -113,6 +113,20 @@ describe('room for a large score, made before it is read', () => {
     making.mockRestore();
   });
 
+  it('says the room is made before the score is read, not after', () => {
+    // Told apart by what the engraver holds when it says so: still the last
+    // score, which has no fortieth bar.
+    core.load(serializer.serialize(twoBarExercise()), WIDE);
+    let holding: number | null | 'unasked' = 'unasked';
+
+    core.load(serializer.serialize(longExercise({ bars: 40 })), WIDE, () => {
+      holding = core.pageOf('m39');
+    });
+
+    expect(holding).toBeNull();
+    expect(core.pageOf('m39')).not.toBeNull();
+  });
+
   it('grows the heap to hold a larger one', () => {
     const characters = Math.ceil((core.heapBytes + 32 * 1024 * 1024) / HEAP_BYTES_PER_CHARACTER);
 
@@ -177,6 +191,24 @@ describe('the engraver, asked across a line', () => {
     expect(narrow).toBeGreaterThan(wide);
     // The pages of the new layout, which is where the last bar now ends.
     await expect(engraver.pageOf('m39')).resolves.toBe(narrow);
+  });
+
+  it('says how large its heap is once room is made for a score, before it has read it', async () => {
+    // On the iPad a page that closes while a score opens has closed in one of
+    // the two, and this is what the kept trail tells them apart by.
+    const engraver = new VerovioEngraver(lineToThe(core));
+    const heard: string[] = [];
+    const printed = serializer.serialize(longExercise({ bars: 40 }));
+    engraver.onRoomMade((heapBytes) => {
+      heard.push('room');
+      expect(heapBytes).toBeGreaterThanOrEqual(heapFor(printed.length));
+    });
+
+    await engraver.load(printed, WIDE).then(() => heard.push('laid out'));
+    await engraver.page(1);
+
+    // Once for the reading, and for nothing else asked.
+    expect(heard).toEqual(['room', 'laid out']);
   });
 
   it('hands a failure back to the one who asked, and goes on answering', async () => {

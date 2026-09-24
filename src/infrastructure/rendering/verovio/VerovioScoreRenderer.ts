@@ -38,6 +38,7 @@ import {
 import { drawShape } from '../overlayElements.js';
 import { PAGE_LABEL_INSET, pageLabelText } from '../pageLabel.js';
 import { PREVIEW_CLIP_ID, PREVIEW_SYSTEM_CLIP_ID, previewPlacement } from '../pagePreview.js';
+import { timeTheStart } from '../../../shared/timeTheStart.js';
 import { buildOverlayShapes, type PlayedMark } from '../playedNoteShapes.js';
 import { fitStaffGeometry, type DrawnNoteSample, type StaffGeometry } from '../staffGeometry.js';
 import { swipeDirection, visibleHeightOf } from '../pageTurns.js';
@@ -267,6 +268,9 @@ export class VerovioScoreRenderer
     this.container = container;
     this.engraver = engraver;
     this.currentZoom = clampZoom(zoom);
+    engraver.onRoomMade((heapBytes) => {
+      timeTheStart('engraver: room made in Verovio', () => `${String(Math.round(heapBytes / 1048576))} MB`);
+    });
     this.watchTheFingers();
     this.scroller()?.addEventListener(
       'scroll',
@@ -309,7 +313,11 @@ export class VerovioScoreRenderer
     this.stepsOfBar = stepsByBar(printed);
     this.lastBar = Math.max(0, ...printed.map((step) => measureIndexOfBar(step.barId) ?? 0));
     const shape = this.shape();
+    // Each kept as it is reached: on the iPad a score too large for the page
+    // closes it, and the last line kept is the last stage it lived through.
+    timeTheStart('engraver: sent to Verovio', () => `${String(musicXml.length)} characters`);
     const count = await this.engraver.load(musicXml, shape);
+    timeTheStart('engraver: laid out', () => `${String(count)} pages`);
     if (layout !== this.layout) {
       return;
     }
@@ -318,6 +326,7 @@ export class VerovioScoreRenderer
     this.pageAt = 0;
     this.standThePages(count, shape);
     await this.drawTheNearPages();
+    timeTheStart('engraver: pages near the reader drawn');
     this.watchTheContainer();
   }
 

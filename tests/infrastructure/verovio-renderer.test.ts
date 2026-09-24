@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PrintedStep } from '../../src/domain/notation/printedIds.js';
 import { readThePage, type PageLayout } from '../../src/infrastructure/rendering/verovio/pageLayout.js';
 import type { VerovioScoreRenderer } from '../../src/infrastructure/rendering/verovio/VerovioScoreRenderer.js';
+import { keepTheTrail, timeTheStart, traceTheStart } from '../../src/shared/timeTheStart.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
@@ -37,6 +38,35 @@ async function aPagedScore(): Promise<Stage> {
   await stage.renderer.load(LONG.xml, LONG.steps);
   return stage;
 }
+
+describe('the trail an opening leaves', () => {
+  it('keeps each stage of opening a score as it is reached', async () => {
+    // His Alkan closes the page on the iPad while it opens, and the console
+    // goes with the page; what is kept is read back on the next visit, and
+    // its last line is the last stage the page lived through.
+    const kept: string[][] = [];
+    traceTheStart(true);
+    keepTheTrail((lines) => kept.push([...lines]));
+    try {
+      timeTheStart('score asked for');
+      const { renderer } = aStage();
+      renderer.setPaged(true);
+
+      await renderer.load(LONG.xml, LONG.steps);
+
+      const stages = (kept.at(-1) ?? []).map((line) => /ms {3}(engraver: [^(]+?)(?: \(|$| {3})/.exec(line)?.[1] ?? '');
+      expect(stages.filter((stage) => stage !== '')).toEqual([
+        'engraver: sent to Verovio',
+        'engraver: room made in Verovio',
+        'engraver: laid out',
+        'engraver: pages near the reader drawn',
+      ]);
+    } finally {
+      keepTheTrail(null);
+      traceTheStart(false);
+    }
+  });
+});
 
 describe('a score read in pages', () => {
   it('lays it out on pages the size of the window and shows the one being read', async () => {

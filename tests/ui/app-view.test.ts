@@ -42,6 +42,7 @@ import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
+import { PrintedOnce } from '../../src/domain/notation/printedOnce.js';
 import {
   AccuracyScoringStrategy,
   ContinuityScoringStrategy,
@@ -297,7 +298,8 @@ function createRig(
   const takes = new TakeLibrary(new InMemorySettingsStore());
   const files = new RecordingFileSink();
   const importer = new DomScoreImporter();
-  const serializer = new MusicXmlSerializer();
+  // As `createApp` has it.
+  const serializer = new PrintedOnce(new MusicXmlSerializer());
   const scores = new ScoreLibrary({
     store: scoreStore,
     serializer,
@@ -1159,6 +1161,30 @@ describe('AppView', () => {
     // Nothing was lost from this one, so nothing was said about it either.
     expect(logged).not.toHaveBeenCalled();
     logged.mockRestore();
+  });
+
+  it('prints a file it opens once, for the library and the engraver both', async () => {
+    // His Alkan closed the iPad's tab while it opened: printing it twice was
+    // eleven million characters more at the moment the page was fullest.
+    const { view, runtime } = createRig();
+    await view.initialize();
+    const xml = new MusicXmlSerializer().serialize(twoBarExercise({ title: 'Borrowed' }));
+    const printing = vi.spyOn(MusicXmlSerializer.prototype, 'serialize');
+    const input = element<HTMLInputElement>('score-file');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [{ arrayBuffer: () => Promise.resolve(new TextEncoder().encode(xml).buffer) }],
+    });
+
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(runtime.controller.openedExercise?.title).toBe('Borrowed');
+    const plain = printing.mock.calls.filter(
+      ([exercise, how]) => exercise.title === 'Borrowed' && how?.evenBars !== true,
+    );
+    expect(plain).toHaveLength(1);
+    printing.mockRestore();
   });
 
   it('adds an armful of files without opening any of them', async () => {

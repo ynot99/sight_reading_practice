@@ -95,6 +95,7 @@ import { DomScoreImporter } from '../infrastructure/notation/DomScoreImporter.js
 import { BUILT_IN_RHYTHM_PROFILES } from '../domain/generation/rhythmProfiles.js';
 import { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.js';
 import { MusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
+import { PrintedOnce } from '../domain/notation/printedOnce.js';
 import { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
 import {
   AccuracyScoringStrategy,
@@ -346,7 +347,9 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     new URLSearchParams(options.location.search).get('engraver') === 'verovio'
       ? new VerovioScoreRenderer(options.scoreContainer, new VerovioEngraver(engraverInAWorker()))
       : new OsmdScoreRenderer(options.scoreContainer);
-  const serializer = new MusicXmlSerializer();
+  // One printer for the library and the engraver, which print a file just
+  // opened the same way one after the other: see `PrintedOnce`.
+  const serializer = new PrintedOnce(new MusicXmlSerializer());
 
   const importer = new DomScoreImporter();
   const presets = new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS);

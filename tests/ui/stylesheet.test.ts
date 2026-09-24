@@ -1212,6 +1212,42 @@ describe('who gets the pinch', () => {
   });
 });
 
+describe('the rows of the drawing and the pitch map beside them', () => {
+  const body = (selector: string): string =>
+    rules().find((rule) => rule.selector === selector)?.body ?? '';
+  const declared = (of: string, name: string): string | undefined =>
+    new RegExp(`(?:^|[\\s;])${name}\\s*:\\s*([^;]+);`).exec(of)?.[1]?.replace(/\s+/g, ' ').trim();
+
+  it('never draws a row shorter than the room between the ruler and the pedal', () => {
+    // His: "не робити можливим щоб вікно ставало менше за вертикальний
+    // minimap". A pinch asks; the room shared among the rows is the floor.
+    const row = declared(body('.roll'), '--roll-row') ?? '';
+
+    expect(row).toMatch(/^max\(\s*var\(--roll-row-asked\)/);
+    expect(row).toContain('100cqh - var(--roll-ruler) - var(--roll-pedal)');
+    expect(row).toContain('/ var(--roll-rows');
+    // Measured against the box the drawing fills, which only a container can
+    // lend a length to.
+    expect(declared(body('.roll-body'), 'container-type')).toBe('size');
+  });
+
+  it('stands the pitch map between the ruler and the pedal, where the rows are', () => {
+    // His: "точне співпадіння actual позицій нот та їх висоти і позиції на
+    // minimap". The map ran from the top of the ruler to the foot of the
+    // pedal, so every mark sat above its row by a ruler at the top and below
+    // it by a pedal lane at the bottom.
+    const map = body('.roll-pitch-map');
+
+    expect(declared(map, 'margin-top')).toBe('var(--roll-ruler)');
+    expect(declared(map, 'margin-bottom')).toBe('var(--roll-pedal)');
+    // Named where both can read them: set on the drawing, the map beside it
+    // would find nothing there.
+    expect(declared(body('.roll-stage'), '--roll-ruler')).toBeDefined();
+    expect(declared(body('.roll-stage'), '--roll-pedal')).toBeDefined();
+    expect(declared(body('.roll'), '--roll-ruler')).toBeUndefined();
+  });
+});
+
 describe('the mark a frame wears', () => {
   // Every frame the one button walks through; the view writes these names on
   // the button and on each mark it clones from it.

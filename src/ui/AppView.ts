@@ -8619,7 +8619,22 @@ export class AppView {
     this.pinchedFrom =
       span === null
         ? null
-        : { ...span, zoom: Number(this.el.rollZoom.value), row: this.rollRowPx };
+        : { ...span, zoom: Number(this.el.rollZoom.value), row: this.theRowAsDrawn() };
+  }
+
+  /**
+   * How tall a row stands on the screen, which is not always what was asked.
+   *
+   * The stylesheet never lets the rows fall short of the room they have, so
+   * after a pinch down past that the row asked for is smaller than the one
+   * drawn. Scaled from the one asked for, the next pinch up would move nothing
+   * until it had made up the difference; the fingers are stretching what they
+   * can see.
+   */
+  private theRowAsDrawn(): number {
+    const key = this.el.rollBody.querySelector<HTMLElement>('.roll__key');
+    const drawnPx = key?.getBoundingClientRect().height ?? 0;
+    return drawnPx > 0 ? drawnPx : this.rollRowPx;
   }
 
   /**
@@ -8672,7 +8687,7 @@ export class AppView {
     const roll = this.el.rollBody.firstElementChild;
     if (roll instanceof HTMLElement) {
       roll.style.setProperty('--roll-second', `${this.el.rollZoom.value}px`);
-      roll.style.setProperty('--roll-row', `${this.rollRowPx}px`);
+      roll.style.setProperty('--roll-row-asked', `${this.rollRowPx}px`);
     }
     // The window is a share of a drawing that has just changed width.
     this.sayWhereTheViewIs();

@@ -936,6 +936,13 @@ textarea {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  /*
+   * How tall the ruler and the pedal lane are, named here and not on the
+   * drawing: the pitch map beside it stands between the same two, and a
+   * sibling cannot read what is set on the drawing.
+   */
+  --roll-ruler: 20px;
+  --roll-pedal: 16px;
 }
 
 /*
@@ -1121,6 +1128,13 @@ textarea {
 .roll-pitch-map {
   position: relative;
   flex: 0 0 18px;
+  /*
+   * Between the ruler and the pedal, where the rows are, so a mark stands
+   * level with the row it marks. Its border meets the drawing's: each is one
+   * pixel, one outside the ruler and one inside the margin.
+   */
+  margin-top: var(--roll-ruler);
+  margin-bottom: var(--roll-pedal);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1192,6 +1206,12 @@ textarea {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+  /*
+   * Its height is the one the rows are measured against - see `--roll-row`.
+   * Sized by the sheet and never by what is drawn in it, which is what a size
+   * container needs to be.
+   */
+  container-type: size;
 }
 
 .roll-body > .roll {
@@ -1233,13 +1253,23 @@ textarea {
  * which is what makes zooming free: `--roll-second` changes and the browser
  * moves every note, line and label at once. Nothing is rebuilt, and no
  * JavaScript holds the layout together.
+ *
+ * A row is what a pinch asked for, and never shorter than the room between
+ * the ruler and the pedal shared among the rows: shorter, the music stopped
+ * above an empty band while the pitch map beside it went on to the bottom, and
+ * no row lined up with its mark. His: "не робити можливим щоб вікно ставало
+ * менше за вертикальний minimap" and "хотів бачити точне співпадіння actual
+ * позицій нот та їх висоти і позиції на minimap". The two pixels are this
+ * drawing's own border, top and bottom.
  */
 .roll {
   --roll-second: 140px;
-  --roll-row: 13px;
+  --roll-row-asked: 13px;
+  --roll-row: max(
+    var(--roll-row-asked),
+    calc((100cqh - var(--roll-ruler) - var(--roll-pedal) - 2px) / var(--roll-rows, 12))
+  );
   --roll-keys: 44px;
-  --roll-ruler: 20px;
-  --roll-pedal: 16px;
   display: grid;
   grid-template-columns: var(--roll-keys) var(--roll-length, 100%);
   grid-template-rows: var(--roll-ruler) calc(var(--roll-row) * var(--roll-rows, 12)) var(--roll-pedal);

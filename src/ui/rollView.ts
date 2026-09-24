@@ -882,8 +882,7 @@ function slipBetween(dueAt: number, playedAt: number, row: number): HTMLElement 
  * *heard*, not a grid computed from a tempo - so a bar the reader was held at
  * is simply a wider bar, and a piece that changes tempo cannot drift away from
  * its own drawing. Everything is positioned in terms of `--roll-second` and
- * `--roll-row`, so zooming changes two custom properties and nothing is
- * rebuilt.
+ * `--roll-row`, so zooming changes custom properties and nothing is rebuilt.
  */
 export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   const { roll } = drawing;

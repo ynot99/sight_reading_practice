@@ -3124,16 +3124,50 @@ describe('AppView', () => {
         );
       };
 
-      expect(drawn?.style.getPropertyValue('--roll-row')).toBe('13px');
+      expect(drawn?.style.getPropertyValue('--roll-row-asked')).toBe('13px');
 
       finger('pointerdown', 1, 0);
       finger('pointerdown', 2, 200);
       // Half as far apart down the page, so half as tall a row.
       finger('pointermove', 2, 100);
 
-      expect(drawn?.style.getPropertyValue('--roll-row')).toBe('7px');
+      // Asked, and the stylesheet decides how much of it the room allows: a
+      // row written straight over its own floor would take the floor away.
+      expect(drawn?.style.getPropertyValue('--roll-row-asked')).toBe('7px');
+      expect(drawn?.style.getPropertyValue('--roll-row')).toBe('');
       // And the width is left alone: the fingers were never apart across.
       expect(element<HTMLInputElement>('roll-zoom').value).toBe('140');
+    });
+
+    it('stretches the rows from the height they stand at, not the one last asked for', async () => {
+      // Pinched down past the room they have, the rows stay filling it and the
+      // row asked for is smaller than the one on the screen. Scaled from that,
+      // a pinch up would move nothing until it had made up the difference.
+      const { view, runtime, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const body = element('roll-body');
+      const drawn = body.querySelector<HTMLElement>('.roll');
+      for (const key of body.querySelectorAll<HTMLElement>('.roll__key')) {
+        key.getBoundingClientRect = () => new DOMRect(0, 0, 44, 18);
+      }
+      const finger = (type: string, pointerId: number, clientY: number): void => {
+        body.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId, clientX: 0, clientY }),
+        );
+      };
+
+      finger('pointerdown', 1, 0);
+      finger('pointerdown', 2, 100);
+      finger('pointermove', 2, 200);
+
+      // Twice the eighteen pixels it stands at, not twice the thirteen asked.
+      expect(drawn?.style.getPropertyValue('--roll-row-asked')).toBe('36px');
     });
 
     it('takes two fingers and no more, and lets go when one lifts', async () => {

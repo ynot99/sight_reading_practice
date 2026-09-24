@@ -70,6 +70,17 @@ const MARKER_ABOVE_STAFF = 1.5;
  */
 const HEAD_HALF_WIDTH = 0.59;
 
+/** A step already played: its notes are gone from the page. */
+const FADED_CLASS = 'note--passed';
+/** What the run will not ask for: the other hand, or outside the passage. */
+const UNPLAYED_CLASS = 'note--unplayed';
+
+/**
+ * How red the marker gets, at most: four misses is already "I cannot read
+ * this chord", and counting higher says nothing new.
+ */
+const TROUBLE_LEVELS = 4;
+
 /**
  * Room above the music on every page, in pixels: the page's own label is
  * written there, and Verovio's margin alone left a tempo mark touching it.
@@ -136,6 +147,10 @@ export class VerovioScoreRenderer
   /** What the reader played, drawn over the notes; see `IPlayedNoteOverlay`. */
   private marks: PlayedMark[] = [];
   private overlayContext: OverlayContext | null = null;
+  /** Steps already passed, whose notes are taken off the page; see `IScoreFade`. */
+  private readonly faded = new Set<number>();
+  /** What the run is about to ask for, or `null` to dim nothing. */
+  private reading: ScoreReading | null = null;
   /** Each drawn page's layer of played notes, and what they are placed by. */
   private readonly overlays = new Map<number, PageOverlay>();
 
@@ -439,7 +454,11 @@ export class VerovioScoreRenderer
       return;
     }
     const read = readThePage(drawing);
-    this.layouts.set(page, { layout: read, scale: this.pagePx.width / read.width });
+    const elements = new Map<string, Element>();
+    for (const element of drawing.querySelectorAll('g.note[id], g.rest[id], g.mRest[id]')) {
+      elements.set(element.id, element);
+    }
+    this.layouts.set(page, { layout: read, scale: this.pagePx.width / read.width, elements });
     for (const name of read.heads.keys()) {
       this.pageOfName.set(name, page);
     }
@@ -449,6 +468,70 @@ export class VerovioScoreRenderer
       }
     }
     this.layTheOverlay(page, drawing, read);
+    this.fadeAndDimThePage(read);
+  }
+
+  /** Takes off and dims what should be, on a page just drawn. */
+  private fadeAndDimThePage(read: PageLayout): void {
+    for (const bar of read.systems.flatMap((system) => system.bars)) {
+      for (const stepIndex of this.stepsOfBar.get(bar.id) ?? []) {
+        this.dimTheStep(stepIndex);
+        if (this.faded.has(stepIndex)) {
+          this.markTheStep(stepIndex, FADED_CLASS, true);
+        }
+      }
+    }
+  }
+
+  /**
+   * The drawn groups of a step's notes and rests, with the staff of each.
+   *
+   * A note of a chord gives the chord's group rather than its own: the stem
+   * is the chord's, and a chord taken off note by note would leave its stem
+   * standing on the page. And a note's ledger lines go with it, though
+   * Verovio draws them with the staff rather than with the note: a note taken
+   * off would otherwise leave its ledger line hanging where it was.
+   */
+  private drawnOfTheStep(stepIndex: number): { readonly element: Element; readonly staffNumber: number }[] {
+    const step = this.printed[stepIndex];
+    const page = step === undefined ? undefined : this.pageOfName.get(step.barId);
+    const read = page === undefined ? undefined : this.layouts.get(page);
+    if (step === undefined || read === undefined) {
+      return [];
+    }
+    const drawn = new Map<Element, number>();
+    for (const here of step.printed) {
+      const element = read.elements.get(here.id);
+      if (element === undefined) {
+        continue;
+      }
+      const parent = element.parentElement;
+      drawn.set(parent?.classList.contains('chord') === true ? parent : element, here.staffNumber);
+      for (const ledger of ledgersUnder(element)) {
+        drawn.set(ledger, here.staffNumber);
+      }
+    }
+    return [...drawn].map(([element, staffNumber]) => ({ element, staffNumber }));
+  }
+
+  private markTheStep(stepIndex: number, className: string, on: boolean): void {
+    for (const { element } of this.drawnOfTheStep(stepIndex)) {
+      element.classList.toggle(className, on);
+    }
+  }
+
+  /**
+   * Dims what the run will not ask for at a step: the hand not being read,
+   * and everything outside the passage.
+   */
+  private dimTheStep(stepIndex: number): void {
+    const reading = this.reading;
+    const outside = reading !== null && (stepIndex < reading.from || stepIndex > reading.to);
+    for (const { element, staffNumber } of this.drawnOfTheStep(stepIndex)) {
+      const otherHand =
+        reading !== null && reading.staves.length > 0 && !reading.staves.includes(staffNumber);
+      element.classList.toggle(UNPLAYED_CLASS, outside || otherHand);
+    }
   }
 
   /**
@@ -884,6 +967,50 @@ export class VerovioScoreRenderer
     }
   }
 
+  // What has been played past, and what the run will not ask for.
+
+  /** Takes a step's notes off the page: the page empties behind the reader. */
+  fadePassed(stepIndex: number): void {
+    this.faded.add(stepIndex);
+    this.markTheStep(stepIndex, FADED_CLASS, true);
+  }
+
+  clearFaded(): void {
+    for (const stepIndex of this.faded) {
+      this.markTheStep(stepIndex, FADED_CLASS, false);
+    }
+    this.faded.clear();
+  }
+
+  /** Dims the notes this run will not ask for, and undims the rest. */
+  dimUnplayed(reading: ScoreReading | null): void {
+    this.reading = reading;
+    for (const page of this.drawn) {
+      const read = this.layouts.get(page)?.layout;
+      for (const bar of read?.systems.flatMap((system) => system.bars) ?? []) {
+        for (const stepIndex of this.stepsOfBar.get(bar.id) ?? []) {
+          this.dimTheStep(stepIndex);
+        }
+      }
+    }
+  }
+
+  /**
+   * Reddens the marker for the step it is standing on, by how often the
+   * reader has missed there.
+   *
+   * Said on the surface and left to the stylesheet, which reddens the
+   * reader's marker by it and never the other hand's.
+   */
+  showTrouble(missteps: number): void {
+    const level = Math.min(Math.max(Math.round(missteps), 0), TROUBLE_LEVELS);
+    if (level <= 0) {
+      delete this.container.dataset['trouble'];
+      return;
+    }
+    this.container.dataset['trouble'] = String(level);
+  }
+
   // Not drawn yet: the steps of the move after this one draw these. Until
   // then each is asked and does nothing, which is what a renderer that cannot
   // draw something is allowed to do - the run goes on the same.
@@ -922,20 +1049,16 @@ export class VerovioScoreRenderer
 
   showBeat(_mark: RulerMark | null): void {}
 
-  showTrouble(_missteps: number): void {}
 
 
-  fadePassed(_stepIndex: number): void {}
-
-  clearFaded(): void {}
-
-  dimUnplayed(_reading: ScoreReading | null): void {}
 }
 
 /** A drawn page as it was read, and how many pixels of it make one of its units. */
 interface ReadPage {
   readonly layout: PageLayout;
   readonly scale: number;
+  /** Every named note and rest the page draws, by its name. */
+  readonly elements: ReadonlyMap<string, Element>;
 }
 
 /** A drawn page's layer of played notes, and what they are placed by. */
@@ -1015,6 +1138,38 @@ function titleOf(musicXml: string): string {
     name === 'lt' ? '<' : name === 'gt' ? '>' : '&',
   );
 }
+
+/**
+ * The ledger lines drawn under a note's head: those of its staff that reach
+ * across the head's left edge.
+ *
+ * Read off the staff's own group, where Verovio draws them - a short line
+ * for each head that needs one, from a little before it to a little after -
+ * and measured against the head as the note itself places it, which is in
+ * the same frame as those lines.
+ */
+function ledgersUnder(note: Element): Element[] {
+  const staff = note.closest('g.staff');
+  const placed = HEAD_PLACE.exec(note.querySelector('g.notehead > use')?.getAttribute('transform') ?? '');
+  if (staff === null || placed === null) {
+    return [];
+  }
+  const headX = Number(placed[1]);
+  return [...staff.querySelectorAll(':scope > g.ledgerLines > path')].filter((path) => {
+    const found = LEDGER.exec(path.getAttribute('d') ?? '');
+    if (found === null) {
+      return false;
+    }
+    const [from, to] = [Number(found[1]), Number(found[2])].sort((a, b) => a - b);
+    return from !== undefined && to !== undefined && from <= headX && headX <= to;
+  });
+}
+
+/** Where a head's glyph is placed: `translate(x, y)`, the x taken. */
+const HEAD_PLACE = /translate\(\s*(-?[\d.]+)/;
+
+/** A ledger line as Verovio writes one: `M x y L x y`, the two x taken. */
+const LEDGER = /M\s*(-?[\d.]+)[\s,]+-?[\d.]+\s*L\s*(-?[\d.]+)/;
 
 /** The steps of each bar, by the bar's printed name. */
 function stepsByBar(printed: readonly PrintedStep[]): Map<string, number[]> {

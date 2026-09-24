@@ -792,6 +792,133 @@ describe('what was played', () => {
   });
 });
 
+describe('what has been played past, and what the run will not ask for', () => {
+  /** Two bars, both hands, opened in pages. */
+  async function twoBarsOpen(): Promise<Stage> {
+    const stage = aStage();
+    stage.renderer.setPaged(true);
+    const two = printed(twoBarExercise());
+    await stage.renderer.load(two.xml, two.steps);
+    return stage;
+  }
+
+  function classesOf(surface: HTMLElement, id: string): string {
+    return surface.querySelector(`[id="${id}"]`)?.getAttribute('class') ?? '';
+  }
+
+  it('takes the notes of a step played past off the page, in both hands', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.fadePassed(0);
+
+    expect(classesOf(surface, 'n0-1-0-0')).toContain('note--passed');
+    expect(classesOf(surface, 'n0-2-0-0')).toContain('note--passed');
+    expect(classesOf(surface, 'n0-1-1-0')).not.toContain('note--passed');
+  });
+
+  it('takes a note’s ledger line off with it', async () => {
+    // Verovio draws ledger lines with the staff, not the note: left behind,
+    // one would hang where middle C was.
+    const { renderer, surface } = await twoBarsOpen();
+    const ledger = surface
+      .querySelector('[id="n0-1-0-0"]')
+      ?.closest('g.staff')
+      ?.querySelector('g.ledgerLines > path');
+    expect(ledger).not.toBeNull();
+
+    renderer.fadePassed(1);
+    expect(ledger?.getAttribute('class') ?? '').not.toContain('note--passed');
+
+    renderer.fadePassed(0);
+    expect(ledger?.getAttribute('class')).toContain('note--passed');
+  });
+
+  it('takes a chord off whole, stem and all', async () => {
+    // The stem is the chord's, not any one note's.
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.fadePassed(4);
+
+    const chord = surface.querySelector('[id="n1-2-0-0"]')?.parentElement;
+    expect(chord?.getAttribute('class')).toContain('chord');
+    expect(chord?.getAttribute('class')).toContain('note--passed');
+  });
+
+  it('puts them all back', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+    renderer.fadePassed(0);
+    renderer.fadePassed(1);
+
+    renderer.clearFaded();
+
+    expect(surface.querySelectorAll('.note--passed')).toHaveLength(0);
+  });
+
+  it('takes them off a page drawn later, as though it had been drawn all along', async () => {
+    const { renderer, surface } = await aPagedScore();
+    const late = LONG.steps.length - 2;
+    const name = LONG.steps[late]?.printed[0]?.id ?? '';
+
+    renderer.fadePassed(late);
+    renderer.turnPages(999);
+
+    await vi.waitFor(() => {
+      expect(classesOf(surface, name)).toContain('note--passed');
+    });
+  });
+
+  it('dims the hand not being read', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.dimUnplayed({ staves: [1], from: 0, to: 99 });
+
+    expect(classesOf(surface, 'n0-2-0-0')).toContain('note--unplayed');
+    expect(classesOf(surface, 'n0-1-0-0')).not.toContain('note--unplayed');
+  });
+
+  it('dims what is outside the passage, and undims it again', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.dimUnplayed({ staves: [], from: 2, to: 3 });
+    expect(classesOf(surface, 'n0-1-0-0')).toContain('note--unplayed');
+    expect(classesOf(surface, 'n0-1-2-0')).not.toContain('note--unplayed');
+    // Both ends are the passage's own.
+    expect(classesOf(surface, 'n0-1-3-0')).not.toContain('note--unplayed');
+    expect(classesOf(surface, 'n1-1-0-0')).toContain('note--unplayed');
+
+    renderer.dimUnplayed(null);
+    expect(surface.querySelectorAll('.note--unplayed')).toHaveLength(0);
+  });
+
+  it('dims a page drawn later as well', async () => {
+    const { renderer, surface } = await aPagedScore();
+    const late = LONG.steps.length - 2;
+    const name = LONG.steps[late]?.printed[0]?.id ?? '';
+
+    renderer.dimUnplayed({ staves: [], from: 0, to: 3 });
+    renderer.turnPages(999);
+
+    await vi.waitFor(() => {
+      expect(classesOf(surface, name)).toContain('note--unplayed');
+    });
+  });
+});
+
+describe('a step the reader keeps missing', () => {
+  it('says on the surface how often, up to four', async () => {
+    const { renderer, surface } = await aPagedScore();
+
+    renderer.showTrouble(2);
+    expect(surface.dataset['trouble']).toBe('2');
+
+    renderer.showTrouble(9);
+    expect(surface.dataset['trouble']).toBe('4');
+
+    renderer.showTrouble(0);
+    expect(surface.dataset['trouble']).toBeUndefined();
+  });
+});
+
 describe('clearing', () => {
   it('takes the pages away and says there are none', async () => {
     const { renderer, surface } = await aPagedScore();

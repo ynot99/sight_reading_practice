@@ -322,7 +322,9 @@ textarea {
  * A filter over the engraver's own marker rather than a marker of ours. It
  * makes that element, it moves it, and it replaces it whenever the page is
  * drawn again - so what is remembered is written on the page the marker
- * stands on, which is ours, and the colour is taken from there.
+ * stands on, which is ours, and the colour is taken from there. Under Verovio
+ * the marker is ours and takes the same filter; the other hand's never does,
+ * since the trouble is the reader's.
  *
  * Turning up the saturation rather than the opacity: the marker is a wash
  * over the notes and has to stay one, and a stronger wash that hides the
@@ -332,19 +334,23 @@ textarea {
   transition: filter 140ms linear;
 }
 
-.score__surface[data-trouble='1'] img[id^='cursorImg'] {
+.score__surface[data-trouble='1'] img[id^='cursorImg'],
+.score__surface[data-trouble='1'] .score__cursor:not(.score__cursor--other) {
   filter: hue-rotate(140deg) saturate(1.6);
 }
 
-.score__surface[data-trouble='2'] img[id^='cursorImg'] {
+.score__surface[data-trouble='2'] img[id^='cursorImg'],
+.score__surface[data-trouble='2'] .score__cursor:not(.score__cursor--other) {
   filter: hue-rotate(140deg) saturate(2.4);
 }
 
-.score__surface[data-trouble='3'] img[id^='cursorImg'] {
+.score__surface[data-trouble='3'] img[id^='cursorImg'],
+.score__surface[data-trouble='3'] .score__cursor:not(.score__cursor--other) {
   filter: hue-rotate(140deg) saturate(3.4);
 }
 
-.score__surface[data-trouble='4'] img[id^='cursorImg'] {
+.score__surface[data-trouble='4'] img[id^='cursorImg'],
+.score__surface[data-trouble='4'] .score__cursor:not(.score__cursor--other) {
   filter: hue-rotate(140deg) saturate(5);
 }
 

@@ -1285,6 +1285,21 @@ describe('the mark a frame wears', () => {
   });
 });
 
+describe('the marker a reader keeps missing at', () => {
+  it('reddens Verovio’s marker as it did OSMD’s, and never the other hand’s', () => {
+    for (const level of ['1', '2', '3', '4']) {
+      const reddened = rules().find((rule) =>
+        rule.selector
+          .split(',')
+          .map((part) => part.trim())
+          .includes(`.score__surface[data-trouble='${level}'] .score__cursor:not(.score__cursor--other)`),
+      );
+      expect(reddened?.body).toMatch(/filter\s*:\s*hue-rotate/);
+    }
+    expect(CSS).not.toMatch(/data-trouble[^{]*score__cursor--other(?!\))/);
+  });
+});
+
 describe('the head on the ruler', () => {
   const body = (selector: string): string =>
     rules().find((rule) => rule.selector === selector)?.body ?? '';

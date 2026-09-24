@@ -99,6 +99,7 @@ import {
   LEAST_ZOOM,
   MOST_ZOOM,
   keepTheHeadInView,
+  theRunScrolledUnderTheHead,
   scrollForTheWindowAt,
   theWindowOnTheRun,
   pinchedTo,
@@ -1469,6 +1470,7 @@ export class AppView {
     rollSnap: HTMLInputElement;
     rollGhosts: HTMLInputElement;
     rollSlips: HTMLInputElement;
+    rollScrollPlayback: HTMLInputElement;
     rollOptions: HTMLButtonElement;
     sheetRollOptions: HTMLElement;
     rollOptionsClose: HTMLButtonElement;
@@ -1765,6 +1767,7 @@ export class AppView {
       rollSnap: requireElement(doc, 'roll-snap'),
       rollGhosts: requireElement(doc, 'roll-ghosts'),
       rollSlips: requireElement(doc, 'roll-slips'),
+      rollScrollPlayback: requireElement(doc, 'roll-scroll-playback'),
       rollOptions: requireElement(doc, 'roll-options'),
       sheetRollOptions: requireElement(doc, 'sheet-roll-options'),
       rollOptionsClose: requireElement(doc, 'roll-options-close'),
@@ -6661,6 +6664,12 @@ export class AppView {
     this.listen(this.el.rollBeatsShown, 'change', () => {
       this.countTheBarOut();
     });
+    this.listen(this.el.rollScrollPlayback, 'change', () => {
+      this.runtime.controller.updateSettings({
+        rollScrollPlayback: this.el.rollScrollPlayback.checked,
+      });
+      this.describeTheRoll();
+    });
     this.listen(this.el.rollKeep, 'click', () => {
       this.keepTheRun();
     });
@@ -6679,6 +6688,18 @@ export class AppView {
       }
       this.putTheHeadWhereItWasTapped(event);
     });
+    // A hand on the drawing takes it over. While the music is running past a
+    // standing cursor the scroller is being written to on every frame, so a
+    // finger dragging it and this putting it back are two hands on one thing;
+    // and a reader who reaches for the picture wants to look at it, which is
+    // what holding the music is for.
+    for (const taking of ['pointerdown', 'wheel'] as const) {
+      this.listen(this.el.rollBody, taking, () => {
+        if (this.theMusicRunsPastTheHead() && this.runtime.takePlayer.playing === RUN_ROLL_ID) {
+          this.holdTheRoll();
+        }
+      });
+    }
     this.listen(this.el.rollBody, 'pointerdown', (event) => {
       this.pinched = false;
       this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -8345,10 +8366,19 @@ export class AppView {
     if (head === null) {
       return;
     }
+    if (this.theMusicRunsPastTheHead()) {
+      drawn.scrollLeft = theRunScrolledUnderTheHead(head.offsetLeft, drawn.clientWidth);
+      return;
+    }
     const to = keepTheHeadInView(head.offsetLeft, drawn.scrollLeft, drawn.clientWidth);
     if (to !== null) {
       drawn.scrollLeft = to;
     }
+  }
+
+  /** Whether the picture is the one that moves while the cursor stands still. */
+  private theMusicRunsPastTheHead(): boolean {
+    return this.runtime.controller.settings.rollScrollPlayback;
   }
 
   /**

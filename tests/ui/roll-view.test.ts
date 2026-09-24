@@ -5,6 +5,7 @@ import {
   MOST_ZOOM,
   drawTheRoll,
   keepTheHeadInView,
+  theRunScrolledUnderTheHead,
   timeFromTap,
   scaledBy,
   pinchedTo,
@@ -418,6 +419,19 @@ describe('drawing a run as a piano roll', () => {
 
     expect(view.querySelectorAll('.roll__note')).toHaveLength(0);
     expect(view.style.getPropertyValue('--roll-rows')).toBe('12');
+  });
+});
+
+describe('running the music past a standing head', () => {
+  it('holds the head a sixth of the way into the view, wherever the music has got to', () => {
+    expect(theRunScrolledUnderTheHead(1_000, 400)).toBe(940);
+    expect(theRunScrolledUnderTheHead(2_000, 400)).toBe(1_940);
+  });
+
+  it('does not scroll past the front of the drawing', () => {
+    // The first seconds of a run are played with the head walking out to
+    // where it will stand, because there is nothing behind it to show.
+    expect(theRunScrolledUnderTheHead(20, 400)).toBe(0);
   });
 });
 

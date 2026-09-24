@@ -66,6 +66,7 @@ const SETTINGS: PracticeSettings = {
   rushingCounts: false,
   markWhileListening: true,
   showPlaybackNotes: true,
+  rollScrollPlayback: true,
   rhythmRuler: 'eighth',
   rulerCursor: true,
   rulerStrength: 0.5,
@@ -81,6 +82,14 @@ const SETTINGS: PracticeSettings = {
 };
 
 describe('practice settings codec', () => {
+  it('round-trips every setting there is, named or not', () => {
+    // A codec is two lists of field names, and the way it goes wrong is that
+    // one list is missing a line: the setting is chosen, kept, and gone by the
+    // next visit with nothing said. The checks below say what the awkward ones
+    // become; this one says none of them is simply absent.
+    expect(decodePracticeSettings(encodePracticeSettings(SETTINGS), KNOWN)).toEqual(SETTINGS);
+  });
+
   it('round-trips everything the reader can choose', () => {
     const restored = decodePracticeSettings(encodePracticeSettings(SETTINGS), KNOWN);
 

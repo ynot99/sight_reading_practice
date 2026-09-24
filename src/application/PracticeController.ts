@@ -289,6 +289,16 @@ export interface PracticeSettings {
    */
   readonly showPlaybackNotes: boolean;
   /**
+   * Whether the picture of a run scrolls past a standing cursor as it plays.
+   *
+   * His: "зробити курсор sticked на саме ліво, та скролиться не тільки курсор,
+   * а й саме вікно разом із курсором щоб це було плавно, та буде це як падаючі
+   * ноти." The other way round is the same two things moving - the head walks
+   * the grid and the grid is nudged along when the head nears its edge - and
+   * at speed the nudges are what the eye follows instead of the music.
+   */
+  readonly rollScrollPlayback: boolean;
+  /**
    * Bars to practise, one-based and inclusive, or `null` for the whole thing.
    *
    * Counted in *playing order* rather than by the number printed on the page,
@@ -867,6 +877,7 @@ export class PracticeController {
       markWhileListening: false,
       rushingCounts: true,
       showPlaybackNotes: false,
+      rollScrollPlayback: false,
       rangeFromBar: null,
       rangeToBar: null,
       repeatRange: false,

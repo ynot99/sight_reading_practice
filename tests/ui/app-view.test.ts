@@ -2431,6 +2431,145 @@ describe('AppView', () => {
       }
     });
 
+    /**
+     * Lends the drawing a width, a place for its head and a scroller that
+     * remembers what it was set to. jsdom lays nothing out, and where the
+     * scroller stands is the whole of what this mode does.
+     */
+    function lendTheDrawingAScroller(headPx: number): {
+      readonly scrolledTo: () => number;
+      readonly giveBack: () => void;
+    } {
+      let scrolled = 0;
+      const had = ['scrollLeft', 'clientWidth', 'offsetLeft'].map(
+        (name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const,
+      );
+      Object.defineProperty(HTMLElement.prototype, 'scrollLeft', {
+        configurable: true,
+        get: () => scrolled,
+        set: (to: number) => {
+          scrolled = to;
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get: () => 400,
+      });
+      Object.defineProperty(HTMLElement.prototype, 'offsetLeft', {
+        configurable: true,
+        get(this: HTMLElement) {
+          return this.classList.contains('roll__head') ? headPx : 0;
+        },
+      });
+      return {
+        scrolledTo: () => scrolled,
+        giveBack: () => {
+          for (const [name, descriptor] of had) {
+            if (descriptor === undefined) {
+              delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name];
+              continue;
+            }
+            Object.defineProperty(HTMLElement.prototype, name, descriptor);
+          }
+        },
+      };
+    }
+
+    /** A run with something in it, with the picture of it open. */
+    async function aRunToLookAt(): Promise<ReturnType<typeof createRig>> {
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      const step = rig.runtime.controller.session?.currentStep;
+      rig.midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      rig.metronome.advanceSubdivisions(8);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      return rig;
+    }
+
+    it('runs the music past a standing cursor when it is asked to, instead of nudging the view', async () => {
+      const rig = await aRunToLookAt();
+      const lent = lendTheDrawingAScroller(1_000);
+      try {
+        rig.runtime.controller.updateSettings({ rollScrollPlayback: true });
+
+        element<HTMLButtonElement>('roll-play').click();
+
+        // The head stands a sixth of the way in, and the music is scrolled
+        // under it - rather than the view being nudged when the head nears
+        // its edge, which at speed is a series of jumps.
+        expect(lent.scrolledTo()).toBe(940);
+      } finally {
+        lent.giveBack();
+      }
+    });
+
+    it('nudges the view instead where it has not been asked to', async () => {
+      const rig = await aRunToLookAt();
+      const lent = lendTheDrawingAScroller(1_000);
+      try {
+        expect(rig.runtime.controller.settings.rollScrollPlayback).toBe(false);
+
+        element<HTMLButtonElement>('roll-play').click();
+
+        expect(lent.scrolledTo()).toBe(900);
+      } finally {
+        lent.giveBack();
+      }
+    });
+
+    it('holds the music where a hand takes hold of the drawing', async () => {
+      // Two hands on one scroller is neither of them moving it: this writes
+      // the scroller on every frame, and a finger dragging it would be
+      // dragging against that.
+      const rig = await aRunToLookAt();
+      const lent = lendTheDrawingAScroller(1_000);
+      try {
+        rig.runtime.controller.updateSettings({ rollScrollPlayback: true });
+        element<HTMLButtonElement>('roll-play').click();
+        expect(rig.runtime.takePlayer.playing).not.toBeNull();
+
+        element('roll-body').dispatchEvent(new Event('wheel', { bubbles: true }));
+
+        expect(rig.runtime.takePlayer.playing).toBeNull();
+      } finally {
+        lent.giveBack();
+      }
+    });
+
+    it('leaves a hand on the drawing alone where the music is not running past it', async () => {
+      const rig = await aRunToLookAt();
+      const lent = lendTheDrawingAScroller(1_000);
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+
+        element('roll-body').dispatchEvent(new Event('wheel', { bubbles: true }));
+
+        expect(rig.runtime.takePlayer.playing).not.toBeNull();
+      } finally {
+        lent.giveBack();
+      }
+    });
+
+    it('remembers whether the music runs past the cursor', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      const box = element<HTMLInputElement>('roll-scroll-playback');
+      expect(box.checked).toBe(false);
+
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      expect(first.runtime.controller.settings.rollScrollPlayback).toBe(true);
+
+      const next = createRig(undefined, store);
+      await next.view.initialize();
+
+      expect(element<HTMLInputElement>('roll-scroll-playback').checked).toBe(true);
+      expect(next.runtime.controller.settings.rollScrollPlayback).toBe(true);
+    });
+
     it('sounds the beat the run was measured against, where it is asked for', async () => {
       // Seeing how far off the beat a note was is one thing; hearing it is the
       // sense that does the work at the keyboard.

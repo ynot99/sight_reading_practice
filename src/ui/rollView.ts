@@ -418,6 +418,28 @@ const HEAD_DRIFTS_TO = 0.75;
  * in it. The three lines that set `scrollLeft` are layout, which no test here
  * can see; these numbers are arithmetic, which every test can.
  */
+/**
+ * How far into the view the head stands while the music runs past it.
+ *
+ * Near the left edge, with a finger's width of what has just been played still
+ * behind it: the reader is looking at what is coming, and a head hard against
+ * the edge reads as a drawing that has been cut off rather than one that is
+ * moving.
+ */
+const HEAD_STANDS_AT = 0.15;
+
+/**
+ * Where the scroller has to stand for the head to keep its place in the view.
+ *
+ * The other way of following a performance - see below - moves the grid only
+ * when the head has drifted out of it, which is steady to read at a walk and a
+ * series of jumps at speed. This one holds the head still and moves the music,
+ * the way falling notes do, so nothing on the screen moves but the music.
+ */
+export function theRunScrolledUnderTheHead(headPx: number, viewWidePx: number): number {
+  return Math.max(0, Math.round(headPx - viewWidePx * HEAD_STANDS_AT));
+}
+
 export function keepTheHeadInView(
   headPx: number,
   scrolledToPx: number,

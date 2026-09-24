@@ -64,6 +64,13 @@ export interface PrintedHere {
   readonly staffNumber: number;
   /** The key a note is, or `null` for a rest. */
   readonly midi: number | null;
+  /**
+   * Where on the staff the note is written, or `null` for a rest - C4 is 28.
+   *
+   * The key does not say it: F sharp and G flat are one key and two places on
+   * the staff, and a mark drawn on the wrong one is a wrong note drawn.
+   */
+  readonly diatonicIndex: number | null;
 }
 
 /** What the page prints where a step is. */
@@ -100,11 +107,16 @@ export function printedAtEachStep(timeline: ExerciseTimeline): readonly PrintedS
         }
         const at: EntryAt = { measureIndex, voice: staff.voice, entryIndex };
         if (entry.kind === 'rest') {
-          here.push({ id: restId(at), staffNumber: staff.staffNumber, midi: null });
+          here.push({ id: restId(at), staffNumber: staff.staffNumber, midi: null, diatonicIndex: null });
           return;
         }
         entry.pitches.forEach((pitch, pitchIndex) => {
-          here.push({ id: noteId(at, pitchIndex), staffNumber: staff.staffNumber, midi: pitch.midi });
+          here.push({
+            id: noteId(at, pitchIndex),
+            staffNumber: staff.staffNumber,
+            midi: pitch.midi,
+            diatonicIndex: pitch.diatonicIndex,
+          });
         });
       });
     });

@@ -40,14 +40,11 @@ import {
   swipeDirection,
 } from './pageTurns.js';
 import { PAGE_LABEL_INSET, pageLabelText } from './pageLabel.js';
+import { drawShape } from './overlayElements.js';
 import { placesToBeginIn, walkEveryPlace } from './cursorWalk.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 import { CursorNavigator, type ICursorPrimitive } from './CursorNavigator.js';
-import {
-  buildOverlayShapes,
-  type OverlayShape,
-  type PlayedMark,
-} from './playedNoteShapes.js';
+import { buildOverlayShapes, type PlayedMark } from './playedNoteShapes.js';
 import {
   diatonicIndexOf,
   fitStaffGeometry,
@@ -2717,7 +2714,7 @@ export class OsmdScoreRenderer
       }).map((shape) => ({ shape, mark })),
     );
     for (const { shape, mark } of shapes) {
-      const drawn = this.createShape(shape, group.ownerDocument);
+      const drawn = drawShape(shape, group.ownerDocument);
       drawn.setAttribute('data-mark', `${mark.stepIndex}:${mark.midi}`);
       if (mark.correct && mark.settled === false) {
         drawn.classList.add('played--unsettled');
@@ -2761,48 +2758,6 @@ export class OsmdScoreRenderer
     // The engraver numbers its pages from one; every page index here is from
     // nought, because it indexes the sheets it drew.
     return typeof number === 'number' && number >= 1 ? number - 1 : null;
-  }
-
-  private createShape(shape: OverlayShape, doc: Document): SVGElement {
-    const colourClass = shape.sounding
-      ? 'played--sounding'
-      : !shape.correct
-        ? 'played--wrong'
-        : shape.looseTiming
-          ? 'played--loose'
-          : 'played--correct';
-    switch (shape.kind) {
-      case 'notehead': {
-        const element = doc.createElementNS(SVG_NAMESPACE, 'ellipse');
-        element.setAttribute('cx', String(shape.x));
-        element.setAttribute('cy', String(shape.y));
-        element.setAttribute('rx', String(shape.radiusX));
-        element.setAttribute('ry', String(shape.radiusY));
-        element.setAttribute('class', `played-note ${colourClass}`);
-        return element;
-      }
-      case 'ledger': {
-        const element = doc.createElementNS(SVG_NAMESPACE, 'line');
-        element.setAttribute('x1', String(shape.x1));
-        element.setAttribute('x2', String(shape.x2));
-        element.setAttribute('y1', String(shape.y));
-        element.setAttribute('y2', String(shape.y));
-        element.setAttribute('class', `played-ledger ${colourClass}`);
-        return element;
-      }
-      case 'accidental': {
-        const element = doc.createElementNS(SVG_NAMESPACE, 'text');
-        element.setAttribute('x', String(shape.x));
-        element.setAttribute('y', String(shape.y));
-        element.setAttribute('font-size', String(shape.size));
-        element.setAttribute('text-anchor', 'middle');
-        element.setAttribute('class', `played-accidental ${colourClass}`);
-        element.textContent = shape.text;
-        return element;
-      }
-      default:
-        return doc.createElementNS(SVG_NAMESPACE, 'g');
-    }
   }
 
   /**

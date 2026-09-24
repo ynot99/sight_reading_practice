@@ -9,7 +9,8 @@ import { VerovioCore } from '../../src/infrastructure/rendering/verovio/VerovioC
 import { VerovioEngraver } from '../../src/infrastructure/rendering/verovio/VerovioEngraver.js';
 import { VerovioScoreRenderer } from '../../src/infrastructure/rendering/verovio/VerovioScoreRenderer.js';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { noteEntry } from '../../src/domain/model/Exercise.js';
+import { KeySignature } from '../../src/domain/model/KeySignature.js';
+import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
 import { bar, longExercise, p, twoBarExercise } from '../support/fixtures.js';
 import { lineToThe } from '../support/verovioLine.js';
 
@@ -530,6 +531,264 @@ describe('the marker', () => {
     expect(box(other).left).toBeGreaterThan(box(marker(surface)).left);
     expect(renderer.otherHand.position).toBe(4);
     expect(renderer.cursor.position).toBe(1);
+  });
+});
+
+describe('what was played', () => {
+  const C_MAJOR = KeySignature.major(0);
+  const context = {
+    keyAt: () => C_MAJOR,
+    clefAt: (staffNumber: number) => (staffNumber === 1 ? ('treble' as const) : ('bass' as const)),
+  };
+
+  /** Two bars, both hands, opened with the overlay told the key and the clefs. */
+  async function twoBarsOpen(): Promise<Stage & { readonly steps: readonly PrintedStep[] }> {
+    const stage = aStage();
+    stage.renderer.setPaged(true);
+    const two = printed(twoBarExercise());
+    await stage.renderer.load(two.xml, two.steps);
+    stage.renderer.configureOverlay(context);
+    return { ...stage, steps: two.steps };
+  }
+
+  /** Lays the music out again at another print, and waits until it has. */
+  async function laidOutAgain(renderer: VerovioScoreRenderer, surface: HTMLElement): Promise<void> {
+    const before = sheets(surface)[0]?.querySelector('svg');
+    renderer.setZoom(renderer.zoom * 1.3);
+    await vi.waitFor(() => {
+      const now = sheets(surface)[0]?.querySelector('svg');
+      expect(now).not.toBeNull();
+      expect(now).not.toBe(before);
+    });
+  }
+
+  function ringsOf(surface: HTMLElement, page = 0): Element[] {
+    return [...(sheets(surface)[page]?.querySelectorAll('.played-overlay ellipse.played-note') ?? [])];
+  }
+
+  /** Where a named head is drawn, in the page's units. */
+  function headOf(surface: HTMLElement, id: string): { x: number; y: number } {
+    const drawing = sheets(surface)[0]?.querySelector('svg') as SVGSVGElement;
+    const head = readThePage(drawing).heads.get(id);
+    return { x: head?.x ?? NaN, y: head?.y ?? NaN };
+  }
+
+  it('rings a right note round the note where it is printed', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0 });
+
+    const [ring] = ringsOf(surface);
+    expect(ring?.getAttribute('class')).toContain('played--correct');
+    // Over the notes: the last thing in the drawing, so it is drawn on top.
+    const music = sheets(surface)[0]?.querySelector('svg.definition-scale');
+    expect(music?.lastElementChild?.getAttribute('class')).toBe('played-overlay');
+    const c4 = headOf(surface, 'n0-1-0-0');
+    expect(Number(ring?.getAttribute('cy'))).toBe(c4.y);
+    // Round the head's middle, not its left edge where Verovio places it.
+    expect(Number(ring?.getAttribute('cx'))).toBeGreaterThan(c4.x);
+  });
+
+  it('rings the left hand’s note on the bass staff, where it is printed', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.showPlayed({ stepIndex: 0, midi: 48, correct: true, offset: 0 });
+
+    expect(Number(ringsOf(surface)[0]?.getAttribute('cy'))).toBe(headOf(surface, 'n0-2-0-0').y);
+  });
+
+  it('draws a wrong note on its own place on the staff, with its sharp and its ledger line', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+
+    // C sharp over the C that was asked for: the same place on the staff, and
+    // a sharp to say so.
+    renderer.showPlayed({ stepIndex: 0, midi: 61, correct: false, offset: 0 });
+
+    const page = sheets(surface)[0];
+    const [ring] = ringsOf(surface);
+    expect(ring?.getAttribute('class')).toContain('played--wrong');
+    expect(Number(ring?.getAttribute('cy'))).toBe(headOf(surface, 'n0-1-0-0').y);
+    expect(page?.querySelector('.played-overlay text.played-accidental')?.textContent).toBe('♯');
+    expect(page?.querySelectorAll('.played-overlay line.played-ledger')).toHaveLength(1);
+  });
+
+  it('places a wrong note nobody printed by where it falls on the staff', async () => {
+    // G4, two places above the E4 on the bottom line.
+    const { renderer, surface } = await twoBarsOpen();
+    const staff = readThePage(sheets(surface)[0]?.querySelector('svg') as SVGSVGElement).systems[0]?.bars[0]
+      ?.staves[0];
+    const halfSpace = (((staff?.lines[1] ?? 0) - (staff?.lines[0] ?? 0)) / 2);
+
+    renderer.showPlayed({ stepIndex: 0, midi: 67, correct: false, offset: 0 });
+
+    expect(Number(ringsOf(surface)[0]?.getAttribute('cy'))).toBe((staff?.bottom ?? NaN) - 2 * halfSpace);
+  });
+
+  it('places a wrong note right on a page that says one note over and over', async () => {
+    // Pairs of different notes are how OSMD's pages were measured, and a page
+    // of one repeated note has none. Verovio's lines say the distance anyway.
+    const stage = aStage();
+    const twoBars = twoBarExercise();
+    const [treble, bass] = twoBars.staves;
+    const same = printed({
+      ...twoBars,
+      staves: [
+        {
+          ...(treble as NonNullable<typeof treble>),
+          measures: [
+            bar(...Array.from({ length: 4 }, () => noteEntry(p('C4'), Duration.QUARTER))),
+            bar(noteEntry(p('C4'), Duration.WHOLE)),
+          ],
+        },
+        {
+          ...(bass as NonNullable<typeof bass>),
+          measures: [bar(noteEntry(p('C3'), Duration.WHOLE)), bar(noteEntry(p('C3'), Duration.WHOLE))],
+        },
+      ],
+    });
+    await stage.renderer.load(same.xml, same.steps);
+    stage.renderer.configureOverlay(context);
+    const staff = readThePage(sheets(stage.surface)[0]?.querySelector('svg') as SVGSVGElement).systems[0]
+      ?.bars[0]?.staves[0];
+    const halfSpace = ((staff?.lines[1] ?? 0) - (staff?.lines[0] ?? 0)) / 2;
+
+    stage.renderer.showPlayed({ stepIndex: 0, midi: 67, correct: false, offset: 0 });
+
+    expect(Number(ringsOf(stage.surface)[0]?.getAttribute('cy'))).toBe((staff?.bottom ?? NaN) - 2 * halfSpace);
+  });
+
+  it('leans a press played early towards the note before it', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0 });
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: true, offset: 0 });
+    const [c4, d4] = ringsOf(surface).map((ring) => Number(ring.getAttribute('cx')));
+    renderer.clearPlayed();
+
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: true, offset: -0.5 });
+
+    const early = Number(ringsOf(surface)[0]?.getAttribute('cx'));
+    expect(early).toBeLessThan(d4 ?? NaN);
+    expect(early).toBeGreaterThan(c4 ?? NaN);
+  });
+
+  it('draws a right note of a beat not yet finished pale, until the beat is', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, settled: false });
+    expect(ringsOf(surface)[0]?.getAttribute('class')).toContain('played--unsettled');
+
+    renderer.settlePlayed(0);
+    expect(ringsOf(surface)[0]?.getAttribute('class')).not.toContain('played--unsettled');
+  });
+
+  it('takes one press off again, and leaves the others', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0 });
+    renderer.showPlayed({ stepIndex: 0, midi: 62, correct: false, offset: 0 });
+
+    renderer.hidePlayed({ stepIndex: 0, midi: 62 });
+
+    expect(ringsOf(surface)).toHaveLength(1);
+    expect(ringsOf(surface)[0]?.getAttribute('class')).toContain('played--correct');
+  });
+
+  it('clears every press, and a new layout does not bring them back', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0 });
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: true, offset: 0 });
+
+    renderer.clearPlayed();
+    expect(ringsOf(surface)).toHaveLength(0);
+
+    await laidOutAgain(renderer, surface);
+    expect(ringsOf(surface)).toHaveLength(0);
+  });
+
+  it('draws again on a new layout exactly what is left: nothing taken off, nothing unsettled that was settled', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, settled: false });
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: true, offset: 0, settled: false });
+    renderer.showPlayed({ stepIndex: 2, midi: 64, correct: true, offset: 0 });
+    renderer.hidePlayed({ stepIndex: 2, midi: 64 });
+    renderer.settlePlayed(0);
+
+    await laidOutAgain(renderer, surface);
+
+    const drawn = [...(sheets(surface)[0]?.querySelectorAll('.played-overlay ellipse') ?? [])].map(
+      (ring) => [ring.getAttribute('data-mark'), ring.classList.contains('played--unsettled')],
+    );
+    expect(drawn).toEqual([
+      ['0:60', false],
+      ['1:62', true],
+    ]);
+  });
+
+  it('leans a press from where its step’s first head stands, however a chord spreads them', async () => {
+    // A chord with a second sets one head beside the other; the step stands
+    // where the first of them is, which is where its marker stands too.
+    const stage = aStage();
+    const twoBars = twoBarExercise();
+    const [treble, bass] = twoBars.staves;
+    const spread = printed({
+      ...twoBars,
+      staves: [
+        {
+          ...(treble as NonNullable<typeof treble>),
+          measures: [
+            bar(
+              noteEntry([p('C4'), p('D4')], Duration.QUARTER),
+              noteEntry(p('E4'), Duration.QUARTER),
+              noteEntry(p('F4'), Duration.QUARTER),
+              noteEntry(p('G4'), Duration.QUARTER),
+            ),
+            ...(treble?.measures.slice(1) ?? []),
+          ],
+        },
+        // A rest under it, so the chord's own heads are all this step draws.
+        {
+          ...(bass as NonNullable<typeof bass>),
+          measures: [bar(restEntry(Duration.WHOLE)), ...(bass?.measures.slice(1) ?? [])],
+        },
+      ],
+    });
+    await stage.renderer.load(spread.xml, spread.steps);
+    stage.renderer.configureOverlay(context);
+    stage.renderer.showPlayed({ stepIndex: 1, midi: 64, correct: true, offset: 0 });
+    const onTime = Number(ringsOf(stage.surface)[0]?.getAttribute('cx'));
+    stage.renderer.clearPlayed();
+    const heads = ['n0-1-0-0', 'n0-1-0-1'].map((id) => headOf(stage.surface, id).x);
+    const step0 = Math.min(...heads);
+    const step0Ring = onTime - (headOf(stage.surface, 'n0-1-1-0').x - step0);
+
+    stage.renderer.showPlayed({ stepIndex: 1, midi: 64, correct: true, offset: -0.5 });
+
+    expect(Number(ringsOf(stage.surface)[0]?.getAttribute('cx'))).toBeCloseTo((onTime + step0Ring) / 2, 5);
+  });
+
+  it('draws a press on a page drawn later, as though it had been drawn all along', async () => {
+    const { renderer, surface } = await aPagedScore();
+    renderer.configureOverlay(context);
+    const late = LONG.steps.length - 2;
+    const midi = LONG.steps[late]?.printed[0]?.midi ?? 60;
+
+    renderer.showPlayed({ stepIndex: late, midi, correct: true, offset: 0 });
+    renderer.turnPages(999);
+
+    await vi.waitFor(() => {
+      expect(ringsOf(surface, renderer.pages.count - 1)).toHaveLength(1);
+    });
+  });
+
+  it('draws the presses again on a new layout', async () => {
+    const { renderer, surface } = await twoBarsOpen();
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0 });
+
+    renderer.setZoom(renderer.zoom * 1.3);
+
+    await vi.waitFor(() => {
+      expect(ringsOf(surface)).toHaveLength(1);
+      expect(Number(ringsOf(surface)[0]?.getAttribute('cy'))).toBe(headOf(surface, 'n0-1-0-0').y);
+    });
   });
 });
 

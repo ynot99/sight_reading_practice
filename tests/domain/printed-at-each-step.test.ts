@@ -3,10 +3,13 @@ import type { Exercise } from '../../src/domain/model/Exercise.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { printedAtEachStep } from '../../src/domain/notation/printedIds.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { noteEntry } from '../../src/domain/model/Exercise.js';
 import {
   arpeggiatedExercise,
   beamedSixteenths,
   longExercise,
+  p,
   partialVoiceExercise,
   tiedExercise,
   twoBarExercise,
@@ -30,14 +33,29 @@ describe('where on the page each step is', () => {
     ]);
   });
 
-  it('says which staff each is on and which key a note is, and that a rest is none', () => {
+  it('says which staff each is on, which key a note is and where it is written, and that a rest is none', () => {
     const steps = printedAtEachStep(buildTimeline(twoBarExercise()));
 
     expect(steps[0]?.printed).toEqual([
-      { id: 'n0-1-0-0', staffNumber: 1, midi: 60 },
-      { id: 'n0-2-0-0', staffNumber: 2, midi: 48 },
+      { id: 'n0-1-0-0', staffNumber: 1, midi: 60, diatonicIndex: 28 },
+      { id: 'n0-2-0-0', staffNumber: 2, midi: 48, diatonicIndex: 21 },
     ]);
-    expect(steps[5]?.printed).toEqual([{ id: 'r1-2-1', staffNumber: 2, midi: null }]);
+    expect(steps[5]?.printed).toEqual([{ id: 'r1-2-1', staffNumber: 2, midi: null, diatonicIndex: null }]);
+  });
+
+  it('tells two spellings of one key apart by where they are written', () => {
+    // F sharp and G flat: one key, two places on the staff.
+    const sharp = printedAtEachStep(
+      buildTimeline(partialVoiceExercise([noteEntry(p('F#4'), Duration.WHOLE)])),
+    );
+    const flat = printedAtEachStep(
+      buildTimeline(partialVoiceExercise([noteEntry(p('Gb4'), Duration.WHOLE)])),
+    );
+    const written = (steps: typeof sharp): number | null | undefined =>
+      steps[0]?.printed.find((here) => here.staffNumber === 1 && here.id.startsWith('n0-2'))?.diatonicIndex;
+
+    expect(written(sharp)).toBe(31);
+    expect(written(flat)).toBe(32);
   });
 
   it('gives a note tied over from the step before its place at this one', () => {
@@ -50,8 +68,8 @@ describe('where on the page each step is', () => {
 
     expect(timeline.at(downbeat)?.expectedMidi).toEqual([48]);
     expect(printedAtEachStep(timeline)[downbeat]?.printed).toEqual([
-      { id: 'n1-1-0-0', staffNumber: 1, midi: 64 },
-      { id: 'n1-2-0-0', staffNumber: 2, midi: 48 },
+      { id: 'n1-1-0-0', staffNumber: 1, midi: 64, diatonicIndex: 30 },
+      { id: 'n1-2-0-0', staffNumber: 2, midi: 48, diatonicIndex: 21 },
     ]);
   });
 

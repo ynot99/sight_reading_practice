@@ -19,7 +19,10 @@ import type {
 } from '../../../application/ports/IScoreRenderer.js';
 import type { RulerMark } from '../../../application/rhythmRuler.js';
 import type { PrintedStep } from '../../../domain/notation/printedIds.js';
+import { drawShape } from '../overlayElements.js';
 import { PAGE_LABEL_INSET, pageLabelText } from '../pageLabel.js';
+import { buildOverlayShapes, type PlayedMark } from '../playedNoteShapes.js';
+import { fitStaffGeometry, type DrawnNoteSample, type StaffGeometry } from '../staffGeometry.js';
 import { swipeDirection, visibleHeightOf } from '../pageTurns.js';
 import { readThePage, type PageLayout } from './pageLayout.js';
 import type { PageShape } from './VerovioCore.js';
@@ -60,6 +63,12 @@ const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const MARKER_BEFORE_HEAD = 0.6;
 const MARKER_WIDTH = 2.4;
 const MARKER_ABOVE_STAFF = 1.5;
+
+/**
+ * Half a notehead's width, in staff spaces. Verovio places a head's glyph by
+ * its left edge, and a ring round the note is drawn round its middle.
+ */
+const HEAD_HALF_WIDTH = 0.59;
 
 /**
  * Room above the music on every page, in pixels: the page's own label is
@@ -122,6 +131,13 @@ export class VerovioScoreRenderer
   private readonly layouts = new Map<number, ReadPage>();
   /** The drawn page every named bar, note and rest is on. */
   private readonly pageOfName = new Map<string, number>();
+  /** The steps of each bar, by the bar's printed name. */
+  private stepsOfBar = new Map<string, number[]>();
+  /** What the reader played, drawn over the notes; see `IPlayedNoteOverlay`. */
+  private marks: PlayedMark[] = [];
+  private overlayContext: OverlayContext | null = null;
+  /** Each drawn page's layer of played notes, and what they are placed by. */
+  private readonly overlays = new Map<number, PageOverlay>();
 
   private currentZoom: number;
   private paged = false;
@@ -191,6 +207,7 @@ export class VerovioScoreRenderer
     this.hasMusic = true;
     this.title = titleOf(musicXml);
     this.printed = printed;
+    this.stepsOfBar = stepsByBar(printed);
     const shape = this.shape();
     const count = await this.engraver.load(musicXml, shape);
     if (layout !== this.layout) {
@@ -236,6 +253,7 @@ export class VerovioScoreRenderer
     this.hasMusic = false;
     this.title = '';
     this.printed = [];
+    this.stepsOfBar = new Map();
     this.container.replaceChildren();
     this.sheets = [];
     this.drawn.clear();
@@ -430,6 +448,98 @@ export class VerovioScoreRenderer
         this.pageOfName.set(bar.id, page);
       }
     }
+    this.layTheOverlay(page, drawing, read);
+  }
+
+  /**
+   * Makes a drawn page's layer of played notes, and draws on it the ones
+   * already played there - a page drawn late shows what was played on it as
+   * though it had been drawn all along.
+   *
+   * Placed by the page's own printed notes: each head of every step on the
+   * page is where that written note is, in the page's units, and the half
+   * space between two staff positions is read off its lines rather than
+   * measured from pairs of notes as OSMD's had to be.
+   */
+  private layTheOverlay(page: number, drawing: SVGSVGElement, read: PageLayout): void {
+    const music = drawing.querySelector('svg.definition-scale');
+    if (music === null) {
+      return;
+    }
+    const samples: DrawnNoteSample[] = [];
+    const stepX = new Map<number, number>();
+    let space = 0;
+    for (const [system, drawn] of read.systems.entries()) {
+      for (const bar of drawn.bars) {
+        const [top, second] = bar.staves[0]?.lines ?? [];
+        if (space === 0 && top !== undefined && second !== undefined) {
+          space = second - top;
+        }
+        for (const stepIndex of this.stepsOfBar.get(bar.id) ?? []) {
+          for (const here of this.printed[stepIndex]?.printed ?? []) {
+            const head = read.heads.get(here.id);
+            if (head === undefined || here.diatonicIndex === null) {
+              continue;
+            }
+            const x = head.x + HEAD_HALF_WIDTH * space;
+            samples.push({
+              stepIndex,
+              page,
+              system,
+              staffNumber: here.staffNumber,
+              diatonicIndex: here.diatonicIndex,
+              y: head.y,
+              x,
+            });
+            stepX.set(stepIndex, Math.min(stepX.get(stepIndex) ?? x, x));
+          }
+        }
+      }
+    }
+    const fitted = fitStaffGeometry(samples);
+    const layer = drawing.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
+    layer.setAttribute('class', 'played-overlay');
+    music.append(layer);
+    this.overlays.set(page, {
+      layer,
+      geometry: fitted === null ? null : { ...fitted, stepHeight: space / 2 },
+      stepX,
+    });
+    for (const mark of this.marks) {
+      if (this.pageOfStep(mark.stepIndex) === page) {
+        this.drawTheMark(mark);
+      }
+    }
+  }
+
+  /** The drawn page a step is on, or `undefined` when it is not drawn. */
+  private pageOfStep(stepIndex: number): number | undefined {
+    const step = this.printed[stepIndex];
+    return step === undefined ? undefined : this.pageOfName.get(step.barId);
+  }
+
+  /** Draws one played note onto its page, if that page is drawn. */
+  private drawTheMark(mark: PlayedMark): void {
+    const page = this.pageOfStep(mark.stepIndex);
+    const overlay = page === undefined ? undefined : this.overlays.get(page);
+    const context = this.overlayContext;
+    if (overlay === undefined || overlay.geometry === null || context === null) {
+      return;
+    }
+    const shapes = buildOverlayShapes([mark], {
+      geometry: overlay.geometry,
+      stepX: overlay.stepX,
+      clefAt: context.clefAt,
+      keyAt: context.keyAt,
+    });
+    for (const shape of shapes) {
+      const drawn = drawShape(shape, overlay.layer.ownerDocument);
+      drawn.setAttribute('data-mark', `${String(mark.stepIndex)}:${String(mark.midi)}`);
+      if (mark.correct && mark.settled === false) {
+        drawn.classList.add('played--unsettled');
+      }
+      overlay.layer.append(drawn);
+    }
   }
 
   /** Forgets what one page, or every page, was read as. */
@@ -437,10 +547,12 @@ export class VerovioScoreRenderer
     if (page === undefined) {
       this.layouts.clear();
       this.pageOfName.clear();
+      this.overlays.clear();
       return;
     }
     const read = this.layouts.get(page)?.layout;
     this.layouts.delete(page);
+    this.overlays.delete(page);
     for (const name of read?.heads.keys() ?? []) {
       this.pageOfName.delete(name);
     }
@@ -713,6 +825,65 @@ export class VerovioScoreRenderer
     };
   }
 
+  // What was played, drawn over the notes.
+
+  configureOverlay(context: OverlayContext): void {
+    this.overlayContext = context;
+  }
+
+  /**
+   * Draws one press over the note it belongs to, onto its page.
+   *
+   * Only the mark just made: redrawing every mark for each note played is
+   * work that grows with the run, and OSMD's did until the trainer stopped
+   * answering two hundred notes into a long piece.
+   */
+  showPlayed(note: PlayedNote): void {
+    const mark: PlayedMark = {
+      stepIndex: note.stepIndex,
+      midi: note.midi,
+      correct: note.correct,
+      sounding: note.sounding,
+      offset: note.offset,
+      settled: note.settled,
+    };
+    this.marks.push(mark);
+    this.drawTheMark(mark);
+  }
+
+  /** Takes one press off again, found by what it is a mark of. */
+  hidePlayed(note: { readonly stepIndex: number; readonly midi: number }): void {
+    this.marks = this.marks.filter(
+      (mark) => mark.stepIndex !== note.stepIndex || mark.midi !== note.midi,
+    );
+    const page = this.pageOfStep(note.stepIndex);
+    const layer = page === undefined ? undefined : this.overlays.get(page)?.layer;
+    for (const drawn of layer?.querySelectorAll(
+      `[data-mark="${String(note.stepIndex)}:${String(note.midi)}"]`,
+    ) ?? []) {
+      drawn.remove();
+    }
+  }
+
+  /** Says a beat has been played in full: its right notes stop being pale. */
+  settlePlayed(stepIndex: number): void {
+    this.marks = this.marks.map((mark) =>
+      mark.stepIndex === stepIndex ? { ...mark, settled: true } : mark,
+    );
+    const page = this.pageOfStep(stepIndex);
+    const layer = page === undefined ? undefined : this.overlays.get(page)?.layer;
+    for (const drawn of layer?.querySelectorAll(`[data-mark^="${String(stepIndex)}:"]`) ?? []) {
+      drawn.classList.remove('played--unsettled');
+    }
+  }
+
+  clearPlayed(): void {
+    this.marks = [];
+    for (const overlay of this.overlays.values()) {
+      overlay.layer.replaceChildren();
+    }
+  }
+
   // Not drawn yet: the steps of the move after this one draw these. Until
   // then each is asked and does nothing, which is what a renderer that cannot
   // draw something is allowed to do - the run goes on the same.
@@ -753,15 +924,6 @@ export class VerovioScoreRenderer
 
   showTrouble(_missteps: number): void {}
 
-  configureOverlay(_context: OverlayContext): void {}
-
-  showPlayed(_note: PlayedNote): void {}
-
-  hidePlayed(_note: { readonly stepIndex: number; readonly midi: number }): void {}
-
-  settlePlayed(_stepIndex: number): void {}
-
-  clearPlayed(): void {}
 
   fadePassed(_stepIndex: number): void {}
 
@@ -774,6 +936,15 @@ export class VerovioScoreRenderer
 interface ReadPage {
   readonly layout: PageLayout;
   readonly scale: number;
+}
+
+/** A drawn page's layer of played notes, and what they are placed by. */
+interface PageOverlay {
+  readonly layer: SVGGElement;
+  /** `null` where the page prints no note to place anything by. */
+  readonly geometry: StaffGeometry | null;
+  /** Where each step on the page stands across it, in its units. */
+  readonly stepX: ReadonlyMap<number, number>;
 }
 
 /** Where a marker stands on a page, in pixels from the page's corner. */
@@ -843,6 +1014,17 @@ function titleOf(musicXml: string): string {
   return (found?.[1] ?? '').replace(/&(lt|gt|amp);/g, (_, name: string) =>
     name === 'lt' ? '<' : name === 'gt' ? '>' : '&',
   );
+}
+
+/** The steps of each bar, by the bar's printed name. */
+function stepsByBar(printed: readonly PrintedStep[]): Map<string, number[]> {
+  const steps = new Map<string, number[]>();
+  printed.forEach((step, index) => {
+    const bar = steps.get(step.barId) ?? [];
+    bar.push(index);
+    steps.set(step.barId, bar);
+  });
+  return steps;
 }
 
 function clampZoom(zoom: number): number {

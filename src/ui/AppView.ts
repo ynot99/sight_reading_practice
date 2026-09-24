@@ -2477,7 +2477,7 @@ export class AppView {
     this.el.readingTitle.textContent = pieceRead(reading.key);
     this.el.readingWhat.replaceChildren(...this.drawTheReading(reading));
     this.el.readingRoll.hidden = reading.roll === undefined;
-    this.el.sheetReading.hidden = false;
+    this.showTheSheet(this.el.sheetReading);
   }
 
   /** The parts of the picture a reading kept, in the order the report shows them. */
@@ -2612,7 +2612,6 @@ export class AppView {
       return;
     }
     this.stopTheRoll();
-    this.shutTheReading();
     this.theOtherRollShowing = {
       roll,
       what: describeReading(reading),
@@ -2620,7 +2619,7 @@ export class AppView {
     };
     this.rollAtMs = 0;
     this.drawTheRollInto();
-    this.el.sheetRoll.hidden = false;
+    this.showTheSheet(this.el.sheetRoll);
     this.sayWhereTheViewIs();
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();
@@ -3880,7 +3879,7 @@ export class AppView {
     // wrong - so this opens the panel the pill opens.
     this.listen(this.el.settingsMetronome, 'click', () => {
       this.el.sheetSettings.hidden = true;
-      this.el.sheetMetronome.hidden = false;
+      this.showTheSheet(this.el.sheetMetronome);
     });
   }
 
@@ -4818,9 +4817,7 @@ export class AppView {
    * means here. His: "чи можеш діалогам додати shortcut esc щоб зачиняти їх?".
    */
   private shutTheInnermostSheet(): boolean {
-    const over = this.doc.querySelector('.sheet--over:not([hidden])');
-    const sheet = over ?? this.doc.querySelector('.sheet:not([hidden])');
-    const shuts = sheet?.querySelector<HTMLElement>('[data-shuts]') ?? null;
+    const shuts = this.theDeepestSheet()?.querySelector<HTMLElement>('[data-shuts]') ?? null;
     if (shuts === null) {
       return false;
     }
@@ -4848,10 +4845,42 @@ export class AppView {
    * question above it is - a list kept here is a list to forget a sheet from.
    */
   private thePictureIsInFront(): boolean {
-    return (
-      !this.el.sheetRoll.hidden &&
-      this.doc.querySelector('.sheet--over:not([hidden])') === null
-    );
+    return this.theDeepestSheet() === this.el.sheetRoll;
+  }
+
+  /**
+   * Puts a sheet up, over whatever is up already.
+   *
+   * How deep it stands is written on the sheet as it opens, because the page
+   * is what gets asked afterwards: which sheet a press of Escape belongs to
+   * is "whichever is deepest", and the stylesheet raises it by the same
+   * number. A list kept in here instead would be a list to forget the next
+   * sheet from, which is the fault `shutTheInnermostSheet` was written to
+   * stop - and a sheet is deep because of what the reader opened it from,
+   * which is not something the markup can know.
+   */
+  private showTheSheet(sheet: HTMLElement): void {
+    if (sheet.hidden) {
+      sheet.dataset['over'] = String(
+        this.doc.querySelectorAll('.sheet:not([hidden])').length + 1,
+      );
+    }
+    sheet.hidden = false;
+  }
+
+  /** The sheet nearest the reader: the last one opened over the rest. */
+  private theDeepestSheet(): HTMLElement | null {
+    let deepest: HTMLElement | null = null;
+    let over = 0;
+    for (const sheet of this.doc.querySelectorAll<HTMLElement>('.sheet:not([hidden])')) {
+      // Equal depth goes to the later one, which is the one drawn on top.
+      const its = Number(sheet.dataset['over'] ?? '1');
+      if (its >= over) {
+        over = its;
+        deepest = sheet;
+      }
+    }
+    return deepest;
   }
 
   /** Starts the drawing playing, or holds it where it has got to. */
@@ -6731,7 +6760,7 @@ export class AppView {
       for (const opener of openers) {
         this.listen(opener, 'click', () => {
           render();
-          sheet.hidden = false;
+          this.showTheSheet(sheet);
         });
       }
       // The dimmed area outside the panel is a way out that a thumb finds
@@ -6958,7 +6987,7 @@ export class AppView {
   private askHowHard(title: string, current: number | null): Promise<number | null | 'left alone'> {
     this.el.starsText.textContent = `How hard is “${title}”, from one to ten?`;
     this.el.starsValue.value = current === null ? '' : current.toFixed(1);
-    this.el.sheetStars.hidden = false;
+    this.showTheSheet(this.el.sheetStars);
     this.el.starsValue.focus();
     this.el.starsValue.select();
 
@@ -7033,7 +7062,7 @@ export class AppView {
     this.el.renameText.textContent = `What should “${current}” be called?`;
     this.el.renameName.value = current;
     this.el.renameProblem.hidden = true;
-    this.el.sheetRename.hidden = false;
+    this.showTheSheet(this.el.sheetRename);
     this.el.renameName.focus();
     this.el.renameName.select();
 
@@ -7109,7 +7138,7 @@ export class AppView {
     // button says what the state of the question is, and there is nothing to
     // report about an answer nobody has given yet.
     this.el.confirmYes.disabled = typed !== null;
-    this.el.sheetConfirm.hidden = false;
+    this.showTheSheet(this.el.sheetConfirm);
     if (typed !== null) {
       this.el.confirmTyped.focus();
     }
@@ -7617,7 +7646,7 @@ export class AppView {
     this.stopTheRoll();
     this.rollAtMs = 0;
     this.drawTheRollInto();
-    this.el.sheetRoll.hidden = false;
+    this.showTheSheet(this.el.sheetRoll);
     // Measured after it is on the screen and not before. A hidden sheet has no
     // width, so the box saying which part of the run is in view was worked out
     // against nothing, found nothing to say, and stayed away until the first
@@ -8161,7 +8190,7 @@ export class AppView {
     };
     this.rollAtMs = 0;
     this.drawTheRollInto();
-    this.el.sheetRoll.hidden = false;
+    this.showTheSheet(this.el.sheetRoll);
     this.sayWhereTheViewIs();
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();

@@ -955,6 +955,22 @@ describe('the stylesheet', () => {
     expect(HTML).toMatch(/id="sheet-confirm"[^>]*class="[^"]*sheet--over/);
   });
 
+  it('raises each sheet above the one it was opened from', () => {
+    // Readings opens a reading, which opens the picture of what was played,
+    // and each stands over the last rather than shutting it. The view writes
+    // the depth on the sheet; these are the steps it is raised by.
+    const level = (selector: string): number => {
+      const body = rules().find((rule) => rule.selector === selector)?.body ?? '';
+      return Number(/z-index\s*:\s*(\d+)/.exec(body)?.[1] ?? '0');
+    };
+    const deep = ['2', '3', '4', '5'].map((over) => level(`.sheet[data-over='${over}']`));
+
+    expect(deep[0]).toBeGreaterThan(level('.sheet'));
+    for (let at = 1; at < deep.length; at += 1) {
+      expect(deep[at]).toBeGreaterThan(deep[at - 1] ?? 0);
+    }
+  });
+
   it('asks the viewport to reach under the safe areas', () => {
     // The stylesheet already offsets by `env(safe-area-inset-*)`, and without
     // `viewport-fit=cover` those resolve to zero - so the transport pill sits

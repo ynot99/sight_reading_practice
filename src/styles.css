@@ -2887,6 +2887,45 @@ body[data-playing='true'] .score__modes {
   z-index: 41;
 }
 
+/*
+ * And in general: a sheet stands as deep as the reader opened it.
+ *
+ * The class above says which sheet is *always* raised from another; this says
+ * where one landed *this time*. Readings opens a reading, which opens the
+ * picture of what was played, and none of the three shuts the one beneath it
+ * - his: "ніякий діалог не зачинявся поки я сам їх не зачиню". Each is over
+ * what it came from, and the view writes the number on it as it opens.
+ */
+.sheet[data-over='2'] {
+  z-index: 42;
+}
+
+.sheet[data-over='3'] {
+  z-index: 43;
+}
+
+.sheet[data-over='4'] {
+  z-index: 44;
+}
+
+.sheet[data-over='5'] {
+  z-index: 45;
+}
+
+/*
+ * Dimmed once, however deep the pile.
+ *
+ * Each sheet lays its own veil over the page, so three of them made a page
+ * nearly black - and the thing the reader is reading, a row of readings under
+ * a reading, is exactly what those veils were hiding.
+ */
+.sheet[data-over='2'],
+.sheet[data-over='3'],
+.sheet[data-over='4'],
+.sheet[data-over='5'] {
+  background: rgb(16 24 40 / 18%);
+}
+
 .sheet__panel--narrow {
   width: min(380px, 100%);
 }

@@ -893,6 +893,64 @@ describe('AppView', () => {
       expect(runtime.takePlayer.playing).toBeNull();
     });
 
+    it('unwinds a reading and its picture one at a time, shutting nothing by itself', async () => {
+      // His: "був order відчинянь readings -> reading -> MIDI viewer та ніякий
+      // діалог не зачинявся поки я сам їх не зачиню".
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:A', {
+        atMs: Date.now(),
+        overall: 0.8,
+        grade: 'B',
+        completed: true,
+        roll: {
+          presses: [
+            {
+              midi: 60,
+              downAtMs: 0,
+              upAtMs: 300,
+              velocity: 0.5,
+              verdict: null,
+              stepIndex: null,
+              deviationMs: null,
+            },
+          ],
+          beats: [],
+          pedal: [],
+          rushes: [],
+          truncated: false,
+        },
+      });
+
+      element<HTMLButtonElement>('focus-readings').click();
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+      element<HTMLButtonElement>('reading-roll').click();
+
+      // All three standing, each over the one it was opened from.
+      expect(element('sheet-readings').hidden).toBe(false);
+      expect(element('sheet-reading').hidden).toBe(false);
+      expect(element('sheet-roll').hidden).toBe(false);
+      expect(Number(element('sheet-roll').dataset['over'])).toBeGreaterThan(
+        Number(element('sheet-reading').dataset['over']),
+      );
+      expect(Number(element('sheet-reading').dataset['over'])).toBeGreaterThan(
+        Number(element('sheet-readings').dataset['over']),
+      );
+
+      pressEscape();
+      expect(element('sheet-roll').hidden).toBe(true);
+      expect(element('sheet-reading').hidden).toBe(false);
+
+      pressEscape();
+      expect(element('sheet-reading').hidden).toBe(true);
+      expect(element('sheet-readings').hidden).toBe(false);
+
+      pressEscape();
+      expect(element('sheet-readings').hidden).toBe(true);
+    });
+
     it('takes the sheet laid over another before the one underneath', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();
@@ -5910,7 +5968,12 @@ describe('AppView', () => {
       element<HTMLButtonElement>('reading-roll').click();
 
       expect(element('sheet-roll').hidden).toBe(false);
-      expect(element('sheet-reading').hidden).toBe(true);
+      // The reading stays open underneath, and the picture stands over it:
+      // nothing shuts until the reader shuts it.
+      expect(element('sheet-reading').hidden).toBe(false);
+      expect(Number(element('sheet-roll').dataset['over'])).toBeGreaterThan(
+        Number(element('sheet-reading').dataset['over']),
+      );
       expect(element('roll-title').textContent).toContain('Clair de Lune');
       // Not of the score in front of the reader, so there is nothing in it to
       // keep or to practise.

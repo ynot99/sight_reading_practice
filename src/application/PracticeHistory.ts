@@ -260,11 +260,35 @@ export class PracticeHistory {
    * fills the table with itself and the rest of the library is not there to
    * compare. Exercises are the exception: `level:1a` is not a piece but a
    * ladder step, and every reading of it was a different melody.
+   *
+   * The hardest pieces first, and the best score among pieces as hard. His:
+   * "Та сортувати по складності. Якщо є таке в нас." How hard a piece is
+   * belongs to the piece and not to the reading - the stars are the reader's
+   * own and change - so it is asked for rather than kept, and a piece rated
+   * again since is ranked by what it is now. One nobody has rated says nothing
+   * either way, and follows the ones that are rated, by score.
    */
-  bestReadings(limit = 10, ofPiece?: string): readonly PracticeReading[] {
+  bestReadings(
+    limit = 10,
+    ofPiece?: string,
+    howHard: (key: string) => number | null = () => null,
+  ): readonly PracticeReading[] {
     const completed = this.readingsOf(ofPiece).filter((reading) => reading.completed);
     const byScore = (left: PracticeReading, right: PracticeReading): number =>
       right.overall - left.overall || right.atMs - left.atMs;
+    const hardness = new Map(completed.map((reading) => [reading, howHard(reading.key)]));
+    const byRank = (left: PracticeReading, right: PracticeReading): number => {
+      const leftIs = hardness.get(left) ?? null;
+      const rightIs = hardness.get(right) ?? null;
+      if (leftIs === rightIs) {
+        return byScore(left, right);
+      }
+      if (leftIs === null || rightIs === null) {
+        return leftIs === null ? 1 : -1;
+      }
+      return rightIs - leftIs;
+    };
+    // One piece is as hard as itself, so its own readings go by score alone.
     if (ofPiece !== undefined) {
       return [...completed].sort(byScore).slice(0, Math.max(0, limit));
     }
@@ -281,7 +305,7 @@ export class PracticeHistory {
         best.set(piece, reading);
       }
     }
-    return [...best.values(), ...exercises].sort(byScore).slice(0, Math.max(0, limit));
+    return [...best.values(), ...exercises].sort(byRank).slice(0, Math.max(0, limit));
   }
 
   /**

@@ -2296,7 +2296,9 @@ export class AppView {
     const piece = this.el.readingsThisPiece.checked
       ? this.runtime.controller.pieceKey
       : undefined;
-    const readings = best ? history.bestReadings(50, piece) : history.lastReadings(50, piece);
+    const readings = best
+      ? history.bestReadings(50, piece, (key) => this.howHardThePieceIs(key))
+      : history.lastReadings(50, piece);
     this.el.readingsEmpty.hidden = readings.length > 0;
     this.el.readingsEmpty.textContent = best
       ? 'Nothing played to the end yet. A reading has to finish to be one of the best.'

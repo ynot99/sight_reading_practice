@@ -51,6 +51,46 @@ describe('every reading there has been', () => {
     ]);
   });
 
+  it('ranks the hardest piece first, whatever it scored', () => {
+    // His: "Та сортувати по складності". Among pieces as hard as each other,
+    // the better reading first - played earlier, so it is the score and not
+    // the time that puts it there.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    history.record('score:Easy', { atMs: 1, overall: 0.95, grade: 'A', completed: true });
+    history.record('score:Also hard', { atMs: 2, overall: 0.8, grade: 'B', completed: true });
+    history.record('score:Hard', { atMs: 3, overall: 0.6, grade: 'C', completed: true });
+    const stars: Readonly<Record<string, number>> = {
+      'score:Easy': 3,
+      'score:Hard': 7,
+      'score:Also hard': 7,
+    };
+
+    const ranked = history.bestReadings(10, undefined, (key) => stars[key] ?? null);
+
+    expect(ranked.map((reading) => reading.key)).toEqual([
+      'score:Also hard',
+      'score:Hard',
+      'score:Easy',
+    ]);
+  });
+
+  it('puts what nobody has rated after what has been, by score', () => {
+    // An unrated piece says nothing either way about how hard it is, and an
+    // exercise has no stars at all.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    history.record('score:Rated', { atMs: 1, overall: 0.5, grade: 'D', completed: true });
+    history.record('score:Unrated', { atMs: 2, overall: 0.99, grade: 'A', completed: true });
+    history.record('level:1a', { atMs: 3, overall: 0.7, grade: 'B', completed: true });
+
+    const ranked = history.bestReadings(10, undefined, (key) => (key === 'score:Rated' ? 2 : null));
+
+    expect(ranked.map((reading) => reading.key)).toEqual([
+      'score:Rated',
+      'score:Unrated',
+      'level:1a',
+    ]);
+  });
+
   it('carries the speed and the hand it was played with', () => {
     // A score means nothing without them: eighty-two per cent of a passage
     // at seventy with one hand is a different afternoon's work.

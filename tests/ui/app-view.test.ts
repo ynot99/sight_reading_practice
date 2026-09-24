@@ -5907,6 +5907,38 @@ describe('AppView', () => {
       expect(rows).not.toContain('Stopped');
     });
 
+    it('puts the hardest pieces first among the best, passages by their piece', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Easy' }), 1_000);
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Hard' }), 2_000);
+      for (const kept of rig.runtime.scores.list()) {
+        await rig.runtime.scores.keepTheStars(kept.id, kept.title === 'Hard' ? 8 : 2, 3_000);
+      }
+      rig.runtime.history.record('score:Easy', {
+        atMs: Date.now(),
+        overall: 0.95,
+        grade: 'A',
+        completed: true,
+      });
+      rig.runtime.history.record('score:Hard bars:3-6', {
+        atMs: Date.now(),
+        overall: 0.6,
+        grade: 'C',
+        completed: true,
+      });
+      element<HTMLButtonElement>('focus-readings').click();
+
+      const best = element<HTMLInputElement>('readings-best');
+      best.checked = true;
+      best.dispatchEvent(new Event('change'));
+
+      const names = [...element('readings-list').querySelectorAll('.readings__name')].map(
+        (name) => name.textContent,
+      );
+      expect(names).toEqual(['Hard', 'Easy']);
+    });
+
     /** A reading as a run records one, with the picture and roll it kept. */
     function readingKept(how: Partial<PracticeAttempt> = {}): PracticeAttempt {
       return {

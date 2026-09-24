@@ -3926,6 +3926,29 @@ describe('AppView', () => {
         .map((control) => control.id);
 
       expect(orphans).toEqual([]);
+
+      // And no control sits in a box belonging to another section. A box is
+      // drawn only while its own section is the one showing, and it takes
+      // whatever is inside it with it: the computer keyboard checkbox, marked
+      // for the instrument section, sat in the practice one and so was drawn
+      // on no tab at all.
+      const shutAway = [...sheet.querySelectorAll<HTMLElement>('input, select')]
+        .filter((control) => {
+          const boxes: string[][] = [];
+          for (let box = control.parentElement; box !== null && box !== sheet; box = box.parentElement) {
+            const sections = box.getAttribute('data-pane');
+            if (sections !== null) {
+              boxes.push(sections.trim().split(/\s+/));
+            }
+          }
+          const shared = boxes.reduce((left, right) => left.filter((name) => right.includes(name)), [
+            ...(boxes[0] ?? []),
+          ]);
+          return boxes.length > 1 && shared.length === 0;
+        })
+        .map((control) => control.id);
+
+      expect(shutAway).toEqual([]);
     });
 
     it('shows one section at a time, and says which', async () => {

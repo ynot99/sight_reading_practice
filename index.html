@@ -972,6 +972,18 @@
           <p id="keyboard-description" class="hint"></p>
         </div>
 
+        <!--
+          Playing the trainer from the letter keys. Two octaves from C3, so
+          the app is usable before a MIDI keyboard is plugged in or while
+          practising away from the instrument.
+        -->
+        <div class="control-group control-group--checks" data-pane="instrument">
+          <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
+          <p class="hint">
+            Two octaves from C3 laid across the letter keys: Z–M and Q–I.
+          </p>
+        </div>
+
         <div class="control-group" data-pane="exercise">
           <label for="preset">Level</label>
           <select id="preset"></select>
@@ -1373,7 +1385,6 @@
             -->
             <button id="settings-metronome" type="button" class="button">Metronome…</button>
           </div>
-          <label data-pane="instrument"><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
         </div>
         </div>
 

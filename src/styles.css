@@ -3404,25 +3404,38 @@ body[data-playing='true'] .score__modes {
  * "on" is the only difference: the squares are each their own answer, and
  * this one is on whenever the run is *not* the plain one the app opens with.
  * Flowing in time is where a reader starts, so that is the state it rests in.
+ *
+ * Each colour is named once, for the button and for every mark cloned from
+ * it - the corner of the score and a reading's row. Named apart, the two went
+ * out of step: when the app came to open on flow, waiting became a frame that
+ * wears a mark, and its mark was the grey of no colour at all.
  */
-.frame__choice[data-frame='bar'] {
+.frame__choice[data-frame='bar'],
+.score__mode--bar {
   --mode-ground: #155e63;
 }
 
-.frame__choice[data-frame='wait'] {
+.frame__choice[data-frame='wait'],
+.score__mode--wait {
   --mode-ground: #78350f;
 }
 
-.frame__choice[data-frame='flow'] {
+.frame__choice[data-frame='flow'],
+.score__mode--flow {
   --mode-ground: #1e3a8a;
 }
 
-.frame__choice[data-frame='listen'] {
+.frame__choice[data-frame='listen'],
+.score__mode--listen {
   --mode-ground: #3730a3;
 }
 
 /* Solid drawings, where the squares' are drawn with a line. */
-.frame__choice svg {
+.frame__choice svg,
+.score__mode--bar svg,
+.score__mode--wait svg,
+.score__mode--flow svg,
+.score__mode--listen svg {
   fill: currentColor;
   stroke: none;
 }
@@ -3561,26 +3574,6 @@ body[data-playing='true'] .score__modes {
 .mode-card--cursor,
 .score__mode--cursor {
   --mode-ground: #115e59;
-}
-
-/* The mark in the corner is the button's own colour, being its own icon. */
-.score__mode--flow {
-  --mode-ground: #1e3a8a;
-}
-
-.score__mode--bar {
-  --mode-ground: #155e63;
-}
-
-.score__mode--listen {
-  --mode-ground: #3730a3;
-}
-
-.score__mode--flow svg,
-.score__mode--bar svg,
-.score__mode--listen svg {
-  fill: currentColor;
-  stroke: none;
 }
 
 /*

@@ -1212,6 +1212,43 @@ describe('who gets the pinch', () => {
   });
 });
 
+describe('the mark a frame wears', () => {
+  // Every frame the one button walks through; the view writes these names on
+  // the button and on each mark it clones from it.
+  const FRAMES = ['wait', 'bar', 'flow', 'listen'];
+  /** The rules that name `selector`, alone or in a group. */
+  const naming = (selector: string): { body: string }[] =>
+    rules().filter((rule) =>
+      rule.selector
+        .split(',')
+        .map((part) => part.trim())
+        .includes(selector),
+    );
+  const ground = (selector: string): string | undefined =>
+    naming(selector)
+      .map((rule) => /--mode-ground\s*:\s*([^;]+);/.exec(rule.body)?.[1]?.trim())
+      .find((value) => value !== undefined);
+
+  it.each(FRAMES)('gives the %s mark the colour of the button it was cloned from', (frame) => {
+    // Wait's had none, so it wore the grey of no colour at all - in the
+    // corner of the score, and on every reading played in it.
+    const own = ground(`.frame__choice[data-frame='${frame}']`);
+
+    expect(own).toBeDefined();
+    expect(ground(`.score__mode--${frame}`)).toBe(own);
+  });
+
+  it.each(FRAMES)('draws the %s mark solid, as the button draws it', (frame) => {
+    // A square's icon is a line and a frame's is a shape; drawn with the
+    // squares' line, a shape is an outline of itself.
+    const solid = naming(`.score__mode--${frame} svg`).some((rule) =>
+      /fill\s*:\s*currentColor/.test(rule.body),
+    );
+
+    expect(solid).toBe(true);
+  });
+});
+
 describe('the head on the ruler', () => {
   const body = (selector: string): string =>
     rules().find((rule) => rule.selector === selector)?.body ?? '';

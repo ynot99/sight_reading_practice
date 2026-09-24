@@ -490,6 +490,27 @@ textarea {
   border: none;
   background: transparent;
   border-radius: 6px;
+  transition: background 120ms ease;
+}
+
+/*
+ * The row lights under the finger.
+ *
+ * The other lists brighten their small buttons, which says nothing here: the
+ * whole row is the button, and a row that does not answer a touch reads as a
+ * list that cannot be opened. Lit by laying the page's own ink over the row's
+ * ground, so it works the same in either theme, and held while a finger is
+ * down - on a tablet that press is the only moment there is, since nothing
+ * hovers there. His: "щоб і бекграунд на кожному item підсвічувався".
+ */
+.takes__list button.readings__open:hover,
+.takes__list button.readings__open:focus-visible {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  filter: none;
+}
+
+.takes__list button.readings__open:active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .readings__lines {

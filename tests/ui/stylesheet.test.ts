@@ -1207,4 +1207,21 @@ describe('a list of readings', () => {
     expect(row?.body).toMatch(/flex:\s*none/);
     expect(row?.body).toMatch(/min-height:\s*min-content/);
   });
+
+  it('lights the whole row under a finger, since the whole row is the button', () => {
+    // The brightness the other lists put on their small buttons does nothing
+    // to a transparent one, so the row answered a touch with nothing at all.
+    const lit = rules().find(
+      (rule) =>
+        rule.selector ===
+        '.takes__list button.readings__open:hover, .takes__list button.readings__open:focus-visible',
+    );
+    const pressed = rules().find(
+      (rule) => rule.selector === '.takes__list button.readings__open:active',
+    );
+
+    expect(lit?.body).toContain('background:');
+    // A tablet has no hover at all: the press is the whole of the answer.
+    expect(pressed?.body).toContain('background:');
+  });
 });

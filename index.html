@@ -674,6 +674,15 @@
               <input id="readings-best" type="checkbox" />
               <span>Best first</span>
             </label>
+            <!--
+              The piece in front of the reader, when there is one. An hour on
+              one piece is an hour of rows to scroll past before the reader
+              finds out whether this morning was better than last night's.
+            -->
+            <label class="sheet__filter">
+              <input id="readings-this-piece" type="checkbox" />
+              <span>This piece</span>
+            </label>
             <button id="readings-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>
@@ -681,6 +690,33 @@
           <p id="readings-empty" class="hint">
             Nothing read yet. Play something to the end and it is remembered here.
           </p>
+        </div>
+      </div>
+
+      <!--
+        One reading of the list, opened.
+
+        The same picture the report draws when a run ends - the bars, the
+        shape, the scatter - kept with the reading rather than drawn again
+        from a report, so what is shown a week later is what was shown then.
+        Over the list rather than instead of it: the reader is comparing, and
+        shutting this puts them back where they were comparing from.
+      -->
+      <div id="sheet-reading" class="sheet sheet--over" hidden>
+        <div class="sheet__panel sheet__panel--wide" role="dialog" aria-modal="true"
+          aria-labelledby="reading-title">
+          <div class="sheet__head">
+            <strong id="reading-title" class="sheet__title">A reading</strong>
+            <button id="reading-close" type="button" data-shuts class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+          <div id="reading-what" class="reading"></div>
+          <div class="sheet__actions">
+            <button id="reading-roll" type="button" class="button button--ghost" hidden>
+              See what you played
+            </button>
+            <button id="reading-delete" type="button" class="button button--ghost">Delete</button>
+          </div>
         </div>
       </div>
 

@@ -31,6 +31,7 @@ import { ScoreLibrary } from '../../src/application/ScoreLibrary.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { TimeToday } from '../../src/application/TimeToday.js';
 import { PracticeHistory } from '../../src/application/PracticeHistory.js';
+import type { PracticeAttempt } from '../../src/application/PracticeHistory.js';
 import {
   beatsWorthMarking,
   rollBeganAtMs,
@@ -5507,6 +5508,184 @@ describe('AppView', () => {
       const rows = element('readings-list').textContent ?? '';
       expect(rows).toContain('Finished');
       expect(rows).not.toContain('Stopped');
+    });
+
+    /** A reading as a run records one, with the picture and roll it kept. */
+    function readingKept(how: Partial<PracticeAttempt> = {}): PracticeAttempt {
+      return {
+        atMs: Date.now(),
+        overall: 0.82,
+        grade: 'B',
+        completed: true,
+        picture: {
+          bars: 'cw.',
+          waitedAtBars: [1],
+          axes: [
+            { name: 'Accuracy', of: 0.9, said: '9 of 10' },
+            { name: 'Timing', of: 0.8, said: '20 ms' },
+            { name: 'Evenness', of: 0.7, said: 'steady' },
+          ],
+          deviationsMs: [-20, -5, 0, 5, 20, 30],
+          pressesJudged: 60,
+          toleranceMs: 120,
+          totals: {
+            steps: 10,
+            playableSteps: 12,
+            correct: 9,
+            incorrect: 1,
+            missed: 0,
+            skipped: 2,
+            expectedNotes: 20,
+            correctNotes: 18,
+            wrongNotes: 2,
+            barsWaitedFor: 1,
+          },
+          meanDeviationMs: -4,
+          meanAbsoluteDeviationMs: 13,
+          deviationSpreadMs: 17,
+          stoppedAtBar: null,
+        },
+        ...how,
+      };
+    }
+
+    it('opens one reading over the list, drawn as the report after a run is', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:Clair de Lune', readingKept());
+      element<HTMLButtonElement>('focus-readings').click();
+
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      expect(element('sheet-reading').hidden).toBe(false);
+      expect(element('reading-title').textContent).toContain('Clair de Lune');
+      const what = element('reading-what');
+      // The bars as they read, one cell each, the second of them waited at.
+      const bars = [...what.querySelectorAll('.run-strip__bar')];
+      expect(bars.map((bar) => bar.getAttribute('data-state'))).toEqual(['clean', 'wrong', 'unread']);
+      expect(bars[1]?.getAttribute('data-waited')).toBe('true');
+      // The shape of the playing, and the numbers under it.
+      expect(what.querySelector('.profile-figure')).not.toBeNull();
+      expect(what.textContent).toContain('18/20');
+      expect(what.textContent).toContain('13 ms');
+    });
+
+    it('says when only some of the presses are drawn, rather than letting them be counted', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:Long', readingKept());
+      element<HTMLButtonElement>('focus-readings').click();
+
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      expect(element('reading-what').textContent).toContain('6 of the 60 presses drawn');
+    });
+
+    it('says so where a reading has given its picture up, rather than drawing an empty frame', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const { picture: _picture, ...bare } = readingKept();
+      rig.runtime.history.record('score:Old', bare);
+      element<HTMLButtonElement>('focus-readings').click();
+
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      expect(element('reading-what').textContent).toContain('given up to make room');
+      expect(element('reading-what').querySelector('.run-strip')).toBeNull();
+    });
+
+    it('opens the picture of what a reading played, titled with the reading', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record(
+        'score:Clair de Lune',
+        readingKept({
+          roll: {
+            presses: [{
+              midi: 60,
+              downAtMs: 0,
+              upAtMs: 500,
+              velocity: 0.6,
+              verdict: null,
+              stepIndex: null,
+              deviationMs: null,
+            }],
+            beats: [],
+            pedal: [],
+            rushes: [],
+            truncated: false,
+          },
+        }),
+      );
+      element<HTMLButtonElement>('focus-readings').click();
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      expect(element('reading-roll').hidden).toBe(false);
+      element<HTMLButtonElement>('reading-roll').click();
+
+      expect(element('sheet-roll').hidden).toBe(false);
+      expect(element('sheet-reading').hidden).toBe(true);
+      expect(element('roll-title').textContent).toContain('Clair de Lune');
+      // Not of the score in front of the reader, so there is nothing in it to
+      // keep or to practise.
+      expect(element<HTMLButtonElement>('roll-practise').disabled).toBe(true);
+      expect(element('roll-keep').hidden).toBe(true);
+    });
+
+    it('offers no picture of a reading that has none', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:Old', readingKept());
+      element<HTMLButtonElement>('focus-readings').click();
+
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      expect(element('reading-roll').hidden).toBe(true);
+    });
+
+    it('forgets one reading when the reader says so, and leaves the rest', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:A', readingKept({ atMs: 1_000 }));
+      rig.runtime.history.record('score:A', readingKept({ atMs: 2_000 }));
+      element<HTMLButtonElement>('focus-readings').click();
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      element<HTMLButtonElement>('reading-delete').click();
+      await confirmDeletion();
+      await waitFor(() => element('sheet-reading').hidden === true);
+
+      expect(rig.runtime.history.lastReadings().map((reading) => reading.atMs)).toEqual([1_000]);
+      expect(element('readings-list').querySelectorAll('li')).toHaveLength(1);
+    });
+
+    it('narrows the list to the piece in front of the reader when asked', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const here = rig.runtime.controller.pieceKey;
+      rig.runtime.history.record(here, readingKept({ atMs: 1_000 }));
+      rig.runtime.history.record('score:Somewhere else', readingKept({ atMs: 2_000 }));
+      element<HTMLButtonElement>('focus-readings').click();
+      expect(element('readings-list').textContent).toContain('Somewhere else');
+
+      const thisPiece = element<HTMLInputElement>('readings-this-piece');
+      thisPiece.checked = true;
+      thisPiece.dispatchEvent(new Event('change'));
+
+      expect(element('readings-list').textContent).not.toContain('Somewhere else');
+      expect(element('readings-list').querySelectorAll('li')).toHaveLength(1);
     });
   });
 

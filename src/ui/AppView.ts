@@ -1,5 +1,8 @@
 import type { AppRuntime } from '../composition/createApp.js';
 import { FLOW_MODE_ID } from '../application/modes/FlowMode.js';
+import { modeIsOn, settingsForMode } from '../application/modes/challengeModes.js';
+import { barCells } from '../domain/scoring/barCells.js';
+import { barsOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { BAR_MODE_ID } from '../application/modes/BarMode.js';
 import { WAIT_MODE_ID } from '../application/modes/WaitMode.js';
@@ -51,7 +54,7 @@ import {
 } from '../application/ports/IMetronome.js';
 import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
-import type { PassageHistory } from '../application/PracticeHistory.js';
+import type { PassageHistory, PracticeReading } from '../application/PracticeHistory.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barLines, barNumberOf, measureCount, spanMs } from '../domain/model/Exercise.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
@@ -364,57 +367,6 @@ function describeBarRange(controller: AppRuntime['controller']): string {
 }
 
 /**
- * What a mode square is, said once.
- *
- * Each is a setting that already exists, read and written through this rather
- * than duplicated by it: there is one answer to "am I playing survival", and
- * the square is another way of asking it. `blind` is the veil drawn over the
- * step under the reader's fingers, which is what makes it blind - the note is
- * gone by the time they reach it, so it has to have been read already.
- */
-function modeIsOn(mode: string, settings: PracticeSettings): boolean {
-  switch (mode) {
-    case 'survival':
-      return settings.survival;
-    case 'blind':
-      return settings.readAheadSteps !== null && settings.readAheadSteps >= 1;
-    case 'rhythm':
-      return settings.rhythmOnly;
-    case 'strict':
-      return settings.stopAtAMistake;
-    // Read the other way round, because the square is the challenge and the
-    // setting is the comfort: on means the marker is gone and the reader is
-    // keeping the place themselves.
-    case 'cursor':
-      return !settings.cursorWhileRunning;
-    default:
-      return false;
-  }
-}
-
-/** The settings a square writes when it is turned on or off. */
-function settingsForMode(mode: string, on: boolean): Partial<PracticeSettings> {
-  switch (mode) {
-    case 'survival':
-      return { survival: on };
-    case 'blind':
-      return { readAheadSteps: on ? 1 : null };
-    // Each of these empties the other, so each turns the other off - "one
-    // wrong note ends the run" and "any note counts" cannot both be the
-    // answer. His: both squares answer, rather than one of them refusing.
-    // Turning either *off* leaves the other alone: it was already off.
-    case 'rhythm':
-      return on ? { rhythmOnly: true, stopAtAMistake: false } : { rhythmOnly: false };
-    case 'strict':
-      return on ? { stopAtAMistake: true, rhythmOnly: false } : { stopAtAMistake: false };
-    case 'cursor':
-      return { cursorWhileRunning: !on };
-    default:
-      return {};
-  }
-}
-
-/**
  * What each kind of run does, in one sentence.
  *
  * Said in one place because it is said in two: the sheet where the run is
@@ -499,47 +451,6 @@ const FRAME_WHAT: Readonly<Record<string, string>> = {
   [FLOW_MODE_ID]: 'The beat carries the music',
   [LISTEN_MODE_ID]: 'The machine plays it to you',
 };
-
-/**
- * One cell per bar of the run, in reading order.
- *
- * His: "цифрами іноді мій мозок просто йде у loading, та не хочеться розуміти
- * що я зараз читаю". A row of numbers answers "how well"; this answers
- * "where", which is the question a reader actually has - and it answers it
- * without being read at all. Four clean bars and then a wall of red is a
- * sentence about the piece that no percentage can say.
- *
- * Two things at once, and deliberately not one: the colour is what was read
- * there, and the mark is where the music had to stop for you. A bar that
- * waited is very often also a bar with wrong notes in it, so a single colour
- * ranking one above the other would simply lose whichever came second.
- */
-function barCells(
-  report: PerformanceReport,
-  bars: number,
-): readonly { readonly label: string; readonly state: string; readonly waited: boolean }[] {
-  const waited = new Set(report.waitedAtBars);
-  return Array.from({ length: bars }, (_unused, measureIndex) => {
-    const steps = report.steps.filter((step) => step.measureIndex === measureIndex);
-    const wrong = steps.reduce((sum, step) => sum + step.wrong.length, 0);
-    const missing = steps.reduce((sum, step) => sum + step.missing.length, 0);
-    const said = [
-      wrong > 0 ? `${wrong} wrong` : '',
-      missing > 0 ? `${missing} missed` : '',
-      waited.has(measureIndex) ? 'waited here' : '',
-    ].filter((part) => part !== '');
-    // The whole piece, not the part that was reached. A run abandoned in bar
-    // three otherwise looks like a flawless piece three bars long, which is
-    // the same lie `playableSteps` exists to stop the percentages telling.
-    const state = steps.length === 0 ? 'unread' : wrong + missing === 0 ? 'clean' : 'wrong';
-    const how = state === 'unread' ? 'not reached' : said.join(', ') || 'clean';
-    return {
-      label: `Bar ${measureIndex + 1} · ${how}`,
-      state,
-      waited: waited.has(measureIndex),
-    };
-  });
-}
 
 /**
  * How often the bar line had to wait, where there is a bar line that waits.
@@ -1372,14 +1283,24 @@ export class AppView {
    * asked for a click. The view has one, so the walking is done here.
    */
   /**
-   * The recording the picture is of, or `null` for the run just played.
+   * The playing the picture is of, or `null` for the run just played.
    *
-   * The picture draws presses and pedal spans against time, and a recording is
-   * exactly that written down - so looking at one asks for no second drawing,
-   * only for a different answer to "which roll". His: "можливість відчинити
-   * будь який recording у MIDI viewer".
+   * A kept recording or a reading out of the history: the picture draws
+   * presses and pedal spans against time, and both of those are exactly that
+   * written down - so looking at one asks for no second drawing, only for a
+   * different answer to "which roll". His: "можливість відчинити будь який
+   * recording у MIDI viewer". Each carries what it is and why there is no
+   * passage in it to practise, since neither is of the score in front of the
+   * reader now.
    */
-  private theTakeShowing: RunRoll | null = null;
+  private theOtherRollShowing: {
+    readonly roll: RunRoll;
+    readonly what: string;
+    readonly why: string;
+  } | null = null;
+
+  /** The reading the sheet over the list is showing, so its buttons know theirs. */
+  private theReadingShowing: PracticeReading | null = null;
   private theOtherHandsWalk: { readonly stepIndex: number; readonly atMs: number }[] = [];
   private theOtherHandsStep: ReturnType<typeof setTimeout> | null = null;
   private silenceWatch: ReturnType<typeof setTimeout> | null = null;
@@ -1602,6 +1523,13 @@ export class AppView {
     readingsList: HTMLUListElement;
     readingsEmpty: HTMLElement;
     readingsBest: HTMLInputElement;
+    readingsThisPiece: HTMLInputElement;
+    sheetReading: HTMLElement;
+    readingTitle: HTMLElement;
+    readingWhat: HTMLElement;
+    readingRoll: HTMLButtonElement;
+    readingDelete: HTMLButtonElement;
+    readingClose: HTMLButtonElement;
     readingsClose: HTMLButtonElement;
     focusReadings: HTMLButtonElement;
     sheetRename: HTMLElement;
@@ -1891,6 +1819,13 @@ export class AppView {
       readingsList: requireElement(doc, 'readings-list'),
       readingsEmpty: requireElement(doc, 'readings-empty'),
       readingsBest: requireElement(doc, 'readings-best'),
+      readingsThisPiece: requireElement(doc, 'readings-this-piece'),
+      sheetReading: requireElement(doc, 'sheet-reading'),
+      readingTitle: requireElement(doc, 'reading-title'),
+      readingWhat: requireElement(doc, 'reading-what'),
+      readingRoll: requireElement(doc, 'reading-roll'),
+      readingDelete: requireElement(doc, 'reading-delete'),
+      readingClose: requireElement(doc, 'reading-close'),
       readingsClose: requireElement(doc, 'readings-close'),
       focusReadings: requireElement(doc, 'focus-readings'),
       sheetRename: requireElement(doc, 'sheet-rename'),
@@ -2345,11 +2280,16 @@ export class AppView {
   private renderReadings(): void {
     const history = this.runtime.history;
     const best = this.el.readingsBest.checked;
-    const readings = best ? history.bestReadings(10) : history.lastReadings(20);
+    const piece = this.el.readingsThisPiece.checked
+      ? this.runtime.controller.pieceKey
+      : undefined;
+    const readings = best ? history.bestReadings(50, piece) : history.lastReadings(50, piece);
     this.el.readingsEmpty.hidden = readings.length > 0;
     this.el.readingsEmpty.textContent = best
       ? 'Nothing played to the end yet. A reading has to finish to be one of the best.'
-      : 'Nothing read yet. Play something and it is remembered here.';
+      : piece === undefined
+        ? 'Nothing read yet. Play something and it is remembered here.'
+        : 'Nothing read of this piece yet.';
     this.el.readingsList.replaceChildren();
 
     const now = Date.now();
@@ -2364,9 +2304,166 @@ export class AppView {
       when.className = 'takes__when';
       when.textContent = describeWhen(reading.atMs, now);
 
-      row.append(name, when);
+      const open = this.doc.createElement('button');
+      open.type = 'button';
+      open.textContent = 'Open';
+      open.title = 'Everything this reading was';
+      open.setAttribute('aria-label', `Open the reading: ${describeReading(reading)}`);
+      this.listen(open, 'click', () => {
+        this.showTheReading(reading);
+      });
+
+      row.append(name, when, open);
       this.el.readingsList.append(row);
     }
+  }
+
+  /**
+   * One reading, opened over the list.
+   *
+   * What it was: the bars as they read, the shape of the playing, where the
+   * hand fell about the beat. All of it kept with the reading when the run
+   * ended, so a reading of a piece that is not even open draws the same
+   * picture it drew that afternoon. An older one has given its picture up to
+   * make room for newer ones, and says so rather than drawing an empty frame.
+   */
+  private showTheReading(reading: PracticeReading): void {
+    this.theReadingShowing = reading;
+    this.el.readingTitle.textContent = describeReading(reading);
+    this.el.readingWhat.replaceChildren(...this.drawTheReading(reading));
+    this.el.readingRoll.hidden = reading.roll === undefined;
+    this.el.sheetReading.hidden = false;
+  }
+
+  /** The parts of the picture a reading kept, in the order the report shows them. */
+  private drawTheReading(reading: PracticeReading): readonly HTMLElement[] {
+    const drawn: HTMLElement[] = [];
+    const said = this.doc.createElement('p');
+    said.className = 'hint';
+    said.textContent = [
+      describeWhen(reading.atMs, Date.now()),
+      reading.completed
+        ? 'played to the end'
+        : `stopped${reading.stoppedAtBar === undefined || reading.stoppedAtBar === null ? '' : ` in bar ${reading.stoppedAtBar}`}`,
+      ...(reading.modes ?? []),
+    ].join(' · ');
+    drawn.push(said);
+
+    const picture = reading.picture;
+    if (picture === undefined) {
+      const gone = this.doc.createElement('p');
+      gone.className = 'hint';
+      gone.textContent =
+        'Only the score of this one is left: its picture was given up to make room for newer readings.';
+      drawn.push(gone);
+      return drawn;
+    }
+
+    const bars = barsOfThePicture(picture);
+    if (bars.length >= 2) {
+      const strip = this.doc.createElement('div');
+      strip.className = 'run-strip';
+      for (const cell of bars) {
+        const box = this.doc.createElement('span');
+        box.className = 'run-strip__bar';
+        box.dataset['state'] = cell.state;
+        box.dataset['waited'] = String(cell.waited);
+        box.title = cell.label;
+        strip.append(box);
+      }
+      drawn.push(strip);
+    }
+
+    if (picture.axes.length >= 3) {
+      const figure = this.doc.createElement('div');
+      figure.className = 'profile-figure';
+      figure.append(drawTheProfile(picture.axes));
+      const list = this.doc.createElement('dl');
+      list.className = 'profile-figure__said';
+      for (const axis of picture.axes) {
+        const name = this.doc.createElement('dt');
+        name.textContent = axis.name;
+        const value = this.doc.createElement('dd');
+        value.textContent = axis.said;
+        list.append(name, value);
+      }
+      figure.append(list);
+      drawn.push(figure);
+    }
+
+    const errors = theHitErrors(picture.deviationsMs, picture.toleranceMs);
+    if (errors !== null) {
+      drawn.push(drawTheHitErrors(errors));
+      if (picture.pressesJudged > picture.deviationsMs.length) {
+        // Said rather than left to be assumed: a strip of six hundred marks
+        // standing for three thousand presses is the shape of the playing,
+        // but it is not every press, and a reader counting them would be
+        // counting the wrong thing.
+        const some = this.doc.createElement('p');
+        some.className = 'hint';
+        some.textContent = `${picture.deviationsMs.length} of the ${picture.pressesJudged} presses drawn.`;
+        drawn.push(some);
+      }
+    }
+
+    const { totals } = picture;
+    const rows: readonly (readonly [string, string])[] = [
+      [
+        'Notes',
+        `${totals.correctNotes}/${totals.expectedNotes} (${percent(totals.expectedNotes === 0 ? 0 : totals.correctNotes / totals.expectedNotes)})`,
+      ],
+      ['Wrong notes', String(totals.wrongNotes)],
+      ['Timing', `${Math.round(picture.meanAbsoluteDeviationMs)} ms away on average`],
+      [
+        'Tendency',
+        `${describeTendency(picture.meanDeviationMs)} · ± ${Math.round(picture.deviationSpreadMs)} ms`,
+      ],
+    ];
+    for (const [name, value] of rows) {
+      const row = this.doc.createElement('div');
+      row.className = 'result__row';
+      const label = this.doc.createElement('span');
+      label.textContent = name;
+      const number = this.doc.createElement('strong');
+      number.textContent = value;
+      row.append(label, number);
+      drawn.push(row);
+    }
+    return drawn;
+  }
+
+  /** Puts the reading away, and the reading it was of with it. */
+  private shutTheReading(): void {
+    this.el.sheetReading.hidden = true;
+    this.theReadingShowing = null;
+  }
+
+  /**
+   * Opens the picture on what a kept reading played.
+   *
+   * The sheet it was asked from steps aside, the way the list of recordings
+   * does: asking to look at a reading is asking for the picture, and a sheet
+   * standing over what it has just opened is the thing it opened being in the
+   * way of itself.
+   */
+  private showTheReadingRoll(reading: PracticeReading): void {
+    const roll = reading.roll;
+    if (roll === undefined) {
+      return;
+    }
+    this.stopTheRoll();
+    this.shutTheReading();
+    this.theOtherRollShowing = {
+      roll,
+      what: describeReading(reading),
+      why: 'A reading kept from before: its bars are not this score’s to practise.',
+    };
+    this.rollAtMs = 0;
+    this.drawTheRollInto();
+    this.el.sheetRoll.hidden = false;
+    this.sayWhereTheViewIs();
+    this.sayWhatWouldBePractised();
+    this.sayWhatThePictureIsOf();
   }
 
   /**
@@ -3297,6 +3394,35 @@ export class AppView {
 
     this.listen(this.el.readingsBest, 'change', () => {
       this.renderReadings();
+    });
+
+    this.listen(this.el.readingsThisPiece, 'change', () => {
+      this.renderReadings();
+    });
+
+    this.listen(this.el.readingClose, 'click', () => {
+      this.shutTheReading();
+    });
+
+    this.listen(this.el.readingRoll, 'click', () => {
+      if (this.theReadingShowing !== null) {
+        this.showTheReadingRoll(this.theReadingShowing);
+      }
+    });
+
+    this.listen(this.el.readingDelete, 'click', () => {
+      const reading = this.theReadingShowing;
+      if (reading === null) {
+        return;
+      }
+      void this.askToDelete(`Forget this reading of ${describeReading(reading)}?`).then((yes) => {
+        if (!yes) {
+          return;
+        }
+        this.runtime.history.remove(reading.key, reading.atMs);
+        this.shutTheReading();
+        this.renderReadings();
+      });
     });
 
     this.listen(this.el.readingsClose, 'click', () => {
@@ -7301,7 +7427,7 @@ export class AppView {
    * the reader who never presses the button should not be paying for them.
    */
   private showTheRoll(): void {
-    this.theTakeShowing = null;
+    this.theOtherRollShowing = null;
     // A different run is a different thing to keep.
     this.el.rollKeep.disabled = false;
     if (this.theRoll() === null) {
@@ -7825,7 +7951,7 @@ export class AppView {
    * has to be the same for the drawing, the marker, the playback and the map.
    */
   private theRoll(): RunRoll | null {
-    return this.theTakeShowing ?? this.runtime.controller.lastRoll;
+    return this.theOtherRollShowing?.roll ?? this.runtime.controller.lastRoll;
   }
 
   /**
@@ -7847,7 +7973,11 @@ export class AppView {
     // opened. His: "діалог з recordings перекриває сам MIDI viewer коли я обрав
     // look at this take".
     this.el.sheetTakes.hidden = true;
-    this.theTakeShowing = rollOfTheTake(take);
+    this.theOtherRollShowing = {
+      roll: rollOfTheTake(take),
+      what: 'A recording',
+      why: 'Free playing: no bars to practise.',
+    };
     this.rollAtMs = 0;
     this.drawTheRollInto();
     this.el.sheetRoll.hidden = false;
@@ -7864,14 +7994,14 @@ export class AppView {
    * something already in the list.
    */
   private sayWhatThePictureIsOf(): void {
-    const aTake = this.theTakeShowing !== null;
-    this.el.rollKeep.hidden = aTake;
-    this.el.rollFrom.disabled = aTake;
-    this.el.rollTo.disabled = aTake;
-    this.el.rollTitle.textContent = aTake ? 'A recording' : 'What you played';
-    if (aTake) {
+    const other = this.theOtherRollShowing;
+    this.el.rollKeep.hidden = other !== null;
+    this.el.rollFrom.disabled = other !== null;
+    this.el.rollTo.disabled = other !== null;
+    this.el.rollTitle.textContent = other?.what ?? 'What you played';
+    if (other !== null) {
       this.el.rollPractise.disabled = true;
-      this.el.rollPassageWhat.textContent = 'Free playing: no bars to practise.';
+      this.el.rollPassageWhat.textContent = other.why;
     }
   }
 
@@ -8326,7 +8456,7 @@ export class AppView {
       report,
       (this.runtime.controller.lastRoll?.presses ?? []).map((press) => press.velocity),
       this.theRunKeptTime(),
-      this.whereTheJudgedEntriesFall(report),
+      this.runtime.controller.whereTheJudgedEntriesFall(report),
     );
     if (axes.length < 3) {
       return;
@@ -8387,21 +8517,6 @@ export class AppView {
    * their entries are supposed to differ. In the same order and under the same
    * filter as the report's own deviations, since the two are read as a pair.
    */
-  private whereTheJudgedEntriesFall(report: PerformanceReport): readonly number[] {
-    const timeline = this.runtime.controller.currentTimeline;
-    const exercise = timeline?.exercise ?? null;
-    if (timeline === null || exercise === null) {
-      return [];
-    }
-    const from = timeline.at(report.steps[0]?.index ?? 0)?.onsetTicks ?? 0;
-    return report.steps
-      .filter((step) => step.deviationMs !== null)
-      .map((step) => {
-        const onset = timeline.at(step.index)?.onsetTicks;
-        return onset === undefined ? 0 : spanMs(exercise, from, onset);
-      });
-  }
-
   private drawTheBars(report: PerformanceReport): void {
     const exercise = this.runtime.controller.currentExercise;
     const bars =

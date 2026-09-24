@@ -454,6 +454,23 @@ textarea {
   font-size: 13px;
 }
 
+/*
+ * One reading out of the history, drawn like the report a run ends with.
+ *
+ * The same parts in the same order - the bars, the shape, the scatter, the
+ * numbers - so a reader who knows what the end of a run looks like already
+ * knows what this is. It scrolls itself: a long piece's strip of bars and
+ * three figures under it are taller than a tablet held sideways.
+ */
+.reading {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .result__grade {
   font-size: 30px;
   font-weight: 700;

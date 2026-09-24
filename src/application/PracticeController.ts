@@ -7,6 +7,9 @@ import type { KeySignature } from '../domain/model/KeySignature.js';
 import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import type { PerformanceReport, StepStatus } from '../domain/scoring/PerformanceReport.js';
+import { theReadingPicture, type ReadingPicture } from '../domain/scoring/ReadingPicture.js';
+import { modesOn } from './modes/challengeModes.js';
+import { pieceOfKey } from './PracticeHistory.js';
 import { beatAt, beatsBetween } from './session/metronomePlan.js';
 import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
 import {
@@ -921,6 +924,63 @@ export class PracticeController {
 
   get currentTimeline(): ExerciseTimeline | null {
     return this.timeline;
+  }
+
+  /**
+   * What the history files this piece's readings under, whichever bars of it
+   * are being read.
+   *
+   * The key without its passage, so a list narrowed to "this piece" holds the
+   * readings of the whole of it and of every stretch inside it - which is
+   * what a reader working through a piece has been doing all afternoon.
+   */
+  get pieceKey(): string {
+    return pieceOfKey(this.practiceKey());
+  }
+
+  /**
+   * Where each judged entry fell in the run, in milliseconds from its first.
+   *
+   * What the spacing axis of the profile is read against: the music's own
+   * clock, so a passage that slows down is not read as a reader who drifted.
+   * Asked of the controller because the timeline is its, and the same answer
+   * serves the chart after a run and the picture the history keeps.
+   */
+  whereTheJudgedEntriesFall(report: PerformanceReport): readonly number[] {
+    const timeline = this.timeline;
+    const exercise = timeline?.exercise ?? null;
+    if (timeline === null || exercise === null) {
+      return [];
+    }
+    const from = timeline.at(report.steps[0]?.index ?? 0)?.onsetTicks ?? 0;
+    return report.steps
+      .filter((step) => step.deviationMs !== null)
+      .map((step) => {
+        const onset = timeline.at(step.index)?.onsetTicks;
+        return onset === undefined ? 0 : spanMs(exercise, from, onset);
+      });
+  }
+
+  /**
+   * What a reading looked like, for the history to keep.
+   *
+   * Drawn as the run ends rather than when it is next opened: the profile is
+   * read against the timeline and the mode of the run it belongs to, and a
+   * week later those belong to whatever is open then.
+   */
+  private pictureOfTheReading(report: PerformanceReport, roll: RunRoll): ReadingPicture {
+    const bars =
+      this.exercise === null
+        ? new Set(report.steps.map((step) => step.measureIndex)).size
+        : (this.exercise.staves[0]?.measures.length ?? 0);
+    return theReadingPicture({
+      report,
+      bars,
+      velocities: roll.presses.map((press) => press.velocity),
+      keepsTime: this.deps.modes.get(this.currentSettings.modeId).requiresMetronome,
+      owedAtMs: this.whereTheJudgedEntriesFall(report),
+      toleranceMs: this.currentSettings.matchToleranceMs,
+    });
   }
 
   get session(): PracticeSession | null {
@@ -2455,6 +2515,8 @@ export class PracticeController {
         this.forgetTheTrouble();
         // A run that is over takes back what it was still holding.
         this.silenceTheOtherHand();
+        const picture = this.pictureOfTheReading(report, session.roll);
+        const modes = modesOn(this.currentSettings);
         this.deps.history?.record(this.practiceKey(), {
           // The calendar, so a table of readings can say when. `IClock`
           // counts from an arbitrary zero for measuring music.
@@ -2464,6 +2526,10 @@ export class PracticeController {
           completed: report.completed,
           tempoPercent: Math.round(this.currentSettings.tempoPercent),
           hand: this.currentSettings.handStaff,
+          stoppedAtBar: picture.stoppedAtBar,
+          ...(modes.length > 0 ? { modes } : {}),
+          picture,
+          roll: session.roll,
         });
         this.considerLadderMove(score.overall, report.completed);
         this.judgeTheDrill(report, score);

@@ -33,14 +33,21 @@ const EVERY_LAYOUT = { breaks: 'auto', header: 'none', footer: 'none', mnumInter
 /**
  * Room in Verovio's heap for each character of a score.
  *
- * Measured on 2026-09-24: the Alkan's 10.8 million characters were read in a
- * heap of 248 MB without it growing, 24 bytes a character, and none of his
- * other 43 scores - the longest 1.4 million - grew the 128 MB it starts with at
- * all. One byte more, for a score a little denser; not many more, because the
- * heap grows in steps of a fifth, and asking past one step on the iPad costs a
- * whole one (28 a character came to 319 MB where 25 comes to 266).
+ * The heap grows in steps of about a fifth - 128, 184, 221, 266, 319 MB - so a
+ * rate either lands on the step a score needs or asks for a whole step more,
+ * which the iPad pays for and never gets back: the heap does not shrink.
+ *
+ * Measured on 2026-09-25 against the Alkan as printed now, 11.3 million
+ * characters with every note named. Left to grow as it read, the heap went
+ * from 128 MB to 221 MB. With room made first at 18 to 20 bytes a character
+ * it stood at 221 MB before the reading and never moved during it; 22 made it
+ * 266 MB, and the 25 used until then 319 MB - two steps the iPad paid for, and
+ * the tab then closed when he imported a score on top of it. 19 is the middle
+ * of the rates that land on the step. None of his other 43 scores - the
+ * longest 1.4 million characters - asks for more than the 128 MB it starts
+ * with.
  */
-export const HEAP_BYTES_PER_CHARACTER = 25;
+export const HEAP_BYTES_PER_CHARACTER = 19;
 
 /** The heap is grown by asking for blocks of this size. */
 const ROOM_BLOCK_BYTES = 16 * 1024 * 1024;

@@ -84,14 +84,16 @@ describe('Verovio, reading what the trainer prints', () => {
 });
 
 describe('room for a large score, made before it is read', () => {
-  it('asks for about what the longest score he has took', () => {
-    // 10.8 million characters were read in 248 MB without the heap growing; it
-    // must ask for at least that, and not so much more that the iPad runs out
-    // asking - left to grow as it read, the heap came to 266 MB.
-    const alkan = heapFor(10_822_714);
+  it('asks for the step the longest score he has needs, and not the step past it', () => {
+    // The Alkan as printed, 11,325,830 characters, needs the heap's 221 MB
+    // step: asked for past 184 MB the heap lands there and does not grow while
+    // it reads, and asked for past 221 MB it lands a whole step higher, which
+    // the iPad pays for and never gets back.
+    const MB = 1024 * 1024;
+    const alkan = heapFor(11_325_830);
 
-    expect(alkan).toBeGreaterThanOrEqual(248 * 1024 * 1024);
-    expect(alkan).toBeLessThan(266 * 1024 * 1024);
+    expect(alkan).toBeGreaterThan(184.4 * MB);
+    expect(alkan).toBeLessThanOrEqual(221.3 * MB);
     expect(heapFor(1_000)).toBe(1_000 * HEAP_BYTES_PER_CHARACTER);
   });
 

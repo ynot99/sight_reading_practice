@@ -50,6 +50,7 @@ import {
   tiedExercise,
   twoBarExercise,
 } from '../support/fixtures.js';
+import { UNSEEN_NOTE } from '../support/printed.js';
 import { measureCount } from '../../src/domain/model/Exercise.js';
 import { emptyRoll, theWaits } from '../../src/application/session/RunRoll.js';
 import { Duration } from '../../src/domain/model/Duration.js';
@@ -2357,13 +2358,13 @@ describe('ruling the bars', () => {
     controller.events.on('exerciseLoaded', ({ musicXml }) => announced.push(musicXml));
 
     await controller.openScore(twoBarExercise());
-    expect(renderer.loadedXml).not.toContain('print-object="no"');
+    expect(renderer.loadedXml).not.toMatch(UNSEEN_NOTE);
 
     controller.updateSettings({ rhythmRuler: 'quarter' });
     await controller.reloadExercise();
 
-    expect(renderer.loadedXml).toContain('print-object="no"');
-    expect(announced[announced.length - 1]).not.toContain('print-object');
+    expect(renderer.loadedXml).toMatch(UNSEEN_NOTE);
+    expect(announced[announced.length - 1]).not.toMatch(UNSEEN_NOTE);
   });
 
   it('gives the cheap page back when it is turned off again', async () => {
@@ -2381,19 +2382,19 @@ describe('ruling the bars', () => {
     const { controller, renderer } = createController();
 
     await controller.openScore(twoBarExercise());
-    expect(renderer.loadedXml).not.toContain('print-object="no"');
+    expect(renderer.loadedXml).not.toMatch(UNSEEN_NOTE);
     // And the drawing is asked for nothing either, rather than being handed
     // marks it would have to decide to ignore.
     expect(renderer.ruler).toEqual([]);
 
     controller.updateSettings({ rhythmRuler: 'quarter' });
     await controller.reloadExercise();
-    expect(renderer.loadedXml).toContain('print-object="no"');
+    expect(renderer.loadedXml).toMatch(UNSEEN_NOTE);
     expect(renderer.ruler.length).toBeGreaterThan(0);
 
     controller.updateSettings({ rhythmRuler: 'off' });
     await controller.reloadExercise();
-    expect(renderer.loadedXml).not.toContain('print-object="no"');
+    expect(renderer.loadedXml).not.toMatch(UNSEEN_NOTE);
     expect(renderer.ruler).toEqual([]);
   });
 

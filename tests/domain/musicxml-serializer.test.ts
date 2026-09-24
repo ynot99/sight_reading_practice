@@ -64,6 +64,15 @@ describe('MusicXmlSerializer', () => {
     expect(root.getAttribute('version')).toBe('4.0');
   });
 
+  it('names the part without printing the name', () => {
+    // Printed, an engraver sets it before the first system and moves that
+    // system along, so the first line of music starts where the others do not.
+    const name = first(root, 'part-name');
+
+    expect(name.textContent).toBe('Piano');
+    expect(name.getAttribute('print-object')).toBe('no');
+  });
+
   it('declares divisions, key, time and both clefs once, in the first measure', () => {
     const attributes = all(root, 'attributes');
     expect(attributes).toHaveLength(1);

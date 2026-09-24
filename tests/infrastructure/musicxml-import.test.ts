@@ -22,6 +22,7 @@ import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImpo
 import { looksZipped } from '../../src/infrastructure/notation/zip.js';
 import { DomainError } from '../../src/shared/errors.js';
 import { longExercise, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import { UNSEEN_NOTE, UNSEEN_NOTES } from '../support/printed.js';
 
 const importer = new DomScoreImporter();
 const serializer = new MusicXmlSerializer();
@@ -602,7 +603,7 @@ describe('making room for the beat', () => {
   const uneven = twoBarExercise();
 
   it('writes nothing at all until it is asked to', () => {
-    expect(serializer.serialize(uneven)).not.toContain('print-object="no"');
+    expect(serializer.serialize(uneven)).not.toMatch(UNSEEN_NOTE);
   });
 
   it('rules each bar by its own grid, and by nothing coarser', () => {
@@ -611,7 +612,7 @@ describe('making room for the beat', () => {
     // The fixture moves in quarters through its first bar and in halves
     // through its second, so that is what each is ruled by: four rests and
     // then two, every one of them marked not to be printed.
-    const spacers = printed.match(/<note print-object="no">/g) ?? [];
+    const spacers = printed.match(UNSEEN_NOTES) ?? [];
     expect(spacers).toHaveLength(6);
     expect(printed).toContain(`<duration>${Duration.QUARTER.ticks}</duration>`);
     expect(printed).toContain(`<duration>${Duration.HALF.ticks}</duration>`);
@@ -622,7 +623,7 @@ describe('making room for the beat', () => {
     const voices = uneven.staves.map((staff) => staff.voice);
 
     // One above every voice written, so it can collide with none of them.
-    const spacer = /<note print-object="no">[\s\S]*?<voice>(\d+)<\/voice>/.exec(printed);
+    const spacer = /<voice>(\d+)<\/voice>/.exec(printed.match(UNSEEN_NOTES)?.[0] ?? '');
     expect(Number(spacer?.[1])).toBe(Math.max(...voices) + 1);
   });
 
@@ -631,14 +632,12 @@ describe('making room for the beat', () => {
     // would be rests. This printing therefore goes to the engraver and
     // nowhere else: what the library keeps and what the trainer announces is
     // the music, and the test for that is next door in the controller.
-    expect(serializer.serialize(uneven)).not.toContain('print-object');
+    expect(serializer.serialize(uneven)).not.toMatch(UNSEEN_NOTE);
 
     // And what it does say is only ever a rest - no pitch, nothing to play.
-    const spacer = /<note print-object="no">([\s\S]*?)<\/note>/.exec(
-      serializer.serialize(uneven, { evenBars: true }),
-    );
-    expect(spacer?.[1]).toContain('<rest/>');
-    expect(spacer?.[1]).not.toContain('<pitch>');
+    const [spacer] = serializer.serialize(uneven, { evenBars: true }).match(UNSEEN_NOTES) ?? [];
+    expect(spacer).toContain('<rest/>');
+    expect(spacer).not.toContain('<pitch>');
   });
 });
 

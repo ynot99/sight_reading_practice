@@ -319,7 +319,11 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       });
       writer.element('part-list', undefined, () => {
         writer.element('score-part', { id: 'P1' }, () => {
-          writer.leaf('part-name', this.options.partName);
+          // Named, and not printed. The trainer has one instrument and says
+          // what the piece is itself; an engraver that prints the name sets it
+          // before the first system and moves that system along to make room,
+          // so the first line of music starts somewhere the others do not.
+          writer.leaf('part-name', this.options.partName, { 'print-object': 'no' });
         });
       });
       writer.element('part', { id: 'P1' }, () => {

@@ -178,6 +178,13 @@ describe('a page of several systems', () => {
     expect(ids).toEqual(Array.from({ length: 40 }, (_, index) => `m${String(index)}`));
   });
 
+  it('starts every system at the same place across the page, the first too', () => {
+    // No instrument's name before the first: it would move that system along.
+    const starts = new Set((page?.systems ?? []).map((system) => system.bars[0]?.left));
+
+    expect(starts.size).toBe(1);
+  });
+
   it('runs each system edge to edge, every bar beginning where the one before it ended', () => {
     // What a bracket round a passage is drawn along; a gap between two bars
     // would be a bracket broken where no bar ends.

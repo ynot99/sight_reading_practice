@@ -34,6 +34,12 @@ export function barId(measureIndex: number): string {
   return `m${String(measureIndex)}`;
 }
 
+/** The bar a name belongs to, read back; `null` for a name that is not a bar's. */
+export function measureIndexOfBar(id: string): number | null {
+  const found = /^m(\d+)$/.exec(id);
+  return found === null ? null : Number(found[1]);
+}
+
 /** The name of one pitch of a note or chord, by its place in the entry's pitches. */
 export function noteId(at: EntryAt, pitchIndex: number): string {
   return `n${entryName(at)}-${String(pitchIndex)}`;

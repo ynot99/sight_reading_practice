@@ -1,77 +1,17 @@
 // @vitest-environment jsdom
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Exercise } from '../../src/domain/model/Exercise.js';
-import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { printedAtEachStep, type PrintedStep } from '../../src/domain/notation/printedIds.js';
-import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
+import { describe, expect, it, vi } from 'vitest';
+import type { PrintedStep } from '../../src/domain/notation/printedIds.js';
 import { readThePage, type PageLayout } from '../../src/infrastructure/rendering/verovio/pageLayout.js';
-import { VerovioCore } from '../../src/infrastructure/rendering/verovio/VerovioCore.js';
-import { VerovioEngraver } from '../../src/infrastructure/rendering/verovio/VerovioEngraver.js';
-import { VerovioScoreRenderer } from '../../src/infrastructure/rendering/verovio/VerovioScoreRenderer.js';
+import type { VerovioScoreRenderer } from '../../src/infrastructure/rendering/verovio/VerovioScoreRenderer.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
 import { bar, longExercise, p, twoBarExercise } from '../support/fixtures.js';
-import { lineToThe } from '../support/verovioLine.js';
+import { printed, sheets, verovioStages, whenDrawn, type Stage } from '../support/verovioStage.js';
 
-/**
- * The renderer on a page jsdom holds, drawn by Verovio itself on this thread.
- *
- * jsdom lays nothing out, so the surface has no size: the renderer lays the
- * music out on the page it uses for a surface not measured yet, 1024 by 768,
- * which is a real page and the same one every time.
- */
-let core: VerovioCore;
-beforeAll(async () => {
-  core = await VerovioCore.start();
-});
-
-const serializer = new MusicXmlSerializer();
-
-interface Printed {
-  readonly xml: string;
-  readonly steps: readonly PrintedStep[];
-}
-
-/** A score as the controller hands it over: the printing, and where each step is on it. */
-function printed(exercise: Exercise): Printed {
-  return { xml: serializer.serialize(exercise), steps: printedAtEachStep(buildTimeline(exercise)) };
-}
+const { aStage } = verovioStages();
 
 const LONG = printed(longExercise({ bars: 240 }));
-
-interface Stage {
-  readonly renderer: VerovioScoreRenderer;
-  readonly engraver: VerovioEngraver;
-  readonly surface: HTMLElement;
-  readonly scroller: HTMLElement;
-}
-
-const stages: Stage[] = [];
-
-function aStage(): Stage {
-  const scroller = document.createElement('div');
-  scroller.className = 'score__scroll';
-  const surface = document.createElement('div');
-  surface.className = 'score__surface';
-  scroller.append(surface);
-  document.body.append(scroller);
-  const engraver = new VerovioEngraver(lineToThe(core));
-  const stage = { renderer: new VerovioScoreRenderer(surface, engraver), engraver, surface, scroller };
-  stages.push(stage);
-  return stage;
-}
-
-afterEach(() => {
-  for (const stage of stages.splice(0)) {
-    stage.renderer.dispose();
-    stage.scroller.remove();
-  }
-});
-
-function sheets(surface: HTMLElement): HTMLElement[] {
-  return [...surface.querySelectorAll<HTMLElement>(':scope > .score__page')];
-}
 
 /** The pages the reader can see. */
 function showing(surface: HTMLElement): number[] {
@@ -123,7 +63,7 @@ describe('a score read in pages', () => {
 
     expect(renderer.pages.at).toBe(2);
     expect(showing(surface)).toEqual([2]);
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(drawn(surface)).toEqual([1, 2, 3]);
     });
   });
@@ -163,7 +103,7 @@ describe('a score read in pages', () => {
     expect(heard).toEqual([]);
 
     renderer.showMeasure(239);
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(renderer.pages.at).toBe(renderer.pages.count - 1);
     });
   });
@@ -173,7 +113,7 @@ describe('a score read in pages', () => {
 
     expect(label(surface, 0)).toBe(`Long fixture · Page 1 of ${String(renderer.pages.count)}`);
     renderer.turnPages(1);
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(label(surface, 2)).toBe(`Long fixture · Page 3 of ${String(renderer.pages.count)}`);
     });
   });
@@ -248,7 +188,7 @@ describe('a layout again', () => {
     const at = renderer.pages.count;
 
     renderer.setZoom(renderer.zoom * 0.6);
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(renderer.pages.count).toBeLessThan(at);
     });
   });
@@ -258,7 +198,7 @@ describe('a layout again', () => {
     // across two layouts - the bar does.
     const { renderer, surface } = await aPagedScore();
     renderer.turnPages(3);
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(drawn(surface)).toContain(3);
     });
     const top = readThePage(sheets(surface)[3]?.querySelector('svg') as SVGSVGElement).systems[0]
@@ -270,10 +210,10 @@ describe('a layout again', () => {
 
     // The old layout stays on the screen until the new one is ready, and it
     // holds that bar too: wait for the new one.
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(renderer.pages.count).toBeGreaterThan(before);
     });
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       const page = sheets(surface)[renderer.pages.at]?.querySelector('svg');
       expect(page).not.toBeNull();
       const bars = readThePage(page as SVGSVGElement).systems.flatMap((system) => system.bars.map((bar) => bar.id));
@@ -285,7 +225,7 @@ describe('a layout again', () => {
     const stage = await aPagedScore();
     const once = await aPagedScore();
     once.renderer.setZoom(0.5);
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(once.renderer.zoom).toBe(0.5);
       expect(sheets(once.surface).length).toBeGreaterThan(0);
     });
@@ -293,7 +233,7 @@ describe('a layout again', () => {
     stage.renderer.setZoom(2);
     stage.renderer.setZoom(0.5);
 
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(stage.renderer.pages.count).toBe(once.renderer.pages.count);
     });
   });
@@ -455,7 +395,7 @@ describe('the marker', () => {
     expect(marker(surface)).toBeNull();
 
     renderer.turnPages(999);
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(marker(surface)?.closest('.score__page')).toBe(sheets(surface)[renderer.pages.count - 1]);
     });
   });
@@ -470,7 +410,7 @@ describe('the marker', () => {
 
     renderer.setZoom(renderer.zoom * 1.4);
 
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(renderer.pages.count).toBeGreaterThan(before);
       const holding = marker(surface)?.closest('.score__page');
       expect(holding?.querySelector(`[id="${name}"]`)).not.toBeNull();
@@ -483,7 +423,7 @@ describe('the marker', () => {
     // it would stand on a page with nothing on it.
     const { renderer, surface } = await aPagedScore();
     renderer.turnPages(3);
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(drawn(surface)).toEqual([2, 3, 4]);
     });
     // A step late on page 3, which a larger print carries past the pages
@@ -496,7 +436,7 @@ describe('the marker', () => {
     renderer.setZoom(renderer.zoom * 1.4);
 
     // Every page round the reader drawn, which is when the marker is put down.
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(renderer.pages.count).toBeGreaterThan(before);
       const at = renderer.pages.at;
       expect(drawn(surface)).toEqual([at - 1, at, at + 1]);
@@ -514,7 +454,7 @@ describe('the marker', () => {
 
     renderer.turnPages(3);
 
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(drawn(surface)).toEqual([2, 3, 4]);
     });
     expect(marker(surface)).toBeNull();
@@ -555,7 +495,7 @@ describe('what was played', () => {
   async function laidOutAgain(renderer: VerovioScoreRenderer, surface: HTMLElement): Promise<void> {
     const before = sheets(surface)[0]?.querySelector('svg');
     renderer.setZoom(renderer.zoom * 1.3);
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       const now = sheets(surface)[0]?.querySelector('svg');
       expect(now).not.toBeNull();
       expect(now).not.toBe(before);
@@ -774,7 +714,7 @@ describe('what was played', () => {
     renderer.showPlayed({ stepIndex: late, midi, correct: true, offset: 0 });
     renderer.turnPages(999);
 
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(ringsOf(surface, renderer.pages.count - 1)).toHaveLength(1);
     });
   });
@@ -785,7 +725,7 @@ describe('what was played', () => {
 
     renderer.setZoom(renderer.zoom * 1.3);
 
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(ringsOf(surface)).toHaveLength(1);
       expect(Number(ringsOf(surface)[0]?.getAttribute('cy'))).toBe(headOf(surface, 'n0-1-0-0').y);
     });
@@ -862,7 +802,7 @@ describe('what has been played past, and what the run will not ask for', () => {
     renderer.fadePassed(late);
     renderer.turnPages(999);
 
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(classesOf(surface, name)).toContain('note--passed');
     });
   });
@@ -898,7 +838,7 @@ describe('what has been played past, and what the run will not ask for', () => {
     renderer.dimUnplayed({ staves: [], from: 0, to: 3 });
     renderer.turnPages(999);
 
-    await vi.waitFor(() => {
+    await whenDrawn(() => {
       expect(classesOf(surface, name)).toContain('note--unplayed');
     });
   });

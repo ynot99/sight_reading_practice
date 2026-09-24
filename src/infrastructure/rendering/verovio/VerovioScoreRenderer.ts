@@ -18,12 +18,39 @@ import type {
   ScoreReading,
 } from '../../../application/ports/IScoreRenderer.js';
 import type { RulerMark } from '../../../application/rhythmRuler.js';
-import type { PrintedStep } from '../../../domain/notation/printedIds.js';
+import { measureIndexOfBar, type PrintedStep } from '../../../domain/notation/printedIds.js';
+import {
+  drawHandSwitch,
+  drawPassageMarker,
+  drawStartMarker,
+  HAND_SWITCH_GAP,
+  HAND_SWITCH_WIDTH,
+  handUnder,
+  HOLD_MS,
+  markerUnder,
+  TAP_SLACK_PX,
+} from '../furniture.js';
 import { drawShape } from '../overlayElements.js';
 import { PAGE_LABEL_INSET, pageLabelText } from '../pageLabel.js';
 import { buildOverlayShapes, type PlayedMark } from '../playedNoteShapes.js';
 import { fitStaffGeometry, type DrawnNoteSample, type StaffGeometry } from '../staffGeometry.js';
 import { swipeDirection, visibleHeightOf } from '../pageTurns.js';
+import {
+  bracketShapes,
+  gripAt,
+  gripsOf,
+  gripUnderPointer,
+  measureAt,
+  measureForDrag,
+  pageTurnForDrag,
+  passageAfterDrag,
+  passageAfterTap,
+  toDrawingPoint,
+  type BracketShape,
+  type DrawnMeasure,
+  type GripEnd,
+  type PassageEdge,
+} from '../passageBrackets.js';
 import { readThePage, type PageLayout } from './pageLayout.js';
 import type { PageShape } from './VerovioCore.js';
 import type { VerovioEngraver } from './VerovioEngraver.js';
@@ -87,8 +114,18 @@ const TROUBLE_LEVELS = 4;
  */
 const LABEL_ROOM_PX = 32;
 
-/** A finger that has moved less than this between landing and lifting has tapped. */
-const TAP_SLOP_PX = 10;
+/**
+ * The left margin Verovio keeps for a brace, in its own units: its own default,
+ * which it lays the brace out in.
+ */
+const BRACE_MARGIN = 50;
+
+/**
+ * Room kept left of the brace for the hand switches, in pixels at any print:
+ * a switch and a gap either side of it, so it touches neither the brace nor
+ * the edge of the screen.
+ */
+const HAND_ROOM_PX = HAND_SWITCH_WIDTH + 2 * HAND_SWITCH_GAP;
 
 /** The pages kept drawn on either side of the one being read, or of the ones in view. */
 const PAGES_EITHER_SIDE = 1;
@@ -108,10 +145,9 @@ const PAGES_EITHER_SIDE = 1;
  * on the screen stays until the new layout is ready, and then the reader is
  * put back on the bar that was at the top of it.
  *
- * What is drawn over the music - the cursor, the notes played, the passage,
- * the hands, the ruler - is the next steps of the move to Verovio. Until they
- * are built this is asked for them and draws nothing, so the app runs against
- * it unchanged; the cursor alone keeps where it is, because the run asks.
+ * What is drawn over the music - the markers, the notes played, the passage,
+ * the hands - is drawn on each page as it is drawn, from where that page says
+ * its bars, staves and notes are; nothing asks the browser where anything is.
  */
 export class VerovioScoreRenderer
   implements
@@ -177,7 +213,29 @@ export class VerovioScoreRenderer
   private pageListeners: ((state: ScorePageState) => void)[] = [];
   private tapListeners: (() => void)[] = [];
   private observer: ResizeObserver | null = null;
-  private finger: { readonly pointerId: number; readonly x: number; readonly y: number } | null = null;
+
+  /** The passage the markers stand round, or `null` with them put away. */
+  private passage: DrawnPassage | null = null;
+  /** The bar the run will start from, where the reader has put it. */
+  private startMeasure: number | null = null;
+  /** The piece's last bar, which a marker dragged past the end waits at. */
+  private lastBar = 0;
+  /** Which staves the run is asking for; see `showHands`. */
+  private handsPlaying: readonly number[] = [];
+  private passageListeners: ((passage: DrawnPassage) => void)[] = [];
+  private markerHeldListeners: ((end: PassageEnd) => void)[] = [];
+  private barHeldListeners: ((measureIndex: number) => void)[] = [];
+  private handListeners: ((staffNumber: number) => void)[] = [];
+  /** A marker a finger is holding, and where it has got to. */
+  private dragging: PassageDrag | null = null;
+  /** A finger that may be turning a page. */
+  private swipe: FingerAt | null = null;
+  /** A finger that may be a tap on the music, or a hold on a bar. */
+  private tapFrom: FingerAt | null = null;
+  /** A switch a finger is on, which is pressed only if it lifts there. */
+  private pressedHand: { readonly pointerId: number; readonly staffNumber: number } | null = null;
+  /** The wait before a finger that stays put is pointing. */
+  private holding: ReturnType<typeof setTimeout> | null = null;
 
   constructor(container: HTMLElement, engraver: VerovioEngraver, zoom = FIRST_ZOOM) {
     this.container = container;
@@ -223,6 +281,7 @@ export class VerovioScoreRenderer
     this.title = titleOf(musicXml);
     this.printed = printed;
     this.stepsOfBar = stepsByBar(printed);
+    this.lastBar = Math.max(0, ...printed.map((step) => measureIndexOfBar(step.barId) ?? 0));
     const shape = this.shape();
     const count = await this.engraver.load(musicXml, shape);
     if (layout !== this.layout) {
@@ -275,12 +334,15 @@ export class VerovioScoreRenderer
     this.forgetTheReadings();
     this.drawing = new Set();
     this.pageAt = 0;
+    this.passage = null;
+    this.letGo();
     this.announcePages();
   }
 
   dispose(): void {
     this.observer?.disconnect();
     this.observer = null;
+    this.cancelHold();
     this.engraver.dispose();
   }
 
@@ -438,6 +500,7 @@ export class VerovioScoreRenderer
       this.drawn.add(page);
       this.readTheDrawnPage(page);
       this.labelThePage(page);
+      this.furnishThePage(page);
     }
     this.letTheFarPagesGo();
     this.placeTheMarkers();
@@ -458,7 +521,12 @@ export class VerovioScoreRenderer
     for (const element of drawing.querySelectorAll('g.note[id], g.rest[id], g.mRest[id]')) {
       elements.set(element.id, element);
     }
-    this.layouts.set(page, { layout: read, scale: this.pagePx.width / read.width, elements });
+    // As wide as the drawing says it is, which is the width the browser shows
+    // it at: Verovio writes its size in whole pixels, and the page asked for
+    // is a fraction of one off that.
+    const wide = Number.parseFloat(drawing.getAttribute('width') ?? '');
+    const scale = (Number.isFinite(wide) && wide > 0 ? wide : this.pagePx.width) / read.width;
+    this.layouts.set(page, { layout: read, scale, elements });
     for (const name of read.heads.keys()) {
       this.pageOfName.set(name, page);
     }
@@ -818,6 +886,9 @@ export class VerovioScoreRenderer
       // In pixels on the screen whatever the print: the label does not grow
       // with the zoom, so neither does the room kept for it.
       pageMarginTop: Math.ceil((LABEL_ROOM_PX * 100) / scale),
+      // The brace's own margin and the switches' room beside it: the brace
+      // grows with the print, and a switch is a fingertip at any.
+      pageMarginLeft: BRACE_MARGIN + Math.ceil((HAND_ROOM_PX * 100) / scale),
     };
   }
 
@@ -874,31 +945,61 @@ export class VerovioScoreRenderer
     }
   }
 
-  // A finger on the music: a swipe turns a page, a touch is said to be one.
+  // The passage, the start of the run and the hands, drawn on each page.
 
-  private watchTheFingers(): void {
-    this.container.addEventListener('pointerdown', (event) => {
-      this.finger = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
-    });
-    this.container.addEventListener('pointerup', (event) => {
-      const from = this.finger;
-      this.finger = null;
-      if (from === null || from.pointerId !== event.pointerId) {
-        return;
-      }
-      const to = { x: event.clientX, y: event.clientY };
-      const turn = this.paged ? swipeDirection(from, to) : 0;
-      if (turn !== 0) {
-        this.turnPages(turn);
-      } else if (Math.hypot(to.x - from.x, to.y - from.y) < TAP_SLOP_PX) {
-        for (const listener of [...this.tapListeners]) {
-          listener();
-        }
-      }
-    });
-    this.container.addEventListener('pointercancel', () => {
-      this.finger = null;
-    });
+  showPassage(passage: DrawnPassage): void {
+    this.passage = passage;
+    this.paintThePassage();
+  }
+
+  hidePassage(): void {
+    this.passage = null;
+    this.paintThePassage();
+  }
+
+  showStart(measureIndex: number | null): void {
+    this.startMeasure = measureIndex;
+    this.paintThePassage();
+  }
+
+  showHands(playing: readonly number[]): void {
+    this.handsPlaying = [...playing];
+    this.paintTheHands();
+  }
+
+  /**
+   * Reports the passage a drag or a tap on a handle left behind.
+   *
+   * One listener on the surface rather than one per marker: pages are drawn
+   * and let go of as the reader moves, and handlers bound to what is drawn
+   * would go with them.
+   */
+  onPassageDragged(listener: (passage: DrawnPassage) => void): () => void {
+    this.passageListeners.push(listener);
+    return () => {
+      this.passageListeners = this.passageListeners.filter((each) => each !== listener);
+    };
+  }
+
+  onMarkerHeld(listener: (end: PassageEnd) => void): () => void {
+    this.markerHeldListeners.push(listener);
+    return () => {
+      this.markerHeldListeners = this.markerHeldListeners.filter((each) => each !== listener);
+    };
+  }
+
+  onBarHeld(listener: (measureIndex: number) => void): () => void {
+    this.barHeldListeners.push(listener);
+    return () => {
+      this.barHeldListeners = this.barHeldListeners.filter((each) => each !== listener);
+    };
+  }
+
+  onHandToggled(listener: (staffNumber: number) => void): () => void {
+    this.handListeners.push(listener);
+    return () => {
+      this.handListeners = this.handListeners.filter((each) => each !== listener);
+    };
   }
 
   onScoreTapped(listener: () => void): () => void {
@@ -906,6 +1007,505 @@ export class VerovioScoreRenderer
     return () => {
       this.tapListeners = this.tapListeners.filter((each) => each !== listener);
     };
+  }
+
+  /** Draws on a page just drawn what stands on it: the passage, the hands. */
+  private furnishThePage(page: number): void {
+    this.paintThePassage(page);
+    this.paintTheHands(page);
+  }
+
+  /**
+   * Draws the two markers and the start of the run, on every page drawn or
+   * on one.
+   *
+   * Each on the page its own bar is on - a passage can run across a page
+   * break - and on none that is not drawn: it is drawn with its page, when
+   * the page is. A layer of its own over the music, because what the reader
+   * played is cleared at every run and the passage is not.
+   */
+  private paintThePassage(only?: number): void {
+    const showing = this.dragging?.passage ?? this.passage;
+    for (const page of only === undefined ? this.drawn : [only]) {
+      const layer = this.layerOn(page, 'passage-markers');
+      if (layer === null) {
+        continue;
+      }
+      layer.replaceChildren();
+      if (showing === null) {
+        continue;
+      }
+      // The start first, so a marker standing on the same bar line is drawn
+      // over it: the marker is the thing to take hold of.
+      const start = this.barsOn(page).find((bar) => bar.measureIndex === this.startMeasure);
+      if (start !== undefined) {
+        layer.append(drawStartMarker(layer.ownerDocument, start));
+      }
+      for (const bracket of this.bracketsOn(page, showing)) {
+        layer.append(drawPassageMarker(layer.ownerDocument, bracket, showing));
+      }
+    }
+  }
+
+  /**
+   * A switch beside every staff of every system, on every page drawn or on
+   * one.
+   *
+   * Repeated the way a clef is, so there is one within reach of wherever the
+   * eye is; in the room kept for them left of the brace (see `shape`), so
+   * none can land on a note or on the brace; and in a layer of their own,
+   * which a marker being moved does not redraw.
+   */
+  private paintTheHands(only?: number): void {
+    for (const page of only === undefined ? this.drawn : [only]) {
+      const layer = this.layerOn(page, 'hand-switches');
+      const read = this.layouts.get(page);
+      if (layer === null || read === undefined) {
+        continue;
+      }
+      layer.replaceChildren();
+      if (this.handsPlaying.length === 0) {
+        continue;
+      }
+      for (const system of read.layout.systems) {
+        // Counted from the top of the system down, as the score numbers its
+        // staves: the right hand is the upper one.
+        for (const [at, staff] of (system.bars[0]?.staves ?? []).entries()) {
+          const staffNumber = at + 1;
+          layer.append(
+            drawHandSwitch(
+              layer.ownerDocument,
+              { staffNumber, left: HAND_ROOM_PX, top: staff.top * read.scale, bottom: staff.bottom * read.scale },
+              this.handsPlaying.includes(staffNumber),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  /** The bars of a drawn page, in that page's pixels. */
+  private barsOn(page: number): DrawnMeasure[] {
+    const read = this.layouts.get(page);
+    const bars: DrawnMeasure[] = [];
+    for (const system of read?.layout.systems ?? []) {
+      for (const bar of system.bars) {
+        const measureIndex = measureIndexOfBar(bar.id);
+        if (read === undefined || measureIndex === null) {
+          continue;
+        }
+        bars.push({
+          measureIndex,
+          page,
+          left: bar.left * read.scale,
+          right: bar.right * read.scale,
+          top: system.top * read.scale,
+          bottom: system.bottom * read.scale,
+        });
+      }
+    }
+    return bars;
+  }
+
+  /**
+   * The markers of a passage that stand on this page.
+   *
+   * Held to the piece first: a drag that reaches past either end is asking
+   * for bars there are none of, and its marker waits at the end it has run
+   * out of. Only the pages near the reader are drawn, so a bar that is not
+   * on this page is on another one rather than past the edge of the music,
+   * and its marker is drawn there when that page is.
+   */
+  private bracketsOn(page: number, passage: DrawnPassage): BracketShape[] {
+    const from = clamp(passage.fromMeasureIndex, 0, this.lastBar);
+    const to = clamp(passage.toMeasureIndex, 0, this.lastBar);
+    return bracketShapes(this.barsOn(page), from, to).filter(
+      (bracket) => bracket.measureIndex === (bracket.edge === 'start' ? from : to),
+    );
+  }
+
+  /**
+   * A layer of ours on a drawn page, over the music or behind it.
+   *
+   * On the page's outer drawing, whose units are the screen's pixels: a
+   * marker a fingertip wide is a fingertip wide at any print. Found among the
+   * drawing's own few children rather than looked for through the whole of
+   * it, and made the first time it is asked for.
+   */
+  private layerOn(page: number, name: string, behind = false): SVGGElement | null {
+    const drawing = this.drawn.has(page) ? this.sheets[page]?.querySelector('svg') : undefined;
+    if (drawing === null || drawing === undefined) {
+      return null;
+    }
+    for (const child of drawing.children) {
+      if (child.classList.contains(name)) {
+        return child as SVGGElement;
+      }
+    }
+    const layer = drawing.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
+    layer.setAttribute('class', name);
+    if (behind) {
+      drawing.prepend(layer);
+    } else {
+      drawing.append(layer);
+    }
+    return layer;
+  }
+
+  // A finger on the music: a marker taken hold of, a switch pressed, a bar
+  // pointed at, a page swiped, or a touch.
+
+  /**
+   * Bound once, on the surface rather than on anything drawn, for the reason
+   * `onPassageDragged` gives. A finger only takes hold when it landed on a
+   * marker, so everything else - a scroll, a pinch - passes through.
+   */
+  private watchTheFingers(): void {
+    // Before anything else, and not passive: a touch that landed on a marker
+    // must not become a scroll. `touch-action` is supposed to say this on its
+    // own, and on an SVG child it is not honoured everywhere - which is why a
+    // marker could once be moved sideways but never down the page.
+    this.container.addEventListener(
+      'touchstart',
+      (event) => {
+        if (markerUnder(event.target, this.container) !== null) {
+          event.preventDefault();
+        }
+      },
+      { passive: false },
+    );
+    this.container.addEventListener(
+      'touchmove',
+      (event) => {
+        if (this.dragging !== null) {
+          event.preventDefault();
+        }
+      },
+      { passive: false },
+    );
+    this.container.addEventListener('pointerdown', (event) => {
+      this.fingerDown(event);
+    });
+    this.container.addEventListener('pointermove', (event) => {
+      this.fingerMoved(event);
+    });
+    this.container.addEventListener('pointerup', (event) => {
+      this.fingerUp(event);
+    });
+    this.container.addEventListener('pointercancel', () => {
+      this.letGo();
+      this.paintThePassage();
+    });
+  }
+
+  private fingerDown(event: PointerEvent): void {
+    // A switch before anything else. It is a drawn thing with an edge to aim
+    // at, so what the browser says was touched is the exact answer - and a
+    // press on one is not a tap on the music, a hold on a bar, or a swipe.
+    const hand = handUnder(event.target);
+    if (hand !== null) {
+      this.pressedHand = { pointerId: event.pointerId, staffNumber: hand };
+      return;
+    }
+    const passage = this.passage;
+    const touched = markerUnder(event.target, this.container);
+    const at = this.pointOnAPage(event);
+    // What the browser says was touched, and only then what the arithmetic
+    // makes of the coordinates - and never a marker that is locked: a run is
+    // being graded, and the handles it put away are not there to be found.
+    const edge =
+      touched?.edge ??
+      (passage === null || passage.movable === false || at === null
+        ? null
+        : gripAt(this.bracketsOn(at.page, passage), at.point));
+    if (edge === null || passage === null) {
+      this.swipe = this.paged ? { pointerId: event.pointerId, x: event.clientX, y: event.clientY } : null;
+      this.tapFrom = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      this.watchForAHold(event);
+      return;
+    }
+    // Held for the whole gesture, so a finger that wanders off the marker -
+    // which is most of them - goes on moving it instead of being dropped.
+    this.container.setPointerCapture?.(event.pointerId);
+    // For the mouse. A touch screen has already decided, from the
+    // `touch-action` of the shape the finger landed on.
+    event.preventDefault();
+    this.dragging = {
+      edge,
+      pointerId: event.pointerId,
+      passage,
+      from: { x: event.clientX, y: event.clientY },
+      grip: touched?.end ?? null,
+      overshot: false,
+    };
+    this.watchForAMarkerHold(event, edge);
+  }
+
+  private fingerMoved(event: PointerEvent): void {
+    this.turnIfDraggedOffThePage(event);
+    const began = this.tapFrom ?? this.dragging?.from ?? null;
+    if (began !== null && Math.hypot(event.clientX - began.x, event.clientY - began.y) > TAP_SLACK_PX) {
+      // Moving is not pointing, at a bar or at a marker. A finger that has
+      // set off with a marker is dragging it, and the wait it started when
+      // it landed must not go off in the middle of that.
+      this.cancelHold();
+    }
+    const drag = this.dragging;
+    const moved = this.draggedTo(event);
+    if (drag === null || moved === null) {
+      return;
+    }
+    event.preventDefault();
+    this.dragging = { ...drag, passage: moved };
+    this.paintThePassage();
+  }
+
+  private fingerUp(event: PointerEvent): void {
+    const pressed = this.pressedHand;
+    if (pressed !== null && pressed.pointerId === event.pointerId) {
+      this.pressedHand = null;
+      // Only if the finger is still on it: one that travelled was reaching
+      // for something else, even if it did not reach it.
+      if (handUnder(event.target) === pressed.staffNumber) {
+        for (const listener of [...this.handListeners]) {
+          listener(pressed.staffNumber);
+        }
+      }
+      return;
+    }
+    const swipe = this.swipe;
+    this.swipe = null;
+    if (swipe !== null && swipe.pointerId === event.pointerId) {
+      const turned = swipeDirection(swipe, { x: event.clientX, y: event.clientY });
+      if (turned !== 0) {
+        this.tapFrom = null;
+        this.cancelHold();
+        this.turnPages(turned);
+        return;
+      }
+    }
+
+    const began = this.tapFrom;
+    this.tapFrom = null;
+    this.cancelHold();
+    if (began !== null && began.pointerId === event.pointerId) {
+      // A tap and not a drag: a finger that stayed put. Anything that moved
+      // was reaching for something, even if it did not reach it.
+      if (Math.hypot(event.clientX - began.x, event.clientY - began.y) <= TAP_SLACK_PX) {
+        for (const listener of [...this.tapListeners]) {
+          listener();
+        }
+      }
+      return;
+    }
+
+    const drag = this.dragging;
+    if (drag === null || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    const moved = this.tappedGrip(event, drag) ?? this.draggedTo(event);
+    this.dragging = null;
+    this.container.releasePointerCapture?.(event.pointerId);
+    if (moved !== null) {
+      this.passage = moved;
+    }
+    this.paintThePassage();
+    if (moved === null) {
+      return;
+    }
+    for (const listener of [...this.passageListeners]) {
+      listener(moved);
+    }
+  }
+
+  /** Forgets every finger, as when the browser takes the touch for itself. */
+  private letGo(): void {
+    this.swipe = null;
+    this.tapFrom = null;
+    this.pressedHand = null;
+    this.dragging = null;
+    this.cancelHold();
+  }
+
+  /**
+   * The passage one bar out or in, when a handle was tapped rather than
+   * dragged.
+   *
+   * A finger that stayed put on a handle meant the button; anything that
+   * travelled meant the handle, even if it did not travel far. Which is why
+   * this is asked before the drag: at nought pixels of movement a drag says
+   * "put it back where it already was", and that is not what was meant.
+   */
+  private tappedGrip(event: PointerEvent, drag: PassageDrag): DrawnPassage | null {
+    if (Math.hypot(event.clientX - drag.from.x, event.clientY - drag.from.y) > TAP_SLACK_PX) {
+      return null;
+    }
+    // The handle the browser says was touched, on whichever page its marker
+    // is; or, where the finger landed on the line, the handle nearest it.
+    const at = drag.grip === null ? this.pointOnAPage(event) : null;
+    const grip =
+      drag.grip === null
+        ? at === null
+          ? null
+          : gripUnderPointer(gripsOf(this.bracketsOn(at.page, drag.passage)), at.point)
+        : (gripsOf([...this.drawn].flatMap((page) => this.bracketsOn(page, drag.passage))).find(
+            (each) => each.edge === drag.edge && each.end === drag.grip,
+          ) ?? null);
+    if (grip === null) {
+      return null;
+    }
+    const next = passageAfterTap(
+      { fromIndex: drag.passage.fromMeasureIndex, toIndex: drag.passage.toMeasureIndex },
+      grip,
+    );
+    return { ...drag.passage, fromMeasureIndex: next.fromIndex, toMeasureIndex: next.toIndex };
+  }
+
+  /** Where this event puts the passage, or `null` when nothing is held. */
+  private draggedTo(event: PointerEvent): DrawnPassage | null {
+    const drag = this.dragging;
+    const at = drag === null || drag.pointerId !== event.pointerId ? null : this.pointOnAPage(event);
+    const landedOn = at === null || drag === null ? null : measureForDrag(this.barsOn(at.page), at.point, drag.edge);
+    if (drag === null || landedOn === null) {
+      return null;
+    }
+    const next = passageAfterDrag(
+      { fromIndex: drag.passage.fromMeasureIndex, toIndex: drag.passage.toMeasureIndex },
+      drag.edge,
+      landedOn,
+    );
+    return { ...drag.passage, fromMeasureIndex: next.fromIndex, toMeasureIndex: next.toIndex };
+  }
+
+  /**
+   * Turns the page when a marker is dragged off the side of it.
+   *
+   * A passage that runs onto the next page cannot be chosen otherwise: the
+   * marker reaches the edge and stops, because the bar it is being taken to
+   * is not on this page. Once on the way out and not again until the finger
+   * has come back in - the new page is where the old one was, so a finger
+   * held out there would otherwise watch the whole piece go by.
+   */
+  private turnIfDraggedOffThePage(event: PointerEvent): void {
+    const drag = this.dragging;
+    const at = this.paged && drag !== null ? this.pointOnAPage(event) : null;
+    if (drag === null || at === null) {
+      return;
+    }
+    const beyond = pageTurnForDrag(this.barsOn(at.page), at.point, this.drawnSize(at.page).width);
+    if (beyond !== 0 && !drag.overshot) {
+      this.dragging = { ...drag, overshot: true };
+      this.turnPages(beyond);
+      return;
+    }
+    if (beyond === 0 && drag.overshot) {
+      this.dragging = { ...drag, overshot: false };
+    }
+  }
+
+  /**
+   * Starts the clock on a finger that has taken hold of a marker.
+   *
+   * It ends the drag when it fires: the reader asked the marker to do
+   * something, not to be moved, and letting the drag finish as well would
+   * nudge the passage a bar on the way out - a tap on a grip means that.
+   */
+  private watchForAMarkerHold(event: PointerEvent, edge: PassageEdge): void {
+    this.cancelHold();
+    this.holding = setTimeout(() => {
+      this.holding = null;
+      if (this.dragging?.pointerId !== event.pointerId) {
+        return;
+      }
+      this.dragging = null;
+      this.container.releasePointerCapture?.(event.pointerId);
+      const end: PassageEnd = edge === 'start' ? 'from' : 'to';
+      for (const listener of [...this.markerHeldListeners]) {
+        listener(end);
+      }
+    }, HOLD_MS);
+  }
+
+  /** Starts the clock on a finger that may be pointing at a bar. */
+  private watchForAHold(event: PointerEvent): void {
+    this.cancelHold();
+    this.holding = setTimeout(() => {
+      this.holding = null;
+      // Still where it landed: a finger that travelled was doing something
+      // else, and by now it has been told so.
+      if (this.tapFrom?.pointerId !== event.pointerId) {
+        return;
+      }
+      // The bar the finger is inside, found by where it is rather than by
+      // whatever element happened to be under it.
+      const at = this.pointOnAPage(event);
+      const bar = at === null ? null : measureAt(this.barsOn(at.page), at.point);
+      if (bar === null) {
+        return;
+      }
+      this.tapFrom = null;
+      for (const listener of [...this.barHeldListeners]) {
+        listener(bar);
+      }
+    }, HOLD_MS);
+  }
+
+  private cancelHold(): void {
+    if (this.holding !== null) {
+      clearTimeout(this.holding);
+      this.holding = null;
+    }
+  }
+
+  /**
+   * The page a touch is on, and where on it, in that page's pixels.
+   *
+   * Read in pages, it is the page being read; scrolled, the drawn page the
+   * finger is over. The browser's own answer where it has one - the
+   * drawing's transform to the screen holds whatever the stylesheet or a
+   * zoom did to it - and the page's box taken as the drawing shown whole
+   * where it has none, which is a test with nothing laid out.
+   */
+  private pointOnAPage(event: {
+    readonly clientX: number;
+    readonly clientY: number;
+  }): { readonly page: number; readonly point: { readonly x: number; readonly y: number } } | null {
+    const page = this.paged ? this.pageAt : this.pageUnder(event.clientY);
+    const drawing = page === null || !this.drawn.has(page) ? null : this.sheets[page]?.querySelector('svg');
+    if (page === null || drawing === null || drawing === undefined) {
+      return null;
+    }
+    const matrix = drawing.getScreenCTM?.();
+    if (matrix !== null && matrix !== undefined) {
+      const inside = new DOMPointReadOnly(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+      return { page, point: { x: inside.x, y: inside.y } };
+    }
+    const box = drawing.getBoundingClientRect();
+    const point = toDrawingPoint(
+      { left: box.left, top: box.top, width: box.width, height: box.height },
+      this.drawnSize(page),
+      { x: event.clientX, y: event.clientY },
+    );
+    return point === null ? null : { page, point };
+  }
+
+  /** How large a drawn page is, in its own pixels; see `readTheDrawnPage`. */
+  private drawnSize(page: number): { readonly width: number; readonly height: number } {
+    const read = this.layouts.get(page);
+    return read === undefined
+      ? this.pagePx
+      : { width: read.layout.width * read.scale, height: read.layout.height * read.scale };
+  }
+
+  /** The drawn page a scrolled score has under a height on the screen. */
+  private pageUnder(clientY: number): number | null {
+    for (const page of this.drawn) {
+      const box = this.sheets[page]?.getBoundingClientRect();
+      if (box !== undefined && clientY >= box.top && clientY < box.bottom) {
+        return page;
+      }
+    }
+    return null;
   }
 
   // What was played, drawn over the notes.
@@ -1019,31 +1619,7 @@ export class VerovioScoreRenderer
 
   turnPagesWithTheMusic(_wanted: boolean): void {}
 
-  showPassage(_passage: DrawnPassage): void {}
-
-  hidePassage(): void {}
-
-  onPassageDragged(_listener: (passage: DrawnPassage) => void): () => void {
-    return () => undefined;
-  }
-
-  showStart(_measureIndex: number | null): void {}
-
   showRepeatedBars(_measureIndexes: readonly number[]): void {}
-
-  onMarkerHeld(_listener: (end: PassageEnd) => void): () => void {
-    return () => undefined;
-  }
-
-  onBarHeld(_listener: (measureIndex: number) => void): () => void {
-    return () => undefined;
-  }
-
-  showHands(_playing: readonly number[]): void {}
-
-  onHandToggled(_listener: (staffNumber: number) => void): () => void {
-    return () => undefined;
-  }
 
   showRhythmRuler(_marks: readonly RulerMark[]): void {}
 
@@ -1068,6 +1644,26 @@ interface PageOverlay {
   readonly geometry: StaffGeometry | null;
   /** Where each step on the page stands across it, in its units. */
   readonly stepX: ReadonlyMap<number, number>;
+}
+
+/** Where a finger landed, so a tap can be told from a drag. */
+interface FingerAt {
+  readonly pointerId: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/** A marker a finger is holding, and where it has got to. */
+interface PassageDrag {
+  readonly edge: PassageEdge;
+  readonly pointerId: number;
+  readonly passage: DrawnPassage;
+  /** Where the finger landed, so a tap can be told from a drag. */
+  readonly from: { readonly x: number; readonly y: number };
+  /** The handle it landed on, when it landed on one rather than the line. */
+  readonly grip: GripEnd | null;
+  /** Whether the finger is currently past the end of the page it is on. */
+  readonly overshot: boolean;
 }
 
 /** Where a marker stands on a page, in pixels from the page's corner. */

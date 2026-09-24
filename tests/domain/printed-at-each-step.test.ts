@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { printedAtEachStep } from '../../src/domain/notation/printedIds.js';
+import { barId, measureIndexOfBar, printedAtEachStep } from '../../src/domain/notation/printedIds.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry } from '../../src/domain/model/Exercise.js';
@@ -16,6 +16,22 @@ import {
 } from '../support/fixtures.js';
 
 const serializer = new MusicXmlSerializer();
+
+describe('a bar’s name, read back', () => {
+  it('gives the bar it was made from', () => {
+    expect(measureIndexOfBar(barId(0))).toBe(0);
+    expect(measureIndexOfBar(barId(1341))).toBe(1341);
+  });
+
+  it('is nothing for a name that is not a bar’s, or only begins like one', () => {
+    // The engraver names the things it draws itself - `m1xu7gi1` is a staff
+    // of one of its pages - and one that only begins like a bar's is not one.
+    expect(measureIndexOfBar('n3-1-0-0')).toBeNull();
+    expect(measureIndexOfBar('m3x')).toBeNull();
+    expect(measureIndexOfBar('xm3')).toBeNull();
+    expect(measureIndexOfBar('m')).toBeNull();
+  });
+});
 
 describe('where on the page each step is', () => {
   it('names every note and rest that begins at a step, in every voice, with its bar', () => {

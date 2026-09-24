@@ -18,9 +18,10 @@ import type {
   ScoreReading,
 } from '../../../application/ports/IScoreRenderer.js';
 import type { RulerMark } from '../../../application/rhythmRuler.js';
+import type { PrintedStep } from '../../../domain/notation/printedIds.js';
 import { PAGE_LABEL_INSET, pageLabelText } from '../pageLabel.js';
 import { swipeDirection, visibleHeightOf } from '../pageTurns.js';
-import { readThePage } from './pageLayout.js';
+import { readThePage, type PageLayout } from './pageLayout.js';
 import type { PageShape } from './VerovioCore.js';
 import type { VerovioEngraver } from './VerovioEngraver.js';
 
@@ -49,6 +50,16 @@ const UNMEASURED_WIDTH_PX = 1024;
 const UNMEASURED_HEIGHT_PX = 768;
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+
+/**
+ * The marker's shape, in staff spaces: from a little before the leftmost head
+ * of its step, as wide as a head with room either side, and reaching a little
+ * past the outer lines of the system. OSMD's was a band like this, and a band
+ * is what a reader has learned to look for.
+ */
+const MARKER_BEFORE_HEAD = 0.6;
+const MARKER_WIDTH = 2.4;
+const MARKER_ABOVE_STAFF = 1.5;
 
 /**
  * Room above the music on every page, in pixels: the page's own label is
@@ -97,8 +108,20 @@ export class VerovioScoreRenderer
 {
   private readonly container: HTMLElement;
   private readonly engraver: VerovioEngraver;
-  private readonly held = new HeldCursor();
-  private readonly otherHeld = new HeldCursor();
+  /** The reader's marker, and the fainter one where the other hand has got to. */
+  private readonly reader = new MarkerOnThePage(() => {
+    this.placeTheMarker(this.reader, 'score__cursor');
+  });
+  private readonly other = new MarkerOnThePage(() => {
+    this.placeTheMarker(this.other, 'score__cursor score__cursor--other');
+  });
+  private readonly markerElements = new Map<MarkerOnThePage, HTMLElement>();
+  /** Where on the page each step is, by name; see `IScoreRenderer.load`. */
+  private printed: readonly PrintedStep[] = [];
+  /** What each drawn page was read as: its systems, its bars, its heads, and its size. */
+  private readonly layouts = new Map<number, ReadPage>();
+  /** The drawn page every named bar, note and rest is on. */
+  private readonly pageOfName = new Map<string, number>();
 
   private currentZoom: number;
   private paged = false;
@@ -142,11 +165,11 @@ export class VerovioScoreRenderer
   }
 
   get cursor(): IScoreCursor {
-    return this.held;
+    return this.reader;
   }
 
   get otherHand(): IScoreCursor {
-    return this.otherHeld;
+    return this.other;
   }
 
   get zoom(): number {
@@ -162,11 +185,12 @@ export class VerovioScoreRenderer
     this.inTheBackground(this.layOutAgain());
   }
 
-  async load(musicXml: string): Promise<void> {
+  async load(musicXml: string, printed: readonly PrintedStep[]): Promise<void> {
     this.layout += 1;
     const layout = this.layout;
     this.hasMusic = true;
     this.title = titleOf(musicXml);
+    this.printed = printed;
     const shape = this.shape();
     const count = await this.engraver.load(musicXml, shape);
     if (layout !== this.layout) {
@@ -211,9 +235,11 @@ export class VerovioScoreRenderer
     this.layout += 1;
     this.hasMusic = false;
     this.title = '';
+    this.printed = [];
     this.container.replaceChildren();
     this.sheets = [];
     this.drawn.clear();
+    this.forgetTheReadings();
     this.drawing = new Set();
     this.pageAt = 0;
     this.announcePages();
@@ -299,6 +325,7 @@ export class VerovioScoreRenderer
     };
     this.drawn.clear();
     this.drawing = new Set();
+    this.forgetTheReadings();
     this.sheets = Array.from({ length: count }, (_, page) => {
       const sheet = this.container.ownerDocument.createElement('div');
       sheet.className = 'score__page';
@@ -376,9 +403,121 @@ export class VerovioScoreRenderer
       }
       sheet.innerHTML = svg;
       this.drawn.add(page);
+      this.readTheDrawnPage(page);
       this.labelThePage(page);
     }
     this.letTheFarPagesGo();
+    this.placeTheMarkers();
+  }
+
+  /**
+   * Reads a page just drawn: its systems, its bars and its heads, and which
+   * names are on it - so a step is placed by arithmetic from then on, and
+   * nothing asks the browser where anything is.
+   */
+  private readTheDrawnPage(page: number): void {
+    const drawing = this.sheets[page]?.querySelector('svg');
+    if (drawing === null || drawing === undefined) {
+      return;
+    }
+    const read = readThePage(drawing);
+    this.layouts.set(page, { layout: read, scale: this.pagePx.width / read.width });
+    for (const name of read.heads.keys()) {
+      this.pageOfName.set(name, page);
+    }
+    for (const system of read.systems) {
+      for (const bar of system.bars) {
+        this.pageOfName.set(bar.id, page);
+      }
+    }
+  }
+
+  /** Forgets what one page, or every page, was read as. */
+  private forgetTheReadings(page?: number): void {
+    if (page === undefined) {
+      this.layouts.clear();
+      this.pageOfName.clear();
+      return;
+    }
+    const read = this.layouts.get(page)?.layout;
+    this.layouts.delete(page);
+    for (const name of read?.heads.keys() ?? []) {
+      this.pageOfName.delete(name);
+    }
+    for (const bar of read?.systems.flatMap((system) => system.bars) ?? []) {
+      this.pageOfName.delete(bar.id);
+    }
+  }
+
+  private placeTheMarkers(): void {
+    this.placeTheMarker(this.reader, 'score__cursor');
+    this.placeTheMarker(this.other, 'score__cursor score__cursor--other');
+  }
+
+  /**
+   * Stands a marker over the step it is at, on the page that step is drawn on.
+   *
+   * Across the whole system, as a band over the heads of the step: from a
+   * little before the leftmost head, and from a little above the top line of
+   * the top staff to a little below the bottom line of the lowest. Off the
+   * page when it is not wanted, or when the page its step is on is not drawn -
+   * which a page far from the reader is not.
+   */
+  private placeTheMarker(marker: MarkerOnThePage, className: string): void {
+    let element = this.markerElements.get(marker);
+    if (element === undefined) {
+      element = this.container.ownerDocument.createElement('div');
+      element.className = className;
+      this.markerElements.set(marker, element);
+    }
+    const where = marker.isWanted ? this.whereTheStepIs(marker.position) : null;
+    if (where === null) {
+      element.remove();
+      return;
+    }
+    if (element.parentElement !== where.sheet) {
+      where.sheet.append(element);
+    }
+    element.style.left = `${String(where.left)}px`;
+    element.style.top = `${String(where.top)}px`;
+    element.style.width = `${String(where.width)}px`;
+    element.style.height = `${String(where.height)}px`;
+  }
+
+  /** Where a step's marker stands on the screen, or `null` if its page is not drawn. */
+  private whereTheStepIs(index: number): MarkerPlace | null {
+    const step = this.printed[index];
+    if (step === undefined) {
+      return null;
+    }
+    const page = this.pageOfName.get(step.barId);
+    const drawn = page === undefined ? undefined : this.layouts.get(page);
+    const sheet = page === undefined ? undefined : this.sheets[page];
+    const read = drawn?.layout;
+    const system = read?.systems.find((each) => each.bars.some((bar) => bar.id === step.barId));
+    const bar = system?.bars.find((each) => each.id === step.barId);
+    if (drawn === undefined || read === undefined || sheet === undefined || system === undefined || bar === undefined) {
+      return null;
+    }
+    const heads = step.printed
+      .map((here) => read.heads.get(here.id)?.x)
+      .filter((x): x is number => x !== undefined);
+    const [top, second] = bar.staves[0]?.lines ?? [];
+    const space = top !== undefined && second !== undefined ? second - top : 0;
+    // Where no head of the step is drawn - which only an unseen rest would
+    // leave - the marker stands at the front of its bar.
+    const left = heads.length > 0 ? Math.min(...heads) - MARKER_BEFORE_HEAD * space : bar.left;
+    const right = heads.length > 0 ? Math.max(...heads) : left;
+    const { scale } = drawn;
+    return {
+      sheet,
+      left: left * scale,
+      top: (system.top - MARKER_ABOVE_STAFF * space) * scale,
+      // As wide as it takes to cover every head, however far apart a chord
+      // with a second in it sets them.
+      width: (right - left + MARKER_WIDTH * space - MARKER_BEFORE_HEAD * space) * scale,
+      height: (system.bottom - system.top + 2 * MARKER_ABOVE_STAFF * space) * scale,
+    };
   }
 
   /**
@@ -416,6 +555,7 @@ export class VerovioScoreRenderer
       if (!wanted.has(page)) {
         this.sheets[page]?.replaceChildren();
         this.drawn.delete(page);
+        this.forgetTheReadings(page);
       }
     }
   }
@@ -630,29 +770,64 @@ export class VerovioScoreRenderer
   dimUnplayed(_reading: ScoreReading | null): void {}
 }
 
+/** A drawn page as it was read, and how many pixels of it make one of its units. */
+interface ReadPage {
+  readonly layout: PageLayout;
+  readonly scale: number;
+}
+
+/** Where a marker stands on a page, in pixels from the page's corner. */
+interface MarkerPlace {
+  readonly sheet: HTMLElement;
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 /**
- * Where a marker is, kept and not yet drawn.
+ * A marker the run moves by step, and the page draws.
  *
- * The run moves it and asks it where it is, so where it is has to be true;
- * showing it is the next step of the move to Verovio.
+ * Any step at once, by name, where OSMD's cursor had to be walked there one
+ * position at a time. It says when it has moved, or been shown or hidden, and
+ * the renderer puts it on the page.
  */
-class HeldCursor implements IScoreCursor {
+class MarkerOnThePage implements IScoreCursor {
   private at = 0;
+  private wanted = true;
+  private readonly moved: () => void;
+
+  constructor(moved: () => void) {
+    this.moved = moved;
+  }
 
   get position(): number {
     return this.at;
   }
 
-  show(): void {}
+  /** Whether the reader asked to see it, wherever it is. */
+  get isWanted(): boolean {
+    return this.wanted;
+  }
 
-  hide(): void {}
+  show(): void {
+    this.wanted = true;
+    this.moved();
+  }
+
+  hide(): void {
+    this.wanted = false;
+    this.moved();
+  }
 
   reset(): void {
     this.at = 0;
+    this.moved();
   }
 
   moveTo(stepIndex: number): void {
-    this.at = stepIndex;
+    this.at = Math.max(0, stepIndex);
+    this.moved();
   }
 }
 

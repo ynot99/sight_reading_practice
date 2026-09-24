@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { Exercise } from '../../src/domain/model/Exercise.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { readThePage } from '../../src/infrastructure/rendering/verovio/pageLayout.js';
+import { printedAtEachStep, type PrintedStep } from '../../src/domain/notation/printedIds.js';
+import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
+import { readThePage, type PageLayout } from '../../src/infrastructure/rendering/verovio/pageLayout.js';
 import { VerovioCore } from '../../src/infrastructure/rendering/verovio/VerovioCore.js';
 import { VerovioEngraver } from '../../src/infrastructure/rendering/verovio/VerovioEngraver.js';
 import { VerovioScoreRenderer } from '../../src/infrastructure/rendering/verovio/VerovioScoreRenderer.js';
-import { longExercise, twoBarExercise } from '../support/fixtures.js';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { noteEntry } from '../../src/domain/model/Exercise.js';
+import { bar, longExercise, p, twoBarExercise } from '../support/fixtures.js';
 import { lineToThe } from '../support/verovioLine.js';
 
 /**
@@ -21,7 +26,18 @@ beforeAll(async () => {
 });
 
 const serializer = new MusicXmlSerializer();
-const LONG = serializer.serialize(longExercise({ bars: 240 }));
+
+interface Printed {
+  readonly xml: string;
+  readonly steps: readonly PrintedStep[];
+}
+
+/** A score as the controller hands it over: the printing, and where each step is on it. */
+function printed(exercise: Exercise): Printed {
+  return { xml: serializer.serialize(exercise), steps: printedAtEachStep(buildTimeline(exercise)) };
+}
+
+const LONG = printed(longExercise({ bars: 240 }));
 
 interface Stage {
   readonly renderer: VerovioScoreRenderer;
@@ -77,7 +93,7 @@ function label(surface: HTMLElement, page: number): string | null {
 async function aPagedScore(): Promise<Stage> {
   const stage = aStage();
   stage.renderer.setPaged(true);
-  await stage.renderer.load(LONG);
+  await stage.renderer.load(LONG.xml, LONG.steps);
   return stage;
 }
 
@@ -190,7 +206,7 @@ describe('a score read in pages', () => {
     const { renderer } = await aPagedScore();
     renderer.turnPages(3);
 
-    await renderer.load(LONG);
+    await renderer.load(LONG.xml, LONG.steps);
 
     expect(renderer.pages.at).toBe(0);
   });
@@ -326,14 +342,194 @@ describe('a finger on the music', () => {
   });
 });
 
-describe('what the run moves', () => {
-  it('keeps where the cursor is, which the run asks', async () => {
-    const { renderer } = await aPagedScore();
+describe('the marker', () => {
+  /** Where on the screen a page's things are: its reading, and pixels to a unit. */
+  function readingOf(surface: HTMLElement, page: number): { layout: PageLayout; scale: number } {
+    const drawing = sheets(surface)[page]?.querySelector('svg') as SVGSVGElement;
+    const layout = readThePage(drawing);
+    return { layout, scale: Number.parseFloat(drawing.getAttribute('width') ?? '0') / layout.width };
+  }
 
-    renderer.cursor.moveTo(7);
-    expect(renderer.cursor.position).toBe(7);
+  function box(element: Element | null | undefined): { left: number; top: number; right: number; bottom: number } {
+    const style = (element as HTMLElement | null)?.style;
+    const left = Number.parseFloat(style?.left ?? 'NaN');
+    const top = Number.parseFloat(style?.top ?? 'NaN');
+    return {
+      left,
+      top,
+      right: left + Number.parseFloat(style?.width ?? 'NaN'),
+      bottom: top + Number.parseFloat(style?.height ?? 'NaN'),
+    };
+  }
+
+  function marker(surface: HTMLElement): HTMLElement | null {
+    return surface.querySelector<HTMLElement>('.score__cursor:not(.score__cursor--other)');
+  }
+
+  it('stands over every head of its step, across both staves of the system', async () => {
+    // Two staves, and a chord with a second in it, whose heads Verovio sets
+    // side by side: a band from the first head alone would leave the second
+    // uncovered, and one as tall as the treble alone would leave the bass.
+    const { renderer, surface } = aStage();
+    const twoBars = twoBarExercise();
+    const [treble, bass] = twoBars.staves;
+    const spread = printed({
+      ...twoBars,
+      staves: [
+        {
+          ...(treble as NonNullable<typeof treble>),
+          measures: [
+            bar(
+              noteEntry([p('C4'), p('D4')], Duration.QUARTER),
+              noteEntry(p('D4'), Duration.QUARTER),
+              noteEntry(p('E4'), Duration.QUARTER),
+              noteEntry(p('F4'), Duration.QUARTER),
+            ),
+            ...(treble?.measures.slice(1) ?? []),
+          ],
+        },
+        bass as NonNullable<typeof bass>,
+      ],
+    });
+    await renderer.load(spread.xml, spread.steps);
+
+    renderer.cursor.moveTo(0);
+
+    const drawn = marker(surface);
+    expect(drawn?.closest('.score__page')).toBe(sheets(surface)[0]);
+    const { layout, scale } = readingOf(surface, 0);
+    const step = spread.steps[0];
+    const heads = (step?.printed ?? []).map((here) => layout.heads.get(here.id)?.x ?? NaN);
+    expect(new Set(heads).size).toBeGreaterThan(1);
+    const system = layout.systems[0];
+    const [top, second] = system?.bars[0]?.staves[0]?.lines ?? [];
+    const space = (second ?? NaN) - (top ?? NaN);
+    const at = box(drawn);
+    expect(at.left).toBeLessThanOrEqual((Math.min(...heads) - space / 2) * scale);
+    expect(at.right).toBeGreaterThanOrEqual((Math.max(...heads) + space) * scale);
+    expect(at.top).toBeLessThanOrEqual(((system?.top ?? NaN) - space) * scale);
+    expect(at.bottom).toBeGreaterThanOrEqual(((system?.bottom ?? NaN) + space) * scale);
+  });
+
+  it('moves along with the music', async () => {
+    const { renderer, surface } = await aPagedScore();
+    renderer.cursor.moveTo(1);
+    const before = box(marker(surface)).left;
+
+    renderer.cursor.moveTo(2);
+
+    expect(box(marker(surface)).left).toBeGreaterThan(before);
+    expect(renderer.cursor.position).toBe(2);
+  });
+
+  it('goes back to the first step when it is reset', async () => {
+    const { renderer, surface } = await aPagedScore();
+    renderer.cursor.moveTo(9);
+    renderer.cursor.moveTo(0);
+    const first = box(marker(surface)).left;
+    renderer.cursor.moveTo(9);
+
     renderer.cursor.reset();
+
     expect(renderer.cursor.position).toBe(0);
+    expect(box(marker(surface)).left).toBe(first);
+  });
+
+  it('comes off the page when it is hidden, and back when it is shown', async () => {
+    const { renderer, surface } = await aPagedScore();
+    renderer.cursor.moveTo(3);
+
+    renderer.cursor.hide();
+    expect(marker(surface)).toBeNull();
+
+    renderer.cursor.show();
+    expect(marker(surface)).not.toBeNull();
+  });
+
+  it('stands on a page not being read only once that page is drawn', async () => {
+    const { renderer, surface } = await aPagedScore();
+    const late = LONG.steps.length - 1;
+
+    renderer.cursor.moveTo(late);
+    expect(marker(surface)).toBeNull();
+
+    renderer.turnPages(999);
+    await vi.waitFor(() => {
+      expect(marker(surface)?.closest('.score__page')).toBe(sheets(surface)[renderer.pages.count - 1]);
+    });
+  });
+
+  it('finds its step again on a new layout, on the page the step is on now', async () => {
+    const { renderer, surface } = await aPagedScore();
+    renderer.turnPages(3);
+    const step = Math.floor(LONG.steps.length * 0.55);
+    renderer.cursor.moveTo(step);
+    const before = renderer.pages.count;
+    const name = LONG.steps[step]?.printed[0]?.id ?? '';
+
+    renderer.setZoom(renderer.zoom * 1.4);
+
+    await vi.waitFor(() => {
+      expect(renderer.pages.count).toBeGreaterThan(before);
+      const holding = marker(surface)?.closest('.score__page');
+      expect(holding?.querySelector(`[id="${name}"]`)).not.toBeNull();
+    });
+  });
+
+  it('forgets where the last layout drew its step', async () => {
+    // Laid out again, the page its step was on may not be drawn at all - the
+    // reader went on to another - and a marker put where the old layout had
+    // it would stand on a page with nothing on it.
+    const { renderer, surface } = await aPagedScore();
+    renderer.turnPages(3);
+    await vi.waitFor(() => {
+      expect(drawn(surface)).toEqual([2, 3, 4]);
+    });
+    // A step late on page 3, which a larger print carries past the pages
+    // drawn round the reader's.
+    const step = LONG.steps.findIndex((each) => each.barId === 'm160');
+    renderer.cursor.moveTo(step);
+    expect(marker(surface)?.closest('.score__page')).toBe(sheets(surface)[3]);
+    const before = renderer.pages.count;
+
+    renderer.setZoom(renderer.zoom * 1.4);
+
+    // Every page round the reader drawn, which is when the marker is put down.
+    await vi.waitFor(() => {
+      expect(renderer.pages.count).toBeGreaterThan(before);
+      const at = renderer.pages.at;
+      expect(drawn(surface)).toEqual([at - 1, at, at + 1]);
+    });
+    const holding = marker(surface)?.closest('.score__page');
+    // Nowhere, or on the page that bar is drawn on now - never on a page the
+    // old layout had it on.
+    expect(holding === null || holding === undefined || holding.querySelector('[id="m160"]') !== null).toBe(true);
+  });
+
+  it('comes off a page that is let go of', async () => {
+    const { renderer, surface } = await aPagedScore();
+    renderer.cursor.moveTo(0);
+    expect(marker(surface)).not.toBeNull();
+
+    renderer.turnPages(3);
+
+    await vi.waitFor(() => {
+      expect(drawn(surface)).toEqual([2, 3, 4]);
+    });
+    expect(marker(surface)).toBeNull();
+  });
+
+  it('keeps the other hand’s marker a marker of its own', async () => {
+    const { renderer, surface } = await aPagedScore();
+    renderer.cursor.moveTo(1);
+
+    renderer.otherHand.moveTo(4);
+
+    const other = surface.querySelector('.score__cursor--other');
+    expect(other).not.toBeNull();
+    expect(box(other).left).toBeGreaterThan(box(marker(surface)).left);
+    expect(renderer.otherHand.position).toBe(4);
+    expect(renderer.cursor.position).toBe(1);
   });
 });
 
@@ -349,7 +545,8 @@ describe('clearing', () => {
 
   it('lays out nothing again after it, which there is no music for', async () => {
     const { renderer, engraver } = aStage();
-    await renderer.load(serializer.serialize(twoBarExercise()));
+    const two = printed(twoBarExercise());
+    await renderer.load(two.xml, two.steps);
     renderer.clear();
     const relayout = vi.spyOn(engraver, 'relayout');
 

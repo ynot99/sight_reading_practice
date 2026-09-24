@@ -283,6 +283,34 @@ textarea {
 }
 
 /*
+ * A page Verovio drew, and the box its marks stand in: the marker is placed
+ * in pixels from the page's corner, so the page is what it is placed against.
+ */
+.score__page {
+  position: relative;
+}
+
+/*
+ * The marker, over the notes of the step the music is at.
+ *
+ * A wash across the system rather than a line, so the chord it stands on is
+ * still read through it - the same blue and the same strength as the marker
+ * OSMD drew, and the other hand's as faint and as grey as its was: it says
+ * where the music is, not where the reader must be.
+ */
+.score__cursor {
+  position: absolute;
+  border-radius: 3px;
+  background: rgb(59 130 246 / 45%);
+  pointer-events: none;
+  transition: filter 140ms linear;
+}
+
+.score__cursor--other {
+  background: rgb(148 163 184 / 28%);
+}
+
+/*
  * The marker reddens where the reader keeps missing.
  *
  * Practising with every colour turned off is reading blind on purpose, and

@@ -250,11 +250,14 @@ export class PracticeHistory {
   }
 
   /**
-   * The best readings, and only readings that reached the end.
+   * The best readings, those that reached the end above every one that did not.
    *
    * A run stopped after four notes of a hard passage can score anything at
    * all, and a table of bests that it could win would be a table of who
-   * stopped soonest.
+   * stopped soonest. Left out altogether, though, a piece never yet played to
+   * the end was not in the table at all, and with only that piece asked for
+   * the table was empty - his, of the list with "this piece" ticked. So a
+   * stopped reading is there, and only below all the finished ones.
    *
    * One a piece when no piece is named, or an afternoon spent on one of them
    * fills the table with itself and the rest of the library is not there to
@@ -273,35 +276,41 @@ export class PracticeHistory {
     ofPiece?: string,
     howHard: (key: string) => number | null = () => null,
   ): readonly PracticeReading[] {
-    const completed = this.readingsOf(ofPiece).filter((reading) => reading.completed);
-    const byScore = (left: PracticeReading, right: PracticeReading): number =>
-      right.overall - left.overall || right.atMs - left.atMs;
-    const hardness = new Map(completed.map((reading) => [reading, howHard(reading.key)]));
-    const byRank = (left: PracticeReading, right: PracticeReading): number => {
+    const readings = this.readingsOf(ofPiece);
+    const hardness = new Map(readings.map((reading) => [reading, howHard(reading.key)]));
+    type Order = (left: PracticeReading, right: PracticeReading) => number;
+    const finishedFirst: Order = (left, right) => Number(right.completed) - Number(left.completed);
+    const hardestFirst: Order = (left, right) => {
       const leftIs = hardness.get(left) ?? null;
       const rightIs = hardness.get(right) ?? null;
       if (leftIs === rightIs) {
-        return byScore(left, right);
+        return 0;
       }
       if (leftIs === null || rightIs === null) {
         return leftIs === null ? 1 : -1;
       }
       return rightIs - leftIs;
     };
+    const bestScoreFirst: Order = (left, right) =>
+      right.overall - left.overall || right.atMs - left.atMs;
+    const byStanding: Order = (left, right) =>
+      finishedFirst(left, right) || bestScoreFirst(left, right);
+    const byRank: Order = (left, right) =>
+      finishedFirst(left, right) || hardestFirst(left, right) || bestScoreFirst(left, right);
     // One piece is as hard as itself, so its own readings go by score alone.
     if (ofPiece !== undefined) {
-      return [...completed].sort(byScore).slice(0, Math.max(0, limit));
+      return [...readings].sort(byStanding).slice(0, Math.max(0, limit));
     }
     const best = new Map<string, PracticeReading>();
     const exercises: PracticeReading[] = [];
-    for (const reading of completed) {
+    for (const reading of readings) {
       if (reading.key.startsWith('level:')) {
         exercises.push(reading);
         continue;
       }
       const piece = pieceOfKey(reading.key);
       const standing = best.get(piece);
-      if (standing === undefined || byScore(reading, standing) < 0) {
+      if (standing === undefined || byStanding(reading, standing) < 0) {
         best.set(piece, reading);
       }
     }

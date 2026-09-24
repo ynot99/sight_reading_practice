@@ -27,15 +27,41 @@ describe('every reading there has been', () => {
     expect(history.lastReadings(5)[0]?.atMs).toBe(29);
   });
 
-  it('lets only finished readings into the best', () => {
+  it('puts a stopped reading below every finished one, whatever it scored', () => {
     // A run stopped after four notes of a hard passage can score anything at
     // all, and a table of bests it could win would be a table of who stopped
-    // soonest.
+    // soonest. Left out, though, a piece never played to the end was missing.
     const history = new PracticeHistory(new InMemorySettingsStore());
     history.record('score:A', { atMs: 1, overall: 1, grade: 'A', completed: false });
     history.record('score:B', { atMs: 2, overall: 0.8, grade: 'B', completed: true });
+    history.record('score:C', { atMs: 3, overall: 0.3, grade: 'F', completed: true });
 
-    expect(history.bestReadings().map((reading) => reading.key)).toEqual(['score:B']);
+    expect(history.bestReadings().map((reading) => reading.key)).toEqual([
+      'score:B',
+      'score:C',
+      'score:A',
+    ]);
+  });
+
+  it('puts it below the finished ones however hard its piece is', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    history.record('score:Hard', { atMs: 1, overall: 0.9, grade: 'A', completed: false });
+    history.record('score:Easy', { atMs: 2, overall: 0.5, grade: 'D', completed: true });
+
+    const ranked = history.bestReadings(10, undefined, (key) => (key === 'score:Hard' ? 9 : 1));
+
+    expect(ranked.map((reading) => reading.key)).toEqual(['score:Easy', 'score:Hard']);
+  });
+
+  it('ranks stopped readings among themselves as it ranks the finished', () => {
+    // Hardest first and then by score, below the line where finishing ends.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    history.record('score:Easy', { atMs: 1, overall: 0.9, grade: 'A', completed: false });
+    history.record('score:Hard', { atMs: 2, overall: 0.2, grade: 'F', completed: false });
+
+    const ranked = history.bestReadings(10, undefined, (key) => (key === 'score:Hard' ? 9 : 1));
+
+    expect(ranked.map((reading) => reading.key)).toEqual(['score:Hard', 'score:Easy']);
   });
 
   it('puts the best first, and the most recent of equals above the rest', () => {
@@ -403,12 +429,32 @@ describe('the readings of one piece', () => {
     expect(history.bestReadings(10).map((reading) => reading.overall)).toEqual([0.8, 0.7, 0.6]);
   });
 
-  it('still lets only finished readings into the best of one piece', () => {
+  it('lists the stopped readings of one piece below its finished ones', () => {
+    // His: with only this piece asked for, and none of its readings finished,
+    // the best of it was an empty list.
     const history = new PracticeHistory(new InMemorySettingsStore());
     history.record('score:A', { ...attempt(0.9, 1_000), completed: false });
     history.record('score:A', attempt(0.4, 2_000));
+    history.record('score:A', { ...attempt(0.95, 3_000), completed: false });
 
-    expect(history.bestReadings(10, 'score:A').map((reading) => reading.overall)).toEqual([0.4]);
+    expect(history.bestReadings(10, 'score:A').map((reading) => reading.overall)).toEqual([
+      0.4, 0.95, 0.9,
+    ]);
+  });
+
+  it('stands a piece in the best of everything by a finished reading where it has one', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    history.record('score:A', { ...attempt(0.9, 1_000), completed: false });
+    history.record('score:A', attempt(0.4, 2_000));
+    history.record('score:B', { ...attempt(0.3, 3_000), completed: false });
+    history.record('score:B', { ...attempt(0.6, 4_000), completed: false });
+
+    // A by the reading that finished, not the better one that did not; B,
+    // never finished, by the best of its stopped ones.
+    expect(history.bestReadings(10).map((reading) => [reading.key, reading.overall])).toEqual([
+      ['score:A', 0.4],
+      ['score:B', 0.6],
+    ]);
   });
 });
 

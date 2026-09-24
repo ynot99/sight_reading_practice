@@ -5872,7 +5872,7 @@ describe('AppView', () => {
       expect(element('reading-what').querySelector('.result__grade')?.textContent).toContain('A');
     });
 
-    it('shows the best ones when asked, and only finished ones', async () => {
+    it('shows the best ones when asked, the stopped ones below', async () => {
       const rig = createRig();
       await rig.view.initialize();
       rig.runtime.history.record('score:Stopped', {
@@ -5893,9 +5893,49 @@ describe('AppView', () => {
       best.checked = true;
       best.dispatchEvent(new Event('change'));
 
-      const rows = element('readings-list').textContent ?? '';
-      expect(rows).toContain('Finished');
-      expect(rows).not.toContain('Stopped');
+      const names = [...element('readings-list').querySelectorAll('.readings__name')].map(
+        (name) => name.textContent,
+      );
+      expect(names).toEqual(['Finished', 'Stopped']);
+    });
+
+    it('shows the best of this piece when none of it was finished', async () => {
+      // His: with "this piece" and "best first" both ticked the list was empty,
+      // because nothing of the piece had been played to the end.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record(rig.runtime.controller.pieceKey, {
+        atMs: Date.now(),
+        overall: 0.4,
+        grade: 'D',
+        completed: false,
+        stoppedAtBar: 3,
+      });
+      element<HTMLButtonElement>('focus-readings').click();
+
+      for (const id of ['readings-this-piece', 'readings-best']) {
+        const box = element<HTMLInputElement>(id);
+        box.checked = true;
+        box.dispatchEvent(new Event('change'));
+      }
+
+      expect(element('readings-list').querySelectorAll('li')).toHaveLength(1);
+      expect(element('readings-empty').hidden).toBe(true);
+    });
+
+    it('says the best of nothing is nothing read, not nothing finished', async () => {
+      // Stopped readings are among the best now, so an empty best is an empty
+      // history - and the old line would send the reader off to finish one.
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-readings').click();
+
+      const best = element<HTMLInputElement>('readings-best');
+      best.checked = true;
+      best.dispatchEvent(new Event('change'));
+
+      expect(element('readings-empty').hidden).toBe(false);
+      expect(element('readings-empty').textContent).toContain('Nothing read yet');
     });
 
     it('puts the hardest pieces first among the best, passages by their piece', async () => {

@@ -2300,9 +2300,10 @@ export class AppView {
       ? history.bestReadings(50, piece, (key) => this.howHardThePieceIs(key))
       : history.lastReadings(50, piece);
     this.el.readingsEmpty.hidden = readings.length > 0;
-    this.el.readingsEmpty.textContent = best
-      ? 'Nothing played to the end yet. A reading has to finish to be one of the best.'
-      : piece === undefined
+    // Whichever order, the list is empty only when nothing has been read:
+    // the best of it include the readings that stopped.
+    this.el.readingsEmpty.textContent =
+      piece === undefined
         ? 'Nothing read yet. Play something and it is remembered here.'
         : 'Nothing read of this piece yet.';
     this.el.readingsList.replaceChildren();

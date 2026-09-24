@@ -1225,3 +1225,27 @@ describe('a list of readings', () => {
     expect(pressed?.body).toContain('background:');
   });
 });
+
+describe('the letter a run is graded with', () => {
+  it('has a colour of its own, in both themes', () => {
+    // His: "літери A/B/C мали свій особистий колір".
+    const light = rules().find((rule) => rule.selector === ':root');
+    const dark = rules().find(
+      (rule, at) => rule.selector === ':root' && at > 0 && rule.at > (light?.at ?? 0),
+    );
+
+    for (const letter of ['a', 'b', 'c', 'd', 'f']) {
+      expect(light?.body).toContain(`--grade-${letter}:`);
+      expect(dark?.body).toContain(`--grade-${letter}:`);
+    }
+  });
+
+  it('wears it on the report and on a reading alike', () => {
+    const worn = rules().filter((rule) => rule.selector.includes("[data-grade='C']"));
+
+    expect(worn).toHaveLength(1);
+    expect(worn[0]?.selector).toContain('.result__grade');
+    expect(worn[0]?.selector).toContain('.pill--grade');
+    expect(worn[0]?.body).toContain('var(--grade-c)');
+  });
+});

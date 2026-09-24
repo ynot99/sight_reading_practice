@@ -2331,6 +2331,7 @@ export class AppView {
       under.className = 'readings__under';
       const grade = this.doc.createElement('span');
       grade.className = 'pill pill--grade';
+      grade.dataset['grade'] = reading.grade;
       grade.textContent = `${percent(reading.overall)} ${reading.grade}`;
       under.append(grade);
       if (reading.tempoPercent !== undefined && reading.tempoPercent !== 100) {
@@ -2572,6 +2573,11 @@ export class AppView {
         'Tendency',
         `${describeTendency(picture.meanDeviationMs)} · ± ${Math.round(picture.deviationSpreadMs)} ms`,
       ],
+      // Only where there is a gate at the bar line to wait at; see
+      // `barsWaitedRow`, which says the same of a run that has just ended.
+      ...(reading.modeId === BAR_MODE_ID
+        ? ([['Bars it waited at', `${totals.barsWaitedFor} of ${picture.bars.length}`]] as const)
+        : []),
     ];
     for (const [name, value] of rows) {
       const row = this.doc.createElement('div');
@@ -7521,6 +7527,9 @@ export class AppView {
 
     const gradeElement = this.doc.createElement('div');
     gradeElement.className = 'result__grade';
+    // The letter in its own colour, here as on a reading's row: one walk from
+    // green to red, read the same whichever of the two a reader is looking at.
+    gradeElement.dataset['grade'] = score.grade;
     gradeElement.textContent = score.grade;
     this.el.result.append(gradeElement);
 

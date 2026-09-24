@@ -37,6 +37,19 @@
    * this is a second telling of what the row already says in words - which is
    * what keeps it readable to somebody who cannot tell 7 from 9 by hue.
    */
+  /*
+   * The letter a run is graded with, in its own colour.
+   *
+   * His, of the readings list: "літери A/B/C мали свій особистий колір". The
+   * same walk from green to red the difficulty ladder makes, at five stops
+   * instead of ten, so a shelf of readings and a shelf of pieces are read
+   * with one eye rather than two.
+   */
+  --grade-a: #15803d;
+  --grade-b: #4d7c0f;
+  --grade-c: #a16207;
+  --grade-d: #c2410c;
+  --grade-f: #b91c1c;
   --star-1: #0e7490;
   --star-2: #166534;
   --star-3: #4d7c0f;
@@ -63,6 +76,12 @@
     --wrong: #f87171;
     --pending: #fbbf24;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
+    /* The same walks, lifted off a dark ground; see the light block above. */
+    --grade-a: #4ade80;
+    --grade-b: #a3e635;
+    --grade-c: #facc15;
+    --grade-d: #fb923c;
+    --grade-f: #f87171;
     /* The same ramp, lifted off a dark ground; see the light block above. */
     --star-1: #22d3ee;
     --star-2: #4ade80;
@@ -592,6 +611,31 @@ textarea {
   font-size: 30px;
   font-weight: 700;
   line-height: 1;
+}
+
+.result__grade[data-grade='A'],
+.pill--grade[data-grade='A'] {
+  color: var(--grade-a);
+}
+
+.result__grade[data-grade='B'],
+.pill--grade[data-grade='B'] {
+  color: var(--grade-b);
+}
+
+.result__grade[data-grade='C'],
+.pill--grade[data-grade='C'] {
+  color: var(--grade-c);
+}
+
+.result__grade[data-grade='D'],
+.pill--grade[data-grade='D'] {
+  color: var(--grade-d);
+}
+
+.result__grade[data-grade='F'],
+.pill--grade[data-grade='F'] {
+  color: var(--grade-f);
 }
 
 .result__row {
@@ -2000,14 +2044,13 @@ select {
 /*
  * The score of the reading, which is what the row is scanned for.
  *
- * Not coloured by its letter: nothing else in this program colours a grade,
- * and a palette invented here would be a second scale beside the one the
- * report already reads out in words.
+ * The letter carries the colour and the ground borrows it, so a column of
+ * rows can be read down without reading any of them. See `--grade-a`.
  */
 .pill--grade {
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-strong);
+  border: 1px solid color-mix(in srgb, currentcolor 35%, transparent);
+  background: color-mix(in srgb, currentcolor 12%, transparent);
   color: var(--text);
   padding: 0 7px;
   font-size: 11px;

@@ -1371,6 +1371,10 @@ describe('AppView', () => {
 
     expect(element('score-verdict').hidden).toBe(false);
     expect(element('result').textContent).toContain('Overall');
+    // And the letter hands its own colour over, the way a reading's row does.
+    expect(element('result').querySelector('.result__grade')?.getAttribute('data-grade')).toBe(
+      element('result').querySelector('.result__grade')?.textContent,
+    );
     // The pill carries the verdict once there is one; the status it was
   });
 
@@ -5706,6 +5710,32 @@ describe('AppView', () => {
       expect(row.querySelector('.readings__mode')).toBeNull();
       expect(row.querySelector('.pill--stopped')).toBeNull();
       expect(row.textContent).not.toContain('speed');
+    });
+
+    it('gives the letter its own colour, on the row and at the head of the sheet', async () => {
+      // His: "літери A/B/C мали свій особистий колір". The colour is the
+      // stylesheet's; what this says is that both places hand it the letter.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:A', {
+        atMs: Date.now(),
+        overall: 0.55,
+        grade: 'C',
+        completed: true,
+      });
+      element<HTMLButtonElement>('focus-readings').click();
+
+      expect(
+        element('readings-list').querySelector('.pill--grade')?.getAttribute('data-grade'),
+      ).toBe('C');
+
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      expect(
+        element('reading-what').querySelector('.result__grade')?.getAttribute('data-grade'),
+      ).toBe('C');
     });
 
     it('opens a sheet wearing the same marks as the row it came from', async () => {

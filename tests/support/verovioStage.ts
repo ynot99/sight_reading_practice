@@ -72,14 +72,19 @@ export async function laidOutAt(renderer: VerovioScoreRenderer, surface: HTMLEle
 }
 
 /**
+ * Gives each test of the file it is called in room for several layouts, for
+ * the reason `whenDrawn` gives.
+ */
+export function allowTheEngraverItsTime(): void {
+  vi.setConfig({ testTimeout: 3 * ENGRAVER_WAIT_MS });
+}
+
+/**
  * Stages for one test file: Verovio started once before its tests, and every
- * stage taken down after each of them.
- *
- * Each test in the file is given room for several layouts, for the reason
- * `whenDrawn` gives.
+ * stage taken down after each of them - each test allowed the engraver its time.
  */
 export function verovioStages(): { readonly aStage: () => Stage } {
-  vi.setConfig({ testTimeout: 3 * ENGRAVER_WAIT_MS });
+  allowTheEngraverItsTime();
   let core: VerovioCore | null = null;
   const stages: Stage[] = [];
   beforeAll(async () => {

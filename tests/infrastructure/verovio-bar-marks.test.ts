@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { rulerMarks, type RulerMark } from '../../src/application/rhythmRuler.js';
-import type { Exercise } from '../../src/domain/model/Exercise.js';
-import { barId, measureIndexOfBar } from '../../src/domain/notation/printedIds.js';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { noteEntry, type Exercise } from '../../src/domain/model/Exercise.js';
+import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
+import { barId, measureIndexOfBar, printedAtEachStep } from '../../src/domain/notation/printedIds.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { readThePage, type PageLayout } from '../../src/infrastructure/rendering/verovio/pageLayout.js';
 import { elementAt } from '../../src/shared/asserts.js';
-import { twoBarExercise } from '../support/fixtures.js';
+import { bar, p, twoBarExercise } from '../support/fixtures.js';
 import { laidOutAt, printed, sheets, verovioStages, whenDrawn, type Printed, type Stage } from '../support/verovioStage.js';
 
 /**
@@ -15,6 +17,7 @@ import { laidOutAt, printed, sheets, verovioStages, whenDrawn, type Printed, typ
  * printed, and where its beats fall.
  */
 const { aStage } = verovioStages();
+const serializer = new MusicXmlSerializer();
 
 /**
  * A grand staff of as many bars as asked for, the two fixture bars over and
@@ -201,6 +204,39 @@ describe('the rhythm ruler', () => {
       beat,
     );
   }
+
+  it('stands the beats of a bar at distances their time asks for, once the ruler asks for room', async () => {
+    // Left to the engraver, a half takes about one and a half times a
+    // quarter's width where its length asks for two - and a ruler drawn over
+    // beats at uneven distances looks crooked. The room is rests nobody sees.
+    const uneven: Exercise = {
+      ...twoBarExercise(),
+      staves: twoBarExercise().staves.map((staff, at) => ({
+        ...staff,
+        measures: [
+          bar(
+            noteEntry(p(at === 0 ? 'C4' : 'C3'), Duration.HALF),
+            noteEntry(p(at === 0 ? 'D4' : 'D3'), Duration.QUARTER),
+            noteEntry(p(at === 0 ? 'E4' : 'E3'), Duration.QUARTER),
+          ),
+          bar(noteEntry(p(at === 0 ? 'G4' : 'G3'), Duration.WHOLE)),
+        ],
+      })),
+    };
+    const ratio = async (evenBars: boolean): Promise<number> => {
+      const { renderer, surface } = aStage();
+      renderer.setPaged(true);
+      await renderer.load(serializer.serialize(uneven, { evenBars }), printedAtEachStep(buildTimeline(uneven)));
+      const heads = readingOf(surface, 0).layout.heads;
+      const [half, second, third] = ['n0-1-0-0', 'n0-1-1-0', 'n0-1-2-0'].map((name) => heads.get(name)?.x ?? NaN);
+      return ((second ?? NaN) - (half ?? NaN)) / ((third ?? NaN) - (second ?? NaN));
+    };
+
+    expect(await ratio(false)).toBeLessThan(1.7);
+    const spaced = await ratio(true);
+    expect(spaced).toBeGreaterThan(1.9);
+    expect(spaced).toBeLessThan(2.1);
+  });
 
   it('rules a line for every beat of every bar on the page, top staff to bottom staff', async () => {
     const { renderer, surface } = await aScore(EIGHT_PRINTED);

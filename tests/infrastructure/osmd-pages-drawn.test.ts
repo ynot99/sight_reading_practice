@@ -114,7 +114,9 @@ describe('drawing only the pages near the reader', { timeout: 30_000 }, () => {
     await renderer.load(new MusicXmlSerializer().serialize(longExercise({ bars: 40 })));
     withLayout(container, 260);
     renderer.setPaged(true);
-  });
+    // Engraving forty bars is seconds of OSMD's own work with the rest of the
+    // suite running beside it, which ten did not always cover.
+  }, 60_000);
 
   it('draws the page being read and the one after it, and nothing on the others', () => {
     expect(renderer.pages.count).toBeGreaterThanOrEqual(6);

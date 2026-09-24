@@ -296,6 +296,21 @@ describe('the top of the next page, shown early', () => {
     expect(previewOn(surface, 1)).toBeNull();
   });
 
+  it('offers nothing on the last page, there being nothing ahead', async () => {
+    const { renderer, surface } = await aScore();
+    const last = renderer.pages.count - 1;
+    renderer.turnPages(last);
+    await whenDrawn(() => {
+      expect(sheets(surface)[last]?.querySelector('svg')).not.toBeNull();
+    });
+    const systems = readingOf(surface, last).layout.systems.length;
+    expect(systems).toBeGreaterThan(1);
+
+    renderer.cursor.moveTo(firstStepOf(surface, last, systems - 1));
+
+    expect(previewOn(surface, last)).toBeNull();
+  });
+
   it('is not shown when not wanted, and not in a scrolled score', async () => {
     const { renderer, surface } = await aScore();
     const systems = readingOf(surface, 0).layout.systems.length;

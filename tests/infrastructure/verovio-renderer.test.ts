@@ -6,7 +6,7 @@ import type { VerovioScoreRenderer } from '../../src/infrastructure/rendering/ve
 import { Duration } from '../../src/domain/model/Duration.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
-import { bar, longExercise, p, twoBarExercise } from '../support/fixtures.js';
+import { bar, beamedSixteenths, longExercise, p, twoBarExercise } from '../support/fixtures.js';
 import { printed, sheets, verovioStages, whenDrawn, type Stage } from '../support/verovioStage.js';
 
 const { aStage } = verovioStages();
@@ -131,6 +131,39 @@ describe('a score read in pages', () => {
     expect(roomAt(small)).toBeGreaterThanOrEqual(32);
     expect(roomAt(large)).toBeGreaterThanOrEqual(32);
     expect(roomAt(large)).toBeLessThan(34);
+  });
+
+  it('asks for a page that fits the room inside the box, reserves and all', async () => {
+    // The box keeps room at both ends - above the page, and the transport
+    // bar's below it - and a page sized to the window overflowed by the strip
+    // nobody owned, which the frame grew to hold and the document scrolled by.
+    const { renderer, engraver, scroller } = aStage();
+    const load = vi.spyOn(engraver, 'load');
+    scroller.style.paddingTop = '8px';
+    scroller.style.paddingBottom = '92px';
+    scroller.getBoundingClientRect = () => ({ left: 0, top: 0, bottom: 260, width: 900, height: 260 }) as DOMRect;
+    renderer.setPaged(true);
+
+    await renderer.load(LONG.xml, LONG.steps);
+
+    const shape = load.mock.calls[0]?.[1];
+    const tall = ((shape?.pageHeight ?? NaN) * (shape?.scale ?? NaN)) / 100;
+    expect(tall).toBeLessThanOrEqual(260 - 8 - 92);
+    expect(tall).toBeGreaterThan(260 - 8 - 92 - 1);
+  });
+
+  it('does not scroll after the marker in a score read in pages', async () => {
+    // A turn is what shows the next system; a scroll on every beat is an
+    // animation over the whole page started again before the last finished.
+    const { renderer, scroller } = await aPagedScore();
+    const scrolled = vi.fn();
+    scroller.scrollTo = scrolled as Element['scrollTo'];
+
+    for (const step of [1, 2, 3, 40, 41]) {
+      renderer.cursor.moveTo(step);
+    }
+
+    expect(scrolled).not.toHaveBeenCalled();
   });
 
   it('goes back to the first page at the start', async () => {
@@ -538,6 +571,49 @@ describe('what was played', () => {
     expect(Number(ring?.getAttribute('cx'))).toBeGreaterThan(c4.x);
   });
 
+  it('rings a note written an octave from where it sounds where it is drawn, and one outside the sign where it always was', async () => {
+    // The pitch in the file is the sounding one and the page draws it an
+    // octave away under an 8va: a mark placed by the pitch alone would ring
+    // the empty staff an octave above the note.
+    const stage = aStage();
+    stage.renderer.setPaged(true);
+    const written = twoBarExercise();
+    const shifted = printed({
+      ...written,
+      octaveShifts: [
+        {
+          measureIndex: 0,
+          offsetTicks: 0,
+          untilMeasureIndex: 0,
+          untilOffsetTicks: Duration.WHOLE.ticks,
+          direction: 'down',
+          size: 8,
+          staffNumber: 1,
+        },
+      ],
+      staves: written.staves.map((staff, at) =>
+        at === 0
+          ? {
+              ...staff,
+              measures: [
+                bar(...['C6', 'D6', 'E6', 'F6'].map((name) => noteEntry(p(name), Duration.QUARTER))),
+                ...staff.measures.slice(1),
+              ],
+            }
+          : staff,
+      ),
+    });
+    await stage.renderer.load(shifted.xml, shifted.steps);
+    stage.renderer.configureOverlay(context);
+
+    stage.renderer.showPlayed({ stepIndex: 0, midi: p('C6').midi, correct: true, offset: 0 });
+    stage.renderer.showPlayed({ stepIndex: 4, midi: p('G4').midi, correct: true, offset: 0 });
+
+    const [under, outside] = ringsOf(stage.surface);
+    expect(Number(under?.getAttribute('cy'))).toBe(headOf(stage.surface, 'n0-1-0-0').y);
+    expect(Number(outside?.getAttribute('cy'))).toBe(headOf(stage.surface, 'n1-1-0-0').y);
+  });
+
   it('rings the left hand’s note on the bass staff, where it is printed', async () => {
     const { renderer, surface } = await twoBarsOpen();
 
@@ -791,6 +867,107 @@ describe('what has been played past, and what the run will not ask for', () => {
     const chord = surface.querySelector('[id="n1-2-0-0"]')?.parentElement;
     expect(chord?.getAttribute('class')).toContain('chord');
     expect(chord?.getAttribute('class')).toContain('note--passed');
+  });
+
+  describe('a beam and a tuplet', () => {
+    /** Two groups of four beamed sixteenths, steps 0-3 and 4-7. */
+    async function beamedOpen(): Promise<Stage> {
+      const stage = aStage();
+      stage.renderer.setPaged(true);
+      const beamed = printed(beamedSixteenths());
+      await stage.renderer.load(beamed.xml, beamed.steps);
+      return stage;
+    }
+
+    /** Whether each beam's own lines have gone, in the order drawn. */
+    function beamsGone(surface: HTMLElement): boolean[] {
+      return [...surface.querySelectorAll('g.beam')].map((beam) => {
+        const lines = [...beam.querySelectorAll(':scope > polygon')];
+        expect(lines.length).toBeGreaterThan(0);
+        return lines.every((line) => line.classList.contains('note--passed'));
+      });
+    }
+
+    it('keeps a beam while it still joins a note that is showing', async () => {
+      // Gone with its first note, it would strand the three it still joins.
+      const { renderer, surface } = await beamedOpen();
+
+      renderer.fadePassed(0);
+      renderer.fadePassed(1);
+      renderer.fadePassed(2);
+
+      expect(beamsGone(surface)).toEqual([false, false]);
+    });
+
+    it('takes the beam once every note under it has gone, and leaves the next group’s', async () => {
+      const { renderer, surface } = await beamedOpen();
+
+      for (const step of [0, 1, 2, 3]) {
+        renderer.fadePassed(step);
+      }
+
+      expect(beamsGone(surface)).toEqual([true, false]);
+    });
+
+    it('brings the beam back with the notes', async () => {
+      const { renderer, surface } = await beamedOpen();
+      for (const step of [0, 1, 2, 3]) {
+        renderer.fadePassed(step);
+      }
+
+      renderer.clearFaded();
+
+      expect(surface.querySelectorAll('.note--passed')).toHaveLength(0);
+    });
+
+    it('dims a beam with the hand it belongs to', async () => {
+      const { renderer, surface } = await beamedOpen();
+
+      renderer.dimUnplayed({ staves: [2], from: 0, to: 7 });
+
+      const lines = [...surface.querySelectorAll('g.beam > polygon')];
+      expect(lines.length).toBeGreaterThan(0);
+      expect(lines.every((line) => line.classList.contains('note--unplayed'))).toBe(true);
+    });
+
+    it('takes a triplet’s number and bracket with its last note', async () => {
+      const base = twoBarExercise();
+      const three = Duration.of('eighth', 0, { actual: 3, normal: 2 });
+      const triplet = printed({
+        ...base,
+        staves: base.staves.map((staff, at) =>
+          at === 0
+            ? {
+                ...staff,
+                measures: [
+                  bar(
+                    noteEntry(p('C4'), three),
+                    noteEntry(p('D4'), three),
+                    noteEntry(p('E4'), three),
+                    noteEntry(p('F4'), Duration.DOTTED_HALF),
+                  ),
+                  ...staff.measures.slice(1),
+                ],
+              }
+            : staff,
+        ),
+      });
+      const stage = aStage();
+      stage.renderer.setPaged(true);
+      await stage.renderer.load(triplet.xml, triplet.steps);
+      const ink = (): boolean[] =>
+        [...stage.surface.querySelectorAll('g.tuplet > g.tupletNum, g.tuplet > g.tupletBracket')].map((each) =>
+          each.classList.contains('note--passed'),
+        );
+      expect(ink()).toHaveLength(2);
+
+      stage.renderer.fadePassed(0);
+      stage.renderer.fadePassed(1);
+      expect(ink()).toEqual([false, false]);
+
+      stage.renderer.fadePassed(2);
+      expect(ink()).toEqual([true, true]);
+    });
   });
 
   it('puts them all back', async () => {

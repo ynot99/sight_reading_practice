@@ -561,7 +561,13 @@ export class VerovioScoreRenderer
     // is a fraction of one off that.
     const wide = Number.parseFloat(drawing.getAttribute('width') ?? '');
     const scale = (Number.isFinite(wide) && wide > 0 ? wide : this.pagePx.width) / read.width;
-    this.layouts.set(page, { layout: read, scale, elements, across: stepsAcross(read, this.printed, this.stepsOfBar) });
+    this.layouts.set(page, {
+      layout: read,
+      scale,
+      elements,
+      across: stepsAcross(read, this.printed, this.stepsOfBar),
+      groupEnds: groupEnds(read, this.printed, this.stepsOfBar, elements),
+    });
     for (const name of read.heads.keys()) {
       this.pageOfName.set(name, page);
     }
@@ -594,6 +600,10 @@ export class VerovioScoreRenderer
    * standing on the page. And a note's ledger lines go with it, though
    * Verovio draws them with the staff rather than with the note: a note taken
    * off would otherwise leave its ledger line hanging where it was.
+   *
+   * A beam, and a tuplet's bracket and number, go with the *last* step under
+   * them: gone with the first, a beam would strand the notes it still joins,
+   * and left behind by the last it floats over an empty page.
    */
   private drawnOfTheStep(stepIndex: number): { readonly element: Element; readonly staffNumber: number }[] {
     const step = this.printed[stepIndex];
@@ -612,6 +622,13 @@ export class VerovioScoreRenderer
       drawn.set(parent?.classList.contains('chord') === true ? parent : element, here.staffNumber);
       for (const ledger of ledgersUnder(element)) {
         drawn.set(ledger, here.staffNumber);
+      }
+      for (const group of groupsAround(element)) {
+        if (read.groupEnds.get(group) === stepIndex) {
+          for (const ink of group.querySelectorAll(GROUP_INK)) {
+            drawn.set(ink, here.staffNumber);
+          }
+        }
       }
     }
     return [...drawn].map(([element, staffNumber]) => ({ element, staffNumber }));
@@ -1959,12 +1976,13 @@ export class VerovioScoreRenderer
    * read: what the preview stands on is a system the reader has finished
    * with, and taking away one they are still reading would be worse than no
    * preview at all. (A page of one system has nothing to give up, and gets
-   * none: there is no second system for it to stand halfway to.)
+   * none: there is no second system for it to stand halfway to. Nor does the
+   * last page, there being no page ahead to copy.)
    */
   private previewToShow(): number | null {
     const next = this.pageAt + 1;
     const systems = this.layouts.get(this.pageAt)?.layout.systems ?? [];
-    if (!this.previewWanted || !this.paged || next >= this.sheets.length) {
+    if (!this.previewWanted || !this.paged) {
       return null;
     }
     const system = this.systemOfStep(this.reader.position, this.pageAt);
@@ -2122,6 +2140,11 @@ interface ReadPage {
    * of its leftmost head, a rest's as much as a note's.
    */
   readonly across: ReadonlyMap<number, number>;
+  /**
+   * Each beam and tuplet on the page, and the last step with a note under it:
+   * the step its own ink - the beam, the bracket and the number - goes with.
+   */
+  readonly groupEnds: ReadonlyMap<Element, number>;
 }
 
 /** A drawn page's layer of played notes, and what they are placed by. */
@@ -2267,6 +2290,41 @@ const HEAD_PLACE = /translate\(\s*(-?[\d.]+)/;
 
 /** A ledger line as Verovio writes one: `M x y L x y`, the two x taken. */
 const LEDGER = /M\s*(-?[\d.]+)[\s,]+-?[\d.]+\s*L\s*(-?[\d.]+)/;
+
+/** What a beam or a tuplet draws of its own, beside the notes inside it. */
+const GROUP_INK = ':scope > polygon, :scope > g.tupletNum, :scope > g.tupletBracket';
+
+/** The beams and tuplets a note stands inside, innermost first. */
+function groupsAround(note: Element): Element[] {
+  const groups: Element[] = [];
+  for (let at = note.parentElement; at !== null && !at.classList.contains('layer'); at = at.parentElement) {
+    if (at.classList.contains('beam') || at.classList.contains('tuplet')) {
+      groups.push(at);
+    }
+  }
+  return groups;
+}
+
+/** See `ReadPage.groupEnds`. */
+function groupEnds(
+  layout: PageLayout,
+  printed: readonly PrintedStep[],
+  stepsOfBar: ReadonlyMap<string, readonly number[]>,
+  elements: ReadonlyMap<string, Element>,
+): Map<Element, number> {
+  const ends = new Map<Element, number>();
+  for (const bar of layout.systems.flatMap((system) => system.bars)) {
+    for (const stepIndex of stepsOfBar.get(bar.id) ?? []) {
+      for (const here of printed[stepIndex]?.printed ?? []) {
+        const element = elements.get(here.id);
+        for (const group of element === undefined ? [] : groupsAround(element)) {
+          ends.set(group, Math.max(ends.get(group) ?? stepIndex, stepIndex));
+        }
+      }
+    }
+  }
+  return ends;
+}
 
 /** A rectangle from a drawing's corner. */
 function aBox(doc: Document, width: number, height: number): SVGRectElement {

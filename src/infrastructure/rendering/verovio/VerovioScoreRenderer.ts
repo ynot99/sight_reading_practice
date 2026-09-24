@@ -37,6 +37,7 @@ import {
 } from '../furniture.js';
 import { drawShape } from '../overlayElements.js';
 import { PAGE_LABEL_INSET, pageLabelText } from '../pageLabel.js';
+import { PREVIEW_CLIP_ID, PREVIEW_SYSTEM_CLIP_ID, previewPlacement } from '../pagePreview.js';
 import { buildOverlayShapes, type PlayedMark } from '../playedNoteShapes.js';
 import { fitStaffGeometry, type DrawnNoteSample, type StaffGeometry } from '../staffGeometry.js';
 import { swipeDirection, visibleHeightOf } from '../pageTurns.js';
@@ -170,8 +171,12 @@ export class VerovioScoreRenderer
   private readonly container: HTMLElement;
   private readonly engraver: VerovioEngraver;
   /** The reader's marker, and the fainter one where the other hand has got to. */
-  private readonly reader = new MarkerOnThePage(() => {
+  private readonly reader = new MarkerOnThePage((byTheMusic) => {
     this.placeTheMarker(this.reader, 'score__cursor');
+    if (byTheMusic) {
+      this.followTheMusic();
+    }
+    this.paintThePreview();
   });
   private readonly other = new MarkerOnThePage(() => {
     this.placeTheMarker(this.other, 'score__cursor score__cursor--other');
@@ -249,6 +254,14 @@ export class VerovioScoreRenderer
   private pressedHand: { readonly pointerId: number; readonly staffNumber: number } | null = null;
   /** The wait before a finger that stays put is pointing. */
   private holding: ReturnType<typeof setTimeout> | null = null;
+  /** Whether a page turns itself as the music leaves it; see `turnPagesWithTheMusic`. */
+  private pagesFollowTheMusic = true;
+  /** Whether the top of the next page is shown early; see `showNextPagePreview`. */
+  private previewWanted = true;
+  /** The preview on the page now, or `null` with none. */
+  private preview: Preview | null = null;
+  /** The system a scrolled score last brought into view, so a note in it does not scroll again. */
+  private followed: string | null = null;
 
   constructor(container: HTMLElement, engraver: VerovioEngraver, zoom = FIRST_ZOOM) {
     this.container = container;
@@ -348,6 +361,8 @@ export class VerovioScoreRenderer
     this.drawing = new Set();
     this.pageAt = 0;
     this.passage = null;
+    this.preview = null;
+    this.followed = null;
     this.letGo();
     this.announcePages();
   }
@@ -377,6 +392,7 @@ export class VerovioScoreRenderer
       this.labelThePage(page);
     }
     this.showThePages();
+    this.paintThePreview(true);
     this.inTheBackground(this.drawTheNearPages());
     this.announcePages();
   }
@@ -434,6 +450,8 @@ export class VerovioScoreRenderer
     this.drawn.clear();
     this.drawing = new Set();
     this.forgetTheReadings();
+    this.preview = null;
+    this.followed = null;
     this.sheets = Array.from({ length: count }, (_, page) => {
       const sheet = this.container.ownerDocument.createElement('div');
       sheet.className = 'score__page';
@@ -510,13 +528,17 @@ export class VerovioScoreRenderer
         continue;
       }
       sheet.innerHTML = svg;
+      if (this.preview?.page === page) {
+        this.preview = null;
+      }
       this.drawn.add(page);
       this.readTheDrawnPage(page);
-      this.labelThePage(page);
       this.furnishThePage(page);
+      this.labelThePage(page);
     }
     this.letTheFarPagesGo();
     this.placeTheMarkers();
+    this.paintThePreview();
   }
 
   /**
@@ -801,25 +823,29 @@ export class VerovioScoreRenderer
    * Scrolled, the pages are one column and only its top says anything - the
    * name, with no count, since a reader who never asked for pages is not on
    * page three of anything.
+   *
+   * In our drawing over the page, and over everything else in it: the preview
+   * of the next page replaces a system of this one, not the page, and "which
+   * page am I on" matters most in the moments before a turn, when it shows.
    */
   private labelThePage(page: number): void {
-    const drawing = this.sheets[page]?.querySelector('svg');
-    if (drawing === null || drawing === undefined) {
+    const layer = this.layerOn(page, 'page-label');
+    if (layer === null) {
       return;
     }
     const said =
       this.paged || page === 0 ? pageLabelText(this.title, page, this.paged ? this.sheets.length : 0) : '';
-    let label = drawing.querySelector(':scope > text.page-label');
+    let label = layer.querySelector('text.page-label');
     if (said === '') {
       label?.remove();
       return;
     }
     if (label === null) {
-      label = drawing.ownerDocument.createElementNS(SVG_NAMESPACE, 'text');
+      label = layer.ownerDocument.createElementNS(SVG_NAMESPACE, 'text');
       label.setAttribute('class', 'page-label');
       label.setAttribute('x', String(PAGE_LABEL_INSET));
       label.setAttribute('y', String(PAGE_LABEL_INSET));
-      drawing.append(label);
+      layer.append(label);
     }
     label.textContent = said;
   }
@@ -831,6 +857,9 @@ export class VerovioScoreRenderer
         this.sheets[page]?.replaceChildren();
         this.drawn.delete(page);
         this.forgetTheReadings(page);
+        if (this.preview?.page === page) {
+          this.preview = null;
+        }
       }
     }
   }
@@ -1101,6 +1130,7 @@ export class VerovioScoreRenderer
         }
       }
     }
+    this.coverTheHandSwitches();
   }
 
   /** The bars of a drawn page, in that page's pixels. */
@@ -1244,6 +1274,11 @@ export class VerovioScoreRenderer
   }
 
   private fingerDown(event: PointerEvent): void {
+    // The preview of the page ahead is a picture and nothing else: its bars
+    // are not on this page, and a marker standing under it is hidden there.
+    if (event.target instanceof Element && event.target.closest('.page-preview') !== null) {
+      return;
+    }
     // A switch before anything else. It is a drawn thing with an edge to aim
     // at, so what the browser says was touched is the exact answer - and a
     // press on one is not a tap on the music, a hold on a bar, or a swipe.
@@ -1824,17 +1859,256 @@ export class VerovioScoreRenderer
     return this.layouts.get(page)?.layout.systems.find((system) => system.bars.some((each) => each.id === bar)) ?? null;
   }
 
-  // Not drawn yet: the steps of the move after this one draw these. Until
-  // then each is asked and does nothing, which is what a renderer that cannot
-  // draw something is allowed to do - the run goes on the same.
+  // Pages that follow the music, and the top of the next one shown early.
 
-  showNextPagePreview(_wanted: boolean): void {}
+  /** Turns the page as the music leaves it, or leaves the turning to the reader. */
+  turnPagesWithTheMusic(wanted: boolean): void {
+    this.pagesFollowTheMusic = wanted;
+  }
 
-  turnPagesWithTheMusic(_wanted: boolean): void {}
+  showNextPagePreview(wanted: boolean): void {
+    if (this.previewWanted === wanted) {
+      return;
+    }
+    this.previewWanted = wanted;
+    this.paintThePreview(true);
+  }
 
+  /**
+   * Keeps the music the reader's marker has moved to in front of them.
+   *
+   * Read in pages, the page turns to the one the marker is on - asking the
+   * engraver where its bar is when that page is not drawn, which a run begun
+   * far into the piece asks for. Scrolled, the column brings the marker's
+   * system into the middle of the view, once for each system rather than for
+   * every note in it.
+   */
+  private followTheMusic(): void {
+    const stepIndex = this.reader.position;
+    if (this.paged && !this.pagesFollowTheMusic) {
+      return;
+    }
+    const page = this.pageOfStep(stepIndex);
+    if (page !== undefined) {
+      if (this.paged) {
+        if (page !== this.pageAt) {
+          this.turnToPage(page);
+        }
+        return;
+      }
+      this.scrollToTheSystemOf(stepIndex, page);
+      return;
+    }
+    const bar = this.printed[stepIndex]?.barId;
+    if (bar === undefined || !this.hasMusic) {
+      return;
+    }
+    const layout = this.layout;
+    this.inTheBackground(
+      this.engraver.pageOf(bar).then((found) => {
+        // The music may have gone on meanwhile, and that move answers for itself.
+        if (layout !== this.layout || found === null || this.reader.position !== stepIndex) {
+          return;
+        }
+        if (this.paged) {
+          if (found - 1 !== this.pageAt) {
+            this.turnToPage(found - 1);
+          }
+          return;
+        }
+        this.scrollTo(this.columnTopOf(found - 1));
+      }),
+    );
+  }
 
+  /** Brings the system a step is on into the middle of a scrolled score. */
+  private scrollToTheSystemOf(stepIndex: number, page: number): void {
+    const where = this.whereTheStepIs(stepIndex);
+    if (where === null) {
+      return;
+    }
+    // The band a marker stands in is the system's, whatever step of it.
+    const system = `${String(this.layout)}:${String(page)}:${String(where.top)}`;
+    if (system === this.followed) {
+      return;
+    }
+    this.followed = system;
+    const scroller = this.scroller();
+    const view = scroller instanceof HTMLElement ? scroller.clientHeight : 0;
+    this.scrollTo(this.columnTopOf(page) + where.top + where.height / 2 - view / 2);
+  }
 
+  /** How far down the scrolled column a page begins. */
+  private columnTopOf(page: number): number {
+    const scroller = this.scroller();
+    const sheet = this.sheets[page];
+    if (!(scroller instanceof HTMLElement) || sheet === undefined) {
+      return 0;
+    }
+    return sheet.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+  }
 
+  private scrollTo(top: number): void {
+    this.scroller()?.scrollTo?.({ top: Math.max(0, top), left: 0, behavior: 'smooth' });
+  }
+
+  /**
+   * The page whose top to show over this one, or `null`.
+   *
+   * Only once the music has reached the *last* system of the page being
+   * read: what the preview stands on is a system the reader has finished
+   * with, and taking away one they are still reading would be worse than no
+   * preview at all. (A page of one system has nothing to give up, and gets
+   * none: there is no second system for it to stand halfway to.)
+   */
+  private previewToShow(): number | null {
+    const next = this.pageAt + 1;
+    const systems = this.layouts.get(this.pageAt)?.layout.systems ?? [];
+    if (!this.previewWanted || !this.paged || next >= this.sheets.length) {
+      return null;
+    }
+    const system = this.systemOfStep(this.reader.position, this.pageAt);
+    return system !== null && system === systems[systems.length - 1] ? next : null;
+  }
+
+  /**
+   * Draws the preview, or takes it away, when the answer has changed.
+   *
+   * Asked on every step the music reaches, and a preview is a copy of a whole
+   * page of notation - so it is drawn only when the answer moves, and again
+   * when the page ahead it is a copy of has been drawn since.
+   */
+  private paintThePreview(afresh = false): void {
+    const next = this.previewToShow();
+    const shown = this.preview;
+    if (!afresh && shown !== null && shown.page === this.pageAt && shown.next === next) {
+      return;
+    }
+    if (!afresh && shown === null && next === null) {
+      return;
+    }
+    shown?.group.remove();
+    this.preview = null;
+    if (next !== null) {
+      this.preview = this.drawThePreview(this.pageAt, next);
+    }
+    this.coverTheHandSwitches();
+  }
+
+  /**
+   * The top of the next page, in the place the first system of this one had.
+   *
+   * A page turn is the hardest moment in sight reading: the music the reader
+   * needs is on a page they cannot see yet, and turning it is exactly when
+   * they can least afford to look away. So the page turns in halves - by the
+   * time the last system is being played, the music after it is already on
+   * the screen, where the first system has finished being needed.
+   *
+   * A copy of the page ahead as Verovio drew it - the same drawing at the same
+   * size, so the notes stand where they will when the page does turn - moved
+   * so its first system lands where this page's first system was, cut off
+   * halfway to this page's second system, and cut a second time in its own
+   * page's terms so none of its second system shows. On solid ground, because
+   * it replaces the system under it rather than being laid over it. `null`
+   * while the page ahead is not drawn to be copied.
+   */
+  private drawThePreview(page: number, next: number): Preview | null {
+    const here = this.layouts.get(page);
+    const ahead = this.layouts.get(next);
+    const over = this.drawingOfOurs(page, false);
+    const copied = this.drawn.has(next) ? this.sheets[next]?.querySelector('svg') : undefined;
+    const [first, second] = here?.layout.systems ?? [];
+    const [target, after] = ahead?.layout.systems ?? [];
+    if (
+      here === undefined ||
+      ahead === undefined ||
+      over === null ||
+      copied === null ||
+      copied === undefined ||
+      first === undefined ||
+      second === undefined ||
+      target === undefined
+    ) {
+      return null;
+    }
+    const doc = over.ownerDocument;
+    const width = this.drawnSize(page).width;
+    const slot = { top: first.top * here.scale, bottom: first.bottom * here.scale };
+    const reached = { top: target.top * ahead.scale, bottom: target.bottom * ahead.scale };
+    // Halfway to the system underneath: room for the ledger lines and tails
+    // hanging off the music shown, and never into the system being played.
+    const bottom = (slot.bottom + second.top * here.scale) / 2;
+
+    const group = doc.createElementNS(SVG_NAMESPACE, 'g');
+    group.setAttribute('class', 'page-preview');
+    const clip = doc.createElementNS(SVG_NAMESPACE, 'clipPath');
+    clip.setAttribute('id', PREVIEW_CLIP_ID);
+    clip.append(aBox(doc, width, bottom));
+    group.append(clip);
+    const ground = aBox(doc, width, bottom);
+    ground.setAttribute('class', 'page-preview__ground');
+    group.append(ground);
+
+    // The clip on one group and the move on another inside it: a clip is read
+    // in the space of the element carrying it, and one carried by the moved
+    // group would move with it.
+    const frame = doc.createElementNS(SVG_NAMESPACE, 'g');
+    frame.setAttribute('clip-path', `url(#${PREVIEW_CLIP_ID})`);
+    const moved = doc.createElementNS(SVG_NAMESPACE, 'g');
+    // And a third, unmoved inside the second, so its cut is read in the page
+    // ahead's own terms: the only ones in which its first system ends.
+    const firstSystem = doc.createElementNS(SVG_NAMESPACE, 'g');
+    if (after !== undefined) {
+      const systemClip = doc.createElementNS(SVG_NAMESPACE, 'clipPath');
+      systemClip.setAttribute('id', PREVIEW_SYSTEM_CLIP_ID);
+      systemClip.append(aBox(doc, width, (reached.bottom + after.top * ahead.scale) / 2));
+      group.append(systemClip);
+      firstSystem.setAttribute('clip-path', `url(#${PREVIEW_SYSTEM_CLIP_ID})`);
+    }
+    // The whole drawing, not its insides: the stylesheet Verovio writes into a
+    // page draws its lines only inside the drawing it names.
+    firstSystem.append(copied.cloneNode(true));
+    moved.append(firstSystem);
+    frame.append(moved);
+    group.append(frame);
+
+    // Said with a line, or this is simply a page with the wrong bars at its
+    // top. Dashed: a solid rule would read as a system's own edge.
+    const edge = doc.createElementNS(SVG_NAMESPACE, 'line');
+    edge.setAttribute('class', 'page-preview__edge');
+    edge.setAttribute('x1', '0');
+    edge.setAttribute('x2', String(width));
+    edge.setAttribute('y1', String(bottom));
+    edge.setAttribute('y2', String(bottom));
+    group.append(edge);
+
+    // Under the page's label, which says what the page is: the preview
+    // replaces a system of it, not the page.
+    const label = [...over.children].find((child) => child.classList.contains('page-label'));
+    over.insertBefore(group, label ?? null);
+    // Placed once it is on the page, where the ink it carries can be measured.
+    moved.setAttribute('transform', previewPlacement(moved, slot, reached, bottom));
+    return { page, next, group, bottom };
+  }
+
+  /**
+   * Takes the hand switches off the system the preview stands over, and puts
+   * them back when it goes: a switch beside music that is not on the page any
+   * more is a switch for the wrong staff.
+   */
+  private coverTheHandSwitches(): void {
+    const preview = this.preview;
+    for (const page of this.drawn) {
+      for (const one of this.layerOn(page, 'hand-switches')?.querySelectorAll<SVGGElement>('g.hand-switch') ?? []) {
+        const top = Number(one.querySelector('.hand-switch__hit')?.getAttribute('y'));
+        if (preview !== null && preview.page === page && top < preview.bottom) {
+          one.dataset['covered'] = 'true';
+        } else {
+          delete one.dataset['covered'];
+        }
+      }
+    }
+  }
 }
 
 /** A drawn page as it was read, and how many pixels of it make one of its units. */
@@ -1857,6 +2131,15 @@ interface PageOverlay {
   readonly geometry: StaffGeometry | null;
   /** Where each step on the page stands across it, in its units. */
   readonly stepX: ReadonlyMap<number, number>;
+}
+
+/** The top of the next page as shown over this one; see `drawThePreview`. */
+interface Preview {
+  readonly page: number;
+  readonly next: number;
+  readonly group: SVGGElement;
+  /** How far down the page it reaches, in its pixels. */
+  readonly bottom: number;
 }
 
 /** Where a finger landed, so a tap can be told from a drag. */
@@ -1894,13 +2177,18 @@ interface MarkerPlace {
  * Any step at once, by name, where OSMD's cursor had to be walked there one
  * position at a time. It says when it has moved, or been shown or hidden, and
  * the renderer puts it on the page.
+ *
+ * And it says who moved it. `moveTo` is the music going somewhere, which the
+ * page follows; a reset, or a marker shown or hidden, is bookkeeping - a run
+ * being set up, a page drawn again - and a page that followed it would throw
+ * the reader back to the first page every time they touched a setting.
  */
 class MarkerOnThePage implements IScoreCursor {
   private at = 0;
   private wanted = true;
-  private readonly moved: () => void;
+  private readonly moved: (byTheMusic: boolean) => void;
 
-  constructor(moved: () => void) {
+  constructor(moved: (byTheMusic: boolean) => void) {
     this.moved = moved;
   }
 
@@ -1915,22 +2203,22 @@ class MarkerOnThePage implements IScoreCursor {
 
   show(): void {
     this.wanted = true;
-    this.moved();
+    this.moved(false);
   }
 
   hide(): void {
     this.wanted = false;
-    this.moved();
+    this.moved(false);
   }
 
   reset(): void {
     this.at = 0;
-    this.moved();
+    this.moved(false);
   }
 
   moveTo(stepIndex: number): void {
     this.at = Math.max(0, stepIndex);
-    this.moved();
+    this.moved(true);
   }
 }
 
@@ -1979,6 +2267,16 @@ const HEAD_PLACE = /translate\(\s*(-?[\d.]+)/;
 
 /** A ledger line as Verovio writes one: `M x y L x y`, the two x taken. */
 const LEDGER = /M\s*(-?[\d.]+)[\s,]+-?[\d.]+\s*L\s*(-?[\d.]+)/;
+
+/** A rectangle from a drawing's corner. */
+function aBox(doc: Document, width: number, height: number): SVGRectElement {
+  const box = doc.createElementNS(SVG_NAMESPACE, 'rect');
+  box.setAttribute('x', '0');
+  box.setAttribute('y', '0');
+  box.setAttribute('width', String(width));
+  box.setAttribute('height', String(height));
+  return box;
+}
 
 /** The gap between two lines of a staff on a page, in its units; nought on a page with none. */
 function staffSpaceOf(layout: PageLayout): number {

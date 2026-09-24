@@ -813,6 +813,16 @@ function clockTime(ms: number): string {
  * so it is unpicked here rather than stored twice. A generated level says so
  * instead of pretending to a name it does not have.
  */
+/** The piece a key names, as the reader would call it. */
+function pieceRead(key: string): string {
+  const [what = ''] = key.split(' bars:');
+  return what.startsWith('score:')
+    ? what.slice('score:'.length)
+    : what.startsWith('level:')
+      ? 'Exercise'
+      : what;
+}
+
 function describeReading(reading: {
   readonly key: string;
   readonly overall: number;
@@ -821,12 +831,8 @@ function describeReading(reading: {
   readonly tempoPercent?: number;
   readonly hand?: number | null;
 }): string {
-  const [what = '', bars = ''] = reading.key.split(' bars:');
-  const piece = what.startsWith('score:')
-    ? what.slice('score:'.length)
-    : what.startsWith('level:')
-      ? 'Exercise'
-      : what;
+  const [, bars = ''] = reading.key.split(' bars:');
+  const piece = pieceRead(reading.key);
   const how: string[] = [`${Math.round(reading.overall * 100)}% ${reading.grade}`];
   if (!reading.completed) {
     how.push('stopped');
@@ -2298,27 +2304,162 @@ export class AppView {
     const now = Date.now();
     for (const reading of readings) {
       const row = this.doc.createElement('li');
-      const name = this.doc.createElement('span');
-      name.className = 'takes__name';
-      name.textContent = describeReading(reading);
-      name.title = reading.key;
-
-      const when = this.doc.createElement('span');
-      when.className = 'takes__when';
-      when.textContent = describeWhen(reading.atMs, now);
+      row.className = 'readings__row';
 
       const open = this.doc.createElement('button');
       open.type = 'button';
-      open.textContent = 'Open';
-      open.title = 'Everything this reading was';
+      open.className = 'readings__open';
+      // The sentence stays, under the row rather than in it: it is what a
+      // reader of the page hears, and what a test asks for.
+      open.title = describeReading(reading);
       open.setAttribute('aria-label', `Open the reading: ${describeReading(reading)}`);
       this.listen(open, 'click', () => {
         this.showTheReading(reading);
       });
 
-      row.append(name, when, open);
+      const lines = this.doc.createElement('span');
+      lines.className = 'readings__lines';
+
+      const head = this.doc.createElement('span');
+      head.className = 'readings__head';
+      const name = this.doc.createElement('span');
+      name.className = 'readings__name';
+      name.textContent = pieceRead(reading.key);
+      head.append(name, ...this.whatTheReadingWas(reading));
+
+      const under = this.doc.createElement('span');
+      under.className = 'readings__under';
+      const grade = this.doc.createElement('span');
+      grade.className = 'pill pill--grade';
+      grade.textContent = `${percent(reading.overall)} ${reading.grade}`;
+      under.append(grade);
+      if (reading.tempoPercent !== undefined && reading.tempoPercent !== 100) {
+        const tempo = this.doc.createElement('span');
+        tempo.textContent = `${String(reading.tempoPercent)}% speed`;
+        under.append(tempo);
+      }
+      const when = this.doc.createElement('span');
+      when.className = 'takes__when';
+      when.textContent = describeWhen(reading.atMs, now);
+      under.append(when);
+
+      lines.append(head, under);
+      open.append(lines);
+      row.append(open);
       this.el.readingsList.append(row);
     }
+  }
+
+  /**
+   * What a reading was, as the marks a row and its sheet both wear.
+   *
+   * Built once for the two of them: a row the reader is comparing against its
+   * neighbours and the sheet they open from it are the same reading, and two
+   * lists of what to say about one would differ the first time either was
+   * touched. Only what was true of that run appears - both hands is the usual
+   * way to play and wears no mark, and neither does full speed.
+   */
+  private whatTheReadingWas(reading: PracticeReading): readonly HTMLElement[] {
+    const marks: HTMLElement[] = [];
+    const pill = (kind: string, text: string, what: string): HTMLElement => {
+      const made = this.doc.createElement('span');
+      made.className = `pill pill--${kind}`;
+      made.textContent = text;
+      made.title = what;
+      return made;
+    };
+
+    const [, bars] = reading.key.split(' bars:');
+    marks.push(
+      bars === undefined
+        ? pill('slice', 'whole piece', 'Read from beginning to end')
+        : pill('slice', `bars ${bars}`, 'A passage of it'),
+    );
+
+    if (reading.hand === 1 || reading.hand === 2) {
+      const right = reading.hand === 1;
+      marks.push(pill('hand', right ? 'RH' : 'LH', right ? 'Right hand alone' : 'Left hand alone'));
+    }
+
+    const hard = this.howHardThePieceIs(reading.key);
+    if (hard !== null) {
+      const stars = this.doc.createElement('span');
+      // The shelf's own mark, colour and all: how hard a piece is has one
+      // answer, and a second way of drawing it would drift from the first.
+      stars.className = 'scores__stars';
+      stars.dataset['band'] = String(theStarBand(hard));
+      stars.textContent = `★ ${hard.toFixed(1)}`;
+      stars.title = 'How hard you marked this piece';
+      marks.push(stars);
+    }
+
+    if (!reading.completed) {
+      const where =
+        reading.stoppedAtBar === undefined || reading.stoppedAtBar === null
+          ? 'stopped'
+          : `stopped at bar ${String(reading.stoppedAtBar)}`;
+      marks.push(pill('stopped', where, 'The reader did not reach the end'));
+    }
+
+    const badges = this.theBadgesOf(reading);
+    if (badges.length > 0) {
+      const worn = this.doc.createElement('span');
+      worn.className = 'readings__modes';
+      worn.append(...badges);
+      marks.push(worn);
+    }
+    return marks;
+  }
+
+  /**
+   * The marks of the kind of run it was, drawn as the squares themselves are.
+   *
+   * The frame from the table the cycling button is drawn from, and each square
+   * from the square: cloned rather than drawn again, because a second drawing
+   * of a mode is a second answer to what it looks like.
+   */
+  private theBadgesOf(reading: PracticeReading): readonly HTMLElement[] {
+    const badges: HTMLElement[] = [];
+    const frame = reading.modeId;
+    if (frame !== undefined && frame !== PLAIN_FRAME && FRAME_ICON[frame] !== undefined) {
+      const badge = this.doc.createElement('span');
+      const slug = FRAME_SLUG[frame] ?? 'frame';
+      badge.className = `score__mode score__mode--${slug} readings__mode`;
+      badge.dataset['mode'] = slug;
+      badge.title = FRAME_NAME[frame] ?? slug;
+      const drawn = this.doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      drawn.setAttribute('viewBox', '0 0 24 24');
+      drawn.setAttribute('aria-hidden', 'true');
+      const path = this.doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', FRAME_ICON[frame] ?? '');
+      drawn.append(path);
+      badge.append(drawn);
+      badges.push(badge);
+    }
+    for (const mode of reading.modes ?? []) {
+      const card = this.el.modesGrid.querySelector<HTMLButtonElement>(
+        `button[data-mode="${mode}"]`,
+      );
+      const icon = card?.querySelector('svg');
+      if (card === undefined || card === null || icon === null || icon === undefined) {
+        continue;
+      }
+      const badge = this.doc.createElement('span');
+      badge.className = `score__mode score__mode--${mode} readings__mode`;
+      badge.dataset['mode'] = mode;
+      badge.title = card.querySelector('.mode-card__name')?.textContent ?? mode;
+      badge.append(icon.cloneNode(true));
+      badges.push(badge);
+    }
+    return badges;
+  }
+
+  /** How hard the piece of a reading was marked, or nothing for one nobody marked. */
+  private howHardThePieceIs(key: string): number | null {
+    const [what = ''] = key.split(' bars:');
+    return what.startsWith('score:')
+      ? this.runtime.scores.theStarsFor(what.slice('score:'.length))
+      : null;
   }
 
   /**
@@ -2332,7 +2473,7 @@ export class AppView {
    */
   private showTheReading(reading: PracticeReading): void {
     this.theReadingShowing = reading;
-    this.el.readingTitle.textContent = describeReading(reading);
+    this.el.readingTitle.textContent = pieceRead(reading.key);
     this.el.readingWhat.replaceChildren(...this.drawTheReading(reading));
     this.el.readingRoll.hidden = reading.roll === undefined;
     this.el.sheetReading.hidden = false;
@@ -2341,16 +2482,26 @@ export class AppView {
   /** The parts of the picture a reading kept, in the order the report shows them. */
   private drawTheReading(reading: PracticeReading): readonly HTMLElement[] {
     const drawn: HTMLElement[] = [];
-    const said = this.doc.createElement('p');
-    said.className = 'hint';
-    said.textContent = [
-      describeWhen(reading.atMs, Date.now()),
-      reading.completed
-        ? 'played to the end'
-        : `stopped${reading.stoppedAtBar === undefined || reading.stoppedAtBar === null ? '' : ` in bar ${reading.stoppedAtBar}`}`,
-      ...(reading.modes ?? []),
-    ].join(' · ');
-    drawn.push(said);
+    // The same marks the row wears, so the sheet a reader opens from a row is
+    // recognisably the thing they pressed.
+    const marks = this.doc.createElement('div');
+    marks.className = 'reading__marks';
+    marks.append(...this.whatTheReadingWas(reading));
+    const when = this.doc.createElement('span');
+    when.className = 'takes__when';
+    when.textContent = describeWhen(reading.atMs, Date.now());
+    marks.append(when);
+    drawn.push(marks);
+
+    const grade = this.doc.createElement('div');
+    grade.className = 'result__grade';
+    grade.dataset['grade'] = reading.grade;
+    grade.textContent = `${reading.grade} · ${percent(reading.overall)}${
+      reading.tempoPercent === undefined || reading.tempoPercent === 100
+        ? ''
+        : ` · ${String(reading.tempoPercent)}% speed`
+    }`;
+    drawn.push(grade);
 
     const picture = reading.picture;
     if (picture === undefined) {

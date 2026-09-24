@@ -29,6 +29,8 @@ export interface PracticeAttempt {
   readonly stoppedAtBar?: number | null;
   /** What was switched on for it, as the badges over the score name them. */
   readonly modes?: readonly string[];
+  /** The kind of run it was: the frame's own id, as the settings carry it. */
+  readonly modeId?: string;
   /** Enough to draw the reading again; dropped from the oldest when the store fills. */
   readonly picture?: ReadingPicture;
   /** What was played, for the roll viewer. The heaviest thing here, and the first dropped. */
@@ -133,6 +135,7 @@ function readAttempt(value: unknown): PracticeAttempt | null {
   const tempoPercent = value['tempoPercent'];
   const hand = value['hand'];
   const stoppedAtBar = value['stoppedAtBar'];
+  const modeId = value['modeId'];
   const modes = readStrings(value['modes']);
   const picture = readPicture(value['picture']);
   const roll = readRoll(value['roll']);
@@ -144,6 +147,7 @@ function readAttempt(value: unknown): PracticeAttempt | null {
     ...(typeof tempoPercent === 'number' ? { tempoPercent } : {}),
     ...(typeof hand === 'number' || hand === null ? { hand: hand as number | null } : {}),
     ...(typeof stoppedAtBar === 'number' ? { stoppedAtBar } : {}),
+    ...(typeof modeId === 'string' ? { modeId } : {}),
     ...(modes.length > 0 ? { modes } : {}),
     ...(picture !== null ? { picture } : {}),
     ...(roll !== null ? { roll } : {}),

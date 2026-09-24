@@ -2538,6 +2538,7 @@ export class PracticeController {
           tempoPercent: Math.round(this.currentSettings.tempoPercent),
           hand: this.currentSettings.handStaff,
           stoppedAtBar: picture.stoppedAtBar,
+          modeId: this.currentSettings.modeId,
           ...(modes.length > 0 ? { modes } : {}),
           picture,
           roll: session.roll,

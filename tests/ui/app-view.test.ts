@@ -11,6 +11,7 @@ import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PracticeController } from '../../src/application/PracticeController.js';
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
+import { WAIT_MODE_ID } from '../../src/application/modes/WaitMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
@@ -5618,9 +5619,117 @@ describe('AppView', () => {
       expect(row).toContain('bars 5-8');
       expect(row).toContain('82% B');
       // The score alone says little: at seventy with the left hand is a
-      // different afternoon's work from full speed with both.
-      expect(row).toContain('70%');
-      expect(row).toContain('left hand');
+      // different afternoon's work from full speed with both. The hand is a
+      // mark rather than a word, and says which in full when it is pointed at.
+      expect(row).toContain('70% speed');
+      const hand = element('readings-list').querySelector('.pill--hand');
+      expect(hand?.textContent).toBe('LH');
+      expect(hand?.getAttribute('title')).toBe('Left hand alone');
+      // And the row is the way in, rather than a button at the end of it.
+      expect(
+        element('readings-list')
+          .querySelector('button')
+          ?.getAttribute('aria-label'),
+      ).toContain('Clair de Lune');
+    });
+
+    it('wears what was true of the run: the passage, how hard the piece is, where it stopped', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await rig.runtime.scores.keep(twoBarExercise({ title: 'Clair de Lune' }), 1_000);
+      const kept = rig.runtime.scores.list()[0];
+      await rig.runtime.scores.keepTheStars(kept?.id ?? '', 4.5, Date.now());
+      rig.runtime.history.record('score:Clair de Lune', {
+        atMs: Date.now(),
+        overall: 0.4,
+        grade: 'D',
+        completed: false,
+        stoppedAtBar: 12,
+      });
+
+      element<HTMLButtonElement>('focus-readings').click();
+
+      const row = element('readings-list');
+      // The whole piece was asked for, even though it was not reached: what
+      // was read and how far it got are different questions.
+      expect(row.querySelector('.pill--slice')?.textContent).toBe('whole piece');
+      expect(row.querySelector('.pill--stopped')?.textContent).toBe('stopped at bar 12');
+      expect(row.querySelector('.scores__stars')?.textContent).toBe('★ 4.5');
+      expect(row.querySelector('.scores__stars')?.getAttribute('data-band')).not.toBeNull();
+    });
+
+    it('wears the squares it was played under, drawn as the squares themselves are', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:A', {
+        atMs: Date.now(),
+        overall: 0.9,
+        grade: 'A',
+        completed: true,
+        modeId: WAIT_MODE_ID,
+        modes: ['survival', 'blind'],
+      });
+
+      element<HTMLButtonElement>('focus-readings').click();
+
+      const worn = [...element('readings-list').querySelectorAll('.readings__mode')];
+      expect(worn.map((badge) => badge.getAttribute('data-mode'))).toEqual([
+        'wait',
+        'survival',
+        'blind',
+      ]);
+      // Each carries the square's own icon rather than one drawn again here.
+      expect(worn.every((badge) => badge.querySelector('svg') !== null)).toBe(true);
+      expect(worn[1]?.getAttribute('title')).toBe('Survival');
+    });
+
+    it('says nothing about the plain way of playing', async () => {
+      // Both hands, full speed, the frame the app opens in: marks for those
+      // would be on every row and would say nothing about any of them.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:A', {
+        atMs: Date.now(),
+        overall: 0.9,
+        grade: 'A',
+        completed: true,
+        tempoPercent: 100,
+        hand: null,
+        modeId: FLOW_MODE_ID,
+        modes: [],
+      });
+
+      element<HTMLButtonElement>('focus-readings').click();
+
+      const row = element('readings-list');
+      expect(row.querySelector('.pill--hand')).toBeNull();
+      expect(row.querySelector('.readings__mode')).toBeNull();
+      expect(row.querySelector('.pill--stopped')).toBeNull();
+      expect(row.textContent).not.toContain('speed');
+    });
+
+    it('opens a sheet wearing the same marks as the row it came from', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:A bars:2-6', {
+        atMs: Date.now(),
+        overall: 0.9,
+        grade: 'A',
+        completed: true,
+        hand: 1,
+        modeId: WAIT_MODE_ID,
+      });
+      element<HTMLButtonElement>('focus-readings').click();
+
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      const marks = element('reading-what').querySelector('.reading__marks');
+      expect(marks?.querySelector('.pill--slice')?.textContent).toBe('bars 2-6');
+      expect(marks?.querySelector('.pill--hand')?.textContent).toBe('RH');
+      expect(marks?.querySelector('.readings__mode')?.getAttribute('data-mode')).toBe('wait');
+      expect(element('reading-what').querySelector('.result__grade')?.textContent).toContain('A');
     });
 
     it('shows the best ones when asked, and only finished ones', async () => {

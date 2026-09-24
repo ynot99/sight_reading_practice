@@ -455,6 +455,90 @@ textarea {
 }
 
 /*
+ * A reading's row: what it was above, how it went below.
+ *
+ * The whole row is the way in, rather than a button at the end of it: a row
+ * is one reading and there is one thing to do with it, and on a tablet the
+ * thumb lands on the row it can see. What was true of that run is worn as
+ * marks - the passage, the hand, how hard the piece is, where it stopped, the
+ * squares it was played under - because the question a reader has in front of
+ * a list of readings is which of these afternoons was which.
+ */
+.readings__row {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.takes__list button.readings__open {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 8px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+}
+
+.readings__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  width: 100%;
+}
+
+.readings__head,
+.readings__under {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.readings__under {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.readings__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.readings__modes {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* The squares' own marks, at the size a row has room for. */
+.score__mode.readings__mode {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.score__mode.readings__mode svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* The row's marks again, at the head of the sheet it opens. */
+.reading__marks {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/*
  * One reading out of the history, drawn like the report a run ends with.
  *
  * The same parts in the same order - the bars, the shape, the scatter, the
@@ -1218,9 +1302,10 @@ textarea {
 /*
  * The metre on the ruler: the same lines as the grid, cut to their weight.
  *
- * In the grid's own colours rather than the head's, because they are the
- * music's lines and the head is the reader's place in them - the one thing on
- * this strip that has to be found at a glance.
+ * Small and bright, at his asking: the grid's own grey is right behind the
+ * music, where the lines must not compete with the notes, and wrong on a
+ * ruler a metre long that is read at a glance from a music stand. They are
+ * short enough that the bar numbers still read over them.
  */
 .roll__tick {
   position: absolute;
@@ -1228,18 +1313,18 @@ textarea {
   width: 1px;
   height: 4px;
   pointer-events: none;
-  background: color-mix(in srgb, var(--border) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .roll__tick--beat {
   height: 7px;
-  background: color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--accent) 80%, transparent);
 }
 
 .roll__tick--downbeat {
   height: 11px;
   width: 2px;
-  background: var(--border);
+  background: var(--accent);
 }
 
 /* A bar line the reader gave late, in the colour it is drawn in below. */
@@ -1845,6 +1930,57 @@ select {
   font-weight: 600;
   border: 1px solid var(--border);
   background: var(--surface-strong);
+  white-space: nowrap;
+}
+
+/*
+ * The marks themselves. Quiet by default, since most of them are simply what
+ * was true; the two that are not - a run that stopped, and how hard the piece
+ * is - wear the colour that already means each of those elsewhere.
+ */
+.pill--slice,
+.pill--hand,
+.pill--stopped {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.pill--hand {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-weight: 700;
+}
+
+.pill--stopped {
+  color: var(--wrong);
+  border-color: color-mix(in srgb, var(--wrong) 45%, transparent);
+  background: color-mix(in srgb, var(--wrong) 12%, transparent);
+}
+
+/*
+ * The score of the reading, which is what the row is scanned for.
+ *
+ * Not coloured by its letter: nothing else in this program colours a grade,
+ * and a palette invented here would be a second scale beside the one the
+ * report already reads out in words.
+ */
+.pill--grade {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: var(--text);
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 

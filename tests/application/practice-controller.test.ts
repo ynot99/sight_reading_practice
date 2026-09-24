@@ -7,7 +7,7 @@ import {
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
-import { WaitMode } from '../../src/application/modes/WaitMode.js';
+import { WAIT_MODE_ID, WaitMode } from '../../src/application/modes/WaitMode.js';
 import { LISTEN_MODE_ID } from '../../src/application/modes/ListenFrame.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
 import type { ExerciseRequest } from '../../src/domain/generation/IExerciseGenerator.js';
@@ -710,6 +710,32 @@ describe('PracticeController', () => {
     const summary = controller.passageHistory();
     expect(summary?.attempts).toBe(2);
     expect(summary?.previous).not.toBeNull();
+  });
+
+  it('records what kind of run a reading was, and a picture of it', async () => {
+    // Written down as the run ends, because by the time a reader opens the
+    // list the squares that are on are whatever is on now - and the picture
+    // is read against this run's own timeline.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller } = createController(
+      true,
+      undefined,
+      { modeId: WAIT_MODE_ID, rhythmOnly: true },
+      history,
+    );
+    await controller.loadNewExercise();
+
+    controller.start()?.abort();
+
+    const kept = history.lastReadings()[0];
+    expect(kept?.modeId).toBe(WAIT_MODE_ID);
+    expect(kept?.modes).toEqual(['rhythm']);
+    expect(kept?.picture?.bars.length).toBeGreaterThan(0);
+    expect(kept?.picture?.totals.playableSteps).toBeGreaterThan(0);
+    expect(kept?.roll).not.toBeUndefined();
+    // Stopped rather than played through, so it says where it was left.
+    expect(kept?.completed).toBe(false);
+    expect(kept?.stoppedAtBar).not.toBeNull();
   });
 
   it('has nothing to drill without a run behind it', () => {

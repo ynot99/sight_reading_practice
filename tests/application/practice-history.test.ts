@@ -299,6 +299,42 @@ describe('keeping the history inside the store', () => {
   });
 });
 
+describe('what a reading says it was played with', () => {
+  it('keeps the frame and the squares, and gives them back', () => {
+    const store = new InMemorySettingsStore();
+    const history = new PracticeHistory(store);
+    history.record('score:A', {
+      ...attempt(0.8, 1_000),
+      modeId: 'mode.wait',
+      modes: ['survival', 'blind'],
+    });
+
+    const read = new PracticeHistory(store);
+    read.load();
+
+    const kept = read.lastReadings()[0];
+    expect(kept?.modeId).toBe('mode.wait');
+    expect(kept?.modes).toEqual(['survival', 'blind']);
+  });
+
+  it('says nothing where the store holds nonsense in their place', () => {
+    const store = new InMemorySettingsStore();
+    store.write({
+      version: 1,
+      passages: {
+        'score:A': [
+          { atMs: 1, overall: 0.5, grade: 'B', completed: true, modeId: 7, modes: 'wait' },
+        ],
+      },
+    });
+    const history = new PracticeHistory(store);
+    history.load();
+
+    expect(history.lastReadings()[0]?.modeId).toBeUndefined();
+    expect(history.lastReadings()[0]?.modes).toBeUndefined();
+  });
+});
+
 describe('the readings of one piece', () => {
   it('narrows both lists to it, passages of it included', () => {
     const history = new PracticeHistory(new InMemorySettingsStore());

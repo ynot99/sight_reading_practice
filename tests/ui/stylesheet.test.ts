@@ -1195,3 +1195,16 @@ describe('who gets the pinch', () => {
     expect(roll?.body).toContain('touch-action: pan-x pan-y');
   });
 });
+
+describe('a list of readings', () => {
+  it('keeps each row its own height while the list itself gives way', () => {
+    // The list is a column that shrinks to fit the sheet, and a row is one of
+    // its items: left to itself a two-line row is squeezed instead of the
+    // list scrolling, and the shelf arrives flattened. His: "readings список
+    // скукожений по висоті".
+    const row = rules().find((rule) => rule.selector === '.takes__list li.readings__row');
+
+    expect(row?.body).toMatch(/flex:\s*none/);
+    expect(row?.body).toMatch(/min-height:\s*min-content/);
+  });
+});

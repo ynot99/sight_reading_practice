@@ -464,8 +464,20 @@ textarea {
  * squares it was played under - because the question a reader has in front of
  * a list of readings is which of these afternoons was which.
  */
-.readings__row {
-  padding: 0 !important;
+/*
+ * Two lines tall, and not to be squeezed.
+ *
+ * The list is a column that gives way when the sheet is short, and a row is
+ * one of its items - so without this the rows themselves were compressed
+ * rather than the list scrolling, and a shelf of readings arrived flattened.
+ * His: "readings список скукожений по висоті". Named with the row's own
+ * class beside the list's so it outweighs the padding every other row has,
+ * rather than by declaring itself important.
+ */
+.takes__list li.readings__row {
+  padding: 0;
+  flex: none;
+  min-height: min-content;
   overflow: hidden;
 }
 

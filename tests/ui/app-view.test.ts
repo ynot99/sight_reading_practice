@@ -2586,38 +2586,29 @@ describe('AppView', () => {
       }
     });
 
-    it('holds the music where a hand takes hold of the drawing', async () => {
-      // Two hands on one scroller is neither of them moving it: this writes
-      // the scroller on every frame, and a finger dragging it would be
-      // dragging against that.
-      const rig = await aRunToLookAt();
-      const lent = lendTheDrawingAScroller(1_000);
-      try {
-        rig.runtime.controller.updateSettings({ rollScrollPlayback: true });
-        element<HTMLButtonElement>('roll-play').click();
-        expect(rig.runtime.takePlayer.playing).not.toBeNull();
+    it.each([true, false])(
+      'plays on when a hand is on the drawing (music running past the cursor: %s)',
+      async (runsPast) => {
+        // His: "ми ставимо на паузу MIDI viewer коли я роблю скрол - я думаю
+        // що не варто це робити". A scroll is looking, not stopping.
+        const rig = await aRunToLookAt();
+        const lent = lendTheDrawingAScroller(1_000);
+        try {
+          rig.runtime.controller.updateSettings({ rollScrollPlayback: runsPast });
+          element<HTMLButtonElement>('roll-play').click();
 
-        element('roll-body').dispatchEvent(new Event('wheel', { bubbles: true }));
+          const body = element('roll-body');
+          body.dispatchEvent(new Event('wheel', { bubbles: true }));
+          body.dispatchEvent(
+            new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, clientX: 5, clientY: 50 }),
+          );
 
-        expect(rig.runtime.takePlayer.playing).toBeNull();
-      } finally {
-        lent.giveBack();
-      }
-    });
-
-    it('leaves a hand on the drawing alone where the music is not running past it', async () => {
-      const rig = await aRunToLookAt();
-      const lent = lendTheDrawingAScroller(1_000);
-      try {
-        element<HTMLButtonElement>('roll-play').click();
-
-        element('roll-body').dispatchEvent(new Event('wheel', { bubbles: true }));
-
-        expect(rig.runtime.takePlayer.playing).not.toBeNull();
-      } finally {
-        lent.giveBack();
-      }
-    });
+          expect(rig.runtime.takePlayer.playing).not.toBeNull();
+        } finally {
+          lent.giveBack();
+        }
+      },
+    );
 
     it('remembers whether the music runs past the cursor', async () => {
       const store = new InMemorySettingsStore();

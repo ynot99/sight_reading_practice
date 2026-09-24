@@ -6890,18 +6890,6 @@ export class AppView {
       }
       this.putTheHeadWhereItWasTapped(event);
     });
-    // A hand on the drawing takes it over. While the music is running past a
-    // standing cursor the scroller is being written to on every frame, so a
-    // finger dragging it and this putting it back are two hands on one thing;
-    // and a reader who reaches for the picture wants to look at it, which is
-    // what holding the music is for.
-    for (const taking of ['pointerdown', 'wheel'] as const) {
-      this.listen(this.el.rollBody, taking, () => {
-        if (this.theMusicRunsPastTheHead() && this.runtime.takePlayer.playing === RUN_ROLL_ID) {
-          this.holdTheRoll();
-        }
-      });
-    }
     this.listen(this.el.rollBody, 'pointerdown', (event) => {
       this.pinched = false;
       this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });

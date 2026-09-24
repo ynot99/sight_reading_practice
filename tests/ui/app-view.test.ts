@@ -2626,6 +2626,9 @@ describe('AppView', () => {
       box.dispatchEvent(new Event('change'));
       expect(first.runtime.controller.settings.rollScrollPlayback).toBe(true);
 
+      // A fresh page, as a reload is: without it the box is still the one that
+      // was just ticked, and says so whether or not anything remembered it.
+      mountRealMarkup();
       const next = createRig(undefined, store);
       await next.view.initialize();
 

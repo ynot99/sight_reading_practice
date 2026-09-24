@@ -6351,6 +6351,7 @@ export class AppView {
     this.showTheListening();
     this.dimWhatHasNothingToSay();
     this.el.showPlaybackNotes.checked = settings.showPlaybackNotes;
+    this.el.rollScrollPlayback.checked = settings.rollScrollPlayback;
     this.el.restEvery.value = String(settings.restEveryMinutes);
     this.el.restEverySettings.value = this.el.restEvery.value;
     this.el.rulerCursor.checked = settings.rulerCursor;

@@ -56,6 +56,12 @@ export class VerovioEngraver {
     return this.ask<'pageOf'>({ type: 'pageOf', elementId });
   }
 
+  /** Lets the engraver go; everything waiting, and anything asked after, fails. */
+  dispose(): void {
+    this.breakDown('It was let go.');
+    this.line.close();
+  }
+
   private ask<K extends EngraverQuestion['type']>(
     question: Extract<EngraverQuestion, { readonly type: K }>,
   ): Promise<EngraverAnswers[K]> {

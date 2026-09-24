@@ -39,6 +39,7 @@ import {
   visibleHeightOf,
   swipeDirection,
 } from './pageTurns.js';
+import { PAGE_LABEL_INSET, pageLabelText } from './pageLabel.js';
 import { placesToBeginIn, walkEveryPlace } from './cursorWalk.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 import { CursorNavigator, type ICursorPrimitive } from './CursorNavigator.js';
@@ -223,19 +224,6 @@ const REPEAT_MARK_RADIUS = 4;
 const NUMBER_REACH = 14;
 const START_FLAG = 9;
 
-/** How far the page's label sits from the corner of the page, in pixels. */
-const PAGE_LABEL_INSET = 18;
-/**
- * How much of a title the corner of a page will take.
- *
- * Counted in characters rather than measured, because the text is an SVG
- * `<text>` and the one honest way to measure one is `getComputedTextLength`,
- * which the headless document this is tested in answers `0` to. A guess at
- * the width of a character would be a measurement in name only, so this is
- * openly a limit on length: past it a corner label has stopped being glanced
- * at and started being read, whatever it measures.
- */
-const TITLE_LIMIT = 48;
 /** Half the width of the arrow drawn inside a handle. */
 const ARROW_REACH = 3.5;
 
@@ -262,12 +250,6 @@ const HAND_SWITCH_HEIGHT = 30;
 /** A staff is five lines. This is that sentence, used as arithmetic. */
 const STAFF_LINES = 5;
 
-/**
- * A title cut to {@link TITLE_LIMIT}, with an ellipsis where it was cut.
- *
- * SVG text does not wrap, so a long one does not become two lines - it runs
- * off the side of the page and out of the drawing.
- */
 /**
  * The five lines of the staff, among everything horizontal drawn with them.
  *
@@ -337,14 +319,6 @@ function horizontalRules(group: Element): { y: number; from: number; to: number 
     });
   }
   return found;
-}
-
-function shortened(title: string): string {
-  const trimmed = title.trim();
-  if (trimmed.length <= TITLE_LIMIT) {
-    return trimmed;
-  }
-  return `${trimmed.slice(0, TITLE_LIMIT - 1).trimEnd()}…`;
 }
 
 /** As much of the engraver's own model as the markers need to read. */
@@ -1615,9 +1589,7 @@ export class OsmdScoreRenderer
    * the whole of the line.
    */
   private pageLabel(at: number, count: number): string {
-    const title = shortened(this.osmd?.Sheet?.TitleString ?? '');
-    const pages = count < 2 ? '' : `Page ${at + 1} of ${count}`;
-    return [title, pages].filter((part) => part !== '').join(' · ');
+    return pageLabelText(this.osmd?.Sheet?.TitleString ?? '', at, count);
   }
 
   /**

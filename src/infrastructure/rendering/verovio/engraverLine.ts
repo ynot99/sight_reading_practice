@@ -42,6 +42,8 @@ export interface EngraverLine {
   onReply(listener: (reply: EngraverReply) => void): void;
   /** The far end is gone - the worker failed to start, or died - and nothing more will come. */
   onBroken(listener: (reason: string) => void): void;
+  /** Lets the far end go: the page that asked is being thrown away. */
+  close(): void;
 }
 
 /** Answers one question, on the engraver's side of the line. */

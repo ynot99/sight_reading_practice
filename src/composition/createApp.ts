@@ -115,6 +115,9 @@ import { WebSocketMidiSource } from '../infrastructure/midi/WebSocketMidiSource.
 import { resolveBridgeUrl, type LocationLike } from '../infrastructure/midi/bridgeUrl.js';
 import { browserMidiAccessProvider } from '../infrastructure/midi/webmidi-dom.js';
 import { OsmdScoreRenderer } from '../infrastructure/rendering/OsmdScoreRenderer.js';
+import { VerovioEngraver } from '../infrastructure/rendering/verovio/VerovioEngraver.js';
+import { VerovioScoreRenderer } from '../infrastructure/rendering/verovio/VerovioScoreRenderer.js';
+import { engraverInAWorker } from '../infrastructure/rendering/verovio/workerLine.js';
 import { SystemClock } from '../infrastructure/time/SystemClock.js';
 import type { IClock } from '../application/ports/IClock.js';
 
@@ -336,7 +339,13 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   }
   const midi = new CompositeMidiSource(sources);
 
-  const renderer = new OsmdScoreRenderer(options.scoreContainer);
+  // While the engraver is being moved from OSMD to Verovio, on this branch
+  // only: `?engraver=verovio` in the address draws with Verovio, and without
+  // it the page is what it was. It goes when OSMD does.
+  const renderer =
+    new URLSearchParams(options.location.search).get('engraver') === 'verovio'
+      ? new VerovioScoreRenderer(options.scoreContainer, new VerovioEngraver(engraverInAWorker()))
+      : new OsmdScoreRenderer(options.scoreContainer);
   const serializer = new MusicXmlSerializer();
 
   const importer = new DomScoreImporter();

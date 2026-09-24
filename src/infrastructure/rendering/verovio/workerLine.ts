@@ -23,5 +23,10 @@ export function engraverInAWorker(): EngraverLine {
         listener(event.message);
       });
     },
+    close(): void {
+      // The score it held is a quarter of a gigabyte on the longest piece;
+      // a worker is not collected while it runs.
+      worker.terminate();
+    },
   };
 }

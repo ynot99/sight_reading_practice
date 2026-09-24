@@ -1,10 +1,9 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import {
-  replyTo,
-  type EngraverAsk,
-  type EngraverLine,
-  type EngraverReply,
+import type {
+  EngraverAsk,
+  EngraverLine,
+  EngraverReply,
 } from '../../src/infrastructure/rendering/verovio/engraverLine.js';
 import {
   HEAP_BYTES_PER_CHARACTER,
@@ -14,6 +13,7 @@ import {
 } from '../../src/infrastructure/rendering/verovio/VerovioCore.js';
 import { VerovioEngraver } from '../../src/infrastructure/rendering/verovio/VerovioEngraver.js';
 import { longExercise, twoBarExercise } from '../support/fixtures.js';
+import { lineToThe } from '../support/verovioLine.js';
 
 /**
  * Verovio itself, in Node - the same engraver the worker runs, so nothing
@@ -27,33 +27,6 @@ beforeAll(async () => {
 
 const serializer = new MusicXmlSerializer();
 const WIDE: PageShape = { pageWidth: 2200, pageHeight: 1400, scale: 50 };
-
-/**
- * A line whose far end is the engraver on this same thread, answering a turn
- * later as a worker would, so nothing can rely on an answer arriving at once.
- */
-function lineToThe(engraver: VerovioCore): EngraverLine & { readonly sent: EngraverAsk[] } {
-  const replies: ((reply: EngraverReply) => void)[] = [];
-  const sent: EngraverAsk[] = [];
-  return {
-    sent,
-    send(ask) {
-      sent.push(ask);
-      setTimeout(() => {
-        const reply = replyTo(engraver, ask);
-        for (const listener of replies) {
-          listener(reply);
-        }
-      }, 0);
-    },
-    onReply(listener) {
-      replies.push(listener);
-    },
-    onBroken() {
-      // This end never breaks.
-    },
-  };
-}
 
 describe('Verovio, reading what the trainer prints', () => {
   it('lays out a printed exercise and draws it, every bar and note under its own name', () => {
@@ -180,6 +153,9 @@ describe('the engraver, asked across a line', () => {
       onBroken() {
         // Never.
       },
+      close() {
+        // Nothing to let go of.
+      },
     });
     const first = engraver.pageOf('m0');
     const second = engraver.pageOf('m1');
@@ -222,6 +198,31 @@ describe('the engraver, asked across a line', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it('lets the far end go when it is let go of, failing what was waiting', async () => {
+    let closed = false;
+    const engraver = new VerovioEngraver({
+      send() {
+        // Asked, and never answered.
+      },
+      onReply() {
+        // Nothing will come.
+      },
+      onBroken() {
+        // Never.
+      },
+      close() {
+        closed = true;
+      },
+    });
+    const waiting = engraver.page(1);
+
+    engraver.dispose();
+
+    expect(closed).toBe(true);
+    await expect(waiting).rejects.toThrow(/let go/);
+    await expect(engraver.page(1)).rejects.toThrow(/let go/);
+  });
+
   it('fails what is waiting when the line breaks, and everything asked after', async () => {
     let breakIt: (reason: string) => void = () => undefined;
     const silent: EngraverLine = {
@@ -233,6 +234,9 @@ describe('the engraver, asked across a line', () => {
       },
       onBroken(listener) {
         breakIt = listener;
+      },
+      close() {
+        // Nothing to let go of.
       },
     };
     const engraver = new VerovioEngraver(silent);

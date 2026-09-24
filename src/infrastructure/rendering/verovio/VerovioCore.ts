@@ -13,6 +13,8 @@ export interface PageShape {
    * again.
    */
   readonly scale: number;
+  /** Room above the music, in the page's units; Verovio's own where not said. */
+  readonly pageMarginTop?: number;
 }
 
 /**

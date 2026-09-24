@@ -20,6 +20,20 @@ export interface StaffLines {
   readonly bottom: number;
 }
 
+/**
+ * A bar's number as the engraver printed it over the bar: where, how large,
+ * and what it says.
+ */
+export interface NumberOnThePage {
+  /** The middle of the figures, which is where Verovio places a number. */
+  readonly x: number;
+  /** Their baseline. */
+  readonly y: number;
+  /** How tall they are set. */
+  readonly size: number;
+  readonly text: string;
+}
+
 /** One bar across all of its staves, barline to barline. */
 export interface BarOnThePage {
   readonly id: string;
@@ -27,6 +41,8 @@ export interface BarOnThePage {
   readonly right: number;
   /** Top staff first. */
   readonly staves: readonly StaffLines[];
+  /** The number printed over it, where one is: every other bar or so. */
+  readonly number: NumberOnThePage | null;
 }
 
 /** One system: a line of bars across the page. */
@@ -62,10 +78,13 @@ export interface SvgNode {
   readonly nodeType: number;
   readonly nodeName: string;
   readonly childNodes: ArrayLike<SvgNode>;
+  /** What a piece of text says; nothing for an element. */
+  readonly nodeValue?: string | null;
   getAttribute?(name: string): string | null;
 }
 
 const ELEMENT_NODE = 1;
+const TEXT_NODE = 3;
 
 /** The music's own drawing: Verovio's inner SVG, which holds the page's units. */
 const MUSIC = 'definition-scale';
@@ -174,10 +193,16 @@ function barAt(bar: SvgNode, id: string, at: Offset, reading: Reading): BarOnThe
   const staves: StaffLines[] = [];
   let left = Infinity;
   let right = -Infinity;
+  let number: NumberOnThePage | null = null;
   for (const child of elementsIn(bar)) {
+    const classes = classesOf(child);
+    if (classes.has('mNum')) {
+      number = numberAt(child, moved(at, attribute(child, 'transform')));
+      continue;
+    }
     // Everything drawn for a note is inside the staff it is on; beside the
     // staves a bar holds only what joins them - barlines, slurs, words.
-    if (!classesOf(child).has('staff')) {
+    if (!classes.has('staff')) {
       continue;
     }
     const here = moved(at, attribute(child, 'transform'));
@@ -203,7 +228,61 @@ function barAt(bar: SvgNode, id: string, at: Offset, reading: Reading): BarOnThe
     left: Number.isFinite(left) ? left : at.x,
     right: Number.isFinite(right) ? right : at.x,
     staves,
+    number,
   };
+}
+
+/**
+ * A bar's number, from the text Verovio writes for it.
+ *
+ * The figures are set inside the text, a size given to them there - the text
+ * itself says nought, so it takes no room of its own - and the text's own x
+ * is left out where it is nought, which is at the start of a system.
+ */
+function numberAt(group: SvgNode, at: Offset): NumberOnThePage | null {
+  const text = findByName(group, 'text');
+  if (text === null) {
+    return null;
+  }
+  const here = moved(at, attribute(text, 'transform'));
+  const sizes: number[] = [];
+  const figures: string[] = [];
+  readTheText(text, sizes, figures);
+  return {
+    x: here.x + Number(attribute(text, 'x') ?? '0'),
+    y: here.y + Number(attribute(text, 'y') ?? '0'),
+    size: Math.max(0, ...sizes),
+    // Without the line breaks the drawing is written with between its parts.
+    text: figures.join('').replace(/\s+/g, ''),
+  };
+}
+
+function readTheText(node: SvgNode, sizes: number[], figures: string[]): void {
+  const size = Number.parseFloat(attribute(node, 'font-size') ?? '');
+  if (Number.isFinite(size)) {
+    sizes.push(size);
+  }
+  for (let index = 0; index < node.childNodes.length; index += 1) {
+    const child = node.childNodes[index];
+    if (child?.nodeType === TEXT_NODE) {
+      figures.push(child.nodeValue ?? '');
+    } else if (child?.nodeType === ELEMENT_NODE) {
+      readTheText(child, sizes, figures);
+    }
+  }
+}
+
+function findByName(node: SvgNode, name: string): SvgNode | null {
+  for (const child of elementsIn(node)) {
+    if (child.nodeName === name) {
+      return child;
+    }
+    const found = findByName(child, name);
+    if (found !== null) {
+      return found;
+    }
+  }
+  return null;
 }
 
 function elementsIn(node: SvgNode): SvgNode[] {

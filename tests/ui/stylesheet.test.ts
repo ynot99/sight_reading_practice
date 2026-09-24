@@ -1285,6 +1285,30 @@ describe('the mark a frame wears', () => {
   });
 });
 
+describe('what is drawn with the music under Verovio', () => {
+  function bodyOf(selector: string): string {
+    return rules()
+      .filter((rule) => rule.selector.split(',').map((each) => each.trim()).includes(selector))
+      .map((rule) => rule.body)
+      .join(';');
+  }
+
+  it('lays our drawings over the page and under it, at its corner', () => {
+    for (const ours of ['.score__over', '.score__under']) {
+      expect(bodyOf(ours)).toMatch(/position:\s*absolute/);
+      expect(bodyOf(ours)).toMatch(/left:\s*0/);
+      expect(bodyOf(ours)).toMatch(/top:\s*0/);
+    }
+  });
+
+  it('stands the one under the page behind the music, and still on the page', () => {
+    // Behind, and no further: the page is a layer of its own, or the ruler
+    // would fall behind the white of the frame and not be seen at all.
+    expect(bodyOf('.score__under')).toMatch(/z-index:\s*-1/);
+    expect(bodyOf('.score__page')).toMatch(/isolation:\s*isolate/);
+  });
+});
+
 describe('the marker a reader keeps missing at', () => {
   it('reddens Verovio’s marker as it did OSMD’s, and never the other hand’s', () => {
     for (const level of ['1', '2', '3', '4']) {

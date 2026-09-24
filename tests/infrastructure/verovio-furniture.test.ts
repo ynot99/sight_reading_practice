@@ -6,7 +6,7 @@ import { measureIndexOfBar } from '../../src/domain/notation/printedIds.js';
 import { readThePage } from '../../src/infrastructure/rendering/verovio/pageLayout.js';
 import { elementAt } from '../../src/shared/asserts.js';
 import { twoBarExercise } from '../support/fixtures.js';
-import { printed, sheets, verovioStages, whenDrawn, type Printed, type Stage } from '../support/verovioStage.js';
+import { laidOutAt, printed, sheets, verovioStages, whenDrawn, type Printed, type Stage } from '../support/verovioStage.js';
 
 /**
  * What is drawn over the music to be read and taken hold of, under Verovio:
@@ -224,6 +224,26 @@ describe('the passage markers', () => {
 
     renderer.showPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
     expect(surface.querySelectorAll('circle.passage-marker__dot')).toHaveLength(0);
+  });
+
+  it('draws them in a drawing of ours over the page, the page’s size, and not inside Verovio’s', async () => {
+    // Verovio's page carries a stylesheet that strokes every shape in it:
+    // inside it, the area a marker is taken hold of by came out as a box.
+    const { renderer, surface } = await aScore(SHORT);
+
+    renderer.showPassage({ fromMeasureIndex: 1, toMeasureIndex: 2 });
+    renderer.showHands([1, 2]);
+
+    const page = elementAt(sheets(surface), 0);
+    const verovio = page.querySelector('svg');
+    const over = page.querySelector('svg.score__over');
+    expect(over?.querySelectorAll('g.passage-marker')).toHaveLength(2);
+    expect(over?.querySelectorAll('g.hand-switch').length).toBeGreaterThan(0);
+    expect(verovio?.querySelector('.passage-marker, .hand-switch')).toBeNull();
+    expect([over?.getAttribute('width'), over?.getAttribute('height')]).toEqual([
+      verovio?.getAttribute('width'),
+      verovio?.getAttribute('height'),
+    ]);
   });
 
   it('takes them away again', async () => {
@@ -539,14 +559,11 @@ describe('the hand switches', () => {
     renderer.showHands([1, 2]);
 
     for (const zoom of [0.4, 2.5]) {
-      renderer.setZoom(zoom);
-      await whenDrawn(() => {
-        expect(renderer.zoom).toBe(zoom);
-        expect(switchesOn(surface).length).toBeGreaterThan(0);
-        const hit = boxOf(switchesOn(surface)[0]?.querySelector('rect.hand-switch__hit'));
-        expect(hit.left).toBeGreaterThan(0);
-        expect(hit.right).toBeLessThan(braceLeft(surface, 0));
-      });
+      await laidOutAt(renderer, surface, zoom);
+      expect(switchesOn(surface).length).toBeGreaterThan(0);
+      const hit = boxOf(switchesOn(surface)[0]?.querySelector('rect.hand-switch__hit'));
+      expect(hit.left).toBeGreaterThan(0);
+      expect(hit.right).toBeLessThan(braceLeft(surface, 0));
     }
   });
 

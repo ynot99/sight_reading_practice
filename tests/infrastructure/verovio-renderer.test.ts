@@ -520,9 +520,18 @@ describe('what was played', () => {
 
     const [ring] = ringsOf(surface);
     expect(ring?.getAttribute('class')).toContain('played--correct');
-    // Over the notes: the last thing in the drawing, so it is drawn on top.
-    const music = sheets(surface)[0]?.querySelector('svg.definition-scale');
-    expect(music?.lastElementChild?.getAttribute('class')).toBe('played-overlay');
+    // Over the notes, in a drawing of ours over the page rather than inside
+    // Verovio's: its stylesheet strokes every ring in there black.
+    const page = sheets(surface)[0];
+    expect(page?.querySelector('svg.score__over > g.played-overlay')).not.toBeNull();
+    expect(page?.querySelector('svg')?.querySelector('.played-overlay')).toBeNull();
+    // Placed in the page's units, as its notes were read: scaled to its pixels.
+    const drawing = page?.querySelector('svg') as SVGSVGElement;
+    const pixelsToAUnit = Number.parseFloat(drawing.getAttribute('width') ?? '0') / readThePage(drawing).width;
+    const scaled = /scale\(([\d.eE+-]+)\)/.exec(
+      page?.querySelector('svg.score__over > g.played-overlay')?.getAttribute('transform') ?? '',
+    );
+    expect(Number(scaled?.[1])).toBeCloseTo(pixelsToAUnit, 8);
     const c4 = headOf(surface, 'n0-1-0-0');
     expect(Number(ring?.getAttribute('cy'))).toBe(c4.y);
     // Round the head's middle, not its left edge where Verovio places it.

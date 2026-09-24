@@ -23,9 +23,12 @@ export interface PageShape {
  * What every layout asks for, whatever the page.
  *
  * No header and no footer: the trainer prints its own title, and a page number
- * at the foot of every page is room taken from the music.
+ * at the foot of every page is room taken from the music. A number over every
+ * second bar, as the page had under OSMD, rather than Verovio's one at the
+ * start of each line: a reader finds a bar by its number, and the mark on a
+ * bar read a second time stands beside it.
  */
-const EVERY_LAYOUT = { breaks: 'auto', header: 'none', footer: 'none' } as const;
+const EVERY_LAYOUT = { breaks: 'auto', header: 'none', footer: 'none', mnumInterval: 2 } as const;
 
 /**
  * Room in Verovio's heap for each character of a score.

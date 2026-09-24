@@ -285,9 +285,36 @@ textarea {
 /*
  * A page Verovio drew, and the box its marks stand in: the marker is placed
  * in pixels from the page's corner, so the page is what it is placed against.
+ *
+ * A layer of its own, so what is drawn under the music stays on the page
+ * rather than falling behind the frame it stands in.
  */
 .score__page {
   position: relative;
+  isolation: isolate;
+}
+
+/*
+ * What is drawn with the music and is not Verovio's - the notes played, the
+ * passage, the hands, the ruler - in drawings of our own laid over the page
+ * and under it, the page's own size.
+ *
+ * Not inside Verovio's drawing, which carries a stylesheet of its own that
+ * strokes every shape in it in the colour of the text: in there the rings
+ * round the notes played came out black whatever they were judged, and the
+ * invisible area a marker is taken hold of by came out as a box.
+ */
+.score__over,
+.score__under {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+
+/* The ruler is a grid to read the music against, so the music is drawn over it. */
+.score__under {
+  z-index: -1;
 }
 
 /*

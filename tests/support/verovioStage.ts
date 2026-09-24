@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, vi } from 'vitest';
+import { afterEach, beforeAll, expect, vi } from 'vitest';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { printedAtEachStep, type PrintedStep } from '../../src/domain/notation/printedIds.js';
@@ -50,6 +50,25 @@ const ENGRAVER_WAIT_MS = 20_000;
 /** Waits until a check holds, allowing the engraver the time its work takes. */
 export function whenDrawn(check: () => void): Promise<void> {
   return vi.waitFor(check, { timeout: ENGRAVER_WAIT_MS, interval: 25 });
+}
+
+/**
+ * Asks for a print and waits for the pages the new layout draws.
+ *
+ * Not for the zoom to read as asked, which it does at once: the old pages
+ * stay on the screen until the new ones are ready, and a check that passes on
+ * them says nothing about the layout it was meant for. Nor for any page to be
+ * new: the new layout's pages stand empty before they are drawn, and the one
+ * being read is not always the first drawn.
+ */
+export async function laidOutAt(renderer: VerovioScoreRenderer, surface: HTMLElement, zoom: number): Promise<void> {
+  const old = new Set(sheets(surface).map((sheet) => sheet.querySelector('svg')));
+  renderer.setZoom(zoom);
+  await whenDrawn(() => {
+    const reading = sheets(surface)[renderer.pages.at]?.querySelector('svg') ?? null;
+    expect(reading).not.toBeNull();
+    expect(old.has(reading)).toBe(false);
+  });
 }
 
 /**

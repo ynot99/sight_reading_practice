@@ -18,16 +18,21 @@ import type {
   ScoreReading,
 } from '../../../application/ports/IScoreRenderer.js';
 import type { RulerMark } from '../../../application/rhythmRuler.js';
-import { measureIndexOfBar, type PrintedStep } from '../../../domain/notation/printedIds.js';
+import { barId, measureIndexOfBar, type PrintedStep } from '../../../domain/notation/printedIds.js';
 import {
+  BAR_PRINTED_RISE,
+  BAR_PRINTED_SCALE,
   drawHandSwitch,
   drawPassageMarker,
+  drawRepeatMark,
   drawStartMarker,
   HAND_SWITCH_GAP,
   HAND_SWITCH_WIDTH,
   handUnder,
   HOLD_MS,
   markerUnder,
+  REPEAT_MARK_GAP,
+  REPEAT_MARK_RADIUS,
   TAP_SLACK_PX,
 } from '../furniture.js';
 import { drawShape } from '../overlayElements.js';
@@ -51,7 +56,7 @@ import {
   type GripEnd,
   type PassageEdge,
 } from '../passageBrackets.js';
-import { readThePage, type PageLayout } from './pageLayout.js';
+import { readThePage, type NumberOnThePage, type PageLayout, type SystemOnThePage } from './pageLayout.js';
 import type { PageShape } from './VerovioCore.js';
 import type { VerovioEngraver } from './VerovioEngraver.js';
 
@@ -222,6 +227,14 @@ export class VerovioScoreRenderer
   private lastBar = 0;
   /** Which staves the run is asking for; see `showHands`. */
   private handsPlaying: readonly number[] = [];
+  /** The bars that are a second reading of ones printed before them. */
+  private repeatedBars: ReadonlySet<number> = new Set();
+  /** The ruler's lines through the whole piece; see `showRhythmRuler`. */
+  private ruled: readonly RulerMark[] = [];
+  /** The ruled line the beat has reached, or `null` with nothing running. */
+  private beatMark: RulerMark | null = null;
+  /** The beat where it is drawn now, to be taken off when it moves on. */
+  private beatDrawn: SVGLineElement | null = null;
   private passageListeners: ((passage: DrawnPassage) => void)[] = [];
   private markerHeldListeners: ((end: PassageEnd) => void)[] = [];
   private barHeldListeners: ((measureIndex: number) => void)[] = [];
@@ -526,7 +539,7 @@ export class VerovioScoreRenderer
     // is a fraction of one off that.
     const wide = Number.parseFloat(drawing.getAttribute('width') ?? '');
     const scale = (Number.isFinite(wide) && wide > 0 ? wide : this.pagePx.width) / read.width;
-    this.layouts.set(page, { layout: read, scale, elements });
+    this.layouts.set(page, { layout: read, scale, elements, across: stepsAcross(read, this.printed, this.stepsOfBar) });
     for (const name of read.heads.keys()) {
       this.pageOfName.set(name, page);
     }
@@ -535,7 +548,7 @@ export class VerovioScoreRenderer
         this.pageOfName.set(bar.id, page);
       }
     }
-    this.layTheOverlay(page, drawing, read);
+    this.layTheOverlay(page, read);
     this.fadeAndDimThePage(read);
   }
 
@@ -612,20 +625,17 @@ export class VerovioScoreRenderer
    * space between two staff positions is read off its lines rather than
    * measured from pairs of notes as OSMD's had to be.
    */
-  private layTheOverlay(page: number, drawing: SVGSVGElement, read: PageLayout): void {
-    const music = drawing.querySelector('svg.definition-scale');
-    if (music === null) {
+  private layTheOverlay(page: number, read: PageLayout): void {
+    const over = this.drawingOfOurs(page, false);
+    const scale = this.layouts.get(page)?.scale;
+    if (over === null || scale === undefined) {
       return;
     }
     const samples: DrawnNoteSample[] = [];
     const stepX = new Map<number, number>();
-    let space = 0;
+    const space = staffSpaceOf(read);
     for (const [system, drawn] of read.systems.entries()) {
       for (const bar of drawn.bars) {
-        const [top, second] = bar.staves[0]?.lines ?? [];
-        if (space === 0 && top !== undefined && second !== undefined) {
-          space = second - top;
-        }
         for (const stepIndex of this.stepsOfBar.get(bar.id) ?? []) {
           for (const here of this.printed[stepIndex]?.printed ?? []) {
             const head = read.heads.get(here.id);
@@ -648,9 +658,11 @@ export class VerovioScoreRenderer
       }
     }
     const fitted = fitStaffGeometry(samples);
-    const layer = drawing.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
+    // In the page's units, as everything it is placed by was read.
+    const layer = over.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
     layer.setAttribute('class', 'played-overlay');
-    music.append(layer);
+    layer.setAttribute('transform', `scale(${String(scale)})`);
+    over.append(layer);
     this.overlays.set(page, {
       layer,
       geometry: fitted === null ? null : { ...fitted, stepHeight: space / 2 },
@@ -1009,10 +1021,17 @@ export class VerovioScoreRenderer
     };
   }
 
-  /** Draws on a page just drawn what stands on it: the passage, the hands. */
+  /**
+   * Draws on a page just drawn what stands on it: the passage, the hands, the
+   * bars' places and marks, the ruler and the beat.
+   */
   private furnishThePage(page: number): void {
     this.paintThePassage(page);
     this.paintTheHands(page);
+    this.callTheBarsByTheirPlaces(page);
+    this.paintTheBarMarks(page);
+    this.paintTheRuler(page);
+    this.paintTheBeat();
   }
 
   /**
@@ -1125,31 +1144,57 @@ export class VerovioScoreRenderer
   }
 
   /**
-   * A layer of ours on a drawn page, over the music or behind it.
-   *
-   * On the page's outer drawing, whose units are the screen's pixels: a
-   * marker a fingertip wide is a fingertip wide at any print. Found among the
-   * drawing's own few children rather than looked for through the whole of
-   * it, and made the first time it is asked for.
+   * A layer of ours on a drawn page, over the music or behind it, made the
+   * first time it is asked for; see `drawingOfOurs`.
    */
   private layerOn(page: number, name: string, behind = false): SVGGElement | null {
-    const drawing = this.drawn.has(page) ? this.sheets[page]?.querySelector('svg') : undefined;
-    if (drawing === null || drawing === undefined) {
+    const ours = this.drawingOfOurs(page, behind);
+    if (ours === null) {
       return null;
     }
-    for (const child of drawing.children) {
+    for (const child of ours.children) {
       if (child.classList.contains(name)) {
         return child as SVGGElement;
       }
     }
-    const layer = drawing.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
+    const layer = ours.ownerDocument.createElementNS(SVG_NAMESPACE, 'g');
     layer.setAttribute('class', name);
-    if (behind) {
-      drawing.prepend(layer);
-    } else {
-      drawing.append(layer);
-    }
+    ours.append(layer);
     return layer;
+  }
+
+  /**
+   * A drawing of ours over a drawn page, or under it, as large as the page.
+   *
+   * Beside Verovio's drawing rather than inside it. Verovio's page carries a
+   * stylesheet of its own, scoped to it, that strokes every shape inside it
+   * in the colour of the text: drawn in there, the rings round the notes
+   * played came out black whatever the note was judged, and the area a marker
+   * is taken hold of by - invisible - came out as a box. In the screen's
+   * pixels, so a marker a fingertip wide is a fingertip wide at any print;
+   * the stylesheet stands the one under the page behind it.
+   *
+   * After Verovio's drawing in the page, which stays the first thing on it:
+   * the page is found as the first drawing there.
+   */
+  private drawingOfOurs(page: number, under: boolean): SVGSVGElement | null {
+    const sheet = this.drawn.has(page) ? this.sheets[page] : undefined;
+    const drawing = sheet?.querySelector('svg');
+    if (sheet === undefined || drawing === null || drawing === undefined) {
+      return null;
+    }
+    const name = under ? 'score__under' : 'score__over';
+    for (const child of sheet.children) {
+      if (child.classList.contains(name)) {
+        return child as SVGSVGElement;
+      }
+    }
+    const ours = sheet.ownerDocument.createElementNS(SVG_NAMESPACE, 'svg');
+    ours.setAttribute('class', name);
+    ours.setAttribute('width', drawing.getAttribute('width') ?? '0');
+    ours.setAttribute('height', drawing.getAttribute('height') ?? '0');
+    drawing.after(ours);
+    return ours;
   }
 
   // A finger on the music: a marker taken hold of, a switch pressed, a bar
@@ -1611,6 +1656,174 @@ export class VerovioScoreRenderer
     this.container.dataset['trouble'] = String(level);
   }
 
+  // What the page says about a bar beyond its notes: its place, whether it is
+  // read twice, and where its beats fall.
+
+  showRepeatedBars(measureIndexes: readonly number[]): void {
+    this.repeatedBars = new Set(measureIndexes);
+    this.paintTheBarMarks();
+  }
+
+  showRhythmRuler(marks: readonly RulerMark[]): void {
+    this.ruled = marks;
+    this.paintTheRuler();
+  }
+
+  showBeat(mark: RulerMark | null): void {
+    this.beatMark = mark;
+    this.paintTheBeat();
+  }
+
+  /**
+   * Prints over each numbered bar of a page its place in the playing, where
+   * the number the writer gave it is not that.
+   *
+   * A repeat is written out, so a piece that repeats prints one number on two
+   * bars, and every bar after the repeat is further into the playing than its
+   * number says. The hold, the markers and the boxes all count the playing,
+   * so the page does too: in Verovio's own figures, over its own number, which
+   * is only told what to say. The writer's number goes on the line above a
+   * bar read twice (`paintTheBarMarks`), where it can still be found.
+   */
+  private callTheBarsByTheirPlaces(page: number): void {
+    const drawing = this.drawn.has(page) ? this.sheets[page]?.querySelector('svg') : undefined;
+    for (const number of drawing?.querySelectorAll('g.mNum') ?? []) {
+      const measureIndex = measureIndexOfBar(number.parentElement?.id ?? '');
+      // The innermost of the text's parts, which is the one holding the figures.
+      const figures = [...number.querySelectorAll('tspan')].at(-1) ?? number.querySelector('text');
+      if (measureIndex === null || figures === null) {
+        continue;
+      }
+      const place = String(measureIndex + 1);
+      if ((figures.textContent ?? '').trim() !== place) {
+        figures.textContent = place;
+      }
+    }
+  }
+
+  /**
+   * Marks each bar read a second time, on every page drawn or on one.
+   *
+   * The turning arrow after the number, saying "you have read this before";
+   * and where the number now says the bar's place rather than what the writer
+   * called it, the writer's number on the line above, smaller - it is how the
+   * bar is found again in the file it came from. Only where a number is
+   * printed: it is the number that needs explaining, and the room round it
+   * above the staff is already kept clear of notes.
+   */
+  private paintTheBarMarks(only?: number): void {
+    for (const page of only === undefined ? this.drawn : [only]) {
+      const layer = this.layerOn(page, 'bar-marks');
+      const read = this.layouts.get(page);
+      if (layer === null || read === undefined) {
+        continue;
+      }
+      layer.replaceChildren();
+      for (const bar of read.layout.systems.flatMap((system) => system.bars)) {
+        const measureIndex = measureIndexOfBar(bar.id);
+        if (measureIndex !== null && bar.number !== null && this.repeatedBars.has(measureIndex)) {
+          layer.append(markARepeat(layer.ownerDocument, measureIndex, bar.number, read.scale));
+        }
+      }
+    }
+  }
+
+  /**
+   * Rules the beat through the bars of every page drawn, or of one.
+   *
+   * Behind the notation rather than over it - a grid to read the music
+   * against, and a grid that hides a notehead is worse than none - and from
+   * the top staff's top line to the bottom staff's bottom one, where a bar
+   * line stands: this is a bar line for a beat. Only on pages drawn, and each
+   * as it is drawn: a ruler is thousands of lines on a long piece.
+   */
+  private paintTheRuler(only?: number): void {
+    for (const page of only === undefined ? this.drawn : [only]) {
+      const layer = this.layerOn(page, 'rhythm-ruler', true);
+      if (layer === null) {
+        continue;
+      }
+      layer.replaceChildren();
+      for (const mark of this.ruled) {
+        const line = this.ruleOne(mark, page, layer.ownerDocument);
+        if (line !== null) {
+          layer.append(line);
+        }
+      }
+    }
+  }
+
+  /**
+   * Stands a marker on the ruled line the music has reached, on its page.
+   *
+   * Its own line over the ruler rather than a line of it: the ruler says where
+   * the beats are and this which one is happening, and this moves on every
+   * beat of the piece while the ruler stays - so a beat is one line taken off
+   * and one put on, and the ruler is left alone. Behind the music all the
+   * same, as the ruler is.
+   */
+  private paintTheBeat(): void {
+    this.beatDrawn?.remove();
+    this.beatDrawn = null;
+    const mark = this.beatMark;
+    const page = mark === null ? undefined : this.pageOfStep(mark.fromStep);
+    // After the ruler's layer, which a page drawn has from the moment it is.
+    const layer = page === undefined ? null : this.layerOn(page, 'ruler-beat-mark', true);
+    const line = mark === null || page === undefined || layer === null ? null : this.ruleOne(mark, page, layer.ownerDocument);
+    if (mark === null || layer === null || line === null) {
+      return;
+    }
+    line.setAttribute('class', `ruler-beat ruler-beat--${mark.weight}`);
+    layer.append(line);
+    this.beatDrawn = line;
+  }
+
+  /**
+   * One ruled line on a drawn page, or `null` where that page cannot place it.
+   *
+   * A line that falls on a note names it twice and stands on it exactly; one
+   * between two notes is reckoned between where they were drawn, and one past
+   * the last note of a bar towards the bar's own right edge, the last place
+   * in it that still means a moment of its music. Two notes either side of a
+   * system break would be reckoned across the width of the page, so a line
+   * between them is left unruled.
+   */
+  private ruleOne(mark: RulerMark, page: number, doc: Document): SVGLineElement | null {
+    const read = this.layouts.get(page);
+    const stepX = read?.across;
+    const system = this.systemOfStep(mark.fromStep, page);
+    if (read === undefined || stepX === undefined || system === null) {
+      return null;
+    }
+    const from = stepX.get(mark.fromStep);
+    const to =
+      mark.toStep === null
+        ? system.bars.find((bar) => bar.id === barId(mark.bar))?.right
+        : this.systemOfStep(mark.toStep, page) === system
+          ? stepX.get(mark.toStep)
+          : undefined;
+    if (from === undefined || to === undefined) {
+      return null;
+    }
+    const x = String((from + (to - from) * mark.fraction) * read.scale);
+    const line = doc.createElementNS(SVG_NAMESPACE, 'line');
+    line.setAttribute('class', `ruler-line ruler-line--${mark.weight}`);
+    line.setAttribute('x1', x);
+    line.setAttribute('x2', x);
+    line.setAttribute('y1', String(system.top * read.scale));
+    line.setAttribute('y2', String(system.bottom * read.scale));
+    return line;
+  }
+
+  /** The system of a drawn page that a step's bar is on, or `null` for a step not on that page. */
+  private systemOfStep(stepIndex: number, page: number): SystemOnThePage | null {
+    const bar = this.printed[stepIndex]?.barId;
+    if (bar === undefined || this.pageOfName.get(bar) !== page) {
+      return null;
+    }
+    return this.layouts.get(page)?.layout.systems.find((system) => system.bars.some((each) => each.id === bar)) ?? null;
+  }
+
   // Not drawn yet: the steps of the move after this one draw these. Until
   // then each is asked and does nothing, which is what a renderer that cannot
   // draw something is allowed to do - the run goes on the same.
@@ -1619,11 +1832,6 @@ export class VerovioScoreRenderer
 
   turnPagesWithTheMusic(_wanted: boolean): void {}
 
-  showRepeatedBars(_measureIndexes: readonly number[]): void {}
-
-  showRhythmRuler(_marks: readonly RulerMark[]): void {}
-
-  showBeat(_mark: RulerMark | null): void {}
 
 
 
@@ -1635,6 +1843,11 @@ interface ReadPage {
   readonly scale: number;
   /** Every named note and rest the page draws, by its name. */
   readonly elements: ReadonlyMap<string, Element>;
+  /**
+   * Where each step on the page stands across it, in its units: the middle
+   * of its leftmost head, a rest's as much as a note's.
+   */
+  readonly across: ReadonlyMap<number, number>;
 }
 
 /** A drawn page's layer of played notes, and what they are placed by. */
@@ -1766,6 +1979,79 @@ const HEAD_PLACE = /translate\(\s*(-?[\d.]+)/;
 
 /** A ledger line as Verovio writes one: `M x y L x y`, the two x taken. */
 const LEDGER = /M\s*(-?[\d.]+)[\s,]+-?[\d.]+\s*L\s*(-?[\d.]+)/;
+
+/** The gap between two lines of a staff on a page, in its units; nought on a page with none. */
+function staffSpaceOf(layout: PageLayout): number {
+  for (const bar of layout.systems.flatMap((system) => system.bars)) {
+    const [top, second] = bar.staves[0]?.lines ?? [];
+    if (top !== undefined && second !== undefined) {
+      return second - top;
+    }
+  }
+  return 0;
+}
+
+/** See `ReadPage.across`. */
+function stepsAcross(
+  layout: PageLayout,
+  printed: readonly PrintedStep[],
+  stepsOfBar: ReadonlyMap<string, readonly number[]>,
+): Map<number, number> {
+  const across = new Map<number, number>();
+  const space = staffSpaceOf(layout);
+  for (const bar of layout.systems.flatMap((system) => system.bars)) {
+    for (const stepIndex of stepsOfBar.get(bar.id) ?? []) {
+      for (const here of printed[stepIndex]?.printed ?? []) {
+        const head = layout.heads.get(here.id);
+        if (head !== undefined) {
+          const x = head.x + HEAD_HALF_WIDTH * space;
+          across.set(stepIndex, Math.min(across.get(stepIndex) ?? x, x));
+        }
+      }
+    }
+  }
+  return across;
+}
+
+/** A figure is about half as wide as it is tall. */
+const FIGURE_WIDTH = 0.5;
+
+/**
+ * The mark on a bar read a second time, beside the number printed over it:
+ * the turning arrow, and - where the number now says the bar's place - the
+ * writer's number on the line above.
+ *
+ * In pixels, from the number as the page was read. Verovio centres a bar's
+ * number where it places it, and everything here is centred with it.
+ */
+function markARepeat(doc: Document, measureIndex: number, number: NumberOnThePage, scale: number): SVGGElement {
+  const mark = doc.createElementNS(SVG_NAMESPACE, 'g');
+  mark.setAttribute('class', 'bar-mark');
+  mark.setAttribute('data-bar', String(measureIndex));
+  const x = number.x * scale;
+  const y = number.y * scale;
+  const size = number.size * scale;
+  const place = String(measureIndex + 1);
+  // After the number it stands beside, as an exponent sits.
+  let reach = (place.length * size * FIGURE_WIDTH) / 2;
+  let markY = y - size;
+  if (number.text !== place) {
+    const height = size * BAR_PRINTED_SCALE;
+    const above = y - size * BAR_PRINTED_RISE;
+    const written = doc.createElementNS(SVG_NAMESPACE, 'text');
+    written.setAttribute('class', 'bar-printed');
+    written.setAttribute('x', String(x));
+    written.setAttribute('y', String(above));
+    written.setAttribute('font-size', String(height));
+    written.setAttribute('text-anchor', 'middle');
+    written.textContent = number.text;
+    mark.append(written);
+    reach = (number.text.length * height * FIGURE_WIDTH) / 2;
+    markY = above - height * 0.35;
+  }
+  mark.append(drawRepeatMark(doc, x + reach + REPEAT_MARK_GAP + REPEAT_MARK_RADIUS, markY));
+  return mark;
+}
 
 /** The steps of each bar, by the bar's printed name. */
 function stepsByBar(printed: readonly PrintedStep[]): Map<string, number[]> {

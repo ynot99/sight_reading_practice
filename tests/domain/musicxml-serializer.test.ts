@@ -242,6 +242,92 @@ describe('MusicXmlSerializer', () => {
   });
 });
 
+describe('the names printed on every bar and note', () => {
+  // The engraver keeps the `id` each `<measure>` and `<note>` is written with,
+  // so the page can be read by name: the notes a step asks for, the bar a
+  // passage ends in. Named by where each stands in the exercise, which the
+  // timeline knows as well as the page does.
+  const ids = (scope: ElementLike, tag: string): string[] =>
+    all(scope, tag).map((element) => element.getAttribute('id') ?? '');
+
+  it('names every bar by its index', () => {
+    const root = parse(serializer.serialize(twoBarExercise()));
+
+    expect(ids(root, 'measure')).toEqual(['m0', 'm1']);
+  });
+
+  it('names every pitch by its bar, its voice, its entry and its place in the chord', () => {
+    //   voice 1: C4 D4 E4 F4 | G4
+    //   voice 2: C3          | [G2 D3] + rest
+    const root = parse(serializer.serialize(twoBarExercise()));
+    const pitched = all(root, 'note').filter((note) => all(note, 'pitch').length > 0);
+
+    expect(
+      pitched.map((note) => `${note.getAttribute('id') ?? ''} ${text(note, 'step')}${text(note, 'octave')}`),
+    ).toEqual([
+      'n0-1-0-0 C4',
+      'n0-1-1-0 D4',
+      'n0-1-2-0 E4',
+      'n0-1-3-0 F4',
+      'n0-2-0-0 C3',
+      'n1-1-0-0 G4',
+      'n1-2-0-0 G2',
+      'n1-2-0-1 D3',
+    ]);
+  });
+
+  it('names a rest by the entry it is', () => {
+    const root = parse(serializer.serialize(twoBarExercise()));
+    const rests = all(root, 'note').filter((note) => all(note, 'rest').length > 0);
+
+    expect(rests.map((rest) => rest.getAttribute('id'))).toEqual(['r1-2-1']);
+  });
+
+  it('names a rest nobody draws the same way', () => {
+    // A silence is a space in the bar the engraver still places, and a voice
+    // entering late is found by it.
+    const root = parse(serializer.serialize(partialVoiceExercise()));
+    const unseen = all(root, 'note').filter((note) => note.getAttribute('print-object') === 'no');
+
+    expect(unseen.map((rest) => rest.getAttribute('id'))).toEqual(['r0-2-0', 'r0-2-2']);
+  });
+
+  it('names a grace note by the entry it leans on, and its place among the graces', () => {
+    const leaning = noteEntry(p('C5'), Duration.HALF, [], [], null, false, {
+      graces: [
+        { pitches: [p('D5'), p('F5')], duration: Duration.EIGHTH, slashed: true },
+        { pitches: [p('E5')], duration: Duration.EIGHTH, slashed: false },
+      ],
+    });
+    const exercise = partialVoiceExercise([
+      noteEntry(p('G3'), Duration.HALF),
+      leaning,
+    ]);
+    const root = parse(serializer.serialize(exercise));
+    const graces = all(root, 'note').filter((note) => all(note, 'grace').length > 0);
+
+    expect(graces.map((grace) => `${grace.getAttribute('id') ?? ''} ${text(grace, 'step')}`)).toEqual([
+      'g0-2-1-0-0 D',
+      'g0-2-1-0-1 F',
+      'g0-2-1-1-0 E',
+    ]);
+    // And the note they lean on keeps its own.
+    expect(ids(root, 'note')).toContain('n0-2-1-0');
+  });
+
+  it('never gives two things one name', () => {
+    for (const exercise of [twoBarExercise(), partialVoiceExercise()]) {
+      const named = [
+        ...ids(parse(serializer.serialize(exercise)), 'measure'),
+        ...ids(parse(serializer.serialize(exercise)), 'note'),
+      ];
+
+      expect(named.every((id) => id !== '')).toBe(true);
+      expect(new Set(named).size).toBe(named.length);
+    }
+  });
+});
+
 describe('XmlWriter', () => {
   it('indents nested elements', () => {
     const writer = new XmlWriter();

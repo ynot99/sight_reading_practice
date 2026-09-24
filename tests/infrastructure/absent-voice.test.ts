@@ -8,6 +8,10 @@ import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImpo
 
 const importer = new DomScoreImporter();
 const serializer = new MusicXmlSerializer();
+/** A rest nobody draws, whatever else its tag carries - its name, for one. */
+const INVISIBLE_REST = /<note [^>]*print-object="no"[^>]*>/;
+/** Every one of them, each to its closing tag. */
+const INVISIBLE_RESTS = /<note [^>]*print-object="no"[^>]*>[\s\S]*?<\/note>/g;
 
 /** One bar of 4/4 at 4 divisions to the quarter, with a second voice in it. */
 function bar(secondVoice: string, staves = ''): string {
@@ -52,7 +56,7 @@ describe('a voice that is absent for part of a bar', () => {
     // Written as a rest nobody draws rather than as `<forward>`: the format
     // means the same by both, and the engraver lays only one of them out
     // where it belongs. Measured on Clair de Lune bar 47.
-    expect(printed).toContain('<note print-object="no">');
+    expect(printed).toMatch(INVISIBLE_REST);
     expect(printed).not.toContain('<forward>');
   });
 
@@ -68,7 +72,7 @@ describe('a voice that is absent for part of a bar', () => {
     // A rest, and not one anybody sees: the page has no more ink on it than
     // the writer put there.
     const printed = serializer.serialize(exercise);
-    expect(printed).toContain('<note print-object="no">');
+    expect(printed).toMatch(INVISIBLE_REST);
     expect(printed).not.toContain('<forward>');
   });
 
@@ -257,21 +261,26 @@ describe('a voice that comes in partway through a triplet', () => {
 
     expect(inner(kept)).toEqual(before);
     // Carried as notation, the way a drawn rest's value is.
-    const invisible = /<note print-object="no">[\s\S]*?<\/note>/.exec(kept)?.[0] ?? '';
+    const invisible = kept.match(INVISIBLE_RESTS)?.[0] ?? '';
     expect(invisible).toContain('<time-modification>');
   });
 
   it('reads a silence kept before it carried its value', () => {
     // Every score in a library from before carries its silences as a length
     // alone, and a third of a beat is no plain value.
+    let aged = 0;
     const kept = serializer
       .serialize(importer.read(late).exercise)
-      .replace(/<note print-object="no">[\s\S]*?<\/note>/g, (silence) =>
-        silence
+      .replace(INVISIBLE_RESTS, (silence) => {
+        aged += 1;
+        return silence
           .replace(/<type>[^<]*<\/type>/, '')
-          .replace(/<time-modification>[\s\S]*?<\/time-modification>/, ''),
-      );
+          .replace(/<time-modification>[\s\S]*?<\/time-modification>/, '');
+      });
 
+    // Made old for certain: a pattern that no longer finds the silence would
+    // leave it as it is written today, and this would pass with nothing read.
+    expect(aged).toBeGreaterThan(0);
     expect(inner(kept)).toEqual(inner(late));
   });
 });

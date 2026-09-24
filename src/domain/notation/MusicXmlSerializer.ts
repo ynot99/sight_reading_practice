@@ -26,6 +26,7 @@ import {
 } from '../model/Exercise.js';
 import type { TupletPosition } from '../model/Exercise.js';
 import type { Alteration, Pitch } from '../model/Pitch.js';
+import { barId, graceId, noteId, restId, type EntryAt } from './printedIds.js';
 import { XmlWriter } from './XmlWriter.js';
 
 /**
@@ -348,7 +349,8 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       // The bar's own number, which a passage carries over from the score it
       // was cut out of - so the page itself says that it is bars 20 to 27 and
       // not a piece that happens to be eight bars long.
-      writer.element('measure', { number: barNumberOf(exercise, measureIndex) }, () => {
+      const bar = { number: barNumberOf(exercise, measureIndex), id: barId(measureIndex) };
+      writer.element('measure', bar, () => {
         if (measureIndex === 0) {
           this.writeAttributes(writer, exercise);
           if (this.options.includeMetronomeMark) {
@@ -710,6 +712,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         exercise,
         staff,
         entry,
+        { measureIndex, voice: staff.voice, entryIndex },
         key,
         activeAccidentals,
         held,
@@ -744,6 +747,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     exercise: Exercise,
     staff: StaffPart,
     entry: MusicalEntry,
+    at: EntryAt,
     key: KeySignature,
     activeAccidentals: Map<string, Alteration>,
     held: ReadonlySet<number>,
@@ -762,7 +766,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         // "Those who fight", bar 128, a triplet begun by a voice that came in
         // late. The ratio is carried like every other piece of notation, and
         // no tuplet mark is written, since nothing is drawn to bracket.
-        writer.element('note', { 'print-object': 'no' }, () => {
+        writer.element('note', { id: restId(at), 'print-object': 'no' }, () => {
           writer.leaf('rest');
           writer.leaf('duration', entry.duration.ticks);
           writer.leaf('voice', staff.voice);
@@ -777,7 +781,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
       }
       case 'rest': {
         const isFullMeasure = entry.duration.ticks === exercise.timeSignature.ticksPerMeasure;
-        writer.element('note', undefined, () => {
+        writer.element('note', { id: restId(at) }, () => {
           writer.leaf('rest', undefined, isFullMeasure ? { measure: 'yes' } : undefined);
           writer.leaf('duration', entry.duration.ticks);
           writer.leaf('voice', staff.voice);
@@ -794,11 +798,11 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
         return;
       }
       case 'note': {
-        this.writeGraces(writer, staff, entry.graces, key, activeAccidentals);
+        this.writeGraces(writer, staff, entry.graces, at, key, activeAccidentals);
         entry.pitches.forEach((pitch, pitchIndex) => {
           const stopping = held.has(pitch.midi);
           const starting = entry.tiedForward.includes(pitch.midi);
-          writer.element('note', undefined, () => {
+          writer.element('note', { id: noteId(at, pitchIndex) }, () => {
             if (pitchIndex > 0) {
               writer.leaf('chord');
             }
@@ -935,12 +939,13 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     writer: XmlWriter,
     staff: StaffPart,
     graces: readonly GraceNote[],
+    leaningOn: EntryAt,
     key: KeySignature,
     activeAccidentals: Map<string, Alteration>,
   ): void {
-    for (const grace of graces) {
+    graces.forEach((grace, graceIndex) => {
       grace.pitches.forEach((pitch, at) => {
-        writer.element('note', undefined, () => {
+        writer.element('note', { id: graceId(leaningOn, graceIndex, at) }, () => {
           writer.leaf('grace', undefined, grace.slashed ? { slash: 'yes' } : { slash: 'no' });
           if (at > 0) {
             writer.leaf('chord');
@@ -961,7 +966,7 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
           writer.leaf('staff', staff.staffNumber);
         });
       });
-    }
+    });
   }
 
   /**

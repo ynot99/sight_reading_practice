@@ -446,15 +446,22 @@ describe('drawing a run as a piano roll', () => {
 });
 
 describe('running the music past a standing head', () => {
-  it('holds the head a sixth of the way into the view, wherever the music has got to', () => {
-    expect(theRunScrolledUnderTheHead(1_000, 400)).toBe(940);
-    expect(theRunScrolledUnderTheHead(2_000, 400)).toBe(1_940);
+  it('holds the head where it was asked to stand, wherever the music has got to', () => {
+    expect(theRunScrolledUnderTheHead(1_000, 400, 0.15)).toBe(940);
+    expect(theRunScrolledUnderTheHead(2_000, 400, 0.15)).toBe(1_940);
+  });
+
+  it('stands it anywhere from against the keys to the middle', () => {
+    // Nought scrolls the head to the very front of the music; a half leaves
+    // as much of what was played behind it as is coming in front.
+    expect(theRunScrolledUnderTheHead(1_000, 400, 0)).toBe(1_000);
+    expect(theRunScrolledUnderTheHead(1_000, 400, 0.5)).toBe(800);
   });
 
   it('does not scroll past the front of the drawing', () => {
     // The first seconds of a run are played with the head walking out to
     // where it will stand, because there is nothing behind it to show.
-    expect(theRunScrolledUnderTheHead(20, 400)).toBe(0);
+    expect(theRunScrolledUnderTheHead(20, 400, 0.15)).toBe(0);
   });
 });
 

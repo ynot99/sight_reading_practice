@@ -553,22 +553,34 @@
                 <input id="roll-beats-shown" type="checkbox" checked />
                 Count the bar out in written time
               </label>
-              <!--
-                The music running past a standing cursor, the way falling
-                notes do. A touch on the drawing while it runs holds it: the
-                reader is taking hold of the scroller, and two of us moving it
-                is neither of us moving it.
-              -->
-              <label class="checkbox" for="roll-scroll-playback">
-                <input id="roll-scroll-playback" type="checkbox" />
-                Scroll the music past the cursor
-              </label>
               <label class="checkbox" for="roll-slips">
                 <input id="roll-slips" type="checkbox" checked />
                 Fill in how far each note was off
               </label>
               <p class="hint">A finger is worth about a tenth of a second, so a tap
                 lands on the grid rather than between its lines.</p>
+            </div>
+
+            <!--
+              The music running past a standing cursor, the way falling notes
+              do, and where that cursor stands. A touch on the drawing while it
+              runs holds it: the reader is taking hold of the scroller, and two
+              of us moving it is neither of us moving it.
+
+              The slider is greyed out rather than taken away while the cursor
+              walks instead: a control that disappears is one the reader goes
+              looking for.
+            -->
+            <div class="control-group">
+              <label class="checkbox" for="roll-scroll-playback">
+                <input id="roll-scroll-playback" type="checkbox" />
+                Scroll the music past the cursor
+              </label>
+              <label for="roll-head-at">
+                The cursor stands <output id="roll-head-at-value">15</output>% of the way in
+              </label>
+              <input id="roll-head-at" type="range" min="0" max="50" step="5" value="15" />
+              <p class="hint">Nought is against the keys, 50 is the middle.</p>
             </div>
 
             <div class="control-group">

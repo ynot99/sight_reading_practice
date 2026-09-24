@@ -2516,7 +2516,10 @@ describe('AppView', () => {
       });
       Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
         configurable: true,
-        get: () => 400,
+        get(this: HTMLElement) {
+          // The keys stand over the front of the view, and are not the music.
+          return this.classList.contains('roll__keys') ? 40 : 400;
+        },
       });
       Object.defineProperty(HTMLElement.prototype, 'offsetLeft', {
         configurable: true,
@@ -2559,10 +2562,11 @@ describe('AppView', () => {
 
         element<HTMLButtonElement>('roll-play').click();
 
-        // The head stands a sixth of the way in, and the music is scrolled
-        // under it - rather than the view being nudged when the head nears
-        // its edge, which at speed is a series of jumps.
-        expect(lent.scrolledTo()).toBe(940);
+        // The head stands 15% of the way across the music - the 360 pixels
+        // the keys leave of the 400 - and the music is scrolled under it,
+        // rather than the view being nudged when the head nears its edge,
+        // which at speed is a series of jumps.
+        expect(lent.scrolledTo()).toBe(946);
       } finally {
         lent.giveBack();
       }
@@ -2634,6 +2638,60 @@ describe('AppView', () => {
 
       expect(element<HTMLInputElement>('roll-scroll-playback').checked).toBe(true);
       expect(next.runtime.controller.settings.rollScrollPlayback).toBe(true);
+    });
+
+    it('stands the cursor as far in as it is asked to, and moves it there at once', async () => {
+      const rig = await aRunToLookAt();
+      const lent = lendTheDrawingAScroller(1_000);
+      try {
+        rig.runtime.controller.updateSettings({ rollScrollPlayback: true });
+        element<HTMLButtonElement>('roll-play').click();
+        expect(lent.scrolledTo()).toBe(946);
+
+        const slider = element<HTMLInputElement>('roll-head-at');
+        slider.value = '50';
+        slider.dispatchEvent(new Event('input'));
+
+        // Half of the 360 pixels of music, while it plays rather than from
+        // the next time it is started.
+        expect(lent.scrolledTo()).toBe(820);
+        expect(element<HTMLOutputElement>('roll-head-at-value').value).toBe('50');
+      } finally {
+        lent.giveBack();
+      }
+    });
+
+    it('greys out where the cursor stands while it walks instead', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      const box = element<HTMLInputElement>('roll-scroll-playback');
+      const slider = element<HTMLInputElement>('roll-head-at');
+      expect(slider.disabled).toBe(true);
+
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      expect(slider.disabled).toBe(false);
+
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+      expect(slider.disabled).toBe(true);
+    });
+
+    it('remembers where the cursor stands', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      const slider = element<HTMLInputElement>('roll-head-at');
+      slider.value = '35';
+      slider.dispatchEvent(new Event('input'));
+
+      mountRealMarkup();
+      const next = createRig(undefined, store);
+      await next.view.initialize();
+
+      expect(next.runtime.controller.settings.rollHeadAtPercent).toBe(35);
+      expect(element<HTMLInputElement>('roll-head-at').value).toBe('35');
+      expect(element<HTMLOutputElement>('roll-head-at-value').value).toBe('35');
     });
 
     it('sounds the beat the run was measured against, where it is asked for', async () => {

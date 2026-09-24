@@ -67,6 +67,7 @@ const SETTINGS: PracticeSettings = {
   markWhileListening: true,
   showPlaybackNotes: true,
   rollScrollPlayback: true,
+  rollHeadAtPercent: 35,
   rhythmRuler: 'eighth',
   rulerCursor: true,
   rulerStrength: 0.5,
@@ -198,6 +199,8 @@ describe('practice settings codec', () => {
         key: { fifths: 99, mode: 'major' },
         timeSignature: '4/7',
         clickWhen: 'whenever',
+        // Past the middle is past where the music still to come is looked at.
+        rollHeadAtPercent: 80,
       },
       KNOWN,
     );
@@ -208,6 +211,7 @@ describe('practice settings codec', () => {
     expect(restored.key).toBeUndefined();
     expect(restored.timeSignature).toBeUndefined();
     expect(restored.clickWhen).toBeUndefined();
+    expect(restored.rollHeadAtPercent).toBeUndefined();
     expect(restored.presetId).toBe('triads-left-hand');
   });
 

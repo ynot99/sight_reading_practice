@@ -299,6 +299,15 @@ export interface PracticeSettings {
    */
   readonly rollScrollPlayback: boolean;
   /**
+   * How far into the picture that cursor stands, as a percentage of the width
+   * the music is drawn in: nought against the keys, fifty in the middle.
+   *
+   * His, asked of the same cursor: "додати відсотки на якому offset має
+   * знаходитись цей курсор". No further than the middle, because while the
+   * music plays it is the part still to come that is being looked at.
+   */
+  readonly rollHeadAtPercent: number;
+  /**
    * Bars to practise, one-based and inclusive, or `null` for the whole thing.
    *
    * Counted in *playing order* rather than by the number printed on the page,
@@ -878,6 +887,10 @@ export class PracticeController {
       rushingCounts: true,
       showPlaybackNotes: false,
       rollScrollPlayback: false,
+      // A finger's width of what has just been played still behind it: a head
+      // hard against the keys reads as a drawing that has been cut off rather
+      // than one that is moving.
+      rollHeadAtPercent: 15,
       rangeFromBar: null,
       rangeToBar: null,
       repeatRange: false,

@@ -1477,6 +1477,8 @@ export class AppView {
     rollGhosts: HTMLInputElement;
     rollSlips: HTMLInputElement;
     rollScrollPlayback: HTMLInputElement;
+    rollHeadAt: HTMLInputElement;
+    rollHeadAtValue: HTMLOutputElement;
     rollOptions: HTMLButtonElement;
     sheetRollOptions: HTMLElement;
     rollOptionsClose: HTMLButtonElement;
@@ -1774,6 +1776,8 @@ export class AppView {
       rollGhosts: requireElement(doc, 'roll-ghosts'),
       rollSlips: requireElement(doc, 'roll-slips'),
       rollScrollPlayback: requireElement(doc, 'roll-scroll-playback'),
+      rollHeadAt: requireElement(doc, 'roll-head-at'),
+      rollHeadAtValue: requireElement(doc, 'roll-head-at-value'),
       rollOptions: requireElement(doc, 'roll-options'),
       sheetRollOptions: requireElement(doc, 'sheet-roll-options'),
       rollOptionsClose: requireElement(doc, 'roll-options-close'),
@@ -6352,6 +6356,7 @@ export class AppView {
     this.dimWhatHasNothingToSay();
     this.el.showPlaybackNotes.checked = settings.showPlaybackNotes;
     this.el.rollScrollPlayback.checked = settings.rollScrollPlayback;
+    this.sayWhereTheHeadStands();
     this.el.restEvery.value = String(settings.restEveryMinutes);
     this.el.restEverySettings.value = this.el.restEvery.value;
     this.el.rulerCursor.checked = settings.rulerCursor;
@@ -6855,6 +6860,14 @@ export class AppView {
       this.runtime.controller.updateSettings({
         rollScrollPlayback: this.el.rollScrollPlayback.checked,
       });
+      this.sayWhereTheHeadStands();
+      this.describeTheRoll();
+    });
+    this.listen(this.el.rollHeadAt, 'input', () => {
+      this.runtime.controller.updateSettings({
+        rollHeadAtPercent: Number(this.el.rollHeadAt.value),
+      });
+      this.sayWhereTheHeadStands();
       this.describeTheRoll();
     });
     this.listen(this.el.rollKeep, 'click', () => {
@@ -8557,7 +8570,11 @@ export class AppView {
       return;
     }
     if (this.theMusicRunsPastTheHead()) {
-      drawn.scrollLeft = theRunScrolledUnderTheHead(head.offsetLeft, drawn.clientWidth);
+      drawn.scrollLeft = theRunScrolledUnderTheHead(
+        head.offsetLeft,
+        this.theRunsWidths(drawn).viewWidePx,
+        this.runtime.controller.settings.rollHeadAtPercent / 100,
+      );
       return;
     }
     const to = keepTheHeadInView(head.offsetLeft, drawn.scrollLeft, drawn.clientWidth);
@@ -8569,6 +8586,19 @@ export class AppView {
   /** Whether the picture is the one that moves while the cursor stands still. */
   private theMusicRunsPastTheHead(): boolean {
     return this.runtime.controller.settings.rollScrollPlayback;
+  }
+
+  /**
+   * Says where the standing cursor stands, and whether it stands at all.
+   *
+   * From one place because two controls change the answer: the slider, and
+   * the box without which the cursor walks and the slider means nothing.
+   */
+  private sayWhereTheHeadStands(): void {
+    const settings = this.runtime.controller.settings;
+    this.el.rollHeadAt.value = String(settings.rollHeadAtPercent);
+    this.el.rollHeadAtValue.value = this.el.rollHeadAt.value;
+    this.el.rollHeadAt.disabled = !settings.rollScrollPlayback;
   }
 
   /**

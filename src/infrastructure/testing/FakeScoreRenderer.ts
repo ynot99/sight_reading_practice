@@ -1,4 +1,5 @@
 import type { RulerMark } from '../../application/rhythmRuler.js';
+import type { PrintedStep } from '../../domain/notation/printedIds.js';
 import type {
   DrawnPassage,
   IHandSwitches,
@@ -71,6 +72,8 @@ export class FakeScoreRenderer
   /** The other hand's marker; see `IOtherHandMarker`. */
   readonly otherHand = new FakeScoreCursor();
   loadedXml: string | null = null;
+  /** Where each step was said to be printed, with the score last loaded. */
+  loadedSteps: readonly PrintedStep[] = [];
   loadCount = 0;
   refreshCount = 0;
   clearCount = 0;
@@ -171,8 +174,9 @@ export class FakeScoreRenderer
     this.zoom = zoom;
   }
 
-  load(musicXml: string): Promise<void> {
+  load(musicXml: string, printed: readonly PrintedStep[]): Promise<void> {
     this.loadedXml = musicXml;
+    this.loadedSteps = printed;
     this.loadCount += 1;
     return Promise.resolve();
   }

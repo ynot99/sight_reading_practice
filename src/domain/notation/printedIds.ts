@@ -1,3 +1,6 @@
+import { barLines } from '../model/Exercise.js';
+import type { ExerciseTimeline } from '../timeline/Timeline.js';
+
 /**
  * The names every bar and note carries on the printed page.
  *
@@ -53,4 +56,61 @@ export function graceId(at: EntryAt, graceIndex: number, pitchIndex: number): st
 
 function entryName(at: EntryAt): string {
   return `${String(at.measureIndex)}-${String(at.voice)}-${String(at.entryIndex)}`;
+}
+
+/** One note or rest the page prints at a step. */
+export interface PrintedHere {
+  readonly id: string;
+  readonly staffNumber: number;
+  /** The key a note is, or `null` for a rest. */
+  readonly midi: number | null;
+}
+
+/** What the page prints where a step is. */
+export interface PrintedStep {
+  /** The bar the step is in, by its printed name. */
+  readonly barId: string;
+  /** Every note and rest that begins there, in every voice. */
+  readonly printed: readonly PrintedHere[];
+}
+
+/**
+ * Where on the page each step of the timeline is, by name.
+ *
+ * Worked out from the exercise the timeline was built from, by the same
+ * reckoning the timeline makes - each voice's entries laid end to end from
+ * the bar line - so a step and its notes are found without the page having
+ * been read at all. A note tied over from the step before is printed again at
+ * this one and is here with it, though nobody plays it: the marker stands on
+ * what is drawn. A rest nobody draws is not here, having no place on the page.
+ */
+export function printedAtEachStep(timeline: ExerciseTimeline): readonly PrintedStep[] {
+  const stepAt = new Map(timeline.steps.map((step) => [step.onsetTicks, step.index]));
+  const printed = timeline.steps.map((): PrintedHere[] => []);
+  const bars = barLines(timeline.exercise);
+  for (const staff of timeline.exercise.staves) {
+    staff.measures.forEach((measure, measureIndex) => {
+      let onsetTicks = bars[measureIndex]?.startTicks ?? 0;
+      measure.entries.forEach((entry, entryIndex) => {
+        const step = stepAt.get(onsetTicks);
+        onsetTicks += entry.duration.ticks;
+        const here = step === undefined ? undefined : printed[step];
+        if (here === undefined || entry.kind === 'silence') {
+          return;
+        }
+        const at: EntryAt = { measureIndex, voice: staff.voice, entryIndex };
+        if (entry.kind === 'rest') {
+          here.push({ id: restId(at), staffNumber: staff.staffNumber, midi: null });
+          return;
+        }
+        entry.pitches.forEach((pitch, pitchIndex) => {
+          here.push({ id: noteId(at, pitchIndex), staffNumber: staff.staffNumber, midi: pitch.midi });
+        });
+      });
+    });
+  }
+  return timeline.steps.map((step, index) => ({
+    barId: barId(step.measureIndex),
+    printed: printed[index] ?? [],
+  }));
 }

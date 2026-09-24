@@ -4822,3 +4822,22 @@ describe('rhythm only, sounding the music', () => {
     expect(rig.controller.replacesTheReadersKeys).toBe(true);
   });
 });
+
+describe('telling the page where the steps are', () => {
+  it('hands the engraver, with the score, where on it each step is printed', async () => {
+    // By the names the notes are printed under, so an engraver that keeps
+    // them finds a step's notes by name.
+    const { controller, renderer } = createController();
+
+    await controller.openScore(twoBarExercise());
+
+    expect(renderer.loadedSteps.map((step) => step.printed.map((here) => here.id))).toEqual([
+      ['n0-1-0-0', 'n0-2-0-0'],
+      ['n0-1-1-0'],
+      ['n0-1-2-0'],
+      ['n0-1-3-0'],
+      ['n1-1-0-0', 'n1-2-0-0', 'n1-2-0-1'],
+      ['r1-2-1'],
+    ]);
+  });
+});

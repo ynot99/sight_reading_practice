@@ -1,6 +1,7 @@
 import type { ClefKind } from '../../domain/model/Clef.js';
 import type { RulerMark } from '../rhythmRuler.js';
 import type { KeySignature } from '../../domain/model/KeySignature.js';
+import type { PrintedStep } from '../../domain/notation/printedIds.js';
 
 /**
  * Engraves notation into whatever surface the host provides.
@@ -9,7 +10,14 @@ import type { KeySignature } from '../../domain/model/KeySignature.js';
  * MusicXML and asks for a cursor.
  */
 export interface IScoreRenderer {
-  load(musicXml: string): Promise<void>;
+  /**
+   * Engraves a score, told where on it each step of the timeline is.
+   *
+   * By the names the notes are printed under (see `printedIds`): an engraver
+   * that keeps them finds a step's notes by name and needs no map from time to
+   * notes of its own making. One that does not is free to ignore them.
+   */
+  load(musicXml: string, printed: readonly PrintedStep[]): Promise<void>;
   /** Re-layout after a container resize. */
   refresh(): void;
   /**

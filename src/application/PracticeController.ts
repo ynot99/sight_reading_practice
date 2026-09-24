@@ -6,6 +6,7 @@ import type { PlayingAhead } from './session/PracticeContext.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
 import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
+import { printedAtEachStep } from '../domain/notation/printedIds.js';
 import type { PerformanceReport, StepStatus } from '../domain/scoring/PerformanceReport.js';
 import { theReadingPicture, type ReadingPicture } from '../domain/scoring/ReadingPicture.js';
 import { modesOn } from './modes/challengeModes.js';
@@ -1626,7 +1627,7 @@ export class PracticeController {
       this.printedXml = printed;
       this.emitter.emit('engraving', { busy: true });
       try {
-        await this.deps.renderer.load(printed);
+        await this.deps.renderer.load(printed, printedAtEachStep(this.timeline));
       } finally {
         // Said even where the drawing threw: a page that failed to appear is
         // still a page nobody is waiting for any more.

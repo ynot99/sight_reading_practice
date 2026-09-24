@@ -246,6 +246,24 @@ function lineFor(beat: GridLine, origin: number): HTMLElement {
 }
 
 /**
+ * The same line's mark on the ruler above: tall for a bar, short for a beat,
+ * shorter for what falls between them.
+ *
+ * The ruler carried bar numbers and nothing else, so the metre could be read
+ * off the grid below but not off the strip that exists to say where you are.
+ * Drawn from the same lines as the grid, so the two cannot disagree: a ruler
+ * with a metre of its own would be a second answer to what the bar is.
+ */
+function tickFor(beat: GridLine, origin: number): HTMLElement {
+  const tick = element('div', `roll__tick roll__tick--${beat.given ? 'given' : beat.weight}`);
+  tick.style.left = atSecond(beat.atMs - origin);
+  if (beat.lateByMs !== null) {
+    tick.title = `Given ${Math.round(beat.lateByMs)} ms late`;
+  }
+  return tick;
+}
+
+/**
  * Where the reader arrived before the music had got there.
  *
  * A line and not a section, and there cannot be one: the music moved on when
@@ -883,6 +901,9 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // One name per bar line, where it fell due rather than where it was given:
   // the number over the grid is the page's, and the page does not move.
   const ruler = element('div', 'roll__ruler');
+  for (const beat of theGrid(roll, drawing.grid)) {
+    ruler.append(tickFor(beat, origin));
+  }
   for (const beat of beatsWorthMarking(roll)) {
     // Whether a place in the music begins a bar is the namer's question, not
     // this one's; all the drawing knows is that a beat the reader gave is not a

@@ -1215,6 +1215,40 @@ textarea {
  * можна малювати пунктиром щоб відрізняти ці смужки від основних слабких
  * долей?".
  */
+/*
+ * The metre on the ruler: the same lines as the grid, cut to their weight.
+ *
+ * In the grid's own colours rather than the head's, because they are the
+ * music's lines and the head is the reader's place in them - the one thing on
+ * this strip that has to be found at a glance.
+ */
+.roll__tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 4px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.roll__tick--beat {
+  height: 7px;
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.roll__tick--downbeat {
+  height: 11px;
+  width: 2px;
+  background: var(--border);
+}
+
+/* A bar line the reader gave late, in the colour it is drawn in below. */
+.roll__tick--given {
+  height: 11px;
+  width: 2px;
+  background: color-mix(in srgb, var(--pending) 75%, transparent);
+}
+
 .roll__line--division {
   background: none;
   border-left: 1px dashed color-mix(in srgb, var(--border) 32%, transparent);

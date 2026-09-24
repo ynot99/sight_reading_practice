@@ -143,6 +143,29 @@ describe('drawing a run as a piano roll', () => {
     expect(view.querySelectorAll('.roll__line--downbeat')).toHaveLength(1);
   });
 
+  it('marks the ruler with the same lines, so the metre can be read off it', () => {
+    // The strip that says where you are carried bar numbers and nothing else.
+    // Begun well after the page's clock did, so a tick that forgot where the
+    // run began would stand somewhere else entirely.
+    const view = draw(
+      roll({
+        beats: [
+          beatOf(1_000, 'downbeat', Duration.QUARTER.ticks * 0),
+          beatOf(1_250, 'division', Duration.QUARTER.ticks * 0.25),
+          beatOf(1_500, 'beat', Duration.QUARTER.ticks * 0.5),
+        ],
+      }),
+    );
+
+    const ruler = view.querySelector('.roll__ruler');
+    expect(ruler?.querySelectorAll('.roll__tick')).toHaveLength(2);
+    expect(ruler?.querySelectorAll('.roll__tick--downbeat')).toHaveLength(1);
+    // At the same moment as the line below it, to the same three decimals.
+    const tick = ruler?.querySelector<HTMLElement>('.roll__tick--beat');
+    const line = view.querySelector<HTMLElement>('.roll__line--beat');
+    expect(tick?.style.left).toBe(line?.style.left);
+  });
+
   it('draws a bar line the reader gave as theirs', () => {
     // Two lines at one bar line is not a fault to be tidied away; drawing them
     // alike was. The metre's line says where the beat was, this one says where

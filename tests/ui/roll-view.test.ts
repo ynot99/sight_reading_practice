@@ -166,6 +166,15 @@ describe('drawing a run as a piano roll', () => {
     expect(tick?.style.left).toBe(line?.style.left);
   });
 
+  it('marks the head on the ruler as well as in the grid', () => {
+    // His: "на ruler теж додати мітку над курсором". One, and on the ruler,
+    // where the head's own line does not reach.
+    const view = draw(roll());
+
+    expect(view.querySelectorAll('.roll__head-mark')).toHaveLength(1);
+    expect(view.querySelector('.roll__ruler .roll__head-mark')).not.toBeNull();
+  });
+
   it('draws a bar line the reader gave as theirs', () => {
     // Two lines at one bar line is not a fault to be tidied away; drawing them
     // alike was. The metre's line says where the beat was, this one says where

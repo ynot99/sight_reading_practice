@@ -916,6 +916,11 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
     mark.textContent = name;
     ruler.append(mark);
   }
+  // The head, marked on the strip that names the bars: its line is drawn in
+  // the grid and stops where the ruler begins. His: "на ruler теж додати мітку
+  // над курсором". Placed by the same custom property as the head, so it
+  // follows without a line of its own.
+  ruler.append(element('div', 'roll__head-mark'));
 
   const keys = element('div', 'roll__keys');
   for (let midi = band.high; midi >= band.low; midi -= 1) {

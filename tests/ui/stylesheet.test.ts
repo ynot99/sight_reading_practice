@@ -1212,6 +1212,30 @@ describe('who gets the pinch', () => {
   });
 });
 
+describe('the head on the ruler', () => {
+  const body = (selector: string): string =>
+    rules().find((rule) => rule.selector === selector)?.body ?? '';
+  /** The `left` itself, and not the `margin-left` that centres the cap. */
+  const left = (of: string): string | undefined =>
+    /(?:^|[\s;])left\s*:\s*([^;]+);/.exec(of)?.[1]?.trim();
+
+  it('stands where the head does', () => {
+    // Two things placed by one number cannot drift apart, however the view is
+    // scrolled or zoomed; placed by two, they would need keeping in step.
+    expect(left(body('.roll__head'))).toContain('--roll-at');
+    expect(left(body('.roll__head-mark'))).toBe(left(body('.roll__head')));
+  });
+
+  it('is as pale as the head at rest, and as strong while it sounds', () => {
+    const colour = (of: string): string | undefined => /background\s*:\s*([^;]+);/.exec(of)?.[1];
+
+    expect(colour(body('.roll__head-mark'))).toBe(colour(body('.roll__head')));
+    expect(colour(body('.roll--sounding .roll__head-mark'))).toBe(
+      colour(body('.roll--sounding .roll__head')),
+    );
+  });
+});
+
 describe('a list of readings', () => {
   it('keeps each row its own height while the list itself gives way', () => {
     // The list is a column that shrinks to fit the sheet, and a row is one of

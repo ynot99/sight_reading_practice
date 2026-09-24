@@ -1574,6 +1574,33 @@ textarea {
 }
 
 /*
+ * The head, marked on the ruler too.
+ *
+ * Its line stops where the ruler begins, so the strip that says which bar is
+ * where said nothing about where the head was. A cap pointing down at it,
+ * shaped rather than drawn as one more line: the ticks beside it are lines in
+ * the same colour.
+ *
+ * Placed by the same property as the head, and as pale as it at rest.
+ */
+.roll__head-mark {
+  position: absolute;
+  bottom: 0;
+  left: calc(var(--roll-second) * var(--roll-at, 0));
+  width: 12px;
+  height: 12px;
+  /* Centred over the two-pixel line. */
+  margin-left: -5px;
+  clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.roll--sounding .roll__head-mark {
+  background: var(--accent);
+}
+
+/*
  * The pedal, kept in sight.
  *
  * Stuck to the foot of the scroller the way the keys are stuck to its side: a

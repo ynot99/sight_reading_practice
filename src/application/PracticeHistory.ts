@@ -135,6 +135,47 @@ function readNotes(value: unknown): NoteCounts | null {
   return { perfect, good, missed, wrong } as NoteCounts;
 }
 
+/**
+ * Whether one stopped reading got further than another: above nought if it did.
+ *
+ * By the notes it played - Perfect and Good together - which is how far it
+ * got and how well in one number: fifteen bars played cleanly are more
+ * notes than three played cleanly, and more than fifteen played badly.
+ * Readings kept before notes were counted have no such number, and between
+ * two where either lacks it the bar each stopped in answers instead. The
+ * grade breaks a tie.
+ */
+function furtherThan(one: PracticeAttempt, other: PracticeAttempt): number {
+  const played =
+    one.notes !== undefined && other.notes !== undefined
+      ? one.notes.perfect + one.notes.good - (other.notes.perfect + other.notes.good)
+      : (one.stoppedAtBar ?? 0) - (other.stoppedAtBar ?? 0);
+  return played !== 0 ? played : one.overall - other.overall;
+}
+
+/**
+ * The readings of a passage it keeps whatever else it gives up: the best of
+ * those played to the end, by the grade, and the best of those stopped.
+ *
+ * Two and not one, because neither can stand for the other. A reading
+ * played to the end ranks above one that stopped, but fifteen bars of
+ * twenty played cleanly are not undone by a whole run played badly the day
+ * after - and keeping only the finished one would throw them away. The
+ * newer of two as good as each other.
+ */
+function theBestOf(attempts: readonly PracticeAttempt[]): PracticeAttempt[] {
+  let finished: PracticeAttempt | null = null;
+  let stopped: PracticeAttempt | null = null;
+  for (const attempt of attempts) {
+    if (attempt.completed) {
+      finished = finished === null || attempt.overall >= finished.overall ? attempt : finished;
+    } else {
+      stopped = stopped === null || furtherThan(attempt, stopped) >= 0 ? attempt : stopped;
+    }
+  }
+  return [finished, stopped].filter((best): best is PracticeAttempt => best !== null);
+}
+
 /** A kept roll, or nothing where the lists it is made of are not there. */
 function readRoll(value: unknown): RunRoll | null {
   if (!isRecord(value)) {
@@ -238,19 +279,33 @@ export class PracticeHistory {
   }
 
   record(key: string, attempt: PracticeAttempt): void {
-    const attempts = [...(this.passages.get(key) ?? []), attempt].slice(-this.keep);
+    const all = [...(this.passages.get(key) ?? []), attempt];
+    // The newest, and the best however old: see `theBestOf`.
+    const kept = new Set([...all.slice(-this.keep), ...theBestOf(all)]);
     // Re-inserting moves the passage to the end, so the oldest *untouched*
-    // one is dropped rather than the oldest ever recorded.
+    // one gives up its readings rather than the oldest ever recorded.
     this.passages.delete(key);
-    this.passages.set(key, attempts);
-    while (this.passages.size > KEEP_PASSAGES) {
-      const oldest = this.passages.keys().next();
-      if (oldest.done) {
-        break;
-      }
-      this.passages.delete(oldest.value);
-    }
+    this.passages.set(
+      key,
+      all.filter((each) => kept.has(each)),
+    );
+    this.letTheOldestPassagesGo();
     this.flush();
+  }
+
+  /**
+   * Beyond the passages practised most recently, the rest give up every
+   * reading but their best.
+   *
+   * Given up, not forgotten: a passage played at all has a best, and it
+   * stays where it was among those practised longest ago. What bounds how
+   * many there are is the budget, which reaches a passage's best last.
+   */
+  private letTheOldestPassagesGo(): void {
+    const keys = [...this.passages.keys()];
+    for (const key of keys.slice(0, Math.max(0, keys.length - KEEP_PASSAGES))) {
+      this.passages.set(key, theBestOf(this.passages.get(key) ?? []));
+    }
   }
 
   /**
@@ -433,31 +488,41 @@ export class PracticeHistory {
    * readings a reader is likely to open keep everything, an afternoon's
    * worth back they are still a picture, and a year back they are still a
    * score and a date - which is what the tables of last and best are made of.
+   *
+   * A passage's best readings are the exception, being kept whatever else
+   * goes: room for their numbers is set aside before anything else is
+   * offered any, so the most they give up is their roll and their picture -
+   * short of a store too small for the bests alone, which at a few hundred
+   * characters a passage is thousands of passages away.
    */
   private keepWithinTheBudget(): void {
     const sizeOf = (attempt: PracticeAttempt): number => JSON.stringify(attempt).length;
     const withoutTheRoll = ({ roll: _roll, ...rest }: PracticeAttempt): PracticeAttempt => rest;
     const withoutThePicture = ({ picture: _picture, ...rest }: PracticeAttempt): PracticeAttempt =>
       rest;
+    const bare = (attempt: PracticeAttempt): PracticeAttempt => withoutThePicture(withoutTheRoll(attempt));
 
+    const best = new Set([...this.passages.values()].flatMap(theBestOf));
     const newestFirst = [...this.passages.values()]
       .flat()
       .sort((left, right) => right.atMs - left.atMs);
     const kept = new Map<PracticeAttempt, PracticeAttempt | null>();
-    let used = 0;
+    let used = [...best].reduce((sum, attempt) => sum + sizeOf(bare(attempt)), 0);
     for (const attempt of newestFirst) {
+      // A best reading's numbers are already paid for.
+      const paid = best.has(attempt) ? sizeOf(bare(attempt)) : 0;
       let keeping: PracticeAttempt | null = attempt;
-      if (used + sizeOf(keeping) > this.mostCharacters) {
+      if (used - paid + sizeOf(keeping) > this.mostCharacters) {
         keeping = withoutTheRoll(keeping);
       }
-      if (used + sizeOf(keeping) > this.mostCharacters) {
+      if (used - paid + sizeOf(keeping) > this.mostCharacters) {
         keeping = withoutThePicture(keeping);
       }
-      if (used + sizeOf(keeping) > this.mostCharacters) {
+      if (used - paid + sizeOf(keeping) > this.mostCharacters) {
         keeping = null;
       }
       kept.set(attempt, keeping);
-      used += keeping === null ? 0 : sizeOf(keeping);
+      used += (keeping === null ? 0 : sizeOf(keeping)) - paid;
     }
     for (const [key, attempts] of [...this.passages]) {
       const left = attempts

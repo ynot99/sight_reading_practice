@@ -295,6 +295,143 @@ function rich(overall: number, atMs: number, marks = 40): PracticeAttempt {
   return { ...attempt(overall, atMs), picture: picture(marks), roll: roll(marks) };
 }
 
+describe('the best readings of a passage, kept whatever comes after them', () => {
+  /** A reading stopped partway, having played this many notes right. */
+  function stopped(atMs: number, played: number, overall = 0.5, stoppedAtBar = 5): PracticeAttempt {
+    return {
+      atMs,
+      overall,
+      grade: 'C',
+      completed: false,
+      stoppedAtBar,
+      notes: { perfect: played, good: 0, missed: 0, wrong: 0 },
+    };
+  }
+
+  const kept = (history: PracticeHistory): number[] =>
+    history
+      .lastReadings(100, 'score:A')
+      .map((reading) => reading.atMs)
+      .sort((left, right) => left - right);
+
+  it('keeps the best played to the end, beyond the newest it keeps', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore(), 3);
+    history.record('score:A', attempt(0.95, 1));
+    for (let at = 2; at <= 8; at += 1) {
+      history.record('score:A', attempt(0.6, at));
+    }
+
+    expect(kept(history)).toEqual([1, 6, 7, 8]);
+  });
+
+  it('keeps the best of those stopped as well, by the notes they got right', () => {
+    // Fifteen bars of twenty played cleanly are not undone by a whole run
+    // played badly the day after.
+    const history = new PracticeHistory(new InMemorySettingsStore(), 3);
+    history.record('score:A', stopped(1, 40, 0.3));
+    history.record('score:A', stopped(2, 10, 0.9));
+    for (let at = 3; at <= 8; at += 1) {
+      history.record('score:A', attempt(0.95 - at / 100, at));
+    }
+
+    // The first finished one is the best of those, and the first stopped
+    // one - fewer points, more notes - the best of the others.
+    expect(kept(history)).toEqual([1, 3, 6, 7, 8]);
+  });
+
+  it('asks how far a reading got where it counted no notes', () => {
+    // Readings kept before notes were counted.
+    const history = new PracticeHistory(new InMemorySettingsStore(), 2);
+    const old = (atMs: number, stoppedAtBar: number, overall: number): PracticeAttempt => ({
+      atMs,
+      overall,
+      grade: 'C',
+      completed: false,
+      stoppedAtBar,
+    });
+    history.record('score:A', old(1, 30, 0.2));
+    history.record('score:A', old(2, 5, 0.9));
+    history.record('score:A', old(3, 5, 0.8));
+    history.record('score:A', old(4, 6, 0.1));
+
+    expect(kept(history)).toEqual([1, 3, 4]);
+  });
+
+  it('counts the Good notes a stopped reading played as well as the Perfect ones', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore(), 1);
+    const played = (atMs: number, perfect: number, good: number): PracticeAttempt => ({
+      ...stopped(atMs, perfect),
+      notes: { perfect, good, missed: 0, wrong: 0 },
+    });
+    history.record('score:A', played(1, 10, 30));
+    history.record('score:A', played(2, 20, 0));
+    history.record('score:A', attempt(0.5, 3));
+
+    expect(kept(history)).toEqual([1, 3]);
+  });
+
+  it('breaks a tie in notes between two stopped readings by the grade', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore(), 1);
+    history.record('score:A', stopped(1, 20, 0.4));
+    history.record('score:A', stopped(2, 20, 0.6));
+    history.record('score:A', stopped(3, 20, 0.5));
+    history.record('score:A', attempt(0.5, 4));
+
+    expect(kept(history)).toEqual([2, 4]);
+  });
+
+  it('keeps the newer of two as good as each other', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore(), 1);
+    history.record('score:A', attempt(0.8, 1));
+    history.record('score:A', attempt(0.8, 2));
+    history.record('score:A', stopped(3, 20, 0.6));
+    history.record('score:A', stopped(4, 20, 0.6));
+    history.record('score:A', attempt(0.5, 5));
+
+    expect(kept(history)).toEqual([2, 4, 5]);
+  });
+
+  it('keeps a passage practised long ago down to its best, rather than forgetting it', () => {
+    // Every passage chosen is a passage of its own, so two hundred of them
+    // come round in a few weeks of practice.
+    const history = new PracticeHistory(new InMemorySettingsStore(), 50);
+    history.record('score:A', attempt(0.95, 1));
+    history.record('score:A', attempt(0.5, 2));
+    for (let at = 0; at < 200; at += 1) {
+      history.record(`score:B bars:${String(at)}-${String(at + 1)}`, attempt(0.5, 10 + at));
+    }
+
+    expect(kept(history)).toEqual([1]);
+    // The two hundred practised since keep all they had.
+    expect(history.summary('score:B bars:0-1')?.attempts).toBe(1);
+  });
+
+  it('keeps the best reading when the store has room only for newer ones, as its numbers', () => {
+    // Room for the newest whole and little else: the readings between give
+    // up everything and then themselves, and the best only its detail.
+    const store = new InMemorySettingsStore();
+    const budget = JSON.stringify(rich(0.5, 0)).length + 300;
+    const history = new PracticeHistory(store, 50, budget);
+    history.record('score:A', rich(0.99, 1));
+    for (let at = 2; at <= 8; at += 1) {
+      history.record('score:A', rich(0.5, at));
+    }
+
+    const readings = history.lastReadings(100, 'score:A');
+    const best = readings.find((reading) => reading.atMs === 1);
+    expect(readings.length).toBeLessThan(8);
+    expect(best?.overall).toBe(0.99);
+    expect(best?.roll).toBeUndefined();
+    expect(best?.picture).toBeUndefined();
+    // Kept inside the budget all the same: its room was set aside, not added.
+    const written = store.read() as { passages: Record<string, unknown[]> };
+    const used = Object.values(written.passages)
+      .flat()
+      .reduce<number>((sum, reading) => sum + JSON.stringify(reading).length, 0);
+    expect(used).toBeLessThanOrEqual(budget);
+  });
+});
+
 describe('keeping the history inside the store', () => {
   it('gives up the oldest reading’s roll first, then its picture, then the reading', () => {
     // The browser's store answers a write it has no room for by refusing it,

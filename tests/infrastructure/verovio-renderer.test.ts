@@ -411,8 +411,84 @@ describe('the marker', () => {
     const at = box(drawn);
     expect(at.left).toBeLessThanOrEqual((Math.min(...heads) - space / 2) * scale);
     expect(at.right).toBeGreaterThanOrEqual((Math.max(...heads) + space) * scale);
-    expect(at.top).toBeLessThanOrEqual(((system?.top ?? NaN) - space) * scale);
-    expect(at.bottom).toBeGreaterThanOrEqual(((system?.bottom ?? NaN) + space) * scale);
+    // From the top line to the bottom one, and no further: OSMD's did, and
+    // a band past them runs into the tempo and the words over the staff.
+    expect(at.top).toBeCloseTo((system?.top ?? NaN) * scale, 5);
+    expect(at.bottom).toBeCloseTo((system?.bottom ?? NaN) * scale, 5);
+  });
+
+  it('is three spaces wide, centred on the head it stands on', async () => {
+    const { renderer, surface } = aStage();
+    const two = printed(twoBarExercise());
+    await renderer.load(two.xml, two.steps);
+
+    renderer.cursor.moveTo(1);
+
+    const { layout, scale } = readingOf(surface, 0);
+    const [top, second] = layout.systems[0]?.bars[0]?.staves[0]?.lines ?? [];
+    const space = (second ?? NaN) - (top ?? NaN);
+    const head = layout.heads.get(two.steps[1]?.printed[0]?.id ?? '')?.x ?? NaN;
+    const at = box(marker(surface));
+    expect(at.right - at.left).toBeCloseTo(3 * space * scale, 5);
+    expect((at.left + at.right) / 2).toBeCloseTo((head + 0.59 * space) * scale, 5);
+  });
+
+  it('stands on the first note, and not over a rest the other hand keeps for the whole bar', async () => {
+    // His Canon in D: the bass begins alone under a bar of rest, which the
+    // engraver sets in the middle of the bar - and a marker stretched to
+    // cover it lay over half the bass's notes as well.
+    const { renderer, surface } = aStage();
+    const twoBars = twoBarExercise();
+    const [treble, bass] = twoBars.staves;
+    const alone = printed({
+      ...twoBars,
+      staves: [
+        { ...(treble as NonNullable<typeof treble>), measures: [bar(restEntry(Duration.WHOLE)), ...(treble?.measures.slice(1) ?? [])] },
+        {
+          ...(bass as NonNullable<typeof bass>),
+          measures: [
+            bar(
+              noteEntry(p('C3'), Duration.QUARTER),
+              noteEntry(p('E3'), Duration.QUARTER),
+              noteEntry(p('G3'), Duration.QUARTER),
+              noteEntry(p('C4'), Duration.QUARTER),
+            ),
+            ...(bass?.measures.slice(1) ?? []),
+          ],
+        },
+      ],
+    });
+    await renderer.load(alone.xml, alone.steps);
+
+    renderer.cursor.moveTo(0);
+
+    const { layout, scale } = readingOf(surface, 0);
+    const rest = layout.heads.get('r0-1-0');
+    expect(rest?.wholeBar).toBe(true);
+    const second = layout.heads.get('n0-2-1-0')?.x ?? NaN;
+    expect(box(marker(surface)).right).toBeLessThan(second * scale);
+  });
+
+  it('stands on a rest for the whole bar when that is all its step draws', async () => {
+    const { renderer, surface } = aStage();
+    const twoBars = twoBarExercise();
+    const [treble, bass] = twoBars.staves;
+    const resting = printed({
+      ...twoBars,
+      staves: [
+        { ...(treble as NonNullable<typeof treble>), measures: [bar(restEntry(Duration.WHOLE)), ...(treble?.measures.slice(1) ?? [])] },
+        { ...(bass as NonNullable<typeof bass>), measures: [bar(restEntry(Duration.WHOLE)), ...(bass?.measures.slice(1) ?? [])] },
+      ],
+    });
+    await renderer.load(resting.xml, resting.steps);
+
+    renderer.cursor.moveTo(0);
+
+    const { layout, scale } = readingOf(surface, 0);
+    const rest = layout.heads.get('r0-1-0')?.x ?? NaN;
+    const at = box(marker(surface));
+    expect(at.left).toBeLessThan(rest * scale);
+    expect(at.right).toBeGreaterThan(rest * scale);
   });
 
   it('moves along with the music', async () => {
@@ -523,11 +599,23 @@ describe('the marker', () => {
     expect(marker(surface)).toBeNull();
   });
 
+  it('keeps the other hand’s marker off the page until the run shows it', async () => {
+    // It moves only while the run plays the other hand; shown from the start,
+    // it stood still on the first note through a whole run waiting for notes.
+    const { renderer, surface } = await aPagedScore();
+    renderer.cursor.moveTo(1);
+    renderer.otherHand.moveTo(4);
+
+    expect(surface.querySelector('.score__cursor--other')).toBeNull();
+    expect(marker(surface)).not.toBeNull();
+  });
+
   it('keeps the other hand’s marker a marker of its own', async () => {
     const { renderer, surface } = await aPagedScore();
     renderer.cursor.moveTo(1);
 
     renderer.otherHand.moveTo(4);
+    renderer.otherHand.show();
 
     const other = surface.querySelector('.score__cursor--other');
     expect(other).not.toBeNull();

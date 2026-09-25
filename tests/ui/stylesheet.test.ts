@@ -1309,6 +1309,27 @@ describe('what is drawn with the music under Verovio', () => {
   });
 });
 
+describe('the marker', () => {
+  const body = (selector: string): string =>
+    rules()
+      .filter((rule) => rule.selector.split(',').map((each) => each.trim()).includes(selector))
+      .map((rule) => rule.body)
+      .join(';');
+
+  it('is square, and fades away at either side, as OSMD’s did', () => {
+    const marker = body('.score__cursor');
+    expect(marker).not.toMatch(/border-radius/);
+    expect(marker).toMatch(
+      /background:\s*linear-gradient\(\s*to right,\s*transparent,\s*var\(--marker-wash\) 20%,\s*var\(--marker-wash\) 80%,\s*transparent\s*\)/,
+    );
+  });
+
+  it('washes the reader’s blue, and the other hand’s fainter and grey', () => {
+    expect(body('.score__cursor')).toMatch(/--marker-wash:\s*rgb\(59 130 246 \/ 45%\)/);
+    expect(body('.score__cursor--other')).toMatch(/--marker-wash:\s*rgb\(148 163 184 \/ 28%\)/);
+  });
+});
+
 describe('the marker a reader keeps missing at', () => {
   it('reddens Verovio’s marker as it did OSMD’s, and never the other hand’s', () => {
     for (const level of ['1', '2', '3', '4']) {

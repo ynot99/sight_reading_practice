@@ -56,6 +56,11 @@ export interface SystemOnThePage {
 export interface HeadOnThePage {
   readonly x: number;
   readonly y: number;
+  /**
+   * A rest that is the whole of its bar, which the engraver sets in the
+   * middle of the bar and not at the moment it begins.
+   */
+  readonly wholeBar: boolean;
 }
 
 export interface PageLayout {
@@ -121,6 +126,7 @@ interface Owner {
   /** For a note, only the glyph inside its head is; a stem or a dot is not. */
   readonly inHead: boolean;
   readonly isRest: boolean;
+  readonly wholeBar: boolean;
 }
 
 function visit(node: SvgNode, at: Offset, reading: Reading, owner: Owner | null): void {
@@ -144,11 +150,11 @@ function visitElement(
 ): void {
   const id = attribute(element, 'id');
   if (id !== null && classes.has('note')) {
-    visit(element, at, reading, { id, inHead: false, isRest: false });
+    visit(element, at, reading, { id, inHead: false, isRest: false, wholeBar: false });
     return;
   }
   if (id !== null && (classes.has('rest') || classes.has('mRest'))) {
-    visit(element, at, reading, { id, inHead: false, isRest: true });
+    visit(element, at, reading, { id, inHead: false, isRest: true, wholeBar: classes.has('mRest') });
     return;
   }
   if (owner !== null && classes.has('notehead')) {
@@ -158,7 +164,7 @@ function visitElement(
   if (owner !== null && element.nodeName === 'use' && (owner.inHead || owner.isRest)) {
     // The glyph's own translation is where it is placed, and it is already in
     // `at`: this is the head.
-    reading.heads.set(owner.id, { x: at.x, y: at.y });
+    reading.heads.set(owner.id, { x: at.x, y: at.y, wholeBar: owner.wholeBar });
     return;
   }
   visit(element, at, reading, owner);

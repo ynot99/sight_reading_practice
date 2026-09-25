@@ -152,10 +152,17 @@ describe('what a page does not draw, or draws small', () => {
     expect(head(page, 'n0-2-0-1').x).toBe(head(page, 'n0-2-0-0').x);
   });
 
-  it('gives a rest that fills its bar a place too', () => {
+  it('gives a rest that fills its bar a place too, and says it is the whole bar', () => {
     const [page] = pagesOf(partialVoiceExercise([restEntry(Duration.WHOLE)]));
 
-    expect(page?.heads.has('r0-2-0')).toBe(true);
+    expect(head(page, 'r0-2-0').wholeBar).toBe(true);
+  });
+
+  it('says a rest that is part of its bar, and a note, are not the whole of it', () => {
+    const [page] = pagesOf(twoBarExercise());
+
+    expect(head(page, 'r1-2-1').wholeBar).toBe(false);
+    expect(head(page, 'n0-1-0-0').wholeBar).toBe(false);
   });
 
   it('stands a grace note before the note it leans on', () => {
@@ -240,7 +247,7 @@ describe('the page’s margin', () => {
       staves: [{ lines: [130, 140, 150, 160, 170], top: 130, bottom: 170 }],
       number: { x: 50, y: 110, size: 36, text: '17' },
     });
-    expect(page.heads.get('n0-1-0-0')).toEqual({ x: 110, y: 150 });
+    expect(page.heads.get('n0-1-0-0')).toEqual({ x: 110, y: 150, wholeBar: false });
     expect([page.width, page.height]).toEqual([1000, 800]);
   });
 });

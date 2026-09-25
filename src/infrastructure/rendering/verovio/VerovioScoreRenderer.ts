@@ -58,7 +58,13 @@ import {
   type GripEnd,
   type PassageEdge,
 } from '../passageBrackets.js';
-import { readThePage, type NumberOnThePage, type PageLayout, type SystemOnThePage } from './pageLayout.js';
+import {
+  readThePage,
+  type HeadOnThePage,
+  type NumberOnThePage,
+  type PageLayout,
+  type SystemOnThePage,
+} from './pageLayout.js';
 import type { PageShape } from './VerovioCore.js';
 import type { VerovioEngraver } from './VerovioEngraver.js';
 
@@ -89,14 +95,12 @@ const UNMEASURED_HEIGHT_PX = 768;
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
 /**
- * The marker's shape, in staff spaces: from a little before the leftmost head
- * of its step, as wide as a head with room either side, and reaching a little
- * past the outer lines of the system. OSMD's was a band like this, and a band
- * is what a reader has learned to look for.
+ * Half the marker's width, in staff spaces, either side of the middle of the
+ * heads it stands on. OSMD's marker was three spaces wide and stood from the
+ * top line of the system to its bottom one; a band like that is what a reader
+ * has learned to look for, and this is the same band.
  */
-const MARKER_BEFORE_HEAD = 0.6;
-const MARKER_WIDTH = 2.4;
-const MARKER_ABOVE_STAFF = 1.5;
+const MARKER_HALF_WIDTH = 1.5;
 
 /**
  * Half a notehead's width, in staff spaces. Verovio places a head's glyph by
@@ -172,14 +176,17 @@ export class VerovioScoreRenderer
   private readonly container: HTMLElement;
   private readonly engraver: VerovioEngraver;
   /** The reader's marker, and the fainter one where the other hand has got to. */
-  private readonly reader = new MarkerOnThePage((byTheMusic) => {
+  private readonly reader = new MarkerOnThePage('shown', (byTheMusic) => {
     this.placeTheMarker(this.reader, 'score__cursor');
     if (byTheMusic) {
       this.followTheMusic();
     }
     this.paintThePreview();
   });
-  private readonly other = new MarkerOnThePage(() => {
+  // Put away until the run plays the other hand for the reader, as OSMD's
+  // was: nothing moves it otherwise, and it would stand on the first note
+  // for the whole of a run.
+  private readonly other = new MarkerOnThePage('hidden', () => {
     this.placeTheMarker(this.other, 'score__cursor score__cursor--other');
   });
   private readonly markerElements = new Map<MarkerOnThePage, HTMLElement>();
@@ -780,11 +787,10 @@ export class VerovioScoreRenderer
   /**
    * Stands a marker over the step it is at, on the page that step is drawn on.
    *
-   * Across the whole system, as a band over the heads of the step: from a
-   * little before the leftmost head, and from a little above the top line of
-   * the top staff to a little below the bottom line of the lowest. Off the
-   * page when it is not wanted, or when the page its step is on is not drawn -
-   * which a page far from the reader is not.
+   * Across the whole system, as a band over the heads of the step: centred on
+   * them, and from the top line of the top staff to the bottom line of the
+   * lowest. Off the page when it is not wanted, or when the page its step is
+   * on is not drawn - which a page far from the reader is not.
    */
   private placeTheMarker(marker: MarkerOnThePage, className: string): void {
     let element = this.markerElements.get(marker);
@@ -823,23 +829,29 @@ export class VerovioScoreRenderer
       return null;
     }
     const heads = step.printed
-      .map((here) => read.heads.get(here.id)?.x)
-      .filter((x): x is number => x !== undefined);
+      .map((here) => read.heads.get(here.id))
+      .filter((head): head is HeadOnThePage => head !== undefined);
+    // A rest that is the whole of its bar is set in the middle of the bar,
+    // which is not where the step is: beside the other hand's first note it
+    // would stretch the marker half across the bar. It is where the marker
+    // stands only when it is all the step draws.
+    const timed = heads.some((head) => !head.wholeBar) ? heads.filter((head) => !head.wholeBar) : heads;
     const [top, second] = bar.staves[0]?.lines ?? [];
     const space = top !== undefined && second !== undefined ? second - top : 0;
+    const middles = timed.map((head) => head.x + HEAD_HALF_WIDTH * space);
     // Where no head of the step is drawn - which only an unseen rest would
     // leave - the marker stands at the front of its bar.
-    const left = heads.length > 0 ? Math.min(...heads) - MARKER_BEFORE_HEAD * space : bar.left;
-    const right = heads.length > 0 ? Math.max(...heads) : left;
+    const first = middles.length > 0 ? Math.min(...middles) : bar.left + MARKER_HALF_WIDTH * space;
+    const last = middles.length > 0 ? Math.max(...middles) : first;
     const { scale } = drawn;
     return {
       sheet,
-      left: left * scale,
-      top: (system.top - MARKER_ABOVE_STAFF * space) * scale,
+      left: (first - MARKER_HALF_WIDTH * space) * scale,
+      top: system.top * scale,
       // As wide as it takes to cover every head, however far apart a chord
       // with a second in it sets them.
-      width: (right - left + MARKER_WIDTH * space - MARKER_BEFORE_HEAD * space) * scale,
-      height: (system.bottom - system.top + 2 * MARKER_ABOVE_STAFF * space) * scale,
+      width: (last - first + 2 * MARKER_HALF_WIDTH * space) * scale,
+      height: (system.bottom - system.top) * scale,
     };
   }
 
@@ -2217,10 +2229,11 @@ interface MarkerPlace {
  */
 class MarkerOnThePage implements IScoreCursor {
   private at = 0;
-  private wanted = true;
+  private wanted: boolean;
   private readonly moved: (byTheMusic: boolean) => void;
 
-  constructor(moved: (byTheMusic: boolean) => void) {
+  constructor(atFirst: 'shown' | 'hidden', moved: (byTheMusic: boolean) => void) {
+    this.wanted = atFirst === 'shown';
     this.moved = moved;
   }
 

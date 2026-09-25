@@ -324,17 +324,27 @@ textarea {
  * still read through it - the same blue and the same strength as the marker
  * OSMD drew, and the other hand's as faint and as grey as its was: it says
  * where the music is, not where the reader must be.
+ *
+ * And the same shape: square at the top and the bottom, and fading away at
+ * either side over a fifth of its width, so it has no edge across the notes
+ * beside it.
  */
 .score__cursor {
+  --marker-wash: rgb(59 130 246 / 45%);
   position: absolute;
-  border-radius: 3px;
-  background: rgb(59 130 246 / 45%);
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--marker-wash) 20%,
+    var(--marker-wash) 80%,
+    transparent
+  );
   pointer-events: none;
   transition: filter 140ms linear;
 }
 
 .score__cursor--other {
-  background: rgb(148 163 184 / 28%);
+  --marker-wash: rgb(148 163 184 / 28%);
 }
 
 /*

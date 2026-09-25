@@ -58,12 +58,15 @@ describe('a press that beats the hand the reader is hearing', () => {
     harness.midi.noteOn(noteAt(harness, 1), 0);
 
     expect(harness.of('noteJudged').map((one) => one.verdict)).toEqual(['correct', 'rushed']);
-    // The note that was asked for, so the run moves on - and held against the
-    // step all the same, which is the whole of what a penalty is.
-    expect(harness.of('stepCompleted').map((one) => one.result.status)).toEqual([
-      'correct',
-      'incorrect',
-    ]);
+    // The note that was asked for, so the run moves on - and Good rather
+    // than Perfect, which is what it costs: the right key, off its moment.
+    // Not a wrong note as well; one press is one thing.
+    const [first, second] = harness.of('stepCompleted').map((one) => one.result);
+    expect(first?.hits.map((hit) => hit.tier)).toEqual(['perfect']);
+    expect(second?.hits.map((hit) => hit.tier)).toEqual(['good']);
+    expect(second?.wrong).toEqual([]);
+    // The music waits here, so there is no moment for a note to be off by.
+    expect(second?.hits.map((hit) => hit.deviationMs)).toEqual([null]);
   });
 
   it('leaves the reader as long as they like to be late', () => {
@@ -439,7 +442,7 @@ describe('Wait mode', () => {
     const [, second] = harness.of('stepCompleted');
     expect(second?.result.status).toBe('incorrect');
     expect(second?.result.wrong).toEqual([MIDI.E4]);
-    expect(second?.result.played).toEqual([MIDI.D4]);
+    expect(second?.result.hits.map((hit) => hit.midi)).toEqual([MIDI.D4]);
   });
 
   it('publishes a verdict for every press', () => {
@@ -447,12 +450,14 @@ describe('Wait mode', () => {
     harness.session.start();
 
     harness.midi.noteOn(MIDI.C4, 0);
-    harness.midi.noteOn(MIDI.C4, 10);
-    harness.midi.noteOn(MIDI.F5, 20);
+    harness.midi.noteOff(MIDI.C4, 80);
+    harness.midi.noteOn(MIDI.C4, 160);
+    harness.midi.noteOn(MIDI.F5, 200);
 
+    // The key struck again is an extra note, like any other key not asked for.
     expect(harness.of('noteJudged').map((event) => event.verdict)).toEqual([
       'correct',
-      'duplicate',
+      'wrong',
       'wrong',
     ]);
     expect(harness.of('noteJudged')[0]?.remaining).toEqual([MIDI.C3]);

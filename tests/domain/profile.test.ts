@@ -10,7 +10,7 @@ function step(index: number, deviationMs: number | null, wrong: readonly number[
     measureIndex: 0,
     beat: 1,
     expected: [60],
-    played: [60],
+    hits: [{ midi: 60, deviationMs: null, tier: 'perfect' }],
     wrong: [...wrong],
     missing: [],
     deviationMs,

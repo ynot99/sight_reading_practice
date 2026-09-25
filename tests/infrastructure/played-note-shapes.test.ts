@@ -122,9 +122,12 @@ describe('where a press is drawn in time', () => {
 });
 
 describe('how a mark is toned', () => {
-  function toneOf(offset: number, correct = true) {
+  function toneOf(tier: 'perfect' | 'good' | undefined, correct = true, offset = 0) {
     const [head] = noteheads(
-      buildOverlayShapes([{ stepIndex: 1, midi: 60, correct, offset }], layout()),
+      buildOverlayShapes(
+        [{ stepIndex: 1, midi: 60, correct, offset, ...(tier === undefined ? {} : { tier }) }],
+        layout(),
+      ),
     );
     if (head === undefined) {
       throw new Error('expected a notehead');
@@ -132,18 +135,28 @@ describe('how a mark is toned', () => {
     return { correct: head.correct, looseTiming: head.looseTiming };
   }
 
-  it('marks a right note played off the beat as loosely timed', () => {
-    expect(toneOf(-0.3)).toEqual({ correct: true, looseTiming: true });
-    expect(toneOf(0.4)).toEqual({ correct: true, looseTiming: true });
+  it('marks a Good note as loosely timed', () => {
+    expect(toneOf('good')).toEqual({ correct: true, looseTiming: true });
   });
 
-  it('leaves a right note played on the beat alone', () => {
-    expect(toneOf(0)).toEqual({ correct: true, looseTiming: false });
+  it('leaves a Perfect note alone, and one nothing judged', () => {
+    expect(toneOf('perfect')).toEqual({ correct: true, looseTiming: false });
+    // A performance sounding, or a reader playing along to one.
+    expect(toneOf(undefined)).toEqual({ correct: true, looseTiming: false });
+  });
+
+  it('takes the tone from how the run judged the note, not from where the mark sits', () => {
+    // Where it sits says where the key landed; whether that was in its window
+    // is the run's to say, and the numbers under the reading are read off the
+    // same answer. A Perfect note in a quick run can sit a little off its
+    // head, and a Good one at a slow tempo right on it.
+    expect(toneOf('perfect', true, -0.3).looseTiming).toBe(false);
+    expect(toneOf('good', true, 0).looseTiming).toBe(true);
   });
 
   it('says nothing new about a wrong note', () => {
     // Wrong is wrong; how late it was does not soften it.
-    expect(toneOf(0.4, false).correct).toBe(false);
+    expect(toneOf(undefined, false, 0.4).correct).toBe(false);
   });
 
   it('tones the whole mark, not just its notehead', () => {
@@ -151,7 +164,7 @@ describe('how a mark is toned', () => {
     // it belongs to would read as two separate marks.
     const shapes = buildOverlayShapes(
       // C#6: high enough for ledger lines, and sharp in C major.
-      [{ stepIndex: 1, midi: 85, correct: true, offset: -0.3 }],
+      [{ stepIndex: 1, midi: 85, correct: true, offset: -0.3, tier: 'good' }],
       layout(),
     );
     expect(shapes.length).toBeGreaterThan(2);

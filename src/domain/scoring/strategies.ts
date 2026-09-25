@@ -9,13 +9,17 @@ import type { PerformanceReport, StepStatus } from './PerformanceReport.js';
  * was - a hand with nothing to play in the passage - and one that was stopped
  * played nothing. Counted as perfect, a run stopped in its count-in, before a
  * key was touched, came out at 70% and a C.
+ *
+ * A Good note is worth `goodWorth` of a Perfect one. Whole where the grade
+ * has a timing part of its own, which charges for where it landed; half where
+ * it has none, or a note played off its moment would cost nothing at all.
  */
-function accuracyOf(report: PerformanceReport, wrongNotePenalty: number): number {
-  const { expectedNotes, correctNotes, wrongNotes } = report.totals;
+function accuracyOf(report: PerformanceReport, wrongNotePenalty: number, goodWorth = 1): number {
+  const { expectedNotes, perfectNotes, goodNotes, wrongNotes } = report.totals;
   if (expectedNotes === 0) {
     return report.completed ? 1 : 0;
   }
-  const hit = correctNotes / expectedNotes;
+  const hit = (perfectNotes + goodWorth * goodNotes) / expectedNotes;
   const penalty = (wrongNotes / expectedNotes) * wrongNotePenalty;
   return clamp(hit - penalty, 0, 1);
 }
@@ -32,12 +36,18 @@ function timingOf(report: PerformanceReport, toleranceMs: number, decayMs: numbe
   return clamp(1 - excess / decayMs, 0, 1);
 }
 
+/** What a Good note is worth where the grade has no timing part; see `accuracyOf`. */
+const GOOD_WITHOUT_TIMING = 0.5;
+
 export interface AccuracyScoringOptions {
   readonly wrongNotePenalty?: number;
 }
 
 /**
  * Wait-mode grading: only the notes matter, since the player sets the pace.
+ *
+ * With no timing part, a Good note - struck ahead of the hand being heard -
+ * counts for half.
  */
 export class AccuracyScoringStrategy implements IScoringStrategy {
   readonly id = 'scoring.accuracy';
@@ -49,7 +59,7 @@ export class AccuracyScoringStrategy implements IScoringStrategy {
   }
 
   score(report: PerformanceReport): SessionScore {
-    const accuracy = accuracyOf(report, this.wrongNotePenalty);
+    const accuracy = accuracyOf(report, this.wrongNotePenalty, GOOD_WITHOUT_TIMING);
     const timing = timingOf(report, 120, 400);
     return {
       accuracy,

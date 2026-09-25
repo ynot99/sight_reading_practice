@@ -223,7 +223,7 @@ describe('Flow mode', () => {
 
     const [first] = harness.of('stepCompleted');
     expect(first?.result.status).toBe('missed');
-    expect(first?.result.played).toEqual([MIDI.C4]);
+    expect(first?.result.hits.map((hit) => hit.midi)).toEqual([MIDI.C4]);
     expect(first?.result.missing).toEqual([MIDI.C3]);
   });
 
@@ -278,7 +278,7 @@ describe('Flow mode', () => {
       expect(results[0]?.wrong).toEqual([]);
       // ...and the bar it was meant for counts it.
       expect(results[1]?.status).toBe('correct');
-      expect(results[1]?.played).toEqual([MIDI.D4]);
+      expect(results[1]?.hits.map((hit) => hit.midi)).toEqual([MIDI.D4]);
     });
 
     it('belongs to the beat it was nearer to, when that beat wants it', () => {
@@ -585,19 +585,40 @@ describe('a note played just behind its beat', () => {
     expect(judged?.stepIndex).toBe(0);
   });
 
-  it('costs nothing on top, and earns nothing either', () => {
+  it('is played, as Good, on the note it was owed to', () => {
+    // Drawn on that note as the right key, it is counted there too: a note
+    // drawn as played and counted as missed was the page and the numbers
+    // disagreeing. Good and not Perfect, being a whole beat behind.
     const harness = flowHarness();
     startAndCountIn(harness);
     harness.metronome.advanceSubdivisions(4);
     harness.clock.set(harness.clock.now() + 40);
     harness.midi.noteOn(MIDI.C4);
-    harness.metronome.advanceSubdivisions(4);
+    // On past the end of the music.
+    harness.metronome.advanceSubdivisions(40);
 
-    const second = harness.of('stepCompleted')[1]?.result;
-    // The step it was owed to was already missed - Flow mode is strict about
-    // time and that is what it is for. What it is not is a wrong note.
-    expect(harness.of('stepCompleted')[0]?.result.status).toBe('missed');
-    expect(second?.wrong).toEqual([]);
+    const [finished] = harness.of('finished');
+    const owed = finished?.report.steps[0];
+    expect(owed?.hits.map((hit) => [hit.midi, hit.tier])).toEqual([[MIDI.C4, 'good']]);
+    // The other note of the chord was never played.
+    expect(owed?.missing).toEqual([MIDI.C3]);
+    expect(owed?.status).toBe('missed');
+    expect(finished?.report.steps[1]?.wrong).toEqual([]);
+    expect(harness.of('noteJudged').at(-1)?.tier).toBe('good');
+  });
+
+  it('finishes the chord it was owed to', () => {
+    const harness = flowHarness();
+    startAndCountIn(harness);
+    harness.midi.noteOn(MIDI.C3);
+    harness.metronome.advanceSubdivisions(4);
+    harness.clock.set(harness.clock.now() + 40);
+    harness.midi.noteOn(MIDI.C4);
+    harness.metronome.advanceSubdivisions(40);
+
+    const owed = harness.of('finished')[0]?.report.steps[0];
+    expect(owed?.missing).toEqual([]);
+    expect(owed?.status).toBe('correct');
   });
 
   it('reaches back one step and no further', () => {
@@ -620,6 +641,125 @@ describe('a note played just behind its beat', () => {
     harness.midi.noteOn(MIDI.D4);
 
     expect(harness.of('noteJudged').at(-1)?.verdict).toBe('correct');
+  });
+});
+
+describe('the account a run keeps of every note', () => {
+  /** One staff, the same key four times: the case where the key cannot say which note it was. */
+  function oneKeyFourTimes(): Harness {
+    const base = twoBarExercise({ tempoBpm: 60 });
+    const [treble] = base.staves;
+    return createHarness({
+      exercise: {
+        ...base,
+        staves: [
+          {
+            ...(treble as NonNullable<typeof treble>),
+            measures: [
+              bar(
+                noteEntry(p('C4'), Duration.QUARTER),
+                noteEntry(p('C4'), Duration.QUARTER),
+                noteEntry(p('C4'), Duration.QUARTER),
+                noteEntry(p('C4'), Duration.QUARTER),
+              ),
+            ],
+          },
+        ],
+      },
+      mode: new FlowMode(),
+      scoring: new TimingWeightedScoringStrategy(),
+      options: {
+        countInBars: COUNT_IN_BARS,
+        clickWhen: 'never',
+        click: 'subdivision',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+  }
+
+  it('calls a note inside its window Perfect and one outside it Good', () => {
+    // A quarter at sixty: its window is sixty milliseconds either way.
+    const harness = flowHarness();
+    startAndCountIn(harness);
+    harness.clock.set(harness.clock.now() + 40);
+    harness.midi.playChord([MIDI.C3, MIDI.C4]);
+    harness.metronome.advanceSubdivisions(4);
+    harness.metronome.advanceSubdivisions(1);
+    harness.midi.noteOn(MIDI.D4);
+    harness.metronome.advanceSubdivisions(3);
+
+    const [first, second] = harness.of('stepCompleted').map((event) => event.result);
+    expect(first?.hits.map((hit) => hit.tier)).toEqual(['perfect', 'perfect']);
+    expect(second?.hits.map((hit) => [hit.tier, hit.deviationMs])).toEqual([['good', 250]]);
+    expect(harness.of('noteJudged').map((judged) => judged.tier)).toEqual(['perfect', 'perfect', 'good']);
+  });
+
+  it('counts Perfect and Good apart, and both as played', () => {
+    const harness = flowHarness();
+    startAndCountIn(harness);
+    harness.midi.playChord([MIDI.C3, MIDI.C4]);
+    harness.metronome.advanceSubdivisions(4);
+    harness.metronome.advanceSubdivisions(1);
+    harness.midi.noteOn(MIDI.D4);
+    harness.metronome.advanceSubdivisions(40);
+
+    const totals = harness.of('finished')[0]?.report.totals;
+    expect(totals?.perfectNotes).toBe(2);
+    expect(totals?.goodNotes).toBe(1);
+    expect(totals?.correctNotes).toBe(3);
+  });
+
+  it('counts a key of the chord struck again as a wrong note, and the chord as played', () => {
+    // On a piano every press is heard.
+    const harness = flowHarness();
+    startAndCountIn(harness);
+    const beat = harness.clock.now();
+    harness.midi.playChord([MIDI.C3, MIDI.C4], beat);
+    harness.midi.noteOff(MIDI.C4, beat + 80);
+    harness.midi.noteOn(MIDI.C4, beat + 160);
+    harness.metronome.advanceSubdivisions(4);
+
+    const [first] = harness.of('stepCompleted').map((event) => event.result);
+    expect(first?.hits.map((hit) => hit.midi).sort()).toEqual([MIDI.C3, MIDI.C4].sort());
+    expect(first?.wrong).toEqual([MIDI.C4]);
+    expect(first?.status).toBe('incorrect');
+  });
+
+  it('gives a key the page asks for again to the note that asks for it, not to the one before', () => {
+    const harness = oneKeyFourTimes();
+    startAndCountIn(harness);
+    for (let beat = 0; beat < 4; beat += 1) {
+      harness.midi.noteOn(MIDI.C4);
+      harness.midi.noteOff(MIDI.C4, harness.clock.now() + 100);
+      harness.metronome.advanceSubdivisions(4);
+    }
+
+    const results = harness.of('stepCompleted').map((event) => event.result);
+    expect(results.map((result) => result.hits.length)).toEqual([1, 1, 1, 1]);
+    expect(results.flatMap((result) => result.wrong)).toEqual([]);
+  });
+
+  it('takes the rest of a chord as the same tap, where only the rhythm is read', () => {
+    // One tap is the whole chord there, so every note of it was played and
+    // none of the others is an extra one.
+    const harness = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      scoring: new TimingWeightedScoringStrategy(),
+      options: {
+        countInBars: COUNT_IN_BARS,
+        clickWhen: 'never',
+        click: 'subdivision',
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false, anyPitch: true },
+      },
+    });
+    startAndCountIn(harness);
+    harness.midi.playChord([MIDI.C3, MIDI.C4]);
+    harness.metronome.advanceSubdivisions(4);
+
+    const [first] = harness.of('stepCompleted').map((event) => event.result);
+    expect(first?.hits).toHaveLength(2);
+    expect(first?.wrong).toEqual([]);
   });
 });
 

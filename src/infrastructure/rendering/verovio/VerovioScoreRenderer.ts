@@ -1672,6 +1672,7 @@ export class VerovioScoreRenderer
       sounding: note.sounding,
       offset: note.offset,
       settled: note.settled,
+      ...(note.tier === undefined ? {} : { tier: note.tier }),
     };
     this.marks.push(mark);
     this.drawTheMark(mark);

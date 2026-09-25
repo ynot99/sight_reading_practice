@@ -17,7 +17,7 @@ function step(overrides: Partial<StepResult> & Pick<StepResult, 'index' | 'statu
     measureIndex: 0,
     beat: 1,
     expected: [60],
-    played: [60],
+    hits: [{ midi: 60, deviationMs: null, tier: 'perfect' }],
     wrong: [],
     missing: [],
     deviationMs: null,
@@ -43,8 +43,8 @@ describe('buildPerformanceReport', () => {
     const report = reportOf([
       step({ index: 0, status: 'correct', deviationMs: 20 }),
       step({ index: 1, status: 'incorrect', wrong: [61], deviationMs: -40 }),
-      step({ index: 2, status: 'missed', played: [], missing: [60] }),
-      step({ index: 3, status: 'skipped', expected: [], played: [] }),
+      step({ index: 2, status: 'missed', hits: [], missing: [60] }),
+      step({ index: 3, status: 'skipped', expected: [], hits: [] }),
     ]);
 
     expect(report.totals).toEqual({
@@ -56,6 +56,8 @@ describe('buildPerformanceReport', () => {
       skipped: 1,
       expectedNotes: 3,
       correctNotes: 2,
+      perfectNotes: 2,
+      goodNotes: 0,
       wrongNotes: 1,
       // Nought unless the run had a gate at the bar line to stop at.
       barsWaitedFor: 0,
@@ -115,7 +117,7 @@ describe('AccuracyScoringStrategy', () => {
 
   it('never returns a negative score', () => {
     const score = strategy.score(
-      reportOf([step({ index: 0, status: 'incorrect', played: [], missing: [60], wrong: Array.from({ length: 40 }, () => 61) })]),
+      reportOf([step({ index: 0, status: 'incorrect', hits: [], missing: [60], wrong: Array.from({ length: 40 }, () => 61) })]),
     );
     expect(score.accuracy).toBe(0);
     expect(score.grade).toBe('F');
@@ -129,7 +131,7 @@ describe('AccuracyScoringStrategy', () => {
 
   it('scores an exercise made only of rests as perfect', () => {
     const score = strategy.score(
-      reportOf([step({ index: 0, status: 'skipped', expected: [], played: [] })]),
+      reportOf([step({ index: 0, status: 'skipped', expected: [], hits: [] })]),
     );
     expect(score.accuracy).toBe(1);
   });
@@ -165,7 +167,7 @@ describe('TimingWeightedScoringStrategy', () => {
   });
 
   it('scores timing as zero when nothing was played in time', () => {
-    const score = strategy.score(reportOf([step({ index: 0, status: 'missed', played: [], missing: [60] })]));
+    const score = strategy.score(reportOf([step({ index: 0, status: 'missed', hits: [], missing: [60] })]));
     expect(score.timing).toBe(0);
     expect(score.accuracy).toBe(0);
     expect(score.overall).toBe(0);
@@ -189,7 +191,7 @@ describe('ContinuityScoringStrategy', () => {
 
   /** A step that was reached but never completed in time. */
   function missed(index: number): StepResult {
-    return step({ index, status: 'missed', played: [], missing: [60] });
+    return step({ index, status: 'missed', hits: [], missing: [60] });
   }
 
   it('measures the longest stretch the reader stayed with', () => {
@@ -228,7 +230,7 @@ describe('ContinuityScoringStrategy', () => {
     const score = strategy.score(
       reportOf([
         step({ index: 0, status: 'correct' }),
-        step({ index: 1, status: 'skipped', expected: [], played: [] }),
+        step({ index: 1, status: 'skipped', expected: [], hits: [] }),
         step({ index: 2, status: 'correct' }),
       ]),
     );
@@ -269,6 +271,25 @@ describe('ContinuityScoringStrategy', () => {
     expect(strategy.score(oneBreak).overall).toBeGreaterThan(
       strategy.score(twoBreaks).overall,
     );
+  });
+});
+
+describe('a Good note in the grade', () => {
+  const good = { midi: 62, deviationMs: 300, tier: 'good' } as const;
+  const report = reportOf([
+    step({ index: 0, status: 'correct' }),
+    step({ index: 1, status: 'correct', expected: [62], hits: [good] }),
+  ]);
+
+  it('counts for half a note where the grade has no timing part to charge it', () => {
+    // Waiting for the notes: a Good one there was struck ahead of the hand
+    // being heard, and counted whole it would cost nothing at all.
+    expect(new AccuracyScoringStrategy().score(report).accuracy).toBeCloseTo(0.75, 9);
+  });
+
+  it('counts whole where the timing part charges for where it landed', () => {
+    expect(new TimingWeightedScoringStrategy().score(report).accuracy).toBe(1);
+    expect(new ContinuityScoringStrategy().score(report).accuracy).toBe(1);
   });
 });
 

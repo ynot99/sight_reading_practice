@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MidiEvent } from '../../src/application/ports/IMidiSource.js';
-import { CompositeMidiSource } from '../../src/infrastructure/midi/CompositeMidiSource.js';
+import { CompositeMidiSource, ONE_PRESS_MS } from '../../src/infrastructure/midi/CompositeMidiSource.js';
 import {
   ComputerKeyboardMidiSource,
   isTypedInto,
@@ -257,6 +257,54 @@ describe('CompositeMidiSource', () => {
     unsubscribe();
     first.noteOn(64, 3);
     expect(events).toHaveLength(2);
+  });
+});
+
+describe('one press arriving by two ways', () => {
+  function twoWays(): { first: MockMidiAdapter; second: MockMidiAdapter; heard: MidiEvent[] } {
+    const first = new MockMidiAdapter({ sourceId: 'keyboard' });
+    const second = new MockMidiAdapter({ sourceId: 'bridge' });
+    const heard: MidiEvent[] = [];
+    new CompositeMidiSource([first, second]).subscribe((event) => heard.push(event));
+    return { first, second, heard };
+  }
+
+  it('is heard once', () => {
+    // The keyboard plugged in, and the bridge relaying the same keyboard: a
+    // second strike counts as an extra note, and this is not one.
+    const { first, second, heard } = twoWays();
+
+    first.noteOn(60, 1000);
+    second.noteOn(60, 1012);
+    // A relay over the network can be tens of milliseconds behind.
+    first.noteOn(64, 2000);
+    second.noteOn(64, 2045);
+
+    expect(heard.filter((event) => event.type === 'noteon')).toHaveLength(2);
+  });
+
+  it('still lets a key struck again be heard, once it could have risen', () => {
+    const { first, heard } = twoWays();
+
+    first.noteOn(60, 1000);
+    first.noteOff(60, 1030);
+    first.noteOn(60, 1000 + ONE_PRESS_MS);
+    // Sixteenths repeated on one key at 250 to the minute, faster than
+    // anyone repeats a key, are sixty milliseconds apart.
+    first.noteOff(60, 1080);
+    first.noteOn(60, 1000 + ONE_PRESS_MS + 60);
+
+    expect(heard.filter((event) => event.type === 'noteon')).toHaveLength(3);
+  });
+
+  it('hears every key of a chord struck together', () => {
+    const { first, heard } = twoWays();
+
+    first.noteOn(60, 1000);
+    first.noteOn(64, 1000);
+    first.noteOn(67, 1001);
+
+    expect(heard.map((event) => (event.type === 'noteon' ? event.midi : null))).toEqual([60, 64, 67]);
   });
 });
 

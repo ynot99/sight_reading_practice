@@ -1,6 +1,7 @@
 import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
 import type { PerformanceReport, StepResult } from '../../domain/scoring/PerformanceReport.js';
 import type { SessionScore } from '../../domain/scoring/IScoringStrategy.js';
+import type { NoteTier } from '../../domain/scoring/noteTiers.js';
 import type { TimelineStep } from '../../domain/timeline/Timeline.js';
 import type { MetronomeTick } from '../ports/IMetronome.js';
 import type { SessionStatus } from './SessionState.js';
@@ -61,6 +62,8 @@ export interface NoteJudgedEvent {
   /** Only meaningful in beat-driven modes; `null` when timing is not judged. */
   readonly deviationMs: number | null;
   readonly remaining: readonly number[];
+  /** How well a right key landed; absent for every other press. See `noteTiers`. */
+  readonly tier?: NoteTier;
 }
 
 /**

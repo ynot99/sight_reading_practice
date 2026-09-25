@@ -981,6 +981,7 @@ describe('what you played, drawn over the score', () => {
         correct: true,
         offset: 0,
         settled: true,
+        tier: 'perfect',
       })),
     );
   });
@@ -1433,12 +1434,15 @@ describe('what you played, drawn over the score', () => {
     midi.noteOn(expected, 900);
 
     expect(renderer.played).toEqual([
-      // Pale, the rest of the chord not having been found yet.
-      { stepIndex: 0, midi: expected, correct: true, offset: 0, settled: false },
+      // Pale, the rest of the chord not having been found yet - and Perfect,
+      // a slow answer being nothing to hold against a reader the music waits for.
+      { stepIndex: 0, midi: expected, correct: true, offset: 0, settled: false, tier: 'perfect' },
     ]);
   });
 
-  it('does not draw the same note twice for one press', async () => {
+  it('draws a key of the chord struck again as a wrong note, over the right one', async () => {
+    // On a piano every press is heard, so a key struck a second time is an
+    // extra note; the note it was the right key for stays right.
     const { controller, renderer, midi } = createController(true);
     await controller.loadNewExercise();
     const session = controller.start();
@@ -1449,9 +1453,13 @@ describe('what you played, drawn over the score', () => {
     const note = step.expectedMidi[0] ?? 60;
 
     midi.noteOn(note, 0);
-    midi.noteOn(note, 10);
+    midi.noteOff(note, 80);
+    midi.noteOn(note, 160);
 
-    expect(renderer.played).toHaveLength(1);
+    expect(renderer.played.map((mark) => [mark.midi, mark.correct])).toEqual([
+      [note, true],
+      [note, false],
+    ]);
   });
 
   describe('holding the marks back until the run ends', () => {
@@ -2176,7 +2184,8 @@ describe('hearing the hand you are not reading', () => {
   it('holds a press that went past the hand it is played against', async () => {
     // His: late is allowed, early is not. The accompaniment is laid a written
     // second after the reader's last press, and a note struck at once has
-    // gone by it - so it is marked, though it is the note that was asked for.
+    // gone by it - so it is Good rather than Perfect: the right key, off its
+    // moment, and drawn as one.
     const { controller, midi, renderer, clock } = await readingTheTreble();
     controller.start();
 
@@ -2184,7 +2193,26 @@ describe('hearing the hand you are not reading', () => {
     midi.noteOn(p('D4').midi, clock.now());
 
     expect(renderer.played.map((mark) => mark.midi)).toEqual([p('C4').midi, p('D4').midi]);
-    expect(renderer.played.map((mark) => mark.correct)).toEqual([true, false]);
+    expect(renderer.played.map((mark) => [mark.correct, mark.tier])).toEqual([
+      [true, 'perfect'],
+      [true, 'good'],
+    ]);
+  });
+
+  it('plays on through a note struck ahead of the hand being heard', async () => {
+    // The right key, off its moment: Good, not a mistake, so asked to stop at
+    // a mistake the run goes on.
+    const { controller, midi, clock, renderer } = await readingTheTreble();
+    controller.updateSettings({ stopAtAMistake: true });
+    const session = controller.start();
+    const reddened = vi.spyOn(renderer, 'showTrouble');
+
+    midi.noteOn(p('C4').midi, clock.now());
+    midi.noteOn(p('D4').midi, clock.now());
+
+    expect(session?.status).toBe('running');
+    // Nor does it redden the marker, which is for a reader stuck on a note.
+    expect(reddened.mock.calls.filter(([missteps]) => missteps > 0)).toEqual([]);
   });
 
   it('holds nothing where no other hand is sounding', async () => {

@@ -2431,7 +2431,7 @@ export class PracticeController {
     this.sessionSubscriptions.push(
       // Every press is drawn where it was actually struck, right or wrong. A
       // repeat of a note already collected adds nothing to look at.
-      session.events.on('noteJudged', ({ midi, verdict, stepIndex, deviationMs }) => {
+      session.events.on('noteJudged', ({ midi, verdict, stepIndex, deviationMs, tier }) => {
         const held = this.currentSettings.playedNotes === 'at-end';
         const why =
           this.currentSettings.playedNotes === 'hidden'
@@ -2454,7 +2454,9 @@ export class PracticeController {
         // Before the marks have their say, and deliberately: this exists for
         // the reader who has turned them off.
         this.noteTheTrouble(verdict);
-        if ((verdict === 'wrong' || verdict === 'rushed') && this.currentSettings.stopAtAMistake) {
+        // A wrong note, and only that: a rushed one is the right key, off its
+        // moment, and the reading goes on.
+        if (verdict === 'wrong' && this.currentSettings.stopAtAMistake) {
           // After the mark is noted and before it is drawn: stopping fires
           // `finished`, which puts up everything the run was holding back -
           // so the note that ended it is on the page with the rest.
@@ -2471,12 +2473,15 @@ export class PracticeController {
           // they are looking at without counting noteheads.
           settled: false,
           // Right against the page, which is what the mark is about: a note
-          // the other hand was going to play was read correctly.
-          correct: verdict !== 'wrong' && verdict !== 'rushed',
+          // the other hand was going to play was read correctly, and one
+          // struck ahead of it was the right key.
+          correct: verdict !== 'wrong',
           // Measured now, not at the end: the offset is a fraction of the gap
           // to the neighbouring note, and it is only known while the run
-          // still knows the tempo it was played at.
+          // still knows the tempo it was played at. It says where the key
+          // landed; the tier says whether that was in its window.
           offset: this.timingOffsetFor(stepIndex, deviationMs, session.tempoBpm),
+          ...(tier === undefined ? {} : { tier }),
         };
         if (this.currentSettings.playedNotes === 'at-end') {
           this.heldMarks.push(mark);
@@ -3047,9 +3052,7 @@ export class PracticeController {
    * blink back at them on every slip.
    */
   private noteTheTrouble(verdict: NoteVerdict): void {
-    if (
-      (verdict !== 'wrong' && verdict !== 'rushed') || this.keepsTime
-    ) {
+    if (verdict !== 'wrong' || this.keepsTime) {
       return;
     }
     this.missteps += 1;

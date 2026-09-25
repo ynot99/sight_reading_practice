@@ -6077,6 +6077,8 @@ describe('AppView', () => {
             skipped: 2,
             expectedNotes: 20,
             correctNotes: 18,
+            perfectNotes: 15,
+            goodNotes: 3,
             wrongNotes: 2,
             barsWaitedFor: 1,
           },

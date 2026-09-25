@@ -2,6 +2,7 @@ import type { ClefKind } from '../../domain/model/Clef.js';
 import type { RulerMark } from '../rhythmRuler.js';
 import type { KeySignature } from '../../domain/model/KeySignature.js';
 import type { PrintedStep } from '../../domain/notation/printedIds.js';
+import type { NoteTier } from '../../domain/scoring/noteTiers.js';
 
 /**
  * Engraves notation into whatever surface the host provides.
@@ -322,6 +323,14 @@ export interface PlayedNote {
    * on the next system and therefore no scale at all.
    */
   readonly offset: number;
+  /**
+   * How well a right key landed, which is the colour it is drawn in: the
+   * run's own account, so the page cannot call a note Perfect that the
+   * numbers call Good. Absent where nothing judged the press - a
+   * performance, or a reader playing along to one - which is drawn as
+   * simply right.
+   */
+  readonly tier?: NoteTier;
 }
 
 /** What the overlay needs in order to spell and place a press. */

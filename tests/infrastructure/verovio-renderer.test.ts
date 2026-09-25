@@ -677,6 +677,19 @@ describe('what was played', () => {
     return { x: head?.x ?? NaN, y: head?.y ?? NaN };
   }
 
+  it('rings a Good note in the paler green, wherever it sits', async () => {
+    // The run's own verdict, so the page cannot call a note Perfect that the
+    // numbers under the reading call Good.
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0, tier: 'good' });
+    renderer.showPlayed({ stepIndex: 1, midi: 62, correct: true, offset: 0.4, tier: 'perfect' });
+
+    const [good, perfect] = ringsOf(surface);
+    expect(good?.getAttribute('class')).toContain('played--loose');
+    expect(perfect?.getAttribute('class')).toContain('played--correct');
+  });
+
   it('rings a right note round the note where it is printed', async () => {
     const { renderer, surface } = await twoBarsOpen();
 

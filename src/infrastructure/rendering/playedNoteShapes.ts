@@ -1,4 +1,5 @@
 import type { ClefKind } from '../../domain/model/Clef.js';
+import type { NoteTier } from '../../domain/scoring/noteTiers.js';
 import type { KeySignature } from '../../domain/model/KeySignature.js';
 import { Pitch } from '../../domain/model/Pitch.js';
 import {
@@ -21,6 +22,8 @@ export interface PlayedMark {
   readonly offset: number;
   /** Whether the beat it belongs to has been played in full. */
   readonly settled?: boolean;
+  /** How well a right key landed; see `PlayedNote.tier`. */
+  readonly tier?: NoteTier;
 }
 
 export interface OverlayLayout {
@@ -141,7 +144,9 @@ export function buildOverlayShapes(
     // The pitch first, because where the mark goes depends on it: the page
     // knows where *this note* is printed, and that is a better answer than
     // the moment the whole chord shares.
-    const looseTiming = mark.offset !== 0;
+    // Good is the right key outside its window, and the run has already
+    // said which it was; where the mark sits is a separate matter.
+    const looseTiming = mark.tier === 'good';
     const key = layout.keyAt(mark.stepIndex);
     const pitch = spellPlayed(mark.midi, key);
     const x = markX(

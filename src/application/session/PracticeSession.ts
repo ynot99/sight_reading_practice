@@ -6,6 +6,7 @@ import {
   type StepResult,
   type StepStatus,
 } from '../../domain/scoring/PerformanceReport.js';
+import { tierOf, type NoteHit, type NoteTier } from '../../domain/scoring/noteTiers.js';
 import { expectedFor } from '../../domain/timeline/Timeline.js';
 import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timeline.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../../shared/EventEmitter.js';
@@ -83,6 +84,8 @@ export class PracticeSession {
   private stepEnteredAt = 0;
   private stepDeviationMs: number | null = null;
   private stepWrongNotes: number[] = [];
+  /** How each key of the open step that was played landed, by the key pressed; the last press wins. */
+  private stepPresses = new Map<number, Omit<NoteHit, 'midi'>>();
   /**
    * Where the written clock was last set, and when.
    *
@@ -740,6 +743,7 @@ export class PracticeSession {
     this.matcher = null;
     this.stepDeviationMs = null;
     this.stepWrongNotes = [];
+    this.stepPresses = new Map();
     this.writtenAnchor = null;
     this.runStartedAt = 0;
     this.runBeganAt = 0;
@@ -900,6 +904,7 @@ export class PracticeSession {
     this.stepEnteredAt = this.clock.now();
     this.stepDeviationMs = null;
     this.stepWrongNotes = [];
+    this.stepPresses = new Map();
 
     // Before the step is announced to anything. A gate is part of what this
     // step *is*, and something told about the step without it - the
@@ -1040,7 +1045,7 @@ export class PracticeSession {
       measureIndex: step.measureIndex,
       beat: step.beat,
       expected: summary?.expected ?? [],
-      played: summary?.matched ?? [],
+      hits: summary === null ? [] : this.hitsOf(summary.expected, summary.matched, summary.missing),
       wrong: [...this.stepWrongNotes],
       missing: summary?.missing ?? [],
       deviationMs: this.stepDeviationMs,
@@ -1418,22 +1423,36 @@ export class PracticeSession {
   private judgeNote(midi: number, rawVerdict: NoteVerdict, deviationMs: number | null): void {
     const owed = rawVerdict === 'wrong' ? this.oweingStepBefore(midi) : null;
     const verdict: NoteVerdict =
-      rawVerdict !== 'wrong'
-        ? rawVerdict
-        : owed !== null
-          ? 'late'
-          : this.belongsToTheOtherHand(midi)
-            ? 'other-hand'
-            : 'wrong';
+      rawVerdict === 'duplicate'
+        ? this.struckAgain()
+        : rawVerdict !== 'wrong'
+          ? rawVerdict
+          : owed !== null
+            ? 'late'
+            : this.belongsToTheOtherHand(midi)
+              ? 'other-hand'
+              : 'wrong';
 
-    // A rushed press is the right note, so it counts against the step
-    // without being a wrong note on the page or in the log: one ledger of
-    // what was held against this step, and the verdict says which it was.
-    if (verdict === 'wrong' || verdict === 'rushed') {
+    if (verdict === 'wrong') {
       this.stepWrongNotes.push(midi);
     }
     if ((verdict === 'correct' || verdict === 'rushed') && this.stepDeviationMs === null) {
       this.stepDeviationMs = deviationMs;
+    }
+    // The right key, and how well: a rushed one is the right key off its
+    // moment, which is what Good is, and a late one belongs to the step it
+    // was owed to.
+    const landed =
+      verdict === 'correct' || verdict === 'rushed'
+        ? this.howItLanded(this.stepIndex, deviationMs, verdict === 'rushed')
+        : verdict === 'late' && owed !== null
+          ? this.howItLanded(owed.index, this.lateBy(owed, deviationMs), false)
+          : null;
+    if (landed !== null && owed === null) {
+      this.stepPresses.set(midi, landed);
+    }
+    if (landed !== null && owed !== null) {
+      this.creditTheOwed(owed, { midi, ...landed });
     }
     const judged: NoteJudgedEvent = {
       midi,
@@ -1443,11 +1462,84 @@ export class PracticeSession {
       stepIndex: owed === null ? this.stepIndex : owed.index,
       deviationMs: owed === null ? deviationMs : this.lateBy(owed, deviationMs),
       remaining: this.matcher?.remaining ?? [],
+      ...(landed === null ? {} : { tier: landed.tier }),
     };
     // Written down and announced from one object, so the picture of the run
     // and the marks on the page cannot come to different conclusions.
     this.roller.judged(judged);
     this.emitter.emit('noteJudged', judged);
+  }
+
+  /**
+   * What a key of this step struck again is.
+   *
+   * A second press of a key already played is heard - on a piano every
+   * press is - so it is an extra note, and wrong like any other. Except
+   * where only the rhythm is read: there one tap is the whole chord, and the
+   * rest of the chord is the same gesture rather than more notes.
+   */
+  private struckAgain(): NoteVerdict {
+    return this.options.matchPolicy.anyPitch === true ? 'duplicate' : 'wrong';
+  }
+
+  /**
+   * Perfect or Good, for a right key that landed this far from its moment.
+   *
+   * A run that waits keeps no time, so every right key there is Perfect -
+   * unless it was struck ahead of the hand the reader is hearing, which is
+   * the right key off its moment all the same.
+   */
+  private howItLanded(stepIndex: number, deviationMs: number | null, rushed: boolean): Omit<NoteHit, 'midi'> {
+    if (!this.mode.requiresMetronome) {
+      return { deviationMs: null, tier: rushed ? 'good' : 'perfect' };
+    }
+    const tier: NoteTier =
+      rushed ? 'good' : deviationMs === null ? 'perfect' : tierOf(this.timeline, stepIndex, deviationMs);
+    return { deviationMs, tier };
+  }
+
+  /**
+   * The notes of the step now closing that were played, each once.
+   *
+   * Read off the matcher's own account of what it collected, and given the
+   * way each key landed. One tap is the whole chord where only the rhythm is
+   * read, so there every note of it was played, when the tap was.
+   */
+  private hitsOf(
+    expected: readonly number[],
+    matched: readonly number[],
+    missing: readonly number[],
+  ): NoteHit[] {
+    const presses = [...this.stepPresses.entries()];
+    if (this.options.matchPolicy.anyPitch === true) {
+      const tap = presses[0]?.[1];
+      return tap === undefined || missing.length > 0 ? [] : expected.map((midi) => ({ midi, ...tap }));
+    }
+    return matched.flatMap((midi) => {
+      const landed = this.stepPresses.get(midi);
+      return landed === undefined ? [] : [{ midi, ...landed }];
+    });
+  }
+
+  /**
+   * Gives a note played a step late to the step it belonged to.
+   *
+   * Drawn on that note, it is played there - taken off what that step was
+   * missing, and Good or Perfect by how far behind it came.
+   */
+  private creditTheOwed(owed: StepResult, hit: NoteHit): void {
+    const at = this.results.lastIndexOf(owed);
+    if (at < 0) {
+      return;
+    }
+    const missing = owed.missing.filter((note) => note !== hit.midi);
+    const wrong = owed.wrong;
+    this.results[at] = {
+      ...owed,
+      hits: [...owed.hits, hit],
+      missing,
+      status: missing.length > 0 ? 'missed' : wrong.length > 0 ? 'incorrect' : 'correct',
+    };
   }
 
   /** How late against the step it was owed to, rather than the one now open. */

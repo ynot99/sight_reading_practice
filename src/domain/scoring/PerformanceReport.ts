@@ -1,3 +1,5 @@
+import type { NoteHit } from './noteTiers.js';
+
 /** Outcome of a single timeline step. */
 export type StepStatus =
   /** Every expected pitch was played, with no wrong notes. */
@@ -15,14 +17,20 @@ export interface StepResult {
   readonly measureIndex: number;
   readonly beat: number;
   readonly expected: readonly number[];
-  readonly played: readonly number[];
+  /**
+   * The notes of the step that were played, each once, and how well.
+   *
+   * A note played a step late is here too, given to the step it belonged
+   * to: the page draws it on that note, and a note drawn as played and
+   * counted as missed is the page and the numbers disagreeing.
+   */
+  readonly hits: readonly NoteHit[];
   /**
    * The presses that counted against this step.
    *
-   * Notes not printed here, and - where the reader is playing against the
-   * other hand - notes printed here but struck before the music reached
-   * them. One ledger rather than two, because everything downstream is
-   * asking the same question of it: was anything held against this step.
+   * Keys not printed here, and a key of it struck again once it had already
+   * been played - on a piano every press is heard, so an extra one is an
+   * extra note whatever key it is.
    */
   readonly wrong: readonly number[];
   readonly missing: readonly number[];
@@ -49,7 +57,12 @@ export interface PerformanceTotals {
   readonly missed: number;
   readonly skipped: number;
   readonly expectedNotes: number;
+  /** Notes played, of those expected: {@link perfectNotes} and {@link goodNotes} together. */
   readonly correctNotes: number;
+  /** Notes played in their window; see `noteTiers`. */
+  readonly perfectNotes: number;
+  /** Notes played outside it - the right key, off its moment. */
+  readonly goodNotes: number;
   readonly wrongNotes: number;
   /**
    * Bar lines the run stopped at because the reader had not arrived.
@@ -127,6 +140,10 @@ function mean(values: readonly number[]): number {
     : values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function hitsOf(steps: readonly StepResult[], tier: NoteHit['tier']): number {
+  return steps.reduce((sum, step) => sum + step.hits.filter((hit) => hit.tier === tier).length, 0);
+}
+
 /** Aggregates step results into the report scoring strategies consume. */
 export function buildPerformanceReport(input: PerformanceReportInput): PerformanceReport {
   const totals: PerformanceTotals = {
@@ -137,10 +154,9 @@ export function buildPerformanceReport(input: PerformanceReportInput): Performan
     missed: input.steps.filter((step) => step.status === 'missed').length,
     skipped: input.steps.filter((step) => step.status === 'skipped').length,
     expectedNotes: input.steps.reduce((sum, step) => sum + step.expected.length, 0),
-    correctNotes: input.steps.reduce(
-      (sum, step) => sum + (step.expected.length - step.missing.length),
-      0,
-    ),
+    correctNotes: input.steps.reduce((sum, step) => sum + step.hits.length, 0),
+    perfectNotes: hitsOf(input.steps, 'perfect'),
+    goodNotes: hitsOf(input.steps, 'good'),
     wrongNotes: input.steps.reduce((sum, step) => sum + step.wrong.length, 0),
     barsWaitedFor: input.waitedAtBars?.length ?? 0,
   };

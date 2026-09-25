@@ -16,7 +16,7 @@ function step(
     status: 'correct',
     beat: 1,
     expected: [60],
-    played: [60],
+    hits: [{ midi: 60, deviationMs: null, tier: 'perfect' }],
     wrong: [],
     missing: [],
     deviationMs: null,
@@ -47,8 +47,8 @@ function run(bars: number, trouble: Readonly<Record<number, Partial<StepResult>>
 describe('finding the bars worth drilling', () => {
   it('lands on the stretch that went worst', () => {
     const report = run(12, {
-      6: { status: 'missed', missing: [60], played: [] },
-      7: { status: 'missed', missing: [60], played: [] },
+      6: { status: 'missed', missing: [60], hits: [] },
+      7: { status: 'missed', missing: [60], hits: [] },
     });
 
     // Bars are one-based, as the reader counts them and as the range takes them.
@@ -58,7 +58,7 @@ describe('finding the bars worth drilling', () => {
   it('weighs a step the music took away above an untidy one', () => {
     const report = run(8, {
       1: { status: 'incorrect', wrong: [61] },
-      5: { status: 'missed', missing: [60], played: [] },
+      5: { status: 'missed', missing: [60], hits: [] },
     });
 
     const passage = worstPassage(report, { bars: 2 });
@@ -84,14 +84,14 @@ describe('finding the bars worth drilling', () => {
     // Trouble usually starts before it shows, so the earlier reading is the
     // one that caused it.
     const report = run(12, {
-      1: { status: 'missed', missing: [60], played: [] },
-      9: { status: 'missed', missing: [60], played: [] },
+      1: { status: 'missed', missing: [60], hits: [] },
+      9: { status: 'missed', missing: [60], hits: [] },
     });
     expect(worstPassage(report, { bars: 2 })?.fromBar).toBe(1);
   });
 
   it('never runs off the end of what was played', () => {
-    const report = run(3, { 2: { status: 'missed', missing: [60], played: [] } });
+    const report = run(3, { 2: { status: 'missed', missing: [60], hits: [] } });
     const passage = worstPassage(report, { bars: 8 });
     expect(passage).toEqual({ fromBar: 1, toBar: 3 });
   });

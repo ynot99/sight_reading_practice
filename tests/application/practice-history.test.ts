@@ -258,6 +258,8 @@ function picture(marks: number): NonNullable<PracticeAttempt['picture']> {
       skipped: 0,
       expectedNotes: marks,
       correctNotes: marks,
+      perfectNotes: marks,
+      goodNotes: 0,
       wrongNotes: 0,
       barsWaitedFor: 0,
     },

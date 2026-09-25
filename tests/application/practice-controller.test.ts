@@ -739,6 +739,78 @@ describe('PracticeController', () => {
     expect(kept?.stoppedAtBar).not.toBeNull();
   });
 
+  it('keeps no reading of a run stopped while it was being counted in', async () => {
+    // His: begun, thought better of in the count-in, and kept as a reading
+    // of C, 70% for keys never touched. Nothing was played, so there is
+    // nothing to report - and no report is what keeps it out of the list.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller, metronome } = createController(
+      true,
+      undefined,
+      { modeId: FLOW_MODE_ID, countInBars: 1 },
+      history,
+    );
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const reported = vi.fn();
+    session?.events.on('finished', reported);
+    metronome.advanceBeats(2);
+    expect(session?.status).toBe('counting-in');
+
+    session?.abort();
+
+    expect(session?.status).toBe('aborted');
+    expect(reported).not.toHaveBeenCalled();
+    expect(history.lastReadings()).toHaveLength(0);
+    expect(metronome.isRunning).toBe(false);
+  });
+
+  it('keeps no reading of a run paused in its count-in and then stopped', async () => {
+    // Paused before the music began is still before the music began.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller, metronome } = createController(
+      true,
+      undefined,
+      { modeId: FLOW_MODE_ID, countInBars: 1 },
+      history,
+    );
+    await controller.loadNewExercise();
+    const session = controller.start();
+    metronome.advanceBeats(2);
+    session?.pause();
+    expect(session?.status).toBe('paused');
+
+    session?.abort();
+
+    expect(session?.status).toBe('aborted');
+    expect(history.lastReadings()).toHaveLength(0);
+  });
+
+  it('keeps the reading of a run stopped in the count it went back to after a pause', async () => {
+    // Counted back in after a pause, the run has bars behind it, and what
+    // was played in them is still the reader's.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller, metronome } = createController(
+      true,
+      undefined,
+      { modeId: FLOW_MODE_ID, countInBars: 1 },
+      history,
+    );
+    await controller.loadNewExercise();
+    const session = controller.start();
+    // The count, and on into the second bar.
+    metronome.advanceBeats(4 + 5);
+    expect(session?.status).toBe('running');
+    session?.pause();
+    session?.resume();
+    expect(session?.status).toBe('counting-in');
+
+    session?.abort();
+
+    expect(history.lastReadings()).toHaveLength(1);
+    expect(history.lastReadings()[0]?.completed).toBe(false);
+  });
+
   it('has nothing to drill without a run behind it', () => {
     const { controller } = createController();
     expect(controller.drillWorstPassage()).toBeNull();

@@ -477,9 +477,23 @@ export class PracticeSession {
     return this.heldAtBarTicks !== null;
   }
 
-  /** Stops the run and publishes the report gathered so far. */
+  /**
+   * Stops the run and publishes the report gathered so far.
+   *
+   * Unless its music never began. Stopped while it was still being counted
+   * in, a run has nothing to report, and a reading kept of it was a grade for
+   * keys never touched - his: a run begun and thought better of in its
+   * count-in. The count a run returns to after a pause is not that: what was
+   * played before the pause is still there to report.
+   */
   abort(): void {
+    const neverBegan =
+      this.results.length === 0 && (this.machine.state === 'counting-in' || this.pausedInCountIn);
     if (!this.dispatch('abort')) {
+      return;
+    }
+    if (neverBegan) {
+      this.endTheRun();
       return;
     }
     this.finalise(false);
@@ -1143,9 +1157,14 @@ export class PracticeSession {
     this.finalise(true);
   }
 
-  private finalise(completed: boolean): void {
+  /** Everything a run ends with, reported or not. */
+  private endTheRun(): void {
     this.mode.onSessionEnd(this.context);
     this.teardown();
+  }
+
+  private finalise(completed: boolean): void {
+    this.endTheRun();
 
     const report = buildPerformanceReport({
       exerciseId: this.timeline.exercise.id,

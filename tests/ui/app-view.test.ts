@@ -3731,13 +3731,30 @@ describe('AppView', () => {
       expect(element('result').querySelector('.run-strip')).not.toBeNull();
     });
 
+    it('puts up no verdict for a run stopped while it was being counted in', async () => {
+      // Nothing was played, so there is nothing to grade - a verdict there
+      // would be a grade for keys never touched.
+      const { view, runtime, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ countInBars: 1, modeId: FLOW_MODE_ID });
+      await runtime.controller.reloadExercise();
+
+      element<HTMLButtonElement>('focus-play').click();
+      metronome.advanceBeats(1);
+      expect(element('score-count').hidden).toBe(false);
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(element('score-verdict').hidden).toBe(true);
+      expect(element('result').textContent).toBe('');
+    });
+
     it('says how many bar lines the music waited at, where there are any', async () => {
       // His, and it is the measure of when to leave the mode for Flow: not how
       // many notes were right but how many times the music had to stop. Said
       // as a fraction of the bars read, because three in four bars and three
       // in forty are opposite readings - and said at nought too, since that is
       // the reading worth arriving at.
-      const { view, runtime } = createRig();
+      const { view, runtime, metronome } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
       const cycle = element<HTMLButtonElement>('frame-cycle');
@@ -3752,6 +3769,9 @@ describe('AppView', () => {
         new Event('click', { bubbles: true }),
       );
       element<HTMLButtonElement>('focus-play').click();
+      // The music begins on the pulse's first tick; stopped before it, the
+      // run would have nothing to report.
+      metronome.advanceBeats(1);
       element<HTMLButtonElement>('focus-stop').click();
 
       expect(element('result').textContent).toContain('Bars it waited at');

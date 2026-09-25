@@ -479,6 +479,12 @@ function element<T extends HTMLElement>(id: string): T {
   return found as T;
 }
 
+/** A press and a let-go on a sheet's dimmed area, outside its panel. */
+function tapOutside(sheet: HTMLElement): void {
+  sheet.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  sheet.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+}
+
 /**
  * A button in a list row, found by what it says it does.
  *
@@ -859,6 +865,58 @@ describe('AppView', () => {
       for (const sheet of sheets) {
         expect(sheet.querySelectorAll('[data-shuts]'), sheet.id).toHaveLength(1);
       }
+    });
+
+    it('shuts on a tap outside its panel, every sheet there is', async () => {
+      // Asked of the page, as Escape is. Wired sheet by sheet it was a list,
+      // and the modes, the picture of a run and then a single reading were each
+      // the one it had missed. His last: "Reading діалог неможливо зачинити
+      // якщо натиснути мишкою поза діалог".
+      // By pressing the sheet's own control, which does whatever shutting that
+      // sheet means - that each one does is the escape key's tests' to say.
+      const { view } = createRig();
+      await view.initialize();
+      const sheets = [...document.querySelectorAll<HTMLElement>('.sheet')];
+
+      expect(sheets.length).toBeGreaterThan(8);
+      for (const sheet of sheets) {
+        let pressed = 0;
+        sheet.querySelector('[data-shuts]')?.addEventListener('click', () => {
+          pressed += 1;
+        });
+        tapOutside(sheet);
+        expect(pressed, sheet.id).toBe(1);
+      }
+    });
+
+    it('shuts a reading on a tap outside it, and leaves the list it came from', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      runtime.history.record('score:A', { atMs: Date.now(), overall: 0.8, grade: 'B', completed: true });
+      element<HTMLButtonElement>('focus-readings').click();
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+      expect(element('sheet-reading').hidden).toBe(false);
+
+      tapOutside(element('sheet-reading'));
+
+      expect(element('sheet-reading').hidden).toBe(true);
+      expect(element('sheet-readings').hidden).toBe(false);
+    });
+
+    it('stays open when a drag begun inside its panel ends outside it', async () => {
+      // Selecting the name being typed, and letting go past the panel's edge:
+      // the click lands on the sheet, and is no way out.
+      const { view } = createRig();
+      await view.initialize();
+      const sheet = element('sheet-settings');
+      element<HTMLButtonElement>('focus-settings').click();
+
+      sheet.querySelector('.sheet__panel')?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      sheet.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(sheet.hidden).toBe(false);
     });
 
     it('shuts the picture of a run, which no list ever had on it', async () => {
@@ -1749,7 +1807,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-modes').click();
       expect(element('sheet-modes').hidden).toBe(false);
 
-      element('sheet-modes').dispatchEvent(new Event('click', { bubbles: true }));
+      tapOutside(element('sheet-modes'));
 
       expect(element('sheet-modes').hidden).toBe(true);
     });
@@ -2114,7 +2172,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('roll-play').click();
       expect(runtime.takePlayer.playing).not.toBeNull();
 
-      element('sheet-roll').dispatchEvent(new Event('click', { bubbles: true }));
+      tapOutside(element('sheet-roll'));
 
       expect(element('sheet-roll').hidden).toBe(true);
       // Everything closing it means, not only the sheet: the playback stops.
@@ -3259,7 +3317,7 @@ describe('AppView', () => {
       // And the dimmed area outside the panel closes it too, which a thumb finds
       // without aiming.
       element<HTMLButtonElement>('roll-options').click();
-      element('sheet-roll-options').dispatchEvent(new Event('click', { bubbles: true }));
+      tapOutside(element('sheet-roll-options'));
 
       expect(element('sheet-roll-options').hidden).toBe(true);
 
@@ -5726,7 +5784,7 @@ describe('AppView', () => {
       expect(element('sheet-settings').contains(element('passage-list'))).toBe(false);
 
       // It closes the way every other sheet does.
-      element('sheet-places').dispatchEvent(new Event('click', { bubbles: true }));
+      tapOutside(element('sheet-places'));
 
       expect(element('sheet-places').hidden).toBe(true);
     });
@@ -7619,7 +7677,7 @@ describe('AppView', () => {
       const sheet = element('sheet-settings');
       element<HTMLButtonElement>('focus-settings').click();
 
-      sheet.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      tapOutside(sheet);
 
       expect(sheet.hidden).toBe(true);
     });
@@ -8222,7 +8280,7 @@ describe('AppView', () => {
       expect(element('sheet-scores').hidden).toBe(false);
       // The dimmed area outside the panel is the way out a thumb finds
       // without aiming.
-      element('sheet-scores').dispatchEvent(new Event('click'));
+      tapOutside(element('sheet-scores'));
       expect(element('sheet-scores').hidden).toBe(true);
     });
 

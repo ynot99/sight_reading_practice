@@ -3937,9 +3937,8 @@ export class AppView {
    * not a second copy of it.
    */
   private bindTheModes(): void {
-    // Opening it, and the dimmed ground that closes it, are the list every
-    // other sheet is in: bound here as well, this one would have been the
-    // only sheet a tap outside did not close - which is what happened.
+    // Opening it is the list every other sheet is in. It was bound here
+    // alone once, and was then the only sheet a tap outside did not close.
     const cards = [...this.el.modesGrid.querySelectorAll('button[data-mode]')];
     this.listen(this.el.modesClose, 'click', () => {
       this.el.sheetModes.hidden = true;
@@ -6785,10 +6784,7 @@ export class AppView {
         () => this.showTheModes(),
       ],
       [
-        // The picture's own options. Listed here rather than wired on their own
-        // so that they get the way out every other sheet has: the dimmed area
-        // outside the panel, which a thumb finds without aiming. His: "чи можна
-        // ховати діалог з опціями при кліку outside цього діалогу?".
+        // The picture's own options.
         this.el.sheetRollOptions,
         [this.el.rollOptions],
         () => undefined,
@@ -6809,11 +6805,30 @@ export class AppView {
           this.showTheSheet(sheet);
         });
       }
-      // The dimmed area outside the panel is a way out that a thumb finds
-      // without aiming; the × is for anyone who does aim.
+    }
+
+    // The dimmed area outside a panel is a way out that a thumb finds without
+    // aiming; the × is for anyone who does aim. Asked of the page and shut by
+    // the sheet's own control, as Escape is - see `shutTheInnermostSheet`.
+    // Wired sheet by sheet it was a list, and the modes, the picture of a run
+    // and a single reading were each in turn the one it had missed. His last:
+    // "Reading діалог неможливо зачинити якщо натиснути мишкою поза діалог".
+    //
+    // Pressed there as well as let go there: a drag begun in the panel -
+    // selecting a name being typed - that ends outside it lands its click on
+    // the sheet as well, and is no way out.
+    //
+    // Each sheet the page has listens for itself, rather than the page
+    // listening on their behalf: Safari on the iPad may make no click at all
+    // of a tap on something that nothing listens to.
+    let pressedOn: EventTarget | null = null;
+    this.listen(this.doc, 'pointerdown', (event) => {
+      pressedOn = event.target;
+    });
+    for (const sheet of this.doc.querySelectorAll<HTMLElement>('.sheet')) {
       this.listen(sheet, 'click', (event) => {
-        if (event.target === sheet) {
-          sheet.hidden = true;
+        if (event.target === sheet && pressedOn === sheet) {
+          sheet.querySelector<HTMLElement>('[data-shuts]')?.click();
         }
       });
     }
@@ -6846,15 +6861,6 @@ export class AppView {
     });
     this.listen(this.el.rollClose, 'click', () => {
       this.closeTheRoll();
-    });
-    // The dimmed area outside the panel, which every other sheet has and this
-    // one had not: it is opened from the report rather than from the transport,
-    // so it was wired on its own and missed the way out a thumb finds without
-    // aiming. His: "клік поза діалог не зачиняє MIDI viewer".
-    this.listen(this.el.sheetRoll, 'click', (event) => {
-      if (event.target === this.el.sheetRoll) {
-        this.closeTheRoll();
-      }
     });
     this.listen(this.el.rollOptionsClose, 'click', () => {
       this.el.sheetRollOptions.hidden = true;

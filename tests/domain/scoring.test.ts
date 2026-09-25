@@ -17,7 +17,8 @@ function step(overrides: Partial<StepResult> & Pick<StepResult, 'index' | 'statu
     measureIndex: 0,
     beat: 1,
     expected: [60],
-    hits: [{ midi: 60, deviationMs: null, tier: 'perfect' }],
+    // Its one note played when the step was, unless a test says otherwise.
+    hits: [{ midi: 60, deviationMs: overrides.deviationMs ?? null, tier: 'perfect' }],
     wrong: [],
     missing: [],
     deviationMs: null,
@@ -64,17 +65,51 @@ describe('buildPerformanceReport', () => {
     });
   });
 
-  it('summarises timing over the steps that were actually played', () => {
+  /** A step whose one note landed this far from its moment. */
+  function timed(index: number, deviationMs: number) {
+    return step({ index, status: 'correct', deviationMs, hits: [{ midi: 60, deviationMs, tier: 'good' }] });
+  }
+
+  it('summarises timing over the notes that were actually played', () => {
     const report = reportOf([
-      step({ index: 0, status: 'correct', deviationMs: 100 }),
-      step({ index: 1, status: 'correct', deviationMs: -50 }),
-      step({ index: 2, status: 'missed', deviationMs: null }),
+      timed(0, 100),
+      timed(1, -50),
+      step({ index: 2, status: 'missed', hits: [], missing: [60], deviationMs: null }),
     ]);
 
     expect(report.timing.deviations).toEqual([100, -50]);
     expect(report.timing.meanDeviationMs).toBe(25);
     expect(report.timing.meanAbsoluteDeviationMs).toBe(75);
     expect(report.timing.maxAbsoluteDeviationMs).toBe(100);
+  });
+
+  it('times every note of a chord, not only the one that came first', () => {
+    const chord = step({
+      index: 0,
+      status: 'correct',
+      expected: [60, 64],
+      deviationMs: 10,
+      hits: [
+        { midi: 60, deviationMs: 10, tier: 'perfect' },
+        { midi: 64, deviationMs: 90, tier: 'good' },
+      ],
+    });
+
+    expect(reportOf([chord]).timing.deviations).toEqual([10, 90]);
+    expect(reportOf([chord]).timing.meanAbsoluteDeviationMs).toBe(50);
+  });
+
+  it('keeps no timing where the run keeps no time', () => {
+    // Waiting for the notes: the notes are played, and none of them has a
+    // moment to be off by. When each step was entered is kept on the step.
+    const waited = step({
+      index: 0,
+      status: 'correct',
+      deviationMs: 2400,
+      hits: [{ midi: 60, deviationMs: null, tier: 'perfect' }],
+    });
+
+    expect(reportOf([waited]).timing.deviations).toEqual([]);
   });
 
   it('handles a run with no notes at all', () => {

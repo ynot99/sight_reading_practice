@@ -14,7 +14,8 @@ function step(index: number, measureIndex: number, how: Partial<StepResult> = {}
     measureIndex,
     beat: 1,
     expected: [60],
-    hits: [{ midi: 60, deviationMs: null, tier: 'perfect' }],
+    // Its one note played when the step was, unless a test says otherwise.
+    hits: [{ midi: 60, deviationMs: how.deviationMs === undefined ? 0 : how.deviationMs, tier: 'perfect' }],
     wrong: [],
     missing: [],
     deviationMs: 0,

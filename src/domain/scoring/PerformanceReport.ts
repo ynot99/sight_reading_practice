@@ -37,6 +37,9 @@ export interface StepResult {
   /**
    * Signed distance between the step's scheduled onset and the first press,
    * in milliseconds. Negative is early. `null` when nothing was played.
+   *
+   * When the step was *entered*, which is what a run that waits reads its
+   * reader's pace from. How well each note was timed is in {@link hits}.
    */
   readonly deviationMs: number | null;
 }
@@ -77,6 +80,11 @@ export interface PerformanceTotals {
 }
 
 export interface PerformanceTiming {
+  /**
+   * How far from its moment every note played landed, in the order of the
+   * music: each note of a chord, and a note played a step late at its own
+   * lateness. Empty where the run keeps no time.
+   */
   readonly deviations: readonly number[];
   readonly meanDeviationMs: number;
   readonly meanAbsoluteDeviationMs: number;
@@ -162,7 +170,7 @@ export function buildPerformanceReport(input: PerformanceReportInput): Performan
   };
 
   const deviations = input.steps
-    .map((step) => step.deviationMs)
+    .flatMap((step) => step.hits.map((hit) => hit.deviationMs))
     .filter((deviation): deviation is number => deviation !== null);
   const absolute = deviations.map(Math.abs);
   const centre = mean(deviations);

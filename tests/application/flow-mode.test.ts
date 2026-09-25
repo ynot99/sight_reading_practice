@@ -605,6 +605,8 @@ describe('a note played just behind its beat', () => {
     expect(owed?.status).toBe('missed');
     expect(finished?.report.steps[1]?.wrong).toEqual([]);
     expect(harness.of('noteJudged').at(-1)?.tier).toBe('good');
+    // And the timing is charged for how late it came.
+    expect(finished?.report.timing.deviations).toEqual([1040]);
   });
 
   it('finishes the chord it was owed to', () => {

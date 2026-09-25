@@ -10,11 +10,19 @@ function step(index: number, deviationMs: number | null, wrong: readonly number[
     measureIndex: 0,
     beat: 1,
     expected: [60],
-    hits: [{ midi: 60, deviationMs: null, tier: 'perfect' }],
+    hits: [{ midi: 60, deviationMs, tier: 'perfect' }],
     wrong: [...wrong],
     missing: [],
     deviationMs,
   };
+}
+
+/**
+ * A step as a run that waits records it: entered at this moment, and its note
+ * with no timing of its own - nothing kept the time for it to be off by.
+ */
+function entered(index: number, atMs: number): StepResult {
+  return { ...step(index, atMs), hits: [{ midi: 60, deviationMs: null, tier: 'perfect' }] };
 }
 
 function reportOf(steps: readonly StepResult[], playableSteps?: number) {
@@ -127,7 +135,7 @@ describe('how evenly the presses were struck', () => {
 describe('what a frame that waits can be judged on', () => {
   /** A reading whose entries fall at these moments from the run's beginning. */
   function played(moments: readonly number[]) {
-    return reportOf(moments.map((at, index) => step(index, at)));
+    return reportOf(moments.map((at, index) => entered(index, at)));
   }
 
   function axis(moments: readonly number[], name: string): number {
@@ -197,7 +205,7 @@ describe('a reading of music that is not all one value', () => {
   const WRITTEN = [0, 2_000, 2_500, 3_500, 4_000, 4_500, 6_500];
 
   function axis(moments: readonly number[], name: string): number {
-    const report = reportOf(moments.map((at, index) => step(index, at)));
+    const report = reportOf(moments.map((at, index) => entered(index, at)));
     return theProfile(report, [], false, WRITTEN).find((each) => each.name === name)?.of ?? -1;
   }
 

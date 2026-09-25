@@ -243,10 +243,10 @@ function theTimedAxes(timing: PerformanceReport['timing']): readonly ProfileAxis
  * milliseconds - or a reading taken slowly would score worse for being slow.
  */
 function theWaitingAxes(
-  timing: PerformanceReport['timing'],
+  entries: readonly number[],
   owedAtMs: readonly number[],
 ): readonly ProfileAxis[] {
-  const paces = thePacesOf(timing.deviations, owedAtMs);
+  const paces = thePacesOf(entries, owedAtMs);
   const held = paces.length === 0 ? 1 : paces.reduce((sum, pace) => sum + pace, 0) / paces.length;
   const flow = theFlowOf(paces);
   const steady = theSteadinessOf(paces);
@@ -281,6 +281,18 @@ function theWaitingAxes(
  * all - and every one carries the number behind it, because a shape says which
  * way a reading leans and never what it was.
  */
+/**
+ * When each step was entered, where the music waited for the reader.
+ *
+ * A step's own first press, which is where a waiting run's pace is read
+ * from - not the notes' timing, of which such a run keeps none.
+ */
+function theEntriesOf(report: PerformanceReport): readonly number[] {
+  return report.steps
+    .map((step) => step.deviationMs)
+    .filter((entered): entered is number => entered !== null);
+}
+
 export function theProfile(
   report: PerformanceReport,
   velocities: readonly number[],
@@ -296,7 +308,7 @@ export function theProfile(
       of: Math.min(1, totals.correct / owed),
       said: `${totals.correct} of ${totals.playableSteps}`,
     },
-    ...(keepsTime ? theTimedAxes(timing) : theWaitingAxes(timing, owedAtMs)),
+    ...(keepsTime ? theTimedAxes(timing) : theWaitingAxes(theEntriesOf(report), owedAtMs)),
   ];
   // Left off rather than drawn at nought where there is nothing to say: three
   // presses are not a hand to judge, and an axis pinned to the middle would

@@ -391,6 +391,22 @@ describe('the best readings of a passage, kept whatever comes after them', () =>
     expect(kept(history)).toEqual([2, 4, 5]);
   });
 
+  it('still has the best reading after a visit', () => {
+    // Kept beyond the newest, so it is written first - and reading the
+    // store back must not take the newest of it and lose the best.
+    const store = new InMemorySettingsStore();
+    const history = new PracticeHistory(store, 3);
+    history.record('score:A', attempt(0.95, 1));
+    for (let at = 2; at <= 8; at += 1) {
+      history.record('score:A', attempt(0.6, at));
+    }
+
+    const next = new PracticeHistory(store, 3);
+    next.load();
+
+    expect(kept(next)).toEqual([1, 6, 7, 8]);
+  });
+
   it('keeps a passage practised long ago down to its best, rather than forgetting it', () => {
     // Every passage chosen is a passage of its own, so two hundred of them
     // come round in a few weeks of practice.

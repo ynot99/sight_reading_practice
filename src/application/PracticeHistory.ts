@@ -176,6 +176,12 @@ function theBestOf(attempts: readonly PracticeAttempt[]): PracticeAttempt[] {
   return [finished, stopped].filter((best): best is PracticeAttempt => best !== null);
 }
 
+/** The newest `keep` of a passage's readings, and its best however old: see `theBestOf`. */
+function whatAPassageKeeps(attempts: readonly PracticeAttempt[], keep: number): PracticeAttempt[] {
+  const kept = new Set([...attempts.slice(-keep), ...theBestOf(attempts)]);
+  return attempts.filter((each) => kept.has(each));
+}
+
 /** A kept roll, or nothing where the lists it is made of are not there. */
 function readRoll(value: unknown): RunRoll | null {
   if (!isRecord(value)) {
@@ -273,22 +279,17 @@ export class PracticeHistory {
         .map(readAttempt)
         .filter((attempt): attempt is PracticeAttempt => attempt !== null);
       if (attempts.length > 0) {
-        this.passages.set(key, attempts.slice(-this.keep));
+        this.passages.set(key, whatAPassageKeeps(attempts, this.keep));
       }
     }
   }
 
   record(key: string, attempt: PracticeAttempt): void {
     const all = [...(this.passages.get(key) ?? []), attempt];
-    // The newest, and the best however old: see `theBestOf`.
-    const kept = new Set([...all.slice(-this.keep), ...theBestOf(all)]);
     // Re-inserting moves the passage to the end, so the oldest *untouched*
     // one gives up its readings rather than the oldest ever recorded.
     this.passages.delete(key);
-    this.passages.set(
-      key,
-      all.filter((each) => kept.has(each)),
-    );
+    this.passages.set(key, whatAPassageKeeps(all, this.keep));
     this.letTheOldestPassagesGo();
     this.flush();
   }

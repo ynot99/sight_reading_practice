@@ -99,6 +99,33 @@ describe('buildPerformanceReport', () => {
     expect(reportOf([chord]).timing.meanAbsoluteDeviationMs).toBe(50);
   });
 
+  it('says beside every deviation whether its note was Perfect or Good', () => {
+    const chord = step({
+      index: 0,
+      status: 'correct',
+      expected: [60, 64],
+      hits: [
+        { midi: 60, deviationMs: 10, tier: 'perfect', windowMs: 40 },
+        { midi: 64, deviationMs: 90, tier: 'good', windowMs: 40 },
+      ],
+    });
+    const next = step({ index: 1, status: 'correct', hits: [{ midi: 62, deviationMs: -5, tier: 'perfect', windowMs: 60 }] });
+
+    expect(reportOf([chord, next]).timing.tiers).toEqual(['perfect', 'good', 'perfect']);
+  });
+
+  it('takes the middle window of the notes played as the window of the run', () => {
+    const windows = (...each: number[]) =>
+      reportOf(
+        each.map((windowMs, index) =>
+          step({ index, status: 'correct', hits: [{ midi: 60, deviationMs: 0, tier: 'perfect', windowMs }] }),
+        ),
+      ).timing.perfectMs;
+
+    expect(windows(40, 90, 60)).toBe(60);
+    expect(windows(40, 60, 90, 30)).toBe(50);
+  });
+
   it('keeps no timing where the run keeps no time', () => {
     // Waiting for the notes: the notes are played, and none of them has a
     // moment to be off by. When each step was entered is kept on the step.
@@ -110,6 +137,7 @@ describe('buildPerformanceReport', () => {
     });
 
     expect(reportOf([waited]).timing.deviations).toEqual([]);
+    expect(reportOf([waited]).timing.perfectMs).toBeNull();
   });
 
   it('handles a run with no notes at all', () => {

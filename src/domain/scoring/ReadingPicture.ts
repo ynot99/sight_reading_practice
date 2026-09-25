@@ -1,4 +1,5 @@
 import { barCells, type BarState } from './barCells.js';
+import type { NoteTier } from './noteTiers.js';
 import type { PerformanceReport, PerformanceTotals } from './PerformanceReport.js';
 import { theProfile, type ProfileAxis } from './theProfile.js';
 
@@ -43,6 +44,13 @@ export interface ReadingPicture {
   readonly deviationsMs: readonly number[];
   /** How many presses those stand for, which is more where the reading was long. */
   readonly pressesJudged: number;
+  /**
+   * Whether each of {@link deviationsMs} was Perfect (`p`) or Good (`g`), in
+   * the same order. Absent from readings kept before notes were judged so.
+   */
+  readonly tiersOfMarks?: string;
+  /** The Perfect window of a typical note of the reading; see `PerformanceTiming.perfectMs`. */
+  readonly perfectMs?: number | null;
   /** The window they were judged against, so the scatter is drawn as it was read. */
   readonly toleranceMs: number;
   readonly totals: PerformanceTotals;
@@ -69,9 +77,19 @@ export function barsOfThePicture(picture: ReadingPicture): readonly { state: Bar
 }
 
 /** Every `nth` of them, so a long reading's scatter keeps its shape at a fraction of the size. */
-function thinnedTo(values: readonly number[], most: number): readonly number[] {
+function thinnedTo<T>(values: readonly T[], most: number): readonly T[] {
   const nth = Math.ceil(values.length / Math.max(1, most));
-  return values.filter((_unused, index) => index % nth === 0).map((value) => Math.round(value));
+  return values.filter((_unused, index) => index % nth === 0);
+}
+
+/** The letter a verdict is kept as. */
+const TIER_LETTERS: Readonly<Record<NoteTier, string>> = { perfect: 'p', good: 'g' };
+
+/** A reading's verdicts, back from the letters they were kept as; empty where one is not a verdict. */
+export function tiersOfThePicture(picture: ReadingPicture): readonly NoteTier[] {
+  const letters = [...(picture.tiersOfMarks ?? '')];
+  const tiers = letters.map((letter) => (letter === 'p' ? 'perfect' : letter === 'g' ? 'good' : null));
+  return tiers.every((tier) => tier !== null) ? tiers : [];
 }
 
 export interface ReadingPictureInput {
@@ -97,8 +115,13 @@ export function theReadingPicture(input: ReadingPictureInput): ReadingPicture {
       .join(''),
     waitedAtBars: [...report.waitedAtBars],
     axes: theProfile(report, input.velocities, input.keepsTime, input.owedAtMs),
-    deviationsMs: thinnedTo(report.timing.deviations, MOST_MARKS),
+    deviationsMs: thinnedTo(report.timing.deviations, MOST_MARKS).map((value) => Math.round(value)),
     pressesJudged: report.timing.deviations.length,
+    // Thinned alike, so the verdict kept for a mark is that mark's.
+    tiersOfMarks: thinnedTo(report.timing.tiers, MOST_MARKS)
+      .map((tier) => TIER_LETTERS[tier])
+      .join(''),
+    perfectMs: report.timing.perfectMs,
     toleranceMs: input.toleranceMs,
     totals: report.totals,
     meanDeviationMs: report.timing.meanDeviationMs,

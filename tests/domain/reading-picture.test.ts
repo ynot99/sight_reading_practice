@@ -5,6 +5,7 @@ import {
   barsOfThePicture,
   MOST_MARKS,
   theReadingPicture,
+  tiersOfThePicture,
 } from '../../src/domain/scoring/ReadingPicture.js';
 
 function step(index: number, measureIndex: number, how: Partial<StepResult> = {}): StepResult {
@@ -89,6 +90,32 @@ describe('the picture a reading keeps', () => {
     // Whole milliseconds: a press is not measured to a thousandth of one, and
     // the digits would be a fifth of what is kept.
     expect(picture.deviationsMs.every((value) => Number.isInteger(value))).toBe(true);
+  });
+
+  it('keeps the verdict of every mark it keeps, thinned alike', () => {
+    // Every third note Good, so a verdict kept against the wrong mark shows.
+    const steps = Array.from({ length: MOST_MARKS * 3 }, (_unused, at) =>
+      step(at, Math.floor(at / 10), {
+        deviationMs: at % 3 === 0 ? 90 : 5,
+        hits: [
+          { midi: 60, deviationMs: at % 3 === 0 ? 90 : 5, tier: at % 3 === 0 ? 'good' : 'perfect', windowMs: 40 },
+        ],
+      }),
+    );
+
+    const picture = theReadingPicture({ report: reportOf(steps), bars: 180, ...plainly });
+
+    const tiers = tiersOfThePicture(picture);
+    expect(tiers).toHaveLength(picture.deviationsMs.length);
+    expect(tiers.every((tier, at) => (tier === 'good') === (picture.deviationsMs[at] === 90))).toBe(true);
+    expect(picture.perfectMs).toBe(40);
+  });
+
+  it('reads back no verdicts where a letter is not one', () => {
+    const picture = theReadingPicture({ report: reportOf([step(0, 0)]), bars: 1, ...plainly });
+
+    expect(tiersOfThePicture({ ...picture, tiersOfMarks: 'pgx' })).toEqual([]);
+    expect(tiersOfThePicture({ ...picture, tiersOfMarks: 'pg' })).toEqual(['perfect', 'good']);
   });
 
   it('keeps every mark of a short run, in order', () => {

@@ -7,6 +7,11 @@ function element(tag: string, className: string): HTMLElement {
 }
 
 function saidOf(errors: HitErrors): string {
+  // How many landed in the window, where the run said: the number the green
+  // span is there to make visible.
+  if (errors.tally !== null) {
+    return `${errors.tally.perfect} perfect · ${errors.tally.good} good`;
+  }
   if (errors.early === 0 && errors.late === 0) {
     return 'every press on the beat';
   }
@@ -30,10 +35,20 @@ function saidOf(errors: HitErrors): string {
 export function drawTheHitErrors(errors: HitErrors): HTMLElement {
   const figure = element('div', 'hit-bar');
   const strip = element('div', 'hit-bar__strip');
+  if (errors.perfect !== null) {
+    // Behind the marks, so the ones that landed in it are seen standing in it.
+    const perfect = element('span', 'hit-bar__perfect');
+    perfect.style.left = `${(errors.perfect.from * 100).toFixed(3)}%`;
+    perfect.style.width = `${((errors.perfect.to - errors.perfect.from) * 100).toFixed(3)}%`;
+    strip.append(perfect);
+  }
   strip.append(element('span', 'hit-bar__beat'));
   for (const mark of errors.marks) {
     const tick = element('span', 'hit-bar__tick');
     tick.dataset['beyond'] = String(mark.beyond);
+    if (mark.tier !== undefined) {
+      tick.dataset['tier'] = mark.tier;
+    }
     tick.style.left = `${(mark.of * 100).toFixed(3)}%`;
     tick.title = `${Math.round(mark.deviationMs)} ms`;
     strip.append(tick);

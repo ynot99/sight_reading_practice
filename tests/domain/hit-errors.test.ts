@@ -74,6 +74,41 @@ describe('where the presses of a run landed', () => {
     expect(errors?.meanOf).toBeCloseTo(0.75, 10);
   });
 
+  it('spans the Perfect window of the run, on the same scale as the marks', () => {
+    // Fifty either side of the beat, in a strip two hundred and fifty wide.
+    const errors = theHitErrors(ENOUGH, 250, { perfectMs: 50 });
+
+    expect(errors?.perfect?.from).toBeCloseTo(0.4, 10);
+    expect(errors?.perfect?.to).toBeCloseTo(0.6, 10);
+  });
+
+  it('keeps the window inside the strip where it is wider than it', () => {
+    const errors = theHitErrors(ENOUGH, 30, { perfectMs: 90 });
+
+    expect(errors?.perfect).toEqual({ from: 0, to: 1 });
+  });
+
+  it('draws no window where the run kept no time to have one', () => {
+    expect(theHitErrors(ENOUGH, 250, { perfectMs: null })?.perfect).toBeNull();
+    expect(theHitErrors(ENOUGH, 250)?.perfect).toBeNull();
+  });
+
+  it('gives each mark the verdict of its note, and counts them', () => {
+    const tiers = ['good', 'perfect', 'perfect', 'perfect', 'perfect', 'good'] as const;
+    const errors = theHitErrors(ENOUGH, 250, { tiers: [...tiers] });
+
+    expect(errors?.marks.map((mark) => mark.tier)).toEqual([...tiers]);
+    expect(errors?.tally).toEqual({ perfect: 4, good: 2 });
+  });
+
+  it('says no verdicts rather than the wrong ones, where they do not match the marks one for one', () => {
+    // A list a mark short would colour every mark after it with its neighbour's.
+    const errors = theHitErrors(ENOUGH, 250, { tiers: ['perfect', 'good'] });
+
+    expect(errors?.marks.every((mark) => mark.tier === undefined)).toBe(true);
+    expect(errors?.tally).toBeNull();
+  });
+
   it('carries the milliseconds behind each mark', () => {
     const errors = theHitErrors(ENOUGH, 250);
 

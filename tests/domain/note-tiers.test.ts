@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, type Exercise, type MusicalEntry } from '../../src/domain/model/Exercise.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
-import { perfectWindowMs, tierOf } from '../../src/domain/scoring/noteTiers.js';
+import { landing, perfectWindowMs } from '../../src/domain/scoring/noteTiers.js';
 import { buildTimeline, type ExerciseTimeline } from '../../src/domain/timeline/Timeline.js';
 import { bar, p, twoBarExercise } from '../support/fixtures.js';
 
@@ -91,14 +91,23 @@ describe('Perfect or Good', () => {
   const timeline = played(60, QUARTERS);
 
   it('is Perfect inside the window, to its edge, on either side', () => {
-    expect(tierOf(timeline, 1, 60)).toBe('perfect');
-    expect(tierOf(timeline, 1, -60)).toBe('perfect');
-    expect(tierOf(timeline, 1, 0)).toBe('perfect');
+    expect(landing(timeline, 1, 60).tier).toBe('perfect');
+    expect(landing(timeline, 1, -60).tier).toBe('perfect');
+    expect(landing(timeline, 1, 0).tier).toBe('perfect');
   });
 
   it('is Good outside it, on either side', () => {
-    expect(tierOf(timeline, 1, 61)).toBe('good');
-    expect(tierOf(timeline, 1, -61)).toBe('good');
+    expect(landing(timeline, 1, 61).tier).toBe('good');
+    expect(landing(timeline, 1, -61).tier).toBe('good');
+  });
+
+  it('says the window it was judged in, on the side it fell', () => {
+    expect(landing(timeline, 1, 30).windowMs).toBeCloseTo(60, 9);
+    const mixed = played(160, [
+      [noteEntry(p('C4'), Duration.QUARTER), ...times(4, Duration.SIXTEENTH), noteEntry(p('C4'), Duration.HALF)],
+    ]);
+    expect(landing(mixed, 1, -10).windowMs).toBe(40);
+    expect(landing(mixed, 1, 10).windowMs).toBeCloseTo(93.75 / 3, 9);
   });
 
   it('asks the side the press fell on', () => {
@@ -108,7 +117,7 @@ describe('Perfect or Good', () => {
       [noteEntry(p('C4'), Duration.QUARTER), ...times(4, Duration.SIXTEENTH), noteEntry(p('C4'), Duration.HALF)],
     ]);
 
-    expect(tierOf(mixed, 1, -40)).toBe('perfect');
-    expect(tierOf(mixed, 1, 40)).toBe('good');
+    expect(landing(mixed, 1, -40).tier).toBe('perfect');
+    expect(landing(mixed, 1, 40).tier).toBe('good');
   });
 });

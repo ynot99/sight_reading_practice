@@ -22,6 +22,11 @@ export interface NoteHit {
    */
   readonly deviationMs: number | null;
   readonly tier: NoteTier;
+  /**
+   * How far off it could have been and still been Perfect, on the side it
+   * fell. Absent where the run keeps no time.
+   */
+  readonly windowMs?: number;
 }
 
 /**
@@ -78,7 +83,12 @@ export function perfectWindowMs(timeline: ExerciseTimeline, stepIndex: number, e
   return Math.min(open, gapMs * PERFECT_SHARE_OF_GAP);
 }
 
-/** Whether a note played this far from its moment was Perfect or Good. */
-export function tierOf(timeline: ExerciseTimeline, stepIndex: number, deviationMs: number): NoteTier {
-  return Math.abs(deviationMs) <= perfectWindowMs(timeline, stepIndex, deviationMs < 0) ? 'perfect' : 'good';
+/** How a note played this far from its moment landed: in its window or not, and the window. */
+export function landing(
+  timeline: ExerciseTimeline,
+  stepIndex: number,
+  deviationMs: number,
+): { readonly tier: NoteTier; readonly windowMs: number } {
+  const windowMs = perfectWindowMs(timeline, stepIndex, deviationMs < 0);
+  return { tier: Math.abs(deviationMs) <= windowMs ? 'perfect' : 'good', windowMs };
 }

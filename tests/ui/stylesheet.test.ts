@@ -1330,6 +1330,36 @@ describe('the marker', () => {
   });
 });
 
+describe('the strip of where the notes landed', () => {
+  const body = (selector: string): string =>
+    rules()
+      .filter((rule) => rule.selector.split(',').map((each) => each.trim()).includes(selector))
+      .map((rule) => rule.body)
+      .join(';');
+
+  it('marks each note in the green it is drawn in on the page', () => {
+    expect(body(".hit-bar__tick[data-tier='perfect']")).toContain('#15803d');
+    expect(body(".hit-bar__tick[data-tier='good']")).toContain('#22c55e');
+    expect(body('.played--correct')).toContain('#15803d');
+    expect(body('.played--loose')).toContain('#22c55e');
+  });
+
+  it('colours a note played from past the edge by its verdict, not as a miss', () => {
+    // A note a step late is Good and played: at the edge, and green.
+    const all = rules();
+    const edge = all.findIndex((rule) => rule.selector === ".hit-bar__tick[data-beyond='true']");
+    const good = all.findIndex((rule) => rule.selector === ".hit-bar__tick[data-tier='good']");
+    expect(edge).toBeGreaterThanOrEqual(0);
+    expect(good).toBeGreaterThan(edge);
+  });
+
+  it('lays the Perfect window behind the marks, across the whole strip', () => {
+    expect(body('.hit-bar__perfect')).toMatch(/position:\s*absolute/);
+    expect(body('.hit-bar__perfect')).toMatch(/top:\s*0/);
+    expect(body('.hit-bar__perfect')).toMatch(/bottom:\s*0/);
+  });
+});
+
 describe('the marker a reader keeps missing at', () => {
   it('reddens Verovio’s marker as it did OSMD’s, and never the other hand’s', () => {
     for (const level of ['1', '2', '3', '4']) {

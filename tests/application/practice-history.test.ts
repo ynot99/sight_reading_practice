@@ -249,6 +249,8 @@ function picture(marks: number): NonNullable<PracticeAttempt['picture']> {
     deviationsMs: Array.from({ length: marks }, (_unused, at) => at),
     pressesJudged: marks,
     toleranceMs: 120,
+    tiersOfMarks: 'pg',
+    perfectMs: 45,
     totals: {
       steps: marks,
       playableSteps: marks,
@@ -351,6 +353,8 @@ describe('keeping the history inside the store', () => {
     const read = new PracticeHistory(store);
     read.load();
     expect(read.lastReadings()[0]?.picture?.bars).toBe('c'.repeat(20));
+    expect(read.lastReadings()[0]?.picture?.tiersOfMarks).toBe('pg');
+    expect(read.lastReadings()[0]?.picture?.perfectMs).toBe(45);
     expect(read.lastReadings()[0]?.roll?.presses).toHaveLength(40);
 
     for (const written1 of written.passages['score:A'] ?? []) {

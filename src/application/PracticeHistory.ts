@@ -100,6 +100,8 @@ function readPicture(value: unknown): ReadingPicture | null {
         ? value['pressesJudged']
         : readNumbers(value['deviationsMs']).length,
     toleranceMs: typeof value['toleranceMs'] === 'number' ? value['toleranceMs'] : 0,
+    ...(typeof value['tiersOfMarks'] === 'string' ? { tiersOfMarks: value['tiersOfMarks'] } : {}),
+    ...(typeof value['perfectMs'] === 'number' ? { perfectMs: value['perfectMs'] } : {}),
     totals: value['totals'] as unknown as ReadingPicture['totals'],
     meanDeviationMs: typeof value['meanDeviationMs'] === 'number' ? value['meanDeviationMs'] : 0,
     meanAbsoluteDeviationMs:

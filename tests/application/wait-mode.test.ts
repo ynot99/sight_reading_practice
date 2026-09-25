@@ -67,6 +67,7 @@ describe('a press that beats the hand the reader is hearing', () => {
     expect(second?.wrong).toEqual([]);
     // The music waits here, so there is no moment for a note to be off by.
     expect(second?.hits.map((hit) => hit.deviationMs)).toEqual([null]);
+    expect(second?.hits[0]?.windowMs).toBeUndefined();
   });
 
   it('leaves the reader as long as they like to be late', () => {

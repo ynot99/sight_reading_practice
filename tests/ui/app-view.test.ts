@@ -3694,6 +3694,10 @@ describe('AppView', () => {
 
       expect(bar).not.toBeNull();
       expect(ticks.length).toBeGreaterThanOrEqual(4);
+      // In the colours of their notes, with the window they had to land in.
+      expect([...ticks].every((tick) => ['perfect', 'good'].includes((tick as HTMLElement).dataset['tier'] ?? ''))).toBe(true);
+      expect(bar?.querySelector('.hit-bar__perfect')).not.toBeNull();
+      expect(bar?.textContent).toMatch(/\d+ perfect · \d+ good/);
       // The edges are the window the run was judged in, not a number of this
       // drawing's own: widen the tolerance and the strip means the same thing
       // about a looser reading.

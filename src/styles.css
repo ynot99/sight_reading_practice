@@ -845,6 +845,31 @@ textarea {
 }
 
 /*
+ * Each mark in the colour its note is drawn on the page: Perfect in the
+ * deeper green, Good in the paler. After the edge's red, and winning over
+ * it - a note a step late is Good, played, and only drawn at the edge
+ * because it came from past it.
+ */
+.hit-bar__tick[data-tier='perfect'] {
+  background: #15803d;
+}
+
+.hit-bar__tick[data-tier='good'] {
+  background: #22c55e;
+}
+
+/*
+ * The Perfect window of a typical note of the run, behind the marks: how many
+ * of them stand inside it is what it is there to show.
+ */
+.hit-bar__perfect {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgb(21 128 61 / 16%);
+}
+
+/*
  * The average, standing against the scatter rather than beside it as a number.
  *
  * Full height and opaque, so it reads over the marks however many of them have

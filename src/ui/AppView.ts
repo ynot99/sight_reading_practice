@@ -2,7 +2,7 @@ import type { AppRuntime } from '../composition/createApp.js';
 import { FLOW_MODE_ID } from '../application/modes/FlowMode.js';
 import { modeIsOn, settingsForMode } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
-import { barsOfThePicture } from '../domain/scoring/ReadingPicture.js';
+import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { BAR_MODE_ID } from '../application/modes/BarMode.js';
 import { WAIT_MODE_ID } from '../application/modes/WaitMode.js';
@@ -2553,7 +2553,10 @@ export class AppView {
       drawn.push(figure);
     }
 
-    const errors = theHitErrors(picture.deviationsMs, picture.toleranceMs);
+    const errors = theHitErrors(picture.deviationsMs, picture.toleranceMs, {
+      tiers: tiersOfThePicture(picture),
+      perfectMs: picture.perfectMs ?? null,
+    });
     if (errors !== null) {
       drawn.push(drawTheHitErrors(errors));
       if (picture.pressesJudged > picture.deviationsMs.length) {
@@ -8756,6 +8759,7 @@ export class AppView {
     const errors = theHitErrors(
       report.timing.deviations,
       this.runtime.controller.settings.matchToleranceMs,
+      { tiers: report.timing.tiers, perfectMs: report.timing.perfectMs },
     );
     if (errors === null) {
       return;

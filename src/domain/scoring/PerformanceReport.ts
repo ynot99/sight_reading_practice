@@ -1,4 +1,4 @@
-import type { NoteHit } from './noteTiers.js';
+import type { NoteHit, NoteTier } from './noteTiers.js';
 
 /** Outcome of a single timeline step. */
 export type StepStatus =
@@ -86,6 +86,14 @@ export interface PerformanceTiming {
    * lateness. Empty where the run keeps no time.
    */
   readonly deviations: readonly number[];
+  /** Whether each of {@link deviations} was Perfect or Good, in the same order. */
+  readonly tiers: readonly NoteTier[];
+  /**
+   * The Perfect window of a typical note of the run: the middle one of the
+   * windows its notes were judged in, which differ with the tempo and with
+   * how close the notes stand. `null` where the run keeps no time.
+   */
+  readonly perfectMs: number | null;
   readonly meanDeviationMs: number;
   readonly meanAbsoluteDeviationMs: number;
   readonly maxAbsoluteDeviationMs: number;
@@ -148,6 +156,18 @@ function mean(values: readonly number[]): number {
     : values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+/** The middle one, or the mean of the middle two; `null` of none. */
+function middleOf(values: readonly number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const half = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? (sorted[half] ?? 0)
+    : ((sorted[half - 1] ?? 0) + (sorted[half] ?? 0)) / 2;
+}
+
 function hitsOf(steps: readonly StepResult[], tier: NoteHit['tier']): number {
   return steps.reduce((sum, step) => sum + step.hits.filter((hit) => hit.tier === tier).length, 0);
 }
@@ -169,9 +189,11 @@ export function buildPerformanceReport(input: PerformanceReportInput): Performan
     barsWaitedFor: input.waitedAtBars?.length ?? 0,
   };
 
-  const deviations = input.steps
-    .flatMap((step) => step.hits.map((hit) => hit.deviationMs))
-    .filter((deviation): deviation is number => deviation !== null);
+  const timed = input.steps
+    .flatMap((step) => step.hits)
+    .filter((hit): hit is NoteHit & { readonly deviationMs: number } => hit.deviationMs !== null);
+  const deviations = timed.map((hit) => hit.deviationMs);
+  const windows = timed.flatMap((hit) => (hit.windowMs === undefined ? [] : [hit.windowMs]));
   const absolute = deviations.map(Math.abs);
   const centre = mean(deviations);
   const spread =
@@ -191,6 +213,8 @@ export function buildPerformanceReport(input: PerformanceReportInput): Performan
     totals,
     timing: {
       deviations,
+      tiers: timed.map((hit) => hit.tier),
+      perfectMs: middleOf(windows),
       meanDeviationMs: centre,
       meanAbsoluteDeviationMs: mean(absolute),
       maxAbsoluteDeviationMs: absolute.length === 0 ? 0 : Math.max(...absolute),

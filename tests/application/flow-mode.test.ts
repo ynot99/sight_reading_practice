@@ -694,6 +694,8 @@ describe('the account a run keeps of every note', () => {
     expect(first?.hits.map((hit) => hit.tier)).toEqual(['perfect', 'perfect']);
     expect(second?.hits.map((hit) => [hit.tier, hit.deviationMs])).toEqual([['good', 250]]);
     expect(harness.of('noteJudged').map((judged) => judged.tier)).toEqual(['perfect', 'perfect', 'good']);
+    // And the window each was judged in: sixty either way, a quarter at sixty.
+    expect(second?.hits[0]?.windowMs).toBeCloseTo(60, 9);
   });
 
   it('counts Perfect and Good apart, and both as played', () => {

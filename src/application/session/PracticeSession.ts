@@ -6,7 +6,7 @@ import {
   type StepResult,
   type StepStatus,
 } from '../../domain/scoring/PerformanceReport.js';
-import { tierOf, type NoteHit, type NoteTier } from '../../domain/scoring/noteTiers.js';
+import { landing, type NoteHit } from '../../domain/scoring/noteTiers.js';
 import { expectedFor } from '../../domain/timeline/Timeline.js';
 import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timeline.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../../shared/EventEmitter.js';
@@ -1493,9 +1493,11 @@ export class PracticeSession {
     if (!this.mode.requiresMetronome) {
       return { deviationMs: null, tier: rushed ? 'good' : 'perfect' };
     }
-    const tier: NoteTier =
-      rushed ? 'good' : deviationMs === null ? 'perfect' : tierOf(this.timeline, stepIndex, deviationMs);
-    return { deviationMs, tier };
+    if (deviationMs === null) {
+      return { deviationMs, tier: rushed ? 'good' : 'perfect' };
+    }
+    const landed = landing(this.timeline, stepIndex, deviationMs);
+    return { deviationMs, tier: rushed ? 'good' : landed.tier, windowMs: landed.windowMs };
   }
 
   /**

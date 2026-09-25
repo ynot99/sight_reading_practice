@@ -7,7 +7,7 @@ import type { KeySignature } from '../domain/model/KeySignature.js';
 import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import { printedAtEachStep } from '../domain/notation/printedIds.js';
-import type { PerformanceReport, StepStatus } from '../domain/scoring/PerformanceReport.js';
+import { noteCountsOf, type PerformanceReport, type StepStatus } from '../domain/scoring/PerformanceReport.js';
 import { theReadingPicture, type ReadingPicture } from '../domain/scoring/ReadingPicture.js';
 import { modesOn } from './modes/challengeModes.js';
 import { pieceOfKey } from './PracticeHistory.js';
@@ -2554,6 +2554,7 @@ export class PracticeController {
           overall: score.overall,
           grade: score.grade,
           completed: report.completed,
+          notes: noteCountsOf(report.totals),
           tempoPercent: Math.round(this.currentSettings.tempoPercent),
           hand: this.currentSettings.handStaff,
           stoppedAtBar: picture.stoppedAtBar,

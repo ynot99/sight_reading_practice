@@ -371,6 +371,52 @@ describe('keeping the history inside the store', () => {
   });
 });
 
+describe('the notes a reading keeps count of', () => {
+  it('keeps them, and reads them back', () => {
+    const store = new InMemorySettingsStore();
+    const history = new PracticeHistory(store);
+    history.record('score:A', {
+      atMs: 1,
+      overall: 0.8,
+      grade: 'B',
+      completed: true,
+      notes: { perfect: 312, good: 40, missed: 5, wrong: 3 },
+    });
+
+    const read = new PracticeHistory(store);
+    read.load();
+
+    expect(read.lastReadings()[0]?.notes).toEqual({ perfect: 312, good: 40, missed: 5, wrong: 3 });
+  });
+
+  it('keeps nothing where one of the four is not a count', () => {
+    const store = new InMemorySettingsStore();
+    const history = new PracticeHistory(store);
+    history.record('score:A', { atMs: 1, overall: 0.8, grade: 'B', completed: true });
+    const written = JSON.parse(JSON.stringify(store.read())) as {
+      passages: Record<string, Record<string, unknown>[]>;
+    };
+    const [kept] = written.passages['score:A'] ?? [];
+
+    for (const nonsense of [
+      { perfect: 1, good: 2, missed: 3 },
+      { perfect: 1, good: 2, missed: 3, wrong: -1 },
+      { perfect: 1.5, good: 2, missed: 3, wrong: 0 },
+      { perfect: '1', good: 2, missed: 3, wrong: 0 },
+    ]) {
+      if (kept !== undefined) {
+        kept['notes'] = nonsense;
+      }
+      store.write(written);
+      const read = new PracticeHistory(store);
+      read.load();
+
+      expect(read.lastReadings()[0]?.overall).toBe(0.8);
+      expect(read.lastReadings()[0]?.notes).toBeUndefined();
+    }
+  });
+});
+
 describe('what a reading says it was played with', () => {
   it('keeps the frame and the squares, and gives them back', () => {
     const store = new InMemorySettingsStore();

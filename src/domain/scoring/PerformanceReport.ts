@@ -79,6 +79,30 @@ export interface PerformanceTotals {
   readonly barsWaitedFor: number;
 }
 
+/**
+ * What became of the notes of a reading, in four numbers.
+ *
+ * The notes the run asked for, Perfect, Good or missed, and the presses it
+ * did not ask for - the account the page is coloured from, told as a count.
+ * Missed is of the notes the run reached: one stopped at bar six has not
+ * missed the bars after it.
+ */
+export interface NoteCounts {
+  readonly perfect: number;
+  readonly good: number;
+  readonly missed: number;
+  readonly wrong: number;
+}
+
+export function noteCountsOf(totals: PerformanceTotals): NoteCounts {
+  return {
+    perfect: totals.perfectNotes,
+    good: totals.goodNotes,
+    missed: Math.max(0, totals.expectedNotes - totals.correctNotes),
+    wrong: totals.wrongNotes,
+  };
+}
+
 export interface PerformanceTiming {
   /**
    * How far from its moment every note played landed, in the order of the

@@ -55,6 +55,7 @@ import {
 import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import type { PassageHistory, PracticeReading } from '../application/PracticeHistory.js';
+import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barLines, barNumberOf, measureCount, spanMs } from '../domain/model/Exercise.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
@@ -2341,6 +2342,9 @@ export class AppView {
       grade.dataset['grade'] = reading.grade;
       grade.textContent = `${percent(reading.overall)} ${reading.grade}`;
       under.append(grade);
+      if (reading.notes !== undefined) {
+        under.append(this.theNotesOf(reading.notes));
+      }
       if (reading.tempoPercent !== undefined && reading.tempoPercent !== 100) {
         const tempo = this.doc.createElement('span');
         tempo.textContent = `${String(reading.tempoPercent)}% speed`;
@@ -2356,6 +2360,36 @@ export class AppView {
       row.append(open);
       this.el.readingsList.append(row);
     }
+  }
+
+  /**
+   * A reading's notes as four numbers, each behind a dot in the colour it is
+   * drawn on the page: Perfect, Good, missed, wrong.
+   *
+   * Numbers first and words only under the finger, because a row is read
+   * against the rows around it and four short numbers line up. The dots and
+   * not the digits carry the colour: the paler green is the page's own, and
+   * as text that small it could not be read.
+   */
+  private theNotesOf(notes: NoteCounts): HTMLElement {
+    const counts = this.doc.createElement('span');
+    counts.className = 'readings__notes';
+    const said = `${notes.perfect} perfect · ${notes.good} good · ${notes.missed} missed · ${notes.wrong} wrong`;
+    counts.title = said;
+    counts.setAttribute('aria-label', said);
+    for (const [kind, count] of [
+      ['perfect', notes.perfect],
+      ['good', notes.good],
+      ['missed', notes.missed],
+      ['wrong', notes.wrong],
+    ] as const) {
+      const one = this.doc.createElement('span');
+      one.className = 'readings__count';
+      one.dataset['kind'] = kind;
+      one.textContent = String(count);
+      counts.append(one);
+    }
+    return counts;
   }
 
   /**

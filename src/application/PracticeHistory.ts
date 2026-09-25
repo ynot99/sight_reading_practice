@@ -1,4 +1,5 @@
 import type { Grade } from '../domain/scoring/IScoringStrategy.js';
+import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { ReadingPicture } from '../domain/scoring/ReadingPicture.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import type { RunRoll } from './session/RunRoll.js';
@@ -20,6 +21,15 @@ export interface PracticeAttempt {
   readonly grade: Grade;
   /** False when the reader stopped rather than reaching the end. */
   readonly completed: boolean;
+  /**
+   * What became of its notes: Perfect, Good, missed, and the wrong ones.
+   *
+   * Kept on the reading and not in its picture, which is given up first
+   * when the store fills: four numbers, and the way to see at a glance
+   * whether anything was played at all. Absent from readings kept before
+   * notes were counted so.
+   */
+  readonly notes?: NoteCounts;
   /**
    * The bar they stopped in, one-based, where they stopped.
    *
@@ -112,6 +122,19 @@ function readPicture(value: unknown): ReadingPicture | null {
   };
 }
 
+/** Kept counts of notes, or nothing where any of the four is not a count. */
+function readNotes(value: unknown): NoteCounts | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const [perfect, good, missed, wrong] = ['perfect', 'good', 'missed', 'wrong'].map((name) => value[name]);
+  const counts = [perfect, good, missed, wrong];
+  if (!counts.every((count) => typeof count === 'number' && Number.isInteger(count) && count >= 0)) {
+    return null;
+  }
+  return { perfect, good, missed, wrong } as NoteCounts;
+}
+
 /** A kept roll, or nothing where the lists it is made of are not there. */
 function readRoll(value: unknown): RunRoll | null {
   if (!isRecord(value)) {
@@ -141,6 +164,7 @@ function readAttempt(value: unknown): PracticeAttempt | null {
   const modes = readStrings(value['modes']);
   const picture = readPicture(value['picture']);
   const roll = readRoll(value['roll']);
+  const notes = readNotes(value['notes']);
   return {
     atMs,
     overall,
@@ -149,6 +173,7 @@ function readAttempt(value: unknown): PracticeAttempt | null {
     ...(typeof tempoPercent === 'number' ? { tempoPercent } : {}),
     ...(typeof hand === 'number' || hand === null ? { hand: hand as number | null } : {}),
     ...(typeof stoppedAtBar === 'number' ? { stoppedAtBar } : {}),
+    ...(notes !== null ? { notes } : {}),
     ...(typeof modeId === 'string' ? { modeId } : {}),
     ...(modes.length > 0 ? { modes } : {}),
     ...(picture !== null ? { picture } : {}),

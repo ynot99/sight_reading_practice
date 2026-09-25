@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { gradeFor } from '../../src/domain/scoring/IScoringStrategy.js';
 import {
   buildPerformanceReport,
+  noteCountsOf,
   type StepResult,
 } from '../../src/domain/scoring/PerformanceReport.js';
 import {
@@ -334,6 +335,26 @@ describe('ContinuityScoringStrategy', () => {
     expect(strategy.score(oneBreak).overall).toBeGreaterThan(
       strategy.score(twoBreaks).overall,
     );
+  });
+});
+
+describe('a reading told as four numbers', () => {
+  it('counts the notes Perfect, Good and missed, and the presses that were wrong', () => {
+    const report = reportOf([
+      step({
+        index: 0,
+        status: 'incorrect',
+        expected: [60, 64],
+        hits: [
+          { midi: 60, deviationMs: 5, tier: 'perfect' },
+          { midi: 64, deviationMs: 120, tier: 'good' },
+        ],
+        wrong: [61, 62],
+      }),
+      step({ index: 1, status: 'missed', expected: [62, 65], hits: [{ midi: 62, deviationMs: 0, tier: 'perfect' }], missing: [65] }),
+    ]);
+
+    expect(noteCountsOf(report.totals)).toEqual({ perfect: 2, good: 1, missed: 1, wrong: 2 });
   });
 });
 

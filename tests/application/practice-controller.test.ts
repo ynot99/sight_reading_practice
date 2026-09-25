@@ -811,6 +811,23 @@ describe('PracticeController', () => {
     expect(history.lastReadings()[0]?.completed).toBe(false);
   });
 
+  it('counts what became of the notes of a reading', async () => {
+    // Four numbers, and the way to see at a glance whether anything was
+    // played at all.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller, midi } = createController(true, undefined, { modeId: WAIT_MODE_ID }, history);
+    await controller.loadNewExercise();
+    const session = controller.start();
+    const [low, high] = session?.currentStep?.expectedMidi ?? [];
+
+    midi.noteOn((low ?? 60) + 1, 0);
+    midi.noteOn(low ?? 60, 10);
+    midi.noteOn(high ?? 72, 20);
+    session?.abort();
+
+    expect(history.lastReadings()[0]?.notes).toEqual({ perfect: 2, good: 0, missed: 0, wrong: 1 });
+  });
+
   it('has nothing to drill without a run behind it', () => {
     const { controller } = createController();
     expect(controller.drillWorstPassage()).toBeNull();

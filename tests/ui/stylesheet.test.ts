@@ -1330,6 +1330,22 @@ describe('the marker', () => {
   });
 });
 
+describe('the four numbers of a reading', () => {
+  const body = (selector: string): string =>
+    rules()
+      .filter((rule) => rule.selector.split(',').map((each) => each.trim()).includes(selector))
+      .map((rule) => rule.body)
+      .join(';');
+
+  it('puts each behind a dot in the colour it is drawn on the page', () => {
+    expect(body(".readings__count[data-kind='perfect']")).toContain('#15803d');
+    expect(body(".readings__count[data-kind='good']")).toContain('#22c55e');
+    expect(body(".readings__count[data-kind='wrong']")).toContain('var(--wrong)');
+    expect(body(".readings__count[data-kind='missed']")).toContain('var(--text-muted)');
+    expect(body('.readings__count::before')).toMatch(/background:\s*var\(--count-dot\)/);
+  });
+});
+
 describe('the strip of where the notes landed', () => {
   const body = (selector: string): string =>
     rules()

@@ -615,6 +615,49 @@ textarea {
   font-size: 11px;
 }
 
+/*
+ * A reading's notes: Perfect, Good, missed, wrong, each a number behind a dot
+ * in the colour it is drawn on the page. The two greens are the page's own,
+ * fixed like the page's white; missed has no mark on the page and is only
+ * quiet here, and wrong is the page's red.
+ */
+.readings__notes {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.readings__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.readings__count::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--count-dot);
+}
+
+.readings__count[data-kind='perfect'] {
+  --count-dot: #15803d;
+}
+
+.readings__count[data-kind='good'] {
+  --count-dot: #22c55e;
+}
+
+.readings__count[data-kind='missed'] {
+  --count-dot: var(--text-muted);
+}
+
+.readings__count[data-kind='wrong'] {
+  --count-dot: var(--wrong);
+}
+
 .readings__name {
   font-weight: 600;
   overflow: hidden;

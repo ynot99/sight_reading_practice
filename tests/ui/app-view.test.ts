@@ -5831,6 +5831,41 @@ describe('AppView', () => {
       ).toContain('Clair de Lune');
     });
 
+    it('says what became of the notes, as four numbers in the colours of the page', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record('score:Clair de Lune', {
+        atMs: Date.now(),
+        overall: 0.82,
+        grade: 'B',
+        completed: true,
+        notes: { perfect: 312, good: 40, missed: 5, wrong: 3 },
+      });
+      rig.runtime.history.record('score:Arabesque', {
+        atMs: Date.now() - 60_000,
+        overall: 0.7,
+        grade: 'C',
+        completed: true,
+      });
+
+      element<HTMLButtonElement>('focus-readings').click();
+
+      const [counted, older] = [...element('readings-list').querySelectorAll('.readings__row')];
+      const counts = [...(counted?.querySelectorAll('.readings__count') ?? [])] as HTMLElement[];
+      expect(counts.map((each) => [each.dataset['kind'], each.textContent])).toEqual([
+        ['perfect', '312'],
+        ['good', '40'],
+        ['missed', '5'],
+        ['wrong', '3'],
+      ]);
+      // In words where it is pointed at.
+      expect(counted?.querySelector('.readings__notes')?.getAttribute('title')).toBe(
+        '312 perfect · 40 good · 5 missed · 3 wrong',
+      );
+      // A reading kept before notes were counted says nothing rather than noughts.
+      expect(older?.querySelector('.readings__notes')).toBeNull();
+    });
+
     it('wears what was true of the run: the passage, how hard the piece is, where it stopped', async () => {
       const rig = createRig();
       await rig.view.initialize();

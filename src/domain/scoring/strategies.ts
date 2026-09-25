@@ -2,11 +2,18 @@ import { clamp } from '../../shared/asserts.js';
 import { gradeFor, type IScoringStrategy, type SessionScore } from './IScoringStrategy.js';
 import type { PerformanceReport, StepStatus } from './PerformanceReport.js';
 
-/** Note accuracy with a configurable penalty for extra, wrong presses. */
+/**
+ * Note accuracy with a configurable penalty for extra, wrong presses.
+ *
+ * Where no note was asked for, a run that reached the end played all there
+ * was - a hand with nothing to play in the passage - and one that was stopped
+ * played nothing. Counted as perfect, a run stopped in its count-in, before a
+ * key was touched, came out at 70% and a C.
+ */
 function accuracyOf(report: PerformanceReport, wrongNotePenalty: number): number {
   const { expectedNotes, correctNotes, wrongNotes } = report.totals;
   if (expectedNotes === 0) {
-    return 1;
+    return report.completed ? 1 : 0;
   }
   const hit = correctNotes / expectedNotes;
   const penalty = (wrongNotes / expectedNotes) * wrongNotePenalty;

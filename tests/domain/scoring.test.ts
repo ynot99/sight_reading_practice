@@ -25,14 +25,14 @@ function step(overrides: Partial<StepResult> & Pick<StepResult, 'index' | 'statu
   };
 }
 
-function reportOf(steps: readonly StepResult[], playableSteps?: number) {
+function reportOf(steps: readonly StepResult[], playableSteps?: number, completed = true) {
   return buildPerformanceReport({
     exerciseId: 'ex',
     modeId: 'mode.test',
     tempoBpm: 60,
     startedAtMs: 0,
     endedAtMs: 10_000,
-    completed: true,
+    completed,
     playableSteps: playableSteps ?? steps.filter((entry) => entry.status !== 'skipped').length,
     steps,
   });
@@ -269,6 +269,28 @@ describe('ContinuityScoringStrategy', () => {
     expect(strategy.score(oneBreak).overall).toBeGreaterThan(
       strategy.score(twoBreaks).overall,
     );
+  });
+});
+
+describe('a run that played nothing', () => {
+  const strategies = [
+    new AccuracyScoringStrategy(),
+    new TimingWeightedScoringStrategy(),
+    new ContinuityScoringStrategy(),
+  ];
+
+  it('scores nothing for a run stopped before a note was asked for', () => {
+    // His: stopped in the count-in, before a key was touched, and the
+    // reading said C, 70% - accuracy over no notes at all was counted as
+    // perfect, and seventy per cent of the grade is accuracy.
+    const stopped = reportOf([], 16, false);
+
+    for (const strategy of strategies) {
+      const score = strategy.score(stopped);
+      expect(score.accuracy).toBe(0);
+      expect(score.overall).toBe(0);
+      expect(score.grade).toBe('F');
+    }
   });
 });
 

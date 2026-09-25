@@ -136,44 +136,67 @@ function readNotes(value: unknown): NoteCounts | null {
 }
 
 /**
- * Whether one stopped reading got further than another: above nought if it did.
+ * The notes a reading played right, less the presses nothing asked for - or
+ * `null` where it never counted them.
  *
- * By the notes it played - Perfect and Good together - which is how far it
- * got and how well in one number: fifteen bars played cleanly are more
- * notes than three played cleanly, and more than fifteen played badly.
- * Readings kept before notes were counted have no such number, and between
- * two where either lacks it the bar each stopped in answers instead. The
- * grade breaks a tie.
+ * How far it got and how well, in one number: fifteen bars played cleanly
+ * are more notes than three played cleanly, and more than a whole run played
+ * badly - and four notes are fewer than any of them, whatever they scored.
+ * Perfect and Good alike, both being the right key. A Wrong press takes one
+ * back, or a hand laid across the keys would find the right one among the
+ * wrong. All four numbers are on the reading's row, so an order made of them
+ * is one the reader can check.
+ *
+ * Readings kept before the four were counted still have their picture's
+ * totals, counted a little differently but near enough to rank by. One that
+ * has lost its picture as well has nothing to say.
  */
-function furtherThan(one: PracticeAttempt, other: PracticeAttempt): number {
-  const played =
-    one.notes !== undefined && other.notes !== undefined
-      ? one.notes.perfect + one.notes.good - (other.notes.perfect + other.notes.good)
-      : (one.stoppedAtBar ?? 0) - (other.stoppedAtBar ?? 0);
-  return played !== 0 ? played : one.overall - other.overall;
+function notesRightOf(attempt: PracticeAttempt): number | null {
+  if (attempt.notes !== undefined) {
+    return attempt.notes.perfect + attempt.notes.good - attempt.notes.wrong;
+  }
+  const totals = attempt.picture?.totals;
+  if (totals === undefined) {
+    return null;
+  }
+  // A picture's totals are read back unchecked.
+  const right = totals.correctNotes - totals.wrongNotes;
+  return Number.isNaN(right) ? null : right;
 }
 
 /**
- * The readings of a passage it keeps whatever else it gives up: the best of
- * those played to the end, by the grade, and the best of those stopped.
+ * Which of two readings of a piece is the better: below nought if the first.
  *
- * Two and not one, because neither can stand for the other. A reading
- * played to the end ranks above one that stopped, but fifteen bars of
- * twenty played cleanly are not undone by a whole run played badly the day
- * after - and keeping only the finished one would throw them away. The
- * newer of two as good as each other.
+ * By the notes each played right, then the grade, then the newer. A reading
+ * that counted no notes cannot be weighed against one that did, and goes
+ * below it: those are the oldest, graded by rules since changed - a run
+ * stopped before its first note once scored seventy per cent. Among
+ * themselves they stand as they always did, a reading played to the end
+ * above one that stopped.
+ */
+function betterFirst(one: PracticeAttempt, other: PracticeAttempt): number {
+  const oneRight = notesRightOf(one);
+  const otherRight = notesRightOf(other);
+  const played =
+    oneRight !== null && otherRight !== null
+      ? otherRight - oneRight
+      : Number(otherRight !== null) - Number(oneRight !== null) ||
+        Number(other.completed) - Number(one.completed);
+  return played || other.overall - one.overall || other.atMs - one.atMs;
+}
+
+/**
+ * The readings of a passage it keeps whatever else it gives up: its best, by
+ * the order Best first shows them in.
+ *
+ * And the best of those that counted no notes, which that order puts below
+ * every one that did: the first run counted would otherwise take the place
+ * of a year of readings' best.
  */
 function theBestOf(attempts: readonly PracticeAttempt[]): PracticeAttempt[] {
-  let finished: PracticeAttempt | null = null;
-  let stopped: PracticeAttempt | null = null;
-  for (const attempt of attempts) {
-    if (attempt.completed) {
-      finished = finished === null || attempt.overall >= finished.overall ? attempt : finished;
-    } else {
-      stopped = stopped === null || furtherThan(attempt, stopped) >= 0 ? attempt : stopped;
-    }
-  }
-  return [finished, stopped].filter((best): best is PracticeAttempt => best !== null);
+  const counted = attempts.filter((attempt) => notesRightOf(attempt) !== null);
+  const uncounted = attempts.filter((attempt) => notesRightOf(attempt) === null);
+  return [counted, uncounted].flatMap((some) => [...some].sort(betterFirst).slice(0, 1));
 }
 
 /** The newest `keep` of a passage's readings, and its best however old: see `theBestOf`. */
@@ -333,26 +356,28 @@ export class PracticeHistory {
   }
 
   /**
-   * The best readings, those that reached the end above every one that did not.
+   * The best readings: those that played the most notes right.
    *
-   * A run stopped after four notes of a hard passage can score anything at
-   * all, and a table of bests that it could win would be a table of who
-   * stopped soonest. Left out altogether, though, a piece never yet played to
-   * the end was not in the table at all, and with only that piece asked for
-   * the table was empty - his, of the list with "this piece" ticked. So a
-   * stopped reading is there, and only below all the finished ones.
+   * One order for every reading, finished or stopped, of the whole piece or
+   * of a passage of it - see `betterFirst`. It was every finished reading
+   * above every stopped one, which kept a run stopped after four notes from
+   * topping the table, and buried with it fifteen bars of twenty played
+   * cleanly under a whole run played badly. His: "best first має зупинені,
+   * але гарно зіграні поставити на вище місце там, де вони дійсно
+   * заслуговують щоб їх побачили". Counting the notes does both: four are
+   * few, and fifteen clean bars are many.
    *
    * One a piece when no piece is named, or an afternoon spent on one of them
    * fills the table with itself and the rest of the library is not there to
    * compare. Exercises are the exception: `level:1a` is not a piece but a
    * ladder step, and every reading of it was a different melody.
    *
-   * The hardest pieces first, and the best score among pieces as hard. His:
-   * "Та сортувати по складності. Якщо є таке в нас." How hard a piece is
+   * The hardest pieces first, and the better reading among pieces as hard.
+   * His: "Та сортувати по складності. Якщо є таке в нас." How hard a piece is
    * belongs to the piece and not to the reading - the stars are the reader's
    * own and change - so it is asked for rather than kept, and a piece rated
    * again since is ranked by what it is now. One nobody has rated says nothing
-   * either way, and follows the ones that are rated, by score.
+   * either way, and follows the ones that are rated.
    */
   bestReadings(
     limit = 10,
@@ -362,7 +387,6 @@ export class PracticeHistory {
     const readings = this.readingsOf(ofPiece);
     const hardness = new Map(readings.map((reading) => [reading, howHard(reading.key)]));
     type Order = (left: PracticeReading, right: PracticeReading) => number;
-    const finishedFirst: Order = (left, right) => Number(right.completed) - Number(left.completed);
     const hardestFirst: Order = (left, right) => {
       const leftIs = hardness.get(left) ?? null;
       const rightIs = hardness.get(right) ?? null;
@@ -374,15 +398,10 @@ export class PracticeHistory {
       }
       return rightIs - leftIs;
     };
-    const bestScoreFirst: Order = (left, right) =>
-      right.overall - left.overall || right.atMs - left.atMs;
-    const byStanding: Order = (left, right) =>
-      finishedFirst(left, right) || bestScoreFirst(left, right);
-    const byRank: Order = (left, right) =>
-      finishedFirst(left, right) || hardestFirst(left, right) || bestScoreFirst(left, right);
-    // One piece is as hard as itself, so its own readings go by score alone.
+    const byRank: Order = (left, right) => hardestFirst(left, right) || betterFirst(left, right);
+    // One piece is as hard as itself, so its own readings go by how they were played alone.
     if (ofPiece !== undefined) {
-      return [...readings].sort(byStanding).slice(0, Math.max(0, limit));
+      return [...readings].sort(betterFirst).slice(0, Math.max(0, limit));
     }
     const best = new Map<string, PracticeReading>();
     const exercises: PracticeReading[] = [];
@@ -393,7 +412,7 @@ export class PracticeHistory {
       }
       const piece = pieceOfKey(reading.key);
       const standing = best.get(piece);
-      if (standing === undefined || byStanding(reading, standing) < 0) {
+      if (standing === undefined || betterFirst(reading, standing) < 0) {
         best.set(piece, reading);
       }
     }

@@ -32,7 +32,31 @@ export function tooLateToSound(atMs: number | undefined, nowMs: number): boolean
 }
 
 /**
- * Turns a wall-clock moment into a moment on the audio clock.
+ * How long after being scheduled a sound actually leaves the device, in seconds.
+ *
+ * `currentTime` is the frame the context is *processing*, not the one
+ * anybody has heard: a buffer's worth of audio, and on a tablet several,
+ * still lie between it and the speaker. The browser knows the number; it has
+ * only to be asked.
+ *
+ * Read each time rather than once: plugging in headphones or waking a
+ * Bluetooth speaker changes it mid-run.
+ */
+export function outputLatencySeconds(context: BaseAudioContext): number {
+  const device = context as BaseAudioContext & {
+    outputLatency?: number;
+    baseLatency?: number;
+  };
+  // `outputLatency` is the whole path and the right answer; `baseLatency`
+  // is only the graph's own buffering, and stands in where the first is not
+  // implemented. Neither is guaranteed, hence the floor at zero.
+  const seconds = device.outputLatency ?? device.baseLatency ?? 0;
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+}
+
+/**
+ * Turns a wall-clock moment into the moment on the audio clock a sound has to
+ * start at to be heard then.
  *
  * The metronome's ticks carry `performance.now()` times and Web Audio counts
  * in seconds of its own, so playing a note at a stated moment means crossing
@@ -42,12 +66,20 @@ export function tooLateToSound(atMs: number | undefined, nowMs: number): boolean
  * question, and it is asked before a note is begun - never before one is
  * stopped, because a note that is sounding has to be stopped whenever the
  * program gets round to it.
+ *
+ * A moment on the page's clock is when a sound is *heard*: it is what a tick
+ * says of its click, and what the cursor steps on. So a sound is started as
+ * long before its moment as the device takes to get it to the speaker.
+ * Started *at* its moment, as it was, every note of a playback was heard that
+ * much after the click it was placed by and after the cursor that stepped on
+ * it - his "курсор зовсім трішки поспішає за саму гру", on the PC.
  */
 export function audioTimeFor(context: BaseAudioContext, atMs: number | undefined): number {
   if (atMs === undefined) {
     return context.currentTime;
   }
-  return context.currentTime + Math.max(0, (atMs - performance.now()) / 1000);
+  const ahead = (atMs - performance.now()) / 1000 - outputLatencySeconds(context);
+  return context.currentTime + Math.max(0, ahead);
 }
 
 /**

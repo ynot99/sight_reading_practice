@@ -7,7 +7,7 @@ import type {
 } from '../../application/ports/IMetronome.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
-import { TOO_LATE_MS, unplug } from './audioTime.js';
+import { TOO_LATE_MS, audioTimeFor, outputLatencySeconds, unplug } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 import {
   buildMetronomeTick,
@@ -311,56 +311,38 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   }
 
   /**
-   * How long after being scheduled a sound actually leaves the device.
+   * How long after being scheduled a sound actually leaves the device: see
+   * `outputLatencySeconds`.
    *
-   * `currentTime` is the frame the context is *processing*, not the one
-   * anybody has heard: a buffer's worth of audio, and on a tablet several,
-   * still lie between it and the speaker. Without this the tick claimed to be
-   * the moment the click was heard while being the moment it was queued -
-   * which is what `MetronomeTick.scheduledTimeMs` has always promised and
-   * this has never delivered.
-   *
-   * It matters because a reader plays to the click. Every press was then
-   * judged against a beat that had not been heard yet, so playing perfectly
-   * in time read as playing late, by exactly this much, on every note. The
-   * browser knows the number; it was simply never asked.
-   *
-   * Read at each tick rather than once: plugging in headphones or waking a
-   * Bluetooth speaker changes it mid-run.
+   * Without this the tick claimed to be the moment the click was heard while
+   * being the moment it was queued - which is what
+   * `MetronomeTick.scheduledTimeMs` has always promised and this had never
+   * delivered. It matters because a reader plays to the click. Every press
+   * was then judged against a beat that had not been heard yet, so playing
+   * perfectly in time read as playing late, by exactly this much, on every
+   * note.
    */
   private outputLatencyMs(): number {
-    const context = this.context as (AudioContext & {
-      outputLatency?: number;
-      baseLatency?: number;
-    }) | null;
-    if (context === null) {
-      return 0;
-    }
-    // `outputLatency` is the whole path and the right answer; `baseLatency`
-    // is only the graph's own buffering, and stands in where the first is not
-    // implemented. Neither is guaranteed, hence the floor at zero.
-    const seconds = context.outputLatency ?? context.baseLatency ?? 0;
-    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+    return this.context === null ? 0 : outputLatencySeconds(this.context) * 1000;
   }
 
   /**
-   * Sounds one click at a moment on the page's clock, running or not.
+   * Sounds one click at a moment on the page's clock, running or not - heard
+   * then, as a note is.
    *
-   * The epoch is worked out afresh rather than taken from the last start:
+   * The clocks are crossed afresh rather than by the last start's epoch:
    * this is asked for by a mode that never starts the pulse at all, and the
    * two clocks drift apart over a practice session anyway.
    */
   click(atMs?: number, weight: BeatWeight = 'beat'): void {
     const context = this.ensureContext();
     void context.resume();
-    const epoch = performance.now() - context.currentTime * 1000;
-    const at = atMs === undefined ? context.currentTime : (atMs - epoch) / 1000;
     // Kept, so that stopping can take back the ones that have not sounded.
     // These are laid out as far ahead as the reader's next entry, which on a
     // held note is a bar or more of beats waiting to be heard.
     const pending = this.sound(
       context,
-      Math.max(context.currentTime, at),
+      audioTimeFor(context, atMs),
       weight === 'downbeat',
       weight !== 'division',
     );

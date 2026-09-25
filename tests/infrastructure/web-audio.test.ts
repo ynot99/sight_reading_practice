@@ -4,6 +4,7 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { WebAudioMetronome } from '../../src/infrastructure/audio/WebAudioMetronome.js';
 import { WebAudioPitchPlayer } from '../../src/infrastructure/audio/WebAudioPitchPlayer.js';
+import { outputLatencySeconds } from '../../src/infrastructure/audio/audioTime.js';
 
 class FakeParam {
   value = 0;
@@ -624,6 +625,57 @@ describe('when the click is actually heard', () => {
     // And it still says it was heard where it was heard.
     expect(ticks[0]?.scheduledTimeMs).toBeCloseTo(60 + 80, 3);
     vi.useRealTimers();
+  });
+
+  it('starts a note early by what the device takes to sound it', () => {
+    // A moment on the page's clock is when a sound is heard, and the tick
+    // the note was placed by says its click is heard then. Started at the
+    // moment instead, the notes of a playback were heard after the click and
+    // the cursor: his "курсор зовсім трішки поспішає за саму гру".
+    const context = new FakeAudioContext();
+    context.outputLatency = 0.08;
+    const player = new WebAudioPitchPlayer(contextFactory(context), { releaseSec: 0.2 });
+    const now = performance.now();
+
+    player.play(60, 0.5, now + 500);
+    player.stop(60, now + 1500);
+
+    expect(context.oscillators[0]?.startedAt ?? 0).toBeCloseTo(0.42, 3);
+    // Let go of when it is heard to be let go of, likewise.
+    expect(context.gains[0]?.gain.ramps.at(-2)?.time ?? 0).toBeCloseTo(1.42, 3);
+  });
+
+  it('starts at once a note whose moment is nearer than the device can manage', () => {
+    const context = new FakeAudioContext();
+    context.advance(3);
+    context.outputLatency = 0.08;
+    const player = new WebAudioPitchPlayer(contextFactory(context));
+
+    player.play(60, 0.5, performance.now() + 30);
+
+    expect(context.oscillators[0]?.startedAt).toBe(3);
+  });
+
+  it('starts a single click early by the same, as a note', () => {
+    // Waiting mode lays out the beats ahead of the reader's last entry, and
+    // the reader hears his own piano at once.
+    const context = new FakeAudioContext();
+    context.outputLatency = 0.08;
+    const metronome = new WebAudioMetronome(contextFactory(context));
+
+    metronome.click(performance.now() + 500);
+
+    expect(context.oscillators[0]?.startedAt ?? 0).toBeCloseTo(0.42, 3);
+  });
+
+  it('takes the graph’s own buffering where the device will not say the rest', () => {
+    const device = (latencies: object): number =>
+      outputLatencySeconds(latencies as unknown as BaseAudioContext);
+
+    expect(device({ outputLatency: 0.08, baseLatency: 0.01 })).toBe(0.08);
+    expect(device({ baseLatency: 0.01 })).toBe(0.01);
+    expect(device({})).toBe(0);
+    expect(device({ outputLatency: Number.POSITIVE_INFINITY })).toBe(0);
   });
 
   it('says nothing extra when the device reports no delay', () => {

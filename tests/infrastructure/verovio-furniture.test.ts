@@ -505,17 +505,34 @@ describe('a finger on the music', () => {
 });
 
 describe('the hand switches', () => {
-  /** Where Verovio drew a system's brace begins, in the page's pixels. */
+  /**
+   * Where Verovio drew a system's brace begins, in the page's pixels: the
+   * tip of it.
+   *
+   * Read off the points its curves pass through. The points that only bend
+   * them lie further out than any ink, and a brace measured by them stands
+   * a staff space short of where the eye sees it.
+   */
   function braceLeft(surface: HTMLElement, page: number): number {
     const drawing = sheets(surface)[page]?.querySelector('svg') as SVGSVGElement;
     const layout = readThePage(drawing);
     const scale = Number.parseFloat(drawing.getAttribute('width') ?? '0') / layout.width;
     const margin = Number(/translate\(\s*(-?[\d.]+)/.exec(drawing.querySelector('g.page-margin')?.getAttribute('transform') ?? '')?.[1]);
-    const xs = [...drawing.querySelectorAll('g.grpSym path')].flatMap((path) =>
-      [...(path.getAttribute('d') ?? '').matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((pair) => Number(pair[1])),
-    );
+    const xs = [...drawing.querySelectorAll('g.grpSym path')].flatMap((path) => passedThrough(path.getAttribute('d') ?? ''));
     expect(xs.length).toBeGreaterThan(0);
     return (margin + Math.min(...xs)) * scale;
+  }
+
+  /** The x of every point a path's lines and curves pass through, its bending points left out. */
+  function passedThrough(d: string): number[] {
+    const xs: number[] = [];
+    for (const [, command, numbers] of d.matchAll(/([MLC])([^MLC]*)/g)) {
+      const pairs = [...(numbers ?? '').matchAll(/(-?[\d.]+)[\s,]+(-?[\d.]+)/g)].map((pair) => Number(pair[1]));
+      // A curve is two points that bend it and one it goes to.
+      const every = command === 'C' ? 3 : 1;
+      xs.push(...pairs.filter((_, at) => at % every === every - 1));
+    }
+    return xs;
   }
 
   function switchesOn(surface: HTMLElement, page = 0): SVGGElement[] {
@@ -565,6 +582,25 @@ describe('the hand switches', () => {
       expect(hit.left).toBeGreaterThan(0);
       expect(hit.right).toBeLessThan(braceLeft(surface, 0));
     }
+  });
+
+  it('stands just short of the brace, and in the same place on the screen, at any print', async () => {
+    // OSMD's switches stood beside its brace. Verovio's own margin left a
+    // strip of empty page between them, and the switches read as belonging
+    // to nothing; the margin is what moves now, and the switches do not.
+    const { renderer, surface } = await aScore(SHORT);
+    renderer.showHands([1, 2]);
+    const places: number[] = [];
+
+    for (const zoom of [0.4, 1, 2.5]) {
+      await laidOutAt(renderer, surface, zoom);
+      const hit = boxOf(switchesOn(surface)[0]?.querySelector('rect.hand-switch__hit'));
+      const gap = braceLeft(surface, 0) - hit.right;
+      expect(gap).toBeGreaterThanOrEqual(2);
+      expect(gap).toBeLessThan(3.5);
+      places.push(hit.left);
+    }
+    expect(new Set(places).size).toBe(1);
   });
 
   it('centres each on the printed lines of its own staff', async () => {

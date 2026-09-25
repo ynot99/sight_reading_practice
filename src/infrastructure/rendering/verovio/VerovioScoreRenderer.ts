@@ -120,23 +120,45 @@ const UNPLAYED_CLASS = 'note--unplayed';
 const TROUBLE_LEVELS = 4;
 
 /**
- * Room above the music on every page, in pixels: the page's own label is
- * written there, and Verovio's margin alone left a tempo mark touching it.
+ * Room above the music on every page, in pixels, at the least: the page's
+ * own label is written there, and Verovio's margin alone left a tempo mark
+ * touching it.
  */
 const LABEL_ROOM_PX = 32;
 
 /**
- * The left margin Verovio keeps for a brace, in its own units: its own default,
- * which it lays the brace out in.
+ * OSMD's margin at the top and the right of a page, in Verovio's units.
+ *
+ * Five of OSMD's own, which came to 50 px at 100% and to the same share of
+ * the print at any other - as a margin in Verovio's units does. It is what
+ * kept the music out from under the corner, where the clock, the listening
+ * light and the marks of the modes stand over the top right of every page:
+ * Verovio's own margins are narrower, and with them the end of a system ran
+ * under the modes and a high note under the clock.
  */
-const BRACE_MARGIN = 50;
+const OSMD_MARGIN = Math.round((50 * 100) / SCALE_AT_ZOOM_ONE);
 
 /**
- * Room kept left of the brace for the hand switches, in pixels at any print:
- * a switch and a gap either side of it, so it touches neither the brace nor
- * the edge of the screen.
+ * How far Verovio's brace reaches left of the staves it joins, in its units:
+ * to the tip at the middle of the system. It is drawn to the size of the
+ * staff and not to the height of the system, so it is the same on every one;
+ * measured on 6.3.0, and the test of the hand switches holds it to that.
+ */
+const BRACE_REACH = 25.2;
+
+/**
+ * Where a hand switch stands, in pixels at any print: a gap from the edge of
+ * the screen, the switch, and a gap past it - the room `drawHandSwitch` is
+ * given, whose right-hand gap is the one it keeps from a staff.
  */
 const HAND_ROOM_PX = HAND_SWITCH_WIDTH + 2 * HAND_SWITCH_GAP;
+
+/**
+ * How far the tip of the brace stands from the switches, in pixels. OSMD's
+ * brace stood about this close to them, and the room Verovio's own margin
+ * left between the two read as the switches belonging to nothing.
+ */
+const BRACE_GAP_PX = 2;
 
 /** The pages kept drawn on either side of the one being read, or of the ones in view. */
 const PAGES_EITHER_SIDE = 1;
@@ -962,12 +984,15 @@ export class VerovioScoreRenderer
       scale,
       pageWidth: clamp(Math.floor((widthPx * 100) / scale), SMALLEST_PAGE, WIDEST_PAGE),
       pageHeight: clamp(Math.floor((heightPx * 100) / scale), SMALLEST_PAGE, TALLEST_PAGE),
-      // In pixels on the screen whatever the print: the label does not grow
-      // with the zoom, so neither does the room kept for it.
-      pageMarginTop: Math.ceil((LABEL_ROOM_PX * 100) / scale),
-      // The brace's own margin and the switches' room beside it: the brace
-      // grows with the print, and a switch is a fingertip at any.
-      pageMarginLeft: BRACE_MARGIN + Math.ceil((HAND_ROOM_PX * 100) / scale),
+      // OSMD's, and never less than the label needs: the label does not
+      // grow with the zoom, so neither does the room it takes.
+      pageMarginTop: Math.max(OSMD_MARGIN, Math.ceil((LABEL_ROOM_PX * 100) / scale)),
+      pageMarginRight: OSMD_MARGIN,
+      // The switches where they always stand, and the brace just past them:
+      // a switch is a fingertip at any print, and the brace grows with it.
+      pageMarginLeft: Math.ceil(
+        BRACE_REACH + ((HAND_ROOM_PX - HAND_SWITCH_GAP + BRACE_GAP_PX) * 100) / scale,
+      ),
     };
   }
 

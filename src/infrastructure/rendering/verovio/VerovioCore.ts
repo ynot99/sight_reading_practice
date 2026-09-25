@@ -17,6 +17,8 @@ export interface PageShape {
   readonly pageMarginTop?: number;
   /** Room left of the music, in the page's units; Verovio's own where not said. */
   readonly pageMarginLeft?: number;
+  /** Room right of the music, in the page's units; Verovio's own where not said. */
+  readonly pageMarginRight?: number;
 }
 
 /**

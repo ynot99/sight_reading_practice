@@ -8,7 +8,7 @@ import { Duration } from '../../src/domain/model/Duration.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
 import { bar, beamedSixteenths, longExercise, p, twoBarExercise } from '../support/fixtures.js';
-import { printed, sheets, verovioStages, whenDrawn, type Stage } from '../support/verovioStage.js';
+import { laidOutAt, printed, sheets, verovioStages, whenDrawn, type Stage } from '../support/verovioStage.js';
 
 const { aStage } = verovioStages();
 
@@ -148,19 +148,31 @@ describe('a score read in pages', () => {
     });
   });
 
-  it('keeps room above the music for what the corner says, the same at any print', async () => {
-    const { renderer, engraver } = await aPagedScore();
-    const relayout = vi.spyOn(engraver, 'relayout');
-    const roomAt = (shape: { readonly scale: number; readonly pageMarginTop?: number } | undefined): number =>
-      ((shape?.pageMarginTop ?? 0) * (shape?.scale ?? 0)) / 100;
+  it('keeps OSMD’s room above the music and after it, and never too little for the label', async () => {
+    // Fifty pixels at 100%, and its share of the print at any other, as
+    // OSMD's was. With Verovio's own margins a system ran on under the marks
+    // of the modes in the top right, and its high notes under the clock.
+    const { renderer, surface } = await aPagedScore();
 
-    renderer.setZoom(0.4);
-    renderer.setZoom(2.5);
-
-    const [small, large] = relayout.mock.calls.map(([shape]) => shape);
-    expect(roomAt(small)).toBeGreaterThanOrEqual(32);
-    expect(roomAt(large)).toBeGreaterThanOrEqual(32);
-    expect(roomAt(large)).toBeLessThan(34);
+    for (const [zoom, top, right] of [
+      [1, 50, 50],
+      [2.5, 125, 125],
+      // The label's room, where OSMD's would be less than it needs.
+      [0.4, 32, 20],
+    ] as const) {
+      await laidOutAt(renderer, surface, zoom);
+      const drawing = sheets(surface)[0]?.querySelector('svg') as SVGSVGElement;
+      const layout = readThePage(drawing);
+      const scale = Number.parseFloat(drawing.getAttribute('width') ?? '0') / layout.width;
+      const margin = /translate\(\s*(-?[\d.]+)[\s,]+(-?[\d.]+)/.exec(
+        drawing.querySelector('g.page-margin')?.getAttribute('transform') ?? '',
+      );
+      const ends = (layout.systems[0]?.bars ?? []).map((bar) => bar.right);
+      expect(Number(margin?.[2]) * scale).toBeGreaterThanOrEqual(top - 1);
+      expect(Number(margin?.[2]) * scale).toBeLessThan(top + 1);
+      expect((layout.width - Math.max(...ends)) * scale).toBeGreaterThanOrEqual(right - 1.5);
+      expect((layout.width - Math.max(...ends)) * scale).toBeLessThan(right + 1.5);
+    }
   });
 
   it('asks for a page that fits the room inside the box, reserves and all', async () => {
@@ -566,8 +578,9 @@ describe('the marker', () => {
       expect(drawn(surface)).toEqual([2, 3, 4]);
     });
     // A step late on page 3, which a larger print carries past the pages
-    // drawn round the reader's.
-    const step = LONG.steps.findIndex((each) => each.barId === 'm160');
+    // drawn round the reader's: in its last bar, whichever that is.
+    const lastBar = readingOf(surface, 3).layout.systems.at(-1)?.bars.at(-1)?.id ?? '';
+    const step = LONG.steps.findIndex((each) => each.barId === lastBar);
     renderer.cursor.moveTo(step);
     expect(marker(surface)?.closest('.score__page')).toBe(sheets(surface)[3]);
     const before = renderer.pages.count;
@@ -583,7 +596,7 @@ describe('the marker', () => {
     const holding = marker(surface)?.closest('.score__page');
     // Nowhere, or on the page that bar is drawn on now - never on a page the
     // old layout had it on.
-    expect(holding === null || holding === undefined || holding.querySelector('[id="m160"]') !== null).toBe(true);
+    expect(holding === null || holding === undefined || holding.querySelector(`[id="${lastBar}"]`) !== null).toBe(true);
   });
 
   it('comes off a page that is let go of', async () => {

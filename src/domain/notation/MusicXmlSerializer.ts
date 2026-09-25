@@ -32,7 +32,7 @@ import { XmlWriter } from './XmlWriter.js';
 /**
  * Turns an {@link Exercise} into engraver-ready notation.
  *
- * The renderer is an implementation detail behind this port: OSMD consumes
+ * The renderer is an implementation detail behind this port: Verovio reads
  * MusicXML today, and any other engraver that speaks it can be swapped in.
  */
 export interface IMusicXmlSerializer {

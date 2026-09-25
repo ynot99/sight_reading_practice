@@ -6,7 +6,7 @@ import type { PrintedStep } from '../../domain/notation/printedIds.js';
 /**
  * Engraves notation into whatever surface the host provides.
  *
- * The application layer never touches the DOM, OSMD or SVG: it hands over
+ * The application layer never touches the DOM, the engraver or SVG: it hands over
  * MusicXML and asks for a cursor.
  */
 export interface IScoreRenderer {

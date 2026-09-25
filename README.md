@@ -652,21 +652,20 @@ number the reader turns down as far as invisible.
 For that to be worth drawing, the page has to be spaced by *time*, and an
 engraver does not space it that way: a long note gets less room than its length
 asks for. Measured on a bar of half, quarter, quarter, where time says the half
-should take twice the quarter's width, this engraver gives it 1.55 - and that
-number does not move for `spacingFactorSoftmax`, for `SoftmaxFactorVexFlow`, or
-for the `NoteDistances` table.
+should take twice the quarter's width, OSMD - which drew the page until
+September 2026 - gave it 1.55, and no setting of its spacing moved that.
 
 So the score handed to the engraver is padded with **rests nobody sees**, at
 the finest grid every note of that bar lands on. The file on disk is never
 touched - the printed MusicXML has always been derived from the exercise, and
-this is one more thing derived into it. With them the same bar comes out at
-2.00, exactly. They cost nothing anyone can see, the engraver drawing a hidden
-note fully transparent, and nothing at all to the marker: its cursor steps
-straight over them, so the timeline and the cursor go on agreeing about every
-position in the piece. A coarser grid buys nothing - a half-note grid under a
-bar of quarters changes not one pixel - and the whole of it costs a long score
-about two seconds more to engrave, which is why the page says it is being
-drawn while it draws.
+this is one more thing derived into it. With them the same bar came out at
+2.00 exactly under OSMD, and comes out between 1.9 and 2.1 under Verovio,
+which left alone gives it less than 1.7. They cost nothing anyone can see, a
+hidden rest being drawn as nothing at all, and nothing at all to the marker: it
+finds a step by the names its notes are printed under, and these rests are no
+step's, so the timeline and the page go on agreeing about every position in the
+piece. A coarser grid buys nothing - a half-note grid under a bar of quarters
+changed not one pixel.
 
 A second **marker can run along the ruler**, beat by beat. It is not the marker
 on the notes and could not be: that one stands where the music is written, and
@@ -787,7 +786,7 @@ about the application, the application knows nothing about the browser.
                     │   model          │   │   midi/    Web MIDI, kbd  │
                     │   timeline       │   │   audio/   metronome,     │
                     │   matching       │   │            pitch player   │
-                    │   notation       │   │   rendering/ OSMD         │
+                    │   notation       │   │   rendering/ Verovio      │
                     │   generation     │   │   time/    SystemClock    │
                     │   scoring        │   │   testing/ mocks & fakes  │
                     └──────────────────┘   └───────────────────────────┘
@@ -869,7 +868,8 @@ src/
 │   │                               #   ComputerKeyboardMidiSource, Composite…
 │   ├── audio/                      #   WebAudioMetronome (look-ahead scheduler),
 │   │                               #   SampledPitchPlayer, WebAudioPitchPlayer
-│   ├── rendering/                  #   OsmdScoreRenderer, CursorNavigator
+│   ├── rendering/                  #   VerovioScoreRenderer; Verovio itself
+│   │                               #   in a worker, under verovio/
 │   ├── storage/                    #   LocalStorageSettingsStore
 │   ├── time/SystemClock.ts
 │   └── testing/                    #   MockMidiAdapter, ManualClock,
@@ -887,21 +887,21 @@ An `Exercise` is the single source of truth, and **two** things are derived
 from it:
 
 ```
-                    ┌─ MusicXmlSerializer ─► MusicXML ─► OSMD ─► what you see
+                    ┌─ MusicXmlSerializer ─► MusicXML ─► Verovio ─► what you see
    Exercise ────────┤
                     └─ buildTimeline ──────► TimelineStep[] ──► what you must play
 ```
 
 Because the printed page and the expected-event list come from the same value,
-they cannot drift apart. A test asserts this directly: OSMD's own cursor
-iterator visits exactly as many positions as our timeline has steps
-(`tests/infrastructure/osmd-compatibility.test.ts`).
+they cannot drift apart. A test asserts this directly: every note and rest a
+step names is on the page Verovio draws, and everything it draws is some step's
+(`tests/infrastructure/verovio-compatibility.test.ts`).
 
 A `TimelineStep` is one cursor position: every note that starts at the same
 musical instant, across both staves. A held bass note under a running melody is
 demanded once, at its onset — exactly as a player experiences it. Rest
-positions are kept as steps with nothing expected, because the engraver's
-cursor stops there too.
+positions are kept as steps with nothing expected, because the rest is drawn
+there and the marker stands on it.
 
 ### Judging what you play
 
@@ -990,14 +990,16 @@ What the suite covers:
   orchestration and cursor synchronisation.
 - **Infrastructure** — MIDI message decoding, device selection and hot-plug
   against a fake `MIDIAccess`; the Web Audio metronome's look-ahead scheduler
-  against a fake `AudioContext` and fake timers; cursor navigation; and a
-  contract test that the real OSMD parses what our serializer emits.
+  against a fake `AudioContext` and fake timers; and the renderer against the
+  real Verovio, whose WASM runs in Node: that it lays out what our serializer
+  emits, and that its drawing and our steps agree.
 - **UI** — `AppView` is mounted against the real `index.html` markup in jsdom,
   so a renamed element id fails a test instead of the app.
 
-Not covered: `OsmdScoreRenderer`'s own glue, which needs a real layout engine.
-Its interesting part — translating absolute step indices onto a forward-only
-cursor — lives in `CursorNavigator` and is fully tested.
+Not covered: what a browser adds. Every place on a page is read off the SVG
+Verovio writes rather than asked of a layout engine, so jsdom is enough for
+the renderer; how the stylesheet lays the pages out is not, and the stylesheet
+tests read it as text.
 
 ## Extending it
 

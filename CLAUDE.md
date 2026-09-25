@@ -14,7 +14,7 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
   ports only (`IMidiSource`, `IMetronome`, `IClock`, `IScoreRenderer`,
   `IExerciseProvider`, `IPitchPlayer`, `IScoringStrategy`).
 - `infrastructure/` is the only place allowed to touch Web MIDI, Web Audio,
-  OSMD or the DOM.
+  Verovio or the DOM.
 - Adapters are constructed in exactly one place: `src/composition/createApp.ts`.
   If you find yourself writing `new SomeAdapter()` anywhere else, that is the
   bug.
@@ -23,8 +23,9 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
 
 - An `Exercise` is the single source of truth. The printed MusicXML and the
   matcher's timeline are both *derived* from it — never let one be edited
-  independently of the other. `tests/infrastructure/osmd-compatibility.test.ts`
-  asserts that OSMD's cursor and our timeline agree on the number of positions.
+  independently of the other. `tests/infrastructure/verovio-compatibility.test.ts`
+  asserts that the page Verovio draws and our timeline agree: every note and
+  rest a step names is drawn, and everything drawn is some step's.
 - Musical time is integer divisions (`DIVISIONS_PER_QUARTER = 3360`). Do not
   introduce floating-point positions; convert to milliseconds only at the edge.
   `Duration.of` refuses a tuplet ratio that would not land on a whole division.
@@ -69,7 +70,7 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
   entry means it is absent for part of one, takes its time so the bar still
   adds up, and is written as a rest carrying `print-object="no"`. It was
   `<forward>`, which is the format's own word for the same thing and which
-  OSMD lays out wrongly: measured on Clair de Lune bar 47, a voice entering
+  OSMD laid out wrongly: measured on Clair de Lune bar 47, a voice entering
   at the end of the bar had its notes drawn at the *beginning* of it. Read
   back, an invisible rest is a silence again - otherwise a score kept in the
   library gains rests nobody wrote. Neither may leave the *staff* blank:

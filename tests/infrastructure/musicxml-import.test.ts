@@ -1933,3 +1933,36 @@ describe('a grace note', () => {
     expect(warnings.filter((warning) => warning.kind === 'grace-notes')).toHaveLength(1);
   });
 });
+
+describe('a pedal written as a bracket', () => {
+  /** One bar with the pedal down, written as the bracket MuseScore writes. */
+  const PEDALLED = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>4</divisions><key><fifths>0</fifths></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time>
+      <clef><sign>G</sign><line>2</line></clef></attributes>
+      <direction placement="below"><direction-type><pedal type="start" line="yes"/>
+      </direction-type><staff>1</staff></direction>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>16</duration>
+      <voice>1</voice><type>whole</type></note>
+      <direction placement="below"><direction-type><pedal type="stop" line="yes"/>
+      </direction-type><staff>1</staff></direction>
+    </measure>
+  </part>
+</score-partwise>`;
+
+  it('prints the pedal the way its writer drew it', () => {
+    // A bracket, which is what MuseScore wrote and what says exactly how long
+    // the pedal is held. The word "Ped." says only that it was pressed - and
+    // asked for that instead, OSMD once laid one system out four times too
+    // tall. Notation the writer chose is carried, not recomputed.
+    const { exercise } = importer.read(PEDALLED);
+
+    expect(exercise.pedalMarks).toHaveLength(2);
+    expect(exercise.pedalMarks.every((mark) => mark.line)).toBe(true);
+    expect(serializer.serialize(exercise)).toContain('line="yes"');
+  });
+});

@@ -430,8 +430,8 @@ describe('a tie in one voice of a shared staff', () => {
 
     // A held note belongs to the *voice* holding it. Tracked per staff, the
     // moving voice wipes what the held one is carrying, and the tie opens in
-    // one bar and never closes - which OSMD cannot draw, so the reader sees
-    // a fresh chord and presses notes the music never asked for again.
+    // one bar and never closes - which OSMD could not draw, so the reader saw
+    // a fresh chord and pressed notes the music never asked for again.
     expect(tiesOf(xml, 'start')).toHaveLength(2);
     expect(tiesOf(xml, 'stop')).toHaveLength(2);
   });

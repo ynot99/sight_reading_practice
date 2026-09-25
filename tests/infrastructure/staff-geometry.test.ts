@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   anchorFor,
   CLEF_LINE_RANGE,
-  diatonicIndexOf,
   fitStaffGeometry,
   ledgerIndicesFor,
   staffForDiatonic,
@@ -22,21 +21,6 @@ const TREBLE: DrawnNoteSample[] = [
   { stepIndex: 1, page: 0, system: 0, staffNumber: 1, diatonicIndex: Pitch.parse('D4').diatonicIndex, y: 150.5 },
   { stepIndex: 2, page: 0, system: 0, staffNumber: 1, diatonicIndex: Pitch.parse('E4').diatonicIndex, y: 145.5 },
 ];
-
-describe('diatonicIndexOf', () => {
-  it('reads the engraver’s pitch, whose octaves run three low', () => {
-    // Middle C is octave 1 to the engraver, 4 everywhere else here.
-    expect(diatonicIndexOf(0, 1)).toBe(Pitch.parse('C4').diatonicIndex);
-    expect(diatonicIndexOf(9, 0)).toBe(Pitch.parse('A3').diatonicIndex);
-    expect(diatonicIndexOf(11, 1)).toBe(Pitch.parse('B4').diatonicIndex);
-  });
-
-  it('refuses a semitone that is not a letter', () => {
-    // A sharp is a letter plus an accidental, never a position of its own.
-    expect(diatonicIndexOf(1, 1)).toBeNull();
-    expect(diatonicIndexOf(6, 1)).toBeNull();
-  });
-});
 
 describe('fitStaffGeometry', () => {
   it('measures the step height from the notes already drawn', () => {

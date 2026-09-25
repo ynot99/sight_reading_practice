@@ -57,8 +57,9 @@ export function soundsFor(note: TimelineNote): number {
  * One cursor position: every note that starts at the same musical instant,
  * across all staves.
  *
- * A step with no notes is a rest position. It still exists because the OSMD
- * cursor stops there, and the two must advance in lockstep.
+ * A step with no notes is a rest position. It still exists because the rest
+ * is drawn there and the marker stands on it: the steps and the page agree
+ * on every position, which `verovio-compatibility` holds them to.
  */
 export interface TimelineStep {
   readonly index: number;

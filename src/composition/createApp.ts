@@ -115,7 +115,6 @@ import { WebMidiAdapter } from '../infrastructure/midi/WebMidiAdapter.js';
 import { WebSocketMidiSource } from '../infrastructure/midi/WebSocketMidiSource.js';
 import { resolveBridgeUrl, type LocationLike } from '../infrastructure/midi/bridgeUrl.js';
 import { browserMidiAccessProvider } from '../infrastructure/midi/webmidi-dom.js';
-import { OsmdScoreRenderer } from '../infrastructure/rendering/OsmdScoreRenderer.js';
 import { VerovioEngraver } from '../infrastructure/rendering/verovio/VerovioEngraver.js';
 import { VerovioScoreRenderer } from '../infrastructure/rendering/verovio/VerovioScoreRenderer.js';
 import { engraverInAWorker } from '../infrastructure/rendering/verovio/workerLine.js';
@@ -298,7 +297,7 @@ export async function openTheShelves(): Promise<KeptShelves> {
  *
  * This is the only place where concrete adapters meet the application. Every
  * other module receives its collaborators through constructor parameters, so
- * swapping OSMD, Web MIDI or Web Audio for something else - or for a test
+ * swapping Verovio, Web MIDI or Web Audio for something else - or for a test
  * double - happens here and nowhere else.
  */
 export function createApp(options: AppRuntimeOptions): AppRuntime {
@@ -340,13 +339,12 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   }
   const midi = new CompositeMidiSource(sources);
 
-  // While the engraver is being moved from OSMD to Verovio, on this branch
-  // only: `?engraver=verovio` in the address draws with Verovio, and without
-  // it the page is what it was. It goes when OSMD does.
-  const renderer =
-    new URLSearchParams(options.location.search).get('engraver') === 'verovio'
-      ? new VerovioScoreRenderer(options.scoreContainer, new VerovioEngraver(engraverInAWorker()))
-      : new OsmdScoreRenderer(options.scoreContainer);
+  // Verovio lays the music out in a worker of its own, so a long score is
+  // laid out while the page goes on answering the reader.
+  const renderer = new VerovioScoreRenderer(
+    options.scoreContainer,
+    new VerovioEngraver(engraverInAWorker()),
+  );
   // One printer for the library and the engraver, which print a file just
   // opened the same way one after the other: see `PrintedOnce`.
   const serializer = new PrintedOnce(new MusicXmlSerializer());

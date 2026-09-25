@@ -18,7 +18,6 @@ import type {
   PassageEnd,
   PlayedNote,
 } from '../../application/ports/IScoreRenderer.js';
-import type { ICursorPrimitive } from '../rendering/CursorNavigator.js';
 
 /** In-memory cursor that records every move. */
 export class FakeScoreCursor implements IScoreCursor {
@@ -54,7 +53,7 @@ export class FakeScoreCursor implements IScoreCursor {
  * Renderer that keeps the MusicXML instead of drawing it.
  *
  * Lets the controller and the cursor synchronisation be tested end to end
- * without a DOM, an SVG backend or OSMD.
+ * without a DOM, an SVG backend or an engraver.
  */
 export class FakeScoreRenderer
   implements
@@ -359,66 +358,3 @@ export class FakeScoreRenderer
   }
 }
 
-/**
- * Forward-only cursor primitive with a fixed number of positions, used to
- * verify {@link CursorNavigator} against the engraver contract.
- */
-export class FakeCursorPrimitive implements ICursorPrimitive {
-  /** How many times the marker has actually been put on the page. */
-  drawn = 0;
-
-  private index = 0;
-  private readonly length: number;
-  visible = false;
-  nextCalls = 0;
-  backCalls = 0;
-  resetCalls = 0;
-
-  constructor(length: number) {
-    this.length = length;
-  }
-
-  get position(): number {
-    return this.index;
-  }
-
-  get endReached(): boolean {
-    return this.index >= this.length - 1;
-  }
-
-  reset(): void {
-    this.index = 0;
-    this.resetCalls += 1;
-  }
-
-  next(): void {
-    this.stepWithoutDrawing();
-    this.drawWhereItIs();
-  }
-
-  stepWithoutDrawing(): void {
-    this.nextCalls += 1;
-    if (this.index < this.length - 1) {
-      this.index += 1;
-    }
-  }
-
-  drawWhereItIs(): void {
-    this.drawn += 1;
-  }
-
-  stepBackWithoutDrawing(): void {
-    this.backCalls += 1;
-    if (this.index > 0) {
-      this.index -= 1;
-    }
-  }
-
-  show(): void {
-    this.visible = true;
-  }
-
-  hide(): void {
-    this.visible = false;
-  }
-}

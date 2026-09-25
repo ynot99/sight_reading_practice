@@ -102,7 +102,7 @@ interface RawNote {
    * Which is time passing with nothing on the page - a silence, in this
    * model's terms - and how every engraver writes a voice that is absent for
    * part of a bar. The alternative in the format, `<forward>`, is what this
-   * program used to write and what OSMD lays out wrongly.
+   * program used to write and what OSMD laid out wrongly.
    */
   readonly invisible: boolean;
 }

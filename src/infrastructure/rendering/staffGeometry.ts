@@ -80,31 +80,6 @@ export interface PrintedNote {
   readonly x: number | null;
 }
 
-/** Semitone value of each letter, which is what the engraver reports. */
-const LETTER_BY_SEMITONE: Readonly<Record<number, number>> = {
-  0: 0, // C
-  2: 1, // D
-  4: 2, // E
-  5: 3, // F
-  7: 4, // G
-  9: 5, // A
-  11: 6, // B
-};
-
-/**
- * Converts the engraver's own pitch description into a staff position.
- *
- * Its octave numbering is three below scientific pitch - middle C is octave 1
- * there and octave 4 everywhere else in this project.
- */
-export function diatonicIndexOf(fundamentalSemitone: number, engraverOctave: number): number | null {
-  const letter = LETTER_BY_SEMITONE[fundamentalSemitone];
-  if (letter === undefined) {
-    return null;
-  }
-  return (engraverOctave + 3) * 7 + letter;
-}
-
 /**
  * Works out the vertical scale of the drawing from notes already on it.
  *

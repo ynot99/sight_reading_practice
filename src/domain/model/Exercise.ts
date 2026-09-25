@@ -536,8 +536,8 @@ export interface ExerciseMetadata {
 /**
  * The single source of truth for one practice item.
  *
- * Everything downstream is derived from this value: the MusicXML that OSMD
- * renders, and the expected-event timeline that MIDI input is judged against.
+ * Everything downstream is derived from this value: the MusicXML the engraver
+ * lays out, and the expected-event timeline that MIDI input is judged against.
  * Because both derivations start here they can never drift apart.
  */
 /** Where the damper pedal goes down or comes up. */

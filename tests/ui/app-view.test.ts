@@ -589,7 +589,7 @@ describe('AppView', () => {
 
     expect(renderer.loadCount).toBe(1);
     // Which piece it is is printed in the corner of the page itself now,
-    // beside the page number - see tests/infrastructure/osmd-page-turns.
+    // beside the page number - see tests/infrastructure/page-label.
     expect(renderer.loadedXml).toContain('<work-title>');
   });
 
@@ -7616,9 +7616,10 @@ describe('AppView', () => {
     });
 
     it('gives the engraver a container of its own', () => {
-      // OSMD sizes the sheet from container.offsetWidth, which counts padding
-      // and border. Drawing into the framed element would make the sheet wider
-      // than the space it has, and put a horizontal scrollbar under it.
+      // A page is laid out as wide as the container's clientWidth, which
+      // counts its padding. Drawing into the framed element would make the
+      // page wider than the space it has, and put a horizontal scrollbar
+      // under it.
       const surface = document.getElementById('score-surface');
       expect(surface).not.toBeNull();
       expect(surface?.id).not.toBe('score');

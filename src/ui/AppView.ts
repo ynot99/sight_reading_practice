@@ -86,27 +86,20 @@ import {
   theMusicsPlaceAt,
   type GridChoice,
 } from '../application/session/RunRoll.js';
-import {
-  paintThePedal,
-  paintTheGrid,
-  paintTheRuler,
-  theInksOf,
-  type RollInks,
-  type RollViewport,
-} from './rollPainter.js';
+import { theInksOf, type RollInks } from './rollPainter.js';
+import { RollTiles, type RollLanes } from './rollTiles.js';
 import {
   drawTheMap,
   drawThePitchMap,
   drawTheRoll,
   rowFromTap,
-  theCanvasesOf,
+  theLanesOf,
   theMapOfThePitches,
   thePitchesOfTheRun,
   theSceneOfTheRoll,
   whatThePedalSaysAt,
   whatTheGridSaysAt,
   whatTheRulerSaysAt,
-  type RollCanvases,
   type RollPitches,
   type RollScene,
   scrollAfterZoom,
@@ -1247,16 +1240,15 @@ export class AppView {
   private mapFrame: number | null = null;
   /** Whether the Storage pane is weighing what is kept, which takes a moment. */
   private weighing = false;
-  /** The frame the drawing is waiting to be painted in, if one has been asked for. */
-  private paintFrame: number | null = null;
   /** The notes of the drawing by pitch, for the map down its side. */
   private rollPitches: RollPitches | null = null;
   /** The head's marks, found once as the drawing is made rather than looked for every frame. */
   private rollHeads: RollHeads | null = null;
   /** What the drawing shows, placed in the run's own time: see `RollScene`. */
   private drawnScene: RollScene | null = null;
-  /** The canvases it is painted on, found once as it is drawn. */
-  private rollCanvases: RollCanvases | null = null;
+  /** The lanes it is painted in, found once as it is drawn, and the tiles painted in them. */
+  private rollLanes: RollLanes | null = null;
+  private rollTiles: RollTiles | null = null;
   /** The colours it is painted in, read off the stylesheet once and again when those change. */
   private rollInks: RollInks | null = null;
   /** What that map last drew, so a scroll that changes nothing on it redraws nothing. */
@@ -2071,7 +2063,7 @@ export class AppView {
       this.rollTick = null;
     }
     this.forgetTheMapFrame();
-    this.forgetThePaintFrame();
+    this.rollTiles?.forget();
     if (this.timeTick !== null) {
       clearInterval(this.timeTick);
       this.timeTick = null;
@@ -7949,22 +7941,24 @@ export class AppView {
   }
 
   /**
-   * Asks for the box to be redrawn, and at most once a frame.
+   * Asks for the view to be shown again - the tiles and the boxes - and at
+   * most once a frame.
    *
    * A scroll can fire many times between two frames, and every one of them used
    * to redraw the box. Drawn more often than the screen is painted, the extra
    * ones are thrown away - and they are not free, because each measures the
    * drawing again.
    *
-   * The frame is what the scrolling goes through. Everything else - a zoom, a
-   * redraw, the sheet opening - draws straight away, because those are single
-   * events that have just changed the thing being measured and there is nothing
-   * to coalesce.
+   * The frame is what the scrolling goes through, and a zoom as well: measuring
+   * the drawing straight after resizing it lays the whole of it out there and
+   * then, and a pinch asks several times a frame. A redraw and the sheet
+   * opening show it straight away, being single events with nothing to
+   * coalesce.
    */
   private askWhereTheViewIs(): void {
     const view = this.doc.defaultView;
     if (view === null || typeof view.requestAnimationFrame !== 'function') {
-      this.sayWhereTheViewIs();
+      this.showTheView();
       return;
     }
     if (this.mapFrame !== null) {
@@ -7972,8 +7966,22 @@ export class AppView {
     }
     this.mapFrame = view.requestAnimationFrame(() => {
       this.mapFrame = null;
-      this.sayWhereTheViewIs();
+      this.showTheView();
     });
+  }
+
+  /**
+   * Everything that follows the part of the run on the screen, in one frame:
+   * the tiles near it, and then the boxes on the maps saying where it is.
+   *
+   * The tiles first, because they measure the drawing and then write only
+   * inside it; the boxes after, measuring a drawing already laid out. The
+   * other way round, the boxes' writes made the tiles' measuring lay the page
+   * out a second time.
+   */
+  private showTheView(): void {
+    this.paintTheRoll();
+    this.sayWhereTheViewIs();
   }
 
   private forgetTheMapFrame(): void {
@@ -8396,7 +8404,9 @@ export class AppView {
     this.drawnScene = scene;
     this.el.rollBody.replaceChildren(drawTheRoll(scene));
     this.rollHeads = theHeadsOf(this.el.rollBody);
-    this.rollCanvases = theCanvasesOf(this.el.rollBody);
+    this.rollTiles?.forget();
+    this.rollLanes = theLanesOf(this.el.rollBody);
+    this.rollTiles = this.rollLanes === null ? null : new RollTiles(this.rollLanes);
     this.rollInks = null;
     this.rollPitches = thePitchesOfTheRun(roll, ghosts);
     this.applyTheZoom();
@@ -8411,9 +8421,8 @@ export class AppView {
     if (drawn instanceof HTMLElement) {
       drawn.addEventListener('scroll', () => {
         this.askWhereTheViewIs();
-        this.askToPaintTheRoll();
       });
-      this.tellThePointerWhatIsUnderIt(drawn);
+      this.tellThePointerWhatIsUnderIt();
     }
     this.sayWhereTheViewIs();
     this.describeTheRoll();
@@ -8422,106 +8431,82 @@ export class AppView {
   /**
    * Tells a pointer resting on the drawing what the mark under it is.
    *
-   * Each mark drawn as an element carried a title of its own. Painted, a canvas
-   * has one, and it is changed to say whatever mark the pointer is over - so a
-   * note still says what it was and how far off the beat it came. His: "а чи
-   * неможливо буде hover робити на canvas?".
+   * Each mark drawn as an element carried a title of its own. Painted, the
+   * lane it is painted in has one, and it is changed to say whatever mark the
+   * pointer is over - so a note still says what it was and how far off the
+   * beat it came. His: "а чи неможливо буде hover робити на canvas?".
    */
-  private tellThePointerWhatIsUnderIt(drawn: HTMLElement): void {
-    const canvases = this.rollCanvases;
-    if (canvases === null) {
+  private tellThePointerWhatIsUnderIt(): void {
+    const lanes = this.rollLanes;
+    if (lanes === null) {
       return;
     }
     const answer = (
-      canvas: HTMLCanvasElement,
+      lane: HTMLElement,
       ask: (scene: RollScene, atMs: number, row: number | null, pxPerSecond: number) => string | null,
     ): void => {
-      canvas.addEventListener('pointermove', (event) => {
+      lane.addEventListener('pointermove', (event) => {
         const scene = this.drawnScene;
         const pxPerSecond = Number(this.el.rollZoom.value);
-        // Where the canvas stands is where the view is scrolled to, since it
-        // stands still while the run moves under it.
-        const box = canvas.getBoundingClientRect();
-        const atMs = timeFromTap(event.clientX - box.left + drawn.scrollLeft, pxPerSecond);
-        const row = rowFromTap(event.clientY - box.top + drawn.scrollTop, this.theRowAsDrawn());
+        // The lane is the length of the run and scrolls with it, so where the
+        // pointer is in it is where it is in the run.
+        const box = lane.getBoundingClientRect();
+        const atMs = timeFromTap(event.clientX - box.left, pxPerSecond);
+        const row = rowFromTap(event.clientY - box.top, this.theRowAsDrawn());
         const says = scene === null || atMs === null ? null : ask(scene, atMs, row, pxPerSecond);
-        if (canvas.title !== (says ?? '')) {
-          canvas.title = says ?? '';
+        if (lane.title !== (says ?? '')) {
+          lane.title = says ?? '';
         }
       });
     };
-    answer(canvases.grid, (scene, atMs, row, pxPerSecond) =>
+    answer(lanes.grid, (scene, atMs, row, pxPerSecond) =>
       row === null ? null : whatTheGridSaysAt(scene, atMs, row, pxPerSecond),
     );
-    answer(canvases.ruler, (scene, atMs, _row, pxPerSecond) =>
+    answer(lanes.ruler, (scene, atMs, _row, pxPerSecond) =>
       whatTheRulerSaysAt(scene, atMs, pxPerSecond),
     );
-    answer(canvases.pedal, (scene, atMs, _row, pxPerSecond) =>
+    answer(lanes.pedal, (scene, atMs, _row, pxPerSecond) =>
       whatThePedalSaysAt(scene, atMs, pxPerSecond),
     );
   }
 
-  /**
-   * Asks for the drawing to be painted, and at most once a frame.
-   *
-   * The twin of `askWhereTheViewIs`, for the same reason: a scroll fires many
-   * times between two frames, and a picture painted more often than the screen
-   * shows one is thrown away.
-   */
-  private askToPaintTheRoll(): void {
-    const view = this.doc.defaultView;
-    if (view === null || typeof view.requestAnimationFrame !== 'function') {
-      this.paintTheRoll();
-      return;
-    }
-    if (this.paintFrame !== null) {
-      return;
-    }
-    this.paintFrame = view.requestAnimationFrame(() => {
-      this.paintFrame = null;
-      this.paintTheRoll();
-    });
-  }
-
-  private forgetThePaintFrame(): void {
-    const view = this.doc.defaultView;
-    if (this.paintFrame !== null && view !== null) {
-      view.cancelAnimationFrame(this.paintFrame);
-    }
-    this.paintFrame = null;
-  }
 
   /**
-   * Paints the part of the run on the screen, on each of its three canvases.
+   * Puts up the tiles of the run on and near the screen, painting any it did
+   * not have.
    *
-   * Only that part, and that is the whole of why it is painted at all: laid
-   * out as an element a mark, a run of five thousand notes took a second to
-   * open and most of one to zoom, every mark of it being placed whether it
-   * was on the screen or not.
+   * Only those, and that is the whole of why it is painted at all: laid out as
+   * an element a mark, a run of five thousand notes took a second to open and
+   * most of one to zoom, every mark of it being placed whether it was on the
+   * screen or not.
    */
   private paintTheRoll(): void {
     const scene = this.drawnScene;
-    const canvases = this.rollCanvases;
+    const tiles = this.rollTiles;
     const drawn = this.el.rollBody.firstElementChild;
-    if (scene === null || canvases === null || !(drawn instanceof HTMLElement)) {
+    if (scene === null || tiles === null || !(drawn instanceof HTMLElement)) {
       return;
     }
+    const widths = this.theRunsWidths(drawn);
+    const heights = this.theRunsHeights(drawn);
     // Nothing on the screen to paint for: the sheet is shut, or nothing has
     // been laid out yet.
-    if (canvases.grid.clientWidth === 0 || canvases.grid.clientHeight === 0) {
+    if (widths.viewWidePx <= 0 || heights.viewTallPx <= 0) {
       return;
     }
     this.rollInks ??= theInksOf(drawn);
-    const view: RollViewport = {
-      scrolledPx: drawn.scrollLeft,
-      scrolledDownPx: drawn.scrollTop,
-      pxPerSecond: Number(this.el.rollZoom.value),
-      rowPx: this.theRowAsDrawn(),
-    };
-    const density = this.doc.defaultView?.devicePixelRatio ?? 1;
-    paintTheGrid(canvases.grid, scene, view, this.rollInks, density);
-    paintTheRuler(canvases.ruler, scene, view, this.rollInks, density);
-    paintThePedal(canvases.pedal, scene, view, this.rollInks, density);
+    tiles.show(
+      scene,
+      { pxPerSecond: Number(this.el.rollZoom.value), rowPx: this.theRowAsDrawn() },
+      {
+        scrolledPx: widths.scrolledToPx,
+        scrolledDownPx: heights.scrolledDownPx,
+        widePx: widths.viewWidePx,
+        tallPx: heights.viewTallPx,
+      },
+      this.rollInks,
+      this.doc.defaultView?.devicePixelRatio ?? 1,
+    );
   }
 
   /**
@@ -8539,7 +8524,7 @@ export class AppView {
     }
     if (typeof view.ResizeObserver === 'function') {
       const watch = new view.ResizeObserver(() => {
-        this.askToPaintTheRoll();
+        this.askWhereTheViewIs();
       });
       watch.observe(this.el.rollBody);
       this.subscriptions.push(() => {
@@ -8550,7 +8535,7 @@ export class AppView {
       const dark = view.matchMedia('(prefers-color-scheme: dark)');
       const repaint = (): void => {
         this.rollInks = null;
-        this.askToPaintTheRoll();
+        this.askWhereTheViewIs();
       };
       dark.addEventListener('change', repaint);
       this.subscriptions.push(() => {
@@ -8987,12 +8972,18 @@ export class AppView {
   private applyTheZoom(): void {
     const roll = this.el.rollBody.firstElementChild;
     if (roll instanceof HTMLElement) {
-      roll.style.setProperty('--roll-second', `${this.el.rollZoom.value}px`);
+      const second = `${this.el.rollZoom.value}px`;
+      roll.style.setProperty('--roll-second', second);
+      // Not handed down from the drawing: see `--roll-second` in the stylesheet.
+      this.rollHeads?.line.style.setProperty('--roll-second', second);
+      this.rollHeads?.mark.style.setProperty('--roll-second', second);
       roll.style.setProperty('--roll-row-asked', `${this.rollRowPx}px`);
     }
-    // The window is a share of a drawing that has just changed width.
-    this.sayWhereTheViewIs();
-    this.askToPaintTheRoll();
+    // The window is a share of a drawing that has just changed width - said
+    // in the next frame rather than now: measuring the drawing straight after
+    // resizing it lays the whole of it out there and then, and a pinch asks
+    // several times a frame.
+    this.askWhereTheViewIs();
   }
 
   /**

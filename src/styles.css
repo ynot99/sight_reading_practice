@@ -1370,6 +1370,30 @@ textarea {
 }
 
 /*
+ * How wide a second of the run is drawn, and so how long the run is: the
+ * drawing's own, and not handed down to what is inside it.
+ *
+ * A zoom changes it on every step of a pinch, and a property handed down is a
+ * new style for everything in the drawing every time it changes - measured,
+ * the keys down its side were most of a zoom's layout, and they do not depend
+ * on it at all. So it stays on the drawing, which it sizes, and is set as
+ * well on the head's two marks, the only other things it places. A browser
+ * that cannot register a property hands it down as before, and every mark is
+ * still where it should be.
+ */
+@property --roll-second {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 140px;
+}
+
+@property --roll-length {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 100%;
+}
+
+/*
  * The run drawn as keys against the clicks it was played to.
  *
  * One scroll container holding four things: a ruler of bar numbers that sticks
@@ -1519,27 +1543,33 @@ textarea {
 }
 
 /*
- * The canvases the run is painted on, one in the ruler, the grid and the
- * pedal lane each.
+ * Where a lane holds its tiles: the whole of the lane, and closed off from
+ * the rest of the page.
  *
- * The size of the part of the drawing on the screen, and stuck there the way
- * the keys and the ruler are, inside the elements the length of the run that
- * the scroller scrolls: so the scrolling - its momentum, a finger's pan, a
- * trackpad going sideways - is the browser's own, and each canvas is painted
- * with whatever part of the run is under it. Never wider than the run, which
- * a short one at a low zoom is not.
+ * Closed off because a tile put up or taken down is a change the page has to
+ * lay out, and a lane of the drawing is laid out as part of everything around
+ * it - measured, a tile's worth of change cost a layout of the whole page,
+ * ten milliseconds and more, several times a frame of a pinch. Held in a box
+ * whose size its contents cannot change, the change is laid out in the box.
  */
-.roll__paint {
-  position: sticky;
-  left: var(--roll-keys);
-  display: block;
-  width: min(100%, calc(100cqw - var(--roll-keys) - 2px));
-  height: 100%;
+.roll__tiles {
+  position: absolute;
+  inset: 0;
+  contain: strict;
 }
 
-.roll__grid > .roll__paint {
-  top: var(--roll-ruler);
-  height: min(100%, calc(100cqh - var(--roll-ruler) - var(--roll-pedal) - 2px));
+/*
+ * A tile of the run, painted: see `RollTiles`.
+ *
+ * Placed in the lane it belongs to and scrolled with it by the page, as the
+ * head is - so the scrolling, its momentum, a finger's pan and a trackpad
+ * going sideways are the browser's own, and the notes go with them rather
+ * than a frame behind. Where each one stands is the painter's to say, since it
+ * is the painter that decides which tiles there are.
+ */
+.roll__tile {
+  position: absolute;
+  display: block;
 }
 
 /*

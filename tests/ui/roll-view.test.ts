@@ -7,7 +7,7 @@ import {
   momentsIn,
   rowFromTap,
   stretchesIn,
-  theCanvasesOf,
+  theLanesOf,
   theSceneOfTheRoll,
   whatThePedalSaysAt,
   whatTheGridSaysAt,
@@ -164,18 +164,19 @@ describe('drawing a run as a piano roll', () => {
     expect(view.querySelector('.roll__ruler .roll__head-mark')).not.toBeNull();
   });
 
-  it('paints the run rather than laying it out: a canvas each for the ruler, the grid and the pedal', () => {
+  it('lays out no mark of the run, only the lanes it is painted in', () => {
     // Laid out as an element a mark, five thousand notes took a second to open
-    // and most of one to zoom.
+    // and most of one to zoom. The painting is done in tiles, near the screen.
     const view = draw(
       roll({ beats: barOfFour(0, 0), presses: [press(), press({ downAtMs: 2000 })] }),
     );
 
-    expect(theCanvasesOf(view)).not.toBeNull();
-    expect(view.querySelector('.roll__grid')?.children).toHaveLength(2);
-    // And the marks each paint over the one it stands in.
-    expect(view.querySelector('.roll__grid > .roll__paint + .roll__head')).not.toBeNull();
-    expect(view.querySelector('.roll__ruler > .roll__paint + .roll__head-mark')).not.toBeNull();
+    expect(theLanesOf(view)).not.toBeNull();
+    expect([...(view.querySelector('.roll__grid')?.children ?? [])].map((child) => child.className)).toEqual([
+      'roll__tiles',
+      'roll__head',
+    ]);
+    expect(view.querySelector('.roll__grid > .roll__tiles')?.children).toHaveLength(0);
   });
 
   it('draws a bar line the reader gave as theirs', () => {

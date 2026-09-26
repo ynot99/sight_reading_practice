@@ -1151,19 +1151,33 @@ describe('the inks the MIDI viewer is painted in', () => {
   });
 });
 
-describe('the canvases the run is painted on', () => {
-  const body = (selector: string): string =>
-    rules().find((rule) => rule.selector === selector)?.body ?? '';
+describe('the zoom of the MIDI viewer', () => {
+  it('is the drawing’s own, and not handed down to everything in it', () => {
+    // Handed down, every step of a pinch was a new style for every key down
+    // the drawing's side, which was most of what a zoom cost.
+    for (const name of ['--roll-second', '--roll-length']) {
+      const registered = rules().find((rule) => rule.selector === `@property ${name}`)?.body ?? '';
+      expect(registered, name).toMatch(/inherits:\s*false/);
+    }
+  });
+});
 
-  it('stand still beside the keys while the run scrolls under them', () => {
-    expect(body('.roll__paint')).toMatch(/position:\s*sticky/);
-    expect(body('.roll__paint')).toMatch(/left:\s*var\(--roll-keys\)/);
-    // The grid's under the ruler, which stands over it.
-    expect(body('.roll__grid > .roll__paint')).toMatch(/top:\s*var\(--roll-ruler\)/);
+describe('the tiles the run is painted in', () => {
+  it('are placed in their lane and scrolled with it, as the head is', () => {
+    // Stuck to the screen and painted again for every step of a scroll, the
+    // notes went a frame behind the head, in jerks.
+    const tile = rules().find((rule) => rule.selector === '.roll__tile')?.body ?? '';
+
+    expect(tile).toMatch(/position:\s*absolute/);
+    expect(tile).not.toMatch(/sticky/);
   });
 
-  it('are never wider than the run, which a short one at a low zoom is not', () => {
-    expect(body('.roll__paint')).toMatch(/width:\s*min\(100%,/);
+  it('are held in a box closed off from the page, so putting one up lays out only the box', () => {
+    // Measured, a tile's worth of change was a layout of the whole page.
+    const layer = rules().find((rule) => rule.selector === '.roll__tiles')?.body ?? '';
+
+    expect(layer).toMatch(/contain:\s*strict/);
+    expect(layer).toMatch(/inset:\s*0/);
   });
 });
 

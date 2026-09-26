@@ -8,11 +8,11 @@ import {
 } from './rollView.js';
 
 /**
- * Where the drawing is being looked at from.
+ * Which part of the drawing a canvas covers.
  *
- * How far the run is scrolled along and down, and how wide a second and how
- * tall a row are drawn: everything a scene placed in the run's own time needs
- * to be put on a screen, and nothing it needs working out again.
+ * Where its left and top edges are in the drawing, and how wide a second and
+ * how tall a row are drawn: everything a scene placed in the run's own time
+ * needs to be put on a canvas, and nothing it needs working out again.
  */
 export interface RollViewport {
   readonly scrolledPx: number;
@@ -140,7 +140,7 @@ interface Readied {
 
 /**
  * Sizes a canvas's pixels to the screen's and clears it, or `null` where there
- * is nothing on the screen to size it to.
+ * is nothing to size it to.
  *
  * As many pixels as the screen has, not as many as the page says: on a tablet
  * those are two or three to a page pixel, and a canvas of page pixels is drawn
@@ -240,7 +240,7 @@ function inkOfNote(inks: RollInks, shade: NoteShade): string {
 }
 
 /**
- * Paints the part of the grid on the screen.
+ * Paints the part of the grid a canvas covers: see `RollTiles`.
  *
  * In the order the marks lie over one another, which is part of what they
  * say. The waits go under the rows, which are a dark wash with the ground
@@ -384,7 +384,7 @@ function inkOfTick(inks: RollInks, kind: LineKind): string {
 }
 
 /**
- * Paints the part of the ruler on the screen: the metre, and the bars' numbers.
+ * Paints the part of the ruler a canvas covers: the metre, and the bars' numbers.
  *
  * Small and bright, at his asking: the grid's own grey is right behind the
  * music, where the lines must not compete with the notes, and wrong on a ruler
@@ -422,7 +422,7 @@ const PEDAL_DOWN_PX = 4;
 const PEDAL_TALL_PX = 7;
 const PEDAL_CORNER_PX = 4;
 
-/** Paints the part of the pedal lane on the screen. */
+/** Paints the part of the pedal lane a canvas covers. */
 export function paintThePedal(
   surface: Surface,
   scene: RollScene,

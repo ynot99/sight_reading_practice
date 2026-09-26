@@ -2143,6 +2143,8 @@ describe('AppView', () => {
       const giveBack = lendTheDrawingASize(() => scrolledTo);
       try {
         await openThePictureOfARun();
+        // The frame the opening asked for, with the zoom it was drawn at.
+        await aFrame();
         const box = element('roll-map-window');
         const at = box.style.transform;
         const drawn = theDrawing();
@@ -2948,15 +2950,15 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
-      const canvas = element('roll-body').querySelector<HTMLCanvasElement>('.roll__grid > .roll__paint');
+      const grid = element('roll-body').querySelector<HTMLElement>('.roll__grid > .roll__tiles');
       const note = view.rollScene?.notes[0];
-      if (canvas === null || note === undefined) {
+      if (grid === null || note === undefined) {
         throw new Error('expected a painted note to point at');
       }
-      // jsdom lays nothing out: the canvas stands at the page's corner, a second
+      // jsdom lays nothing out: the grid stands at the page's corner, a second
       // is the zoom's hundred and forty pixels, and a row the thirteen asked for.
       const rest = (atMs: number, row: number): void => {
-        canvas.dispatchEvent(
+        grid.dispatchEvent(
           new PointerEvent('pointermove', {
             bubbles: true,
             clientX: (atMs / 1000) * 140,
@@ -2966,35 +2968,76 @@ describe('AppView', () => {
       };
 
       rest(note.fromMs + 5, note.row);
-      expect(canvas.title).toBe(note.says);
+      expect(grid.title).toBe(note.says);
 
       // And nothing, where there is nothing to say.
       rest(note.fromMs + 5, note.row + 3);
-      expect(canvas.title).toBe('');
+      expect(grid.title).toBe('');
     });
 
-    it('paints the drawing again when the view moves or the zoom does, and once a frame', async () => {
-      // Painted only where the screen is, so whatever changes what the screen
-      // shows has to paint again - and a scroll fires many times a frame.
-      const painted: string[] = [];
-      const lent = ['getContext', 'clientWidth', 'clientHeight'].map(
-        (name) => [name, Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, name)] as const,
-      );
-      Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { configurable: true, get: () => 400 });
-      Object.defineProperty(HTMLCanvasElement.prototype, 'clientHeight', { configurable: true, get: () => 200 });
-      Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-        configurable: true,
-        value(this: HTMLCanvasElement) {
-          const which = this.parentElement?.className ?? '';
-          // A canvas that takes every stroke and keeps only that it was cleared.
-          return new Proxy(
-            {},
-            {
-              get: (_target, name) => (name === 'clearRect' ? () => painted.push(which) : () => undefined),
-              set: () => true,
-            },
-          );
+    it('paints the tiles again when the zoom changes, not when a scroll needs none, and once a frame', async () => {
+      // A scroll is the page's to do, with the tiles on it: painting on every
+      // step of one put the notes a frame behind the head, in jerks. His: "скрол
+      // йде з ривками, але курсор скролиться нормально".
+      const painted = new Set<HTMLCanvasElement>();
+      let paintings = 0;
+      const sizes: Record<string, (node: HTMLElement) => number> = {
+        clientWidth: (node) => (node.classList.contains('roll') ? 400 : node.classList.contains('roll__keys') ? 44 : 0),
+        clientHeight: (node) => {
+          if (node.classList.contains('roll')) {
+            return 300;
+          }
+          // Where a lane holds its tiles, which is the lane inside its border.
+          const lane = node.classList.contains('roll__tiles') ? node.parentElement : null;
+          return lane?.classList.contains('roll__ruler') === true
+            ? 19
+            : lane?.classList.contains('roll__pedal') === true
+              ? 15
+              : 0;
         },
+        offsetHeight: (node) =>
+          node.classList.contains('roll__ruler') ? 20 : node.classList.contains('roll__pedal') ? 16 : 0,
+      };
+      const lent = [...Object.keys(sizes), 'scrollLeft'].map(
+        (name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const,
+      );
+      for (const [name, size] of Object.entries(sizes)) {
+        Object.defineProperty(HTMLElement.prototype, name, {
+          configurable: true,
+          get(this: HTMLElement) {
+            return size(this);
+          },
+        });
+      }
+      // A scroller that remembers where it was put.
+      const scrolled = new WeakMap<HTMLElement, number>();
+      Object.defineProperty(HTMLElement.prototype, 'scrollLeft', {
+        configurable: true,
+        get(this: HTMLElement) {
+          return scrolled.get(this) ?? 0;
+        },
+        set(this: HTMLElement, to: number) {
+          scrolled.set(this, to);
+        },
+      });
+      const context = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+        this: HTMLCanvasElement,
+      ) {
+        // A canvas that takes every stroke and keeps only that it was cleared,
+        // which a painting does once.
+        return new Proxy(
+          {},
+          {
+            get: (_target, name) =>
+              name === 'clearRect'
+                ? () => {
+                    painted.add(this);
+                    paintings += 1;
+                  }
+                : () => undefined,
+            set: () => true,
+          },
+        ) as unknown as RenderingContext;
       });
       const frame = (): Promise<void> =>
         new Promise((done) => {
@@ -3007,33 +3050,62 @@ describe('AppView', () => {
         element<HTMLButtonElement>('focus-play').click();
         const step = runtime.controller.session?.currentStep;
         midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
-        metronome.advanceSubdivisions(16);
+        metronome.advanceSubdivisions(48);
         element<HTMLButtonElement>('focus-stop').click();
         element<HTMLButtonElement>('run-roll-open').click();
+        // The tiles on the screen in the frame after, and the ones kept ready
+        // in the frame after that.
         await frame();
-        // All three, once.
-        expect([...painted].sort()).toEqual(['roll__grid', 'roll__pedal', 'roll__ruler']);
+        await frame();
+        const tiles = (): number => element('roll-body').querySelectorAll('.roll__tile').length;
+        // The grid, the ruler and the pedal lane, each painted once.
+        expect(element('roll-body').querySelectorAll('.roll__grid .roll__tile').length).toBeGreaterThan(0);
+        expect(element('roll-body').querySelectorAll('.roll__ruler .roll__tile').length).toBeGreaterThan(0);
+        expect(paintings).toBe(tiles());
 
-        painted.length = 0;
+        paintings = 0;
         const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
         for (let each = 0; each < 5; each += 1) {
           drawn?.dispatchEvent(new Event('scroll'));
         }
         await frame();
-        expect(painted.filter((which) => which === 'roll__grid')).toHaveLength(1);
+        expect(paintings).toBe(0);
 
-        painted.length = 0;
+        paintings = 0;
+        painted.clear();
         const zoom = element<HTMLInputElement>('roll-zoom');
-        zoom.value = '200';
-        zoom.dispatchEvent(new Event('input', { bubbles: true }));
+        for (const asked of ['200', '210']) {
+          zoom.value = asked;
+          zoom.dispatchEvent(new Event('input', { bubbles: true }));
+        }
         await frame();
-        expect(painted.filter((which) => which === 'roll__grid')).toHaveLength(1);
+        await frame();
+        // Every tile up painted again, and once, however many times it was asked.
+        expect(paintings).toBe(tiles());
+        expect(painted.size).toBe(tiles());
+
+        // And a scroll far along puts up the tiles it comes to.
+        paintings = 0;
+        const far = ((view.rollScene?.lengthMs ?? 0) / 1000) * 210 - 400;
+        expect(far).toBeGreaterThan(2000);
+        if (drawn !== null) {
+          drawn.scrollLeft = far;
+          drawn.dispatchEvent(new Event('scroll'));
+        }
+        await frame();
+        expect(paintings).toBeGreaterThan(0);
+        const lefts = [...element('roll-body').querySelectorAll<HTMLElement>('.roll__grid .roll__tile')].map(
+          (tile) => Number.parseFloat(tile.style.left),
+        );
+        expect(Math.max(...lefts)).toBeGreaterThan(far - 256);
+        expect(Math.min(...lefts)).toBeGreaterThan(0);
       } finally {
+        context.mockRestore();
         for (const [name, descriptor] of lent) {
           if (descriptor === undefined) {
-            delete (HTMLCanvasElement.prototype as unknown as Record<string, unknown>)[name];
+            delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name];
           } else {
-            Object.defineProperty(HTMLCanvasElement.prototype, name, descriptor);
+            Object.defineProperty(HTMLElement.prototype, name, descriptor);
           }
         }
       }
@@ -3329,6 +3401,10 @@ describe('AppView', () => {
 
       expect(element<HTMLInputElement>('roll-zoom').value).toBe('280');
       expect(drawn?.style.getPropertyValue('--roll-second')).toBe('280px');
+      // And the head's two marks told as well, since it is not handed down to them.
+      for (const mark of drawn?.querySelectorAll<HTMLElement>('.roll__head, .roll__head-mark') ?? []) {
+        expect(mark.style.getPropertyValue('--roll-second')).toBe('280px');
+      }
 
       // And the fingers coming up is not a tap: the head stays where it was.
       const at = headAt(drawn);

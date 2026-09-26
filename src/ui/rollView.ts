@@ -14,6 +14,7 @@ import {
   type RunRoll,
 } from '../application/session/RunRoll.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
+import type { RollLanes } from './rollTiles.js';
 
 /**
  * What the drawing needs beyond the roll itself.
@@ -1215,22 +1216,20 @@ export function rowFromTap(offsetPx: number, rowPx: number): number | null {
 }
 
 /**
- * The frame a run is painted into: the keys, and three canvases.
+ * The frame a run is painted into: the keys, and three lanes for its tiles.
  *
  * One scroll container holding a ruler that sticks to the top, a column of
- * keys that sticks to the left, the grid, and a lane for the pedal - each of
- * the three a canvas the size of the screen, standing still while the run
- * scrolls under it and painted with only the part of the run that shows. The
- * run was drawn as an element a mark, every one of them placed by the zoom:
- * at five thousand notes a zoom took most of a second a frame and opening
- * the run a second, because every mark of the run was laid out whether it was
- * on the screen or not. His, of Signal: "Як Signal MIDI аплікуха малює все без
- * підлагувань?" - by painting only what is on the screen, which is what this
- * does.
+ * keys that sticks to the left, the grid, and a lane for the pedal. The run
+ * was drawn into them as an element a mark, every one placed by the zoom: at
+ * five thousand notes a zoom took most of a second a frame and opening the run
+ * a second, because every mark of the run was laid out whether it was on the
+ * screen or not. His, of Signal: "Як Signal MIDI аплікуха малює все без
+ * підлагувань?" - by painting only what is on the screen. The lanes are
+ * painted in tiles, near the screen and nowhere else: see `RollTiles`.
  *
- * The grid itself is still an element the length of the run, so the scroller
- * has something to scroll and a tap has somewhere to land; it is empty but for
- * the canvas and the head.
+ * Each lane is still an element the length of the run, so the scroller has
+ * something to scroll and a tap has somewhere to land; the grid holds nothing
+ * but its tiles and the head.
  */
 export function drawTheRoll(scene: RollScene): HTMLElement {
   const view = element('div', 'roll');
@@ -1242,7 +1241,7 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   // the grid and stops where the ruler begins. His: "на ruler теж додати мітку
   // над курсором". Placed by the same custom property as the head, so it
   // follows without a line of its own.
-  ruler.append(element('canvas', 'roll__paint'), element('div', 'roll__head-mark'));
+  ruler.append(element('div', 'roll__tiles'), element('div', 'roll__head-mark'));
 
   const keys = element('div', 'roll__keys');
   for (let row = 0; row < scene.rows; row += 1) {
@@ -1258,26 +1257,19 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   const grid = element('div', 'roll__grid');
   // Where a playback has got to, moved by one custom property so following a
   // performance costs one write a frame rather than a redraw.
-  grid.append(element('canvas', 'roll__paint'), element('div', 'roll__head'));
+  grid.append(element('div', 'roll__tiles'), element('div', 'roll__head'));
 
   const pedal = element('div', 'roll__pedal');
-  pedal.append(element('canvas', 'roll__paint'));
+  pedal.append(element('div', 'roll__tiles'));
 
   view.append(ruler, keys, grid, pedal);
   return view;
 }
 
-/** The three canvases a drawing is painted on. */
-export interface RollCanvases {
-  readonly ruler: HTMLCanvasElement;
-  readonly grid: HTMLCanvasElement;
-  readonly pedal: HTMLCanvasElement;
-}
-
-/** A drawing's canvases, or `null` where nothing has been drawn. */
-export function theCanvasesOf(within: ParentNode): RollCanvases | null {
-  const ruler = within.querySelector<HTMLCanvasElement>('.roll__ruler > .roll__paint');
-  const grid = within.querySelector<HTMLCanvasElement>('.roll__grid > .roll__paint');
-  const pedal = within.querySelector<HTMLCanvasElement>('.roll__pedal > .roll__paint');
+/** Where a drawing's three lanes hold their tiles, or `null` where nothing has been drawn. */
+export function theLanesOf(within: ParentNode): RollLanes | null {
+  const ruler = within.querySelector<HTMLElement>('.roll__ruler > .roll__tiles');
+  const grid = within.querySelector<HTMLElement>('.roll__grid > .roll__tiles');
+  const pedal = within.querySelector<HTMLElement>('.roll__pedal > .roll__tiles');
   return ruler === null || grid === null || pedal === null ? null : { ruler, grid, pedal };
 }

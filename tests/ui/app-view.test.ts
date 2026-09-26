@@ -479,6 +479,11 @@ function element<T extends HTMLElement>(id: string): T {
   return found as T;
 }
 
+/** Where the MIDI viewer's head stands, in seconds, as its line is told. */
+function headAt(drawn: Element | null | undefined): string | undefined {
+  return drawn?.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-at');
+}
+
 /** A press and a let-go on a sheet's dimmed area, outside its panel. */
 function tapOutside(sheet: HTMLElement): void {
   sheet.dispatchEvent(new Event('pointerdown', { bubbles: true }));
@@ -2422,6 +2427,42 @@ describe('AppView', () => {
     });
 
 
+    it('writes nothing over the drawing on a frame that moves only the head', async () => {
+      // Every write to the page makes it lay itself out again, the drawing and
+      // its notes included. The squares built again and the play icon set
+      // again on every frame of a playback cost a whole layout each: at five
+      // thousand notes, most of a quarter of a second a frame.
+      const { view, runtime, midi, clock } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(longExercise({ bars: 4, tempoBpm: 60 }));
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(20);
+        vi.advanceTimersByTime(100);
+        expect(element('roll-beats').children.length).toBe(4);
+        const watch = new MutationObserver(() => undefined);
+        for (const id of ['roll-beats', 'roll-play']) {
+          watch.observe(element(id), { childList: true, attributes: true, subtree: true });
+        }
+
+        // Well inside the first click of a bar at sixty.
+        clock.advance(20);
+        vi.advanceTimersByTime(100);
+
+        expect(headAt(drawn)).not.toBe('0.000');
+        expect(watch.takeRecords()).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('puts the whole run on one line under the drawing', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();
@@ -2567,12 +2608,17 @@ describe('AppView', () => {
       vi.useFakeTimers();
       try {
         element<HTMLButtonElement>('roll-play').click();
-        expect(drawn?.style.getPropertyValue('--roll-at')).toBe('0.000');
+        expect(headAt(drawn)).toBe('0.000');
 
         clock.advance(400);
         vi.advanceTimersByTime(100);
 
-        expect(drawn?.style.getPropertyValue('--roll-at')).toBe('0.400');
+        expect(headAt(drawn)).toBe('0.400');
+        // Its cap on the ruler with it, and nothing else told: written on the
+        // drawing, every note in it inherited the number and was restyled on
+        // every frame - 228 ms a frame at five thousand notes.
+        expect(drawn?.querySelector<HTMLElement>('.roll__head-mark')?.style.getPropertyValue('--roll-at')).toBe('0.400');
+        expect(drawn?.style.getPropertyValue('--roll-at')).toBe('');
       } finally {
         vi.useRealTimers();
       }
@@ -2588,7 +2634,7 @@ describe('AppView', () => {
       readonly giveBack: () => void;
     } {
       let scrolled = 0;
-      const had = ['scrollLeft', 'clientWidth', 'offsetLeft'].map(
+      const had = ['scrollLeft', 'clientWidth', 'getBoundingClientRect'].map(
         (name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const,
       );
       Object.defineProperty(HTMLElement.prototype, 'scrollLeft', {
@@ -2605,10 +2651,12 @@ describe('AppView', () => {
           return this.classList.contains('roll__keys') ? 40 : 400;
         },
       });
-      Object.defineProperty(HTMLElement.prototype, 'offsetLeft', {
+      // Where the head has been moved to, which the page says and its place
+      // does not: it is moved, and `offsetLeft` would say nought.
+      Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
         configurable: true,
-        get(this: HTMLElement) {
-          return this.classList.contains('roll__head') ? headPx : 0;
+        value(this: HTMLElement) {
+          return new DOMRect(this.classList.contains('roll__head') ? headPx : 0, 0, 0, 0);
         },
       });
       return {
@@ -2873,14 +2921,14 @@ describe('AppView', () => {
       }
 
       expect(runtime.takePlayer.playing).toBeNull();
-      expect(drawn?.style.getPropertyValue('--roll-at')).toBe('0.300');
+      expect(headAt(drawn)).toBe('0.300');
       expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(false);
       expect(element('roll-play').getAttribute('aria-label')).toBe('Play');
 
       element<HTMLButtonElement>('roll-stop').click();
 
       // Stopped: back to the beginning, which is what stopping means.
-      expect(drawn?.style.getPropertyValue('--roll-at')).toBe('0.000');
+      expect(headAt(drawn)).toBe('0.000');
       expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(true);
     });
 
@@ -2912,7 +2960,7 @@ describe('AppView', () => {
       // and sixty-eight pixels in is a fifth of a second past the first beat.
       grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 188 }));
 
-      expect(drawn?.style.getPropertyValue('--roll-at')).toBe('1.000');
+      expect(headAt(drawn)).toBe('1.000');
     });
 
     it('plays from where the head was put, and moves the sound when it is moved again', async () => {
@@ -3179,12 +3227,12 @@ describe('AppView', () => {
       expect(drawn?.style.getPropertyValue('--roll-second')).toBe('280px');
 
       // And the fingers coming up is not a tap: the head stays where it was.
-      const at = drawn?.style.getPropertyValue('--roll-at');
+      const at = headAt(drawn);
       finger('pointerup', 2, 200);
       finger('pointerup', 1, 0);
       body.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 400 }));
 
-      expect(drawn?.style.getPropertyValue('--roll-at')).toBe(at);
+      expect(headAt(drawn)).toBe(at);
     });
 
     it('shortens the rows when the fingers pinch down the page', async () => {
@@ -3353,7 +3401,7 @@ describe('AppView', () => {
       // which is not where any beat of this run falls.
       gridEl.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 70 }));
 
-      expect(drawn?.style.getPropertyValue('--roll-at')).toBe('0.500');
+      expect(headAt(drawn)).toBe('0.500');
     });
 
     it('shows the notes that were asked for, when they are asked for', async () => {

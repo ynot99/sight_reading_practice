@@ -321,6 +321,19 @@ function noteFor(press: RolledPress, origin: number, high: number, endMs: number
   return note;
 }
 
+/** The head's two marks: its line over the grid, and its cap on the ruler. */
+export interface RollHeads {
+  readonly line: HTMLElement;
+  readonly mark: HTMLElement;
+}
+
+/** The head's marks in a drawing, or `null` where nothing has been drawn. */
+export function theHeadsOf(within: ParentNode): RollHeads | null {
+  const line = within.querySelector<HTMLElement>('.roll__grid > .roll__head');
+  const mark = within.querySelector<HTMLElement>('.roll__ruler > .roll__head-mark');
+  return line === null || mark === null ? null : { line, mark };
+}
+
 /**
  * The moment a tap on the grid means, in milliseconds from the roll's start.
  *

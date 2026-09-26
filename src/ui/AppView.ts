@@ -105,9 +105,11 @@ import {
   theWindowOnTheRun,
   pinchedTo,
   timeFromTap,
+  theHeadsOf,
   type FingerSpan,
   type PinchedFrom,
   type RollGhost,
+  type RollHeads,
 } from './rollView.js';
 import type { LadderStep } from '../application/ladder/PracticeLadder.js';
 import { readBackup } from '../application/Backup.js';
@@ -1229,8 +1231,12 @@ export class AppView {
   private mapFrame: number | null = null;
   /** The notes of the drawing by pitch, for the map down its side. */
   private rollPitches: RollPitches | null = null;
+  /** The head's marks, found once as the drawing is made rather than looked for every frame. */
+  private rollHeads: RollHeads | null = null;
   /** What that map last drew, so a scroll that changes nothing on it redraws nothing. */
   private pitchMarksDrawn = '';
+  /** What the squares over the drawing last said, for the same reason: see `countTheBarOut`. */
+  private barSquaresDrawn = '';
   /** Clicks of the run already handed to the metronome by this playback. */
   private rollClicksSent = 0;
   /**
@@ -7724,6 +7730,15 @@ export class AppView {
     if (bar === null) {
       return;
     }
+    // Only when they say something new, which is once a click. Built again
+    // on every frame of a playback, they made the page lay itself out again
+    // every time - the drawing and every note in it included, which at five
+    // thousand notes was most of a quarter of a second a frame.
+    const said = `${String(bar.of)}:${String(bar.filled)}:${String(bar.overflowed)}`;
+    if (said === this.barSquaresDrawn) {
+      return;
+    }
+    this.barSquaresDrawn = said;
     this.el.rollBeats.classList.toggle('roll-beats--over', bar.overflowed);
     this.el.rollBeats.replaceChildren(
       ...Array.from({ length: bar.of }, (_unused, at) => {
@@ -8297,6 +8312,7 @@ export class AppView {
         keepsTime: this.theRunKeptTime(),
       }),
     );
+    this.rollHeads = theHeadsOf(this.el.rollBody);
     this.rollPitches = thePitchesOfTheRun(roll, ghosts);
     this.applyTheZoom();
     this.el.rollMap.replaceChildren(
@@ -8577,10 +8593,15 @@ export class AppView {
   private describeTheRoll(): void {
     const player = this.runtime.takePlayer;
     const sounding = player.playing === RUN_ROLL_ID;
-    this.el.rollPlayIcon.setAttribute('d', sounding ? PAUSE_ICON : PLAY_ICON);
-    const label = sounding ? 'Pause' : 'Play';
-    this.el.rollPlay.title = label;
-    this.el.rollPlay.setAttribute('aria-label', label);
+    // Only when it turns over, for the reason the squares are: see
+    // `countTheBarOut`. The same icon set again is a new drawing to the page.
+    const icon = sounding ? PAUSE_ICON : PLAY_ICON;
+    if (this.el.rollPlayIcon.getAttribute('d') !== icon) {
+      this.el.rollPlayIcon.setAttribute('d', icon);
+      const label = sounding ? 'Pause' : 'Play';
+      this.el.rollPlay.title = label;
+      this.el.rollPlay.setAttribute('aria-label', label);
+    }
     // Nothing to stop where the head is already at the beginning and silent.
     this.el.rollStop.disabled = !sounding && this.rollAtMs === 0;
 
@@ -8589,29 +8610,39 @@ export class AppView {
       return;
     }
     drawn.classList.toggle('roll--sounding', sounding);
+    const heads = this.rollHeads;
+    if (heads === null) {
+      return;
+    }
     // The head is a place, not a sign that something is playing: it stands
     // where the reader put it or where the sound stopped, and it is there from
     // the moment the drawing opens. His: "чи можливо мати курсор завжди? Бо він
     // наразі пропадає як тільки робиться stop".
-    drawn.style.setProperty('--roll-at', (this.headIsAtMs() / 1000).toFixed(3));
+    //
+    // Written on the two marks and not on the drawing, which every note in it
+    // would inherit: see `.roll__head` in the stylesheet.
+    const at = (this.headIsAtMs() / 1000).toFixed(3);
+    heads.line.style.setProperty('--roll-at', at);
+    heads.mark.style.setProperty('--roll-at', at);
     this.sayWhereTheHeadIs();
     this.countTheBarOut();
     if (!sounding) {
       return;
     }
-    const head = drawn.querySelector<HTMLElement>('.roll__head');
-    if (head === null) {
-      return;
-    }
+    // Read off the page, where it has been moved to: a move is not a place,
+    // so `offsetLeft` would say nought wherever it stood.
+    const grid = heads.line.parentElement;
+    const headPx =
+      heads.line.getBoundingClientRect().left - (grid?.getBoundingClientRect().left ?? 0);
     if (this.theMusicRunsPastTheHead()) {
       drawn.scrollLeft = theRunScrolledUnderTheHead(
-        head.offsetLeft,
+        headPx,
         this.theRunsWidths(drawn).viewWidePx,
         this.runtime.controller.settings.rollHeadAtPercent / 100,
       );
       return;
     }
-    const to = keepTheHeadInView(head.offsetLeft, drawn.scrollLeft, drawn.clientWidth);
+    const to = keepTheHeadInView(headPx, drawn.scrollLeft, drawn.clientWidth);
     if (to !== null) {
       drawn.scrollLeft = to;
     }

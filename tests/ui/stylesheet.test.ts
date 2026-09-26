@@ -1397,12 +1397,23 @@ describe('the head on the ruler', () => {
   /** The `left` itself, and not the `margin-left` that centres the cap. */
   const left = (of: string): string | undefined =>
     /(?:^|[\s;])left\s*:\s*([^;]+);/.exec(of)?.[1]?.trim();
+  const moved = (of: string): string | undefined =>
+    /(?:^|[\s;])transform\s*:\s*([^;]+);/.exec(of)?.[1]?.trim();
 
   it('stands where the head does', () => {
     // Two things placed by one number cannot drift apart, however the view is
     // scrolled or zoomed; placed by two, they would need keeping in step.
-    expect(left(body('.roll__head'))).toContain('--roll-at');
-    expect(left(body('.roll__head-mark'))).toBe(left(body('.roll__head')));
+    expect(moved(body('.roll__head'))).toContain('--roll-at');
+    expect(moved(body('.roll__head-mark'))).toBe(moved(body('.roll__head')));
+  });
+
+  it('is moved rather than placed, on a layer of its own', () => {
+    // `left` lays the grid out again on every frame of a playback; a move on
+    // a layer of its own does not touch it.
+    for (const mark of ['.roll__head', '.roll__head-mark']) {
+      expect(left(body(mark)), mark).toBe('0');
+      expect(body(mark), mark).toMatch(/will-change\s*:\s*transform/);
+    }
   });
 
   it('is as pale as the head at rest, and as strong while it sounds', () => {

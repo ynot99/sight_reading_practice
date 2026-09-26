@@ -2083,6 +2083,31 @@ describe('AppView', () => {
       }
     });
 
+    it('leaves a scrolling wheel to the browser, and takes a zooming one', async () => {
+      // Taken, the first message of a gesture made the browser wait on the page
+      // for every one after it, and each was drawn a frame later than it could
+      // have been. His: "реагує canvas на скрол повільно". A zoom is still
+      // taken, or the browser zooms the whole page along with the drawing.
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        await openThePictureOfARun();
+        const scrolling = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 30 });
+        element('roll-body').dispatchEvent(scrolling);
+        await aFrame();
+
+        expect(scrolling.defaultPrevented).toBe(false);
+        // Left to the browser, and still scrolled by us.
+        expect(element('roll-map-window').style.transform).toBe('translateX(30.000%)');
+
+        const zooming = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120, ctrlKey: true });
+        element('roll-body').dispatchEvent(zooming);
+
+        expect(zooming.defaultPrevented).toBe(true);
+      } finally {
+        giveBack();
+      }
+    });
+
     it('scrolls up and down to where a finger is on the strip', async () => {
       // Centred on the finger, as along the run: half way down the strip is
       // half the rows' worth, less half of the sixty on the screen.

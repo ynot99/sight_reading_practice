@@ -7019,7 +7019,7 @@ export class AppView {
       (event) => {
         this.scrollOrZoomTheRollByWheel(event);
       },
-      // Said, so that neither a scroll nor a zoom moves the page under it.
+      // Said, so that a zoom does not zoom the page under it as well.
       { passive: false },
     );
     this.listen(this.el.rollMap, 'pointerdown', (event) => {
@@ -7978,12 +7978,13 @@ export class AppView {
     if (this.drawnScene === null) {
       return;
     }
-    event.preventDefault();
     // Held down, the wheel zooms: the convention every drawing program and the
     // browser's own page zoom use, and the one a trackpad pinch already
     // arrives as. His: "горизонтальний та вертикальний скроли зробити
     // звичайними скролами, а ctrl+скрол зробити zoom in/zoom out".
     if (event.ctrlKey || event.metaKey) {
+      // Taken from the browser, which would zoom the whole page with it.
+      event.preventDefault();
       const was = Number(this.el.rollZoom.value);
       const now = zoomAfterWheel(was, event.deltaY, LEAST_ZOOM, MOST_ZOOM);
       if (now !== was) {
@@ -7995,6 +7996,15 @@ export class AppView {
     // Otherwise it scrolls, as it would have scrolled the page: both ways from
     // a trackpad, which keeps its own momentum, and along the run with shift
     // held where a mouse wheel only turns one way.
+    //
+    // And the browser is left the wheel, having nothing to do with it: nothing
+    // around the drawing scrolls, and the page will not take a swipe for
+    // "back". Taken from it, the first message of a gesture made the browser
+    // wait on the page for every message after it, each then handled on its
+    // own and drawn a frame later than the frame it arrived for. Measured on
+    // his trackpad, a message waited a frame and more before it was drawn, on
+    // either axis. His: "реагує canvas на скрол повільно". Left alone, the rest
+    // of the gesture comes with the frame it is drawn in.
     this.stopTheFling();
     const unit =
       event.deltaMode === 1 ? LINE_PX : event.deltaMode === 2 ? this.rollScroller.viewWidePx : 1;

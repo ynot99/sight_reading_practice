@@ -845,20 +845,37 @@
           -->
           <div id="modes-grid" class="modes">
             <!--
-              What kind of run this is, first in the row and dressed as one
-              of the squares beside it: one button pressed until it says the
-              one you want. His shape twice over - the cycling, and standing
-              level with the rest. The line under the name stays, because a
-              cycler with nothing but an icon is three answers the reader has
-              to remember.
+              What kind of run this is, first in the row and dressed as the
+              squares beside it: a button for each, one of them lit at most.
+              His, after the mods of a rhythm game - each button knows what it
+              cannot go with and puts that out, so pressing one frame puts the
+              other out, and pressing a lit one leaves flowing in time, which
+              has no button because it is what none lit means. The line under
+              each name stays: an icon alone is an answer to remember.
             -->
-            <button id="frame-cycle" type="button" class="mode-card frame__choice"
-              data-frame="wait" aria-pressed="false">
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path id="frame-icon" d="" />
-              </svg>
-              <strong id="frame-name" class="frame__name"></strong>
-              <span id="frame-what" class="frame__what"></span>
+            <button type="button" class="mode-card frame__choice" data-frame="bar"
+              aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="" /></svg>
+              <strong class="frame__name"></strong>
+              <span class="frame__what"></span>
+            </button>
+            <button type="button" class="mode-card frame__choice" data-frame="note"
+              aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="" /></svg>
+              <strong class="frame__name"></strong>
+              <span class="frame__what"></span>
+            </button>
+            <button type="button" class="mode-card frame__choice" data-frame="wait"
+              aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="" /></svg>
+              <strong class="frame__name"></strong>
+              <span class="frame__what"></span>
+            </button>
+            <button type="button" class="mode-card frame__choice" data-frame="listen"
+              aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="" /></svg>
+              <strong class="frame__name"></strong>
+              <span class="frame__what"></span>
             </button>
             <button type="button" class="mode-card mode-card--survival" data-mode="survival"
               aria-pressed="false">

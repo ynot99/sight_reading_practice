@@ -3519,13 +3519,12 @@ body[data-playing='true'] .score__modes {
  * the accent - the same way everything else here says "this one".
  */
 /*
- * The one button that says what kind of run this is, dressed as a square.
+ * The buttons that say what kind of run this is, dressed as squares.
  *
- * His: it is one of them to look at, so it is one of them to look at - the
- * same ground, the same lift and turn when it comes on. What it means by
- * "on" is the only difference: the squares are each their own answer, and
- * this one is on whenever the run is *not* the plain one the app opens with.
- * Flowing in time is where a reader starts, so that is the state it rests in.
+ * His: they are squares to look at, so they are squares - the same ground, the
+ * same lift and turn when one comes on. What sets them apart is only that one
+ * of them is lit at most: they answer one question between them. Flowing in
+ * time, where a reader starts, has no button - it is what none lit means.
  *
  * Each colour is named once, for the button and for every mark cloned from
  * it - the corner of the score and a reading's row. Named apart, the two went
@@ -3577,28 +3576,6 @@ body[data-playing='true'] .score__modes {
  * one state and itself is nothing at all, which read as a button that had
  * not noticed being pressed.
  */
-@keyframes frame-turn {
-  from {
-    transform: scale(0.97) rotate(0deg);
-    filter: saturate(0.55) brightness(0.72);
-  }
-
-  to {
-    transform: scale(1.04) rotate(-2deg);
-    filter: none;
-  }
-}
-
-.frame__choice[data-turning='true'] {
-  animation: frame-turn 180ms ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .frame__choice[data-turning='true'] {
-    animation: none;
-  }
-}
-
 /*
  * The squares, and they scroll inside the sheet like every other sheet's
  * contents.

@@ -484,6 +484,15 @@ function element<T extends HTMLElement>(id: string): T {
   return found as T;
 }
 
+/** The Modes sheet's button for a frame, by the slug it is marked with. */
+function frameButton(slug: string): HTMLButtonElement {
+  const found = element('modes-grid').querySelector<HTMLButtonElement>(`button[data-frame="${slug}"]`);
+  if (found === null) {
+    throw new Error(`no button for the ${slug} frame`);
+  }
+  return found;
+}
+
 /** Where the MIDI viewer's head stands, in seconds, as its line is told. */
 function headAt(drawn: Element | null | undefined): string | undefined {
   return drawn?.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-at');
@@ -643,13 +652,10 @@ describe('AppView', () => {
     const { view, runtime } = createRig();
     await view.initialize();
 
-    // From the one place the frame is chosen now: the button in the Modes
-    // sheet, pressed until it says the one wanted.
-    // The rig starts where it waits, and the ring goes on to listening and
-    // then to flowing.
-    const cycle = element<HTMLButtonElement>('frame-cycle');
-    cycle.click();
-    cycle.click();
+    // From the one place the frame is chosen now: its button in the Modes
+    // sheet. The rig starts where it waits, and pressing that one again puts
+    // it out, which is flowing in time.
+    frameButton('wait').click();
     await Promise.resolve();
 
     expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
@@ -4238,11 +4244,7 @@ describe('AppView', () => {
       const { view, runtime, metronome } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
-      const cycle = element<HTMLButtonElement>('frame-cycle');
-      // Waiting is where the rig starts; the bar line is two along.
-      cycle.click();
-      cycle.click();
-      cycle.click();
+      frameButton('bar').click();
       await Promise.resolve();
       expect(runtime.controller.settings.modeId).toBe(BAR_MODE_ID);
 
@@ -4267,11 +4269,7 @@ describe('AppView', () => {
       const { view, runtime, metronome } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
-      const cycle = element<HTMLButtonElement>('frame-cycle');
-      // Waiting is where the rig starts; every note is four along.
-      for (const _ of [1, 2, 3, 4]) {
-        cycle.click();
-      }
+      frameButton('note').click();
       await Promise.resolve();
       expect(runtime.controller.settings.modeId).toBe(NOTE_MODE_ID);
 
@@ -4286,72 +4284,88 @@ describe('AppView', () => {
       expect(element('result').textContent).not.toContain('Bars it waited at');
     });
 
-    it('walks one button through the five kinds of run', async () => {
-      // His shape: one button pressed until it says the one you want, above
-      // the squares rather than among them - the squares are all "make it
-      // harder" and this is the frame they sit inside. What it says and what
-      // it is drawn as change with it, and so does the sentence underneath,
-      // which is the half that says what the choice means.
+    it('offers each frame as a button of its own, one lit at a time', async () => {
+      // His, after the mods of a rhythm game: a button for each frame, first in
+      // the squares' own row and dressed as they are, and one of them lit at
+      // most. Flowing in time has no button - it is what none lit means.
       const { view, runtime } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
-      const cycle = element<HTMLButtonElement>('frame-cycle');
-      // First in the squares' own row, and dressed as one of them, so it
-      // stands level with the rest rather than in a strip of its own.
-      expect(element('modes-grid').firstElementChild).toBe(cycle);
-      expect(cycle.classList.contains('mode-card')).toBe(true);
-      const drawn = (): string => element('frame-icon').getAttribute('d') ?? '';
-      expect(cycle.dataset['frame']).toBe('wait');
-      // Lit like a square, and for the same reason: this is not the plain
-      // run the app opens with. Flowing in time is, so that is where it
-      // rests - which is the one thing it means differently from the four.
-      expect(cycle.getAttribute('aria-pressed')).toBe('true');
-      const waiting = drawn();
+      const buttons = [...element('modes-grid').querySelectorAll<HTMLButtonElement>('button[data-frame]')];
+      expect(buttons.map((button) => button.dataset['frame'])).toEqual(['bar', 'note', 'wait', 'listen']);
+      expect(element('modes-grid').firstElementChild).toBe(buttons[0]);
+      expect(buttons.every((button) => button.classList.contains('mode-card'))).toBe(true);
+      const lit = (): string[] =>
+        buttons
+          .filter((button) => button.getAttribute('aria-pressed') === 'true')
+          .map((button) => button.dataset['frame'] ?? '');
+      // Each says what it is, drawn and in words.
+      expect(frameButton('bar').querySelector('.frame__what')?.textContent).toContain('bar line');
+      expect(frameButton('note').querySelector('.frame__name')?.textContent).toBe('Wait each note');
+      expect(frameButton('listen').querySelector('.frame__what')?.textContent).toContain('machine');
+      expect(new Set(buttons.map((button) => button.querySelector('path')?.getAttribute('d'))).size).toBe(4);
+      // The rig starts where it waits.
+      expect(lit()).toEqual(['wait']);
 
-      cycle.click();
+      frameButton('listen').click();
 
       expect(runtime.controller.settings.modeId).toBe(LISTEN_MODE_ID);
-      expect(cycle.dataset['frame']).toBe('listen');
-      expect(element('frame-name').textContent).toContain('Listen');
-      expect(element('frame-what').textContent).toContain('machine');
-      expect(drawn()).not.toBe(waiting);
-      // Two presses running can both leave it lit, and both are felt: the
-      // turn is played again rather than transitioned from a state to
-      // itself, which is no movement at all.
-      expect(cycle.dataset['turning']).toBe('true');
+      expect(lit()).toEqual(['listen']);
 
-      // On to the frame the app opens in, which is the button going out:
-      // nothing to play there, since going out is the square's own way down.
-      cycle.click();
+      // Pressed again, it goes out, and the run flows in time.
+      frameButton('listen').click();
 
       expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
-      expect(cycle.getAttribute('aria-pressed')).toBe('false');
-      expect(cycle.dataset['turning']).toBeUndefined();
+      expect(lit()).toEqual([]);
 
-      // On to the one between the two, which is his ladder: the ring runs
-      // from the frame that gives no help at all to the one that asks for
-      // nothing, so the bar line - one place a bar to be found again - sits
-      // between flowing and waiting.
-      cycle.click();
-
-      expect(runtime.controller.settings.modeId).toBe(BAR_MODE_ID);
-      expect(cycle.dataset['frame']).toBe('bar');
-      expect(element('frame-what').textContent).toContain('bar line');
-      expect(cycle.getAttribute('aria-pressed')).toBe('true');
-
-      // Then a gate at every note with the beat still running, which helps
-      // more than the bar line and less than waiting, where there is no beat.
-      cycle.click();
+      frameButton('bar').click();
+      frameButton('note').click();
 
       expect(runtime.controller.settings.modeId).toBe(NOTE_MODE_ID);
-      expect(cycle.dataset['frame']).toBe('note');
-      expect(element('frame-what').textContent).toContain('Each note');
+      expect(lit()).toEqual(['note']);
+    });
 
-      // And round again, rather than stopping at the end of the list.
-      cycle.click();
+    it('puts out what a frame cannot go with, and a frame what a square cannot', async () => {
+      // Each button knows what it cannot go with, and whichever is pressed
+      // last wins: nothing is refused, the other simply goes out.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      const square = (mode: string): HTMLButtonElement =>
+        element('modes-grid').querySelector<HTMLButtonElement>(`[data-mode="${mode}"]`) as HTMLButtonElement;
 
-      expect(runtime.controller.settings.modeId).toBe(new WaitMode().id);
-      expect(drawn()).toBe(waiting);
+      // Listening asks nothing of the reader, so nothing that makes the
+      // reading harder has anything to act on.
+      square('survival').click();
+      square('cursor').click();
+      frameButton('listen').click();
+
+      expect(runtime.controller.settings.modeId).toBe(LISTEN_MODE_ID);
+      expect(runtime.controller.settings.survival).toBe(false);
+      expect(square('cursor').getAttribute('aria-pressed')).toBe('false');
+
+      square('blind').click();
+
+      expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
+      expect(square('blind').getAttribute('aria-pressed')).toBe('true');
+
+      // Rhythm only asks for the time the frame that waits for the reader
+      // never keeps.
+      square('rhythm').click();
+      frameButton('wait').click();
+
+      expect(runtime.controller.settings.modeId).toBe(WAIT_MODE_ID);
+      expect(runtime.controller.settings.rhythmOnly).toBe(false);
+      // The blind square goes with waiting, and stays.
+      expect(square('blind').getAttribute('aria-pressed')).toBe('true');
+
+      // Asked for from the settings sheet, the same rule.
+      const rhythmOnly = element<HTMLInputElement>('rhythm-only');
+      rhythmOnly.checked = true;
+      rhythmOnly.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.rhythmOnly).toBe(true);
+      expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
     });
 
     it('offers a third frame, in which the machine plays and nothing is judged', async () => {
@@ -4361,13 +4375,10 @@ describe('AppView', () => {
       const { view, runtime } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
-      const cycle = element<HTMLButtonElement>('frame-cycle');
-
-      // Waiting is where the rig starts, and listening is the next along.
-      cycle.click();
+      frameButton('listen').click();
 
       expect(runtime.controller.machinePlays).toBe(true);
-      expect(cycle.dataset['frame']).toBe('listen');
+      expect(frameButton('listen').getAttribute('aria-pressed')).toBe('true');
 
       element<HTMLButtonElement>('focus-play').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -4462,9 +4473,10 @@ describe('AppView', () => {
       expect(element('score-modes').hidden).toBe(false);
 
       // And the frame leads whatever else is on.
+      runtime.controller.updateSettings({ modeId: BAR_MODE_ID });
       (element('modes-grid').querySelector('[data-mode="blind"]') as HTMLButtonElement).click();
 
-      expect(marks()).toEqual(['listen', 'blind']);
+      expect(marks()).toEqual(['bar', 'blind']);
 
       runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
       element<HTMLButtonElement>('focus-modes').click();
@@ -5251,9 +5263,9 @@ describe('AppView', () => {
 
     // The frame is not a control at the desk any more: it is the button in
     // the Modes sheet, and what it says of itself is said there.
-    element<HTMLButtonElement>('frame-cycle').click();
+    frameButton('listen').click();
     expect(runtime.controller.settings.modeId).toBe(LISTEN_MODE_ID);
-    expect(element('frame-what').textContent).toContain('machine');
+    expect(frameButton('listen').querySelector('.frame__what')?.textContent).toContain('machine');
   });
 
   describe('the ladder arrows', () => {

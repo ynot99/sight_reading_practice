@@ -1,6 +1,6 @@
 import type { AppRuntime } from '../composition/createApp.js';
 import { FLOW_MODE_ID } from '../application/modes/FlowMode.js';
-import { modeIsOn, settingsForMode } from '../application/modes/challengeModes.js';
+import { modeIsOn, settingsForFrame, settingsForMode } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
@@ -437,18 +437,15 @@ function describeBarRange(controller: AppRuntime['controller']): string {
 const PLAIN_FRAME = FLOW_MODE_ID;
 
 /**
- * The frames in the order the one button walks through them.
+ * The frames that have a button, in the order the buttons stand.
  *
- * His, and it is a ladder: hardest first and easiest last. Flow gives no help
- * at all, the bar line gives one place a bar to be found again, every note
- * gives one at each note while the beat still runs, waiting gives one at every
- * note with no beat to keep, and listening asks for nothing. Starting from the resting
- * frame is what makes the ring read as a list - the first press is always
- * "leave the default", and the reader is never counting from somewhere
- * arbitrary.
+ * His, and it is a ladder: the least help first and the most last. The bar
+ * line gives one place a bar to be found again, every note gives one at each
+ * note while the beat still runs, waiting gives one at every note with no beat
+ * to keep, and listening asks for nothing. Flowing in time, which gives no help
+ * at all, has no button: it is what is left when none is pressed.
  */
-const FRAME_ORDER: readonly string[] = [
-  FLOW_MODE_ID,
+const FRAMES_OFFERED: readonly string[] = [
   BAR_MODE_ID,
   NOTE_MODE_ID,
   WAIT_MODE_ID,
@@ -490,10 +487,9 @@ const FRAME_ICON: Readonly<Record<string, string>> = {
   [LISTEN_MODE_ID]: 'M4 9v6h4l5 4V5L8 9H4zm12-.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z',
 };
 
-/** The frame after this one, which is what pressing the button means. */
-function frameAfter(modeId: string): string {
-  const at = FRAME_ORDER.indexOf(modeId);
-  return FRAME_ORDER[(at + 1) % FRAME_ORDER.length] ?? WAIT_MODE_ID;
+/** The frame a button stands for, read off the slug it is marked with. */
+function frameOfTheButton(button: HTMLElement): string | null {
+  return FRAMES_OFFERED.find((frame) => FRAME_SLUG[frame] === button.dataset['frame']) ?? null;
 }
 
 /*
@@ -1598,10 +1594,7 @@ export class AppView {
     placesClose: HTMLButtonElement;
     sheetModes: HTMLElement;
     modesGrid: HTMLElement;
-    frameCycle: HTMLButtonElement;
-    frameIcon: SVGPathElement;
-    frameName: HTMLElement;
-    frameWhat: HTMLElement;
+    frameChoices: readonly HTMLButtonElement[];
     modesClose: HTMLButtonElement;
     focusModes: HTMLButtonElement;
     settingsMetronome: HTMLButtonElement;
@@ -1900,10 +1893,9 @@ export class AppView {
       placesClose: requireElement(doc, 'places-close'),
       sheetModes: requireElement(doc, 'sheet-modes'),
       modesGrid: requireElement(doc, 'modes-grid'),
-      frameCycle: requireElement(doc, 'frame-cycle'),
-      frameIcon: requireElement(doc, 'frame-icon'),
-      frameName: requireElement(doc, 'frame-name'),
-      frameWhat: requireElement(doc, 'frame-what'),
+      frameChoices: [
+        ...requireElement(doc, 'modes-grid').querySelectorAll<HTMLButtonElement>('button[data-frame]'),
+      ],
       modesClose: requireElement(doc, 'modes-close'),
       focusModes: requireElement(doc, 'focus-modes'),
       settingsMetronome: requireElement(doc, 'settings-metronome'),
@@ -3631,14 +3623,18 @@ export class AppView {
     });
 
     this.listen(this.el.stopAtMistake, 'change', () => {
-      controller.updateSettings(settingsForMode('strict', this.el.stopAtMistake.checked));
+      controller.updateSettings(
+        settingsForMode('strict', this.el.stopAtMistake.checked, controller.settings),
+      );
       this.syncControlsFromSettings();
     });
 
     this.listen(this.el.rhythmOnly, 'change', () => {
       // Through the squares' own rule, so the drawer cannot make the pair
       // the squares will not: one switch, one answer, wherever it is asked.
-      controller.updateSettings(settingsForMode('rhythm', this.el.rhythmOnly.checked));
+      controller.updateSettings(
+        settingsForMode('rhythm', this.el.rhythmOnly.checked, controller.settings),
+      );
       this.syncControlsFromSettings();
     });
 
@@ -4051,24 +4047,35 @@ export class AppView {
     this.listen(this.el.modesClose, 'click', () => {
       this.el.sheetModes.hidden = true;
     });
-    this.listen(this.el.frameCycle, 'click', () => {
-      // The same setting the settings select carries. Several ways to say one
-      // thing is how everything here works; what must not happen is two
-      // things saying it differently, which is why they read it back through
-      // one sync.
-      this.runtime.controller.updateSettings({
-        modeId: frameAfter(this.runtime.controller.settings.modeId),
+    for (const button of this.el.frameChoices) {
+      const frame = frameOfTheButton(button);
+      if (frame === null) {
+        continue;
+      }
+      // Said once, from the same tables the corner and a reading's row read.
+      button.querySelector('path')?.setAttribute('d', FRAME_ICON[frame] ?? '');
+      const name = button.querySelector('.frame__name');
+      if (name !== null) {
+        name.textContent = FRAME_NAME[frame] ?? '';
+      }
+      const what = button.querySelector('.frame__what');
+      if (what !== null) {
+        what.textContent = FRAME_WHAT[frame] ?? '';
+      }
+      this.listen(button, 'click', () => {
+        const controller = this.runtime.controller;
+        controller.updateSettings(settingsForFrame(frame, controller.settings));
+        this.syncControlsFromSettings();
       });
-      this.syncControlsFromSettings();
-      this.turnTheFrame();
-    });
+    }
     for (const card of cards) {
       if (!(card instanceof HTMLButtonElement)) {
         continue;
       }
       this.listen(card, 'click', () => {
         const on = card.getAttribute('aria-pressed') !== 'true';
-        this.runtime.controller.updateSettings(settingsForMode(card.dataset['mode'] ?? '', on));
+        const controller = this.runtime.controller;
+        controller.updateSettings(settingsForMode(card.dataset['mode'] ?? '', on, controller.settings));
         this.syncControlsFromSettings();
       });
     }
@@ -4114,31 +4121,26 @@ export class AppView {
 
   private showTheModes(): void {
     const settings = this.runtime.controller.settings;
-    const frame = settings.modeId;
-    this.el.frameCycle.dataset['frame'] = FRAME_SLUG[frame] ?? 'wait';
-    this.el.frameIcon.setAttribute('d', FRAME_ICON[frame] ?? '');
-    this.el.frameName.textContent = FRAME_NAME[frame] ?? '';
-    this.el.frameWhat.textContent = FRAME_WHAT[frame] ?? '';
-    this.el.frameCycle.title = `${FRAME_NAME[frame] ?? ''} - press for ${FRAME_NAME[frameAfter(frame)] ?? ''}`;
-    // On means "not the plain one". Flowing in time is where a reader starts
-    // and what the app opens with, so it is the state this rests in - and
-    // choosing either of the others lights it the way a square lights.
-    this.el.frameCycle.setAttribute('aria-pressed', String(frame !== PLAIN_FRAME));
-    // The frame first, where it is not the one that waits. That one is the
-    // resting state of this program - Start begins a run and the music waits
-    // for the reader - and the other two are exactly the cases where Start
-    // does something else, which is what a corner is for. Left unsaid, a
-    // reader could sit down to practise and have the machine play at them.
+    // One of them lit at most: the frame chosen, where it is not the plain
+    // one, which has no button and is what none lit means.
+    const chosen =
+      this.el.frameChoices.find((button) => frameOfTheButton(button) === settings.modeId) ?? null;
+    for (const button of this.el.frameChoices) {
+      button.setAttribute('aria-pressed', String(button === chosen));
+    }
+    // The frame first, where it is not the plain one: those are exactly the
+    // cases where Start does something other than what a reader expects,
+    // which is what a corner is for. Left unsaid, a reader could sit down to
+    // practise and have the machine play at them.
     const on: HTMLButtonElement[] = [];
-    const away = settings.modeId !== PLAIN_FRAME;
-    if (away) {
-      on.push(this.el.frameCycle);
+    if (chosen !== null) {
+      on.push(chosen);
     }
     // And on the button that acts on it. The reader presses Start without
     // looking; what it will start is the one thing it may need to say, and
     // only where the answer is not the plain one.
     this.el.focusPlayFrame.replaceChildren();
-    const badge = away ? this.el.frameCycle.querySelector('svg') : null;
+    const badge = chosen?.querySelector('svg') ?? null;
     if (badge !== null) {
       this.el.focusPlayFrame.append(badge.cloneNode(true));
     }
@@ -4201,27 +4203,6 @@ export class AppView {
     // Nothing on is nothing to say, rather than an empty strip of furniture.
     this.el.scoreModes.hidden = names.length === 0;
     this.el.scoreModes.setAttribute('aria-label', `Modes on: ${names.join(', ')}`);
-  }
-
-  /**
-   * Plays the turn again, however the press left the button.
-   *
-   * The squares get theirs from a transition, and that is right for two
-   * states: every press moves between them. This button has three, so two
-   * presses running can both leave it lit - and a transition from a state to
-   * itself is nothing at all, which read as a button that had not noticed
-   * being pressed. Taken off and put back on, with the layout read in
-   * between so the browser starts a new animation rather than keeping the
-   * one it thinks is already running.
-   */
-  private turnTheFrame(): void {
-    const card = this.el.frameCycle;
-    delete card.dataset['turning'];
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- reading the layout is the point.
-    void card.offsetWidth;
-    if (card.getAttribute('aria-pressed') === 'true') {
-      card.dataset['turning'] = 'true';
-    }
   }
 
   /**

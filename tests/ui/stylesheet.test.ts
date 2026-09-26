@@ -603,18 +603,6 @@ describe('the stylesheet', () => {
     expect(dimmed?.body).not.toMatch(/display\s*:\s*none/);
   });
 
-  it('gives the frame button a turn of its own to play', () => {
-    // It stands in the squares' own grid now, so its size is theirs and
-    // needs no rule. The turn still does: the squares get theirs from a
-    // transition, which is right for two states, and this button has three -
-    // two presses running can both leave it lit, and a transition from a
-    // state to itself is no movement at all. jsdom runs no animation, so
-    // nothing in the view tests can see it.
-    const turn = rules().find((rule) => rule.selector === ".frame__choice[data-turning='true']");
-
-    expect(turn?.body).toMatch(/animation\s*:\s*frame-turn/);
-  });
-
   it('hides only what a repeat says it was called', () => {
     // The number in the corner says where in the playing this bar is, and the
     // marker, the report and the passage all count by it - so it can never be

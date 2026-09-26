@@ -708,6 +708,42 @@ describe('when the click is actually heard', () => {
     expect(context.oscillators[0]?.startedAt ?? 0).toBeCloseTo(0.42, 3);
   });
 
+  it('takes back the single clicks not yet heard, when asked and when stopped', () => {
+    // A run heard back hands its clicks over ahead of the head, as it does its
+    // notes, and a pause has to take back both.
+    const context = new FakeAudioContext();
+    const metronome = new WebAudioMetronome(contextFactory(context));
+    metronome.click(performance.now() + 500);
+    const asked = context.oscillators[0];
+
+    metronome.takeBackTheClicks();
+
+    // Stopped before it starts, and silent from now.
+    expect(asked?.stoppedAt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(asked?.startedAt ?? 0);
+    expect(context.gains[0]?.gain.ramps.at(-1)).toEqual({ value: 0, time: 0 });
+
+    metronome.click(performance.now() + 500);
+    const again = context.oscillators[1];
+    metronome.stop();
+
+    expect(again?.stoppedAt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(again?.startedAt ?? 0);
+  });
+
+  it('forgets a single click once it has sounded', () => {
+    // One a beat for as long as a run is heard back: kept any longer, every
+    // one of them would be.
+    const context = new FakeAudioContext();
+    const metronome = new WebAudioMetronome(contextFactory(context));
+    metronome.click();
+    const asked = context.oscillators[0];
+    context.advance(1);
+    asked?.onended?.();
+
+    metronome.takeBackTheClicks();
+
+    expect(asked?.stoppedAt).toBeCloseTo(0.06, 6);
+  });
+
   it('takes the graph’s own buffering where the device will not say the rest', () => {
     const device = (latencies: object): number =>
       outputLatencySeconds(latencies as unknown as BaseAudioContext);

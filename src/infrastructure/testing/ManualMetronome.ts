@@ -53,8 +53,15 @@ export class ManualMetronome implements IMetronome {
   /** Every one-off click asked for, as the moment it was asked to sound at. */
   readonly clicks: { readonly atMs: number | undefined; readonly weight: BeatWeight }[] = [];
 
+  /** How many times the clicks not yet heard were taken back. */
+  clicksTakenBack = 0;
+
   click(atMs?: number, weight: BeatWeight = 'beat'): void {
     this.clicks.push({ atMs, weight });
+  }
+
+  takeBackTheClicks(): void {
+    this.clicksTakenBack += 1;
   }
 
   /**

@@ -320,6 +320,16 @@ export interface IClickOnce {
    * `atMs` is on the same clock the ticks carry; omitted means now.
    */
   click(atMs?: number, weight?: BeatWeight): void;
+
+  /**
+   * Takes back every click asked for that has not sounded yet.
+   *
+   * A run heard back hands its clicks over a little ahead of the head, as it
+   * does its notes, so holding it or moving it has to take back the ones not
+   * yet heard - or they sound over a playback that has stopped, or over the
+   * wrong part of the run.
+   */
+  takeBackTheClicks(): void;
 }
 
 /**

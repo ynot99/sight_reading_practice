@@ -3080,6 +3080,70 @@ describe('AppView', () => {
       expect(metronome.clicks).toEqual([]);
     });
 
+    it('takes back the clicks it handed over whenever the sound stops or moves', async () => {
+      // They go out a little ahead of the head, as the notes do, and the notes
+      // are taken back whenever the playback stops or moves. Left, a pause was
+      // followed by a click. His: "коли ставлю playback на паузу за пів біту,
+      // то курсор зупиняється одразу, а playback після пів біту потім ще
+      // зіграє ноту".
+      const { view, runtime, midi, metronome, clock } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(16);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      // Found afresh each time: a finer grid draws the run again.
+      const tap = (): void => {
+        const grid = element('roll-body').querySelector<HTMLElement>('.roll__grid');
+        if (grid === null) {
+          throw new Error('expected a grid to tap');
+        }
+        grid.getBoundingClientRect = () => ({ left: 0, top: 0, right: 0, bottom: 0,
+          width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+        grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 10 }));
+      };
+      const change = (id: string, value: string): void => {
+        const select = element<HTMLSelectElement>(id);
+        select.value = value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const play = (): void => {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(100);
+        vi.advanceTimersByTime(100);
+      };
+
+      vi.useFakeTimers();
+      try {
+        // Nothing of the drawing's is out while it is silent, and the one-off
+        // clicks are also how the mode with no pulse places its beats.
+        tap();
+        change('roll-speed', '75');
+        change('roll-grid', '2');
+        element<HTMLButtonElement>('roll-stop').click();
+        expect(metronome.clicksTakenBack).toBe(0);
+
+        play();
+        element<HTMLButtonElement>('roll-play').click();
+        expect(metronome.clicksTakenBack, 'held').toBe(1);
+
+        play();
+        tap();
+        expect(metronome.clicksTakenBack, 'moved').toBe(2);
+        change('roll-speed', '50');
+        expect(metronome.clicksTakenBack, 'slowed').toBe(3);
+        change('roll-grid', '4');
+        expect(metronome.clicksTakenBack, 'counted finer').toBe(4);
+        element<HTMLButtonElement>('roll-stop').click();
+        expect(metronome.clicksTakenBack, 'stopped').toBe(5);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('holds a playback where it is, and stops it back to the beginning', async () => {
       // Pausing and stopping are different questions: a reader working out what
       // happened in one bar plays it, holds it, looks, and plays on from there.

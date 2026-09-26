@@ -7,7 +7,7 @@ import type {
 } from '../../application/ports/IMetronome.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
-import { TOO_LATE_MS, audioTimeFor, outputLatencySeconds, unplug } from './audioTime.js';
+import { TOO_LATE_MS, audioTimeFor, outputLatencySeconds, takeBack, unplug } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 import {
   buildMetronomeTick,
@@ -85,8 +85,11 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   private config: MetronomeConfig = DEFAULT_CONFIG;
   private timer: ReturnType<typeof setInterval> | null = null;
   private queue: ScheduledTick[] = [];
-  /** One-off clicks already on the audio clock, so a stop can take them back. */
-  private pending: OscillatorNode[] = [];
+  /**
+   * One-off clicks on the audio clock and not yet over, so that they can be
+   * taken back. Each leaves as it ends: a run heard back asks for one a beat.
+   */
+  private readonly pending = new Set<SoundedClick>();
   private nextTickIndex = 0;
   private nextTickAudioTime = 0;
   /**
@@ -191,7 +194,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
       this.timer = null;
     }
     this.queue = [];
-    this.forgetPendingClicks();
+    this.takeBackTheClicks();
   }
 
   private ensureContext(): AudioContext {
@@ -340,15 +343,24 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     // Kept, so that stopping can take back the ones that have not sounded.
     // These are laid out as far ahead as the reader's next entry, which on a
     // held note is a bar or more of beats waiting to be heard.
-    const pending = this.sound(
+    const sounded = this.sound(
       context,
       audioTimeFor(context, atMs),
       weight === 'downbeat',
       weight !== 'division',
     );
-    if (pending !== null) {
-      this.pending.push(pending);
+    if (sounded !== null) {
+      this.pending.add(sounded);
     }
+  }
+
+  /** Silences the one-off clicks that have not sounded yet. */
+  takeBackTheClicks(): void {
+    const now = this.context?.currentTime ?? 0;
+    for (const click of this.pending) {
+      takeBack(click.oscillator, click.envelope, now);
+    }
+    this.pending.clear();
   }
 
   private playClick(context: AudioContext, tick: MetronomeTick, at: number): void {
@@ -360,7 +372,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     at: number,
     downbeat: boolean,
     pulse: boolean,
-  ): OscillatorNode | null {
+  ): SoundedClick | null {
     const level = volumeToGain(this.currentVolume, this.options.gain);
     if (level <= 0) {
       return null;
@@ -381,26 +393,21 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.05);
 
     oscillator.connect(envelope).connect(context.destination);
+    const sounded: SoundedClick = { oscillator, envelope };
     oscillator.onended = () => {
+      this.pending.delete(sounded);
       unplug(oscillator, envelope);
     };
     oscillator.start(at);
     oscillator.stop(at + 0.06);
-    return oscillator;
+    return sounded;
   }
+}
 
-  /** Silences the one-off clicks that have not sounded yet. */
-  private forgetPendingClicks(): void {
-    const now = this.context?.currentTime ?? 0;
-    for (const oscillator of this.pending) {
-      try {
-        oscillator.stop(now);
-      } catch {
-        // It had already finished on its own.
-      }
-    }
-    this.pending = [];
-  }
+/** A click on the audio clock, with what it takes to silence it. */
+interface SoundedClick {
+  readonly oscillator: OscillatorNode;
+  readonly envelope: GainNode;
 }
 
 /**

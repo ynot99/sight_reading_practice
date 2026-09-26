@@ -7132,11 +7132,19 @@ export class AppView {
       // changed length, so it is asked again rather than carried over.
       const roll = this.theRoll();
       if (roll !== null) {
+        this.takeBackTheRollsClicks();
         this.rollClicksSent = clicksBefore(roll, this.headIsAtMs(), this.theRollsGrid());
       }
     });
     this.listen(this.el.rollSpeed, 'change', () => {
       this.runtime.takePlayer.setSpeed(this.theRollsSpeed());
+      // The clicks already out were placed at the old speed, so they are taken
+      // back and handed over again at the new one.
+      const roll = this.theRoll();
+      if (roll !== null) {
+        this.takeBackTheRollsClicks();
+        this.rollClicksSent = clicksBefore(roll, this.headIsAtMs(), this.theRollsGrid());
+      }
       this.describeTheRoll();
     });
     this.listen(this.el.placesClose, 'click', () => {
@@ -8859,9 +8867,26 @@ export class AppView {
   }
 
   private letTheRollTickGo(): void {
+    this.takeBackTheRollsClicks();
     if (this.rollTick !== null) {
       clearInterval(this.rollTick);
       this.rollTick = null;
+    }
+  }
+
+  /**
+   * Takes back the clicks a playback has handed over and nobody has heard yet.
+   *
+   * They go out a little ahead of the head, as its notes do, and the notes are
+   * taken back whenever the playback stops or moves - so these are too, or a
+   * pause is followed by a click, and a jump by a click from where it was.
+   *
+   * Only while the drawing is being played: the metronome's one-off clicks are
+   * also how the mode with no pulse places its beats.
+   */
+  private takeBackTheRollsClicks(): void {
+    if (this.rollTick !== null) {
+      this.runtime.metronomeClick.takeBackTheClicks();
     }
   }
 
@@ -8900,6 +8925,7 @@ export class AppView {
       ? theBeatNearest(roll, tapped, this.theRollsGrid())
       : tapped;
     this.rollAtMs = at;
+    this.takeBackTheRollsClicks();
     this.rollClicksSent = clicksBefore(roll, at, this.theRollsGrid());
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
       this.runtime.takePlayer.seek(at);

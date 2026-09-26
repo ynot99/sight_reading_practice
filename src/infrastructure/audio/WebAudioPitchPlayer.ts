@@ -1,6 +1,6 @@
 import type { IPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
-import { audioTimeFor, beginRelease, tooLateToSound, unplug } from './audioTime.js';
+import { audioTimeFor, beginRelease, takeBack, tooLateToSound, unplug } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 
 export interface WebAudioPitchPlayerOptions {
@@ -14,6 +14,8 @@ interface Voice {
   readonly envelope: GainNode;
   /** Level the envelope holds between attack and release. */
   readonly peak: number;
+  /** When it begins, on the audio clock: later than now for a note handed over ahead. */
+  readonly startsAt: number;
 }
 
 function frequencyOf(midi: number): number {
@@ -30,7 +32,13 @@ function frequencyOf(midi: number): number {
 export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
   private readonly contextFactory: () => AudioContext;
   private readonly options: Required<WebAudioPitchPlayerOptions>;
+  /** The note each key is sounding, while its key is down. */
   private readonly voices = new Map<number, Voice>();
+  /**
+   * Every note started and not yet over, its key up or not: what silencing
+   * everything has to reach. See the sampled player's, which this stands in for.
+   */
+  private readonly sounding = new Set<Voice>();
   private context: AudioContext | null = null;
   private currentVolume = 1;
 
@@ -93,12 +101,15 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
     envelope.gain.exponentialRampToValueAtTime(peak * 0.55, now + 0.35);
 
     oscillator.connect(envelope).connect(context.destination);
+    const voice: Voice = { oscillator, envelope, peak, startsAt: now };
     oscillator.onended = () => {
+      this.sounding.delete(voice);
       unplug(oscillator, envelope);
     };
     oscillator.start(now);
     timeTheStart('first note sounded (fallback tone)');
-    this.voices.set(midi, { oscillator, envelope, peak });
+    this.voices.set(midi, voice);
+    this.sounding.add(voice);
   }
 
   stop(midi: number, atMs?: number): void {
@@ -107,19 +118,37 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
       return;
     }
     this.voices.delete(midi);
-
-    const now = audioTimeFor(this.context, atMs);
-    const release = this.options.releaseSec;
-    beginRelease(voice.envelope.gain, now, release, {
-      now: this.context.currentTime,
-      peak: voice.peak,
-    });
-    voice.oscillator.stop(now + release + 0.02);
+    this.release(voice, this.context, audioTimeFor(this.context, atMs));
   }
 
   stopAll(): void {
-    for (const midi of [...this.voices.keys()]) {
-      this.stop(midi);
+    this.voices.clear();
+    const context = this.context;
+    if (context === null) {
+      this.sounding.clear();
+      return;
+    }
+    const now = context.currentTime;
+    for (const voice of [...this.sounding]) {
+      this.sounding.delete(voice);
+      if (voice.startsAt > now) {
+        takeBack(voice.oscillator, voice.envelope, now);
+      } else {
+        this.release(voice, context, now);
+      }
+    }
+  }
+
+  private release(voice: Voice, context: AudioContext, at: number): void {
+    const release = this.options.releaseSec;
+    beginRelease(voice.envelope.gain, at, release, {
+      now: context.currentTime,
+      peak: voice.peak,
+    });
+    try {
+      voice.oscillator.stop(at + release + 0.02);
+    } catch {
+      // Refused as a second stop, by an older engine; the release still fades it.
     }
   }
 

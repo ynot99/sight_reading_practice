@@ -7,7 +7,7 @@ import type {
 import { SilentPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { PIANO_SAMPLES, nearestSample, playbackRateFor } from './pianoSampleMap.js';
-import { audioTimeFor, beginRelease, tooLateToSound, unplug } from './audioTime.js';
+import { audioTimeFor, beginRelease, takeBack, tooLateToSound, unplug } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 
 export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
@@ -61,6 +61,8 @@ interface Voice {
   readonly envelope: GainNode;
   /** Level the envelope holds between attack and release. */
   readonly peak: number;
+  /** When it begins, on the audio clock: later than now for a note handed over ahead. */
+  readonly startsAt: number;
 }
 
 /**
@@ -110,7 +112,19 @@ export class SampledPitchPlayer
   >;
 
   private readonly buffers = new Map<number, AudioBuffer>();
+  /** The note each key is sounding, while its key or the pedal holds it. */
   private readonly voices = new Map<number, Voice>();
+  /**
+   * Every note started and not yet over, its key up or not.
+   *
+   * A playback hands a note over with its end already scheduled, so its key
+   * is up - and it is out of `voices` - before it has even begun. Silencing
+   * only `voices` left every note handed over ahead to play on after a pause,
+   * and every note still ringing to ring to its end. His: "коли ставлю
+   * playback на паузу за пів біту, то курсор зупиняється одразу, а playback
+   * після пів біту потім ще зіграє ноту".
+   */
+  private readonly sounding = new Set<Voice>();
   private readonly onFallback = new Set<number>();
 
   /** Keys released while the pedal was down; the dampers are still up. */
@@ -296,13 +310,16 @@ export class SampledPitchPlayer
     }
     source.start(now);
     timeTheStart('first note sounded');
+    const voice: Voice = { source, envelope, peak, startsAt: now };
     source.onended = () => {
       if (this.voices.get(midi)?.source === source) {
         this.voices.delete(midi);
       }
+      this.sounding.delete(voice);
       unplug(source, ...(tone === null ? [] : [tone]), envelope);
     };
-    this.voices.set(midi, { source, envelope, peak });
+    this.voices.set(midi, voice);
+    this.sounding.add(voice);
   }
 
   stop(midi: number, atMs?: number): void {
@@ -337,15 +354,20 @@ export class SampledPitchPlayer
     }
     this.fallback.stopAll();
 
+    this.voices.clear();
     const context = this.context;
     if (context === null) {
-      this.voices.clear();
+      this.sounding.clear();
       return;
     }
     const now = context.currentTime;
-    for (const [midi, voice] of [...this.voices]) {
-      this.voices.delete(midi);
-      this.release(voice, now);
+    for (const voice of [...this.sounding]) {
+      this.sounding.delete(voice);
+      if (voice.startsAt > now) {
+        takeBack(voice.source, voice.envelope, now);
+      } else {
+        this.release(voice, now);
+      }
     }
   }
 

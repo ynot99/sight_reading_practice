@@ -529,6 +529,46 @@ describe('WebAudioPitchPlayer', () => {
 
     expect(context.oscillators.every((node) => node.stoppedAt !== null)).toBe(true);
   });
+
+  it('takes back a note handed over ahead, as the sampled one does', () => {
+    // It stands in while the recordings download, and a playback started then
+    // is paused like any other. See the sampled player's test of the same.
+    const context = new FakeAudioContext();
+    const player = new WebAudioPitchPlayer(contextFactory(context), { releaseSec: 0.2 });
+    const now = performance.now();
+    player.play(60, 0.5, now + 500);
+    player.stop(60, now + 1_500);
+    const tone = context.oscillators[0];
+
+    player.stopAll();
+
+    expect(tone?.stoppedAt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(tone?.startedAt ?? 0);
+    expect(context.gains[0]?.gain.ramps.at(-1)).toEqual({ value: 0, time: 0 });
+  });
+
+  it('cuts short a note already sounding whose end lay ahead', () => {
+    const context = new FakeAudioContext();
+    const player = new WebAudioPitchPlayer(contextFactory(context), { releaseSec: 0.2 });
+    player.play(60, 0.5);
+    player.stop(60, performance.now() + 3_000);
+    context.advance(1);
+
+    player.stopAll();
+
+    expect(context.oscillators[0]?.stoppedAt).toBeCloseTo(1.22, 6);
+  });
+
+  it('forgets a note once it has ended', () => {
+    const context = new FakeAudioContext();
+    const player = new WebAudioPitchPlayer(contextFactory(context));
+    player.play(60, 0.5);
+    const tone = context.oscillators[0];
+    tone?.onended?.();
+
+    player.stopAll();
+
+    expect(tone?.stoppedAt).toBeNull();
+  });
 });
 
 describe('when the click is actually heard', () => {

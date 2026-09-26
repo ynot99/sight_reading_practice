@@ -551,6 +551,57 @@ describe('SampledPitchPlayer', () => {
     expect(fallback.stopAllCalls).toBe(1);
   });
 
+  describe('silencing everything, a playback in the middle of it', () => {
+    // A playback hands a note over with its end scheduled beside its start, so
+    // its key is up before it has even begun. Silencing only the keys still
+    // down left it to play after a pause. His: "коли ставлю playback на паузу
+    // за пів біту, то курсор зупиняється одразу, а playback після пів біту
+    // потім ще зіграє ноту".
+    it('takes back a note handed over ahead, so it never begins', async () => {
+      const { player, context } = createPlayer();
+      await player.load();
+      const now = performance.now();
+      player.play(60, 1, now + 500);
+      player.stop(60, now + 1_500);
+      const source = context.sources[0];
+
+      player.stopAll();
+
+      // Stopped before it starts, which the audio clock allows...
+      expect(source?.stoppedAt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
+        source?.startedAt ?? 0,
+      );
+      // ...and silent from now, for an engine that refuses a second stop.
+      expect(context.gains[0]?.gain.ramps.at(-1)).toEqual({ value: 0, time: 0 });
+    });
+
+    it('cuts short a note already sounding whose end lay ahead', async () => {
+      const { player, context } = createPlayer();
+      await player.load();
+      player.play(60, 1);
+      player.stop(60, performance.now() + 3_000);
+      context.currentTime = 1;
+
+      player.stopAll();
+
+      // Faded from now, over the release, not left to ring to its end.
+      expect(context.sources[0]?.stoppedAt).toBeCloseTo(1 + 0.35 + 0.02, 6);
+    });
+
+    it('forgets a note once it has ended', async () => {
+      // Kept any longer, every note of a long piece would be kept.
+      const { player, context } = createPlayer();
+      await player.load();
+      player.play(60, 1);
+      const source = context.sources[0];
+      source?.onended?.();
+
+      player.stopAll();
+
+      expect(source?.stoppedAt).toBeNull();
+    });
+  });
+
   it('loads only once however often it is asked', async () => {
     const { player, requested } = createPlayer();
 

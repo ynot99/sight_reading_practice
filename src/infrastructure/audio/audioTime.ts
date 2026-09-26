@@ -105,6 +105,32 @@ export function unplug(...nodes: readonly { disconnect(): void }[]): void {
 }
 
 /**
+ * Takes back a sound that was scheduled and has not begun, so it never does.
+ *
+ * Not a release. A release fades from now and stops the source at the end of
+ * the fade, and a note due later than that still begins - into its own attack,
+ * which the release had just cancelled the start of.
+ *
+ * Silenced as well as stopped. Stopping before the start is allowed, and the
+ * source then plays nothing and still ends; but it is the second stop on a
+ * note whose end was scheduled with it, and an older engine refuses a second
+ * stop. The envelope holds it silent either way.
+ */
+export function takeBack(
+  source: { stop(when?: number): void },
+  envelope: GainNode,
+  now: number,
+): void {
+  envelope.gain.cancelScheduledValues(0);
+  envelope.gain.setValueAtTime(0, now);
+  try {
+    source.stop(now);
+  } catch {
+    // Refused as a second stop; the envelope keeps it silent.
+  }
+}
+
+/**
  * Starts a note's release at `at`, without a step in the envelope.
  *
  * The value to fade *from* has to be the one the envelope will really hold

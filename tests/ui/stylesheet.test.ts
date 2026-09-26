@@ -1181,6 +1181,20 @@ describe('the canvases the run is painted on', () => {
     expect(body('.roll__head')).toContain('- var(--roll-x)');
     expect(body('.roll__head-mark')).toContain('- var(--roll-x)');
   });
+
+  it('are not blurred through by the sheet they stand in', () => {
+    // A blur behind a sheet is worked out again over the whole screen on every
+    // frame anything above it changes, which in the viewer is every frame of a
+    // scroll. On his PC a quarter of those frames were dropped for it. His,
+    // with it taken off: "тепер все просто літає".
+    const blurring = rules().filter(
+      (rule) =>
+        /(^|[\s,>+~])\.sheet(?![\w-])/.test(rule.selector) &&
+        /backdrop-filter\s*:\s*(?!none)/.test(rule.body),
+    );
+
+    expect(blurring.map((rule) => rule.selector)).toEqual([]);
+  });
 });
 
 describe('the zoom the reader can reach', () => {

@@ -2638,6 +2638,13 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
  * environment the UI tests run in, so a real dialog would be a control no
  * test could open - and these lists are exactly where a delete goes wrong
  * unwatched.
+ *
+ * The page behind is dimmed and not blurred. A blur the size of the screen is
+ * worked out again on every frame in which anything above it changes, and in
+ * the MIDI viewer that is every frame of a scroll or a playback. On his PC it
+ * dropped a quarter of the frames while scrolling, with the main thread
+ * waiting on the GPU rather than working; with the blur taken off in the
+ * console: "тепер все просто літає", and he saw nothing lost.
  */
 .sheet {
   position: fixed;
@@ -2648,8 +2655,6 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
   justify-content: center;
   padding: 16px;
   background: rgb(16 24 40 / 45%);
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
 }
 
 .sheet__panel {

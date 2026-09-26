@@ -86,20 +86,30 @@ import {
   theMusicsPlaceAt,
   type GridChoice,
 } from '../application/session/RunRoll.js';
-import { theInksOf, type RollInks } from './rollPainter.js';
-import { RollTiles, type RollLanes } from './rollTiles.js';
+import {
+  paintThePedal,
+  paintTheGrid,
+  paintTheRuler,
+  theInksOf,
+  type RollInks,
+  type RollViewport,
+  type Surface,
+} from './rollPainter.js';
+import { RollScroller, speedOf, type FingerAt } from './rollScroller.js';
 import {
   drawTheMap,
   drawThePitchMap,
   drawTheRoll,
   rowFromTap,
-  theLanesOf,
+  theCanvasesOf,
+  theKeysStripOf,
   theMapOfThePitches,
   thePitchesOfTheRun,
   theSceneOfTheRoll,
   whatThePedalSaysAt,
   whatTheGridSaysAt,
   whatTheRulerSaysAt,
+  type RollCanvases,
   type RollPitches,
   type RollScene,
   scrollAfterZoom,
@@ -312,6 +322,35 @@ const SCORING_DESCRIPTIONS: Readonly<Record<string, string>> = {
     'little; stopping costs everything. Says nothing in Wait mode, where nothing ' +
     'moves without you.',
 };
+
+/** How far a wheel's line is, for a wheel that counts in lines. */
+const LINE_PX = 16;
+/** How far a finger may wander and still be tapping, in pixels. */
+const TAP_SLOP_PX = 6;
+
+/**
+ * A canvas whose size is already known, so the painter is told it rather than
+ * made to ask the page.
+ */
+function sized(canvas: HTMLCanvasElement, widePx: number, tallPx: number): Surface {
+  return {
+    clientWidth: widePx,
+    clientHeight: tallPx,
+    get width() {
+      return canvas.width;
+    },
+    set width(value: number) {
+      canvas.width = value;
+    },
+    get height() {
+      return canvas.height;
+    },
+    set height(value: number) {
+      canvas.height = value;
+    },
+    getContext: (kind) => canvas.getContext(kind),
+  };
+}
 
 /**
  * How this reading compares with the ones before it.
@@ -1246,9 +1285,29 @@ export class AppView {
   private rollHeads: RollHeads | null = null;
   /** What the drawing shows, placed in the run's own time: see `RollScene`. */
   private drawnScene: RollScene | null = null;
-  /** The lanes it is painted in, found once as it is drawn, and the tiles painted in them. */
-  private rollLanes: RollLanes | null = null;
-  private rollTiles: RollTiles | null = null;
+  /** The canvases it is painted on and the strip of keys, found once as it is drawn. */
+  private rollCanvases: RollCanvases | null = null;
+  private rollKeysStrip: HTMLElement | null = null;
+  /** Where the view stands on the drawing: see `RollScroller`. */
+  private readonly rollScroller = new RollScroller();
+  /** How tall a row is, and the ruler and the pedal lane, as last measured. */
+  private rollLook = { rowPx: 13, rulerTallPx: 0, pedalTallPx: 0 };
+  /** The frame a fling is going on in, if one is. */
+  private flingFrame: number | null = null;
+  /**
+   * A finger moving the drawing: where the view stood when it came down, where
+   * it came down, and where it has been lately - which is how fast it was
+   * going when it lets go.
+   */
+  private rollPan: {
+    readonly pointerId: number;
+    readonly fromX: number;
+    readonly fromY: number;
+    readonly clientX: number;
+    readonly clientY: number;
+    readonly trail: FingerAt[];
+    moved: boolean;
+  } | null = null;
   /** The colours it is painted in, read off the stylesheet once and again when those change. */
   private rollInks: RollInks | null = null;
   /** What that map last drew, so a scroll that changes nothing on it redraws nothing. */
@@ -1284,6 +1343,8 @@ export class AppView {
    * also moved the head to wherever the last finger happened to be.
    */
   private pinched = false;
+  /** And whether it was a finger moving the drawing, which ends the same way. */
+  private panned = false;
   /**
    * Where the head stands while nothing is sounding, in milliseconds.
    *
@@ -2063,7 +2124,7 @@ export class AppView {
       this.rollTick = null;
     }
     this.forgetTheMapFrame();
-    this.rollTiles?.forget();
+    this.stopTheFling();
     if (this.timeTick !== null) {
       clearInterval(this.timeTick);
       this.timeTick = null;
@@ -2693,9 +2754,10 @@ export class AppView {
       why: 'A reading kept from before: its bars are not this score’s to practise.',
     };
     this.rollAtMs = 0;
+    this.rollScroller.to(0, 0);
     this.drawTheRollInto();
     this.showTheSheet(this.el.sheetRoll);
-    this.sayWhereTheViewIs();
+    this.showTheView();
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();
   }
@@ -6955,9 +7017,9 @@ export class AppView {
     this.el.rollBody.addEventListener(
       'wheel',
       (event) => {
-        this.zoomTheRollByWheel(event);
+        this.scrollOrZoomTheRollByWheel(event);
       },
-      // Said, so that the zoom may keep the page from scrolling under it.
+      // Said, so that neither a scroll nor a zoom moves the page under it.
       { passive: false },
     );
     this.listen(this.el.rollMap, 'pointerdown', (event) => {
@@ -7010,15 +7072,31 @@ export class AppView {
       this.goAndPractiseThePassage();
     });
     this.listen(this.el.rollBody, 'click', (event) => {
-      if (this.pinched) {
+      if (this.pinched || this.panned) {
         return;
       }
       this.putTheHeadWhereItWasTapped(event);
     });
     this.listen(this.el.rollBody, 'pointerdown', (event) => {
       this.pinched = false;
+      this.panned = false;
+      this.stopTheFling();
       this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       this.beginAPinch();
+      // One finger, or a pen, moves the drawing; a mouse points at it, as it
+      // always has, and a second finger makes a pan a pinch.
+      this.rollPan =
+        event.pointerType !== 'mouse' && this.rollFingers.size === 1
+          ? {
+              pointerId: event.pointerId,
+              fromX: this.rollScroller.x,
+              fromY: this.rollScroller.y,
+              clientX: event.clientX,
+              clientY: event.clientY,
+              trail: [{ atMs: event.timeStamp, x: event.clientX, y: event.clientY }],
+              moved: false,
+            }
+          : null;
     });
     this.listen(this.el.rollBody, 'pointermove', (event) => {
       if (!this.rollFingers.has(event.pointerId)) {
@@ -7026,11 +7104,18 @@ export class AppView {
       }
       this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       this.pinchTheRoll();
+      this.panTheRoll(event);
     });
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
+        if (!this.rollFingers.has(event.pointerId)) {
+          return;
+        }
         this.rollFingers.delete(event.pointerId);
         this.beginAPinch();
+        if (this.rollPan?.pointerId === event.pointerId) {
+          this.letThePanGo(event, ending === 'pointerup');
+        }
       });
     }
     this.listen(this.el.rollZoom, 'input', () => {
@@ -7774,6 +7859,7 @@ export class AppView {
     }
     this.stopTheRoll();
     this.rollAtMs = 0;
+    this.rollScroller.to(0, 0);
     this.drawTheRollInto();
     this.showTheSheet(this.el.sheetRoll);
     // Measured after it is on the screen and not before. A hidden sheet has no
@@ -7781,7 +7867,7 @@ export class AppView {
     // against nothing, found nothing to say, and stayed away until the first
     // scroll re-measured it. His: "minimap синій прямокутник не зявляється при
     // відчинені діалогу, а тільки при першому скролі".
-    this.sayWhereTheViewIs();
+    this.showTheView();
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();
   }
@@ -7888,26 +7974,106 @@ export class AppView {
    * from either jumps; a flick becomes a run of small steps instead, which is
    * the same gesture arriving smoothly. His: "по скролу робити зум".
    */
-  private zoomTheRollByWheel(event: WheelEvent): void {
-    const drawn = this.el.rollBody.firstElementChild;
-    // A wheel scrolls, which is what a wheel does, and the browser is better at
-    // it than anything written here - it keeps the momentum, the rubber band
-    // and the sideways axis a trackpad gives. Held down, the same wheel zooms:
-    // the convention every drawing program and the browser's own page zoom use,
-    // and the one a trackpad pinch already arrives as. His: "горизонтальний та
-    // вертикальний скроли зробити звичайними скролами, а ctrl+скрол зробити
-    // zoom in/zoom out".
-    if (!(drawn instanceof HTMLElement) || !(event.ctrlKey || event.metaKey)) {
+  private scrollOrZoomTheRollByWheel(event: WheelEvent): void {
+    if (this.drawnScene === null) {
       return;
     }
     event.preventDefault();
-    const was = Number(this.el.rollZoom.value);
-    const now = zoomAfterWheel(was, event.deltaY, LEAST_ZOOM, MOST_ZOOM);
-    if (now === was) {
+    // Held down, the wheel zooms: the convention every drawing program and the
+    // browser's own page zoom use, and the one a trackpad pinch already
+    // arrives as. His: "горизонтальний та вертикальний скроли зробити
+    // звичайними скролами, а ctrl+скрол зробити zoom in/zoom out".
+    if (event.ctrlKey || event.metaKey) {
+      const was = Number(this.el.rollZoom.value);
+      const now = zoomAfterWheel(was, event.deltaY, LEAST_ZOOM, MOST_ZOOM);
+      if (now !== was) {
+        this.el.rollZoom.value = String(now);
+        this.holdTheZoomAround(event.clientX, was, now);
+      }
       return;
     }
-    this.el.rollZoom.value = String(now);
-    this.holdTheZoomAround(drawn, event.clientX, was, now);
+    // Otherwise it scrolls, as it would have scrolled the page: both ways from
+    // a trackpad, which keeps its own momentum, and along the run with shift
+    // held where a mouse wheel only turns one way.
+    this.stopTheFling();
+    const unit =
+      event.deltaMode === 1 ? LINE_PX : event.deltaMode === 2 ? this.rollScroller.viewWidePx : 1;
+    const sideways = event.shiftKey && event.deltaX === 0;
+    if (
+      this.rollScroller.by(
+        (sideways ? event.deltaY : event.deltaX) * unit,
+        (sideways ? 0 : event.deltaY) * unit,
+      )
+    ) {
+      this.askWhereTheViewIs();
+    }
+  }
+
+  /** Moves the drawing with a finger, where one is moving it. */
+  private panTheRoll(event: PointerEvent): void {
+    const pan = this.rollPan;
+    if (pan?.pointerId !== event.pointerId || this.rollFingers.size !== 1) {
+      return;
+    }
+    const acrossPx = event.clientX - pan.clientX;
+    const downPx = event.clientY - pan.clientY;
+    // A finger is never quite still: until it has gone somewhere it is a tap,
+    // and a tap puts the head down.
+    if (!pan.moved && Math.hypot(acrossPx, downPx) < TAP_SLOP_PX) {
+      return;
+    }
+    pan.moved = true;
+    this.panned = true;
+    pan.trail.push({ atMs: event.timeStamp, x: event.clientX, y: event.clientY });
+    if (pan.trail.length > 32) {
+      pan.trail.splice(0, pan.trail.length - 32);
+    }
+    if (this.rollScroller.to(pan.fromX - acrossPx, pan.fromY - downPx)) {
+      this.askWhereTheViewIs();
+    }
+  }
+
+  /** A finger lets go: thrown, the drawing goes on and slows; put down, it stays. */
+  private letThePanGo(event: PointerEvent, thrown: boolean): void {
+    const pan = this.rollPan;
+    this.rollPan = null;
+    if (pan === null || !pan.moved || !thrown) {
+      return;
+    }
+    const speed = speedOf(pan.trail, event.timeStamp);
+    this.rollScroller.fling(-speed.x, -speed.y);
+    this.carryTheFling();
+  }
+
+  /** Carries a fling on, a frame at a time, until it has slowed to nothing. */
+  private carryTheFling(): void {
+    const view = this.doc.defaultView;
+    if (view === null || typeof view.requestAnimationFrame !== 'function') {
+      return;
+    }
+    if (this.flingFrame !== null) {
+      view.cancelAnimationFrame(this.flingFrame);
+    }
+    let last: number | null = null;
+    const frame = (now: number): void => {
+      // The first frame has no frame before it; call it one frame's worth.
+      const moved = this.rollScroller.step(last === null ? 16 : now - last);
+      last = now;
+      if (moved) {
+        this.showTheView();
+      }
+      this.flingFrame = this.rollScroller.flinging ? view.requestAnimationFrame(frame) : null;
+    };
+    this.flingFrame = this.rollScroller.flinging ? view.requestAnimationFrame(frame) : null;
+  }
+
+  private stopTheFling(): void {
+    this.rollScroller.stop();
+    const view = this.doc.defaultView;
+    if (this.flingFrame !== null && view !== null) {
+      view.cancelAnimationFrame(this.flingFrame);
+    }
+    this.flingFrame = null;
   }
 
   /**
@@ -7917,27 +8083,21 @@ export class AppView {
    * - it does not stretch with the music and would drag the anchor sideways by
    * its own width every time.
    */
-  private holdTheZoomAround(drawn: HTMLElement, clientX: number, was: number, now: number): void {
-    // Everything read before anything is written, and nothing read afterwards.
-    // A width or a scroll position asked for *after* a zoom has been written
-    // makes the browser lay the whole drawing out there and then - six thousand
-    // elements of it on a run of his City of Tears - so a moving pinch that
-    // read after each write paid for one of those on every move of a finger
-    // instead of one before each frame. The width that follows from the new
-    // zoom is arithmetic, so nothing has to be asked twice.
-    const widths = this.theRunsWidths(drawn);
-    const scrolledTo = drawn.scrollLeft;
-    const at = clientX - drawn.getBoundingClientRect().left - widths.keysPx;
+  private holdTheZoomAround(clientX: number, was: number, now: number): void {
+    // Everything read before anything is written. The width that follows from
+    // the new zoom is arithmetic, so nothing has to be asked twice.
+    const widths = this.theRunsWidths();
+    const at = clientX - (this.rollCanvases?.grid.getBoundingClientRect().left ?? clientX + 1);
 
     this.applyTheZoom();
 
     const widened = (widths.wholeWidePx * now) / was;
     const to =
       widths.wholeWidePx > 0 && at >= 0
-        ? scrollAfterZoom(scrolledTo, at, widths.wholeWidePx, widened)
-        : scrolledTo;
-    drawn.scrollLeft = to;
-    this.showTheWindow(theWindowOnTheRun(to, widths.viewWidePx, widened));
+        ? scrollAfterZoom(widths.scrolledToPx, at, widths.wholeWidePx, widened)
+        : widths.scrolledToPx;
+    this.rollScroller.to(to, this.rollScroller.y);
+    this.showTheWindow(theWindowOnTheRun(this.rollScroller.x, widths.viewWidePx, widened));
   }
 
   /**
@@ -7980,8 +8140,40 @@ export class AppView {
    * out a second time.
    */
   private showTheView(): void {
+    this.measureTheRoll();
     this.paintTheRoll();
     this.sayWhereTheViewIs();
+  }
+
+  /**
+   * Tells the scroller how big the view and the drawing are, off the page.
+   *
+   * Read before anything in the frame is written, so reading it lays nothing
+   * out that a write had just unsettled. The lanes do not change size when the
+   * run is scrolled or zoomed, so this is the same answer every frame until
+   * the sheet itself does.
+   */
+  private measureTheRoll(): void {
+    const scene = this.drawnScene;
+    const canvases = this.rollCanvases;
+    if (scene === null || canvases === null) {
+      return;
+    }
+    const lane = (canvas: HTMLCanvasElement): { widePx: number; tallPx: number } => ({
+      widePx: canvas.parentElement?.clientWidth ?? 0,
+      tallPx: canvas.parentElement?.clientHeight ?? 0,
+    });
+    const grid = lane(canvases.grid);
+    const rowPx = this.theRowAsDrawn();
+    this.rollLook = {
+      rowPx,
+      rulerTallPx: lane(canvases.ruler).tallPx,
+      pedalTallPx: lane(canvases.pedal).tallPx,
+    };
+    this.rollScroller.size(grid, {
+      widePx: (scene.lengthMs / 1000) * Number(this.el.rollZoom.value),
+      tallPx: scene.rows * rowPx,
+    });
   }
 
   private forgetTheMapFrame(): void {
@@ -8000,20 +8192,11 @@ export class AppView {
    * is worse than no box.
    */
   private sayWhereTheViewIs(): void {
-    const drawn = this.el.rollBody.firstElementChild;
-    // Both ways read before either box is written, so neither read waits on a
-    // layout the other's write has asked for.
-    const widths = drawn instanceof HTMLElement ? this.theRunsWidths(drawn) : null;
-    const heights = drawn instanceof HTMLElement ? this.theRunsHeights(drawn) : null;
-    this.showTheWindow(
-      widths === null
-        ? null
-        : theWindowOnTheRun(widths.scrolledToPx, widths.viewWidePx, widths.wholeWidePx),
-    );
+    const widths = this.theRunsWidths();
+    const heights = this.theRunsHeights();
+    this.showTheWindow(theWindowOnTheRun(widths.scrolledToPx, widths.viewWidePx, widths.wholeWidePx));
     this.showTheRowsInView(
-      heights === null
-        ? null
-        : theWindowOnTheRun(heights.scrolledDownPx, heights.viewTallPx, heights.wholeTallPx),
+      theWindowOnTheRun(heights.scrolledDownPx, heights.viewTallPx, heights.wholeTallPx),
     );
   }
 
@@ -8089,75 +8272,57 @@ export class AppView {
 
   /** Scrolls the drawing up or down to the rows a finger is on, down the side. */
   private showTheRowsWhereTheyWerePointedAt(event: PointerEvent): void {
-    const drawn = this.el.rollBody.firstElementChild;
     const box = this.el.rollPitchMap.getBoundingClientRect();
-    if (!(drawn instanceof HTMLElement) || box.height <= 0) {
+    if (box.height <= 0) {
       return;
     }
     const share = Math.min(1, Math.max(0, (event.clientY - box.top) / box.height));
-    const heights = this.theRunsHeights(drawn);
+    const heights = this.theRunsHeights();
     const to = scrollForTheWindowAt(share, heights.viewTallPx, heights.wholeTallPx);
-    drawn.scrollTop = to;
+    this.rollScroller.to(this.rollScroller.x, to);
     this.showTheRowsInView(theWindowOnTheRun(to, heights.viewTallPx, heights.wholeTallPx));
+    this.askWhereTheViewIs();
   }
 
   /** Scrolls the drawing to the part of the run a finger is on the map. */
   private showTheRunWhereItWasPointedAt(event: PointerEvent): void {
-    const drawn = this.el.rollBody.firstElementChild;
     const box = this.el.rollMap.getBoundingClientRect();
-    if (!(drawn instanceof HTMLElement) || box.width <= 0) {
+    if (box.width <= 0) {
       return;
     }
     const share = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
-    const widths = this.theRunsWidths(drawn);
+    const widths = this.theRunsWidths();
     const to = scrollForTheWindowAt(share, widths.viewWidePx, widths.wholeWidePx);
-    drawn.scrollLeft = to;
+    this.rollScroller.to(to, this.rollScroller.y);
     this.showTheWindow(theWindowOnTheRun(to, widths.viewWidePx, widths.wholeWidePx));
+    this.askWhereTheViewIs();
   }
 
-  /**
-   * The drawing measured as music, with the column of key names left out.
-   *
-   * The names are a sticky column inside the same scroller, so they are part of
-   * its width and no part of the run. Counted in, the strip and the drawing
-   * measure two different wholes - and two wholes is exactly what put marks on
-   * the map at places the run never reached.
-   */
-  private theRunsWidths(drawn: HTMLElement): {
-    readonly keysPx: number;
+  /** The drawing measured along the run: where the view stands, how wide it is, and the whole. */
+  private theRunsWidths(): {
     readonly scrolledToPx: number;
     readonly viewWidePx: number;
     readonly wholeWidePx: number;
   } {
-    const keys = drawn.querySelector<HTMLElement>('.roll__keys')?.clientWidth ?? 0;
+    const scrolled = this.rollScroller;
     return {
-      keysPx: keys,
-      scrolledToPx: drawn.scrollLeft,
-      viewWidePx: drawn.clientWidth - keys,
-      wholeWidePx: drawn.scrollWidth - keys,
+      scrolledToPx: scrolled.x,
+      viewWidePx: scrolled.viewWidePx,
+      wholeWidePx: scrolled.wholeWidePx,
     };
   }
 
-  /**
-   * The drawing measured as rows of pitch, with the ruler and the pedal left out.
-   *
-   * Both stick to their edges of the same scroller, the bar numbers to the top
-   * and the pedal to the bottom, so the rows are only ever seen between them.
-   * Taken off the view and the whole alike, a scroll down is a scroll through
-   * the rows and nothing else - the same arithmetic as along the run, and so
-   * the same box.
-   */
-  private theRunsHeights(drawn: HTMLElement): {
+  /** And down it, as rows of pitch. */
+  private theRunsHeights(): {
     readonly scrolledDownPx: number;
     readonly viewTallPx: number;
     readonly wholeTallPx: number;
   } {
-    const ruler = drawn.querySelector<HTMLElement>('.roll__ruler')?.offsetHeight ?? 0;
-    const pedal = drawn.querySelector<HTMLElement>('.roll__pedal')?.offsetHeight ?? 0;
+    const scrolled = this.rollScroller;
     return {
-      scrolledDownPx: drawn.scrollTop,
-      viewTallPx: drawn.clientHeight - ruler - pedal,
-      wholeTallPx: drawn.scrollHeight - ruler - pedal,
+      scrolledDownPx: scrolled.y,
+      viewTallPx: scrolled.viewTallPx,
+      wholeTallPx: scrolled.wholeTallPx,
     };
   }
 
@@ -8343,9 +8508,10 @@ export class AppView {
       why: 'Free playing: no bars to practise.',
     };
     this.rollAtMs = 0;
+    this.rollScroller.to(0, 0);
     this.drawTheRollInto();
     this.showTheSheet(this.el.sheetRoll);
-    this.sayWhereTheViewIs();
+    this.showTheView();
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();
   }
@@ -8404,9 +8570,8 @@ export class AppView {
     this.drawnScene = scene;
     this.el.rollBody.replaceChildren(drawTheRoll(scene));
     this.rollHeads = theHeadsOf(this.el.rollBody);
-    this.rollTiles?.forget();
-    this.rollLanes = theLanesOf(this.el.rollBody);
-    this.rollTiles = this.rollLanes === null ? null : new RollTiles(this.rollLanes);
+    this.rollCanvases = theCanvasesOf(this.el.rollBody);
+    this.rollKeysStrip = theKeysStripOf(this.el.rollBody);
     this.rollInks = null;
     this.rollPitches = thePitchesOfTheRun(roll, ghosts);
     this.applyTheZoom();
@@ -8415,16 +8580,10 @@ export class AppView {
       this.el.rollMapWindow,
       this.el.rollMapHead,
     );
-    // The drawing is thrown away and built again on every redraw, so the watch
-    // on its scrolling goes with it and there is nothing to unsubscribe.
-    const drawn = this.el.rollBody.firstElementChild;
-    if (drawn instanceof HTMLElement) {
-      drawn.addEventListener('scroll', () => {
-        this.askWhereTheViewIs();
-      });
-      this.tellThePointerWhatIsUnderIt();
-    }
-    this.sayWhereTheViewIs();
+    // The drawing is thrown away and built again on every redraw, so what its
+    // canvases listen for goes with it and there is nothing to unsubscribe.
+    this.tellThePointerWhatIsUnderIt();
+    this.showTheView();
     this.describeTheRoll();
   }
 
@@ -8437,76 +8596,78 @@ export class AppView {
    * beat it came. His: "а чи неможливо буде hover робити на canvas?".
    */
   private tellThePointerWhatIsUnderIt(): void {
-    const lanes = this.rollLanes;
-    if (lanes === null) {
+    const canvases = this.rollCanvases;
+    if (canvases === null) {
       return;
     }
     const answer = (
-      lane: HTMLElement,
+      canvas: HTMLCanvasElement,
       ask: (scene: RollScene, atMs: number, row: number | null, pxPerSecond: number) => string | null,
     ): void => {
-      lane.addEventListener('pointermove', (event) => {
+      canvas.addEventListener('pointermove', (event) => {
         const scene = this.drawnScene;
         const pxPerSecond = Number(this.el.rollZoom.value);
-        // The lane is the length of the run and scrolls with it, so where the
-        // pointer is in it is where it is in the run.
-        const box = lane.getBoundingClientRect();
-        const atMs = timeFromTap(event.clientX - box.left, pxPerSecond);
-        const row = rowFromTap(event.clientY - box.top, this.theRowAsDrawn());
+        // The canvas stands still over the run, which is where the view says.
+        const box = canvas.getBoundingClientRect();
+        const atMs = timeFromTap(event.clientX - box.left + this.rollScroller.x, pxPerSecond);
+        const row = rowFromTap(event.clientY - box.top + this.rollScroller.y, this.rollLook.rowPx);
         const says = scene === null || atMs === null ? null : ask(scene, atMs, row, pxPerSecond);
-        if (lane.title !== (says ?? '')) {
-          lane.title = says ?? '';
+        if (canvas.title !== (says ?? '')) {
+          canvas.title = says ?? '';
         }
       });
     };
-    answer(lanes.grid, (scene, atMs, row, pxPerSecond) =>
+    answer(canvases.grid, (scene, atMs, row, pxPerSecond) =>
       row === null ? null : whatTheGridSaysAt(scene, atMs, row, pxPerSecond),
     );
-    answer(lanes.ruler, (scene, atMs, _row, pxPerSecond) =>
+    answer(canvases.ruler, (scene, atMs, _row, pxPerSecond) =>
       whatTheRulerSaysAt(scene, atMs, pxPerSecond),
     );
-    answer(lanes.pedal, (scene, atMs, _row, pxPerSecond) =>
+    answer(canvases.pedal, (scene, atMs, _row, pxPerSecond) =>
       whatThePedalSaysAt(scene, atMs, pxPerSecond),
     );
   }
 
 
   /**
-   * Puts up the tiles of the run on and near the screen, painting any it did
-   * not have.
+   * Paints the part of the run in view on the three canvases, and moves the
+   * head and the keys to where the view stands - all in one frame, so nothing
+   * on the screen is a frame behind anything else.
    *
-   * Only those, and that is the whole of why it is painted at all: laid out as
-   * an element a mark, a run of five thousand notes took a second to open and
-   * most of one to zoom, every mark of it being placed whether it was on the
-   * screen or not.
+   * Only that part, and that is the whole of why it is painted at all: laid out
+   * as an element a mark, a run of five thousand notes took a second to open
+   * and most of one to zoom, every mark of it being placed whether it was on
+   * the screen or not.
    */
   private paintTheRoll(): void {
     const scene = this.drawnScene;
-    const tiles = this.rollTiles;
+    const canvases = this.rollCanvases;
     const drawn = this.el.rollBody.firstElementChild;
-    if (scene === null || tiles === null || !(drawn instanceof HTMLElement)) {
+    const scrolled = this.rollScroller;
+    if (scene === null || canvases === null || !(drawn instanceof HTMLElement)) {
       return;
     }
-    const widths = this.theRunsWidths(drawn);
-    const heights = this.theRunsHeights(drawn);
+    const along = `${String(scrolled.x)}px`;
+    this.rollHeads?.line.style.setProperty('--roll-x', along);
+    this.rollHeads?.mark.style.setProperty('--roll-x', along);
+    this.rollKeysStrip?.style.setProperty('--roll-y', `${String(scrolled.y)}px`);
     // Nothing on the screen to paint for: the sheet is shut, or nothing has
     // been laid out yet.
-    if (widths.viewWidePx <= 0 || heights.viewTallPx <= 0) {
+    if (scrolled.viewWidePx <= 0 || scrolled.viewTallPx <= 0) {
       return;
     }
     this.rollInks ??= theInksOf(drawn);
-    tiles.show(
-      scene,
-      { pxPerSecond: Number(this.el.rollZoom.value), rowPx: this.theRowAsDrawn() },
-      {
-        scrolledPx: widths.scrolledToPx,
-        scrolledDownPx: heights.scrolledDownPx,
-        widePx: widths.viewWidePx,
-        tallPx: heights.viewTallPx,
-      },
-      this.rollInks,
-      this.doc.defaultView?.devicePixelRatio ?? 1,
-    );
+    const look = this.rollLook;
+    const view: RollViewport = {
+      scrolledPx: scrolled.x,
+      scrolledDownPx: scrolled.y,
+      pxPerSecond: Number(this.el.rollZoom.value),
+      rowPx: look.rowPx,
+    };
+    const density = this.doc.defaultView?.devicePixelRatio ?? 1;
+    paintTheGrid(sized(canvases.grid, scrolled.viewWidePx, scrolled.viewTallPx), scene, view, this.rollInks, density);
+    paintTheRuler(sized(canvases.ruler, scrolled.viewWidePx, look.rulerTallPx), scene, view, this.rollInks, density);
+    paintThePedal(sized(canvases.pedal, scrolled.viewWidePx, look.pedalTallPx), scene, view, this.rollInks, density);
   }
 
   /**
@@ -8712,8 +8873,12 @@ export class AppView {
     if (grid === null || roll === null) {
       return;
     }
+    // The grid stands still over the run, which is where the view says.
     const box = grid.getBoundingClientRect();
-    const tapped = timeFromTap(event.clientX - box.left, Number(this.el.rollZoom.value));
+    const tapped = timeFromTap(
+      event.clientX - box.left + this.rollScroller.x,
+      Number(this.el.rollZoom.value),
+    );
     if (tapped === null) {
       return;
     }
@@ -8841,22 +9006,18 @@ export class AppView {
     if (!sounding) {
       return;
     }
-    // Read off the page, where it has been moved to: a move is not a place,
-    // so `offsetLeft` would say nought wherever it stood.
-    const grid = heads.line.parentElement;
-    const headPx =
-      heads.line.getBoundingClientRect().left - (grid?.getBoundingClientRect().left ?? 0);
-    if (this.theMusicRunsPastTheHead()) {
-      drawn.scrollLeft = theRunScrolledUnderTheHead(
-        headPx,
-        this.theRunsWidths(drawn).viewWidePx,
-        this.runtime.controller.settings.rollHeadAtPercent / 100,
-      );
-      return;
-    }
-    const to = keepTheHeadInView(headPx, drawn.scrollLeft, drawn.clientWidth);
-    if (to !== null) {
-      drawn.scrollLeft = to;
+    // Where the head is in the drawing is arithmetic: the moment, at the zoom.
+    const headPx = (this.headIsAtMs() / 1000) * Number(this.el.rollZoom.value);
+    const scrolled = this.rollScroller;
+    const to = this.theMusicRunsPastTheHead()
+      ? theRunScrolledUnderTheHead(
+          headPx,
+          scrolled.viewWidePx,
+          this.runtime.controller.settings.rollHeadAtPercent / 100,
+        )
+      : keepTheHeadInView(headPx, scrolled.x, scrolled.viewWidePx);
+    if (to !== null && scrolled.to(to, scrolled.y)) {
+      this.askWhereTheViewIs();
     }
   }
 
@@ -8947,11 +9108,10 @@ export class AppView {
     const was = Number(this.el.rollZoom.value);
     this.el.rollZoom.value = String(asked.zoom);
     this.rollRowPx = asked.row;
-    const drawn = this.el.rollBody.firstElementChild;
     // Held around the point between the fingers, for the same reason the wheel
     // is held around the pointer: a pinch aimed at a bar means that bar.
-    if (drawn instanceof HTMLElement && asked.zoom !== was) {
-      this.holdTheZoomAround(drawn, this.theMiddleOfTheFingers(), was, asked.zoom);
+    if (asked.zoom !== was) {
+      this.holdTheZoomAround(this.theMiddleOfTheFingers(), was, asked.zoom);
       return;
     }
     this.applyTheZoom();
@@ -8973,16 +9133,24 @@ export class AppView {
     const roll = this.el.rollBody.firstElementChild;
     if (roll instanceof HTMLElement) {
       const second = `${this.el.rollZoom.value}px`;
-      roll.style.setProperty('--roll-second', second);
-      // Not handed down from the drawing: see `--roll-second` in the stylesheet.
+      // Only where it places something: see `--roll-second` in the stylesheet.
       this.rollHeads?.line.style.setProperty('--roll-second', second);
       this.rollHeads?.mark.style.setProperty('--roll-second', second);
       roll.style.setProperty('--roll-row-asked', `${this.rollRowPx}px`);
     }
-    // The window is a share of a drawing that has just changed width - said
-    // in the next frame rather than now: measuring the drawing straight after
-    // resizing it lays the whole of it out there and then, and a pinch asks
-    // several times a frame.
+    // How long the run now is follows from the zoom, so the scroller is told at
+    // once - a place set next is kept inside the new length, not the old.
+    const scene = this.drawnScene;
+    const scrolled = this.rollScroller;
+    if (scene !== null) {
+      scrolled.size(
+        { widePx: scrolled.viewWidePx, tallPx: scrolled.viewTallPx },
+        {
+          widePx: (scene.lengthMs / 1000) * Number(this.el.rollZoom.value),
+          tallPx: scrolled.wholeTallPx,
+        },
+      );
+    }
     this.askWhereTheViewIs();
   }
 

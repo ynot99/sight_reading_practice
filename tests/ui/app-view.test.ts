@@ -1883,7 +1883,7 @@ describe('AppView', () => {
       // синій прямокутник не зявляється при відчинені діалогу, а тільки при
       // першому скролі".
       const lent = (
-        name: 'clientWidth' | 'scrollWidth',
+        name: 'clientWidth',
         width: (element: HTMLElement) => number,
       ): (() => void) => {
         const had = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name);
@@ -1901,11 +1901,9 @@ describe('AppView', () => {
           Object.defineProperty(HTMLElement.prototype, name, had);
         };
       };
-      // The column of key names keeps its own width, because the drawing is
-      // measured as music with that column taken off both ends.
+      // The view is the grid's width, the keys beside it being no part of the run.
       const giveBack = [
-        lent('clientWidth', (node) => (node.classList.contains('roll__keys') ? 44 : 400)),
-        lent('scrollWidth', () => 2_000),
+        lent('clientWidth', (node) => (node.classList.contains('roll__grid') ? 100 : 0)),
       ];
       try {
         const { view, runtime, midi } = createRig();
@@ -1929,28 +1927,23 @@ describe('AppView', () => {
 
 
     /**
-     * Lends the drawing a size, because jsdom lays nothing out.
+     * Lends the drawing's grid a size, because jsdom lays nothing out.
      *
-     * Every number the map is drawn from is a measurement of the drawing, so
-     * without one there is no window to move and the box hides itself.
+     * The grid is the view onto the run, and every number the maps are drawn
+     * from follows from it, from the run and from the zoom.
      */
-    function lendTheDrawingASize(
-      scrolledTo: () => number,
-      more: Record<string, (node: HTMLElement) => number> = {},
-    ): () => void {
+    function lendTheDrawingASize(view: { readonly wide: number; readonly tall: number }): () => void {
       const sizes: Record<string, (node: HTMLElement) => number> = {
-        clientWidth: (node) => (node.classList.contains('roll__keys') ? 44 : 400),
-        scrollWidth: () => 2_000,
-        scrollLeft: () => scrolledTo(),
-        ...more,
+        clientWidth: (node) => (node.classList.contains('roll__grid') ? view.wide : 0),
+        clientHeight: (node) => (node.classList.contains('roll__grid') ? view.tall : 0),
       };
       const giveBack: (() => void)[] = [];
-      for (const [name, width] of Object.entries(sizes)) {
+      for (const [name, size] of Object.entries(sizes)) {
         const had = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name);
         Object.defineProperty(HTMLElement.prototype, name, {
           configurable: true,
           get(this: HTMLElement) {
-            return width(this);
+            return size(this);
           },
         });
         giveBack.push(() => {
@@ -1968,6 +1961,13 @@ describe('AppView', () => {
       };
     }
 
+    /** Turns a wheel over the drawing, as a trackpad does, either way. */
+    function wheel(deltaX: number, deltaY = 0): void {
+      element('roll-body').dispatchEvent(
+        new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX, deltaY }),
+      );
+    }
+
     /** Opens the picture of a run with one note in it. */
     async function openThePictureOfARun(): Promise<ReturnType<typeof createRig>> {
       const rig = createRig();
@@ -1978,14 +1978,6 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
       return rig;
-    }
-
-    function theDrawing(): HTMLElement {
-      const drawn = element('roll-body').firstElementChild;
-      if (!(drawn instanceof HTMLElement)) {
-        throw new Error('the run was not drawn');
-      }
-      return drawn;
     }
 
     const aFrame = async (): Promise<void> =>
@@ -2000,27 +1992,24 @@ describe('AppView', () => {
       // again, on every scroll event. A transform is the compositor's and
       // changes no layout at all. His: "чи можна якось швидкість оновлення зони
       // minimap прискорити? Я хочу щоб все йшло плавно, як в osu!".
-      let scrolledTo = 0;
-      const giveBack = lendTheDrawingASize(() => scrolledTo);
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
       try {
-        await openThePictureOfARun();
+        const { view } = await openThePictureOfARun();
         const box = element('roll-map-window');
+        // A second of air past the one note, at a hundred and forty to the second.
+        const whole = ((view.rollScene?.lengthMs ?? 0) / 1000) * 140;
+        expect(whole).toBeGreaterThan(130);
+        expect(Number.parseFloat(box.style.width)).toBeCloseTo((100 / whole) * 100, 1);
+        expect(box.style.transform).toBe('translateX(0.000%)');
         const wide = box.style.width;
-        const at = box.style.transform;
-        expect(wide).not.toBe('');
 
-        scrolledTo = 800;
-        theDrawing().dispatchEvent(new Event('scroll'));
+        wheel(30);
         await aFrame();
 
-        // Four hundred wide on two thousand of run, less the forty-four the
-        // column of key names keeps: a window of 356 on 1956, which is 18.2 per
-        // cent of the map. Scrolled to 800 it stands 800/356 of its own widths
-        // along - because a transform's per cent is of the element being moved,
-        // and the share it is given is of the map.
-        expect(wide).toBe('18.2%');
-        expect(at).toBe('translateX(0.000%)');
-        expect(box.style.transform).toBe('translateX(224.719%)');
+        // Thirty along is thirty hundredths of its own width, because a
+        // transform's per cent is of the element being moved, and the share it
+        // is given is of the map.
+        expect(box.style.transform).toBe('translateX(30.000%)');
         expect(box.style.left).toBe('');
         // The width is a width, and a scroll does not change it.
         expect(box.style.width).toBe(wide);
@@ -2033,8 +2022,7 @@ describe('AppView', () => {
       // His: "існують для мене часто ноти які вилазять out of view". The run is
       // one note, pressed and let go at its start, and a second of air - so
       // scrolled to the far end the screen shows none of it.
-      let scrolledTo = 0;
-      const giveBack = lendTheDrawingASize(() => scrolledTo);
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 0 });
       try {
         const rig = createRig();
         await rig.view.initialize();
@@ -2053,12 +2041,12 @@ describe('AppView', () => {
         // A scroll that changes nothing on the strip redraws nothing on it:
         // this is asked on every frame of a playback.
         const marks = strip.firstElementChild;
-        theDrawing().dispatchEvent(new Event('scroll'));
+        // Down, which moves nothing along the run.
+        wheel(0, 5);
         await aFrame();
         expect(strip.firstElementChild).toBe(marks);
 
-        scrolledTo = 1_600;
-        theDrawing().dispatchEvent(new Event('scroll'));
+        wheel(10_000);
         await aFrame();
 
         expect(strip.querySelectorAll('.roll-pitch-map__mark')).toHaveLength(0);
@@ -2069,32 +2057,26 @@ describe('AppView', () => {
       }
     });
 
-    it('boxes the rows on the screen, leaving out the ruler and the pedal', async () => {
-      // Both stick to their edges, so the rows are only ever seen between them.
-      // Three hundred tall with twenty of ruler and sixteen of pedal is 264 of
-      // rows on the screen, out of 964: 27.4 per cent of the strip.
-      let scrolledDown = 0;
-      const giveBack = lendTheDrawingASize(() => 0, {
-        clientHeight: () => 300,
-        scrollHeight: () => 1_000,
-        scrollTop: () => scrolledDown,
-        offsetHeight: (node) =>
-          node.classList.contains('roll__ruler') ? 20 : node.classList.contains('roll__pedal') ? 16 : 0,
-      });
+    it('boxes the rows on the screen', async () => {
+      // The grid is the rows on the screen, the ruler and the pedal lane being
+      // beside it: sixty tall, of twelve rows at thirteen.
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 60 });
       try {
-        await openThePictureOfARun();
+        const { view } = await openThePictureOfARun();
         const box = element('roll-pitch-map-window');
+        const whole = (view.rollScene?.rows ?? 0) * 13;
 
         expect(box.hidden).toBe(false);
-        expect(box.style.height).toBe('27.386%');
+        expect(box.style.height).toBe(`${((60 / whole) * 100).toFixed(3)}%`);
         expect(box.style.transform).toBe('translateY(0.000%)');
 
-        scrolledDown = 350;
-        theDrawing().dispatchEvent(new Event('scroll'));
+        wheel(0, 45);
         await aFrame();
 
-        // 350 down is 350/264 of its own heights along.
-        expect(box.style.transform).toBe('translateY(132.576%)');
+        // Forty-five down is forty-five sixtieths of its own heights along.
+        expect(box.style.transform).toBe('translateY(75.000%)');
+        // And the keys go down with the rows they name.
+        expect(element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y')).toBe('45px');
         expect(box.style.top).toBe('');
       } finally {
         giveBack();
@@ -2102,24 +2084,12 @@ describe('AppView', () => {
     });
 
     it('scrolls up and down to where a finger is on the strip', async () => {
-      // Centred on the finger, as along the run: half way down a strip of 200
-      // is half of 964 rows' worth, less half of the 264 on the screen.
-      let scrolledDown = 0;
-      const giveBack = lendTheDrawingASize(() => 0, {
-        clientHeight: () => 300,
-        scrollHeight: () => 1_000,
-        offsetHeight: (node) =>
-          node.classList.contains('roll__ruler') ? 20 : node.classList.contains('roll__pedal') ? 16 : 0,
-      });
-      Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
-        configurable: true,
-        get: () => scrolledDown,
-        set: (to: number) => {
-          scrolledDown = to;
-        },
-      });
+      // Centred on the finger, as along the run: half way down the strip is
+      // half the rows' worth, less half of the sixty on the screen.
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 60 });
       try {
-        await openThePictureOfARun();
+        const { view } = await openThePictureOfARun();
+        const whole = (view.rollScene?.rows ?? 0) * 13;
         const strip = element('roll-pitch-map');
         strip.getBoundingClientRect = () => ({ top: 100, height: 200 }) as DOMRect;
         strip.setPointerCapture = () => undefined;
@@ -2128,10 +2098,155 @@ describe('AppView', () => {
           new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, clientX: 5, clientY: 200 }),
         );
 
-        expect(scrolledDown).toBe(350);
-        expect(element('roll-pitch-map-window').style.transform).toBe('translateY(132.576%)');
+        const to = whole / 2 - 30;
+        expect(element('roll-pitch-map-window').style.transform).toBe(
+          `translateY(${((to / 60) * 100).toFixed(3)}%)`,
+        );
       } finally {
-        delete (HTMLElement.prototype as unknown as Record<string, unknown>)['scrollTop'];
+        giveBack();
+      }
+    });
+
+    /** How far along the run the view stands, as the head is told it once the frame has come. */
+    function scrolledAlong(): number {
+      const head = element('roll-body').querySelector<HTMLElement>('.roll__head');
+      return Number.parseFloat(head?.style.getPropertyValue('--roll-x') ?? '0');
+    }
+
+    function finger(type: string, clientX: number, pointerType = 'touch'): void {
+      element('roll-body').dispatchEvent(
+        new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType, clientX, clientY: 50 }),
+      );
+    }
+
+    const aMoment = (): Promise<void> =>
+      new Promise((done) => {
+        setTimeout(done, 12);
+      });
+
+    it('moves the drawing with a finger, and lets it glide on when it is thrown', async () => {
+      // Kept by the program rather than the page, so a finger's pan and its
+      // fling are the program's to do - and the drawing, the head and the keys
+      // all go together. His, of Signal: "великий canvas скролиться дуже швидко".
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        const { view } = await openThePictureOfARun();
+        const whole = ((view.rollScene?.lengthMs ?? 0) / 1000) * 140;
+        finger('pointerdown', 90);
+        await aMoment();
+        finger('pointermove', 80);
+        await aMoment();
+        finger('pointermove', 70);
+        await aFrame();
+        // Twenty pixels to the left is twenty pixels further along.
+        expect(scrolledAlong()).toBe(20);
+        // Held there before letting go: put down, not thrown.
+        await new Promise((done) => {
+          setTimeout(done, 80);
+        });
+        finger('pointerup', 70);
+        await aFrame();
+        expect(scrolledAlong()).toBe(20);
+
+        // And thrown, it goes on - as far as the run lets it.
+        finger('pointerdown', 70);
+        await aMoment();
+        finger('pointermove', 65);
+        await aMoment();
+        finger('pointermove', 60);
+        finger('pointerup', 60);
+        await aFrame();
+        await aFrame();
+        expect(scrolledAlong()).toBeGreaterThan(30);
+        expect(scrolledAlong()).toBeLessThanOrEqual(whole - 100);
+      } finally {
+        giveBack();
+      }
+    });
+
+    it('puts the head down on a tap, and not at the end of a pan', async () => {
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        await openThePictureOfARun();
+        const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
+        // Put exactly where it lands rather than on the nearest beat, so that
+        // a tap anywhere is somewhere the head was not.
+        const snap = element<HTMLInputElement>('roll-snap');
+        snap.checked = false;
+        snap.dispatchEvent(new Event('change', { bubbles: true }));
+        const at = headAt(drawn);
+        finger('pointerdown', 90);
+        finger('pointermove', 60);
+        finger('pointerup', 60);
+        const grid = element('roll-body').querySelector('.roll__grid');
+        grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 60 }));
+
+        expect(headAt(drawn)).toBe(at);
+
+        // A finger is never quite still, and a tap that wandered a pixel or two
+        // is still a tap - at the moment under it, which is thirty pixels
+        // further on than where it touched the screen, the drawing having been
+        // moved thirty along.
+        finger('pointerdown', 90);
+        finger('pointermove', 92);
+        finger('pointerup', 92);
+        grid?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 92 }));
+        expect(headAt(drawn)).toBe(((92 + 30) / 140).toFixed(3));
+      } finally {
+        giveBack();
+      }
+    });
+
+    it('opens a picture at its beginning, wherever the last one was left', async () => {
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        await openThePictureOfARun();
+        wheel(30);
+        await aFrame();
+        expect(scrolledAlong()).toBe(30);
+
+        element<HTMLButtonElement>('roll-close').click();
+        element<HTMLButtonElement>('run-roll-open').click();
+        await aFrame();
+
+        expect(scrolledAlong()).toBe(0);
+      } finally {
+        giveBack();
+      }
+    });
+
+    it('leaves a mouse pointing rather than dragging, as a page does', async () => {
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        await openThePictureOfARun();
+        finger('pointerdown', 90, 'mouse');
+        finger('pointermove', 60, 'mouse');
+        finger('pointerup', 60, 'mouse');
+        await aFrame();
+
+        expect(scrolledAlong()).toBe(0);
+      } finally {
+        giveBack();
+      }
+    });
+
+    it('turns a mouse wheel along the run with shift held, and counts a wheel in lines as lines', async () => {
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        await openThePictureOfARun();
+        element('roll-body').dispatchEvent(
+          new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 12, shiftKey: true }),
+        );
+        await aFrame();
+        expect(scrolledAlong()).toBe(12);
+
+        element('roll-body').dispatchEvent(
+          new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 1, deltaMode: 1 }),
+        );
+        await aFrame();
+        // A line is sixteen pixels.
+        expect(scrolledAlong()).toBe(28);
+      } finally {
         giveBack();
       }
     });
@@ -2139,20 +2254,17 @@ describe('AppView', () => {
     it('redraws the box at most once a frame, however much is scrolled', async () => {
       // A scroll fires many times between two frames, and every one of them
       // used to redraw the box. The extra ones are thrown away unseen.
-      let scrolledTo = 0;
-      const giveBack = lendTheDrawingASize(() => scrolledTo);
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
       try {
         await openThePictureOfARun();
         // The frame the opening asked for, with the zoom it was drawn at.
         await aFrame();
         const box = element('roll-map-window');
         const at = box.style.transform;
-        const drawn = theDrawing();
         const frames = vi.spyOn(window, 'requestAnimationFrame');
 
-        for (const to of [200, 400, 800]) {
-          scrolledTo = to;
-          drawn.dispatchEvent(new Event('scroll'));
+        for (const by of [5, 10, 15]) {
+          wheel(by);
         }
 
         // Not yet: the frame is what the scrolling goes through.
@@ -2633,38 +2745,35 @@ describe('AppView', () => {
      * remembers what it was set to. jsdom lays nothing out, and where the
      * scroller stands is the whole of what this mode does.
      */
-    function lendTheDrawingAScroller(headPx: number): {
+    function lendTheDrawingAScroller(): {
       readonly scrolledTo: () => number;
+      readonly headPx: () => number;
       readonly giveBack: () => void;
     } {
-      let scrolled = 0;
-      const had = ['scrollLeft', 'clientWidth', 'getBoundingClientRect'].map(
+      const had = ['clientWidth', 'clientHeight'].map(
         (name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const,
       );
-      Object.defineProperty(HTMLElement.prototype, 'scrollLeft', {
-        configurable: true,
-        get: () => scrolled,
-        set: (to: number) => {
-          scrolled = to;
-        },
-      });
+      // A view of 360 along and 200 down.
       Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
         configurable: true,
         get(this: HTMLElement) {
-          // The keys stand over the front of the view, and are not the music.
-          return this.classList.contains('roll__keys') ? 40 : 400;
+          return this.classList.contains('roll__grid') ? 360 : 0;
         },
       });
-      // Where the head has been moved to, which the page says and its place
-      // does not: it is moved, and `offsetLeft` would say nought.
-      Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
         configurable: true,
-        value(this: HTMLElement) {
-          return new DOMRect(this.classList.contains('roll__head') ? headPx : 0, 0, 0, 0);
+        get(this: HTMLElement) {
+          return this.classList.contains('roll__grid') ? 200 : 0;
         },
       });
+      const drawn = (): HTMLElement | null => element('roll-body').querySelector<HTMLElement>('.roll');
       return {
-        scrolledTo: () => scrolled,
+        // Where the view stands, as the head is told it.
+        scrolledTo: () =>
+          Number.parseFloat(
+            drawn()?.querySelector<HTMLElement>('.roll__head')?.style.getPropertyValue('--roll-x') ?? '0',
+          ),
+        headPx: () => Number(headAt(drawn())) * Number(element<HTMLInputElement>('roll-zoom').value),
         giveBack: () => {
           for (const [name, descriptor] of had) {
             if (descriptor === undefined) {
@@ -2676,6 +2785,46 @@ describe('AppView', () => {
         },
       };
     }
+
+    /**
+     * A run played to a pulse long enough to scroll along, with the picture of
+     * it open, drawn at six hundred to the second, and the head put down a
+     * thousand pixels in: somewhere a playback can be followed to.
+     */
+    async function aLongRunWithTheHeadFarIn(): Promise<ReturnType<typeof createRig>> {
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = rig.runtime.controller.session?.currentStep;
+      rig.midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      rig.metronome.advanceSubdivisions(48);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      putTheHeadFarIn();
+      return rig;
+    }
+
+    function putTheHeadFarIn(): void {
+      // Exactly where it is put, and not on the nearest beat.
+      const snap = element<HTMLInputElement>('roll-snap');
+      snap.checked = false;
+      snap.dispatchEvent(new Event('change', { bubbles: true }));
+      const zoom = element<HTMLInputElement>('roll-zoom');
+      zoom.value = '600';
+      zoom.dispatchEvent(new Event('input', { bubbles: true }));
+      const grid = element('roll-body').querySelector<HTMLElement>('.roll__grid');
+      if (grid === null) {
+        throw new Error('expected a grid to tap');
+      }
+      grid.getBoundingClientRect = () => new DOMRect(0, 0, 360, 200);
+      grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 1000 }));
+    }
+
+    const aFrameOf = async (): Promise<void> =>
+      new Promise((done) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => done()));
+      });
 
     /** A run with something in it, with the picture of it open. */
     async function aRunToLookAt(): Promise<ReturnType<typeof createRig>> {
@@ -2691,32 +2840,38 @@ describe('AppView', () => {
     }
 
     it('runs the music past a standing cursor when it is asked to, instead of nudging the view', async () => {
-      const rig = await aRunToLookAt();
-      const lent = lendTheDrawingAScroller(1_000);
+      const lent = lendTheDrawingAScroller();
       try {
+        const rig = await aLongRunWithTheHeadFarIn();
         rig.runtime.controller.updateSettings({ rollScrollPlayback: true });
 
         element<HTMLButtonElement>('roll-play').click();
+        await aFrameOf();
 
-        // The head stands 15% of the way across the music - the 360 pixels
-        // the keys leave of the 400 - and the music is scrolled under it,
-        // rather than the view being nudged when the head nears its edge,
-        // which at speed is a series of jumps.
-        expect(lent.scrolledTo()).toBe(946);
+        // The head stands 15% of the way across the 360 pixels of music, and
+        // the music is scrolled under it, rather than the view being nudged
+        // when the head nears its edge, which at speed is a series of jumps.
+        expect(lent.headPx()).toBeGreaterThan(500);
+        expect(lent.scrolledTo()).toBe(Math.round(lent.headPx() - 360 * 0.15));
       } finally {
         lent.giveBack();
       }
     });
 
     it('nudges the view instead where it has not been asked to', async () => {
-      const rig = await aRunToLookAt();
-      const lent = lendTheDrawingAScroller(1_000);
+      const lent = lendTheDrawingAScroller();
       try {
+        const rig = await aLongRunWithTheHeadFarIn();
         expect(rig.runtime.controller.settings.rollScrollPlayback).toBe(false);
 
         element<HTMLButtonElement>('roll-play').click();
+        await aFrameOf();
 
-        expect(lent.scrolledTo()).toBe(900);
+        // Past the front three quarters of the view, so put a quarter of the
+        // way in.
+        expect(lent.headPx()).toBeGreaterThan(270);
+        // To the pixel, the head's place being said to a thousandth of a second.
+        expect(lent.scrolledTo()).toBeCloseTo(lent.headPx() - 360 * 0.25, 0);
       } finally {
         lent.giveBack();
       }
@@ -2727,8 +2882,8 @@ describe('AppView', () => {
       async (runsPast) => {
         // His: "ми ставимо на паузу MIDI viewer коли я роблю скрол - я думаю
         // що не варто це робити". A scroll is looking, not stopping.
+        const lent = lendTheDrawingAScroller();
         const rig = await aRunToLookAt();
-        const lent = lendTheDrawingAScroller(1_000);
         try {
           rig.runtime.controller.updateSettings({ rollScrollPlayback: runsPast });
           element<HTMLButtonElement>('roll-play').click();
@@ -2768,20 +2923,22 @@ describe('AppView', () => {
     });
 
     it('stands the cursor as far in as it is asked to, and moves it there at once', async () => {
-      const rig = await aRunToLookAt();
-      const lent = lendTheDrawingAScroller(1_000);
+      const lent = lendTheDrawingAScroller();
       try {
+        const rig = await aLongRunWithTheHeadFarIn();
         rig.runtime.controller.updateSettings({ rollScrollPlayback: true });
         element<HTMLButtonElement>('roll-play').click();
-        expect(lent.scrolledTo()).toBe(946);
+        await aFrameOf();
+        expect(lent.scrolledTo()).toBe(Math.round(lent.headPx() - 360 * 0.15));
 
         const slider = element<HTMLInputElement>('roll-head-at');
         slider.value = '50';
         slider.dispatchEvent(new Event('input'));
+        await aFrameOf();
 
         // Half of the 360 pixels of music, while it plays rather than from
         // the next time it is started.
-        expect(lent.scrolledTo()).toBe(820);
+        expect(lent.scrolledTo()).toBe(Math.round(lent.headPx() - 180));
         expect(element<HTMLOutputElement>('roll-head-at-value').value).toBe('50');
       } finally {
         lent.giveBack();
@@ -2950,7 +3107,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
-      const grid = element('roll-body').querySelector<HTMLElement>('.roll__grid > .roll__tiles');
+      const grid = element('roll-body').querySelector<HTMLElement>('.roll__grid > .roll__paint');
       const note = view.rollScene?.notes[0];
       if (grid === null || note === undefined) {
         throw new Error('expected a painted note to point at');
@@ -2975,30 +3132,24 @@ describe('AppView', () => {
       expect(grid.title).toBe('');
     });
 
-    it('paints the tiles again when the zoom changes, not when a scroll needs none, and once a frame', async () => {
-      // A scroll is the page's to do, with the tiles on it: painting on every
-      // step of one put the notes a frame behind the head, in jerks. His: "скрол
-      // йде з ривками, але курсор скролиться нормально".
-      const painted = new Set<HTMLCanvasElement>();
-      let paintings = 0;
+    it('paints the three canvases in the frame after a scroll or a zoom, once however many ask', async () => {
+      // One place for the view, and the drawing, the head and the keys all put
+      // where it says in one frame: painted as the page scrolled, the notes
+      // went behind the head in jerks. His: "скрол йде з ривками, але курсор
+      // скролиться нормально".
+      const painted: string[] = [];
       const sizes: Record<string, (node: HTMLElement) => number> = {
-        clientWidth: (node) => (node.classList.contains('roll') ? 400 : node.classList.contains('roll__keys') ? 44 : 0),
-        clientHeight: (node) => {
-          if (node.classList.contains('roll')) {
-            return 300;
-          }
-          // Where a lane holds its tiles, which is the lane inside its border.
-          const lane = node.classList.contains('roll__tiles') ? node.parentElement : null;
-          return lane?.classList.contains('roll__ruler') === true
-            ? 19
-            : lane?.classList.contains('roll__pedal') === true
-              ? 15
-              : 0;
-        },
-        offsetHeight: (node) =>
-          node.classList.contains('roll__ruler') ? 20 : node.classList.contains('roll__pedal') ? 16 : 0,
+        clientWidth: (node) => (node.classList.contains('roll__grid') ? 300 : 0),
+        clientHeight: (node) =>
+          node.classList.contains('roll__grid')
+            ? 150
+            : node.classList.contains('roll__ruler')
+              ? 19
+              : node.classList.contains('roll__pedal')
+                ? 15
+                : 0,
       };
-      const lent = [...Object.keys(sizes), 'scrollLeft'].map(
+      const lent = Object.keys(sizes).map(
         (name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const,
       );
       for (const [name, size] of Object.entries(sizes)) {
@@ -3009,32 +3160,16 @@ describe('AppView', () => {
           },
         });
       }
-      // A scroller that remembers where it was put.
-      const scrolled = new WeakMap<HTMLElement, number>();
-      Object.defineProperty(HTMLElement.prototype, 'scrollLeft', {
-        configurable: true,
-        get(this: HTMLElement) {
-          return scrolled.get(this) ?? 0;
-        },
-        set(this: HTMLElement, to: number) {
-          scrolled.set(this, to);
-        },
-      });
       const context = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
         this: HTMLCanvasElement,
       ) {
+        const lane = this.parentElement?.className ?? '';
         // A canvas that takes every stroke and keeps only that it was cleared,
         // which a painting does once.
         return new Proxy(
           {},
           {
-            get: (_target, name) =>
-              name === 'clearRect'
-                ? () => {
-                    painted.add(this);
-                    paintings += 1;
-                  }
-                : () => undefined,
+            get: (_target, name) => (name === 'clearRect' ? () => painted.push(lane) : () => undefined),
             set: () => true,
           },
         ) as unknown as RenderingContext;
@@ -3053,52 +3188,29 @@ describe('AppView', () => {
         metronome.advanceSubdivisions(48);
         element<HTMLButtonElement>('focus-stop').click();
         element<HTMLButtonElement>('run-roll-open').click();
-        // The tiles on the screen in the frame after, and the ones kept ready
-        // in the frame after that.
         await frame();
-        await frame();
-        const tiles = (): number => element('roll-body').querySelectorAll('.roll__tile').length;
-        // The grid, the ruler and the pedal lane, each painted once.
-        expect(element('roll-body').querySelectorAll('.roll__grid .roll__tile').length).toBeGreaterThan(0);
-        expect(element('roll-body').querySelectorAll('.roll__ruler .roll__tile').length).toBeGreaterThan(0);
-        expect(paintings).toBe(tiles());
+        const each = ['roll__grid', 'roll__pedal', 'roll__ruler'];
+        expect([...new Set(painted)].sort()).toEqual(each);
 
-        paintings = 0;
-        const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
-        for (let each = 0; each < 5; each += 1) {
-          drawn?.dispatchEvent(new Event('scroll'));
+        painted.length = 0;
+        for (let turn = 0; turn < 5; turn += 1) {
+          element('roll-body').dispatchEvent(
+            new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 10 }),
+          );
         }
+        // Not until the frame, and then once.
+        expect(painted).toEqual([]);
         await frame();
-        expect(paintings).toBe(0);
+        expect([...painted].sort()).toEqual(each);
 
-        paintings = 0;
-        painted.clear();
+        painted.length = 0;
         const zoom = element<HTMLInputElement>('roll-zoom');
         for (const asked of ['200', '210']) {
           zoom.value = asked;
           zoom.dispatchEvent(new Event('input', { bubbles: true }));
         }
         await frame();
-        await frame();
-        // Every tile up painted again, and once, however many times it was asked.
-        expect(paintings).toBe(tiles());
-        expect(painted.size).toBe(tiles());
-
-        // And a scroll far along puts up the tiles it comes to.
-        paintings = 0;
-        const far = ((view.rollScene?.lengthMs ?? 0) / 1000) * 210 - 400;
-        expect(far).toBeGreaterThan(2000);
-        if (drawn !== null) {
-          drawn.scrollLeft = far;
-          drawn.dispatchEvent(new Event('scroll'));
-        }
-        await frame();
-        expect(paintings).toBeGreaterThan(0);
-        const lefts = [...element('roll-body').querySelectorAll<HTMLElement>('.roll__grid .roll__tile')].map(
-          (tile) => Number.parseFloat(tile.style.left),
-        );
-        expect(Math.max(...lefts)).toBeGreaterThan(far - 256);
-        expect(Math.min(...lefts)).toBeGreaterThan(0);
+        expect([...painted].sort()).toEqual(each);
       } finally {
         context.mockRestore();
         for (const [name, descriptor] of lent) {
@@ -3400,8 +3512,7 @@ describe('AppView', () => {
       finger('pointermove', 2, 200);
 
       expect(element<HTMLInputElement>('roll-zoom').value).toBe('280');
-      expect(drawn?.style.getPropertyValue('--roll-second')).toBe('280px');
-      // And the head's two marks told as well, since it is not handed down to them.
+      // And the head's two marks told, which are what it places.
       for (const mark of drawn?.querySelectorAll<HTMLElement>('.roll__head, .roll__head-mark') ?? []) {
         expect(mark.style.getPropertyValue('--roll-second')).toBe('280px');
       }
@@ -3828,9 +3939,8 @@ describe('AppView', () => {
       expect(element('result').querySelector('#run-roll-open')).toBeNull();
     });
 
-    it('zooms the drawing by the one property it is laid out in', async () => {
-      // Which is why zooming is a property changing rather than a redraw: the
-      // browser moves every note, line and label from the same numbers.
+    it('zooms the head with the drawing', async () => {
+      // The drawing is painted at the zoom; the head is placed by it.
       const { view, runtime, midi } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-play').click();
@@ -3844,7 +3954,10 @@ describe('AppView', () => {
       zoom.dispatchEvent(new Event('input', { bubbles: true }));
 
       const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
-      expect(drawn?.style.getPropertyValue('--roll-second')).toBe('320px');
+      for (const mark of drawn?.querySelectorAll<HTMLElement>('.roll__head, .roll__head-mark') ?? []) {
+        expect(mark.style.getPropertyValue('--roll-second')).toBe('320px');
+      }
+      expect(drawn?.querySelectorAll('.roll__head, .roll__head-mark')).toHaveLength(2);
     });
 
     it('offers the last reading once it is no longer on screen', async () => {

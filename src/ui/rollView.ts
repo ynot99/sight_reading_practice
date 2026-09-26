@@ -14,7 +14,6 @@ import {
   type RunRoll,
 } from '../application/session/RunRoll.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
-import type { RollLanes } from './rollTiles.js';
 
 /**
  * What the drawing needs beyond the roll itself.
@@ -106,18 +105,6 @@ const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 
 function isBlack(midi: number): boolean {
   return BLACK_KEYS.has(((midi % 12) + 12) % 12);
-}
-
-/**
- * A length of time as a CSS length, in terms of the zoom.
- *
- * Every position in the drawing is written this way, so zooming is one custom
- * property changing and not a redraw: the browser recomputes the whole grid
- * from the same numbers. Seconds rather than milliseconds only to keep the
- * numbers legible in the markup.
- */
-function atSecond(ms: number): string {
-  return `calc(var(--roll-second) * ${(ms / 1000).toFixed(4)})`;
 }
 
 function atRow(row: number): string {
@@ -866,6 +853,9 @@ export function thePitchesOfTheRun(
   for (const { ghost, from, until } of placedGhosts(roll, ghosts)) {
     notes.push({ row: band.high - ghost.midi, fromMs: from, untilMs: until, kind: 'plain' });
   }
+  // In time order, so the stretch on the screen is found rather than walked
+  // to: see `theMapOfThePitches`.
+  notes.sort((left, right) => left.fromMs - right.fromMs);
   return { rows: band.high - band.low + 1, lengthMs: endMs - origin, notes };
 }
 
@@ -893,10 +883,9 @@ export function theMapOfThePitches(
   const fromMs = inView.fromShare * pitches.lengthMs;
   const untilMs = (inView.fromShare + inView.widthShare) * pitches.lengthMs;
   const rows = new Map<number, PitchMarkKind>();
-  for (const note of pitches.notes) {
-    if (note.untilMs < fromMs || note.fromMs > untilMs) {
-      continue;
-    }
+  // Found rather than walked: this is asked on every frame the view moves, and
+  // a run of a long piece is tens of thousands of notes.
+  for (const note of stretchesIn(pitches.notes, fromMs, untilMs)) {
     const had = rows.get(note.row);
     if (had === undefined || HOW_TELLING[note.kind] > HOW_TELLING[had]) {
       rows.set(note.row, note.kind);
@@ -1067,9 +1056,15 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
  * begins long before the screen does and is still on it, and a search on
  * beginnings alone would lose it.
  */
-const reaches = new WeakMap<readonly SceneStretch[], Float64Array>();
+/** Anything that lasts from one moment of the run to another. */
+interface Lasting {
+  readonly fromMs: number;
+  readonly untilMs: number;
+}
 
-function reachOf(marks: readonly SceneStretch[]): Float64Array {
+const reaches = new WeakMap<readonly Lasting[], Float64Array>();
+
+function reachOf(marks: readonly Lasting[]): Float64Array {
   const known = reaches.get(marks);
   if (known !== undefined) {
     return known;
@@ -1106,7 +1101,7 @@ function firstFrom(length: number, valueAt: (at: number) => number, atLeast: num
  * marks and a screen shows a few hundred of them, so walking the whole list on
  * every frame of a scroll was the cost of the drawing, whatever was on it.
  */
-export function stretchesIn<T extends SceneStretch>(
+export function stretchesIn<T extends Lasting>(
   marks: readonly T[],
   fromMs: number,
   untilMs: number,
@@ -1216,34 +1211,29 @@ export function rowFromTap(offsetPx: number, rowPx: number): number | null {
 }
 
 /**
- * The frame a run is painted into: the keys, and three lanes for its tiles.
+ * The frame a run is painted into: a ruler, the keys, the grid and a lane for
+ * the pedal, in a box that does not scroll.
  *
- * One scroll container holding a ruler that sticks to the top, a column of
- * keys that sticks to the left, the grid, and a lane for the pedal. The run
- * was drawn into them as an element a mark, every one placed by the zoom: at
- * five thousand notes a zoom took most of a second a frame and opening the run
- * a second, because every mark of the run was laid out whether it was on the
- * screen or not. His, of Signal: "Як Signal MIDI аплікуха малює все без
- * підлагувань?" - by painting only what is on the screen. The lanes are
- * painted in tiles, near the screen and nowhere else: see `RollTiles`.
- *
- * Each lane is still an element the length of the run, so the scroller has
- * something to scroll and a tap has somewhere to land; the grid holds nothing
- * but its tiles and the head.
+ * The run was an element a mark, then a canvas the page scrolled under, then
+ * tiles the page scrolled; each was the page moving the run on its own while
+ * something else caught up with it. His, of Signal: "в Signal великий canvas
+ * скролиться дуже швидко... а в нас коли я скролю - я вже бачу як це все
+ * перемальовується". So the place is kept by `RollScroller`, and the three
+ * lanes are canvases painted from it; the keys and the head are moved by it,
+ * in the same frame.
  */
 export function drawTheRoll(scene: RollScene): HTMLElement {
   const view = element('div', 'roll');
   view.style.setProperty('--roll-rows', String(scene.rows));
-  view.style.setProperty('--roll-length', atSecond(scene.lengthMs));
 
   const ruler = element('div', 'roll__ruler');
   // The head, marked on the strip that names the bars: its line is drawn in
   // the grid and stops where the ruler begins. His: "на ruler теж додати мітку
-  // над курсором". Placed by the same custom property as the head, so it
-  // follows without a line of its own.
-  ruler.append(element('div', 'roll__tiles'), element('div', 'roll__head-mark'));
+  // над курсором".
+  ruler.append(element('canvas', 'roll__paint'), element('div', 'roll__head-mark'));
 
   const keys = element('div', 'roll__keys');
+  const strip = element('div', 'roll__keys-strip');
   for (let row = 0; row < scene.rows; row += 1) {
     const midi = scene.highest - row;
     const key = element('div', `roll__key${isBlack(midi) ? ' roll__key--black' : ''}`);
@@ -1251,25 +1241,36 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
     // Named only where the name is worth the room: every C, so the eye has
     // somewhere to land, and the black keys by their shape alone.
     key.textContent = midi % 12 === 0 ? midiToLabel(midi) : '';
-    keys.append(key);
+    strip.append(key);
   }
+  keys.append(strip);
 
   const grid = element('div', 'roll__grid');
-  // Where a playback has got to, moved by one custom property so following a
-  // performance costs one write a frame rather than a redraw.
-  grid.append(element('div', 'roll__tiles'), element('div', 'roll__head'));
+  grid.append(element('canvas', 'roll__paint'), element('div', 'roll__head'));
 
   const pedal = element('div', 'roll__pedal');
-  pedal.append(element('div', 'roll__tiles'));
+  pedal.append(element('canvas', 'roll__paint'));
 
   view.append(ruler, keys, grid, pedal);
   return view;
 }
 
-/** Where a drawing's three lanes hold their tiles, or `null` where nothing has been drawn. */
-export function theLanesOf(within: ParentNode): RollLanes | null {
-  const ruler = within.querySelector<HTMLElement>('.roll__ruler > .roll__tiles');
-  const grid = within.querySelector<HTMLElement>('.roll__grid > .roll__tiles');
-  const pedal = within.querySelector<HTMLElement>('.roll__pedal > .roll__tiles');
+/** The three canvases a drawing is painted on. */
+export interface RollCanvases {
+  readonly ruler: HTMLCanvasElement;
+  readonly grid: HTMLCanvasElement;
+  readonly pedal: HTMLCanvasElement;
+}
+
+/** A drawing's canvases, or `null` where nothing has been drawn. */
+export function theCanvasesOf(within: ParentNode): RollCanvases | null {
+  const ruler = within.querySelector<HTMLCanvasElement>('.roll__ruler > .roll__paint');
+  const grid = within.querySelector<HTMLCanvasElement>('.roll__grid > .roll__paint');
+  const pedal = within.querySelector<HTMLCanvasElement>('.roll__pedal > .roll__paint');
   return ruler === null || grid === null || pedal === null ? null : { ruler, grid, pedal };
+}
+
+/** The column of keys' moving strip, which the view moves up and down. */
+export function theKeysStripOf(within: ParentNode): HTMLElement | null {
+  return within.querySelector<HTMLElement>('.roll__keys-strip');
 }

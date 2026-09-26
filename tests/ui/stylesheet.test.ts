@@ -69,9 +69,12 @@ describe('the stylesheet', () => {
     // only says what they are until they arrive. Asked per *occurrence* and not
     // per name, because one rule spelling a fallback does not make every other
     // use of that name safe - which is exactly how `--muted` slipped through.
-    const defined = new Set(
-      [...CSS.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1] ?? ''),
-    );
+    // A property registered with `@property` has a value of its own until one
+    // is set, which is what it is registered for.
+    const defined = new Set([
+      ...[...CSS.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1] ?? ''),
+      ...[...CSS.matchAll(/@property\s+(--[a-z0-9-]+)/g)].map((match) => match[1] ?? ''),
+    ]);
     const bare = [...CSS.matchAll(/var\(\s*(--[a-z0-9-]+)\s*([,)])/g)]
       .filter((match) => match[2] === ')')
       .map((match) => match[1] ?? '');
@@ -126,23 +129,20 @@ describe('the stylesheet', () => {
     }
   });
 
-  it('leaves the drawing of a run no scrollbars of its own', () => {
-    // The map under it is the one. They answered the same question and the map
-    // answers it better - it says where in the run the view is *and* where the
-    // reader stopped - and two strips for one question is also two strips of a
-    // drawing's height. Said in both spellings for the reason above, and here
-    // that matters more than dressing: new Chromium reads the standard property
-    // and then ignores the pseudo-elements entirely, so a rule written only in
-    // WebKit's spelling would leave the bar showing on the desk. His: "може
-    // варто горизонтальний скрол замінити на minimap?".
+  it('leaves the drawing of a run no scrollbars, since it does not scroll', () => {
+    // The maps under it and beside it are its scrollbars, and they answer the
+    // question better: where in the run the view is *and* where the reader
+    // stopped. His: "може варто горизонтальний скрол замінити на minimap?".
+    // The place itself is kept by the program and not by the page, which
+    // scrolled a frame ahead of anything painted to follow it.
     const roll = rules().find((rule) => rule.selector === '.roll');
-    const webkit = rules().find((rule) => rule.selector === '.roll::-webkit-scrollbar');
 
-    expect(roll?.body).toMatch(/scrollbar-width\s*:\s*none/);
-    expect(webkit?.body).toMatch(/height\s*:\s*0/);
-    // And the scrolling itself is untouched: the wheel, the trackpad and a
-    // finger all still move it, which is what `overflow: auto` says.
-    expect(roll?.body).toMatch(/overflow\s*:\s*auto/);
+    expect(roll?.body).toMatch(/overflow\s*:\s*hidden/);
+    expect(rules().some((rule) => rule.selector.startsWith('.roll::-webkit-scrollbar'))).toBe(false);
+    // And each lane keeps what is painted in it to itself.
+    for (const lane of ['.roll__ruler', '.roll__keys', '.roll__grid', '.roll__pedal']) {
+      expect(rules().find((rule) => rule.selector === lane)?.body, lane).toMatch(/overflow\s*:\s*hidden/);
+    }
   });
 
   it('stands the map against the drawing, in the place the bar had', () => {
@@ -1118,10 +1118,12 @@ describe('nothing on this page pulls', () => {
     expect(root?.body).toContain('overscroll-behavior: none');
   });
 
-  it('stops a drag off the end of the run from reaching the page', () => {
+  it('keeps a finger on the drawing from moving the page', () => {
+    // Every finger on it is the drawing's: one scrolls it and two zoom it, and
+    // neither is handed on to the page.
     const roll = rules().find((rule) => rule.selector === '.roll');
 
-    expect(roll?.body).toContain('overscroll-behavior: contain');
+    expect(roll?.body).toContain('touch-action: none');
   });
 });
 
@@ -1151,33 +1153,33 @@ describe('the inks the MIDI viewer is painted in', () => {
   });
 });
 
-describe('the zoom of the MIDI viewer', () => {
-  it('is the drawing’s own, and not handed down to everything in it', () => {
+describe('the zoom and the place of the MIDI viewer', () => {
+  it('are set where they place something, and handed down to nothing else', () => {
     // Handed down, every step of a pinch was a new style for every key down
-    // the drawing's side, which was most of what a zoom cost.
-    for (const name of ['--roll-second', '--roll-length']) {
+    // the drawing's side, which was most of what a zoom cost - and a scroll
+    // sets the place on every frame.
+    for (const name of ['--roll-second', '--roll-x', '--roll-y']) {
       const registered = rules().find((rule) => rule.selector === `@property ${name}`)?.body ?? '';
       expect(registered, name).toMatch(/inherits:\s*false/);
     }
   });
 });
 
-describe('the tiles the run is painted in', () => {
-  it('are placed in their lane and scrolled with it, as the head is', () => {
-    // Stuck to the screen and painted again for every step of a scroll, the
-    // notes went a frame behind the head, in jerks.
-    const tile = rules().find((rule) => rule.selector === '.roll__tile')?.body ?? '';
+describe('the canvases the run is painted on', () => {
+  it('fill their lanes, which stand still while the view moves', () => {
+    const paint = rules().find((rule) => rule.selector === '.roll__paint')?.body ?? '';
 
-    expect(tile).toMatch(/position:\s*absolute/);
-    expect(tile).not.toMatch(/sticky/);
+    expect(paint).toMatch(/position:\s*absolute/);
+    expect(paint).toMatch(/inset:\s*0/);
   });
 
-  it('are held in a box closed off from the page, so putting one up lays out only the box', () => {
-    // Measured, a tile's worth of change was a layout of the whole page.
-    const layer = rules().find((rule) => rule.selector === '.roll__tiles')?.body ?? '';
+  it('move the keys and the head by the place the view stands at', () => {
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
 
-    expect(layer).toMatch(/contain:\s*strict/);
-    expect(layer).toMatch(/inset:\s*0/);
+    expect(body('.roll__keys-strip')).toMatch(/translateY\(calc\(-1 \* var\(--roll-y\)\)\)/);
+    expect(body('.roll__head')).toContain('- var(--roll-x)');
+    expect(body('.roll__head-mark')).toContain('- var(--roll-x)');
   });
 });
 
@@ -1220,13 +1222,13 @@ describe('how fine the grid reads', () => {
 });
 
 describe('who gets the pinch', () => {
-  it('names the pans, which is what hands two fingers to the drawing', () => {
+  it('hands every finger to the drawing, which is what gives it the pinch', () => {
     // Left to the browser a pinch magnifies the whole document, which on a
     // tablet leaves the reader zoomed into a corner of an application with no
     // way back that they asked for.
     const roll = rules().find((rule) => rule.selector === '.roll');
 
-    expect(roll?.body).toContain('touch-action: pan-x pan-y');
+    expect(roll?.body).toContain('touch-action: none');
   });
 });
 

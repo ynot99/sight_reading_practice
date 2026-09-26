@@ -37,6 +37,7 @@ import type { PracticeAttempt } from '../../src/application/PracticeHistory.js';
 import {
   beatsWorthMarking,
   rollBeganAtMs,
+  rollEndedAtMs,
   theMusicsBeats,
 } from '../../src/application/session/RunRoll.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
@@ -2643,6 +2644,52 @@ describe('AppView', () => {
       // Moved rather than placed, so that following a playback costs no layout.
       expect(element('roll-map-head').style.transform).toBe('translateX(0.000%)');
       expect(element('roll-map-head').style.left).toBe('');
+    });
+
+    it('keeps the map in one column with the drawing, which the sheet does not space', async () => {
+      // The map is the drawing's bottom edge, as the pitch map is its right
+      // one; as a row of the sheet it had the sheet's gap above it. His: "між
+      // MIDI viewer та горизонтальним minimap є gap який хочеться прибрати".
+      const column = element('roll-map').parentElement;
+
+      expect(column?.classList.contains('roll-frame')).toBe(true);
+      expect(document.querySelector('.roll-stage')?.parentElement).toBe(column);
+    });
+
+    it('moves the marker on the map with the head, however late the run was played', async () => {
+      // The map places everything on the clock the run was played by, and the
+      // head counts from the run's own nought: a run played a minute into the
+      // session had its head read as a minute before it began, and held at the
+      // left edge. His: "курсор на ньому не оновлюється, а завжди стоїть на
+      // самому початку".
+      const { view, runtime, midi, clock } = createRig();
+      await view.initialize();
+      clock.advance(60_000);
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, clock.now());
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      const roll = runtime.controller.lastRoll;
+      if (roll === null) {
+        throw new Error('expected a run to have been written down');
+      }
+      expect(rollBeganAtMs(roll)).toBeGreaterThan(50_000);
+
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(400);
+        vi.advanceTimersByTime(100);
+      } finally {
+        vi.useRealTimers();
+      }
+
+      const share = 400 / (rollEndedAtMs(roll) - rollBeganAtMs(roll));
+      expect(element('roll-map-head').style.transform).toBe(
+        `translateX(${(share * 100).toFixed(3)}%)`,
+      );
+      element<HTMLButtonElement>('roll-stop').click();
     });
 
     it('chooses a passage out of the picture, and goes to it', async () => {

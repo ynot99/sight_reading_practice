@@ -1054,6 +1054,21 @@ textarea {
 }
 
 /*
+ * The drawing and the map under it, as one thing.
+ *
+ * The sheet spaces its rows apart, and the map is not a row of the sheet: it is
+ * the drawing's bottom edge, as the pitch map is its right one. Apart, the
+ * sheet's gap stood between them - ten pixels the pitch map never had. His:
+ * "між MIDI viewer та горизонтальним minimap є gap який хочеться прибрати".
+ */
+.roll-frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/*
  * Where the drawing stands, so something can float over it.
  *
  * A place and not a variant of the drawing: the squares are laid against this
@@ -1232,10 +1247,18 @@ textarea {
   will-change: transform;
 }
 
+/*
+ * A pixel in from the map's edges across it, and not flush with them.
+ *
+ * The map clips what it holds, and a box whose border lies on the clip's own
+ * edge loses that border to the rounding wherever the edge falls between two
+ * device pixels - at a screen scale of 1.25 it does. His: "не видно нижній
+ * border". Along the map it moves, and there it is as wide as the view is.
+ */
 .roll-map__window {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 1px;
+  bottom: 1px;
   left: 0;
   border: 1px solid var(--accent);
   border-radius: 3px;
@@ -1297,11 +1320,12 @@ textarea {
   background: var(--wrong);
 }
 
+/* A pixel in from the edges across it, for the reason the map's box is. */
 .roll-pitch-map__window {
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
+  left: 1px;
+  right: 1px;
   border: 1px solid var(--accent);
   border-radius: 3px;
   background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -1507,6 +1531,9 @@ textarea {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  /* Square along the bottom, where the map stands against it with no gap. */
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .roll__ruler {

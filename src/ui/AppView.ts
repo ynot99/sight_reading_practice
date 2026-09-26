@@ -7962,7 +7962,14 @@ export class AppView {
     // written to on every tick of a playback, and `left` is a layout each time.
     // The element is as wide as the map and all of it is transparent but its
     // left edge, so a share of the map is a share of the element.
-    const share = shareOfTheRun(roll, this.headIsAtMs());
+    //
+    // On the clock the run was played by, which is what every mark on the map
+    // is placed on: the head counts from the run's own nought. Handed over as
+    // it was, it read as a moment long before the run began - a minute into a
+    // session, a minute before - and was held at the left edge whatever it
+    // did. His: "курсор на ньому не оновлюється, а завжди стоїть на самому
+    // початку".
+    const share = shareOfTheRun(roll, rollBeganAtMs(roll) + this.headIsAtMs());
     this.el.rollMapHead.style.transform = `translateX(${(share * 100).toFixed(3)}%)`;
   }
 

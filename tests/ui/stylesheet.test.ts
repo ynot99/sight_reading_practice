@@ -155,6 +155,29 @@ describe('the stylesheet', () => {
     // Square where it meets the drawing, rounded where it does not.
     expect(map?.body).toMatch(/border-top-left-radius\s*:\s*0/);
     expect(map?.body).toMatch(/border-top-right-radius\s*:\s*0/);
+    // And in one column with it, which the sheet's own gap does not reach: no
+    // margin was not enough, the sheet spaced the two apart all the same.
+    // His: "між MIDI viewer та горизонтальним minimap є gap".
+    const frame = rules().find((rule) => rule.selector === '.roll-frame')?.body ?? '';
+    expect(frame).toMatch(/flex-direction\s*:\s*column/);
+    expect(frame).not.toMatch(/gap/);
+    // Square on the drawing's side of the join too, or its rounded corner
+    // stands over the map's square one.
+    const drawing = rules().find((rule) => rule.selector === '.roll')?.body ?? '';
+    expect(drawing).toMatch(/border-bottom-left-radius\s*:\s*0/);
+    expect(drawing).toMatch(/border-bottom-right-radius\s*:\s*0/);
+  });
+
+  it('keeps the boxes on the maps off the edges across them', () => {
+    // A border lying on the clip's own edge is lost to the rounding wherever
+    // that edge falls between device pixels. His: "не видно нижній border".
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    expect(body('.roll-map__window')).toMatch(/top\s*:\s*1px/);
+    expect(body('.roll-map__window')).toMatch(/bottom\s*:\s*1px/);
+    expect(body('.roll-pitch-map__window')).toMatch(/left\s*:\s*1px/);
+    expect(body('.roll-pitch-map__window')).toMatch(/right\s*:\s*1px/);
   });
 
   it('gives the corner of the page one line, not a ragged one', () => {

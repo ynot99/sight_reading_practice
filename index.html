@@ -450,6 +450,12 @@
             viewer десь зверху? Буде перекривати трішки, але це буде займати
             меньше місця".
           -->
+          <!--
+            The drawing and the map under it, as one thing: the map is the
+            drawing's bottom edge, as the pitch map is its right one, and not a
+            row of the sheet with the sheet's space between.
+          -->
+          <div class="roll-frame">
           <div class="roll-stage">
             <div id="roll-body" class="roll-body"></div>
             <!--
@@ -486,6 +492,7 @@
           <div id="roll-map" class="roll-map" title="The whole run. Drag to move the view.">
             <div id="roll-map-window" class="roll-map__window" hidden></div>
             <div id="roll-map-head" class="roll-map__head"></div>
+          </div>
           </div>
           <!--
             Choosing what to practise out of the picture of what happened.

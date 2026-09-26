@@ -2709,16 +2709,15 @@ describe('AppView', () => {
         const left = renderer.played.length;
         expect(left).toBeGreaterThan(0);
 
-        element<HTMLButtonElement>('run-replay').click();
-
-        expect(runtime.controller.replaying).toBe(true);
-        expect(element('score-verdict').hidden).toBe(true);
-        expect(renderer.played).toEqual([]);
-        expect(element('focus-play').getAttribute('aria-label')).toBe('Start');
-
         vi.useFakeTimers();
         try {
-          element<HTMLButtonElement>('focus-play').click();
+          element<HTMLButtonElement>('run-replay').click();
+
+          expect(runtime.controller.replaying).toBe(true);
+          expect(element('score-verdict').hidden).toBe(true);
+          expect(renderer.played).toEqual([]);
+          // Going at once, as pressing the button asked. His: "коли я починаю
+          // "see replay" - я думаю що варто запускати replay автоматично".
           expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
           // Up to just past the first chord, a second in: its marks, and no more.
           clock.advance(1_100);
@@ -2758,16 +2757,15 @@ describe('AppView', () => {
         const keys = element('replay-keys');
         expect(keys.hidden).toBe(true);
 
-        element<HTMLButtonElement>('run-replay').click();
-
-        expect(keys.hidden).toBe(false);
-        expect(document.body.dataset['replaying']).toBe('true');
-        expect(keys.querySelectorAll('[data-midi]')).toHaveLength(88);
-        expect(keys.querySelector('[data-shade]')).toBeNull();
-
         vi.useFakeTimers();
         try {
-          element<HTMLButtonElement>('focus-play').click();
+          element<HTMLButtonElement>('run-replay').click();
+
+          expect(keys.hidden).toBe(false);
+          expect(document.body.dataset['replaying']).toBe('true');
+          expect(keys.querySelectorAll('[data-midi]')).toHaveLength(88);
+          expect(keys.querySelector('[data-shade]')).toBeNull();
+
           rig.clock.advance(1_100);
           vi.advanceTimersByTime(100);
 
@@ -2783,6 +2781,35 @@ describe('AppView', () => {
         expect(keys.hidden).toBe(true);
         expect(document.body.dataset['replaying']).toBeUndefined();
         expect(keys.querySelector('[data-shade]')).toBeNull();
+      });
+
+      it('leaves nothing going behind it when the page is put away', async () => {
+        const { view } = await aRunPlayed();
+        vi.useFakeTimers();
+        try {
+          element<HTMLButtonElement>('run-replay').click();
+          expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+          view.dispose();
+
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('takes the keyboard away with the replay, whatever ended it', async () => {
+        // Another piece opened ends one too, and the keyboard stayed up with
+        // Stop greyed out. His: "як я вмикаю replay - то нема шляху позбутися
+        // намальованого піаніно".
+        const { runtime } = await aRunPlayed();
+        element<HTMLButtonElement>('run-replay').click();
+        expect(element('replay-keys').hidden).toBe(false);
+
+        await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60, title: 'Another' }));
+
+        expect(element('replay-keys').hidden).toBe(true);
+        expect(document.body.dataset['replaying']).toBeUndefined();
       });
 
       it('sets how fast it is played back with the tempo buttons, and gives them back after', async () => {

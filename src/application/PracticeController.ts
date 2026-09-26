@@ -652,6 +652,17 @@ export interface ControllerEventMap {
    */
   sessionDiscarded: Record<string, never>;
   /**
+   * A run shown again on the page is over, however it ended.
+   *
+   * Stop ends one, and so does anything that takes the page for something
+   * else: another piece opened, a run begun, a performance started. The view
+   * puts a keyboard under a replay and raises the bar over it, and hearing
+   * only of Stop it left both standing, with a Stop greyed out because there
+   * was nothing left to end. His: "як я вмикаю replay - то нема шляху
+   * позбутися намальованого піаніно".
+   */
+  replayEnded: Record<string, never>;
+  /**
    * Whether the engraver is drawing a page right now.
    *
    * Seconds on a long score, and more of them since the bars can be ruled:
@@ -1383,6 +1394,8 @@ export class PracticeController {
     this.openedScore = null;
     this.forgetThePassage();
     this.endThePerformance();
+    // And so were these: a new exercise is other notes.
+    this.dropTheReplay();
     return this.load(undefined);
   }
 
@@ -1450,7 +1463,7 @@ export class PracticeController {
     this.openedScore = exercise;
     this.endThePerformance();
     // Its marks were of the piece that was open.
-    this.replay = null;
+    this.dropTheReplay();
     // Nothing to adopt: the file brings the tempo it is written at, which is
     // what 100% means - and a piece just opened is read at what it says
     // until the reader says otherwise.
@@ -1760,7 +1773,7 @@ export class PracticeController {
     // Each performance is its own: marks left from the last one would be the
     // page answering a question nobody has asked yet.
     this.deps.overlay.clearPlayed();
-    this.replay = null;
+    this.dropTheReplay();
     // Something is happening to the music now, so a press is a press and not
     // the beginning of a run.
     this.watchForTheOpening();
@@ -2129,6 +2142,19 @@ export class PracticeController {
     this.replay = null;
     this.applyCursorVisibility();
     this.watchForTheOpening();
+    this.emitter.emit('replayEnded', {});
+  }
+
+  /**
+   * Lets a replay go without putting its marks back: the page it was shown on
+   * is being taken for something else, which clears it.
+   */
+  private dropTheReplay(): void {
+    if (this.replay === null) {
+      return;
+    }
+    this.replay = null;
+    this.emitter.emit('replayEnded', {});
   }
 
   /** Whether a run is being shown again on the page. */
@@ -2815,7 +2841,7 @@ export class PracticeController {
     this.heldMarks = [];
     this.lentMarks = [];
     // A run begun is the page's again, whatever it was being shown.
-    this.replay = null;
+    this.dropTheReplay();
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
     this.fadedThrough = -1;

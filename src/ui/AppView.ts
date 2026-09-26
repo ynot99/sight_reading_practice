@@ -2155,6 +2155,10 @@ export class AppView {
       clearInterval(this.rollTick);
       this.rollTick = null;
     }
+    if (this.replayTick !== null) {
+      clearInterval(this.replayTick);
+      this.replayTick = null;
+    }
     this.forgetTheMapFrame();
     this.stopTheFling();
     if (this.timeTick !== null) {
@@ -5593,6 +5597,12 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      controller.events.on('replayEnded', () => {
+        this.letGoOfTheReplay();
+      }),
+    );
+
+    this.subscriptions.push(
       controller.events.on('sessionDiscarded', () => {
         // Asked rather than assumed: this fires on the way into starting a
         // run as well as on the way out of one, and the answer differs.
@@ -7980,7 +7990,7 @@ export class AppView {
   }
 
   /**
-   * Puts a run on the notes again, ready to be played.
+   * Puts a run on the notes again, and plays it.
    *
    * The page takes it over: the marks come off, the marker goes to where the
    * music began, and the transport is the replay's - Start plays and holds it,
@@ -8007,8 +8017,11 @@ export class AppView {
     if (scrolled !== null) {
       this.replayKeyboard.scroller.scrollLeft = scrolled;
     }
-    this.showThePerformance();
     this.describeTempo();
+    // Going at once: pressing "See replay" was asking to see it, and a replay
+    // standing at its first note is one more press before that. His: "коли я
+    // починаю "see replay" - я думаю що варто запускати replay автоматично".
+    this.toggleTheReplay();
   }
 
   /**
@@ -8118,12 +8131,24 @@ export class AppView {
 
   /** Ends a replay, leaving the run's marks on the page where they were made. */
   private endTheReplay(): void {
+    // Which the controller says, and `letGoOfTheReplay` hears.
+    this.runtime.controller.endReplay();
+    this.letGoOfTheReplay();
+  }
+
+  /**
+   * Takes down what was put up for a replay: its sound, the keyboard under it
+   * and the bar raised over that.
+   *
+   * On the controller saying the replay is over, and not on Stop alone:
+   * another piece opened or a run begun ends one as well. See `replayEnded`.
+   */
+  private letGoOfTheReplay(): void {
     if (this.replayRoll === null) {
       return;
     }
     this.holdTheReplay();
     this.replayRoll = null;
-    this.runtime.controller.endReplay();
     lightTheKeys(this.replayKeyboard, new Map(), false);
     this.el.replayKeys.hidden = true;
     delete this.doc.body.dataset['replaying'];

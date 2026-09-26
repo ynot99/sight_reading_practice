@@ -5101,6 +5101,69 @@ describe('a run shown again on the page', () => {
 
     expect(second.controller.replaying).toBe(false);
   });
+
+  it('says it is over, however it ended', async () => {
+    // Stop is not the only end of one, and what stands over the page for it has
+    // to come down with it. His: "нема шляху позбутися намальованого піаніно".
+    const ends: Record<string, (rig: Awaited<ReturnType<typeof aRunPlayed>>) => unknown> = {
+      stopped: ({ controller }) => {
+        controller.endReplay();
+      },
+      'another piece': ({ controller }) =>
+        controller.openScore(twoBarExercise({ tempoBpm: 60, title: 'Another' })),
+      'a new exercise': ({ controller }) => controller.loadNewExercise(),
+      'a run': ({ controller }) => controller.start(),
+      'a performance': ({ controller }) => {
+        controller.listen();
+      },
+    };
+    for (const [how, end] of Object.entries(ends)) {
+      const rig = await aRunPlayed();
+      rig.controller.beginReplay(rig.roll, FLOW_MODE_ID);
+      let said = 0;
+      rig.controller.events.on('replayEnded', () => {
+        said += 1;
+      });
+
+      await end(rig);
+
+      expect({ how, said, replaying: rig.controller.replaying }).toEqual({ how, said: 1, replaying: false });
+
+      // And once: there is nothing more to end.
+      rig.controller.endReplay();
+
+      expect({ how, said }).toEqual({ how, said: 1 });
+    }
+  });
+
+  it('says nothing where there was none', async () => {
+    const { controller } = await aRunPlayed();
+    let said = 0;
+    controller.events.on('replayEnded', () => {
+      said += 1;
+    });
+
+    controller.start();
+    controller.stop();
+    controller.listen();
+    controller.endReplay();
+
+    expect(said).toBe(0);
+  });
+
+  it('stays through the same piece put up again', async () => {
+    const { controller, roll } = await aRunPlayed();
+    controller.beginReplay(roll, FLOW_MODE_ID);
+    let said = 0;
+    controller.events.on('replayEnded', () => {
+      said += 1;
+    });
+
+    await controller.reloadExercise();
+
+    expect(said).toBe(0);
+    expect(controller.replaying).toBe(true);
+  });
 });
 
 describe('rhythm only, sounding the music', () => {

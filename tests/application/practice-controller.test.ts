@@ -53,7 +53,7 @@ import {
 } from '../support/fixtures.js';
 import { UNSEEN_NOTE } from '../support/printed.js';
 import { measureCount } from '../../src/domain/model/Exercise.js';
-import { emptyRoll, theWaits } from '../../src/application/session/RunRoll.js';
+import { emptyRoll, theWaits, type RunRoll } from '../../src/application/session/RunRoll.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
@@ -4919,6 +4919,187 @@ describe('the last run that reached an end', () => {
     await controller.loadNewExercise();
 
     expect(controller.lastReport).not.toBeNull();
+  });
+});
+
+describe('a run shown again on the page', () => {
+  // His: "See replay щоб перейти у ноти та побачити гру на самих нотах".
+
+  /**
+   * A run under the metronome, which ticks here once a quarter: the first chord
+   * a moment after its beat, the second note on its own, a wrong note after
+   * it, and stopped there.
+   */
+  async function aRunPlayed(): Promise<ReturnType<typeof createController> & { readonly roll: RunRoll }> {
+    const rig = createController(true);
+    await rig.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    rig.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+    rig.controller.start();
+    rig.metronome.advanceSubdivisions(1);
+    rig.clock.advance(30);
+    rig.midi.noteOn(MIDI.C3);
+    rig.midi.noteOn(MIDI.C4);
+    rig.metronome.advanceSubdivisions(1);
+    rig.midi.noteOn(MIDI.D4);
+    rig.clock.advance(500);
+    rig.midi.noteOn(MIDI.C5);
+    rig.controller.stop();
+    const roll = rig.controller.lastRoll;
+    if (roll === null) {
+      throw new Error('expected the run to have been written down');
+    }
+    return { ...rig, roll };
+  }
+
+  const at = (renderer: FakeScoreRenderer): string[] =>
+    renderer.played.map((mark) => `${String(mark.stepIndex)}:${String(mark.midi)}`);
+
+  it('clears the page and puts the marker where the music began', async () => {
+    const { controller, renderer, roll } = await aRunPlayed();
+    expect(renderer.played.length).toBeGreaterThan(0);
+
+    expect(controller.beginReplay(roll, FLOW_MODE_ID)).toBe(true);
+
+    expect(controller.replaying).toBe(true);
+    expect(renderer.played).toEqual([]);
+    expect(renderer.cursor.position).toBe(0);
+  });
+
+  it('shows the marker as a performance does, whatever it does at rest', async () => {
+    const { controller, renderer, roll } = await aRunPlayed();
+    controller.updateSettings({ cursorAtRest: false, cursorWhileListening: true });
+    expect(renderer.cursor.visible).toBe(false);
+
+    controller.beginReplay(roll, FLOW_MODE_ID);
+
+    expect(renderer.cursor.visible).toBe(true);
+
+    controller.endReplay();
+
+    expect(renderer.cursor.visible).toBe(false);
+  });
+
+  it('draws each mark as its key went down, and the marker where the music was', async () => {
+    const { controller, renderer, roll } = await aRunPlayed();
+    controller.beginReplay(roll, FLOW_MODE_ID);
+
+    controller.replayAt(500);
+
+    expect(at(renderer)).toEqual([`0:${String(MIDI.C3)}`, `0:${String(MIDI.C4)}`]);
+    expect(renderer.cursor.position).toBe(0);
+
+    controller.replayAt(1_200);
+
+    expect(at(renderer)).toContain(`1:${String(MIDI.D4)}`);
+    expect(at(renderer)).not.toContain(`1:${String(MIDI.C5)}`);
+    expect(renderer.cursor.position).toBe(1);
+  });
+
+  it('starts the marks again when the playback is put back', async () => {
+    const { controller, renderer, roll } = await aRunPlayed();
+    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.replayAt(1_600);
+
+    controller.replayAt(100);
+
+    expect(at(renderer)).toEqual([`0:${String(MIDI.C3)}`, `0:${String(MIDI.C4)}`]);
+    expect(renderer.cursor.position).toBe(0);
+  });
+
+  it('ends with the whole run on the page, as the run left it', async () => {
+    const { controller, renderer, roll } = await aRunPlayed();
+    const left = at(renderer);
+    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.replayAt(500);
+
+    controller.endReplay();
+
+    expect(controller.replaying).toBe(false);
+    expect([...at(renderer)].sort()).toEqual([...left].sort());
+  });
+
+  it('draws its marks again on the piece put up again', async () => {
+    // A change of tempo puts the same piece up again, and a page put up again
+    // is a clean one.
+    const { controller, renderer, roll } = await aRunPlayed();
+    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.replayAt(1_200);
+    const shown = at(renderer);
+
+    await controller.reloadExercise();
+
+    expect(renderer.clearPlayedCount).toBeGreaterThan(0);
+    expect(at(renderer)).toEqual(shown);
+  });
+
+  it('keeps the marker where the replay is when the page is laid out again', async () => {
+    // Laid out again - a turn into fullscreen - the marker used to be put back
+    // on the last step of the run behind the replay.
+    const { controller, renderer, roll } = await aRunPlayed();
+    // The run stopped on its second step; the replay is still on its first.
+    expect(controller.session?.currentIndex).toBe(1);
+    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.replayAt(500);
+
+    controller.refreshScore();
+
+    expect(renderer.cursor.position).toBe(0);
+  });
+
+  it('shows nothing, and touches nothing, where the run does not fit the music open', async () => {
+    const { controller, renderer } = await aRunPlayed();
+    const left = at(renderer);
+    const elsewhere: RunRoll = {
+      presses: [
+        { midi: MIDI.C4, downAtMs: 0, upAtMs: 100, velocity: 0.7, verdict: 'correct', stepIndex: 40, deviationMs: 0 },
+      ],
+      beats: [],
+      pedal: [],
+      rushes: [],
+      truncated: false,
+    };
+
+    expect(controller.canReplay(elsewhere)).toBe(false);
+    expect(controller.beginReplay(elsewhere, FLOW_MODE_ID)).toBe(false);
+    expect(at(renderer)).toEqual(left);
+  });
+
+  it('is not shown over a run that is going', async () => {
+    const { controller, metronome, roll } = await aRunPlayed();
+    controller.start();
+    metronome.advanceSubdivisions(1);
+
+    expect(controller.canReplay(roll)).toBe(false);
+  });
+
+  it('begins no run on a key touched while it is shown', async () => {
+    // A key brushed while watching is not the reader deciding to play.
+    const { controller, midi, roll } = await aRunPlayed();
+    controller.updateSettings({ immediateStart: true });
+    controller.beginReplay(roll, FLOW_MODE_ID);
+
+    // The whole of the chord a run would begin on.
+    midi.noteOn(MIDI.C3);
+    midi.noteOn(MIDI.C4);
+
+    expect(controller.session?.status).not.toBe('running');
+    expect(controller.session?.status).not.toBe('counting-in');
+  });
+
+  it('is over when another piece is opened, or a run begun', async () => {
+    const first = await aRunPlayed();
+    first.controller.beginReplay(first.roll, FLOW_MODE_ID);
+
+    await first.controller.openScore(twoBarExercise({ tempoBpm: 60, title: 'Another' }));
+
+    expect(first.controller.replaying).toBe(false);
+
+    const second = await aRunPlayed();
+    second.controller.beginReplay(second.roll, FLOW_MODE_ID);
+
+    second.controller.start();
+
+    expect(second.controller.replaying).toBe(false);
   });
 });
 

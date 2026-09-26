@@ -55,7 +55,8 @@ import {
 } from '../application/ports/IMetronome.js';
 import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
-import type { PassageHistory, PracticeReading } from '../application/PracticeHistory.js';
+import { pieceOfKey, type PassageHistory, type PracticeReading } from '../application/PracticeHistory.js';
+import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barLines, barNumberOf, measureCount, spanMs } from '../domain/model/Exercise.js';
@@ -295,6 +296,8 @@ const TAKE_TICK_MS = 80;
  * sounding is the drawing's or the shelf's.
  */
 const RUN_ROLL_ID = 'the run just played';
+/** What the player is sounding while a run is shown again on the notes. */
+const RUN_REPLAY_ID = 'a run shown again on the page';
 /**
  * How far ahead of the sound the clicks over a playback are laid out.
  *
@@ -1326,6 +1329,16 @@ export class AppView {
   /** Clicks of the run already handed to the metronome by this playback. */
   private rollClicksSent = 0;
   /**
+   * A run being shown again on the notes, and where the showing has got to.
+   * See `replayTheRun`.
+   */
+  private replayRoll: RunRoll | null = null;
+  private replayTick: ReturnType<typeof setInterval> | null = null;
+  private replayAtMs = 0;
+  private replayClicksSent = 0;
+  /** Played to its end, so that Start plays it again from the top. */
+  private replayRanOut = false;
+  /**
    * Fingers down on the drawing, and what the zoom was when the second arrived.
    *
    * Two are a pinch. Kept by pointer id rather than counted, because a finger
@@ -1633,6 +1646,7 @@ export class AppView {
     readingTitle: HTMLElement;
     readingWhat: HTMLElement;
     readingRoll: HTMLButtonElement;
+    readingReplay: HTMLButtonElement;
     readingDelete: HTMLButtonElement;
     readingClose: HTMLButtonElement;
     readingsClose: HTMLButtonElement;
@@ -1934,6 +1948,7 @@ export class AppView {
       readingTitle: requireElement(doc, 'reading-title'),
       readingWhat: requireElement(doc, 'reading-what'),
       readingRoll: requireElement(doc, 'reading-roll'),
+      readingReplay: requireElement(doc, 'reading-replay'),
       readingDelete: requireElement(doc, 'reading-delete'),
       readingClose: requireElement(doc, 'reading-close'),
       readingsClose: requireElement(doc, 'readings-close'),
@@ -2615,6 +2630,7 @@ export class AppView {
     this.el.readingTitle.textContent = pieceRead(reading.key);
     this.el.readingWhat.replaceChildren(...this.drawTheReading(reading));
     this.el.readingRoll.hidden = reading.roll === undefined;
+    this.el.readingReplay.hidden = !this.canReplayTheReading(reading);
     this.showTheSheet(this.el.sheetReading);
   }
 
@@ -3246,7 +3262,8 @@ export class AppView {
       status === 'paused' ||
       this.isPreviewing ||
       this.runtime.controller.isListening ||
-      this.runtime.controller.isListeningPaused
+      this.runtime.controller.isListeningPaused ||
+      this.runtime.controller.replaying
     );
   }
 
@@ -3714,6 +3731,12 @@ export class AppView {
     this.listen(this.el.readingRoll, 'click', () => {
       if (this.theReadingShowing !== null) {
         this.showTheReadingRoll(this.theReadingShowing);
+      }
+    });
+
+    this.listen(this.el.readingReplay, 'click', () => {
+      if (this.theReadingShowing !== null) {
+        void this.replayTheReading(this.theReadingShowing);
       }
     });
 
@@ -4399,6 +4422,11 @@ export class AppView {
    */
   private togglePlayback(): void {
     const { controller } = this.runtime;
+    // A run being shown again has the transport until it is stopped.
+    if (controller.replaying) {
+      this.toggleTheReplay();
+      return;
+    }
     // His: Start replaces playback. In the listening frame there is no
     // session to ask about - the performance is the run - so the one button
     // hands over to the one that has always driven it.
@@ -4712,6 +4740,7 @@ export class AppView {
     const controller = this.runtime.controller;
     this.forgetTheBeats();
     this.cancelPreview();
+    this.endTheReplay();
     controller.stop();
     // A performance ends too, whichever frame Stop was pressed in - and this
     // is a no-op where there is none, which is cheaper than a branch that
@@ -5129,6 +5158,10 @@ export class AppView {
    * Generation is seeded, so the notes are the same ones either way.
    */
   private nudgeTempo(deltaPercent: number): void {
+    if (this.runtime.controller.replaying) {
+      this.changeTheReplaySpeed(deltaPercent > 0 ? 1 : -1);
+      return;
+    }
     this.runtime.controller.nudgeTempoPercent(deltaPercent);
     this.describeTempo();
     this.syncControlsFromSettings();
@@ -5272,6 +5305,13 @@ export class AppView {
   }
 
   private describeTempo(): void {
+    if (this.runtime.controller.replaying) {
+      // There is no run to set a tempo for while one is shown again, so the
+      // buttons say how fast it is played back.
+      this.el.focusTempo.value = `${String(Math.round(this.theRollsSpeed() * 100))}%`;
+      this.el.focusTempo.title = 'How fast the run is played back';
+      return;
+    }
     const percent = this.runtime.controller.tempoPercent;
     this.el.focusTempo.value = `${percent}%`;
     this.el.focusTempo.title = `${this.runtime.controller.tempoBpm} bpm`;
@@ -7663,9 +7703,15 @@ export class AppView {
     // button used to have a twin beside it saying this for the performance
     // alone, which is the twin this replaces.
     const controller = this.runtime.controller;
+    // And a replay, which is not a session either: held part way through it
+    // is held, and ready at its start it is ready.
+    const replaySounding = this.replayIsSounding;
     const running =
-      status === 'running' || status === 'counting-in' || controller.isListening;
-    const paused = status === 'paused' || controller.isListeningPaused;
+      status === 'running' || status === 'counting-in' || controller.isListening || replaySounding;
+    const paused =
+      status === 'paused' ||
+      controller.isListeningPaused ||
+      (controller.replaying && !replaySounding && this.replayAtMs > 0 && !this.replayRanOut);
     // What is being practised is settled before a run and not during one: a
     // run is graded, and a passage moved halfway through makes the report a
     // report of nothing in particular. The markers stay on the page saying
@@ -7744,7 +7790,9 @@ export class AppView {
     // work something out is still at the keyboard. Asked here because this is
     // already the one place that answers "is anything happening to the music",
     // and a second answer to that question could only disagree with this one.
-    if (playing) {
+    // A replay being watched holds it too, though it keeps the bar: the
+    // reader is not at the keys, and the tempo buttons are its speed.
+    if (playing || this.replayIsSounding) {
       this.runtime.screenWake.hold();
     } else {
       this.runtime.screenWake.release();
@@ -7846,6 +7894,212 @@ export class AppView {
       this.showTheRoll();
     });
     this.el.result.append(open);
+    // And the way to see it again on the notes, beside the picture of it. His:
+    // "See replay щоб перейти у ноти та побачити гру на самих нотах".
+    if (!this.runtime.controller.canReplay(roll)) {
+      return;
+    }
+    const replay = this.doc.createElement('button');
+    replay.type = 'button';
+    replay.id = 'run-replay';
+    replay.className = 'button button--ghost result__roll';
+    replay.textContent = 'See replay';
+    this.listen(replay, 'click', () => {
+      const controller = this.runtime.controller;
+      this.replayTheRun(roll, controller.lastReport?.modeId ?? controller.settings.modeId);
+    });
+    this.el.result.append(replay);
+  }
+
+  /**
+   * Whether a kept reading can be shown again on the notes.
+   *
+   * Where it kept what was played, and of a piece that is open or kept on this
+   * device - and, where that piece is the one open, where the reading still fits
+   * it as it is now. A generated exercise is another one every time, so there is
+   * nothing to show one of its readings on.
+   */
+  private canReplayTheReading(reading: PracticeReading): boolean {
+    const roll = reading.roll;
+    if (roll === undefined) {
+      return false;
+    }
+    const piece = pieceOfKey(reading.key);
+    // A level is filed under what it was generated from, and it is generated
+    // afresh: the one open now is not the one the reading was of.
+    if (!piece.startsWith('score:')) {
+      return false;
+    }
+    if (piece === this.runtime.controller.pieceKey) {
+      return this.runtime.controller.canReplay(roll);
+    }
+    return this.keptScoreFor(piece) !== null;
+  }
+
+  /** The kept score a reading's piece is, by the title it was filed under. */
+  private keptScoreFor(piece: string): StoredScoreSummary | null {
+    if (!piece.startsWith('score:')) {
+      return null;
+    }
+    const title = piece.slice('score:'.length);
+    return this.runtime.scores.list().find((score) => score.title === title) ?? null;
+  }
+
+  /**
+   * Shows a kept reading again on the notes, opening its piece first where
+   * another is open.
+   */
+  private async replayTheReading(reading: PracticeReading): Promise<void> {
+    const roll = reading.roll;
+    if (roll === undefined) {
+      return;
+    }
+    this.shutTheReading();
+    this.el.sheetReadings.hidden = true;
+    const piece = pieceOfKey(reading.key);
+    if (piece !== this.runtime.controller.pieceKey) {
+      const kept = this.keptScoreFor(piece);
+      if (kept === null) {
+        return;
+      }
+      await this.openKeptScore(kept.id, kept.title);
+    }
+    this.replayTheRun(roll, reading.modeId ?? this.runtime.controller.settings.modeId);
+  }
+
+  /**
+   * Puts a run on the notes again, ready to be played.
+   *
+   * The page takes it over: the marks come off, the marker goes to where the
+   * music began, and the transport is the replay's - Start plays and holds it,
+   * Stop ends it and leaves the run's marks where they were made, and the tempo
+   * buttons say how fast it is played back.
+   */
+  private replayTheRun(roll: RunRoll, playedIn: string): void {
+    this.showVerdict(false);
+    this.endTheReplay();
+    if (!this.runtime.controller.beginReplay(roll, playedIn)) {
+      this.sayInTheMiddle(
+        'This run was played on the piece as it was then, and does not fit it as it is now.',
+      );
+      return;
+    }
+    this.replayRoll = roll;
+    this.replayAtMs = 0;
+    this.replayClicksSent = 0;
+    this.replayRanOut = false;
+    this.showThePerformance();
+    this.describeTempo();
+  }
+
+  /** Whether the replay is sounding now, rather than held or ready. */
+  private get replayIsSounding(): boolean {
+    return this.replayRoll !== null && this.runtime.takePlayer.playing === RUN_REPLAY_ID;
+  }
+
+  /** Start, over a replay: plays it from where it was held, or holds it. */
+  private toggleTheReplay(): void {
+    const roll = this.replayRoll;
+    if (roll === null) {
+      return;
+    }
+    const player = this.runtime.takePlayer;
+    if (player.playing === RUN_REPLAY_ID) {
+      this.holdTheReplay();
+      return;
+    }
+    const from = this.replayRanOut ? 0 : this.replayAtMs;
+    this.replayRanOut = false;
+    this.replayAtMs = from;
+    player.setSpeed(this.theRollsSpeed());
+    player.play(RUN_REPLAY_ID, rollAsEvents(roll), from);
+    this.replayClicksSent = clicksBefore(roll, from, this.theRollsGrid());
+    this.runtime.controller.replayAt(from);
+    if (this.replayTick === null) {
+      this.replayTick = setInterval(() => {
+        this.followTheReplay();
+      }, TAKE_TICK_MS);
+    }
+    this.showThePerformance();
+  }
+
+  /** Moves the page along with the sound: the marks made by now, and the marker. */
+  private followTheReplay(): void {
+    const roll = this.replayRoll;
+    const player = this.runtime.takePlayer;
+    // Over already, from the other side: another piece was opened, or a run
+    // was begun, and the page is theirs.
+    if (roll === null || !this.runtime.controller.replaying) {
+      this.endTheReplay();
+      return;
+    }
+    player.pump();
+    if (player.playing !== RUN_REPLAY_ID) {
+      // Something else took the player over.
+      this.holdTheReplay();
+      return;
+    }
+    const at = player.positionMs;
+    this.replayAtMs = at;
+    this.replayClicksSent = this.clickTheRunsBeats(roll, this.replayClicksSent, at);
+    this.runtime.controller.replayAt(at);
+    if (player.finished) {
+      this.replayRanOut = true;
+      this.holdTheReplay();
+    }
+  }
+
+  /** Holds a replay where it is, to be played on from there. */
+  private holdTheReplay(): void {
+    const player = this.runtime.takePlayer;
+    if (player.playing === RUN_REPLAY_ID) {
+      this.replayAtMs = player.positionMs;
+      player.pause();
+    }
+    if (this.replayTick !== null) {
+      clearInterval(this.replayTick);
+      this.replayTick = null;
+      // Handed over ahead of the sound, as its notes are.
+      this.runtime.metronomeClick.takeBackTheClicks();
+    }
+    this.showThePerformance();
+  }
+
+  /** Ends a replay, leaving the run's marks on the page where they were made. */
+  private endTheReplay(): void {
+    if (this.replayRoll === null) {
+      return;
+    }
+    this.holdTheReplay();
+    this.replayRoll = null;
+    this.runtime.controller.endReplay();
+    this.showThePerformance();
+    this.describeTempo();
+  }
+
+  /**
+   * The tempo buttons, over a replay: the next speed it can be played back at.
+   *
+   * The same speeds the picture of a run is played at, and the same setting -
+   * one question, how fast to hear a run back, whichever way it is shown.
+   */
+  private changeTheReplaySpeed(step: number): void {
+    const speeds = [...this.el.rollSpeed.options].map((option) => option.value);
+    const at = speeds.indexOf(this.el.rollSpeed.value);
+    const next = speeds[Math.min(speeds.length - 1, Math.max(0, at + step))];
+    if (next === undefined || next === this.el.rollSpeed.value) {
+      return;
+    }
+    this.el.rollSpeed.value = next;
+    const roll = this.replayRoll;
+    const player = this.runtime.takePlayer;
+    if (roll !== null && player.playing === RUN_REPLAY_ID) {
+      player.setSpeed(this.theRollsSpeed());
+      // Placed at the old speed, so taken back and handed over again.
+      this.runtime.metronomeClick.takeBackTheClicks();
+      this.replayClicksSent = clicksBefore(roll, player.positionMs, this.theRollsGrid());
+    }
+    this.describeTempo();
   }
 
   /**
@@ -8971,8 +9225,22 @@ export class AppView {
    */
   private soundTheBeat(positionMs: number): void {
     const roll = this.theRoll();
-    if (roll === null || !this.el.rollClick.checked) {
+    if (roll === null) {
       return;
+    }
+    this.rollClicksSent = this.clickTheRunsBeats(roll, this.rollClicksSent, positionMs);
+  }
+
+  /**
+   * Hands the metronome the run's clicks due by a moment of it, and says how
+   * many of them have been handed over now.
+   *
+   * Asked by both ways a run is heard back - its picture and the notes - on the
+   * one setting that says whether a run is heard back with its beat.
+   */
+  private clickTheRunsBeats(roll: RunRoll, sent: number, positionMs: number): number {
+    if (!this.el.rollClick.checked) {
+      return sent;
     }
     // The window is a tenth of a second of the *run's* time, which at a slow
     // speed reaches further ahead in the room than that. Harmless, and left
@@ -8982,7 +9250,7 @@ export class AppView {
     const rate = this.runtime.takePlayer.speed;
     const due = clicksUpTo(
       roll,
-      this.rollClicksSent,
+      sent,
       positionMs + ROLL_CLICK_LEAD_MS,
       this.theRollsGrid(),
     );
@@ -8996,7 +9264,7 @@ export class AppView {
         beat.weight,
       );
     }
-    this.rollClicksSent += due.length;
+    return sent + due.length;
   }
 
   /**

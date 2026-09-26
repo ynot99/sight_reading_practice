@@ -2656,6 +2656,162 @@ describe('AppView', () => {
       expect(document.querySelector('.roll-stage')?.parentElement).toBe(column);
     });
 
+    describe('shown again on the notes', () => {
+      // His: "See replay щоб перейти у ноти та побачити гру на самих нотах, та
+      // будуть ті самі кнопки будто я би почав гру".
+
+      /** Two steps played in the frame that waits, a second apart, and stopped. */
+      async function aRunPlayed(title?: string): Promise<ReturnType<typeof createRig>> {
+        const rig = createRig();
+        await rig.view.initialize();
+        if (title !== undefined) {
+          await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60, title }));
+        }
+        element<HTMLButtonElement>('focus-play').click();
+        for (const _ of [1, 2]) {
+          rig.clock.advance(1_000);
+          for (const midi of rig.runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+            rig.midi.noteOn(midi, rig.clock.now());
+          }
+        }
+        element<HTMLButtonElement>('focus-stop').click();
+        return rig;
+      }
+
+      /**
+       * Files the run just played as a reading, as the app does when a run
+       * ends: the rig's controller keeps no history of its own.
+       */
+      const keepTheReading = ({ runtime }: ReturnType<typeof createRig>): void => {
+        const roll = runtime.controller.lastRoll;
+        if (roll === null) {
+          throw new Error('expected a run to have been written down');
+        }
+        runtime.history.record(runtime.controller.practiceKey(), {
+          atMs: Date.now(),
+          overall: 0.8,
+          grade: 'B',
+          completed: false,
+          modeId: runtime.controller.settings.modeId,
+          roll,
+        });
+      };
+
+      const openTheReading = (): void => {
+        element<HTMLButtonElement>('focus-readings').click();
+        element('readings-list').querySelector('button')?.dispatchEvent(
+          new MouseEvent('click', { bubbles: true }),
+        );
+      };
+
+      it('plays the run on the notes from beside the picture of it, with the run’s own buttons', async () => {
+        const { runtime, renderer, clock } = await aRunPlayed();
+        const left = renderer.played.length;
+        expect(left).toBeGreaterThan(0);
+
+        element<HTMLButtonElement>('run-replay').click();
+
+        expect(runtime.controller.replaying).toBe(true);
+        expect(element('score-verdict').hidden).toBe(true);
+        expect(renderer.played).toEqual([]);
+        expect(element('focus-play').getAttribute('aria-label')).toBe('Start');
+
+        vi.useFakeTimers();
+        try {
+          element<HTMLButtonElement>('focus-play').click();
+          expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
+          // Up to just past the first chord, a second in: its marks, and no more.
+          clock.advance(1_100);
+          vi.advanceTimersByTime(100);
+          const first = renderer.played.length;
+          expect(first).toBeGreaterThan(0);
+          expect(renderer.played.every((mark) => mark.stepIndex === renderer.played[0]?.stepIndex)).toBe(true);
+
+          clock.advance(1_000);
+          vi.advanceTimersByTime(100);
+          expect(renderer.played.length).toBeGreaterThan(first);
+
+          element<HTMLButtonElement>('focus-play').click();
+          expect(element('focus-play').getAttribute('aria-label')).toBe('Resume');
+        } finally {
+          vi.useRealTimers();
+        }
+
+        element<HTMLButtonElement>('focus-stop').click();
+
+        expect(runtime.controller.replaying).toBe(false);
+        expect(renderer.played).toHaveLength(left);
+      });
+
+      it('sets how fast it is played back with the tempo buttons, and gives them back after', async () => {
+        const { runtime } = await aRunPlayed();
+        element<HTMLButtonElement>('run-replay').click();
+        expect(element<HTMLOutputElement>('focus-tempo').value).toBe('100%');
+
+        element<HTMLButtonElement>('focus-slower').click();
+
+        expect(element<HTMLOutputElement>('focus-tempo').value).toBe('75%');
+        expect(element<HTMLSelectElement>('roll-speed').value).toBe('75');
+        expect(runtime.controller.tempoPercent).toBe(100);
+
+        element<HTMLButtonElement>('focus-stop').click();
+
+        expect(element<HTMLOutputElement>('focus-tempo').value).toBe(
+          `${String(runtime.controller.tempoPercent)}%`,
+        );
+      });
+
+      it('shows a kept reading of the piece that is open', async () => {
+        const rig = await aRunPlayed('Kept');
+        const { runtime } = rig;
+        keepTheReading(rig);
+        openTheReading();
+
+        expect(element('reading-replay').hidden).toBe(false);
+
+        element<HTMLButtonElement>('reading-replay').click();
+        await vi.waitFor(() => {
+          expect(runtime.controller.replaying).toBe(true);
+        });
+        expect(element('sheet-reading').hidden).toBe(true);
+      });
+
+      it('opens the piece a kept reading was of, and shows it there', async () => {
+        const rig = await aRunPlayed('Kept');
+        const { runtime } = rig;
+        keepTheReading(rig);
+        await runtime.scores.keep(twoBarExercise({ tempoBpm: 60, title: 'Kept' }), 1_000);
+        await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60, title: 'Another' }));
+        openTheReading();
+
+        element<HTMLButtonElement>('reading-replay').click();
+
+        await vi.waitFor(() => {
+          expect(runtime.controller.replaying).toBe(true);
+        });
+        expect(runtime.controller.pieceKey).toBe('score:Kept');
+      });
+
+      it('offers none for a piece that is not on this device', async () => {
+        const kept = await aRunPlayed('Kept');
+        keepTheReading(kept);
+        await kept.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60, title: 'Another' }));
+        openTheReading();
+
+        expect(element('reading-roll').hidden).toBe(false);
+        expect(element('reading-replay').hidden).toBe(true);
+      });
+
+      it('offers none for a reading of a level, which is generated afresh', async () => {
+        const rig = await aRunPlayed();
+        keepTheReading(rig);
+        openTheReading();
+
+        expect(element('reading-roll').hidden).toBe(false);
+        expect(element('reading-replay').hidden).toBe(true);
+      });
+    });
+
     it('moves the marker on the map with the head, however late the run was played', async () => {
       // The map places everything on the clock the run was played by, and the
       // head counts from the run's own nought: a run played a minute into the

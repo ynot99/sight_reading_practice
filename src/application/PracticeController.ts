@@ -76,6 +76,7 @@ import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
 import { ONE_BREATH_MS } from './session/RunRoll.js';
 import type { RunRoll } from './session/RunRoll.js';
+import { replayFits, theMarksOfTheRun, theStepAt, type ReplayMark } from './runReplay.js';
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMeter.js';
@@ -794,6 +795,17 @@ export class PracticeController {
   /** Notes of the other hand still sounding, so a stop can take them back. */
   private readonly sounding = new Set<number>();
   /**
+   * A run being shown again on the page, and how far into it the page is.
+   * See `beginReplay`.
+   */
+  private replay: {
+    readonly roll: RunRoll;
+    readonly marks: readonly ReplayMark[];
+    drawn: number;
+    drawnUpToMs: number;
+    atStep: number | null;
+  } | null = null;
+  /**
    * Steps of this run whose written notes a press has sounded, in rhythm only.
    *
    * Once a step: every note of a chord is a press, and a press kept for the
@@ -1181,6 +1193,8 @@ export class PracticeController {
       this.deps.overlay.clearPlayed();
       this.heldMarks = [];
       this.lentMarks = [];
+      // Except for a run being shown again, whose marks are what it is for.
+      this.drawTheReplayAgain();
     }
 
     // Any of these changes what the run will ask for, or whether saying so
@@ -1425,6 +1439,8 @@ export class PracticeController {
     }
     this.openedScore = exercise;
     this.endThePerformance();
+    // Its marks were of the piece that was open.
+    this.replay = null;
     // Nothing to adopt: the file brings the tempo it is written at, which is
     // what 100% means - and a piece just opened is read at what it says
     // until the reader says otherwise.
@@ -1527,6 +1543,14 @@ export class PracticeController {
   refreshScore(): void {
     this.deps.renderer.refresh();
     this.applyCursorVisibility();
+    // Where a run is being shown again, the marker is the replay's: the run
+    // behind it has ended, and its last step is not where the music is now.
+    if (this.replay !== null) {
+      if (this.replay.atStep !== null) {
+        this.deps.cursor.moveTo(this.replay.atStep);
+      }
+      return;
+    }
     const index = this.currentSession?.currentIndex ?? -1;
     if (index > 0) {
       this.deps.cursor.moveTo(index);
@@ -1654,6 +1678,7 @@ export class PracticeController {
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
     this.forgetTheTrouble();
+    this.drawTheReplayAgain();
     if (newMusic) {
       // And the marker goes back to the top of it. On music already on the
       // stand it stays where the reader put it: a tempo nudge is not a
@@ -1725,6 +1750,7 @@ export class PracticeController {
     // Each performance is its own: marks left from the last one would be the
     // page answering a question nobody has asked yet.
     this.deps.overlay.clearPlayed();
+    this.replay = null;
     // Something is happening to the music now, so a press is a press and not
     // the beginning of a run.
     this.watchForTheOpening();
@@ -1988,6 +2014,134 @@ export class PracticeController {
     return this.finishedRoll;
   }
 
+  /**
+   * Whether a run's recording can be played back over the music now open.
+   *
+   * Not while a run or a performance has the page, and not where it would draw
+   * on other notes than it was played on: see `replayFits`.
+   */
+  canReplay(roll: RunRoll): boolean {
+    const timeline = this.timeline;
+    const status = this.currentSession?.status;
+    const busy =
+      status === 'running' ||
+      status === 'counting-in' ||
+      status === 'paused' ||
+      this.isListening ||
+      this.isListeningPaused;
+    return timeline !== null && !busy && replayFits(roll, timeline);
+  }
+
+  /**
+   * Gets the page ready to show a run again, as it went.
+   *
+   * The marks come off and the veil with them, and the marker goes to where
+   * the music began; `replayAt` then puts back whatever had happened by a
+   * moment of the run, and `endReplay` the whole of it. His: "See replay щоб
+   * перейти у ноти та побачити гру на самих нотах".
+   *
+   * `playedIn` is the frame it was played in, which decides whether its marks
+   * were drawn off their beats: that is a question about the run, not about
+   * whatever frame is chosen now.
+   *
+   * `false`, and nothing touched, where the run cannot be shown here.
+   */
+  beginReplay(roll: RunRoll, playedIn: string): boolean {
+    const timeline = this.timeline;
+    if (timeline === null || !this.canReplay(roll)) {
+      return false;
+    }
+    const keepsTime =
+      !machineIsPlaying(playedIn) &&
+      this.deps.modes.has(playedIn) &&
+      this.deps.modes.get(playedIn).requiresMetronome;
+    this.deps.overlay.clearPlayed();
+    this.deps.fade.clearFaded();
+    this.replay = {
+      roll,
+      marks: theMarksOfTheRun(roll, timeline, { keepsTime, tempoBpm: this.tempoBpm }),
+      drawn: 0,
+      drawnUpToMs: 0,
+      atStep: null,
+    };
+    this.applyCursorVisibility();
+    this.watchForTheOpening();
+    this.replayAt(0);
+    return true;
+  }
+
+  /**
+   * Shows the run as it stood a moment into it, on the run's own clock.
+   *
+   * Each mark once, as its key went down, and the marker where the music was.
+   * A moment earlier than the last one asked - a playback put back - starts the
+   * marks again from nothing, since a mark cannot be un-made one at a time.
+   */
+  replayAt(atMs: number): void {
+    const replay = this.replay;
+    const timeline = this.timeline;
+    if (replay === null || timeline === null) {
+      return;
+    }
+    if (atMs < replay.drawnUpToMs) {
+      this.deps.overlay.clearPlayed();
+      replay.drawn = 0;
+    }
+    replay.drawnUpToMs = atMs;
+    let next = replay.marks[replay.drawn];
+    while (next !== undefined && next.atMs <= atMs) {
+      this.deps.overlay.showPlayed(next.mark);
+      replay.drawn += 1;
+      next = replay.marks[replay.drawn];
+    }
+    const step = theStepAt(replay.roll, timeline, atMs) ?? replay.marks[0]?.mark.stepIndex ?? null;
+    if (step !== null && step !== replay.atStep) {
+      replay.atStep = step;
+      this.deps.cursor.moveTo(step);
+    }
+  }
+
+  /**
+   * Ends a replay with the whole run on the page, as it stood when it ended.
+   *
+   * Which is the page a run leaves behind: every mark, where it was made.
+   */
+  endReplay(): void {
+    const replay = this.replay;
+    if (replay === null) {
+      return;
+    }
+    for (const { mark } of replay.marks.slice(replay.drawn)) {
+      this.deps.overlay.showPlayed(mark);
+    }
+    this.replay = null;
+    this.applyCursorVisibility();
+    this.watchForTheOpening();
+  }
+
+  /** Whether a run is being shown again on the page. */
+  get replaying(): boolean {
+    return this.replay !== null;
+  }
+
+  /**
+   * Puts a replay's marks back on a page that has just been cleared.
+   *
+   * Drawn again from nothing up to where it stood: the page was engraved again,
+   * or cleared for a reason of its own, and the marks it had went with it.
+   */
+  private drawTheReplayAgain(): void {
+    const replay = this.replay;
+    if (replay === null) {
+      return;
+    }
+    const at = replay.drawnUpToMs;
+    replay.drawn = 0;
+    replay.drawnUpToMs = 0;
+    replay.atStep = null;
+    this.replayAt(at);
+  }
+
 
   /**
    * What was decided about the last few presses, in order.
@@ -2225,7 +2379,10 @@ export class PracticeController {
       // A held performance does count: the reader means to pick it up, and
       // playing over it would start a run instead.
       !this.isListening &&
-      !this.isListeningPaused;
+      !this.isListeningPaused &&
+      // And a run being shown again, for the same reason: a key touched while
+      // watching it is not the reader deciding to play.
+      this.replay === null;
     if (!wanted) {
       this.listeningForTheOpening?.();
       this.listeningForTheOpening = null;
@@ -2629,6 +2786,8 @@ export class PracticeController {
     }
     this.heldMarks = [];
     this.lentMarks = [];
+    // A run begun is the page's again, whatever it was being shown.
+    this.replay = null;
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
     this.fadedThrough = -1;
@@ -3578,7 +3737,9 @@ export class PracticeController {
    * while they are held.
    */
   private wantsCursorNow(): boolean {
-    if (this.isListening || this.isListeningPaused) {
+    // A run shown again is the page played to the reader, as a performance is,
+    // and the marker is asked about the same way.
+    if (this.isListening || this.isListeningPaused || this.replay !== null) {
       return this.currentSettings.cursorWhileListening;
     }
     const status = this.currentSession?.status;

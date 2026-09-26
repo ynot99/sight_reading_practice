@@ -56,6 +56,13 @@ import {
 import { TimeToday } from '../application/TimeToday.js';
 import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
 import { pieceOfKey, type PassageHistory, type PracticeReading } from '../application/PracticeHistory.js';
+import {
+  drawTheKeyboard,
+  lightTheKeys,
+  MIDDLE_C,
+  scrollToShow,
+  type ReplayKeyboard,
+} from './replayKeys.js';
 import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
@@ -1302,6 +1309,8 @@ export class AppView {
   private rollKeysStrip: HTMLElement | null = null;
   /** Where the view stands on the drawing: see `RollScroller`. */
   private readonly rollScroller = new RollScroller();
+  /** The keys a run is shown again over. See `showTheReplaysKeys`. */
+  private readonly replayKeyboard: ReplayKeyboard;
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
   private rollLook = { rowPx: 13, rulerTallPx: 0, pedalTallPx: 0 };
   /** The frame a fling is going on in, if one is. */
@@ -1647,6 +1656,7 @@ export class AppView {
     readingWhat: HTMLElement;
     readingRoll: HTMLButtonElement;
     readingReplay: HTMLButtonElement;
+    replayKeys: HTMLElement;
     readingDelete: HTMLButtonElement;
     readingClose: HTMLButtonElement;
     readingsClose: HTMLButtonElement;
@@ -1949,6 +1959,7 @@ export class AppView {
       readingWhat: requireElement(doc, 'reading-what'),
       readingRoll: requireElement(doc, 'reading-roll'),
       readingReplay: requireElement(doc, 'reading-replay'),
+      replayKeys: requireElement(doc, 'replay-keys'),
       readingDelete: requireElement(doc, 'reading-delete'),
       readingClose: requireElement(doc, 'reading-close'),
       readingsClose: requireElement(doc, 'readings-close'),
@@ -2044,6 +2055,7 @@ export class AppView {
       audioFeedback: requireElement(doc, 'audio-feedback'),
       computerKeyboard: requireElement(doc, 'computer-keyboard'),
     };
+    this.replayKeyboard = drawTheKeyboard(this.el.replayKeys);
   }
 
   async initialize(): Promise<void> {
@@ -7988,8 +8000,45 @@ export class AppView {
     this.replayAtMs = 0;
     this.replayClicksSent = 0;
     this.replayRanOut = false;
+    this.el.replayKeys.hidden = false;
+    this.doc.body.dataset['replaying'] = 'true';
+    this.showTheReplaysKeys(0);
+    const scrolled = scrollToShow(this.replayKeyboard, roll.presses[0]?.midi ?? MIDDLE_C);
+    if (scrolled !== null) {
+      this.replayKeyboard.scroller.scrollLeft = scrolled;
+    }
     this.showThePerformance();
     this.describeTempo();
+  }
+
+  /**
+   * The keys down and the pedal, a moment into the replay.
+   *
+   * Where the screen is too narrow for the whole keyboard, a key lit out of
+   * sight brings the row round to it: a key pressed off the edge is a press
+   * nobody sees.
+   */
+  private showTheReplaysKeys(atMs: number): void {
+    const state = this.runtime.controller.replayKeysAt(atMs);
+    if (state === null) {
+      return;
+    }
+    const keyboard = this.replayKeyboard;
+    lightTheKeys(keyboard, state.keys, state.pedal);
+    const scroller = keyboard.scroller;
+    const lowest = Math.min(...state.keys.keys());
+    const key = keyboard.keys.get(lowest);
+    if (key === undefined || scroller.scrollWidth <= scroller.clientWidth) {
+      return;
+    }
+    const along = key.classList.contains('replay-keys__black') ? (key.parentElement ?? key) : key;
+    const inView =
+      along.offsetLeft >= scroller.scrollLeft &&
+      along.offsetLeft + along.offsetWidth <= scroller.scrollLeft + scroller.clientWidth;
+    const to = inView ? null : scrollToShow(keyboard, lowest);
+    if (to !== null && typeof scroller.scrollTo === 'function') {
+      scroller.scrollTo({ left: to, behavior: 'smooth' });
+    }
   }
 
   /** Whether the replay is sounding now, rather than held or ready. */
@@ -8015,6 +8064,7 @@ export class AppView {
     player.play(RUN_REPLAY_ID, rollAsEvents(roll), from);
     this.replayClicksSent = clicksBefore(roll, from, this.theRollsGrid());
     this.runtime.controller.replayAt(from);
+    this.showTheReplaysKeys(from);
     if (this.replayTick === null) {
       this.replayTick = setInterval(() => {
         this.followTheReplay();
@@ -8043,6 +8093,7 @@ export class AppView {
     this.replayAtMs = at;
     this.replayClicksSent = this.clickTheRunsBeats(roll, this.replayClicksSent, at);
     this.runtime.controller.replayAt(at);
+    this.showTheReplaysKeys(at);
     if (player.finished) {
       this.replayRanOut = true;
       this.holdTheReplay();
@@ -8073,6 +8124,9 @@ export class AppView {
     this.holdTheReplay();
     this.replayRoll = null;
     this.runtime.controller.endReplay();
+    lightTheKeys(this.replayKeyboard, new Map(), false);
+    this.el.replayKeys.hidden = true;
+    delete this.doc.body.dataset['replaying'];
     this.showThePerformance();
     this.describeTempo();
   }

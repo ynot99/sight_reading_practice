@@ -168,6 +168,20 @@ describe('the stylesheet', () => {
     expect(drawing).toMatch(/border-bottom-right-radius\s*:\s*0/);
   });
 
+  it('stands the bar above the keyboard of a replay, and lets a narrow row of keys scroll', () => {
+    // Moved by an attribute and a length the sheet names, so nothing is
+    // measured to put the bar where the keys are not. His: "на телефоні
+    // клавіатуру придеться буде зробити scrollable".
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    expect(body('.replay-keys')).toMatch(/position\s*:\s*fixed/);
+    expect(body('.replay-keys')).toMatch(/bottom\s*:\s*0/);
+    expect(body("body[data-replaying='true'] .focus-bar")).toMatch(/bottom\s*:[^;]*var\(--replay-keys\)/);
+    expect(body('.replay-keys__scroller')).toMatch(/overflow-x\s*:\s*auto/);
+    expect(body('.replay-keys__white')).toMatch(/min-width\s*:\s*14px/);
+  });
+
   it('keeps the boxes on the maps off the edges across them', () => {
     // A border lying on the clip's own edge is lost to the rounding wherever
     // that edge falls between device pixels. His: "не видно нижній border".

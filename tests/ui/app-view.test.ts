@@ -2743,6 +2743,48 @@ describe('AppView', () => {
         expect(renderer.played).toHaveLength(left);
       });
 
+      it('puts the keyboard under the music while it is shown, lit with the keys down and the pedal', async () => {
+        // His: "чи можна також малювати клавіатуру щоб візуалізовувати мої
+        // натискання та десь мати індикатор педалі?".
+        const rig = createRig();
+        await rig.view.initialize();
+        element<HTMLButtonElement>('focus-play').click();
+        rig.clock.advance(1_000);
+        rig.midi.pedal(true, rig.clock.now());
+        for (const midi of rig.runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+          rig.midi.noteOn(midi, rig.clock.now());
+        }
+        element<HTMLButtonElement>('focus-stop').click();
+        const keys = element('replay-keys');
+        expect(keys.hidden).toBe(true);
+
+        element<HTMLButtonElement>('run-replay').click();
+
+        expect(keys.hidden).toBe(false);
+        expect(document.body.dataset['replaying']).toBe('true');
+        expect(keys.querySelectorAll('[data-midi]')).toHaveLength(88);
+        expect(keys.querySelector('[data-shade]')).toBeNull();
+
+        vi.useFakeTimers();
+        try {
+          element<HTMLButtonElement>('focus-play').click();
+          rig.clock.advance(1_100);
+          vi.advanceTimersByTime(100);
+
+          const lit = [...keys.querySelectorAll<HTMLElement>('[data-shade]')].map((key) => Number(key.dataset['midi']));
+          expect(lit.sort()).toEqual([...(rig.runtime.controller.lastRoll?.presses.map((press) => press.midi) ?? [])].sort());
+          expect(keys.querySelector<HTMLElement>('.replay-keys__pedal')?.dataset['down']).toBe('true');
+        } finally {
+          vi.useRealTimers();
+        }
+
+        element<HTMLButtonElement>('focus-stop').click();
+
+        expect(keys.hidden).toBe(true);
+        expect(document.body.dataset['replaying']).toBeUndefined();
+        expect(keys.querySelector('[data-shade]')).toBeNull();
+      });
+
       it('sets how fast it is played back with the tempo buttons, and gives them back after', async () => {
         const { runtime } = await aRunPlayed();
         element<HTMLButtonElement>('run-replay').click();

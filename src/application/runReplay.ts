@@ -143,3 +143,64 @@ export function theStepAt(roll: RunRoll, timeline: ExerciseTimeline, atMs: numbe
   }
   return last;
 }
+
+/** How a key is lit while it is down: the verdict its press was given. */
+export type KeyShade = 'perfect' | 'good' | 'wrong' | 'aside';
+
+/**
+ * The keys down a moment into the run, each lit as its press was judged.
+ *
+ * In the colours its mark on the page is drawn in, so a key and the ring it
+ * left say the same thing. A press nothing was decided about - struck while the
+ * music was elsewhere, a note of a chord already collected, the hand being
+ * heard - is lit as set aside: it was played, and it was not a fault.
+ *
+ * Down from the moment the key went down until it came up, or until the end of
+ * the run for one still held when it stopped.
+ */
+export function theKeysDownAt(
+  roll: RunRoll,
+  timeline: ExerciseTimeline,
+  judging: ReplayJudging,
+  atMs: number,
+): ReadonlyMap<number, KeyShade> {
+  const began = rollBeganAtMs(roll);
+  const down = new Map<number, KeyShade>();
+  for (const press of roll.presses) {
+    const from = press.downAtMs - began;
+    const until = press.upAtMs === null ? Number.POSITIVE_INFINITY : press.upAtMs - began;
+    if (atMs < from || atMs >= until) {
+      continue;
+    }
+    down.set(press.midi, shadeOf(press.verdict, press.stepIndex, press.deviationMs, timeline, judging));
+  }
+  return down;
+}
+
+function shadeOf(
+  verdict: NoteVerdict | null,
+  stepIndex: number | null,
+  deviationMs: number | null,
+  timeline: ExerciseTimeline,
+  judging: ReplayJudging,
+): KeyShade {
+  if (verdict === 'wrong') {
+    return 'wrong';
+  }
+  if (verdict === null || stepIndex === null) {
+    return 'aside';
+  }
+  // A right key has a tier; the rest - a chord note struck again, the hand
+  // being heard - have none, and were set aside.
+  return tierOf(verdict, stepIndex, deviationMs, timeline, judging) ?? 'aside';
+}
+
+/** Whether the sustain pedal was down a moment into the run. */
+export function thePedalDownAt(roll: RunRoll, atMs: number): boolean {
+  const began = rollBeganAtMs(roll);
+  return roll.pedal.some(
+    (span) =>
+      span.downAtMs - began <= atMs &&
+      (span.upAtMs === null || atMs < span.upAtMs - began),
+  );
+}

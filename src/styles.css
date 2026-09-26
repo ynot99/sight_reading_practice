@@ -2376,6 +2376,105 @@ body[data-bare='true'] .focus-aside {
 }
 
 /*
+ * The keyboard a run is shown again over, docked along the bottom.
+ *
+ * Under the music, where a piano is, and the width of the screen: the bar
+ * stands above it while it is up, moved by the one attribute that says a run
+ * is being shown again, so nothing measures anything. Eighty-eight keys at
+ * no narrower than a finger's reading of them: where the screen is too narrow
+ * for that - a phone - the row scrolls. His: "на телефоні клавіатуру
+ * придеться буде зробити scrollable".
+ *
+ * The keys are a piano's in either theme: light and dark, as the instrument's.
+ */
+:root {
+  --replay-keys: 72px;
+}
+
+.replay-keys {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 19;
+  display: flex;
+  height: calc(var(--replay-keys) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+body[data-replaying='true'] .focus-bar {
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-keys));
+}
+
+.replay-keys__pedal {
+  flex: 0 0 auto;
+  align-self: center;
+  margin: 0 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.replay-keys__pedal[data-down='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.replay-keys__scroller {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+}
+
+.replay-keys__white {
+  position: relative;
+  flex: 1 0 14px;
+  min-width: 14px;
+  border-right: 1px solid #cbd5e1;
+  border-radius: 0 0 3px 3px;
+  background: #ffffff;
+}
+
+.replay-keys__black {
+  position: absolute;
+  top: 0;
+  right: -30%;
+  z-index: 1;
+  width: 60%;
+  height: 60%;
+  border-radius: 0 0 2px 2px;
+  background: #1f2937;
+}
+
+/* Lit in the colours its ring on the page is drawn in. */
+.replay-keys__white[data-shade='perfect'],
+.replay-keys__black[data-shade='perfect'] {
+  background: #15803d;
+}
+
+.replay-keys__white[data-shade='good'],
+.replay-keys__black[data-shade='good'] {
+  background: #22c55e;
+}
+
+.replay-keys__white[data-shade='wrong'],
+.replay-keys__black[data-shade='wrong'] {
+  background: #b91c1c;
+}
+
+.replay-keys__white[data-shade='aside'],
+.replay-keys__black[data-shade='aside'] {
+  background: #94a3b8;
+}
+
+/*
  * The page and nothing else, until the reader asks for the rest back.
  *
  * His own: sometimes he wants to look at the music with nothing standing

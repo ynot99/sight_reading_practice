@@ -76,7 +76,16 @@ import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession } from './session/PracticeSession.js';
 import { ONE_BREATH_MS } from './session/RunRoll.js';
 import type { RunRoll } from './session/RunRoll.js';
-import { replayFits, theMarksOfTheRun, theStepAt, type ReplayMark } from './runReplay.js';
+import {
+  replayFits,
+  theKeysDownAt,
+  theMarksOfTheRun,
+  thePedalDownAt,
+  theStepAt,
+  type KeyShade,
+  type ReplayJudging,
+  type ReplayMark,
+} from './runReplay.js';
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMeter.js';
@@ -800,6 +809,7 @@ export class PracticeController {
    */
   private replay: {
     readonly roll: RunRoll;
+    readonly judging: ReplayJudging;
     readonly marks: readonly ReplayMark[];
     drawn: number;
     drawnUpToMs: number;
@@ -2057,9 +2067,11 @@ export class PracticeController {
       this.deps.modes.get(playedIn).requiresMetronome;
     this.deps.overlay.clearPlayed();
     this.deps.fade.clearFaded();
+    const judging: ReplayJudging = { keepsTime, tempoBpm: this.tempoBpm };
     this.replay = {
       roll,
-      marks: theMarksOfTheRun(roll, timeline, { keepsTime, tempoBpm: this.tempoBpm }),
+      judging,
+      marks: theMarksOfTheRun(roll, timeline, judging),
       drawn: 0,
       drawnUpToMs: 0,
       atStep: null,
@@ -2122,6 +2134,22 @@ export class PracticeController {
   /** Whether a run is being shown again on the page. */
   get replaying(): boolean {
     return this.replay !== null;
+  }
+
+  /**
+   * The keys and the pedal down a moment into the run being shown again, or
+   * `null` where none is. See `theKeysDownAt`.
+   */
+  replayKeysAt(atMs: number): { readonly keys: ReadonlyMap<number, KeyShade>; readonly pedal: boolean } | null {
+    const replay = this.replay;
+    const timeline = this.timeline;
+    if (replay === null || timeline === null) {
+      return null;
+    }
+    return {
+      keys: theKeysDownAt(replay.roll, timeline, replay.judging, atMs),
+      pedal: thePedalDownAt(replay.roll, atMs),
+    };
   }
 
   /**

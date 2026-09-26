@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   replayFits,
+  theKeysDownAt,
   theMarksOfTheRun,
+  thePedalDownAt,
   theStepAt,
   type ReplayJudging,
 } from '../../src/application/runReplay.js';
@@ -151,5 +153,43 @@ describe('where the music was, a moment into the run', () => {
     // The run begins at its first press, which is its nought.
     expect(theStepAt(run, timeline, 1_000)).toBe(0);
     expect(theStepAt(run, timeline, 2_800)).toBe(1);
+  });
+});
+
+describe('the keys down, and the pedal, a moment into the run', () => {
+  it('lights each key from when it went down to when it came up, as its press was judged', () => {
+    const run = roll([
+      press({ downAtMs: PLAYED_AT, upAtMs: PLAYED_AT + 800, stepIndex: 0, midi: MIDI.C4, deviationMs: 10 }),
+      press({ downAtMs: PLAYED_AT + 1_300, upAtMs: PLAYED_AT + 1_900, stepIndex: 1, midi: MIDI.D4, deviationMs: 300 }),
+      press({ downAtMs: PLAYED_AT + 1_400, upAtMs: PLAYED_AT + 1_600, midi: MIDI.C5, verdict: 'wrong', stepIndex: 1 }),
+      press({ downAtMs: PLAYED_AT + 1_500, upAtMs: null, midi: MIDI.G2, verdict: 'other-hand', stepIndex: 1 }),
+    ]);
+    const at = (ms: number): [number, string][] => [...theKeysDownAt(run, timeline, IN_TIME, ms)];
+
+    expect(at(400)).toEqual([[MIDI.C4, 'perfect']]);
+    // Let go of: dark again.
+    expect(at(1_000)).toEqual([]);
+    expect(at(1_550)).toEqual([
+      [MIDI.D4, 'good'],
+      [MIDI.C5, 'wrong'],
+      [MIDI.G2, 'aside'],
+    ]);
+    // Still held when the run stopped, so held to the end.
+    expect(at(60_000)).toEqual([[MIDI.G2, 'aside']]);
+  });
+
+  it('says the pedal is down while it was, and to the end where it was never let up', () => {
+    const run: RunRoll = {
+      ...roll([press({ downAtMs: PLAYED_AT })]),
+      pedal: [
+        { downAtMs: PLAYED_AT + 500, upAtMs: PLAYED_AT + 1_500 },
+        { downAtMs: PLAYED_AT + 3_000, upAtMs: null },
+      ],
+    };
+
+    expect(thePedalDownAt(run, 100)).toBe(false);
+    expect(thePedalDownAt(run, 1_000)).toBe(true);
+    expect(thePedalDownAt(run, 2_000)).toBe(false);
+    expect(thePedalDownAt(run, 9_000)).toBe(true);
   });
 });

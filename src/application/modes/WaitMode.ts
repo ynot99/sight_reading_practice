@@ -71,6 +71,7 @@ export class WaitMode extends BasePracticeMode {
       event.midi,
       rushed(context, event) ? 'rushed' : outcome.verdict,
       deviationMs,
+      event.timestampMs,
     );
 
     if (outcome.completed) {

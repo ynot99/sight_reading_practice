@@ -58,6 +58,7 @@ function verdict(midi: number, event: Partial<NoteJudgedEvent> = {}): NoteJudged
     stepIndex: 0,
     deviationMs: null,
     remaining: [],
+    atMs: 0,
     ...event,
   };
 }

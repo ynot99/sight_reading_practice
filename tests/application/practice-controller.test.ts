@@ -4910,6 +4910,92 @@ describe('rhythm only, sounding the music', () => {
     expect(rig.instrument.played.every((note) => note.atMs === 1_234)).toBe(true);
   });
 
+  describe('under the metronome', () => {
+    // A step there is finished when its written time is over, not when it is
+    // played, and the notes used to be sounded when it finished: a beat after
+    // the press, or - later than the instrument will play anything - never.
+    // His: "з клавіатури неможливо грати у ритм, бо натискання пальцем грає
+    // ноти із затримкою".
+    async function tappingAlong(modeId: string): Promise<ReturnType<typeof createController>> {
+      const rig = await tappingTheRhythm({ rhythmSoundsTheMusic: true, modeId, countInBars: 0 });
+      // The first tick, which opens the first step at nought.
+      rig.metronome.advanceSubdivisions(1);
+      return rig;
+    }
+
+    it('sounds a press when it is made, not when its beat is over', async () => {
+      const rig = await tappingAlong(FLOW_MODE_ID);
+      rig.clock.advance(40);
+
+      rig.midi.noteOn(MIDI.G4);
+
+      expect(soundedNotes(rig.instrument)).toEqual([MIDI.C3, MIDI.C4]);
+      expect(rig.instrument.played.every((note) => note.atMs === 40)).toBe(true);
+    });
+
+    it('sounds a press at a bar the run waits at, when it is made', async () => {
+      const rig = await tappingAlong(BAR_MODE_ID);
+      rig.clock.advance(40);
+
+      rig.midi.noteOn(MIDI.G4);
+
+      expect(soundedNotes(rig.instrument)).toEqual([MIDI.C3, MIDI.C4]);
+    });
+
+    it('sounds nothing for a step the music went past unplayed', async () => {
+      const rig = await tappingAlong(FLOW_MODE_ID);
+      rig.midi.noteOn(MIDI.G4);
+      rig.midi.noteOff(MIDI.G4);
+
+      // The second beat and the third, with no key pressed for either.
+      rig.metronome.advanceSubdivisions(2);
+
+      expect(soundedNotes(rig.instrument)).toEqual([MIDI.C3, MIDI.C4]);
+    });
+
+    it('sounds a press kept for the next beat when it is made, and once', async () => {
+      // Fifty milliseconds before the second beat, near enough to be meant for
+      // it: judged when that beat opens, and heard when it was played.
+      const rig = await tappingAlong(FLOW_MODE_ID);
+      rig.clock.advance(950);
+
+      rig.midi.noteOn(MIDI.G4);
+
+      expect(rig.instrument.played).toEqual([
+        expect.objectContaining({ midi: MIDI.D4, atMs: 950 }),
+      ]);
+
+      rig.metronome.advanceSubdivisions(1);
+
+      expect(soundedNotes(rig.instrument)).toEqual([MIDI.D4]);
+    });
+
+    it('sounds a step again in the next run', async () => {
+      // Once a step is once a run: a second run through the same bars is
+      // played again, and heard again.
+      const rig = await tappingAlong(FLOW_MODE_ID);
+      rig.midi.noteOn(MIDI.G4);
+      rig.midi.noteOff(MIDI.G4);
+      rig.controller.stop();
+      rig.instrument.played.length = 0;
+
+      rig.controller.start();
+      rig.metronome.advanceSubdivisions(1);
+      rig.midi.noteOn(MIDI.G4);
+
+      expect(soundedNotes(rig.instrument)).toEqual([MIDI.C3, MIDI.C4]);
+    });
+
+    it('sounds a chord once, however many of its notes are pressed', async () => {
+      const rig = await tappingAlong(FLOW_MODE_ID);
+
+      rig.midi.noteOn(MIDI.G4);
+      rig.midi.noteOn(MIDI.C5);
+
+      expect(soundedNotes(rig.instrument)).toEqual([MIDI.C3, MIDI.C4]);
+    });
+  });
+
   it('sounds only the hand being read', async () => {
     const rig = await tappingTheRhythm({ rhythmSoundsTheMusic: true, handStaff: 1 });
 

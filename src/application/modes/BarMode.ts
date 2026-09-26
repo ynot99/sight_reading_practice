@@ -170,7 +170,7 @@ export class BarMode extends FlowMode {
     const matcher = context.matcher;
     if (matcher === null) {
       // Nothing is owed here, so there is nothing for the gate to open on.
-      context.judgeNote(event.midi, 'wrong', null);
+      context.judgeNote(event.midi, 'wrong', null, event.timestampMs);
       return;
     }
 
@@ -178,7 +178,12 @@ export class BarMode extends FlowMode {
     // No deviation at a gate: the reader is being asked where the beat is,
     // not whether they found it in time. Measuring them against a clock that
     // is standing still would be measuring them against nothing.
-    context.judgeNote(event.midi, outcome.verdict, outcome.verdict === 'correct' ? 0 : null);
+    context.judgeNote(
+      event.midi,
+      outcome.verdict,
+      outcome.verdict === 'correct' ? 0 : null,
+      event.timestampMs,
+    );
 
     if (outcome.completed) {
       // The chord is complete, so the bar begins - here, at this press. The

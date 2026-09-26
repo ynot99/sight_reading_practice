@@ -209,8 +209,19 @@ export interface PracticeContext {
    */
   startTheHeldBarAt(atMs: number): void;
 
-  /** Reports a judged press; the session records and publishes it. */
-  judgeNote(midi: number, verdict: NoteVerdict, deviationMs: number | null): void;
+  /**
+   * Reports a judged press; the session records and publishes it.
+   *
+   * `atMs` is when the key went down, which a press kept for the next beat
+   * was well before it was judged.
+   */
+  judgeNote(midi: number, verdict: NoteVerdict, deviationMs: number | null, atMs: number): void;
+  /**
+   * Says a press is being kept for the step after the open one, where it will
+   * be judged when that step opens. See `PressKeptEvent` for why it is said
+   * at once.
+   */
+  keptForTheNextStep(midi: number, atMs: number): void;
   /** Finalises the current step and advances. Status is derived when omitted. */
   completeStep(status?: StepStatus): void;
   /** Ends the run early (used when a mode runs out of material). */

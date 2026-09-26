@@ -64,6 +64,29 @@ export interface NoteJudgedEvent {
   readonly remaining: readonly number[];
   /** How well a right key landed; absent for every other press. See `noteTiers`. */
   readonly tier?: NoteTier;
+  /**
+   * When the key went down, on this page's clock.
+   *
+   * Not when it was judged: a press reaching for the next beat is kept until
+   * that beat opens, and anything that answers the press - the written notes
+   * sounded in its place - has to answer it when it was made.
+   */
+  readonly atMs: number;
+}
+
+/**
+ * A press kept for the step after the open one, to be judged when it opens.
+ *
+ * Announced now rather than when it is judged, for the one thing that cannot
+ * wait: what it sounds like. Rhythm only, sounding the written notes, heard the
+ * press as late as it had been early - up to the early window, 120 ms.
+ */
+export interface PressKeptEvent {
+  readonly midi: number;
+  /** When the key went down, on this page's clock. */
+  readonly atMs: number;
+  /** The step it is kept for. */
+  readonly stepIndex: number;
 }
 
 /**
@@ -91,6 +114,7 @@ export interface SessionEventMap {
   stepCompleted: StepCompletedEvent;
   positionChanged: PositionEvent;
   noteJudged: NoteJudgedEvent;
+  pressKept: PressKeptEvent;
   beat: MetronomeTick;
   barBegan: BarBeganEvent;
   finished: SessionFinishedEvent;

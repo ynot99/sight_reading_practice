@@ -794,6 +794,13 @@ export class PracticeController {
   /** Notes of the other hand still sounding, so a stop can take them back. */
   private readonly sounding = new Set<number>();
   /**
+   * Steps of this run whose written notes a press has sounded, in rhythm only.
+   *
+   * Once a step: every note of a chord is a press, and a press kept for the
+   * next beat is announced when it is made and judged again when it opens.
+   */
+  private readonly stepsSoundedForTheReader = new Set<number>();
+  /**
    * When the reader last moved the music on, and where the music was then.
    *
    * A mode that waits has no clock of its own: it reaches every step the
@@ -2373,6 +2380,7 @@ export class PracticeController {
     });
 
     this.currentSession = session;
+    this.stepsSoundedForTheReader.clear();
     // Back to the first note before a beat of the count-in is heard. The
     // cursor used to be left wherever the run before it was paused until the
     // music began, so the reader spent the count-in looking at the wrong bar
@@ -2390,12 +2398,6 @@ export class PracticeController {
       // A step is dimmed the moment it is done with, whether it was played
       // well, badly or not at all: the page empties as the music passes.
       session.events.on('stepCompleted', ({ result, atMs }) => {
-        if (this.soundsTheMusicForTheReader && result.status !== 'skipped') {
-          const step = this.timeline?.at(result.index);
-          if (step !== undefined && step !== null) {
-            this.soundTheWrittenNotes(step, atMs);
-          }
-        }
         this.readerReaches(result.index, result.status, atMs);
         // The beat is finished, so its right notes stop being provisional.
         // Said for every step, including one nobody played: telling the
@@ -2425,6 +2427,21 @@ export class PracticeController {
             'settle',
           );
         }
+      }),
+    );
+
+    this.sessionSubscriptions.push(
+      // Rhythm only, sounding the music: a press sounds the notes written for
+      // the step it was for, when it was made. On the press and not when the
+      // step is finished, which under the metronome is the end of the step's
+      // written time: the notes came a beat late, or - later than the
+      // instrument will play anything - not at all. His: "з клавіатури
+      // неможливо грати у ритм, бо натискання пальцем грає ноти із затримкою".
+      session.events.on('pressKept', ({ stepIndex, atMs }) => {
+        this.soundTheStepPlayed(stepIndex, atMs);
+      }),
+      session.events.on('noteJudged', ({ stepIndex, atMs }) => {
+        this.soundTheStepPlayed(stepIndex, atMs);
       }),
     );
 
@@ -3442,6 +3459,24 @@ export class PracticeController {
   get replacesTheReadersKeys(): boolean {
     const status = this.currentSession?.status;
     return this.soundsTheMusicForTheReader && (status === 'running' || status === 'counting-in');
+  }
+
+  /**
+   * Sounds a step a press was for, once, where the run sounds the music.
+   *
+   * Only a step somebody pressed a key for: one the music went past unplayed
+   * is silence, as it was on the keys.
+   */
+  private soundTheStepPlayed(index: number, atMs: number): void {
+    if (!this.soundsTheMusicForTheReader || this.stepsSoundedForTheReader.has(index)) {
+      return;
+    }
+    const step = this.timeline?.at(index);
+    if (step === undefined || step === null) {
+      return;
+    }
+    this.stepsSoundedForTheReader.add(index);
+    this.soundTheWrittenNotes(step, atMs);
   }
 
   /**

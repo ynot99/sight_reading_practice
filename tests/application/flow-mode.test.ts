@@ -281,6 +281,26 @@ describe('Flow mode', () => {
       expect(results[1]?.hits.map((hit) => hit.midi)).toEqual([MIDI.D4]);
     });
 
+    it('says at once that it was kept, for which step, and when the key went down', () => {
+      // Judged when its beat opens, but what it sounds like cannot wait for
+      // that: rhythm only, sounding the written notes, heard a press as late
+      // as it had been early.
+      const harness = flowHarness();
+      startAndCountIn(harness);
+      harness.metronome.advanceSubdivisions(3);
+      harness.clock.set(RUN_STARTS_AT_MS + 950);
+      harness.midi.noteOn(MIDI.D4);
+
+      expect(harness.of('pressKept')).toEqual([
+        { midi: MIDI.D4, atMs: RUN_STARTS_AT_MS + 950, stepIndex: 1 },
+      ]);
+
+      harness.metronome.advanceSubdivisions(1);
+
+      // And when it is judged, it still says when it was pressed.
+      expect(harness.of('noteJudged')[0]?.atMs).toBe(RUN_STARTS_AT_MS + 950);
+    });
+
     it('belongs to the beat it was nearer to, when that beat wants it', () => {
       // Three hundred milliseconds before the second beat of a slow bar is
       // nearer to that beat than to the one behind it, and the second beat is

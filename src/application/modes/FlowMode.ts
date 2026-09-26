@@ -83,6 +83,7 @@ export class FlowMode extends BasePracticeMode {
     if (this.isAimedAtTheNextStep(context, event)) {
       // Held back rather than judged: it belongs to a step that has not begun.
       this.early.push(event);
+      context.keptForTheNextStep(event.midi, event.timestampMs);
       return;
     }
     this.judge(context, event);
@@ -146,7 +147,7 @@ export class FlowMode extends BasePracticeMode {
     const step = context.currentStep;
     if (matcher === null || step === null) {
       // Pressed during a rest: still worth reporting as an extra note.
-      context.judgeNote(event.midi, 'wrong', null);
+      context.judgeNote(event.midi, 'wrong', null, event.timestampMs);
       return;
     }
 
@@ -157,6 +158,6 @@ export class FlowMode extends BasePracticeMode {
     // takes deviations from correct notes, so the timing statistics are
     // untouched by this.
     const deviationMs = event.timestampMs - context.scheduledTimeMs(step.onsetTicks);
-    context.judgeNote(event.midi, outcome.verdict, deviationMs);
+    context.judgeNote(event.midi, outcome.verdict, deviationMs, event.timestampMs);
   }
 }

@@ -1420,7 +1420,12 @@ export class PracticeSession {
     return previous.missing.includes(midi) ? previous : null;
   }
 
-  private judgeNote(midi: number, rawVerdict: NoteVerdict, deviationMs: number | null): void {
+  private judgeNote(
+    midi: number,
+    rawVerdict: NoteVerdict,
+    deviationMs: number | null,
+    atMs: number,
+  ): void {
     const owed = rawVerdict === 'wrong' ? this.oweingStepBefore(midi) : null;
     const verdict: NoteVerdict =
       rawVerdict === 'duplicate'
@@ -1463,6 +1468,7 @@ export class PracticeSession {
       deviationMs: owed === null ? deviationMs : this.lateBy(owed, deviationMs),
       remaining: this.matcher?.remaining ?? [],
       ...(landed === null ? {} : { tier: landed.tier }),
+      atMs,
     };
     // Written down and announced from one object, so the picture of the run
     // and the marks on the page cannot come to different conclusions.
@@ -1618,8 +1624,11 @@ export class PracticeSession {
       movesOnTo: (midi: number) => session.movesOnTo(midi),
       positionTicks: (tick: MetronomeTick) => tick.positionTicks - session.positionOffsetTicks,
       scheduledTimeMs: (ticks: number) => session.runStartedAt + session.elapsedTo(ticks),
-      judgeNote: (midi: number, verdict: NoteVerdict, deviationMs: number | null) => {
-        session.judgeNote(midi, verdict, deviationMs);
+      judgeNote: (midi: number, verdict: NoteVerdict, deviationMs: number | null, atMs: number) => {
+        session.judgeNote(midi, verdict, deviationMs, atMs);
+      },
+      keptForTheNextStep: (midi: number, atMs: number) => {
+        session.emitter.emit('pressKept', { midi, atMs, stepIndex: session.stepIndex + 1 });
       },
       holdForTheBar: (untilTicks: number) => {
         session.holdForTheBar(untilTicks);

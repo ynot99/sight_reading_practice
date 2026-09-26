@@ -1,6 +1,7 @@
 import { PracticeController } from '../application/PracticeController.js';
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { BarMode } from '../application/modes/BarMode.js';
+import { NoteMode } from '../application/modes/NoteMode.js';
 import { FlowMode } from '../application/modes/FlowMode.js';
 import { NoAudioWaking, type IAudioWaking } from '../application/ports/IAudioWaking.js';
 import { NoScreenWake, type IScreenWake } from '../application/ports/IScreenWake.js';
@@ -363,6 +364,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const modes = new PracticeModeRegistry().registerAll([
     new FlowMode(),
     new BarMode(),
+    new NoteMode(),
     new WaitMode(),
   ]);
   const ladder = new PracticeLadder(BUILT_IN_LADDER);

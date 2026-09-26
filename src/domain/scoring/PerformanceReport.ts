@@ -75,6 +75,9 @@ export interface PerformanceTotals {
    * but how many times the music had to wait. It is the measure of when to
    * leave that mode for Flow - the gate stops catching you before the notes
    * stop being wrong.
+   *
+   * Where the gate stands at every note instead, it counts the notes the music
+   * stood at: the same question, asked a note at a time.
    */
   readonly barsWaitedFor: number;
 }

@@ -8,6 +8,7 @@ import { TimeSignature } from '../../domain/model/TimeSignature.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
 import {
   buildMetronomeTick,
+  isHeldBack,
   subdivisionSecondsAt,
   ticksPerSubdivision,
 } from '../audio/metronomeMath.js';
@@ -133,7 +134,9 @@ export class ManualMetronome implements IMetronome {
   advanceSubdivisions(count = 1): MetronomeTick[] {
     const ticks: MetronomeTick[] = [];
     for (let step = 0; step < count; step += 1) {
-      if (!this.running) {
+      // Held at a gate, as the real one is: nothing past it is built, and
+      // the clock stands where the test left it.
+      if (!this.running || isHeldBack(this.nextIndex, this.config)) {
         break;
       }
       const scheduledTimeMs = this.nextTimeMs;
@@ -163,7 +166,11 @@ export class ManualMetronome implements IMetronome {
       if (nextPosition > positionTicks) {
         break;
       }
-      emitted.push(...this.advanceSubdivisions(1));
+      const one = this.advanceSubdivisions(1);
+      if (one.length === 0) {
+        break;
+      }
+      emitted.push(...one);
       guard -= 1;
     }
     return emitted;

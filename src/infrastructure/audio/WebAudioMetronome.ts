@@ -12,6 +12,7 @@ import { timeTheStart } from '../../shared/timeTheStart.js';
 import {
   buildMetronomeTick,
   isAudibleClick,
+  isHeldBack,
   subdivisionSecondsAt,
   ticksPerSubdivision,
 } from './metronomeMath.js';
@@ -252,7 +253,9 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     }
     const horizon = context.currentTime + this.options.scheduleAheadSec;
 
-    while (this.nextTickAudioTime < horizon) {
+    // Not past a gate the run is holding: those ticks wait, keeping the
+    // moments they were going to be heard at, until it is moved on.
+    while (this.nextTickAudioTime < horizon && !isHeldBack(this.nextTickIndex, this.config)) {
       const tick = this.buildTick(this.nextTickIndex, this.nextTickAudioTime);
       timeTheStart(
         'metronome: first tick placed',

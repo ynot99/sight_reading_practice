@@ -291,6 +291,22 @@ export interface MetronomeConfig {
    * a metronome that is not following a piece.
    */
   readonly endsAtTicks: number | null;
+  /**
+   * Where the pulse stands still until it is told to go on.
+   *
+   * No tick further into the music than this is built, heard or delivered;
+   * the ones up to it go on as usual. Not the same thing as the end above,
+   * past which ticks still run silently for a mode to finish on: a gate in
+   * the middle of the music has nothing after it to run through until the
+   * reader has played it.
+   *
+   * Moved on by configuring again, which a pulse allows while it runs - and
+   * it has to be moved *before* the pulse gets there, since a look-ahead
+   * scheduler builds a tick a tenth of a second before it is heard.
+   *
+   * Absent or `null`: nothing holds it.
+   */
+  readonly holdsPastTicks?: number | null;
   /** Keep the pulse but stay silent (Flow mode without a click). */
   readonly muted: boolean;
 }

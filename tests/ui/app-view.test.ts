@@ -14,6 +14,7 @@ import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js'
 import { WAIT_MODE_ID } from '../../src/application/modes/WaitMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
+import { NoteMode, NOTE_MODE_ID } from '../../src/application/modes/NoteMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { CLICK_WHEN } from '../../src/application/ports/IMetronome.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
@@ -284,6 +285,7 @@ function createRig(
     new WaitMode(),
     new FlowMode(),
     new BarMode(),
+    new NoteMode(),
   ]);
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const instrument = new RecordingPitchPlayer();
@@ -4259,7 +4261,32 @@ describe('AppView', () => {
       expect(element('result').textContent).toMatch(/Bars it waited at\s*\d+ of \d+/);
     });
 
-    it('walks one button through the four kinds of run', async () => {
+    it('says how many notes the music waited at, where every note waits', async () => {
+      // The bar line's number, a note at a time, and a fraction for the same
+      // reason: of the notes the reader was asked for.
+      const { view, runtime, metronome } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      const cycle = element<HTMLButtonElement>('frame-cycle');
+      // Waiting is where the rig starts; every note is four along.
+      for (const _ of [1, 2, 3, 4]) {
+        cycle.click();
+      }
+      await Promise.resolve();
+      expect(runtime.controller.settings.modeId).toBe(NOTE_MODE_ID);
+
+      element<HTMLButtonElement>('sheet-modes').dispatchEvent(
+        new Event('click', { bubbles: true }),
+      );
+      element<HTMLButtonElement>('focus-play').click();
+      metronome.advanceBeats(1);
+      element<HTMLButtonElement>('focus-stop').click();
+
+      expect(element('result').textContent).toMatch(/Notes it waited at\s*\d+ of \d+/);
+      expect(element('result').textContent).not.toContain('Bars it waited at');
+    });
+
+    it('walks one button through the five kinds of run', async () => {
       // His shape: one button pressed until it says the one you want, above
       // the squares rather than among them - the squares are all "make it
       // harder" and this is the frame they sit inside. What it says and what
@@ -4311,6 +4338,14 @@ describe('AppView', () => {
       expect(cycle.dataset['frame']).toBe('bar');
       expect(element('frame-what').textContent).toContain('bar line');
       expect(cycle.getAttribute('aria-pressed')).toBe('true');
+
+      // Then a gate at every note with the beat still running, which helps
+      // more than the bar line and less than waiting, where there is no beat.
+      cycle.click();
+
+      expect(runtime.controller.settings.modeId).toBe(NOTE_MODE_ID);
+      expect(cycle.dataset['frame']).toBe('note');
+      expect(element('frame-what').textContent).toContain('Each note');
 
       // And round again, rather than stopping at the end of the list.
       cycle.click();
@@ -6626,6 +6661,25 @@ describe('AppView', () => {
       expect(what.querySelector('.profile-figure')).not.toBeNull();
       expect(what.textContent).toContain('18/20');
       expect(what.textContent).toContain('13 ms');
+    });
+
+    it('says how often the music waited, the way the reading was played', async () => {
+      // A bar line's gate counts bars, a gate at every note counts notes - of
+      // the notes asked for - and a frame with no gate says nothing about it.
+      const said = async (modeId: string): Promise<string> => {
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.runtime.history.record('score:Gated', readingKept({ modeId }));
+        element<HTMLButtonElement>('focus-readings').click();
+        element('readings-list').querySelector('button')?.dispatchEvent(
+          new MouseEvent('click', { bubbles: true }),
+        );
+        return element('reading-what').textContent ?? '';
+      };
+
+      expect(await said(NOTE_MODE_ID)).toMatch(/Notes it waited at\s*1 of 12/);
+      expect(await said(BAR_MODE_ID)).toMatch(/Bars it waited at\s*1 of 3/);
+      expect(await said(FLOW_MODE_ID)).not.toMatch(/waited at/);
     });
 
     it('says when only some of the presses are drawn, rather than letting them be counted', async () => {

@@ -1285,7 +1285,7 @@ describe('the rows of the drawing and the pitch map beside them', () => {
 describe('the mark a frame wears', () => {
   // Every frame the one button walks through; the view writes these names on
   // the button and on each mark it clones from it.
-  const FRAMES = ['wait', 'bar', 'flow', 'listen'];
+  const FRAMES = ['wait', 'bar', 'note', 'flow', 'listen'];
   /** The rules that name `selector`, alone or in a group. */
   const naming = (selector: string): { body: string }[] =>
     rules().filter((rule) =>

@@ -3537,6 +3537,11 @@ body[data-playing='true'] .score__modes {
   --mode-ground: #155e63;
 }
 
+.frame__choice[data-frame='note'],
+.score__mode--note {
+  --mode-ground: #86198f;
+}
+
 .frame__choice[data-frame='wait'],
 .score__mode--wait {
   --mode-ground: #78350f;
@@ -3555,6 +3560,7 @@ body[data-playing='true'] .score__modes {
 /* Solid drawings, where the squares' are drawn with a line. */
 .frame__choice svg,
 .score__mode--bar svg,
+.score__mode--note svg,
 .score__mode--wait svg,
 .score__mode--flow svg,
 .score__mode--listen svg {

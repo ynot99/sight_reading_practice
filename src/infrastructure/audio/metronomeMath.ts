@@ -157,6 +157,15 @@ function survivesTheSilence(tick: MetronomeTick, config: MetronomeConfig): boole
 }
 
 /**
+ * Whether the tick at this index is past where the pulse is held, and so is
+ * not to be built yet. See `MetronomeConfig.holdsPastTicks`.
+ */
+export function isHeldBack(index: number, config: MetronomeConfig): boolean {
+  const holds = config.holdsPastTicks ?? null;
+  return holds !== null && index * ticksPerSubdivision(config) > holds;
+}
+
+/**
  * Whether a tick is one the reader hears.
  *
  * The metronome always ticks at the resolution the loop needs; this decides

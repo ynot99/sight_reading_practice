@@ -30,6 +30,15 @@ export interface IPracticeMode {
    */
   readonly waitsForTheFirstBeat: boolean;
   /**
+   * Whether a gate lets the music run up to its note and holds it only past it.
+   *
+   * The other way a gate can stand. At a bar line the pulse falls silent at the
+   * gate and the reader's press is the downbeat. At every note that would be no
+   * pulse at all, so there the beat falls as written, the reader has the note's
+   * Perfect window to meet it, and only after that does the music stand still.
+   */
+  readonly holdsPastTheGate: boolean;
+  /**
    * Grading this mode is usually judged by.
    *
    * A default, not a binding: the reader may grade any mode by any registered
@@ -73,6 +82,9 @@ export abstract class BasePracticeMode implements IPracticeMode {
 
   /** Concrete for the same reason: most modes count themselves in. */
   readonly waitsForTheFirstBeat: boolean = false;
+
+  /** And this one: a gate, where a mode has one, is at a bar line. */
+  readonly holdsPastTheGate: boolean = false;
 
   /** Nothing waits, by default: most modes are carried by the clock. */
   holdsAt(_context: PracticeContext, _step: PracticeStep): number | null {

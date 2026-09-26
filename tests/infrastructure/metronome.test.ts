@@ -299,6 +299,26 @@ describe('ManualMetronome', () => {
     expect(metronome.nextTickIndex).toBe(5);
   });
 
+  it('holds where it is told to, as the real one does, and goes on when moved', () => {
+    const clock = new ManualClock();
+    const metronome = new ManualMetronome(clock);
+    const q = Duration.QUARTER.ticks;
+    metronome.configure({ ...COMMON, holdsPastTicks: q });
+    metronome.start();
+
+    metronome.advanceBeats(3);
+    metronome.advanceToTicks(q * 3);
+
+    // Up to the second beat and not a tick further: the clock stands with it.
+    expect(metronome.emitted.at(-1)?.positionTicks).toBe(q);
+    expect(clock.now()).toBe(1000);
+
+    metronome.configure({ ...COMMON, holdsPastTicks: null });
+    const [next] = metronome.advanceSubdivisions(1);
+
+    expect(next?.positionTicks).toBe(q + q / 4);
+  });
+
   it('restarts its counters on each start', () => {
     const clock = new ManualClock();
     const metronome = new ManualMetronome(clock);

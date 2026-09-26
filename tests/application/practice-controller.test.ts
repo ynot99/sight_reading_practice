@@ -8,6 +8,7 @@ import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js'
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
 import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { WAIT_MODE_ID, WaitMode } from '../../src/application/modes/WaitMode.js';
+import { NOTE_MODE_ID, NoteMode } from '../../src/application/modes/NoteMode.js';
 import { LISTEN_MODE_ID } from '../../src/application/modes/ListenFrame.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
 import type { ExerciseRequest } from '../../src/domain/generation/IExerciseGenerator.js';
@@ -95,7 +96,12 @@ function createController(
   const controller = new PracticeController({
     presets: new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS),
     rhythms: new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES),
-    modes: new PracticeModeRegistry().registerAll([new WaitMode(), new FlowMode(), new BarMode()]),
+    modes: new PracticeModeRegistry().registerAll([
+      new WaitMode(),
+      new FlowMode(),
+      new BarMode(),
+      new NoteMode(),
+    ]),
     serializer: new MusicXmlSerializer(),
     renderer,
     cursor: renderer.cursor,
@@ -2062,6 +2068,41 @@ describe('hearing the hand you are not reading', () => {
     midi.noteOn(MIDI.G4, clock.now());
 
     expect(sounded(instrument).length).toBeGreaterThan(beforeTheLine);
+  });
+
+  it('holds the other hand at every note until the reader plays it, where every note waits', async () => {
+    // His, asking for the frame: "продивись щоб hear other hand випадково не
+    // гралась". The music stands at a note the reader has not met, and the
+    // other hand with it; it comes in with the press.
+    const { controller, instrument, midi, metronome, clock } = await readingTheTreble();
+    controller.updateSettings({ modeId: NOTE_MODE_ID, countInBars: 0 });
+    controller.start();
+    metronome.advanceSubdivisions(1);
+
+    // The first note's bass waits for the first note.
+    expect(sounded(instrument)).toEqual([]);
+    midi.noteOn(MIDI.C4, clock.now());
+    expect(sounded(instrument)).toEqual([MIDI.C3]);
+
+    // The rest of the bar met on its beats, which reaches the second bar's
+    // chord: its bass is not heard before the treble is.
+    for (const note of [MIDI.D4, MIDI.E4, MIDI.F4]) {
+      metronome.advanceSubdivisions(4);
+      midi.noteOn(note, clock.now());
+    }
+    metronome.advanceSubdivisions(4);
+    const atTheChord = sounded(instrument).length;
+    // Standing there, however long it stands.
+    metronome.advanceSubdivisions(8);
+    clock.advance(2_000);
+
+    expect(sounded(instrument)).toHaveLength(atTheChord);
+
+    midi.noteOn(MIDI.G4, clock.now());
+
+    expect(sounded(instrument).slice(atTheChord)).toEqual(
+      expect.arrayContaining([MIDI.G2, MIDI.D3]),
+    );
   });
 
   it('plays the piece instead of beginning a run, in the listening frame', async () => {

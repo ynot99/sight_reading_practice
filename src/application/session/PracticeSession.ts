@@ -6,7 +6,7 @@ import {
   type StepResult,
   type StepStatus,
 } from '../../domain/scoring/PerformanceReport.js';
-import { landing, type NoteHit } from '../../domain/scoring/noteTiers.js';
+import { landing, perfectWindowMs, type NoteHit } from '../../domain/scoring/noteTiers.js';
 import { expectedFor } from '../../domain/timeline/Timeline.js';
 import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timeline.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../../shared/EventEmitter.js';
@@ -125,6 +125,18 @@ export class PracticeSession {
   private pulseGeneration = 0;
   /** The count-in the plan now in force was laid out with. */
   private pulseCountInBars = 0;
+  /**
+   * Where to look for the note the pulse is held just past, in a frame whose
+   * gates hold past their note; `null` in every other frame.
+   *
+   * The step the search begins at, not the tick: the gate is the first step
+   * from here that asks the reader for something, and which that is depends on
+   * the hand being read. Moved on as each gate opens - *before* the pulse gets
+   * there, since a look-ahead scheduler builds a tick a tenth of a second
+   * ahead of hearing it, and a tick built past an unplayed note is the music
+   * going on without the reader.
+   */
+  private pulseHeldFrom: number | null = null;
   /**
    * Whether the run's clock is still to be taken from the pulse it restarted.
    *
@@ -315,6 +327,7 @@ export class PracticeSession {
     this.resetRunState();
     this.theOpeningChord = [...opening];
     this.pedalIsDown = pedalWasDown;
+    this.pulseHeldFrom = this.mode.holdsPastTheGate ? this.resumeAtIndex : null;
 
     // Silent from the first note onwards where the reader gives that beat:
     // the count-in still sounds, and nothing past it does until they play.
@@ -397,6 +410,7 @@ export class PracticeSession {
       bars: this.barsToBeat(countInBars),
       tempos: this.temposToBeat(countInBars),
       endsAtTicks: this.endOfTheMusic(countInBars, stopAtTicks),
+      holdsPastTicks: this.theNextGate(countInBars),
       subdivisionsPerPulse: subdivisionsPerPulseFor(
         this.timeline,
         this.timeline.exercise.timeSignature,
@@ -407,6 +421,33 @@ export class PracticeSession {
       silences: this.options.clickSilences,
       muted: clickIsSilent(this.clickForThePulse()),
     });
+  }
+
+  /**
+   * The tick of the pulse the music is held just past, or `null`.
+   *
+   * On the pulse's own count, which begins at the front of its count-in and at
+   * the place the run picks up at - the same reckoning the end of the music is
+   * given in.
+   */
+  private theNextGate(countInBars: number): number | null {
+    if (this.pulseHeldFrom === null) {
+      return null;
+    }
+    for (let index = this.pulseHeldFrom; index < this.timeline.length; index += 1) {
+      const step = this.timeline.at(index);
+      if (step === null) {
+        break;
+      }
+      if (this.expectedAt(step).length > 0) {
+        return metronomeEnd(this.timeline.exercise, {
+          countInBars,
+          fromTicks: this.resumeAtTicks,
+          untilTicks: step.onsetTicks,
+        });
+      }
+    }
+    return null;
   }
 
   pause(): void {
@@ -441,6 +482,12 @@ export class PracticeSession {
     const target = this.measureStartStep(this.currentStep);
     this.resumeAtTicks = target?.onsetTicks ?? 0;
     this.resumeAtIndex = target?.index ?? 0;
+    // Held from the bar it picks up at, counted from there: the gate it was
+    // held at was reckoned from wherever the pulse last began.
+    if (this.mode.holdsPastTheGate) {
+      this.pulseHeldFrom = this.resumeAtIndex;
+      this.configureThePulse();
+    }
 
     // Counted back in, exactly as at the start. A run that simply resumed left
     // the reader with their hands off the keys and the music already moving,
@@ -748,6 +795,7 @@ export class PracticeSession {
     this.runStartedAt = 0;
     this.runBeganAt = 0;
     this.heldAtBarTicks = null;
+    this.pulseHeldFrom = null;
     this.anchorOnTheNextTick = false;
     this.waitedAtBars = [];
     this.roller.reset();
@@ -951,7 +999,10 @@ export class PracticeSession {
    * had to wait must not count it.
    */
   private holdIfStillWaiting(): void {
-    if (this.heldAtBarTicks === null || !this.metronome.isRunning) {
+    // Nothing to stop where the gate holds past its note: the pulse has built
+    // nothing beyond the note and will not until it is moved on, and a pulse
+    // stopped here would lose the beat it has in hand for the note itself.
+    if (this.heldAtBarTicks === null || !this.metronome.isRunning || this.mode.holdsPastTheGate) {
       return;
     }
     const waitingAt = this.currentStep?.measureIndex;
@@ -987,6 +1038,10 @@ export class PracticeSession {
       return;
     }
     this.heldAtBarTicks = null;
+    if (this.mode.holdsPastTheGate) {
+      this.openTheNoteGate(step, atMs);
+      return;
+    }
     if (this.metronome.isRunning) {
       // Nothing ever stopped, so nothing has to start: the pulse is already
       // this bar's, counting from where it always was. Beginning it again
@@ -1026,6 +1081,51 @@ export class PracticeSession {
       this.anchorOnTheNextTick = true;
       this.metronome.start();
     }
+    this.emitter.emit('barBegan', { stepIndex: step.index, atMs });
+  }
+
+  /**
+   * The moment the gate at this step stops the music: see `gateClosesAtMs`.
+   */
+  private gateClosesAt(step: TimelineStep): number {
+    return (
+      this.runStartedAt +
+      this.elapsedTo(step.onsetTicks) +
+      perfectWindowMs(this.timeline, step.index, false)
+    );
+  }
+
+  /**
+   * Opens a gate that holds past its note, the note having been played.
+   *
+   * In time - by the end of its Perfect window - and the music never stopped:
+   * the pulse is moved on to the next note and goes on counting from where it
+   * always was, and the note is the reader's to have been early or late with.
+   *
+   * After that, and the music has been standing at the note since its window
+   * closed. Then the press is the beat, exactly as a bar line's is: the pulse
+   * begins again from it, the run's clock with it, and the time spent
+   * standing is written down as a wait - drawn as one in the picture of the
+   * run - because the note's beat fell and its restart falls again where the
+   * reader took it.
+   */
+  private openTheNoteGate(step: TimelineStep, atMs: number): void {
+    this.theFirstBarHasBegun = true;
+    this.pulseHeldFrom = step.index + 1;
+    if (atMs <= this.gateClosesAt(step) && this.metronome.isRunning) {
+      this.configureThePulse(this.pulseCountInBars);
+      this.emitter.emit('barBegan', { stepIndex: step.index, atMs });
+      return;
+    }
+    this.waitedAtBars.push(step.measureIndex);
+    this.resumeAtTicks = step.onsetTicks;
+    this.resumeAtIndex = step.index;
+    this.positionOffsetTicks = -step.onsetTicks;
+    this.runStartedAt = atMs - this.elapsedTo(step.onsetTicks);
+    this.configureThePulse(0);
+    this.pulseGeneration += 1;
+    this.anchorOnTheNextTick = true;
+    this.metronome.start();
     this.emitter.emit('barBegan', { stepIndex: step.index, atMs });
   }
 
@@ -1620,6 +1720,12 @@ export class PracticeSession {
       },
       get holdingAtBarLine() {
         return session.heldAtBarTicks !== null;
+      },
+      get gateClosesAtMs() {
+        const step = session.currentStep;
+        return session.heldAtBarTicks === null || step === null || !session.mode.holdsPastTheGate
+          ? null
+          : session.gateClosesAt(step);
       },
       movesOnTo: (midi: number) => session.movesOnTo(midi),
       positionTicks: (tick: MetronomeTick) => tick.positionTicks - session.positionOffsetTicks,

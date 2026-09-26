@@ -198,6 +198,16 @@ export interface PracticeContext {
   readonly holdingAtBarLine: boolean;
 
   /**
+   * The moment a gate that holds past its note stops the music, or `null`.
+   *
+   * The end of the note's Perfect window on the late side. A press up to then
+   * met the beat, and is judged as it landed; one after it found the music
+   * standing still, and is the beat itself. `null` where no such gate is
+   * closed. See `IPracticeMode.holdsPastTheGate`.
+   */
+  readonly gateClosesAtMs: number | null;
+
+  /**
    * Starts a bar the pulse is waiting at, with this press as its downbeat.
    *
    * His: "сильна доля має гратись як я граю". The waiting ends when the

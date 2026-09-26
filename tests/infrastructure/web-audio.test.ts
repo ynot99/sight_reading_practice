@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MetronomeTick } from '../../src/application/ports/IMetronome.js';
+import type { MetronomeConfig, MetronomeTick } from '../../src/application/ports/IMetronome.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { WebAudioMetronome } from '../../src/infrastructure/audio/WebAudioMetronome.js';
@@ -310,6 +310,46 @@ describe('WebAudioMetronome', () => {
 
     const [first, second] = ticks;
     expect((second?.scheduledTimeMs ?? 0) - (first?.scheduledTimeMs ?? 0)).toBeCloseTo(1000, 6);
+  });
+
+  it('builds nothing past where it is held, and goes on in time when moved', () => {
+    // A frame that waits at every note: the music runs up to the note the
+    // reader has not played yet and no further, and a click or a tick past it
+    // would be the music going on without them.
+    const q = Duration.QUARTER.ticks;
+    const heldAt = (holdsPastTicks: number | null): MetronomeConfig => ({
+      bpm: 60,
+      timeSignature: new TimeSignature(4, 4),
+      bars: [],
+      tempos: [],
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      dropout: null,
+      endsAtTicks: null,
+      holdsPastTicks,
+      muted: false,
+    });
+    metronome.configure(heldAt(q));
+    metronome.start();
+
+    // Well past the second beat's moment, and the third's.
+    for (const _ of [1, 2, 3]) {
+      context.advance(0.5);
+      vi.advanceTimersByTime(20);
+    }
+    context.advance(0.4);
+    vi.advanceTimersByTime(20);
+
+    expect(ticks.map((tick) => tick.positionTicks)).toEqual([0, q]);
+    expect(context.oscillators).toHaveLength(2);
+
+    // Moved on before the third beat was due: it comes at its own moment.
+    metronome.configure(heldAt(q * 3));
+    context.advance(0.2);
+    vi.advanceTimersByTime(20);
+
+    expect(ticks.map((tick) => tick.positionTicks)).toEqual([0, q, q * 2]);
+    expect((ticks[2]?.scheduledTimeMs ?? 0) - (ticks[1]?.scheduledTimeMs ?? 0)).toBeCloseTo(1000, 6);
   });
 
   it('accents downbeats above other beats', () => {

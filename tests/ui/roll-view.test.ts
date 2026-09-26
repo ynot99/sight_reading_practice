@@ -4,6 +4,7 @@ import {
   LEAST_ZOOM,
   MOST_ZOOM,
   drawTheRoll,
+  theSceneOfTheRoll,
   keepTheHeadInView,
   theRunScrolledUnderTheHead,
   timeFromTap,
@@ -36,6 +37,7 @@ import type { BeatWeight } from '../../src/application/ports/IMetronome.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { MIDI } from '../support/fixtures.js';
 import { drawTheProfile } from '../../src/ui/profileChart.js';
+import type { RollScene } from '../../src/ui/rollView.js';
 import type { ProfileAxis } from '../../src/domain/scoring/theProfile.js';
 
 function press(over: Partial<RolledPress> = {}): RolledPress {
@@ -82,54 +84,58 @@ function draw(
   return drawTheRoll({ roll: input, barLabel: label });
 }
 
+/** What a run is drawn as, with the bars named as `draw` names them. */
+function sceneOf(
+  input: RunRoll,
+  label: (positionTicks: number) => string | null = (ticks) =>
+    ticks % (Duration.QUARTER.ticks * 4) === 0
+      ? `${ticks / (Duration.QUARTER.ticks * 4) + 1}`
+      : null,
+): RollScene {
+  return theSceneOfTheRoll({ roll: input, barLabel: label });
+}
+
 describe('drawing a run as a piano roll', () => {
   it('places a note by when it was struck and let go of', () => {
     // The grid's nought is the first thing that happened, so a run whose first
     // click is at four seconds does not start four seconds of empty grid.
-    const view = draw(
+    const scene = sceneOf(
       roll({
         beats: barOfFour(0, 4000),
         presses: [press({ downAtMs: 5000, upAtMs: 5500 })],
       }),
     );
 
-    const note = view.querySelector<HTMLElement>('.roll__note');
-    expect(note?.style.left).toBe('calc(var(--roll-second) * 1.0000)');
-    expect(note?.style.width).toBe('calc(var(--roll-second) * 0.5000)');
+    expect(scene.notes.map(({ fromMs, untilMs }) => [fromMs, untilMs])).toEqual([[1000, 1500]]);
+    // And the bar's number with it, at the run's own nought.
+    expect(scene.bars).toEqual([{ atMs: 0, name: '1' }]);
   });
 
   it('runs a key still held to the edge and says that is what it is', () => {
-    const view = draw(
+    const scene = sceneOf(
       roll({ beats: barOfFour(0, 0), presses: [press({ downAtMs: 0, upAtMs: null })] }),
     );
 
-    const note = view.querySelector<HTMLElement>('.roll__note');
-    expect(note?.classList.contains('roll__note--open')).toBe(true);
+    expect(scene.notes[0]?.open).toBe(true);
     // To the last click plus the tail, which is four seconds of bar and one over.
-    expect(note?.style.width).toBe('calc(var(--roll-second) * 4.0000)');
+    expect(scene.notes[0]?.untilMs).toBe(4000);
   });
 
   it('stacks the pitches downwards from the top of the band', () => {
-    const view = draw(
+    const scene = sceneOf(
       roll({
         presses: [press({ midi: MIDI.C4 }), press({ midi: MIDI.C4 + 1 })],
       }),
     );
 
-    const tops = [...view.querySelectorAll<HTMLElement>('.roll__note')].map(
-      (note) => note.style.top,
-    );
     // Pitch runs downwards, so the semitone above sits exactly one row higher.
     // Both are well inside the band, which has grown around them to the twelve
     // rows a drawing gets however few notes there were.
-    expect(tops).toEqual([
-      'calc(var(--roll-row) * 6)',
-      'calc(var(--roll-row) * 5)',
-    ]);
+    expect(scene.notes.map((note) => note.row)).toEqual([6, 5]);
   });
 
   it('draws a line for a bar and for a beat, and none for a subdivision', () => {
-    const view = draw(
+    const scene = sceneOf(
       roll({
         beats: [
           beatOf(0, 'downbeat', Duration.QUARTER.ticks * 0),
@@ -139,8 +145,7 @@ describe('drawing a run as a piano roll', () => {
       }),
     );
 
-    expect(view.querySelectorAll('.roll__line')).toHaveLength(2);
-    expect(view.querySelectorAll('.roll__line--downbeat')).toHaveLength(1);
+    expect(scene.lines.map((line) => line.kind)).toEqual(['downbeat', 'beat']);
   });
 
   it('marks the ruler with the same lines, so the metre can be read off it', () => {
@@ -179,7 +184,7 @@ describe('drawing a run as a piano roll', () => {
     // Two lines at one bar line is not a fault to be tidied away; drawing them
     // alike was. The metre's line says where the beat was, this one says where
     // the reader put it.
-    const view = draw(
+    const scene = sceneOf(
       roll({
         beats: [
           beatOf(0, 'downbeat', 0),
@@ -188,14 +193,13 @@ describe('drawing a run as a piano roll', () => {
       }),
     );
 
-    expect([...view.querySelectorAll<HTMLElement>('.roll__line')].map((line) => line.className))
-      .toEqual(['roll__line roll__line--downbeat', 'roll__line roll__line--given']);
+    expect(scene.lines.map((line) => line.kind)).toEqual(['downbeat', 'given']);
   });
 
   it('paints the whole wait, from where the beat fell to where it was given', () => {
     // The band rather than its edge: the eye takes a width where it would have
     // to measure a gap.
-    const view = draw(
+    const scene = sceneOf(
       roll({
         beats: [
           beatOf(1000, 'downbeat', 0),
@@ -205,12 +209,8 @@ describe('drawing a run as a piano roll', () => {
       }),
     );
 
-    const bands = [...view.querySelectorAll<HTMLElement>('.roll__wait')];
-    expect(bands).toHaveLength(1);
     // From the run's own beginning, which is its first event.
-    expect(bands[0]?.style.left).toBe('calc(var(--roll-second) * 0.0000)');
-    expect(bands[0]?.style.width).toBe('calc(var(--roll-second) * 0.1800)');
-    expect(bands[0]?.title).toBe('The music waited 180 ms');
+    expect(scene.waits).toEqual([{ fromMs: 0, untilMs: 180, says: 'The music waited 180 ms' }]);
   });
 
   it('lays the wait under the rows, so the black keys darken it', () => {
@@ -233,14 +233,12 @@ describe('drawing a run as a piano roll', () => {
   });
 
   it('paints nothing where every beat fell where it was meant to', () => {
-    const view = draw(roll({ beats: barOfFour(0, 0) }));
-
-    expect(view.querySelectorAll('.roll__wait')).toHaveLength(0);
+    expect(sceneOf(roll({ beats: barOfFour(0, 0) })).waits).toEqual([]);
   });
 
   it('names a bar once, at the line that fell due rather than the one given', () => {
     // The number over the grid is the page's, and the page does not move.
-    const view = draw(
+    const scene = sceneOf(
       roll({
         beats: [
           beatOf(0, 'downbeat', 0),
@@ -250,19 +248,14 @@ describe('drawing a run as a piano roll', () => {
       () => '12',
     );
 
-    const marks = [...view.querySelectorAll<HTMLElement>('.roll__bar')];
-    expect(marks).toHaveLength(1);
-    expect(marks[0]?.style.left).toBe('calc(var(--roll-second) * 0.0000)');
+    expect(scene.bars).toEqual([{ atMs: 0, name: '12' }]);
   });
 
   it('leaves a beat unnamed where the music has no bar line', () => {
     // A beat inside a bar is not a bar, and the ruler says nothing about it.
-    const view = draw(
-      roll({ beats: barOfFour(0, 0) }),
-      (ticks) => (ticks === 0 ? '1' : null),
-    );
+    const scene = sceneOf(roll({ beats: barOfFour(0, 0) }), (ticks) => (ticks === 0 ? '1' : null));
 
-    expect(view.querySelectorAll('.roll__bar')).toHaveLength(1);
+    expect(scene.bars).toHaveLength(1);
   });
 
   it('cuts the beat into the parts that were asked for', () => {
@@ -271,35 +264,36 @@ describe('drawing a run as a piano roll', () => {
       beatOf(1000, 'beat', Duration.QUARTER.ticks),
     ];
 
-    expect(draw(roll({ beats })).querySelectorAll('.roll__line')).toHaveLength(2);
+    expect(sceneOf(roll({ beats })).lines).toHaveLength(2);
 
-    const finer = drawTheRoll({
+    const finer = theSceneOfTheRoll({
       roll: roll({ beats }),
       barLabel: () => null,
       grid: { beats: true, parts: 2 },
     });
 
-    expect(finer.querySelectorAll('.roll__line')).toHaveLength(3);
-    const cut = finer.querySelector<HTMLElement>('.roll__line--division');
-    expect(cut?.style.left).toBe('calc(var(--roll-second) * 0.5000)');
+    expect(finer.lines).toHaveLength(3);
+    expect(finer.lines.filter((line) => line.kind === 'division').map((line) => line.atMs)).toEqual([
+      500,
+    ]);
   });
 
   it('draws the bar lines alone where that is all that is wanted', () => {
     // The reading a long run wants: where the bars fell, and nothing else
     // competing for the eye.
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({ beats: barOfFour(0, 0) }),
       barLabel: () => null,
       grid: { beats: false, parts: 1 },
     });
 
-    expect(view.querySelectorAll('.roll__line')).toHaveLength(1);
+    expect(scene.lines).toHaveLength(1);
   });
 
   it('names each bar once, by what the writer called it', () => {
     // A repeat is written out, so the fifth bar of the playing is not bar five
     // of the page. The drawing asks rather than counts.
-    const view = draw(
+    const scene = sceneOf(
       roll({ beats: [...barOfFour(0, 0), ...barOfFour(1, 4000)] }),
       // A namer answers for bar lines and says nothing about anything else.
       (ticks) => {
@@ -310,13 +304,14 @@ describe('drawing a run as a piano roll', () => {
       },
     );
 
-    const marks = [...view.querySelectorAll<HTMLElement>('.roll__bar')];
-    expect(marks.map((mark) => mark.textContent)).toEqual(['8', '9']);
-    expect(marks[1]?.style.left).toBe('calc(var(--roll-second) * 4.0000)');
+    expect(scene.bars).toEqual([
+      { atMs: 0, name: '8' },
+      { atMs: 4000, name: '9' },
+    ]);
   });
 
   it('colours a press by the verdict the page was marked with', () => {
-    const view = draw(
+    const scene = sceneOf(
       roll({
         presses: [
           press({ midi: MIDI.C4, verdict: 'correct' }),
@@ -327,22 +322,14 @@ describe('drawing a run as a piano roll', () => {
       }),
     );
 
-    const shades = [...view.querySelectorAll<HTMLElement>('.roll__note')].map(
-      (note) => note.className,
-    );
-    expect(shades).toEqual([
-      'roll__note roll__note--correct',
-      'roll__note roll__note--wrong',
-      'roll__note roll__note--aside',
-      'roll__note roll__note--unjudged',
-    ]);
+    expect(scene.notes.map((note) => note.shade)).toEqual(['correct', 'wrong', 'aside', 'unjudged']);
   });
 
   it('says nothing about the timing in a note’s colour', () => {
     // The right note is the right note. How far off the beat it came is the
     // band's business, and giving the note its own colour for it made one
     // colour mean three different things.
-    const view = draw(
+    const scene = sceneOf(
       roll({
         presses: [
           press({ midi: MIDI.C4, verdict: 'rushed' }),
@@ -351,10 +338,7 @@ describe('drawing a run as a piano roll', () => {
       }),
     );
 
-    const shades = [...view.querySelectorAll<HTMLElement>('.roll__note')].map(
-      (note) => note.className,
-    );
-    expect(shades).toEqual(['roll__note roll__note--correct', 'roll__note roll__note--correct']);
+    expect(scene.notes.map((note) => note.shade)).toEqual(['correct', 'correct']);
   });
 
   it('reddens a beat the reader overtook, and gives it no band', () => {
@@ -362,25 +346,22 @@ describe('drawing a run as a piano roll', () => {
     // where the beat was due is time that never elapsed, the music having moved
     // on when they did. His: "малювати цю ранню вертикальну лінію метроному
     // червоним кольором".
-    const view = draw(
+    const scene = sceneOf(
       roll({
         beats: [beatOf(0, 'downbeat', 0), beatOf(1000, 'beat', Duration.QUARTER.ticks)],
         rushes: [{ atMs: 1600, byMs: 400 }],
       }),
     );
 
-    const early = view.querySelectorAll<HTMLElement>('.roll__line--rushed');
-    expect(early).toHaveLength(1);
-    expect(early[0]?.title).toBe('Taken 400 ms early');
-    expect(early[0]?.style.left).toBe('calc(var(--roll-second) * 1.6000)');
-    expect(view.querySelectorAll('.roll__wait')).toHaveLength(0);
+    expect(scene.rushes).toEqual([{ atMs: 1600, says: 'Taken 400 ms early' }]);
+    expect(scene.waits).toEqual([]);
   });
 
   it('cuts a note the music asked for where the reader came in early', () => {
     // The beat at the far end is the one they took, so the note ends there
     // rather than running on through music the reader had already left. His:
     // "якщо ghost нота була достатньо довгою - то придеться її розрізати".
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({
         beats: [beatOf(0, 'downbeat', 0), beatOf(1600, 'downbeat', Duration.QUARTER.ticks * 4)],
         presses: [press({ downAtMs: 0, upAtMs: 200 })],
@@ -391,66 +372,82 @@ describe('drawing a run as a piano roll', () => {
       ],
     });
 
-    const outline = view.querySelector<HTMLElement>('.roll__ghost');
     // A written bar of it, cut at one and six tenths where he came in.
-    expect(outline?.style.width).toBe('calc(var(--roll-second) * 1.6000)');
+    expect(scene.ghosts.map(({ fromMs, untilMs }) => [fromMs, untilMs])).toEqual([[0, 1600]]);
   });
 
   it('says how far off the beat a press was, signed the way a reader falls', () => {
-    const view = draw(roll({ presses: [press({ deviationMs: 42.4 })] }));
+    const scene = sceneOf(roll({ presses: [press({ deviationMs: 42.4 })] }));
 
-    expect(view.querySelector<HTMLElement>('.roll__note')?.title).toBe('C4 · correct · +42 ms');
+    expect(scene.notes[0]?.says).toBe('C4 · correct · +42 ms');
   });
 
   it('keeps a band of pitches even for a single note', () => {
     // One note drawn as one row is a stripe, not a picture.
-    const view = draw(roll({ presses: [press()] }));
-
-    expect(view.style.getPropertyValue('--roll-rows')).toBe('12');
+    expect(sceneOf(roll({ presses: [press()] })).rows).toBe(12);
+    expect(draw(roll({ presses: [press()] })).style.getPropertyValue('--roll-rows')).toBe('12');
   });
 
   it('clamps the band to what was played, with air above and below', () => {
     // Eighty-eight rows of which sixty are empty puts the music in a tenth of
     // the screen, and the question being asked is about the other axis.
-    const view = draw(
-      roll({ presses: [press({ midi: 48 }), press({ midi: 72 })] }),
-    );
+    const scene = sceneOf(roll({ presses: [press({ midi: 48 }), press({ midi: 72 })] }));
 
-    expect(view.style.getPropertyValue('--roll-rows')).toBe('29');
+    expect(scene.rows).toBe(29);
+    expect(scene.highest).toBe(74);
   });
 
   it('draws the pedal for as long as it was held', () => {
-    const view = draw(
+    const scene = sceneOf(
       roll({ beats: barOfFour(0, 0), pedal: [{ downAtMs: 500, upAtMs: 2500 }] }),
     );
 
-    const span = view.querySelector<HTMLElement>('.roll__pedal-span');
-    expect(span?.style.left).toBe('calc(var(--roll-second) * 0.5000)');
-    expect(span?.style.width).toBe('calc(var(--roll-second) * 2.0000)');
+    expect(scene.pedal).toEqual([{ fromMs: 500, untilMs: 2500, open: false, says: 'Pedal' }]);
   });
 
   it('runs a pedal still down to the edge, and says so', () => {
-    const view = draw(
+    const scene = sceneOf(
       roll({ beats: barOfFour(0, 0), pedal: [{ downAtMs: 0, upAtMs: null }] }),
     );
 
-    expect(view.querySelector<HTMLElement>('.roll__pedal-span')?.title).toBe('Pedal, still down');
+    expect(scene.pedal).toEqual([
+      { fromMs: 0, untilMs: 4000, open: true, says: 'Pedal, still down' },
+    ]);
   });
 
   it('shades the rows the black keys are on', () => {
     // An octave from C to C has five of them, and the band drawn for one note
     // is an octave.
-    const view = draw(roll({ presses: [press({ midi: MIDI.C4 })] }));
+    const input = roll({ presses: [press({ midi: MIDI.C4 })] });
 
-    expect(view.querySelectorAll('.roll__row')).toHaveLength(5);
-    expect(view.querySelectorAll('.roll__key--black')).toHaveLength(5);
+    // Down from the top of the band, which runs from G3 to F#4: F#, D#, C#,
+    // A# and G#.
+    expect(sceneOf(input).blackRows).toEqual([0, 3, 5, 8, 10]);
+    expect(draw(input).querySelectorAll('.roll__key--black')).toHaveLength(5);
+  });
+
+  it('puts every list in the order its marks begin, however they came', () => {
+    // So the stretch of a long run on the screen can be found without walking
+    // the rest of it.
+    const scene = sceneOf(
+      roll({
+        presses: [press({ downAtMs: 900, upAtMs: 950 }), press({ downAtMs: 100, upAtMs: 150 })],
+        pedal: [
+          { downAtMs: 700, upAtMs: 800 },
+          { downAtMs: 200, upAtMs: 300 },
+        ],
+      }),
+    );
+
+    expect(scene.notes.map((note) => note.fromMs)).toEqual([0, 800]);
+    expect(scene.pedal.map((span) => span.fromMs)).toEqual([100, 600]);
   });
 
   it('draws an empty run without falling over', () => {
-    const view = draw(roll());
+    const scene = sceneOf(roll());
 
-    expect(view.querySelectorAll('.roll__note')).toHaveLength(0);
-    expect(view.style.getPropertyValue('--roll-rows')).toBe('12');
+    expect(scene.notes).toEqual([]);
+    expect(scene.rows).toBe(12);
   });
 });
 
@@ -579,6 +576,8 @@ describe('the notes the music asked for', () => {
     beatOf(0, 'downbeat', 0),
     beatOf(1000, 'beat', Duration.QUARTER.ticks),
   ];
+  const spans = (scene: RollScene): number[][] =>
+    scene.ghosts.map(({ fromMs, untilMs }) => [fromMs, untilMs]);
 
   it('draws them over the ones that were played', () => {
     // An outline underneath the note that answered it is an outline nobody can
@@ -601,7 +600,7 @@ describe('the notes the music asked for', () => {
   });
 
   it('places them by the clicks that happened, not by a tempo', () => {
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({ beats: grid }),
       barLabel: () => null,
       ghosts: [
@@ -609,24 +608,22 @@ describe('the notes the music asked for', () => {
       ],
     });
 
-    const ghost = view.querySelector<HTMLElement>('.roll__ghost');
-    expect(ghost?.style.left).toBe('calc(var(--roll-second) * 0.5000)');
-    expect(ghost?.style.width).toBe('calc(var(--roll-second) * 0.5000)');
+    expect(spans(scene)).toEqual([[500, 1000]]);
+    expect(scene.ghosts[0]?.says).toBe('C4 · asked for here');
   });
 
   it('keeps a note nobody played inside the band', () => {
     // Which is the one worth seeing: a band drawn round the presses alone would
     // leave a missed note outside the picture altogether.
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({ beats: grid, presses: [press({ midi: 60 })] }),
       barLabel: () => null,
       ghosts: [{ midi: 84, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 }],
     });
 
-    const ghost = view.querySelector<HTMLElement>('.roll__ghost');
-    expect(ghost).not.toBeNull();
+    expect(scene.ghosts).toHaveLength(1);
     // Twenty-four semitones apart, plus the air above and below.
-    expect(view.style.getPropertyValue('--roll-rows')).toBe('29');
+    expect(scene.rows).toBe(29);
   });
 
   it('draws none of them past where the run stopped', () => {
@@ -636,7 +633,7 @@ describe('the notes the music asked for', () => {
     // of clicks out over the whole score and drawing a canvas of notes nobody
     // played. His: "MIDI viewer наразі малює повний канвас нот, навіть якщо я
     // грав тільки слайс".
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({ beats: grid }),
       barLabel: () => null,
       ghosts: [
@@ -650,7 +647,7 @@ describe('the notes the music asked for', () => {
       ],
     });
 
-    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(1);
+    expect(scene.ghosts).toHaveLength(1);
   });
 
   it('measures the end of the run from where the run began', () => {
@@ -658,7 +655,7 @@ describe('the notes the music asked for', () => {
     // two seconds long. Measured against that clock instead, the notes of the
     // next five seconds of the score would be drawn as though the reader had
     // reached them.
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({
         beats: [beatOf(5_000, 'downbeat', 0), beatOf(6_000, 'beat', Duration.QUARTER.ticks)],
       }),
@@ -674,13 +671,13 @@ describe('the notes the music asked for', () => {
       ],
     });
 
-    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(1);
+    expect(scene.ghosts).toHaveLength(1);
   });
 
   it('cuts one the run stopped in the middle of off at the end', () => {
     // A note still being asked for when the reader stopped is part of the run;
     // how much of it there was to play afterwards is not.
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({ beats: grid }),
       barLabel: () => null,
       ghosts: [
@@ -693,25 +690,24 @@ describe('the notes the music asked for', () => {
       ],
     });
 
-    const ghost = view.querySelector<HTMLElement>('.roll__ghost');
     // The roll ends a second past its last click, and the outline stops there.
-    expect(ghost?.style.width).toBe('calc(var(--roll-second) * 1.0000)');
+    expect(spans(scene)).toEqual([[1000, 2000]]);
   });
 
   it('draws none of them where the run had no pulse to place them against', () => {
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({ presses: [press()] }),
       barLabel: () => null,
       ghosts: [{ midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 }],
     });
 
-    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(0);
+    expect(scene.ghosts).toEqual([]);
   });
 
   it('cuts a note off where its beat fell, not where the reader arrived', () => {
     // A note ending on a bar line that waited was drawn on to the end of the
     // wait, which made the yellow band look like part of the note.
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({
         beats: [
           beatOf(0, 'downbeat', 0),
@@ -723,14 +719,12 @@ describe('the notes the music asked for', () => {
       ghosts: [{ midi: MIDI.C4, fromTicks: 0, untilTicks: Duration.QUARTER.ticks, stepIndex: 0 }],
     });
 
-    const ghost = view.querySelector<HTMLElement>('.roll__ghost');
-    expect(ghost?.style.left).toBe('calc(var(--roll-second) * 0.0000)');
     // One second, which is where the beat fell - not one and four tenths.
-    expect(ghost?.style.width).toBe('calc(var(--roll-second) * 1.0000)');
+    expect(spans(scene)).toEqual([[0, 1000]]);
   });
 
   it('begins a note on a waited bar line where the reader took it', () => {
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({
         beats: [
           beatOf(0, 'downbeat', 0),
@@ -749,15 +743,11 @@ describe('the notes the music asked for', () => {
       ],
     });
 
-    expect(view.querySelector<HTMLElement>('.roll__ghost')?.style.left).toBe(
-      'calc(var(--roll-second) * 1.4000)',
-    );
+    expect(scene.ghosts[0]?.fromMs).toBe(1400);
   });
 
   it('draws none unless they are asked for', () => {
-    const view = draw(roll({ beats: grid, presses: [press()] }));
-
-    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(0);
+    expect(sceneOf(roll({ beats: grid, presses: [press()] })).ghosts).toEqual([]);
   });
 });
 
@@ -773,8 +763,8 @@ describe('how far a note was from where it was owed', () => {
     stepIndex: 0,
   };
 
-  function drawnWith(pressed: Partial<RolledPress>): HTMLElement {
-    return drawTheRoll({
+  function drawnWith(pressed: Partial<RolledPress>): RollScene {
+    return theSceneOfTheRoll({
       roll: roll({ beats: grid, presses: [press({ midi: MIDI.C4, stepIndex: 0, ...pressed })] }),
       barLabel: () => null,
       ghosts: [owed],
@@ -782,18 +772,18 @@ describe('how far a note was from where it was owed', () => {
   }
 
   it('fills the gap where the note came late', () => {
-    const band = drawnWith({ downAtMs: 300, upAtMs: 800 }).querySelector<HTMLElement>('.roll__slip');
+    const [band] = drawnWith({ downAtMs: 300, upAtMs: 800 }).slips;
 
-    expect(band?.className).toBe('roll__slip roll__slip--late');
-    expect(band?.style.left).toBe('calc(var(--roll-second) * 0.0000)');
-    expect(band?.style.width).toBe('calc(var(--roll-second) * 0.3000)');
-    expect(band?.title).toBe('Late by 300 ms');
+    expect(band?.kind).toBe('late');
+    expect([band?.fromMs, band?.untilMs]).toEqual([0, 300]);
+    expect(band?.row).toBe(drawnWith({ downAtMs: 300 }).notes[0]?.row);
+    expect(band?.says).toBe('Late by 300 ms');
   });
 
   it('fills it the other way where the note was rushed', () => {
     // The band reaches back from the note to where it was owed, and says so in
     // the colour this program already uses for a fault.
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({
         beats: grid,
         presses: [press({ midi: MIDI.C4, stepIndex: 0, downAtMs: -200, upAtMs: 300 })],
@@ -802,61 +792,61 @@ describe('how far a note was from where it was owed', () => {
       ghosts: [owed],
     });
 
-    const band = view.querySelector<HTMLElement>('.roll__slip');
-    expect(band?.className).toBe('roll__slip roll__slip--rushed');
-    expect(band?.title).toBe('Rushed by 200 ms');
+    const [band] = scene.slips;
+    expect(band?.kind).toBe('rushed');
+    expect(band?.says).toBe('Rushed by 200 ms');
   });
 
   it('grows stronger with the size of the gap, and stops growing', () => {
     // So that "badly rushed" looks worse than "a little early" without a
     // threshold anybody has to agree on.
-    const faint = drawnWith({ downAtMs: 60 }).querySelector<HTMLElement>('.roll__slip');
-    const plain = drawnWith({ downAtMs: 200 }).querySelector<HTMLElement>('.roll__slip');
-    const most = drawnWith({ downAtMs: 2_000 }).querySelector<HTMLElement>('.roll__slip');
+    const faint = drawnWith({ downAtMs: 60 }).slips[0]?.strength ?? 0;
+    const plain = drawnWith({ downAtMs: 200 }).slips[0]?.strength ?? 0;
+    const most = drawnWith({ downAtMs: 2_000 }).slips[0]?.strength ?? 0;
 
-    expect(Number(faint?.style.opacity)).toBeLessThan(Number(plain?.style.opacity));
-    expect(Number(plain?.style.opacity)).toBeLessThan(Number(most?.style.opacity));
-    expect(Number(most?.style.opacity)).toBe(0.5);
+    expect(faint).toBeLessThan(plain);
+    expect(plain).toBeLessThan(most);
+    expect(most).toBe(0.5);
   });
 
   it('leaves the gaps unfilled where that is not the question', () => {
     // Whether a chord went down together is read off whether the presses line
     // up, and bands lying across them are colour between the eye and that line.
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({ beats: grid, presses: [press({ midi: MIDI.C4, stepIndex: 0, downAtMs: 300 })] }),
       barLabel: () => null,
       ghosts: [owed],
       slips: false,
     });
 
-    expect(view.querySelectorAll('.roll__slip')).toHaveLength(0);
+    expect(scene.slips).toEqual([]);
     // And what the question *is* about is still there.
-    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(1);
-    expect(view.querySelectorAll('.roll__note')).toHaveLength(1);
+    expect(scene.ghosts).toHaveLength(1);
+    expect(scene.notes).toHaveLength(1);
   });
 
   it('says nothing about a note that was near enough', () => {
     // Every note is off by something; drawn without a floor the whole run is one
     // wash of colour saying nothing about anywhere in particular.
-    expect(drawnWith({ downAtMs: 10 }).querySelectorAll('.roll__slip')).toHaveLength(0);
+    expect(drawnWith({ downAtMs: 10 }).slips).toEqual([]);
   });
 
   it('says nothing where the note was never played', () => {
     // The outline says that on its own, and there is no second edge to fill to.
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({ beats: grid, presses: [] }),
       barLabel: () => null,
       ghosts: [owed],
     });
 
-    expect(view.querySelectorAll('.roll__slip')).toHaveLength(0);
-    expect(view.querySelectorAll('.roll__ghost')).toHaveLength(1);
+    expect(scene.slips).toEqual([]);
+    expect(scene.ghosts).toHaveLength(1);
   });
 
   it('pairs a press with the note it answered, not with the pitch', () => {
     // A piece returns to the same note again and again. Paired by pitch, the
     // second C would be measured against the first C's place in the music.
-    const view = drawTheRoll({
+    const scene = theSceneOfTheRoll({
       roll: roll({
         beats: grid,
         presses: [
@@ -876,10 +866,8 @@ describe('how far a note was from where it was owed', () => {
       ],
     });
 
-    const bands = [...view.querySelectorAll<HTMLElement>('.roll__slip')];
     // The first was dead on and says nothing; the second was three tenths late.
-    expect(bands).toHaveLength(1);
-    expect(bands[0]?.title).toBe('Late by 300 ms');
+    expect(scene.slips.map((band) => band.says)).toEqual(['Late by 300 ms']);
   });
 });
 

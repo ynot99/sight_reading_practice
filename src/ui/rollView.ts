@@ -202,7 +202,7 @@ function placedGhosts(roll: RunRoll, ghosts: readonly RollGhost[]): PlacedGhost[
  * the run said nothing about is drawn plainly rather than as a fault, which is
  * the difference between "this was wrong" and "nothing was decided here".
  */
-function shadeOf(press: RolledPress): string {
+function shadeOf(press: RolledPress): NoteShade {
   switch (press.verdict) {
     case 'correct':
       return 'correct';
@@ -229,38 +229,120 @@ function element(tag: string, className: string): HTMLElement {
   return made;
 }
 
+/** How a press is coloured: see `shadeOf`. */
+export type NoteShade = 'correct' | 'wrong' | 'aside' | 'unjudged';
+
+/** How a line of the grid is drawn: the metre's own weights, and a bar line the reader gave. */
+export type LineKind = 'downbeat' | 'beat' | 'division' | 'given';
+
+/** A stretch of the run, and what it says to a pointer resting on it, if anything. */
+export interface SceneStretch {
+  readonly fromMs: number;
+  readonly untilMs: number;
+  readonly says: string | null;
+}
+
+/** A stretch on one row of pitch, counted down from the top of the band. */
+export interface SceneRowed extends SceneStretch {
+  readonly row: number;
+}
+
+/** A press. */
+export interface SceneNote extends SceneRowed {
+  readonly shade: NoteShade;
+  /** Still down when the run ended, so it runs to the edge rather than stopping. */
+  readonly open: boolean;
+}
+
+/** The gap between where a note was owed and where it was taken: see `slipBetween`. */
+export interface SceneSlip extends SceneRowed {
+  readonly kind: 'late' | 'rushed';
+  /** How solid it is drawn, nought to {@link SLIP_MOST_SOLID}. */
+  readonly strength: number;
+}
+
+/** The pedal, down. */
+export interface ScenePedal extends SceneStretch {
+  readonly open: boolean;
+}
+
+/** An instant of the run, and what it says to a pointer resting on it, if anything. */
+export interface SceneMoment {
+  readonly atMs: number;
+  readonly says: string | null;
+}
+
+/** A click, as a line down the grid and a tick on the ruler. */
+export interface SceneLine extends SceneMoment {
+  readonly kind: LineKind;
+}
+
+/** A bar's printed number, where the bar begins. */
+export interface SceneBar {
+  readonly atMs: number;
+  readonly name: string;
+}
+
 /**
- * The line a click leaves: heavy for a bar, plain for a beat.
+ * Everything the drawing shows, placed in the run's own time.
+ *
+ * Milliseconds from where the run began, and rows down from the top of the
+ * band of pitches: nothing the screen knows about. How wide a second is and how
+ * tall a row are the zoom's to say when it is painted, so a zoom is painting
+ * again and not working everything out again. Each list is in time order, so
+ * the part of the run on the screen can be found without walking the rest of
+ * it - a long piece is tens of thousands of marks, and the screen shows a few
+ * hundred.
+ */
+export interface RollScene {
+  /** The pitch on the top row. */
+  readonly highest: number;
+  readonly rows: number;
+  /** How long the run is drawn: to its last event, and a moment of air past it. */
+  readonly lengthMs: number;
+  /** The rows the black keys are on, which are shaded as they are on the instrument. */
+  readonly blackRows: readonly number[];
+  readonly waits: readonly SceneStretch[];
+  /** The clicks, which the ruler marks as well as the grid: one list, so they cannot disagree. */
+  readonly lines: readonly SceneLine[];
+  readonly rushes: readonly SceneMoment[];
+  readonly slips: readonly SceneSlip[];
+  readonly notes: readonly SceneNote[];
+  /** The notes the music asked for: see {@link RollDrawing.ghosts}. */
+  readonly ghosts: readonly SceneRowed[];
+  readonly bars: readonly SceneBar[];
+  readonly pedal: readonly ScenePedal[];
+}
+
+/** A list in the order its marks begin, which a sort that keeps ties as they came leaves alone. */
+function inTimeOrder<T extends SceneStretch>(marks: readonly T[]): T[] {
+  return [...marks].sort((left, right) => left.fromMs - right.fromMs);
+}
+
+function momentsInTimeOrder<T extends { readonly atMs: number }>(marks: readonly T[]): T[] {
+  return [...marks].sort((left, right) => left.atMs - right.atMs);
+}
+
+/**
+ * The line a click leaves: heavy for a bar, plain for a beat, and a mark on the
+ * ruler above as well - tall for a bar, short for a beat, shorter for what falls
+ * between them.
  *
  * A bar line the reader gave late gets a line of its own kind: the metre's own
  * lines say where the beat was, and this one says where they put it, in the
  * colour of the head because like the head it is theirs rather than the music's.
- */
-function lineFor(beat: GridLine, origin: number): HTMLElement {
-  const line = element('div', `roll__line roll__line--${beat.given ? 'given' : beat.weight}`);
-  line.style.left = atSecond(beat.atMs - origin);
-  if (beat.lateByMs !== null) {
-    line.title = `Given ${Math.round(beat.lateByMs)} ms late`;
-  }
-  return line;
-}
-
-/**
- * The same line's mark on the ruler above: tall for a bar, short for a beat,
- * shorter for what falls between them.
  *
  * The ruler carried bar numbers and nothing else, so the metre could be read
  * off the grid below but not off the strip that exists to say where you are.
- * Drawn from the same lines as the grid, so the two cannot disagree: a ruler
+ * Marked from the same lines as the grid, so the two cannot disagree: a ruler
  * with a metre of its own would be a second answer to what the bar is.
  */
-function tickFor(beat: GridLine, origin: number): HTMLElement {
-  const tick = element('div', `roll__tick roll__tick--${beat.given ? 'given' : beat.weight}`);
-  tick.style.left = atSecond(beat.atMs - origin);
-  if (beat.lateByMs !== null) {
-    tick.title = `Given ${Math.round(beat.lateByMs)} ms late`;
-  }
-  return tick;
+function lineOf(beat: GridLine, origin: number): SceneLine {
+  return {
+    atMs: beat.atMs - origin,
+    kind: beat.given ? 'given' : beat.weight,
+    says: beat.lateByMs === null ? null : `Given ${Math.round(beat.lateByMs)} ms late`,
+  };
 }
 
 /**
@@ -272,11 +354,8 @@ function tickFor(beat: GridLine, origin: number): HTMLElement {
  * that moment - an entry between the clicks the reader chose is not drawn as a
  * beat, and hanging this on one left it with no mark at all.
  */
-function rushFor(rush: RolledRush, origin: number): HTMLElement {
-  const line = element('div', 'roll__line roll__line--rushed');
-  line.style.left = atSecond(rush.atMs - origin);
-  line.title = `Taken ${Math.round(rush.byMs)} ms early`;
-  return line;
+function rushOf(rush: RolledRush, origin: number): SceneMoment {
+  return { atMs: rush.atMs - origin, says: `Taken ${Math.round(rush.byMs)} ms early` };
 }
 
 /**
@@ -291,34 +370,31 @@ function rushFor(rush: RolledRush, origin: number): HTMLElement {
  * waits on each of them: in both the music stood still for him, and in both the
  * grid on either side of the band is even. His: "кожен такий slowdown
  * замальовувати жовтою секцією just like у wait for bars".
- *
- * `null` for a beat that fell where it was meant to, which is most of them.
  */
-function waitFor(wait: RolledWait, origin: number): HTMLElement {
+function waitOf(wait: RolledWait, origin: number): SceneStretch {
   const held = wait.untilMs - wait.fromMs;
-  const band = element('div', 'roll__wait');
-  band.style.left = atSecond(wait.fromMs - origin);
-  band.style.width = atSecond(held);
-  band.title = `The music waited ${Math.round(held)} ms`;
-  return band;
+  return {
+    fromMs: wait.fromMs - origin,
+    untilMs: wait.untilMs - origin,
+    says: `The music waited ${Math.round(held)} ms`,
+  };
 }
 
-function noteFor(press: RolledPress, origin: number, high: number, endMs: number): HTMLElement {
-  const note = element('div', `roll__note roll__note--${shadeOf(press)}`);
+function noteOf(press: RolledPress, origin: number, high: number, endMs: number): SceneNote {
   const until = press.upAtMs ?? endMs;
-  note.style.left = atSecond(press.downAtMs - origin);
-  note.style.width = atSecond(Math.max(0, until - press.downAtMs));
-  note.style.top = atRow(high - press.midi);
   // What it was, for a finger on a cell. The deviation is the reason the view
   // exists, so it is said in milliseconds and signed: behind the beat is
   // positive, because that is the direction a reader falls.
   const off =
     press.deviationMs === null ? '' : ` · ${press.deviationMs > 0 ? '+' : ''}${Math.round(press.deviationMs)} ms`;
-  note.title = `${midiToLabel(press.midi)} · ${press.verdict ?? 'not judged'}${off}`;
-  if (press.upAtMs === null) {
-    note.classList.add('roll__note--open');
-  }
-  return note;
+  return {
+    fromMs: press.downAtMs - origin,
+    untilMs: press.downAtMs - origin + Math.max(0, until - press.downAtMs),
+    row: high - press.midi,
+    shade: shadeOf(press),
+    open: press.upAtMs === null,
+    says: `${midiToLabel(press.midi)} · ${press.verdict ?? 'not judged'}${off}`,
+  };
 }
 
 /** The head's two marks: its line over the grid, and its cap on the ruler. */
@@ -872,60 +948,141 @@ export function drawTheMap(roll: RunRoll): HTMLElement {
  * without a threshold anybody has to agree on. His: "мабуть червоні у випадку
  * якщо сильно поспішав з нотою".
  */
-function slipBetween(dueAt: number, playedAt: number, row: number): HTMLElement | null {
+function slipBetween(dueAt: number, playedAt: number, row: number): SceneSlip | null {
   const gap = playedAt - dueAt;
   if (Math.abs(gap) < SLIP_FLOOR_MS) {
     return null;
   }
-  const band = element('div', `roll__slip roll__slip--${gap > 0 ? 'late' : 'rushed'}`);
-  band.style.left = atSecond(Math.min(dueAt, playedAt));
-  band.style.width = atSecond(Math.abs(gap));
-  band.style.top = atRow(row);
-  band.style.opacity = String(
-    Math.min(SLIP_MOST_SOLID, (Math.abs(gap) / SLIP_FULL_MS) * SLIP_MOST_SOLID),
-  );
-  band.title = `${gap > 0 ? 'Late' : 'Rushed'} by ${Math.abs(Math.round(gap))} ms`;
-  return band;
+  return {
+    fromMs: Math.min(dueAt, playedAt),
+    untilMs: Math.min(dueAt, playedAt) + Math.abs(gap),
+    row,
+    kind: gap > 0 ? 'late' : 'rushed',
+    strength: Math.min(SLIP_MOST_SOLID, (Math.abs(gap) / SLIP_FULL_MS) * SLIP_MOST_SOLID),
+    says: `${gap > 0 ? 'Late' : 'Rushed'} by ${Math.abs(Math.round(gap))} ms`,
+  };
 }
 
 /**
- * Draws a run as keys against the clicks it was played to.
+ * Everything a run is drawn as, worked out once a drawing: see {@link RollScene}.
  *
  * The horizontal axis is real time and the lines are the moments clicks were
  * *heard*, not a grid computed from a tempo - so a bar the reader was held at
  * is simply a wider bar, and a piece that changes tempo cannot drift away from
- * its own drawing. Everything is positioned in terms of `--roll-second` and
- * `--roll-row`, so zooming changes custom properties and nothing is rebuilt.
+ * its own drawing.
  */
-export function drawTheRoll(drawing: RollDrawing): HTMLElement {
+export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
   const { roll } = drawing;
   const origin = rollBeganAtMs(roll);
   const endMs = rollEndedAtMs(roll);
   const ghosts = drawing.ghosts ?? [];
   const band = bandOf(roll.presses, ghosts);
-  const rows = band.high - band.low + 1;
 
-  const view = element('div', 'roll');
-  view.style.setProperty('--roll-rows', String(rows));
-  view.style.setProperty('--roll-length', atSecond(endMs - origin));
+  const blackRows: number[] = [];
+  for (let midi = band.high; midi >= band.low; midi -= 1) {
+    if (isBlack(midi)) {
+      blackRows.push(band.high - midi);
+    }
+  }
 
   // One name per bar line, where it fell due rather than where it was given:
   // the number over the grid is the page's, and the page does not move.
-  const ruler = element('div', 'roll__ruler');
-  for (const beat of theGrid(roll, drawing.grid)) {
-    ruler.append(tickFor(beat, origin));
-  }
+  const bars: SceneBar[] = [];
   for (const beat of beatsWorthMarking(roll)) {
     // Whether a place in the music begins a bar is the namer's question, not
     // this one's; all the drawing knows is that a beat the reader gave is not a
     // second bar to be named.
     const name = beat.given ? null : drawing.barLabel(beat.positionTicks);
-    if (name === null) {
-      continue;
+    if (name !== null) {
+      bars.push({ atMs: beat.atMs - origin, name });
     }
+  }
+
+  // The press that answered each note the music asked for, by the step it was
+  // owed to: a piece returns to the same pitch again and again, so pitch alone
+  // would pair a press with whichever of them came first.
+  const answered = new Map<string, RolledPress>();
+  for (const press of roll.presses) {
+    const key = `${press.stepIndex ?? -1}:${press.midi}`;
+    if (!answered.has(key)) {
+      answered.set(key, press);
+    }
+  }
+  // Where each note the music asked for belongs, worked out once.
+  const outlines = placedGhosts(roll, ghosts);
+  const slips: SceneSlip[] = [];
+  for (const { ghost, from } of outlines) {
+    // Only where the right note was played at the wrong time. No press and the
+    // outline says it alone; no note asked for and there is nothing to be off
+    // from.
+    const press = answered.get(`${ghost.stepIndex}:${ghost.midi}`);
+    const slip =
+      press === undefined || drawing.slips === false || drawing.keepsTime === false
+        ? null
+        : slipBetween(from, press.downAtMs - origin, band.high - ghost.midi);
+    if (slip !== null) {
+      slips.push(slip);
+    }
+  }
+
+  return {
+    highest: band.high,
+    rows: band.high - band.low + 1,
+    lengthMs: endMs - origin,
+    blackRows,
+    waits: inTimeOrder(theWaits(roll).map((wait) => waitOf(wait, origin))),
+    // The same list a playback sounds its clicks from, so a line and a click
+    // can never end up in different places - cut lines included.
+    lines: momentsInTimeOrder(theGrid(roll, drawing.grid).map((beat) => lineOf(beat, origin))),
+    rushes: momentsInTimeOrder(theRushes(roll).map((rush) => rushOf(rush, origin))),
+    slips: inTimeOrder(slips),
+    notes: inTimeOrder(roll.presses.map((press) => noteOf(press, origin, band.high, endMs))),
+    ghosts: inTimeOrder(
+      outlines.map(({ ghost, from, until }) => ({
+        fromMs: from,
+        untilMs: from + Math.max(0, until - from),
+        row: band.high - ghost.midi,
+        says: `${midiToLabel(ghost.midi)} · asked for here`,
+      })),
+    ),
+    bars: momentsInTimeOrder(bars),
+    pedal: inTimeOrder(
+      roll.pedal.map((span) => ({
+        fromMs: span.downAtMs - origin,
+        untilMs: span.downAtMs - origin + Math.max(0, (span.upAtMs ?? endMs) - span.downAtMs),
+        open: span.upAtMs === null,
+        says: span.upAtMs === null ? 'Pedal, still down' : 'Pedal',
+      })),
+    ),
+  };
+}
+
+/**
+ * Draws a run as keys against the clicks it was played to.
+ *
+ * Everything is positioned in terms of `--roll-second` and `--roll-row`, so
+ * zooming changes custom properties and nothing is rebuilt.
+ */
+export function drawTheRoll(drawing: RollDrawing): HTMLElement {
+  const scene = theSceneOfTheRoll(drawing);
+
+  const view = element('div', 'roll');
+  view.style.setProperty('--roll-rows', String(scene.rows));
+  view.style.setProperty('--roll-length', atSecond(scene.lengthMs));
+
+  const ruler = element('div', 'roll__ruler');
+  for (const line of scene.lines) {
+    const tick = element('div', `roll__tick roll__tick--${line.kind}`);
+    tick.style.left = atSecond(line.atMs);
+    if (line.says !== null) {
+      tick.title = line.says;
+    }
+    ruler.append(tick);
+  }
+  for (const bar of scene.bars) {
     const mark = element('span', 'roll__bar');
-    mark.style.left = atSecond(beat.atMs - origin);
-    mark.textContent = name;
+    mark.style.left = atSecond(bar.atMs);
+    mark.textContent = bar.name;
     ruler.append(mark);
   }
   // The head, marked on the strip that names the bars: its line is drawn in
@@ -935,9 +1092,10 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   ruler.append(element('div', 'roll__head-mark'));
 
   const keys = element('div', 'roll__keys');
-  for (let midi = band.high; midi >= band.low; midi -= 1) {
+  for (let row = 0; row < scene.rows; row += 1) {
+    const midi = scene.highest - row;
     const key = element('div', `roll__key${isBlack(midi) ? ' roll__key--black' : ''}`);
-    key.style.top = atRow(band.high - midi);
+    key.style.top = atRow(row);
     // Named only where the name is worth the room: every C, so the eye has
     // somewhere to land, and the black keys by their shape alone.
     key.textContent = midi % 12 === 0 ? midiToLabel(midi) : '';
@@ -950,79 +1108,77 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   // showing through, so a band beneath one is seen through it. Which is what he
   // asked for - "на чорні ноти також буде темне жовтий колір" - and it falls out
   // of the order rather than needing a second colour to keep in step.
-  for (const wait of theWaits(roll)) {
-    grid.append(waitFor(wait, origin));
+  for (const wait of scene.waits) {
+    const band = element('div', 'roll__wait');
+    band.style.left = atSecond(wait.fromMs);
+    band.style.width = atSecond(wait.untilMs - wait.fromMs);
+    band.title = wait.says ?? '';
+    grid.append(band);
   }
-  for (let midi = band.high; midi >= band.low; midi -= 1) {
-    if (!isBlack(midi)) {
-      continue;
-    }
+  for (const at of scene.blackRows) {
     const row = element('div', 'roll__row');
-    row.style.top = atRow(band.high - midi);
+    row.style.top = atRow(at);
     grid.append(row);
   }
-  // The same list a playback sounds its clicks from, so a line and a click can
-  // never end up in different places - cut lines included.
-  for (const beat of theGrid(roll, drawing.grid)) {
-    grid.append(lineFor(beat, origin));
-  }
-  for (const rush of theRushes(roll)) {
-    grid.append(rushFor(rush, origin));
-  }
-  // The press that answered each note the music asked for, by the step it was
-  // owed to: a piece returns to the same pitch again and again, so pitch alone
-  // would pair a press with whichever of them came first.
-  const answered = new Map<string, RolledPress>();
-  for (const press of roll.presses) {
-    const key = `${press.stepIndex ?? -1}:${press.midi}`;
-    if (!answered.has(key)) {
-      answered.set(key, press);
+  for (const line of scene.lines) {
+    const drawn = element('div', `roll__line roll__line--${line.kind}`);
+    drawn.style.left = atSecond(line.atMs);
+    if (line.says !== null) {
+      drawn.title = line.says;
     }
+    grid.append(drawn);
   }
-
-  // Where each note the music asked for belongs, worked out once. The bands go
-  // down here and the outlines at the end, because they want opposite sides of
-  // the presses: a band is a stretch of ground and belongs under them, and an
-  // outline is a thing to read against them and was being covered by them.
-  const outlines = placedGhosts(roll, ghosts);
-  for (const { ghost, from } of outlines) {
-    // Only where the right note was played at the wrong time. No press and the
-    // outline says it alone; no note asked for and there is nothing to be off
-    // from.
-    const press = answered.get(`${ghost.stepIndex}:${ghost.midi}`);
-    const slip =
-      press === undefined || drawing.slips === false || drawing.keepsTime === false
-        ? null
-        : slipBetween(from, press.downAtMs - origin, band.high - ghost.midi);
-    if (slip !== null) {
-      grid.append(slip);
+  for (const rush of scene.rushes) {
+    const drawn = element('div', 'roll__line roll__line--rushed');
+    drawn.style.left = atSecond(rush.atMs);
+    drawn.title = rush.says ?? '';
+    grid.append(drawn);
+  }
+  // The bands go down here and the outlines at the end, because they want
+  // opposite sides of the presses: a band is a stretch of ground and belongs
+  // under them, and an outline is a thing to read against them and was being
+  // covered by them.
+  for (const slip of scene.slips) {
+    const band = element('div', `roll__slip roll__slip--${slip.kind}`);
+    band.style.left = atSecond(slip.fromMs);
+    band.style.width = atSecond(slip.untilMs - slip.fromMs);
+    band.style.top = atRow(slip.row);
+    band.style.opacity = String(slip.strength);
+    band.title = slip.says ?? '';
+    grid.append(band);
+  }
+  for (const note of scene.notes) {
+    const drawn = element('div', `roll__note roll__note--${note.shade}`);
+    drawn.style.left = atSecond(note.fromMs);
+    drawn.style.width = atSecond(note.untilMs - note.fromMs);
+    drawn.style.top = atRow(note.row);
+    drawn.title = note.says ?? '';
+    if (note.open) {
+      drawn.classList.add('roll__note--open');
     }
+    grid.append(drawn);
   }
-  for (const press of roll.presses) {
-    grid.append(noteFor(press, origin, band.high, endMs));
-  }
-
   // Over the presses, and that is the whole of what they are for: an outline
   // underneath the note that answered it is an outline nobody can see, because
   // a note played at all covers most of one. His: "чи можеш зробити ghost ноти
   // щоб вони малювалися поверх моїх нот... бо наразі мої ноти перекривають
   // більшість ghost нот". They stay out of the way of the pointer, so the press
   // underneath keeps its own reading of how far off the beat it was.
-  for (const { ghost, from, until } of outlines) {
+  for (const ghost of scene.ghosts) {
     const drawn = element('div', 'roll__ghost');
-    drawn.style.left = atSecond(from);
-    drawn.style.width = atSecond(Math.max(0, until - from));
-    drawn.style.top = atRow(band.high - ghost.midi);
-    drawn.title = `${midiToLabel(ghost.midi)} · asked for here`;
+    drawn.style.left = atSecond(ghost.fromMs);
+    drawn.style.width = atSecond(ghost.untilMs - ghost.fromMs);
+    drawn.style.top = atRow(ghost.row);
+    drawn.title = ghost.says ?? '';
     grid.append(drawn);
   }
 
   const pedal = element('div', 'roll__pedal');
-  for (const span of roll.pedal) {
+  for (const span of scene.pedal) {
     const held = element('div', 'roll__pedal-span');
-    held.style.left = atSecond(span.downAtMs - origin);
-    held.style.width = atSecond(Math.max(0, (span.upAtMs ?? endMs) - span.downAtMs));
-    held.title = span.upAtMs === null ? 'Pedal, still down' : 'Pedal';
+    held.style.left = atSecond(span.fromMs);
+    held.style.width = atSecond(span.untilMs - span.fromMs);
+    held.title = span.says ?? '';
     pedal.append(held);
   }
 

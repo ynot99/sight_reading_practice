@@ -970,6 +970,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M5 4h4v16H5z M11 4h4v16h-4z M17 4h3v16h-3z" />
             </svg><span>Library</span></button>
+          <button type="button" class="settings-sections__tab" data-chooses="storage">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3z M4 6c0 1.7 3.6 3 8 3s8-1.3 8-3 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
+            </svg><span>Storage</span></button>
           <button type="button" class="settings-sections__tab" data-chooses="developers">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M4 7l1.4-1.4L11.8 12l-6.4 6.4L4 17l5-5z M12 16h8v2h-8z" />
@@ -1184,6 +1188,23 @@
           read past it. His: "може їх лишити при опції з settings у розділі for
           developers".
         -->
+        <!--
+          What this device keeps, as one bar of what it is made of and a
+          legend under it. His, of iOS: "memory management табу в settings
+          як в ios що там є рисочка яка заповнюється різними кольорами - та
+          легенда знизу щоб сказати що скільки займає". Weighed when the pane
+          is opened, which is when the question is being asked.
+        -->
+        <div class="control-group storage" data-pane="storage">
+          <div class="storage__head">
+            <span>What this device keeps</span>
+            <span id="storage-total" class="storage__total"></span>
+          </div>
+          <div id="storage-bar" class="storage-bar" role="img" aria-label="What this device keeps"></div>
+          <ul id="storage-legend" class="storage-legend"></ul>
+          <p id="storage-kept" class="hint"></p>
+          <p id="storage-small" class="hint"></p>
+        </div>
         <div class="control-group" data-pane="developers">
           <label><input id="trace-the-start" type="checkbox" /> Print start timings to the console</label>
           <p class="hint">
@@ -1197,12 +1218,6 @@
             <p class="hint">The last timings before this page was opened again:</p>
             <pre id="timing-trail-lines" class="timing-trail"></pre>
           </div>
-          <div class="ladder-row">
-            <button id="measure-storage" type="button" class="button button--ghost">
-              Measure storage
-            </button>
-          </div>
-          <ul id="storage-report" class="hint storage-report" hidden></ul>
         </div>
         <div class="control-group" data-pane="library">
           <label for="save-backup">Everything on this device</label>

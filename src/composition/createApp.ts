@@ -86,6 +86,9 @@ import { KeptTrail } from '../infrastructure/storage/KeptTrail.js';
 import type { ITimingTrail } from '../application/ports/ITimingTrail.js';
 import {
   BrowserStorageGauge,
+  browserCaches,
+  keptScores,
+  keptWhole,
   browserStorageManager,
 } from '../infrastructure/storage/BrowserStorageGauge.js';
 import { ExercisePresetRegistry } from '../domain/generation/ExercisePresetRegistry.js';
@@ -393,13 +396,36 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const takes = new TakeLibrary(takeStore);
   takes.load();
 
+  const historyStore =
+    options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY);
+  const history = new PracticeHistory(historyStore);
+  history.load();
+
+  const timeStore =
+    options.timeStore ?? new LocalStorageSettingsStore(browserStorage(), TIME_STORAGE_KEY);
+  const timeToday = new TimeToday(timeStore);
+  timeToday.load();
+
   const scoreStore = options.scoreStore ?? new IndexedDbScoreStore();
-  const storage = new BrowserStorageGauge(browserStorageManager(), browserStorage(), [
-    { name: 'settings', key: DEFAULT_STORAGE_KEY },
-    { name: 'readings', key: HISTORY_STORAGE_KEY },
-    { name: 'time today', key: TIME_STORAGE_KEY },
-    { name: 'takes', key: TAKES_STORAGE_KEY },
-  ]);
+  const storage = new BrowserStorageGauge(
+    browserStorageManager(),
+    browserStorage(),
+    [
+      { name: 'settings', key: DEFAULT_STORAGE_KEY },
+      { name: 'readings', key: HISTORY_STORAGE_KEY },
+      { name: 'time today', key: TIME_STORAGE_KEY },
+      { name: 'takes', key: TAKES_STORAGE_KEY },
+    ],
+    {
+      parts: [
+        keptScores(scoreStore),
+        keptWhole('readings', [historyStore], () => history.everyReading().length),
+        keptWhole('takes', [takeStore], () => takes.list().length),
+        keptWhole('settings', [settingsStore, timeStore], () => null),
+      ],
+      caches: browserCaches(),
+    },
+  );
   const scores = new ScoreLibrary({ store: scoreStore, serializer, importer, keeper: storage });
   const cloudDrive = new GoogleDrive({
     clientId: GOOGLE_CLIENT_ID,
@@ -421,16 +447,6 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     store: scoreStore,
     reload: () => scores.load(),
   });
-
-  const historyStore =
-    options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY);
-  const history = new PracticeHistory(historyStore);
-  history.load();
-
-  const timeStore =
-    options.timeStore ?? new LocalStorageSettingsStore(browserStorage(), TIME_STORAGE_KEY);
-  const timeToday = new TimeToday(timeStore);
-  timeToday.load();
 
   // Everything kept between visits, so one file can carry all of it. Keyed by
   // where each blob lives, which is what a restore has to put it back under.

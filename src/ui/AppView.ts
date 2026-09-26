@@ -61,7 +61,7 @@ import { barLines, barNumberOf, measureCount, spanMs } from '../domain/model/Exe
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
 import { drawTheHitErrors } from './hitErrorBar.js';
-import { describeStorage } from './storageReport.js';
+import { sizeOf, theStorageAccount } from './storageReport.js';
 import { findAll, wordsIn, type Found } from './settingsSearch.js';
 import type { DriveScore } from '../application/LibrarySync.js';
 import type { SettingsSyncOutcome } from '../application/SettingsSync.js';
@@ -1245,6 +1245,8 @@ export class AppView {
   private rollTick: ReturnType<typeof setInterval> | null = null;
   /** A frame asked for to redraw the map's box, and not yet arrived. */
   private mapFrame: number | null = null;
+  /** Whether the Storage pane is weighing what is kept, which takes a moment. */
+  private weighing = false;
   /** The frame the drawing is waiting to be painted in, if one has been asked for. */
   private paintFrame: number | null = null;
   /** The notes of the drawing by pitch, for the map down its side. */
@@ -1411,7 +1413,6 @@ export class AppView {
     pagedScore: HTMLInputElement;
     repeatNumbers: HTMLInputElement;
     traceTheStart: HTMLInputElement;
-    measureStorage: HTMLButtonElement;
     timingTrail: HTMLElement;
     timingTrailLines: HTMLElement;
     driveSync: HTMLButtonElement;
@@ -1425,7 +1426,11 @@ export class AppView {
     settingsSearchNext: HTMLButtonElement;
     scoreSync: HTMLButtonElement;
     scoreSyncText: HTMLElement;
-    storageReport: HTMLUListElement;
+    storageTotal: HTMLElement;
+    storageBar: HTMLElement;
+    storageLegend: HTMLUListElement;
+    storageKept: HTMLElement;
+    storageSmall: HTMLElement;
     focusSmaller: HTMLButtonElement;
     focusBigger: HTMLButtonElement;
     focusZoom: HTMLOutputElement;
@@ -1710,7 +1715,6 @@ export class AppView {
       pagedScore: requireElement(doc, 'paged-score'),
       repeatNumbers: requireElement(doc, 'repeat-numbers'),
       traceTheStart: requireElement(doc, 'trace-the-start'),
-      measureStorage: requireElement(doc, 'measure-storage'),
       timingTrail: requireElement(doc, 'timing-trail'),
       timingTrailLines: requireElement(doc, 'timing-trail-lines'),
       driveSync: requireElement(doc, 'drive-sync'),
@@ -1724,7 +1728,11 @@ export class AppView {
       settingsSearchNext: requireElement(doc, 'settings-search-next'),
       scoreSync: requireElement(doc, 'score-sync'),
       scoreSyncText: requireElement(doc, 'score-sync-text'),
-      storageReport: requireElement(doc, 'storage-report'),
+      storageTotal: requireElement(doc, 'storage-total'),
+      storageBar: requireElement(doc, 'storage-bar'),
+      storageLegend: requireElement(doc, 'storage-legend'),
+      storageKept: requireElement(doc, 'storage-kept'),
+      storageSmall: requireElement(doc, 'storage-small'),
       focusSmaller: requireElement(doc, 'focus-smaller'),
       focusBigger: requireElement(doc, 'focus-bigger'),
       focusZoom: requireElement(doc, 'focus-zoom'),
@@ -4262,10 +4270,6 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
-    this.listen(this.el.measureStorage, 'click', () => {
-      void this.showWhatIsKept();
-    });
-
     this.listen(this.el.driveSync, 'click', () => {
       void this.syncWithTheDrive();
     });
@@ -6047,6 +6051,10 @@ export class AppView {
     if (pane === 'library') {
       this.runtime.cloudDrive.prepare();
     }
+    // Weighed when it is looked at, which is when the question is asked.
+    if (pane === 'storage') {
+      void this.showWhatIsKept();
+    }
   }
 
   /**
@@ -6318,21 +6326,60 @@ export class AppView {
   }
 
   /**
-   * Asks the browser what it keeps for the trainer, and lists its answers.
+   * Weighs what the device keeps for the trainer, and draws it as a bar of
+   * its parts with a legend under it.
    *
-   * Asked when the reader asks, not watched: whether there is room and
-   * whether it will be kept is the question, and it is theirs to ask.
+   * Asked when the pane is opened, not watched: whether there is room, what
+   * is taking it and whether it will be kept is the question, and it is the
+   * reader's to ask. Weighing reads the offline copy back, some tens of
+   * megabytes, so a second opening while one is going waits for it.
    */
   private async showWhatIsKept(): Promise<void> {
-    const reading = await this.runtime.storage.read();
-    this.el.storageReport.replaceChildren(
-      ...describeStorage(reading).map((line) => {
-        const item = this.doc.createElement('li');
-        item.textContent = line;
-        return item;
-      }),
-    );
-    this.el.storageReport.hidden = false;
+    if (this.weighing) {
+      return;
+    }
+    this.weighing = true;
+    this.el.storageTotal.textContent = 'Weighing…';
+    try {
+      const account = theStorageAccount(await this.runtime.storage.read());
+      this.el.storageTotal.textContent = account.total;
+      this.el.storageBar.replaceChildren(
+        ...account.pieces
+          .filter((piece) => piece.bytes > 0)
+          .map((piece) => {
+            const part = this.doc.createElement('span');
+            part.className = 'storage-bar__part';
+            part.dataset['kind'] = piece.kind;
+            part.style.flexGrow = String(piece.share);
+            part.title = `${piece.name}: ${sizeOf(piece.bytes)}`;
+            return part;
+          }),
+      );
+      this.el.storageBar.setAttribute(
+        'aria-label',
+        account.pieces.map((piece) => `${piece.name} ${sizeOf(piece.bytes)}`).join(', '),
+      );
+      this.el.storageLegend.replaceChildren(
+        ...account.pieces.map((piece) => {
+          const item = this.doc.createElement('li');
+          const dot = this.doc.createElement('span');
+          dot.className = 'storage-legend__dot';
+          dot.dataset['kind'] = piece.kind;
+          const name = this.doc.createElement('span');
+          name.textContent = piece.name;
+          const size = this.doc.createElement('span');
+          size.className = 'storage-legend__size';
+          size.textContent =
+            piece.count === null ? sizeOf(piece.bytes) : `${sizeOf(piece.bytes)} · ${String(piece.count)}`;
+          item.append(dot, name, size);
+          return item;
+        }),
+      );
+      this.el.storageKept.textContent = account.kept;
+      this.el.storageSmall.textContent = account.small;
+    } finally {
+      this.weighing = false;
+    }
   }
 
   private syncControlsFromSettings(): void {

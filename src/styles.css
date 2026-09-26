@@ -1750,10 +1750,100 @@ textarea {
   gap: 8px;
 }
 
-/* What the device keeps, a line to each answer. */
-.storage-report {
+/*
+ * What the device keeps, as one bar of what it is made of.
+ *
+ * The whole bar is what is kept, not the room there is for it: twenty-six
+ * megabytes of nine gigabytes is a bar with a hair in it. The room is said
+ * in words at the head. A part too small to see keeps a sliver, so every
+ * part in the legend is somewhere on the bar.
+ */
+.storage {
+  display: grid;
+  gap: 10px;
+}
+
+.storage__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.storage__total {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-bar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--surface-strong);
+}
+
+.storage-bar__part {
+  flex: 0 0 0;
+  min-width: 3px;
+  background: var(--storage-ink);
+}
+
+.storage-legend {
+  display: grid;
+  gap: 6px;
+  margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.storage-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.storage-legend__dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--storage-ink);
+}
+
+.storage-legend__size {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Each part in one colour, on the bar and beside its name alike. */
+[data-kind='scores'] {
+  --storage-ink: var(--accent);
+}
+
+[data-kind='readings'] {
+  --storage-ink: var(--correct);
+}
+
+[data-kind='takes'] {
+  --storage-ink: var(--pending);
+}
+
+[data-kind='sound'] {
+  --storage-ink: var(--star-8);
+}
+
+[data-kind='app'] {
+  --storage-ink: var(--star-1);
+}
+
+[data-kind='settings'] {
+  --storage-ink: var(--star-10);
+}
+
+[data-kind='other'] {
+  --storage-ink: color-mix(in srgb, var(--text-muted) 45%, transparent);
 }
 
 /*
@@ -3814,6 +3904,7 @@ body[data-playing='true'] .score__modes {
 .sheet__panel[data-showing='sound'] [data-pane~='sound'],
 .sheet__panel[data-showing='practice'] [data-pane~='practice'],
 .sheet__panel[data-showing='library'] [data-pane~='library'],
+.sheet__panel[data-showing='storage'] [data-pane~='storage'],
 .sheet__panel[data-showing='developers'] [data-pane~='developers'] {
   display: revert;
 }

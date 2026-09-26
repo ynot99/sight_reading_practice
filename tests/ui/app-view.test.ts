@@ -370,8 +370,11 @@ function createRig(
       Promise.resolve({
         usedBytes: 42 * 1024 * 1024,
         quotaBytes: 100 * 1024 * 1024 * 1024,
-        databaseBytes: 30 * 1024 * 1024,
         persisted: false,
+        parts: [
+          { kind: 'scores' as const, bytes: 12 * 1024 * 1024, count: 98 },
+          { kind: 'sound' as const, bytes: 20 * 1024 * 1024, count: null },
+        ],
         shelves: [
           { name: 'settings', characters: 3_000 },
           { name: 'takes', characters: 1_200_000 },
@@ -9316,20 +9319,30 @@ describe('what the device keeps', () => {
     mountRealMarkup();
   });
 
-  it('lists what the browser says when asked, and not before', async () => {
-    // Settings -> For developers. Whether there is room and whether it will be
-    // kept is a question the reader asks; the page does not ask it for them.
+  it('weighs what is kept when its pane is opened, and not before', async () => {
+    // Settings -> Storage. His, of iOS: a bar of what is kept, and a legend
+    // under it. Whether there is room and what is taking it is a question the
+    // reader asks; the page does not ask it for them.
     const { view } = createRig();
     await view.initialize();
-    const report = element<HTMLUListElement>('storage-report');
-    expect(report.hidden).toBe(true);
+    const legend = element<HTMLUListElement>('storage-legend');
+    element<HTMLButtonElement>('focus-settings').click();
+    expect(legend.children).toHaveLength(0);
 
-    element<HTMLButtonElement>('measure-storage').click();
-    await waitFor(() => !report.hidden);
+    document.querySelector<HTMLButtonElement>('button[data-chooses="storage"]')?.click();
+    await waitFor(() => legend.children.length > 0);
 
-    const lines = [...report.querySelectorAll('li')].map((line) => line.textContent);
-    expect(lines).toContain('Kept from being cleared: no');
-    expect(lines.some((line) => line?.includes('takes 1.1 MB'))).toBe(true);
+    expect(element('storage-total').textContent).toBe('42.0 MB / 100 GB');
+    // Biggest first, and the rest of the total as a part of its own.
+    expect([...legend.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
+      'Piano sound20.0 MB',
+      'Scores12.0 MB · 98',
+      'Other10.0 MB',
+    ]);
+    const bar = [...element('storage-bar').children] as HTMLElement[];
+    expect(bar.map((part) => part.dataset['kind'])).toEqual(['sound', 'scores', 'other']);
+    expect(Number(bar[0]?.style.flexGrow)).toBeCloseTo(20 / 42, 6);
+    expect(element('storage-kept').textContent).toContain('Home Screen');
   });
 });
 

@@ -2798,6 +2798,104 @@ describe('AppView', () => {
         }
       });
 
+      it('folds the bar away to the run’s buttons while it is shown, held or going', async () => {
+        // His: "я очікував побачити 3 кнопки посеред екрану як у грі коли
+        // стартуєш грати". Stop among them: the stylesheet shows it only on a
+        // bar folded away, so a replay under the whole bar had no Stop at all.
+        const { clock } = await aRunPlayed();
+        vi.useFakeTimers();
+        try {
+          element<HTMLButtonElement>('run-replay').click();
+
+          expect(element('focus-bar').dataset['playing']).toBe('true');
+          expect(document.body.dataset['playing']).toBe('true');
+          expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
+
+          clock.advance(500);
+          vi.advanceTimersByTime(100);
+          element<HTMLButtonElement>('focus-play').click();
+
+          expect(element('focus-play').getAttribute('aria-label')).toBe('Resume');
+          expect(element('focus-bar').dataset['playing']).toBe('true');
+
+          element<HTMLButtonElement>('focus-stop').click();
+
+          expect(element('focus-bar').dataset['playing']).toBe('false');
+          expect(document.body.dataset['playing']).toBe('false');
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('plays itself again from the top on Play it again, and begins no run', async () => {
+        const { runtime, renderer, clock } = await aRunPlayed();
+        vi.useFakeTimers();
+        try {
+          element<HTMLButtonElement>('run-replay').click();
+          clock.advance(2_100);
+          vi.advanceTimersByTime(100);
+          expect(renderer.played.length).toBeGreaterThan(0);
+          const before = runtime.controller.session;
+
+          element<HTMLButtonElement>('focus-replay').click();
+
+          expect(runtime.controller.replaying).toBe(true);
+          expect(runtime.controller.session).toBe(before);
+          expect(renderer.played).toEqual([]);
+          expect(element('focus-play').getAttribute('aria-label')).toBe('Pause');
+
+          clock.advance(1_100);
+          vi.advanceTimersByTime(100);
+
+          expect(renderer.played.length).toBeGreaterThan(0);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('ends by itself once it has played out, and gives the page back', async () => {
+        const { runtime, renderer, clock } = await aRunPlayed();
+        const left = renderer.played.length;
+        vi.useFakeTimers();
+        try {
+          element<HTMLButtonElement>('run-replay').click();
+
+          clock.advance(60_000);
+          vi.advanceTimersByTime(100);
+
+          expect(runtime.controller.replaying).toBe(false);
+          expect(element('replay-keys').hidden).toBe(true);
+          expect(element('focus-bar').dataset['playing']).toBe('false');
+          expect(renderer.played).toHaveLength(left);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('keeps its speed in the row on a narrow screen, where the drawer is shut', async () => {
+        // A phone keeps the speed in the drawer, which goes with the rest of the
+        // bar while a replay is shown - and how fast to watch is its question.
+        Object.defineProperty(window, 'matchMedia', {
+          configurable: true,
+          value: () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }),
+        });
+        try {
+          await aRunPlayed();
+          const speed = element('focus-speed');
+          expect(speed.parentElement).toBe(element('focus-drawer'));
+
+          element<HTMLButtonElement>('run-replay').click();
+
+          expect(speed.parentElement).toBe(element('focus-row'));
+
+          element<HTMLButtonElement>('focus-stop').click();
+
+          expect(speed.parentElement).toBe(element('focus-drawer'));
+        } finally {
+          Reflect.deleteProperty(window, 'matchMedia');
+        }
+      });
+
       it('takes the keyboard away with the replay, whatever ended it', async () => {
         // Another piece opened ends one too, and the keyboard stayed up with
         // Stop greyed out. His: "як я вмикаю replay - то нема шляху позбутися

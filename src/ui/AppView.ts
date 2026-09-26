@@ -1345,8 +1345,8 @@ export class AppView {
   private replayTick: ReturnType<typeof setInterval> | null = null;
   private replayAtMs = 0;
   private replayClicksSent = 0;
-  /** Played to its end, so that Start plays it again from the top. */
-  private replayRanOut = false;
+  /** Puts the speed in the row or the drawer, as fits now. See `bindNarrowLayout`. */
+  private placeTheSpeed: () => void = () => {};
   /**
    * Fingers down on the drawing, and what the zoom was when the second arrived.
    *
@@ -4314,12 +4314,17 @@ export class AppView {
       return;
     }
     const narrow = view.matchMedia('(max-width: 560px)');
-    const place = (): void => {
-      if (narrow.matches) {
+    // In the row over a replay, however narrow: the drawer goes with the rest
+    // of the bar then, and how fast to watch is the replay's own question.
+    this.placeTheSpeed = (): void => {
+      if (narrow.matches && this.replayRoll === null) {
         this.el.focusDrawer.prepend(this.el.focusSpeed);
       } else {
         this.el.focusRow.insertBefore(this.el.focusSpeed, this.el.focusMetronome);
       }
+    };
+    const place = (): void => {
+      this.placeTheSpeed();
     };
     place();
     narrow.addEventListener('change', place);
@@ -4521,6 +4526,12 @@ export class AppView {
    * making them one would lose one of the two.
    */
   private replayRun(): void {
+    // Over a replay, the replay again: a run begun here would take the page
+    // from under the one being watched.
+    if (this.replayRoll !== null) {
+      this.replayFromTheTop();
+      return;
+    }
     this.stopEverything();
     this.beginRun();
   }
@@ -7733,7 +7744,7 @@ export class AppView {
     const paused =
       status === 'paused' ||
       controller.isListeningPaused ||
-      (controller.replaying && !replaySounding && this.replayAtMs > 0 && !this.replayRanOut);
+      (controller.replaying && !replaySounding && this.replayAtMs > 0);
     // What is being practised is settled before a run and not during one: a
     // run is graded, and a passage moved halfway through makes the report a
     // report of nothing in particular. The markers stay on the page saying
@@ -7783,6 +7794,10 @@ export class AppView {
    * One answer, because everything that stands over the page has to agree about
    * it: a performance counts, and so does a run held part way through - a reader
    * who stopped to work something out is still at the keyboard.
+   *
+   * And a run being shown again, held or going: the page is the replay's, and
+   * the bar folds away to its buttons as it does for a run. His: "я очікував
+   * побачити 3 кнопки посеред екрану як у грі коли стартуєш грати".
    */
   private somethingIsPlaying(): boolean {
     const controller = this.runtime.controller;
@@ -7790,7 +7805,8 @@ export class AppView {
       this.isPlaying ||
       this.isPreviewing ||
       controller.isListening ||
-      controller.isListeningPaused
+      controller.isListeningPaused ||
+      controller.replaying
     );
   }
 
@@ -7812,9 +7828,8 @@ export class AppView {
     // work something out is still at the keyboard. Asked here because this is
     // already the one place that answers "is anything happening to the music",
     // and a second answer to that question could only disagree with this one.
-    // A replay being watched holds it too, though it keeps the bar: the
-    // reader is not at the keys, and the tempo buttons are its speed.
-    if (playing || this.replayIsSounding) {
+    // A replay being watched holds it too, since it counts as playing.
+    if (playing) {
       this.runtime.screenWake.hold();
     } else {
       this.runtime.screenWake.release();
@@ -8009,7 +8024,7 @@ export class AppView {
     this.replayRoll = roll;
     this.replayAtMs = 0;
     this.replayClicksSent = 0;
-    this.replayRanOut = false;
+    this.placeTheSpeed();
     this.el.replayKeys.hidden = false;
     this.doc.body.dataset['replaying'] = 'true';
     this.showTheReplaysKeys(0);
@@ -8070,9 +8085,7 @@ export class AppView {
       this.holdTheReplay();
       return;
     }
-    const from = this.replayRanOut ? 0 : this.replayAtMs;
-    this.replayRanOut = false;
-    this.replayAtMs = from;
+    const from = this.replayAtMs;
     player.setSpeed(this.theRollsSpeed());
     player.play(RUN_REPLAY_ID, rollAsEvents(roll), from);
     this.replayClicksSent = clicksBefore(roll, from, this.theRollsGrid());
@@ -8090,10 +8103,7 @@ export class AppView {
   private followTheReplay(): void {
     const roll = this.replayRoll;
     const player = this.runtime.takePlayer;
-    // Over already, from the other side: another piece was opened, or a run
-    // was begun, and the page is theirs.
-    if (roll === null || !this.runtime.controller.replaying) {
-      this.endTheReplay();
+    if (roll === null) {
       return;
     }
     player.pump();
@@ -8107,10 +8117,19 @@ export class AppView {
     this.replayClicksSent = this.clickTheRunsBeats(roll, this.replayClicksSent, at);
     this.runtime.controller.replayAt(at);
     this.showTheReplaysKeys(at);
+    // Over when it has played out, as a run is: the page comes back with the
+    // whole run on it. His: "щоб не треба було додивлюватись до кінця" - Stop
+    // is the way out before then.
     if (player.finished) {
-      this.replayRanOut = true;
-      this.holdTheReplay();
+      this.endTheReplay();
     }
+  }
+
+  /** Play it again, over a replay: the replay from its beginning. */
+  private replayFromTheTop(): void {
+    this.holdTheReplay();
+    this.replayAtMs = 0;
+    this.toggleTheReplay();
   }
 
   /** Holds a replay where it is, to be played on from there. */
@@ -8149,6 +8168,7 @@ export class AppView {
     }
     this.holdTheReplay();
     this.replayRoll = null;
+    this.placeTheSpeed();
     lightTheKeys(this.replayKeyboard, new Map(), false);
     this.el.replayKeys.hidden = true;
     delete this.doc.body.dataset['replaying'];

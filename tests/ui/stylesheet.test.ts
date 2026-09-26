@@ -182,6 +182,20 @@ describe('the stylesheet', () => {
     expect(body('.replay-keys__white')).toMatch(/min-width\s*:\s*14px/);
   });
 
+  it('keeps the speed beside the run’s buttons over a replay, on a ground of its own', () => {
+    // The row folds away to what is marked to stay mid-run, and a replay's
+    // speed is set while it is watched. His: "Так, можна додати й швидкість".
+    const speed =
+      rules().find(
+        (rule) =>
+          rule.selector ===
+          "body[data-replaying='true'] .focus-bar[data-playing='true'] .focus-bar__row > #focus-speed",
+      )?.body ?? '';
+
+    expect(speed).toMatch(/display\s*:\s*flex/);
+    expect(speed).toMatch(/background\s*:\s*var\(--surface\)/);
+  });
+
   it('keeps the boxes on the maps off the edges across them', () => {
     // A border lying on the clip's own edge is lost to the rounding wherever
     // that edge falls between device pixels. His: "не видно нижній border".

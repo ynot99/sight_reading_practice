@@ -2578,6 +2578,18 @@ body[data-bare='true'] .focus-bar__row > [data-bare]:focus-visible {
 }
 
 /*
+ * And the speed, over a replay: how fast to watch is the one thing about a
+ * replay there is to set, and it is set while watching. On a ground of its
+ * own, as the buttons beside it are, or its number is read against the staves.
+ */
+body[data-replaying='true'] .focus-bar[data-playing='true'] .focus-bar__row > #focus-speed {
+  display: flex;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgb(16 24 40 / 22%);
+}
+
+/*
  * Quick replay, which is the row's one button the other way round.
  *
  * Everything else here is a control the reader has between runs, marked if

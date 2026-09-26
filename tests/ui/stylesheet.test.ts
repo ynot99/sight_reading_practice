@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { INKS } from '../../src/ui/rollPainter.js';
 
 const HTML = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
 
@@ -1124,17 +1125,45 @@ describe('nothing on this page pulls', () => {
   });
 });
 
-describe('the wait a bar line had', () => {
-  it('is painted through, so what is behind it shows', () => {
+/** An ink the MIDI viewer is painted in, as the stylesheet declares it on `.roll`. */
+function ink(name: string): string {
+  const roll = rules().find((rule) => rule.selector === '.roll')?.body ?? '';
+  return new RegExp(`--roll-ink-${name}\\s*:\\s*([^;]+);`).exec(roll)?.[1]?.trim() ?? '';
+}
+
+describe('the inks the MIDI viewer is painted in', () => {
+  it('declares every one the painter reads', () => {
+    // One the painter asks for and the stylesheet does not have reads back as
+    // nothing, and a canvas given nothing paints in black - on a dark ground,
+    // a mark that is there and cannot be seen.
+    for (const name of Object.values(INKS)) {
+      expect(ink(name), name).not.toBe('');
+    }
+  });
+
+  it('paints the waits and the rows through, so what is behind them shows', () => {
     // The whole point of laying the band under the rows: those rows are a dark
     // wash with the ground showing through, so the band comes out darker where
     // the black keys are. An opaque band would hide them and the effect with
     // them, and no test that reads the markup could tell.
-    const band = rules().find((rule) => rule.selector === '.roll__wait');
-    const row = rules().find((rule) => rule.selector === '.roll__row');
+    expect(ink('wait')).toContain('transparent');
+    expect(ink('row')).toContain('transparent');
+  });
+});
 
-    expect(band?.body).toContain('transparent');
-    expect(row?.body).toContain('transparent');
+describe('the canvases the run is painted on', () => {
+  const body = (selector: string): string =>
+    rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+  it('stand still beside the keys while the run scrolls under them', () => {
+    expect(body('.roll__paint')).toMatch(/position:\s*sticky/);
+    expect(body('.roll__paint')).toMatch(/left:\s*var\(--roll-keys\)/);
+    // The grid's under the ruler, which stands over it.
+    expect(body('.roll__grid > .roll__paint')).toMatch(/top:\s*var\(--roll-ruler\)/);
+  });
+
+  it('are never wider than the run, which a short one at a low zoom is not', () => {
+    expect(body('.roll__paint')).toMatch(/width:\s*min\(100%,/);
   });
 });
 
@@ -1157,23 +1186,10 @@ describe('the notes the music asked for', () => {
     // a capsule the same weight as its own rim has no rim, and where the press
     // fills it edge to edge there is then nothing to say where one ends and the
     // other begins - which is the one thing it is there to show.
-    const body = rules().find((rule) => rule.selector === '.roll__ghost')?.body ?? '';
-    const edge = Number(/border:[^;]*--text-muted\) (\d+)%/.exec(body)?.[1] ?? '0');
-    const fill = Number(/background:[^;]*--text-muted\) (\d+)%/.exec(body)?.[1] ?? '0');
+    const percent = (said: string): number => Number(/--text-muted\) (\d+)%/.exec(said)?.[1] ?? '0');
 
-    expect(fill).toBeGreaterThan(0);
-    expect(edge).toBeGreaterThan(fill);
-  });
-
-  it('lets the pointer through to the press underneath', () => {
-    // The outline is drawn over the presses, which is the only way it can be
-    // seen at all - a note played covers most of one. Over them it would also
-    // take the pointer from them, and what a finger on a note is asking is what
-    // that note was *and* how far off the beat it came. The outline can answer
-    // only the first, and no test that reads the markup could tell.
-    const ghost = rules().find((rule) => rule.selector === '.roll__ghost');
-
-    expect(ghost?.body).toContain('pointer-events: none');
+    expect(percent(ink('ghost'))).toBeGreaterThan(0);
+    expect(percent(ink('ghost-edge'))).toBeGreaterThan(percent(ink('ghost')));
   });
 });
 
@@ -1181,23 +1197,11 @@ describe('how fine the grid reads', () => {
   it('draws what falls between the beats more faintly than a beat', () => {
     // It is the thing being measured *against* rather than the thing being
     // counted, and a grid of equals is a wash in which no beat can be found.
-    const beat = rules().find((rule) => rule.selector === '.roll__line');
-    const division = rules().find((rule) => rule.selector === '.roll__line--division');
-    const percent = (body: string | undefined): number =>
-      Number(/var\(--border\) (\d+)%/.exec(body ?? '')?.[1] ?? '0');
+    // That it is dashed as well is the painter's to say: see its tests.
+    const percent = (said: string): number => Number(/var\(--border\) (\d+)%/.exec(said)?.[1] ?? '0');
 
-    expect(percent(division?.body)).toBeGreaterThan(0);
-    expect(percent(division?.body)).toBeLessThan(percent(beat?.body));
-  });
-
-  it('dashes it, so faintness is not the only thing telling it from a beat', () => {
-    // With the eye on one bar a faint line over pale ground can read as a beat.
-    // Two channels, because the distinction has to survive both ways of looking.
-    const division = rules().find((rule) => rule.selector === '.roll__line--division');
-
-    expect(division?.body).toContain('dashed');
-    // And no solid fill left behind it, which would hide the dashes.
-    expect(division?.body).toContain('background: none');
+    expect(percent(ink('division'))).toBeGreaterThan(0);
+    expect(percent(ink('division'))).toBeLessThan(percent(ink('line')));
   });
 });
 

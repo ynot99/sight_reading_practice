@@ -87,12 +87,28 @@ import {
   type GridChoice,
 } from '../application/session/RunRoll.js';
 import {
+  paintThePedal,
+  paintTheGrid,
+  paintTheRuler,
+  theInksOf,
+  type RollInks,
+  type RollViewport,
+} from './rollPainter.js';
+import {
   drawTheMap,
   drawThePitchMap,
   drawTheRoll,
+  rowFromTap,
+  theCanvasesOf,
   theMapOfThePitches,
   thePitchesOfTheRun,
+  theSceneOfTheRoll,
+  whatThePedalSaysAt,
+  whatTheGridSaysAt,
+  whatTheRulerSaysAt,
+  type RollCanvases,
   type RollPitches,
+  type RollScene,
   scrollAfterZoom,
   shareOfTheRun,
   theSquaresOfTheBar,
@@ -1229,10 +1245,18 @@ export class AppView {
   private rollTick: ReturnType<typeof setInterval> | null = null;
   /** A frame asked for to redraw the map's box, and not yet arrived. */
   private mapFrame: number | null = null;
+  /** The frame the drawing is waiting to be painted in, if one has been asked for. */
+  private paintFrame: number | null = null;
   /** The notes of the drawing by pitch, for the map down its side. */
   private rollPitches: RollPitches | null = null;
   /** The head's marks, found once as the drawing is made rather than looked for every frame. */
   private rollHeads: RollHeads | null = null;
+  /** What the drawing shows, placed in the run's own time: see `RollScene`. */
+  private drawnScene: RollScene | null = null;
+  /** The canvases it is painted on, found once as it is drawn. */
+  private rollCanvases: RollCanvases | null = null;
+  /** The colours it is painted in, read off the stylesheet once and again when those change. */
+  private rollInks: RollInks | null = null;
   /** What that map last drew, so a scroll that changes nothing on it redraws nothing. */
   private pitchMarksDrawn = '';
   /** What the squares over the drawing last said, for the same reason: see `countTheBarOut`. */
@@ -2039,6 +2063,7 @@ export class AppView {
       this.rollTick = null;
     }
     this.forgetTheMapFrame();
+    this.forgetThePaintFrame();
     if (this.timeTick !== null) {
       clearInterval(this.timeTick);
       this.timeTick = null;
@@ -4835,6 +4860,16 @@ export class AppView {
     this.syncCard();
   }
 
+  /**
+   * What the MIDI viewer is painting, placed in the run's own time.
+   *
+   * For whoever needs to know what is on a canvas without reading its pixels:
+   * the tests, which can read a scene and cannot read a painting.
+   */
+  get rollScene(): RollScene | null {
+    return this.drawnScene;
+  }
+
   /** True while the reader is being given their look at the page. */
   get isPreviewing(): boolean {
     return this.previewTimer !== null;
@@ -6868,6 +6903,7 @@ export class AppView {
     this.listen(this.el.rollClose, 'click', () => {
       this.closeTheRoll();
     });
+    this.repaintTheRollWhenTheScreenChanges();
     this.listen(this.el.rollOptionsClose, 'click', () => {
       this.el.sheetRollOptions.hidden = true;
     });
@@ -8302,17 +8338,19 @@ export class AppView {
       return;
     }
     const ghosts = this.theNotesAskedFor();
-    this.el.rollBody.replaceChildren(
-      drawTheRoll({
-        roll,
-        barLabel: this.barNamer(),
-        grid: this.theRollsGrid(),
-        ghosts,
-        slips: this.el.rollSlips.checked,
-        keepsTime: this.theRunKeptTime(),
-      }),
-    );
+    const scene = theSceneOfTheRoll({
+      roll,
+      barLabel: this.barNamer(),
+      grid: this.theRollsGrid(),
+      ghosts,
+      slips: this.el.rollSlips.checked,
+      keepsTime: this.theRunKeptTime(),
+    });
+    this.drawnScene = scene;
+    this.el.rollBody.replaceChildren(drawTheRoll(scene));
     this.rollHeads = theHeadsOf(this.el.rollBody);
+    this.rollCanvases = theCanvasesOf(this.el.rollBody);
+    this.rollInks = null;
     this.rollPitches = thePitchesOfTheRun(roll, ghosts);
     this.applyTheZoom();
     this.el.rollMap.replaceChildren(
@@ -8326,10 +8364,152 @@ export class AppView {
     if (drawn instanceof HTMLElement) {
       drawn.addEventListener('scroll', () => {
         this.askWhereTheViewIs();
+        this.askToPaintTheRoll();
       });
+      this.tellThePointerWhatIsUnderIt(drawn);
     }
     this.sayWhereTheViewIs();
     this.describeTheRoll();
+  }
+
+  /**
+   * Tells a pointer resting on the drawing what the mark under it is.
+   *
+   * Each mark drawn as an element carried a title of its own. Painted, a canvas
+   * has one, and it is changed to say whatever mark the pointer is over - so a
+   * note still says what it was and how far off the beat it came. His: "а чи
+   * неможливо буде hover робити на canvas?".
+   */
+  private tellThePointerWhatIsUnderIt(drawn: HTMLElement): void {
+    const canvases = this.rollCanvases;
+    if (canvases === null) {
+      return;
+    }
+    const answer = (
+      canvas: HTMLCanvasElement,
+      ask: (scene: RollScene, atMs: number, row: number | null, pxPerSecond: number) => string | null,
+    ): void => {
+      canvas.addEventListener('pointermove', (event) => {
+        const scene = this.drawnScene;
+        const pxPerSecond = Number(this.el.rollZoom.value);
+        // Where the canvas stands is where the view is scrolled to, since it
+        // stands still while the run moves under it.
+        const box = canvas.getBoundingClientRect();
+        const atMs = timeFromTap(event.clientX - box.left + drawn.scrollLeft, pxPerSecond);
+        const row = rowFromTap(event.clientY - box.top + drawn.scrollTop, this.theRowAsDrawn());
+        const says = scene === null || atMs === null ? null : ask(scene, atMs, row, pxPerSecond);
+        if (canvas.title !== (says ?? '')) {
+          canvas.title = says ?? '';
+        }
+      });
+    };
+    answer(canvases.grid, (scene, atMs, row, pxPerSecond) =>
+      row === null ? null : whatTheGridSaysAt(scene, atMs, row, pxPerSecond),
+    );
+    answer(canvases.ruler, (scene, atMs, _row, pxPerSecond) =>
+      whatTheRulerSaysAt(scene, atMs, pxPerSecond),
+    );
+    answer(canvases.pedal, (scene, atMs, _row, pxPerSecond) =>
+      whatThePedalSaysAt(scene, atMs, pxPerSecond),
+    );
+  }
+
+  /**
+   * Asks for the drawing to be painted, and at most once a frame.
+   *
+   * The twin of `askWhereTheViewIs`, for the same reason: a scroll fires many
+   * times between two frames, and a picture painted more often than the screen
+   * shows one is thrown away.
+   */
+  private askToPaintTheRoll(): void {
+    const view = this.doc.defaultView;
+    if (view === null || typeof view.requestAnimationFrame !== 'function') {
+      this.paintTheRoll();
+      return;
+    }
+    if (this.paintFrame !== null) {
+      return;
+    }
+    this.paintFrame = view.requestAnimationFrame(() => {
+      this.paintFrame = null;
+      this.paintTheRoll();
+    });
+  }
+
+  private forgetThePaintFrame(): void {
+    const view = this.doc.defaultView;
+    if (this.paintFrame !== null && view !== null) {
+      view.cancelAnimationFrame(this.paintFrame);
+    }
+    this.paintFrame = null;
+  }
+
+  /**
+   * Paints the part of the run on the screen, on each of its three canvases.
+   *
+   * Only that part, and that is the whole of why it is painted at all: laid
+   * out as an element a mark, a run of five thousand notes took a second to
+   * open and most of one to zoom, every mark of it being placed whether it
+   * was on the screen or not.
+   */
+  private paintTheRoll(): void {
+    const scene = this.drawnScene;
+    const canvases = this.rollCanvases;
+    const drawn = this.el.rollBody.firstElementChild;
+    if (scene === null || canvases === null || !(drawn instanceof HTMLElement)) {
+      return;
+    }
+    // Nothing on the screen to paint for: the sheet is shut, or nothing has
+    // been laid out yet.
+    if (canvases.grid.clientWidth === 0 || canvases.grid.clientHeight === 0) {
+      return;
+    }
+    this.rollInks ??= theInksOf(drawn);
+    const view: RollViewport = {
+      scrolledPx: drawn.scrollLeft,
+      scrolledDownPx: drawn.scrollTop,
+      pxPerSecond: Number(this.el.rollZoom.value),
+      rowPx: this.theRowAsDrawn(),
+    };
+    const density = this.doc.defaultView?.devicePixelRatio ?? 1;
+    paintTheGrid(canvases.grid, scene, view, this.rollInks, density);
+    paintTheRuler(canvases.ruler, scene, view, this.rollInks, density);
+    paintThePedal(canvases.pedal, scene, view, this.rollInks, density);
+  }
+
+  /**
+   * Paints the drawing again when the room it has changes, or its colours do.
+   *
+   * A canvas is as many pixels as it was made, and stretches rather than grows
+   * when the sheet around it does; and it is painted in the colours of the
+   * moment it was painted, which a tablet turning dark at dusk changes under
+   * it.
+   */
+  private repaintTheRollWhenTheScreenChanges(): void {
+    const view = this.doc.defaultView;
+    if (view === null) {
+      return;
+    }
+    if (typeof view.ResizeObserver === 'function') {
+      const watch = new view.ResizeObserver(() => {
+        this.askToPaintTheRoll();
+      });
+      watch.observe(this.el.rollBody);
+      this.subscriptions.push(() => {
+        watch.disconnect();
+      });
+    }
+    if (typeof view.matchMedia === 'function') {
+      const dark = view.matchMedia('(prefers-color-scheme: dark)');
+      const repaint = (): void => {
+        this.rollInks = null;
+        this.askToPaintTheRoll();
+      };
+      dark.addEventListener('change', repaint);
+      this.subscriptions.push(() => {
+        dark.removeEventListener('change', repaint);
+      });
+    }
   }
 
   /**
@@ -8765,6 +8945,7 @@ export class AppView {
     }
     // The window is a share of a drawing that has just changed width.
     this.sayWhereTheViewIs();
+    this.askToPaintTheRoll();
   }
 
   /**

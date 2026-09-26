@@ -1378,10 +1378,10 @@ textarea {
  * the one scroller - so the keys stay beside the notes they name and the bar
  * numbers stay above them with nothing keeping them in step.
  *
- * Every position in the grid is a `calc()` over these two custom properties,
- * which is what makes zooming free: `--roll-second` changes and the browser
- * moves every note, line and label at once. Nothing is rebuilt, and no
- * JavaScript holds the layout together.
+ * How long the run is and how many rows it has are sizes the stylesheet
+ * works out from `--roll-second` and `--roll-row`, so a zoom is the scroller
+ * growing and nothing else laid out again. What is on it is painted: see
+ * `.roll__paint`.
  *
  * A row is what a pinch asked for, and never shorter than the room between
  * the ruler and the pedal shared among the rows: shorter, the music stopped
@@ -1399,6 +1399,94 @@ textarea {
     calc((100cqh - var(--roll-ruler) - var(--roll-pedal) - 2px) / var(--roll-rows, 12))
   );
   --roll-keys: 44px;
+  /*
+   * The inks the run is painted in, read by the painter off the page rather
+   * than written into it, so the drawing wears the page's colours on a dark
+   * ground and a light one alike.
+   *
+   * How long a bar line waited for the reader: the whole height, because the
+   * wait belongs to the music rather than to any one key, and behind the rows
+   * rather than over them. The rows the black keys sit on are a dark wash with
+   * the ground showing through, so the band is seen through them and comes
+   * out darker there by itself - both have to be seen through for that.
+   */
+  --roll-ink-wait: color-mix(in srgb, var(--pending) 26%, transparent);
+  --roll-ink-row: color-mix(in srgb, var(--surface-strong) 60%, transparent);
+  /*
+   * A line where a click was heard. Not where a click was due: the bar frame
+   * holds the music at a bar line until the reader gives it its beat, so a bar
+   * taken slowly is a wider bar here, and that width is the wait.
+   *
+   * What falls between the beats - the eighths or the sixteenths, whichever
+   * the run needed - fainter than a beat, and dashed. Two channels for one
+   * distinction, because it has to survive both ways of looking: the weight
+   * tells them apart at a glance across a whole run, and the dashes tell them
+   * apart when the eye is on one bar and a faint line could be a beat drawn
+   * over pale ground. His: "8мі та 16ті можна малювати пунктиром щоб
+   * відрізняти ці смужки від основних слабких долей?".
+   */
+  --roll-ink-line: color-mix(in srgb, var(--border) 70%, transparent);
+  --roll-ink-division: color-mix(in srgb, var(--border) 32%, transparent);
+  --roll-ink-downbeat: var(--border);
+  /*
+   * A bar line the reader gave after it fell due. Two lines at one bar line is
+   * not a fault to be tidied away - the gap between them is how long the music
+   * waited. What was a fault was drawing them alike: the metre's lines say
+   * where the beat was, and this says where the reader put it, so it is in the
+   * colour of the head, the other thing here that is theirs.
+   *
+   * And a beat the reader overtook, red rather than banded, because there is
+   * no width to draw: the time between there and where the beat was due never
+   * elapsed.
+   */
+  --roll-ink-given: color-mix(in srgb, var(--pending) 75%, transparent);
+  --roll-ink-rushed: var(--wrong);
+  /*
+   * A note the music asked for: a capsule the press sits inside, which is what
+   * he settled on after trying it himself - "я хочу щоб мої ноти виглядали
+   * буд-то вони 'у капсулах' щоб було видно де правильно я натискав, але
+   * наскільки я був off". The fill is what makes it a container rather than a
+   * pair of edges to measure between, so it is heavy enough to read as one;
+   * the rim stays heavier still, or the capsule has no rim and the whole thing
+   * is a smudge.
+   *
+   * It costs less than it looks. A capsule only ever lies over a note the
+   * music asked for, and a note played where one was asked for is very nearly
+   * always the right one - so the colour it washes out is the colour that was
+   * saying the least. A wrong note is outside every capsule, which is most of
+   * how it reads as wrong.
+   */
+  --roll-ink-ghost: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  --roll-ink-ghost-edge: color-mix(in srgb, var(--text-muted) 85%, transparent);
+  /*
+   * How far a note was from where it was owed: orange for late, and the red
+   * of a rush for rushed. A judgement this program already makes - the music
+   * waits for a reader who is behind, and the accompaniment does not wait for
+   * one who is ahead.
+   */
+  --roll-ink-late: var(--pending);
+  /*
+   * The presses, in the verdicts the page is already marked with. One the run
+   * set aside - the same note twice, or the hand that is being listened to -
+   * happened and was not a fault; one nothing was decided about is drawn as
+   * an outline in this, because a fill in any colour is a verdict and there
+   * was not one.
+   */
+  --roll-ink-note: var(--text-muted);
+  --roll-ink-correct: var(--correct);
+  --roll-ink-wrong: var(--wrong);
+  --roll-ink-aside: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  /*
+   * The metre on the ruler: the same lines as the grid, cut to their weight,
+   * and small and bright at his asking. The grid's own grey is right behind
+   * the music, where the lines must not compete with the notes, and wrong on a
+   * ruler a metre long that is read at a glance from a music stand.
+   */
+  --roll-ink-tick-division: color-mix(in srgb, var(--accent) 55%, transparent);
+  --roll-ink-tick-beat: color-mix(in srgb, var(--accent) 80%, transparent);
+  --roll-ink-tick-downbeat: var(--accent);
+  --roll-ink-bar: var(--text-muted);
+  --roll-ink-pedal: color-mix(in srgb, var(--accent) 70%, transparent);
   display: grid;
   grid-template-columns: var(--roll-keys) var(--roll-length, 100%);
   grid-template-rows: var(--roll-ruler) calc(var(--roll-row) * var(--roll-rows, 12)) var(--roll-pedal);
@@ -1430,13 +1518,28 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 
-.roll__bar {
-  position: absolute;
-  top: 3px;
-  padding-left: 3px;
-  font-size: 10px;
-  line-height: 1;
-  color: var(--text-muted);
+/*
+ * The canvases the run is painted on, one in the ruler, the grid and the
+ * pedal lane each.
+ *
+ * The size of the part of the drawing on the screen, and stuck there the way
+ * the keys and the ruler are, inside the elements the length of the run that
+ * the scroller scrolls: so the scrolling - its momentum, a finger's pan, a
+ * trackpad going sideways - is the browser's own, and each canvas is painted
+ * with whatever part of the run is under it. Never wider than the run, which
+ * a short one at a low zoom is not.
+ */
+.roll__paint {
+  position: sticky;
+  left: var(--roll-keys);
+  display: block;
+  width: min(100%, calc(100cqw - var(--roll-keys) - 2px));
+  height: 100%;
+}
+
+.roll__grid > .roll__paint {
+  top: var(--roll-ruler);
+  height: min(100%, calc(100cqh - var(--roll-ruler) - var(--roll-pedal) - 2px));
 }
 
 /*
@@ -1483,229 +1586,6 @@ textarea {
   cursor: pointer;
   grid-row: 2;
   grid-column: 2;
-}
-
-/*
- * How long a bar line waited for the reader.
- *
- * The whole height, because the wait belongs to the music rather than to any
- * one key, and behind the rows rather than over them: the rows the black keys
- * sit on are a dark wash with the ground showing through, so the band is seen
- * through them and comes out darker there by itself.
- */
-.roll__wait {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: color-mix(in srgb, var(--pending) 26%, transparent);
-}
-
-.roll__row {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: var(--roll-row);
-  background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
-}
-
-/*
- * A line where a click was heard.
- *
- * Not where a click was due: the bar frame holds the music at a bar line until
- * the reader gives it its beat, so a bar taken slowly is a wider bar here, and
- * that width is the wait. A grid computed from the tempo would draw the line
- * where nobody heard one.
- */
-.roll__line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: color-mix(in srgb, var(--border) 70%, transparent);
-}
-
-/*
- * What falls between the beats: the eighths or the sixteenths, whichever the run
- * needed.
- *
- * Dashed, and fainter than a beat. Two channels for one distinction, because it
- * has to survive both ways of looking: the weight tells them apart at a glance
- * across a whole run, and the dashes tell them apart when the eye is on one bar
- * and a faint line could be a beat drawn over pale ground. His: "8мі та 16ті
- * можна малювати пунктиром щоб відрізняти ці смужки від основних слабких
- * долей?".
- */
-/*
- * The metre on the ruler: the same lines as the grid, cut to their weight.
- *
- * Small and bright, at his asking: the grid's own grey is right behind the
- * music, where the lines must not compete with the notes, and wrong on a
- * ruler a metre long that is read at a glance from a music stand. They are
- * short enough that the bar numbers still read over them.
- */
-.roll__tick {
-  position: absolute;
-  bottom: 0;
-  width: 1px;
-  height: 4px;
-  pointer-events: none;
-  background: color-mix(in srgb, var(--accent) 55%, transparent);
-}
-
-.roll__tick--beat {
-  height: 7px;
-  background: color-mix(in srgb, var(--accent) 80%, transparent);
-}
-
-.roll__tick--downbeat {
-  height: 11px;
-  width: 2px;
-  background: var(--accent);
-}
-
-/* A bar line the reader gave late, in the colour it is drawn in below. */
-.roll__tick--given {
-  height: 11px;
-  width: 2px;
-  background: color-mix(in srgb, var(--pending) 75%, transparent);
-}
-
-.roll__line--division {
-  background: none;
-  border-left: 1px dashed color-mix(in srgb, var(--border) 32%, transparent);
-}
-
-.roll__line--downbeat {
-  width: 2px;
-  background: var(--border);
-}
-
-/*
- * A bar line the reader gave after it fell due.
- *
- * Two lines at one bar line is not a fault to be tidied away - the gap between
- * them is how long the music waited, which is the one thing the frame with
- * gates exists to show. What was a fault was drawing them alike: the metre's
- * lines say where the beat was, and this says where the reader put it, so it
- * is drawn in the colour of the head, which is the other thing here that is
- * theirs rather than the music's.
- */
-.roll__line--given {
-  width: 2px;
-  background: color-mix(in srgb, var(--pending) 75%, transparent);
-}
-
-/*
- * A beat the reader overtook: they played the next note before the music had
- * got there. Red rather than banded, because there is no width to draw - the
- * time between here and where the beat was due never elapsed.
- */
-.roll__line--rushed {
-  background: var(--wrong);
-  width: 2px;
-}
-
-/*
- * A note the music asked for, behind the ones that were played.
- *
- * An outline rather than a fill, and pale: it is the question, not the answer.
- * Where the reader played it the press covers it and the two edges show how far
- * apart they were; where they did not, the outline is all there is - which is
- * the one thing colour alone could never say, because a note nobody played has
- * nothing to colour.
- */
-.roll__ghost {
-  position: absolute;
-  height: var(--roll-row);
-  min-width: 2px;
-  border-radius: 2px;
-  /*
-   * A capsule the press sits inside, which is what he settled on after trying it
-   * himself: "я хочу щоб мої ноти виглядали буд-то вони 'у капсулах' щоб було
-   * видно де правильно я натискав, але наскільки я був off". The fill is what
-   * makes it a container rather than a pair of edges to measure between, so it
-   * is heavy enough to read as one; the border stays heavier still, or the
-   * capsule has no rim and the whole thing is a smudge.
-   *
-   * It costs less than it looks. A capsule only ever lies over a note the music
-   * asked for, and a note played where one was asked for is very nearly always
-   * the right one - so the colour it washes out is the colour that was saying
-   * the least. A wrong note is outside every capsule, which is most of how it
-   * reads as wrong.
-   */
-  border: 1px solid color-mix(in srgb, var(--text-muted) 85%, transparent);
-  background: color-mix(in srgb, var(--text-muted) 50%, transparent);
-  /*
-   * Drawn over the presses, so it must not take the pointer from them: what a
-   * finger on a note is asking is what that note was and how far off the beat
-   * it came, and the outline can only answer the first.
-   */
-  pointer-events: none;
-}
-
-/*
- * How far a note was from where it was owed.
- *
- * On that note's own row, between the two edges the eye would otherwise have to
- * measure between. Orange for late and red for rushed, which is a judgement this
- * program already makes: the music waits for a reader who is behind, and the
- * accompaniment does not wait for one who is ahead.
- *
- * Over the ghost it belongs to and under the press that answered it, so the
- * answer stays the thing the eye lands on.
- */
-.roll__slip {
-  position: absolute;
-  height: var(--roll-row);
-  border-radius: 2px;
-}
-
-.roll__slip--late {
-  background: var(--pending);
-}
-
-.roll__slip--rushed {
-  background: var(--wrong);
-}
-
-.roll__note {
-  position: absolute;
-  height: var(--roll-row);
-  min-width: 2px;
-  border-radius: 2px;
-  background: var(--text-muted);
-}
-
-.roll__note--correct {
-  background: var(--correct);
-}
-
-.roll__note--wrong {
-  background: var(--wrong);
-}
-
-
-/*
- * A press the run set aside: the same note twice, or the hand that is being
- * listened to rather than played. It happened, and it was not a fault.
- */
-.roll__note--aside {
-  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
-}
-
-/*
- * And one nothing was decided about. Drawn as an outline, because a fill in
- * any colour is a verdict and there was not one.
- */
-.roll__note--unjudged {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--text-muted);
-}
-
-/* Still down when the run ended, so it runs to the edge rather than stopping. */
-.roll__note--open {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
 }
 
 /*
@@ -1786,15 +1666,6 @@ textarea {
   grid-column: 2;
   background: var(--surface);
   border-top: 1px solid var(--border);
-}
-
-.roll__pedal-span {
-  position: absolute;
-  top: 4px;
-  height: 7px;
-  min-width: 2px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
 .controls {

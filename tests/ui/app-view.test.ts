@@ -2387,10 +2387,9 @@ describe('AppView', () => {
       // the thing it has just opened.
       expect(element('sheet-takes').hidden).toBe(true);
       expect(element('roll-title').textContent).toBe('A recording');
-      const drawn = element('roll-body').querySelector('.roll');
-      expect(drawn?.querySelectorAll('.roll__note').length).toBeGreaterThan(0);
+      expect(view.rollScene?.notes.length).toBeGreaterThan(0);
       // No grid: nothing was keeping the time of free playing.
-      expect(drawn?.querySelectorAll('.roll__line')).toHaveLength(0);
+      expect(view.rollScene?.lines).toHaveLength(0);
       // And nothing a recording cannot answer is on offer.
       expect(element('roll-keep').hidden).toBe(true);
       expect(element<HTMLButtonElement>('roll-from').disabled).toBe(true);
@@ -2563,7 +2562,7 @@ describe('AppView', () => {
       expect(element('sheet-roll').hidden).toBe(false);
       const drawn = element('roll-body').querySelector('.roll');
       expect(drawn).not.toBeNull();
-      expect(drawn?.querySelectorAll('.roll__note').length).toBeGreaterThan(0);
+      expect(view.rollScene?.notes.length).toBeGreaterThan(0);
     });
 
     it('sounds the run the drawing is of, and follows it with a head', async () => {
@@ -2932,6 +2931,111 @@ describe('AppView', () => {
       expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(true);
     });
 
+    it('tells a pointer resting on a note what it was, painted as it is', async () => {
+      // Each mark drawn as an element carried a title of its own; painted, the
+      // canvas has one, changed to say whatever the pointer is over. His: "а чи
+      // неможливо буде hover робити на canvas?".
+      const { view, runtime, midi, metronome } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(16);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+
+      const canvas = element('roll-body').querySelector<HTMLCanvasElement>('.roll__grid > .roll__paint');
+      const note = view.rollScene?.notes[0];
+      if (canvas === null || note === undefined) {
+        throw new Error('expected a painted note to point at');
+      }
+      // jsdom lays nothing out: the canvas stands at the page's corner, a second
+      // is the zoom's hundred and forty pixels, and a row the thirteen asked for.
+      const rest = (atMs: number, row: number): void => {
+        canvas.dispatchEvent(
+          new PointerEvent('pointermove', {
+            bubbles: true,
+            clientX: (atMs / 1000) * 140,
+            clientY: row * 13 + 6,
+          }),
+        );
+      };
+
+      rest(note.fromMs + 5, note.row);
+      expect(canvas.title).toBe(note.says);
+
+      // And nothing, where there is nothing to say.
+      rest(note.fromMs + 5, note.row + 3);
+      expect(canvas.title).toBe('');
+    });
+
+    it('paints the drawing again when the view moves or the zoom does, and once a frame', async () => {
+      // Painted only where the screen is, so whatever changes what the screen
+      // shows has to paint again - and a scroll fires many times a frame.
+      const painted: string[] = [];
+      const lent = ['getContext', 'clientWidth', 'clientHeight'].map(
+        (name) => [name, Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, name)] as const,
+      );
+      Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { configurable: true, get: () => 400 });
+      Object.defineProperty(HTMLCanvasElement.prototype, 'clientHeight', { configurable: true, get: () => 200 });
+      Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+        configurable: true,
+        value(this: HTMLCanvasElement) {
+          const which = this.parentElement?.className ?? '';
+          // A canvas that takes every stroke and keeps only that it was cleared.
+          return new Proxy(
+            {},
+            {
+              get: (_target, name) => (name === 'clearRect' ? () => painted.push(which) : () => undefined),
+              set: () => true,
+            },
+          );
+        },
+      });
+      const frame = (): Promise<void> =>
+        new Promise((done) => {
+          requestAnimationFrame(() => done());
+        });
+      try {
+        const { view, runtime, midi, metronome } = createRig();
+        await view.initialize();
+        runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+        element<HTMLButtonElement>('focus-play').click();
+        const step = runtime.controller.session?.currentStep;
+        midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+        metronome.advanceSubdivisions(16);
+        element<HTMLButtonElement>('focus-stop').click();
+        element<HTMLButtonElement>('run-roll-open').click();
+        await frame();
+        // All three, once.
+        expect([...painted].sort()).toEqual(['roll__grid', 'roll__pedal', 'roll__ruler']);
+
+        painted.length = 0;
+        const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
+        for (let each = 0; each < 5; each += 1) {
+          drawn?.dispatchEvent(new Event('scroll'));
+        }
+        await frame();
+        expect(painted.filter((which) => which === 'roll__grid')).toHaveLength(1);
+
+        painted.length = 0;
+        const zoom = element<HTMLInputElement>('roll-zoom');
+        zoom.value = '200';
+        zoom.dispatchEvent(new Event('input', { bubbles: true }));
+        await frame();
+        expect(painted.filter((which) => which === 'roll__grid')).toHaveLength(1);
+      } finally {
+        for (const [name, descriptor] of lent) {
+          if (descriptor === undefined) {
+            delete (HTMLCanvasElement.prototype as unknown as Record<string, unknown>)[name];
+          } else {
+            Object.defineProperty(HTMLCanvasElement.prototype, name, descriptor);
+          }
+        }
+      }
+    });
+
     it('puts the head on the beat nearest where the grid was tapped', async () => {
       // The grid is the one thing in the sheet worth pointing at, and pointing
       // at a moment is how anybody looks at a recording. Where the tap lands
@@ -3049,10 +3153,8 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
-      const named = [...element('roll-body').querySelectorAll('.roll__bar')].map(
-        (mark) => mark.textContent,
-      );
-      const beats = element('roll-body').querySelectorAll('.roll__line').length;
+      const named = (view.rollScene?.bars ?? []).map((bar) => bar.name);
+      const beats = view.rollScene?.lines.length ?? 0;
       // Named as the page names them, which is from five rather than from one.
       expect(named[0]).toBe('5');
       // And only the bar lines: a beat inside a bar is not a bar.
@@ -3157,10 +3259,11 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
-      const lines = (): number =>
-        element('roll-body').querySelectorAll('.roll__line').length;
+      const lines = (): number => view.rollScene?.lines.length ?? 0;
+      const divisions = (): number =>
+        (view.rollScene?.lines ?? []).filter((line) => line.kind === 'division').length;
       const beatsOnly = lines();
-      expect(element('roll-body').querySelectorAll('.roll__line--division')).toHaveLength(0);
+      expect(divisions()).toBe(0);
 
       const grid = element<HTMLSelectElement>('roll-grid');
       grid.value = '4';
@@ -3168,9 +3271,7 @@ describe('AppView', () => {
 
       // More lines, and the new ones are drawn as what they are.
       expect(lines()).toBeGreaterThan(beatsOnly);
-      expect(
-        element('roll-body').querySelectorAll('.roll__line--division').length,
-      ).toBeGreaterThan(0);
+      expect(divisions()).toBeGreaterThan(0);
 
       // And the metronome is on the same grid: the finer clicks sound too.
       metronome.clicks.length = 0;
@@ -3419,15 +3520,13 @@ describe('AppView', () => {
 
       // Shown from the start, because he keeps them on: "я думаю що ghost ноти
       // варто мати включеними постійно".
-      expect(
-        element('roll-body').querySelectorAll('.roll__ghost').length,
-      ).toBeGreaterThan(0);
+      expect(view.rollScene?.ghosts.length).toBeGreaterThan(0);
 
       const ghosts = element<HTMLInputElement>('roll-ghosts');
       ghosts.checked = false;
       ghosts.dispatchEvent(new Event('change', { bubbles: true }));
 
-      expect(element('roll-body').querySelectorAll('.roll__ghost')).toHaveLength(0);
+      expect(view.rollScene?.ghosts).toHaveLength(0);
     });
 
     it('sections every slowdown, including the ones between the clicks', async () => {
@@ -3463,15 +3562,12 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
-      const body = element('roll-body');
-      const said = [...body.querySelectorAll<HTMLElement>('.roll__wait')].map(
-        (band) => band.title,
-      );
+      const said = (view.rollScene?.waits ?? []).map((band) => band.says);
       // One for every entry, and not one for every fourth: the click marks the
       // beat, and he was reading sixteenths.
       expect(said.filter((title) => title === 'The music waited 450 ms').length).toBeGreaterThan(3);
       // And nothing on a note's own row, which is the mark he never asked for.
-      expect(body.querySelectorAll('.roll__slip')).toHaveLength(0);
+      expect(view.rollScene?.slips).toHaveLength(0);
     });
 
     it('sections a note waited for, and reddens nothing a reader simply took faster', async () => {
@@ -3508,9 +3604,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('run-roll-open').click();
 
       // Eight tenths late where he waited, six tenths early where he did not.
-      const waits = [...element('roll-body').querySelectorAll<HTMLElement>('.roll__wait')].map(
-        (band) => band.title,
-      );
+      const waits = (view.rollScene?.waits ?? []).map((band) => band.says);
       expect(waits).toContain('The music waited 800 ms');
       // And the five seconds he took to reach the first note at all: the music
       // was ready the moment the run began, which is the section that used not
@@ -3523,18 +3617,16 @@ describe('AppView', () => {
       // counted out, and between two entries a beat apart it counts none. Left
       // as it was, reading quarters at speed turned every line red, which he
       // read as the grid having gone: "тепер лінії взагалі зникли".
-      expect(element('roll-body').querySelectorAll('.roll__line--rushed')).toHaveLength(0);
+      expect(view.rollScene?.rushes).toHaveLength(0);
 
       // And the notes asked for keep their written lengths, whatever the reader
       // did about arriving at them: a quarter here is a second, a half is two.
-      const outlines = [...element('roll-body').querySelectorAll<HTMLElement>('.roll__ghost')];
+      const outlines = (view.rollScene?.ghosts ?? []).map((outline) => outline.untilMs - outline.fromMs);
       expect(outlines.length).toBeGreaterThan(1);
-      for (const outline of outlines) {
-        expect(outline.style.width).not.toBe('calc(var(--roll-second) * 0.0000)');
+      for (const lasts of outlines) {
+        expect(lasts).toBeGreaterThan(0);
       }
-      expect(outlines.map((outline) => outline.style.width)).toContain(
-        'calc(var(--roll-second) * 1.0000)',
-      );
+      expect(outlines.map((lasts) => Math.round(lasts))).toContain(1000);
     });
 
     it('gives a note no band of its own in a frame that waits', async () => {
@@ -3577,13 +3669,11 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
-      expect(element('roll-body').querySelectorAll('.roll__ghost').length).toBeGreaterThan(0);
-      expect(element('roll-body').querySelectorAll('.roll__slip')).toHaveLength(0);
+      expect(view.rollScene?.ghosts.length).toBeGreaterThan(0);
+      expect(view.rollScene?.slips).toHaveLength(0);
       // And the chord is still legibly in pieces: two notes, struck a hundred
       // and fifty milliseconds apart, drawn where they were struck.
-      const struck = [...element('roll-body').querySelectorAll<HTMLElement>('.roll__note')]
-        .map((note) => note.style.left)
-        .slice(0, 2);
+      const struck = (view.rollScene?.notes ?? []).map((note) => note.fromMs).slice(0, 2);
       expect(struck[0]).not.toBe(struck[1]);
     });
 
@@ -3615,10 +3705,10 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
 
-      const bands = [...element('roll-body').querySelectorAll('.roll__slip')];
+      const bands = view.rollScene?.slips ?? [];
       expect(bands.length).toBeGreaterThan(1);
       for (const band of bands) {
-        expect(band.className).toBe('roll__slip roll__slip--late');
+        expect(band.kind).toBe('late');
       }
 
       // And they can be put away, for the question they are in the way of.
@@ -3626,10 +3716,8 @@ describe('AppView', () => {
       slips.checked = false;
       slips.dispatchEvent(new Event('change', { bubbles: true }));
 
-      expect(element('roll-body').querySelectorAll('.roll__slip')).toHaveLength(0);
-      expect(
-        element('roll-body').querySelectorAll('.roll__note').length,
-      ).toBeGreaterThan(0);
+      expect(view.rollScene?.slips).toHaveLength(0);
+      expect(view.rollScene?.notes.length).toBeGreaterThan(0);
     });
 
     it('stops the run sounding when its drawing is put away', async () => {

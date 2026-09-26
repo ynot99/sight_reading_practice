@@ -1058,38 +1058,191 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
 }
 
 /**
- * Draws a run as keys against the clicks it was played to.
+ * How far along a list sorted by where its marks begin each of them reaches.
  *
- * Everything is positioned in terms of `--roll-second` and `--roll-row`, so
- * zooming changes custom properties and nothing is rebuilt.
+ * The furthest end of any mark up to and including each one, so that it never
+ * goes backwards and can be searched: the first place it reaches a moment is
+ * the first mark that might still be showing there. A note held for a minute
+ * begins long before the screen does and is still on it, and a search on
+ * beginnings alone would lose it.
  */
-export function drawTheRoll(drawing: RollDrawing): HTMLElement {
-  const scene = theSceneOfTheRoll(drawing);
+const reaches = new WeakMap<readonly SceneStretch[], Float64Array>();
 
+function reachOf(marks: readonly SceneStretch[]): Float64Array {
+  const known = reaches.get(marks);
+  if (known !== undefined) {
+    return known;
+  }
+  const reach = new Float64Array(marks.length);
+  let furthest = Number.NEGATIVE_INFINITY;
+  marks.forEach((mark, at) => {
+    furthest = Math.max(furthest, mark.untilMs);
+    reach[at] = furthest;
+  });
+  reaches.set(marks, reach);
+  return reach;
+}
+
+/** The first place in a rising list that is at least `atLeast`, or its length. */
+function firstFrom(length: number, valueAt: (at: number) => number, atLeast: number): number {
+  let low = 0;
+  let high = length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (valueAt(middle) < atLeast) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
+}
+
+/**
+ * The marks of a list that show between two moments of the run.
+ *
+ * Found rather than filtered: a run of a long piece is tens of thousands of
+ * marks and a screen shows a few hundred of them, so walking the whole list on
+ * every frame of a scroll was the cost of the drawing, whatever was on it.
+ */
+export function stretchesIn<T extends SceneStretch>(
+  marks: readonly T[],
+  fromMs: number,
+  untilMs: number,
+): T[] {
+  const reach = reachOf(marks);
+  const found: T[] = [];
+  for (let at = firstFrom(marks.length, (each) => reach[each] ?? 0, fromMs); at < marks.length; at += 1) {
+    const mark = marks[at];
+    if (mark === undefined || mark.fromMs > untilMs) {
+      break;
+    }
+    if (mark.untilMs >= fromMs) {
+      found.push(mark);
+    }
+  }
+  return found;
+}
+
+/** The marks of a list of instants that fall between two moments of the run. */
+export function momentsIn<T extends { readonly atMs: number }>(
+  marks: readonly T[],
+  fromMs: number,
+  untilMs: number,
+): T[] {
+  const found: T[] = [];
+  for (let at = firstFrom(marks.length, (each) => marks[each]?.atMs ?? 0, fromMs); at < marks.length; at += 1) {
+    const mark = marks[at];
+    if (mark === undefined || mark.atMs > untilMs) {
+      break;
+    }
+    found.push(mark);
+  }
+  return found;
+}
+
+/**
+ * How near a pointer has to be to a line to be on it, in pixels.
+ *
+ * Lines are one and two pixels wide, which nobody can rest a pointer on; a
+ * little either side is still unmistakably that line and nothing else.
+ */
+const POINTER_REACH_PX = 3;
+/** And how narrow anything is drawn, however short: see `.roll__paint`. */
+export const NARROWEST_PX = 2;
+
+/**
+ * What the grid says to a pointer resting on it, or `null` where nothing does.
+ *
+ * The topmost mark there that says anything, in the order they are painted -
+ * except the notes the music asked for, which are painted over the presses so
+ * they can be seen and must not take the pointer from them: what a finger on a
+ * note is asking is what that note was *and* how far off the beat it came, and
+ * the outline can answer only the first.
+ */
+export function whatTheGridSaysAt(
+  scene: RollScene,
+  atMs: number,
+  row: number,
+  pxPerSecond: number,
+): string | null {
+  const slackMs = (POINTER_REACH_PX / pxPerSecond) * 1000;
+  const narrowestMs = (NARROWEST_PX / pxPerSecond) * 1000;
+  const onRow = <T extends SceneRowed>(marks: readonly T[]): T | undefined =>
+    stretchesIn(marks, atMs - narrowestMs, atMs)
+      .filter(
+        (mark) =>
+          mark.row === row && Math.max(mark.untilMs, mark.fromMs + narrowestMs) >= atMs,
+      )
+      .at(-1);
+  const near = <T extends SceneMoment>(marks: readonly T[]): T | undefined =>
+    momentsIn(marks, atMs - slackMs, atMs + slackMs)
+      .filter((mark) => mark.says !== null)
+      .at(-1);
+  return (
+    onRow(scene.notes)?.says ??
+    onRow(scene.slips)?.says ??
+    near(scene.rushes)?.says ??
+    near(scene.lines)?.says ??
+    stretchesIn(scene.waits, atMs, atMs).at(-1)?.says ??
+    null
+  );
+}
+
+/** What the ruler says to a pointer resting on it: a bar line the reader gave late. */
+export function whatTheRulerSaysAt(scene: RollScene, atMs: number, pxPerSecond: number): string | null {
+  const slackMs = (POINTER_REACH_PX / pxPerSecond) * 1000;
+  return (
+    momentsIn(scene.lines, atMs - slackMs, atMs + slackMs)
+      .filter((line) => line.says !== null)
+      .at(-1)?.says ?? null
+  );
+}
+
+/** What the pedal lane says to a pointer resting on it. */
+export function whatThePedalSaysAt(scene: RollScene, atMs: number, pxPerSecond: number): string | null {
+  const narrowestMs = (NARROWEST_PX / pxPerSecond) * 1000;
+  return (
+    stretchesIn(scene.pedal, atMs - narrowestMs, atMs)
+      .filter((span) => Math.max(span.untilMs, span.fromMs + narrowestMs) >= atMs)
+      .at(-1)?.says ?? null
+  );
+}
+
+/** The row of pitch a distance down the grid falls in. */
+export function rowFromTap(offsetPx: number, rowPx: number): number | null {
+  return rowPx > 0 ? Math.floor(offsetPx / rowPx) : null;
+}
+
+/**
+ * The frame a run is painted into: the keys, and three canvases.
+ *
+ * One scroll container holding a ruler that sticks to the top, a column of
+ * keys that sticks to the left, the grid, and a lane for the pedal - each of
+ * the three a canvas the size of the screen, standing still while the run
+ * scrolls under it and painted with only the part of the run that shows. The
+ * run was drawn as an element a mark, every one of them placed by the zoom:
+ * at five thousand notes a zoom took most of a second a frame and opening
+ * the run a second, because every mark of the run was laid out whether it was
+ * on the screen or not. His, of Signal: "Як Signal MIDI аплікуха малює все без
+ * підлагувань?" - by painting only what is on the screen, which is what this
+ * does.
+ *
+ * The grid itself is still an element the length of the run, so the scroller
+ * has something to scroll and a tap has somewhere to land; it is empty but for
+ * the canvas and the head.
+ */
+export function drawTheRoll(scene: RollScene): HTMLElement {
   const view = element('div', 'roll');
   view.style.setProperty('--roll-rows', String(scene.rows));
   view.style.setProperty('--roll-length', atSecond(scene.lengthMs));
 
   const ruler = element('div', 'roll__ruler');
-  for (const line of scene.lines) {
-    const tick = element('div', `roll__tick roll__tick--${line.kind}`);
-    tick.style.left = atSecond(line.atMs);
-    if (line.says !== null) {
-      tick.title = line.says;
-    }
-    ruler.append(tick);
-  }
-  for (const bar of scene.bars) {
-    const mark = element('span', 'roll__bar');
-    mark.style.left = atSecond(bar.atMs);
-    mark.textContent = bar.name;
-    ruler.append(mark);
-  }
   // The head, marked on the strip that names the bars: its line is drawn in
   // the grid and stops where the ruler begins. His: "на ruler теж додати мітку
   // над курсором". Placed by the same custom property as the head, so it
   // follows without a line of its own.
-  ruler.append(element('div', 'roll__head-mark'));
+  ruler.append(element('canvas', 'roll__paint'), element('div', 'roll__head-mark'));
 
   const keys = element('div', 'roll__keys');
   for (let row = 0; row < scene.rows; row += 1) {
@@ -1103,90 +1256,28 @@ export function drawTheRoll(drawing: RollDrawing): HTMLElement {
   }
 
   const grid = element('div', 'roll__grid');
-  // Underneath everything, the rows included, and that is what makes the bands
-  // darker where the black keys are: those rows are a dark wash with the ground
-  // showing through, so a band beneath one is seen through it. Which is what he
-  // asked for - "на чорні ноти також буде темне жовтий колір" - and it falls out
-  // of the order rather than needing a second colour to keep in step.
-  for (const wait of scene.waits) {
-    const band = element('div', 'roll__wait');
-    band.style.left = atSecond(wait.fromMs);
-    band.style.width = atSecond(wait.untilMs - wait.fromMs);
-    band.title = wait.says ?? '';
-    grid.append(band);
-  }
-  for (const at of scene.blackRows) {
-    const row = element('div', 'roll__row');
-    row.style.top = atRow(at);
-    grid.append(row);
-  }
-  for (const line of scene.lines) {
-    const drawn = element('div', `roll__line roll__line--${line.kind}`);
-    drawn.style.left = atSecond(line.atMs);
-    if (line.says !== null) {
-      drawn.title = line.says;
-    }
-    grid.append(drawn);
-  }
-  for (const rush of scene.rushes) {
-    const drawn = element('div', 'roll__line roll__line--rushed');
-    drawn.style.left = atSecond(rush.atMs);
-    drawn.title = rush.says ?? '';
-    grid.append(drawn);
-  }
-  // The bands go down here and the outlines at the end, because they want
-  // opposite sides of the presses: a band is a stretch of ground and belongs
-  // under them, and an outline is a thing to read against them and was being
-  // covered by them.
-  for (const slip of scene.slips) {
-    const band = element('div', `roll__slip roll__slip--${slip.kind}`);
-    band.style.left = atSecond(slip.fromMs);
-    band.style.width = atSecond(slip.untilMs - slip.fromMs);
-    band.style.top = atRow(slip.row);
-    band.style.opacity = String(slip.strength);
-    band.title = slip.says ?? '';
-    grid.append(band);
-  }
-  for (const note of scene.notes) {
-    const drawn = element('div', `roll__note roll__note--${note.shade}`);
-    drawn.style.left = atSecond(note.fromMs);
-    drawn.style.width = atSecond(note.untilMs - note.fromMs);
-    drawn.style.top = atRow(note.row);
-    drawn.title = note.says ?? '';
-    if (note.open) {
-      drawn.classList.add('roll__note--open');
-    }
-    grid.append(drawn);
-  }
-  // Over the presses, and that is the whole of what they are for: an outline
-  // underneath the note that answered it is an outline nobody can see, because
-  // a note played at all covers most of one. His: "чи можеш зробити ghost ноти
-  // щоб вони малювалися поверх моїх нот... бо наразі мої ноти перекривають
-  // більшість ghost нот". They stay out of the way of the pointer, so the press
-  // underneath keeps its own reading of how far off the beat it was.
-  for (const ghost of scene.ghosts) {
-    const drawn = element('div', 'roll__ghost');
-    drawn.style.left = atSecond(ghost.fromMs);
-    drawn.style.width = atSecond(ghost.untilMs - ghost.fromMs);
-    drawn.style.top = atRow(ghost.row);
-    drawn.title = ghost.says ?? '';
-    grid.append(drawn);
-  }
-
-  const pedal = element('div', 'roll__pedal');
-  for (const span of scene.pedal) {
-    const held = element('div', 'roll__pedal-span');
-    held.style.left = atSecond(span.fromMs);
-    held.style.width = atSecond(span.untilMs - span.fromMs);
-    held.title = span.says ?? '';
-    pedal.append(held);
-  }
-
   // Where a playback has got to, moved by one custom property so following a
   // performance costs one write a frame rather than a redraw.
-  const head = element('div', 'roll__head');
-  grid.append(head);
+  grid.append(element('canvas', 'roll__paint'), element('div', 'roll__head'));
+
+  const pedal = element('div', 'roll__pedal');
+  pedal.append(element('canvas', 'roll__paint'));
 
   view.append(ruler, keys, grid, pedal);
   return view;
+}
+
+/** The three canvases a drawing is painted on. */
+export interface RollCanvases {
+  readonly ruler: HTMLCanvasElement;
+  readonly grid: HTMLCanvasElement;
+  readonly pedal: HTMLCanvasElement;
+}
+
+/** A drawing's canvases, or `null` where nothing has been drawn. */
+export function theCanvasesOf(within: ParentNode): RollCanvases | null {
+  const ruler = within.querySelector<HTMLCanvasElement>('.roll__ruler > .roll__paint');
+  const grid = within.querySelector<HTMLCanvasElement>('.roll__grid > .roll__paint');
+  const pedal = within.querySelector<HTMLCanvasElement>('.roll__pedal > .roll__paint');
+  return ruler === null || grid === null || pedal === null ? null : { ruler, grid, pedal };
 }

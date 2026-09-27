@@ -6,6 +6,24 @@ import { WebAudioMetronome } from '../../src/infrastructure/audio/WebAudioMetron
 import { WebAudioPitchPlayer } from '../../src/infrastructure/audio/WebAudioPitchPlayer.js';
 import { outputLatencySeconds } from '../../src/infrastructure/audio/audioTime.js';
 
+/**
+ * The page's clock, held still for the length of `body`.
+ *
+ * A test that reads the clock, and the code it is testing reading it again,
+ * are apart by however long the machine takes between the two - and under a
+ * loaded suite that was more than a millisecond, so a note placed at a moment
+ * came out that much early against a tolerance of half of one.
+ */
+function withTheClockStill(body: (now: number) => void): void {
+  const now = performance.now();
+  const still = vi.spyOn(performance, 'now').mockReturnValue(now);
+  try {
+    body(now);
+  } finally {
+    still.mockRestore();
+  }
+}
+
 class FakeParam {
   value = 0;
   readonly ramps: { value: number; time: number }[] = [];
@@ -482,17 +500,16 @@ describe('WebAudioPitchPlayer', () => {
     // silence in one sample - a click on every note of a playback.
     const context = new FakeAudioContext();
     const player = new WebAudioPitchPlayer(contextFactory(context), { releaseSec: 0.2 });
-    const now = performance.now();
 
-    player.play(60, 0.5, now + 500);
-    player.stop(60, now + 1500);
+    withTheClockStill((now) => {
+      player.play(60, 0.5, now + 500);
+      player.stop(60, now + 1500);
+    });
 
     const gain = context.gains[0]?.gain;
     const anchor = gain?.ramps.at(-2);
     const fade = gain?.ramps.at(-1);
-    // The fade begins at the release moment and ends a release later. A
-    // fraction of a millisecond passes between reading the clock here and
-    // inside the player, which is what real scheduling looks like.
+    // The fade begins at the release moment and ends a release later.
     expect(anchor?.time ?? 0).toBeCloseTo(1.5, 3);
     expect(fade?.value).toBe(0.0001);
     expect(fade?.time ?? 0).toBeCloseTo(1.7, 3);
@@ -715,10 +732,11 @@ describe('when the click is actually heard', () => {
     const context = new FakeAudioContext();
     context.outputLatency = 0.08;
     const player = new WebAudioPitchPlayer(contextFactory(context), { releaseSec: 0.2 });
-    const now = performance.now();
 
-    player.play(60, 0.5, now + 500);
-    player.stop(60, now + 1500);
+    withTheClockStill((now) => {
+      player.play(60, 0.5, now + 500);
+      player.stop(60, now + 1500);
+    });
 
     expect(context.oscillators[0]?.startedAt ?? 0).toBeCloseTo(0.42, 3);
     // Let go of when it is heard to be let go of, likewise.
@@ -743,7 +761,9 @@ describe('when the click is actually heard', () => {
     context.outputLatency = 0.08;
     const metronome = new WebAudioMetronome(contextFactory(context));
 
-    metronome.click(performance.now() + 500);
+    withTheClockStill((now) => {
+      metronome.click(now + 500);
+    });
 
     expect(context.oscillators[0]?.startedAt ?? 0).toBeCloseTo(0.42, 3);
   });

@@ -459,6 +459,7 @@ export class PracticeSession {
     // Whatever the run was waiting for, the reader is no longer answering it.
     this.heldAtBarTicks = null;
     this.metronome.stop();
+    this.forgetTheBeatsNotHeard();
   }
 
   /**
@@ -542,11 +543,26 @@ export class PracticeSession {
     if (!this.dispatch('abort')) {
       return;
     }
+    this.forgetTheBeatsNotHeard();
     if (neverBegan) {
       this.endTheRun();
       return;
     }
     this.finalise(false);
+  }
+
+  /**
+   * Takes back the beats laid out ahead of the reader, the music having
+   * stopped before they fell.
+   *
+   * A frame that waits writes the beats down as far as the next note owed,
+   * and sounds them as clicks handed over ahead; stopping the metronome takes
+   * back the ones not yet heard. Kept in the roll, they were beats nobody
+   * heard: the picture of a run stopped a moment into a long note ran on to
+   * the end of that note, and a run shown again clicked them.
+   */
+  private forgetTheBeatsNotHeard(): void {
+    this.roller.forgetBeatsFrom(this.clock.now());
   }
 
   /** Releases every subscription without publishing a report. */

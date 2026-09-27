@@ -2774,6 +2774,38 @@ describe('the click in a mode that waits', () => {
     expect(metronome.clicks.map((click) => click.atMs)).not.toContain(9_000);
   });
 
+  it('keeps none of the beats laid out ahead of a run stopped before they fell', async () => {
+    // Stopping takes back the clicks not yet heard, so the beats written for
+    // them never happened. Kept, the picture of a run stopped a moment into a
+    // long note ran on to the end of it, and a replay clicked them.
+    const { controller, midi, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    const session = controller.start();
+    clock.set(5_000);
+    midi.noteOn(p('C3').midi, clock.now());
+    // The whole bar laid out ahead of him at five, six, seven and eight.
+    clock.set(6_500);
+
+    controller.stop();
+
+    expect((session?.roll.beats ?? []).map((beat) => beat.atMs)).toEqual([0, 5_000, 6_000]);
+  });
+
+  it('keeps none laid out ahead of a pause either', async () => {
+    const { controller, midi, clock } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    const session = controller.start();
+    clock.set(5_000);
+    midi.noteOn(p('C3').midi, clock.now());
+    clock.set(6_500);
+
+    controller.pause();
+
+    expect((session?.roll.beats ?? []).map((beat) => beat.atMs)).toEqual([0, 5_000, 6_000]);
+  });
+
   it('takes back the beats the reader came in ahead of', async () => {
     // Come in early and the music moves on from there, so the beats still
     // standing in the stretch he left were scheduled and never happened. Drawn,

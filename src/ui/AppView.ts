@@ -89,6 +89,7 @@ import {
   clicksUpTo,
   rollAsEvents,
   rollBeganAtMs,
+  rollOfTheScore,
   rollOfTheTake,
   takeOfTheRun,
   type RunRoll,
@@ -1424,6 +1425,7 @@ export class AppView {
     readonly roll: RunRoll;
     readonly what: string;
     readonly why: string;
+    readonly isScore?: boolean;
   } | null = null;
 
   /** The reading the sheet over the list is showing, so its buttons know theirs. */
@@ -1617,6 +1619,7 @@ export class AppView {
     settingsSections: HTMLElement;
     sheetPlaces: HTMLElement;
     focusPlaces: HTMLButtonElement;
+    focusRoll: HTMLButtonElement;
     placesClose: HTMLButtonElement;
     sheetModes: HTMLElement;
     modesGrid: HTMLElement;
@@ -1919,6 +1922,7 @@ export class AppView {
       settingsSections: requireElement(doc, 'settings-sections'),
       sheetPlaces: requireElement(doc, 'sheet-places'),
       focusPlaces: requireElement(doc, 'focus-places'),
+      focusRoll: requireElement(doc, 'focus-roll'),
       placesClose: requireElement(doc, 'places-close'),
       sheetModes: requireElement(doc, 'sheet-modes'),
       modesGrid: requireElement(doc, 'modes-grid'),
@@ -3486,6 +3490,10 @@ export class AppView {
     this.listen(this.el.focusWhole, 'click', () => {
       controller.updateSettings({ rangeFromBar: null, rangeToBar: null });
       this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.focusRoll, 'click', () => {
+      this.showTheScoreRoll();
     });
 
     this.listen(this.el.drill, 'click', () => {
@@ -9037,21 +9045,56 @@ export class AppView {
   }
 
   /**
+   * Opens the picture on the score itself: its written notes, pedal spans and
+   * bars, with no performance to measure.
+   */
+  private showTheScoreRoll(): void {
+    const timeline = this.runtime.controller.currentTimeline;
+    const exercise = timeline?.exercise ?? this.runtime.controller.currentExercise;
+    if (exercise === null || timeline === null) {
+      return;
+    }
+    this.stopTheRoll();
+    this.theOtherRollShowing = {
+      roll: rollOfTheScore(exercise, timeline),
+      what: exercise.title || 'The score',
+      why: '',
+      isScore: true,
+    };
+    this.rollAtMs = 0;
+    this.rollScroller.to(0, 0);
+    this.drawTheRollInto();
+    this.showTheSheet(this.el.sheetRoll);
+    this.showTheView();
+    this.sayWhatWouldBePractised();
+    this.sayWhatThePictureIsOf();
+  }
+
+  /**
    * Puts away what only a run can answer.
    *
    * A recording has no passage to practise and no bar to point at - it is not
    * of this score, or of any - and keeping it again would file a second copy of
    * something already in the list.
+   *
+   * A score on the other hand *is* of this music: its bars are available to
+   * choose from and practise, though keeping it again is still hidden since it
+   * is already in the library.
    */
   private sayWhatThePictureIsOf(): void {
     const other = this.theOtherRollShowing;
     this.el.rollKeep.hidden = other !== null;
-    this.el.rollFrom.disabled = other !== null;
-    this.el.rollTo.disabled = other !== null;
+    const isScore = other?.isScore ?? false;
+    this.el.rollFrom.disabled = other !== null && !isScore;
+    this.el.rollTo.disabled = other !== null && !isScore;
     this.el.rollTitle.textContent = other?.what ?? 'What you played';
     if (other !== null) {
-      this.el.rollPractise.disabled = true;
-      this.el.rollPassageWhat.textContent = other.why;
+      if (isScore) {
+        this.sayWhatWouldBePractised();
+      } else {
+        this.el.rollPractise.disabled = true;
+        this.el.rollPassageWhat.textContent = other.why;
+      }
     }
   }
 

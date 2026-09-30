@@ -1,5 +1,13 @@
 import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
 import type { MidiFileEvent } from '../../domain/midi/MidiFile.js';
+import {
+  barLines,
+  elapsedMsAt,
+  pedalSpans,
+  velocityAt,
+  type Exercise,
+} from '../../domain/model/Exercise.js';
+import { soundsFor, type ExerciseTimeline } from '../../domain/timeline/Timeline.js';
 import type { BeatWeight } from '../ports/IMetronome.js';
 import type {
   MidiNoteOffEvent,
@@ -907,6 +915,77 @@ export function rollOfTheTake(take: Take): RunRoll {
     pedal.push({ downAtMs: pedalDownAt, upAtMs: null });
   }
   return { presses, beats: [], pedal, rushes: [], truncated: false };
+}
+
+/**
+ * The score itself, as something the MIDI viewer can draw and play.
+ *
+ * Drawn with every note the music wrote, its pedal marks, and its beats -
+ * without deviations, rushes or waits, because this is the music before
+ * anybody played it.
+ *
+ * Its notes are marked as correct so the drawing gives them their colour
+ * rather than the empty outline of an unjudged press, and each carries its
+ * step in the timeline so replay and the keyboard recognise them.
+ */
+export function rollOfTheScore(exercise: Exercise, timeline: ExerciseTimeline): RunRoll {
+  const bars = barLines(exercise);
+  const presses: RolledPress[] = [];
+  for (const step of timeline.steps) {
+    const downAtMs = elapsedMsAt(exercise, step.onsetTicks);
+    const measureStart = bars[step.measureIndex]?.startTicks ?? 0;
+    const offsetTicks = step.onsetTicks - measureStart;
+    const seen = new Map<number, RolledPress>();
+    for (const note of step.notes) {
+      const upAtMs = elapsedMsAt(exercise, step.onsetTicks + soundsFor(note));
+      const velocity = velocityAt(exercise, step.measureIndex, offsetTicks, note.staffNumber);
+      const existing = seen.get(note.midi);
+      if (existing === undefined || (existing.upAtMs ?? 0) < upAtMs) {
+        seen.set(note.midi, {
+          midi: note.midi,
+          downAtMs,
+          upAtMs,
+          velocity,
+          verdict: 'correct',
+          stepIndex: step.index,
+          deviationMs: 0,
+        });
+      }
+    }
+    for (const press of seen.values()) {
+      presses.push(press);
+    }
+  }
+
+  const beats: RolledBeat[] = [];
+  for (const bar of bars) {
+    const pulse = bar.timeSignature.ticksPerPulse;
+    for (
+      let tick = bar.startTicks;
+      tick < bar.startTicks + bar.timeSignature.ticksPerMeasure;
+      tick += pulse
+    ) {
+      const into = tick - bar.startTicks;
+      beats.push({
+        atMs: elapsedMsAt(exercise, tick),
+        weight: into === 0 ? 'downbeat' : 'beat',
+        positionTicks: tick,
+      });
+    }
+  }
+
+  const pedal: RolledPedal[] = pedalSpans(exercise).map(([down, up]) => ({
+    downAtMs: elapsedMsAt(exercise, down),
+    upAtMs: elapsedMsAt(exercise, up),
+  }));
+
+  return {
+    presses,
+    beats,
+    pedal,
+    rushes: [],
+    truncated: false,
+  };
 }
 
 /**

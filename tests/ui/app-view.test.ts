@@ -3208,6 +3208,46 @@ describe('AppView', () => {
       expect(view.rollScene?.notes.length).toBeGreaterThan(0);
     });
 
+    it('opens the score itself in the MIDI viewer when focus-roll is pressed', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      expect(element('sheet-roll').hidden).toBe(true);
+      element<HTMLButtonElement>('focus-roll').click();
+
+      expect(element('sheet-roll').hidden).toBe(false);
+      expect(element('roll-title').textContent).toBe(
+        runtime.controller.currentExercise?.title ?? 'The score',
+      );
+      expect(element('roll-keep').hidden).toBe(true);
+      expect(element<HTMLButtonElement>('roll-from').disabled).toBe(false);
+      expect(element<HTMLButtonElement>('roll-to').disabled).toBe(false);
+      expect(view.rollScene?.notes.length).toBeGreaterThan(0);
+    });
+
+    it('allows choosing a passage and practising it from the score roll', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+
+      element<HTMLButtonElement>('focus-roll').click();
+      expect(element('sheet-roll').hidden).toBe(false);
+
+      const from = element<HTMLButtonElement>('roll-from');
+      const to = element<HTMLButtonElement>('roll-to');
+      const practise = element<HTMLButtonElement>('roll-practise');
+
+      expect(practise.disabled).toBe(true);
+
+      from.click();
+      to.click();
+
+      expect(practise.disabled).toBe(false);
+      practise.click();
+
+      expect(element('sheet-roll').hidden).toBe(true);
+      expect(runtime.controller.settings.rangeFromBar).not.toBeNull();
+    });
+
     it('sounds the run the drawing is of, and follows it with a head', async () => {
       // Through the player that already plays a recording back: a run written
       // down is one, pedal and all.

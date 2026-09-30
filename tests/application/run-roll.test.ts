@@ -14,12 +14,14 @@ import {
   rollAsEvents,
   rollBeganAtMs,
   rollEndedAtMs,
+  rollOfTheScore,
   rollOfTheTake,
   takeOfTheRun,
   type RolledBeat,
   type RolledPress,
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
+import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { FlowMode } from '../../src/application/modes/FlowMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import type {
@@ -1082,3 +1084,50 @@ describe('a recording drawn by the same machinery', () => {
     ]);
   });
 });
+
+describe('the roll of a score', () => {
+  it('draws the notes of the exercise as correct and timed from the tempo', () => {
+    const exercise = twoBarExercise({ tempoBpm: 60 });
+    const timeline = buildTimeline(exercise);
+    const roll = rollOfTheScore(exercise, timeline);
+
+    expect(roll.presses.length).toBeGreaterThan(0);
+    expect(roll.presses.every((press) => press.verdict === 'correct')).toBe(true);
+    expect(roll.presses.every((press) => press.deviationMs === 0)).toBe(true);
+    expect(roll.presses.every((press) => press.stepIndex !== null)).toBe(true);
+    // At 60 bpm, C4 quarter note lasts 1000ms, C3 whole note lasts 4000ms
+    const c4 = roll.presses.find((press) => press.midi === MIDI.C4);
+    const c3 = roll.presses.find((press) => press.midi === MIDI.C3);
+    expect(c4?.downAtMs).toBe(0);
+    expect(c4?.upAtMs).toBe(1_000);
+    expect(c3?.downAtMs).toBe(0);
+    expect(c3?.upAtMs).toBe(4_000);
+  });
+
+  it('marks every beat of every measure in the exercise', () => {
+    const exercise = twoBarExercise({ tempoBpm: 60 });
+    const timeline = buildTimeline(exercise);
+    const roll = rollOfTheScore(exercise, timeline);
+
+    // 2 bars of 4/4 = 8 beats
+    expect(roll.beats.length).toBe(8);
+    expect(roll.beats[0]).toEqual({ atMs: 0, weight: 'downbeat', positionTicks: 0 });
+    expect(roll.beats[1]).toEqual({ atMs: 1_000, weight: 'beat', positionTicks: Duration.QUARTER.ticks });
+    expect(roll.beats[4]).toEqual({ atMs: 4_000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 4 });
+  });
+
+  it('converts pedal marks into pedal spans', () => {
+    const exercise = {
+      ...twoBarExercise({ tempoBpm: 60 }),
+      pedalMarks: [
+        { measureIndex: 0, offsetTicks: 0, type: 'start' as const, line: true },
+        { measureIndex: 1, offsetTicks: 0, type: 'stop' as const, line: true },
+      ],
+    };
+    const timeline = buildTimeline(exercise);
+    const roll = rollOfTheScore(exercise, timeline);
+
+    expect(roll.pedal).toEqual([{ downAtMs: 0, upAtMs: 4_000 }]);
+  });
+});
+

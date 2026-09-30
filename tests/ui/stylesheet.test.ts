@@ -182,6 +182,11 @@ describe('the stylesheet', () => {
     expect(body("body[data-keys-hidden='true'] .focus-bar")).not.toMatch(/var\(--replay-keys\)/);
     expect(body('.replay-keys__scroller')).toMatch(/overflow-x\s*:\s*auto/);
     expect(body('.replay-keys__white')).toMatch(/min-width\s*:\s*14px/);
+    expect(body('.replay-keys__white')).toMatch(/transition\s*:[^;]*background-color/);
+    expect(body('.replay-keys__black')).toMatch(/transition\s*:[^;]*background-color/);
+    expect(body('.replay-keys__white[data-shade], .replay-keys__black[data-shade]')).toMatch(/transition\s*:\s*none/);
+    expect(body('.replay-keys__pedal')).toMatch(/transition\s*:[^;]*background-color/);
+    expect(body(".replay-keys__pedal[data-down='true']")).toMatch(/transition\s*:\s*none/);
   });
 
   it('shows the keyboard toggle button only mid-run during replay and playback', () => {

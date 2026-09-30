@@ -2425,12 +2425,14 @@ body[data-keys-hidden='true'] .focus-bar {
   border-radius: 999px;
   color: var(--text-muted);
   font-size: 12px;
+  transition: background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out;
 }
 
 .replay-keys__pedal[data-down='true'] {
   border-color: var(--accent);
   background: var(--accent);
   color: #ffffff;
+  transition: none;
 }
 
 .replay-keys__scroller {
@@ -2448,6 +2450,7 @@ body[data-keys-hidden='true'] .focus-bar {
   border-right: 1px solid #cbd5e1;
   border-radius: 0 0 3px 3px;
   background: #ffffff;
+  transition: background-color 300ms ease-out;
 }
 
 .replay-keys__black {
@@ -2459,6 +2462,18 @@ body[data-keys-hidden='true'] .focus-bar {
   height: 60%;
   border-radius: 0 0 2px 2px;
   background: #1f2937;
+  transition: background-color 300ms ease-out;
+}
+
+/*
+ * Immediate strike on press, gentle fade on release.
+ *
+ * Pressed keys light up with no transition so there is zero attack lag;
+ * when released and data-shade is cleared, the key transitions back to resting white/black.
+ */
+.replay-keys__white[data-shade],
+.replay-keys__black[data-shade] {
+  transition: none;
 }
 
 /* Lit in the colours its ring on the page is drawn in. */

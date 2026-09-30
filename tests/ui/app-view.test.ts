@@ -875,6 +875,30 @@ describe('AppView', () => {
     expect(keys.querySelectorAll<HTMLElement>('[data-shade]').length).toBe(0);
   });
 
+  it('releases sounding playback keys when their note duration ends', async () => {
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    const keys = element('replay-keys');
+
+    await pressListen(runtime.controller);
+
+    vi.useFakeTimers();
+    try {
+      // Sound a step with notes
+      metronome.advanceSubdivisions(2);
+      expect(keys.querySelectorAll<HTMLElement>('[data-shade="perfect"]').length).toBeGreaterThan(0);
+
+      // Advance timers past all note durations (at 60 bpm, a whole note sounds for 4000ms)
+      vi.advanceTimersByTime(5000);
+
+      // The keys release (data-shade removed, triggering the gentle fade-out)
+      expect(keys.querySelectorAll<HTMLElement>('[data-shade]').length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      element<HTMLButtonElement>('focus-stop').click();
+    }
+  });
+
   it('keeps the keyboard hidden during regular practice runs', async () => {
     const { view, runtime } = createRig();
     await view.initialize();

@@ -67,7 +67,7 @@ import {
 import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { barLines, barNumberOf, measureCount, spanMs } from '../domain/model/Exercise.js';
+import { barLines, barNumberOf, measureCount, pedalHeldUntil, spanMs } from '../domain/model/Exercise.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
 import { drawTheHitErrors } from './hitErrorBar.js';
@@ -83,7 +83,7 @@ const SETTINGS_WENT: Readonly<Record<SettingsSyncOutcome, string>> = {
   same: 'already the same',
 };
 import { drawTheProfile } from './profileChart.js';
-import { expectedFor } from '../domain/timeline/Timeline.js';
+import { expectedFor, soundsFor } from '../domain/timeline/Timeline.js';
 import {
   clicksBefore,
   clicksUpTo,
@@ -1264,6 +1264,8 @@ export class AppView {
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
   private restTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Active timers that release keys sounding during playback. */
+  private playbackKeyReleaseTimers: ReturnType<typeof setTimeout>[] = [];
   /** The week as it was last drawn, so seven marks are not redrawn for nothing. */
   private weekShown: string | null = null;
 
@@ -2142,6 +2144,7 @@ export class AppView {
   dispose(): void {
     this.forgetTheBeats();
     this.cancelPreview();
+    this.clearPlaybackKeyTimers();
     if (this.tempoRedraw !== null) {
       clearTimeout(this.tempoRedraw);
       this.tempoRedraw = null;
@@ -3164,6 +3167,7 @@ export class AppView {
       controller.pauseListening();
       // Held music has no next beat until it is picked up again.
       this.forgetTheBeats();
+      this.clearPlaybackKeyTimers();
       lightTheKeys(this.replayKeyboard, new Map(), false);
       this.showThePerformance();
       return;
@@ -8233,10 +8237,18 @@ export class AppView {
     }
   }
 
+  private clearPlaybackKeyTimers(): void {
+    for (const timer of this.playbackKeyReleaseTimers) {
+      clearTimeout(timer);
+    }
+    this.playbackKeyReleaseTimers = [];
+  }
+
   /**
    * Lights the keys sounding at this step of the playback, and scrolls them into view if needed.
    */
   private showThePlaybackKeys(stepIndex: number): void {
+    this.clearPlaybackKeyTimers();
     const controller = this.runtime.controller;
     const step = controller.currentTimeline?.at(stepIndex) ?? null;
     if (step === null) {
@@ -8244,7 +8256,44 @@ export class AppView {
     }
     const midis = expectedFor(step, controller.settings.handStaff);
     const shadeMap = new Map<number, KeyShade>(midis.map((m) => [m, 'perfect']));
-    lightTheKeys(this.replayKeyboard, shadeMap, false);
+    const exercise = controller.currentExercise;
+    const pedalDown = exercise !== null && pedalHeldUntil(exercise, step.onsetTicks) !== null;
+    lightTheKeys(this.replayKeyboard, shadeMap, pedalDown);
+
+    if (exercise !== null && step.notes.length > 0) {
+      const hand = controller.settings.handStaff;
+      const sounding = step.notes.filter((note) => hand === null || note.staffNumber === hand);
+      const tempoRatio = Math.max(0.05, controller.tempoPercent / 100);
+      const durationByMidi = new Map<number, number>();
+      for (const note of sounding) {
+        const noteDurationMs =
+          spanMs(exercise, step.onsetTicks, step.onsetTicks + soundsFor(note)) / tempoRatio;
+        const current = durationByMidi.get(note.midi) ?? 0;
+        if (noteDurationMs > current) {
+          durationByMidi.set(note.midi, noteDurationMs);
+        }
+      }
+
+      const byDuration = new Map<number, number[]>();
+      for (const [midi, durationMs] of durationByMidi) {
+        if (durationMs > 0) {
+          const list = byDuration.get(durationMs) ?? [];
+          list.push(midi);
+          byDuration.set(durationMs, list);
+        }
+      }
+
+      const activeShades = new Map(shadeMap);
+      for (const [durationMs, midisToRelease] of byDuration) {
+        const timer = setTimeout(() => {
+          for (const m of midisToRelease) {
+            activeShades.delete(m);
+          }
+          lightTheKeys(this.replayKeyboard, activeShades, pedalDown);
+        }, durationMs);
+        this.playbackKeyReleaseTimers.push(timer);
+      }
+    }
 
     if (midis.length === 0) {
       return;
@@ -8267,6 +8316,7 @@ export class AppView {
   }
 
   private stopShowingPlaybackKeys(): void {
+    this.clearPlaybackKeyTimers();
     delete this.doc.body.dataset['listening'];
     lightTheKeys(this.replayKeyboard, new Map(), false);
     this.applyKeyboardVisibility();

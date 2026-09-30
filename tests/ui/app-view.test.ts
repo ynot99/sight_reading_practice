@@ -819,6 +819,75 @@ describe('AppView', () => {
     expect(runtime.controller.isListeningPaused).toBe(false);
   });
 
+  it('shows the docked keyboard and lights sounding notes during playback, toggling with the button', async () => {
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    const toggle = element<HTMLButtonElement>('focus-keyboard');
+    const keys = element('replay-keys');
+
+    // Before playback, keys are hidden
+    expect(keys.hidden).toBe(true);
+    expect(document.body.dataset['listening']).toBeUndefined();
+
+    await pressListen(runtime.controller);
+
+    expect(document.body.dataset['listening']).toBe('true');
+    expect(keys.hidden).toBe(false);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle.title).toBe('Hide keyboard');
+
+    // Metronome advance sounds the step
+    metronome.advanceSubdivisions(2);
+    const lit = [...keys.querySelectorAll<HTMLElement>('[data-shade="perfect"]')];
+    expect(lit.length).toBeGreaterThan(0);
+
+    // Pause unlights keys
+    element<HTMLButtonElement>('focus-play').click();
+    expect(runtime.controller.isListeningPaused).toBe(true);
+    expect(keys.querySelectorAll<HTMLElement>('[data-shade]').length).toBe(0);
+
+    // Resume lights again
+    element<HTMLButtonElement>('focus-play').click();
+    expect(runtime.controller.isListening).toBe(true);
+    metronome.advanceSubdivisions(2);
+    expect(keys.querySelectorAll<HTMLElement>('[data-shade="perfect"]').length).toBeGreaterThan(0);
+
+    // Toggle button hides keyboard
+    toggle.click();
+    expect(runtime.controller.settings.showKeyboard).toBe(false);
+    expect(keys.hidden).toBe(true);
+    expect(document.body.dataset['keysHidden']).toBe('true');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.title).toBe('Show keyboard');
+
+    // Toggle button shows keyboard again
+    toggle.click();
+    expect(runtime.controller.settings.showKeyboard).toBe(true);
+    expect(keys.hidden).toBe(false);
+    expect(document.body.dataset['keysHidden']).toBeUndefined();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+    // Stop playback cleans up keyboard and state
+    element<HTMLButtonElement>('focus-stop').click();
+    expect(keys.hidden).toBe(true);
+    expect(document.body.dataset['listening']).toBeUndefined();
+    expect(document.body.dataset['keysHidden']).toBeUndefined();
+    expect(keys.querySelectorAll<HTMLElement>('[data-shade]').length).toBe(0);
+  });
+
+  it('keeps the keyboard hidden during regular practice runs', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+    const keys = element('replay-keys');
+
+    element<HTMLButtonElement>('focus-play').click();
+    expect(runtime.controller.session?.status).toBe('running');
+    expect(keys.hidden).toBe(true);
+
+    element<HTMLButtonElement>('focus-stop').click();
+    expect(keys.hidden).toBe(true);
+  });
+
   describe('the section for developers', () => {
     it('turns the start timings on from the settings, and keeps them on', async () => {
       // His: "може їх лишити при опції з settings у розділі for developers".
@@ -2781,6 +2850,36 @@ describe('AppView', () => {
         expect(keys.hidden).toBe(true);
         expect(document.body.dataset['replaying']).toBeUndefined();
         expect(keys.querySelector('[data-shade]')).toBeNull();
+      });
+
+      it('toggles the keyboard shown or hidden with the keyboard toggle button', async () => {
+        const { runtime } = await aRunPlayed();
+        const toggle = element<HTMLButtonElement>('focus-keyboard');
+        const keys = element('replay-keys');
+
+        element<HTMLButtonElement>('run-replay').click();
+        expect(keys.hidden).toBe(false);
+        expect(document.body.dataset['keysHidden']).toBeUndefined();
+        expect(toggle.getAttribute('aria-pressed')).toBe('true');
+        expect(toggle.title).toBe('Hide keyboard');
+
+        // Click to hide
+        toggle.click();
+        expect(runtime.controller.settings.showKeyboard).toBe(false);
+        expect(keys.hidden).toBe(true);
+        expect(document.body.dataset['keysHidden']).toBe('true');
+        expect(toggle.getAttribute('aria-pressed')).toBe('false');
+        expect(toggle.title).toBe('Show keyboard');
+
+        // Click to show again
+        toggle.click();
+        expect(runtime.controller.settings.showKeyboard).toBe(true);
+        expect(keys.hidden).toBe(false);
+        expect(document.body.dataset['keysHidden']).toBeUndefined();
+        expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+        element<HTMLButtonElement>('focus-stop').click();
+        expect(keys.hidden).toBe(true);
       });
 
       it('leaves nothing going behind it when the page is put away', async () => {
@@ -5594,6 +5693,7 @@ describe('AppView', () => {
         'focus-play',
         'focus-replay',
         'focus-stop',
+        'focus-keyboard',
       ]);
     });
 

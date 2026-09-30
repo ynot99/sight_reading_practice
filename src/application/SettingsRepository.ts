@@ -393,6 +393,7 @@ export function decodePracticeSettings(
     rulerCursor: readBoolean(value['rulerCursor']),
     rulerStrength: readNumber(value['rulerStrength'], 0, 1),
     restEveryMinutes: readInteger(value['restEveryMinutes'], 0, 180),
+    showKeyboard: readBoolean(value['showKeyboard']),
   } as PracticeSettings);
 }
 
@@ -458,6 +459,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     rulerCursor: settings.rulerCursor,
     rulerStrength: settings.rulerStrength,
     restEveryMinutes: settings.restEveryMinutes,
+    showKeyboard: settings.showKeyboard,
   };
 }
 

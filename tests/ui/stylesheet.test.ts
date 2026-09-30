@@ -178,8 +178,21 @@ describe('the stylesheet', () => {
     expect(body('.replay-keys')).toMatch(/position\s*:\s*fixed/);
     expect(body('.replay-keys')).toMatch(/bottom\s*:\s*0/);
     expect(body("body[data-replaying='true'] .focus-bar")).toMatch(/bottom\s*:[^;]*var\(--replay-keys\)/);
+    expect(body("body[data-listening='true'] .focus-bar")).toMatch(/bottom\s*:[^;]*var\(--replay-keys\)/);
+    expect(body("body[data-keys-hidden='true'] .focus-bar")).not.toMatch(/var\(--replay-keys\)/);
     expect(body('.replay-keys__scroller')).toMatch(/overflow-x\s*:\s*auto/);
     expect(body('.replay-keys__white')).toMatch(/min-width\s*:\s*14px/);
+  });
+
+  it('shows the keyboard toggle button only mid-run during replay and playback', () => {
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    expect(body('#focus-keyboard')).toMatch(/display\s*:\s*none/);
+    expect(
+      body("body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard, body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard") ||
+      body("body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard"),
+    ).toMatch(/display\s*:\s*inline-flex/);
   });
 
   it('keeps the speed beside the run’s buttons over a replay, on a ground of its own', () => {

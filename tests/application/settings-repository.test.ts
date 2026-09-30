@@ -80,6 +80,7 @@ const SETTINGS: PracticeSettings = {
   keyboard: '61',
   countInRun: 'once',
   countInPlayback: 'every',
+  showKeyboard: true,
 };
 
 describe('practice settings codec', () => {

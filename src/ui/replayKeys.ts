@@ -1,4 +1,5 @@
 import type { KeyShade } from '../application/runReplay.js';
+export type { KeyShade };
 
 /** The lowest key of a piano, A0. */
 export const LOWEST_KEY = 21;

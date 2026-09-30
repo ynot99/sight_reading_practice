@@ -2408,6 +2408,14 @@ body[data-replaying='true'] .focus-bar {
   bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-keys));
 }
 
+body[data-listening='true'] .focus-bar {
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-keys));
+}
+
+body[data-keys-hidden='true'] .focus-bar {
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
 .replay-keys__pedal {
   flex: 0 0 auto;
   align-self: center;
@@ -2645,6 +2653,31 @@ body[data-replaying='true'] .focus-bar[data-playing='true'] .focus-bar__row > #f
 .focus-bar:not([data-playing='true']) #focus-stop,
 .focus-bar:not([data-playing='true']) #focus-replay {
   display: none;
+}
+
+/*
+ * Keyboard toggle, only while watching a replay or listening to a performance.
+ *
+ * Hidden between runs, and hidden during regular practice runs so as not to
+ * distract a reader playing live notes.
+ */
+#focus-keyboard {
+  display: none;
+}
+
+#focus-keyboard[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+#focus-keyboard[aria-pressed='false'] {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard,
+body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard {
+  display: inline-flex;
 }
 
 /*

@@ -1648,6 +1648,18 @@
           </button>
 
           <!--
+            Toggle showing the docked keyboard during replay and playback.
+            Visible only mid-run during replay and playback.
+          -->
+          <button id="focus-keyboard" type="button" data-mid-run
+            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
+            aria-pressed="true" title="Hide keyboard" aria-label="Hide keyboard">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm2 0v14h14V5H5zm3 0v8h2V5H8zm6 0v8h2V5h-2z" />
+            </svg>
+          </button>
+
+          <!--
             Moved into the drawer on a narrow screen, where the row has room
             for five buttons and no more. One element with two homes rather
             than two copies: a second pair of buttons would be a second

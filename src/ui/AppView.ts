@@ -61,6 +61,7 @@ import {
   lightTheKeys,
   MIDDLE_C,
   scrollToShow,
+  type KeyShade,
   type ReplayKeyboard,
 } from './replayKeys.js';
 import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
@@ -1552,6 +1553,7 @@ export class AppView {
     focusRow: HTMLElement;
     focusSpeed: HTMLElement;
     focusStop: HTMLButtonElement;
+    focusKeyboard: HTMLButtonElement;
     focusRewind: HTMLButtonElement;
     focusSlower: HTMLButtonElement;
     focusFaster: HTMLButtonElement;
@@ -1853,6 +1855,7 @@ export class AppView {
       focusRow: requireElement(doc, 'focus-row'),
       focusSpeed: requireElement(doc, 'focus-speed'),
       focusStop: requireElement(doc, 'focus-stop'),
+      focusKeyboard: requireElement(doc, 'focus-keyboard'),
       focusRewind: requireElement(doc, 'focus-rewind'),
       focusSlower: requireElement(doc, 'focus-slower'),
       focusFaster: requireElement(doc, 'focus-faster'),
@@ -3161,6 +3164,7 @@ export class AppView {
       controller.pauseListening();
       // Held music has no next beat until it is picked up again.
       this.forgetTheBeats();
+      lightTheKeys(this.replayKeyboard, new Map(), false);
       this.showThePerformance();
       return;
     }
@@ -3244,8 +3248,12 @@ export class AppView {
   }
 
   private showThePerformance(): void {
+    const controller = this.runtime.controller;
+    if (!controller.isListening && !controller.isListeningPaused && this.doc.body.dataset['listening'] === 'true') {
+      this.stopShowingPlaybackKeys();
+    }
     this.applyPlayingChrome();
-    this.updateButtons(this.runtime.controller.session?.status ?? 'idle');
+    this.updateButtons(controller.session?.status ?? 'idle');
     this.describeStopping();
   }
 
@@ -4346,6 +4354,11 @@ export class AppView {
       this.stopEverything();
     });
 
+    this.listen(this.el.focusKeyboard, 'click', () => {
+      controller.updateSettings({ showKeyboard: !controller.settings.showKeyboard });
+      this.syncControlsFromSettings();
+    });
+
     this.listen(this.el.focusReplay, 'click', () => {
       this.replayRun();
     });
@@ -4773,6 +4786,7 @@ export class AppView {
     // is a no-op where there is none, which is cheaper than a branch that
     // has to be kept in step with what Stop already did.
     controller.stopListening();
+    this.stopShowingPlaybackKeys();
     this.showThePerformance();
   }
 
@@ -5635,8 +5649,23 @@ export class AppView {
       // transport went back to offering Listen, and Stop went grey, over a
       // performance that was playing.
       controller.playbackEvents.on('started', () => {
+        this.doc.body.dataset['listening'] = 'true';
+        this.applyKeyboardVisibility();
+        const firstStep = controller.currentTimeline?.at(0);
+        const notes = firstStep ? expectedFor(firstStep, controller.settings.handStaff) : [];
+        const initialLowest = notes.length > 0 ? Math.min(...notes) : MIDDLE_C;
+        const scrolled = scrollToShow(this.replayKeyboard, initialLowest);
+        if (scrolled !== null) {
+          this.replayKeyboard.scroller.scrollLeft = scrolled;
+        }
         this.showThePerformance();
         this.markWhenPainted();
+      }),
+    );
+
+    this.subscriptions.push(
+      controller.playbackEvents.on('stepReached', ({ stepIndex }) => {
+        this.showThePlaybackKeys(stepIndex);
       }),
     );
 
@@ -5669,6 +5698,7 @@ export class AppView {
         // The beats it had promised go with it: they were promises about a
         // performance that is over.
         this.forgetTheBeats();
+        this.stopShowingPlaybackKeys();
         this.showThePerformance();
       }),
     );
@@ -6603,6 +6633,7 @@ export class AppView {
     this.el.markListening.checked = settings.markWhileListening;
     this.showTheModes();
     this.showTheListening();
+    this.applyKeyboardVisibility();
     this.dimWhatHasNothingToSay();
     this.el.showPlaybackNotes.checked = settings.showPlaybackNotes;
     this.el.rollScrollPlayback.checked = settings.rollScrollPlayback;
@@ -8025,8 +8056,8 @@ export class AppView {
     this.replayAtMs = 0;
     this.replayClicksSent = 0;
     this.placeTheSpeed();
-    this.el.replayKeys.hidden = false;
     this.doc.body.dataset['replaying'] = 'true';
+    this.applyKeyboardVisibility();
     this.showTheReplaysKeys(0);
     const scrolled = scrollToShow(this.replayKeyboard, roll.presses[0]?.midi ?? MIDDLE_C);
     if (scrolled !== null) {
@@ -8170,10 +8201,75 @@ export class AppView {
     this.replayRoll = null;
     this.placeTheSpeed();
     lightTheKeys(this.replayKeyboard, new Map(), false);
-    this.el.replayKeys.hidden = true;
     delete this.doc.body.dataset['replaying'];
+    this.applyKeyboardVisibility();
     this.showThePerformance();
     this.describeTempo();
+  }
+
+  /**
+   * Applies the reader's choice about showing the docked keyboard during replay and playback.
+   */
+  private applyKeyboardVisibility(): void {
+    const show = this.runtime.controller.settings.showKeyboard;
+    this.el.focusKeyboard.setAttribute('aria-pressed', String(show));
+    const title = show ? 'Hide keyboard' : 'Show keyboard';
+    this.el.focusKeyboard.title = title;
+    this.el.focusKeyboard.setAttribute('aria-label', title);
+
+    const inReplay = this.replayRoll !== null;
+    const inPlayback = this.doc.body.dataset['listening'] === 'true';
+    const active = inReplay || inPlayback;
+
+    if (active && show) {
+      this.el.replayKeys.hidden = false;
+      delete this.doc.body.dataset['keysHidden'];
+    } else if (active && !show) {
+      this.el.replayKeys.hidden = true;
+      this.doc.body.dataset['keysHidden'] = 'true';
+    } else {
+      this.el.replayKeys.hidden = true;
+      delete this.doc.body.dataset['keysHidden'];
+    }
+  }
+
+  /**
+   * Lights the keys sounding at this step of the playback, and scrolls them into view if needed.
+   */
+  private showThePlaybackKeys(stepIndex: number): void {
+    const controller = this.runtime.controller;
+    const step = controller.currentTimeline?.at(stepIndex) ?? null;
+    if (step === null) {
+      return;
+    }
+    const midis = expectedFor(step, controller.settings.handStaff);
+    const shadeMap = new Map<number, KeyShade>(midis.map((m) => [m, 'perfect']));
+    lightTheKeys(this.replayKeyboard, shadeMap, false);
+
+    if (midis.length === 0) {
+      return;
+    }
+    const keyboard = this.replayKeyboard;
+    const scroller = keyboard.scroller;
+    const lowest = Math.min(...midis);
+    const key = keyboard.keys.get(lowest);
+    if (key === undefined || scroller.scrollWidth <= scroller.clientWidth) {
+      return;
+    }
+    const along = key.classList.contains('replay-keys__black') ? (key.parentElement ?? key) : key;
+    const inView =
+      along.offsetLeft >= scroller.scrollLeft &&
+      along.offsetLeft + along.offsetWidth <= scroller.scrollLeft + scroller.clientWidth;
+    const to = inView ? null : scrollToShow(keyboard, lowest);
+    if (to !== null && typeof scroller.scrollTo === 'function') {
+      scroller.scrollTo({ left: to, behavior: 'smooth' });
+    }
+  }
+
+  private stopShowingPlaybackKeys(): void {
+    delete this.doc.body.dataset['listening'];
+    lightTheKeys(this.replayKeyboard, new Map(), false);
+    this.applyKeyboardVisibility();
   }
 
   /**

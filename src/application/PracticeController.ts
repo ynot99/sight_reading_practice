@@ -615,6 +615,13 @@ export interface PracticeSettings {
    * question about what is happening, not about the clock.
    */
   readonly restEveryMinutes: number;
+  /**
+   * Whether the keyboard is shown during replay and playback.
+   *
+   * His: a docked keyboard showing what keys are sounding during replay
+   * and playback, with a button on the transport bar to hide or show it.
+   */
+  readonly showKeyboard: boolean;
 }
 
 export interface ExerciseLoadedEvent {
@@ -970,6 +977,7 @@ export class PracticeController {
       rulerCursor: false,
       rulerStrength: 1,
       restEveryMinutes: 30,
+      showKeyboard: true,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();

@@ -675,27 +675,40 @@ function markInForce(
   const here = (bars[measureIndex]?.startTicks ?? 0) + offsetTicks;
   const lastBy = (marks: readonly Placed<DynamicMark>[]): DynamicMark | null =>
     marks[lastOfLeadingRun(marks, (placed) => placed.at <= here)]?.item ?? null;
-  const latest = lastBy(heardBy(exercise, null).marks);
-  const mine = lastBy(heardBy(exercise, staffNumber).marks);
-  // A dynamic written under one staff of a piano part is an instruction to
-  // the player, not to that hand alone: one `pp` under the treble means the
-  // whole texture. Measured on his own score and it is what was wrong - the
-  // left hand went on at `mf` under a right hand playing `pp`, which is
-  // exactly "I hear no difference".
-  //
-  // A hand that has been marked separately keeps its own where the two sit
-  // at the same moment, which is how `f` over `p` is written; after that the
-  // later instruction governs, whichever staff it was written under.
-  if (mine === null) {
-    return latest;
+  return theMarkThatGoverns(
+    lastBy(heardBy(exercise, staffNumber).marks),
+    lastBy(heardBy(exercise, null).marks),
+  );
+}
+
+/**
+ * Which of a staff's own last mark and the last mark for every staff it plays
+ * at.
+ *
+ * A dynamic written under one staff of a piano part is an instruction to the
+ * player, not to that hand alone: one `pp` under the treble means the whole
+ * texture. Measured on his own score and it is what was wrong - the left hand
+ * went on at `mf` under a right hand playing `pp`, which is exactly "I hear
+ * no difference".
+ *
+ * A hand that has been marked separately keeps its own where the two sit at
+ * the same moment, which is how `f` over `p` is written; after that the later
+ * instruction governs, whichever staff it was written under.
+ */
+export function theMarkThatGoverns(
+  own: DynamicMark | null,
+  everyStaff: DynamicMark | null,
+): DynamicMark | null {
+  if (own === null) {
+    return everyStaff;
   }
-  if (latest === null) {
-    return mine;
+  if (everyStaff === null) {
+    return own;
   }
-  const mineIsLater =
-    mine.measureIndex > latest.measureIndex ||
-    (mine.measureIndex === latest.measureIndex && mine.offsetTicks >= latest.offsetTicks);
-  return mineIsLater ? mine : latest;
+  const ownIsLater =
+    own.measureIndex > everyStaff.measureIndex ||
+    (own.measureIndex === everyStaff.measureIndex && own.offsetTicks >= everyStaff.offsetTicks);
+  return ownIsLater ? own : everyStaff;
 }
 
 /** A mark or a hairpin, and where in the piece it begins. */

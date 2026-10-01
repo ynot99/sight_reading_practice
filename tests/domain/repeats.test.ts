@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { barIsRepeated, barNumberOf, measureCount, validateExercise } from '../../src/domain/model/Exercise.js';
+import {
+  barIsRepeated,
+  barLines,
+  barNumberOf,
+  dynamicAt,
+  measureCount,
+  pedalHeldUntil,
+  tempoAtTick,
+  validateExercise,
+  type DynamicLevel,
+} from '../../src/domain/model/Exercise.js';
 import {
   NO_REPEAT,
   playedOrder,
@@ -169,8 +179,15 @@ describe('a score written out from its repeats', () => {
     const { exercise } = importer.read(pedalled);
 
     // Bar two is read at positions one and three, and the pedal goes down at
-    // both: everything positioned by bar moves with the music.
-    expect(exercise.pedalMarks.map((mark) => mark.measureIndex)).toEqual([1, 3]);
+    // both: everything positioned by bar moves with the music. Never lifted,
+    // it is still down where the reading turns back - and bar two was first
+    // read with it up, so it comes up there and goes down again with the bar:
+    // a change of pedal, as a reader turning back makes one.
+    expect(exercise.pedalMarks.map((mark) => [mark.measureIndex, mark.type])).toEqual([
+      [1, 'start'],
+      [3, 'stop'],
+      [3, 'start'],
+    ]);
   });
 
   /** The repeated score with a direction written at the start of a bar. */
@@ -293,6 +310,97 @@ describe('a score written out from its repeats', () => {
     const unrolled = unrollRepeats({ ...longExercise({ bars: 4 }), hairpins: [hairpin] }, [0, 1, 2, 1, 2, 3]);
 
     expect(spans(unrolled.hairpins)).toEqual([[0, q, 1, 0]]);
+  });
+
+  describe('a bar read again, read as it was the first time', () => {
+    // Read 1 2 3 2 3 4: bars two and three twice.
+    const order = [0, 1, 2, 1, 2, 3];
+    const q = Duration.QUARTER.ticks;
+    const base = longExercise({ bars: 4, tempoBpm: 60 });
+    const atBar = (exercise: ReturnType<typeof unrollRepeats>, at: number, offset = 0): number =>
+      (barLines(exercise)[at]?.startTicks ?? 0) + offset;
+    const dynamic = (measureIndex: number, offsetTicks: number, level: DynamicLevel, staffNumber: number | null = null) => ({
+      measureIndex,
+      offsetTicks,
+      level,
+      staffNumber,
+    });
+
+    it('starts the second reading at the loudness the first began at', () => {
+      // A repeat is read as the page is read anywhere else. The stretch ends
+      // forte, and the second reading began forte.
+      const unrolled = unrollRepeats(
+        { ...base, dynamicMarks: [dynamic(0, 0, 'p'), dynamic(1, q * 2, 'f')] },
+        order,
+      );
+
+      expect(dynamicAt(unrolled, 3, 0, 1)).toBe('p');
+      expect(dynamicAt(unrolled, 3, q * 2, 1)).toBe('f');
+      // A mark of the page, so a score kept and opened again reads the same.
+      expect(unrolled.dynamicMarks.find((mark) => mark.measureIndex === 3 && mark.offsetTicks === 0)?.implied).not.toBe(true);
+    });
+
+    it('puts back a hand marked on its own inside the stretch', () => {
+      const unrolled = unrollRepeats(
+        { ...base, dynamicMarks: [dynamic(0, 0, 'p'), dynamic(2, 0, 'f', 2)] },
+        order,
+      );
+
+      expect(dynamicAt(unrolled, 3, 0, 2)).toBe('p');
+      expect(dynamicAt(unrolled, 4, 0, 2)).toBe('f');
+    });
+
+    it('states nothing again where the stretch left the loudness as it found it', () => {
+      const unrolled = unrollRepeats({ ...base, dynamicMarks: [dynamic(0, 0, 'p')] }, order);
+
+      expect(unrolled.dynamicMarks.map((mark) => mark.measureIndex)).toEqual([0]);
+    });
+
+    it('starts the second reading at the speed the first began at', () => {
+      const unrolled = unrollRepeats(
+        { ...base, tempoChanges: [{ measureIndex: 2, offsetTicks: 0, tempoBpm: 90 }] },
+        order,
+      );
+
+      expect(tempoAtTick(unrolled, atBar(unrolled, 3))).toBe(60);
+      expect(tempoAtTick(unrolled, atBar(unrolled, 4))).toBe(90);
+    });
+
+    it('lifts the pedal at the turn where it was up when the bar was first read', () => {
+      // Pressed in bar three and lifted in bar four: the turn back from bar
+      // three goes to a bar read with the pedal up.
+      const unrolled = unrollRepeats(
+        {
+          ...base,
+          pedalMarks: [
+            { measureIndex: 2, offsetTicks: 0, type: 'start', line: true },
+            { measureIndex: 3, offsetTicks: 0, type: 'stop', line: true },
+          ],
+        },
+        order,
+      );
+
+      expect(pedalHeldUntil(unrolled, atBar(unrolled, 3, q))).toBeNull();
+      expect(pedalHeldUntil(unrolled, atBar(unrolled, 4, q))).not.toBeNull();
+    });
+
+    it('presses it again where it was down when the bar was first read', () => {
+      // Down from the top and lifted halfway into bar two: bar two was first
+      // read with it down.
+      const unrolled = unrollRepeats(
+        {
+          ...base,
+          pedalMarks: [
+            { measureIndex: 0, offsetTicks: 0, type: 'start', line: true },
+            { measureIndex: 1, offsetTicks: q * 2, type: 'stop', line: true },
+          ],
+        },
+        order,
+      );
+
+      expect(pedalHeldUntil(unrolled, atBar(unrolled, 3, q))).not.toBeNull();
+      expect(pedalHeldUntil(unrolled, atBar(unrolled, 3, q * 3))).toBeNull();
+    });
   });
 
   it('keeps every bar adding up to its metre', () => {

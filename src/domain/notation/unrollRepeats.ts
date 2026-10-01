@@ -1,6 +1,7 @@
 import type {
   BarLabel,
   ClefChange,
+  DynamicLevel,
   DynamicMark,
   Exercise,
   KeyChange,
@@ -15,6 +16,7 @@ import {
   clefAtMeasure,
   keyAtMeasure,
   measureCount,
+  theMarkThatGoverns,
   timeAtMeasure,
 } from '../model/Exercise.js';
 
@@ -122,6 +124,14 @@ function endOfEnding(bars: readonly BarRepeat[], from: number): number {
  * were read once: its second reading was played at whatever loudness the
  * first had ended on, and drawn with no octave sign over notes written an
  * octave from where they sound.
+ *
+ * And a bar read again is read as it was the first time. The loudness, the
+ * speed and the pedal it was first read under are stated again where the
+ * reading turns back to it, wherever the stretch has left them different -
+ * so a stretch that ends louder than it began starts its second reading
+ * where it started its first, as a reader turning back reads it. Stated as
+ * marks of the page, as a key restated at a repeat is, so a score kept and
+ * opened again reads the same.
  */
 export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exercise {
   const written = measureCount(exercise);
@@ -141,27 +151,39 @@ export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exe
   const tempoChanges: TempoChange[] = [];
   const dynamicMarks: DynamicMark[] = [];
   const tempoWords: TempoWord[] = [];
+  const staffNumbers = [...new Set(exercise.staves.map((staff) => staff.staffNumber))];
+  // How things stood as each bar was first read.
+  const asFirstRead = new Map<number, InForce>();
+  let standing: InForce = { dynamics: new Map(), tempoBpm: exercise.tempoBpm, pedalDown: null };
   order.forEach((from, at) => {
-    for (const mark of exercise.pedalMarks) {
-      if (mark.measureIndex === from) {
-        pedalMarks.push({ ...mark, measureIndex: at });
-      }
+    const then = asFirstRead.get(from);
+    if (then === undefined) {
+      asFirstRead.set(from, standing);
+    } else {
+      standing = readAgainAsFirstRead(then, standing, at, staffNumbers, {
+        dynamicMarks,
+        tempoChanges,
+        pedalMarks,
+      });
     }
-    for (const change of exercise.tempoChanges) {
-      if (change.measureIndex === from) {
-        tempoChanges.push({ ...change, measureIndex: at });
-      }
-    }
-    for (const mark of exercise.dynamicMarks) {
-      if (mark.measureIndex === from) {
-        dynamicMarks.push({ ...mark, measureIndex: at });
-      }
-    }
+    const pedal = exercise.pedalMarks
+      .filter((mark) => mark.measureIndex === from)
+      .map((mark) => ({ ...mark, measureIndex: at }));
+    const tempos = exercise.tempoChanges
+      .filter((change) => change.measureIndex === from)
+      .map((change) => ({ ...change, measureIndex: at }));
+    const dynamics = exercise.dynamicMarks
+      .filter((mark) => mark.measureIndex === from)
+      .map((mark) => ({ ...mark, measureIndex: at }));
+    pedalMarks.push(...pedal);
+    tempoChanges.push(...tempos);
+    dynamicMarks.push(...dynamics);
     for (const word of exercise.tempoWords) {
       if (word.measureIndex === from) {
         tempoWords.push({ ...word, measureIndex: at });
       }
     }
+    standing = readOn(standing, dynamics, tempos, pedal);
   });
   const runs = runsOf(order);
 
@@ -301,4 +323,97 @@ function spannedAcross<T extends Spanning>(
   return laid.sort(
     (left, right) => left.measureIndex - right.measureIndex || left.offsetTicks - right.offsetTicks,
   );
+}
+
+/** The loudness, speed and pedal a reading is under at a bar line. */
+interface InForce {
+  /** The last mark of each staff, and of none, where the reading placed it. */
+  readonly dynamics: ReadonlyMap<number | null, DynamicMark>;
+  /** As written: the speeds worked out from words are worked out afterwards. */
+  readonly tempoBpm: number;
+  /** The mark that put the pedal down, while it is down. */
+  readonly pedalDown: PedalMark | null;
+}
+
+/** How things stand once a bar's own marks have been read. */
+function readOn(
+  standing: InForce,
+  dynamics: readonly DynamicMark[],
+  tempos: readonly TempoChange[],
+  pedal: readonly PedalMark[],
+): InForce {
+  const byOffset = (left: { offsetTicks: number }, right: { offsetTicks: number }): number =>
+    left.offsetTicks - right.offsetTicks;
+  const marks = new Map(standing.dynamics);
+  for (const mark of [...dynamics].sort(byOffset)) {
+    marks.set(mark.staffNumber, mark);
+  }
+  const written = tempos.filter((change) => change.implied !== true).sort(byOffset);
+  // Paired as `pedalSpans` pairs them: a press while down changes nothing,
+  // and a lift while up changes nothing.
+  let pedalDown = standing.pedalDown;
+  for (const mark of pedal) {
+    pedalDown = mark.type === 'start' ? (pedalDown ?? mark) : null;
+  }
+  return {
+    dynamics: marks,
+    tempoBpm: written.at(-1)?.tempoBpm ?? standing.tempoBpm,
+    pedalDown,
+  };
+}
+
+/** How loud a staff is under them, by the rule the page is read by. */
+function loudnessOf(
+  dynamics: ReadonlyMap<number | null, DynamicMark>,
+  staffNumber: number | null,
+): DynamicLevel | null {
+  const own = staffNumber === null ? null : (dynamics.get(staffNumber) ?? null);
+  return theMarkThatGoverns(own, dynamics.get(null) ?? null)?.level ?? null;
+}
+
+/**
+ * States again, at the start of a bar read once already, what it was first
+ * read under - where the reading has left it otherwise.
+ *
+ * Every staff's mark is stated where any staff's loudness differs: a hand
+ * marked on its own inside the stretch would otherwise keep its own level
+ * beside a mark for every staff stated again.
+ */
+function readAgainAsFirstRead(
+  then: InForce,
+  now: InForce,
+  at: number,
+  staffNumbers: readonly number[],
+  into: { dynamicMarks: DynamicMark[]; tempoChanges: TempoChange[]; pedalMarks: PedalMark[] },
+): InForce {
+  const dynamics = new Map(now.dynamics);
+  // Every staff the page has, and any a mark names that it does not.
+  const staves = new Set<number | null>([
+    null,
+    ...staffNumbers,
+    ...then.dynamics.keys(),
+    ...now.dynamics.keys(),
+  ]);
+  const otherwise = [...staves].some(
+    (staff) => loudnessOf(then.dynamics, staff) !== loudnessOf(now.dynamics, staff),
+  );
+  if (otherwise) {
+    for (const [staff, mark] of then.dynamics) {
+      const stated = { ...mark, measureIndex: at, offsetTicks: 0 };
+      into.dynamicMarks.push(stated);
+      dynamics.set(staff, stated);
+    }
+  }
+  if (then.tempoBpm !== now.tempoBpm) {
+    into.tempoChanges.push({ measureIndex: at, offsetTicks: 0, tempoBpm: then.tempoBpm });
+  }
+  let pedalDown = now.pedalDown;
+  if (then.pedalDown === null && now.pedalDown !== null) {
+    into.pedalMarks.push({ ...now.pedalDown, measureIndex: at, offsetTicks: 0, type: 'stop' });
+    pedalDown = null;
+  } else if (then.pedalDown !== null && now.pedalDown === null) {
+    pedalDown = { ...then.pedalDown, measureIndex: at, offsetTicks: 0 };
+    into.pedalMarks.push(pedalDown);
+  }
+  return { dynamics, tempoBpm: then.tempoBpm, pedalDown };
 }

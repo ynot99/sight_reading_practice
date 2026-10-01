@@ -876,29 +876,49 @@ describe('AppView', () => {
     expect(keys.querySelectorAll<HTMLElement>('[data-shade]').length).toBe(0);
   });
 
-  it('releases sounding playback keys when their note duration ends', async () => {
+  it('keeps a held note lit under the notes that move over it, and lets it go where it ends', async () => {
+    // The bass whole note under four quarters is down the whole bar. Lit with
+    // each step's own notes alone, it went dark at the melody's second note.
     const { view, runtime, metronome } = createRig();
     await view.initialize();
     await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
     const keys = element('replay-keys');
-
+    const lit = (): number[] =>
+      [...keys.querySelectorAll<HTMLElement>('[data-shade]')]
+        .map((key) => Number(key.dataset['midi']))
+        .sort((left, right) => left - right);
     await pressListen(runtime.controller);
 
-    vi.useFakeTimers();
-    try {
-      // Sound a step with notes
-      metronome.advanceSubdivisions(2);
-      expect(keys.querySelectorAll<HTMLElement>('[data-shade="perfect"]').length).toBeGreaterThan(0);
+    metronome.advanceSubdivisions(2);
+    expect(lit()).toEqual([p('C3').midi, p('D4').midi]);
 
-      // Advance timers past all note durations (at 60 bpm, a whole note sounds for 4000ms)
-      vi.advanceTimersByTime(5000);
+    // Into the second bar, where the whole note has ended.
+    metronome.advanceSubdivisions(4);
+    expect(lit()).toEqual([p('G2').midi, p('D3').midi, p('G4').midi]);
 
-      // The keys release (data-shade removed, triggering the gentle fade-out)
-      expect(keys.querySelectorAll<HTMLElement>('[data-shade]').length).toBe(0);
-    } finally {
-      vi.useRealTimers();
-      element<HTMLButtonElement>('focus-stop').click();
-    }
+    element<HTMLButtonElement>('focus-stop').click();
+  });
+
+  it('shows the pedal down where the music holds it during playback', async () => {
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore({
+      ...twoBarExercise({ tempoBpm: 60 }),
+      pedalMarks: [
+        { measureIndex: 0, offsetTicks: 0, type: 'start', line: true },
+        { measureIndex: 1, offsetTicks: 0, type: 'stop', line: true },
+      ],
+    });
+    const pedal = element('replay-keys').querySelector<HTMLElement>('.replay-keys__pedal');
+    await pressListen(runtime.controller);
+
+    metronome.advanceSubdivisions(2);
+    expect(pedal?.dataset['down']).toBe('true');
+
+    metronome.advanceSubdivisions(4);
+    expect(pedal?.dataset['down']).toBe('false');
+
+    element<HTMLButtonElement>('focus-stop').click();
   });
 
   it('keeps the keyboard hidden during regular practice runs', async () => {

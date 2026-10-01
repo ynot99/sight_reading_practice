@@ -125,6 +125,35 @@ export function expectedFor(
 }
 
 /**
+ * The keys held down at a place in the music, for one hand or for both.
+ *
+ * Each note is down from where it is struck for as long as it sounds - so a
+ * tie holds it and a staccato lets it go early - which is what a keyboard
+ * showing the music has to light. Not what a step asks for: a bass note held
+ * under a running melody is asked for once and is down the whole time.
+ * Ascending and each key once, as `expectedMidi` is.
+ */
+export function keysHeldAt(
+  timeline: ExerciseTimeline,
+  ticks: number,
+  staffNumber: number | null,
+): readonly number[] {
+  const held = new Set<number>();
+  for (const step of timeline.steps) {
+    if (step.onsetTicks > ticks) {
+      break;
+    }
+    for (const note of step.notes) {
+      const inTheHand = staffNumber === null || note.staffNumber === staffNumber;
+      if (inTheHand && step.onsetTicks + soundsFor(note) > ticks) {
+        held.add(note.midi);
+      }
+    }
+  }
+  return [...held].sort((left, right) => left - right);
+}
+
+/**
  * The performable projection of an {@link Exercise}: a flat, ordered list of
  * expected events. This is what the practice session walks and what MIDI
  * input is judged against.

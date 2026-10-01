@@ -83,7 +83,7 @@ const SETTINGS_WENT: Readonly<Record<SettingsSyncOutcome, string>> = {
   same: 'already the same',
 };
 import { drawTheProfile } from './profileChart.js';
-import { expectedFor, soundsFor } from '../domain/timeline/Timeline.js';
+import { expectedFor, keysHeldAt, soundsFor } from '../domain/timeline/Timeline.js';
 import {
   clicksBefore,
   clicksUpTo,
@@ -1265,8 +1265,6 @@ export class AppView {
   /** Pending re-engraving after the tempo buttons stop being pressed. */
   private tempoRedraw: ReturnType<typeof setTimeout> | null = null;
   private restTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Active timers that release keys sounding during playback. */
-  private playbackKeyReleaseTimers: ReturnType<typeof setTimeout>[] = [];
   /** The week as it was last drawn, so seven marks are not redrawn for nothing. */
   private weekShown: string | null = null;
 
@@ -2148,7 +2146,6 @@ export class AppView {
   dispose(): void {
     this.forgetTheBeats();
     this.cancelPreview();
-    this.clearPlaybackKeyTimers();
     if (this.tempoRedraw !== null) {
       clearTimeout(this.tempoRedraw);
       this.tempoRedraw = null;
@@ -3171,7 +3168,6 @@ export class AppView {
       controller.pauseListening();
       // Held music has no next beat until it is picked up again.
       this.forgetTheBeats();
-      this.clearPlaybackKeyTimers();
       lightTheKeys(this.replayKeyboard, new Map(), false);
       this.showThePerformance();
       return;
@@ -8245,64 +8241,34 @@ export class AppView {
     }
   }
 
-  private clearPlaybackKeyTimers(): void {
-    for (const timer of this.playbackKeyReleaseTimers) {
-      clearTimeout(timer);
-    }
-    this.playbackKeyReleaseTimers = [];
-  }
-
   /**
-   * Lights the keys sounding at this step of the playback, and scrolls them into view if needed.
+   * Lights the keys held down at this step of the playback, and scrolls the
+   * ones struck there into view if needed.
+   *
+   * Every key the music holds, not only the step's own: a bass note under a
+   * moving melody is down the whole time, and lit with the step's notes alone
+   * it went dark at the melody's next note. Asked again at each step rather
+   * than timed out, so the keys keep to the player's clock and a pause has
+   * nothing to cancel. A note that ends between two steps - a staccato, a voice
+   * falling silent - goes dark at the next step rather than at its own end.
    */
   private showThePlaybackKeys(stepIndex: number): void {
-    this.clearPlaybackKeyTimers();
     const controller = this.runtime.controller;
-    const step = controller.currentTimeline?.at(stepIndex) ?? null;
-    if (step === null) {
+    const timeline = controller.currentTimeline;
+    const step = timeline?.at(stepIndex) ?? null;
+    if (timeline === null || step === null) {
       return;
     }
-    const midis = expectedFor(step, controller.settings.handStaff);
-    const shadeMap = new Map<number, KeyShade>(midis.map((m) => [m, 'perfect']));
-    const exercise = controller.currentExercise;
-    const pedalDown = exercise !== null && pedalHeldUntil(exercise, step.onsetTicks) !== null;
-    lightTheKeys(this.replayKeyboard, shadeMap, pedalDown);
+    const hand = controller.settings.handStaff;
+    const held = keysHeldAt(timeline, step.onsetTicks, hand);
+    const pedalDown = pedalHeldUntil(timeline.exercise, step.onsetTicks) !== null;
+    lightTheKeys(
+      this.replayKeyboard,
+      new Map<number, KeyShade>(held.map((midi) => [midi, 'perfect'])),
+      pedalDown,
+    );
 
-    if (exercise !== null && step.notes.length > 0) {
-      const hand = controller.settings.handStaff;
-      const sounding = step.notes.filter((note) => hand === null || note.staffNumber === hand);
-      const tempoRatio = Math.max(0.05, controller.tempoPercent / 100);
-      const durationByMidi = new Map<number, number>();
-      for (const note of sounding) {
-        const noteDurationMs =
-          spanMs(exercise, step.onsetTicks, step.onsetTicks + soundsFor(note)) / tempoRatio;
-        const current = durationByMidi.get(note.midi) ?? 0;
-        if (noteDurationMs > current) {
-          durationByMidi.set(note.midi, noteDurationMs);
-        }
-      }
-
-      const byDuration = new Map<number, number[]>();
-      for (const [midi, durationMs] of durationByMidi) {
-        if (durationMs > 0) {
-          const list = byDuration.get(durationMs) ?? [];
-          list.push(midi);
-          byDuration.set(durationMs, list);
-        }
-      }
-
-      const activeShades = new Map(shadeMap);
-      for (const [durationMs, midisToRelease] of byDuration) {
-        const timer = setTimeout(() => {
-          for (const m of midisToRelease) {
-            activeShades.delete(m);
-          }
-          lightTheKeys(this.replayKeyboard, activeShades, pedalDown);
-        }, durationMs);
-        this.playbackKeyReleaseTimers.push(timer);
-      }
-    }
-
+    const midis = expectedFor(step, hand);
     if (midis.length === 0) {
       return;
     }
@@ -8324,7 +8290,6 @@ export class AppView {
   }
 
   private stopShowingPlaybackKeys(): void {
-    this.clearPlaybackKeyTimers();
     delete this.doc.body.dataset['listening'];
     lightTheKeys(this.replayKeyboard, new Map(), false);
     this.applyKeyboardVisibility();

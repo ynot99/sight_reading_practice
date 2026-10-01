@@ -3,7 +3,7 @@ import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, restEntry, silenceEntry } from '../../src/domain/model/Exercise.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
-import { buildTimeline, soundsFor } from '../../src/domain/timeline/Timeline.js';
+import { buildTimeline, keysHeldAt, soundsFor } from '../../src/domain/timeline/Timeline.js';
 import type { TimelineNote } from '../../src/domain/timeline/Timeline.js';
 import {
   MIDI,
@@ -11,6 +11,8 @@ import {
   p,
   partialVoiceExercise,
   singleBarExercise,
+  staccatoInTheBass,
+  tiedExercise,
   twoBarExercise,
 } from '../support/fixtures.js';
 
@@ -252,5 +254,47 @@ describe('how long a note is sounded for', () => {
     const odd = { ...noteOf(true), durationTicks: Duration.QUARTER.ticks / 3 };
 
     expect(Number.isInteger(soundsFor(odd))).toBe(true);
+  });
+});
+
+describe('the keys held down at a place in the music', () => {
+  const q = Duration.QUARTER.ticks;
+
+  it('keeps a note held under the notes that move over it', () => {
+    // The bass whole note is asked for once, at its onset, and is down all bar.
+    const timeline = buildTimeline(twoBarExercise());
+
+    expect(keysHeldAt(timeline, q, null)).toEqual([MIDI.C3, MIDI.D4]);
+    expect(keysHeldAt(timeline, q * 3, null)).toEqual([MIDI.C3, MIDI.F4]);
+  });
+
+  it('lets a key go where its note ends, and not a moment later', () => {
+    const timeline = buildTimeline(twoBarExercise());
+
+    // The whole note ends at the bar line, and the half-note chord at the rest.
+    expect(keysHeldAt(timeline, q * 4, null)).toEqual([MIDI.G2, MIDI.D3, MIDI.G4]);
+    expect(keysHeldAt(timeline, q * 6, null)).toEqual([MIDI.G4]);
+  });
+
+  it('holds a tied note across the bar line', () => {
+    // The tied E4 is struck once, in bar one, and nothing in bar two asks for
+    // it again - so only the tie says it is still down there.
+    const timeline = buildTimeline(tiedExercise());
+
+    expect(keysHeldAt(timeline, q * 5, null)).toEqual([MIDI.C3, MIDI.E4]);
+  });
+
+  it('lets a note marked short go after half of it', () => {
+    const timeline = buildTimeline(staccatoInTheBass());
+
+    expect(keysHeldAt(timeline, q * 2 - 1, null)).toEqual([MIDI.C3, MIDI.C4]);
+    expect(keysHeldAt(timeline, q * 2, null)).toEqual([MIDI.C4]);
+  });
+
+  it('keeps to the hand it is asked about', () => {
+    const timeline = buildTimeline(twoBarExercise());
+
+    expect(keysHeldAt(timeline, q, 1)).toEqual([MIDI.D4]);
+    expect(keysHeldAt(timeline, q, 2)).toEqual([MIDI.C3]);
   });
 });

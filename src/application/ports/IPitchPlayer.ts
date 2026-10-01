@@ -16,6 +16,15 @@ export interface IPitchPlayer {
   play(midi: number, velocity: number, atMs?: number): void;
   stop(midi: number, atMs?: number): void;
   stopAll(): void;
+  /**
+   * Takes back every note handed over to begin after `atMs`, so it never
+   * sounds. Notes already begun are left to end as they were told to.
+   *
+   * What a waiting run asks for when the reader comes in ahead of the
+   * accompaniment it laid out for them: the rest of it was the music they
+   * have just left.
+   */
+  takeBackFrom(atMs: number): void;
 }
 
 /**
@@ -73,6 +82,10 @@ export class SilentPitchPlayer implements IPitchPlayer, ISustainPedal {
   }
 
   stopAll(): void {
+    // Intentionally silent.
+  }
+
+  takeBackFrom(): void {
     // Intentionally silent.
   }
 }

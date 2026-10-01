@@ -139,6 +139,22 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
     }
   }
 
+  takeBackFrom(atMs: number): void {
+    const context = this.context;
+    if (context === null) {
+      return;
+    }
+    const from = audioTimeFor(context, atMs);
+    const now = context.currentTime;
+    // As the sampled player does, and for the same reason.
+    for (const voice of [...this.sounding]) {
+      if (voice.startsAt > from) {
+        this.sounding.delete(voice);
+        takeBack(voice.oscillator, voice.envelope, now);
+      }
+    }
+  }
+
   private release(voice: Voice, context: AudioContext, at: number): void {
     const release = this.options.releaseSec;
     beginRelease(voice.envelope.gain, at, release, {

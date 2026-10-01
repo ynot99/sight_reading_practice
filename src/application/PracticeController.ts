@@ -709,6 +709,15 @@ export interface ControllerEventMap {
    * asked for a click.
    */
   otherHandReached: { readonly stepIndex: number; readonly atMs: number };
+  /**
+   * The reader came in ahead of the accompaniment laid out for them, and what
+   * had not begun of it by `atMs` is taken back.
+   *
+   * So the page lets go of the places it was going to walk the other hand's
+   * marker to: they were in the music the reader has just left, and walked
+   * after the reader's own entry they were a second marker going backwards.
+   */
+  otherHandOvertaken: { readonly atMs: number };
   restDue: { readonly sittingMs: number };
   /**
    * The beats about to pass, and when each of them falls.
@@ -851,6 +860,14 @@ export class PracticeController {
    * arrived as one cluster with no rhythm in it at all.
    */
   private otherHandAnchor: { readonly wallMs: number; readonly ticks: number } | null = null;
+  /**
+   * How far ahead the accompaniment has been laid out for the reader, or
+   * `null` where nothing is.
+   *
+   * What says whether the reader has come in ahead of it: laid out to a moment
+   * still to come, there is something of it left to take back.
+   */
+  private otherHandLaidUntilMs: number | null = null;
   /**
    * Where the reader last took the music to, and when.
    *
@@ -3356,6 +3373,7 @@ export class PracticeController {
     const reachesAt =
       anchor.wallMs + spanMs(this.exercise as Exercise, anchor.ticks, step.onsetTicks);
     this.soundTheOtherHand(step, reachesAt);
+    this.otherHandLaidUntilMs = Math.max(this.otherHandLaidUntilMs ?? reachesAt, reachesAt);
     this.emitter.emit('otherHandReached', { stepIndex: step.index, atMs: reachesAt });
   }
 
@@ -3381,6 +3399,19 @@ export class PracticeController {
     if (!this.wantsTheOtherHand()) {
       return;
     }
+    // Come in ahead of what was laid out for them - a rest of several bars cut
+    // short - the reader has left that music behind, and what of it has not
+    // begun goes. Left to sound, the other hand was heard twice at once: the
+    // rest of the bars they skipped, and the bar they came in at. Forgiven
+    // rather than refused, which is this frame's way; holding the reader to the
+    // beat is the frame that waits at every note. From now and not from their
+    // key going down: what began in between has been heard.
+    const now = this.deps.clock.now();
+    if (this.otherHandLaidUntilMs !== null && this.otherHandLaidUntilMs > now) {
+      this.deps.instrument.takeBackFrom(now);
+      this.emitter.emit('otherHandOvertaken', { atMs: now });
+    }
+    this.otherHandLaidUntilMs = null;
     // From the moment the key went down. Over the bridge that is a hop
     // before the run heard about it, and anchored on the hearing the whole
     // phrase after it came out that much late - which is exactly what a
@@ -3776,6 +3807,7 @@ export class PracticeController {
     }
     this.sounding.clear();
     this.otherHandAnchor = null;
+    this.otherHandLaidUntilMs = null;
     this.readersLastEntry = null;
     // And the beats laid out with them. A run walked away from must not go on
     // counting itself in an empty room.

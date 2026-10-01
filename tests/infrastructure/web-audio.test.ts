@@ -530,6 +530,24 @@ describe('WebAudioPitchPlayer', () => {
     expect(context.oscillators[1]?.stoppedAt).toBeNull();
   });
 
+  it('takes back what was handed over to begin later, and leaves what has begun', () => {
+    const context = new FakeAudioContext();
+    const player = new WebAudioPitchPlayer(contextFactory(context));
+
+    withTheClockStill((now) => {
+      player.play(60, 0.5);
+      player.play(64, 0.5, now + 500);
+      player.stop(64, now + 1_000);
+
+      player.takeBackFrom(now);
+    });
+
+    expect(context.oscillators[0]?.stoppedAt).toBeNull();
+    expect(context.oscillators[1]?.stoppedAt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
+      context.oscillators[1]?.startedAt ?? 0,
+    );
+  });
+
   it('ends the ringing note on a key when it is struck again, not when the repeat is handed over', () => {
     // As the sampled instrument does: a playback hands a repeat over ahead,
     // and the note before it must sound until the repeat does.

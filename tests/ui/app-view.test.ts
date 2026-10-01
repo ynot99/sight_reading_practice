@@ -2077,6 +2077,37 @@ describe('AppView', () => {
     });
 
 
+    it('does not walk the other hand’s marker back to bars the reader has come in ahead of', async () => {
+      vi.useFakeTimers();
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        await rig.runtime.controller.openScore(oneHandWalksUnderAHeldNote({ tempoBpm: 60 }));
+        rig.runtime.controller.updateSettings({
+          handStaff: 1,
+          hearTheOtherHand: true,
+          modeId: new WaitMode().id,
+          countInBars: 0,
+          clickWhen: 'never',
+        });
+        rig.runtime.controller.start();
+        rig.midi.noteOn(MIDI.C4, 0);
+        rig.clock.advance(1_500);
+        vi.advanceTimersByTime(1_500);
+
+        // Into the second bar after two of the bass's four quarters.
+        rig.midi.noteOn(MIDI.D4, rig.clock.now());
+        const cameInAt = rig.renderer.otherHand.position;
+        rig.clock.advance(3_000);
+        vi.advanceTimersByTime(3_000);
+
+        expect(cameInAt).toBe(4);
+        expect(rig.renderer.otherHand.position).toBe(4);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('keeps the run being looked at with the recordings', async () => {
       const { view, runtime, midi } = createRig();
       await view.initialize();

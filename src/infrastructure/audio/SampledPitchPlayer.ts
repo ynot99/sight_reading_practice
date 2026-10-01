@@ -371,6 +371,24 @@ export class SampledPitchPlayer
     }
   }
 
+  takeBackFrom(atMs: number): void {
+    this.fallback.takeBackFrom(atMs);
+    const context = this.context;
+    if (context === null) {
+      return;
+    }
+    const from = audioTimeFor(context, atMs);
+    const now = context.currentTime;
+    // Only from what is sounding: a note handed over ahead was told its end
+    // with it, so no key is still down on one that has not begun.
+    for (const voice of [...this.sounding]) {
+      if (voice.startsAt > from) {
+        this.sounding.delete(voice);
+        takeBack(voice.source, voice.envelope, now);
+      }
+    }
+  }
+
   private release(voice: Voice, now: number): void {
     const release = this.options.releaseSec;
     try {

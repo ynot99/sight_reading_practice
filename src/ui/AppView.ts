@@ -5627,6 +5627,12 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      controller.events.on('otherHandOvertaken', ({ atMs }) => {
+        this.forgetTheOtherHandsWalkFrom(atMs);
+      }),
+    );
+
+    this.subscriptions.push(
       controller.events.on('restDue', ({ sittingMs }) => {
         this.showTheRest(sittingMs);
       }),
@@ -9051,6 +9057,18 @@ export class AppView {
       },
       Math.max(0, next.atMs - now),
     );
+  }
+
+  /**
+   * Lets go of the places the other hand was still to walk to.
+   *
+   * The reader came in ahead of them, and the music they were in has gone with
+   * its sound. Walked to after the reader's own entry, the marker went back to
+   * bars already left: a second walk running behind the first.
+   */
+  private forgetTheOtherHandsWalkFrom(atMs: number): void {
+    this.theOtherHandsWalk = this.theOtherHandsWalk.filter((place) => place.atMs <= atMs);
+    this.moveTheOtherHandsMarker();
   }
 
   /** Takes the second marker off the page, the run being over. */

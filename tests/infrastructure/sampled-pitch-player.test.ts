@@ -124,6 +124,12 @@ class RecordingFallback implements IPitchPlayer {
     this.stopAllCalls += 1;
   }
 
+  readonly takenBackFrom: number[] = [];
+
+  takeBackFrom(atMs: number): void {
+    this.takenBackFrom.push(atMs);
+  }
+
   setVolume(volume: number): void {
     this.volume = volume;
   }
@@ -381,6 +387,30 @@ describe('SampledPitchPlayer', () => {
 
     expect(context.sources).toHaveLength(2);
     expect(context.sources[0]?.stoppedAt).not.toBeNull();
+  });
+
+  it('takes back what was handed over to begin later, and leaves what has begun', async () => {
+    const { player, context, fallback } = createPlayer();
+    await player.load();
+    const now = performance.now();
+    const still = vi.spyOn(performance, 'now').mockReturnValue(now);
+    try {
+      player.play(60, 1);
+      player.play(64, 1, now + 500);
+      player.stop(64, now + 1_000);
+
+      player.takeBackFrom(now);
+    } finally {
+      still.mockRestore();
+    }
+
+    // The one already sounding goes on; the one still to come never begins.
+    expect(context.sources[0]?.stoppedAt).toBeNull();
+    expect(context.sources[1]?.stoppedAt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
+      context.sources[1]?.startedAt ?? 0,
+    );
+    // And the stand-in, which may be sounding some of them, is asked the same.
+    expect(fallback.takenBackFrom).toEqual([now]);
   });
 
   it('ends the ringing note on a key when it is struck again, not when the repeat is handed over', async () => {

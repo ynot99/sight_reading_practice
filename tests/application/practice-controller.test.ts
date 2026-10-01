@@ -2199,6 +2199,47 @@ describe('hearing the hand you are not reading', () => {
     expect(instrument.played.map((note) => note.atMs)).toEqual([4_920, 5_920, 6_920, 7_920]);
   });
 
+  it('takes back the rest of the other hand when the reader comes in ahead of it', async () => {
+    // The bass walks four quarters under a held treble note. Coming into the
+    // next bar after two of them, the other two were still to sound - and the
+    // next bar's bass sounded with them: two of the other hand at once.
+    const rig = createController(true);
+    await rig.controller.openScore(oneHandWalksUnderAHeldNote({ tempoBpm: 60 }));
+    rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true, modeId: WAIT_MODE_ID });
+    const overtaken = vi.fn();
+    rig.controller.events.on('otherHandOvertaken', overtaken);
+    rig.controller.start();
+    rig.midi.noteOn(p('C4').midi, rig.clock.now());
+
+    rig.clock.set(1_500);
+    rig.midi.noteOn(p('D4').midi, rig.clock.now());
+
+    expect(rig.instrument.heard.map((note) => [note.midi, note.atMs])).toEqual([
+      [p('C3').midi, 0],
+      [p('D3').midi, 1_000],
+      [p('G2').midi, 1_500],
+    ]);
+    expect(overtaken).toHaveBeenCalledWith({ atMs: 1_500 });
+  });
+
+  it('takes nothing back from a reader who comes in after the other hand', async () => {
+    const rig = createController(true);
+    await rig.controller.openScore(oneHandWalksUnderAHeldNote({ tempoBpm: 60 }));
+    rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true, modeId: WAIT_MODE_ID });
+    const overtaken = vi.fn();
+    rig.controller.events.on('otherHandOvertaken', overtaken);
+    rig.controller.start();
+    rig.midi.noteOn(p('C4').midi, rig.clock.now());
+
+    rig.clock.set(4_200);
+    rig.midi.noteOn(p('D4').midi, rig.clock.now());
+
+    expect(rig.instrument.heard.map((note) => note.midi)).toEqual(
+      ['C3', 'D3', 'E3', 'F3', 'G2'].map((name) => p(name).midi),
+    );
+    expect(overtaken).not.toHaveBeenCalled();
+  });
+
   it('holds each note for as long as it is written', async () => {
     const { controller, midi, instrument, clock } = await readingTheTreble();
     controller.start();

@@ -2429,8 +2429,12 @@ body[data-notes-falling='true'] .focus-bar:has(:focus-visible) {
 
   /* The edge of a note, so one over the music stays a shape. */
   --keys-edge: rgb(15 23 42 / 70%);
-  /* A bar line among the falling notes, and its number. */
-  --keys-bar-line: var(--text);
+  /*
+   * A bar line among the falling notes, and its number: in the ink of the
+   * page it falls over, which is white in either theme. The theme's own text
+   * colour is near white in the dark one, and the lines went with the paper.
+   */
+  --keys-bar-line: #1e293b;
 
   position: fixed;
   inset: 0;

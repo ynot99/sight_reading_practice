@@ -257,7 +257,9 @@ describe('the stylesheet', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';
     expect(body('.replay-keys')).toMatch(/--keys-edge\s*:/);
-    expect(body('.replay-keys')).toMatch(/--keys-bar-line\s*:/);
+    // In the page's ink and not the theme's: the score is white in either.
+    expect(body('.score')).toMatch(/background\s*:\s*#ffffff/);
+    expect(body('.replay-keys')).toMatch(/--keys-bar-line\s*:\s*#[0-9a-f]{6}\s*;/);
     for (const shade of ['perfect', 'good', 'wrong', 'aside', 'heard']) {
       expect(body('.replay-keys'), shade).toMatch(new RegExp(`--keys-${shade}\\s*:`));
       expect(

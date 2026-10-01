@@ -86,8 +86,10 @@ This file is how the work is done here, and the rules that are easy to break.
   said so; do not reconcile it inside a render method. State lives in the
   controller and the model and is never read back from the DOM.
 - One answer, worked out in one place. Look before writing a helper: the keys
-  down at a moment are `theKeysDownAt`, the score as a roll `rollOfTheScore`,
-  a note's sounding length `soundsFor`.
+  a step strikes are `notesStruckAt`, a note's sounding length `soundsFor`,
+  the keys down a moment into a run `theKeysDownAt`, the score as a roll
+  `rollOfTheScore`. Two loops working out the same thing will come to
+  disagree, and then nobody can say which was right.
 - Timers belong to `ui/`. The application layer is driven through the clock
   and metronome ports.
 

@@ -39,6 +39,7 @@ import { ExercisePlayer } from './ExercisePlayer.js';
 import type { PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type {
+  ChosenClickWhen,
   ClickWhen,
   BeatWeight,
   ClickPattern,
@@ -356,7 +357,15 @@ export interface PracticeSettings {
    * count-in" cannot be one of its values without leaving the count-in's own
    * pattern unsaid.
    */
-  readonly clickWhen: ClickWhen;
+  readonly clickWhen: ChosenClickWhen;
+  /**
+   * Whether the click sounds at all.
+   *
+   * The metronome's button turns it off and on; `clickWhen` keeps what was
+   * chosen for while it is on, so a click turned off for one run comes back
+   * as it was set.
+   */
+  readonly clickOn: boolean;
   readonly matchToleranceMs: number;
   /**
    * How long a press takes to reach the page, in milliseconds.
@@ -964,6 +973,7 @@ export class PracticeController {
       repeatRange: false,
       ladderStepId: null,
       clickWhen: 'always',
+      clickOn: true,
       matchToleranceMs: 250,
       inputLatencyMs: 0,
       playingAhead: 'a-mistake',
@@ -1198,9 +1208,13 @@ export class PracticeController {
     // The click is a thing the reader reaches for *while* playing, so it takes
     // effect there rather than at the next Start. A run stopped to answer a
     // button is the run they were asking about.
-    if (changes.clickPattern !== undefined || changes.clickWhen !== undefined) {
-      this.currentSession?.applyClick(next.clickPattern, next.clickWhen);
-      this.player?.applyClick(next.clickPattern, next.clickWhen);
+    if (
+      changes.clickPattern !== undefined ||
+      changes.clickWhen !== undefined ||
+      changes.clickOn !== undefined
+    ) {
+      this.currentSession?.applyClick(next.clickPattern, this.clickWhenHeard);
+      this.player?.applyClick(next.clickPattern, this.clickWhenHeard);
     }
 
     // The passage is a thing the reader reaches for *while* listening, so it
@@ -2313,7 +2327,7 @@ export class PracticeController {
    * silent from the bar the music begins at.
    */
   private get theClickAPlaybackUses(): ClickWhen {
-    const asked = this.currentSettings.clickWhen;
+    const asked = this.clickWhenHeard;
     return this.aPlaybackIsCountedIn && clickIsSilent(asked) ? 'count-in-only' : asked;
   }
 
@@ -2614,7 +2628,7 @@ export class PracticeController {
           this.currentSettings.rushingCounts && this.wantsTheOtherHand() ? 'a-mistake' : 'allowed',
         click: this.currentSettings.clickPattern,
         clickSilences: this.currentSettings.clickSilences,
-        clickWhen: this.currentSettings.clickWhen,
+        clickWhen: this.clickWhenHeard,
       },
     });
 
@@ -3463,7 +3477,7 @@ export class PracticeController {
     if (this.currentSession?.musicMovesWithTheReader !== true || exercise === null) {
       return;
     }
-    const sounded = clickFollowsTheReader(this.currentSettings.clickWhen);
+    const sounded = clickFollowsTheReader(this.clickWhenHeard);
     const owedAtMs = this.whereTheBeatFellDue(exercise, step.onsetTicks);
     // At the resolution the reader asked to hear. A click they place is still
     // the click they chose the pattern for, and the subdivisions they had
@@ -3692,7 +3706,12 @@ export class PracticeController {
     if (this.currentSettings.countInBars > 0) {
       return true;
     }
-    return !clickIsSilent(this.currentSettings.clickWhen);
+    return !clickIsSilent(this.clickWhenHeard);
+  }
+
+  /** When the click sounds: the switch and the choice, taken together. */
+  private get clickWhenHeard(): ClickWhen {
+    return this.currentSettings.clickOn ? this.currentSettings.clickWhen : 'never';
   }
 
   /** Whether this step is one the reader has to play. */

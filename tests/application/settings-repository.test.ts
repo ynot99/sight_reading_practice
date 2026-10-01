@@ -41,6 +41,7 @@ const SETTINGS: PracticeSettings = {
   repeatRange: true,
   ladderStepId: 'rung.2b',
   clickWhen: 'cycle-2',
+  clickOn: false,
   inputLatencyMs: 0,
   matchToleranceMs: 180,
   pitchClassOnly: true,
@@ -142,7 +143,7 @@ describe('practice settings codec', () => {
   });
 
   it('reads the two settings this one used to be', () => {
-    const legacy = { ...encodePracticeSettings(SETTINGS), clickWhen: undefined };
+    const legacy = { ...encodePracticeSettings(SETTINGS), clickWhen: undefined, clickOn: undefined };
     const when = (stored: Record<string, unknown>): string | undefined =>
       decodePracticeSettings({ ...legacy, ...stored }, KNOWN).clickWhen;
 
@@ -154,8 +155,11 @@ describe('practice settings codec', () => {
     expect(when({ clickDropout: 'cycle-2' })).toBe('cycle-2');
 
     // Mute wins where both are set: someone who silenced the metronome meant
-    // silence, whatever they had chosen about dropping out.
-    expect(when({ clickDropout: 'cycle-2', metronomeMuted: true })).toBe('never');
+    // silence, whatever they had chosen about dropping out. Silence is the
+    // metronome's switch now, so it is the switch that is turned off.
+    const muted = decodePracticeSettings({ ...legacy, clickDropout: 'cycle-2', metronomeMuted: true }, KNOWN);
+    expect(muted.clickOn).toBe(false);
+    expect(muted.clickWhen).toBeUndefined();
     expect(when({ metronomeMuted: false, clickDropout: 'never' })).toBe('always');
 
     // And the bar count the dropout was before either of them.
@@ -163,6 +167,19 @@ describe('practice settings codec', () => {
     expect(when({ dropoutBars: 0 })).toBe('always');
     // A cycle length the menu never offered is dropped rather than invented.
     expect(when({ dropoutBars: 3 })).toBeUndefined();
+  });
+
+  it('reads a click stored as never as the click turned off', () => {
+    // Never was one of the answers once; the switch is now. What it comes back
+    // on as is the default, there being no choice stored to give back.
+    const stored = { ...encodePracticeSettings(SETTINGS), clickWhen: 'never', clickOn: undefined };
+
+    const read = decodePracticeSettings(stored, KNOWN);
+
+    expect(read.clickOn).toBe(false);
+    expect(read.clickWhen).toBeUndefined();
+    // A switch stored beside it is the switch.
+    expect(decodePracticeSettings({ ...stored, clickOn: true }, KNOWN).clickOn).toBe(true);
   });
 
   it('keeps the listening frame, which no registry holds', () => {

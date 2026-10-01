@@ -12,12 +12,13 @@ import type { SessionStatus } from '../application/session/SessionState.js';
 import type { PositionEvent } from '../application/session/SessionEvents.js';
 import type { MidiConnectionStatus, MidiEvent } from '../application/ports/IMidiSource.js';
 import {
-  CLICK_WHEN,
+  CLICK_WHEN_CHOICES,
   CLICK_PATTERNS,
   dropoutCycleBars,
-  type ClickWhen,
+  type ChosenClickWhen,
   type ClickPattern,
 } from '../application/ports/IMetronome.js';
+import { HOLD_MS } from '../shared/holding.js';
 import type { SessionScore } from '../domain/scoring/IScoringStrategy.js';
 import {
   SAMPLE_LOADING_MODES,
@@ -563,7 +564,8 @@ type IdleControl =
   | 'survival-punish'
   | 'playing-ahead'
   | 'hear-other-hand'
-  | 'rushing-counts';
+  | 'rushing-counts'
+  | 'click-when';
 
 /**
  * Why a control has nothing to say just now, or `null` where it has.
@@ -612,6 +614,8 @@ function whyItIsIdle(
       return settings.hearTheOtherHand && settings.handStaff !== null
         ? null
         : 'Nothing of the other hand is sounding to be ahead of.';
+    case 'click-when':
+      return settings.clickOn ? null : 'The metronome is off. A tap on its button turns it on.';
     default:
       return null;
   }
@@ -779,7 +783,7 @@ function readRuler(value: string): RulerDivision {
   return RULER_DIVISIONS.includes(value as RulerDivision) ? (value as RulerDivision) : 'off';
 }
 
-const CLICK_WHEN_LABELS: Readonly<Record<ClickWhen, string>> = {
+const CLICK_WHEN_LABELS: Readonly<Record<ChosenClickWhen, string>> = {
   always: 'All the way through',
   'with-my-bars': 'With me, bar by bar',
   'with-me': 'With me, beat by beat',
@@ -787,25 +791,11 @@ const CLICK_WHEN_LABELS: Readonly<Record<ClickWhen, string>> = {
   'cycle-1': '1 bar on, 1 off',
   'cycle-2': '2 bars on, 2 off',
   'cycle-4': '4 bars on, 4 off',
-  never: 'Never',
 };
 
-/**
- * The three answers the fullscreen button cycles through.
- *
- * Not all six: a cycle of bars on and bars off is chosen deliberately before a
- * run, and a thumb between two runs wants "all the way", "just count me in" or
- * "leave me alone". Landing on the list from a cycle gives the first of them,
- * which is the one a reader reaching for the button is most likely to want.
- */
-const CLICK_WHEN_BY_THUMB: readonly ClickWhen[] = ['always', 'count-in-only', 'never'];
-
-function dropoutDescription(when: ClickWhen, countInBars: number): string {
+function dropoutDescription(when: ChosenClickWhen, countInBars: number): string {
   if (when === 'always') {
     return 'The click plays all the way through.';
-  }
-  if (when === 'never') {
-    return 'No click at all. The beat still runs the page; you simply do not hear it.';
   }
   if (when === 'count-in-only') {
     // Chosen together with no count-in, this asks for silence and nothing
@@ -1191,8 +1181,8 @@ function isOutOfRoom(error: unknown): boolean {
   );
 }
 
-function readClickWhen(value: string): ClickWhen {
-  return CLICK_WHEN.includes(value as ClickWhen) ? (value as ClickWhen) : 'always';
+function readClickWhen(value: string): ChosenClickWhen {
+  return CLICK_WHEN_CHOICES.includes(value as ChosenClickWhen) ? (value as ChosenClickWhen) : 'always';
 }
 
 function readSampleLoading(value: string): SampleLoading {
@@ -3339,7 +3329,7 @@ export class AppView {
     );
     fillSelect(
       this.el.dropout,
-      CLICK_WHEN.map((choice) => ({ value: choice, label: CLICK_WHEN_LABELS[choice] })),
+      CLICK_WHEN_CHOICES.map((choice) => ({ value: choice, label: CLICK_WHEN_LABELS[choice] })),
       this.runtime.controller.settings.clickWhen,
     );
     fillSelect(
@@ -4304,6 +4294,7 @@ export class AppView {
       ['playing-ahead', this.el.playingAhead],
       ['hear-other-hand', this.el.hearOtherHand],
       ['rushing-counts', this.el.rushingCounts],
+      ['click-when', this.el.dropout],
     ];
     for (const [name, control] of controls) {
       const carrier = control.closest('label, .control-group');
@@ -5272,6 +5263,7 @@ export class AppView {
     controller.updateSettings({
       modeId: FLOW_MODE_ID,
       clickWhen: 'always',
+      clickOn: true,
       clickPattern: 'pulse',
       countInBars: Math.max(1, controller.settings.countInBars),
       handStaff: null,
@@ -5468,20 +5460,80 @@ export class AppView {
   }
 
   /**
-   * Says what the metronome is set to, on the button that opens it.
+   * Says what the metronome is set to, on its button.
    *
-   * The button raises a sheet rather than cycling anything, so its own state
-   * is only ever a label - but a reader glancing at the row wants to know
-   * whether the click is on at all without opening it, and the answer is one
-   * short line.
+   * Whether it is on is shown - lit, plain for the count-in alone, or dimmed
+   * when off - and what it is set to is said, with what a tap and a hold do.
+   * A cycle of bars on and off has no picture of its own and is shown as
+   * sounding, which is what it mostly is.
    */
-  private describeMetronomeButton(when: ClickWhen, pattern: ClickPattern): void {
-    const label =
-      `Metronome: ${CLICK_WHEN_LABELS[when].toLowerCase()}` +
-      `, ${CLICK_LABELS[pattern].toLowerCase()}`;
-    this.el.focusMetronome.dataset['click'] = CLICK_WHEN_BY_THUMB.includes(when) ? when : 'always';
+  private describeMetronomeButton(on: boolean, when: ChosenClickWhen, pattern: ClickPattern): void {
+    const label = on
+      ? `Metronome: ${CLICK_WHEN_LABELS[when].toLowerCase()}, ${CLICK_LABELS[pattern].toLowerCase()}. ` +
+        'Tap to turn it off, hold for its settings.'
+      : 'Metronome off. Tap to turn it on, hold for its settings.';
+    this.el.focusMetronome.dataset['click'] = !on
+      ? 'never'
+      : when === 'count-in-only'
+        ? 'count-in-only'
+        : 'always';
     this.el.focusMetronome.title = label;
     this.el.focusMetronome.setAttribute('aria-label', label);
+  }
+
+  /**
+   * The metronome's button: a tap turns the click off and on, and holding it
+   * opens everything about it.
+   *
+   * Turning the click off between runs is the thing reached for most, and it
+   * was a sheet and a list away. What it is set to stays where it was, for when
+   * it is turned on again. A right click opens the same sheet, there being no
+   * finger to hold on a desk; and the click a held finger makes on letting go
+   * is the hold's, not a tap.
+   */
+  private bindTheMetronomeButton(): void {
+    const button = this.el.focusMetronome;
+    const openTheSheet = (): void => {
+      this.syncControlsFromSettings();
+      this.showTheSheet(this.el.sheetMetronome);
+    };
+    let holding: ReturnType<typeof setTimeout> | null = null;
+    let opened = false;
+    const letGo = (): void => {
+      if (holding !== null) {
+        clearTimeout(holding);
+        holding = null;
+      }
+    };
+    this.listen(button, 'pointerdown', () => {
+      opened = false;
+      letGo();
+      holding = setTimeout(() => {
+        holding = null;
+        opened = true;
+        openTheSheet();
+      }, HOLD_MS);
+    });
+    this.listen(button, 'pointerup', letGo);
+    this.listen(button, 'pointercancel', letGo);
+    this.listen(button, 'pointerleave', letGo);
+    this.listen(button, 'contextmenu', (event) => {
+      event.preventDefault();
+      letGo();
+      if (!opened) {
+        opened = true;
+        openTheSheet();
+      }
+    });
+    this.listen(button, 'click', () => {
+      if (opened) {
+        opened = false;
+        return;
+      }
+      const controller = this.runtime.controller;
+      controller.updateSettings({ clickOn: !controller.settings.clickOn });
+      this.syncControlsFromSettings();
+    });
   }
 
   /**
@@ -6687,7 +6739,7 @@ export class AppView {
     this.el.whatOpens.value = settings.whatOpens;
     this.el.whatOpensDescription.textContent = OPENING_DESCRIPTIONS[settings.whatOpens];
     this.applyPreview();
-    this.describeMetronomeButton(settings.clickWhen, settings.clickPattern);
+    this.describeMetronomeButton(settings.clickOn, settings.clickWhen, settings.clickPattern);
     this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
     this.applyScoreCover();
@@ -6930,7 +6982,7 @@ export class AppView {
       `mode: ${settings.modeId}   tempo: ${controller.tempoBpm} bpm (${controller.tempoPercent}%)`,
       `input delay: ${settings.inputLatencyMs} ms   chord window: ${settings.matchToleranceMs} ms`,
       `marks: ${settings.playedNotes}   hand: ${settings.handStaff ?? 'both'}   count-in: ${settings.countInBars}`,
-      `click: ${settings.clickPattern} / ${settings.clickWhen}`,
+      `click: ${settings.clickOn ? '' : 'off, '}${settings.clickPattern} / ${settings.clickWhen}`,
       `bridge clock: ${describeSkew(this.runtime.bridge?.clockSkewMs ?? null)}`,
       report === undefined || report === null
         ? 'last run: none'
@@ -7039,14 +7091,6 @@ export class AppView {
         },
       ],
       [
-        // Everything about the click, from either place. It was two cycle
-        // buttons in the drawer and two sliders down the settings sheet, and
-        // "quieter, and give me two bars of count-in" meant both.
-        this.el.sheetMetronome,
-        [this.el.focusMetronome],
-        () => this.syncControlsFromSettings(),
-      ],
-      [
         // Beside the two bar numbers, which is where a passage is chosen.
         // Down the settings sheet it was nowhere near the thing it is about,
         // and a reader who has just marked a stretch out would have had to
@@ -7083,6 +7127,7 @@ export class AppView {
         });
       }
     }
+    this.bindTheMetronomeButton();
 
     // The dimmed area outside a panel is a way out that a thumb finds without
     // aiming; the × is for anyone who does aim. Asked of the page and shut by

@@ -4258,8 +4258,14 @@ body[data-repeats='hidden'] .repeat-mark {
   opacity: 0.35;
 }
 
+/*
+ * Held for its settings, so a held finger is not taken for anything else: no
+ * callout over it, no word selected under it.
+ */
 #focus-metronome {
   flex: none;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
 .focus-bar__hands {

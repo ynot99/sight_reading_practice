@@ -129,7 +129,7 @@ function createController(
     ...(providerFor === undefined ? {} : { providerFor }),
     initialSettings: {
       countInBars: 0,
-      clickWhen: 'never',
+      clickOn: false,
       matchToleranceMs: Number.POSITIVE_INFINITY,
       ...extraSettings,
     },
@@ -929,9 +929,23 @@ describe('PracticeController', () => {
     expect(controller.session).toBeNull();
   });
 
+  it('turns the click off and on again mid-run, keeping when it was to sound', async () => {
+    const { controller, metronome } = createController();
+    controller.updateSettings({ modeId: FLOW_MODE_ID, clickWhen: 'cycle-2', clickOn: false });
+    await controller.loadNewExercise();
+    controller.start();
+    expect(metronome.currentConfig.muted).toBe(true);
+
+    controller.updateSettings({ clickOn: true });
+
+    expect(controller.settings.clickWhen).toBe('cycle-2');
+    expect(metronome.currentConfig.muted).toBe(false);
+    expect(metronome.currentConfig.dropout).not.toBeNull();
+  });
+
   it('passes the practice settings through to the session', async () => {
     const { controller, metronome } = createController();
-    controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 1, clickWhen: 'never' });
+    controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 1, clickOn: false });
     await controller.loadNewExercise();
 
     const session = controller.start();
@@ -1189,7 +1203,7 @@ describe('what you played, drawn over the score', () => {
     // doing nothing at all. His: "'Count-in in the playback' опція нічого не
     // робить".
     const { controller, metronome } = createController(true);
-    controller.updateSettings({ countInBars: 2, countInPlayback: 'once', clickWhen: 'never' });
+    controller.updateSettings({ countInBars: 2, countInPlayback: 'once', clickOn: false });
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
 
     controller.listen();
@@ -1202,7 +1216,7 @@ describe('what you played, drawn over the score', () => {
 
   it('stays silent through a playback nobody asked to be counted into', async () => {
     const { controller, metronome } = createController(true);
-    controller.updateSettings({ countInBars: 2, countInPlayback: 'never', clickWhen: 'never' });
+    controller.updateSettings({ countInBars: 2, countInPlayback: 'never', clickOn: false });
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
 
     controller.listen();
@@ -1214,7 +1228,7 @@ describe('what you played, drawn over the score', () => {
     // Nought bars is no count-in at all, so there is nothing to be heard and
     // nothing to unmute the click for.
     const { controller, metronome } = createController(true);
-    controller.updateSettings({ countInBars: 0, countInPlayback: 'once', clickWhen: 'never' });
+    controller.updateSettings({ countInBars: 0, countInPlayback: 'once', clickOn: false });
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
 
     controller.listen();
@@ -1847,7 +1861,7 @@ describe('hearing the hand you are not reading', () => {
       hearTheOtherHand: true,
       modeId: new WaitMode().id,
       countInBars: 0,
-      clickWhen: 'never',
+      clickOn: false,
     });
     const reached: string[] = [];
     rig.controller.events.on('otherHandReached', ({ stepIndex, atMs }) => {
@@ -1875,7 +1889,7 @@ describe('hearing the hand you are not reading', () => {
     rig.controller.updateSettings({
       modeId: new WaitMode().id,
       countInBars: 0,
-      clickWhen: 'with-my-bars',
+      clickWhen: 'with-my-bars', clickOn: true,
       clickPattern: 'pulse',
     });
     rig.controller.start();
@@ -1922,7 +1936,7 @@ describe('hearing the hand you are not reading', () => {
     rig.controller.updateSettings({
       modeId: FLOW_MODE_ID,
       countInBars: 0,
-      clickWhen: 'with-my-bars',
+      clickWhen: 'with-my-bars', clickOn: true,
       clickPattern: 'pulse',
     });
     rig.controller.start();
@@ -1973,7 +1987,7 @@ describe('hearing the hand you are not reading', () => {
       modeId: new WaitMode().id,
       handStaff: 1,
       countInBars: 0,
-      clickWhen: 'with-my-bars',
+      clickWhen: 'with-my-bars', clickOn: true,
       clickPattern: 'pulse',
     });
     rig.controller.start();
@@ -1998,7 +2012,7 @@ describe('hearing the hand you are not reading', () => {
     rig.controller.updateSettings({
       modeId: new WaitMode().id,
       countInBars: 0,
-      clickWhen: 'always',
+      clickWhen: 'always', clickOn: true,
       clickPattern: 'pulse',
     });
     rig.controller.start();
@@ -2792,7 +2806,7 @@ describe('the click in a mode that waits', () => {
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
     // Reading the bass, which holds a whole note under four treble quarters:
     // three of those beats are his to wait through.
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true });
     controller.start();
     clock.set(5_000);
 
@@ -2814,7 +2828,7 @@ describe('the click in a mode that waits', () => {
     // telling him he is late, which is the opposite of a frame that waits.
     const { controller, midi, metronome, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true });
     const session = controller.start();
     clock.set(5_000);
 
@@ -2854,7 +2868,7 @@ describe('the click in a mode that waits', () => {
     // long note ran on to the end of it, and a replay clicked them.
     const { controller, midi, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true });
     const session = controller.start();
     clock.set(5_000);
     midi.noteOn(p('C3').midi, clock.now());
@@ -2869,7 +2883,7 @@ describe('the click in a mode that waits', () => {
   it('keeps none laid out ahead of a pause either', async () => {
     const { controller, midi, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true });
     const session = controller.start();
     clock.set(5_000);
     midi.noteOn(p('C3').midi, clock.now());
@@ -2887,7 +2901,7 @@ describe('the click in a mode that waits', () => {
     // His: "просто придеться скіпати одразу до наступної ноти яку я натиснув".
     const { controller, midi, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true });
     const session = controller.start();
     clock.set(5_000);
 
@@ -2924,7 +2938,7 @@ describe('the click in a mode that waits', () => {
     // починаю гру".
     const { controller, midi, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', immediateStart: true });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true, immediateStart: true });
     clock.set(5_000);
 
     midi.noteOn(p('C3').midi, clock.now());
@@ -2951,7 +2965,7 @@ describe('the click in a mode that waits', () => {
     // the volume, and always said so.
     const { controller, midi, metronome, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'never' });
+    controller.updateSettings({ handStaff: 2, clickOn: false });
     const session = controller.start();
     clock.set(5_000);
 
@@ -2997,7 +3011,7 @@ describe('the click in a mode that waits', () => {
     // гри... він має дивитись як йшла музика, та розуміти де були паузи".
     const { controller, midi, metronome, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'always', countInBars: 0 });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'always', clickOn: true, countInBars: 0 });
     const session = controller.start();
     // Four seconds of pulse, and he plays nothing for any of them.
     for (let guard = 0; guard < 4; guard += 1) {
@@ -3024,7 +3038,7 @@ describe('the click in a mode that waits', () => {
     // from whether the pulse has anything to do afterwards.
     const { controller, metronome } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', countInBars: 1 });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true, countInBars: 1 });
 
     controller.start();
 
@@ -3039,7 +3053,7 @@ describe('the click in a mode that waits', () => {
     // moments interleaved.
     const { controller, midi, metronome, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', countInBars: 1 });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true, countInBars: 1 });
     const session = controller.start();
     // Four beats of counting, and the fifth tick is the music's first beat.
     for (let guard = 0; guard < 5; guard += 1) {
@@ -3083,7 +3097,7 @@ describe('the click in a mode that waits', () => {
     await controller.openScore(compoundBarExercise({ tempoBpm: 60 }));
     controller.updateSettings({
       handStaff: 1,
-      clickWhen: 'with-me',
+      clickWhen: 'with-me', clickOn: true,
       countInBars: 0,
       clickPattern: 'division',
     });
@@ -3120,7 +3134,7 @@ describe('the click in a mode that waits', () => {
     await controller.openScore(offBeatAfterALongNote({ tempoBpm: 60 }));
     controller.updateSettings({
       handStaff: 1,
-      clickWhen: 'with-me',
+      clickWhen: 'with-me', clickOn: true,
       countInBars: 0,
       clickPattern: 'pulse',
     });
@@ -3144,7 +3158,7 @@ describe('the click in a mode that waits', () => {
     // are as much that run's grid as a pulse's ticks are of another's.
     const { controller, midi, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true });
     const session = controller.start();
     clock.set(5_000);
 
@@ -3181,7 +3195,7 @@ describe('the click in a mode that waits', () => {
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
     controller.updateSettings({
       modeId: new WaitMode().id,
-      clickWhen: 'with-me',
+      clickWhen: 'with-me', clickOn: true,
       countInBars: 1,
     });
     const session = controller.start();
@@ -3206,7 +3220,7 @@ describe('the click in a mode that waits', () => {
     // clicking through music that was standing still waiting for him.
     const { controller, metronome } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', countInBars: 1 });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true, countInBars: 1 });
 
     controller.start();
 
@@ -3223,7 +3237,7 @@ describe('the click in a mode that waits', () => {
     // pattern for.
     const { controller, midi, metronome, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickPattern: 'division' });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true, clickPattern: 'division' });
     controller.start();
     clock.set(5_000);
 
@@ -3246,7 +3260,7 @@ describe('the click in a mode that waits', () => {
   it('marks only the bar when that is all the reader asked for', async () => {
     const { controller, midi, metronome, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickPattern: 'downbeat' });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true, clickPattern: 'downbeat' });
     controller.start();
     clock.set(5_000);
 
@@ -3260,7 +3274,7 @@ describe('the click in a mode that waits', () => {
     // machine playing his part for him.
     const { controller, midi, metronome, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me' });
+    controller.updateSettings({ handStaff: 2, clickWhen: 'with-me', clickOn: true });
     controller.start();
     midi.noteOn(p('C3').midi, clock.now());
 
@@ -3272,7 +3286,7 @@ describe('the click in a mode that waits', () => {
   it('says nothing while the reader asked for no click', async () => {
     const { controller, midi, metronome, clock } = createController(true);
     await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    controller.updateSettings({ handStaff: 2, clickWhen: 'never' });
+    controller.updateSettings({ handStaff: 2, clickOn: false });
     controller.start();
 
     midi.noteOn(p('C3').midi, clock.now());

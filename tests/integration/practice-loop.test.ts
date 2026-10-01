@@ -64,7 +64,7 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
       presetId: 'melody-and-intervals',
       measures: 4,
       countInBars: 0,
-      clickWhen: 'never',
+      clickOn: false,
       matchToleranceMs: Number.POSITIVE_INFINITY,
       ...initial,
     },

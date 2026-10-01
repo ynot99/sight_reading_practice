@@ -16,7 +16,8 @@ import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRe
 import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { NoteMode, NOTE_MODE_ID } from '../../src/application/modes/NoteMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
-import { CLICK_WHEN } from '../../src/application/ports/IMetronome.js';
+import { CLICK_WHEN_CHOICES } from '../../src/application/ports/IMetronome.js';
+import { HOLD_MS } from '../../src/shared/holding.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
@@ -351,7 +352,7 @@ function createRig(
     ladder,
     initialSettings: {
       countInBars: 0,
-      clickWhen: 'never',
+      clickOn: false,
       matchToleranceMs: Number.POSITIVE_INFINITY,
       ...restored.practice,
     },
@@ -594,13 +595,13 @@ describe('AppView', () => {
     expect(element('click-description').textContent).not.toBe('');
     // The list rather than a number kept by hand: a count written out here goes
     // stale the first time a choice is added, quietly checking less.
-    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(CLICK_WHEN.length);
+    expect(element<HTMLSelectElement>('dropout').options).toHaveLength(CLICK_WHEN_CHOICES.length);
     expect(element('dropout-description').textContent).not.toBe('');
 
     // Each choice says what it does, and none of them falls through to a
     // sentence meant for another: "with me" used to be described as a cycle
     // and came out promising to leave the reader alone for nought bars.
-    for (const choice of CLICK_WHEN) {
+    for (const choice of CLICK_WHEN_CHOICES) {
       const dropout = element<HTMLSelectElement>('dropout');
       dropout.value = choice;
       dropout.dispatchEvent(new Event('change'));
@@ -2058,7 +2059,7 @@ describe('AppView', () => {
           hearTheOtherHand: true,
           modeId: new WaitMode().id,
           countInBars: 0,
-          clickWhen: 'never',
+          clickOn: false,
         });
         rig.runtime.controller.start();
         rig.midi.noteOn(MIDI.C4, 0);
@@ -2089,7 +2090,7 @@ describe('AppView', () => {
           hearTheOtherHand: true,
           modeId: new WaitMode().id,
           countInBars: 0,
-          clickWhen: 'never',
+          clickOn: false,
         });
         rig.runtime.controller.start();
         rig.midi.noteOn(MIDI.C4, 0);
@@ -2824,7 +2825,7 @@ describe('AppView', () => {
       runtime.controller.updateSettings({
         modeId: new WaitMode().id,
         countInBars: 0,
-        clickWhen: 'never',
+        clickOn: false,
       });
       runtime.controller.start();
 
@@ -4992,7 +4993,7 @@ describe('AppView', () => {
         modeId: new WaitMode().id,
         matchToleranceMs: 250,
         countInBars: 0,
-        clickWhen: 'never',
+        clickOn: false,
       });
       element<HTMLButtonElement>('focus-play').click();
       for (let played = 0; played < 6; played += 1) {
@@ -9193,7 +9194,7 @@ describe('AppView', () => {
       runtime.controller.updateSettings({
         modeId: new WaitMode().id,
         countInBars: 0,
-        clickWhen: 'never',
+        clickOn: false,
       });
       expect(element('score-listening-text').textContent).toBe('Play to start');
       runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
@@ -9677,6 +9678,13 @@ describe('AppView', () => {
       expect(eye.getAttribute('aria-expanded')).toBe('true');
     });
 
+    /** Asks the metronome's button for its settings, as a right click does. */
+    function openTheMetronome(): void {
+      element('focus-metronome').dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+      );
+    }
+
     it('puts everything about the click behind one button', async () => {
       // It was in three places: two cycle buttons under the drawer handle and
       // two sliders down the settings sheet, so "quieter, and give me two
@@ -9685,7 +9693,7 @@ describe('AppView', () => {
       await view.initialize();
       expect(element('sheet-metronome').hidden).toBe(true);
 
-      element<HTMLButtonElement>('focus-metronome').click();
+      openTheMetronome();
 
       expect(element('sheet-metronome').hidden).toBe(false);
       for (const id of ['dropout', 'click', 'count-in', 'metronome-volume']) {
@@ -9703,7 +9711,7 @@ describe('AppView', () => {
       const { view } = createRig();
       await view.initialize();
 
-      element<HTMLButtonElement>('focus-metronome').click();
+      openTheMetronome();
       expect(element('sheet-metronome').hidden).toBe(false);
 
       element<HTMLButtonElement>('metronome-close').click();
@@ -9713,17 +9721,20 @@ describe('AppView', () => {
     it('says what the metronome is set to without being opened', async () => {
       // A reader glancing at the row wants to know whether the click is on at
       // all, and that answer is one short line rather than a sheet.
-      const { view } = createRig();
+      const { view, runtime } = createRig();
       await view.initialize();
+      // On, as the app starts it; the rig keeps the click off.
+      runtime.controller.updateSettings({ clickOn: true });
       setClickWhen('always');
       const button = element<HTMLButtonElement>('focus-metronome');
 
       expect(button.dataset['click']).toBe('always');
       expect(button.title).toContain('all the way through');
 
-      setClickWhen('never');
+      button.click();
       expect(button.dataset['click']).toBe('never');
-      expect(button.title).toContain('never');
+      expect(button.title).toContain('off');
+      button.click();
 
       // A cycle - a bar on, a bar off - has no picture of its own, so it is
       // shown as sounding, which is what it mostly is.
@@ -9731,9 +9742,93 @@ describe('AppView', () => {
       expect(button.dataset['click']).toBe('always');
     });
 
-    it('names the pattern on the same button, that being the same subject', async () => {
-      const { view } = createRig();
+    it('turns the click off and on with a tap, keeping when it was to sound', async () => {
+      // Turning it off between runs is the thing reached for most, and it was a
+      // sheet and a list away - where "Never" was one of the answers, and
+      // turning it back on meant choosing again.
+      const { view, runtime } = createRig();
       await view.initialize();
+      // On, as the app starts it; the rig keeps the click off.
+      runtime.controller.updateSettings({ clickOn: true });
+      setClickWhen('count-in-only');
+      const button = element<HTMLButtonElement>('focus-metronome');
+
+      button.click();
+
+      expect(runtime.controller.settings.clickOn).toBe(false);
+      expect(element('sheet-metronome').hidden).toBe(true);
+
+      button.click();
+
+      expect(runtime.controller.settings.clickOn).toBe(true);
+      expect(runtime.controller.settings.clickWhen).toBe('count-in-only');
+    });
+
+    it('opens everything about the click when its button is held, and leaves the click as it was', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      // On, as the app starts it; the rig keeps the click off.
+      runtime.controller.updateSettings({ clickOn: true });
+      const button = element<HTMLButtonElement>('focus-metronome');
+      vi.useFakeTimers();
+      try {
+        button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        vi.advanceTimersByTime(HOLD_MS - 1);
+        expect(element('sheet-metronome').hidden).toBe(true);
+
+        vi.advanceTimersByTime(1);
+        expect(element('sheet-metronome').hidden).toBe(false);
+
+        // The finger lets go, and the click that makes is the hold's.
+        button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+        button.click();
+        expect(runtime.controller.settings.clickOn).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('takes a short press for a tap, not a hold', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      // On, as the app starts it; the rig keeps the click off.
+      runtime.controller.updateSettings({ clickOn: true });
+      const button = element<HTMLButtonElement>('focus-metronome');
+      vi.useFakeTimers();
+      try {
+        button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        vi.advanceTimersByTime(HOLD_MS / 3);
+        button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+        button.click();
+        vi.advanceTimersByTime(HOLD_MS);
+
+        expect(element('sheet-metronome').hidden).toBe(true);
+        expect(runtime.controller.settings.clickOn).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('dims when the click sounds while it is off, and says why', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      // On, as the app starts it; the rig keeps the click off.
+      runtime.controller.updateSettings({ clickOn: true });
+      const carrier = element('dropout').closest<HTMLElement>('.control-group');
+
+      element<HTMLButtonElement>('focus-metronome').click();
+
+      expect(carrier?.dataset['idle']).toBe('true');
+      expect(carrier?.title).toContain('off');
+      // Never among the answers: off is the button's.
+      expect([...element<HTMLSelectElement>('dropout').options].map((option) => option.value)).not.toContain('never');
+    });
+
+    it('names the pattern on the same button, that being the same subject', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      // On, as the app starts it; the rig keeps the click off.
+      runtime.controller.updateSettings({ clickOn: true });
       const select = element<HTMLSelectElement>('click');
       select.value = 'downbeat';
       select.dispatchEvent(new Event('change'));
@@ -10400,7 +10495,7 @@ describe('measuring how long a press takes to arrive', () => {
     await rig.view.initialize();
     rig.runtime.controller.updateSettings({
       modeId: new WaitMode().id,
-      clickWhen: 'never',
+      clickOn: false,
       countInBars: 0,
     });
 

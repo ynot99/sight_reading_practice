@@ -314,6 +314,7 @@ export function decodePracticeSettings(
   if (!isRecord(value)) {
     return {};
   }
+  const storedWhen = readClickWhen(value['clickWhen'], value);
   return compact<PracticeSettings>({
     presetId: readId(value['presetId'], known.presetIds),
     modeId: readId(value['modeId'], known.modeIds),
@@ -352,7 +353,10 @@ export function decodePracticeSettings(
       value['ladderStepId'] === null
         ? null
         : readId(value['ladderStepId'], known.ladderStepIds ?? []),
-    clickWhen: readClickWhen(value['clickWhen'], value),
+    // A device that stored `never` had the click turned off. That is the
+    // switch now, and what it comes back on as is the default.
+    clickWhen: storedWhen === 'never' ? undefined : storedWhen,
+    clickOn: readBoolean(value['clickOn']) ?? (storedWhen === 'never' ? false : undefined),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
     // Bounded either way: a relay can only add delay, but a keyboard stamped
     // at the source can arrive fractionally ahead of when the page notices.
@@ -422,6 +426,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     repeatRange: settings.repeatRange,
     ladderStepId: settings.ladderStepId,
     clickWhen: settings.clickWhen,
+    clickOn: settings.clickOn,
     // `Infinity` has no JSON representation; the slider cannot reach it anyway.
     matchToleranceMs: Number.isFinite(settings.matchToleranceMs)
       ? settings.matchToleranceMs

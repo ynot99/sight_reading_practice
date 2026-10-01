@@ -139,6 +139,21 @@ export const CLICK_WHEN = [
 export type ClickWhen = (typeof CLICK_WHEN)[number];
 
 /**
+ * The answers a reader chooses between: when the click sounds, while it
+ * sounds at all.
+ *
+ * `never` is the click turned off, which is a switch of its own - the
+ * metronome's button - and not one of these. Two questions: turned off for a
+ * run and on again, the click comes back as it was chosen, where as one list
+ * it came back as whatever the reader landed on.
+ */
+export type ChosenClickWhen = Exclude<ClickWhen, 'never'>;
+
+export const CLICK_WHEN_CHOICES: readonly ChosenClickWhen[] = CLICK_WHEN.filter(
+  (when): when is ChosenClickWhen => when !== 'never',
+);
+
+/**
  * How often the count-in happens, where there is one.
  *
  * Asked separately of a run and of a playback, because they are different

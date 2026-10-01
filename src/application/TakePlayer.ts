@@ -51,8 +51,6 @@ export class TakePlayer {
   /** Notes below this index are all handed over; `handed` holds the rest. */
   private handedOver = 0;
   private readonly handed = new Set<number>();
-  /** When the key now down on each pitch comes up, in take time. */
-  private readonly soundingUntil = new Map<number, number>();
   private lengthMs = 0;
   /**
    * How fast it plays, as a multiple of the take's own time.
@@ -183,18 +181,14 @@ export class TakePlayer {
         this.handed.add(index);
         continue;
       }
-      // The instrument keeps one voice per pitch, so a pitch is handed over
-      // only once the key before it on that pitch has come up. Handing over
-      // a repeat while its predecessor is still waiting to sound killed the
-      // predecessor before it ever did - a run of repeated notes coming out
-      // clipped to nothing. No note is ever late for this: two notes of one
-      // pitch never overlap, so the moment one key rises is at or before the
-      // moment the next goes down. What the pedal does to the *sound* after
-      // that is already in the note's length and is not this rule's business.
-      const busyUntil = this.soundingUntil.get(note.midi);
-      if (busyUntil !== undefined && at < busyUntil) {
-        continue;
-      }
+      // A repeat is handed over ahead like any other note. Striking a key the
+      // instrument is still sounding ends the old note when the new one
+      // sounds, not when it is handed over, so nothing is cut short. Waiting
+      // instead for the key before it to come up - which is what this did, from
+      // before the instrument learned that - made a repeat with no gap in
+      // front of it late: there the key comes up at the very moment the repeat
+      // is due, so it went over only once the clock had already reached it.
+      // A written score has no gap before any of its repeats.
 
       // A note straddling the seek is struck there rather than skipped: a
       // listener who drops into the middle of a held chord should hear the
@@ -202,7 +196,6 @@ export class TakePlayer {
       const startsAt = Math.max(note.startMs, this.offsetMs);
       this.instrument.play(note.midi, note.velocity, this.whenHeard(startsAt));
       this.instrument.stop(note.midi, this.whenHeard(Math.max(note.endMs, startsAt)));
-      this.soundingUntil.set(note.midi, note.keyUpMs);
       this.handed.add(index);
     }
 
@@ -262,7 +255,6 @@ export class TakePlayer {
   private rewindTo(index: number): void {
     this.handedOver = index;
     this.handed.clear();
-    this.soundingUntil.clear();
   }
 
   private silence(): void {

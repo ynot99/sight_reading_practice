@@ -530,6 +530,21 @@ describe('WebAudioPitchPlayer', () => {
     expect(context.oscillators[1]?.stoppedAt).toBeNull();
   });
 
+  it('ends the ringing note on a key when it is struck again, not when the repeat is handed over', () => {
+    // As the sampled instrument does: a playback hands a repeat over ahead,
+    // and the note before it must sound until the repeat does.
+    const context = new FakeAudioContext();
+    const player = new WebAudioPitchPlayer(contextFactory(context), { releaseSec: 0.2 });
+
+    withTheClockStill((now) => {
+      player.play(60, 0.5, now + 500);
+      player.play(60, 0.5, now + 1500);
+    });
+
+    // The fade of the first begins at the repeat.
+    expect(context.gains[0]?.gain.ramps.at(-2)?.time ?? 0).toBeCloseTo(1.5, 3);
+  });
+
   it('caps the number of simultaneous voices', () => {
     const context = new FakeAudioContext();
     const player = new WebAudioPitchPlayer(contextFactory(context), { maxVoices: 2 });

@@ -383,6 +383,25 @@ describe('SampledPitchPlayer', () => {
     expect(context.sources[0]?.stoppedAt).not.toBeNull();
   });
 
+  it('ends the ringing note on a key when it is struck again, not when the repeat is handed over', async () => {
+    // A playback hands notes over ahead, a repeat on the same key among them.
+    // Ended at the handing over, the note before it was cut short - or never
+    // heard at all, where it too was still to come.
+    const { player, context } = createPlayer();
+    await player.load();
+    const now = performance.now();
+    const still = vi.spyOn(performance, 'now').mockReturnValue(now);
+    try {
+      player.play(60, 1, now + 500);
+      player.play(60, 1, now + 1_500);
+    } finally {
+      still.mockRestore();
+    }
+
+    // Faded from the repeat's moment, over the release.
+    expect(context.sources[0]?.stoppedAt).toBeCloseTo(1.5 + 0.35 + 0.02, 3);
+  });
+
   it('scales with the volume and goes silent at zero', async () => {
     const { player, context, fallback } = createPlayer();
     await player.load();

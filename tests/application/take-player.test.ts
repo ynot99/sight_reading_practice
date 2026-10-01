@@ -162,23 +162,35 @@ describe('a take with the same key struck twice in quick succession', () => {
     { kind: 'noteOff', atMs: 190, midi: 60 },
   ];
 
-  it('does not let the second one kill the first before it sounds', () => {
-    // The instrument keeps one voice per pitch, and striking a key re-hits
-    // the string *now* rather than when the note was scheduled for. Handed
-    // both at once, the first was silenced before it had ever been heard -
-    // which is a run of repeated notes coming out clipped to nothing.
-    const { clock, instrument, player } = rig();
+  it('hands both over ahead, each at its own moment', () => {
+    const { instrument, player } = rig();
 
     player.play('take-1', REPEATED);
-    expect(instrument.played).toHaveLength(1);
-
-    // Handed over once the first has finished, and not a moment later: two
-    // notes of one pitch never overlap, so that moment is at or before the
-    // second one's own beginning.
-    clock.advance(90);
-    player.pump();
 
     expect(instrument.played.map((note) => note.atMs)).toEqual([0, 100]);
+    expect(instrument.stopped.map((note) => note.atMs)).toEqual([90, 190]);
+  });
+
+  it('hands over a repeat that follows straight on in time to sound on its moment', () => {
+    // Every repeated note of a written score follows straight on: the key
+    // comes up at the very moment it is struck again. Held back until the key
+    // before it was up, the repeat went over only once the clock had reached
+    // it, and sounded late by however long the page took to look again - the
+    // stutter on the second of two notes alike in the drawing of a score.
+    const { clock, instrument, player } = rig();
+
+    player.play('take-1', [
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 300, midi: 60 },
+      { kind: 'noteOn', atMs: 300, midi: 60, velocity: 0.8 },
+      { kind: 'noteOff', atMs: 600, midi: 60 },
+    ]);
+    clock.advance(100);
+    player.pump();
+
+    expect(instrument.played.map((note) => note.atMs)).toEqual([0, 300]);
+    // And the first is told to end where the second begins, not before.
+    expect(instrument.stopped.map((note) => note.atMs)).toEqual([300, 600]);
   });
 
   it('leaves different pitches to be handed over together', () => {

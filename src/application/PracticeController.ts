@@ -87,6 +87,7 @@ import {
   thePressesBetween,
   thePressesOfTheRun,
   theStepAt,
+  whenTheRunReachedBar,
   type KeyShade,
   type ReplayJudging,
   type ReplayMark,
@@ -2243,6 +2244,18 @@ export class PracticeController {
   replayPressesBetween(fromMs: number, untilMs: number): readonly ReplayedPress[] {
     const replay = this.replay;
     return replay === null ? [] : thePressesBetween(replay.presses, fromMs, untilMs);
+  }
+
+  /**
+   * When the run being shown again reached a bar, on its own clock - `null`
+   * where it never did, or no run is being shown. See `whenTheRunReachedBar`.
+   */
+  replayMomentOfBar(measureIndex: number): number | null {
+    const replay = this.replay;
+    const timeline = this.timeline;
+    return replay === null || timeline === null
+      ? null
+      : whenTheRunReachedBar(replay.roll, timeline, measureIndex);
   }
 
   /**

@@ -5952,7 +5952,13 @@ export class AppView {
       // standing in front of the notes.
       // Held on a bar: the reader is filling in the next mark that is
       // missing - where to start, then the two ends of the passage.
+      // While a run is shown again it is the reader asking to see it from
+      // there, not setting up the next one.
       this.runtime.renderer.onBarHeld((measureIndex) => {
+        if (this.replayRoll !== null) {
+          this.replayFromBar(measureIndex);
+          return;
+        }
         this.placeNextMark(measureIndex);
       }),
     );
@@ -8288,6 +8294,40 @@ export class AppView {
     // is the way out before then.
     if (player.finished) {
       this.endTheReplay();
+    }
+  }
+
+  /**
+   * Puts the replay at the moment the run reached a bar, playing on from
+   * there if it was playing and held there if it was held.
+   *
+   * A hold on a bar is otherwise the reader placing where the next run starts
+   * and the ends of its passage. While a run is shown again the reader is
+   * looking for a stretch of it, so those are left as they are; and a replay
+   * that could only be watched from its beginning made a stretch in the middle
+   * of a long run a wait.
+   */
+  private replayFromBar(measureIndex: number): void {
+    const controller = this.runtime.controller;
+    const at = controller.replayMomentOfBar(measureIndex);
+    if (at === null) {
+      const exercise = controller.currentExercise;
+      const bar = exercise === null ? measureIndex + 1 : barNumberOf(exercise, measureIndex);
+      this.sayInTheMiddle(`The run did not get to bar ${String(bar)}.`);
+      return;
+    }
+    const going = this.replayIsSounding;
+    this.holdTheReplay();
+    this.replayAtMs = at;
+    if (going) {
+      this.toggleTheReplay();
+      return;
+    }
+    controller.replayAt(at);
+    this.showTheReplaysKeys(at);
+    // Held, the lane stands still, so it is shown once at the new moment.
+    if (!this.el.replayKeys.hidden && controller.settings.keysShown === 'falling-notes') {
+      this.paintTheFallingNotes();
     }
   }
 

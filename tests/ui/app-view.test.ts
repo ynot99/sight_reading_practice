@@ -3338,6 +3338,49 @@ describe('AppView', () => {
         element<HTMLButtonElement>('focus-stop').click();
       });
 
+      it('plays a replay on from a bar held, and leaves the next run’s place and passage alone', async () => {
+        const rig = await aRunPlayed('Seek');
+        const { runtime } = rig;
+        const player = runtime.takePlayer;
+        const play = element<HTMLButtonElement>('focus-play');
+        vi.useFakeTimers();
+        try {
+          element<HTMLButtonElement>('run-replay').click();
+          rig.clock.advance(1_500);
+          vi.advanceTimersByTime(100);
+          const reached = runtime.controller.replayMomentOfBar(0);
+          expect(reached).not.toBeNull();
+          expect(reached).not.toBe(player.positionMs);
+
+          // Held twice: once on its own is the place the next run starts,
+          // twice the near end of its passage - neither of them, here.
+          rig.renderer.holdBar(0);
+          rig.renderer.holdBar(0);
+          expect(player.positionMs).toBe(reached);
+          expect(play.getAttribute('aria-label')).toBe('Pause');
+          expect(runtime.controller.settings.rangeFromBar).toBeNull();
+          expect(runtime.controller.settings.rangeToBar).toBeNull();
+
+          // Held, it stays held, and goes on from the bar when it is let go.
+          rig.clock.advance(700);
+          vi.advanceTimersByTime(100);
+          play.click();
+          rig.renderer.holdBar(0);
+          expect(play.getAttribute('aria-label')).toBe('Resume');
+
+          // A bar the run never got to says so, and moves nothing.
+          rig.renderer.holdBar(1);
+          expect(element('result').textContent).toBe('The run did not get to bar 2.');
+
+          play.click();
+          expect(player.positionMs).toBe(reached);
+        } finally {
+          vi.useRealTimers();
+        }
+
+        element<HTMLButtonElement>('focus-stop').click();
+      });
+
       it('leaves nothing going behind it when the page is put away', async () => {
         const { view } = await aRunPlayed();
         vi.useFakeTimers();

@@ -88,6 +88,11 @@ counted:
 So bars 9 to 12 are: hold 9, hold 9, hold 12. And bar 9 alone is: hold 9,
 hold 9, hold 9.
 
+While a run is **shown again**, a hold on a bar is something else: the replay
+goes to where the run reached that bar and plays on from there, or waits
+there if it was held. The passage and the place are left alone; a bar the run
+never got to says so.
+
 Which mark it is could instead have been said by *where in the bar* the finger
 landed, near the bar line against the middle of it, and that is a distinction
 a fingertip cannot reliably make: a bar is a couple of centimetres and a

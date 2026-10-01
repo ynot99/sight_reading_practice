@@ -79,8 +79,9 @@ This file is how the work is done here, and the rules that are easy to break.
 
 - Comments say *why*, in full sentences. Names are phrases that say what a
   thing is for (`theNotesAskedFor`, `letGoOfTheReplay`).
-- A comment that quotes the owner (`His:`) quotes verbatim. Never a
-  paraphrase.
+- Do not quote the owner in code, comments or commit messages: give the
+  reason in the program's own terms. The `His:` quotes already in the code
+  stay as they are; none are added.
 - No workarounds. When state goes out of step, find the event that should have
   said so; do not reconcile it inside a render method. State lives in the
   controller and the model and is never read back from the DOM.

@@ -2386,39 +2386,62 @@ body[data-bare='true'] .focus-aside {
  * придеться буде зробити scrollable".
  *
  * The keys are a piano's in either theme: light and dark, as the instrument's.
+ *
+ * Over the keys, a lane the notes fall down onto them through: a few seconds
+ * of the music ahead, each note landing on its key as it sounds. Its height
+ * is a share of the screen's, so a phone on its side keeps most of the page.
+ * The bar stands over the two of them.
  */
 :root {
   --replay-keys: 72px;
+  --falling-notes: clamp(72px, 22vh, 200px);
+  --replay-dock: calc(var(--replay-keys) + var(--falling-notes));
 }
 
 .replay-keys {
+  /* What a key is lit in, and the note falling onto it. */
+  --keys-perfect: #15803d;
+  --keys-good: #22c55e;
+  --keys-wrong: #b91c1c;
+  --keys-aside: #94a3b8;
+  /* Not a verdict: what the machine plays, nobody's press. */
+  --keys-heard: #2563eb;
+
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 19;
   display: flex;
-  height: calc(var(--replay-keys) + env(safe-area-inset-bottom, 0px));
+  height: calc(var(--replay-dock) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
   border-top: 1px solid var(--border);
   background: var(--surface);
 }
 
 body[data-replaying='true'] .focus-bar {
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-keys));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-dock));
 }
 
 body[data-listening='true'] .focus-bar {
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-keys));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-dock));
 }
 
 body[data-keys-hidden='true'] .focus-bar {
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
+/* The pedal's mark, level with the keys rather than the lane over them. */
+.replay-keys__side {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: flex-end;
+  align-items: center;
+  height: var(--replay-keys);
+}
+
 .replay-keys__pedal {
   flex: 0 0 auto;
-  align-self: center;
   margin: 0 8px;
   padding: 4px 8px;
   border: 1px solid var(--border);
@@ -2436,11 +2459,43 @@ body[data-keys-hidden='true'] .focus-bar {
 }
 
 .replay-keys__scroller {
-  display: flex;
   flex: 1 1 auto;
   min-width: 0;
   overflow-x: auto;
   overscroll-behavior: contain;
+}
+
+/*
+ * The lane over the row of keys, as wide as the keys come out: the width of
+ * the screen, or more where the row scrolls - and then the lane scrolls with
+ * it, being part of what scrolls.
+ */
+.replay-keys__track {
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  min-width: 100%;
+  height: 100%;
+}
+
+.replay-keys__lane {
+  position: relative;
+  flex: 0 0 var(--falling-notes);
+}
+
+.replay-keys__lane > canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Positioned, so a key's place along the keyboard is counted from the row. */
+.replay-keys__row {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
 }
 
 .replay-keys__white {
@@ -2479,22 +2534,27 @@ body[data-keys-hidden='true'] .focus-bar {
 /* Lit in the colours its ring on the page is drawn in. */
 .replay-keys__white[data-shade='perfect'],
 .replay-keys__black[data-shade='perfect'] {
-  background: #15803d;
+  background: var(--keys-perfect);
 }
 
 .replay-keys__white[data-shade='good'],
 .replay-keys__black[data-shade='good'] {
-  background: #22c55e;
+  background: var(--keys-good);
 }
 
 .replay-keys__white[data-shade='wrong'],
 .replay-keys__black[data-shade='wrong'] {
-  background: #b91c1c;
+  background: var(--keys-wrong);
 }
 
 .replay-keys__white[data-shade='aside'],
 .replay-keys__black[data-shade='aside'] {
-  background: #94a3b8;
+  background: var(--keys-aside);
+}
+
+.replay-keys__white[data-shade='heard'],
+.replay-keys__black[data-shade='heard'] {
+  background: var(--keys-heard);
 }
 
 /*

@@ -63,9 +63,19 @@ import {
   lightTheKeys,
   MIDDLE_C,
   scrollToShow,
-  type KeyShade,
+  whereTheKeysAre,
+  type KeyLight,
+  type KeyPlace,
   type ReplayKeyboard,
 } from './replayKeys.js';
+import {
+  FALLING_AHEAD_MS,
+  paintTheLane,
+  theFallingNotes,
+  theLaneInks,
+  type FallingBar,
+  type LaneInks,
+} from './fallingNotes.js';
 import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
 import { replayFits } from '../application/runReplay.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
@@ -1317,6 +1327,12 @@ export class AppView {
   private readonly rollScroller = new RollScroller();
   /** The keys a run is shown again over. See `showTheReplaysKeys`. */
   private readonly replayKeyboard: ReplayKeyboard;
+  /** The frame the notes over the keys are painted on next, while any fall. */
+  private fallingFrame: number | null = null;
+  /** Where each key stands along the row, until the row changes size. */
+  private keyPlaces: ReadonlyMap<number, KeyPlace> | null = null;
+  /** The lane's colours, read again each time notes begin to fall. */
+  private laneInks: LaneInks | null = null;
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
   private rollLook = { rowPx: 13, rulerTallPx: 0, pedalTallPx: 0 };
   /** The frame a fling is going on in, if one is. */
@@ -2176,6 +2192,7 @@ export class AppView {
       this.replayTick = null;
     }
     this.forgetTheMapFrame();
+    this.stopTheNotesFalling();
     this.stopTheFling();
     if (this.timeTick !== null) {
       clearInterval(this.timeTick);
@@ -7185,6 +7202,7 @@ export class AppView {
       this.closeTheRoll();
     });
     this.repaintTheRollWhenTheScreenChanges();
+    this.measureTheKeysAgainWhenTheyMove();
     this.listen(this.el.rollOptionsClose, 'click', () => {
       this.el.sheetRollOptions.hidden = true;
     });
@@ -8339,6 +8357,9 @@ export class AppView {
     }
     if (!active) {
       lightTheKeys(this.replayKeyboard, new Map(), false);
+      // Nothing is falling, and the picture of what was is let go of with
+      // the memory it holds. Painting sizes it again.
+      this.replayKeyboard.lane.width = 0;
     }
 
     if (active && show) {
@@ -8351,6 +8372,112 @@ export class AppView {
       this.el.replayKeys.hidden = true;
       delete this.doc.body.dataset['keysHidden'];
     }
+    this.letTheNotesFall();
+  }
+
+  /**
+   * The notes over the keyboard at this moment: the next few seconds of a
+   * playback, or of the run being shown again.
+   *
+   * A playback's are the notes the player will sound, on the page's clock, lit
+   * as heard. A replay's are the run's presses in the colours they were
+   * judged, on the replay's own clock - and at the speed it is played at, so
+   * the lane always holds the same few seconds of screen time and a replay
+   * slowed down falls as slowly as it sounds.
+   */
+  get fallingScene(): readonly FallingBar[] {
+    const controller = this.runtime.controller;
+    if (this.replayRoll !== null) {
+      const player = this.runtime.takePlayer;
+      const at = player.playing === RUN_REPLAY_ID ? player.positionMs : this.replayAtMs;
+      const ahead = FALLING_AHEAD_MS * player.speed;
+      return theFallingNotes(controller.replayPressesBetween(at, at + ahead), at, ahead);
+    }
+    const now = this.runtime.clock.now();
+    return theFallingNotes(
+      controller
+        .playbackNotesBetween(now, now + FALLING_AHEAD_MS)
+        .map((note) => ({ ...note, shade: 'heard' as const })),
+      now,
+      FALLING_AHEAD_MS,
+    );
+  }
+
+  /** Whether notes are falling now, rather than held or gone. */
+  private get notesAreFalling(): boolean {
+    return (
+      !this.el.replayKeys.hidden && (this.runtime.controller.isListening || this.replayIsSounding)
+    );
+  }
+
+  /**
+   * Keeps the notes over the keyboard moving while music goes under it, and
+   * stops them where it stops.
+   *
+   * A frame at a time, and only then. Each frame asks whether anything is
+   * still falling, of the controller rather than of whatever last told the
+   * page, so the lane stops with the music however the music was stopped.
+   * Held, the lane keeps the picture it had, as the page keeps its marks; and
+   * nothing is painted while nothing moves, which on a tablet is battery.
+   */
+  private letTheNotesFall(): void {
+    const view = this.doc.defaultView;
+    if (
+      !this.notesAreFalling ||
+      this.fallingFrame !== null ||
+      view === null ||
+      typeof view.requestAnimationFrame !== 'function'
+    ) {
+      return;
+    }
+    // Read again, since the ground may have turned dark since the last time.
+    this.laneInks = null;
+    const frame = (): void => {
+      this.fallingFrame = null;
+      if (!this.notesAreFalling) {
+        return;
+      }
+      this.paintTheFallingNotes();
+      this.fallingFrame = view.requestAnimationFrame(frame);
+    };
+    this.fallingFrame = view.requestAnimationFrame(frame);
+  }
+
+  private stopTheNotesFalling(): void {
+    if (this.fallingFrame !== null) {
+      this.doc.defaultView?.cancelAnimationFrame(this.fallingFrame);
+      this.fallingFrame = null;
+    }
+  }
+
+  private paintTheFallingNotes(): void {
+    this.keyPlaces ??= whereTheKeysAre(this.replayKeyboard);
+    this.laneInks ??= theLaneInks(this.el.replayKeys);
+    paintTheLane(
+      this.replayKeyboard.lane,
+      this.fallingScene,
+      this.keyPlaces,
+      this.laneInks,
+      this.doc.defaultView?.devicePixelRatio ?? 1,
+    );
+  }
+
+  /**
+   * Asks the keys where they stand again when the row changes size: shown,
+   * hidden, or a screen turned on its side.
+   */
+  private measureTheKeysAgainWhenTheyMove(): void {
+    const view = this.doc.defaultView;
+    if (view === null || typeof view.ResizeObserver !== 'function') {
+      return;
+    }
+    const watch = new view.ResizeObserver(() => {
+      this.keyPlaces = null;
+    });
+    watch.observe(this.replayKeyboard.row);
+    this.subscriptions.push(() => {
+      watch.disconnect();
+    });
   }
 
   /**
@@ -8374,9 +8501,10 @@ export class AppView {
     const hand = controller.settings.handStaff;
     const held = keysHeldAt(timeline, step.onsetTicks, hand);
     const pedalDown = pedalHeldUntil(timeline.exercise, step.onsetTicks) !== null;
+    // As heard: the machine is playing, and nobody's press was judged.
     lightTheKeys(
       this.replayKeyboard,
-      new Map<number, KeyShade>(held.map((midi) => [midi, 'perfect'])),
+      new Map<number, KeyLight>(held.map((midi) => [midi, 'heard'])),
       pedalDown,
     );
 

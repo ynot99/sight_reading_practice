@@ -1,6 +1,12 @@
 import type { KeyShade } from '../application/runReplay.js';
 export type { KeyShade };
 
+/**
+ * How a key is lit: as its press was judged, in a replay - or as heard, in a
+ * playback, where nobody played it and nothing was judged.
+ */
+export type KeyLight = KeyShade | 'heard';
+
 /** The lowest key of a piano, A0. */
 export const LOWEST_KEY = 21;
 /** And the highest, C8: eighty-eight in all. */
@@ -21,6 +27,10 @@ export interface ReplayKeyboard {
   readonly pedal: HTMLElement;
   /** The part that scrolls, where the screen is too narrow for all of it. */
   readonly scroller: HTMLElement;
+  /** The row of keys, which every key's place along the keyboard is counted from. */
+  readonly row: HTMLElement;
+  /** Where notes fall onto the keys from: over the row, and as wide as it. */
+  readonly lane: HTMLCanvasElement;
 }
 
 /**
@@ -43,9 +53,25 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
   pedal.className = 'replay-keys__pedal';
   pedal.dataset['down'] = 'false';
   pedal.textContent = 'Ped.';
+  // Level with the keys, under the lane rather than beside it.
+  const side = doc.createElement('span');
+  side.className = 'replay-keys__side';
+  side.append(pedal);
 
   const scroller = doc.createElement('div');
   scroller.className = 'replay-keys__scroller';
+  // The lane and the keys in one track, so the two scroll as one and the lane
+  // is as wide as the keys however wide those come out.
+  const track = doc.createElement('div');
+  track.className = 'replay-keys__track';
+  const laneBox = doc.createElement('div');
+  laneBox.className = 'replay-keys__lane';
+  const lane = doc.createElement('canvas');
+  laneBox.append(lane);
+  const row = doc.createElement('div');
+  row.className = 'replay-keys__row';
+  track.append(laneBox, row);
+  scroller.append(track);
   for (let midi = LOWEST_KEY; midi <= HIGHEST_KEY; midi += 1) {
     if (isBlackKey(midi)) {
       continue;
@@ -62,11 +88,35 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
       keys.set(above, black);
       white.append(black);
     }
-    scroller.append(white);
+    row.append(white);
   }
 
-  host.replaceChildren(pedal, scroller);
-  return { keys, pedal, scroller };
+  host.replaceChildren(side, scroller);
+  return { keys, pedal, scroller, row, lane };
+}
+
+/** Where a key stands along the row, and how wide it is drawn, in page pixels. */
+export interface KeyPlace {
+  readonly left: number;
+  readonly width: number;
+}
+
+/**
+ * Where every key stands along the row, read off the keys as drawn.
+ *
+ * The stylesheet decides how wide a key is - a share of the screen, or a
+ * finger's width on a phone where the row scrolls instead - so anything drawn
+ * over the keys asks them where they are rather than working it out again.
+ */
+export function whereTheKeysAre(keyboard: ReplayKeyboard): ReadonlyMap<number, KeyPlace> {
+  const places = new Map<number, KeyPlace>();
+  for (const [midi, key] of keyboard.keys) {
+    // A black key is placed inside its white one, so its own offset is from
+    // there.
+    const from = isBlackKey(midi) ? (key.parentElement?.offsetLeft ?? 0) : 0;
+    places.set(midi, { left: from + key.offsetLeft, width: key.offsetWidth });
+  }
+  return places;
 }
 
 /**
@@ -77,7 +127,7 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
  */
 export function lightTheKeys(
   keyboard: ReplayKeyboard,
-  down: ReadonlyMap<number, KeyShade>,
+  down: ReadonlyMap<number, KeyLight>,
   pedalDown: boolean,
 ): void {
   for (const [midi, key] of keyboard.keys) {

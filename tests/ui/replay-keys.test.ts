@@ -8,6 +8,7 @@ import {
   lightTheKeys,
   LOWEST_KEY,
   scrollToShow,
+  whereTheKeysAre,
 } from '../../src/ui/replayKeys.js';
 import type { KeyShade } from '../../src/application/runReplay.js';
 
@@ -20,7 +21,7 @@ function aKeyboard(): ReturnType<typeof drawTheKeyboard> {
 describe('the keyboard a run is shown again over', () => {
   it('has all eighty-eight keys, from A0 to C8, the black ones in their places', () => {
     const keyboard = aKeyboard();
-    const whites = [...keyboard.scroller.children];
+    const whites = [...keyboard.row.children];
 
     expect(keyboard.keys.size).toBe(88);
     expect(whites).toHaveLength(52);
@@ -31,6 +32,35 @@ describe('the keyboard a run is shown again over', () => {
     expect(keyboard.keys.get(61)?.parentElement).toBe(keyboard.keys.get(60));
     expect(keyboard.keys.get(64)?.children).toHaveLength(0);
     expect([...keyboard.keys.keys()].filter(isBlackKey)).toHaveLength(36);
+  });
+
+  it('puts the lane the notes fall through over the row, inside what scrolls', () => {
+    const keyboard = aKeyboard();
+
+    expect(keyboard.lane.tagName).toBe('CANVAS');
+    // In the one track as the row, and above it, so the two scroll as one.
+    const track = keyboard.row.parentElement;
+    expect(track?.parentElement).toBe(keyboard.scroller);
+    expect(keyboard.lane.parentElement?.parentElement).toBe(track);
+    expect(track?.firstElementChild).toBe(keyboard.lane.parentElement);
+    expect(track?.lastElementChild).toBe(keyboard.row);
+  });
+
+  it('says where each key stands along the row, a black one from the white one it stands on', () => {
+    const keyboard = aKeyboard();
+    const lay = (element: HTMLElement | undefined, sizes: Record<string, number>): void => {
+      for (const [name, value] of Object.entries(sizes)) {
+        Object.defineProperty(element, name, { value, configurable: true });
+      }
+    };
+    lay(keyboard.keys.get(60), { offsetLeft: 322, offsetWidth: 14 });
+    lay(keyboard.keys.get(61), { offsetLeft: 10, offsetWidth: 8 });
+
+    const places = whereTheKeysAre(keyboard);
+
+    expect(places.size).toBe(88);
+    expect(places.get(60)).toEqual({ left: 322, width: 14 });
+    expect(places.get(61)).toEqual({ left: 332, width: 8 });
   });
 
   it('lights the keys down in their verdicts, puts the rest out, and says the pedal', () => {

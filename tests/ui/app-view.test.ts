@@ -133,6 +133,7 @@ import {
   p,
   twoBarExercise,
 } from '../support/fixtures.js';
+import { Recorder } from '../support/recordingCanvas.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -841,10 +842,12 @@ describe('AppView', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
     expect(toggle.title).toBe('Hide keyboard');
 
-    // Metronome advance sounds the step
+    // Metronome advance sounds the step, lit as heard: nobody played it, so
+    // it is in no verdict's colour.
     metronome.advanceSubdivisions(2);
-    const lit = [...keys.querySelectorAll<HTMLElement>('[data-shade="perfect"]')];
+    const lit = [...keys.querySelectorAll<HTMLElement>('[data-shade]')];
     expect(lit.length).toBeGreaterThan(0);
+    expect(lit.every((key) => key.dataset['shade'] === 'heard')).toBe(true);
 
     // Pause unlights keys
     element<HTMLButtonElement>('focus-play').click();
@@ -855,7 +858,7 @@ describe('AppView', () => {
     element<HTMLButtonElement>('focus-play').click();
     expect(runtime.controller.isListening).toBe(true);
     metronome.advanceSubdivisions(2);
-    expect(keys.querySelectorAll<HTMLElement>('[data-shade="perfect"]').length).toBeGreaterThan(0);
+    expect(keys.querySelectorAll<HTMLElement>('[data-shade="heard"]').length).toBeGreaterThan(0);
 
     // Toggle button hides keyboard
     toggle.click();
@@ -901,6 +904,114 @@ describe('AppView', () => {
     expect(lit()).toEqual([p('G2').midi, p('D3').midi, p('G4').midi]);
 
     element<HTMLButtonElement>('focus-stop').click();
+  });
+
+  it('drops the notes a playback will sound onto the keys, and lets go of them when it stops', async () => {
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    const lane = element('replay-keys').querySelector('canvas');
+    if (lane === null) {
+      throw new Error('No lane over the keys.');
+    }
+    await pressListen(runtime.controller);
+    metronome.advanceSubdivisions(1);
+
+    // Three seconds of the music over the keys at sixty to the crotchet: the
+    // first beat on its key, the next two coming down onto theirs, and the
+    // bass's whole note under all of them. Lit as heard, as the keys are.
+    const scene = view.fallingScene
+      .map((bar) => [bar.midi, bar.shade, Number(bar.top.toFixed(3)), Number(bar.bottom.toFixed(3))])
+      .sort((left, right) => Number(left[0]) - Number(right[0]));
+    expect(scene).toEqual([
+      [p('C3').midi, 'heard', 0, 1],
+      [p('C4').midi, 'heard', 0.667, 1],
+      [p('D4').midi, 'heard', 0.333, 0.667],
+      [p('E4').midi, 'heard', 0, 0.333],
+    ]);
+
+    lane.width = 300;
+    element<HTMLButtonElement>('focus-stop').click();
+
+    // Nothing falling, and the picture of what was let go of.
+    expect(view.fallingScene).toEqual([]);
+    expect(lane.width).toBe(0);
+  });
+
+  it('paints the falling notes a frame at a time while the music moves, and not once it is held', async () => {
+    // However it is held: the lane asks the controller at every frame, so a
+    // performance stopped without the page being told stops the lane too.
+    const frames = new Map<number, FrameRequestCallback>();
+    let asked = 0;
+    const ask = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      asked += 1;
+      frames.set(asked, callback);
+      return asked;
+    });
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {
+      frames.delete(id);
+    });
+    const runTheFrames = (): void => {
+      const due = [...frames.values()];
+      frames.clear();
+      for (const frame of due) {
+        frame(0);
+      }
+    };
+    try {
+      const { view, runtime, metronome } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      const lane = element('replay-keys').querySelector('canvas');
+      if (lane === null) {
+        throw new Error('No lane over the keys.');
+      }
+      // A lane with room on it, since jsdom lays nothing out and has no canvas.
+      const recorder = new Recorder();
+      let painted = 0;
+      Object.defineProperty(lane, 'clientWidth', { value: 300, configurable: true });
+      Object.defineProperty(lane, 'clientHeight', { value: 100, configurable: true });
+      Object.defineProperty(lane, 'getContext', {
+        configurable: true,
+        value: () => {
+          painted += 1;
+          return recorder;
+        },
+      });
+
+      runTheFrames();
+      expect(painted).toBe(0);
+
+      await pressListen(runtime.controller);
+      metronome.advanceSubdivisions(1);
+      runTheFrames();
+      runTheFrames();
+      expect(painted).toBe(2);
+      expect(recorder.marks.filter((mark) => mark.how === 'fill').length).toBeGreaterThan(0);
+
+      runtime.controller.pauseListening();
+      runTheFrames();
+      runTheFrames();
+      expect(painted).toBe(2);
+
+      element<HTMLButtonElement>('focus-play').click();
+      runTheFrames();
+      expect(painted).toBe(3);
+
+      // Nor while the keyboard is put away, and again once it is back.
+      element<HTMLButtonElement>('focus-keyboard').click();
+      runTheFrames();
+      runTheFrames();
+      expect(painted).toBe(3);
+      element<HTMLButtonElement>('focus-keyboard').click();
+      runTheFrames();
+      expect(painted).toBe(4);
+
+      element<HTMLButtonElement>('focus-stop').click();
+    } finally {
+      ask.mockRestore();
+      cancel.mockRestore();
+    }
   });
 
   it('takes the keyboard away however a playback ends, not only on Stop', async () => {
@@ -3145,6 +3256,43 @@ describe('AppView', () => {
 
         element<HTMLButtonElement>('focus-stop').click();
         expect(keys.hidden).toBe(true);
+      });
+
+      it('drops the run’s presses onto the keys in the colours they were judged, as slowly as it is played', async () => {
+        const { view, runtime } = await aRunPlayed('Falling');
+        const roll = runtime.controller.lastRoll;
+        if (roll === null) {
+          throw new Error('expected a run to have been written down');
+        }
+        const presses = roll.presses;
+        // The run's own nought, which a replay begins at.
+        const began = rollBeganAtMs(roll);
+        expect(new Set(presses.map((press) => press.downAtMs - began))).toEqual(new Set([1_000, 2_000]));
+
+        element<HTMLButtonElement>('run-replay').click();
+
+        // At its own speed, both chords of the run are within the lane's three
+        // seconds, the second a second further up it - each in the colour its
+        // key is lit in once it is down.
+        const scene = view.fallingScene;
+        expect(scene.map((bar) => bar.midi).sort()).toEqual(presses.map((press) => press.midi).sort());
+        for (const bar of scene) {
+          const press = presses.find((one) => one.midi === bar.midi);
+          const downAt = (press?.downAtMs ?? Number.NaN) - began;
+          expect(bar.bottom, String(bar.midi)).toBeCloseTo(1 - downAt / 3_000, 6);
+          expect(bar.shade, String(bar.midi)).toBe(runtime.controller.replayKeysAt(downAt)?.keys.get(bar.midi));
+        }
+
+        // At half speed a second of the run takes two of the screen's, and only
+        // the first chord is within the lane's three.
+        element<HTMLButtonElement>('focus-play').click();
+        element<HTMLSelectElement>('roll-speed').value = '50';
+        element<HTMLButtonElement>('focus-play').click();
+
+        const first = presses.filter((press) => press.downAtMs - began === 1_000).map((press) => press.midi);
+        expect(view.fallingScene.map((bar) => bar.midi).sort()).toEqual(first.sort());
+
+        element<HTMLButtonElement>('focus-stop').click();
       });
 
       it('leaves nothing going behind it when the page is put away', async () => {

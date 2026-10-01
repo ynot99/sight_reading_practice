@@ -104,20 +104,37 @@ export function asCanvasColour(said: string): string {
  * colour it works out to on this page, on this ground.
  */
 export function theInksOf(drawing: HTMLElement): RollInks {
+  const inks = inksFrom(
+    drawing,
+    Object.fromEntries(
+      Object.entries(INKS).map(([key, name]) => [key, `--roll-ink-${name}`]),
+    ) as Record<keyof typeof INKS, string>,
+  );
+  const font = drawing.ownerDocument.defaultView?.getComputedStyle(drawing).fontFamily ?? 'sans-serif';
+  return { ...inks, font };
+}
+
+/**
+ * Colours the stylesheet names as custom properties, each as it works out
+ * under `drawing`, ready for a canvas.
+ */
+export function inksFrom<Name extends string>(
+  drawing: HTMLElement,
+  properties: Readonly<Record<Name, string>>,
+): Record<Name, string> {
   const probe = drawing.ownerDocument.createElement('span');
   probe.hidden = true;
   drawing.append(probe);
   const view = drawing.ownerDocument.defaultView;
-  const read = (name: string): string => {
-    probe.style.color = `var(--roll-ink-${name})`;
+  const read = (property: string): string => {
+    probe.style.color = `var(${property})`;
     return asCanvasColour(view?.getComputedStyle(probe).color ?? '');
   };
   const inks = Object.fromEntries(
-    Object.entries(INKS).map(([key, name]) => [key, read(name)]),
-  ) as Omit<RollInks, 'font'>;
-  const font = view?.getComputedStyle(drawing).fontFamily ?? 'sans-serif';
+    Object.entries<string>(properties).map(([key, property]) => [key, read(property)]),
+  ) as Record<Name, string>;
   probe.remove();
-  return { ...inks, font };
+  return inks;
 }
 
 /** A canvas, as far as painting on one goes. */
@@ -130,7 +147,7 @@ export interface Surface {
 }
 
 /** A canvas made ready for a picture: sized to the screen's pixels and cleared. */
-interface Readied {
+export interface Readied {
   readonly paint: CanvasRenderingContext2D;
   readonly widePx: number;
   readonly tallPx: number;
@@ -146,7 +163,7 @@ interface Readied {
  * those are two or three to a page pixel, and a canvas of page pixels is drawn
  * at a half or a third of what the screen can show.
  */
-function readied(surface: Surface, density: number): Readied | null {
+export function readied(surface: Surface, density: number): Readied | null {
   const widePx = surface.clientWidth;
   const tallPx = surface.clientHeight;
   if (widePx <= 0 || tallPx <= 0) {
@@ -182,7 +199,7 @@ function across(view: RollViewport, widePx: number) {
 }
 
 /** A box with rounded corners, or square ones where the canvas cannot round them. */
-function box(
+export function box(
   paint: CanvasRenderingContext2D,
   x: number,
   y: number,

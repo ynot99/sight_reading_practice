@@ -1028,6 +1028,35 @@ describe('AppView', () => {
     }
   });
 
+  it('lets the notes be seen through the bar while they fall, and only then', async () => {
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    const falling = (): string | undefined => document.body.dataset['notesFalling'];
+    expect(falling()).toBeUndefined();
+
+    await pressListen(runtime.controller);
+    metronome.advanceSubdivisions(1);
+    expect(falling()).toBe('true');
+
+    // Held, the bar is what the reader is about to press.
+    element<HTMLButtonElement>('focus-play').click();
+    expect(falling()).toBeUndefined();
+    element<HTMLButtonElement>('focus-play').click();
+    expect(falling()).toBe('true');
+
+    // Nothing falls with the keyboard alone, or with the score alone.
+    element<HTMLButtonElement>('focus-keyboard').click();
+    expect(falling()).toBeUndefined();
+    element<HTMLButtonElement>('focus-keyboard').click();
+    expect(falling()).toBeUndefined();
+    element<HTMLButtonElement>('focus-keyboard').click();
+    expect(falling()).toBe('true');
+
+    element<HTMLButtonElement>('focus-stop').click();
+    expect(falling()).toBeUndefined();
+  });
+
   it('takes the keyboard away however a playback ends, not only on Stop', async () => {
     // Another frame ends the performance from inside the controller, and the
     // page hears no Stop and no end of the music.
@@ -3251,6 +3280,7 @@ describe('AppView', () => {
         expect(keys.hidden).toBe(false);
         expect(keys.dataset['shows']).toBe('falling-notes');
         expect(document.body.dataset['keysHidden']).toBeUndefined();
+        expect(document.body.dataset['notesFalling']).toBe('true');
 
         toggle.click();
         expect(runtime.controller.settings.keysShown).toBe('keys');

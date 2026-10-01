@@ -8395,6 +8395,14 @@ export class AppView {
       this.el.replayKeys.hidden = true;
       delete this.doc.body.dataset['keysHidden'];
     }
+    // Said on the page for the stylesheet, which lets the notes be seen
+    // through the bar while they fall behind it. Only while they fall: held,
+    // the bar is what the reader is about to press.
+    if (this.notesAreFalling) {
+      this.doc.body.dataset['notesFalling'] = 'true';
+    } else {
+      delete this.doc.body.dataset['notesFalling'];
+    }
     this.letTheNotesFall();
   }
 

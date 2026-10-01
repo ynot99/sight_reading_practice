@@ -2376,6 +2376,24 @@ body[data-bare='true'] .focus-aside {
 }
 
 /*
+ * The bar while notes fall behind it: faint, so they are seen through it,
+ * and without its blur, which over a lane painted every frame would be worked
+ * out again every frame. A faint button is pressed as surely as a plain one,
+ * and a pointer over the bar, or a key's focus in it, brings it back whole.
+ */
+body[data-notes-falling='true'] .focus-bar {
+  opacity: 0.3;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: opacity 200ms ease-out;
+}
+
+body[data-notes-falling='true'] .focus-bar:hover,
+body[data-notes-falling='true'] .focus-bar:has(:focus-visible) {
+  opacity: 1;
+}
+
+/*
  * The keyboard a run is shown again over, docked along the bottom.
  *
  * Under the music, where a piano is, and the width of the screen: the bar

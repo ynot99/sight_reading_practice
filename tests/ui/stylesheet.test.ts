@@ -229,6 +229,19 @@ describe('the stylesheet', () => {
     expect(body('.replay-keys__side')).toMatch(/position\s*:\s*relative/);
   });
 
+  it('lets the falling notes be seen through the bar, without a blur worked out every frame', () => {
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
+    const faint = body("body[data-notes-falling='true'] .focus-bar");
+
+    expect(faint).toMatch(/opacity\s*:\s*0\.3\b/);
+    expect(faint).toMatch(/(^|[^-])backdrop-filter\s*:\s*none/);
+    expect(faint).toMatch(/-webkit-backdrop-filter\s*:\s*none/);
+    expect(
+      body("body[data-notes-falling='true'] .focus-bar:hover, body[data-notes-falling='true'] .focus-bar:has(:focus-visible)"),
+    ).toMatch(/opacity\s*:\s*1\b/);
+  });
+
   it('shows on the keyboard button which of the three is over the page', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';

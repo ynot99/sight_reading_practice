@@ -616,10 +616,11 @@ export interface PracticeSettings {
    */
   readonly restEveryMinutes: number;
   /**
-   * Whether the keyboard is shown during replay and playback.
+   * Whether the keyboard docked under the page is shown while a run is shown
+   * again or the music is played back.
    *
-   * His: a docked keyboard showing what keys are sounding during replay
-   * and playback, with a button on the transport bar to hide or show it.
+   * One setting for both, kept between visits: the button on the bar that
+   * hides it says the same thing whichever of the two is going.
    */
   readonly showKeyboard: boolean;
 }

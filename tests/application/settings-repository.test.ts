@@ -81,7 +81,7 @@ const SETTINGS: PracticeSettings = {
   keyboard: '61',
   countInRun: 'once',
   countInPlayback: 'every',
-  showKeyboard: true,
+  keysShown: 'keys',
 };
 
 describe('practice settings codec', () => {
@@ -167,6 +167,22 @@ describe('practice settings codec', () => {
     expect(when({ dropoutBars: 0 })).toBe('always');
     // A cycle length the menu never offered is dropped rather than invented.
     expect(when({ dropoutBars: 3 })).toBeUndefined();
+  });
+
+  it('reads what stands over the page from the switch it used to be', () => {
+    // The keyboard was shown or hidden; there are three answers now. Hidden
+    // is still everything put away, and shown brings the notes falling onto
+    // the keys with it.
+    const legacy = { ...encodePracticeSettings(SETTINGS), keysShown: undefined };
+    const shown = (stored: Record<string, unknown>): string | undefined =>
+      decodePracticeSettings({ ...legacy, ...stored }, KNOWN).keysShown;
+
+    expect(shown({ showKeyboard: false })).toBe('none');
+    expect(shown({ showKeyboard: true })).toBe('falling-notes');
+    expect(shown({})).toBeUndefined();
+    // The answer stored by name wins over the old switch.
+    expect(shown({ keysShown: 'keys', showKeyboard: false })).toBe('keys');
+    expect(shown({ keysShown: 'sideways' })).toBeUndefined();
   });
 
   it('reads a click stored as never as the click turned off', () => {

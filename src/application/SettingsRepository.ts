@@ -19,7 +19,12 @@ import {
   type ClickWhen,
   type ClickPattern,
 } from './ports/IMetronome.js';
-import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from './PracticeController.js';
+import {
+  KEYS_SHOWN,
+  PLAYED_NOTE_DISPLAYS,
+  type KeysShown,
+  type PlayedNoteDisplay,
+} from './PracticeController.js';
 
 /**
  * What belongs to this device rather than to the practice.
@@ -266,6 +271,20 @@ function readPlayedNotes(value: unknown, legacyShow: unknown): PlayedNoteDisplay
   return shown === undefined ? undefined : shown ? 'live' : 'hidden';
 }
 
+/**
+ * What stands over the page, accepting the switch this setting used to be.
+ *
+ * `showKeyboard: false` put everything away, which is still `none`; a
+ * keyboard that was shown comes back with its notes falling onto it.
+ */
+function readKeysShown(value: unknown, legacyShow: unknown): KeysShown | undefined {
+  if (KEYS_SHOWN.includes(value as KeysShown)) {
+    return value as KeysShown;
+  }
+  const shown = readBoolean(legacyShow);
+  return shown === undefined ? undefined : shown ? 'falling-notes' : 'none';
+}
+
 function readKey(value: unknown): KeySignature | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -397,7 +416,7 @@ export function decodePracticeSettings(
     rulerCursor: readBoolean(value['rulerCursor']),
     rulerStrength: readNumber(value['rulerStrength'], 0, 1),
     restEveryMinutes: readInteger(value['restEveryMinutes'], 0, 180),
-    showKeyboard: readBoolean(value['showKeyboard']),
+    keysShown: readKeysShown(value['keysShown'], value['showKeyboard']),
   } as PracticeSettings);
 }
 
@@ -464,7 +483,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     rulerCursor: settings.rulerCursor,
     rulerStrength: settings.rulerStrength,
     restEveryMinutes: settings.restEveryMinutes,
-    showKeyboard: settings.showKeyboard,
+    keysShown: settings.keysShown,
   };
 }
 

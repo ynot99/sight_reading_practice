@@ -17,7 +17,7 @@ const INKS: LaneInks = {
   wrong: 'wrong',
   aside: 'aside',
   heard: 'heard',
-  ground: 'ground',
+  edge: 'edge',
 };
 
 const note = (fromMs: number, untilMs: number, midi = 60): FallingNote => ({
@@ -84,7 +84,7 @@ describe('the notes falling onto the keys', () => {
     }
   });
 
-  it('paints each note over its own key, the white keys first and the black ones over them', () => {
+  it('paints each note over its own key and edged, the white keys first and the black ones over them', () => {
     const { surface: lane, recorder } = surface(300, 200);
     const keys = new Map<number, KeyPlace>([
       [60, { left: 100, width: 20 }],
@@ -109,11 +109,13 @@ describe('the notes falling onto the keys', () => {
     expect(lane.height).toBe(400);
     expect(recorder.transform).toEqual([2, 0, 0, 2, 0, 0]);
     expect(recorder.marks.map(({ how, ink, x, y, wide, tall }) => [how, ink, x, y, wide, tall])).toEqual([
-      // A pixel in from either edge of its key.
+      // A pixel in from either edge of its key, and edged so that over the
+      // music it is still a shape.
       ['fill', 'perfect', 101, 0, 18, 100],
-      // Over the join of the two, outlined in the ground so the two stay two.
+      ['stroke', 'edge', 101, 0, 18, 100],
+      // Over the join of the two.
       ['fill', 'wrong', 115, 100, 10, 100],
-      ['stroke', 'ground', 115, 100, 10, 100],
+      ['stroke', 'edge', 115, 100, 10, 100],
     ]);
   });
 
@@ -128,6 +130,9 @@ describe('the notes falling onto the keys', () => {
       1,
     );
 
-    expect(recorder.marks.map(({ y, tall }) => [y, tall])).toEqual([[198, 2]]);
+    expect(recorder.marks.map(({ how, y, tall }) => [how, y, tall])).toEqual([
+      ['fill', 198, 2],
+      ['stroke', 198, 2],
+    ]);
   });
 });

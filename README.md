@@ -171,12 +171,14 @@ the settings again on the way back in, so a passage moved during the pause
 takes effect.
 
 **A keyboard under the music** comes up while Listen plays and while a run is
-shown again: all eighty-eight keys, the pedal beside them, and over them a lane
-the next three seconds of notes fall down, each landing on its key as it
-sounds. Under Listen they are one blue, since the machine is playing and nothing
-is judged; in a replay they are the reader's own presses, in the colours each
-was judged in. The keyboard button in the bar hides the keys and the lane
-together.
+shown again: all eighty-eight keys and the pedal beside them, with the next
+three seconds of notes falling down the whole page onto them, each landing on
+its key as it sounds. The notes are half seen and have no ground behind them,
+so the score reads through them. Under Listen they are one blue, since the
+machine is playing and nothing is judged; in a replay they are the reader's
+own presses, in the colours each was judged in. The keyboard button in the bar
+goes round three answers: the falling notes and the keyboard, the keyboard
+alone, and the score alone.
 
 **Which hand** is asked on the page itself: a switch in the margin beside each
 staff, repeated down the page the way a clef is, so there is one within reach

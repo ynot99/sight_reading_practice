@@ -5,8 +5,8 @@ import { box, inksFrom, readied, type Surface } from './rollPainter.js';
  * How far ahead the lane over the keyboard shows the music, in milliseconds
  * of it as heard.
  *
- * Long enough to see the next move of a hand coming, short enough that a
- * quick note is still a block rather than a line on a lane a few fingers tall.
+ * Long enough to see the next move of a hand coming, and short enough that
+ * the notes do not crawl down the height of a screen.
  */
 export const FALLING_AHEAD_MS = 3_000;
 
@@ -58,8 +58,8 @@ export function theFallingNotes(
   return bars;
 }
 
-/** The colours of the lane: one for each way a key is lit, and the ground. */
-export type LaneInks = Readonly<Record<KeyLight | 'ground', string>>;
+/** The colours of the lane: one for each way a key is lit, and a note's edge. */
+export type LaneInks = Readonly<Record<KeyLight | 'edge', string>>;
 
 /**
  * The stylesheet's names for them, which the keys are lit in as well: a note
@@ -71,7 +71,7 @@ const LANE_INKS: LaneInks = {
   wrong: '--keys-wrong',
   aside: '--keys-aside',
   heard: '--keys-heard',
-  ground: '--surface',
+  edge: '--keys-edge',
 };
 
 /** The lane's colours as they work out under the keyboard, on this ground. */
@@ -88,10 +88,12 @@ const CORNER_PX = 3;
 /**
  * Paints the notes falling onto the keys.
  *
- * Each over its own key and as wide as the key is drawn. The black keys'
- * notes go on last, outlined in the ground: a black key stands over the join
- * of two white ones, and so does its note, which would otherwise run into
- * theirs.
+ * Each over its own key and as wide as the key is drawn, and each edged, so
+ * a note over the music stays a shape however busy the page under it is. The
+ * black keys' notes go on last: a black key stands over the join of two
+ * white ones, and so does its note. Painted whole - how much of the score
+ * shows through is the stylesheet's, on the lane as a whole, so a note over
+ * another does not show the one under it.
  */
 export function paintTheLane(
   surface: Surface,
@@ -120,10 +122,8 @@ export function paintTheLane(
     box(paint, key.left + GAP_PX, top, wide, tall, Math.min(CORNER_PX, tall / 2, wide / 2));
     paint.fillStyle = inks[bar.shade];
     paint.fill();
-    if (isBlackKey(bar.midi)) {
-      paint.strokeStyle = inks.ground;
-      paint.lineWidth = 1;
-      paint.stroke();
-    }
+    paint.strokeStyle = inks.edge;
+    paint.lineWidth = 1;
+    paint.stroke();
   }
 }

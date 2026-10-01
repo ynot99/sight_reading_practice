@@ -2387,15 +2387,17 @@ body[data-bare='true'] .focus-aside {
  *
  * The keys are a piano's in either theme: light and dark, as the instrument's.
  *
- * Over the keys, a lane the notes fall down onto them through: a few seconds
- * of the music ahead, each note landing on its key as it sounds. Its height
- * is a share of the screen's, so a phone on its side keeps most of the page.
- * The bar stands over the two of them.
+ * Over the keys and the whole page above them, a lane the notes fall down
+ * onto them through: a few seconds of the music ahead, each note landing on
+ * its key as it sounds. It has no ground of its own and its notes are half
+ * seen, so the score stays readable under them - and it takes no touch, so
+ * the score under it is the score. The bar stands over the keys, and the
+ * notes pass behind it.
  */
 :root {
   --replay-keys: 72px;
-  --falling-notes: clamp(72px, 22vh, 200px);
-  --replay-dock: calc(var(--replay-keys) + var(--falling-notes));
+  /* How much of a falling note is seen, and so how much of the score. */
+  --falling-notes-opacity: 0.45;
 }
 
 .replay-keys {
@@ -2407,32 +2409,48 @@ body[data-bare='true'] .focus-aside {
   /* Not a verdict: what the machine plays, nobody's press. */
   --keys-heard: #2563eb;
 
+  /* The edge of a note, so one over the music stays a shape. */
+  --keys-edge: rgb(15 23 42 / 70%);
+
   position: fixed;
+  inset: 0;
+  z-index: 19;
+  display: flex;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  pointer-events: none;
+}
+
+/* The ground of the keys alone, which takes the touches that land on it. */
+.replay-keys::before {
+  content: '';
+  position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 19;
-  display: flex;
-  height: calc(var(--replay-dock) + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  height: calc(var(--replay-keys) + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border);
   background: var(--surface);
+  pointer-events: auto;
 }
 
 body[data-replaying='true'] .focus-bar {
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-dock));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-keys));
 }
 
 body[data-listening='true'] .focus-bar {
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-dock));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-keys));
 }
 
 body[data-keys-hidden='true'] .focus-bar {
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
-/* The pedal's mark, level with the keys rather than the lane over them. */
+/*
+ * The pedal's mark, level with the keys rather than the lane over them.
+ * Positioned, so it stands over the keys' ground rather than under it.
+ */
 .replay-keys__side {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   align-self: flex-end;
@@ -2473,6 +2491,7 @@ body[data-keys-hidden='true'] .focus-bar {
 .replay-keys__track {
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   width: max-content;
   min-width: 100%;
   height: 100%;
@@ -2480,7 +2499,7 @@ body[data-keys-hidden='true'] .focus-bar {
 
 .replay-keys__lane {
   position: relative;
-  flex: 0 0 var(--falling-notes);
+  flex: 1 1 auto;
 }
 
 .replay-keys__lane > canvas {
@@ -2489,13 +2508,24 @@ body[data-keys-hidden='true'] .focus-bar {
   display: block;
   width: 100%;
   height: 100%;
+  opacity: var(--falling-notes-opacity);
 }
 
-/* Positioned, so a key's place along the keyboard is counted from the row. */
+/* The keyboard alone: the lane is there and nothing falls down it. */
+.replay-keys[data-shows='keys'] .replay-keys__lane {
+  visibility: hidden;
+}
+
+/*
+ * Positioned, so a key's place along the keyboard is counted from the row.
+ * And the one part that takes a touch: a row too wide for its screen is
+ * slid along with a finger.
+ */
 .replay-keys__row {
   position: relative;
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 var(--replay-keys);
+  pointer-events: auto;
 }
 
 .replay-keys__white {
@@ -2740,14 +2770,28 @@ body[data-replaying='true'] .focus-bar[data-playing='true'] .focus-bar__row > #f
   display: none;
 }
 
-#focus-keyboard[aria-pressed='true'] {
+/*
+ * Three answers, shown rather than named: the notes falling onto the keys
+ * are drawn only while they fall, the keyboard alone is lit without them,
+ * and the score alone dims the lot. `title` says which, and what is next.
+ */
+#focus-keyboard[data-shows='falling-notes'],
+#focus-keyboard[data-shows='keys'] {
   color: var(--accent);
   border-color: var(--accent);
 }
 
-#focus-keyboard[aria-pressed='false'] {
+#focus-keyboard[data-shows='keys'] .keys-icon__falling {
+  display: none;
+}
+
+#focus-keyboard[data-shows='none'] {
   color: var(--text-muted);
   border-color: var(--border);
+}
+
+#focus-keyboard[data-shows='none'] svg {
+  opacity: 0.35;
 }
 
 body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard,

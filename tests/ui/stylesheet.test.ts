@@ -176,11 +176,11 @@ describe('the stylesheet', () => {
       rules().find((rule) => rule.selector === selector)?.body ?? '';
 
     expect(body('.replay-keys')).toMatch(/position\s*:\s*fixed/);
-    expect(body('.replay-keys')).toMatch(/bottom\s*:\s*0/);
-    // Over the keys and the lane the notes fall down onto them through.
-    expect(body("body[data-replaying='true'] .focus-bar")).toMatch(/bottom\s*:[^;]*var\(--replay-dock\)/);
-    expect(body("body[data-listening='true'] .focus-bar")).toMatch(/bottom\s*:[^;]*var\(--replay-dock\)/);
-    expect(body("body[data-keys-hidden='true'] .focus-bar")).not.toMatch(/var\(--replay-(dock|keys)\)/);
+    expect(body('.replay-keys')).toMatch(/inset\s*:\s*0/);
+    // Over the keys; the notes falling down the page pass behind it.
+    expect(body("body[data-replaying='true'] .focus-bar")).toMatch(/bottom\s*:[^;]*var\(--replay-keys\)/);
+    expect(body("body[data-listening='true'] .focus-bar")).toMatch(/bottom\s*:[^;]*var\(--replay-keys\)/);
+    expect(body("body[data-keys-hidden='true'] .focus-bar")).not.toMatch(/var\(--replay-keys\)/);
     expect(body('.replay-keys__scroller')).toMatch(/overflow-x\s*:\s*auto/);
     expect(body('.replay-keys__white')).toMatch(/min-width\s*:\s*14px/);
     expect(body('.replay-keys__white')).toMatch(/transition\s*:[^;]*background-color/);
@@ -190,35 +190,60 @@ describe('the stylesheet', () => {
     expect(body(".replay-keys__pedal[data-down='true']")).toMatch(/transition\s*:\s*none/);
   });
 
-  it('lays the lane of falling notes over the keys, as wide as they are and scrolling with them', () => {
+  it('lays the falling notes over the whole page, the score showing through and taking its touches', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';
-    const sheet = rules()
-      .map((rule) => rule.body)
-      .join('\n');
 
-    // The dock is the keys and the lane, and is as tall as the two.
-    expect(sheet).toMatch(/--replay-dock\s*:\s*calc\(\s*var\(--replay-keys\)\s*\+\s*var\(--falling-notes\)\s*\)/);
-    expect(body('.replay-keys')).toMatch(/height\s*:\s*calc\(\s*var\(--replay-dock\)/);
-    // Inside what scrolls, so the two move as one, and as wide as the row
-    // comes out - the screen, or more where the row scrolls.
+    // The height of the screen, with no ground of its own, and taking no
+    // touch: the score under it is the score.
+    expect(body('.replay-keys')).toMatch(/inset\s*:\s*0/);
+    expect(body('.replay-keys')).toMatch(/pointer-events\s*:\s*none/);
+    expect(body('.replay-keys')).not.toMatch(/background/);
+    // The keys have their ground, which does take a touch.
+    expect(body('.replay-keys::before')).toMatch(/height\s*:\s*calc\(\s*var\(--replay-keys\)/);
+    expect(body('.replay-keys::before')).toMatch(/background\s*:\s*var\(--surface\)/);
+    expect(body('.replay-keys::before')).toMatch(/pointer-events\s*:\s*auto/);
+    // Inside what scrolls, so the two move as one, as wide as the row comes
+    // out - the screen, or more where the row scrolls - with the keys at the
+    // foot and the lane all the rest.
     expect(body('.replay-keys__track')).toMatch(/flex-direction\s*:\s*column/);
+    expect(body('.replay-keys__track')).toMatch(/justify-content\s*:\s*flex-end/);
     expect(body('.replay-keys__track')).toMatch(/width\s*:\s*max-content/);
     expect(body('.replay-keys__track')).toMatch(/min-width\s*:\s*100%/);
-    expect(body('.replay-keys__lane')).toMatch(/flex\s*:\s*0 0 var\(--falling-notes\)/);
+    expect(body('.replay-keys__lane')).toMatch(/flex\s*:\s*1 1 auto/);
+    expect(body('.replay-keys__row')).toMatch(/flex\s*:\s*0 0 var\(--replay-keys\)/);
+    // Half seen, so the score reads through the notes.
     expect(body('.replay-keys__lane > canvas')).toMatch(/position\s*:\s*absolute/);
     expect(body('.replay-keys__lane > canvas')).toMatch(/width\s*:\s*100%/);
+    expect(body('.replay-keys__lane > canvas')).toMatch(/opacity\s*:\s*var\(--falling-notes-opacity\)/);
+    // The keyboard alone keeps its place and lets nothing fall.
+    expect(body(".replay-keys[data-shows='keys'] .replay-keys__lane")).toMatch(/visibility\s*:\s*hidden/);
     // A key's place along the keyboard is counted from the row, not from the
-    // dock with the pedal's mark in front of it.
+    // dock with the pedal's mark in front of it; and the row is slid with a
+    // finger where it is too wide for its screen.
     expect(body('.replay-keys__row')).toMatch(/position\s*:\s*relative/);
-    // And the pedal's mark stands level with the keys.
+    expect(body('.replay-keys__row')).toMatch(/pointer-events\s*:\s*auto/);
+    // And the pedal's mark stands level with the keys, over their ground.
     expect(body('.replay-keys__side')).toMatch(/align-self\s*:\s*flex-end/);
     expect(body('.replay-keys__side')).toMatch(/height\s*:\s*var\(--replay-keys\)/);
+    expect(body('.replay-keys__side')).toMatch(/position\s*:\s*relative/);
+  });
+
+  it('shows on the keyboard button which of the three is over the page', () => {
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    expect(body("#focus-keyboard[data-shows='falling-notes'], #focus-keyboard[data-shows='keys']")).toMatch(
+      /color\s*:\s*var\(--accent\)/,
+    );
+    expect(body("#focus-keyboard[data-shows='keys'] .keys-icon__falling")).toMatch(/display\s*:\s*none/);
+    expect(body("#focus-keyboard[data-shows='none'] svg")).toMatch(/opacity\s*:\s*0\.35/);
   });
 
   it('lights a key and the note falling onto it in one colour for each way of lighting it', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';
+    expect(body('.replay-keys')).toMatch(/--keys-edge\s*:/);
     for (const shade of ['perfect', 'good', 'wrong', 'aside', 'heard']) {
       expect(body('.replay-keys'), shade).toMatch(new RegExp(`--keys-${shade}\\s*:`));
       expect(

@@ -839,8 +839,9 @@ describe('AppView', () => {
 
     expect(document.body.dataset['listening']).toBe('true');
     expect(keys.hidden).toBe(false);
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
-    expect(toggle.title).toBe('Hide keyboard');
+    expect(keys.dataset['shows']).toBe('falling-notes');
+    expect(toggle.dataset['shows']).toBe('falling-notes');
+    expect(toggle.title).toBe('Falling notes and keyboard. Press for keyboard only.');
 
     // Metronome advance sounds the step, lit as heard: nobody played it, so
     // it is in no verdict's colour.
@@ -860,20 +861,28 @@ describe('AppView', () => {
     metronome.advanceSubdivisions(2);
     expect(keys.querySelectorAll<HTMLElement>('[data-shade="heard"]').length).toBeGreaterThan(0);
 
-    // Toggle button hides keyboard
+    // The button goes round: the keyboard alone, the score alone, and the
+    // notes falling onto the keyboard again.
     toggle.click();
-    expect(runtime.controller.settings.showKeyboard).toBe(false);
+    expect(runtime.controller.settings.keysShown).toBe('keys');
+    expect(keys.hidden).toBe(false);
+    expect(keys.dataset['shows']).toBe('keys');
+    expect(document.body.dataset['keysHidden']).toBeUndefined();
+    expect(toggle.dataset['shows']).toBe('keys');
+    expect(toggle.title).toBe('Keyboard only. Press for the score only.');
+
+    toggle.click();
+    expect(runtime.controller.settings.keysShown).toBe('none');
     expect(keys.hidden).toBe(true);
     expect(document.body.dataset['keysHidden']).toBe('true');
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
-    expect(toggle.title).toBe('Show keyboard');
+    expect(toggle.dataset['shows']).toBe('none');
+    expect(toggle.title).toBe('The score only. Press for falling notes and keyboard.');
 
-    // Toggle button shows keyboard again
     toggle.click();
-    expect(runtime.controller.settings.showKeyboard).toBe(true);
+    expect(runtime.controller.settings.keysShown).toBe('falling-notes');
     expect(keys.hidden).toBe(false);
+    expect(keys.dataset['shows']).toBe('falling-notes');
     expect(document.body.dataset['keysHidden']).toBeUndefined();
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
 
     // Stop playback cleans up keyboard and state
     element<HTMLButtonElement>('focus-stop').click();
@@ -998,9 +1007,14 @@ describe('AppView', () => {
       runTheFrames();
       expect(painted).toBe(3);
 
-      // Nor while the keyboard is put away, and again once it is back.
+      // Nor with the keyboard alone, when the picture is let go of, nor with
+      // the score alone; and again once the notes are asked for back.
       element<HTMLButtonElement>('focus-keyboard').click();
+      expect(lane.width).toBe(0);
       runTheFrames();
+      runTheFrames();
+      expect(painted).toBe(3);
+      element<HTMLButtonElement>('focus-keyboard').click();
       runTheFrames();
       expect(painted).toBe(3);
       element<HTMLButtonElement>('focus-keyboard').click();
@@ -3228,31 +3242,30 @@ describe('AppView', () => {
         expect(keys.querySelector('[data-shade]')).toBeNull();
       });
 
-      it('toggles the keyboard shown or hidden with the keyboard toggle button', async () => {
+      it('goes round the falling notes, the keyboard alone and the score alone with the keyboard button', async () => {
         const { runtime } = await aRunPlayed();
         const toggle = element<HTMLButtonElement>('focus-keyboard');
         const keys = element('replay-keys');
 
         element<HTMLButtonElement>('run-replay').click();
         expect(keys.hidden).toBe(false);
+        expect(keys.dataset['shows']).toBe('falling-notes');
         expect(document.body.dataset['keysHidden']).toBeUndefined();
-        expect(toggle.getAttribute('aria-pressed')).toBe('true');
-        expect(toggle.title).toBe('Hide keyboard');
 
-        // Click to hide
         toggle.click();
-        expect(runtime.controller.settings.showKeyboard).toBe(false);
+        expect(runtime.controller.settings.keysShown).toBe('keys');
+        expect(keys.hidden).toBe(false);
+        expect(keys.dataset['shows']).toBe('keys');
+
+        toggle.click();
+        expect(runtime.controller.settings.keysShown).toBe('none');
         expect(keys.hidden).toBe(true);
         expect(document.body.dataset['keysHidden']).toBe('true');
-        expect(toggle.getAttribute('aria-pressed')).toBe('false');
-        expect(toggle.title).toBe('Show keyboard');
 
-        // Click to show again
         toggle.click();
-        expect(runtime.controller.settings.showKeyboard).toBe(true);
+        expect(runtime.controller.settings.keysShown).toBe('falling-notes');
         expect(keys.hidden).toBe(false);
         expect(document.body.dataset['keysHidden']).toBeUndefined();
-        expect(toggle.getAttribute('aria-pressed')).toBe('true');
 
         element<HTMLButtonElement>('focus-stop').click();
         expect(keys.hidden).toBe(true);

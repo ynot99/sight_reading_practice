@@ -55,7 +55,12 @@ import {
   type CountInWhen,
 } from '../application/ports/IMetronome.js';
 import { TimeToday } from '../application/TimeToday.js';
-import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/PracticeController.js';
+import {
+  KEYS_SHOWN,
+  PLAYED_NOTE_DISPLAYS,
+  type KeysShown,
+  type PlayedNoteDisplay,
+} from '../application/PracticeController.js';
 import { pieceOfKey, type PassageHistory, type PracticeReading } from '../application/PracticeHistory.js';
 import {
   drawTheKeyboard,
@@ -1258,6 +1263,13 @@ function reportToTheConsole(what: string, error: unknown): void {
 function theWheelsTurn(event: WheelEvent): number {
   return event.deltaY !== 0 ? event.deltaY : event.deltaX;
 }
+
+/** What the keyboard's button says each of its answers is. */
+const KEYS_SHOWN_SAID: Readonly<Record<KeysShown, string>> = {
+  'falling-notes': 'Falling notes and keyboard',
+  keys: 'Keyboard only',
+  none: 'The score only',
+};
 
 /**
  * Vanilla DOM presentation layer.
@@ -4388,7 +4400,9 @@ export class AppView {
     });
 
     this.listen(this.el.focusKeyboard, 'click', () => {
-      controller.updateSettings({ showKeyboard: !controller.settings.showKeyboard });
+      // On round the three, in the order they are listed.
+      const at = KEYS_SHOWN.indexOf(controller.settings.keysShown);
+      controller.updateSettings({ keysShown: KEYS_SHOWN[(at + 1) % KEYS_SHOWN.length] ?? 'falling-notes' });
       this.syncControlsFromSettings();
     });
 
@@ -8329,22 +8343,28 @@ export class AppView {
   }
 
   /**
-   * The keyboard docked under the page, as the music and the reader's choice
-   * have it now.
+   * The keyboard docked under the page and the notes falling onto it, as the
+   * music and the reader's choice have them now.
    *
-   * Up while a run is shown again or the music is played back, unless the
-   * reader has hidden it, and put out when neither is going. Worked out from
-   * the controller every time, never from what the page last said, so
-   * whatever ends a performance takes the keyboard away the next time the
+   * Up while a run is shown again or the music is played back, as much of it
+   * as the reader has asked for, and put out when neither is going. Worked
+   * out from the controller every time, never from what the page last said,
+   * so whatever ends a performance takes the keyboard away the next time the
    * page is brought up to date - not only Stop and the music's own end.
    */
   private applyKeyboardVisibility(): void {
     const controller = this.runtime.controller;
-    const show = controller.settings.showKeyboard;
-    this.el.focusKeyboard.setAttribute('aria-pressed', String(show));
-    const title = show ? 'Hide keyboard' : 'Show keyboard';
+    const shows = controller.settings.keysShown;
+    const show = shows !== 'none';
+    // What is over the page now, and what a press brings: the button goes
+    // round three, and a picture of three is not enough to say which comes
+    // next.
+    const next = KEYS_SHOWN[(KEYS_SHOWN.indexOf(shows) + 1) % KEYS_SHOWN.length] ?? 'falling-notes';
+    const title = `${KEYS_SHOWN_SAID[shows]}. Press for ${KEYS_SHOWN_SAID[next].toLowerCase()}.`;
+    this.el.focusKeyboard.dataset['shows'] = shows;
     this.el.focusKeyboard.title = title;
     this.el.focusKeyboard.setAttribute('aria-label', title);
+    this.el.replayKeys.dataset['shows'] = shows;
 
     const inReplay = this.replayRoll !== null;
     const inPlayback = controller.isListening || controller.isListeningPaused;
@@ -8357,8 +8377,11 @@ export class AppView {
     }
     if (!active) {
       lightTheKeys(this.replayKeyboard, new Map(), false);
+    }
+    if (!active || shows !== 'falling-notes') {
       // Nothing is falling, and the picture of what was is let go of with
-      // the memory it holds. Painting sizes it again.
+      // the memory it holds - the height of the screen of it. Painting sizes
+      // it again.
       this.replayKeyboard.lane.width = 0;
     }
 
@@ -8403,10 +8426,13 @@ export class AppView {
     );
   }
 
-  /** Whether notes are falling now, rather than held or gone. */
+  /** Whether notes are falling now, rather than held, put away or gone. */
   private get notesAreFalling(): boolean {
+    const controller = this.runtime.controller;
     return (
-      !this.el.replayKeys.hidden && (this.runtime.controller.isListening || this.replayIsSounding)
+      !this.el.replayKeys.hidden &&
+      controller.settings.keysShown === 'falling-notes' &&
+      (controller.isListening || this.replayIsSounding)
     );
   }
 

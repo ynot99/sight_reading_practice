@@ -1651,11 +1651,21 @@
             Toggle showing the docked keyboard during replay and playback.
             Visible only mid-run during replay and playback.
           -->
+          <!--
+            Three answers on one button: the notes falling onto the keyboard,
+            the keyboard alone, or the score alone. The falling notes are
+            drawn over the keys while they fall.
+          -->
           <button id="focus-keyboard" type="button" data-mid-run
-            class="focus-bar__button focus-bar__button--icon focus-bar__toggle"
-            aria-pressed="true" title="Hide keyboard" aria-label="Hide keyboard">
+            class="focus-bar__button focus-bar__button--icon" data-shows="falling-notes"
+            title="Falling notes and keyboard. Press for keyboard only."
+            aria-label="Falling notes and keyboard. Press for keyboard only.">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path fill-rule="evenodd" clip-rule="evenodd" d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm2 0v14h14V5H5zm3 0v8h2V5H8zm6 0v8h2V5h-2z" />
+              <g class="keys-icon__falling">
+                <rect x="6.5" y="2" width="3" height="6" rx="1" />
+                <rect x="14.5" y="4" width="3" height="4" rx="1" />
+              </g>
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M3 12a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7zm2 0v7h14v-7H5zm3 0v4h2v-4H8zm6 0v4h2v-4h-2z" />
             </svg>
           </button>
 

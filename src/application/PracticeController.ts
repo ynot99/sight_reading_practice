@@ -112,6 +112,15 @@ export const PLAYED_NOTE_DISPLAYS = ['live', 'while-held', 'at-end', 'hidden'] a
 
 export type PlayedNoteDisplay = (typeof PLAYED_NOTE_DISPLAYS)[number];
 
+/**
+ * What stands over the music while it is played back or a run is shown
+ * again, in the order the button goes round them: the notes falling onto the
+ * keyboard, the keyboard alone, or nothing but the page.
+ */
+export const KEYS_SHOWN = ['falling-notes', 'keys', 'none'] as const;
+
+export type KeysShown = (typeof KEYS_SHOWN)[number];
+
 /** Presses kept for the judging log; a bounded ring, not a history. */
 const JUDGING_LOG_LENGTH = 300;
 /**
@@ -630,13 +639,15 @@ export interface PracticeSettings {
    */
   readonly restEveryMinutes: number;
   /**
-   * Whether the keyboard docked under the page is shown while a run is shown
-   * again or the music is played back.
+   * What stands over the page while a run is shown again or the music is
+   * played back: see `KEYS_SHOWN`.
    *
-   * One setting for both, kept between visits: the button on the bar that
-   * hides it says the same thing whichever of the two is going.
+   * One setting for both, kept between visits: the button on the bar says
+   * the same thing whichever of the two is going. One answer of three rather
+   * than two switches, because the notes fall onto the keys and have nothing
+   * to fall onto without them.
    */
-  readonly showKeyboard: boolean;
+  readonly keysShown: KeysShown;
 }
 
 export interface ExerciseLoadedEvent {
@@ -1011,7 +1022,7 @@ export class PracticeController {
       rulerCursor: false,
       rulerStrength: 1,
       restEveryMinutes: 30,
-      showKeyboard: true,
+      keysShown: 'falling-notes',
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();

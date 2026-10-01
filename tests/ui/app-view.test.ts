@@ -128,6 +128,7 @@ import {
   longExercise,
   offBeatAfterALongNote,
   oneHandWalksUnderAHeldNote,
+  unisonInTwoVoices,
   p,
   twoBarExercise,
 } from '../support/fixtures.js';
@@ -3472,6 +3473,16 @@ describe('AppView', () => {
         expect(ghosts[i]?.fromMs).toBeCloseTo(notes[i]?.fromMs ?? 0, 1);
         expect(ghosts[i]?.untilMs).toBeCloseTo(notes[i]?.untilMs ?? 0, 1);
       }
+    });
+
+    it('outlines a unison once under the score, as it is drawn once', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(unisonInTwoVoices({ tempoBpm: 60 }));
+
+      element<HTMLButtonElement>('focus-roll').click();
+
+      expect(view.rollScene?.ghosts.length).toBe(view.rollScene?.notes.length);
     });
 
     it('allows choosing a passage and practising it from the score roll', async () => {

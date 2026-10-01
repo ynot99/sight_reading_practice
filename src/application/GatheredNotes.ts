@@ -5,7 +5,7 @@ import {
   spanMs,
   velocityAt,
 } from '../domain/model/Exercise.js';
-import { soundsFor } from '../domain/timeline/Timeline.js';
+import { notesStruckAt, soundsFor } from '../domain/timeline/Timeline.js';
 import type { ExerciseTimeline, TimelineOrnament } from '../domain/timeline/Timeline.js';
 import { lastOfLeadingRun } from '../shared/leadingRun.js';
 
@@ -196,11 +196,10 @@ export class GatheredNotes {
     const exercise = this.timeline.exercise;
     const staffNumber = this.staffNumber;
     const at = (ticks: number): number => elapsedMsAt(exercise, ticks) - this.beganMs;
-    const longest = new Map<string, ScheduledNote>();
+    const gathered = new Map<string, ScheduledNote>();
 
-    const sounding = step.notes.filter(
-      (note) => staffNumber === null || note.staffNumber === staffNumber,
-    );
+    // Each key once, a unison written in two voices being one key.
+    const sounding = notesStruckAt(step, staffNumber);
     // Dynamics are placed as a bar and an offset into it, which is how the
     // format places a direction; the timeline counts from the beginning of
     // the piece.
@@ -228,33 +227,24 @@ export class GatheredNotes {
       // the damper lifts whatever the writer marked it.
       const endTicks = Math.max(step.onsetTicks + soundsFor(note), heldUntil ?? 0);
       const until = at(endTicks);
-      // Two voices may notate the same sounding pitch at the same instant.
-      // That is one key on the keyboard and must be one sound here: striking
-      // it twice doubles the attack into an audible knock. The longer of the
-      // two wins, since the key stays down until the last of them lets go.
-      const seen = String(note.midi);
-      const previous = longest.get(seen);
-      if (previous === undefined || previous.untilMs < until) {
-        // A rolled note is released with the rest of the chord - the hand
-        // lifts once - so only the attack moves. `Math.max` is the guard
-        // for a roll that a very short step has squeezed to nothing.
-        longest.set(seen, {
-          midi: note.midi,
-          atMs: startsAt,
-          untilMs: Math.max(until, startsAt),
-          // What the page asks for where this note falls: the level in
-          // force, lifted or lowered by any hairpin drawn over it. A
-          // staff's own marks are preferred to the piece's, which is how a
-          // piano part with the left hand marked `p` under a melody marked
-          // `f` is written.
-          velocity: velocityAt(
-            exercise,
-            step.measureIndex,
-            step.onsetTicks - measureStart,
-            note.staffNumber,
-          ),
-        });
-      }
+      // A rolled note is released with the rest of the chord - the hand
+      // lifts once - so only the attack moves. `Math.max` is the guard for a
+      // roll that a very short step has squeezed to nothing.
+      gathered.set(String(note.midi), {
+        midi: note.midi,
+        atMs: startsAt,
+        untilMs: Math.max(until, startsAt),
+        // What the page asks for where this note falls: the level in force,
+        // lifted or lowered by any hairpin drawn over it. A staff's own marks
+        // are preferred to the piece's, which is how a piano part with the
+        // left hand marked `p` under a melody marked `f` is written.
+        velocity: velocityAt(
+          exercise,
+          step.measureIndex,
+          step.onsetTicks - measureStart,
+          note.staffNumber,
+        ),
+      });
     }
 
     // The ornaments printed here, laid in front of the note they lean on.
@@ -282,7 +272,7 @@ export class GatheredNotes {
           continue;
         }
         for (const pitch of ornament.pitches) {
-          longest.set(`grace${String(hand)}.${String(index)}:${String(pitch.midi)}`, {
+          gathered.set(`grace${String(hand)}.${String(index)}:${String(pitch.midi)}`, {
             midi: pitch.midi,
             atMs: where.atMs,
             untilMs: where.untilMs,
@@ -297,7 +287,7 @@ export class GatheredNotes {
       }
     }
 
-    this.unsettled.push(...longest.values());
+    this.unsettled.push(...gathered.values());
     // Nothing gathered after this step can sound before the step ahead of it:
     // an ornament of the next step leans back no further than this one.
     const settledUpTo = this.previousMs;

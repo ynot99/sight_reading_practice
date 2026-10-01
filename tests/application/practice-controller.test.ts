@@ -50,6 +50,7 @@ import {
   partialVoiceExercise,
   tiedExercise,
   twoBarExercise,
+  unisonInTwoVoices,
 } from '../support/fixtures.js';
 import { UNSEEN_NOTE } from '../support/printed.js';
 import { measureCount } from '../../src/domain/model/Exercise.js';
@@ -2197,6 +2198,38 @@ describe('hearing the hand you are not reading', () => {
     midi.noteOn(p('C3').midi, 4_920);
 
     expect(instrument.played.map((note) => note.atMs)).toEqual([4_920, 5_920, 6_920, 7_920]);
+  });
+
+  it('strikes a key the other hand writes in two voices once', async () => {
+    // A unison in the accompaniment is one key, as it is in the reader's own
+    // hand and in a playback. Struck twice it knocks.
+    const base = twoBarExercise({ tempoBpm: 60 });
+    const doubled = {
+      ...base,
+      staves: [
+        ...base.staves,
+        {
+          staffNumber: 2,
+          voice: 3,
+          clef: 'bass' as const,
+          clefChanges: [],
+          measures: [
+            bar(noteEntry(p('C3'), Duration.HALF), restEntry(Duration.HALF)),
+            bar(restEntry(Duration.WHOLE)),
+          ],
+        },
+      ],
+    };
+    const rig = createController(true);
+    await rig.controller.openScore(doubled);
+    rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true, modeId: WAIT_MODE_ID });
+    rig.controller.start();
+
+    rig.midi.noteOn(p('C4').midi, rig.clock.now());
+
+    expect(rig.instrument.played.filter((each) => each.midi === p('C3').midi)).toHaveLength(1);
+    // For the whole note, the longer of the two.
+    expect(rig.instrument.stopped.find((each) => each.midi === p('C3').midi)?.atMs).toBe(4_000);
   });
 
   it('takes back the rest of the other hand when the reader comes in ahead of it', async () => {
@@ -5360,6 +5393,18 @@ describe('rhythm only, sounding the music', () => {
     rig.midi.noteOn(MIDI.G4);
 
     expect(soundedNotes(rig.instrument)).toEqual([MIDI.C4]);
+  });
+
+  it('sounds a unison once, for as long as the longer of its voices', async () => {
+    const rig = createController(true);
+    await rig.controller.openScore(unisonInTwoVoices({ tempoBpm: 60 }));
+    rig.controller.updateSettings({ rhythmOnly: true, hearTheOtherHand: false, rhythmSoundsTheMusic: true });
+    rig.controller.start();
+
+    rig.midi.noteOn(MIDI.G4, 0);
+
+    expect(rig.instrument.played.filter((note) => note.midi === MIDI.C4)).toHaveLength(1);
+    expect(rig.instrument.stopped.find((note) => note.midi === MIDI.C4)?.atMs).toBe(2_000);
   });
 
   it('sounds nothing of its own where it was not asked to', async () => {

@@ -34,7 +34,7 @@ import type { Take } from '../../src/application/PerformanceRecorder.js';
 import type { MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import type { BeatWeight } from '../../src/application/ports/IMetronome.js';
 import { Duration } from '../../src/domain/model/Duration.js';
-import { MIDI, offBeatAfterALongNote, twoBarExercise } from '../support/fixtures.js';
+import { MIDI, offBeatAfterALongNote, twoBarExercise, unisonInTwoVoices } from '../support/fixtures.js';
 import { createHarness } from '../support/harness.js';
 
 function beatOf(atMs: number, weight: BeatWeight, positionTicks: number): RolledBeat {
@@ -1114,6 +1114,14 @@ describe('the roll of a score', () => {
     expect(roll.beats[0]).toEqual({ atMs: 0, weight: 'downbeat', positionTicks: 0 });
     expect(roll.beats[1]).toEqual({ atMs: 1_000, weight: 'beat', positionTicks: Duration.QUARTER.ticks });
     expect(roll.beats[4]).toEqual({ atMs: 4_000, weight: 'downbeat', positionTicks: Duration.QUARTER.ticks * 4 });
+  });
+
+  it('draws a unison as one press, as long as the longer of its voices', () => {
+    const exercise = unisonInTwoVoices({ tempoBpm: 60 });
+    const roll = rollOfTheScore(exercise, buildTimeline(exercise));
+
+    const struck = roll.presses.filter((press) => press.midi === MIDI.C4 && press.downAtMs === 0);
+    expect(struck.map((press) => press.upAtMs)).toEqual([2_000]);
   });
 
   it('converts pedal marks into pedal spans', () => {

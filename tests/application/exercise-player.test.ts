@@ -14,6 +14,7 @@ import {
   tiedExercise,
   staccatoInTheBass,
   twoBarExercise,
+  unisonInTwoVoices,
 } from '../support/fixtures.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
@@ -930,6 +931,16 @@ describe('listening to an exercise', () => {
 
     const struck = instrument.played.map((note) => `${note.midi}@${note.atMs}`);
     expect(new Set(struck).size).toBe(struck.length);
+  });
+
+  it('holds a unison as long as the longer of its voices', () => {
+    const unison = unisonInTwoVoices({ tempoBpm: 60 });
+    const { player, metronome, instrument } = rig(unison);
+    player.start(buildTimeline(unison), { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(8);
+
+    expect(instrument.played.filter((note) => note.midi === MIDI.C4 && note.atMs === 0)).toHaveLength(1);
+    expect(instrument.stopped.find((note) => note.midi === MIDI.C4)?.atMs).toBe(2_000);
   });
 
   it('lets the pedal hold a note past its written length', () => {

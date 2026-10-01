@@ -556,6 +556,35 @@ export function staccatoInTheBass(overrides: ExerciseOverrides = {}): Exercise {
 }
 
 /**
+ * Two bars of the two-bar fixture with a second treble voice writing the same
+ * C4 on the first beat: half a bar, where the melody holds it for a beat.
+ *
+ * A unison is one key, struck once and held as long as the longer of its
+ * voices. The longer is written first, so a rule that kept whichever came last
+ * would show.
+ */
+export function unisonInTwoVoices(overrides: ExerciseOverrides = {}): Exercise {
+  const base = twoBarExercise(overrides);
+  return {
+    ...base,
+    id: 'fixture-unison',
+    staves: [
+      {
+        staffNumber: 1,
+        voice: 3,
+        clef: 'treble',
+        clefChanges: [],
+        measures: [
+          bar(noteEntry(p('C4'), Duration.HALF), restEntry(Duration.HALF)),
+          bar(restEntry(Duration.WHOLE)),
+        ],
+      },
+      ...base.staves,
+    ],
+  };
+}
+
+/**
  * The treble holds a whole note while the bass walks four quarters under it.
  *
  * The shape that shows the two clocks of a waiting mode apart: the reader owes

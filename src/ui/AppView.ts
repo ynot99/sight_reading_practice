@@ -85,7 +85,7 @@ const SETTINGS_WENT: Readonly<Record<SettingsSyncOutcome, string>> = {
   same: 'already the same',
 };
 import { drawTheProfile } from './profileChart.js';
-import { expectedFor, keysHeldAt, soundsFor } from '../domain/timeline/Timeline.js';
+import { expectedFor, keysHeldAt, notesStruckAt, soundsFor } from '../domain/timeline/Timeline.js';
 import {
   clicksBefore,
   clicksUpTo,
@@ -9388,21 +9388,13 @@ export class AppView {
     const hand = isScore ? null : this.runtime.controller.settings.handStaff;
     const asked: RollGhost[] = [];
     for (const step of timeline.steps) {
-      const notes =
-        hand === null ? step.notes : step.notes.filter((note) => note.staffNumber === hand);
-      const seen = new Map<number, number>();
-      for (const note of notes) {
-        const length = soundsFor(note);
-        const existing = seen.get(note.midi);
-        if (existing === undefined || existing < length) {
-          seen.set(note.midi, length);
-        }
-      }
-      for (const [midi, length] of seen.entries()) {
+      // The same notes, for the same lengths, that the score's own roll is
+      // drawn from and the playback sounds: worked out in one place.
+      for (const note of notesStruckAt(step, hand)) {
         asked.push({
-          midi,
+          midi: note.midi,
           fromTicks: step.onsetTicks,
-          untilTicks: step.onsetTicks + length,
+          untilTicks: step.onsetTicks + soundsFor(note),
           stepIndex: step.index,
         });
       }

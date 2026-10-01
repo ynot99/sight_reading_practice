@@ -119,9 +119,52 @@ export function expectedFor(
   if (staffNumber === null) {
     return step.expectedMidi;
   }
-  return [
-    ...new Set(step.notes.filter((note) => note.staffNumber === staffNumber).map((note) => note.midi)),
-  ];
+  return [...new Set(notesInTheHand(step, staffNumber).map((note) => note.midi))];
+}
+
+/**
+ * Each key a step strikes, once, for one hand or for both.
+ *
+ * Two voices may write the same pitch at the same instant. That is one key on
+ * the keyboard and one sound: struck twice it knocks. The key stays down until
+ * the last of them lets go, so the note kept is the one that sounds longest.
+ *
+ * The one place this is worked out. Everything that sounds a step, draws it or
+ * lights its keys asks here and then asks `soundsFor` how long - so the notes
+ * a picture draws, the outlines under them and what the playback sounds cannot
+ * come to disagree, as they once did, each having worked it out for itself.
+ * Ascending, as a step's notes are.
+ */
+export function notesStruckAt(
+  step: TimelineStep,
+  staffNumber: number | null,
+): readonly TimelineNote[] {
+  return longestOnEachKey(notesInTheHand(step, staffNumber));
+}
+
+/** The same, for the hands other than this one: what is not the reader's. */
+export function notesStruckOutside(
+  step: TimelineStep,
+  staffNumber: number,
+): readonly TimelineNote[] {
+  return longestOnEachKey(step.notes.filter((note) => note.staffNumber !== staffNumber));
+}
+
+function notesInTheHand(step: TimelineStep, staffNumber: number | null): readonly TimelineNote[] {
+  return staffNumber === null
+    ? step.notes
+    : step.notes.filter((note) => note.staffNumber === staffNumber);
+}
+
+function longestOnEachKey(notes: readonly TimelineNote[]): readonly TimelineNote[] {
+  const longest = new Map<number, TimelineNote>();
+  for (const note of notes) {
+    const known = longest.get(note.midi);
+    if (known === undefined || soundsFor(known) < soundsFor(note)) {
+      longest.set(note.midi, note);
+    }
+  }
+  return [...longest.values()];
 }
 
 /**
@@ -143,9 +186,8 @@ export function keysHeldAt(
     if (step.onsetTicks > ticks) {
       break;
     }
-    for (const note of step.notes) {
-      const inTheHand = staffNumber === null || note.staffNumber === staffNumber;
-      if (inTheHand && step.onsetTicks + soundsFor(note) > ticks) {
+    for (const note of notesStruckAt(step, staffNumber)) {
+      if (step.onsetTicks + soundsFor(note) > ticks) {
         held.add(note.midi);
       }
     }

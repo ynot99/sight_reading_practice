@@ -16,6 +16,8 @@ import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyR
 import {
   buildTimeline,
   expectedFor,
+  notesStruckAt,
+  notesStruckOutside,
   soundsFor,
   type ExerciseTimeline,
   type TimelineStep,
@@ -3745,20 +3747,8 @@ export class PracticeController {
     if (exercise === null) {
       return;
     }
-    const hand = this.currentSettings.handStaff;
     const measureStart = barLines(exercise)[step.measureIndex]?.startTicks ?? 0;
-    // Two voices on one pitch are one key, held as long as the longer of them.
-    const longest = new Map<number, TimelineStep['notes'][number]>();
-    for (const note of step.notes) {
-      if (hand !== null && note.staffNumber !== hand) {
-        continue;
-      }
-      const known = longest.get(note.midi);
-      if (known === undefined || soundsFor(known) < soundsFor(note)) {
-        longest.set(note.midi, note);
-      }
-    }
-    for (const note of longest.values()) {
+    for (const note of notesStruckAt(step, this.currentSettings.handStaff)) {
       this.deps.instrument.play(
         note.midi,
         velocityAt(exercise, step.measureIndex, step.onsetTicks - measureStart, note.staffNumber),
@@ -3778,10 +3768,9 @@ export class PracticeController {
     if (hand === null || exercise === null) {
       return;
     }
-    for (const note of step.notes) {
-      if (note.staffNumber === hand) {
-        continue;
-      }
+    // Each key once, as the reader's own hand is sounded: a unison written in
+    // two voices is one key, and struck twice it knocks.
+    for (const note of notesStruckOutside(step, hand)) {
       this.deps.instrument.play(note.midi, OTHER_HAND_VELOCITY, atMs);
       // Sounded for as long as it sounds rather than as long as it is written,
       // which is the same number unless the writer marked it short.

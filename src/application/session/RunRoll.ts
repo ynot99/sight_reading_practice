@@ -7,7 +7,7 @@ import {
   velocityAt,
   type Exercise,
 } from '../../domain/model/Exercise.js';
-import { soundsFor, type ExerciseTimeline } from '../../domain/timeline/Timeline.js';
+import { notesStruckAt, soundsFor, type ExerciseTimeline } from '../../domain/timeline/Timeline.js';
 import type { BeatWeight } from '../ports/IMetronome.js';
 import type {
   MidiNoteOffEvent,
@@ -935,25 +935,16 @@ export function rollOfTheScore(exercise: Exercise, timeline: ExerciseTimeline): 
     const downAtMs = elapsedMsAt(exercise, step.onsetTicks);
     const measureStart = bars[step.measureIndex]?.startTicks ?? 0;
     const offsetTicks = step.onsetTicks - measureStart;
-    const seen = new Map<number, RolledPress>();
-    for (const note of step.notes) {
-      const upAtMs = elapsedMsAt(exercise, step.onsetTicks + soundsFor(note));
-      const velocity = velocityAt(exercise, step.measureIndex, offsetTicks, note.staffNumber);
-      const existing = seen.get(note.midi);
-      if (existing === undefined || (existing.upAtMs ?? 0) < upAtMs) {
-        seen.set(note.midi, {
-          midi: note.midi,
-          downAtMs,
-          upAtMs,
-          velocity,
-          verdict: 'correct',
-          stepIndex: step.index,
-          deviationMs: null,
-        });
-      }
-    }
-    for (const press of seen.values()) {
-      presses.push(press);
+    for (const note of notesStruckAt(step, null)) {
+      presses.push({
+        midi: note.midi,
+        downAtMs,
+        upAtMs: elapsedMsAt(exercise, step.onsetTicks + soundsFor(note)),
+        velocity: velocityAt(exercise, step.measureIndex, offsetTicks, note.staffNumber),
+        verdict: 'correct',
+        stepIndex: step.index,
+        deviationMs: null,
+      });
     }
   }
 

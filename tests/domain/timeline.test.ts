@@ -3,8 +3,14 @@ import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, restEntry, silenceEntry } from '../../src/domain/model/Exercise.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
-import { buildTimeline, keysHeldAt, soundsFor } from '../../src/domain/timeline/Timeline.js';
-import type { TimelineNote } from '../../src/domain/timeline/Timeline.js';
+import {
+  buildTimeline,
+  keysHeldAt,
+  notesStruckAt,
+  notesStruckOutside,
+  soundsFor,
+} from '../../src/domain/timeline/Timeline.js';
+import type { TimelineNote, TimelineStep } from '../../src/domain/timeline/Timeline.js';
 import {
   MIDI,
   bar,
@@ -296,5 +302,52 @@ describe('the keys held down at a place in the music', () => {
 
     expect(keysHeldAt(timeline, q, 1)).toEqual([MIDI.D4]);
     expect(keysHeldAt(timeline, q, 2)).toEqual([MIDI.C3]);
+  });
+});
+
+describe('the keys a step strikes', () => {
+  const q = Duration.QUARTER.ticks;
+
+  function note(name: string, staffNumber: number, durationTicks: number, staccato = false): TimelineNote {
+    return {
+      pitch: p(name),
+      midi: p(name).midi,
+      staffNumber,
+      durationTicks,
+      arpeggiated: false,
+      staccato,
+    };
+  }
+
+  /** C4 written by both hands - a whole note marked short, and a dotted half - and E4 by one. */
+  const step: TimelineStep = {
+    index: 0,
+    onsetTicks: 0,
+    durationTicks: q,
+    measureIndex: 0,
+    beat: 1,
+    notes: [note('C4', 1, q * 4, true), note('C4', 2, q * 3), note('E4', 1, q)],
+    expectedMidi: [MIDI.C4, MIDI.E4],
+    ornamentMidi: [],
+    ornaments: [],
+  };
+
+  it('strikes a key two voices write once, as the one that sounds longer', () => {
+    // The dotted half sounds three beats; the whole note marked short, two.
+    // Longer as written is not longer as heard.
+    const struck = notesStruckAt(step, null);
+
+    expect(struck.map((each) => each.midi)).toEqual([MIDI.C4, MIDI.E4]);
+    expect(struck.map((each) => soundsFor(each))).toEqual([q * 3, q]);
+  });
+
+  it('keeps to the hand asked about, and to the others', () => {
+    expect(notesStruckAt(step, 1).map((each) => [each.midi, soundsFor(each)])).toEqual([
+      [MIDI.C4, q * 2],
+      [MIDI.E4, q],
+    ]);
+    expect(notesStruckOutside(step, 1).map((each) => [each.midi, each.staffNumber])).toEqual([
+      [MIDI.C4, 2],
+    ]);
   });
 });

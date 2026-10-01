@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ExercisePlayer } from '../../src/application/ExercisePlayer.js';
+import { ExercisePlayer, type HeardNote } from '../../src/application/ExercisePlayer.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
@@ -1366,5 +1366,153 @@ describe('a performance follows the reader as a run does', () => {
 
     expect(finished).toHaveLength(1);
     expect(player.isPlaying).toBe(false);
+  });
+});
+
+describe('the notes heard between two moments', () => {
+  /** Two bars, the second at twice the speed: a lap is six seconds. */
+  const quickening = (): Exercise => ({
+    ...twoBarExercise({ tempoBpm: 60 }),
+    tempoChanges: [{ measureIndex: 1, offsetTicks: 0, tempoBpm: 120 }],
+  });
+  const named = (notes: readonly HeardNote[]): string[] =>
+    notes.map((note) => `${String(note.midi)}@${String(note.fromMs)}-${String(note.untilMs)}`).sort();
+
+  it('shows every note before it sounds, at the moments the instrument is given', () => {
+    // Read off the list the instrument is handed its notes from, so what is
+    // drawn of the music coming and what is heard of it cannot part - through
+    // a count-in, a change of tempo and the seams of a repeat.
+    const { player, metronome, instrument, timeline } = rig(quickening());
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      countInBars: 1,
+      repeat: true,
+    });
+
+    const firstShown = new Map<string, number>();
+    const shown = new Map<string, HeardNote>();
+    let now = 0;
+    for (let tick = 0; tick < 40; tick += 1) {
+      now = metronome.advanceSubdivisions(1)[0]?.scheduledTimeMs ?? now;
+      for (const note of player.notesHeardBetween(now, now + 3_000)) {
+        const key = `${String(note.midi)}@${String(note.fromMs)}`;
+        shown.set(key, note);
+        if (!firstShown.has(key)) {
+          firstShown.set(key, now);
+        }
+      }
+    }
+
+    const handed = instrument.played.map((note) => `${String(note.midi)}@${String(note.atMs)}`);
+    const stops = instrument.stopped.map((note) => `${String(note.midi)}@${String(note.atMs)}`);
+    // Three laps and more, so the seams are in it.
+    expect(now).toBeGreaterThan(4_000 + 3 * 6_000);
+    for (const key of handed) {
+      expect(shown.has(key), key).toBe(true);
+    }
+    for (const [key, note] of shown) {
+      if (note.fromMs > now) {
+        continue;
+      }
+      expect(handed, key).toContain(key);
+      expect(stops, key).toContain(`${String(note.midi)}@${String(note.untilMs)}`);
+      // In good time: a tick is at most a second apart here, so a note is
+      // seen at least two of its three seconds before it sounds - the first
+      // ones included, which fall through the count-in.
+      expect(note.fromMs - (firstShown.get(key) ?? note.fromMs), key).toBeGreaterThanOrEqual(2_000);
+    }
+  });
+
+  it('keeps a note that is still sounding', () => {
+    // The bass holds its whole bar under four quarters: two and a half
+    // seconds in, it has been sounding all that time and is still.
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(3);
+
+    expect(named(player.notesHeardBetween(2_500, 2_600))).toEqual([
+      `${String(MIDI.C3)}@0-4000`,
+      `${String(MIDI.E4)}@2000-3000`,
+    ]);
+  });
+
+  it('leaves out what begins where the stretch asked about ends', () => {
+    // Asked from nought to a second, the second beat is not in it - whether
+    // it has already been handed to the instrument or is still to be.
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(1);
+
+    expect(named(player.notesHeardBetween(0, 1_000))).toEqual([
+      `${String(MIDI.C3)}@0-4000`,
+      `${String(MIDI.C4)}@0-1000`,
+    ]);
+    expect(named(player.notesHeardBetween(2_500, 3_000))).toEqual([
+      `${String(MIDI.C3)}@0-4000`,
+      `${String(MIDI.E4)}@2000-3000`,
+    ]);
+    // And what has ended by where it begins: the first beat is over at one
+    // second, the bass under it is not.
+    expect(named(player.notesHeardBetween(1_000, 1_500))).toEqual([
+      `${String(MIDI.C3)}@0-4000`,
+      `${String(MIDI.D4)}@1000-2000`,
+    ]);
+  });
+
+  it('puts the music where the count-in will end, at the tempo it is counted at', () => {
+    // Begun at the second bar, which is twice as fast: the bar of count-in
+    // is beaten at the music's own speed and lasts two seconds, not four.
+    const { player, metronome, timeline } = rig(quickening());
+    const second = timeline.steps.findIndex((step) => step.measureIndex === 1);
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      countInBars: 1,
+      fromIndex: second,
+    });
+    metronome.advanceSubdivisions(1);
+
+    expect(named(player.notesHeardBetween(0, 2_500))).toEqual([
+      `${String(MIDI.G2)}@2000-3000`,
+      `${String(MIDI.D3)}@2000-3000`,
+      `${String(MIDI.G4)}@2000-4000`,
+    ]);
+  });
+
+  it('shows the next time round, and none once this one is to be the last', () => {
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      repeat: true,
+    });
+    metronome.advanceSubdivisions(7);
+    // The opening of the next lap is already with the instrument, the beat
+    // after it not yet - and neither is heard once the repeat is turned off.
+    const nextLap = (): string[] =>
+      named(player.notesHeardBetween(7_500, 9_500)).filter((note) => !note.includes('@4000'));
+
+    expect(nextLap()).toEqual([
+      `${String(MIDI.C3)}@8000-12000`,
+      `${String(MIDI.C4)}@8000-9000`,
+      `${String(MIDI.D4)}@9000-10000`,
+    ]);
+
+    player.setRepeating(false);
+    expect(nextLap()).toEqual([]);
+  });
+
+  it('shows nothing once the music is held', () => {
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(2);
+
+    player.pause();
+
+    expect(player.notesHeardBetween(1_000, 4_000)).toEqual([]);
   });
 });

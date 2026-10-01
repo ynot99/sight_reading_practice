@@ -147,34 +147,71 @@ export function theStepAt(roll: RunRoll, timeline: ExerciseTimeline, atMs: numbe
 /** How a key is lit while it is down: the verdict its press was given. */
 export type KeyShade = 'perfect' | 'good' | 'wrong' | 'aside';
 
+/** A key the run pressed: when it was down, and how its press was judged. */
+export interface ReplayedPress {
+  readonly midi: number;
+  /** When it went down, on the run's own clock. */
+  readonly fromMs: number;
+  /** When it came up - for ever, for a key still held when the run stopped. */
+  readonly untilMs: number;
+  readonly shade: KeyShade;
+}
+
+/**
+ * Every key the run pressed, each in the colours its mark on the page is
+ * drawn in, so a key and the ring it left say the same thing.
+ *
+ * A press nothing was decided about - struck while the music was elsewhere, a
+ * note of a chord already collected, the hand being heard - is set aside: it
+ * was played, and it was not a fault.
+ *
+ * Worked out once for a replay and read by everything that shows a press -
+ * the key lit while it is down, and the note falling onto it before - which
+ * have to agree on its colour and on its moments.
+ */
+export function thePressesOfTheRun(
+  roll: RunRoll,
+  timeline: ExerciseTimeline,
+  judging: ReplayJudging,
+): readonly ReplayedPress[] {
+  const began = rollBeganAtMs(roll);
+  return roll.presses.map((press) => ({
+    midi: press.midi,
+    fromMs: press.downAtMs - began,
+    untilMs: press.upAtMs === null ? Number.POSITIVE_INFINITY : press.upAtMs - began,
+    shade: shadeOf(press.verdict, press.stepIndex, press.deviationMs, timeline, judging),
+  }));
+}
+
 /**
  * The keys down a moment into the run, each lit as its press was judged.
- *
- * In the colours its mark on the page is drawn in, so a key and the ring it
- * left say the same thing. A press nothing was decided about - struck while the
- * music was elsewhere, a note of a chord already collected, the hand being
- * heard - is lit as set aside: it was played, and it was not a fault.
  *
  * Down from the moment the key went down until it came up, or until the end of
  * the run for one still held when it stopped.
  */
 export function theKeysDownAt(
-  roll: RunRoll,
-  timeline: ExerciseTimeline,
-  judging: ReplayJudging,
+  presses: readonly ReplayedPress[],
   atMs: number,
 ): ReadonlyMap<number, KeyShade> {
-  const began = rollBeganAtMs(roll);
   const down = new Map<number, KeyShade>();
-  for (const press of roll.presses) {
-    const from = press.downAtMs - began;
-    const until = press.upAtMs === null ? Number.POSITIVE_INFINITY : press.upAtMs - began;
-    if (atMs < from || atMs >= until) {
-      continue;
+  for (const press of presses) {
+    if (press.fromMs <= atMs && atMs < press.untilMs) {
+      down.set(press.midi, press.shade);
     }
-    down.set(press.midi, shadeOf(press.verdict, press.stepIndex, press.deviationMs, timeline, judging));
   }
   return down;
+}
+
+/**
+ * The presses down at some moment between two: those still held at the
+ * first, and those that go down before the second.
+ */
+export function thePressesBetween(
+  presses: readonly ReplayedPress[],
+  fromMs: number,
+  untilMs: number,
+): readonly ReplayedPress[] {
+  return presses.filter((press) => press.untilMs > fromMs && press.fromMs < untilMs);
 }
 
 function shadeOf(

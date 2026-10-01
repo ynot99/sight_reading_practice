@@ -36,7 +36,7 @@ import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
-import type { PlayerEventMap } from './ExercisePlayer.js';
+import type { HeardNote, PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type {
   ChosenClickWhen,
@@ -84,10 +84,13 @@ import {
   theKeysDownAt,
   theMarksOfTheRun,
   thePedalDownAt,
+  thePressesBetween,
+  thePressesOfTheRun,
   theStepAt,
   type KeyShade,
   type ReplayJudging,
   type ReplayMark,
+  type ReplayedPress,
 } from './runReplay.js';
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
@@ -850,6 +853,7 @@ export class PracticeController {
     readonly roll: RunRoll;
     readonly judging: ReplayJudging;
     readonly marks: readonly ReplayMark[];
+    readonly presses: readonly ReplayedPress[];
     drawn: number;
     drawnUpToMs: number;
     atStep: number | null;
@@ -2127,6 +2131,7 @@ export class PracticeController {
       roll,
       judging,
       marks: theMarksOfTheRun(roll, timeline, judging),
+      presses: thePressesOfTheRun(roll, timeline, judging),
       drawn: 0,
       drawnUpToMs: 0,
       atStep: null,
@@ -2210,14 +2215,31 @@ export class PracticeController {
    */
   replayKeysAt(atMs: number): { readonly keys: ReadonlyMap<number, KeyShade>; readonly pedal: boolean } | null {
     const replay = this.replay;
-    const timeline = this.timeline;
-    if (replay === null || timeline === null) {
+    if (replay === null) {
       return null;
     }
     return {
-      keys: theKeysDownAt(replay.roll, timeline, replay.judging, atMs),
+      keys: theKeysDownAt(replay.presses, atMs),
       pedal: thePedalDownAt(replay.roll, atMs),
     };
+  }
+
+  /**
+   * The presses of the run being shown again that are down at some moment
+   * between two, on the run's own clock - none where no run is. See
+   * `thePressesOfTheRun`.
+   */
+  replayPressesBetween(fromMs: number, untilMs: number): readonly ReplayedPress[] {
+    const replay = this.replay;
+    return replay === null ? [] : thePressesBetween(replay.presses, fromMs, untilMs);
+  }
+
+  /**
+   * The notes of the playback heard between two moments on the clock - none
+   * where nothing is playing. See `ExercisePlayer.notesHeardBetween`.
+   */
+  playbackNotesBetween(fromMs: number, untilMs: number): readonly HeardNote[] {
+    return this.player?.notesHeardBetween(fromMs, untilMs) ?? [];
   }
 
   /**

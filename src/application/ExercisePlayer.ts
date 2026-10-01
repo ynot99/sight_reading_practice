@@ -1,4 +1,5 @@
 
+import { ticksToMilliseconds } from '../domain/model/Duration.js';
 import { barLines, positionOfTick, spanMs } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { GatheredNotes, type ScheduledNote } from './GatheredNotes.js';
@@ -26,6 +27,13 @@ import {
 
 /** Which hands to sound. `null` is both. */
 export type ListeningHand = number | null;
+
+/** A note of a performance, at the moments on the clock it is heard. */
+export interface HeardNote {
+  readonly midi: number;
+  readonly fromMs: number;
+  readonly untilMs: number;
+}
 
 export interface ListeningOptions {
   /** Staff to sound alone, or `null` for the whole texture. */
@@ -234,6 +242,18 @@ export class ExercisePlayer {
   /** Bars of pulse in front of the music, and where they end in plan ticks. */
   private countInBars = 0;
   private countInTicks = 0;
+  /** The one tempo the count-in is beaten at, as the plan has it. */
+  private countInBpm = 0;
+  /**
+   * Where the music will begin on the clock, while the count-in is still
+   * being counted and it has not begun.
+   */
+  private countedInToMs: number | null = null;
+  /**
+   * The notes handed to the instrument that may still be sounding, at the
+   * moments it was given them.
+   */
+  private handedOver: HeardNote[] = [];
 
   /** Where the stretch ends, in the timeline's own ticks. */
   private endOf(toIndex: number | undefined): number {
@@ -383,6 +403,51 @@ export class ExercisePlayer {
   }
 
   /**
+   * The notes heard between two moments on the clock: those still sounding
+   * at the first, and those that begin before the second.
+   *
+   * Read off the list the instrument is handed its notes from, in the same
+   * terms - the moment the music began, the laps, where this reading ends -
+   * so a picture of the music coming cannot disagree with the sound of it.
+   * Worked out again beside the player, the two would part at the first
+   * repeat, the first hand changed mid-performance, or the first passage
+   * moved while it played.
+   *
+   * During the count-in the music has no moment yet, so it is put where the
+   * count-in will end: the count-in is beaten at one tempo, the one the music
+   * is about to start at, so how long is left of it is one multiplication.
+   */
+  notesHeardBetween(fromMs: number, untilMs: number): readonly HeardNote[] {
+    // Nothing either way once it has stopped: what it had handed over is
+    // forgotten, and there is no list left to read.
+    const began = this.startedAtMs ?? this.countedInToMs;
+    if (began === null) {
+      return [];
+    }
+    const last = this.endsAtMs;
+    // A note handed over past the end of the last reading is taken back when
+    // the reading ends, before it can begin: the repeat was turned off after
+    // the next time round had started to be handed over.
+    const endsAt = last === null ? Number.POSITIVE_INFINITY : began + last;
+    const heard = this.handedOver.filter(
+      (note) => note.untilMs > fromMs && note.fromMs < untilMs && note.fromMs < endsAt,
+    );
+    for (let at = this.nextToSchedule; ; at += 1) {
+      const note = this.noteAt(at);
+      if (note === null || began + note.atMs >= untilMs) {
+        break;
+      }
+      if (last !== null && note.atMs >= last) {
+        break;
+      }
+      if (began + note.untilMs > fromMs) {
+        heard.push({ midi: note.midi, fromMs: began + note.atMs, untilMs: began + note.untilMs });
+      }
+    }
+    return heard;
+  }
+
+  /**
    * Holds the performance where it is, rather than ending it.
    *
    * The sound stops the way it does on any stop - what is already on the
@@ -435,6 +500,12 @@ export class ExercisePlayer {
     this.countInTicks = this.countInBars * startsIn.ticksPerMeasure;
     const first = timeline.at(Math.max(0, Math.round(options.fromIndex ?? 0)));
     this.fromTicks = first?.onsetTicks ?? 0;
+    // The tempo the plan opens with, which is the count-in's.
+    this.countInBpm =
+      metronomeTempos(timeline.exercise, {
+        countInBars: this.countInBars,
+        fromTicks: this.fromTicks,
+      })[0]?.bpm ?? timeline.exercise.tempoBpm;
     this.atIndex = first?.index ?? 0;
     this.announcedIndex = null;
     // Whatever was being held, this is now what is happening instead.
@@ -646,6 +717,8 @@ export class ExercisePlayer {
       this.deps.instrument.stopAll();
     }
     this.pending = null;
+    this.handedOver = [];
+    this.countedInToMs = null;
     this.playing = false;
   }
 
@@ -736,11 +809,20 @@ export class ExercisePlayer {
     // in front of a piece that changes speed needs no arithmetic at all.
     if (this.startedAtMs === null) {
       if (tick.positionTicks < this.countInTicks) {
+        // Taken again at every tick of it, from the latest, so the moment
+        // drifts no further than one subdivision's arithmetic.
+        this.countedInToMs =
+          tick.scheduledTimeMs +
+          ticksToMilliseconds(this.countInTicks - tick.positionTicks, this.countInBpm);
         return;
       }
       this.startedAtMs = tick.scheduledTimeMs;
     }
     const from = this.startedAtMs;
+    // What has finished sounding is no longer anything to show.
+    if (this.handedOver.some((note) => note.untilMs <= tick.scheduledTimeMs)) {
+      this.handedOver = this.handedOver.filter((note) => note.untilMs > tick.scheduledTimeMs);
+    }
 
     // Scheduled straight through the seam, which is the whole of being
     // seamless. The notes of the next lap are handed over while the last of
@@ -763,6 +845,11 @@ export class ExercisePlayer {
       }
       this.nextToSchedule += 1;
       this.scheduledThroughMs = Math.max(this.scheduledThroughMs, from + note.atMs);
+      this.handedOver.push({
+        midi: note.midi,
+        fromMs: from + note.atMs,
+        untilMs: from + note.untilMs,
+      });
       this.deps.instrument.play(note.midi, note.velocity, from + note.atMs);
       timeTheStart(
         'player: first note handed to the instrument',

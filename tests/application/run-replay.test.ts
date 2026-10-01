@@ -4,6 +4,8 @@ import {
   theKeysDownAt,
   theMarksOfTheRun,
   thePedalDownAt,
+  thePressesBetween,
+  thePressesOfTheRun,
   theStepAt,
   type ReplayJudging,
 } from '../../src/application/runReplay.js';
@@ -164,9 +166,13 @@ describe('the keys down, and the pedal, a moment into the run', () => {
       press({ downAtMs: PLAYED_AT + 1_400, upAtMs: PLAYED_AT + 1_600, midi: MIDI.C5, verdict: 'wrong', stepIndex: 1 }),
       press({ downAtMs: PLAYED_AT + 1_500, upAtMs: null, midi: MIDI.G2, verdict: 'other-hand', stepIndex: 1 }),
     ]);
-    const at = (ms: number): [number, string][] => [...theKeysDownAt(run, timeline, IN_TIME, ms)];
+    const presses = thePressesOfTheRun(run, timeline, IN_TIME);
+    const at = (ms: number): [number, string][] => [...theKeysDownAt(presses, ms)];
 
+    // Lit the moment it goes down, and dark the moment it comes up.
+    expect(at(0)).toEqual([[MIDI.C4, 'perfect']]);
     expect(at(400)).toEqual([[MIDI.C4, 'perfect']]);
+    expect(at(800)).toEqual([]);
     // Let go of: dark again.
     expect(at(1_000)).toEqual([]);
     expect(at(1_550)).toEqual([
@@ -176,6 +182,28 @@ describe('the keys down, and the pedal, a moment into the run', () => {
     ]);
     // Still held when the run stopped, so held to the end.
     expect(at(60_000)).toEqual([[MIDI.G2, 'aside']]);
+  });
+
+  it('gives the presses down at some moment between two, each in its colour', () => {
+    // What falls onto the keys before they go down: a press still held at
+    // the first moment, or going down before the second. One that came up
+    // exactly at the first, or goes down exactly at the second, is not there.
+    const run = roll([
+      press({ downAtMs: PLAYED_AT, upAtMs: PLAYED_AT + 800, stepIndex: 0, midi: MIDI.C4, deviationMs: 10 }),
+      press({ downAtMs: PLAYED_AT + 1_300, upAtMs: PLAYED_AT + 1_900, stepIndex: 1, midi: MIDI.D4, deviationMs: 300 }),
+      press({ downAtMs: PLAYED_AT + 1_500, upAtMs: null, midi: MIDI.G2, verdict: 'other-hand', stepIndex: 1 }),
+    ]);
+    const presses = thePressesOfTheRun(run, timeline, IN_TIME);
+    const between = (from: number, until: number): [number, string][] =>
+      thePressesBetween(presses, from, until).map((one) => [one.midi, one.shade]);
+
+    expect(between(800, 1_300)).toEqual([]);
+    expect(between(799, 1_301)).toEqual([
+      [MIDI.C4, 'perfect'],
+      [MIDI.D4, 'good'],
+    ]);
+    // Held when the run stopped, so down to the end of it.
+    expect(between(30_000, 33_000)).toEqual([[MIDI.G2, 'aside']]);
   });
 
   it('says the pedal is down while it was, and to the end where it was never let up', () => {

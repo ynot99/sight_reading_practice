@@ -66,6 +66,7 @@ import {
   type ReplayKeyboard,
 } from './replayKeys.js';
 import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
+import { replayFits } from '../application/runReplay.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barLines, barNumberOf, measureCount, pedalHeldUntil, spanMs } from '../domain/model/Exercise.js';
@@ -1437,6 +1438,11 @@ export class AppView {
     readonly what: string;
     readonly why: string;
     readonly isScore?: boolean;
+    /**
+     * Whether it was played against the score open now, as that score is now -
+     * so that the notes the score asks for belong under it.
+     */
+    readonly ofTheOpenScore: boolean;
   } | null = null;
 
   /** The reading the sheet over the list is showing, so its buttons know theirs. */
@@ -2811,6 +2817,7 @@ export class AppView {
       roll,
       what: describeReading(reading),
       why: 'A reading kept from before: its bars are not this score’s to practise.',
+      ofTheOpenScore: this.wasPlayedOnTheOpenScore(reading, roll),
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -8043,6 +8050,24 @@ export class AppView {
     return this.keptScoreFor(piece) !== null;
   }
 
+  /**
+   * Whether a kept reading was played on the score open now, as it is now.
+   *
+   * The same question a replay asks before it puts a reading on the notes. A
+   * generated exercise is another one every time it is made, so a reading of
+   * one was never played on the one open.
+   */
+  private wasPlayedOnTheOpenScore(reading: PracticeReading, roll: RunRoll): boolean {
+    const piece = pieceOfKey(reading.key);
+    const timeline = this.runtime.controller.currentTimeline;
+    return (
+      piece.startsWith('score:') &&
+      piece === this.runtime.controller.pieceKey &&
+      timeline !== null &&
+      replayFits(roll, timeline)
+    );
+  }
+
   /** The kept score a reading's piece is, by the title it was filed under. */
   private keptScoreFor(piece: string): StoredScoreSummary | null {
     if (!piece.startsWith('score:')) {
@@ -9071,6 +9096,7 @@ export class AppView {
       roll: rollOfTheTake(take),
       what: 'A recording',
       why: 'Free playing: no bars to practise.',
+      ofTheOpenScore: false,
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -9097,6 +9123,7 @@ export class AppView {
       what: exercise.title || 'The score',
       why: '',
       isScore: true,
+      ofTheOpenScore: true,
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -9331,6 +9358,12 @@ export class AppView {
   private theNotesAskedFor(): readonly RollGhost[] {
     const timeline = this.runtime.controller.currentTimeline;
     if (!this.el.rollGhosts.checked || timeline === null) {
+      return [];
+    }
+    // Only under what was played on this score. Under a reading of another
+    // piece the open score's notes are somebody else's question drawn beneath
+    // its answer.
+    if (this.theOtherRollShowing?.ofTheOpenScore === false) {
       return [];
     }
     const isScore = this.theOtherRollShowing?.isScore ?? false;

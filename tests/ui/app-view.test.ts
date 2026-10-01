@@ -39,7 +39,9 @@ import {
   rollBeganAtMs,
   rollEndedAtMs,
   theMusicsBeats,
+  type RunRoll,
 } from '../../src/application/session/RunRoll.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 
@@ -7515,6 +7517,100 @@ describe('AppView', () => {
       // keep or to practise.
       expect(element<HTMLButtonElement>('roll-practise').disabled).toBe(true);
       expect(element('roll-keep').hidden).toBe(true);
+    });
+
+    /** A roll of one judged press on the first step, over a bar of four beats. */
+    function aRollOnTheFirstStep(): RunRoll {
+      return {
+        presses: [{
+          midi: 60,
+          downAtMs: 0,
+          upAtMs: 500,
+          velocity: 0.6,
+          verdict: 'correct',
+          stepIndex: 0,
+          deviationMs: 0,
+        }],
+        beats: [0, 1, 2, 3, 4].map((beat) => ({
+          atMs: beat * 1_000,
+          weight: beat % 4 === 0 ? ('downbeat' as const) : ('beat' as const),
+          positionTicks: beat * Duration.QUARTER.ticks,
+        })),
+        pedal: [],
+        rushes: [],
+        truncated: false,
+      };
+    }
+
+    it('draws none of the open score’s notes under a reading of another piece', async () => {
+      // They were drawn from whatever was open, so a reading of Clair de Lune
+      // looked at over another piece had that piece's notes as its outlines.
+      const rig = createRig();
+      await rig.view.initialize();
+      await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      rig.runtime.history.record('score:Clair de Lune', readingKept({ roll: aRollOnTheFirstStep() }));
+      element<HTMLButtonElement>('focus-readings').click();
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      element<HTMLButtonElement>('reading-roll').click();
+
+      expect(rig.view.rollScene?.notes.length).toBeGreaterThan(0);
+      expect(rig.view.rollScene?.ghosts).toHaveLength(0);
+    });
+
+    it('draws the notes asked for under a reading of the score that is open', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      rig.runtime.history.record(rig.runtime.controller.pieceKey, readingKept({ roll: aRollOnTheFirstStep() }));
+      element<HTMLButtonElement>('focus-readings').click();
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      element<HTMLButtonElement>('reading-roll').click();
+
+      expect(rig.view.rollScene?.ghosts.length).toBeGreaterThan(0);
+    });
+
+    it('draws none under a reading of a generated exercise, which is another one each time', async () => {
+      // Filed under the level it came from, which is the level open now - and
+      // still not the notes it was played on.
+      const rig = createRig();
+      await rig.view.initialize();
+      rig.runtime.history.record(rig.runtime.controller.pieceKey, readingKept({ roll: aRollOnTheFirstStep() }));
+      element<HTMLButtonElement>('focus-readings').click();
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      element<HTMLButtonElement>('reading-roll').click();
+
+      expect(rig.view.rollScene?.ghosts).toHaveLength(0);
+    });
+
+    it('draws none under a reading the open score no longer fits, being changed since', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      const fitted = aRollOnTheFirstStep();
+      const press = fitted.presses[0];
+      if (press === undefined) {
+        throw new Error('No press in the roll.');
+      }
+      // A step the two bars do not have.
+      const roll = { ...fitted, presses: [{ ...press, stepIndex: 99 }] };
+      rig.runtime.history.record(rig.runtime.controller.pieceKey, readingKept({ roll }));
+      element<HTMLButtonElement>('focus-readings').click();
+      element('readings-list').querySelector('button')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+
+      element<HTMLButtonElement>('reading-roll').click();
+
+      expect(rig.view.rollScene?.ghosts).toHaveLength(0);
     });
 
     it('offers no picture of a reading that has none', async () => {

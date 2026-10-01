@@ -118,4 +118,30 @@ export function scrollToShow(keyboard: ReplayKeyboard, midi: number): number | n
   return Math.max(0, along.offsetLeft + along.offsetWidth / 2 - scroller.clientWidth / 2);
 }
 
+/**
+ * Slides the row round to `midi` when it is out of sight, and leaves the row
+ * where it is when it is not.
+ *
+ * Where the screen is too narrow for the whole keyboard, a key lit off the
+ * edge is a press nobody sees. One already in view is not chased, or the row
+ * would swim with every note. The same for a replay and a playback, so it is
+ * written once.
+ */
+export function keepInView(keyboard: ReplayKeyboard, midi: number): void {
+  const scroller = keyboard.scroller;
+  const key = keyboard.keys.get(midi);
+  if (key === undefined) {
+    return;
+  }
+  // A keyboard that fits its screen is never moved: `scrollToShow` says so.
+  const along = isBlackKey(midi) ? (key.parentElement ?? key) : key;
+  const inView =
+    along.offsetLeft >= scroller.scrollLeft &&
+    along.offsetLeft + along.offsetWidth <= scroller.scrollLeft + scroller.clientWidth;
+  const to = inView ? null : scrollToShow(keyboard, midi);
+  if (to !== null && typeof scroller.scrollTo === 'function') {
+    scroller.scrollTo({ left: to, behavior: 'smooth' });
+  }
+}
+
 export { MIDDLE_C };

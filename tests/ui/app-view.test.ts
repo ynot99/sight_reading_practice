@@ -899,6 +899,25 @@ describe('AppView', () => {
     element<HTMLButtonElement>('focus-stop').click();
   });
 
+  it('takes the keyboard away however a playback ends, not only on Stop', async () => {
+    // Another frame ends the performance from inside the controller, and the
+    // page hears no Stop and no end of the music.
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    const keys = element('replay-keys');
+    await pressListen(runtime.controller);
+    metronome.advanceSubdivisions(2);
+    expect(keys.hidden).toBe(false);
+
+    frameButton('wait').click();
+
+    expect(runtime.controller.isListening).toBe(false);
+    expect(keys.hidden).toBe(true);
+    expect(document.body.dataset['listening']).toBeUndefined();
+    expect(keys.querySelector('[data-shade]')).toBeNull();
+  });
+
   it('brings the keyboard round to where the playback begins, not to the top of the piece', async () => {
     const { view, runtime } = createRig();
     await view.initialize();
@@ -931,6 +950,48 @@ describe('AppView', () => {
     // Bar two's lowest note is G2, centred: not bar one's C3.
     expect(scrolledTo).toBe(p('G2').midi * 10 + 5 - 100);
 
+    element<HTMLButtonElement>('focus-stop').click();
+  });
+
+  it('slides the keyboard along to a note struck out of sight during playback', async () => {
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    // Two hundred pixels of a keyboard laid a key every ten, since jsdom lays
+    // nothing out.
+    const keys = element('replay-keys');
+    const scroller = keys.querySelector<HTMLElement>('.replay-keys__scroller');
+    if (scroller === null) {
+      throw new Error('No scroller under the keys.');
+    }
+    let left = 0;
+    const slides: number[] = [];
+    Object.defineProperty(scroller, 'scrollWidth', { value: 1_000, configurable: true });
+    Object.defineProperty(scroller, 'clientWidth', { value: 200, configurable: true });
+    Object.defineProperty(scroller, 'scrollLeft', {
+      configurable: true,
+      get: () => left,
+      set: (to: number) => {
+        left = to;
+      },
+    });
+    Object.defineProperty(scroller, 'scrollTo', {
+      configurable: true,
+      value: (options: ScrollToOptions) => {
+        slides.push(options.left ?? Number.NaN);
+      },
+    });
+    for (const key of keys.querySelectorAll<HTMLElement>('[data-midi]')) {
+      Object.defineProperty(key, 'offsetLeft', { value: Number(key.dataset['midi']) * 10 });
+      Object.defineProperty(key, 'offsetWidth', { value: 10 });
+    }
+    await pressListen(runtime.controller);
+    // Opened on C3, which leaves D4 past the right-hand edge.
+    expect(left).toBe(p('C3').midi * 10 + 5 - 100);
+
+    metronome.advanceSubdivisions(2);
+
+    expect(slides).toEqual([p('D4').midi * 10 + 5 - 100]);
     element<HTMLButtonElement>('focus-stop').click();
   });
 

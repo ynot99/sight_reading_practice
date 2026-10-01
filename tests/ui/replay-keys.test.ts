@@ -4,6 +4,7 @@ import {
   drawTheKeyboard,
   HIGHEST_KEY,
   isBlackKey,
+  keepInView,
   lightTheKeys,
   LOWEST_KEY,
   scrollToShow,
@@ -86,5 +87,37 @@ describe('the keyboard a run is shown again over', () => {
     lay(keyboard.scroller, { scrollWidth: 1100, clientWidth: 1100 });
 
     expect(scrollToShow(keyboard, 60)).toBeNull();
+  });
+
+  it('slides the row round to a key out of sight, and leaves it where the key already shows', () => {
+    const keyboard = aKeyboard();
+    const lay = (element: HTMLElement, sizes: Record<string, number>): void => {
+      for (const [name, value] of Object.entries(sizes)) {
+        Object.defineProperty(element, name, { value, configurable: true });
+      }
+    };
+    const slides: number[] = [];
+    Object.defineProperty(keyboard.scroller, 'scrollTo', {
+      configurable: true,
+      value: (options: ScrollToOptions) => {
+        slides.push(options.left ?? Number.NaN);
+      },
+    });
+    lay(keyboard.scroller, { scrollWidth: 728, clientWidth: 360, scrollLeft: 0 });
+    const c4 = keyboard.keys.get(60) as HTMLElement;
+
+    lay(c4, { offsetLeft: 322, offsetWidth: 14 });
+    keepInView(keyboard, 60);
+    expect(slides).toEqual([]);
+
+    lay(c4, { offsetLeft: 500, offsetWidth: 14 });
+    keepInView(keyboard, 60);
+    // A black key is judged by the white one it stands on.
+    keepInView(keyboard, 61);
+    expect(slides).toEqual([500 + 7 - 180, 500 + 7 - 180]);
+
+    lay(keyboard.scroller, { scrollWidth: 1100, clientWidth: 1100 });
+    keepInView(keyboard, 60);
+    expect(slides).toHaveLength(2);
   });
 });

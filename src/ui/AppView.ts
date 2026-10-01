@@ -58,6 +58,7 @@ import { PLAYED_NOTE_DISPLAYS, type PlayedNoteDisplay } from '../application/Pra
 import { pieceOfKey, type PassageHistory, type PracticeReading } from '../application/PracticeHistory.js';
 import {
   drawTheKeyboard,
+  keepInView,
   lightTheKeys,
   MIDDLE_C,
   scrollToShow,
@@ -3253,9 +3254,6 @@ export class AppView {
 
   private showThePerformance(): void {
     const controller = this.runtime.controller;
-    if (!controller.isListening && !controller.isListeningPaused && this.doc.body.dataset['listening'] === 'true') {
-      this.stopShowingPlaybackKeys();
-    }
     this.applyPlayingChrome();
     this.updateButtons(controller.session?.status ?? 'idle');
     this.describeStopping();
@@ -4794,7 +4792,6 @@ export class AppView {
     // is a no-op where there is none, which is cheaper than a branch that
     // has to be kept in step with what Stop already did.
     controller.stopListening();
-    this.stopShowingPlaybackKeys();
     this.showThePerformance();
   }
 
@@ -5657,7 +5654,8 @@ export class AppView {
       // transport went back to offering Listen, and Stop went grey, over a
       // performance that was playing.
       controller.playbackEvents.on('started', ({ stepIndex }) => {
-        this.doc.body.dataset['listening'] = 'true';
+        // Up before it is scrolled: a keyboard not shown has no width to
+        // scroll across.
         this.applyKeyboardVisibility();
         // The first notes it will sound, from where it begins: a passage deep
         // in the piece was shown the keys of its first bar.
@@ -5711,7 +5709,6 @@ export class AppView {
         // The beats it had promised go with it: they were promises about a
         // performance that is over.
         this.forgetTheBeats();
-        this.stopShowingPlaybackKeys();
         this.showThePerformance();
       }),
     );
@@ -7867,6 +7864,7 @@ export class AppView {
     // можеш і пілюлю з last run теж ховати?".
     this.offerTheLastReading();
     this.el.focusBar.dataset['playing'] = String(playing);
+    this.applyKeyboardVisibility();
     // His: hold the screen while there is a run, and let it go when there is
     // not - including while one is paused, because a reader who has stopped to
     // work something out is still at the keyboard. Asked here because this is
@@ -8095,21 +8093,9 @@ export class AppView {
     if (state === null) {
       return;
     }
-    const keyboard = this.replayKeyboard;
-    lightTheKeys(keyboard, state.keys, state.pedal);
-    const scroller = keyboard.scroller;
-    const lowest = Math.min(...state.keys.keys());
-    const key = keyboard.keys.get(lowest);
-    if (key === undefined || scroller.scrollWidth <= scroller.clientWidth) {
-      return;
-    }
-    const along = key.classList.contains('replay-keys__black') ? (key.parentElement ?? key) : key;
-    const inView =
-      along.offsetLeft >= scroller.scrollLeft &&
-      along.offsetLeft + along.offsetWidth <= scroller.scrollLeft + scroller.clientWidth;
-    const to = inView ? null : scrollToShow(keyboard, lowest);
-    if (to !== null && typeof scroller.scrollTo === 'function') {
-      scroller.scrollTo({ left: to, behavior: 'smooth' });
+    lightTheKeys(this.replayKeyboard, state.keys, state.pedal);
+    if (state.keys.size > 0) {
+      keepInView(this.replayKeyboard, Math.min(...state.keys.keys()));
     }
   }
 
@@ -8221,18 +8207,35 @@ export class AppView {
   }
 
   /**
-   * Applies the reader's choice about showing the docked keyboard during replay and playback.
+   * The keyboard docked under the page, as the music and the reader's choice
+   * have it now.
+   *
+   * Up while a run is shown again or the music is played back, unless the
+   * reader has hidden it, and put out when neither is going. Worked out from
+   * the controller every time, never from what the page last said, so
+   * whatever ends a performance takes the keyboard away the next time the
+   * page is brought up to date - not only Stop and the music's own end.
    */
   private applyKeyboardVisibility(): void {
-    const show = this.runtime.controller.settings.showKeyboard;
+    const controller = this.runtime.controller;
+    const show = controller.settings.showKeyboard;
     this.el.focusKeyboard.setAttribute('aria-pressed', String(show));
     const title = show ? 'Hide keyboard' : 'Show keyboard';
     this.el.focusKeyboard.title = title;
     this.el.focusKeyboard.setAttribute('aria-label', title);
 
     const inReplay = this.replayRoll !== null;
-    const inPlayback = this.doc.body.dataset['listening'] === 'true';
+    const inPlayback = controller.isListening || controller.isListeningPaused;
     const active = inReplay || inPlayback;
+    // Said on the page for the stylesheet, which lifts the bar over the keys.
+    if (inPlayback) {
+      this.doc.body.dataset['listening'] = 'true';
+    } else {
+      delete this.doc.body.dataset['listening'];
+    }
+    if (!active) {
+      lightTheKeys(this.replayKeyboard, new Map(), false);
+    }
 
     if (active && show) {
       this.el.replayKeys.hidden = false;
@@ -8273,31 +8276,10 @@ export class AppView {
       pedalDown,
     );
 
-    const midis = expectedFor(step, hand);
-    if (midis.length === 0) {
-      return;
+    const struck = expectedFor(step, hand);
+    if (struck.length > 0) {
+      keepInView(this.replayKeyboard, Math.min(...struck));
     }
-    const keyboard = this.replayKeyboard;
-    const scroller = keyboard.scroller;
-    const lowest = Math.min(...midis);
-    const key = keyboard.keys.get(lowest);
-    if (key === undefined || scroller.scrollWidth <= scroller.clientWidth) {
-      return;
-    }
-    const along = key.classList.contains('replay-keys__black') ? (key.parentElement ?? key) : key;
-    const inView =
-      along.offsetLeft >= scroller.scrollLeft &&
-      along.offsetLeft + along.offsetWidth <= scroller.scrollLeft + scroller.clientWidth;
-    const to = inView ? null : scrollToShow(keyboard, lowest);
-    if (to !== null && typeof scroller.scrollTo === 'function') {
-      scroller.scrollTo({ left: to, behavior: 'smooth' });
-    }
-  }
-
-  private stopShowingPlaybackKeys(): void {
-    delete this.doc.body.dataset['listening'];
-    lightTheKeys(this.replayKeyboard, new Map(), false);
-    this.applyKeyboardVisibility();
   }
 
   /**

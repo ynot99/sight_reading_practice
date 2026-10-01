@@ -76,9 +76,11 @@ import {
 import {
   FALLING_AHEAD_MS,
   paintTheLane,
+  theFallingBarLines,
   theFallingNotes,
   theLaneInks,
-  type FallingBar,
+  type LaneBarLine,
+  type LaneNote,
   type LaneInks,
 } from './fallingNotes.js';
 import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
@@ -8311,9 +8313,8 @@ export class AppView {
     const controller = this.runtime.controller;
     const at = controller.replayMomentOfBar(measureIndex);
     if (at === null) {
-      const exercise = controller.currentExercise;
-      const bar = exercise === null ? measureIndex + 1 : barNumberOf(exercise, measureIndex);
-      this.sayInTheMiddle(`The run did not get to bar ${String(bar)}.`);
+      // By its place in the playing, which is the number printed over it.
+      this.sayInTheMiddle(`The run did not get to bar ${String(measureIndex + 1)}.`);
       return;
     }
     const going = this.replayIsSounding;
@@ -8447,30 +8448,64 @@ export class AppView {
   }
 
   /**
+   * The moment the lane over the keyboard stands at, and how much it shows
+   * ahead of it.
+   *
+   * A playback's on the page's clock. A replay's on its own - and at the speed
+   * it is played at, so the lane always holds the same few seconds of screen
+   * time and a replay slowed down falls as slowly as it sounds.
+   */
+  private get laneClock(): { readonly nowMs: number; readonly aheadMs: number } {
+    if (this.replayRoll !== null) {
+      const player = this.runtime.takePlayer;
+      return {
+        nowMs: player.playing === RUN_REPLAY_ID ? player.positionMs : this.replayAtMs,
+        aheadMs: FALLING_AHEAD_MS * player.speed,
+      };
+    }
+    return { nowMs: this.runtime.clock.now(), aheadMs: FALLING_AHEAD_MS };
+  }
+
+  /**
    * The notes over the keyboard at this moment: the next few seconds of a
    * playback, or of the run being shown again.
    *
-   * A playback's are the notes the player will sound, on the page's clock, lit
-   * as heard. A replay's are the run's presses in the colours they were
-   * judged, on the replay's own clock - and at the speed it is played at, so
-   * the lane always holds the same few seconds of screen time and a replay
-   * slowed down falls as slowly as it sounds.
+   * A playback's are the notes the player will sound, lit as heard. A
+   * replay's are the run's presses, in the colours they were judged.
    */
-  get fallingScene(): readonly FallingBar[] {
+  get fallingScene(): readonly LaneNote[] {
     const controller = this.runtime.controller;
-    if (this.replayRoll !== null) {
-      const player = this.runtime.takePlayer;
-      const at = player.playing === RUN_REPLAY_ID ? player.positionMs : this.replayAtMs;
-      const ahead = FALLING_AHEAD_MS * player.speed;
-      return theFallingNotes(controller.replayPressesBetween(at, at + ahead), at, ahead);
-    }
-    const now = this.runtime.clock.now();
+    const { nowMs, aheadMs } = this.laneClock;
+    const until = nowMs + aheadMs;
     return theFallingNotes(
-      controller
-        .playbackNotesBetween(now, now + FALLING_AHEAD_MS)
-        .map((note) => ({ ...note, shade: 'heard' as const })),
-      now,
-      FALLING_AHEAD_MS,
+      this.replayRoll !== null
+        ? controller.replayPressesBetween(nowMs, until)
+        : controller
+            .playbackNotesBetween(nowMs, until)
+            .map((note) => ({ ...note, shade: 'heard' as const })),
+      nowMs,
+      aheadMs,
+    );
+  }
+
+  /**
+   * The bar lines falling with the notes, each with the number printed over
+   * its bar on the page: a playback's where the player begins each bar, a
+   * replay's where the run reached it.
+   */
+  get fallingBarLines(): readonly LaneBarLine[] {
+    const controller = this.runtime.controller;
+    const { nowMs, aheadMs } = this.laneClock;
+    const until = nowMs + aheadMs;
+    const bars =
+      this.replayRoll !== null
+        ? controller.replayBarsBetween(nowMs, until)
+        : controller.playbackBarsBetween(nowMs, until);
+    return theFallingBarLines(
+      // Numbered by their places in the playing, as the page numbers them.
+      bars.map((bar) => ({ label: String(bar.measureIndex + 1), atMs: bar.atMs })),
+      nowMs,
+      aheadMs,
     );
   }
 
@@ -8530,6 +8565,7 @@ export class AppView {
     paintTheLane(
       this.replayKeyboard.lane,
       this.fallingScene,
+      this.fallingBarLines,
       this.keyPlaces,
       this.laneInks,
       this.doc.defaultView?.devicePixelRatio ?? 1,

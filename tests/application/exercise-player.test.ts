@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ExercisePlayer, type HeardNote } from '../../src/application/ExercisePlayer.js';
+import { ExercisePlayer, type BarStart, type HeardNote } from '../../src/application/ExercisePlayer.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
@@ -1514,5 +1514,154 @@ describe('the notes heard between two moments', () => {
     player.pause();
 
     expect(player.notesHeardBetween(1_000, 4_000)).toEqual([]);
+  });
+});
+
+describe('the bars begun between two moments', () => {
+  /** Two bars, the second at twice the speed: a lap is six seconds. */
+  const quickening = (): Exercise => ({
+    ...twoBarExercise({ tempoBpm: 60 }),
+    tempoChanges: [{ measureIndex: 1, offsetTicks: 0, tempoBpm: 120 }],
+  });
+
+  it('puts every bar line where the click marks the bar, seen before it comes', () => {
+    // Timed as the notes are, so a bar line drawn among them stands where
+    // the music crosses it - through a count-in, a change of tempo and the
+    // seams of a repeat. The click's own downbeats are the check.
+    const { player, metronome, timeline } = rig(quickening());
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      countInBars: 1,
+      repeat: true,
+    });
+    const countIn = timeline.exercise.timeSignature.ticksPerMeasure;
+
+    const firstShown = new Map<number, BarStart>();
+    const seenAt = new Map<number, number>();
+    const downbeats: number[] = [];
+    let now = 0;
+    for (let tick = 0; tick < 40; tick += 1) {
+      const [at] = metronome.advanceSubdivisions(1);
+      now = at?.scheduledTimeMs ?? now;
+      if (at !== undefined && at.isDownbeat && at.positionTicks >= countIn) {
+        downbeats.push(at.scheduledTimeMs);
+      }
+      for (const bar of player.barsBetween(now, now + 3_000)) {
+        const key = Math.round(bar.atMs);
+        firstShown.set(key, bar);
+        if (!seenAt.has(key)) {
+          seenAt.set(key, now);
+        }
+      }
+    }
+
+    const shownByNow = [...firstShown.values()]
+      .filter((bar) => bar.atMs <= now)
+      .sort((left, right) => left.atMs - right.atMs);
+    // Three laps and more, so the seams are in it.
+    expect(downbeats.length).toBeGreaterThan(6);
+    expect(shownByNow.map((bar) => Math.round(bar.atMs))).toEqual(downbeats.map(Math.round));
+    // The two bars in turn, and round again.
+    expect(shownByNow.map((bar) => bar.measureIndex)).toEqual(downbeats.map((_, at) => at % 2));
+    // In good time, the first through the count-in as well.
+    for (const bar of shownByNow) {
+      expect(bar.atMs - (seenAt.get(Math.round(bar.atMs)) ?? bar.atMs)).toBeGreaterThanOrEqual(2_000);
+    }
+  });
+
+  it('leaves out the bar a performance was picked up partway through, and one where the stretch ends', () => {
+    // Begun on the second beat of the first bar, at sixty: the first bar has
+    // begun already, and the second is three beats away.
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never', fromIndex: 1 });
+    metronome.advanceSubdivisions(1);
+
+    expect(player.barsBetween(0, 3_000)).toEqual([]);
+    expect(player.barsBetween(0, 3_001)).toEqual([{ measureIndex: 1, atMs: 3_000 }]);
+    expect(player.barsBetween(3_000, 3_001)).toEqual([{ measureIndex: 1, atMs: 3_000 }]);
+    expect(player.barsBetween(3_001, 9_000)).toEqual([]);
+  });
+
+  it('draws no line through a count-in for the bar the music is picked up in', () => {
+    // A bar of count-in, four seconds, in front of the second beat of the
+    // first bar: that bar began before the music does, and the line it would
+    // have had falls inside the count-in.
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      countInBars: 1,
+      fromIndex: 1,
+    });
+    metronome.advanceSubdivisions(1);
+
+    expect(player.barsBetween(0, 7_001)).toEqual([{ measureIndex: 1, atMs: 7_000 }]);
+  });
+
+  it('goes round the whole passage after a first time round picked up partway through it', () => {
+    // Picked up on the second beat, going round the two bars: the first time
+    // round is seven seconds, and every lap after it begins at the top.
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      repeat: true,
+      fromIndex: 1,
+      loopFromIndex: 0,
+    });
+    metronome.advanceSubdivisions(1);
+
+    expect(player.barsBetween(0, 16_000)).toEqual([
+      { measureIndex: 1, atMs: 3_000 },
+      { measureIndex: 0, atMs: 7_000 },
+      { measureIndex: 1, atMs: 11_000 },
+      { measureIndex: 0, atMs: 15_000 },
+    ]);
+  });
+
+  it('shows the next time round, and none once this one is to be the last', () => {
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never', repeat: true });
+    metronome.advanceSubdivisions(7);
+
+    expect(player.barsBetween(7_000, 13_000)).toEqual([
+      { measureIndex: 0, atMs: 8_000 },
+      { measureIndex: 1, atMs: 12_000 },
+    ]);
+
+    player.setRepeating(false);
+    expect(player.barsBetween(7_000, 13_000)).toEqual([]);
+  });
+
+  it('follows a passage moved while it plays', () => {
+    // Narrowed to the first bar, going round: the lap is four seconds now.
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never', repeat: true });
+    metronome.advanceSubdivisions(1);
+    expect(player.barsBetween(1_000, 9_000)).toEqual([
+      { measureIndex: 1, atMs: 4_000 },
+      { measureIndex: 0, atMs: 8_000 },
+    ]);
+
+    player.retarget(3);
+
+    expect(player.barsBetween(1_000, 9_000)).toEqual([
+      { measureIndex: 0, atMs: 4_000 },
+      { measureIndex: 0, atMs: 8_000 },
+    ]);
+  });
+
+  it('shows none once the music is held', () => {
+    const { player, metronome, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(2);
+
+    player.pause();
+
+    expect(player.barsBetween(0, 9_000)).toEqual([]);
   });
 });

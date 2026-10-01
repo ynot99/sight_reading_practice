@@ -997,6 +997,8 @@ describe('AppView', () => {
       runTheFrames();
       expect(painted).toBe(2);
       expect(recorder.marks.filter((mark) => mark.how === 'fill').length).toBeGreaterThan(0);
+      // The first bar's line with them, on the keys as the music begins.
+      expect(recorder.marks.some((mark) => mark.how === 'text' && mark.words === '1')).toBe(true);
 
       runtime.controller.pauseListening();
       runTheFrames();
@@ -1055,6 +1057,27 @@ describe('AppView', () => {
 
     element<HTMLButtonElement>('focus-stop').click();
     expect(falling()).toBeUndefined();
+  });
+
+  it('drops the bar lines with the notes, numbered as the page numbers its bars', async () => {
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    await pressListen(runtime.controller);
+    const lines = (): [string, number][] =>
+      view.fallingBarLines.map((line) => [line.label, Number(line.at.toFixed(3))]);
+
+    // The first bar begins as the music does, on the keys; the second is
+    // four seconds off, past the lane's three.
+    metronome.advanceSubdivisions(1);
+    expect(lines()).toEqual([['1', 1]]);
+
+    // Two seconds on, the second bar is a third of the way down.
+    metronome.advanceSubdivisions(2);
+    expect(lines()).toEqual([['2', 0.333]]);
+
+    element<HTMLButtonElement>('focus-stop').click();
+    expect(view.fallingBarLines).toEqual([]);
   });
 
   it('takes the keyboard away however a playback ends, not only on Stop', async () => {
@@ -3334,6 +3357,19 @@ describe('AppView', () => {
 
         const first = presses.filter((press) => press.downAtMs - began === 1_000).map((press) => press.midi);
         expect(view.fallingScene.map((bar) => bar.midi).sort()).toEqual(first.sort());
+
+        element<HTMLButtonElement>('focus-stop').click();
+      });
+
+      it('drops the run’s bar lines where it reached them', async () => {
+        const { view, runtime } = await aRunPlayed('Bar lines');
+        element<HTMLButtonElement>('run-replay').click();
+
+        const reached = runtime.controller.replayMomentOfBar(0);
+        expect(reached).not.toBeNull();
+        expect(view.fallingBarLines.map((line) => [line.label, Number(line.at.toFixed(3))])).toEqual([
+          ['1', Number((1 - (reached ?? 0) / 3_000).toFixed(3))],
+        ]);
 
         element<HTMLButtonElement>('focus-stop').click();
       });

@@ -2429,6 +2429,8 @@ body[data-notes-falling='true'] .focus-bar:has(:focus-visible) {
 
   /* The edge of a note, so one over the music stays a shape. */
   --keys-edge: rgb(15 23 42 / 70%);
+  /* A bar line among the falling notes, and its number. */
+  --keys-bar-line: var(--text);
 
   position: fixed;
   inset: 0;

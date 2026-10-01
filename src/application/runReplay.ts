@@ -1,5 +1,6 @@
 import type { NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { barLines } from '../domain/model/Exercise.js';
+import type { BarStart } from './ExercisePlayer.js';
 import { landing, type NoteTier } from '../domain/scoring/noteTiers.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { playedNoteOffset } from './playedNoteOffset.js';
@@ -146,51 +147,63 @@ export function theStepAt(roll: RunRoll, timeline: ExerciseTimeline, atMs: numbe
 }
 
 /**
- * When in the run the music reached a bar, on the run's own clock, or `null`
- * where it never did: a bar outside the passage the run was of, or past where
- * it stopped.
+ * Every bar the run reached, once each, and when, on the run's own clock. A
+ * bar outside the passage the run was of, or past where it stopped, is not
+ * among them.
  *
  * `theStepAt` the other way round, and read off the same things so that the
- * two agree - the marker stands on the bar's first step at the moment given
+ * two agree - the marker stands on a bar's first step at the moment given
  * here. The first beat that fell inside the bar where the run kept its beats;
  * a bar line given late is written down twice, and it is where it fell due
  * that the music got there. Where the run kept none, the first press made in
  * the bar, which is where the music was taken to be.
+ *
+ * Worked out once for a replay, and read by everything that asks where a bar
+ * is in it: going to a bar held, and the bar lines falling onto the keys.
  */
-export function whenTheRunReachedBar(
-  roll: RunRoll,
-  timeline: ExerciseTimeline,
-  measureIndex: number,
-): number | null {
+export function theBarsOfTheRun(roll: RunRoll, timeline: ExerciseTimeline): readonly BarStart[] {
   const lines = barLines(timeline.exercise);
-  const line = lines[measureIndex];
-  if (line === undefined) {
-    return null;
-  }
   const began = rollBeganAtMs(roll);
+  const reached = new Map<number, number>();
+  const reach = (measureIndex: number, atMs: number): void => {
+    const known = reached.get(measureIndex);
+    if (known === undefined || atMs < known) {
+      reached.set(measureIndex, atMs);
+    }
+  };
   if (roll.beats.length > 0) {
-    const endsAt = lines[measureIndex + 1]?.startTicks ?? timeline.totalTicks;
-    let first: { readonly atMs: number; readonly positionTicks: number } | null = null;
     for (const beat of roll.beats) {
-      if (beat.positionTicks >= line.startTicks && (first === null || beat.atMs < first.atMs)) {
-        first = beat;
+      const measureIndex = barOf(lines, beat.positionTicks);
+      if (measureIndex !== null) {
+        reach(measureIndex, beat.atMs - began);
       }
     }
-    // The first beat at or past the bar line, which is in the bar unless the
-    // run never stood in it.
-    return first !== null && first.positionTicks < endsAt ? first.atMs - began : null;
-  }
-  let first: { readonly atMs: number; readonly measureIndex: number } | null = null;
-  for (const press of roll.presses) {
-    const step = press.stepIndex === null ? null : timeline.at(press.stepIndex);
-    if (step === null || step.measureIndex < measureIndex) {
-      continue;
-    }
-    if (first === null || press.downAtMs < first.atMs) {
-      first = { atMs: press.downAtMs, measureIndex: step.measureIndex };
+  } else {
+    for (const press of roll.presses) {
+      const step = press.stepIndex === null ? null : timeline.at(press.stepIndex);
+      if (step !== null) {
+        reach(step.measureIndex, press.downAtMs - began);
+      }
     }
   }
-  return first !== null && first.measureIndex === measureIndex ? first.atMs - began : null;
+  return [...reached].map(([measureIndex, atMs]) => ({ measureIndex, atMs }));
+}
+
+/** The bar a place in the music falls in, found rather than walked to. */
+function barOf(lines: readonly { readonly startTicks: number }[], ticks: number): number | null {
+  let low = 0;
+  let high = lines.length - 1;
+  let found: number | null = null;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    if ((lines[middle]?.startTicks ?? Number.POSITIVE_INFINITY) <= ticks) {
+      found = middle;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return found;
 }
 
 /** How a key is lit while it is down: the verdict its press was given. */

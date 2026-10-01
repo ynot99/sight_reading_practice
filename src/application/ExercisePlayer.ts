@@ -1,6 +1,6 @@
 
 import { ticksToMilliseconds } from '../domain/model/Duration.js';
-import { barLines, positionOfTick, spanMs } from '../domain/model/Exercise.js';
+import { barLines, elapsedMsAt, positionOfTick, spanMs } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { GatheredNotes, type ScheduledNote } from './GatheredNotes.js';
 import type { PositionEvent } from './session/SessionEvents.js';
@@ -33,6 +33,12 @@ export interface HeardNote {
   readonly midi: number;
   readonly fromMs: number;
   readonly untilMs: number;
+}
+
+/** Where a bar begins: which bar, counted from nought, and when. */
+export interface BarStart {
+  readonly measureIndex: number;
+  readonly atMs: number;
 }
 
 export interface ListeningOptions {
@@ -254,6 +260,15 @@ export class ExercisePlayer {
    * moments it was given them.
    */
   private handedOver: HeardNote[] = [];
+  /**
+   * The bars of the stretch, timed from where the first time round begins and
+   * from where a lap does - worked out once for as long as the stretch stays
+   * the same, rather than on every frame something draws them.
+   */
+  private stretchBars: {
+    readonly firstTimeRound: readonly BarStart[];
+    readonly lap: readonly BarStart[];
+  } | null = null;
 
   /** Where the stretch ends, in the timeline's own ticks. */
   private endOf(toIndex: number | undefined): number {
@@ -286,6 +301,7 @@ export class ExercisePlayer {
       return;
     }
     this.untilTicks = until;
+    this.stretchBars = null;
     // A lap is a different length now, in ticks and in time both.
     this.lapTicks = Math.max(0, this.untilTicks - this.loopFromTicks);
     this.lapMs = spanMs(this.timeline.exercise, this.loopFromTicks, this.untilTicks);
@@ -403,6 +419,70 @@ export class ExercisePlayer {
   }
 
   /**
+   * The bars that begin between two moments on the clock.
+   *
+   * In the terms the notes are timed in, so a bar line drawn among them
+   * stands where the music crosses it: from where the music began, the first
+   * time round from where this performance did and each lap after it from
+   * where the lap does, and none past where this reading ends. A bar the
+   * music was picked up partway through has begun already.
+   */
+  barsBetween(fromMs: number, untilMs: number): readonly BarStart[] {
+    const began = this.startedAtMs ?? this.countedInToMs;
+    if (!this.playing || began === null) {
+      return [];
+    }
+    const { firstTimeRound, lap } = this.barsOfTheStretch();
+    const last = this.endsAtMs;
+    const found: BarStart[] = [];
+    const take = (bar: BarStart, lapBeganMs: number): void => {
+      const atMs = lapBeganMs + bar.atMs;
+      if (last !== null && atMs >= last) {
+        return;
+      }
+      if (began + atMs >= fromMs && began + atMs < untilMs) {
+        found.push({ measureIndex: bar.measureIndex, atMs: began + atMs });
+      }
+    };
+    for (const bar of firstTimeRound) {
+      take(bar, 0);
+    }
+    if (this.laidInLaps && this.lapMs > 0) {
+      // Only the laps that reach into the stretch asked about. Each begins
+      // where `noteAt` puts its notes: after the first time round, and after
+      // every whole lap before it.
+      const firstLap = Math.max(1, Math.floor((fromMs - began - this.firstLapMs) / this.lapMs) + 1);
+      for (let at = firstLap; began + this.firstLapMs + (at - 1) * this.lapMs < untilMs; at += 1) {
+        for (const bar of lap) {
+          take(bar, this.firstLapMs + (at - 1) * this.lapMs);
+        }
+      }
+    }
+    return found;
+  }
+
+  private barsOfTheStretch(): {
+    readonly firstTimeRound: readonly BarStart[];
+    readonly lap: readonly BarStart[];
+  } {
+    const timeline = this.timeline;
+    if (this.stretchBars !== null || timeline === null) {
+      return this.stretchBars ?? { firstTimeRound: [], lap: [] };
+    }
+    const exercise = timeline.exercise;
+    const from = (fromTicks: number): readonly BarStart[] => {
+      const fromMs = elapsedMsAt(exercise, fromTicks);
+      return barLines(exercise).flatMap((line, measureIndex) =>
+        line.startTicks >= fromTicks && line.startTicks < this.untilTicks
+          ? [{ measureIndex, atMs: elapsedMsAt(exercise, line.startTicks) - fromMs }]
+          : [],
+      );
+    };
+    this.stretchBars = { firstTimeRound: from(this.fromTicks), lap: from(this.loopFromTicks) };
+    return this.stretchBars;
+  }
+
+  /**
    * The notes heard between two moments on the clock: those still sounding
    * at the first, and those that begin before the second.
    *
@@ -511,6 +591,7 @@ export class ExercisePlayer {
     // Whatever was being held, this is now what is happening instead.
     this.pausedAtIndex = null;
     this.untilTicks = this.endOf(options.toIndex);
+    this.stretchBars = null;
     this.pending = null;
     this.nextToSchedule = 0;
     this.scheduledThroughMs = Number.NEGATIVE_INFINITY;

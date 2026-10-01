@@ -36,7 +36,7 @@ import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
-import type { HeardNote, PlayerEventMap } from './ExercisePlayer.js';
+import type { BarStart, HeardNote, PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type {
   ChosenClickWhen,
@@ -86,8 +86,8 @@ import {
   thePedalDownAt,
   thePressesBetween,
   thePressesOfTheRun,
+  theBarsOfTheRun,
   theStepAt,
-  whenTheRunReachedBar,
   type KeyShade,
   type ReplayJudging,
   type ReplayMark,
@@ -866,6 +866,7 @@ export class PracticeController {
     readonly judging: ReplayJudging;
     readonly marks: readonly ReplayMark[];
     readonly presses: readonly ReplayedPress[];
+    readonly bars: readonly BarStart[];
     drawn: number;
     drawnUpToMs: number;
     atStep: number | null;
@@ -2144,6 +2145,7 @@ export class PracticeController {
       judging,
       marks: theMarksOfTheRun(roll, timeline, judging),
       presses: thePressesOfTheRun(roll, timeline, judging),
+      bars: theBarsOfTheRun(roll, timeline),
       drawn: 0,
       drawnUpToMs: 0,
       atStep: null,
@@ -2248,14 +2250,26 @@ export class PracticeController {
 
   /**
    * When the run being shown again reached a bar, on its own clock - `null`
-   * where it never did, or no run is being shown. See `whenTheRunReachedBar`.
+   * where it never did, or no run is being shown. See `theBarsOfTheRun`.
    */
   replayMomentOfBar(measureIndex: number): number | null {
-    const replay = this.replay;
-    const timeline = this.timeline;
-    return replay === null || timeline === null
-      ? null
-      : whenTheRunReachedBar(replay.roll, timeline, measureIndex);
+    return this.replay?.bars.find((bar) => bar.measureIndex === measureIndex)?.atMs ?? null;
+  }
+
+  /**
+   * The bars the run being shown again began between two moments on its own
+   * clock - none where no run is.
+   */
+  replayBarsBetween(fromMs: number, untilMs: number): readonly BarStart[] {
+    return (this.replay?.bars ?? []).filter((bar) => bar.atMs >= fromMs && bar.atMs < untilMs);
+  }
+
+  /**
+   * The bars a playback begins between two moments on the clock - none where
+   * nothing is playing. See `ExercisePlayer.barsBetween`.
+   */
+  playbackBarsBetween(fromMs: number, untilMs: number): readonly BarStart[] {
+    return this.player?.barsBetween(fromMs, untilMs) ?? [];
   }
 
   /**

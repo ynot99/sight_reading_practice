@@ -22,7 +22,7 @@ export interface FallingNote {
  * A note as the lane shows it, its ends as shares of the lane's height:
  * nought at the top, where the music comes in, and one at the keys.
  */
-export interface FallingBar {
+export interface LaneNote {
   readonly midi: number;
   readonly shade: KeyLight;
   readonly top: number;
@@ -42,9 +42,9 @@ export function theFallingNotes(
   notes: readonly FallingNote[],
   nowMs: number,
   aheadMs: number,
-): readonly FallingBar[] {
+): readonly LaneNote[] {
   const at = (ms: number): number => 1 - (ms - nowMs) / aheadMs;
-  const bars: FallingBar[] = [];
+  const bars: LaneNote[] = [];
   for (const note of notes) {
     const top = Math.max(0, at(note.untilMs));
     const bottom = Math.min(1, at(note.fromMs));
@@ -58,25 +58,65 @@ export function theFallingNotes(
   return bars;
 }
 
-/** The colours of the lane: one for each way a key is lit, and a note's edge. */
-export type LaneInks = Readonly<Record<KeyLight | 'edge', string>>;
+/** Where a bar of the music begins: the number printed over it, and when. */
+export interface FallingBarLine {
+  readonly label: string;
+  readonly atMs: number;
+}
+
+/** A bar line as the lane shows it, at a share of its height from the top. */
+export interface LaneBarLine {
+  readonly label: string;
+  readonly at: number;
+}
+
+/**
+ * Where each bar line stands in the lane at a moment: in the time the notes
+ * are in, so a line reaches the keys as the bar begins. One on the keys is
+ * the bar beginning now; one at the very top has not come in yet.
+ */
+export function theFallingBarLines(
+  lines: readonly FallingBarLine[],
+  nowMs: number,
+  aheadMs: number,
+): readonly LaneBarLine[] {
+  const shown: LaneBarLine[] = [];
+  for (const line of lines) {
+    const at = 1 - (line.atMs - nowMs) / aheadMs;
+    if (at > 0 && at <= 1) {
+      shown.push({ label: line.label, at });
+    }
+  }
+  return shown;
+}
+
+/**
+ * The colours of the lane: one for each way a key is lit, a note's edge and
+ * a bar line - and the typeface the bar numbers are set in, which is the
+ * page's.
+ */
+export type LaneInks = Readonly<Record<KeyLight | 'edge' | 'line', string>> & {
+  readonly font: string;
+};
 
 /**
  * The stylesheet's names for them, which the keys are lit in as well: a note
  * and the key it lands on say the same thing.
  */
-const LANE_INKS: LaneInks = {
+const LANE_INKS: Readonly<Record<keyof Omit<LaneInks, 'font'>, string>> = {
   perfect: '--keys-perfect',
   good: '--keys-good',
   wrong: '--keys-wrong',
   aside: '--keys-aside',
   heard: '--keys-heard',
   edge: '--keys-edge',
+  line: '--keys-bar-line',
 };
 
 /** The lane's colours as they work out under the keyboard, on this ground. */
 export function theLaneInks(keyboard: HTMLElement): LaneInks {
-  return inksFrom(keyboard, LANE_INKS);
+  const font = keyboard.ownerDocument.defaultView?.getComputedStyle(keyboard).fontFamily ?? '';
+  return { ...inksFrom(keyboard, LANE_INKS), font: font === '' ? 'sans-serif' : font };
 }
 
 /** Room left between a note and the next key's, in page pixels. */
@@ -84,9 +124,23 @@ const GAP_PX = 1;
 /** The least a note is drawn tall, so that the shortest still shows. */
 const LEAST_TALL_PX = 2;
 const CORNER_PX = 3;
+/** How large a bar's number is set, and how far in from the lane's edge. */
+const BAR_NUMBER_PX = 12;
+const BAR_NUMBER_INSET_PX = 4;
+/**
+ * A bar line's dashes and weight. Broken, because under it lie the staff's
+ * own lines, which are whole and run the same way.
+ */
+const BAR_LINE_DASHES = [6, 4];
+const BAR_LINE_PX = 2;
 
 /**
- * Paints the notes falling onto the keys.
+ * Paints the notes falling onto the keys, and the bar lines among them.
+ *
+ * A bar line goes across the whole lane under the notes, broken so that it
+ * is not taken for a line of the staff under it, with the number printed
+ * over the bar on the page at its left: the notes coming can be found on the
+ * score, the stretch above a line being the bar of that number.
  *
  * Each over its own key and as wide as the key is drawn, and each edged, so
  * a note over the music stays a shape however busy the page under it is. The
@@ -97,7 +151,8 @@ const CORNER_PX = 3;
  */
 export function paintTheLane(
   surface: Surface,
-  bars: readonly FallingBar[],
+  bars: readonly LaneNote[],
+  barLines: readonly LaneBarLine[],
   keys: ReadonlyMap<number, KeyPlace>,
   inks: LaneInks,
   density: number,
@@ -106,7 +161,22 @@ export function paintTheLane(
   if (ready === null) {
     return;
   }
-  const { paint, tallPx } = ready;
+  const { paint, tallPx, widePx, snap } = ready;
+  paint.fillStyle = inks.line;
+  paint.strokeStyle = inks.line;
+  paint.lineWidth = BAR_LINE_PX;
+  paint.font = `${String(BAR_NUMBER_PX)}px ${inks.font}`;
+  paint.textBaseline = 'bottom';
+  paint.setLineDash(BAR_LINE_DASHES);
+  for (const line of barLines) {
+    const y = snap(line.at * tallPx) - BAR_LINE_PX / 2;
+    paint.beginPath();
+    paint.moveTo(0, y);
+    paint.lineTo(widePx, y);
+    paint.stroke();
+    paint.fillText(line.label, BAR_NUMBER_INSET_PX, y - BAR_LINE_PX);
+  }
+  paint.setLineDash([]);
   const ordered = [
     ...bars.filter((bar) => !isBlackKey(bar.midi)),
     ...bars.filter((bar) => isBlackKey(bar.midi)),

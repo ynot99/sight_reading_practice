@@ -179,7 +179,9 @@ takes effect.
 shown again: all eighty-eight keys and the pedal beside them, with the next
 three seconds of notes falling down the whole page onto them, each landing on
 its key as it sounds. The notes are half seen and have no ground behind them,
-so the score reads through them. Under Listen they are one blue, since the
+so the score reads through them. A broken line falls with them where each bar
+begins, with the bar's number at its left, so what is coming can be found on
+the page. Under Listen they are one blue, since the
 machine is playing and nothing is judged; in a replay they are the reader's
 own presses, in the colours each was judged in. The keyboard button in the bar
 goes round three answers: the falling notes and the keyboard, the keyboard

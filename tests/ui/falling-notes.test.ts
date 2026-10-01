@@ -2,10 +2,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   paintTheLane,
+  theFallingBarLines,
   theFallingNotes,
-  type FallingBar,
   type FallingNote,
   type LaneInks,
+  type LaneNote,
 } from '../../src/ui/fallingNotes.js';
 import type { KeyPlace } from '../../src/ui/replayKeys.js';
 import { surface } from '../support/recordingCanvas.js';
@@ -18,6 +19,8 @@ const INKS: LaneInks = {
   aside: 'aside',
   heard: 'heard',
   edge: 'edge',
+  line: 'line',
+  font: 'serif',
 };
 
 const note = (fromMs: number, untilMs: number, midi = 60): FallingNote => ({
@@ -28,7 +31,7 @@ const note = (fromMs: number, untilMs: number, midi = 60): FallingNote => ({
 });
 
 /** A bar's ends to a thousandth, which is finer than any screen. */
-const ends = (bars: readonly FallingBar[]): [number, number, number][] =>
+const ends = (bars: readonly LaneNote[]): [number, number, number][] =>
   bars.map((bar) => [bar.midi, Number(bar.top.toFixed(3)), Number(bar.bottom.toFixed(3))]);
 
 describe('the notes falling onto the keys', () => {
@@ -99,6 +102,7 @@ describe('the notes falling onto the keys', () => {
         // Not a key the keyboard has.
         { midi: 200, shade: 'good', top: 0, bottom: 1 },
       ],
+      [],
       keys,
       INKS,
       2,
@@ -125,6 +129,7 @@ describe('the notes falling onto the keys', () => {
     paintTheLane(
       lane,
       [{ midi: 60, shade: 'heard', top: 0.999, bottom: 1 }],
+      [],
       new Map([[60, { left: 100, width: 20 }]]),
       INKS,
       1,
@@ -133,6 +138,54 @@ describe('the notes falling onto the keys', () => {
     expect(recorder.marks.map(({ how, y, tall }) => [how, y, tall])).toEqual([
       ['fill', 198, 2],
       ['stroke', 198, 2],
+    ]);
+  });
+});
+
+describe('the bar lines falling with the notes', () => {
+  it('stands each where its bar begins, reaching the keys as it does', () => {
+    // A second in, three ahead: a bar beginning now is on the keys, one two
+    // seconds off a third of the way down.
+    const lines = theFallingBarLines(
+      [
+        { label: '3', atMs: 1_000 },
+        { label: '4', atMs: 3_000 },
+        // Not come in yet, and gone already.
+        { label: '5', atMs: 4_000 },
+        { label: '2', atMs: 999 },
+      ],
+      1_000,
+      3_000,
+    );
+
+    expect(lines.map(({ label, at }) => [label, Number(at.toFixed(3))])).toEqual([
+      ['3', 1],
+      ['4', 0.333],
+    ]);
+  });
+
+  it('paints a line across the lane under the notes, with the number of its bar at its left', () => {
+    const { surface: lane, recorder } = surface(300, 300);
+
+    paintTheLane(
+      lane,
+      [{ midi: 60, shade: 'heard', top: 0, bottom: 0.5 }],
+      [{ label: '12', at: 0.5 }],
+      new Map([[60, { left: 100, width: 20 }]]),
+      INKS,
+      1,
+    );
+
+    expect(recorder.font).toBe('12px serif');
+    expect(
+      recorder.marks.map(({ how, ink, x, y, wide, tall, words, dashes }) => [how, ink, x, y, wide, tall, words, dashes]),
+    ).toEqual([
+      // Broken, so as not to be taken for a line of the staff under it.
+      ['stroke', 'line', 0, 149, 300, 0, undefined, [6, 4]],
+      ['text', 'line', 4, 147, 0, 0, '12', undefined],
+      // And the notes whole-edged over it.
+      ['fill', 'heard', 101, 0, 18, 150, undefined, undefined],
+      ['stroke', 'edge', 101, 0, 18, 150, undefined, []],
     ]);
   });
 });

@@ -257,6 +257,7 @@ describe('the stylesheet', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';
     expect(body('.replay-keys')).toMatch(/--keys-edge\s*:/);
+    expect(body('.replay-keys')).toMatch(/--keys-bar-line\s*:/);
     for (const shade of ['perfect', 'good', 'wrong', 'aside', 'heard']) {
       expect(body('.replay-keys'), shade).toMatch(new RegExp(`--keys-${shade}\\s*:`));
       expect(

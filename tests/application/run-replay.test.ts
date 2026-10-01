@@ -6,8 +6,8 @@ import {
   thePedalDownAt,
   thePressesBetween,
   thePressesOfTheRun,
+  theBarsOfTheRun,
   theStepAt,
-  whenTheRunReachedBar,
   type ReplayJudging,
 } from '../../src/application/runReplay.js';
 import type { RolledBeat, RolledPress, RunRoll } from '../../src/application/session/RunRoll.js';
@@ -160,6 +160,22 @@ describe('where the music was, a moment into the run', () => {
 });
 
 describe('when the run reached a bar', () => {
+  /** When the run reached one bar, or `null` where it never did. */
+  const reached = (run: RunRoll, measureIndex: number): number | null =>
+    theBarsOfTheRun(run, timeline).find((bar) => bar.measureIndex === measureIndex)?.atMs ?? null;
+
+  it('lists every bar the run reached, once each', () => {
+    const run = roll(
+      [press({ downAtMs: PLAYED_AT })],
+      [beat(PLAYED_AT, 0), beat(PLAYED_AT + 1_000, q), beat(PLAYED_AT + 4_000, q * 4), beat(PLAYED_AT + 5_000, q * 5)],
+    );
+
+    expect(theBarsOfTheRun(run, timeline)).toEqual([
+      { measureIndex: 0, atMs: 0 },
+      { measureIndex: 1, atMs: 4_000 },
+    ]);
+  });
+
   it('reads the beats, where the music got to a bar line given late at the moment it fell due', () => {
     const run = roll(
       [press({ downAtMs: PLAYED_AT })],
@@ -176,12 +192,12 @@ describe('when the run reached a bar', () => {
       ],
     );
 
-    expect(whenTheRunReachedBar(run, timeline, 0)).toBe(0);
-    expect(whenTheRunReachedBar(run, timeline, 1)).toBe(4_000);
+    expect(reached(run, 0)).toBe(0);
+    expect(reached(run, 1)).toBe(4_000);
     // Where the marker stands then, which is the bar's first step.
     expect(theStepAt(run, timeline, 4_000)).toBe(4);
     // A bar the piece does not have.
-    expect(whenTheRunReachedBar(run, timeline, 2)).toBeNull();
+    expect(reached(run, 2)).toBeNull();
   });
 
   it('reads the presses where the run kept no beats', () => {
@@ -193,24 +209,24 @@ describe('when the run reached a bar', () => {
     ]);
 
     // The run begins at its first press.
-    expect(whenTheRunReachedBar(run, timeline, 0)).toBe(0);
-    expect(whenTheRunReachedBar(run, timeline, 1)).toBe(4_800);
+    expect(reached(run, 0)).toBe(0);
+    expect(reached(run, 1)).toBe(4_800);
     expect(theStepAt(run, timeline, 4_800)).toBe(4);
   });
 
   it('says a bar the run never stood in was never reached, before it or after', () => {
     // Stopped in the first bar.
     const stopped = roll([press({ downAtMs: PLAYED_AT })], [beat(PLAYED_AT, 0), beat(PLAYED_AT + 1_000, q)]);
-    expect(whenTheRunReachedBar(stopped, timeline, 1)).toBeNull();
+    expect(reached(stopped, 1)).toBeNull();
     const stoppedUnbeaten = roll([press({ downAtMs: PLAYED_AT, stepIndex: 1 })]);
-    expect(whenTheRunReachedBar(stoppedUnbeaten, timeline, 1)).toBeNull();
+    expect(reached(stoppedUnbeaten, 1)).toBeNull();
 
     // A passage of the second bar alone.
     const passage = roll([press({ downAtMs: PLAYED_AT, stepIndex: 4 })], [beat(PLAYED_AT, q * 4), beat(PLAYED_AT + 1_000, q * 5)]);
-    expect(whenTheRunReachedBar(passage, timeline, 0)).toBeNull();
-    expect(whenTheRunReachedBar(passage, timeline, 1)).toBe(0);
+    expect(reached(passage, 0)).toBeNull();
+    expect(reached(passage, 1)).toBe(0);
     const passageUnbeaten = roll([press({ downAtMs: PLAYED_AT, stepIndex: 4 })]);
-    expect(whenTheRunReachedBar(passageUnbeaten, timeline, 0)).toBeNull();
+    expect(reached(passageUnbeaten, 0)).toBeNull();
   });
 });
 

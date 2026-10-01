@@ -1,10 +1,12 @@
 import type {
   BarLabel,
   ClefChange,
+  DynamicMark,
   Exercise,
   KeyChange,
   PedalMark,
   TempoChange,
+  TempoWord,
   TimeChange,
 } from '../model/Exercise.js';
 import {
@@ -112,9 +114,14 @@ function endOfEnding(bars: readonly BarRepeat[], from: number): number {
  * says where in the piece it is and still agrees with the file it came from.
  *
  * Everything positioned by bar moves with the music: a pedal in a repeated
- * bar is pressed on both readings, and a key or metre that changed inside the
+ * bar is pressed on both readings, a dynamic or a word under it is read on
+ * both, a line across bars - an octave sign, a hairpin - is drawn under every
+ * reading of the bars it covers, and a key or metre that changed inside the
  * span is stated again wherever the reading arrives at it from somewhere
- * else.
+ * else. Left where the file put them, the marks under a repeated stretch
+ * were read once: its second reading was played at whatever loudness the
+ * first had ended on, and drawn with no octave sign over notes written an
+ * octave from where they sound.
  */
 export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exercise {
   const written = measureCount(exercise);
@@ -132,6 +139,8 @@ export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exe
 
   const pedalMarks: PedalMark[] = [];
   const tempoChanges: TempoChange[] = [];
+  const dynamicMarks: DynamicMark[] = [];
+  const tempoWords: TempoWord[] = [];
   order.forEach((from, at) => {
     for (const mark of exercise.pedalMarks) {
       if (mark.measureIndex === from) {
@@ -143,7 +152,18 @@ export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exe
         tempoChanges.push({ ...change, measureIndex: at });
       }
     }
+    for (const mark of exercise.dynamicMarks) {
+      if (mark.measureIndex === from) {
+        dynamicMarks.push({ ...mark, measureIndex: at });
+      }
+    }
+    for (const word of exercise.tempoWords) {
+      if (word.measureIndex === from) {
+        tempoWords.push({ ...word, measureIndex: at });
+      }
+    }
   });
+  const runs = runsOf(order);
 
   // Stated wherever it becomes true, rather than carried over from the bar
   // before: a reading that jumps back arrives from somewhere else, and what
@@ -171,6 +191,10 @@ export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exe
     barLabels,
     pedalMarks,
     tempoChanges,
+    dynamicMarks,
+    tempoWords,
+    hairpins: spannedAcross(exercise, exercise.hairpins, runs),
+    octaveShifts: spannedAcross(exercise, exercise.octaveShifts, runs),
     keyChanges,
     timeChanges,
     staves: exercise.staves.map((staff) => {
@@ -199,4 +223,82 @@ export function unrollRepeats(exercise: Exercise, order: readonly number[]): Exe
       };
     }),
   };
+}
+
+/** A stretch of the reading that is a stretch of the page. */
+interface Run {
+  /** Where it begins in the reading. */
+  readonly at: number;
+  /** And the bar of the file it begins with. */
+  readonly from: number;
+  readonly bars: number;
+}
+
+/**
+ * The reading cut where it turns: bars read one after another as they are
+ * written, from one turn back to the next.
+ */
+function runsOf(order: readonly number[]): readonly Run[] {
+  const runs: Run[] = [];
+  order.forEach((from, at) => {
+    const last = runs.at(-1);
+    if (last !== undefined && last.from + last.bars === from && last.at + last.bars === at) {
+      runs[runs.length - 1] = { ...last, bars: last.bars + 1 };
+      return;
+    }
+    runs.push({ at, from, bars: 1 });
+  });
+  return runs;
+}
+
+/** A mark drawn from one place to another. */
+interface Spanning {
+  readonly measureIndex: number;
+  readonly offsetTicks: number;
+  readonly untilMeasureIndex: number;
+  readonly untilOffsetTicks: number;
+}
+
+/**
+ * Lines across bars, laid over every stretch of the reading that has the bars
+ * they cover.
+ *
+ * Where a reading arrives in the middle of a line - turned back to a bar the
+ * line passes through - the line is drawn again from that bar. Where a reading
+ * turns back before the line ends, it ends at that bar line. A line ending
+ * exactly where a reading arrives covers nothing of it.
+ */
+function spannedAcross<T extends Spanning>(
+  exercise: Exercise,
+  marks: readonly T[],
+  runs: readonly Run[],
+): T[] {
+  const laid: T[] = [];
+  for (const mark of marks) {
+    for (const run of runs) {
+      const first = Math.max(mark.measureIndex, run.from);
+      const last = Math.min(mark.untilMeasureIndex, run.from + run.bars - 1);
+      if (first > last) {
+        continue;
+      }
+      const offsetTicks = first === mark.measureIndex ? mark.offsetTicks : 0;
+      const untilOffsetTicks =
+        last === mark.untilMeasureIndex
+          ? mark.untilOffsetTicks
+          : timeAtMeasure(exercise, last).ticksPerMeasure;
+      if (first === last && offsetTicks >= untilOffsetTicks) {
+        continue;
+      }
+      laid.push({
+        ...mark,
+        measureIndex: run.at + (first - run.from),
+        offsetTicks,
+        untilMeasureIndex: run.at + (last - run.from),
+        untilOffsetTicks,
+      });
+    }
+  }
+  return laid.sort(
+    (left, right) => left.measureIndex - right.measureIndex || left.offsetTicks - right.offsetTicks,
+  );
 }

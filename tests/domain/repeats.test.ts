@@ -2,7 +2,13 @@
 import { describe, expect, it } from 'vitest';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { barIsRepeated, barNumberOf, measureCount, validateExercise } from '../../src/domain/model/Exercise.js';
-import { NO_REPEAT, playedOrder, type BarRepeat } from '../../src/domain/notation/unrollRepeats.js';
+import {
+  NO_REPEAT,
+  playedOrder,
+  unrollRepeats,
+  type BarRepeat,
+} from '../../src/domain/notation/unrollRepeats.js';
+import { longExercise } from '../support/fixtures.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
@@ -165,6 +171,128 @@ describe('a score written out from its repeats', () => {
     // Bar two is read at positions one and three, and the pedal goes down at
     // both: everything positioned by bar moves with the music.
     expect(exercise.pedalMarks.map((mark) => mark.measureIndex)).toEqual([1, 3]);
+  });
+
+  /** The repeated score with a direction written at the start of a bar. */
+  function withDirection(bar: number, direction: string): string {
+    const opening = new RegExp(
+      `(<measure number="${String(bar)}">` +
+        '(?:\\s*<barline location="left">.*?</barline>)?' +
+        '(?:\\s*<attributes>[\\s\\S]*?</attributes>)?)',
+    );
+    return REPEATED.replace(opening, `$1<direction>${direction}</direction>`);
+  }
+
+  /** Where a line lies in the reading: bar and offset at each end. */
+  function spans(marks: readonly { measureIndex: number; offsetTicks: number; untilMeasureIndex: number; untilOffsetTicks: number }[]): number[][] {
+    return marks.map((mark) => [mark.measureIndex, mark.offsetTicks, mark.untilMeasureIndex, mark.untilOffsetTicks]);
+  }
+
+  const WHOLE = Duration.WHOLE.ticks;
+
+  it('reads a dynamic on both readings of its bar', () => {
+    // Left where the file put it, the second reading was played at whatever
+    // loudness the first had ended on.
+    const { exercise } = importer.read(
+      withDirection(2, '<direction-type><dynamics><f/></dynamics></direction-type><staff>1</staff>'),
+    );
+
+    expect(exercise.dynamicMarks.map((mark) => mark.measureIndex)).toEqual([1, 3]);
+  });
+
+  it('reads a word about the speed on both readings of its bar', () => {
+    const { exercise } = importer.read(
+      withDirection(3, '<direction-type><words>rit.</words></direction-type>'),
+    );
+
+    expect(exercise.tempoWords.map((word) => word.measureIndex)).toEqual([2, 4]);
+  });
+
+  it('draws an octave sign under every reading of the bars it covers', () => {
+    // Bars two and three, read twice. The second reading had no sign over
+    // notes written an octave from where they sound.
+    const signed = withDirection(2, '<direction-type><octave-shift type="down" size="8"/></direction-type>')
+      .replace(
+        /(<measure number="3">[\s\S]*?<type>whole<\/type><\/note>)/,
+        '$1<direction><direction-type><octave-shift type="stop" size="8"/></direction-type></direction>',
+      );
+    const { exercise } = importer.read(signed);
+
+    expect(spans(exercise.octaveShifts)).toEqual([
+      [1, 0, 2, WHOLE],
+      [3, 0, 4, WHOLE],
+    ]);
+  });
+
+  it('draws a sign begun before the repeat again over the bars read twice', () => {
+    // From bar one to the end of bar three: the second reading arrives at bar
+    // two from the end of bar three, and is still under the sign.
+    const signed = withDirection(1, '<direction-type><octave-shift type="down" size="8"/></direction-type>')
+      .replace(
+        /(<measure number="3">[\s\S]*?<type>whole<\/type><\/note>)/,
+        '$1<direction><direction-type><octave-shift type="stop" size="8"/></direction-type></direction>',
+      );
+    const { exercise } = importer.read(signed);
+
+    expect(spans(exercise.octaveShifts)).toEqual([
+      [0, 0, 2, WHOLE],
+      [3, 0, 4, WHOLE],
+    ]);
+  });
+
+  it('ends a hairpin at the bar line where the reading turns back', () => {
+    // From bar three into bar four. The first reading of bar three turns back
+    // to bar two at its end, so the hairpin ends with it; the second goes on
+    // into bar four.
+    const swelling = withDirection(3, '<direction-type><wedge type="crescendo"/></direction-type>').replace(
+      /(<measure number="4">)/,
+      '$1<direction><direction-type><wedge type="stop"/></direction-type></direction>',
+    );
+    const { exercise } = importer.read(swelling);
+
+    expect(spans(exercise.hairpins)).toEqual([
+      [2, 0, 2, WHOLE],
+      [4, 0, 5, 0],
+    ]);
+  });
+
+  it('keeps a line’s own start and end inside a bar, and starts it again at the bar line', () => {
+    // Read 1 2 3 2 3 4, a line from a beat into bar one to two beats into bar
+    // three: the first reading keeps both of its ends; the second arrives at
+    // bar two under it, so it starts at that bar line and keeps the end.
+    const q = Duration.QUARTER.ticks;
+    const line = {
+      measureIndex: 0,
+      offsetTicks: q,
+      untilMeasureIndex: 2,
+      untilOffsetTicks: q * 2,
+      direction: 'down' as const,
+      size: 8 as const,
+      staffNumber: 1,
+    };
+    const unrolled = unrollRepeats({ ...longExercise({ bars: 4 }), octaveShifts: [line] }, [0, 1, 2, 1, 2, 3]);
+
+    expect(spans(unrolled.octaveShifts)).toEqual([
+      [0, q, 2, q * 2],
+      [3, 0, 4, q * 2],
+    ]);
+  });
+
+  it('draws nothing of a line that ends at the bar line a reading arrives at', () => {
+    // Ending where bar two begins, it covers none of bar two - and the second
+    // reading begins there.
+    const q = Duration.QUARTER.ticks;
+    const hairpin = {
+      measureIndex: 0,
+      offsetTicks: q,
+      untilMeasureIndex: 1,
+      untilOffsetTicks: 0,
+      kind: 'crescendo' as const,
+      staffNumber: 1,
+    };
+    const unrolled = unrollRepeats({ ...longExercise({ bars: 4 }), hairpins: [hairpin] }, [0, 1, 2, 1, 2, 3]);
+
+    expect(spans(unrolled.hairpins)).toEqual([[0, q, 1, 0]]);
   });
 
   it('keeps every bar adding up to its metre', () => {

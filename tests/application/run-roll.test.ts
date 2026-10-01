@@ -1093,7 +1093,7 @@ describe('the roll of a score', () => {
 
     expect(roll.presses.length).toBeGreaterThan(0);
     expect(roll.presses.every((press) => press.verdict === 'correct')).toBe(true);
-    expect(roll.presses.every((press) => press.deviationMs === 0)).toBe(true);
+    expect(roll.presses.every((press) => press.deviationMs === null)).toBe(true);
     expect(roll.presses.every((press) => press.stepIndex !== null)).toBe(true);
     // At 60 bpm, C4 quarter note lasts 1000ms, C3 whole note lasts 4000ms
     const c4 = roll.presses.find((press) => press.midi === MIDI.C4);

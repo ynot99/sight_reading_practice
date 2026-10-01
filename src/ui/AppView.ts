@@ -9288,20 +9288,33 @@ export class AppView {
    * measured against - including the notes it never got, which are the ones
    * worth seeing. The hand is the one being practised: a reader working the left
    * hand is not being shown the right hand's notes as something they missed.
+   * For the score itself, both hands are shown so the outlines match what was
+   * written across the whole piece.
    */
   private theNotesAskedFor(): readonly RollGhost[] {
     const timeline = this.runtime.controller.currentTimeline;
     if (!this.el.rollGhosts.checked || timeline === null) {
       return [];
     }
-    const hand = this.runtime.controller.settings.handStaff;
+    const isScore = this.theOtherRollShowing?.isScore ?? false;
+    const hand = isScore ? null : this.runtime.controller.settings.handStaff;
     const asked: RollGhost[] = [];
     for (const step of timeline.steps) {
-      for (const midi of expectedFor(step, hand)) {
+      const notes =
+        hand === null ? step.notes : step.notes.filter((note) => note.staffNumber === hand);
+      const seen = new Map<number, number>();
+      for (const note of notes) {
+        const length = soundsFor(note);
+        const existing = seen.get(note.midi);
+        if (existing === undefined || existing < length) {
+          seen.set(note.midi, length);
+        }
+      }
+      for (const [midi, length] of seen.entries()) {
         asked.push({
           midi,
           fromTicks: step.onsetTicks,
-          untilTicks: step.onsetTicks + step.durationTicks,
+          untilTicks: step.onsetTicks + length,
           stepIndex: step.index,
         });
       }

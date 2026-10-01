@@ -948,7 +948,7 @@ export function rollOfTheScore(exercise: Exercise, timeline: ExerciseTimeline): 
           velocity,
           verdict: 'correct',
           stepIndex: step.index,
-          deviationMs: 0,
+          deviationMs: null,
         });
       }
     }

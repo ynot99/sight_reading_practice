@@ -822,6 +822,7 @@ describe('AppView', () => {
   it('shows the docked keyboard and lights sounding notes during playback, toggling with the button', async () => {
     const { view, runtime, metronome } = createRig();
     await view.initialize();
+    await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
     const toggle = element<HTMLButtonElement>('focus-keyboard');
     const keys = element('replay-keys');
 
@@ -878,6 +879,7 @@ describe('AppView', () => {
   it('releases sounding playback keys when their note duration ends', async () => {
     const { view, runtime, metronome } = createRig();
     await view.initialize();
+    await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
     const keys = element('replay-keys');
 
     await pressListen(runtime.controller);
@@ -3222,7 +3224,17 @@ describe('AppView', () => {
       expect(element('roll-keep').hidden).toBe(true);
       expect(element<HTMLButtonElement>('roll-from').disabled).toBe(false);
       expect(element<HTMLButtonElement>('roll-to').disabled).toBe(false);
+      expect(element<HTMLInputElement>('roll-ghosts').disabled).toBe(false);
+      expect(element<HTMLInputElement>('roll-slips').disabled).toBe(false);
       expect(view.rollScene?.notes.length).toBeGreaterThan(0);
+      expect(view.rollScene?.ghosts.length).toBe(view.rollScene?.notes.length);
+      const notes = view.rollScene?.notes ?? [];
+      const ghosts = view.rollScene?.ghosts ?? [];
+      for (let i = 0; i < notes.length; i++) {
+        expect(ghosts[i]?.row).toBe(notes[i]?.row);
+        expect(ghosts[i]?.fromMs).toBeCloseTo(notes[i]?.fromMs ?? 0, 1);
+        expect(ghosts[i]?.untilMs).toBeCloseTo(notes[i]?.untilMs ?? 0, 1);
+      }
     });
 
     it('allows choosing a passage and practising it from the score roll', async () => {

@@ -899,6 +899,41 @@ describe('AppView', () => {
     element<HTMLButtonElement>('focus-stop').click();
   });
 
+  it('brings the keyboard round to where the playback begins, not to the top of the piece', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    // A keyboard wider than its screen, laid out a key every ten pixels, since
+    // jsdom lays nothing out.
+    const keys = element('replay-keys');
+    const scroller = keys.querySelector<HTMLElement>('.replay-keys__scroller');
+    if (scroller === null) {
+      throw new Error('No scroller under the keys.');
+    }
+    let scrolledTo: number | null = null;
+    Object.defineProperty(scroller, 'scrollWidth', { value: 1_000, configurable: true });
+    Object.defineProperty(scroller, 'clientWidth', { value: 200, configurable: true });
+    Object.defineProperty(scroller, 'scrollLeft', {
+      configurable: true,
+      get: () => scrolledTo ?? 0,
+      set: (left: number) => {
+        scrolledTo = left;
+      },
+    });
+    for (const key of keys.querySelectorAll<HTMLElement>('[data-midi]')) {
+      Object.defineProperty(key, 'offsetLeft', { value: Number(key.dataset['midi']) * 10 });
+      Object.defineProperty(key, 'offsetWidth', { value: 10 });
+    }
+    runtime.controller.updateSettings({ rangeFromBar: 2, rangeToBar: 2 });
+
+    await pressListen(runtime.controller);
+
+    // Bar two's lowest note is G2, centred: not bar one's C3.
+    expect(scrolledTo).toBe(p('G2').midi * 10 + 5 - 100);
+
+    element<HTMLButtonElement>('focus-stop').click();
+  });
+
   it('shows the pedal down where the music holds it during playback', async () => {
     const { view, runtime, metronome } = createRig();
     await view.initialize();

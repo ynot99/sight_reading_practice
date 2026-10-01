@@ -5656,11 +5656,16 @@ export class AppView {
       // last one's `finished`, which the button knows nothing about - so the
       // transport went back to offering Listen, and Stop went grey, over a
       // performance that was playing.
-      controller.playbackEvents.on('started', () => {
+      controller.playbackEvents.on('started', ({ stepIndex }) => {
         this.doc.body.dataset['listening'] = 'true';
         this.applyKeyboardVisibility();
-        const firstStep = controller.currentTimeline?.at(0);
-        const notes = firstStep ? expectedFor(firstStep, controller.settings.handStaff) : [];
+        // The first notes it will sound, from where it begins: a passage deep
+        // in the piece was shown the keys of its first bar.
+        const hand = controller.settings.handStaff;
+        const firstStruck = controller.currentTimeline?.steps
+          .slice(stepIndex)
+          .find((step) => expectedFor(step, hand).length > 0);
+        const notes = firstStruck === undefined ? [] : expectedFor(firstStruck, hand);
         const initialLowest = notes.length > 0 ? Math.min(...notes) : MIDDLE_C;
         const scrolled = scrollToShow(this.replayKeyboard, initialLowest);
         if (scrolled !== null) {

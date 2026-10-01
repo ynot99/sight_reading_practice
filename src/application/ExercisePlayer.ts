@@ -100,7 +100,14 @@ export interface ExercisePlayerDependencies {
 }
 
 export interface PlayerEventMap {
-  started: Record<string, never>;
+  /**
+   * The performance has begun, at this step.
+   *
+   * Which is the reader's place inside the passage, not the top of the
+   * piece: anything put up to show the music - the keyboard under it - is put
+   * where the music starts.
+   */
+  started: { readonly stepIndex: number };
   finished: Record<string, never>;
   /**
    * Where the music has reached, as the bar and beat a reader would say.
@@ -491,7 +498,7 @@ export class ExercisePlayer {
     timeTheStart(
       `player: cursor at the start (walked ${String(walkedFrom)} -> ${String(first?.index ?? 0)})`,
     );
-    this.emitter.emit('started', {});
+    this.emitter.emit('started', { stepIndex: first?.index ?? 0 });
     timeTheStart('player: page reacted to the start');
     this.deps.metronome.start();
     timeTheStart('player: metronome started (the clock is now running)');

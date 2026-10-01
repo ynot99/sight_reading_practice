@@ -1,7 +1,94 @@
 # Working in this repository
 
 `README.md` explains what the app is and how it is structured — read it first.
-This file only lists the rules that are easy to break.
+This file is how the work is done here, and the rules that are easy to break.
+`git log` is the history: every commit says what changed and why.
+
+## What the app is for
+
+- It is used mostly with imported scores, on a tablet in fullscreen and on a
+  desktop, with Web MIDI in the browser. Reproduce a report under the settings
+  it was made with — the frame, the count-in, play-to-start, the click — since
+  each takes another path through the code.
+- Two directions share the repo: a utility that makes reading easier, and a
+  trainer of real sight-reading. Ask which one a request is for. Inside the
+  trainer, an aid (note names, coloured notes, keys lit ahead, automatic
+  slowing) takes away the work the exercise exists for: say so.
+
+## How the work is done
+
+- The owner decides and reviews every change. Reports to the owner are short
+  and grouped by topic, with any question on its own **bold** line at the end.
+- **Discuss first, one item at a time.** Propose the order and why, do one
+  item, run the checks, show what changed, stop. A batch delivers decisions
+  the owner never got to make.
+- **Argue before building.** Say what a feature would actually measure or do,
+  where it would live and what it costs, and say "don't build this" when that
+  is the answer. Check first whether something already answers it. When the
+  owner reaffirms after the objection, build it in full.
+- **A description by appearance is a question.** Name the thing — say what it
+  is a picture *of* — before changing or removing it.
+- **Measure before claiming a cause.** Every report so far meant something
+  other than its wording. Reproduce, print the numbers, then fix. Where only
+  the device can answer (timing, memory, the keyboard, a tablet), add logging
+  and say exactly how to reproduce, for the owner to run. Settings has "Copy a
+  judging log" and For developers → start timings. Headless numbers are
+  ratios between variants, never the browser's cost.
+- A test "flaky under load" may be an unseeded exercise: view rigs generate
+  from a fresh seed. Print the state on failure before blaming timing.
+
+## Commits
+
+- Straight to `main`. **Commit, never push**: a push runs the deploy, and the
+  owner pushes. Before rewording anything, check `git status -sb` and
+  `git log origin/main`; rewording a pushed commit needs a force push, which
+  is the owner's call.
+- Before committing: `npm run typecheck`, `npx vitest run` and `npm run build`,
+  each exit 0.
+- The subject is a plain sentence saying what changed — no prefix. The body
+  says why: the cause found, what was measured, the tests and the mutations
+  they caught. Never "as X does"; describe the mechanism.
+- Stage explicitly. Never commit scores or MIDI files supplied for testing, or
+  anything rendered from them — they are third-party arrangements, and every
+  fixture here is synthetic. Never commit `.env`, nor any local file listed in
+  `.git/info/exclude`.
+- A tag names a version verified by hand. Tag before anything risky.
+
+## The interface
+
+- **Nothing in the transport row may change size**: it moves the buttons under
+  a thumb already aiming. Text that changes lives in the notice pill beside the
+  bar, out of the flow. Icons carry `title` as well as `aria-label`.
+- Mid-run the bar folds to what is marked `data-mid-run`; anything else added to
+  the row is hidden by default. On a narrow screen the row holds five buttons.
+- **One question, one setting, one place.** The drawer holds only what a reader
+  presses with hands on the keys: the passage and its places, note size, the
+  hand. The left pill is what you open, the right one the takes. A control
+  another setting has emptied is dimmed with a reason, never disabled.
+- **No new checkboxes**: they multiply. Difficulty is chosen in Modes.
+- **CSS holds the layout.** No JavaScript that measures a layout and corrects
+  it; find the box that is the wrong size. JS asks only what CSS cannot know.
+  No `backdrop-filter` over anything that repaints: it cost a quarter of the
+  frames on an integrated GPU.
+- Colours on keys, marks and rows are verdicts (Perfect / Good / Miss / Wrong).
+  Do not light something nobody judged in a verdict's colour.
+- Anything placed against a staff is measured from the printed page (Verovio's
+  SVG), never from the model.
+
+## Code idioms
+
+- Comments say *why*, in full sentences. Names are phrases that say what a
+  thing is for (`theNotesAskedFor`, `letGoOfTheReplay`).
+- A comment that quotes the owner (`His:`) quotes verbatim. Never a
+  paraphrase.
+- No workarounds. When state goes out of step, find the event that should have
+  said so; do not reconcile it inside a render method. State lives in the
+  controller and the model and is never read back from the DOM.
+- One answer, worked out in one place. Look before writing a helper: the keys
+  down at a moment are `theKeysDownAt`, the score as a roll `rollOfTheScore`,
+  a note's sounding length `soundsFor`.
+- Timers belong to `ui/`. The application layer is driven through the clock
+  and metronome ports.
 
 ## Layering
 
@@ -103,6 +190,17 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
 
 - Every rule in `domain/` and `application/` gets a test. New practice modes,
   voice generators, rhythm profiles and scoring strategies need one each.
+- **Every new test is mutation-checked**: break the smallest thing it covers
+  and watch it fail, for the stated reason. A test that passes anyway is
+  strengthened or deleted; a rule no test can reach is deleted. Pin the
+  property, not the mechanism.
+- Where a threshold decides, sweep the whole band rather than picking cases —
+  `tests/application/note-marks.test.ts` is the model.
+- jsdom applies no stylesheet. Layout rules are held in
+  `tests/ui/stylesheet.test.ts`, which reads the text — so a rule found there
+  proves the file says it, not that it wins. Check specificity and order.
+- A test of a reload builds a fresh page (`mountRealMarkup()`) before the
+  second rig, or it reads back what the first one set.
 - `tests/fixtures/preset-digest.txt` pins what every built-in preset generates.
   Refactoring the generation layer must leave it byte-identical; a deliberate
   change to the ladder means regenerating it and reading the diff.
@@ -112,3 +210,5 @@ Dependencies point inwards: `ui`/`composition` → `application` → `domain`, w
 - **`npm test` does not typecheck.** Run `npm run typecheck` (or `npm run
   build`) before calling anything done — type errors in tests have slipped
   through a green suite before.
+- Never `git checkout -- <file>` to undo a temporary edit in a file with
+  uncommitted work; copy the file first and copy it back.

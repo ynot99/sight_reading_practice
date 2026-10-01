@@ -128,7 +128,9 @@ import {
   shareOfTheRun,
   theSquaresOfTheBar,
   zoomAfterWheel,
+  LEAST_ROW,
   LEAST_ZOOM,
+  MOST_ROW,
   MOST_ZOOM,
   keepTheHeadInView,
   theRunScrolledUnderTheHead,
@@ -1244,6 +1246,16 @@ function percent(value: number): string {
  */
 function reportToTheConsole(what: string, error: unknown): void {
   console.error(what, error);
+}
+
+/**
+ * How far a wheel turned, whichever way it turned.
+ *
+ * A wheel turns up and down; a trackpad swiped sideways turns only across.
+ * Where a turn means a size rather than a place, either way is the same ask.
+ */
+function theWheelsTurn(event: WheelEvent): number {
+  return event.deltaY !== 0 ? event.deltaY : event.deltaX;
 }
 
 /**
@@ -7132,6 +7144,22 @@ export class AppView {
       // Said, so that a zoom does not zoom the page under it as well.
       { passive: false },
     );
+    // The maps say how much of the run, and how many of its rows, are on the
+    // screen - so a wheel over either changes that, along its own axis.
+    this.el.rollMap.addEventListener(
+      'wheel',
+      (event) => {
+        this.zoomByAWheelOverAMap(event, 'along');
+      },
+      { passive: false },
+    );
+    this.el.rollPitchMap.addEventListener(
+      'wheel',
+      (event) => {
+        this.zoomByAWheelOverAMap(event, 'down');
+      },
+      { passive: false },
+    );
     this.listen(this.el.rollMap, 'pointerdown', (event) => {
       this.el.rollMap.setPointerCapture(event.pointerId);
       this.showTheRunWhereItWasPointedAt(event);
@@ -8455,12 +8483,15 @@ export class AppView {
     if (event.ctrlKey || event.metaKey) {
       // Taken from the browser, which would zoom the whole page with it.
       event.preventDefault();
-      const was = Number(this.el.rollZoom.value);
-      const now = zoomAfterWheel(was, event.deltaY, LEAST_ZOOM, MOST_ZOOM);
-      if (now !== was) {
-        this.el.rollZoom.value = String(now);
-        this.holdTheZoomAround(event.clientX, was, now);
-      }
+      this.zoomAlongTheRunByWheel(event.deltaY, event.clientX);
+      return;
+    }
+    // And with Alt held it makes the rows taller or shorter: the height a
+    // pinch changes on a screen, which a desk has no pinch for. Taken from
+    // the browser too, which may otherwise go back a page on it.
+    if (event.altKey) {
+      event.preventDefault();
+      this.zoomTheRowsByWheel(theWheelsTurn(event));
       return;
     }
     // Otherwise it scrolls, as it would have scrolled the page: both ways from
@@ -8487,6 +8518,60 @@ export class AppView {
     ) {
       this.askWhereTheViewIs();
     }
+  }
+
+  /** Zooms along the run by a wheel, holding the music under `clientX` where it is. */
+  private zoomAlongTheRunByWheel(deltaPx: number, clientX: number): void {
+    const was = Number(this.el.rollZoom.value);
+    const now = zoomAfterWheel(was, deltaPx, LEAST_ZOOM, MOST_ZOOM);
+    if (now !== was) {
+      this.el.rollZoom.value = String(now);
+      this.holdTheZoomAround(clientX, was, now);
+    }
+  }
+
+  /**
+   * Makes the rows taller or shorter by a wheel.
+   *
+   * From the row as drawn, as a pinch starts from it: the stylesheet never
+   * lets the rows fall short of the room they have, and scaled from a smaller
+   * row asked for, a turn up would move nothing until it had made up the
+   * difference.
+   */
+  private zoomTheRowsByWheel(deltaPx: number): void {
+    const was = Math.round(this.theRowAsDrawn());
+    const now = zoomAfterWheel(was, deltaPx, LEAST_ROW, MOST_ROW);
+    if (now !== was) {
+      this.rollRowPx = now;
+      this.applyTheZoom();
+    }
+  }
+
+  /**
+   * A wheel over one of the maps: zooms along the axis that map is of.
+   *
+   * Along the run around the middle of the view, since the pointer is on the
+   * map and not over any moment of the drawing. A plain wheel is left to the
+   * browser, as over the drawing - nothing around the maps scrolls - and one
+   * with Ctrl held is taken, being how a trackpad pinch arrives and what the
+   * browser would zoom the whole page by.
+   */
+  private zoomByAWheelOverAMap(event: WheelEvent, axis: 'along' | 'down'): void {
+    if (this.drawnScene === null) {
+      return;
+    }
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+    }
+    if (axis === 'down') {
+      this.zoomTheRowsByWheel(theWheelsTurn(event));
+      return;
+    }
+    const grid = this.rollCanvases?.grid.getBoundingClientRect();
+    this.zoomAlongTheRunByWheel(
+      theWheelsTurn(event),
+      grid === undefined ? 0 : grid.left + grid.width / 2,
+    );
   }
 
   /** Moves the drawing with a finger, where one is moving it. */

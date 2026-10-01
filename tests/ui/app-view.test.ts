@@ -2328,6 +2328,94 @@ describe('AppView', () => {
       }
     });
 
+    /** How tall the rows were last asked to be, in pixels. */
+    function theRowsAsked(): string {
+      const drawn = element('roll-body').firstElementChild;
+      return drawn instanceof HTMLElement ? drawn.style.getPropertyValue('--roll-row-asked') : '';
+    }
+
+    it('makes the rows taller and shorter on a wheel with Alt held, and leaves the width', async () => {
+      // A pinch changes the height on a screen. A desk has no pinch, and the
+      // held wheel changed the width alone.
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        await openThePictureOfARun();
+        const zoom = element<HTMLInputElement>('roll-zoom');
+        const width = zoom.value;
+        const taller = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120, altKey: true });
+
+        element('roll-body').dispatchEvent(taller);
+
+        expect(taller.defaultPrevented).toBe(true);
+        expect(theRowsAsked()).toBe('15px');
+        expect(zoom.value).toBe(width);
+
+        element('roll-body').dispatchEvent(
+          new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120, altKey: true }),
+        );
+
+        expect(theRowsAsked()).toBe('13px');
+      } finally {
+        giveBack();
+      }
+    });
+
+    it('makes the rows taller from the height they are drawn at, where the room made them taller than asked', async () => {
+      // The stylesheet fills the room with the rows, so a row asked for at
+      // thirteen may stand at twenty. Grown from thirteen, the first turns up
+      // would change nothing on the screen.
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        await openThePictureOfARun();
+        const key = element('roll-body').querySelector<HTMLElement>('.roll__key');
+        if (key === null) {
+          throw new Error('No key drawn beside the rows.');
+        }
+        key.getBoundingClientRect = () => ({ height: 20 }) as DOMRect;
+
+        element('roll-body').dispatchEvent(
+          new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120, altKey: true }),
+        );
+
+        expect(theRowsAsked()).toBe('23px');
+      } finally {
+        giveBack();
+      }
+    });
+
+    it('zooms along the run on a wheel over the map, and the rows on one over the strip of pitches', async () => {
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 200 });
+      try {
+        await openThePictureOfARun();
+        const zoom = element<HTMLInputElement>('roll-zoom');
+        const width = Number(zoom.value);
+        const overTheMap = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120 });
+
+        element('roll-map').dispatchEvent(overTheMap);
+
+        expect(Number(zoom.value)).toBeGreaterThan(width);
+        // Left to the browser, as a plain wheel over the drawing is.
+        expect(overTheMap.defaultPrevented).toBe(false);
+
+        const widened = zoom.value;
+        // A trackpad swiped sideways over the strip turns it too.
+        element('roll-pitch-map').dispatchEvent(
+          new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: -120 }),
+        );
+
+        expect(theRowsAsked()).toBe('15px');
+        expect(zoom.value).toBe(widened);
+
+        // A trackpad pinch arrives with Ctrl held, and must not zoom the page.
+        const pinched = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -10, ctrlKey: true });
+        element('roll-map').dispatchEvent(pinched);
+
+        expect(pinched.defaultPrevented).toBe(true);
+      } finally {
+        giveBack();
+      }
+    });
+
     it('scrolls up and down to where a finger is on the strip', async () => {
       // Centred on the finger, as along the run: half way down the strip is
       // half the rows' worth, less half of the sixty on the screen.

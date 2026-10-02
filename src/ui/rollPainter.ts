@@ -97,6 +97,17 @@ export function asCanvasColour(said: string): string {
 }
 
 /**
+ * The same colour with nothing of it seen, for an ink to fade to.
+ *
+ * Faded to a transparent black instead, the way between them goes through
+ * grey wherever a canvas mixes its stops without regard to their alpha.
+ */
+export function withNoAlpha(ink: string): string {
+  const parts = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/.exec(ink.trim());
+  return parts === null ? 'rgba(0, 0, 0, 0)' : `rgba(${parts[1] ?? '0'}, ${parts[2] ?? '0'}, ${parts[3] ?? '0'}, 0)`;
+}
+
+/**
  * The inks of a drawing, read off the stylesheet through a mark of its own.
  *
  * Each ink is a custom property, and a custom property is read back as it was

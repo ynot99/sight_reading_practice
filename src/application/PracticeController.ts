@@ -36,7 +36,7 @@ import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
-import type { BarStart, KeyDown, PlayerEventMap } from './ExercisePlayer.js';
+import type { BarStart, KeyDown, PedalDown, PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type {
   ChosenClickWhen,
@@ -85,6 +85,7 @@ import {
   theKeysDownAt,
   theMarksOfTheRun,
   thePedalDownAt,
+  thePedalOfTheRun,
   thePressesBetween,
   thePressesOfTheRun,
   theBarsOfTheRun,
@@ -887,6 +888,7 @@ export class PracticeController {
     readonly judging: ReplayJudging;
     readonly marks: readonly ReplayMark[];
     readonly presses: readonly ReplayedPress[];
+    readonly pedal: readonly PedalDown[];
     readonly bars: readonly BarStart[];
     /** When it reached each line of the ruler, for the ruler it was asked of. */
     ruling: { readonly of: readonly RulerMark[]; readonly moments: readonly RuledMoment[] } | null;
@@ -2188,6 +2190,7 @@ export class PracticeController {
       judging,
       marks: theMarksOfTheRun(roll, timeline, judging),
       presses: thePressesOfTheRun(roll, timeline, judging),
+      pedal: thePedalOfTheRun(roll),
       bars: theBarsOfTheRun(roll, timeline),
       ruling: null,
       drawn: 0,
@@ -2350,6 +2353,22 @@ export class PracticeController {
    */
   playbackKeysDownBetween(fromMs: number, untilMs: number): readonly KeyDown[] {
     return this.player?.keysDownBetween(fromMs, untilMs) ?? [];
+  }
+
+  /**
+   * When the playback holds the pedal down between two moments on the clock -
+   * none where nothing is playing. See `ExercisePlayer.pedalDownBetween`.
+   */
+  playbackPedalBetween(fromMs: number, untilMs: number): readonly PedalDown[] {
+    return this.player?.pedalDownBetween(fromMs, untilMs) ?? [];
+  }
+
+  /**
+   * When the run being shown again had the pedal down between two moments on
+   * its own clock - none where no run is. See `thePedalOfTheRun`.
+   */
+  replayPedalBetween(fromMs: number, untilMs: number): readonly PedalDown[] {
+    return (this.replay?.pedal ?? []).filter((span) => span.untilMs > fromMs && span.fromMs < untilMs);
   }
 
   /**

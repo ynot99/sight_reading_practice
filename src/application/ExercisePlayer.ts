@@ -1,6 +1,6 @@
 
 import { ticksToMilliseconds } from '../domain/model/Duration.js';
-import { barLines, elapsedMsAt, positionOfTick, spanMs } from '../domain/model/Exercise.js';
+import { barLines, elapsedMsAt, pedalPresses, positionOfTick, spanMs } from '../domain/model/Exercise.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { GatheredNotes, type ScheduledNote } from './GatheredNotes.js';
 import type { PositionEvent } from './session/SessionEvents.js';
@@ -35,6 +35,12 @@ export type ListeningHand = number | null;
  */
 export interface KeyDown {
   readonly midi: number;
+  readonly fromMs: number;
+  readonly untilMs: number;
+}
+
+/** The sustain pedal down, from when to when. */
+export interface PedalDown {
   readonly fromMs: number;
   readonly untilMs: number;
 }
@@ -321,6 +327,11 @@ export class ExercisePlayer {
       readonly lap: readonly PlaceReached<MusicalPlace>[];
     }
   >();
+  /** The pedal's presses inside the stretch, timed as its places are. */
+  private stretchPedal: {
+    readonly firstTimeRound: readonly PedalDown[];
+    readonly lap: readonly PedalDown[];
+  } | null = null;
 
   /** Where the stretch ends, in the timeline's own ticks. */
   private endOf(toIndex: number | undefined): number {
@@ -354,6 +365,7 @@ export class ExercisePlayer {
     }
     this.untilTicks = until;
     this.stretchPlaces.clear();
+    this.stretchPedal = null;
     // A lap is a different length now, in ticks and in time both.
     this.lapTicks = Math.max(0, this.untilTicks - this.loopFromTicks);
     this.lapMs = spanMs(this.timeline.exercise, this.loopFromTicks, this.untilTicks);
@@ -521,16 +533,84 @@ export class ExercisePlayer {
       }
     };
     take(firstTimeRound, 0);
-    if (this.laidInLaps && this.lapMs > 0) {
-      // Only the laps that reach into the stretch asked about. Each begins
-      // where `noteAt` puts its notes: after the first time round, and after
-      // every whole lap before it.
-      const firstLap = Math.max(1, Math.floor((fromMs - began - this.firstLapMs) / this.lapMs) + 1);
-      for (let at = firstLap; began + this.firstLapMs + (at - 1) * this.lapMs < untilMs; at += 1) {
-        take(lap, this.firstLapMs + (at - 1) * this.lapMs);
-      }
+    for (const lapBeganMs of this.lapsReaching(fromMs - began, untilMs - began)) {
+      take(lap, lapBeganMs);
     }
     return found;
+  }
+
+  /**
+   * Where each lap after the first time round begins that reaches into a
+   * stretch of the music's own time: none where the music does not go round.
+   * Each begins where `noteAt` puts its notes - after the first time round,
+   * and after every whole lap before it.
+   */
+  private lapsReaching(fromMs: number, untilMs: number): readonly number[] {
+    if (!this.laidInLaps || this.lapMs <= 0) {
+      return [];
+    }
+    const laps: number[] = [];
+    const firstLap = Math.max(1, Math.floor((fromMs - this.firstLapMs) / this.lapMs) + 1);
+    for (let at = firstLap; this.firstLapMs + (at - 1) * this.lapMs < untilMs; at += 1) {
+      laps.push(this.firstLapMs + (at - 1) * this.lapMs);
+    }
+    return laps;
+  }
+
+  /**
+   * When the sustain pedal is down between two moments on the clock: each
+   * press that is down at any time between them, from when to when.
+   *
+   * In the terms its places are, and for the same reasons: the presses the
+   * sound is held by, cut to the stretch - a pedal down when the music is
+   * picked up is down from there, and one still down where a lap ends comes
+   * up there - and none past where this reading ends.
+   */
+  pedalDownBetween(fromMs: number, untilMs: number): readonly PedalDown[] {
+    const began = this.startedAtMs ?? this.countedInToMs;
+    if (!this.playing || began === null) {
+      return [];
+    }
+    const { firstTimeRound, lap } = this.pedalOfTheStretch();
+    const last = this.endsAtMs ?? Number.POSITIVE_INFINITY;
+    const down: PedalDown[] = [];
+    const take = (presses: readonly PedalDown[], lapBeganMs: number): void => {
+      for (const press of presses) {
+        const from = lapBeganMs + press.fromMs;
+        if (began + from >= untilMs || from >= last) {
+          break;
+        }
+        const until = Math.min(lapBeganMs + press.untilMs, last);
+        if (began + until > fromMs) {
+          down.push({ fromMs: began + from, untilMs: began + until });
+        }
+      }
+    };
+    take(firstTimeRound, 0);
+    for (const lapBeganMs of this.lapsReaching(fromMs - began, untilMs - began)) {
+      take(lap, lapBeganMs);
+    }
+    return down;
+  }
+
+  private pedalOfTheStretch(): { readonly firstTimeRound: readonly PedalDown[]; readonly lap: readonly PedalDown[] } {
+    const timeline = this.timeline;
+    if (this.stretchPedal !== null || timeline === null) {
+      return this.stretchPedal ?? { firstTimeRound: [], lap: [] };
+    }
+    const exercise = timeline.exercise;
+    const presses = pedalPresses(exercise);
+    const from = (fromTicks: number): readonly PedalDown[] => {
+      const fromMs = elapsedMsAt(exercise, fromTicks);
+      return presses
+        .filter(([down, up]) => up > fromTicks && down < this.untilTicks)
+        .map(([down, up]) => ({
+          fromMs: elapsedMsAt(exercise, Math.max(down, fromTicks)) - fromMs,
+          untilMs: elapsedMsAt(exercise, Math.min(up, this.untilTicks)) - fromMs,
+        }));
+    };
+    this.stretchPedal = { firstTimeRound: from(this.fromTicks), lap: from(this.loopFromTicks) };
+    return this.stretchPedal;
   }
 
   private placesOfTheStretch<Place extends MusicalPlace>(
@@ -674,6 +754,7 @@ export class ExercisePlayer {
     this.pausedAtIndex = null;
     this.untilTicks = this.endOf(options.toIndex);
     this.stretchPlaces.clear();
+    this.stretchPedal = null;
     this.pending = null;
     this.nextToSchedule = 0;
     this.scheduledThroughMs = Number.NEGATIVE_INFINITY;

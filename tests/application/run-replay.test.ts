@@ -4,6 +4,7 @@ import {
   theKeysDownAt,
   theMarksOfTheRun,
   thePedalDownAt,
+  thePedalOfTheRun,
   thePressesBetween,
   thePressesOfTheRun,
   theBarsOfTheRun,
@@ -342,5 +343,11 @@ describe('the keys down, and the pedal, a moment into the run', () => {
     expect(thePedalDownAt(run, 1_000)).toBe(true);
     expect(thePedalDownAt(run, 2_000)).toBe(false);
     expect(thePedalDownAt(run, 9_000)).toBe(true);
+    // From when to when, on the run's own clock, which is what falls onto
+    // the pedal's mark.
+    expect(thePedalOfTheRun(run)).toEqual([
+      { fromMs: 500, untilMs: 1_500 },
+      { fromMs: 3_000, untilMs: Number.POSITIVE_INFINITY },
+    ]);
   });
 });

@@ -31,6 +31,8 @@ export interface ReplayKeyboard {
   readonly row: HTMLElement;
   /** Where notes fall onto the keys from: over the row, and as wide as it. */
   readonly lane: HTMLCanvasElement;
+  /** Where the pedal falls onto its mark from: over the mark, and as wide as it. */
+  readonly pedalLane: HTMLCanvasElement;
 }
 
 /**
@@ -53,10 +55,18 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
   pedal.className = 'replay-keys__pedal';
   pedal.dataset['down'] = 'false';
   pedal.textContent = 'Ped.';
-  // Level with the keys, under the lane rather than beside it.
+  // Level with the keys, with a lane of its own over it that the pedal falls
+  // down onto it through, as the notes fall onto the keys.
+  const foot = doc.createElement('span');
+  foot.className = 'replay-keys__pedal-foot';
+  foot.append(pedal);
+  const pedalLaneBox = doc.createElement('span');
+  pedalLaneBox.className = 'replay-keys__lane replay-keys__pedal-lane';
+  const pedalLane = doc.createElement('canvas');
+  pedalLaneBox.append(pedalLane);
   const side = doc.createElement('span');
   side.className = 'replay-keys__side';
-  side.append(pedal);
+  side.append(pedalLaneBox, foot);
 
   const scroller = doc.createElement('div');
   scroller.className = 'replay-keys__scroller';
@@ -92,7 +102,7 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
   }
 
   host.replaceChildren(side, scroller);
-  return { keys, pedal, scroller, row, lane };
+  return { keys, pedal, scroller, row, lane, pedalLane };
 }
 
 /** Where a key stands along the row, and how wide it is drawn, in page pixels. */

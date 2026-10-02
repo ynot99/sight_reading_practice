@@ -1,6 +1,6 @@
 import type { RuledMoment } from '../application/rhythmRuler.js';
 import { isBlackKey, type KeyLight, type KeyPlace } from './replayKeys.js';
-import { box, inksFrom, readied, type Surface } from './rollPainter.js';
+import { box, inksFrom, readied, withNoAlpha, type Surface } from './rollPainter.js';
 
 /**
  * How far ahead the lane over the keyboard shows the music, in milliseconds
@@ -44,19 +44,65 @@ export function theFallingNotes(
   nowMs: number,
   aheadMs: number,
 ): readonly LaneNote[] {
-  const at = (ms: number): number => 1 - (ms - nowMs) / aheadMs;
   const bars: LaneNote[] = [];
   for (const note of notes) {
-    const top = Math.max(0, at(note.untilMs));
-    const bottom = Math.min(1, at(note.fromMs));
-    // Cut to the lane, a note still above it or already past it has no
-    // height left, and nor has one that lasts no time.
-    if (top >= bottom) {
-      continue;
+    const ends = inTheLane(note, nowMs, aheadMs);
+    if (ends !== null) {
+      bars.push({ midi: note.midi, shade: note.shade, ...ends });
     }
-    bars.push({ midi: note.midi, shade: note.shade, top, bottom });
   }
   return bars;
+}
+
+/**
+ * Where something lasting from one moment to another stands in the lane: its
+ * top where it ends, its foot where it begins, cut to the lane - or `null`
+ * where it is still above it, already past it, or lasts no time.
+ */
+function inTheLane(
+  span: { readonly fromMs: number; readonly untilMs: number },
+  nowMs: number,
+  aheadMs: number,
+): { readonly top: number; readonly bottom: number } | null {
+  const at = (ms: number): number => 1 - (ms - nowMs) / aheadMs;
+  const top = Math.max(0, at(span.untilMs));
+  const bottom = Math.min(1, at(span.fromMs));
+  return top >= bottom ? null : { top, bottom };
+}
+
+/**
+ * A press of the pedal as the column over its mark shows it, as shares of its
+ * height: `top` where the pedal comes up, cut to the column, and `foot` where
+ * it goes down - past the mark, below one, once it has gone down.
+ */
+export interface LanePedal {
+  readonly top: number;
+  readonly foot: number;
+}
+
+/**
+ * Where each press of the pedal stands over its mark at a moment, as a note
+ * stands over its key: its foot reaching the mark as the pedal goes down, and
+ * going on down past it, since what is painted is the foot and not the whole
+ * of a hold. A press still above the column, or come up already, is not
+ * there.
+ */
+export function theFallingPedal(
+  presses: readonly { readonly fromMs: number; readonly untilMs: number }[],
+  nowMs: number,
+  aheadMs: number,
+): readonly LanePedal[] {
+  const at = (ms: number): number => 1 - (ms - nowMs) / aheadMs;
+  const shown: LanePedal[] = [];
+  for (const press of presses) {
+    const top = Math.max(0, at(press.untilMs));
+    const foot = at(press.fromMs);
+    if (foot <= 0 || top >= 1 || top >= foot) {
+      continue;
+    }
+    shown.push({ top, foot });
+  }
+  return shown;
 }
 
 /** Where a bar of the music begins: the number printed over it, and when. */
@@ -174,6 +220,74 @@ const BAR_NUMBER_INSET_PX = 4;
  */
 const BAR_LINE_DASHES = [6, 4];
 const BAR_LINE_PX = 2;
+/**
+ * How far in from either side of its column a press of the pedal is drawn,
+ * and how much each of its ends is taken in: a pedal lifted and pressed again
+ * at one moment is two presses end to end, and is seen as two.
+ */
+const PEDAL_INSET_PX = 12;
+const PEDAL_END_PX = 1;
+/**
+ * How much of a press is painted whole from its foot, and how far above that
+ * it fades away. A pedal is held for bars at a time, and a column standing
+ * over the mark for all of it would say nothing the lit mark does not; what
+ * is worth seeing coming is the moment it goes down. A press shorter than
+ * both is seen whole, so a quick change of pedal is seen as one.
+ */
+const PEDAL_SOLID_PX = 24;
+const PEDAL_FADE_PX = 48;
+
+/**
+ * Paints the pedal falling onto its mark: each press as a pill, in the ink a
+ * key is lit as heard - the pedal is pressed, and nobody judged it - whole at
+ * its foot and fading above it. The foot goes on down into the mark as the
+ * pedal goes down and takes the rest with it, so a long hold is seen landing
+ * and then gone, until the next press comes.
+ */
+export function paintTheFallingPedal(
+  surface: Surface,
+  presses: readonly LanePedal[],
+  inks: LaneInks,
+  density: number,
+): void {
+  const ready = readied(surface, density);
+  if (ready === null) {
+    return;
+  }
+  const { paint, tallPx, widePx } = ready;
+  const wide = Math.max(1, widePx - 2 * PEDAL_INSET_PX);
+  const round = wide / 2;
+  for (const press of presses) {
+    const footPx = press.foot * tallPx - PEDAL_END_PX;
+    const goneAbovePx = footPx - PEDAL_SOLID_PX - PEDAL_FADE_PX;
+    const liftPx = Math.min(press.top * tallPx + PEDAL_END_PX, footPx - LEAST_TALL_PX);
+    const fromPx = Math.max(liftPx, goneAbovePx);
+    const untilPx = Math.min(footPx, tallPx);
+    if (untilPx <= fromPx) {
+      continue;
+    }
+    const tall = untilPx - fromPx;
+    // Round at the foot while it is in the column; gone into the mark, it is
+    // cut off square where the column ends.
+    const footRound = footPx <= tallPx ? Math.min(round, tall / 2) : 0;
+    const topRound = Math.min(round, tall / 2);
+    box(paint, PEDAL_INSET_PX, fromPx, wide, tall, [topRound, topRound, footRound, footRound]);
+    paint.fillStyle = fadingUp(paint, footPx, inks.heard);
+    paint.fill();
+    paint.strokeStyle = fadingUp(paint, footPx, inks.edge);
+    paint.lineWidth = 1;
+    paint.stroke();
+  }
+}
+
+/** An ink whole for the solid part of a press above its foot, and fading to nothing above that. */
+function fadingUp(paint: CanvasRenderingContext2D, footPx: number, ink: string): CanvasGradient {
+  const fade = paint.createLinearGradient(0, footPx, 0, footPx - PEDAL_SOLID_PX - PEDAL_FADE_PX);
+  fade.addColorStop(0, ink);
+  fade.addColorStop(PEDAL_SOLID_PX / (PEDAL_SOLID_PX + PEDAL_FADE_PX), ink);
+  fade.addColorStop(1, withNoAlpha(ink));
+  return fade;
+}
 
 /**
  * Paints the notes falling onto the keys, and the bar lines among them.

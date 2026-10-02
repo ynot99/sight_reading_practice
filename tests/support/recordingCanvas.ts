@@ -12,6 +12,38 @@ export interface Mark {
   readonly dashes?: readonly number[];
   readonly alpha: number;
   readonly words?: string;
+  /** Where an ink that fades runs from and to, and its stops on the way. */
+  readonly fade?: { readonly fromY: number; readonly toY: number; readonly stops: readonly [number, string][] };
+}
+
+/**
+ * An ink that changes along a line, as painted with: said as its first
+ * colour, so a mark in it is found by the ink it starts in.
+ */
+class RecordedGradient {
+  readonly stops: [number, string][] = [];
+  readonly fromY: number;
+  readonly toY: number;
+
+  constructor(fromY: number, toY: number) {
+    this.fromY = fromY;
+    this.toY = toY;
+  }
+
+  addColorStop(offset: number, colour: string): void {
+    this.stops.push([offset, colour]);
+  }
+
+  toString(): string {
+    return this.stops[0]?.[1] ?? '';
+  }
+}
+
+/** A mark's ink and how it fades, whatever it was painted with. */
+function inkOf(style: unknown): { readonly ink: string; readonly fade?: Mark['fade'] } {
+  return style instanceof RecordedGradient
+    ? { ink: String(style), fade: { fromY: style.fromY, toY: style.toY, stops: style.stops } }
+    : { ink: String(style) };
 }
 
 /**
@@ -60,14 +92,23 @@ export class Recorder {
   setLineDash(dashes: number[]): void {
     this.dashes = dashes;
   }
+  createLinearGradient(_fromX: number, fromY: number, _toX: number, toY: number): RecordedGradient {
+    return new RecordedGradient(fromY, toY);
+  }
   fill(): void {
     if (this.path !== null) {
-      this.marks.push({ how: 'fill', ink: this.fillStyle, ...this.path, alpha: this.globalAlpha });
+      this.marks.push({ how: 'fill', ...inkOf(this.fillStyle), ...this.path, alpha: this.globalAlpha });
     }
   }
   stroke(): void {
     if (this.path !== null) {
-      this.marks.push({ how: 'stroke', ink: this.strokeStyle, ...this.path, dashes: this.dashes, alpha: this.globalAlpha });
+      this.marks.push({
+        how: 'stroke',
+        ...inkOf(this.strokeStyle),
+        ...this.path,
+        dashes: this.dashes,
+        alpha: this.globalAlpha,
+      });
     }
   }
   fillText(words: string, x: number, y: number): void {

@@ -4,6 +4,7 @@ import {
   DYNAMIC_VELOCITY,
   dynamicAt,
   pedalHeldUntil,
+  pedalPresses,
   pedalSpans,
   velocityAt,
 } from '../../src/domain/model/Exercise.js';
@@ -56,6 +57,63 @@ describe('the pedal in force where a key is struck', () => {
 
     for (let ticks = -q; ticks <= 9 * q; ticks += q / 4) {
       expect(pedalHeldUntil(piece, ticks)).toBe(walked(ticks));
+    }
+  });
+});
+
+describe('each press of the pedal', () => {
+  it('is two where the pedal is lifted and pressed again at one moment, and one where both staves write it', () => {
+    const changed: Exercise = {
+      ...twoBarExercise(),
+      pedalMarks: [pedal(0, 0, 'start'), pedal(0, 2 * q, 'stop'), pedal(0, 2 * q, 'start'), pedal(1, 0, 'stop')],
+    };
+    const twice: Exercise = {
+      ...twoBarExercise(),
+      pedalMarks: [pedal(0, 0, 'start'), pedal(1, 0, 'stop'), pedal(0, 0, 'start'), pedal(1, 0, 'stop')],
+    };
+
+    expect(pedalPresses(changed)).toEqual([
+      [0, 2 * q],
+      [2 * q, 4 * q],
+    ]);
+    expect(pedalPresses(twice)).toEqual([[0, 4 * q]]);
+  });
+
+  it('follows what the sound is held by, a press ending where the next begins and none left down past the end', () => {
+    // Listed later-first, the way two staves' directions come out of a file,
+    // with the second line down before the first comes up; and a line never
+    // lifted. A press is down exactly where a key struck is held, and they
+    // follow one another in time without overlapping.
+    const pieces: Exercise[] = [
+      {
+        ...twoBarExercise(),
+        pedalMarks: [pedal(0, 3 * q, 'start'), pedal(1, 2 * q, 'stop'), pedal(0, 0, 'start'), pedal(1, 0, 'stop')],
+      },
+      {
+        ...twoBarExercise(),
+        pedalMarks: [pedal(0, 0, 'start'), pedal(1, 0, 'stop'), pedal(0, 3 * q, 'start'), pedal(1, 2 * q, 'stop')],
+      },
+      { ...twoBarExercise(), pedalMarks: [pedal(0, q, 'start'), pedal(0, 2 * q, 'stop'), pedal(1, q, 'start')] },
+    ];
+    expect(pedalPresses(pieces[0] as Exercise)).toEqual([
+      [0, 3 * q],
+      [3 * q, 6 * q],
+    ]);
+    expect(pedalPresses(pieces[2] as Exercise)).toEqual([
+      [q, 2 * q],
+      [5 * q, 8 * q],
+    ]);
+
+    for (const piece of pieces) {
+      const presses = pedalPresses(piece);
+      for (let ticks = -q; ticks <= 9 * q; ticks += q / 4) {
+        const inside = presses.some(([down, up]) => ticks >= down && ticks < up);
+        expect(inside, String(ticks)).toBe(pedalHeldUntil(piece, ticks) !== null);
+      }
+      for (const [at, [down, up]] of presses.entries()) {
+        expect(down).toBeLessThan(up);
+        expect(down).toBeGreaterThanOrEqual(presses[at - 1]?.[1] ?? Number.NEGATIVE_INFINITY);
+      }
     }
   });
 });

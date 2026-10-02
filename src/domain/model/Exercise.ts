@@ -274,6 +274,33 @@ function pedalStretches(exercise: Exercise): readonly PedalStretch[] {
 /** {@link pedalStretches}, once per piece. */
 const pedalStretchesOf = new WeakMap<Exercise, readonly PedalStretch[]>();
 
+/**
+ * Each time the pedal goes down and comes up, in divisions and in time order,
+ * as the sound has it.
+ *
+ * Read off the stretches {@link pedalHeldUntil} reads, so a picture of the
+ * pedal cannot disagree with what it holds: a press lasts for as long as a
+ * key struck in it is held to the same moment. The same pedal written on both
+ * staves is one press, and one lifted and pressed again at a moment is two,
+ * the second beginning where the first ends.
+ */
+export function pedalPresses(exercise: Exercise): readonly (readonly [number, number])[] {
+  const presses: [number, number][] = [];
+  for (const { from, heldUntil } of pedalStretches(exercise)) {
+    const last = presses.at(-1);
+    if (heldUntil === null || (last !== undefined && last[1] === heldUntil)) {
+      continue;
+    }
+    // Pressed afresh before the last press was over, where spans written on
+    // two staves overlap: the last press ends where this one begins.
+    if (last !== undefined && last[1] > from) {
+      last[1] = from;
+    }
+    presses.push([from, heldUntil]);
+  }
+  return presses;
+}
+
 /** The metre in force at a given measure. */
 export function timeAtMeasure(exercise: Exercise, measureIndex: number): TimeSignature {
   let current = exercise.timeSignature;

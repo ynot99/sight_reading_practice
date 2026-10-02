@@ -973,7 +973,7 @@ describe('AppView', () => {
       await view.initialize();
       await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
       runtime.controller.updateSettings({ rhythmRuler: 'eighth' });
-      const lane = element('replay-keys').querySelector('canvas');
+      const lane = element('replay-keys').querySelector<HTMLCanvasElement>('.replay-keys__track canvas');
       if (lane === null) {
         throw new Error('No lane over the keys.');
       }
@@ -1114,6 +1114,37 @@ describe('AppView', () => {
 
     element<HTMLButtonElement>('focus-stop').click();
     expect(view.fallingRuling).toEqual([]);
+  });
+
+  it('lets the pedal fall onto its mark as the playback holds it', async () => {
+    // At sixty, down for the first two beats and again for the next two.
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore({
+      ...twoBarExercise({ tempoBpm: 60 }),
+      pedalMarks: [
+        { measureIndex: 0, offsetTicks: 0, type: 'start', line: true },
+        { measureIndex: 0, offsetTicks: 2 * Duration.QUARTER.ticks, type: 'stop', line: true },
+        { measureIndex: 0, offsetTicks: 2 * Duration.QUARTER.ticks, type: 'start', line: true },
+        { measureIndex: 1, offsetTicks: 0, type: 'stop', line: true },
+      ],
+    });
+    const column = element('replay-keys').querySelector<HTMLCanvasElement>('.replay-keys__side canvas');
+    expect(column).not.toBeNull();
+
+    await pressListen(runtime.controller);
+    metronome.advanceSubdivisions(1);
+
+    // Two presses over the lane's three seconds: the first on the mark now,
+    // the second coming down onto it two seconds off.
+    expect(view.fallingPedal.map((press) => [Number(press.top.toFixed(3)), Number(press.foot.toFixed(3))])).toEqual([
+      [0.333, 1],
+      [0, 0.333],
+    ]);
+
+    element<HTMLButtonElement>('focus-stop').click();
+    expect(view.fallingPedal).toEqual([]);
+    expect(column?.width).toBe(0);
   });
 
   it('takes the keyboard away however a playback ends, not only on Stop', async () => {
@@ -3329,6 +3360,8 @@ describe('AppView', () => {
           const lit = [...keys.querySelectorAll<HTMLElement>('[data-shade]')].map((key) => Number(key.dataset['midi']));
           expect(lit.sort()).toEqual([...(rig.runtime.controller.lastRoll?.presses.map((press) => press.midi) ?? [])].sort());
           expect(keys.querySelector<HTMLElement>('.replay-keys__pedal')?.dataset['down']).toBe('true');
+          // And down past its mark from there on, never having been let up.
+          expect(rig.view.fallingPedal.map((press) => [press.top, press.foot > 1])).toEqual([[0, true]]);
         } finally {
           vi.useRealTimers();
         }

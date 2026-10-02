@@ -5074,6 +5074,30 @@ describe('a run shown again on the page', () => {
   const at = (renderer: FakeScoreRenderer): string[] =>
     renderer.played.map((mark) => `${String(mark.stepIndex)}:${String(mark.midi)}`);
 
+  it('gives the pedal the run held down between two moments on its own clock', async () => {
+    const { controller, roll } = await aRunPlayed();
+    const began = rollBeganAtMs(roll);
+    controller.beginReplay(
+      {
+        ...roll,
+        pedal: [
+          { downAtMs: began + 500, upAtMs: began + 1_500 },
+          { downAtMs: began + 3_000, upAtMs: null },
+        ],
+      },
+      { modeId: FLOW_MODE_ID, modes: [] },
+    );
+    const between = (from: number, until: number): [number, number][] =>
+      controller.replayPedalBetween(from, until).map((span) => [span.fromMs, span.untilMs]);
+
+    expect(between(1_500, 3_000)).toEqual([]);
+    expect(between(1_000, 3_001)).toEqual([
+      [500, 1_500],
+      [3_000, Number.POSITIVE_INFINITY],
+    ]);
+    expect(between(60_000, 61_000)).toEqual([[3_000, Number.POSITIVE_INFINITY]]);
+  });
+
   it('keeps what a run was played with, as it was, for showing it again', async () => {
     const rig = createController(true);
     const { controller } = rig;

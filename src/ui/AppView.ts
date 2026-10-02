@@ -84,9 +84,12 @@ import {
 import {
   FALLING_AHEAD_MS,
   paintTheLane,
+  paintTheFallingPedal,
   theFallingBarLines,
   theFallingNotes,
+  theFallingPedal,
   theFallingRuling,
+  type LanePedal,
   theLaneInks,
   type LaneRuling,
   type LaneBarLine,
@@ -8515,6 +8518,7 @@ export class AppView {
       // the memory it holds - the height of the screen of it. Painting sizes
       // it again.
       this.replayKeyboard.lane.width = 0;
+      this.replayKeyboard.pedalLane.width = 0;
     }
 
     if (active && show) {
@@ -8618,6 +8622,23 @@ export class AppView {
     );
   }
 
+  /**
+   * The pedal falling onto its mark: a playback's as the player holds it, a
+   * replay's as the run did.
+   */
+  get fallingPedal(): readonly LanePedal[] {
+    const controller = this.runtime.controller;
+    const { nowMs, aheadMs } = this.laneClock;
+    const until = nowMs + aheadMs;
+    return theFallingPedal(
+      this.replayRoll !== null
+        ? controller.replayPedalBetween(nowMs, until)
+        : controller.playbackPedalBetween(nowMs, until),
+      nowMs,
+      aheadMs,
+    );
+  }
+
   /** Whether notes are falling now, rather than held, put away or gone. */
   private get notesAreFalling(): boolean {
     const controller = this.runtime.controller;
@@ -8675,6 +8696,12 @@ export class AppView {
       this.replayKeyboard.lane,
       { notes: this.fallingScene, barLines: this.fallingBarLines, ruling: this.fallingRuling },
       this.keyPlaces,
+      this.laneInks,
+      this.doc.defaultView?.devicePixelRatio ?? 1,
+    );
+    paintTheFallingPedal(
+      this.replayKeyboard.pedalLane,
+      this.fallingPedal,
       this.laneInks,
       this.doc.defaultView?.devicePixelRatio ?? 1,
     );

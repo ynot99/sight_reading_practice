@@ -1558,6 +1558,103 @@ describe('the keys held down between two moments', () => {
   });
 });
 
+describe('the pedal down between two moments', () => {
+  /**
+   * At sixty, a second a beat: down for the first two beats, lifted and down
+   * again for the next two, and down from the second beat of the second bar
+   * to the end without being lifted.
+   */
+  const pedalled = (): Exercise => ({
+    ...twoBarExercise({ tempoBpm: 60 }),
+    pedalMarks: [
+      { measureIndex: 0, offsetTicks: 0, type: 'start', line: true },
+      { measureIndex: 0, offsetTicks: 2 * Duration.QUARTER.ticks, type: 'stop', line: true },
+      { measureIndex: 0, offsetTicks: 2 * Duration.QUARTER.ticks, type: 'start', line: true },
+      { measureIndex: 1, offsetTicks: 0, type: 'stop', line: true },
+      { measureIndex: 1, offsetTicks: Duration.QUARTER.ticks, type: 'start', line: true },
+    ],
+  });
+  const spans = (down: readonly { fromMs: number; untilMs: number }[]): [number, number][] =>
+    down.map((span) => [Math.round(span.fromMs), Math.round(span.untilMs)]);
+
+  it('gives each press down at any time between them, a change of pedal as two', () => {
+    const { player, metronome, timeline } = rig(pedalled());
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(1);
+
+    expect(spans(player.pedalDownBetween(0, 9_000))).toEqual([
+      [0, 2_000],
+      [2_000, 4_000],
+      [5_000, 8_000],
+    ]);
+    // Down across the whole of the stretch asked about, and so in it.
+    expect(spans(player.pedalDownBetween(2_500, 3_000))).toEqual([[2_000, 4_000]]);
+    // Up at the first moment, or down only at the second, is not.
+    expect(spans(player.pedalDownBetween(4_000, 5_000))).toEqual([]);
+  });
+
+  it('holds it down from where the music is picked up, and lifts it where the stretch ends', () => {
+    // Picked up on the second beat, and stopped where the third of the
+    // second bar begins: the first press is down already, and the last comes
+    // up a beat after it goes down rather than three.
+    const { player, metronome, timeline } = rig(pedalled());
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never', fromIndex: 1, toIndex: 4 });
+    metronome.advanceSubdivisions(1);
+
+    expect(spans(player.pedalDownBetween(0, 9_000))).toEqual([
+      [0, 1_000],
+      [1_000, 3_000],
+      [4_000, 5_000],
+    ]);
+  });
+
+  it('lifts it where a lap ends, before the next lap presses it again', () => {
+    // Going round the first bar and the beat after it, six seconds a lap: the
+    // pedal down from the fifth beat comes up as the lap ends, and the next
+    // lap's first press goes down there.
+    const { player, metronome, timeline } = rig(pedalled());
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never', repeat: true, toIndex: 4 });
+    metronome.advanceSubdivisions(1);
+
+    expect(spans(player.pedalDownBetween(5_500, 6_500))).toEqual([
+      [5_000, 6_000],
+      [6_000, 8_000],
+    ]);
+  });
+
+  it('goes round with the music, and not once this time round is to be the last', () => {
+    const { player, metronome, timeline } = rig(pedalled());
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never', repeat: true });
+    metronome.advanceSubdivisions(7);
+
+    expect(spans(player.pedalDownBetween(7_000, 10_000))).toEqual([
+      [5_000, 8_000],
+      [8_000, 10_000],
+    ]);
+
+    player.setRepeating(false);
+    expect(spans(player.pedalDownBetween(7_000, 10_000))).toEqual([[5_000, 8_000]]);
+
+    player.pause();
+    expect(player.pedalDownBetween(7_000, 10_000)).toEqual([]);
+  });
+
+  it('follows a passage moved while it plays', () => {
+    const { player, metronome, timeline } = rig(pedalled());
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never', repeat: true });
+    metronome.advanceSubdivisions(1);
+    expect(spans(player.pedalDownBetween(8_000, 9_000))).toEqual([[8_000, 10_000]]);
+
+    // Narrowed to the first bar, going round: the lap is four seconds now,
+    // and its second press comes up where the lap ends.
+    player.retarget(3);
+
+    expect(spans(player.pedalDownBetween(8_000, 9_000))).toEqual([[8_000, 10_000]]);
+    expect(spans(player.pedalDownBetween(6_000, 7_000))).toEqual([[6_000, 8_000]]);
+    expect(spans(player.pedalDownBetween(3_000, 3_500))).toEqual([[2_000, 4_000]]);
+  });
+});
+
 describe('the bars begun between two moments', () => {
   /** Two bars, the second at twice the speed: a lap is six seconds. */
   const quickening = (): Exercise => ({

@@ -2470,16 +2470,21 @@ body[data-keys-hidden='true'] .focus-bar {
 }
 
 /*
- * The pedal's mark, level with the keys rather than the lane over them.
- * Positioned, so it stands over the keys' ground rather than under it.
+ * The pedal's mark, level with the keys, and over it a lane of its own that
+ * the pedal falls down onto it through. Positioned, so it stands over the
+ * keys' ground rather than under it.
  */
 .replay-keys__side {
   position: relative;
   display: flex;
   flex: 0 0 auto;
-  align-self: flex-end;
+  flex-direction: column;
+}
+
+.replay-keys__pedal-foot {
+  display: flex;
+  flex: 0 0 var(--replay-keys);
   align-items: center;
-  height: var(--replay-keys);
 }
 
 .replay-keys__pedal {
@@ -2535,7 +2540,7 @@ body[data-keys-hidden='true'] .focus-bar {
   opacity: var(--falling-notes-opacity);
 }
 
-/* The keyboard alone: the lane is there and nothing falls down it. */
+/* The keyboard alone: the lanes are there and nothing falls down them. */
 .replay-keys[data-shows='keys'] .replay-keys__lane {
   visibility: hidden;
 }

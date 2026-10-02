@@ -223,9 +223,12 @@ describe('the stylesheet', () => {
     // finger where it is too wide for its screen.
     expect(body('.replay-keys__row')).toMatch(/position\s*:\s*relative/);
     expect(body('.replay-keys__row')).toMatch(/pointer-events\s*:\s*auto/);
-    // And the pedal's mark stands level with the keys, over their ground.
-    expect(body('.replay-keys__side')).toMatch(/align-self\s*:\s*flex-end/);
-    expect(body('.replay-keys__side')).toMatch(/height\s*:\s*var\(--replay-keys\)/);
+    // And the pedal's mark stands level with the keys, over their ground,
+    // with a lane of its own above it the height of the notes' - the same
+    // kind of lane, half seen, and put away with the notes'.
+    expect(body('.replay-keys__side')).toMatch(/flex-direction\s*:\s*column/);
+    expect(body('.replay-keys__side')).not.toMatch(/align-self|height/);
+    expect(body('.replay-keys__pedal-foot')).toMatch(/flex\s*:\s*0 0 var\(--replay-keys\)/);
     expect(body('.replay-keys__side')).toMatch(/position\s*:\s*relative/);
   });
 

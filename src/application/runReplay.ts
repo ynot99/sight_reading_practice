@@ -1,6 +1,6 @@
 import type { NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { barLines } from '../domain/model/Exercise.js';
-import type { BarStart } from './ExercisePlayer.js';
+import type { BarStart, PedalDown } from './ExercisePlayer.js';
 import type { RuledMoment, RulerMark } from './rhythmRuler.js';
 import { landing, type NoteTier } from '../domain/scoring/noteTiers.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
@@ -341,12 +341,19 @@ function shadeOf(
   return tierOf(verdict, stepIndex, deviationMs, timeline, judging) ?? 'aside';
 }
 
+/**
+ * When the sustain pedal was down in the run, on its own clock: one still down
+ * when the run ended is down for good.
+ */
+export function thePedalOfTheRun(roll: RunRoll): readonly PedalDown[] {
+  const began = rollBeganAtMs(roll);
+  return roll.pedal.map((span) => ({
+    fromMs: span.downAtMs - began,
+    untilMs: span.upAtMs === null ? Number.POSITIVE_INFINITY : span.upAtMs - began,
+  }));
+}
+
 /** Whether the sustain pedal was down a moment into the run. */
 export function thePedalDownAt(roll: RunRoll, atMs: number): boolean {
-  const began = rollBeganAtMs(roll);
-  return roll.pedal.some(
-    (span) =>
-      span.downAtMs - began <= atMs &&
-      (span.upAtMs === null || atMs < span.upAtMs - began),
-  );
+  return thePedalOfTheRun(roll).some((span) => span.fromMs <= atMs && atMs < span.untilMs);
 }

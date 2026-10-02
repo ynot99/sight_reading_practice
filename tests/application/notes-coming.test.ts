@@ -124,6 +124,53 @@ describe('the notes the music will reach on its own', () => {
     ]);
   });
 
+  it('gives them from the count-in, where the count-in says the music will begin', () => {
+    const harness = harnessFor(new FlowMode());
+    harness.session.start();
+    // Two beats into the count-in, at sixty: the music is two beats away.
+    harness.metronome.advanceSubdivisions(4 * 2 + 1);
+    expect(harness.session.status).toBe('counting-in');
+
+    expect(said(harness.session.notesComingBefore(6_000))).toEqual([
+      [0, 4_000],
+      [1, 5_000],
+    ]);
+
+    // From where the run picks up, where that is partway through.
+    const partway = createHarness({
+      exercise: twoBarExercise({ tempoBpm: 60 }),
+      mode: new FlowMode(),
+      options: {
+        countInBars: 1,
+        clickWhen: 'never',
+        click: 'subdivision',
+        startAtIndex: 2,
+        matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+      },
+    });
+    partway.session.start();
+    partway.metronome.advanceSubdivisions(1);
+    expect(said(partway.session.notesComingBefore(6_000))).toEqual([
+      [2, 4_000],
+      [3, 5_000],
+    ]);
+
+    // And the frame that waits at every note goes as far as its first.
+    const atNotes = harnessFor(new NoteMode());
+    atNotes.session.start();
+    atNotes.metronome.advanceSubdivisions(1);
+    expect(said(atNotes.session.notesComingBefore(60_000))).toEqual([[0, 4_000]]);
+  });
+
+  it('gives none in the count-in where the first beat is the reader\'s to give', () => {
+    const harness = harnessFor(new BarMode());
+    harness.session.start();
+    harness.metronome.advanceSubdivisions(5);
+    expect(harness.session.status).toBe('counting-in');
+
+    expect(harness.session.notesComingBefore(60_000)).toEqual([]);
+  });
+
   it('gives none where the reader is the clock', () => {
     const harness = harnessFor(new WaitMode());
     countedIn(harness);

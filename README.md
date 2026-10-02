@@ -48,7 +48,8 @@ square so that a reading says it was played with it: over each step where a
 note is owed, the marker's band grows in two halves, down from the top of the
 system and up from its foot, meets between the staves as the beat falls, and
 is white for the moment they meet. They begin a second ahead, so how near a
-note is reads the same at any tempo. Only where the music keeps time, and only
+note is reads the same at any tempo, and through the count-in, so the first
+note is seen coming as well. Only where the music keeps time, and only
 as far ahead as its moments are known: at a bar line the downbeat is the
 reader's to give, and where the music waits at every note, a note not yet
 played is as far as it goes. A cursor on every note leaves no place to keep

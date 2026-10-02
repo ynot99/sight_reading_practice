@@ -1259,6 +1259,34 @@ describe('AppView', () => {
     }
   });
 
+  it('closes the cursors on the first note through the count-in', async () => {
+    const frames: FrameRequestCallback[] = [];
+    const ask = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    try {
+      const { view, runtime, metronome, renderer, clock } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 1, closingCursors: true });
+
+      element<HTMLButtonElement>('focus-play').click();
+      // The last beat of the count-in, a tick being a beat here: the music is
+      // a second away.
+      metronome.advanceSubdivisions(4);
+      expect(runtime.controller.session?.status).toBe('counting-in');
+      clock.advance(250);
+      for (const frame of frames.splice(0)) {
+        frame(0);
+      }
+
+      expect(renderer.closing.map((cue) => [cue.stepIndex, cue.closing])).toEqual([[0, 0.25]]);
+    } finally {
+      ask.mockRestore();
+    }
+  });
+
   it('takes the keyboard away however a playback ends, not only on Stop', async () => {
     // Another frame ends the performance from inside the controller, and the
     // page hears no Stop and no end of the music.

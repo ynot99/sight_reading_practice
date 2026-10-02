@@ -8757,8 +8757,9 @@ export class AppView {
   }
 
   /**
-   * Keeps the cursors closing while a run goes and they are asked for, and
-   * takes them off the page where it stops. A frame at a time, each asking the
+   * Keeps the cursors closing while a run goes and they are asked for - and
+   * while it is counted in, so the first note is seen coming - and takes them
+   * off the page where it stops. A frame at a time, each asking the
    * controller again, so however a run stops the cursors stop with it.
    */
   private letTheCursorsClose(): void {
@@ -8769,7 +8770,8 @@ export class AppView {
     const frame = (): void => {
       this.closingFrame = null;
       const controller = this.runtime.controller;
-      if (!controller.settings.closingCursors || controller.session?.status !== 'running') {
+      const status = controller.session?.status;
+      if (!controller.settings.closingCursors || (status !== 'running' && status !== 'counting-in')) {
         this.runtime.renderer.showClosing([]);
         return;
       }

@@ -8,6 +8,7 @@ import {
 } from '../../domain/scoring/PerformanceReport.js';
 import { landing, perfectWindowMs, type NoteHit } from '../../domain/scoring/noteTiers.js';
 import { expectedFor } from '../../domain/timeline/Timeline.js';
+import { ticksToMilliseconds } from '../../domain/model/Duration.js';
 import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timeline.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../../shared/EventEmitter.js';
 import type { IPracticeMode } from '../modes/IPracticeMode.js';
@@ -181,6 +182,11 @@ export class PracticeSession {
   private resumeAtTicks = 0;
   /** Step the run is about to pick up from. */
   private resumeAtIndex = 0;
+  /**
+   * Where the music will begin on the clock, while the count-in is still
+   * being counted and it has not begun.
+   */
+  private countedInToMs: number | null = null;
   /** Note-ons that landed during the count-in, kept until the music starts. */
   private beforeTheMusic: MidiNoteOnEvent[] = [];
   /**
@@ -555,14 +561,26 @@ export class PracticeSession {
    * as it goes: the music stands there if it is played late.
    */
   notesComingBefore(untilMs: number): readonly NotesComing[] {
-    if (this.status !== 'running' || !this.mode.requiresMetronome) {
+    if (!this.mode.requiresMetronome) {
+      return [];
+    }
+    // Counted in, from where the count-in says the music will begin - unless
+    // its first beat is the reader's to give.
+    const countingIn = this.status === 'counting-in';
+    const counted = this.countedInToMs;
+    if (countingIn && (counted === null || this.mode.waitsForTheFirstBeat)) {
+      return [];
+    }
+    if (!countingIn && this.status !== 'running') {
       return [];
     }
     if (this.heldAtBarTicks !== null && !this.mode.holdsPastTheGate) {
       return [];
     }
+    const origin =
+      countingIn && counted !== null ? counted - this.elapsedTo(this.resumeAtTicks) : this.runStartedAt;
     const coming: NotesComing[] = [];
-    const from = this.stepIndex;
+    const from = countingIn ? this.resumeAtIndex : this.stepIndex;
     const bar = this.timeline.at(from)?.measureIndex;
     for (let at = from; at <= this.lastIndex; at += 1) {
       const step = this.timeline.at(at);
@@ -572,7 +590,7 @@ export class PracticeSession {
       if (at > from && this.mode.standsStill === 'at-bar-lines' && step.measureIndex !== bar) {
         break;
       }
-      const atMs = this.runStartedAt + this.elapsedTo(step.onsetTicks);
+      const atMs = origin + this.elapsedTo(step.onsetTicks);
       if (atMs >= untilMs) {
         break;
       }
@@ -580,7 +598,7 @@ export class PracticeSession {
         continue;
       }
       coming.push({ stepIndex: at, atMs });
-      const played = at === from && this.matcher?.completed === true;
+      const played = !countingIn && at === from && this.matcher?.completed === true;
       if (this.mode.standsStill === 'at-notes' && !played) {
         break;
       }
@@ -912,7 +930,27 @@ export class PracticeSession {
    * everything downstream - the timeline, the scheduled onsets, the position
    * shown - goes on counting from the start of the piece.
    */
+  /**
+   * Works out where the music will begin from a tick of the count-in.
+   *
+   * The count-in is beaten at one tempo, the one the music opens at, so how
+   * long is left of it is one multiplication; taken again at every tick of
+   * it, from the latest, so it drifts no further than one tick's arithmetic.
+   */
+  private countTowardsTheMusic(tick: MetronomeTick): void {
+    const exercise = this.timeline.exercise;
+    const countInBars = this.pulseCountInBars;
+    const musicFrom = metronomeEnd(exercise, {
+      countInBars,
+      fromTicks: this.resumeAtTicks,
+      untilTicks: this.resumeAtTicks,
+    });
+    const bpm = this.temposToBeat(countInBars)[0]?.bpm ?? this.tempoBpm;
+    this.countedInToMs = tick.scheduledTimeMs + ticksToMilliseconds(musicFrom - tick.positionTicks, bpm);
+  }
+
   private beginRunning(atMs: number, tickPositionTicks: number): void {
+    this.countedInToMs = null;
     this.runStartedAt = atMs - this.elapsedTo(this.resumeAtTicks);
     // The first time only: a run counted back in after a pause is the same
     // run, and the report asks how long the reader played rather than how
@@ -1452,6 +1490,7 @@ export class PracticeSession {
   private handleTick(tick: MetronomeTick): void {
     const pulse = this.pulseGeneration;
     if (this.status === 'counting-in') {
+      this.countTowardsTheMusic(tick);
       if (!tick.isPulse) {
         return;
       }

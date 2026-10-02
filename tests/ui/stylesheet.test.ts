@@ -275,11 +275,19 @@ describe('the stylesheet', () => {
     expect(body('.replay-keys__pedal-foot')).toMatch(/pointer-events\s*:\s*auto/);
     // An empty ring, filled where the pedal falls, white on the mark lit by it.
     expect(body('.replay-keys__pedal-dot')).toMatch(/border\s*:\s*1\.5px solid var\(--accent\)/);
-    expect(body('.replay-keys__pedal-dot')).not.toMatch(/background/);
+    expect(body('.replay-keys__pedal-dot')).not.toMatch(/(^|[;\s])background\s*:/);
     expect(body(".replay-keys__pedal-foot[data-falls='true'] .replay-keys__pedal-dot")).toMatch(
       /background\s*:\s*var\(--accent\)/,
     );
     expect(body(".replay-keys__pedal[data-down='true'] .replay-keys__pedal-dot")).toMatch(/border-color\s*:\s*#ffffff/);
+    // And it changes as the mark does: at once as the pedal goes down, and in
+    // the mark's own time as it comes up.
+    const time = (selector: string): string[] =>
+      [...body(selector).matchAll(/(\d+ms ease-out)/g)].map((found) => found[1] ?? '');
+    expect(time('.replay-keys__pedal-dot')).toEqual(time('.replay-keys__pedal').slice(0, 2));
+    expect(time('.replay-keys__pedal-dot')).toHaveLength(2);
+    expect(body(".replay-keys__pedal[data-down='true'] .replay-keys__pedal-dot")).toMatch(/transition\s*:\s*none/);
+    expect(body(".replay-keys__pedal[data-down='true']")).toMatch(/transition\s*:\s*none/);
     expect(
       body(".replay-keys__pedal-foot[data-falls='true'] .replay-keys__pedal[data-down='true'] .replay-keys__pedal-dot"),
     ).toMatch(/background\s*:\s*#ffffff/);

@@ -358,6 +358,58 @@ describe('a finger on the music', () => {
   });
 });
 
+describe('the closing cursors', () => {
+  function rects(surface: HTMLElement): SVGRectElement[] {
+    return [...surface.querySelectorAll<SVGRectElement>('g.closing-cursors rect.closing-cursor')];
+  }
+
+  const at = (bar: SVGRectElement | undefined, name: string): number => Number(bar?.getAttribute(name) ?? Number.NaN);
+
+  it('closes a bar from above the notes owed at a step and one from below, meeting on their heads', async () => {
+    const { renderer, surface } = aStage();
+    const two = printed(twoBarExercise());
+    await renderer.load(two.xml, two.steps);
+    const drawing = sheets(surface)[0]?.querySelector('svg') as SVGSVGElement;
+    const layout = readThePage(drawing);
+    const [top, second] = layout.systems[0]?.bars[0]?.staves[0]?.lines ?? [];
+    const space = (second ?? Number.NaN) - (top ?? Number.NaN);
+    // The treble's C4 alone of the first chord: its bass note is not owed.
+    const c4 = two.steps[0]?.printed.find((here) => here.midi === 60);
+    const head = layout.heads.get(c4?.id ?? '');
+
+    renderer.showClosing([{ stepIndex: 0, midis: [60], closing: 0.5 }]);
+
+    const [above, below] = rects(surface);
+    expect(rects(surface)).toHaveLength(2);
+    // Half way: two spaces off the head, above and below, a space and a half
+    // long and a head wide, on the head's middle.
+    const headTop = (head?.y ?? Number.NaN) - space / 2;
+    const headFoot = (head?.y ?? Number.NaN) + space / 2;
+    expect(at(above, 'y') + at(above, 'height')).toBeCloseTo(headTop - 2 * space, 5);
+    expect(at(below, 'y')).toBeCloseTo(headFoot + 2 * space, 5);
+    expect(at(above, 'height')).toBeCloseTo(1.5 * space, 5);
+    expect(at(above, 'x') + at(above, 'width') / 2).toBeCloseTo((head?.x ?? Number.NaN) + 0.59 * space, 5);
+    expect(above?.hasAttribute('data-met')).toBe(false);
+
+    // Met: on the head, and white.
+    renderer.showClosing([{ stepIndex: 0, midis: [60], closing: 1 }]);
+    const [onTop, onFoot] = rects(surface);
+    expect(rects(surface)).toHaveLength(2);
+    expect(at(onTop, 'y') + at(onTop, 'height')).toBeCloseTo(headTop, 5);
+    expect(at(onFoot, 'y')).toBeCloseTo(headFoot, 5);
+    expect(onTop?.getAttribute('data-met')).toBe('true');
+
+    // Across a chord, from the top of the highest to the foot of the lowest.
+    renderer.showClosing([{ stepIndex: 0, midis: [48, 60], closing: 1 }]);
+    const c3 = layout.heads.get(two.steps[0]?.printed.find((here) => here.midi === 48)?.id ?? '');
+    expect(at(rects(surface)[1], 'y')).toBeCloseTo((c3?.y ?? Number.NaN) + space / 2, 5);
+
+    // And off the page once nothing is coming, or what is coming is not drawn.
+    renderer.showClosing([{ stepIndex: 0, midis: [99], closing: 1 }]);
+    expect(rects(surface)).toEqual([]);
+  });
+});
+
 describe('the marker', () => {
   /** Where on the screen a page's things are: its reading, and pixels to a unit. */
   function readingOf(surface: HTMLElement, page: number): { layout: PageLayout; scale: number } {

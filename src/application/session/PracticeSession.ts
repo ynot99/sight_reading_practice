@@ -63,6 +63,13 @@ export interface PracticeSessionDependencies {
  * {@link IPracticeMode}. It talks to hardware only through ports, so the
  * entire loop runs headless in tests.
  */
+/** Notes the reader owes at a step, and when the music will reach them. */
+export interface NotesComing {
+  readonly stepIndex: number;
+  readonly atMs: number;
+  readonly midis: readonly number[];
+}
+
 export class PracticeSession {
   private readonly timeline: ExerciseTimeline;
   private readonly mode: IPracticeMode;
@@ -516,6 +523,51 @@ export class PracticeSession {
       this.metronome.start();
     }
     this.enterStep(this.resumeAtIndex);
+  }
+
+  /**
+   * The notes the reader owes that the music will reach on its own before a
+   * moment, and when it reaches each: none where the reader is the clock.
+   *
+   * On the run's own clock, which a gate opened late moves on - so as far as
+   * the next place the music may stand and no further. At a bar line the
+   * downbeat is the reader's to give, and while the music stands at one, when
+   * it goes on is theirs too. At every note, a note not yet played is as far
+   * as it goes: the music stands there if it is played late.
+   */
+  notesComingBefore(untilMs: number): readonly NotesComing[] {
+    if (this.status !== 'running' || !this.mode.requiresMetronome) {
+      return [];
+    }
+    if (this.heldAtBarTicks !== null && !this.mode.holdsPastTheGate) {
+      return [];
+    }
+    const coming: NotesComing[] = [];
+    const from = this.stepIndex;
+    const bar = this.timeline.at(from)?.measureIndex;
+    for (let at = from; at <= this.lastIndex; at += 1) {
+      const step = this.timeline.at(at);
+      if (step === null) {
+        break;
+      }
+      if (at > from && this.mode.standsStill === 'at-bar-lines' && step.measureIndex !== bar) {
+        break;
+      }
+      const atMs = this.runStartedAt + this.elapsedTo(step.onsetTicks);
+      if (atMs >= untilMs) {
+        break;
+      }
+      const midis = this.expectedAt(step);
+      if (midis.length === 0) {
+        continue;
+      }
+      coming.push({ stepIndex: at, atMs, midis });
+      const played = at === from && this.matcher?.completed === true;
+      if (this.mode.standsStill === 'at-notes' && !played) {
+        break;
+      }
+    }
+    return coming;
   }
 
   /**

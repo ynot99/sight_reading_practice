@@ -39,6 +39,16 @@ export interface IPracticeMode {
    */
   readonly holdsPastTheGate: boolean;
   /**
+   * Where the music can stand still waiting for the reader, for anything that
+   * has to see ahead of now: nowhere, at bar lines, or at every note they owe.
+   *
+   * `holdsAt` says, as each step is entered, whether it stands there; this says
+   * where it ever might, which is how far the moments of the notes ahead are
+   * known. Past a place the music may stand, when anything falls is the
+   * reader's.
+   */
+  readonly standsStill: 'nowhere' | 'at-bar-lines' | 'at-notes';
+  /**
    * Grading this mode is usually judged by.
    *
    * A default, not a binding: the reader may grade any mode by any registered
@@ -85,6 +95,9 @@ export abstract class BasePracticeMode implements IPracticeMode {
 
   /** And this one: a gate, where a mode has one, is at a bar line. */
   readonly holdsPastTheGate: boolean = false;
+
+  /** And this: most modes are carried by the clock and never stand still. */
+  readonly standsStill: IPracticeMode['standsStill'] = 'nowhere';
 
   /** Nothing waits, by default: most modes are carried by the clock. */
   holdsAt(_context: PracticeContext, _step: PracticeStep): number | null {

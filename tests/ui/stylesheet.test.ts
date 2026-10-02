@@ -296,6 +296,18 @@ describe('the stylesheet', () => {
     expect(body('.replay-keys__pedal')).toMatch(/position\s*:\s*relative/);
   });
 
+  it('draws the closing cursors in a fixed ink, and white with an edge where they meet', () => {
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    // Fixed, the page being white in either theme.
+    expect(body('.closing-cursor')).toMatch(/fill\s*:\s*rgb\(37 99 235 \/ 75%\)/);
+    expect(body(".closing-cursor[data-met='true']")).toMatch(/fill\s*:\s*#ffffff/);
+    // White alone is nothing on white paper.
+    expect(body(".closing-cursor[data-met='true']")).toMatch(/stroke\s*:\s*#2563eb/);
+    expect(body(".closing-cursor[data-met='true']")).toMatch(/vector-effect\s*:\s*non-scaling-stroke/);
+  });
+
   it('takes a finger held on the metronome button for nothing but a hold', () => {
     const body = rules().find((rule) => rule.selector === '#focus-metronome')?.body ?? '';
 

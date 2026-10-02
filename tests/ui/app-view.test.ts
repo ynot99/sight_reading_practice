@@ -1217,6 +1217,48 @@ describe('AppView', () => {
     ask.mockRestore();
   });
 
+  it('closes the cursors on the notes coming a frame at a time while a run goes, and takes them off when it stops', async () => {
+    const frames: FrameRequestCallback[] = [];
+    const ask = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const runAFrame = (): void => {
+      for (const frame of frames.splice(0)) {
+        frame(0);
+      }
+    };
+    try {
+      const { view, runtime, metronome, renderer, clock } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0, closingCursors: true });
+
+      element<HTMLButtonElement>('focus-play').click();
+      metronome.advanceSubdivisions(1);
+      const began = clock.now();
+      clock.advance(750);
+      runAFrame();
+
+      // A second ahead: the first note met a moment ago and still white, and
+      // the second three quarters of the way closed on it.
+      expect(renderer.closing.map((cue) => [cue.stepIndex, cue.closing])).toEqual([[1, 0.75]]);
+      clock.set(began + 1_050);
+      runAFrame();
+      expect(renderer.closing.map((cue) => [cue.stepIndex, Number(cue.closing.toFixed(2))])).toEqual([
+        [1, 1],
+        [2, 0.05],
+      ]);
+
+      element<HTMLButtonElement>('focus-stop').click();
+      runAFrame();
+      expect(renderer.closing).toEqual([]);
+      expect(frames).toEqual([]);
+    } finally {
+      ask.mockRestore();
+    }
+  });
+
   it('takes the keyboard away however a playback ends, not only on Stop', async () => {
     // Another frame ends the performance from inside the controller, and the
     // page hears no Stop and no end of the music.

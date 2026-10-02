@@ -5074,6 +5074,24 @@ describe('a run shown again on the page', () => {
   const at = (renderer: FakeScoreRenderer): string[] =>
     renderer.played.map((mark) => `${String(mark.stepIndex)}:${String(mark.midi)}`);
 
+  it('gives the notes coming to the closing cursors only where they are asked for, from a moment on', async () => {
+    const rig = createController(true);
+    const { controller } = rig;
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+    controller.start();
+    rig.metronome.advanceSubdivisions(1);
+    const steps = (from: number, until: number): number[] =>
+      controller.notesClosingBetween(from, until).map((notes) => notes.stepIndex);
+
+    expect(steps(0, 60_000)).toEqual([]);
+
+    controller.updateSettings({ closingCursors: true });
+    const began = controller.notesClosingBetween(-60_000, 60_000)[0]?.atMs ?? Number.NaN;
+    expect(steps(began, began + 2_001)).toEqual([0, 1, 2]);
+    expect(steps(began + 1, began + 2_001)).toEqual([1, 2]);
+  });
+
   it('gives the pedal the run held down between two moments on its own clock', async () => {
     const { controller, roll } = await aRunPlayed();
     const began = rollBeganAtMs(roll);

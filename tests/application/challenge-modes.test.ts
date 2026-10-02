@@ -25,6 +25,7 @@ function settings(overrides: Partial<PracticeSettings> = {}): PracticeSettings {
     rhythmOnly: false,
     stopAtAMistake: false,
     cursorWhileRunning: true,
+    closingCursors: false,
     ...overrides,
   } as unknown as PracticeSettings;
 }
@@ -83,13 +84,36 @@ describe('a square turned on in a frame it cannot go with', () => {
     }
   });
 
-  it('takes rhythm, and only rhythm, out of the frame that waits with no beat', () => {
+  it('takes only the squares that keep to a beat out of the frame that waits with no beat', () => {
+    // Rhythm only asks for the time between notes, and the closing cursors
+    // close on a beat: the frame that waits for the reader keeps neither.
     const waiting = settings({ modeId: WAIT_MODE_ID });
+    const needABeat = ['rhythm', 'closing'];
 
-    expect(settingsForMode('rhythm', true, waiting).modeId).toBe(FLOW_MODE_ID);
-    for (const mode of CHALLENGE_MODES.filter((mode) => mode !== 'rhythm')) {
+    for (const mode of needABeat) {
+      expect(settingsForMode(mode, true, waiting).modeId).toBe(FLOW_MODE_ID);
+    }
+    for (const mode of CHALLENGE_MODES.filter((mode) => !needABeat.includes(mode))) {
       expect(settingsForMode(mode, true, waiting).modeId).toBeUndefined();
     }
+    // And put out by choosing that frame.
+    const closing = settings({ closingCursors: true });
+    expect(modesOn(after(closing, settingsForFrame(WAIT_MODE_ID, closing)))).toEqual([]);
+    expect(modesOn(after(closing, settingsForFrame(NOTE_MODE_ID, closing)))).toEqual(['closing']);
+  });
+
+  it('puts the closing cursors and no cursor out of each other', () => {
+    // A cursor on every note, and keeping the place yourself: one answer.
+    const noCursor = settings({ cursorWhileRunning: false });
+    const closing = after(noCursor, settingsForMode('closing', true, noCursor));
+    expect(modesOn(closing)).toEqual(['closing']);
+
+    const none = after(closing, settingsForMode('cursor', true, closing));
+    expect(modesOn(none)).toEqual(['cursor']);
+
+    // Turning either off leaves the other as it was.
+    expect(modesOn(after(none, settingsForMode('closing', false, none)))).toEqual(['cursor']);
+    expect(modesOn(after(closing, settingsForMode('cursor', false, closing)))).toEqual(['closing']);
   });
 
   it('leaves the frame alone when a square is turned off', () => {

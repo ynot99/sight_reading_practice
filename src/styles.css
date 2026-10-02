@@ -343,6 +343,21 @@ textarea {
   transition: filter 140ms linear;
 }
 
+/*
+ * The cursors closing on a note the reader owes, and white for the moment
+ * they meet on it. In fixed inks: the page is white in either theme.
+ */
+.closing-cursor {
+  fill: rgb(37 99 235 / 75%);
+}
+
+.closing-cursor[data-met='true'] {
+  fill: #ffffff;
+  stroke: #2563eb;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
 .score__cursor--other {
   --marker-wash: rgb(148 163 184 / 28%);
 }
@@ -4059,6 +4074,11 @@ body[data-playing='true'] .score__modes {
 .mode-card--cursor,
 .score__mode--cursor {
   --mode-ground: #115e59;
+}
+
+.mode-card--closing,
+.score__mode--closing {
+  --mode-ground: #9a3412;
 }
 
 /*

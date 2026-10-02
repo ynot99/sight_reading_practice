@@ -99,7 +99,7 @@ import {
 import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
 import { replayFits } from '../application/runReplay.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
-import type { DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
+import type { ClosingCue, DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
 import { barLines, barNumberOf, measureCount, pedalHeldUntil, spanMs } from '../domain/model/Exercise.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
@@ -818,6 +818,14 @@ function readMetronomeTap(value: string): MetronomeTap {
   return METRONOME_TAPS.includes(value as MetronomeTap) ? (value as MetronomeTap) : 'opens-its-sheet';
 }
 
+/**
+ * How long before a note's beat the cursors begin to close on it, and how long
+ * they stay met on it after: long enough to be seen coming and seen to meet,
+ * short enough that a run of quick notes is not a crowd of them.
+ */
+const CLOSING_LEAD_MS = 1_000;
+const CLOSING_MET_MS = 120;
+
 /** The opening a stored or typed value names, falling back to generating. */
 function readWhatOpens(value: string): WhatOpens {
   return WHAT_OPENS.includes(value as WhatOpens) ? (value as WhatOpens) : 'generated';
@@ -1371,6 +1379,8 @@ export class AppView {
   private readonly replayKeyboard: ReplayKeyboard;
   /** The frame the notes over the keys are painted on next, while any fall. */
   private fallingFrame: number | null = null;
+  /** The frame the closing cursors are next drawn in, while they are. */
+  private closingFrame: number | null = null;
   /** Where each key stands along the row, until the row changes size. */
   private keyPlaces: ReadonlyMap<number, KeyPlace> | null = null;
   /** The lane's colours, read again each time notes begin to fall. */
@@ -2241,6 +2251,10 @@ export class AppView {
     }
     this.forgetTheMapFrame();
     this.stopTheNotesFalling();
+    if (this.closingFrame !== null) {
+      this.doc.defaultView?.cancelAnimationFrame(this.closingFrame);
+      this.closingFrame = null;
+    }
     this.stopTheFling();
     if (this.timeTick !== null) {
       clearInterval(this.timeTick);
@@ -5948,6 +5962,7 @@ export class AppView {
       session.events.on('statusChanged', ({ status }) => {
         this.updateButtons(status);
         this.keepDrainingWhileWaiting(status === 'running');
+        this.letTheCursorsClose();
         // Playing a piece is the plainest way of saying it is the one being
         // worked on - and the only way to say it about a score the program
         // put on the stand by itself.
@@ -8691,6 +8706,45 @@ export class AppView {
       this.fallingFrame = view.requestAnimationFrame(frame);
     };
     this.fallingFrame = view.requestAnimationFrame(frame);
+  }
+
+  /**
+   * The cursors closing on the notes coming, as they stand now: each from
+   * where it begins a second before its beat, to meeting on it, and met for a
+   * moment after.
+   */
+  get closingCues(): readonly ClosingCue[] {
+    const now = this.runtime.clock.now();
+    return this.runtime.controller
+      .notesClosingBetween(now - CLOSING_MET_MS, now + CLOSING_LEAD_MS)
+      .map((notes) => ({
+        stepIndex: notes.stepIndex,
+        midis: notes.midis,
+        closing: Math.min(1, Math.max(0, 1 - (notes.atMs - now) / CLOSING_LEAD_MS)),
+      }));
+  }
+
+  /**
+   * Keeps the cursors closing while a run goes and they are asked for, and
+   * takes them off the page where it stops. A frame at a time, each asking the
+   * controller again, so however a run stops the cursors stop with it.
+   */
+  private letTheCursorsClose(): void {
+    const view = this.doc.defaultView;
+    if (this.closingFrame !== null || view === null || typeof view.requestAnimationFrame !== 'function') {
+      return;
+    }
+    const frame = (): void => {
+      this.closingFrame = null;
+      const controller = this.runtime.controller;
+      if (!controller.settings.closingCursors || controller.session?.status !== 'running') {
+        this.runtime.renderer.showClosing([]);
+        return;
+      }
+      this.runtime.renderer.showClosing(this.closingCues);
+      this.closingFrame = view.requestAnimationFrame(frame);
+    };
+    this.closingFrame = view.requestAnimationFrame(frame);
   }
 
   private stopTheNotesFalling(): void {

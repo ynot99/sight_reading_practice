@@ -44,6 +44,7 @@ export class BarMode extends FlowMode {
   // line after it, and the pulse must be silent there too: his, again -
   // "перший тік метроному грається навіть якщо я нічого не натискав".
   override readonly waitsForTheFirstBeat = true;
+  override readonly standsStill = 'at-bar-lines';
 
   /** Whether this bar's gate is still to come. */
   private awaitingTheBar = true;

@@ -37,6 +37,7 @@ export class NoteMode extends FlowMode {
   override readonly id = NOTE_MODE_ID;
   override readonly label = 'Wait at every note';
   override readonly holdsPastTheGate = true;
+  override readonly standsStill = 'at-notes';
 
   override holdsAt(context: PracticeContext, step: PracticeStep): number | null {
     // The matcher rather than the step's own notes, for the reason Wait mode

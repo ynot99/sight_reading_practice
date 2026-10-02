@@ -43,6 +43,16 @@ you reach it), **Rhythm only** (any note counts), **One mistake** (a wrong
 note ends the run) and **No cursor** (keep the place yourself). Rhythm only
 and One mistake empty each other, so turning either on turns the other off.
 
+A sixth square, **Closing cursors**, is an aid rather than a challenge, and a
+square so that a reading says it was played with it: on each note owed, two
+cursors close from above and below, meet on its heads as its beat falls, and
+are white for the moment they meet. They begin a second ahead, so how near a
+note is reads the same at any tempo. Only where the music keeps time, and only
+as far ahead as its moments are known: at a bar line the downbeat is the
+reader's to give, and where the music waits at every note, a note not yet
+played is as far as it goes. A cursor on every note leaves no place to keep
+yourself, so it and No cursor each turn the other off.
+
 Whichever kind of run is *not* the one the app opens with is said in the
 corner of the page and on the Start button itself, because Start means
 something different in each and a reader can be left in one.

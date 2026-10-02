@@ -84,6 +84,7 @@ const SETTINGS: PracticeSettings = {
   countInPlayback: 'every',
   keysShown: 'keys',
   pedalFalls: false,
+  closingCursors: true,
 };
 
 describe('practice settings codec', () => {

@@ -263,6 +263,26 @@ export interface IRhythmRuler {
   showBeat(mark: RulerMark | null): void;
 }
 
+/** A note the reader owes, and how far the cursors closing on it have come. */
+export interface ClosingCue {
+  readonly stepIndex: number;
+  /** The keys of it the reader owes, whose heads the cursors close on. */
+  readonly midis: readonly number[];
+  /** From nought where they begin, to one where they meet on its beat. */
+  readonly closing: number;
+}
+
+/**
+ * Two cursors closing on each note the reader owes, from above it and below,
+ * meeting on its heads as its beat falls.
+ *
+ * Asked a frame at a time with the notes coming and how near each is; how far
+ * apart they begin, and how a meeting looks, is the drawing's.
+ */
+export interface IClosingCursors {
+  showClosing(cues: readonly ClosingCue[]): void;
+}
+
 /**
  * How much trouble the step under the marker is giving the reader.
  *

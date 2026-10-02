@@ -11,6 +11,8 @@ import type {
   IScoreFade,
   IRhythmRuler,
   IStuckMarker,
+  IClosingCursors,
+  ClosingCue,
   IScoreCursor,
   IScoreRenderer,
   IScoreZoom,
@@ -65,7 +67,8 @@ export class FakeScoreRenderer
     IScorePages,
     IHandSwitches,
     IStuckMarker,
-    IRhythmRuler
+    IRhythmRuler,
+    IClosingCursors
 {
   readonly cursor = new FakeScoreCursor();
   /** The other hand's marker; see `IOtherHandMarker`. */
@@ -114,6 +117,13 @@ export class FakeScoreRenderer
 
   showTrouble(missteps: number): void {
     this.trouble = missteps;
+  }
+
+  /** The cursors last shown closing, as they were asked for. */
+  closing: readonly ClosingCue[] = [];
+
+  showClosing(cues: readonly ClosingCue[]): void {
+    this.closing = cues;
   }
 
   configureOverlay(context: OverlayContext): void {

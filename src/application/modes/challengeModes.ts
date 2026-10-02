@@ -13,7 +13,7 @@ export interface PlayedWith {
 }
 
 /** The squares a reader can turn on, in the order they are shown. */
-export const CHALLENGE_MODES: readonly string[] = ['survival', 'blind', 'rhythm', 'strict', 'cursor'];
+export const CHALLENGE_MODES: readonly string[] = ['survival', 'blind', 'rhythm', 'strict', 'cursor', 'closing'];
 
 /**
  * What a mode square is, said once.
@@ -43,6 +43,10 @@ export function modeIsOn(mode: string, settings: PracticeSettings): boolean {
     // keeping the place themselves.
     case 'cursor':
       return !settings.cursorWhileRunning;
+    // Not a challenge but an aid, and a square so that a reading says it was
+    // played with it.
+    case 'closing':
+      return settings.closingCursors;
     default:
       return false;
   }
@@ -84,6 +88,9 @@ const FRAMES_A_SQUARE_REFUSES: Readonly<Record<string, readonly string[]>> = {
   rhythm: [LISTEN_MODE_ID, WAIT_MODE_ID],
   strict: [LISTEN_MODE_ID],
   cursor: [LISTEN_MODE_ID],
+  // The cursors close on a beat, and the frame that waits for the reader
+  // keeps none.
+  closing: [LISTEN_MODE_ID, WAIT_MODE_ID],
 };
 
 /**
@@ -140,8 +147,12 @@ function squareSettings(mode: string, on: boolean): Partial<PracticeSettings> {
       return on ? { rhythmOnly: true, stopAtAMistake: false } : { rhythmOnly: false };
     case 'strict':
       return on ? { stopAtAMistake: true, rhythmOnly: false } : { stopAtAMistake: false };
+    // Each empties the other: the closing cursors are a marker on every note,
+    // and there is no keeping the place yourself with one there.
     case 'cursor':
-      return { cursorWhileRunning: !on };
+      return on ? { cursorWhileRunning: false, closingCursors: false } : { cursorWhileRunning: true };
+    case 'closing':
+      return on ? { closingCursors: true, cursorWhileRunning: true } : { closingCursors: false };
     default:
       return {};
   }

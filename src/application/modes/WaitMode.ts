@@ -38,6 +38,7 @@ export class WaitMode extends BasePracticeMode {
   readonly id = WAIT_MODE_ID;
   readonly label = 'Wait for the notes';
   readonly requiresMetronome = false;
+  override readonly standsStill = 'at-notes';
 
   override onStepEntered(context: PracticeContext, _step: PracticeStep): void {
     // The matcher, not the step's own notes. A step can hold notes this

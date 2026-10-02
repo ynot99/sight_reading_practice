@@ -5,6 +5,8 @@ import type {
   IPassageMarkers,
   IPlayedNoteOverlay,
   IRhythmRuler,
+  IClosingCursors,
+  ClosingCue,
   IScoreCursor,
   IScoreFade,
   IScorePages,
@@ -108,6 +110,15 @@ const MARKER_HALF_WIDTH = 1.5;
  */
 const HEAD_HALF_WIDTH = 0.59;
 
+/**
+ * The closing cursors, in staff spaces: how far from the heads they begin,
+ * how long each is, and how wide - a head's width, so the pair reads as the
+ * note's own.
+ */
+const CLOSING_REACH = 4;
+const CLOSING_LONG = 1.5;
+const CLOSING_WIDE = 1.2;
+
 /** A step already played: its notes are gone from the page. */
 const FADED_CLASS = 'note--passed';
 /** What the run will not ask for: the other hand, or outside the passage. */
@@ -193,7 +204,8 @@ export class VerovioScoreRenderer
     IRhythmRuler,
     IPlayedNoteOverlay,
     IScoreFade,
-    IStuckMarker
+    IStuckMarker,
+    IClosingCursors
 {
   private readonly container: HTMLElement;
   private readonly engraver: VerovioEngraver;
@@ -212,6 +224,8 @@ export class VerovioScoreRenderer
     this.placeTheMarker(this.other, 'score__cursor score__cursor--other');
   });
   private readonly markerElements = new Map<MarkerOnThePage, HTMLElement>();
+  /** The pages the closing cursors were last drawn on, to be taken off them. */
+  private readonly closingDrawnOn = new Set<number>();
   /** Where on the page each step is, by name; see `IScoreRenderer.load`. */
   private printed: readonly PrintedStep[] = [];
   /** What each drawn page was read as: its systems, its bars, its heads, and its size. */
@@ -1771,6 +1785,81 @@ export class VerovioScoreRenderer
   showBeat(mark: RulerMark | null): void {
     this.beatMark = mark;
     this.paintTheBeat();
+  }
+
+  /**
+   * Draws the cursors closing on the notes coming: a bar above the highest
+   * head the reader owes at a step and one below the lowest, as far from them
+   * as the note is from its beat and touching them on it, white for the moment
+   * they meet. Placed by the heads as the page prints them, and on whatever
+   * page the step is drawn on; a step on a page not drawn has none.
+   */
+  showClosing(cues: readonly ClosingCue[]): void {
+    for (const page of this.closingDrawnOn) {
+      this.layerOn(page, 'closing-cursors')?.replaceChildren();
+    }
+    this.closingDrawnOn.clear();
+    for (const cue of cues) {
+      const where = this.whereTheNotesAre(cue.stepIndex, cue.midis);
+      const layer = where === null ? null : this.layerOn(where.page, 'closing-cursors');
+      if (where === null || layer === null) {
+        continue;
+      }
+      this.closingDrawnOn.add(where.page);
+      layer.setAttribute('transform', `scale(${String(where.scale)})`);
+      const { space } = where;
+      const away = CLOSING_REACH * space * (1 - Math.min(1, Math.max(0, cue.closing)));
+      const long = CLOSING_LONG * space;
+      const wide = CLOSING_WIDE * space;
+      for (const top of [where.top - away - long, where.bottom + away]) {
+        const bar = layer.ownerDocument.createElementNS(SVG_NAMESPACE, 'rect');
+        bar.setAttribute('class', 'closing-cursor');
+        bar.setAttribute('x', String(where.x - wide / 2));
+        bar.setAttribute('y', String(top));
+        bar.setAttribute('width', String(wide));
+        bar.setAttribute('height', String(long));
+        bar.setAttribute('rx', String(wide / 2));
+        if (cue.closing >= 1) {
+          bar.setAttribute('data-met', 'true');
+        }
+        layer.append(bar);
+      }
+    }
+  }
+
+  /**
+   * Where the heads of some keys of a step stand on the page, in its units:
+   * across them, from the top of the highest to the foot of the lowest -
+   * `null` where none of them is drawn.
+   */
+  private whereTheNotesAre(
+    stepIndex: number,
+    midis: readonly number[],
+  ): { page: number; scale: number; space: number; x: number; top: number; bottom: number } | null {
+    const step = this.printed[stepIndex];
+    const page = step === undefined ? undefined : this.pageOfName.get(step.barId);
+    const drawn = page === undefined ? undefined : this.layouts.get(page);
+    if (step === undefined || page === undefined || drawn === undefined) {
+      return null;
+    }
+    const space = staffSpaceOf(drawn.layout);
+    const heads = step.printed
+      .filter((here) => here.midi !== null && midis.includes(here.midi))
+      .map((here) => drawn.layout.heads.get(here.id))
+      .filter((head): head is HeadOnThePage => head !== undefined);
+    if (heads.length === 0) {
+      return null;
+    }
+    const middles = heads.map((head) => head.x + HEAD_HALF_WIDTH * space);
+    const ys = heads.map((head) => head.y);
+    return {
+      page,
+      scale: drawn.scale,
+      space,
+      x: (Math.min(...middles) + Math.max(...middles)) / 2,
+      top: Math.min(...ys) - space / 2,
+      bottom: Math.max(...ys) + space / 2,
+    };
   }
 
   /**

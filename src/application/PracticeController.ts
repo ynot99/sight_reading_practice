@@ -77,7 +77,7 @@ import {
   velocityAt,
 } from '../domain/model/Exercise.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
-import { PracticeSession } from './session/PracticeSession.js';
+import { PracticeSession, type NotesComing } from './session/PracticeSession.js';
 import { ONE_BREATH_MS } from './session/RunRoll.js';
 import type { RunRoll } from './session/RunRoll.js';
 import {
@@ -673,6 +673,11 @@ export interface PracticeSettings {
    * reader is looking when they want it gone.
    */
   readonly pedalFalls: boolean;
+  /**
+   * Two cursors closing on each note the reader owes, meeting on it as its
+   * beat falls: see `notesClosingBetween`. A square of Modes.
+   */
+  readonly closingCursors: boolean;
 }
 
 export interface ExerciseLoadedEvent {
@@ -1062,6 +1067,7 @@ export class PracticeController {
       restEveryMinutes: 30,
       keysShown: 'falling-notes',
       pedalFalls: true,
+      closingCursors: false,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();
@@ -2362,6 +2368,18 @@ export class PracticeController {
    */
   playbackKeysDownBetween(fromMs: number, untilMs: number): readonly KeyDown[] {
     return this.player?.keysDownBetween(fromMs, untilMs) ?? [];
+  }
+
+  /**
+   * The notes the reader owes whose beats fall between two moments on the
+   * clock, for the cursors closing on them - none where they are not asked
+   * for. See `PracticeSession.notesComingBefore`.
+   */
+  notesClosingBetween(fromMs: number, untilMs: number): readonly NotesComing[] {
+    if (!this.currentSettings.closingCursors) {
+      return [];
+    }
+    return (this.currentSession?.notesComingBefore(untilMs) ?? []).filter((notes) => notes.atMs >= fromMs);
   }
 
   /**

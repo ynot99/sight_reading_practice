@@ -13,7 +13,13 @@ import { lastOfLeadingRun } from '../shared/leadingRun.js';
 export interface ScheduledNote {
   readonly midi: number;
   readonly atMs: number;
+  /** When it stops sounding: its own length, or the pedal's where that is longer. */
   readonly untilMs: number;
+  /**
+   * When the key comes up, which is the note's own length: the pedal holds
+   * the sound on after it, not the key.
+   */
+  readonly releasedMs: number;
   /** How hard to strike it, `0..1`, from the dynamics on the page. */
   readonly velocity: number;
 }
@@ -225,7 +231,8 @@ export class GatheredNotes {
       // As long as it sounds rather than as long as it is written - and the
       // pedal still wins, because a note struck under the damper rings until
       // the damper lifts whatever the writer marked it.
-      const endTicks = Math.max(step.onsetTicks + soundsFor(note), heldUntil ?? 0);
+      const releasedTicks = step.onsetTicks + soundsFor(note);
+      const endTicks = Math.max(releasedTicks, heldUntil ?? 0);
       const until = at(endTicks);
       // A rolled note is released with the rest of the chord - the hand
       // lifts once - so only the attack moves. `Math.max` is the guard for a
@@ -234,6 +241,7 @@ export class GatheredNotes {
         midi: note.midi,
         atMs: startsAt,
         untilMs: Math.max(until, startsAt),
+        releasedMs: at(releasedTicks),
         // What the page asks for where this note falls: the level in force,
         // lifted or lowered by any hairpin drawn over it. A staff's own marks
         // are preferred to the piece's, which is how a piano part with the
@@ -276,6 +284,7 @@ export class GatheredNotes {
             midi: pitch.midi,
             atMs: where.atMs,
             untilMs: where.untilMs,
+            releasedMs: where.untilMs,
             velocity: velocityAt(
               exercise,
               step.measureIndex,

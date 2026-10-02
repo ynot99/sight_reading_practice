@@ -178,7 +178,9 @@ takes effect.
 **A keyboard under the music** comes up while Listen plays and while a run is
 shown again: all eighty-eight keys and the pedal beside them, with the next
 three seconds of notes falling down the whole page onto them, each landing on
-its key as it sounds. The notes are half seen and have no ground behind them,
+its key as it sounds and as long as its key is held - under the pedal the
+string rings on after the key is let go, and a melody is not every key down at
+once. The notes are half seen and have no ground behind them,
 so the score reads through them. A broken line falls with them where each bar
 begins, with the bar's number at its left, so what is coming can be found on
 the page. Under Listen they are one blue, since the

@@ -28,8 +28,12 @@ import {
 /** Which hands to sound. `null` is both. */
 export type ListeningHand = number | null;
 
-/** A note of a performance, at the moments on the clock it is heard. */
-export interface HeardNote {
+/**
+ * A key a performance holds down, from when to when on the clock: as long as
+ * the note is written, which is how long a hand holds it. The pedal holds the
+ * sound on after it, and not the key.
+ */
+export interface KeyDown {
   readonly midi: number;
   readonly fromMs: number;
   readonly untilMs: number;
@@ -256,10 +260,10 @@ export class ExercisePlayer {
    */
   private countedInToMs: number | null = null;
   /**
-   * The notes handed to the instrument that may still be sounding, at the
-   * moments it was given them.
+   * The keys of the notes handed to the instrument that may still be down,
+   * at the moments it was given them.
    */
-  private handedOver: HeardNote[] = [];
+  private handedOver: KeyDown[] = [];
   /**
    * The bars of the stretch, timed from where the first time round begins and
    * from where a lap does - worked out once for as long as the stretch stays
@@ -483,8 +487,12 @@ export class ExercisePlayer {
   }
 
   /**
-   * The notes heard between two moments on the clock: those still sounding
-   * at the first, and those that begin before the second.
+   * The keys held down between two moments on the clock: those still down at
+   * the first, and those that go down before the second.
+   *
+   * Down for as long as each note is written. Under the pedal the strings go
+   * on sounding after the key is let go, and a picture that held the key down
+   * as long had every note of a melody held at once, which no hand does.
    *
    * Read off the list the instrument is handed its notes from, in the same
    * terms - the moment the music began, the laps, where this reading ends -
@@ -497,7 +505,7 @@ export class ExercisePlayer {
    * count-in will end: the count-in is beaten at one tempo, the one the music
    * is about to start at, so how long is left of it is one multiplication.
    */
-  notesHeardBetween(fromMs: number, untilMs: number): readonly HeardNote[] {
+  keysDownBetween(fromMs: number, untilMs: number): readonly KeyDown[] {
     // Nothing either way once it has stopped: what it had handed over is
     // forgotten, and there is no list left to read.
     const began = this.startedAtMs ?? this.countedInToMs;
@@ -509,8 +517,8 @@ export class ExercisePlayer {
     // the reading ends, before it can begin: the repeat was turned off after
     // the next time round had started to be handed over.
     const endsAt = last === null ? Number.POSITIVE_INFINITY : began + last;
-    const heard = this.handedOver.filter(
-      (note) => note.untilMs > fromMs && note.fromMs < untilMs && note.fromMs < endsAt,
+    const down = this.handedOver.filter(
+      (key) => key.untilMs > fromMs && key.fromMs < untilMs && key.fromMs < endsAt,
     );
     for (let at = this.nextToSchedule; ; at += 1) {
       const note = this.noteAt(at);
@@ -520,11 +528,11 @@ export class ExercisePlayer {
       if (last !== null && note.atMs >= last) {
         break;
       }
-      if (began + note.untilMs > fromMs) {
-        heard.push({ midi: note.midi, fromMs: began + note.atMs, untilMs: began + note.untilMs });
+      if (began + note.releasedMs > fromMs) {
+        down.push({ midi: note.midi, fromMs: began + note.atMs, untilMs: began + note.releasedMs });
       }
     }
-    return heard;
+    return down;
   }
 
   /**
@@ -843,6 +851,7 @@ export class ExercisePlayer {
       ...note,
       atMs: base + note.atMs,
       untilMs: base + note.untilMs,
+      releasedMs: base + note.releasedMs,
     };
   }
 
@@ -929,7 +938,7 @@ export class ExercisePlayer {
       this.handedOver.push({
         midi: note.midi,
         fromMs: from + note.atMs,
-        untilMs: from + note.untilMs,
+        untilMs: from + note.releasedMs,
       });
       this.deps.instrument.play(note.midi, note.velocity, from + note.atMs);
       timeTheStart(

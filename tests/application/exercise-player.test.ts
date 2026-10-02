@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ExercisePlayer, type BarStart, type HeardNote } from '../../src/application/ExercisePlayer.js';
+import { ExercisePlayer, type BarStart, type KeyDown } from '../../src/application/ExercisePlayer.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
@@ -1369,13 +1369,13 @@ describe('a performance follows the reader as a run does', () => {
   });
 });
 
-describe('the notes heard between two moments', () => {
+describe('the keys held down between two moments', () => {
   /** Two bars, the second at twice the speed: a lap is six seconds. */
   const quickening = (): Exercise => ({
     ...twoBarExercise({ tempoBpm: 60 }),
     tempoChanges: [{ measureIndex: 1, offsetTicks: 0, tempoBpm: 120 }],
   });
-  const named = (notes: readonly HeardNote[]): string[] =>
+  const named = (notes: readonly KeyDown[]): string[] =>
     notes.map((note) => `${String(note.midi)}@${String(note.fromMs)}-${String(note.untilMs)}`).sort();
 
   it('shows every note before it sounds, at the moments the instrument is given', () => {
@@ -1392,11 +1392,11 @@ describe('the notes heard between two moments', () => {
     });
 
     const firstShown = new Map<string, number>();
-    const shown = new Map<string, HeardNote>();
+    const shown = new Map<string, KeyDown>();
     let now = 0;
     for (let tick = 0; tick < 40; tick += 1) {
       now = metronome.advanceSubdivisions(1)[0]?.scheduledTimeMs ?? now;
-      for (const note of player.notesHeardBetween(now, now + 3_000)) {
+      for (const note of player.keysDownBetween(now, now + 3_000)) {
         const key = `${String(note.midi)}@${String(note.fromMs)}`;
         shown.set(key, note);
         if (!firstShown.has(key)) {
@@ -1417,6 +1417,7 @@ describe('the notes heard between two moments', () => {
         continue;
       }
       expect(handed, key).toContain(key);
+      // Up where the sound stops, there being no pedal here to hold it on.
       expect(stops, key).toContain(`${String(note.midi)}@${String(note.untilMs)}`);
       // In good time: a tick is at most a second apart here, so a note is
       // seen at least two of its three seconds before it sounds - the first
@@ -1425,14 +1426,54 @@ describe('the notes heard between two moments', () => {
     }
   });
 
-  it('keeps a note that is still sounding', () => {
+  it('lets a key up where its note is written to end, while the pedal holds the sound on', () => {
+    // A melody under the pedal: every note of it rings on to the bar line,
+    // and held down for as long, every note of it was down at once - which
+    // no hand does, and which is not what anyone playing it does either.
+    const base = twoBarExercise({ tempoBpm: 60 });
+    const pedalled = {
+      ...base,
+      pedalMarks: [
+        { measureIndex: 0, offsetTicks: 0, type: 'start' as const, line: true },
+        { measureIndex: 1, offsetTicks: 0, type: 'stop' as const, line: true },
+        // Down again for the second bar, to its last beat.
+        { measureIndex: 1, offsetTicks: 0, type: 'start' as const, line: true },
+        { measureIndex: 1, offsetTicks: Duration.QUARTER.ticks * 3, type: 'stop' as const, line: true },
+      ],
+    };
+    const { player, metronome, instrument } = rig(pedalled);
+    player.start(buildTimeline(pedalled), { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(1);
+
+    // Heard to the bar line, held down for its quarter, and the next key
+    // already down by the time it has come up.
+    expect(instrument.stopped.find((note) => note.midi === MIDI.C4)?.atMs).toBe(4_000);
+    expect(named(player.keysDownBetween(0, 2_000))).toEqual([
+      `${String(MIDI.C3)}@0-4000`,
+      `${String(MIDI.C4)}@0-1000`,
+      `${String(MIDI.D4)}@1000-2000`,
+    ]);
+    expect(named(player.keysDownBetween(1_500, 2_000))).toEqual([
+      `${String(MIDI.C3)}@0-4000`,
+      `${String(MIDI.D4)}@1000-2000`,
+    ]);
+    // And the same of keys not yet handed over: the second bar's half notes
+    // are let go at their half, the pedal sounding them a beat longer.
+    expect(named(player.keysDownBetween(5_000, 6_500)).filter((key) => key.includes('@4000-'))).toEqual([
+      `${String(MIDI.G2)}@4000-6000`,
+      `${String(MIDI.D3)}@4000-6000`,
+      `${String(MIDI.G4)}@4000-8000`,
+    ]);
+  });
+
+  it('keeps a key that is still down', () => {
     // The bass holds its whole bar under four quarters: two and a half
-    // seconds in, it has been sounding all that time and is still.
+    // seconds in, it has been down all that time and is still.
     const { player, metronome, timeline } = rig();
     player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(3);
 
-    expect(named(player.notesHeardBetween(2_500, 2_600))).toEqual([
+    expect(named(player.keysDownBetween(2_500, 2_600))).toEqual([
       `${String(MIDI.C3)}@0-4000`,
       `${String(MIDI.E4)}@2000-3000`,
     ]);
@@ -1445,17 +1486,17 @@ describe('the notes heard between two moments', () => {
     player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
     metronome.advanceSubdivisions(1);
 
-    expect(named(player.notesHeardBetween(0, 1_000))).toEqual([
+    expect(named(player.keysDownBetween(0, 1_000))).toEqual([
       `${String(MIDI.C3)}@0-4000`,
       `${String(MIDI.C4)}@0-1000`,
     ]);
-    expect(named(player.notesHeardBetween(2_500, 3_000))).toEqual([
+    expect(named(player.keysDownBetween(2_500, 3_000))).toEqual([
       `${String(MIDI.C3)}@0-4000`,
       `${String(MIDI.E4)}@2000-3000`,
     ]);
     // And what has ended by where it begins: the first beat is over at one
     // second, the bass under it is not.
-    expect(named(player.notesHeardBetween(1_000, 1_500))).toEqual([
+    expect(named(player.keysDownBetween(1_000, 1_500))).toEqual([
       `${String(MIDI.C3)}@0-4000`,
       `${String(MIDI.D4)}@1000-2000`,
     ]);
@@ -1475,7 +1516,7 @@ describe('the notes heard between two moments', () => {
     });
     metronome.advanceSubdivisions(1);
 
-    expect(named(player.notesHeardBetween(0, 2_500))).toEqual([
+    expect(named(player.keysDownBetween(0, 2_500))).toEqual([
       `${String(MIDI.G2)}@2000-3000`,
       `${String(MIDI.D3)}@2000-3000`,
       `${String(MIDI.G4)}@2000-4000`,
@@ -1494,7 +1535,7 @@ describe('the notes heard between two moments', () => {
     // The opening of the next lap is already with the instrument, the beat
     // after it not yet - and neither is heard once the repeat is turned off.
     const nextLap = (): string[] =>
-      named(player.notesHeardBetween(7_500, 9_500)).filter((note) => !note.includes('@4000'));
+      named(player.keysDownBetween(7_500, 9_500)).filter((note) => !note.includes('@4000'));
 
     expect(nextLap()).toEqual([
       `${String(MIDI.C3)}@8000-12000`,
@@ -1513,7 +1554,7 @@ describe('the notes heard between two moments', () => {
 
     player.pause();
 
-    expect(player.notesHeardBetween(1_000, 4_000)).toEqual([]);
+    expect(player.keysDownBetween(1_000, 4_000)).toEqual([]);
   });
 });
 

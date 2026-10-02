@@ -8448,7 +8448,7 @@ export class AppView {
       this.replayRoll !== null
         ? controller.replayPressesBetween(nowMs, until)
         : controller
-            .playbackNotesBetween(nowMs, until)
+            .playbackKeysDownBetween(nowMs, until)
             .map((note) => ({ ...note, shade: 'heard' as const })),
       nowMs,
       aheadMs,

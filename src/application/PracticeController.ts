@@ -36,7 +36,7 @@ import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
-import type { BarStart, HeardNote, PlayerEventMap } from './ExercisePlayer.js';
+import type { BarStart, KeyDown, PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type {
   ChosenClickWhen,
@@ -2273,11 +2273,11 @@ export class PracticeController {
   }
 
   /**
-   * The notes of the playback heard between two moments on the clock - none
-   * where nothing is playing. See `ExercisePlayer.notesHeardBetween`.
+   * The keys the playback holds down between two moments on the clock - none
+   * where nothing is playing. See `ExercisePlayer.keysDownBetween`.
    */
-  playbackNotesBetween(fromMs: number, untilMs: number): readonly HeardNote[] {
-    return this.player?.notesHeardBetween(fromMs, untilMs) ?? [];
+  playbackKeysDownBetween(fromMs: number, untilMs: number): readonly KeyDown[] {
+    return this.player?.keysDownBetween(fromMs, untilMs) ?? [];
   }
 
   /**

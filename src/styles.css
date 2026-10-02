@@ -4386,14 +4386,57 @@ body[data-repeats='hidden'] .repeat-mark {
   opacity: 0.35;
 }
 
-/*
- * Held for its settings, so a held finger is not taken for anything else: no
- * callout over it, no word selected under it.
- */
 #focus-metronome {
   flex: none;
-  -webkit-touch-callout: none;
-  user-select: none;
+}
+
+/*
+ * A switch: on or off, said by where its thumb stands and whether its track
+ * is lit. The whole row is the switch, so the words are pressed as surely as
+ * the thumb.
+ */
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.switch__track {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  background: var(--border);
+  transition: background-color 150ms ease-out;
+}
+
+.switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(16 24 40 / 30%);
+  transition: transform 150ms ease-out;
+}
+
+.switch[aria-checked='true'] .switch__track {
+  background: var(--accent);
+}
+
+.switch[aria-checked='true'] .switch__thumb {
+  transform: translateX(18px);
 }
 
 .focus-bar__hands {

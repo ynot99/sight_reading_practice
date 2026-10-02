@@ -242,6 +242,15 @@ describe('the stylesheet', () => {
     ).toMatch(/opacity\s*:\s*1\b/);
   });
 
+  it('draws a switch that says on by its lit track and its thumb across', () => {
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    expect(body(".switch[aria-checked='true'] .switch__track")).toMatch(/background\s*:\s*var\(--accent\)/);
+    expect(body(".switch[aria-checked='true'] .switch__thumb")).toMatch(/transform\s*:\s*translateX\(18px\)/);
+    expect(body('.switch__track')).toMatch(/background\s*:\s*var\(--border\)/);
+  });
+
   it('shows on the keyboard button which of the three is over the page', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';

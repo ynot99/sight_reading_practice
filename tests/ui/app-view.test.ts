@@ -17,7 +17,6 @@ import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { NoteMode, NOTE_MODE_ID } from '../../src/application/modes/NoteMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { CLICK_WHEN_CHOICES } from '../../src/application/ports/IMetronome.js';
-import { HOLD_MS } from '../../src/shared/holding.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
@@ -9948,11 +9947,9 @@ describe('AppView', () => {
       expect(eye.getAttribute('aria-expanded')).toBe('true');
     });
 
-    /** Asks the metronome's button for its settings, as a right click does. */
+    /** Opens everything about the click, as its button does. */
     function openTheMetronome(): void {
-      element('focus-metronome').dispatchEvent(
-        new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
-      );
+      element<HTMLButtonElement>('focus-metronome').click();
     }
 
     it('puts everything about the click behind one button', async () => {
@@ -10001,10 +9998,11 @@ describe('AppView', () => {
       expect(button.dataset['click']).toBe('always');
       expect(button.title).toContain('all the way through');
 
-      button.click();
+      openTheMetronome();
+      element<HTMLButtonElement>('metronome-on').click();
       expect(button.dataset['click']).toBe('never');
       expect(button.title).toContain('off');
-      button.click();
+      element<HTMLButtonElement>('metronome-on').click();
 
       // A cycle - a bar on, a bar off - has no picture of its own, so it is
       // shown as sounding, which is what it mostly is.
@@ -10012,71 +10010,35 @@ describe('AppView', () => {
       expect(button.dataset['click']).toBe('always');
     });
 
-    it('turns the click off and on with a tap, keeping when it was to sound', async () => {
-      // Turning it off between runs is the thing reached for most, and it was a
-      // sheet and a list away - where "Never" was one of the answers, and
-      // turning it back on meant choosing again.
+    it('turns the click off and on with the switch at the top of its sheet, keeping when it was to sound', async () => {
+      // A tap that turned it off, with a hold for the rest, could not be
+      // guessed: nothing on a button says it can be held. The button opens the
+      // sheet, and the switch at the head of it says what it does by being one.
       const { view, runtime } = createRig();
       await view.initialize();
       // On, as the app starts it; the rig keeps the click off.
       runtime.controller.updateSettings({ clickOn: true });
       setClickWhen('count-in-only');
-      const button = element<HTMLButtonElement>('focus-metronome');
+      const on = element<HTMLButtonElement>('metronome-on');
 
-      button.click();
+      openTheMetronome();
+
+      expect(element('sheet-metronome').hidden).toBe(false);
+      expect(runtime.controller.settings.clickOn).toBe(true);
+      expect(on.getAttribute('aria-checked')).toBe('true');
+      // At the top, over everything about how it sounds.
+      expect(on.closest('.controls')?.firstElementChild?.contains(on)).toBe(true);
+
+      on.click();
 
       expect(runtime.controller.settings.clickOn).toBe(false);
-      expect(element('sheet-metronome').hidden).toBe(true);
+      expect(on.getAttribute('aria-checked')).toBe('false');
 
-      button.click();
+      on.click();
 
       expect(runtime.controller.settings.clickOn).toBe(true);
+      expect(on.getAttribute('aria-checked')).toBe('true');
       expect(runtime.controller.settings.clickWhen).toBe('count-in-only');
-    });
-
-    it('opens everything about the click when its button is held, and leaves the click as it was', async () => {
-      const { view, runtime } = createRig();
-      await view.initialize();
-      // On, as the app starts it; the rig keeps the click off.
-      runtime.controller.updateSettings({ clickOn: true });
-      const button = element<HTMLButtonElement>('focus-metronome');
-      vi.useFakeTimers();
-      try {
-        button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-        vi.advanceTimersByTime(HOLD_MS - 1);
-        expect(element('sheet-metronome').hidden).toBe(true);
-
-        vi.advanceTimersByTime(1);
-        expect(element('sheet-metronome').hidden).toBe(false);
-
-        // The finger lets go, and the click that makes is the hold's.
-        button.dispatchEvent(new Event('pointerup', { bubbles: true }));
-        button.click();
-        expect(runtime.controller.settings.clickOn).toBe(true);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('takes a short press for a tap, not a hold', async () => {
-      const { view, runtime } = createRig();
-      await view.initialize();
-      // On, as the app starts it; the rig keeps the click off.
-      runtime.controller.updateSettings({ clickOn: true });
-      const button = element<HTMLButtonElement>('focus-metronome');
-      vi.useFakeTimers();
-      try {
-        button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-        vi.advanceTimersByTime(HOLD_MS / 3);
-        button.dispatchEvent(new Event('pointerup', { bubbles: true }));
-        button.click();
-        vi.advanceTimersByTime(HOLD_MS);
-
-        expect(element('sheet-metronome').hidden).toBe(true);
-        expect(runtime.controller.settings.clickOn).toBe(false);
-      } finally {
-        vi.useRealTimers();
-      }
     });
 
     it('dims when the click sounds while it is off, and says why', async () => {
@@ -10086,11 +10048,12 @@ describe('AppView', () => {
       runtime.controller.updateSettings({ clickOn: true });
       const carrier = element('dropout').closest<HTMLElement>('.control-group');
 
-      element<HTMLButtonElement>('focus-metronome').click();
+      openTheMetronome();
+      element<HTMLButtonElement>('metronome-on').click();
 
       expect(carrier?.dataset['idle']).toBe('true');
-      expect(carrier?.title).toContain('off');
-      // Never among the answers: off is the button's.
+      expect(carrier?.title).toContain('switch at the top');
+      // Never among the answers: off is the switch's.
       expect([...element<HTMLSelectElement>('dropout').options].map((option) => option.value)).not.toContain('never');
     });
 

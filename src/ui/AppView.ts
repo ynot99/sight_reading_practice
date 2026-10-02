@@ -18,7 +18,6 @@ import {
   type ChosenClickWhen,
   type ClickPattern,
 } from '../application/ports/IMetronome.js';
-import { HOLD_MS } from '../shared/holding.js';
 import type { SessionScore } from '../domain/scoring/IScoringStrategy.js';
 import {
   SAMPLE_LOADING_MODES,
@@ -632,7 +631,7 @@ function whyItIsIdle(
         ? null
         : 'Nothing of the other hand is sounding to be ahead of.';
     case 'click-when':
-      return settings.clickOn ? null : 'The metronome is off. A tap on its button turns it on.';
+      return settings.clickOn ? null : 'The metronome is off. The switch at the top turns it on.';
     default:
       return null;
   }
@@ -1532,6 +1531,7 @@ export class AppView {
     focusPlayFrame: HTMLElement;
     focusHands: HTMLButtonElement;
     focusMetronome: HTMLButtonElement;
+    metronomeOn: HTMLButtonElement;
     scoreListening: HTMLButtonElement;
     scoreListeningText: HTMLElement;
     focusRepeat: HTMLButtonElement;
@@ -1835,6 +1835,7 @@ export class AppView {
       focusPlayFrame: requireElement(doc, 'focus-play-frame'),
       focusHands: requireElement(doc, 'focus-hands'),
       focusMetronome: requireElement(doc, 'focus-metronome'),
+      metronomeOn: requireElement(doc, 'metronome-on'),
       scoreListening: requireElement(doc, 'score-listening'),
       scoreListeningText: requireElement(doc, 'score-listening-text'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
@@ -5502,9 +5503,8 @@ export class AppView {
    */
   private describeMetronomeButton(on: boolean, when: ChosenClickWhen, pattern: ClickPattern): void {
     const label = on
-      ? `Metronome: ${CLICK_WHEN_LABELS[when].toLowerCase()}, ${CLICK_LABELS[pattern].toLowerCase()}. ` +
-        'Tap to turn it off, hold for its settings.'
-      : 'Metronome off. Tap to turn it on, hold for its settings.';
+      ? `Metronome: ${CLICK_WHEN_LABELS[when].toLowerCase()}, ${CLICK_LABELS[pattern].toLowerCase()}.`
+      : 'Metronome off.';
     this.el.focusMetronome.dataset['click'] = !on
       ? 'never'
       : when === 'count-in-only'
@@ -5512,57 +5512,24 @@ export class AppView {
         : 'always';
     this.el.focusMetronome.title = label;
     this.el.focusMetronome.setAttribute('aria-label', label);
+    this.el.metronomeOn.setAttribute('aria-checked', String(on));
   }
 
   /**
-   * The metronome's button: a tap turns the click off and on, and holding it
-   * opens everything about it.
+   * The metronome's button opens everything about it, and the switch at the
+   * top of that turns the click off and on.
    *
-   * Turning the click off between runs is the thing reached for most, and it
-   * was a sheet and a list away. What it is set to stays where it was, for when
-   * it is turned on again. A right click opens the same sheet, there being no
-   * finger to hold on a desk; and the click a held finger makes on letting go
-   * is the hold's, not a tap.
+   * A tap that turned it off, with a hold for the rest, was quicker and could
+   * not be guessed: nothing on a button says it can be held. The switch says
+   * what it does by being a switch. What the click is set to stays where it
+   * was while it is off, for when it is turned on again.
    */
   private bindTheMetronomeButton(): void {
-    const button = this.el.focusMetronome;
-    const openTheSheet = (): void => {
+    this.listen(this.el.focusMetronome, 'click', () => {
       this.syncControlsFromSettings();
       this.showTheSheet(this.el.sheetMetronome);
-    };
-    let holding: ReturnType<typeof setTimeout> | null = null;
-    let opened = false;
-    const letGo = (): void => {
-      if (holding !== null) {
-        clearTimeout(holding);
-        holding = null;
-      }
-    };
-    this.listen(button, 'pointerdown', () => {
-      opened = false;
-      letGo();
-      holding = setTimeout(() => {
-        holding = null;
-        opened = true;
-        openTheSheet();
-      }, HOLD_MS);
     });
-    this.listen(button, 'pointerup', letGo);
-    this.listen(button, 'pointercancel', letGo);
-    this.listen(button, 'pointerleave', letGo);
-    this.listen(button, 'contextmenu', (event) => {
-      event.preventDefault();
-      letGo();
-      if (!opened) {
-        opened = true;
-        openTheSheet();
-      }
-    });
-    this.listen(button, 'click', () => {
-      if (opened) {
-        opened = false;
-        return;
-      }
+    this.listen(this.el.metronomeOn, 'click', () => {
       const controller = this.runtime.controller;
       controller.updateSettings({ clickOn: !controller.settings.clickOn });
       this.syncControlsFromSettings();

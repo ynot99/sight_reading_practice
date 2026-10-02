@@ -624,6 +624,18 @@
               title="Close" aria-label="Close">×</button>
           </div>
           <div class="controls controls--stacked">
+            <!--
+              Whether it is heard at all, over everything about how it
+              sounds. Turned off, what it is set to stays as it was, for when
+              it is turned on again.
+            -->
+            <div class="control-group">
+              <button id="metronome-on" type="button" class="switch" role="switch" aria-checked="true">
+                <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+                <span>Hear the metronome</span>
+              </button>
+            </div>
+
             <div class="control-group">
               <label for="dropout">Metronome sounds</label>
               <select id="dropout"></select>

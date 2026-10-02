@@ -425,8 +425,28 @@ export class PracticeSession {
       click: this.options.click,
       dropout: resolveDropout(this.clickForThePulse(), countInBars),
       silences: this.options.clickSilences,
+      clickedNotes: this.options.click === 'notes' ? this.theNotesClicked(countInBars) : null,
       muted: clickIsSilent(this.clickForThePulse()),
     });
+  }
+
+  /**
+   * Where the notes fall on the pulse's own count, for a click on them: the
+   * reader's hand, or both, from where the run picks up - the same reckoning
+   * the end of the music and its gates are given in.
+   */
+  private theNotesClicked(countInBars: number): { readonly musicFromTicks: number; readonly at: readonly number[] } {
+    const exercise = this.timeline.exercise;
+    const fromTicks = this.resumeAtTicks;
+    const onTheCount = (untilTicks: number): number =>
+      metronomeEnd(exercise, { countInBars, fromTicks, untilTicks });
+    const staff = this.options.clickNotesOf === 'both-hands' ? null : this.options.expectedStaff;
+    return {
+      musicFromTicks: onTheCount(fromTicks),
+      at: this.timeline.steps
+        .filter((step) => step.onsetTicks >= fromTicks && expectedFor(step, staff).length > 0)
+        .map((step) => onTheCount(step.onsetTicks)),
+    };
   }
 
   /**

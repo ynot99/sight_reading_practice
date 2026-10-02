@@ -94,6 +94,8 @@ describe('clicksPerPulse', () => {
       pulse: [1, 1],
       division: [2, 3],
       subdivision: [4, 6],
+      // The beat, where nothing says where the notes are.
+      notes: [1, 1],
     };
     for (const [pattern, [simple, compound]] of Object.entries(expected) as [
       ClickPattern,

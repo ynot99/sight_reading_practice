@@ -18,6 +18,8 @@ import {
   CLICK_PATTERNS,
   type ClickWhen,
   type ClickPattern,
+  CLICK_NOTES_OF,
+  type ClickNotesOf,
 } from './ports/IMetronome.js';
 import {
   KEYS_SHOWN,
@@ -211,6 +213,10 @@ function readHand(value: unknown): number | null | undefined {
   return readInteger(value, 1, 4);
 }
 
+function readClickNotesOf(value: unknown): ClickNotesOf | undefined {
+  return CLICK_NOTES_OF.includes(value as ClickNotesOf) ? (value as ClickNotesOf) : undefined;
+}
+
 function readClickPattern(value: unknown): ClickPattern | undefined {
   return CLICK_PATTERNS.includes(value as ClickPattern) ? (value as ClickPattern) : undefined;
 }
@@ -373,6 +379,7 @@ export function decodePracticeSettings(
     tempoPercent: readNumber(value['tempoPercent'], 5, 1_500),
     countInBars: readInteger(value['countInBars'], 0, 4),
     clickPattern: readClickPattern(value['clickPattern']),
+    clickNotesOf: readClickNotesOf(value['clickNotesOf']),
     handStaff: readHand(value['handStaff']),
     hearTheOtherHand: readBoolean(value['hearTheOtherHand']),
     showRepeatNumbers: readBoolean(value['showRepeatNumbers']),
@@ -508,6 +515,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     keysShown: settings.keysShown,
     pedalFalls: settings.pedalFalls,
     closingCursors: settings.closingCursors,
+    clickNotesOf: settings.clickNotesOf,
   };
 }
 

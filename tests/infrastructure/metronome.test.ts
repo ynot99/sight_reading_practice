@@ -47,6 +47,20 @@ describe('which ticks are heard', () => {
     expect(audibleIndices({ ...COMMON, click: 'downbeat' }, 32)).toEqual([0, 16]);
   });
 
+  it('clicks on the notes, beats the count-in, and beats the pulse where nobody said where the notes are', () => {
+    const q = Duration.QUARTER.ticks;
+    // A bar of count-in, then notes on the beat, half a beat on, and a third
+    // of a beat on - finer than the grid, so heard on the tick it falls in.
+    const onTheNotes: MetronomeConfig = {
+      ...COMMON,
+      click: 'notes',
+      clickedNotes: { musicFromTicks: 4 * q, at: [4 * q, 4.5 * q, 5 * q + q / 3] },
+    };
+
+    expect(audibleIndices(onTheNotes, 32)).toEqual([0, 4, 8, 12, 16, 18, 21]);
+    expect(audibleIndices({ ...onTheNotes, clickedNotes: null }, 16)).toEqual([0, 4, 8, 12]);
+  });
+
   it('divides a compound pulse in three, not in two', () => {
     const compound: MetronomeConfig = {
       ...COMMON,

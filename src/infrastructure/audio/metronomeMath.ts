@@ -6,6 +6,26 @@ import {
 import type { TimeSignature } from '../../domain/model/TimeSignature.js';
 import { DIVISIONS_PER_QUARTER } from '../../domain/model/Duration.js';
 
+/**
+ * Whether a note falls within a tick's stretch of the pulse.
+ *
+ * Not only on the tick: the grid a piece is run on is capped, and a note
+ * written finer than it opens on the tick it falls inside.
+ */
+function aNoteFallsIn(notes: readonly number[], fromTicks: number, untilTicks: number): boolean {
+  let low = 0;
+  let high = notes.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if ((notes[middle] ?? Number.POSITIVE_INFINITY) < fromTicks) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return (notes[low] ?? Number.POSITIVE_INFINITY) < untilTicks;
+}
+
 /** Seconds occupied by one subdivision at the configured tempo. */
 export function subdivisionSeconds(config: MetronomeConfig): number {
   return subdivisionSecondsAt(config, 0);
@@ -183,6 +203,10 @@ export function isAudibleClick(tick: MetronomeTick, config: MetronomeConfig): bo
   }
   if (!survivesTheSilence(tick, config)) {
     return false;
+  }
+  const notes = config.clickedNotes;
+  if (config.click === 'notes' && notes != null && tick.positionTicks >= notes.musicFromTicks) {
+    return aNoteFallsIn(notes.at, tick.positionTicks, tick.positionTicks + ticksPerSubdivision(config));
   }
   if (config.click === 'downbeat') {
     return tick.isDownbeat;

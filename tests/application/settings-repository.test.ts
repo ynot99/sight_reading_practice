@@ -85,6 +85,7 @@ const SETTINGS: PracticeSettings = {
   keysShown: 'keys',
   pedalFalls: false,
   closingCursors: true,
+  clickNotesOf: 'both-hands',
 };
 
 describe('practice settings codec', () => {
@@ -186,6 +187,16 @@ describe('practice settings codec', () => {
     // The answer stored by name wins over the old switch.
     expect(shown({ keysShown: 'keys', showKeyboard: false })).toBe('keys');
     expect(shown({ keysShown: 'sideways' })).toBeUndefined();
+  });
+
+  it('reads whose notes the click is on only where it is one of the answers', () => {
+    const stored = encodePracticeSettings(SETTINGS);
+    const whose = (value: unknown): string | undefined =>
+      decodePracticeSettings({ ...stored, clickNotesOf: value }, KNOWN).clickNotesOf;
+
+    expect(whose('my-hand')).toBe('my-hand');
+    expect(whose('both-hands')).toBe('both-hands');
+    expect(whose('the-neighbours')).toBeUndefined();
   });
 
   it('reads what a tap on the metronome does only where it is one of the answers', () => {

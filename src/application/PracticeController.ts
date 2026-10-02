@@ -43,6 +43,7 @@ import type {
   ClickWhen,
   BeatWeight,
   ClickPattern,
+  ClickNotesOf,
   ClickSilence,
   CountInWhen,
 } from './ports/IMetronome.js';
@@ -284,6 +285,8 @@ export interface PracticeSettings {
    * leaning on it.
    */
   readonly clickPattern: ClickPattern;
+  /** Whose notes a click on the notes is for: see `CLICK_NOTES_OF`. */
+  readonly clickNotesOf: ClickNotesOf;
   /**
    * Staff to practise and to hear, or `null` for both hands.
    *
@@ -1015,6 +1018,7 @@ export class PracticeController {
       // And a playback has never had one.
       countInPlayback: 'never',
       clickPattern: 'pulse',
+      clickNotesOf: 'my-hand',
       handStaff: null,
       hearTheOtherHand: false,
       markWhileListening: false,
@@ -2805,6 +2809,7 @@ export class PracticeController {
         rushing:
           this.currentSettings.rushingCounts && this.wantsTheOtherHand() ? 'a-mistake' : 'allowed',
         click: this.currentSettings.clickPattern,
+        clickNotesOf: this.currentSettings.clickNotesOf,
         clickSilences: this.currentSettings.clickSilences,
         clickWhen: this.clickWhenHeard,
       },

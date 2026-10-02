@@ -3,6 +3,7 @@ import type { StepStatus } from '../../domain/scoring/PerformanceReport.js';
 import type { ExerciseTimeline, TimelineStep } from '../../domain/timeline/Timeline.js';
 import type { IClock } from '../ports/IClock.js';
 import type {
+  ClickNotesOf,
   ClickWhen,
   ClickPattern,
   ClickSilence,
@@ -51,6 +52,8 @@ export interface SessionOptions {
   readonly expectedStaff: number | null;
   /** How much of the pulse the reader hears. */
   readonly click: ClickPattern;
+  /** Whose notes a click on the notes is for: the hand read, unless said. */
+  readonly clickNotesOf?: ClickNotesOf;
   /**
    * Which of those clicks are taken away again.
    *

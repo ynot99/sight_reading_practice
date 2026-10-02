@@ -5074,6 +5074,24 @@ describe('a run shown again on the page', () => {
   const at = (renderer: FakeScoreRenderer): string[] =>
     renderer.played.map((mark) => `${String(mark.stepIndex)}:${String(mark.midi)}`);
 
+  it('hands the run whose notes the click is on', async () => {
+    const rig = createController(true);
+    const { controller } = rig;
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    const q = Duration.QUARTER.ticks;
+    // The bass alone strikes only at the bar lines; both hands, every beat.
+    controller.updateSettings({
+      modeId: FLOW_MODE_ID,
+      countInBars: 0,
+      handStaff: 2,
+      clickPattern: 'notes',
+      clickNotesOf: 'both-hands',
+    });
+    controller.start();
+
+    expect(rig.metronome.currentConfig.clickedNotes?.at).toEqual([0, q, 2 * q, 3 * q, 4 * q]);
+  });
+
   it('gives the notes coming to the closing cursors only where they are asked for, from a moment on', async () => {
     const rig = createController(true);
     const { controller } = rig;

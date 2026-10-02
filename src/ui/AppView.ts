@@ -18,8 +18,10 @@ import type { SessionStatus } from '../application/session/SessionState.js';
 import type { PositionEvent } from '../application/session/SessionEvents.js';
 import type { MidiConnectionStatus, MidiEvent } from '../application/ports/IMidiSource.js';
 import {
+  CLICK_NOTES_OF,
   CLICK_WHEN_CHOICES,
   CLICK_PATTERNS,
+  type ClickNotesOf,
   dropoutCycleBars,
   type ChosenClickWhen,
   type ClickPattern,
@@ -662,7 +664,18 @@ const CLICK_LABELS: Readonly<Record<ClickPattern, string>> = {
   pulse: 'Every beat',
   division: 'Every half beat',
   subdivision: 'Every quarter beat',
+  notes: 'The notes',
 };
+
+const CLICK_NOTES_LABELS: Readonly<Record<ClickNotesOf, string>> = {
+  'my-hand': 'The notes I play',
+  'both-hands': 'Every note, both hands',
+};
+
+/** Whose notes a stored or typed value names, or the reader's own. */
+function readClickNotesOf(value: string): ClickNotesOf {
+  return CLICK_NOTES_OF.includes(value as ClickNotesOf) ? (value as ClickNotesOf) : 'my-hand';
+}
 
 /**
  * How much of the run the click sits out, from none of it to all of it.
@@ -877,6 +890,9 @@ const CLICK_DESCRIPTIONS: Readonly<Record<ClickPattern, string>> = {
   pulse: 'The felt beat: two dotted quarters in 6/8, four quarters in 4/4.',
   division: 'Halves the beat, or thirds it in compound time.',
   subdivision: 'The finest click. Useful for sixteenths, busy everywhere else.',
+  notes:
+    'A click as each note falls - the rhythm of the music, heard. The count-in is ' +
+    'beaten as ever, and where the music waits for you it clicks on the beat.',
 };
 
 /**
@@ -1777,6 +1793,8 @@ export class AppView {
     tempoValue: HTMLOutputElement;
     click: HTMLSelectElement;
     clickDescription: HTMLElement;
+    clickNotesGroup: HTMLElement;
+    clickNotes: HTMLSelectElement;
     dropout: HTMLSelectElement;
     dropoutDescription: HTMLElement;
     focusFrom: HTMLInputElement;
@@ -2085,6 +2103,8 @@ export class AppView {
       tempoValue: requireElement(doc, 'tempo-value'),
       click: requireElement(doc, 'click'),
       clickDescription: requireElement(doc, 'click-description'),
+      clickNotesGroup: requireElement(doc, 'click-notes-group'),
+      clickNotes: requireElement(doc, 'click-notes'),
       dropout: requireElement(doc, 'dropout'),
       dropoutDescription: requireElement(doc, 'dropout-description'),
       focusFrom: requireElement(doc, 'focus-from'),
@@ -3407,6 +3427,11 @@ export class AppView {
       this.runtime.controller.settings.clickPattern,
     );
     fillSelect(
+      this.el.clickNotes,
+      CLICK_NOTES_OF.map((whose) => ({ value: whose, label: CLICK_NOTES_LABELS[whose] })),
+      this.runtime.controller.settings.clickNotesOf,
+    );
+    fillSelect(
       this.el.dropout,
       CLICK_WHEN_CHOICES.map((choice) => ({ value: choice, label: CLICK_WHEN_LABELS[choice] })),
       this.runtime.controller.settings.clickWhen,
@@ -3515,6 +3540,11 @@ export class AppView {
       // And the piece keeps it. Choosing here is the only way this setting
       // ever moves, so it is the only place that has to remember.
       void this.letTheScoreKeepTheClick(pattern);
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.clickNotes, 'change', () => {
+      controller.updateSettings({ clickNotesOf: readClickNotesOf(this.el.clickNotes.value) });
       this.syncControlsFromSettings();
     });
 
@@ -6785,6 +6815,9 @@ export class AppView {
     this.describeHands(settings.handStaff);
     this.el.click.value = settings.clickPattern;
     this.el.clickDescription.textContent = CLICK_DESCRIPTIONS[settings.clickPattern];
+    // Shown, not dimmed: it is a question about the notes and nothing else.
+    this.el.clickNotesGroup.hidden = settings.clickPattern !== 'notes';
+    this.el.clickNotes.value = settings.clickNotesOf;
     this.el.dropout.value = settings.clickWhen;
     this.describeDropout();
     this.describePassageRange();

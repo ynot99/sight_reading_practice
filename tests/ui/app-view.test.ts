@@ -16,7 +16,7 @@ import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRe
 import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { NoteMode, NOTE_MODE_ID } from '../../src/application/modes/NoteMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
-import { CLICK_WHEN_CHOICES } from '../../src/application/ports/IMetronome.js';
+import { CLICK_PATTERNS, CLICK_WHEN_CHOICES } from '../../src/application/ports/IMetronome.js';
 import { HOLD_MS } from '../../src/shared/holding.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
@@ -593,7 +593,7 @@ describe('AppView', () => {
     expect(element<HTMLSelectElement>('key').options.length).toBeGreaterThan(5);
     expect(element('preset-description').textContent).not.toBe('');
     expect(element('rhythm-description').textContent).not.toBe('');
-    expect(element<HTMLSelectElement>('click').options).toHaveLength(4);
+    expect(element<HTMLSelectElement>('click').options).toHaveLength(CLICK_PATTERNS.length);
     expect(element('click-description').textContent).not.toBe('');
     // The list rather than a number kept by hand: a count written out here goes
     // stale the first time a choice is added, quietly checking less.
@@ -10410,6 +10410,41 @@ describe('AppView', () => {
 
       expect(element('sheet-metronome').hidden).toBe(false);
       expect(runtime.controller.settings.clickOn).toBe(false);
+    });
+
+    it('asks whose notes only once the click is on the notes, shown rather than dimmed', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const group = element('click-notes-group');
+      const click = element<HTMLSelectElement>('click');
+      const whose = element<HTMLSelectElement>('click-notes');
+      openTheMetronome();
+      expect(group.hidden).toBe(true);
+      expect(whose.closest('#sheet-metronome')).not.toBeNull();
+
+      click.value = 'notes';
+      click.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.settings.clickPattern).toBe('notes');
+      expect(group.hidden).toBe(false);
+      expect(group.dataset['idle']).toBeUndefined();
+      expect([...whose.options].map((option) => option.value)).toEqual(['my-hand', 'both-hands']);
+      expect(whose.value).toBe('my-hand');
+
+      whose.value = 'both-hands';
+      whose.dispatchEvent(new Event('change'));
+      expect(runtime.controller.settings.clickNotesOf).toBe('both-hands');
+
+      click.value = 'pulse';
+      click.dispatchEvent(new Event('change'));
+      expect(group.hidden).toBe(true);
+      // Kept for when it is asked again.
+      expect(runtime.controller.settings.clickNotesOf).toBe('both-hands');
+
+      // And says what it is set to, however it was set.
+      runtime.controller.updateSettings({ clickNotesOf: 'my-hand' });
+      openTheMetronome();
+      expect(whose.value).toBe('my-hand');
     });
 
     it('dims when the click sounds while it is off, and says why', async () => {

@@ -5,6 +5,7 @@ import type { IPracticeMode } from '../../src/application/modes/IPracticeMode.js
 import { NoteMode } from '../../src/application/modes/NoteMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import type { NotesComing } from '../../src/application/session/PracticeSession.js';
+import { Duration } from '../../src/domain/model/Duration.js';
 import { MIDI, twoBarExercise } from '../support/fixtures.js';
 import { createHarness, type Harness } from '../support/harness.js';
 
@@ -40,6 +41,33 @@ function play(harness: Harness, ...midi: readonly number[]): void {
 
 const said = (coming: readonly NotesComing[]): [number, number][] =>
   coming.map((notes) => [notes.stepIndex, notes.atMs]);
+
+describe('the click on the notes', () => {
+  it('is told where the notes of the hand read fall, or of both hands, on the count of its pulse', () => {
+    const q = Duration.QUARTER.ticks;
+    const clicked = (whose: 'my-hand' | 'both-hands'): unknown => {
+      const harness = createHarness({
+        exercise: twoBarExercise({ tempoBpm: 60 }),
+        mode: new FlowMode(),
+        options: {
+          countInBars: 1,
+          clickWhen: 'always',
+          click: 'notes',
+          clickNotesOf: whose,
+          // The bass, which strikes only at the two bar lines.
+          expectedStaff: 2,
+          matchPolicy: { toleranceMs: 250, pitchClassOnly: false },
+        },
+      });
+      harness.session.start();
+      return harness.metronome.currentConfig.clickedNotes;
+    };
+
+    // After a bar of count-in, four beats long.
+    expect(clicked('my-hand')).toEqual({ musicFromTicks: 4 * q, at: [4 * q, 8 * q] });
+    expect(clicked('both-hands')).toEqual({ musicFromTicks: 4 * q, at: [4 * q, 5 * q, 6 * q, 7 * q, 8 * q] });
+  });
+});
 
 describe('the notes the music will reach on its own', () => {
   it('gives each the reader owes, and when its beat falls, where the music keeps time', () => {

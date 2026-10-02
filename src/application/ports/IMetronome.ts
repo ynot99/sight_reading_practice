@@ -29,7 +29,15 @@ export interface MetronomeTick {
  * in simple time and three in compound, which is what the words mean and what
  * a reader of 6/8 expects to hear.
  */
-export const CLICK_PATTERNS = ['downbeat', 'pulse', 'division', 'subdivision'] as const;
+export const CLICK_PATTERNS = ['downbeat', 'pulse', 'division', 'subdivision', 'notes'] as const;
+
+/**
+ * Whose notes a click on the notes sounds for: the hand being read, or every
+ * note of the music.
+ */
+export const CLICK_NOTES_OF = ['my-hand', 'both-hands'] as const;
+
+export type ClickNotesOf = (typeof CLICK_NOTES_OF)[number];
 
 /**
  * What a click marks: the bar beginning, a beat falling, or a part of one.
@@ -64,6 +72,10 @@ export function clicksPerPulse(pattern: ClickPattern, timeSignature: TimeSignatu
   switch (pattern) {
     case 'downbeat':
     case 'pulse':
+    // On the notes, a click falls where a note does, which the beat does not
+    // say; counted in, or where nothing says where the notes are, it is the
+    // beat.
+    case 'notes':
       return 1;
     case 'division':
       return timeSignature.divisionsPerPulse;
@@ -280,6 +292,15 @@ export interface MetronomeConfig {
   readonly bars: readonly MetronomeBar[];
   /** Which clicks are left out, so the reader supplies them. */
   readonly silences?: ClickSilence;
+  /**
+   * Where the notes fall, for a click on the notes: the tick on the pulse's
+   * own count the music begins at - before it, the count-in is beaten as a
+   * pulse - and each note's tick on it, in order.
+   *
+   * Absent or `null`: nobody has said where the notes are, and a click on
+   * them is a click on the beat.
+   */
+  readonly clickedNotes?: { readonly musicFromTicks: number; readonly at: readonly number[] } | null;
   /**
    * Ticks emitted per felt beat.
    *

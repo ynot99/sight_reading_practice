@@ -54,6 +54,12 @@ reader's to give, and where the music waits at every note, a note not yet
 played is as far as it goes. A cursor on every note leaves no place to keep
 yourself, so it and No cursor each turn the other off.
 
+What they show can be heard as well: the metronome can click **on the notes**,
+as each one falls, rather than on the beat - the reader's hand's notes, or
+both hands', which is asked beside it and only while the click is on the
+notes. The count-in is beaten as ever, and where the music waits for the
+reader, or the machine plays it, the click is on the beat.
+
 Whichever kind of run is *not* the one the app opens with is said in the
 corner of the page and on the Start button itself, because Start means
 something different in each and a reader can be left in one.

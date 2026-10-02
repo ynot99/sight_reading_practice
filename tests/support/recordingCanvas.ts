@@ -17,8 +17,8 @@ export interface Mark {
 }
 
 /**
- * An ink that changes along a line, as painted with: said as its first
- * colour, so a mark in it is found by the ink it starts in.
+ * An ink that changes along a line, as painted with: said as the colour it
+ * is most, so a mark in it is found by the ink it fades from.
  */
 class RecordedGradient {
   readonly stops: [number, string][] = [];
@@ -34,8 +34,13 @@ class RecordedGradient {
     this.stops.push([offset, colour]);
   }
 
+  /** Said as the colour most of its stops are, which is the ink it fades from. */
   toString(): string {
-    return this.stops[0]?.[1] ?? '';
+    const counted = new Map<string, number>();
+    for (const [, colour] of this.stops) {
+      counted.set(colour, (counted.get(colour) ?? 0) + 1);
+    }
+    return [...counted].sort((left, right) => right[1] - left[1])[0]?.[0] ?? '';
   }
 }
 

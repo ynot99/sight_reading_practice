@@ -1137,9 +1137,9 @@ describe('AppView', () => {
 
     // Two presses over the lane's three seconds: the first on the mark now,
     // the second coming down onto it two seconds off.
-    expect(view.fallingPedal.map((press) => [Number(press.top.toFixed(3)), Number(press.foot.toFixed(3))])).toEqual([
+    expect(view.fallingPedal.map((press) => [Number(press.lift.toFixed(3)), Number(press.foot.toFixed(3))])).toEqual([
       [0.333, 1],
-      [0, 0.333],
+      [-0.333, 0.333],
     ]);
 
     element<HTMLButtonElement>('focus-stop').click();
@@ -3361,7 +3361,9 @@ describe('AppView', () => {
           expect(lit.sort()).toEqual([...(rig.runtime.controller.lastRoll?.presses.map((press) => press.midi) ?? [])].sort());
           expect(keys.querySelector<HTMLElement>('.replay-keys__pedal')?.dataset['down']).toBe('true');
           // And down past its mark from there on, never having been let up.
-          expect(rig.view.fallingPedal.map((press) => [press.top, press.foot > 1])).toEqual([[0, true]]);
+          expect(rig.view.fallingPedal.map((press) => [press.lift, press.foot > 1])).toEqual([
+            [Number.NEGATIVE_INFINITY, true],
+          ]);
         } finally {
           vi.useRealTimers();
         }

@@ -1,6 +1,6 @@
 import type { RuledMoment } from '../application/rhythmRuler.js';
 import { isBlackKey, type KeyLight, type KeyPlace } from './replayKeys.js';
-import { box, inksFrom, readied, withNoAlpha, type Surface } from './rollPainter.js';
+import { box, inksFrom, partlySeen, readied, type Surface } from './rollPainter.js';
 
 /**
  * How far ahead the lane over the keyboard shows the music, in milliseconds
@@ -72,20 +72,21 @@ function inTheLane(
 
 /**
  * A press of the pedal as the column over its mark shows it, as shares of its
- * height: `top` where the pedal comes up, cut to the column, and `foot` where
- * it goes down - past the mark, below one, once it has gone down.
+ * height: `lift` where the pedal comes up and `foot` where it goes down. Not
+ * cut to the column, since what is painted is its two ends: a foot gone down
+ * past the mark is below one, and a lift still to come above the column is
+ * below nought - endlessly, for a pedal never let up.
  */
 export interface LanePedal {
-  readonly top: number;
+  readonly lift: number;
   readonly foot: number;
 }
 
 /**
  * Where each press of the pedal stands over its mark at a moment, as a note
- * stands over its key: its foot reaching the mark as the pedal goes down, and
- * going on down past it, since what is painted is the foot and not the whole
- * of a hold. A press still above the column, or come up already, is not
- * there.
+ * stands over its key: its foot reaching the mark as the pedal goes down, its
+ * lift reaching it as it comes up. A press still above the column, or come up
+ * already, is not there.
  */
 export function theFallingPedal(
   presses: readonly { readonly fromMs: number; readonly untilMs: number }[],
@@ -95,12 +96,12 @@ export function theFallingPedal(
   const at = (ms: number): number => 1 - (ms - nowMs) / aheadMs;
   const shown: LanePedal[] = [];
   for (const press of presses) {
-    const top = Math.max(0, at(press.untilMs));
+    const lift = at(press.untilMs);
     const foot = at(press.fromMs);
-    if (foot <= 0 || top >= 1 || top >= foot) {
+    if (foot <= 0 || lift >= 1 || lift >= foot) {
       continue;
     }
-    shown.push({ top, foot });
+    shown.push({ lift, foot });
   }
   return shown;
 }
@@ -228,21 +229,41 @@ const BAR_LINE_PX = 2;
 const PEDAL_INSET_PX = 12;
 const PEDAL_END_PX = 1;
 /**
- * How much of a press is painted whole from its foot, and how far above that
- * it fades away. A pedal is held for bars at a time, and a column standing
- * over the mark for all of it would say nothing the lit mark does not; what
- * is worth seeing coming is the moment it goes down. A press shorter than
- * both is seen whole, so a quick change of pedal is seen as one.
+ * How much of a press is painted whole from each of its ends, and how far in
+ * from that it fades away. A pedal is held for bars at a time, and a column
+ * standing over the mark for all of it would say nothing the lit mark does
+ * not; what is worth seeing coming is the moment it goes down and the moment
+ * it comes up. A press shorter than both ends is seen whole, so a quick
+ * change of pedal is seen as one.
  */
 const PEDAL_SOLID_PX = 24;
 const PEDAL_FADE_PX = 48;
+const PEDAL_END_REACH_PX = PEDAL_SOLID_PX + PEDAL_FADE_PX;
+
+/** How much of an end of a press is seen, so far in from it. */
+function seenFromAnEnd(px: number): number {
+  return Math.min(1, Math.max(0, 1 - (px - PEDAL_SOLID_PX) / PEDAL_FADE_PX));
+}
+
+/** A stretch of a press to paint, and how much of it is seen along it. */
+interface PedalPiece {
+  readonly fromPx: number;
+  readonly untilPx: number;
+  /** Rounded at its top, where that is the pedal coming up. */
+  readonly roundTop: boolean;
+  /** And at its foot, where that is the pedal going down. */
+  readonly roundFoot: boolean;
+  /** How much is seen, as stops from `fromPx` to `untilPx`. */
+  readonly seen: readonly (readonly [number, number])[];
+}
 
 /**
  * Paints the pedal falling onto its mark: each press as a pill, in the ink a
  * key is lit as heard - the pedal is pressed, and nobody judged it - whole at
- * its foot and fading above it. The foot goes on down into the mark as the
- * pedal goes down and takes the rest with it, so a long hold is seen landing
- * and then gone, until the next press comes.
+ * its two ends and faded between them, as a bracket. Its foot lands on the
+ * mark as the pedal goes down and goes on down into it, out of sight; its
+ * top lands as the pedal comes up. A long hold is seen going down, gone, and
+ * then coming up.
  */
 export function paintTheFallingPedal(
   surface: Surface,
@@ -256,37 +277,78 @@ export function paintTheFallingPedal(
   }
   const { paint, tallPx, widePx } = ready;
   const wide = Math.max(1, widePx - 2 * PEDAL_INSET_PX);
-  const round = wide / 2;
   for (const press of presses) {
-    const footPx = press.foot * tallPx - PEDAL_END_PX;
-    const goneAbovePx = footPx - PEDAL_SOLID_PX - PEDAL_FADE_PX;
-    const liftPx = Math.min(press.top * tallPx + PEDAL_END_PX, footPx - LEAST_TALL_PX);
-    const fromPx = Math.max(liftPx, goneAbovePx);
-    const untilPx = Math.min(footPx, tallPx);
-    if (untilPx <= fromPx) {
-      continue;
+    for (const piece of piecesOf(press, tallPx)) {
+      const top = Math.max(piece.fromPx, 0);
+      const foot = Math.min(piece.untilPx, tallPx);
+      if (foot <= top) {
+        continue;
+      }
+      const tall = foot - top;
+      const round = Math.min(wide / 2, tall / 2);
+      // An end is round where it is in the column; cut off by the column's
+      // edge, or faded into the middle of a long press, it is square.
+      const topRound = piece.roundTop && piece.fromPx >= 0 ? round : 0;
+      const footRound = piece.roundFoot && piece.untilPx <= tallPx ? round : 0;
+      box(paint, PEDAL_INSET_PX, top, wide, tall, [topRound, topRound, footRound, footRound]);
+      paint.fillStyle = seenAlong(paint, piece, inks.heard);
+      paint.fill();
+      paint.strokeStyle = seenAlong(paint, piece, inks.edge);
+      paint.lineWidth = 1;
+      paint.stroke();
     }
-    const tall = untilPx - fromPx;
-    // Round at the foot while it is in the column; gone into the mark, it is
-    // cut off square where the column ends.
-    const footRound = footPx <= tallPx ? Math.min(round, tall / 2) : 0;
-    const topRound = Math.min(round, tall / 2);
-    box(paint, PEDAL_INSET_PX, fromPx, wide, tall, [topRound, topRound, footRound, footRound]);
-    paint.fillStyle = fadingUp(paint, footPx, inks.heard);
-    paint.fill();
-    paint.strokeStyle = fadingUp(paint, footPx, inks.edge);
-    paint.lineWidth = 1;
-    paint.stroke();
   }
 }
 
-/** An ink whole for the solid part of a press above its foot, and fading to nothing above that. */
-function fadingUp(paint: CanvasRenderingContext2D, footPx: number, ink: string): CanvasGradient {
-  const fade = paint.createLinearGradient(0, footPx, 0, footPx - PEDAL_SOLID_PX - PEDAL_FADE_PX);
-  fade.addColorStop(0, ink);
-  fade.addColorStop(PEDAL_SOLID_PX / (PEDAL_SOLID_PX + PEDAL_FADE_PX), ink);
-  fade.addColorStop(1, withNoAlpha(ink));
-  return fade;
+/**
+ * What of a press is painted: the whole of it, where its two ends come close
+ * enough for their fades to meet, and otherwise each end with its fade.
+ */
+function piecesOf(press: LanePedal, tallPx: number): readonly PedalPiece[] {
+  const footPx = press.foot * tallPx - PEDAL_END_PX;
+  const liftPx = Math.min(press.lift * tallPx + PEDAL_END_PX, footPx - LEAST_TALL_PX);
+  const longPx = footPx - liftPx;
+  if (longPx <= 2 * PEDAL_END_REACH_PX) {
+    // Seen as the more of the two ends says at each place along it, which
+    // changes only where one of them stops being whole or stops being seen.
+    const along = [0, PEDAL_SOLID_PX, PEDAL_END_REACH_PX, longPx - PEDAL_END_REACH_PX, longPx - PEDAL_SOLID_PX, longPx]
+      .filter((px) => px >= 0 && px <= longPx)
+      .sort((left, right) => left - right);
+    return [
+      {
+        fromPx: liftPx,
+        untilPx: footPx,
+        roundTop: true,
+        roundFoot: true,
+        seen: along.map((px) => [px / longPx, Math.max(seenFromAnEnd(px), seenFromAnEnd(longPx - px))] as const),
+      },
+    ];
+  }
+  const fading: readonly (readonly [number, number])[] = [
+    [0, 1],
+    [PEDAL_SOLID_PX / PEDAL_END_REACH_PX, 1],
+    [1, 0],
+  ];
+  return [
+    // The foot, fading upwards; and the top, fading down.
+    {
+      fromPx: footPx - PEDAL_END_REACH_PX,
+      untilPx: footPx,
+      roundTop: false,
+      roundFoot: true,
+      seen: fading.map(([at, seen]) => [1 - at, seen] as const).reverse(),
+    },
+    { fromPx: liftPx, untilPx: liftPx + PEDAL_END_REACH_PX, roundTop: true, roundFoot: false, seen: fading },
+  ];
+}
+
+/** An ink seen along a piece of a press as much as its stops say. */
+function seenAlong(paint: CanvasRenderingContext2D, piece: PedalPiece, ink: string): CanvasGradient {
+  const along = paint.createLinearGradient(0, piece.fromPx, 0, piece.untilPx);
+  for (const [at, seen] of piece.seen) {
+    along.addColorStop(at, seen === 1 ? ink : partlySeen(ink, seen));
+  }
+  return along;
 }
 
 /**

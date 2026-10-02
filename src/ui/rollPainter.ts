@@ -97,14 +97,17 @@ export function asCanvasColour(said: string): string {
 }
 
 /**
- * The same colour with nothing of it seen, for an ink to fade to.
+ * The same colour with only a share of it seen, for an ink to fade through.
  *
  * Faded to a transparent black instead, the way between them goes through
  * grey wherever a canvas mixes its stops without regard to their alpha.
  */
-export function withNoAlpha(ink: string): string {
-  const parts = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/.exec(ink.trim());
-  return parts === null ? 'rgba(0, 0, 0, 0)' : `rgba(${parts[1] ?? '0'}, ${parts[2] ?? '0'}, ${parts[3] ?? '0'}, 0)`;
+export function partlySeen(ink: string, share: number): string {
+  const parts = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+))?/.exec(ink.trim());
+  const alpha = Number(((parts?.[4] === undefined ? 1 : Number(parts[4])) * share).toFixed(3));
+  return parts === null
+    ? `rgba(0, 0, 0, ${String(alpha)})`
+    : `rgba(${parts[1] ?? '0'}, ${parts[2] ?? '0'}, ${parts[3] ?? '0'}, ${String(alpha)})`;
 }
 
 /**

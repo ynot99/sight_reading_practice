@@ -10,10 +10,11 @@ import {
   type FallingNote,
   type LaneInks,
   type LaneNote,
+  type LanePedal,
 } from '../../src/ui/fallingNotes.js';
 import type { KeyPlace } from '../../src/ui/replayKeys.js';
-import { withNoAlpha } from '../../src/ui/rollPainter.js';
-import { surface } from '../support/recordingCanvas.js';
+import { partlySeen } from '../../src/ui/rollPainter.js';
+import { surface, type Mark } from '../support/recordingCanvas.js';
 
 /** Every ink named by what it is for, so a note painted says which it was. */
 const INKS: LaneInks = {
@@ -149,12 +150,22 @@ describe('the notes falling onto the keys', () => {
 });
 
 describe('the pedal falling onto its mark', () => {
-  it('lands the foot of a press on the mark as the pedal goes down, and takes it on down past it', () => {
+  /** A real colour, so what an end fades through can be told. */
+  const BLUE = 'rgb(37, 99, 235)';
+  const inks: LaneInks = { ...INKS, heard: BLUE };
+  const painted = (presses: readonly LanePedal[]): Mark[] => {
+    const { surface: column, recorder } = surface(56, 200);
+    paintTheFallingPedal(column, presses, inks, 1);
+    return recorder.inked(BLUE);
+  };
+
+  it('lands the foot of a press on the mark as the pedal goes down, and its top as it comes up', () => {
     const shown = theFallingPedal(
       [
         // Down a second ago, and up a second and a half from now.
         { fromMs: 0, untilMs: 2_500 },
         { fromMs: 2_500, untilMs: 3_100 },
+        // Never let up.
         { fromMs: 3_500, untilMs: Number.POSITIVE_INFINITY },
         // Up already, and still to come.
         { fromMs: 0, untilMs: 1_000 },
@@ -164,95 +175,117 @@ describe('the pedal falling onto its mark', () => {
       3_000,
     );
 
-    expect(shown.map((press) => [Number(press.top.toFixed(3)), Number(press.foot.toFixed(3))])).toEqual([
+    expect(shown.map((press) => [Number(press.lift.toFixed(3)), Number(press.foot.toFixed(3))])).toEqual([
       [0.5, 1.333],
       [0.3, 0.5],
-      [0, 0.167],
+      [Number.NEGATIVE_INFINITY, 0.167],
     ]);
   });
 
-  it('paints a press whole at its foot and faded above, a change of pedal as two', () => {
-    const { surface: column, recorder } = surface(56, 200);
+  it('paints a short press whole, and a long one by its two ends, each fading in towards the other', () => {
+    const [short] = painted([{ lift: 0.25, foot: 0.5 }]);
+    expect([short?.y, short?.tall, short?.corners]).toEqual([51, 48, [16, 16, 16, 16]]);
+    expect(new Set(short?.fade?.stops.map(([, colour]) => colour))).toEqual(new Set([BLUE]));
 
-    paintTheFallingPedal(
-      column,
-      [
-        // Short enough to be seen whole, ending where the next begins.
-        { top: 0.25, foot: 0.5 },
-        { top: 0, foot: 0.8 },
-      ],
-      INKS,
-      1,
-    );
-
-    const pills = recorder.inked('heard');
-    expect(pills.map(({ x, y, wide, tall }) => [x, y, wide, tall])).toEqual([
-      [12, 51, 32, 48],
-      // Long: seen for its foot and the fade over it, not up to its top.
-      [12, 87, 32, 72],
-    ]);
-    // Whole for its foot, and to nothing above that.
-    expect(pills[1]?.fade).toEqual({
-      fromY: 159,
-      toY: 87,
+    const [foot, top] = painted([{ lift: 0, foot: 0.9 }]);
+    // The foot, round at the bottom, whole for a way and faded above.
+    expect([foot?.x, foot?.y, foot?.wide, foot?.tall, foot?.corners]).toEqual([12, 107, 32, 72, [0, 0, 16, 16]]);
+    expect(foot?.fade).toEqual({
+      fromY: 107,
+      toY: 179,
       stops: [
-        [0, 'heard'],
-        [1 / 3, 'heard'],
-        [1, 'rgba(0, 0, 0, 0)'],
+        [0, 'rgba(37, 99, 235, 0)'],
+        [1 - 1 / 3, BLUE],
+        [1, BLUE],
       ],
     });
-    // Edged, as a note is, and the edge fading with it.
-    expect(recorder.inked('edge').map((edge) => edge.fade?.toY)).toEqual([27, 87]);
+    // The top, round above, whole for a way and faded below.
+    expect([top?.y, top?.tall, top?.corners]).toEqual([1, 72, [16, 16, 0, 0]]);
+    expect(top?.fade?.stops).toEqual([
+      [0, BLUE],
+      [1 / 3, BLUE],
+      [1, 'rgba(37, 99, 235, 0)'],
+    ]);
+  });
+
+  it('lets the fades of two ends meet in a press too short for both, seen less between them but never gone', () => {
+    // Ninety-eight pixels long: each end is seen whole for twenty-four, and
+    // by the middle each has faded by a little.
+    const [whole, ...more] = painted([{ lift: 0.25, foot: 0.75 }]);
+
+    expect(more).toEqual([]);
+    expect([whole?.y, whole?.tall]).toEqual([51, 98]);
+    expect(whole?.fade?.stops.map(([, colour]) => colour)).toEqual([
+      BLUE,
+      BLUE,
+      'rgba(37, 99, 235, 0.958)',
+      'rgba(37, 99, 235, 0.958)',
+      BLUE,
+      BLUE,
+    ]);
+
+    // A hundred and thirty-eight: as long as one can be and still be painted
+    // whole, and between its ends all but gone - as a longer one, painted by
+    // its two ends, is gone there.
+    const [longest] = painted([{ lift: 0.15, foot: 0.85 }]);
+    expect(longest?.fade?.stops.map(([, colour]) => colour)).toEqual([
+      BLUE,
+      BLUE,
+      'rgba(37, 99, 235, 0.125)',
+      'rgba(37, 99, 235, 0.125)',
+      BLUE,
+      BLUE,
+    ]);
+  });
+
+  it('paints only the foot of a pedal never let up, and the top of one let up beyond the column', () => {
+    expect(painted([{ lift: Number.NEGATIVE_INFINITY, foot: 0.8 }]).map(({ y, tall }) => [y, tall])).toEqual([
+      [87, 72],
+    ]);
+
+    // Its top above the column: the part of its fade that has come in, cut
+    // square where the column begins.
+    const [, top] = painted([{ lift: -0.2, foot: 0.9 }]);
+    expect([top?.y, top?.tall, top?.corners, top?.fade?.fromY]).toEqual([0, 33, [0, 0, 0, 0], -39]);
+  });
+
+  it('takes the foot on down into the mark, and lands the top on it as the pedal comes up', () => {
+    expect(
+      painted([
+        // Down a moment ago: its foot is past the mark, cut off square.
+        { lift: -1, foot: 1.2 },
+        // Down long enough for all of the foot that is painted to have gone in.
+        { lift: -1, foot: 1.5 },
+      ]).map(({ y, tall, corners }) => [y, tall, corners]),
+    ).toEqual([[167, 33, [0, 0, 0, 0]]]);
+
+    // Coming up in a moment: its top is all but on the mark.
+    expect(painted([{ lift: 0.95, foot: 2 }]).map(({ y, tall, corners }) => [y, tall, corners])).toEqual([
+      [191, 9, [4.5, 4.5, 0, 0]],
+    ]);
   });
 
   it('leaves room to see a change of pedal between two presses end to end', () => {
-    const { surface: column, recorder } = surface(56, 200);
+    const [upper, lower] = painted([
+      { lift: 0.25, foot: 0.5 },
+      { lift: 0.5, foot: 0.75 },
+    ]);
 
-    paintTheFallingPedal(
-      column,
-      [
-        { top: 0.25, foot: 0.5 },
-        { top: 0.5, foot: 0.75 },
-      ],
-      INKS,
-      1,
-    );
-
-    const [upper, lower] = recorder.inked('heard');
     expect((lower?.y ?? 0) - ((upper?.y ?? 0) + (upper?.tall ?? 0))).toBe(2);
   });
 
-  it('takes a press on down into the mark once the pedal is down, and is gone once its fade has passed', () => {
+  it('paints the shortest press tall enough to see, and edges every piece', () => {
     const { surface: column, recorder } = surface(56, 200);
 
-    paintTheFallingPedal(
-      column,
-      [
-        // Down a moment ago: its foot is past the mark, cut off square.
-        { top: 0, foot: 1.2 },
-        // Down long enough for all of it that is painted to have gone in.
-        { top: 0, foot: 1.5 },
-      ],
-      INKS,
-      1,
-    );
+    paintTheFallingPedal(column, [{ lift: 0.999, foot: 1 }, { lift: 0, foot: 0.9 }], inks, 1);
 
-    expect(recorder.inked('heard').map(({ y, tall, corners }) => [y, tall, corners])).toEqual([
-      [167, 33, [16, 16, 0, 0]],
-    ]);
+    expect(recorder.inked(BLUE).map(({ y, tall }) => [y, tall])[0]).toEqual([197, 2]);
+    expect(recorder.inked('edge').map((edge) => edge.fade?.fromY)).toEqual([197, 107, 1]);
   });
 
-  it('paints the shortest press tall enough to see', () => {
-    const { surface: column, recorder } = surface(56, 200);
-
-    paintTheFallingPedal(column, [{ top: 0.999, foot: 1 }], INKS, 1);
-
-    expect(recorder.inked('heard').map(({ y, tall }) => [y, tall])).toEqual([[197, 2]]);
-  });
-
-  it('fades an ink to the same colour unseen, not to a transparent black', () => {
-    expect(withNoAlpha('rgb(37, 99, 235)')).toBe('rgba(37, 99, 235, 0)');
-    expect(withNoAlpha('rgba(15, 23, 42, 0.7)')).toBe('rgba(15, 23, 42, 0)');
+  it('fades an ink through its own colour, not through a transparent black', () => {
+    expect(partlySeen('rgb(37, 99, 235)', 0)).toBe('rgba(37, 99, 235, 0)');
+    expect(partlySeen('rgba(15, 23, 42, 0.7)', 0.5)).toBe('rgba(15, 23, 42, 0.35)');
   });
 });
 

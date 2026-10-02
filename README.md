@@ -190,10 +190,11 @@ the page; where the page is ruled, the beats and their divisions are ruled at
 the lane's two sides in the same grid, a beat longer than a division. Under Listen they are one blue, since the
 machine is playing and nothing is judged; in a replay they are the reader's
 own presses, in the colours each was judged in. The pedal falls onto its mark
-in a column of its own, each press a pill whole at its foot and fading above
-it: what is worth seeing coming is the moment it goes down, and a pedal held
-for bars is seen landing and then gone, the mark lit, until the next press
-comes. A change of pedal is two pills, with room between them. The keyboard button in the bar
+in a column of its own, each press a pill whole at its two ends and fading
+between them, as a bracket: what is worth seeing coming is the moment it goes
+down and the moment it comes up. A pedal held for bars is seen landing, gone
+while the mark is lit, and then coming up. A change of pedal is two pills,
+with room between them. The keyboard button in the bar
 goes round three answers: the falling notes and the keyboard, the keyboard
 alone, and the score alone.
 

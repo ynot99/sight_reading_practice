@@ -110,15 +110,6 @@ const MARKER_HALF_WIDTH = 1.5;
  */
 const HEAD_HALF_WIDTH = 0.59;
 
-/**
- * The closing cursors, in staff spaces: how far from the heads they begin,
- * how long each is, and how wide - a head's width, so the pair reads as the
- * note's own.
- */
-const CLOSING_REACH = 4;
-const CLOSING_LONG = 1.5;
-const CLOSING_WIDE = 1.2;
-
 /** A step already played: its notes are gone from the page. */
 const FADED_CLASS = 'note--passed';
 /** What the run will not ask for: the other hand, or outside the passage. */
@@ -224,8 +215,8 @@ export class VerovioScoreRenderer
     this.placeTheMarker(this.other, 'score__cursor score__cursor--other');
   });
   private readonly markerElements = new Map<MarkerOnThePage, HTMLElement>();
-  /** The pages the closing cursors were last drawn on, to be taken off them. */
-  private readonly closingDrawnOn = new Set<number>();
+  /** The halves of the closing cursors on the page, kept to be drawn again. */
+  private readonly closingHalves: HTMLElement[] = [];
   /** Where on the page each step is, by name; see `IScoreRenderer.load`. */
   private printed: readonly PrintedStep[] = [];
   /** What each drawn page was read as: its systems, its bars, its heads, and its size. */
@@ -888,6 +879,9 @@ export class VerovioScoreRenderer
       // with a second in it sets them.
       width: (last - first + 2 * MARKER_HALF_WIDTH * space) * scale,
       height: (system.bottom - system.top) * scale,
+      // Half way down the system: between a piano's two staves, the two
+      // being drawn alike.
+      middle: ((system.top + system.bottom) / 2) * scale,
     };
   }
 
@@ -1788,78 +1782,51 @@ export class VerovioScoreRenderer
   }
 
   /**
-   * Draws the cursors closing on the notes coming: a bar above the highest
-   * head the reader owes at a step and one below the lowest, as far from them
-   * as the note is from its beat and touching them on it, white for the moment
-   * they meet. Placed by the heads as the page prints them, and on whatever
-   * page the step is drawn on; a step on a page not drawn has none.
+   * Draws the cursors closing on the notes coming: the marker's band over a
+   * step in two halves, one growing down from the top of the system and one
+   * up from its foot, as far as the note is near its beat - meeting between
+   * the staves on it, and white for the moment they meet. On whatever page
+   * the step is drawn on; a step on a page not drawn has none.
    */
   showClosing(cues: readonly ClosingCue[]): void {
-    for (const page of this.closingDrawnOn) {
-      this.layerOn(page, 'closing-cursors')?.replaceChildren();
-    }
-    this.closingDrawnOn.clear();
+    let used = 0;
     for (const cue of cues) {
-      const where = this.whereTheNotesAre(cue.stepIndex, cue.midis);
-      const layer = where === null ? null : this.layerOn(where.page, 'closing-cursors');
-      if (where === null || layer === null) {
+      const where = this.whereTheStepIs(cue.stepIndex);
+      if (where === null) {
         continue;
       }
-      this.closingDrawnOn.add(where.page);
-      layer.setAttribute('transform', `scale(${String(where.scale)})`);
-      const { space } = where;
-      const away = CLOSING_REACH * space * (1 - Math.min(1, Math.max(0, cue.closing)));
-      const long = CLOSING_LONG * space;
-      const wide = CLOSING_WIDE * space;
-      for (const top of [where.top - away - long, where.bottom + away]) {
-        const bar = layer.ownerDocument.createElementNS(SVG_NAMESPACE, 'rect');
-        bar.setAttribute('class', 'closing-cursor');
-        bar.setAttribute('x', String(where.x - wide / 2));
-        bar.setAttribute('y', String(top));
-        bar.setAttribute('width', String(wide));
-        bar.setAttribute('height', String(long));
-        bar.setAttribute('rx', String(wide / 2));
-        if (cue.closing >= 1) {
-          bar.setAttribute('data-met', 'true');
+      const closing = Math.min(1, Math.max(0, cue.closing));
+      const foot = where.top + where.height;
+      const down = (where.middle - where.top) * closing;
+      const up = (foot - where.middle) * closing;
+      for (const [top, height] of [
+        [where.top, down],
+        [foot - up, up],
+      ] as const) {
+        let half = this.closingHalves[used];
+        if (half === undefined) {
+          half = this.container.ownerDocument.createElement('div');
+          half.className = 'score__closing';
+          this.closingHalves.push(half);
         }
-        layer.append(bar);
+        used += 1;
+        if (half.parentElement !== where.sheet) {
+          where.sheet.append(half);
+        }
+        half.style.left = `${String(where.left)}px`;
+        half.style.top = `${String(top)}px`;
+        half.style.width = `${String(where.width)}px`;
+        half.style.height = `${String(height)}px`;
+        if (closing >= 1) {
+          half.dataset['met'] = 'true';
+        } else {
+          delete half.dataset['met'];
+        }
       }
     }
-  }
-
-  /**
-   * Where the heads of some keys of a step stand on the page, in its units:
-   * across them, from the top of the highest to the foot of the lowest -
-   * `null` where none of them is drawn.
-   */
-  private whereTheNotesAre(
-    stepIndex: number,
-    midis: readonly number[],
-  ): { page: number; scale: number; space: number; x: number; top: number; bottom: number } | null {
-    const step = this.printed[stepIndex];
-    const page = step === undefined ? undefined : this.pageOfName.get(step.barId);
-    const drawn = page === undefined ? undefined : this.layouts.get(page);
-    if (step === undefined || page === undefined || drawn === undefined) {
-      return null;
+    for (const spare of this.closingHalves.splice(used)) {
+      spare.remove();
     }
-    const space = staffSpaceOf(drawn.layout);
-    const heads = step.printed
-      .filter((here) => here.midi !== null && midis.includes(here.midi))
-      .map((here) => drawn.layout.heads.get(here.id))
-      .filter((head): head is HeadOnThePage => head !== undefined);
-    if (heads.length === 0) {
-      return null;
-    }
-    const middles = heads.map((head) => head.x + HEAD_HALF_WIDTH * space);
-    const ys = heads.map((head) => head.y);
-    return {
-      page,
-      scale: drawn.scale,
-      space,
-      x: (Math.min(...middles) + Math.max(...middles)) / 2,
-      top: Math.min(...ys) - space / 2,
-      bottom: Math.max(...ys) + space / 2,
-    };
   }
 
   /**
@@ -2328,6 +2295,8 @@ interface MarkerPlace {
   readonly top: number;
   readonly width: number;
   readonly height: number;
+  /** Between the system's staves, where the two halves of a closing cursor meet. */
+  readonly middle: number;
 }
 
 /**

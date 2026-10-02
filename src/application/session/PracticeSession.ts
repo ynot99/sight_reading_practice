@@ -63,11 +63,10 @@ export interface PracticeSessionDependencies {
  * {@link IPracticeMode}. It talks to hardware only through ports, so the
  * entire loop runs headless in tests.
  */
-/** Notes the reader owes at a step, and when the music will reach them. */
+/** A step the reader owes notes at, and when the music will reach it. */
 export interface NotesComing {
   readonly stepIndex: number;
   readonly atMs: number;
-  readonly midis: readonly number[];
 }
 
 export class PracticeSession {
@@ -557,11 +556,10 @@ export class PracticeSession {
       if (atMs >= untilMs) {
         break;
       }
-      const midis = this.expectedAt(step);
-      if (midis.length === 0) {
+      if (this.expectedAt(step).length === 0) {
         continue;
       }
-      coming.push({ stepIndex: at, atMs, midis });
+      coming.push({ stepIndex: at, atMs });
       const played = at === from && this.matcher?.completed === true;
       if (this.mode.standsStill === 'at-notes' && !played) {
         break;

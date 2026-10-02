@@ -359,54 +359,66 @@ describe('a finger on the music', () => {
 });
 
 describe('the closing cursors', () => {
-  function rects(surface: HTMLElement): SVGRectElement[] {
-    return [...surface.querySelectorAll<SVGRectElement>('g.closing-cursors rect.closing-cursor')];
+  function halves(surface: HTMLElement): HTMLElement[] {
+    return [...surface.querySelectorAll<HTMLElement>('.score__closing')];
   }
 
-  const at = (bar: SVGRectElement | undefined, name: string): number => Number(bar?.getAttribute(name) ?? Number.NaN);
+  function box(element: HTMLElement | undefined): { left: number; top: number; right: number; bottom: number } {
+    const left = Number.parseFloat(element?.style.left ?? 'NaN');
+    const top = Number.parseFloat(element?.style.top ?? 'NaN');
+    return {
+      left,
+      top,
+      right: left + Number.parseFloat(element?.style.width ?? 'NaN'),
+      bottom: top + Number.parseFloat(element?.style.height ?? 'NaN'),
+    };
+  }
 
-  it('closes a bar from above the notes owed at a step and one from below, meeting on their heads', async () => {
+  it('grows the marker over a step in two halves, from the top of the system and its foot, to meet between the staves', async () => {
     const { renderer, surface } = aStage();
     const two = printed(twoBarExercise());
     await renderer.load(two.xml, two.steps);
     const drawing = sheets(surface)[0]?.querySelector('svg') as SVGSVGElement;
     const layout = readThePage(drawing);
-    const [top, second] = layout.systems[0]?.bars[0]?.staves[0]?.lines ?? [];
-    const space = (second ?? Number.NaN) - (top ?? Number.NaN);
-    // The treble's C4 alone of the first chord: its bass note is not owed.
-    const c4 = two.steps[0]?.printed.find((here) => here.midi === 60);
-    const head = layout.heads.get(c4?.id ?? '');
+    const scale = Number.parseFloat(drawing.getAttribute('width') ?? '0') / layout.width;
+    const system = layout.systems[0];
+    const [treble, bass] = system?.bars[0]?.staves ?? [];
+    const middle = (((treble?.lines.at(-1) ?? Number.NaN) + (bass?.lines[0] ?? Number.NaN)) / 2) * scale;
+    const top = (system?.top ?? Number.NaN) * scale;
+    const foot = (system?.bottom ?? Number.NaN) * scale;
+    renderer.cursor.moveTo(1);
+    const marker = box(surface.querySelector<HTMLElement>('.score__cursor:not(.score__cursor--other)') ?? undefined);
 
-    renderer.showClosing([{ stepIndex: 0, midis: [60], closing: 0.5 }]);
+    renderer.showClosing([{ stepIndex: 1, closing: 0.5 }]);
 
-    const [above, below] = rects(surface);
-    expect(rects(surface)).toHaveLength(2);
-    // Half way: two spaces off the head, above and below, a space and a half
-    // long and a head wide, on the head's middle.
-    const headTop = (head?.y ?? Number.NaN) - space / 2;
-    const headFoot = (head?.y ?? Number.NaN) + space / 2;
-    expect(at(above, 'y') + at(above, 'height')).toBeCloseTo(headTop - 2 * space, 5);
-    expect(at(below, 'y')).toBeCloseTo(headFoot + 2 * space, 5);
-    expect(at(above, 'height')).toBeCloseTo(1.5 * space, 5);
-    expect(at(above, 'x') + at(above, 'width') / 2).toBeCloseTo((head?.x ?? Number.NaN) + 0.59 * space, 5);
-    expect(above?.hasAttribute('data-met')).toBe(false);
+    const [down, up] = halves(surface).map(box);
+    expect(halves(surface)).toHaveLength(2);
+    // Half way to the middle from each end.
+    expect(down?.top).toBeCloseTo(top, 5);
+    expect(down?.bottom).toBeCloseTo(top + (middle - top) / 2, 5);
+    expect(up?.bottom).toBeCloseTo(foot, 5);
+    expect(up?.top).toBeCloseTo(foot - (foot - middle) / 2, 5);
+    // As wide as the marker, where the marker would stand on the step.
+    expect([down?.left, down?.right]).toEqual([marker.left, marker.right]);
+    expect(halves(surface)[0]?.dataset['met']).toBeUndefined();
 
-    // Met: on the head, and white.
-    renderer.showClosing([{ stepIndex: 0, midis: [60], closing: 1 }]);
-    const [onTop, onFoot] = rects(surface);
-    expect(rects(surface)).toHaveLength(2);
-    expect(at(onTop, 'y') + at(onTop, 'height')).toBeCloseTo(headTop, 5);
-    expect(at(onFoot, 'y')).toBeCloseTo(headFoot, 5);
-    expect(onTop?.getAttribute('data-met')).toBe('true');
+    // Met: on the middle, and white.
+    renderer.showClosing([{ stepIndex: 1, closing: 1 }]);
+    const [downMet, upMet] = halves(surface).map(box);
+    expect(downMet?.bottom).toBeCloseTo(middle, 5);
+    expect(upMet?.top).toBeCloseTo(middle, 5);
+    expect(halves(surface).map((half) => half.dataset['met'])).toEqual(['true', 'true']);
 
-    // Across a chord, from the top of the highest to the foot of the lowest.
-    renderer.showClosing([{ stepIndex: 0, midis: [48, 60], closing: 1 }]);
-    const c3 = layout.heads.get(two.steps[0]?.printed.find((here) => here.midi === 48)?.id ?? '');
-    expect(at(rects(surface)[1], 'y')).toBeCloseTo((c3?.y ?? Number.NaN) + space / 2, 5);
-
-    // And off the page once nothing is coming, or what is coming is not drawn.
-    renderer.showClosing([{ stepIndex: 0, midis: [99], closing: 1 }]);
-    expect(rects(surface)).toEqual([]);
+    // Two steps, two pairs; and off the page once nothing is coming.
+    renderer.showClosing([
+      { stepIndex: 1, closing: 0.2 },
+      { stepIndex: 2, closing: 0 },
+    ]);
+    expect(halves(surface)).toHaveLength(4);
+    // Not met yet, the two that were.
+    expect(halves(surface).filter((half) => half.dataset['met'] !== undefined)).toEqual([]);
+    renderer.showClosing([]);
+    expect(halves(surface)).toEqual([]);
   });
 });
 

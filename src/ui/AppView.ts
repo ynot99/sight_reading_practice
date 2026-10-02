@@ -8719,7 +8719,6 @@ export class AppView {
       .notesClosingBetween(now - CLOSING_MET_MS, now + CLOSING_LEAD_MS)
       .map((notes) => ({
         stepIndex: notes.stepIndex,
-        midis: notes.midis,
         closing: Math.min(1, Math.max(0, 1 - (notes.atMs - now) / CLOSING_LEAD_MS)),
       }));
   }

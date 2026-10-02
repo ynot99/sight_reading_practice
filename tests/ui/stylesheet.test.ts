@@ -296,16 +296,19 @@ describe('the stylesheet', () => {
     expect(body('.replay-keys__pedal')).toMatch(/position\s*:\s*relative/);
   });
 
-  it('draws the closing cursors in a fixed ink, and white with an edge where they meet', () => {
+  it('draws the closing cursors as the marker is drawn, and white within its blue where they meet', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';
+    const wash = (selector: string): string => /--marker-wash\s*:\s*([^;]+);/.exec(body(selector))?.[1] ?? '';
 
-    // Fixed, the page being white in either theme.
-    expect(body('.closing-cursor')).toMatch(/fill\s*:\s*rgb\(37 99 235 \/ 75%\)/);
-    expect(body(".closing-cursor[data-met='true']")).toMatch(/fill\s*:\s*#ffffff/);
-    // White alone is nothing on white paper.
-    expect(body(".closing-cursor[data-met='true']")).toMatch(/stroke\s*:\s*#2563eb/);
-    expect(body(".closing-cursor[data-met='true']")).toMatch(/vector-effect\s*:\s*non-scaling-stroke/);
+    // The marker's own band, in the marker's own blue.
+    expect(wash('.score__closing')).toBe(wash('.score__cursor'));
+    expect(body('.score__closing')).toMatch(/position\s*:\s*absolute/);
+    expect(body('.score__closing')).toMatch(/pointer-events\s*:\s*none/);
+    // Met: white, seen through, inside blue - white alone is nothing on the
+    // white page.
+    const met = body(".score__closing[data-met='true']");
+    expect(met).toMatch(/rgb\(37 99 235 \/ 70%\)[^]*rgb\(255 255 255 \/ 75%\)[^]*rgb\(37 99 235 \/ 70%\)/);
   });
 
   it('takes a finger held on the metronome button for nothing but a hold', () => {

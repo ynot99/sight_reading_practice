@@ -44,9 +44,10 @@ note ends the run) and **No cursor** (keep the place yourself). Rhythm only
 and One mistake empty each other, so turning either on turns the other off.
 
 A sixth square, **Closing cursors**, is an aid rather than a challenge, and a
-square so that a reading says it was played with it: on each note owed, two
-cursors close from above and below, meet on its heads as its beat falls, and
-are white for the moment they meet. They begin a second ahead, so how near a
+square so that a reading says it was played with it: over each step where a
+note is owed, the marker's band grows in two halves, down from the top of the
+system and up from its foot, meets between the staves as the beat falls, and
+is white for the moment they meet. They begin a second ahead, so how near a
 note is reads the same at any tempo. Only where the music keeps time, and only
 as far ahead as its moments are known: at a bar line the downbeat is the
 reader's to give, and where the music waits at every note, a note not yet

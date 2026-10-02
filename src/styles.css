@@ -344,18 +344,34 @@ textarea {
 }
 
 /*
- * The cursors closing on a note the reader owes, and white for the moment
- * they meet on it. In fixed inks: the page is white in either theme.
+ * The cursors closing on a step the reader owes: the marker's band, in two
+ * halves growing towards each other. Where they meet, white with the band's
+ * blue at its edges - white alone is nothing on the white page - and seen
+ * through, so the notes under it are not lost for the moment it lasts.
  */
-.closing-cursor {
-  fill: rgb(37 99 235 / 75%);
+.score__closing {
+  --marker-wash: rgb(59 130 246 / 45%);
+  position: absolute;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--marker-wash) 20%,
+    var(--marker-wash) 80%,
+    transparent
+  );
+  pointer-events: none;
 }
 
-.closing-cursor[data-met='true'] {
-  fill: #ffffff;
-  stroke: #2563eb;
-  stroke-width: 1.5px;
-  vector-effect: non-scaling-stroke;
+.score__closing[data-met='true'] {
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgb(37 99 235 / 70%) 15%,
+    rgb(255 255 255 / 75%) 40%,
+    rgb(255 255 255 / 75%) 60%,
+    rgb(37 99 235 / 70%) 85%,
+    transparent
+  );
 }
 
 .score__cursor--other {

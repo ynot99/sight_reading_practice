@@ -38,8 +38,8 @@ function play(harness: Harness, ...midi: readonly number[]): void {
   }
 }
 
-const said = (coming: readonly NotesComing[]): [number, number, number[]][] =>
-  coming.map((notes) => [notes.stepIndex, notes.atMs, [...notes.midis].sort((left, right) => left - right)]);
+const said = (coming: readonly NotesComing[]): [number, number][] =>
+  coming.map((notes) => [notes.stepIndex, notes.atMs]);
 
 describe('the notes the music will reach on its own', () => {
   it('gives each the reader owes, and when its beat falls, where the music keeps time', () => {
@@ -48,11 +48,11 @@ describe('the notes the music will reach on its own', () => {
     countedIn(harness);
 
     expect(said(harness.session.notesComingBefore(9_000))).toEqual([
-      [0, 4_000, [MIDI.C3, MIDI.C4]],
-      [1, 5_000, [MIDI.D4]],
-      [2, 6_000, [MIDI.E4]],
-      [3, 7_000, [MIDI.F4]],
-      [4, 8_000, [MIDI.G2, MIDI.D3, MIDI.G4]],
+      [0, 4_000],
+      [1, 5_000],
+      [2, 6_000],
+      [3, 7_000],
+      [4, 8_000],
     ]);
     // Not one whose beat falls at the moment asked about, and not the rest
     // the bass keeps, which is owed nothing.

@@ -519,6 +519,26 @@ describe('settings shared between devices', () => {
     expect(now.survival).toBe(changed.survival);
   });
 
+  it('keeps whether the click is heard to this device, and shares what it sounds like', () => {
+    // Turned off and on between runs, for the run about to be played here.
+    const kept = repository();
+    kept.savePractice(SETTINGS, 1_000);
+
+    kept.savePractice({ ...SETTINGS, clickOn: !SETTINGS.clickOn }, 2_000);
+
+    expect(kept.sharedSettings().changedAtMs).toBe(1_000);
+    expect(kept.sharedSettings().values).not.toHaveProperty('clickOn');
+    expect(kept.sharedSettings().values['clickPattern']).toBe(SETTINGS.clickPattern);
+    expect(kept.sharedSettings().values['metronomeTap']).toBe(SETTINGS.metronomeTap);
+
+    // And another device's is not taken over this one's.
+    const now = kept.adoptSettings({
+      values: { ...kept.sharedSettings().values, clickOn: SETTINGS.clickOn },
+      changedAtMs: 7_000,
+    });
+    expect(now.clickOn).toBe(!SETTINGS.clickOn);
+  });
+
   it('takes another device settings, keeping its own, with their moment', () => {
     // Taking a word is not saying one: a device that has only caught up must
     // not come out newer than a change made elsewhere before it did.

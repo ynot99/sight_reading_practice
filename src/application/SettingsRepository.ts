@@ -93,6 +93,10 @@ const STORAGE_VERSION = 1;
  * is chosen afresh between runs, often, and at the instrument in front of the
  * reader. Shared, every change of it was a change to carry, and the offer to
  * sync came up each time a frame was pressed.
+ *
+ * And whether the click is heard at all, for the same reason: it is turned
+ * off and on between runs, for the run about to be played here. What it
+ * sounds like when it is on is shared.
  */
 export const SETTINGS_KEPT_ON_THE_DEVICE: readonly string[] = [
   'inputLatencyMs',
@@ -100,6 +104,7 @@ export const SETTINGS_KEPT_ON_THE_DEVICE: readonly string[] = [
   'traceTheStart',
   'rangeFromBar',
   'rangeToBar',
+  'clickOn',
   ...SETTINGS_THE_MODES_WRITE,
 ];
 

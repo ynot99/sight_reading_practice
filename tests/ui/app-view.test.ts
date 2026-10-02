@@ -1147,6 +1147,76 @@ describe('AppView', () => {
     expect(column?.width).toBe(0);
   });
 
+  it('hides the pedal falling onto its mark, and lets it fall again, with a press of the mark', async () => {
+    const frames: FrameRequestCallback[] = [];
+    const ask = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const runAFrame = (): void => {
+      for (const frame of frames.splice(0)) {
+        frame(0);
+      }
+    };
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore({
+      ...twoBarExercise({ tempoBpm: 60 }),
+      pedalMarks: [
+        { measureIndex: 0, offsetTicks: 0, type: 'start', line: true },
+        { measureIndex: 1, offsetTicks: 0, type: 'stop', line: true },
+      ],
+    });
+    const keys = element('replay-keys');
+    const toggle = keys.querySelector<HTMLButtonElement>('.replay-keys__side button');
+    const column = keys.querySelector<HTMLCanvasElement>('.replay-keys__side canvas');
+    if (toggle === null || column === null) {
+      throw new Error('No pedal mark to press, or no column over it.');
+    }
+    // A column with room on it, since jsdom lays nothing out and has no canvas.
+    const recorder = new Recorder();
+    Object.defineProperty(column, 'clientWidth', { value: 56, configurable: true });
+    Object.defineProperty(column, 'clientHeight', { value: 300, configurable: true });
+    Object.defineProperty(column, 'getContext', { configurable: true, value: () => recorder });
+    // The mark is in the place pressed, which is the whole of it.
+    expect(toggle.contains(keys.querySelector('.replay-keys__pedal'))).toBe(true);
+    expect(toggle.querySelector('.replay-keys__pedal-dot')).not.toBeNull();
+
+    await pressListen(runtime.controller);
+    metronome.advanceSubdivisions(1);
+    runAFrame();
+    expect(recorder.marks.length).toBeGreaterThan(0);
+    expect(toggle.dataset['falls']).toBe('true');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle.title).toContain('Press to hide it');
+
+    toggle.click();
+
+    expect(runtime.controller.settings.pedalFalls).toBe(false);
+    expect(toggle.dataset['falls']).toBe('false');
+    expect(toggle.title).toContain('Press to let it fall');
+    // Let go of at once, and left unpainted while the music goes on.
+    expect(column.width).toBe(0);
+    recorder.marks.length = 0;
+    runAFrame();
+    expect(recorder.marks).toEqual([]);
+
+    toggle.click();
+    runAFrame();
+
+    expect(runtime.controller.settings.pedalFalls).toBe(true);
+    expect(recorder.marks.length).toBeGreaterThan(0);
+
+    // With the keyboard alone nothing falls: dimmed, with the reason, and
+    // still answering for when the notes fall again.
+    element<HTMLButtonElement>('focus-keyboard').click();
+    expect(toggle.dataset['idle']).toBe('true');
+    expect(toggle.title).toContain('keyboard is shown alone');
+    toggle.click();
+    expect(runtime.controller.settings.pedalFalls).toBe(false);
+    ask.mockRestore();
+  });
+
   it('takes the keyboard away however a playback ends, not only on Stop', async () => {
     // Another frame ends the performance from inside the controller, and the
     // page hears no Stop and no end of the music.

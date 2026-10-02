@@ -33,6 +33,8 @@ export interface ReplayKeyboard {
   readonly lane: HTMLCanvasElement;
   /** Where the pedal falls onto its mark from: over the mark, and as wide as it. */
   readonly pedalLane: HTMLCanvasElement;
+  /** The mark's place, which turns the pedal falling onto it off and on. */
+  readonly pedalToggle: HTMLButtonElement;
 }
 
 /**
@@ -55,9 +57,16 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
   pedal.className = 'replay-keys__pedal';
   pedal.dataset['down'] = 'false';
   pedal.textContent = 'Ped.';
+  // Whether the pedal falls onto the mark: filled, or empty.
+  const dot = doc.createElement('span');
+  dot.className = 'replay-keys__pedal-dot';
+  pedal.append(dot);
   // Level with the keys, with a lane of its own over it that the pedal falls
-  // down onto it through, as the notes fall onto the keys.
-  const foot = doc.createElement('span');
+  // down onto it through, as the notes fall onto the keys. The whole of the
+  // place under that lane is what is pressed, the mark being smaller than a
+  // fingertip.
+  const foot = doc.createElement('button');
+  foot.type = 'button';
   foot.className = 'replay-keys__pedal-foot';
   foot.append(pedal);
   const pedalLaneBox = doc.createElement('span');
@@ -102,7 +111,7 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
   }
 
   host.replaceChildren(side, scroller);
-  return { keys, pedal, scroller, row, lane, pedalLane };
+  return { keys, pedal, scroller, row, lane, pedalLane, pedalToggle: foot };
 }
 
 /** Where a key stands along the row, and how wide it is drawn, in page pixels. */

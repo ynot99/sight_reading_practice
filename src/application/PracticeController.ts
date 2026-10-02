@@ -665,6 +665,14 @@ export interface PracticeSettings {
    * to fall onto without them.
    */
   readonly keysShown: KeysShown;
+  /**
+   * Whether the pedal falls onto its mark with the notes.
+   *
+   * Asked on the mark itself and nowhere else: it is a question about what
+   * stands over that one mark, and answered there it is answered where the
+   * reader is looking when they want it gone.
+   */
+  readonly pedalFalls: boolean;
 }
 
 export interface ExerciseLoadedEvent {
@@ -1053,6 +1061,7 @@ export class PracticeController {
       rulerStrength: 1,
       restEveryMinutes: 30,
       keysShown: 'falling-notes',
+      pedalFalls: true,
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();

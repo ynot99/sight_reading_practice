@@ -2481,16 +2481,60 @@ body[data-keys-hidden='true'] .focus-bar {
   flex-direction: column;
 }
 
+/*
+ * The place of the pedal's mark, which is what turns the pedal falling onto
+ * it off and on: the whole of it, the mark being smaller than a fingertip.
+ */
 .replay-keys__pedal-foot {
   display: flex;
   flex: 0 0 var(--replay-keys);
   align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/*
+ * Whether the pedal falls: filled, or an empty ring, after the mark's word.
+ * White on the mark while the pedal is down, which is lit in the colour the
+ * ring would be.
+ */
+.replay-keys__pedal-dot {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+}
+
+.replay-keys__pedal-foot[data-falls='true'] .replay-keys__pedal-dot {
+  background: var(--accent);
+}
+
+.replay-keys__pedal[data-down='true'] .replay-keys__pedal-dot {
+  border-color: #ffffff;
+}
+
+.replay-keys__pedal-foot[data-falls='true'] .replay-keys__pedal[data-down='true'] .replay-keys__pedal-dot {
+  background: #ffffff;
+}
+
+.replay-keys__pedal-foot[data-idle='true'] .replay-keys__pedal-dot {
+  opacity: 0.35;
 }
 
 .replay-keys__pedal {
+  position: relative;
   flex: 0 0 auto;
   margin: 0 8px;
-  padding: 4px 8px;
+  padding: 4px 16px 4px 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--text-muted);

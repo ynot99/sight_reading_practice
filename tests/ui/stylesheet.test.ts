@@ -267,6 +267,27 @@ describe('the stylesheet', () => {
     expect(at('.focus-bar__badge--replay')).toBeGreaterThan(at('.focus-bar__badge'));
   });
 
+  it('marks whether the pedal falls on its mark, and takes a press on the whole of its place', () => {
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    // Pressed, in a picture that takes no touches.
+    expect(body('.replay-keys__pedal-foot')).toMatch(/pointer-events\s*:\s*auto/);
+    // An empty ring, filled where the pedal falls, white on the mark lit by it.
+    expect(body('.replay-keys__pedal-dot')).toMatch(/border\s*:\s*1\.5px solid var\(--accent\)/);
+    expect(body('.replay-keys__pedal-dot')).not.toMatch(/background/);
+    expect(body(".replay-keys__pedal-foot[data-falls='true'] .replay-keys__pedal-dot")).toMatch(
+      /background\s*:\s*var\(--accent\)/,
+    );
+    expect(body(".replay-keys__pedal[data-down='true'] .replay-keys__pedal-dot")).toMatch(/border-color\s*:\s*#ffffff/);
+    expect(
+      body(".replay-keys__pedal-foot[data-falls='true'] .replay-keys__pedal[data-down='true'] .replay-keys__pedal-dot"),
+    ).toMatch(/background\s*:\s*#ffffff/);
+    expect(body(".replay-keys__pedal-foot[data-idle='true'] .replay-keys__pedal-dot")).toMatch(/opacity\s*:\s*0\.35/);
+    // Placed in the mark it marks, which makes room for it.
+    expect(body('.replay-keys__pedal')).toMatch(/position\s*:\s*relative/);
+  });
+
   it('takes a finger held on the metronome button for nothing but a hold', () => {
     const body = rules().find((rule) => rule.selector === '#focus-metronome')?.body ?? '';
 

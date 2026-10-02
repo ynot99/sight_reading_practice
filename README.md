@@ -194,7 +194,9 @@ in a column of its own, each press a pill whole at its two ends and fading
 between them, as a bracket: what is worth seeing coming is the moment it goes
 down and the moment it comes up. A pedal held for bars is seen landing, gone
 while the mark is lit, and then coming up. A change of pedal is two pills,
-with room between them. The keyboard button in the bar
+with room between them. A press of the mark hides the falling pedal or lets
+it fall again, and a dot on the mark, filled or empty, says which; it is
+asked there and nowhere else. The keyboard button in the bar
 goes round three answers: the falling notes and the keyboard, the keyboard
 alone, and the score alone.
 

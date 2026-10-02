@@ -83,6 +83,7 @@ const SETTINGS: PracticeSettings = {
   countInRun: 'once',
   countInPlayback: 'every',
   keysShown: 'keys',
+  pedalFalls: false,
 };
 
 describe('practice settings codec', () => {

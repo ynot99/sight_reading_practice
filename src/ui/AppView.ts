@@ -4469,6 +4469,13 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    // Hidden at once, the column being let go of; let fall again, it is
+    // painted with the next frame of music, as the notes are.
+    this.listen(this.replayKeyboard.pedalToggle, 'click', () => {
+      controller.updateSettings({ pedalFalls: !controller.settings.pedalFalls });
+      this.syncControlsFromSettings();
+    });
+
     this.listen(this.el.focusReplay, 'click', () => {
       this.replayRun();
     });
@@ -8500,6 +8507,7 @@ export class AppView {
     this.el.focusKeyboard.title = title;
     this.el.focusKeyboard.setAttribute('aria-label', title);
     this.el.replayKeys.dataset['shows'] = shows;
+    this.describeThePedalToggle();
 
     const inReplay = this.replayRoll !== null;
     const inPlayback = controller.isListening || controller.isListeningPaused;
@@ -8518,6 +8526,9 @@ export class AppView {
       // the memory it holds - the height of the screen of it. Painting sizes
       // it again.
       this.replayKeyboard.lane.width = 0;
+      this.replayKeyboard.pedalLane.width = 0;
+    }
+    if (!controller.settings.pedalFalls) {
       this.replayKeyboard.pedalLane.width = 0;
     }
 
@@ -8699,12 +8710,36 @@ export class AppView {
       this.laneInks,
       this.doc.defaultView?.devicePixelRatio ?? 1,
     );
-    paintTheFallingPedal(
-      this.replayKeyboard.pedalLane,
-      this.fallingPedal,
-      this.laneInks,
-      this.doc.defaultView?.devicePixelRatio ?? 1,
-    );
+    if (this.runtime.controller.settings.pedalFalls) {
+      paintTheFallingPedal(
+        this.replayKeyboard.pedalLane,
+        this.fallingPedal,
+        this.laneInks,
+        this.doc.defaultView?.devicePixelRatio ?? 1,
+      );
+    }
+  }
+
+  /**
+   * Says on the pedal's mark whether the pedal falls onto it, and what a
+   * press of it does - dimmed, with the reason, where nothing falls at all.
+   */
+  private describeThePedalToggle(): void {
+    const settings = this.runtime.controller.settings;
+    const toggle = this.replayKeyboard.pedalToggle;
+    const falls = settings.pedalFalls;
+    toggle.dataset['falls'] = String(falls);
+    toggle.setAttribute('aria-pressed', String(falls));
+    const said = falls ? 'The pedal falls onto its mark. Press to hide it.' : 'The pedal is hidden. Press to let it fall.';
+    if (settings.keysShown === 'falling-notes') {
+      delete toggle.dataset['idle'];
+      toggle.title = said;
+    } else {
+      // Not refused: what it is set to is kept for when the notes fall again.
+      toggle.dataset['idle'] = 'true';
+      toggle.title = `${said} Nothing falls while the keyboard is shown alone.`;
+    }
+    toggle.setAttribute('aria-label', toggle.title);
   }
 
   /**

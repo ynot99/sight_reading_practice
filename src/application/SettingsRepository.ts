@@ -436,6 +436,7 @@ export function decodePracticeSettings(
     rulerStrength: readNumber(value['rulerStrength'], 0, 1),
     restEveryMinutes: readInteger(value['restEveryMinutes'], 0, 180),
     keysShown: readKeysShown(value['keysShown'], value['showKeyboard']),
+    pedalFalls: readBoolean(value['pedalFalls']),
   } as PracticeSettings);
 }
 
@@ -504,6 +505,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     rulerStrength: settings.rulerStrength,
     restEveryMinutes: settings.restEveryMinutes,
     keysShown: settings.keysShown,
+    pedalFalls: settings.pedalFalls,
   };
 }
 

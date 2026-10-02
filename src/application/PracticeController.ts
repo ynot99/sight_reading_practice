@@ -52,6 +52,7 @@ import {
   rulerMarks,
   rulerMarksBetween,
   rulerStepTicks,
+  type RuledMoment,
   type RulerDivision,
   type RulerMark,
 } from './rhythmRuler.js';
@@ -87,6 +88,7 @@ import {
   thePressesBetween,
   thePressesOfTheRun,
   theBarsOfTheRun,
+  theRulingOfTheRun,
   theStepAt,
   type KeyShade,
   type ReplayJudging,
@@ -858,6 +860,11 @@ export class PracticeController {
   /** Notes of the other hand still sounding, so a stop can take them back. */
   private readonly sounding = new Set<number>();
   /**
+   * The lines the page is ruled in, as the renderer was last given them:
+   * what anything else that draws the ruler reads, so the two cannot differ.
+   */
+  private ruled: readonly RulerMark[] = [];
+  /**
    * A run being shown again on the page, and how far into it the page is.
    * See `beginReplay`.
    */
@@ -867,6 +874,8 @@ export class PracticeController {
     readonly marks: readonly ReplayMark[];
     readonly presses: readonly ReplayedPress[];
     readonly bars: readonly BarStart[];
+    /** When it reached each line of the ruler, for the ruler it was asked of. */
+    ruling: { readonly of: readonly RulerMark[]; readonly moments: readonly RuledMoment[] } | null;
     drawn: number;
     drawnUpToMs: number;
     atStep: number | null;
@@ -2146,6 +2155,7 @@ export class PracticeController {
       marks: theMarksOfTheRun(roll, timeline, judging),
       presses: thePressesOfTheRun(roll, timeline, judging),
       bars: theBarsOfTheRun(roll, timeline),
+      ruling: null,
       drawn: 0,
       drawnUpToMs: 0,
       atStep: null,
@@ -2262,6 +2272,34 @@ export class PracticeController {
    */
   replayBarsBetween(fromMs: number, untilMs: number): readonly BarStart[] {
     return (this.replay?.bars ?? []).filter((bar) => bar.atMs >= fromMs && bar.atMs < untilMs);
+  }
+
+  /**
+   * The ruler's lines the run being shown again reached between two moments
+   * on its own clock - none where no run is, or nothing is ruled. See
+   * `theRulingOfTheRun`.
+   */
+  replayRulingBetween(fromMs: number, untilMs: number): readonly RuledMoment[] {
+    const replay = this.replay;
+    if (replay === null) {
+      return [];
+    }
+    if (replay.ruling?.of !== this.ruled) {
+      replay.ruling = { of: this.ruled, moments: theRulingOfTheRun(replay.roll, this.ruled) };
+    }
+    return replay.ruling.moments.filter((moment) => moment.atMs >= fromMs && moment.atMs < untilMs);
+  }
+
+  /**
+   * The ruler's lines a playback reaches between two moments on the clock -
+   * the same lines the page is ruled in, none where it is not. See
+   * `ExercisePlayer.placesBetween`.
+   */
+  playbackRulingBetween(fromMs: number, untilMs: number): readonly RuledMoment[] {
+    return (this.player?.placesBetween(this.ruled, fromMs, untilMs) ?? []).map(({ place, atMs }) => ({
+      weight: place.weight,
+      atMs,
+    }));
   }
 
   /**
@@ -3718,9 +3756,8 @@ export class PracticeController {
    */
   private drawTheRuler(): void {
     const timeline = this.timeline;
-    this.deps.ruler.showRhythmRuler(
-      timeline === null ? [] : rulerMarks(timeline, this.currentSettings.rhythmRuler),
-    );
+    this.ruled = timeline === null ? [] : rulerMarks(timeline, this.currentSettings.rhythmRuler);
+    this.deps.ruler.showRhythmRuler(this.ruled);
   }
 
   /** Whether there is another hand to hear at all. */

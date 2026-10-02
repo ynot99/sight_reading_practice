@@ -7,11 +7,13 @@ import {
   thePressesBetween,
   thePressesOfTheRun,
   theBarsOfTheRun,
+  theRulingOfTheRun,
   theStepAt,
   type ReplayJudging,
 } from '../../src/application/runReplay.js';
 import type { RolledBeat, RolledPress, RunRoll } from '../../src/application/session/RunRoll.js';
 import { Duration } from '../../src/domain/model/Duration.js';
+import { rulerMarks } from '../../src/application/rhythmRuler.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { MIDI, twoBarExercise } from '../support/fixtures.js';
 
@@ -227,6 +229,55 @@ describe('when the run reached a bar', () => {
     expect(reached(passage, 1)).toBe(0);
     const passageUnbeaten = roll([press({ downAtMs: PLAYED_AT, stepIndex: 4 })]);
     expect(reached(passageUnbeaten, 0)).toBeNull();
+  });
+});
+
+describe('where the run reached the ruler', () => {
+  const eighths = rulerMarks(timeline, 'eighth');
+  const ruled = (run: RunRoll): [string, number][] =>
+    theRulingOfTheRun(run, eighths).map((moment) => [moment.weight, Math.round(moment.atMs)]);
+
+  it('puts a line on a beat where the beat fell, and one between two its share of the way', () => {
+    const run = roll(
+      [press({ downAtMs: PLAYED_AT })],
+      [beat(PLAYED_AT, 0), beat(PLAYED_AT + 1_000, q), beat(PLAYED_AT + 2_000, q * 2)],
+    );
+
+    expect(ruled(run)).toEqual([
+      ['downbeat', 0],
+      ['division', 500],
+      ['beat', 1_000],
+      ['division', 1_500],
+      ['beat', 2_000],
+    ]);
+  });
+
+  it('holds the lines after a gate back until the music went on, and rules nothing past the last beat', () => {
+    // The second bar's line fell due at four seconds, the music stood, and
+    // the reader gave it at five and a half: the half beat after it is half
+    // way from there to the next beat, not from where it fell due.
+    const run = roll(
+      [press({ downAtMs: PLAYED_AT })],
+      [
+        beat(PLAYED_AT, 0),
+        beat(PLAYED_AT + 4_000, q * 4),
+        beat(PLAYED_AT + 5_500, q * 4),
+        beat(PLAYED_AT + 6_500, q * 5),
+      ],
+    );
+
+    const second = ruled(run).filter(([, atMs]) => atMs >= 4_000);
+    expect(second).toEqual([
+      ['downbeat', 4_000],
+      ['division', 6_000],
+      ['beat', 6_500],
+    ]);
+  });
+
+  it('guesses at none where the run kept no beats', () => {
+    const run = roll([press({ downAtMs: PLAYED_AT, stepIndex: 0 }), press({ downAtMs: PLAYED_AT + 1_000, stepIndex: 1 })]);
+
+    expect(ruled(run)).toEqual([]);
   });
 });
 

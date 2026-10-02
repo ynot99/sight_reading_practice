@@ -133,6 +133,7 @@ import {
   twoBarExercise,
 } from '../support/fixtures.js';
 import { Recorder } from '../support/recordingCanvas.js';
+import { theFallingRuling } from '../../src/ui/fallingNotes.js';
 
 // Resolved from the project root: in a jsdom environment `import.meta.url` is
 // served over http, so it cannot be turned into a file path.
@@ -970,6 +971,7 @@ describe('AppView', () => {
       const { view, runtime, metronome } = createRig();
       await view.initialize();
       await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      runtime.controller.updateSettings({ rhythmRuler: 'eighth' });
       const lane = element('replay-keys').querySelector('canvas');
       if (lane === null) {
         throw new Error('No lane over the keys.');
@@ -996,8 +998,10 @@ describe('AppView', () => {
       runTheFrames();
       expect(painted).toBe(2);
       expect(recorder.marks.filter((mark) => mark.how === 'fill').length).toBeGreaterThan(0);
-      // The first bar's line with them, on the keys as the music begins.
+      // The first bar's line with them, on the keys as the music begins, and
+      // a beat ruled at the side.
       expect(recorder.marks.some((mark) => mark.how === 'text' && mark.words === '1')).toBe(true);
+      expect(recorder.marks.some((mark) => mark.how === 'fill' && mark.x === 0 && mark.wide === 18)).toBe(true);
 
       runtime.controller.pauseListening();
       runTheFrames();
@@ -1077,6 +1081,38 @@ describe('AppView', () => {
 
     element<HTMLButtonElement>('focus-stop').click();
     expect(view.fallingBarLines).toEqual([]);
+  });
+
+  it('rules the beats and their divisions at the sides of the lane, in the grid the page is ruled in', async () => {
+    const { view, runtime, metronome } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    const ruling = (): [string, number][] =>
+      view.fallingRuling.map((line) => [line.weight, Number(line.at.toFixed(3))]);
+
+    // Not ruled, nothing ruled.
+    await pressListen(runtime.controller);
+    metronome.advanceSubdivisions(1);
+    expect(ruling()).toEqual([]);
+    element<HTMLButtonElement>('focus-stop').click();
+
+    // In eighths: a beat a second, a division between, over the lane's three
+    // seconds - and the bar's own line left to the bar line.
+    runtime.controller.updateSettings({ rhythmRuler: 'eighth' });
+    await pressListen(runtime.controller);
+    metronome.advanceSubdivisions(1);
+    // The bar lines asked of the same performance first, as a frame asks.
+    expect(view.fallingBarLines.map((line) => line.label)).toEqual(['1']);
+    expect(ruling()).toEqual([
+      ['division', 0.833],
+      ['beat', 0.667],
+      ['division', 0.5],
+      ['beat', 0.333],
+      ['division', 0.167],
+    ]);
+
+    element<HTMLButtonElement>('focus-stop').click();
+    expect(view.fallingRuling).toEqual([]);
   });
 
   it('takes the keyboard away however a playback ends, not only on Stop', async () => {
@@ -3356,6 +3392,35 @@ describe('AppView', () => {
 
         const first = presses.filter((press) => press.downAtMs - began === 1_000).map((press) => press.midi);
         expect(view.fallingScene.map((bar) => bar.midi).sort()).toEqual(first.sort());
+
+        element<HTMLButtonElement>('focus-stop').click();
+      });
+
+      it('rules a run that kept its beats where it reached the lines', async () => {
+        const { view, runtime, metronome, midi, clock } = createRig();
+        await view.initialize();
+        await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60, title: 'Ruled' }));
+        runtime.controller.updateSettings({ modeId: 'mode.flow', countInBars: 0, rhythmRuler: 'eighth' });
+        element<HTMLButtonElement>('focus-play').click();
+        metronome.advanceSubdivisions(1);
+        clock.advance(30);
+        midi.noteOn(MIDI.C3, clock.now());
+        midi.noteOn(MIDI.C4, clock.now());
+        metronome.advanceSubdivisions(1);
+        midi.noteOn(MIDI.D4, clock.now());
+        metronome.advanceSubdivisions(1);
+        element<HTMLButtonElement>('focus-stop').click();
+
+        element<HTMLButtonElement>('run-replay').click();
+
+        expect(view.fallingRuling.map((line) => line.weight)).toContain('beat');
+        expect(view.fallingRuling).toEqual(
+          theFallingRuling(
+            runtime.controller.replayRulingBetween(0, 3_000),
+            0,
+            3_000,
+          ),
+        );
 
         element<HTMLButtonElement>('focus-stop').click();
       });

@@ -45,6 +45,50 @@ export interface BarStart {
   readonly atMs: number;
 }
 
+/** A place in the music, by where it stands in divisions. */
+export interface MusicalPlace {
+  readonly ticks: number;
+}
+
+/** A place in the music, and when in a performance the music reaches it. */
+export interface PlaceReached<Place extends MusicalPlace> {
+  readonly place: Place;
+  readonly atMs: number;
+}
+
+/** Where each bar of a piece begins, as places in it; once per piece. */
+const barPlacesOf = new WeakMap<
+  ExerciseTimeline['exercise'],
+  readonly (MusicalPlace & { readonly measureIndex: number })[]
+>();
+
+function barPlaces(
+  exercise: ExerciseTimeline['exercise'],
+): readonly (MusicalPlace & { readonly measureIndex: number })[] {
+  const known = barPlacesOf.get(exercise);
+  if (known !== undefined) {
+    return known;
+  }
+  const places = barLines(exercise).map((line, measureIndex) => ({ ticks: line.startTicks, measureIndex }));
+  barPlacesOf.set(exercise, places);
+  return places;
+}
+
+/** The first entry at or after a moment, in a list in order of moments. */
+function firstFrom(list: readonly { readonly atMs: number }[], atMs: number): number {
+  let low = 0;
+  let high = list.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if ((list[middle]?.atMs ?? Number.POSITIVE_INFINITY) < atMs) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
+}
+
 export interface ListeningOptions {
   /** Staff to sound alone, or `null` for the whole texture. */
   readonly staffNumber: ListeningHand;
@@ -265,14 +309,18 @@ export class ExercisePlayer {
    */
   private handedOver: KeyDown[] = [];
   /**
-   * The bars of the stretch, timed from where the first time round begins and
-   * from where a lap does - worked out once for as long as the stretch stays
-   * the same, rather than on every frame something draws them.
+   * Places in the music inside the stretch, timed from where the first time
+   * round begins and from where a lap does - worked out once for each list of
+   * places for as long as the stretch stays the same, rather than on every
+   * frame something draws them.
    */
-  private stretchBars: {
-    readonly firstTimeRound: readonly BarStart[];
-    readonly lap: readonly BarStart[];
-  } | null = null;
+  private readonly stretchPlaces = new Map<
+    readonly MusicalPlace[],
+    {
+      readonly firstTimeRound: readonly PlaceReached<MusicalPlace>[];
+      readonly lap: readonly PlaceReached<MusicalPlace>[];
+    }
+  >();
 
   /** Where the stretch ends, in the timeline's own ticks. */
   private endOf(toIndex: number | undefined): number {
@@ -305,7 +353,7 @@ export class ExercisePlayer {
       return;
     }
     this.untilTicks = until;
-    this.stretchBars = null;
+    this.stretchPlaces.clear();
     // A lap is a different length now, in ticks and in time both.
     this.lapTicks = Math.max(0, this.untilTicks - this.loopFromTicks);
     this.lapMs = spanMs(this.timeline.exercise, this.loopFromTicks, this.untilTicks);
@@ -423,67 +471,93 @@ export class ExercisePlayer {
   }
 
   /**
-   * The bars that begin between two moments on the clock.
-   *
-   * In the terms the notes are timed in, so a bar line drawn among them
-   * stands where the music crosses it: from where the music began, the first
-   * time round from where this performance did and each lap after it from
-   * where the lap does, and none past where this reading ends. A bar the
-   * music was picked up partway through has begun already.
+   * The bars that begin between two moments on the clock. See
+   * {@link placesBetween}, of which they are the bar lines.
    */
   barsBetween(fromMs: number, untilMs: number): readonly BarStart[] {
+    const timeline = this.timeline;
+    if (timeline === null) {
+      return [];
+    }
+    return this.placesBetween(barPlaces(timeline.exercise), fromMs, untilMs).map(
+      ({ place, atMs }) => ({ measureIndex: place.measureIndex, atMs }),
+    );
+  }
+
+  /**
+   * Where places in the music fall between two moments on the clock - each
+   * one the music reaches in that time, and when. `places` are in the order
+   * of the music.
+   *
+   * In the terms the notes are timed in, so a line drawn among them stands
+   * where the music crosses it: from where the music began, the first time
+   * round from where this performance did and each lap after it from where
+   * the lap does, and none past where this reading ends. A place the music
+   * was picked up after has gone by already.
+   */
+  placesBetween<Place extends MusicalPlace>(
+    places: readonly Place[],
+    fromMs: number,
+    untilMs: number,
+  ): readonly PlaceReached<Place>[] {
     const began = this.startedAtMs ?? this.countedInToMs;
     if (!this.playing || began === null) {
       return [];
     }
-    const { firstTimeRound, lap } = this.barsOfTheStretch();
+    const { firstTimeRound, lap } = this.placesOfTheStretch(places);
     const last = this.endsAtMs;
-    const found: BarStart[] = [];
-    const take = (bar: BarStart, lapBeganMs: number): void => {
-      const atMs = lapBeganMs + bar.atMs;
-      if (last !== null && atMs >= last) {
-        return;
-      }
-      if (began + atMs >= fromMs && began + atMs < untilMs) {
-        found.push({ measureIndex: bar.measureIndex, atMs: began + atMs });
+    const found: PlaceReached<Place>[] = [];
+    const take = (list: readonly PlaceReached<Place>[], lapBeganMs: number): void => {
+      for (let at = firstFrom(list, fromMs - began - lapBeganMs); at < list.length; at += 1) {
+        const reached = list[at];
+        if (reached === undefined) {
+          break;
+        }
+        const atMs = lapBeganMs + reached.atMs;
+        if (began + atMs >= untilMs || (last !== null && atMs >= last)) {
+          break;
+        }
+        found.push({ place: reached.place, atMs: began + atMs });
       }
     };
-    for (const bar of firstTimeRound) {
-      take(bar, 0);
-    }
+    take(firstTimeRound, 0);
     if (this.laidInLaps && this.lapMs > 0) {
       // Only the laps that reach into the stretch asked about. Each begins
       // where `noteAt` puts its notes: after the first time round, and after
       // every whole lap before it.
       const firstLap = Math.max(1, Math.floor((fromMs - began - this.firstLapMs) / this.lapMs) + 1);
       for (let at = firstLap; began + this.firstLapMs + (at - 1) * this.lapMs < untilMs; at += 1) {
-        for (const bar of lap) {
-          take(bar, this.firstLapMs + (at - 1) * this.lapMs);
-        }
+        take(lap, this.firstLapMs + (at - 1) * this.lapMs);
       }
     }
     return found;
   }
 
-  private barsOfTheStretch(): {
-    readonly firstTimeRound: readonly BarStart[];
-    readonly lap: readonly BarStart[];
+  private placesOfTheStretch<Place extends MusicalPlace>(
+    places: readonly Place[],
+  ): {
+    readonly firstTimeRound: readonly PlaceReached<Place>[];
+    readonly lap: readonly PlaceReached<Place>[];
   } {
     const timeline = this.timeline;
-    if (this.stretchBars !== null || timeline === null) {
-      return this.stretchBars ?? { firstTimeRound: [], lap: [] };
+    const known = this.stretchPlaces.get(places);
+    if (known !== undefined || timeline === null) {
+      // Kept under its own list, so it is a list of these places.
+      return (known as { firstTimeRound: PlaceReached<Place>[]; lap: PlaceReached<Place>[] } | undefined) ?? {
+        firstTimeRound: [],
+        lap: [],
+      };
     }
     const exercise = timeline.exercise;
-    const from = (fromTicks: number): readonly BarStart[] => {
+    const from = (fromTicks: number): readonly PlaceReached<Place>[] => {
       const fromMs = elapsedMsAt(exercise, fromTicks);
-      return barLines(exercise).flatMap((line, measureIndex) =>
-        line.startTicks >= fromTicks && line.startTicks < this.untilTicks
-          ? [{ measureIndex, atMs: elapsedMsAt(exercise, line.startTicks) - fromMs }]
-          : [],
-      );
+      return places
+        .filter((place) => place.ticks >= fromTicks && place.ticks < this.untilTicks)
+        .map((place) => ({ place, atMs: elapsedMsAt(exercise, place.ticks) - fromMs }));
     };
-    this.stretchBars = { firstTimeRound: from(this.fromTicks), lap: from(this.loopFromTicks) };
-    return this.stretchBars;
+    const timed = { firstTimeRound: from(this.fromTicks), lap: from(this.loopFromTicks) };
+    this.stretchPlaces.set(places, timed);
+    return timed;
   }
 
   /**
@@ -599,7 +673,7 @@ export class ExercisePlayer {
     // Whatever was being held, this is now what is happening instead.
     this.pausedAtIndex = null;
     this.untilTicks = this.endOf(options.toIndex);
-    this.stretchBars = null;
+    this.stretchPlaces.clear();
     this.pending = null;
     this.nextToSchedule = 0;
     this.scheduledThroughMs = Number.NEGATIVE_INFINITY;

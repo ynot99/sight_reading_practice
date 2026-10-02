@@ -5074,6 +5074,29 @@ describe('a run shown again on the page', () => {
   const at = (renderer: FakeScoreRenderer): string[] =>
     renderer.played.map((mark) => `${String(mark.stepIndex)}:${String(mark.midi)}`);
 
+  it('rules the run where it reached the lines the page is ruled in', async () => {
+    const { controller, roll } = await aRunPlayed();
+    controller.updateSettings({ rhythmRuler: 'eighth' });
+    controller.beginReplay(roll, FLOW_MODE_ID);
+    const ruled = (): [string, number][] =>
+      controller.replayRulingBetween(0, 1_001).map((moment) => [moment.weight, Math.round(moment.atMs)]);
+
+    expect(ruled()).toEqual([
+      ['downbeat', 0],
+      ['division', 500],
+      ['beat', 1_000],
+    ]);
+
+    // Ruled afresh, read afresh; and nothing where nothing is ruled.
+    controller.updateSettings({ rhythmRuler: 'quarter' });
+    expect(ruled()).toEqual([
+      ['downbeat', 0],
+      ['beat', 1_000],
+    ]);
+    controller.updateSettings({ rhythmRuler: 'off' });
+    expect(ruled()).toEqual([]);
+  });
+
   it('clears the page and puts the marker where the music began', async () => {
     const { controller, renderer, roll } = await aRunPlayed();
     expect(renderer.played.length).toBeGreaterThan(0);

@@ -77,7 +77,9 @@ import {
   paintTheLane,
   theFallingBarLines,
   theFallingNotes,
+  theFallingRuling,
   theLaneInks,
+  type LaneRuling,
   type LaneBarLine,
   type LaneNote,
   type LaneInks,
@@ -8472,6 +8474,24 @@ export class AppView {
     );
   }
 
+  /**
+   * The ruler's beats and their divisions falling with the notes, in the grid
+   * the page is ruled in: a playback's where the player reaches them, a
+   * replay's where the run did.
+   */
+  get fallingRuling(): readonly LaneRuling[] {
+    const controller = this.runtime.controller;
+    const { nowMs, aheadMs } = this.laneClock;
+    const until = nowMs + aheadMs;
+    return theFallingRuling(
+      this.replayRoll !== null
+        ? controller.replayRulingBetween(nowMs, until)
+        : controller.playbackRulingBetween(nowMs, until),
+      nowMs,
+      aheadMs,
+    );
+  }
+
   /** Whether notes are falling now, rather than held, put away or gone. */
   private get notesAreFalling(): boolean {
     const controller = this.runtime.controller;
@@ -8527,8 +8547,7 @@ export class AppView {
     this.laneInks ??= theLaneInks(this.el.replayKeys);
     paintTheLane(
       this.replayKeyboard.lane,
-      this.fallingScene,
-      this.fallingBarLines,
+      { notes: this.fallingScene, barLines: this.fallingBarLines, ruling: this.fallingRuling },
       this.keyPlaces,
       this.laneInks,
       this.doc.defaultView?.devicePixelRatio ?? 1,

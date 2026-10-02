@@ -1,3 +1,4 @@
+import type { RuledMoment } from '../application/rhythmRuler.js';
 import { isBlackKey, type KeyLight, type KeyPlace } from './replayKeys.js';
 import { box, inksFrom, readied, type Surface } from './rollPainter.js';
 
@@ -122,8 +123,48 @@ export function theLaneInks(keyboard: HTMLElement): LaneInks {
 /** Room left between a note and the next key's, in page pixels. */
 const GAP_PX = 1;
 /** The least a note is drawn tall, so that the shortest still shows. */
+/** A beat of the ruler, or a division of one, at a share of the lane's height. */
+export interface LaneRuling {
+  readonly weight: 'beat' | 'division';
+  readonly at: number;
+}
+
+/**
+ * Where each line of the ruler stands in the lane at a moment, in the time
+ * the notes are in. A bar's own line is drawn across the lane already, so it
+ * is not ruled again here.
+ */
+export function theFallingRuling(
+  moments: readonly RuledMoment[],
+  nowMs: number,
+  aheadMs: number,
+): readonly LaneRuling[] {
+  const shown: LaneRuling[] = [];
+  for (const moment of moments) {
+    const at = 1 - (moment.atMs - nowMs) / aheadMs;
+    if (moment.weight !== 'downbeat' && at > 0 && at <= 1) {
+      shown.push({ weight: moment.weight, at });
+    }
+  }
+  return shown;
+}
+
+/** Everything the lane shows at a moment. */
+export interface LaneScene {
+  readonly notes: readonly LaneNote[];
+  readonly barLines: readonly LaneBarLine[];
+  readonly ruling: readonly LaneRuling[];
+}
+
 const LEAST_TALL_PX = 2;
 const CORNER_PX = 3;
+/**
+ * How far in from either edge of the lane a beat is ruled, and a division of
+ * one: the ruler stands at the sides, out of the way of the notes, and a beat
+ * is told from what lies between beats by its length.
+ */
+const RULED_PX: Readonly<Record<LaneRuling['weight'], number>> = { beat: 18, division: 9 };
+const RULED_WEIGHT_PX: Readonly<Record<LaneRuling['weight'], number>> = { beat: 2, division: 1 };
 /** How large a bar's number is set, and how far in from the lane's edge. */
 const BAR_NUMBER_PX = 12;
 const BAR_NUMBER_INSET_PX = 4;
@@ -140,7 +181,9 @@ const BAR_LINE_PX = 2;
  * A bar line goes across the whole lane under the notes, broken so that it
  * is not taken for a line of the staff under it, with the number printed
  * over the bar on the page at its left: the notes coming can be found on the
- * score, the stretch above a line being the bar of that number.
+ * score, the stretch above a line being the bar of that number. The beats
+ * between, and the divisions of them, are ruled at the two sides alone, in
+ * the grid the page is ruled in.
  *
  * Each over its own key and as wide as the key is drawn, and each edged, so
  * a note over the music stays a shape however busy the page under it is. The
@@ -151,8 +194,7 @@ const BAR_LINE_PX = 2;
  */
 export function paintTheLane(
   surface: Surface,
-  bars: readonly LaneNote[],
-  barLines: readonly LaneBarLine[],
+  scene: LaneScene,
   keys: ReadonlyMap<number, KeyPlace>,
   inks: LaneInks,
   density: number,
@@ -164,11 +206,17 @@ export function paintTheLane(
   const { paint, tallPx, widePx, snap } = ready;
   paint.fillStyle = inks.line;
   paint.strokeStyle = inks.line;
+  for (const line of scene.ruling) {
+    const y = snap(line.at * tallPx) - RULED_WEIGHT_PX[line.weight] / 2;
+    const reach = RULED_PX[line.weight];
+    paint.fillRect(0, y, reach, RULED_WEIGHT_PX[line.weight]);
+    paint.fillRect(widePx - reach, y, reach, RULED_WEIGHT_PX[line.weight]);
+  }
   paint.lineWidth = BAR_LINE_PX;
   paint.font = `${String(BAR_NUMBER_PX)}px ${inks.font}`;
   paint.textBaseline = 'bottom';
   paint.setLineDash(BAR_LINE_DASHES);
-  for (const line of barLines) {
+  for (const line of scene.barLines) {
     const y = snap(line.at * tallPx) - BAR_LINE_PX / 2;
     paint.beginPath();
     paint.moveTo(0, y);
@@ -178,19 +226,19 @@ export function paintTheLane(
   }
   paint.setLineDash([]);
   const ordered = [
-    ...bars.filter((bar) => !isBlackKey(bar.midi)),
-    ...bars.filter((bar) => isBlackKey(bar.midi)),
+    ...scene.notes.filter((note) => !isBlackKey(note.midi)),
+    ...scene.notes.filter((note) => isBlackKey(note.midi)),
   ];
-  for (const bar of ordered) {
-    const key = keys.get(bar.midi);
+  for (const note of ordered) {
+    const key = keys.get(note.midi);
     if (key === undefined) {
       continue;
     }
-    const tall = Math.max(LEAST_TALL_PX, (bar.bottom - bar.top) * tallPx);
-    const top = Math.min(bar.top * tallPx, tallPx - tall);
+    const tall = Math.max(LEAST_TALL_PX, (note.bottom - note.top) * tallPx);
+    const top = Math.min(note.top * tallPx, tallPx - tall);
     const wide = Math.max(1, key.width - 2 * GAP_PX);
     box(paint, key.left + GAP_PX, top, wide, tall, Math.min(CORNER_PX, tall / 2, wide / 2));
-    paint.fillStyle = inks[bar.shade];
+    paint.fillStyle = inks[note.shade];
     paint.fill();
     paint.strokeStyle = inks.edge;
     paint.lineWidth = 1;

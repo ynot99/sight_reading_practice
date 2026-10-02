@@ -183,7 +183,8 @@ string rings on after the key is let go, and a melody is not every key down at
 once. The notes are half seen and have no ground behind them,
 so the score reads through them. A broken line falls with them where each bar
 begins, with the bar's number at its left, so what is coming can be found on
-the page. Under Listen they are one blue, since the
+the page; where the page is ruled, the beats and their divisions are ruled at
+the lane's two sides in the same grid, a beat longer than a division. Under Listen they are one blue, since the
 machine is playing and nothing is judged; in a replay they are the reader's
 own presses, in the colours each was judged in. The keyboard button in the bar
 goes round three answers: the falling notes and the keyboard, the keyboard

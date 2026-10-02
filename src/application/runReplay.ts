@@ -1,6 +1,7 @@
 import type { NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { barLines } from '../domain/model/Exercise.js';
 import type { BarStart } from './ExercisePlayer.js';
+import type { RuledMoment, RulerMark } from './rhythmRuler.js';
 import { landing, type NoteTier } from '../domain/scoring/noteTiers.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import { playedNoteOffset } from './playedNoteOffset.js';
@@ -187,6 +188,52 @@ export function theBarsOfTheRun(roll: RunRoll, timeline: ExerciseTimeline): read
     }
   }
   return [...reached].map(([measureIndex, atMs]) => ({ measureIndex, atMs }));
+}
+
+/**
+ * When the run reached each line of the ruler, on its own clock.
+ *
+ * Read off the run's beats, between two of which the music went at an even
+ * pace: a line on a beat is where that beat fell, and a line between two is
+ * that share of the way from the last moment the music stood at the one to
+ * the first it was at the other - so a gate stood at holds the lines after
+ * it back until the music went on, as it held the music. A run that kept no
+ * beats had no pace to share out, and its lines are not guessed at.
+ */
+export function theRulingOfTheRun(roll: RunRoll, marks: readonly RulerMark[]): readonly RuledMoment[] {
+  const began = rollBeganAtMs(roll);
+  // Each place the music stood at: when it got there, and when it last was.
+  const stood: { ticks: number; firstMs: number; lastMs: number }[] = [];
+  for (const beat of [...roll.beats].sort((left, right) => left.atMs - right.atMs)) {
+    const last = stood.at(-1);
+    if (last !== undefined && beat.positionTicks <= last.ticks) {
+      last.lastMs = Math.max(last.lastMs, beat.atMs);
+      continue;
+    }
+    stood.push({ ticks: beat.positionTicks, firstMs: beat.atMs, lastMs: beat.atMs });
+  }
+  const ruled: RuledMoment[] = [];
+  let at = 0;
+  for (const mark of marks) {
+    while ((stood[at + 1]?.ticks ?? Number.POSITIVE_INFINITY) <= mark.ticks) {
+      at += 1;
+    }
+    const here = stood[at];
+    if (here === undefined || here.ticks > mark.ticks) {
+      continue;
+    }
+    if (here.ticks === mark.ticks) {
+      ruled.push({ weight: mark.weight, atMs: here.firstMs - began });
+      continue;
+    }
+    const next = stood[at + 1];
+    if (next === undefined) {
+      continue;
+    }
+    const share = (mark.ticks - here.ticks) / (next.ticks - here.ticks);
+    ruled.push({ weight: mark.weight, atMs: here.lastMs + share * (next.firstMs - here.lastMs) - began });
+  }
+  return ruled;
 }
 
 /** The bar a place in the music falls in, found rather than walked to. */

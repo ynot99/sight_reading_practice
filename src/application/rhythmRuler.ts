@@ -49,6 +49,12 @@ export function rulerStepTicks(division: RulerDivision): number {
 /** What a ruled line is marking, which is how strongly it is drawn. */
 export type RulerWeight = 'downbeat' | 'beat' | 'division';
 
+/** A line of the ruler at the moment a performance reaches it. */
+export interface RuledMoment {
+  readonly weight: RulerWeight;
+  readonly atMs: number;
+}
+
 /**
  * One line of the ruler, placed against the notes the engraver drew.
  *

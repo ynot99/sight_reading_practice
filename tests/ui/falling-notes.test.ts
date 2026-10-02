@@ -4,6 +4,7 @@ import {
   paintTheLane,
   theFallingBarLines,
   theFallingNotes,
+  theFallingRuling,
   type FallingNote,
   type LaneInks,
   type LaneNote,
@@ -96,13 +97,16 @@ describe('the notes falling onto the keys', () => {
 
     paintTheLane(
       lane,
-      [
-        { midi: 61, shade: 'wrong', top: 0.5, bottom: 1 },
-        { midi: 60, shade: 'perfect', top: 0, bottom: 0.5 },
-        // Not a key the keyboard has.
-        { midi: 200, shade: 'good', top: 0, bottom: 1 },
-      ],
-      [],
+      {
+        notes: [
+          { midi: 61, shade: 'wrong', top: 0.5, bottom: 1 },
+          { midi: 60, shade: 'perfect', top: 0, bottom: 0.5 },
+          // Not a key the keyboard has.
+          { midi: 200, shade: 'good', top: 0, bottom: 1 },
+        ],
+        barLines: [],
+        ruling: [],
+      },
       keys,
       INKS,
       2,
@@ -128,8 +132,7 @@ describe('the notes falling onto the keys', () => {
 
     paintTheLane(
       lane,
-      [{ midi: 60, shade: 'heard', top: 0.999, bottom: 1 }],
-      [],
+      { notes: [{ midi: 60, shade: 'heard', top: 0.999, bottom: 1 }], barLines: [], ruling: [] },
       new Map([[60, { left: 100, width: 20 }]]),
       INKS,
       1,
@@ -169,8 +172,7 @@ describe('the bar lines falling with the notes', () => {
 
     paintTheLane(
       lane,
-      [{ midi: 60, shade: 'heard', top: 0, bottom: 0.5 }],
-      [{ label: '12', at: 0.5 }],
+      { notes: [{ midi: 60, shade: 'heard', top: 0, bottom: 0.5 }], barLines: [{ label: '12', at: 0.5 }], ruling: [] },
       new Map([[60, { left: 100, width: 20 }]]),
       INKS,
       1,
@@ -186,6 +188,58 @@ describe('the bar lines falling with the notes', () => {
       // And the notes whole-edged over it.
       ['fill', 'heard', 101, 0, 18, 150, undefined, undefined],
       ['stroke', 'edge', 101, 0, 18, 150, undefined, []],
+    ]);
+  });
+});
+
+describe('the ruler at the sides of the lane', () => {
+  it('stands each beat and division where it falls, leaving the bar line to the bar', () => {
+    const lines = theFallingRuling(
+      [
+        { weight: 'downbeat', atMs: 1_000 },
+        { weight: 'division', atMs: 1_500 },
+        { weight: 'beat', atMs: 2_000 },
+        // Not come in yet, and gone already.
+        { weight: 'beat', atMs: 4_000 },
+        { weight: 'division', atMs: 999 },
+      ],
+      1_000,
+      3_000,
+    );
+
+    expect(lines.map(({ weight, at }) => [weight, Number(at.toFixed(3))])).toEqual([
+      ['division', 0.833],
+      ['beat', 0.667],
+    ]);
+  });
+
+  it('rules a beat longer than a division, at both sides, under the bar lines and the notes', () => {
+    const { surface: lane, recorder } = surface(300, 300);
+
+    paintTheLane(
+      lane,
+      {
+        notes: [{ midi: 60, shade: 'heard', top: 0, bottom: 0.5 }],
+        barLines: [{ label: '12', at: 0.25 }],
+        ruling: [
+          { weight: 'beat', at: 0.5 },
+          { weight: 'division', at: 0.75 },
+        ],
+      },
+      new Map([[60, { left: 100, width: 20 }]]),
+      INKS,
+      1,
+    );
+
+    expect(recorder.marks.map(({ how, ink, x, y, wide, tall }) => [how, ink, x, y, wide, tall])).toEqual([
+      ['fill', 'line', 0, 149, 18, 2],
+      ['fill', 'line', 282, 149, 18, 2],
+      ['fill', 'line', 0, 224.5, 9, 1],
+      ['fill', 'line', 291, 224.5, 9, 1],
+      ['stroke', 'line', 0, 74, 300, 0],
+      ['text', 'line', 4, 72, 0, 0],
+      ['fill', 'heard', 101, 0, 18, 150],
+      ['stroke', 'edge', 101, 0, 18, 150],
     ]);
   });
 });

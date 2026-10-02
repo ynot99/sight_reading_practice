@@ -14,6 +14,7 @@ import {
   restEntry,
   timeAtMeasure,
   validateExercise,
+  type Exercise,
 } from '../../src/domain/model/Exercise.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
@@ -21,7 +22,7 @@ import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
 import { looksZipped } from '../../src/infrastructure/notation/zip.js';
 import { DomainError } from '../../src/shared/errors.js';
-import { longExercise, tiedExercise, twoBarExercise } from '../support/fixtures.js';
+import { bar, longExercise, p, tiedExercise, twoBarExercise } from '../support/fixtures.js';
 import { UNSEEN_NOTE, UNSEEN_NOTES } from '../support/printed.js';
 
 const importer = new DomScoreImporter();
@@ -616,6 +617,37 @@ describe('making room for the beat', () => {
     expect(spacers).toHaveLength(6);
     expect(printed).toContain(`<duration>${Duration.QUARTER.ticks}</duration>`);
     expect(printed).toContain(`<duration>${Duration.HALF.ticks}</duration>`);
+  });
+
+  it('writes each with its value, and a triplet grid in triplets, grouped and unmarked', () => {
+    // A length alone was not enough: no plain value is a third of a beat,
+    // and the engraver laid a bar of triplets out as if its spacers were far
+    // longer, the bar taking most of its line.
+    const triplets: Exercise = {
+      ...uneven,
+      staves: uneven.staves.map((staff, at) => ({
+        ...staff,
+        measures: [
+          at === 0
+            ? bar(...Array.from({ length: 12 }, () => noteEntry(p('C4'), Duration.TRIPLET_EIGHTH)))
+            : bar(noteEntry(p('C3'), Duration.WHOLE)),
+          ...staff.measures.slice(1),
+        ],
+      })),
+    };
+    const spacers = serializer.serialize(triplets, { evenBars: true }).match(UNSEEN_NOTES) ?? [];
+    const first = spacers.slice(0, 12);
+
+    expect(first.every((spacer) => spacer.includes('<type>eighth</type>'))).toBe(true);
+    expect(first.every((spacer) => /<actual-notes>3<\/actual-notes>\s*<normal-notes>2<\/normal-notes>/.test(spacer))).toBe(true);
+    // A group of three, opened and closed, with no bracket and no figure.
+    const marks = first.map((spacer) => /<tuplet type="(start|stop)"[^>]*\/>/g.exec(spacer)?.[1] ?? '');
+    expect(marks.slice(0, 6)).toEqual(['start', '', 'stop', 'start', '', 'stop']);
+    expect(first[0]).toMatch(/bracket="no"/);
+    expect(first[0]).toMatch(/show-number="none"/);
+    // And the plain grid of the bar after it, with plain values.
+    expect(spacers.slice(12).every((spacer) => /<type>(quarter|half)<\/type>/.test(spacer))).toBe(true);
+    expect(spacers.slice(12).some((spacer) => spacer.includes('time-modification'))).toBe(false);
   });
 
   it('keeps them out of the way of the voices the music uses', () => {

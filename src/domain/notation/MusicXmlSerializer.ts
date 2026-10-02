@@ -1,7 +1,6 @@
 import { assertNever } from '../../shared/asserts.js';
 import { CLEF_DEFINITIONS, type ClefKind } from '../model/Clef.js';
-import { DIVISIONS_PER_QUARTER } from '../model/Duration.js';
-import type { Duration } from '../model/Duration.js';
+import { DIVISIONS_PER_QUARTER, Duration, NOTE_TYPES, type Tuplet } from '../model/Duration.js';
 import type {
   Beam,
   ClefChange,
@@ -275,6 +274,46 @@ function spacerGrid(exercise: Exercise, measureIndex: number, barTicks: number):
   return Math.max(grid, FINEST_SPACER_TICKS);
 }
 
+/**
+ * What a spacer of a length is written as: the value that length is, plain
+ * where there is one and otherwise in the time of a tuplet the bar itself
+ * uses - `null` where it is neither.
+ *
+ * A length alone is not enough for the engraver. No plain value is a third
+ * of a beat, and given only the length of one it laid a bar of triplets out
+ * as if its spacers were far longer than they are: on a real score, Mr. Blue
+ * Sky, that bar took most of its line, its notes crowded into the start of
+ * it and the bars beside it squeezed. Its own rests nobody sees are written
+ * with their values for the same reason.
+ */
+function spacerValue(ticks: number, tuplets: readonly Tuplet[]): Duration | null {
+  if (Duration.isNotatable(ticks)) {
+    return Duration.fromTicks(ticks);
+  }
+  for (const tuplet of tuplets) {
+    for (const type of NOTE_TYPES) {
+      if (Duration.of(type).ticks * tuplet.normal === ticks * tuplet.actual) {
+        return Duration.of(type, 0, tuplet);
+      }
+    }
+  }
+  return null;
+}
+
+/** Every tuplet a bar's music is written in, once each. */
+function tupletsOfTheBar(exercise: Exercise, measureIndex: number): readonly Tuplet[] {
+  const found = new Map<string, Tuplet>();
+  for (const staff of exercise.staves) {
+    for (const entry of staff.measures[measureIndex]?.entries ?? []) {
+      if (entry.duration.isTuplet) {
+        const { tuplet } = entry.duration;
+        found.set(`${String(tuplet.actual)}:${String(tuplet.normal)}`, tuplet);
+      }
+    }
+  }
+  return [...found.values()];
+}
+
 function greatestCommonDivisor(left: number, right: number): number {
   let a = Math.abs(left);
   let b = Math.abs(right);
@@ -493,22 +532,56 @@ export class MusicXmlSerializer implements IMusicXmlSerializer {
     if (every <= 0) {
       return;
     }
+    const tuplets = tupletsOfTheBar(exercise, measureIndex);
+    const spacers: Duration[] = [];
+    for (let at = 0; at < barTicks; at += every) {
+      // The last one is short wherever the grid does not divide the bar - a
+      // half ruled through three four - and stopping at the bar line is the
+      // truth about that rather than a fault in it.
+      const value = spacerValue(Math.min(every, barTicks - at), tuplets);
+      // A bar whose grid has no value to write it in is left to the
+      // engraver: spaced its own way, rather than laid out wrong.
+      if (value === null) {
+        return;
+      }
+      spacers.push(value);
+    }
     if (anyStaffWritten) {
       writer.element('backup', undefined, () => {
         writer.leaf('duration', barTicks);
       });
     }
     const voice = Math.max(0, ...exercise.staves.map((staff) => staff.voice)) + 1;
-    for (let at = 0; at < barTicks; at += every) {
-      // The last one is short wherever the grid does not divide the bar - a
-      // half ruled through three four - and stopping at the bar line is the
-      // truth about that rather than a fault in it.
-      const length = Math.min(every, barTicks - at);
+    // Counted into groups of the tuplet's own size, each opened and closed:
+    // the ratio alone, the engraver took each of them at its plain value, and
+    // the bar came out half as long again. Nothing marks a group on the page.
+    let intoTheGroup = 0;
+    for (const value of spacers) {
+      const size = value.isTuplet ? value.tuplet.actual : 0;
+      const starts = size > 0 && intoTheGroup === 0;
+      const stops = size > 0 && intoTheGroup === size - 1;
+      intoTheGroup = size > 0 ? (intoTheGroup + 1) % size : 0;
       writer.element('note', { 'print-object': 'no' }, () => {
         writer.leaf('rest');
-        writer.leaf('duration', length);
+        writer.leaf('duration', value.ticks);
         writer.leaf('voice', voice);
+        writer.leaf('type', value.type);
+        if (value.dots === 1) {
+          writer.leaf('dot');
+        }
+        this.writeTimeModification(writer, value);
         writer.leaf('staff', 1);
+        if (starts || stops) {
+          writer.element('notations', undefined, () => {
+            const unmarked = { number: 1, bracket: 'no', 'show-number': 'none' };
+            if (starts) {
+              writer.leaf('tuplet', undefined, { type: 'start', ...unmarked });
+            }
+            if (stops) {
+              writer.leaf('tuplet', undefined, { type: 'stop', ...unmarked });
+            }
+          });
+        }
       });
     }
   }

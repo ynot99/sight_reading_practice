@@ -238,6 +238,47 @@ describe('the rhythm ruler', () => {
     expect(spaced).toBeLessThan(2.1);
   });
 
+  it('gives a bar of triplets no more room than its notes take, once the ruler asks for room', async () => {
+    // A bar ruled on a triplet grid had its rests nobody sees written with a
+    // length and no value. No plain value is a third of a beat, and the
+    // engraver laid the bar out as if they were far longer: on a real score,
+    // Mr. Blue Sky, the bar of triplets took most of its line, its notes
+    // crowded into the first part and the bars beside it squeezed. Each bar
+    // is evened by its own grid, so a bar of three times the notes stays
+    // wider than its neighbour - but no wider than the engraver sets it.
+    const triplets: Exercise = {
+      ...twoBarExercise(),
+      staves: twoBarExercise().staves.map((staff, at) => ({
+        ...staff,
+        measures: [
+          at === 0
+            ? bar(...Array.from({ length: 12 }, () => noteEntry(p('C4'), Duration.TRIPLET_EIGHTH)))
+            : bar(noteEntry(p('C3'), Duration.WHOLE)),
+          at === 0
+            ? bar(...Array.from({ length: 4 }, () => noteEntry(p('D4'), Duration.QUARTER)))
+            : bar(noteEntry(p('D3'), Duration.WHOLE)),
+        ],
+      })),
+    };
+    const widths = async (evenBars: boolean): Promise<number> => {
+      const { renderer, surface } = aStage();
+      renderer.setPaged(true);
+      await renderer.load(serializer.serialize(triplets, { evenBars }), printedAtEachStep(buildTimeline(triplets)));
+      const heads = readingOf(surface, 0).layout.heads;
+      const x = (name: string): number => heads.get(name)?.x ?? Number.NaN;
+      // The first bar from its first note to the second bar's, against three
+      // beats of the second bar stretched to four.
+      return (x('n1-1-0-0') - x('n0-1-0-0')) / (((x('n1-1-3-0') - x('n1-1-0-0')) * 4) / 3);
+    };
+
+    const left = await widths(false);
+    const spaced = await widths(true);
+    // On the same line as the bar after it, and not stretched past its own
+    // width: a bar pushed onto the next line reads as negative here.
+    expect(spaced).toBeGreaterThan(0);
+    expect(spaced).toBeLessThan(left * 1.15);
+  });
+
   it('rules a line for every beat of every bar on the page, top staff to bottom staff', async () => {
     const { renderer, surface } = await aScore(EIGHT_PRINTED);
 

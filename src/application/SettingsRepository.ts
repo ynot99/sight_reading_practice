@@ -25,6 +25,7 @@ import {
   type KeysShown,
   type PlayedNoteDisplay,
 } from './PracticeController.js';
+import { SETTINGS_THE_MODES_WRITE } from './modes/challengeModes.js';
 
 /**
  * What belongs to this device rather than to the practice.
@@ -85,6 +86,11 @@ const STORAGE_VERSION = 1;
  * cable, how large the page is drawn is a fact about this screen, and the
  * stretch of bars chosen belongs to whichever score is open here. Carried,
  * each would be right on one device and wrong on the other.
+ *
+ * And the way of playing chosen in Modes - the frame and the squares - which
+ * is chosen afresh between runs, often, and at the instrument in front of the
+ * reader. Shared, every change of it was a change to carry, and the offer to
+ * sync came up each time a frame was pressed.
  */
 export const SETTINGS_KEPT_ON_THE_DEVICE: readonly string[] = [
   'inputLatencyMs',
@@ -92,6 +98,7 @@ export const SETTINGS_KEPT_ON_THE_DEVICE: readonly string[] = [
   'traceTheStart',
   'rangeFromBar',
   'rangeToBar',
+  ...SETTINGS_THE_MODES_WRITE,
 ];
 
 /** The settings another device shares, and when they last changed here. */

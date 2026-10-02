@@ -39,6 +39,21 @@ export function modeIsOn(mode: string, settings: PracticeSettings): boolean {
   }
 }
 
+/**
+ * Every setting the Modes sheet writes: the frame, and what each square is.
+ *
+ * Read off what the squares write rather than listed beside them, so that a
+ * square which comes to write another setting is counted with the rest.
+ */
+export const SETTINGS_THE_MODES_WRITE: readonly string[] = [
+  'modeId',
+  ...new Set(
+    CHALLENGE_MODES.flatMap((mode) =>
+      [true, false].flatMap((on) => Object.keys(squareSettings(mode, on))),
+    ),
+  ),
+];
+
 /** The squares that are on, by name. */
 export function modesOn(settings: PracticeSettings): readonly string[] {
   return CHALLENGE_MODES.filter((mode) => modeIsOn(mode, settings));

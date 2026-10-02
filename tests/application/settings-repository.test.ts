@@ -477,6 +477,36 @@ describe('settings shared between devices', () => {
     expect(values['tempoPercent']).toBe(84);
   });
 
+  it('keeps the way of playing chosen in Modes to this device', () => {
+    // Chosen afresh between runs and at the instrument in front of the
+    // reader: shared, each frame pressed was a change to carry, and the offer
+    // to sync came up every time.
+    const kept = repository();
+    kept.savePractice(SETTINGS, 1_000);
+    const changed = {
+      modeId: 'mode.wait',
+      survival: !SETTINGS.survival,
+      readAheadSteps: SETTINGS.readAheadSteps === null ? 1 : null,
+      rhythmOnly: !SETTINGS.rhythmOnly,
+      stopAtAMistake: !SETTINGS.stopAtAMistake,
+      cursorWhileRunning: !SETTINGS.cursorWhileRunning,
+    };
+    for (const [setting, value] of Object.entries(changed)) {
+      kept.savePractice({ ...SETTINGS, [setting]: value }, 2_000);
+      expect(kept.sharedSettings().changedAtMs, setting).toBe(1_000);
+      expect(kept.sharedSettings().values, setting).not.toHaveProperty(setting);
+    }
+
+    // And another device's are not taken over this one's.
+    kept.savePractice({ ...SETTINGS, ...changed }, 3_000);
+    const now = kept.adoptSettings({
+      values: { ...kept.sharedSettings().values, modeId: 'mode.flow', survival: SETTINGS.survival },
+      changedAtMs: 7_000,
+    });
+    expect(now.modeId).toBe('mode.wait');
+    expect(now.survival).toBe(changed.survival);
+  });
+
   it('takes another device settings, keeping its own, with their moment', () => {
     // Taking a word is not saying one: a device that has only caught up must
     // not come out newer than a change made elsewhere before it did.

@@ -91,7 +91,10 @@ hold 9, hold 9.
 While a run is **shown again**, a hold on a bar is something else: the replay
 goes to where the run reached that bar and plays on from there, or waits
 there if it was held. The passage and the place are left alone; a bar the run
-never got to says so.
+never got to says so. For as long as it is shown, the page's corner says what
+the run was played with - its frame and squares, not whatever is chosen now -
+and Start carries the replay's mark in place of the frame's, since it plays
+the run whatever frame is chosen.
 
 Which mark it is could instead have been said by *where in the bar* the finger
 landed, near the bar line against the middle of it, and that is a distinction

@@ -3,6 +3,15 @@ import { FLOW_MODE_ID } from './FlowMode.js';
 import { LISTEN_MODE_ID } from './ListenFrame.js';
 import { WAIT_MODE_ID } from './WaitMode.js';
 
+/**
+ * What a run was played with: the frame it was played in, and the squares
+ * that were on - which a run shown again says, whatever is chosen now.
+ */
+export interface PlayedWith {
+  readonly modeId: string;
+  readonly modes: readonly string[];
+}
+
 /** The squares a reader can turn on, in the order they are shown. */
 export const CHALLENGE_MODES: readonly string[] = ['survival', 'blind', 'rhythm', 'strict', 'cursor'];
 

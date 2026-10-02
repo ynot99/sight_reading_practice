@@ -3229,7 +3229,10 @@ describe('AppView', () => {
        * Files the run just played as a reading, as the app does when a run
        * ends: the rig's controller keeps no history of its own.
        */
-      const keepTheReading = ({ runtime }: ReturnType<typeof createRig>): void => {
+      const keepTheReading = (
+        { runtime }: ReturnType<typeof createRig>,
+        modes?: readonly string[],
+      ): void => {
         const roll = runtime.controller.lastRoll;
         if (roll === null) {
           throw new Error('expected a run to have been written down');
@@ -3240,9 +3243,16 @@ describe('AppView', () => {
           grade: 'B',
           completed: false,
           modeId: runtime.controller.settings.modeId,
+          ...(modes === undefined ? {} : { modes }),
           roll,
         });
       };
+
+      /** The marks in the page's corner, the frame first. */
+      const cornerMarks = (): string[] =>
+        [...element('score-modes').querySelectorAll('[data-mode]')].map(
+          (mark) => mark.getAttribute('data-mode') ?? '',
+        );
 
       const openTheReading = (): void => {
         element<HTMLButtonElement>('focus-readings').click();
@@ -3625,6 +3635,58 @@ describe('AppView', () => {
         expect(element<HTMLOutputElement>('focus-tempo').value).toBe(
           `${String(runtime.controller.tempoPercent)}%`,
         );
+      });
+
+      it('says in the corner what the run was played with while it is shown, not what is chosen now', async () => {
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.runtime.controller.updateSettings({ modeId: WAIT_MODE_ID, cursorWhileRunning: false });
+        element<HTMLButtonElement>('focus-play').click();
+        for (const _ of [1, 2]) {
+          rig.clock.advance(1_000);
+          for (const midi of rig.runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+            rig.midi.noteOn(midi, rig.clock.now());
+          }
+        }
+        element<HTMLButtonElement>('focus-stop').click();
+        // Chosen afresh after the run.
+        rig.runtime.controller.updateSettings({ modeId: BAR_MODE_ID, cursorWhileRunning: true });
+        element<HTMLButtonElement>('focus-modes').click();
+        element<HTMLButtonElement>('modes-close').click();
+        expect(cornerMarks()).toEqual(['bar']);
+
+        vi.useFakeTimers();
+        try {
+          element<HTMLButtonElement>('run-replay').click();
+
+          expect(cornerMarks()).toEqual(['wait', 'cursor']);
+          // Start plays the run shown again, and says so rather than the frame.
+          expect(document.body.dataset['replaying']).toBe('true');
+          expect(element('focus-play-replay').closest('#focus-play')).not.toBeNull();
+
+          element<HTMLButtonElement>('focus-stop').click();
+        } finally {
+          vi.useRealTimers();
+        }
+
+        expect(rig.runtime.controller.replaying).toBe(false);
+        expect(cornerMarks()).toEqual(['bar']);
+      });
+
+      it('says in the corner what a kept reading was played with', async () => {
+        const rig = await aRunPlayed('Kept');
+        const { runtime } = rig;
+        runtime.controller.updateSettings({ modeId: WAIT_MODE_ID });
+        keepTheReading(rig, ['blind']);
+        runtime.controller.updateSettings({ modeId: BAR_MODE_ID });
+        openTheReading();
+
+        element<HTMLButtonElement>('reading-replay').click();
+        await vi.waitFor(() => {
+          expect(runtime.controller.replaying).toBe(true);
+        });
+
+        expect(cornerMarks()).toEqual(['wait', 'blind']);
       });
 
       it('shows a kept reading of the piece that is open', async () => {

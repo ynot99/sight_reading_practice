@@ -251,6 +251,19 @@ describe('the stylesheet', () => {
     expect(body("#focus-metronome[data-click='off'] svg")).toBe(body(".focus-bar__toggle[aria-pressed='false'] svg"));
   });
 
+  it('marks Start as the replay while a run is shown again, in place of the frame', () => {
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
+    const at = (selector: string): number => rules().findIndex((rule) => rule.selector === selector);
+
+    expect(body('.focus-bar__badge--replay')).toMatch(/display\s*:\s*none/);
+    expect(body("body[data-replaying='true'] .focus-bar__badge--replay")).toMatch(/display\s*:\s*flex/);
+    expect(body("body[data-replaying='true'] #focus-play-frame")).toMatch(/display\s*:\s*none/);
+    // Hidden by a rule as strong as the one that shows every badge, so it
+    // has to come after it.
+    expect(at('.focus-bar__badge--replay')).toBeGreaterThan(at('.focus-bar__badge'));
+  });
+
   it('takes a finger held on the metronome button for nothing but a hold', () => {
     const body = rules().find((rule) => rule.selector === '#focus-metronome')?.body ?? '';
 

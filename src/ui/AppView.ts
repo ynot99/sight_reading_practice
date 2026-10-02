@@ -1,6 +1,12 @@
 import type { AppRuntime } from '../composition/createApp.js';
 import { FLOW_MODE_ID } from '../application/modes/FlowMode.js';
-import { modeIsOn, settingsForFrame, settingsForMode } from '../application/modes/challengeModes.js';
+import {
+  modeIsOn,
+  modesOn,
+  settingsForFrame,
+  settingsForMode,
+  type PlayedWith,
+} from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
@@ -4260,10 +4266,6 @@ export class AppView {
     // cases where Start does something other than what a reader expects,
     // which is what a corner is for. Left unsaid, a reader could sit down to
     // practise and have the machine play at them.
-    const on: HTMLButtonElement[] = [];
-    if (chosen !== null) {
-      on.push(chosen);
-    }
     // And on the button that acts on it. The reader presses Start without
     // looking; what it will start is the one thing it may need to say, and
     // only where the answer is not the plain one.
@@ -4278,13 +4280,34 @@ export class AppView {
         continue;
       }
       const mode = card.dataset['mode'] ?? '';
-      const lit = modeIsOn(mode, settings);
-      card.setAttribute('aria-pressed', String(lit));
-      if (lit) {
-        on.push(card);
+      card.setAttribute('aria-pressed', String(modeIsOn(mode, settings)));
+    }
+    // The corner says what the page is showing. A run shown again was played
+    // with what it was played with, whatever has been chosen since, and the
+    // page is that run's until it is over.
+    this.showWhichModesAreOn(
+      this.cardsOf(
+        this.runtime.controller.replayPlayedWith ?? { modeId: settings.modeId, modes: modesOn(settings) },
+      ),
+    );
+  }
+
+  /**
+   * The cards of the Modes sheet a run is played with: its frame, where it is
+   * not the plain one, and then the squares that are on, in the sheet's order.
+   */
+  private cardsOf(playedWith: PlayedWith): HTMLButtonElement[] {
+    const cards: HTMLButtonElement[] = [];
+    const frame = this.el.frameChoices.find((button) => frameOfTheButton(button) === playedWith.modeId);
+    if (frame !== undefined) {
+      cards.push(frame);
+    }
+    for (const card of this.el.modesGrid.querySelectorAll('button[data-mode]')) {
+      if (card instanceof HTMLButtonElement && playedWith.modes.includes(card.dataset['mode'] ?? '')) {
+        cards.push(card);
       }
     }
-    this.showWhichModesAreOn(on);
+    return cards;
   }
 
   /**
@@ -8173,7 +8196,7 @@ export class AppView {
     replay.textContent = 'See replay';
     this.listen(replay, 'click', () => {
       const controller = this.runtime.controller;
-      this.replayTheRun(roll, controller.lastReport?.modeId ?? controller.settings.modeId);
+      this.replayTheRun(roll, controller.lastPlayedWith ?? { modeId: controller.settings.modeId, modes: [] });
     });
     this.el.result.append(replay);
   }
@@ -8249,7 +8272,11 @@ export class AppView {
       }
       await this.openKeptScore(kept.id, kept.title);
     }
-    this.replayTheRun(roll, reading.modeId ?? this.runtime.controller.settings.modeId);
+    this.replayTheRun(roll, {
+      modeId: reading.modeId ?? this.runtime.controller.settings.modeId,
+      // A reading kept before the squares were written down says only its frame.
+      modes: reading.modes ?? [],
+    });
   }
 
   /**
@@ -8260,10 +8287,10 @@ export class AppView {
    * Stop ends it and leaves the run's marks where they were made, and the tempo
    * buttons say how fast it is played back.
    */
-  private replayTheRun(roll: RunRoll, playedIn: string): void {
+  private replayTheRun(roll: RunRoll, playedWith: PlayedWith): void {
     this.showVerdict(false);
     this.endTheReplay();
-    if (!this.runtime.controller.beginReplay(roll, playedIn)) {
+    if (!this.runtime.controller.beginReplay(roll, playedWith)) {
       this.sayInTheMiddle(
         'This run was played on the piece as it was then, and does not fit it as it is now.',
       );
@@ -8274,6 +8301,7 @@ export class AppView {
     this.replayClicksSent = 0;
     this.placeTheSpeed();
     this.doc.body.dataset['replaying'] = 'true';
+    this.showTheModes();
     this.applyKeyboardVisibility();
     this.showTheReplaysKeys(0);
     const scrolled = scrollToShow(this.replayKeyboard, roll.presses[0]?.midi ?? MIDDLE_C);
@@ -8440,6 +8468,7 @@ export class AppView {
     this.placeTheSpeed();
     lightTheKeys(this.replayKeyboard, new Map(), false);
     delete this.doc.body.dataset['replaying'];
+    this.showTheModes();
     this.applyKeyboardVisibility();
     this.showThePerformance();
     this.describeTempo();

@@ -9,7 +9,7 @@ import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.
 import { printedAtEachStep } from '../domain/notation/printedIds.js';
 import { noteCountsOf, type PerformanceReport, type StepStatus } from '../domain/scoring/PerformanceReport.js';
 import { theReadingPicture, type ReadingPicture } from '../domain/scoring/ReadingPicture.js';
-import { modesOn } from './modes/challengeModes.js';
+import { modesOn, type PlayedWith } from './modes/challengeModes.js';
 import { pieceOfKey } from './PracticeHistory.js';
 import { beatAt, beatsBetween } from './session/metronomePlan.js';
 import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
@@ -883,6 +883,7 @@ export class PracticeController {
    */
   private replay: {
     readonly roll: RunRoll;
+    readonly playedWith: PlayedWith;
     readonly judging: ReplayJudging;
     readonly marks: readonly ReplayMark[];
     readonly presses: readonly ReplayedPress[];
@@ -957,6 +958,8 @@ export class PracticeController {
    * session may be gone.
    */
   private finishedRoll: RunRoll | null = null;
+  /** What the last run that reached an end was played with. */
+  private finishedPlayedWith: PlayedWith | null = null;
   private cleanReadings = 0;
   private poorReadings = 0;
 
@@ -2120,6 +2123,20 @@ export class PracticeController {
   }
 
   /**
+   * What the last run was played with, or `null` before there has been one:
+   * kept as it was, so that a run shown again says what it was played with
+   * and not whatever has been chosen since.
+   */
+  get lastPlayedWith(): PlayedWith | null {
+    return this.finishedPlayedWith;
+  }
+
+  /** What the run being shown again was played with, or `null` where none is. */
+  get replayPlayedWith(): PlayedWith | null {
+    return this.replay?.playedWith ?? null;
+  }
+
+  /**
    * Whether a run's recording can be played back over the music now open.
    *
    * Not while a run or a performance has the page, and not where it would draw
@@ -2145,13 +2162,15 @@ export class PracticeController {
    * moment of the run, and `endReplay` the whole of it. His: "See replay щоб
    * перейти у ноти та побачити гру на самих нотах".
    *
-   * `playedIn` is the frame it was played in, which decides whether its marks
-   * were drawn off their beats: that is a question about the run, not about
-   * whatever frame is chosen now.
+   * `playedWith` is what it was played with. Its frame decides whether its
+   * marks were drawn off their beats: that is a question about the run, not
+   * about whatever frame is chosen now. And the whole of it is what the page
+   * says the run was, for as long as it is shown.
    *
    * `false`, and nothing touched, where the run cannot be shown here.
    */
-  beginReplay(roll: RunRoll, playedIn: string): boolean {
+  beginReplay(roll: RunRoll, playedWith: PlayedWith): boolean {
+    const playedIn = playedWith.modeId;
     const timeline = this.timeline;
     if (timeline === null || !this.canReplay(roll)) {
       return false;
@@ -2165,6 +2184,7 @@ export class PracticeController {
     const judging: ReplayJudging = { keepsTime, tempoBpm: this.tempoBpm };
     this.replay = {
       roll,
+      playedWith,
       judging,
       marks: theMarksOfTheRun(roll, timeline, judging),
       presses: thePressesOfTheRun(roll, timeline, judging),
@@ -2929,6 +2949,7 @@ export class PracticeController {
         this.silenceTheOtherHand();
         const picture = this.pictureOfTheReading(report, session.roll);
         const modes = modesOn(this.currentSettings);
+        this.finishedPlayedWith = { modeId: this.currentSettings.modeId, modes };
         this.deps.history?.record(this.practiceKey(), {
           // The calendar, so a table of readings can say when. `IClock`
           // counts from an arbitrary zero for measuring music.

@@ -2771,6 +2771,22 @@ body[data-replaying='true'] .focus-bar[data-playing='true'] .focus-bar__row > #f
 }
 
 /*
+ * While a run is shown again, Start plays that run whatever frame is chosen:
+ * the replay's mark stands where the frame's would, and the frame's gives way.
+ */
+.focus-bar__badge--replay {
+  display: none;
+}
+
+body[data-replaying='true'] .focus-bar__badge--replay {
+  display: flex;
+}
+
+body[data-replaying='true'] #focus-play-frame {
+  display: none;
+}
+
+/*
  * Stop, only while there is something to stop.
  *
  * His: with playback folded into a frame, a Stop button standing greyed out

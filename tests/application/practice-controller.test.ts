@@ -5074,10 +5074,37 @@ describe('a run shown again on the page', () => {
   const at = (renderer: FakeScoreRenderer): string[] =>
     renderer.played.map((mark) => `${String(mark.stepIndex)}:${String(mark.midi)}`);
 
+  it('keeps what a run was played with, as it was, for showing it again', async () => {
+    const rig = createController(true);
+    const { controller } = rig;
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0, survival: true });
+    controller.start();
+    rig.metronome.advanceSubdivisions(1);
+    rig.midi.noteOn(MIDI.C4);
+    controller.stop();
+    const roll = controller.lastRoll;
+    if (roll === null) {
+      throw new Error('expected the run to have been written down');
+    }
+
+    // Chosen afresh after it, which the run was not played with.
+    controller.updateSettings({ modeId: WAIT_MODE_ID, survival: false });
+    const playedWith = controller.lastPlayedWith;
+    expect(playedWith).toEqual({ modeId: FLOW_MODE_ID, modes: ['survival'] });
+    expect(controller.replayPlayedWith).toBeNull();
+
+    controller.beginReplay(roll, { modeId: BAR_MODE_ID, modes: ['blind'] });
+    expect(controller.replayPlayedWith).toEqual({ modeId: BAR_MODE_ID, modes: ['blind'] });
+
+    controller.endReplay();
+    expect(controller.replayPlayedWith).toBeNull();
+  });
+
   it('rules the run where it reached the lines the page is ruled in', async () => {
     const { controller, roll } = await aRunPlayed();
     controller.updateSettings({ rhythmRuler: 'eighth' });
-    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
     const ruled = (): [string, number][] =>
       controller.replayRulingBetween(0, 1_001).map((moment) => [moment.weight, Math.round(moment.atMs)]);
 
@@ -5101,7 +5128,7 @@ describe('a run shown again on the page', () => {
     const { controller, renderer, roll } = await aRunPlayed();
     expect(renderer.played.length).toBeGreaterThan(0);
 
-    expect(controller.beginReplay(roll, FLOW_MODE_ID)).toBe(true);
+    expect(controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] })).toBe(true);
 
     expect(controller.replaying).toBe(true);
     expect(renderer.played).toEqual([]);
@@ -5113,7 +5140,7 @@ describe('a run shown again on the page', () => {
     controller.updateSettings({ cursorAtRest: false, cursorWhileListening: true });
     expect(renderer.cursor.visible).toBe(false);
 
-    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
 
     expect(renderer.cursor.visible).toBe(true);
 
@@ -5124,7 +5151,7 @@ describe('a run shown again on the page', () => {
 
   it('draws each mark as its key went down, and the marker where the music was', async () => {
     const { controller, renderer, roll } = await aRunPlayed();
-    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
 
     controller.replayAt(500);
 
@@ -5140,7 +5167,7 @@ describe('a run shown again on the page', () => {
 
   it('starts the marks again when the playback is put back', async () => {
     const { controller, renderer, roll } = await aRunPlayed();
-    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
     controller.replayAt(1_600);
 
     controller.replayAt(100);
@@ -5152,7 +5179,7 @@ describe('a run shown again on the page', () => {
   it('ends with the whole run on the page, as the run left it', async () => {
     const { controller, renderer, roll } = await aRunPlayed();
     const left = at(renderer);
-    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
     controller.replayAt(500);
 
     controller.endReplay();
@@ -5165,7 +5192,7 @@ describe('a run shown again on the page', () => {
     // A change of tempo puts the same piece up again, and a page put up again
     // is a clean one.
     const { controller, renderer, roll } = await aRunPlayed();
-    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
     controller.replayAt(1_200);
     const shown = at(renderer);
 
@@ -5181,7 +5208,7 @@ describe('a run shown again on the page', () => {
     const { controller, renderer, roll } = await aRunPlayed();
     // The run stopped on its second step; the replay is still on its first.
     expect(controller.session?.currentIndex).toBe(1);
-    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
     controller.replayAt(500);
 
     controller.refreshScore();
@@ -5203,7 +5230,7 @@ describe('a run shown again on the page', () => {
     };
 
     expect(controller.canReplay(elsewhere)).toBe(false);
-    expect(controller.beginReplay(elsewhere, FLOW_MODE_ID)).toBe(false);
+    expect(controller.beginReplay(elsewhere, { modeId: FLOW_MODE_ID, modes: [] })).toBe(false);
     expect(at(renderer)).toEqual(left);
   });
 
@@ -5219,7 +5246,7 @@ describe('a run shown again on the page', () => {
     // A key brushed while watching is not the reader deciding to play.
     const { controller, midi, roll } = await aRunPlayed();
     controller.updateSettings({ immediateStart: true });
-    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
 
     // The whole of the chord a run would begin on.
     midi.noteOn(MIDI.C3);
@@ -5231,14 +5258,14 @@ describe('a run shown again on the page', () => {
 
   it('is over when another piece is opened, or a run begun', async () => {
     const first = await aRunPlayed();
-    first.controller.beginReplay(first.roll, FLOW_MODE_ID);
+    first.controller.beginReplay(first.roll, { modeId: FLOW_MODE_ID, modes: [] });
 
     await first.controller.openScore(twoBarExercise({ tempoBpm: 60, title: 'Another' }));
 
     expect(first.controller.replaying).toBe(false);
 
     const second = await aRunPlayed();
-    second.controller.beginReplay(second.roll, FLOW_MODE_ID);
+    second.controller.beginReplay(second.roll, { modeId: FLOW_MODE_ID, modes: [] });
 
     second.controller.start();
 
@@ -5262,7 +5289,7 @@ describe('a run shown again on the page', () => {
     };
     for (const [how, end] of Object.entries(ends)) {
       const rig = await aRunPlayed();
-      rig.controller.beginReplay(rig.roll, FLOW_MODE_ID);
+      rig.controller.beginReplay(rig.roll, { modeId: FLOW_MODE_ID, modes: [] });
       let said = 0;
       rig.controller.events.on('replayEnded', () => {
         said += 1;
@@ -5296,7 +5323,7 @@ describe('a run shown again on the page', () => {
 
   it('stays through the same piece put up again', async () => {
     const { controller, roll } = await aRunPlayed();
-    controller.beginReplay(roll, FLOW_MODE_ID);
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
     let said = 0;
     controller.events.on('replayEnded', () => {
       said += 1;

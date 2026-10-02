@@ -56,10 +56,13 @@ import {
 import { TimeToday } from '../application/TimeToday.js';
 import {
   KEYS_SHOWN,
+  METRONOME_TAPS,
   PLAYED_NOTE_DISPLAYS,
   type KeysShown,
+  type MetronomeTap,
   type PlayedNoteDisplay,
 } from '../application/PracticeController.js';
+import { HOLD_MS } from '../shared/holding.js';
 import { pieceOfKey, type PassageHistory, type PracticeReading } from '../application/PracticeHistory.js';
 import {
   drawTheKeyboard,
@@ -789,6 +792,21 @@ function readCountIn(value: string, fallback: CountInWhen): CountInWhen {
 /** The way of turning a stored or typed value names, or the usual one. */
 function readPageTurns(value: string): PageTurns {
   return PAGE_TURNS.includes(value as PageTurns) ? (value as PageTurns) : 'preview';
+}
+
+const METRONOME_TAP_LABELS: Readonly<Record<MetronomeTap, string>> = {
+  'opens-its-sheet': 'Opens this sheet',
+  'turns-it-off-and-on': 'Turns the metronome off and on',
+};
+
+const METRONOME_TAP_DESCRIPTIONS: Readonly<Record<MetronomeTap, string>> = {
+  'opens-its-sheet': 'Holding the button turns the metronome off and on.',
+  'turns-it-off-and-on': 'Holding the button, or a right click, opens this sheet.',
+};
+
+/** What a tap on the metronome's button does, as a stored or typed value names it. */
+function readMetronomeTap(value: string): MetronomeTap {
+  return METRONOME_TAPS.includes(value as MetronomeTap) ? (value as MetronomeTap) : 'opens-its-sheet';
 }
 
 /** The opening a stored or typed value names, falling back to generating. */
@@ -1760,6 +1778,8 @@ export class AppView {
     countInRun: HTMLSelectElement;
     countInPlayback: HTMLSelectElement;
     countInPlaybackDescription: HTMLElement;
+    metronomeTap: HTMLSelectElement;
+    metronomeTapDescription: HTMLElement;
     countInValue: HTMLOutputElement;
     tolerance: HTMLInputElement;
     latency: HTMLInputElement;
@@ -2066,6 +2086,8 @@ export class AppView {
       countInRun: requireElement(doc, 'count-in-run'),
       countInPlayback: requireElement(doc, 'count-in-playback'),
       countInPlaybackDescription: requireElement(doc, 'count-in-playback-description'),
+      metronomeTap: requireElement(doc, 'metronome-tap'),
+      metronomeTapDescription: requireElement(doc, 'metronome-tap-description'),
       countInValue: requireElement(doc, 'count-in-value'),
       tolerance: requireElement(doc, 'tolerance'),
       latency: requireElement(doc, 'latency'),
@@ -3406,6 +3428,11 @@ export class AppView {
       WHAT_OPENS.map((choice) => ({ value: choice, label: OPENING_LABELS[choice] })),
       this.runtime.controller.settings.whatOpens,
     );
+    fillSelect(
+      this.el.metronomeTap,
+      METRONOME_TAPS.map((choice) => ({ value: choice, label: METRONOME_TAP_LABELS[choice] })),
+      this.runtime.controller.settings.metronomeTap,
+    );
     for (const select of [this.el.restEvery, this.el.restEverySettings]) {
       fillSelect(
         select,
@@ -3735,6 +3762,11 @@ export class AppView {
 
     this.listen(this.el.whatOpens, 'change', () => {
       controller.updateSettings({ whatOpens: readWhatOpens(this.el.whatOpens.value) });
+      this.syncControlsFromSettings();
+    });
+
+    this.listen(this.el.metronomeTap, 'change', () => {
+      controller.updateSettings({ metronomeTap: readMetronomeTap(this.el.metronomeTap.value) });
       this.syncControlsFromSettings();
     });
 
@@ -5501,12 +5533,20 @@ export class AppView {
    * Whether it is on is shown, lit as a switch that is on and dimmed when
    * off, which is the switch at the head of its sheet; when it sounds and on
    * what is said in words. The count-in alone was shown plain, and a reader
-   * who had just turned the click on saw a button that did not say so.
+   * who had just turned the click on saw a button that did not say so. What a
+   * tap and a hold do is said too, a hold being nowhere to be seen.
    */
-  private describeMetronomeButton(on: boolean, when: ChosenClickWhen, pattern: ClickPattern): void {
-    const label = on
-      ? `Metronome: ${CLICK_WHEN_LABELS[when].toLowerCase()}, ${CLICK_LABELS[pattern].toLowerCase()}.`
+  private describeMetronomeButton(settings: PracticeSettings): void {
+    const on = settings.clickOn;
+    const set = on
+      ? `Metronome: ${CLICK_WHEN_LABELS[settings.clickWhen].toLowerCase()}, ` +
+        `${CLICK_LABELS[settings.clickPattern].toLowerCase()}.`
       : 'Metronome off.';
+    const turn = on ? 'turn it off' : 'turn it on';
+    const label =
+      settings.metronomeTap === 'opens-its-sheet'
+        ? `${set} Tap for its settings, hold to ${turn}.`
+        : `${set} Tap to ${turn}, hold for its settings.`;
     this.el.focusMetronome.dataset['click'] = on ? 'on' : 'off';
     this.el.focusMetronome.title = label;
     this.el.focusMetronome.setAttribute('aria-label', label);
@@ -5514,24 +5554,79 @@ export class AppView {
   }
 
   /**
-   * The metronome's button opens everything about it, and the switch at the
-   * top of that turns the click off and on.
+   * The metronome's button has two answers, opening everything about the
+   * click and turning it off and on: a tap gives the one the reader chose in
+   * its sheet, opening it unless they chose otherwise, and holding it gives
+   * the other. The switch at the top of the sheet turns it off and on as well,
+   * and says what it does by being a switch.
    *
-   * A tap that turned it off, with a hold for the rest, was quicker and could
-   * not be guessed: nothing on a button says it can be held. The switch says
-   * what it does by being a switch. What the click is set to stays where it
-   * was while it is off, for when it is turned on again.
+   * Opening the sheet is the answer a tap gives first because it can be found:
+   * nothing on a button says it can be held. A right click is a hold, there
+   * being no finger to hold on a desk; and the click a held finger makes on
+   * letting go is the hold's, not a tap. What the click is set to stays where
+   * it was while it is off, for when it is turned on again.
    */
   private bindTheMetronomeButton(): void {
-    this.listen(this.el.focusMetronome, 'click', () => {
+    const controller = this.runtime.controller;
+    const button = this.el.focusMetronome;
+    const openTheSheet = (): void => {
       this.syncControlsFromSettings();
       this.showTheSheet(this.el.sheetMetronome);
-    });
-    this.listen(this.el.metronomeOn, 'click', () => {
-      const controller = this.runtime.controller;
+    };
+    const turnItOffOrOn = (): void => {
       controller.updateSettings({ clickOn: !controller.settings.clickOn });
       this.syncControlsFromSettings();
+    };
+    const tapped = (): void => {
+      if (controller.settings.metronomeTap === 'opens-its-sheet') {
+        openTheSheet();
+      } else {
+        turnItOffOrOn();
+      }
+    };
+    const held = (): void => {
+      if (controller.settings.metronomeTap === 'opens-its-sheet') {
+        turnItOffOrOn();
+      } else {
+        openTheSheet();
+      }
+    };
+    let holding: ReturnType<typeof setTimeout> | null = null;
+    let wasHeld = false;
+    const letGo = (): void => {
+      if (holding !== null) {
+        clearTimeout(holding);
+        holding = null;
+      }
+    };
+    this.listen(button, 'pointerdown', () => {
+      wasHeld = false;
+      letGo();
+      holding = setTimeout(() => {
+        holding = null;
+        wasHeld = true;
+        held();
+      }, HOLD_MS);
     });
+    this.listen(button, 'pointerup', letGo);
+    this.listen(button, 'pointercancel', letGo);
+    this.listen(button, 'pointerleave', letGo);
+    this.listen(button, 'contextmenu', (event) => {
+      event.preventDefault();
+      letGo();
+      if (!wasHeld) {
+        wasHeld = true;
+        held();
+      }
+    });
+    this.listen(button, 'click', () => {
+      if (wasHeld) {
+        wasHeld = false;
+        return;
+      }
+      tapped();
+    });
+    this.listen(this.el.metronomeOn, 'click', turnItOffOrOn);
   }
 
   /**
@@ -6742,8 +6837,10 @@ export class AppView {
     this.el.rhythmRulerDescription.textContent = RULER_DESCRIPTIONS[settings.rhythmRuler];
     this.el.whatOpens.value = settings.whatOpens;
     this.el.whatOpensDescription.textContent = OPENING_DESCRIPTIONS[settings.whatOpens];
+    this.el.metronomeTap.value = settings.metronomeTap;
+    this.el.metronomeTapDescription.textContent = METRONOME_TAP_DESCRIPTIONS[settings.metronomeTap];
     this.applyPreview();
-    this.describeMetronomeButton(settings.clickOn, settings.clickWhen, settings.clickPattern);
+    this.describeMetronomeButton(settings);
     this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
     this.applyScoreCover();

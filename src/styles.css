@@ -4383,8 +4383,28 @@ body[data-repeats='hidden'] .repeat-mark {
   opacity: 0.35;
 }
 
+/*
+ * Held for the other of its two answers, so a held finger is not taken for
+ * anything else: no callout over it, no word selected under it.
+ */
 #focus-metronome {
   flex: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/*
+ * What is set once and left, folded away at the foot of a sheet: opening it
+ * shows what is reached for between runs and nothing more.
+ */
+.sheet__more > summary {
+  padding: 4px 0;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.sheet__more[open] > summary {
+  margin-bottom: 8px;
 }
 
 /*

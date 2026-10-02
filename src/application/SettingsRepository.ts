@@ -21,8 +21,10 @@ import {
 } from './ports/IMetronome.js';
 import {
   KEYS_SHOWN,
+  METRONOME_TAPS,
   PLAYED_NOTE_DISPLAYS,
   type KeysShown,
+  type MetronomeTap,
   type PlayedNoteDisplay,
 } from './PracticeController.js';
 import { SETTINGS_THE_MODES_WRITE } from './modes/challengeModes.js';
@@ -292,6 +294,10 @@ function readKeysShown(value: unknown, legacyShow: unknown): KeysShown | undefin
   return shown === undefined ? undefined : shown ? 'falling-notes' : 'none';
 }
 
+function readMetronomeTap(value: unknown): MetronomeTap | undefined {
+  return METRONOME_TAPS.includes(value as MetronomeTap) ? (value as MetronomeTap) : undefined;
+}
+
 function readKey(value: unknown): KeySignature | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -383,6 +389,7 @@ export function decodePracticeSettings(
     // switch now, and what it comes back on as is the default.
     clickWhen: storedWhen === 'never' ? undefined : storedWhen,
     clickOn: readBoolean(value['clickOn']) ?? (storedWhen === 'never' ? false : undefined),
+    metronomeTap: readMetronomeTap(value['metronomeTap']),
     matchToleranceMs: readNumber(value['matchToleranceMs'], 1, 60_000),
     // Bounded either way: a relay can only add delay, but a keyboard stamped
     // at the source can arrive fractionally ahead of when the page notices.
@@ -453,6 +460,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     ladderStepId: settings.ladderStepId,
     clickWhen: settings.clickWhen,
     clickOn: settings.clickOn,
+    metronomeTap: settings.metronomeTap,
     // `Infinity` has no JSON representation; the slider cannot reach it anyway.
     matchToleranceMs: Number.isFinite(settings.matchToleranceMs)
       ? settings.matchToleranceMs

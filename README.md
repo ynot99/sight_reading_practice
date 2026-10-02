@@ -266,7 +266,10 @@ that, above the scores that have been kept.
 The metronome is in the row rather than the drawer because it is the thing
 reached for most between runs, and a drawer is a gesture before it is a
 button. It opens everything about the click, with a switch at the top that
-turns it off and on, keeping what it was set to.
+turns it off and on, keeping what it was set to; holding the button turns it
+off and on too. A reader who has set the click once can swap the two at the
+foot of that sheet, so a tap turns it off and on and a hold, or a right click
+on a desk, opens it.
 
 Which hand is one button carrying all three answers, cycling both → left →
 right. Both hands are always drawn and the one not being read is dimmed, so

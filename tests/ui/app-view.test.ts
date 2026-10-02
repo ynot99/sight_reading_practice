@@ -17,6 +17,7 @@ import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { NoteMode, NOTE_MODE_ID } from '../../src/application/modes/NoteMode.js';
 import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { CLICK_WHEN_CHOICES } from '../../src/application/ports/IMetronome.js';
+import { HOLD_MS } from '../../src/shared/holding.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
@@ -10107,6 +10108,99 @@ describe('AppView', () => {
       expect(runtime.controller.settings.clickOn).toBe(true);
       expect(on.getAttribute('aria-checked')).toBe('true');
       expect(runtime.controller.settings.clickWhen).toBe('count-in-only');
+    });
+
+    /** Holds a finger on the metronome's button long enough to be a hold, and lets go. */
+    function holdTheMetronome(): void {
+      const button = element<HTMLButtonElement>('focus-metronome');
+      vi.useFakeTimers();
+      try {
+        button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        vi.advanceTimersByTime(HOLD_MS);
+        // The finger lets go, and the click that makes is the hold's.
+        button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+        button.click();
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+
+    it('turns the click off and on when its button is held, and opens the sheet on a tap', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      // On, as the app starts it; the rig keeps the click off.
+      runtime.controller.updateSettings({ clickOn: true });
+      setClickWhen('always');
+      const button = element<HTMLButtonElement>('focus-metronome');
+      expect(button.title).toContain('Tap for its settings, hold to turn it off.');
+
+      // Not yet a hold a moment short of one.
+      vi.useFakeTimers();
+      try {
+        button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        vi.advanceTimersByTime(HOLD_MS - 1);
+        expect(runtime.controller.settings.clickOn).toBe(true);
+        button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+        vi.advanceTimersByTime(HOLD_MS);
+        expect(runtime.controller.settings.clickOn).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+      // Let go that soon, it was a tap.
+      button.click();
+      expect(element('sheet-metronome').hidden).toBe(false);
+      element<HTMLButtonElement>('metronome-close').click();
+
+      holdTheMetronome();
+
+      expect(runtime.controller.settings.clickOn).toBe(false);
+      expect(element('sheet-metronome').hidden).toBe(true);
+      expect(button.dataset['click']).toBe('off');
+      expect(button.title).toContain('hold to turn it on.');
+
+      holdTheMetronome();
+
+      expect(runtime.controller.settings.clickOn).toBe(true);
+      expect(element('sheet-metronome').hidden).toBe(true);
+    });
+
+    it('swaps what a tap and a hold do at the foot of its sheet', async () => {
+      // A reader who has set the click once and only turns it off and on can
+      // have that on the tap; the sheet is then a hold, or a right click, away.
+      const { view, runtime } = createRig();
+      await view.initialize();
+      // On, as the app starts it; the rig keeps the click off.
+      runtime.controller.updateSettings({ clickOn: true });
+      const button = element<HTMLButtonElement>('focus-metronome');
+      const tap = element<HTMLSelectElement>('metronome-tap');
+      // Folded under the rest of the sheet, and opening it as it stands.
+      expect(tap.closest('#sheet-metronome details.sheet__more')).not.toBeNull();
+      expect(tap.value).toBe('opens-its-sheet');
+
+      openTheMetronome();
+      tap.value = 'turns-it-off-and-on';
+      tap.dispatchEvent(new Event('change'));
+      element<HTMLButtonElement>('metronome-close').click();
+
+      expect(runtime.controller.settings.metronomeTap).toBe('turns-it-off-and-on');
+      expect(element('metronome-tap-description').textContent).toContain('opens this sheet');
+      expect(button.title).toContain('Tap to turn it off, hold for its settings.');
+
+      button.click();
+
+      expect(runtime.controller.settings.clickOn).toBe(false);
+      expect(element('sheet-metronome').hidden).toBe(true);
+
+      holdTheMetronome();
+
+      expect(element('sheet-metronome').hidden).toBe(false);
+      expect(runtime.controller.settings.clickOn).toBe(false);
+      element<HTMLButtonElement>('metronome-close').click();
+
+      button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+
+      expect(element('sheet-metronome').hidden).toBe(false);
+      expect(runtime.controller.settings.clickOn).toBe(false);
     });
 
     it('dims when the click sounds while it is off, and says why', async () => {

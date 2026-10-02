@@ -68,14 +68,7 @@ const HAND_SWITCH_HEIGHT = 30;
 
 /** How far a finger may wander and still have meant a tap, in screen pixels. */
 export const TAP_SLACK_PX = 8;
-/**
- * How long a finger stays put before it is pointing rather than touching.
- *
- * Long enough not to fire under a reader who is turning a page or reaching
- * for a marker, short enough that holding still feels like an instruction
- * rather than a wait.
- */
-export const HOLD_MS = 450;
+export { HOLD_MS } from '../../shared/holding.js';
 
 /**
  * One of the two passage markers, with its grips.

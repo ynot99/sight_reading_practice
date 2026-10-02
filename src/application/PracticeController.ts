@@ -124,6 +124,17 @@ export const KEYS_SHOWN = ['falling-notes', 'keys', 'none'] as const;
 
 export type KeysShown = (typeof KEYS_SHOWN)[number];
 
+/**
+ * What a tap on the metronome's button does; holding it does the other.
+ *
+ * Opening its sheet is the answer that can be found, a hold being invisible
+ * on a button. A reader who has set the click once and only ever turns it off
+ * and on can have that on the tap instead.
+ */
+export const METRONOME_TAPS = ['opens-its-sheet', 'turns-it-off-and-on'] as const;
+
+export type MetronomeTap = (typeof METRONOME_TAPS)[number];
+
 /** Presses kept for the judging log; a bounded ring, not a history. */
 const JUDGING_LOG_LENGTH = 300;
 /**
@@ -381,6 +392,8 @@ export interface PracticeSettings {
    * as it was set.
    */
   readonly clickOn: boolean;
+  /** What a tap on the metronome's button does: see `METRONOME_TAPS`. */
+  readonly metronomeTap: MetronomeTap;
   readonly matchToleranceMs: number;
   /**
    * How long a press takes to reach the page, in milliseconds.
@@ -1000,6 +1013,7 @@ export class PracticeController {
       ladderStepId: null,
       clickWhen: 'always',
       clickOn: true,
+      metronomeTap: 'opens-its-sheet',
       matchToleranceMs: 250,
       inputLatencyMs: 0,
       playingAhead: 'a-mistake',

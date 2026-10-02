@@ -251,6 +251,13 @@ describe('the stylesheet', () => {
     expect(body("#focus-metronome[data-click='off'] svg")).toBe(body(".focus-bar__toggle[aria-pressed='false'] svg"));
   });
 
+  it('takes a finger held on the metronome button for nothing but a hold', () => {
+    const body = rules().find((rule) => rule.selector === '#focus-metronome')?.body ?? '';
+
+    expect(body).toMatch(/-webkit-touch-callout\s*:\s*none/);
+    expect(body).toMatch(/(^|[;\s])user-select\s*:\s*none/);
+  });
+
   it('draws a switch that says on by its lit track and its thumb across', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';

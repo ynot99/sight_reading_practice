@@ -42,6 +42,7 @@ const SETTINGS: PracticeSettings = {
   ladderStepId: 'rung.2b',
   clickWhen: 'cycle-2',
   clickOn: false,
+  metronomeTap: 'turns-it-off-and-on',
   inputLatencyMs: 0,
   matchToleranceMs: 180,
   pitchClassOnly: true,
@@ -183,6 +184,17 @@ describe('practice settings codec', () => {
     // The answer stored by name wins over the old switch.
     expect(shown({ keysShown: 'keys', showKeyboard: false })).toBe('keys');
     expect(shown({ keysShown: 'sideways' })).toBeUndefined();
+  });
+
+  it('reads what a tap on the metronome does only where it is one of the answers', () => {
+    const stored = encodePracticeSettings(SETTINGS);
+    const tap = (value: unknown): string | undefined =>
+      decodePracticeSettings({ ...stored, metronomeTap: value }, KNOWN).metronomeTap;
+
+    expect(tap('opens-its-sheet')).toBe('opens-its-sheet');
+    expect(tap('turns-it-off-and-on')).toBe('turns-it-off-and-on');
+    expect(tap('rings-a-bell')).toBeUndefined();
+    expect(tap(undefined)).toBeUndefined();
   });
 
   it('reads a click stored as never as the click turned off', () => {

@@ -242,6 +242,15 @@ describe('the stylesheet', () => {
     ).toMatch(/opacity\s*:\s*1\b/);
   });
 
+  it('lights the metronome button as a switch that is on, whenever the click is', () => {
+    const body = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    // The same light as the repeat's, the switch beside it.
+    expect(body("#focus-metronome[data-click='on']")).toBe(body(".focus-bar__toggle[aria-pressed='true']"));
+    expect(body("#focus-metronome[data-click='off'] svg")).toBe(body(".focus-bar__toggle[aria-pressed='false'] svg"));
+  });
+
   it('draws a switch that says on by its lit track and its thumb across', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';

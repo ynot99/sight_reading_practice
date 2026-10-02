@@ -3632,19 +3632,16 @@ body[data-playing='true'] .score__modes {
 }
 
 /*
- * Three answers on one button, shown rather than named.
- *
- * The pendulum is always drawn; what changes is how loudly. Sounding all the
- * way through takes the same lit treatment as a switch that is on, the
- * count-in only sits plain, and silence is dimmed the way an unpressed toggle
- * is. `title` carries the exact answer, which is the half a picture cannot.
+ * The metronome's button, lit as a switch that is on whenever the click is,
+ * and dimmed as an unpressed one when it is off. When it sounds is in
+ * `title`, which is the half a picture cannot say.
  */
-#focus-metronome[data-click='always'] {
+#focus-metronome[data-click='on'] {
   color: var(--wrong);
   border-color: currentcolor;
 }
 
-#focus-metronome[data-click='never'] svg {
+#focus-metronome[data-click='off'] svg {
   opacity: 0.35;
 }
 

@@ -9995,19 +9995,22 @@ describe('AppView', () => {
       setClickWhen('always');
       const button = element<HTMLButtonElement>('focus-metronome');
 
-      expect(button.dataset['click']).toBe('always');
+      expect(button.dataset['click']).toBe('on');
       expect(button.title).toContain('all the way through');
 
       openTheMetronome();
       element<HTMLButtonElement>('metronome-on').click();
-      expect(button.dataset['click']).toBe('never');
+      expect(button.dataset['click']).toBe('off');
       expect(button.title).toContain('off');
       element<HTMLButtonElement>('metronome-on').click();
 
-      // A cycle - a bar on, a bar off - has no picture of its own, so it is
-      // shown as sounding, which is what it mostly is.
+      // Lit whenever the click is on, however much of the run it sounds for:
+      // when is said in words.
+      setClickWhen('count-in-only');
+      expect(button.dataset['click']).toBe('on');
+      expect(button.title).toContain('count-in');
       setClickWhen('cycle-2');
-      expect(button.dataset['click']).toBe('always');
+      expect(button.dataset['click']).toBe('on');
     });
 
     it('turns the click off and on with the switch at the top of its sheet, keeping when it was to sound', async () => {

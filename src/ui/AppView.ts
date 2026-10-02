@@ -5496,20 +5496,16 @@ export class AppView {
   /**
    * Says what the metronome is set to, on its button.
    *
-   * Whether it is on is shown - lit, plain for the count-in alone, or dimmed
-   * when off - and what it is set to is said, with what a tap and a hold do.
-   * A cycle of bars on and off has no picture of its own and is shown as
-   * sounding, which is what it mostly is.
+   * Whether it is on is shown, lit as a switch that is on and dimmed when
+   * off, which is the switch at the head of its sheet; when it sounds and on
+   * what is said in words. The count-in alone was shown plain, and a reader
+   * who had just turned the click on saw a button that did not say so.
    */
   private describeMetronomeButton(on: boolean, when: ChosenClickWhen, pattern: ClickPattern): void {
     const label = on
       ? `Metronome: ${CLICK_WHEN_LABELS[when].toLowerCase()}, ${CLICK_LABELS[pattern].toLowerCase()}.`
       : 'Metronome off.';
-    this.el.focusMetronome.dataset['click'] = !on
-      ? 'never'
-      : when === 'count-in-only'
-        ? 'count-in-only'
-        : 'always';
+    this.el.focusMetronome.dataset['click'] = on ? 'on' : 'off';
     this.el.focusMetronome.title = label;
     this.el.focusMetronome.setAttribute('aria-label', label);
     this.el.metronomeOn.setAttribute('aria-checked', String(on));

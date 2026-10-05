@@ -1710,6 +1710,11 @@ export class PracticeController {
       // A rung that is a set of keys and metres rather than one: the page
       // draws its own, by its seed, so going back to it is the same page.
       ...(this.ladderStep?.draws === undefined ? {} : { drawnFrom: this.ladderStep.draws }),
+      // And written as the route has reached: the marks a grade brings. Off
+      // the route the page is the plain one the settings describe.
+      ...(this.ladderStep === null || this.deps.ladder === undefined
+        ? {}
+        : { writing: this.deps.ladder.writingAt(this.ladderStep.id) }),
     };
 
     return this.present(await this.provider.provide(request));

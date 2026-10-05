@@ -59,6 +59,7 @@ export const BUILT_IN_LADDER: readonly LadderStep[] = [
       key: C_MAJOR,
       timeSignature: FOUR_FOUR,
     },
+    writes: { staccato: true, dynamics: ['p', 'f'] },
   },
   {
     id: 'initial.left',
@@ -98,6 +99,7 @@ export const BUILT_IN_LADDER: readonly LadderStep[] = [
     label: 'Grade 1 · a',
     description: 'The hands in turn, with eighth notes.',
     settings: { rhythmProfileId: 'flowing' },
+    writes: { accents: true, dynamics: ['p', 'mp', 'mf', 'f'], hairpins: true },
   },
   {
     id: 'grade-1.three',
@@ -123,6 +125,7 @@ export const BUILT_IN_LADDER: readonly LadderStep[] = [
       key: C_MAJOR,
       timeSignature: FOUR_FOUR,
     },
+    writes: { dynamics: ['pp', 'p', 'mp', 'mf', 'f'] },
   },
   theNewKeysOf('grade-2', 'Grade 2 · b', 'The new keys: D major, E minor or G minor.'),
   theWholeOf('grade-2', 'Grade 2 · c', 'All of Grade 2: both hands together, in any of its eight keys.'),
@@ -165,6 +168,7 @@ export const BUILT_IN_LADDER: readonly LadderStep[] = [
     label: 'Grade 4 · a',
     description: 'Two-note chords in six-eight: two beats of three.',
     settings: { timeSignature: SIX_EIGHT },
+    writes: { tenuto: true },
   },
   {
     id: 'grade-4.broken',
@@ -178,7 +182,23 @@ export const BUILT_IN_LADDER: readonly LadderStep[] = [
       timeSignature: FOUR_FOUR,
     },
   },
-  theWholeOf('grade-4', 'Grade 4 · c', 'All of Grade 4: broken chords in any key and metre so far.'),
+  {
+    id: 'grade-4.chromatic',
+    grade: 'grade-4',
+    label: 'Grade 4 · c',
+    description: 'Broken chords with now and then a chromatic note, leaning into the next by a half step.',
+    settings: {},
+    writes: { chromatic: true },
+  },
+  {
+    id: 'grade-4.pause',
+    grade: 'grade-4',
+    label: 'Grade 4 · d',
+    description: 'A pause over the last notes: held for longer than they are written.',
+    settings: {},
+    writes: { pauses: true },
+  },
+  theWholeOf('grade-4', 'Grade 4 · e', 'All of Grade 4: broken chords in any key and metre so far.'),
   {
     id: 'grade-5.sequences',
     grade: 'grade-5',
@@ -190,6 +210,7 @@ export const BUILT_IN_LADDER: readonly LadderStep[] = [
       key: C_MAJOR,
       timeSignature: FOUR_FOUR,
     },
+    writes: { dynamics: ['pp', 'p', 'mp', 'mf', 'f', 'ff'] },
   },
   {
     id: 'grade-5.across',
@@ -198,6 +219,14 @@ export const BUILT_IN_LADDER: readonly LadderStep[] = [
     description: 'Sequences that begin off the beat and hold across it.',
     settings: { rhythmProfileId: 'syncopated' },
   },
-  theNewKeysOf('grade-5', 'Grade 5 · c', 'The new keys: E or A flat major, F sharp or C minor.'),
-  theWholeOf('grade-5', 'Grade 5 · d', 'All of Grade 5: any of sixteen keys. The top of the ladder.'),
+  {
+    id: 'grade-5.slowing',
+    grade: 'grade-5',
+    label: 'Grade 5 · c',
+    description: 'Sequences that slow down through the last bar, as rit. says.',
+    settings: {},
+    writes: { slowingAtTheEnd: true },
+  },
+  theNewKeysOf('grade-5', 'Grade 5 · d', 'The new keys: E or A flat major, F sharp or C minor.'),
+  theWholeOf('grade-5', 'Grade 5 · e', 'All of Grade 5: any of sixteen keys. The top of the ladder.'),
 ];

@@ -4,6 +4,7 @@ import type { Exercise, StaffPart } from '../model/Exercise.js';
 import { validateExercise } from '../model/Exercise.js';
 import type { ExerciseRequest, IExerciseGenerator } from './IExerciseGenerator.js';
 import { createRng, randomSeed } from './Rng.js';
+import { written } from './writing.js';
 import type { IVoiceGenerator, VoiceContext } from './voices/IVoiceGenerator.js';
 
 export interface StaffPlan {
@@ -65,7 +66,7 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
       measures: plan.voice.generate(context),
     }));
 
-    const exercise: Exercise = {
+    const plain: Exercise = {
       id: `${this.id}-${seed.toString(16)}`,
       title: `${key.name} · ${timeSignature.toString()} · ${request.measures} bars`,
       key,
@@ -85,6 +86,9 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
       metadata: { generatorId: this.id, seed },
     };
 
+    // After every note is drawn, from the same source, so the notes of a page
+    // are the same with or without what is written over them.
+    const exercise = request.writing === undefined ? plain : written(plain, request.writing, rng);
     validateExercise(exercise);
     return exercise;
   }

@@ -3,6 +3,7 @@ import type { KeySignature } from '../model/KeySignature.js';
 import type { TimeSignature } from '../model/TimeSignature.js';
 import type { RhythmProfile } from './RhythmProfile.js';
 import type { PitchRange } from './voices/IVoiceGenerator.js';
+import type { Writing } from './writing.js';
 
 /**
  * Keys and metres an exercise draws its own from.
@@ -40,6 +41,11 @@ export interface ExerciseRequest {
    * `timeSignature`. Drawn by the seed, so the same seed is the same key.
    */
   readonly drawnFrom?: DrawnFrom;
+  /**
+   * What the page is written with beyond its notes - chromatic notes,
+   * articulation, dynamics, a pause, a slowing. Absent, nothing.
+   */
+  readonly writing?: Writing;
 }
 
 /**

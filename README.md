@@ -66,7 +66,7 @@ corner of the page and on the Start button itself, because Start means
 something different in each and a reader can be left in one.
 
 **The ladder** is a route through those settings rather than a replacement for
-them: twenty-four named rungs in six grades, Initial to Grade 5, moved along
+them: twenty-seven named rungs in six grades, Initial to Grade 5, moved along
 with the arrows. The grades follow the parameters the examining boards publish
 for piano sight-reading, in this program's own words - each adds keys, metres,
 rhythms and textures to everything below it, from one hand on five notes in C
@@ -79,7 +79,18 @@ rung arriving at new material states all four, and a test holds the ladder to
 that. A grade meets its new keys on a rung of their own and ends on a rung
 that is a test of the whole grade: there the key and the metre are drawn
 afresh for each exercise from every one the grade has reached, by the
-exercise's seed, so going back to a page is the same page. Two clean readings in a row
+exercise's seed, so going back to a page is the same page.
+
+A grade also brings what a page is **written with** beyond its notes: the
+dot and the two plain dynamics from the start, accents, the mezzo levels and
+hairpins at Grade 1, tenuto, chromatic notes leaning into the next by a half
+step and a pause over the last notes at Grade 4, and a last bar that slows
+under `rit.` at Grade 5. Marks only say how, and arrive with whatever else a
+rung moves; what changes the notes played or when - the chromatic notes, the
+pause, the slowing - is a rung of its own. The pause and the slowing are
+held by the clock as a score's are, so the click and the judging follow them.
+Minor keys are written as minor is, the seventh sharpened where it rises to
+the key note. Off the route a page is the plain one the settings describe. Two clean readings in a row
 move you up, two that come apart move you down, and the streak restarts on
 arrival so a fall cannot bounce straight back off the readings that preceded
 it. Only whole readings of fresh material count: a repeated passage is
@@ -895,12 +906,14 @@ src/
 │   │   ├── presets.ts              #   the built-in levels (material)
 │   │   ├── RhythmProfile.ts        #   voice roles + the profile registry
 │   │   ├── rhythmProfiles.ts       #   the rhythmic levels (calm ➜ sixteenths)
+│   │   ├── writing.ts              #   marks, chromatic notes, a pause, a slowing
 │   │   └── voices/                 #   IVoiceGenerator strategies
 │   │       ├── MelodyVoiceGenerator.ts
 │   │       ├── PatternVoiceGenerator.ts
 │   │       ├── figures.ts          #     scales, arpeggios, sequences
 │   │       ├── HarmonyVoiceGenerator.ts
 │   │       ├── TakingTurnsVoiceGenerator.ts #  a hand only in its own bars
+│   │       ├── minorKey.ts         #     the seventh sharpened to the tonic
 │   │       └── SilentVoiceGenerator.ts
 │   └── scoring/
 │       ├── PerformanceReport.ts    #   StepResult ➜ aggregated report

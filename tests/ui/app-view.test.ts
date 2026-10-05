@@ -6717,13 +6717,11 @@ describe('AppView', () => {
       await Promise.resolve();
 
       expect(runtime.controller.ladderStep?.label).toBe('Initial · a');
-      expect(element('ladder-step').textContent).toBe('Initial · a, 1 of 24');
+      expect(element('ladder-step').textContent).toBe('Initial · a, 1 of 27');
       expect(element('ladder-description').textContent).toContain('five fingers from C');
       // What the grade adds, and what a test at it has that is not written yet.
       expect(element('grade-new').textContent).toContain('New at Initial: each hand alone');
-      expect(element('grade-not-yet').textContent).toBe(
-        'Not written here yet: staccato and legato and loud and soft.',
-      );
+      expect(element('grade-not-yet').textContent).toBe('Not written here yet: legato phrases under a slur.');
       // Nowhere below the bottom to go.
       expect(element<HTMLButtonElement>('ladder-down').disabled).toBe(true);
     });

@@ -1,4 +1,5 @@
 import type { DrawnFrom } from '../../domain/generation/IExerciseGenerator.js';
+import type { Writing } from '../../domain/generation/writing.js';
 import { DomainError } from '../../shared/errors.js';
 import type { PracticeSettings } from '../PracticeController.js';
 import type { Grade } from './grades.js';
@@ -29,6 +30,12 @@ export interface LadderStep {
    * what this rung asks, not a setting the route has reached.
    */
   readonly draws?: DrawnFrom;
+  /**
+   * What the page is written with from this rung on, over what the rungs
+   * below already wrote: folded along the route like the settings, since a
+   * grade that brings dynamics keeps them in every rung after it.
+   */
+  readonly writes?: Writing;
 }
 
 /**
@@ -152,6 +159,19 @@ export class PracticeLadder {
       settings = { ...settings, ...step.settings };
     }
     return settings;
+  }
+
+  /** Everything the route has written with by this rung. */
+  writingAt(id: string): Writing {
+    const at = this.indexById.get(id);
+    if (at === undefined) {
+      return {};
+    }
+    let writing: Writing = {};
+    for (const step of this.steps.slice(0, at + 1)) {
+      writing = { ...writing, ...step.writes };
+    }
+    return writing;
   }
 
   /** Whether there is anywhere further to go in that direction. */

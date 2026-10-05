@@ -89,8 +89,12 @@ describe('the built-in ladder', () => {
       if (arriving) {
         continue;
       }
-      // Drawing the key and metre is the one thing a grade's last rungs move.
-      const moved = [rhythmProfileId, key, timeSignature, step.draws].filter(
+      // Drawing the key and metre is the one thing a grade's last rungs move,
+      // and so is writing that changes what is played or when. Marks that
+      // only say how - a dot, a dynamic - travel with whatever else moves.
+      const { chromatic, pauses, slowingAtTheEnd } = step.writes ?? {};
+      const played = chromatic ?? pauses ?? slowingAtTheEnd;
+      const moved = [rhythmProfileId, key, timeSignature, step.draws, played].filter(
         (value) => value !== undefined,
       ).length;
       expect({ rung: step.id, moved }).toEqual({ rung: step.id, moved: 1 });
@@ -179,10 +183,33 @@ describe('the built-in ladder', () => {
           rhythm: rhythms.get(settings.rhythmProfileId ?? ''),
           seed,
           ...(step.draws === undefined ? {} : { drawnFrom: step.draws }),
+          writing: ladder.writingAt(step.id),
         });
         expect(() => validateExercise(exercise)).not.toThrow();
       }
     }
+  });
+
+  it('writes with what the route has reached, and keeps it from there on', () => {
+    expect(ladder.writingAt('initial.right')).toEqual({ staccato: true, dynamics: ['p', 'f'] });
+    // Grade 1 brings accents, the mezzo levels and hairpins, over the dot.
+    expect(ladder.writingAt('grade-2.all')).toEqual({
+      staccato: true,
+      accents: true,
+      hairpins: true,
+      dynamics: ['pp', 'p', 'mp', 'mf', 'f'],
+    });
+    const fourth = ladder.writingAt('grade-4.pause');
+    expect([fourth.tenuto, fourth.chromatic, fourth.pauses, fourth.slowingAtTheEnd]).toEqual([
+      true,
+      true,
+      true,
+      undefined,
+    ]);
+    // The chromatic notes arrive on a rung of their own, after the broken chords.
+    expect(ladder.writingAt('grade-4.broken').chromatic).toBeUndefined();
+    expect(ladder.writingAt('grade-5.all').dynamics).toContain('ff');
+    expect(ladder.writingAt('rung.gone')).toEqual({});
   });
 
   it('says what each grade adds', () => {

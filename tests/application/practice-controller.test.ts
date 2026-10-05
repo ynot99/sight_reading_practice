@@ -3836,6 +3836,14 @@ describe('climbing the ladder', () => {
     ]);
     expect(requests.at(-1)?.drawnFrom?.times?.map(String)).toEqual(['4/4', '3/4', '2/4']);
 
+    // Written as the route has reached by then.
+    expect(requests.at(-1)?.writing).toEqual({
+      staccato: true,
+      accents: true,
+      hairpins: true,
+      dynamics: ['p', 'mp', 'mf', 'f'],
+    });
+
     // A rung of one key asks for that key.
     rig.controller.selectLadderStep('grade-1.three');
     await rig.controller.loadNewExercise();
@@ -3847,6 +3855,8 @@ describe('climbing the ladder', () => {
     await rig.controller.loadNewExercise();
     expect(requests.at(-1)?.drawnFrom).toBeUndefined();
     expect(requests.at(-1)?.key.name).toBe('D major');
+    // Off the route the page is the plain one the settings describe.
+    expect(requests.at(-1)?.writing).toBeUndefined();
   });
 
   it('puts a reader who left back on at the rung, not past it', async () => {

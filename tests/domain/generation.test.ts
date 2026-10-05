@@ -408,14 +408,20 @@ describe('built-in presets', () => {
   });
 
   it('generate valid material across keys and time signatures', () => {
-    const signatures = [new TimeSignature(4, 4), new TimeSignature(3, 4), new TimeSignature(6, 8)];
+    // Every metre and key the settings offer, minor keys among them.
+    const signatures = ['4/4', '3/4', '2/4', '3/8', '6/8'].map((value) => TimeSignature.parse(value));
+    const keys = [-4, -3, -1, 0, 2, 4].flatMap((fifths) => [
+      KeySignature.major(fifths),
+      KeySignature.minor(fifths),
+    ]);
     for (const preset of BUILT_IN_PRESETS) {
       for (const timeSignature of signatures) {
-        for (const fifths of [-3, -1, 0, 2, 4]) {
+        for (const key of keys) {
+          const fifths = key.fifths;
           const exercise = preset.generator.generate({
             measures: 3,
             timeSignature,
-            key: KeySignature.major(fifths),
+            key,
             tempoBpm: 60,
             rhythm: RHYTHMS.get(preset.defaults.rhythmProfileId),
             seed: fifths + 100,

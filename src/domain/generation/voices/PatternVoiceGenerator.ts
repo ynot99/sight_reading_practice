@@ -15,6 +15,15 @@ export interface PatternVoiceOptions {
   readonly figures: readonly WeightedFigure[];
   /** Largest jump from one figure to the next, in scale degrees. */
   readonly maxLeap: number;
+  /**
+   * Five notes from the key's tonic, the first at or above the range's lowest
+   * note, in place of the range itself.
+   *
+   * A five-finger position is a hand set on a key, not on five white notes:
+   * C to G is one in C major and in G major is a hand two notes out of place,
+   * with an F sharp under the fourth finger that no position puts there.
+   */
+  readonly fiveFingersFromTheTonic?: boolean;
 }
 
 /**
@@ -37,10 +46,7 @@ export class PatternVoiceGenerator implements IVoiceGenerator {
   }
 
   generate(context: VoiceContext): Measure[] {
-    // Inside the keys the reader has, where they said what those are.
-    const range = playableRange(this.options.range, context.withinRange);
-    const lowest = range.lowest.diatonicIndex;
-    const highest = range.highest.diatonicIndex;
+    const { lowest, highest } = this.theHand(context);
     const walker = new FigureWalker({
       rng: context.rng,
       lowest,
@@ -77,5 +83,21 @@ export class PatternVoiceGenerator implements IVoiceGenerator {
     }
 
     return measures;
+  }
+
+  /** The staff positions the line may use, lowest and highest. */
+  private theHand(context: VoiceContext): { readonly lowest: number; readonly highest: number } {
+    // Inside the keys the reader has, where they said what those are.
+    const range = playableRange(this.options.range, context.withinRange);
+    if (this.options.fiveFingersFromTheTonic !== true) {
+      return { lowest: range.lowest.diatonicIndex, highest: range.highest.diatonicIndex };
+    }
+    let lowest = context.key.tonicIndexAtOrAbove(range.lowest.diatonicIndex);
+    // An octave down where the hand would run off the top of the keyboard.
+    const top = context.withinRange?.highest.midi;
+    if (top !== undefined && context.key.pitchAt(lowest + 4).midi > top) {
+      lowest -= 7;
+    }
+    return { lowest, highest: lowest + 4 };
   }
 }

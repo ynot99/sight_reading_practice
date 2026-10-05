@@ -6,10 +6,48 @@ import { GrandStaffExerciseGenerator } from './GrandStaffExerciseGenerator.js';
 import { HarmonyVoiceGenerator } from './voices/HarmonyVoiceGenerator.js';
 import { PatternVoiceGenerator } from './voices/PatternVoiceGenerator.js';
 import { SilentVoiceGenerator } from './voices/SilentVoiceGenerator.js';
+import { TakingTurnsVoiceGenerator } from './voices/TakingTurnsVoiceGenerator.js';
 import type { PitchRange } from './voices/IVoiceGenerator.js';
 
 function range(lowest: string, highest: string): PitchRange {
   return { lowest: Pitch.parse(lowest), highest: Pitch.parse(highest) };
+}
+
+/**
+ * A right hand of five fingers on the key, from the first tonic at or above
+ * middle C: C to G in C major, G to D in G major.
+ */
+function rightHandOnFive(): PatternVoiceGenerator {
+  return new PatternVoiceGenerator({
+    range: range('C4', 'G4'),
+    role: 'lead',
+    figures: [
+      { value: 'scale', weight: 6 },
+      { value: 'neighbour', weight: 3 },
+      { value: 'repeat', weight: 2 },
+    ],
+    maxLeap: 1,
+    fiveFingersFromTheTonic: true,
+  });
+}
+
+/**
+ * A left hand of five fingers on the key, from the first tonic at or above
+ * the F under the bass staff: C3 in C major, G2 in G major, so the hand sits
+ * on the staff whatever the key.
+ */
+function leftHandOnFive(): PatternVoiceGenerator {
+  return new PatternVoiceGenerator({
+    range: range('F2', 'C3'),
+    role: 'lead',
+    figures: [
+      { value: 'scale', weight: 6 },
+      { value: 'neighbour', weight: 3 },
+      { value: 'repeat', weight: 2 },
+    ],
+    maxLeap: 1,
+    fiveFingersFromTheTonic: true,
+  });
 }
 
 /**
@@ -45,6 +83,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
               { value: 'repeat', weight: 2 },
             ],
             maxLeap: 1,
+            fiveFingersFromTheTonic: true,
           }),
         },
         {
@@ -58,6 +97,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
               { value: 'repeat', weight: 2 },
             ],
             maxLeap: 2,
+            fiveFingersFromTheTonic: true,
           }),
         },
       ],
@@ -411,6 +451,82 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
       timeSignature: new TimeSignature(4, 4),
       key: KeySignature.major(1),
       tempoBpm: 76,
+    },
+  },
+  {
+    id: 'right-hand-five',
+    label: 'Right hand alone, five fingers',
+    description: 'The right hand on five notes from the key\'s tonic, the left hand resting.',
+    generator: new GrandStaffExerciseGenerator({
+      id: 'gen.right-hand-five',
+      label: 'Right hand, five fingers',
+      staves: [
+        { clef: 'treble', voice: rightHandOnFive() },
+        { clef: 'bass', voice: new SilentVoiceGenerator() },
+      ],
+    }),
+    defaults: {
+      measures: 4,
+      rhythmProfileId: 'calm',
+      timeSignature: new TimeSignature(4, 4),
+      key: KeySignature.major(0),
+      tempoBpm: 60,
+    },
+  },
+  {
+    id: 'left-hand-five',
+    label: 'Left hand alone, five fingers',
+    description: 'The left hand on five notes from the key\'s tonic, the right hand resting.',
+    generator: new GrandStaffExerciseGenerator({
+      id: 'gen.left-hand-five',
+      label: 'Left hand, five fingers',
+      staves: [
+        { clef: 'treble', voice: new SilentVoiceGenerator() },
+        { clef: 'bass', voice: leftHandOnFive() },
+      ],
+    }),
+    defaults: {
+      measures: 4,
+      rhythmProfileId: 'calm',
+      timeSignature: new TimeSignature(4, 4),
+      key: KeySignature.major(0),
+      tempoBpm: 60,
+    },
+  },
+  {
+    id: 'hands-in-turn',
+    label: 'Hands in turn, five fingers',
+    description: 'Two bars for the right hand, then two for the left, each on five notes.',
+    generator: new GrandStaffExerciseGenerator({
+      id: 'gen.hands-in-turn',
+      label: 'Hands in turn',
+      staves: [
+        {
+          clef: 'treble',
+          voice: new TakingTurnsVoiceGenerator({
+            voice: rightHandOnFive(),
+            turn: 0,
+            hands: 2,
+            barsEach: 2,
+          }),
+        },
+        {
+          clef: 'bass',
+          voice: new TakingTurnsVoiceGenerator({
+            voice: leftHandOnFive(),
+            turn: 1,
+            hands: 2,
+            barsEach: 2,
+          }),
+        },
+      ],
+    }),
+    defaults: {
+      measures: 4,
+      rhythmProfileId: 'calm',
+      timeSignature: new TimeSignature(4, 4),
+      key: KeySignature.major(0),
+      tempoBpm: 60,
     },
   },
 ];

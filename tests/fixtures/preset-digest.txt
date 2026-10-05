@@ -121,3 +121,39 @@ staff 2 (bass)
   6: A2/half F#3/quarter D3/quarter
   7: B2/quarter B3/half G3/quarter
   8: E3/quarter C3/quarter G3/quarter E3/quarter
+
+# right-hand-five
+staff 1 (treble)
+  1: C4/half D4/half
+  2: E4/half F4/half
+  3: E4/half F4/quarter G4/quarter
+  4: F4/quarter G4/quarter F4/quarter R/quarter
+staff 2 (bass)
+  1: R/whole
+  2: R/whole
+  3: R/whole
+  4: R/whole
+
+# left-hand-five
+staff 1 (treble)
+  1: R/whole
+  2: R/whole
+  3: R/whole
+  4: R/whole
+staff 2 (bass)
+  1: C3/half D3/half
+  2: E3/half F3/half
+  3: E3/half F3/quarter G3/quarter
+  4: F3/quarter G3/quarter F3/quarter R/quarter
+
+# hands-in-turn
+staff 1 (treble)
+  1: C4/half D4/half
+  2: E4/half F4/half
+  3: R/whole
+  4: R/whole
+staff 2 (bass)
+  1: R/whole
+  2: R/whole
+  3: F3/quarter E3/quarter R/half
+  4: F3/quarter E3/quarter D3/half

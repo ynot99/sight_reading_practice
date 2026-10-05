@@ -1690,6 +1690,11 @@ export class AppView {
     focusTempo: HTMLOutputElement;
     scoresFresh: HTMLButtonElement;
     scoresRung: HTMLElement;
+    scoresExercise: HTMLButtonElement;
+    sheetExercise: HTMLElement;
+    grades: HTMLElement;
+    gradeNew: HTMLElement;
+    gradeNotYet: HTMLElement;
     midiStatus: HTMLElement;
     bridgeStatus: HTMLElement;
     pedalStatus: HTMLElement;
@@ -1998,6 +2003,11 @@ export class AppView {
       focusTempo: requireElement(doc, 'focus-tempo'),
       scoresFresh: requireElement(doc, 'scores-fresh'),
       scoresRung: requireElement(doc, 'scores-rung'),
+      scoresExercise: requireElement(doc, 'scores-exercise'),
+      sheetExercise: requireElement(doc, 'sheet-exercise'),
+      grades: requireElement(doc, 'grades'),
+      gradeNew: requireElement(doc, 'grade-new'),
+      gradeNotYet: requireElement(doc, 'grade-not-yet'),
       midiStatus: requireElement(doc, 'midi-status'),
       bridgeStatus: requireElement(doc, 'bridge-status'),
       pedalStatus: requireElement(doc, 'pedal-status'),
@@ -3737,6 +3747,8 @@ export class AppView {
     this.listen(this.el.ladderUp, 'click', () => {
       this.moveLadder(1);
     });
+
+    this.layTheGrades();
 
     this.listen(this.el.showPlayed, 'change', () => {
       controller.updateSettings({ playedNotes: readPlayedNotes(this.el.showPlayed.value) });
@@ -7025,14 +7037,50 @@ export class AppView {
     void this.reload(true);
   }
 
+  /**
+   * A button for each grade, from the ladder's own list of them.
+   *
+   * Choosing one puts the reader on its first rung and writes a page there,
+   * as the arrows do: a grade is a decision to read something else now.
+   */
+  private layTheGrades(): void {
+    const { controller, ladder } = this.runtime;
+    this.el.grades.replaceChildren(
+      ...ladder.gradesInOrder().map((grade) => {
+        const button = this.doc.createElement('button');
+        button.type = 'button';
+        button.className = 'grades__grade';
+        button.dataset['grade'] = grade.id;
+        button.textContent = grade.short;
+        button.title = grade.label;
+        button.setAttribute('aria-label', grade.label);
+        this.listen(button, 'click', () => {
+          const first = ladder.firstOf(grade.id);
+          if (first === null || controller.selectLadderStep(first.id) === null) {
+            return;
+          }
+          this.syncControlsFromSettings();
+          void this.reload(true);
+        });
+        return button;
+      }),
+    );
+  }
+
   /** Names the rung, or says plainly that the reader has left the route. */
   private describeLadder(): void {
     const { controller, ladder } = this.runtime;
     const step = controller.ladderStep;
+    const gradeId = step?.grade ?? null;
+    for (const button of this.el.grades.querySelectorAll<HTMLElement>('.grades__grade')) {
+      button.setAttribute('aria-pressed', String(button.dataset['grade'] === gradeId));
+    }
     if (step === null) {
       this.el.ladderStep.textContent = 'Off the ladder';
       this.el.ladderDescription.textContent =
-        'The settings below were chosen by hand. The arrows put you back on.';
+        'The settings below were chosen by hand. A grade or the arrows put you back on.';
+      this.el.gradeNew.textContent = '';
+      this.el.gradeNotYet.textContent = '';
       this.el.scoresRung.textContent = 'Off the ladder — the settings were chosen by hand';
       this.el.ladderDown.disabled = false;
       this.el.ladderUp.disabled = false;
@@ -7040,11 +7088,12 @@ export class AppView {
     }
     this.el.ladderStep.textContent = `${step.label}, ${ladder.positionOf(step.id)} of ${ladder.list().length}`;
     const grade = ladder.gradeOf(step);
+    this.el.ladderDescription.textContent = step.description;
     // What the grade adds, and what a test at it would have that these pages
     // cannot write yet: said, so the top of a grade does not claim all of it.
-    const notYet =
-      grade.notYet.length === 0 ? '' : ` Not written here yet: ${listedInWords(grade.notYet)}.`;
-    this.el.ladderDescription.textContent = `${step.description} New at ${grade.label}: ${listedInWords(grade.newHere)}.${notYet}`;
+    this.el.gradeNew.textContent = `New at ${grade.label}: ${listedInWords(grade.newHere)}.`;
+    this.el.gradeNotYet.textContent =
+      grade.notYet.length === 0 ? '' : `Not written here yet: ${listedInWords(grade.notYet)}.`;
     this.el.scoresRung.textContent = `${step.label} — ${step.description}`;
     this.el.ladderDown.disabled = !ladder.canStep(step.id, -1);
     this.el.ladderUp.disabled = !ladder.canStep(step.id, 1);
@@ -7340,6 +7389,13 @@ export class AppView {
         this.el.sheetModes,
         [this.el.focusModes],
         () => this.showTheModes(),
+      ],
+      [
+        // Over the scores it was opened from, so shutting it goes back to
+        // the button that makes the exercise it describes.
+        this.el.sheetExercise,
+        [this.el.scoresExercise],
+        () => this.syncControlsFromSettings(),
       ],
       [
         // The picture's own options.

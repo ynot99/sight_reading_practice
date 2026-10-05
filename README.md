@@ -89,6 +89,14 @@ fell due rather than the ones in the exercise. Setting the material, rhythm,
 key or metre by hand steps off the route and says so; tempo and bar count do
 not, because slowing a rung down is how it is meant to be met.
 
+All of it is in one sheet, **Exercise**, opened from the button beside *A
+fresh exercise* in Scores - beside the only thing it is for, rather than a
+section of the settings two sheets away. The grades are a row of buttons, and
+choosing one puts you on its first rung; under them the arrows, what the rung
+and its grade ask, the bars and the tempo. The material, rhythm, key and metre,
+which step off the route, are folded away under *More*. How a run is graded is
+not about the notes, and stays in the settings beside the modes.
+
 A score opened from disk is **kept**, and appears in a list beside the page:
 the file is chosen once and afterwards the piece is simply there. What is
 stored is the MusicXML this project's own serializer produces, in the

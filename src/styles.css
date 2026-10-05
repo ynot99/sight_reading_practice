@@ -1748,7 +1748,8 @@ textarea {
   min-width: 0;
 }
 
-.control-group > label {
+.control-group > label,
+.control-group__label {
   color: var(--text-muted);
   font-size: 12px;
   text-transform: uppercase;
@@ -2042,13 +2043,73 @@ select {
 }
 
 /*
- * The answer that needs nothing kept, above the shelf of ones that do.
+ * The answer that needs nothing kept, above the shelf of ones that do, and
+ * beside it what that answer is made of.
  */
+.scores__fresh-row {
+  display: flex;
+  gap: 8px;
+}
+
 .scores__fresh {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
   text-align: left;
+}
+
+/* Its height is the row's, set by the two lines beside it. */
+.scores__exercise {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0 12px;
+}
+
+/* Drawn rather than filled: three strokes and two knobs are a slider only outlined. */
+.scores__exercise svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+/*
+ * The grades, side by side: which one is being read is lit as the chosen
+ * section of the settings is, and a grade is pressed as one word.
+ */
+.grades {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.grades__grade {
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  min-width: 40px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.grades__grade:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.grades__grade[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .scores__fresh-lines {

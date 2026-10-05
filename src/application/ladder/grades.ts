@@ -15,6 +15,8 @@ export interface Grade {
   readonly id: string;
   /** "Initial", "Grade 3". */
   readonly label: string;
+  /** What its button says among the others: "Initial", "3". */
+  readonly short: string;
   /** What the grade adds that the exercises here write, in a reader's words. */
   readonly newHere: readonly string[];
   /**
@@ -37,6 +39,7 @@ export const BUILT_IN_GRADES: readonly Grade[] = [
   {
     id: 'initial',
     label: 'Initial',
+    short: 'Initial',
     newHere: [
       'each hand alone, then the hands in turn',
       'five fingers from the key note',
@@ -51,6 +54,7 @@ export const BUILT_IN_GRADES: readonly Grade[] = [
   {
     id: 'grade-1',
     label: 'Grade 1',
+    short: '1',
     newHere: ['eighth notes', 'three-four and two-four', 'G major, F major and A minor'],
     notYet: ['dotted half notes', 'accidentals in minor keys', 'slurs and accents', 'dynamics and hairpins'],
     keys: [major(1), major(-1), minor(0)],
@@ -59,6 +63,7 @@ export const BUILT_IN_GRADES: readonly Grade[] = [
   {
     id: 'grade-2',
     label: 'Grade 2',
+    short: '2',
     newHere: ['both hands together', 'D major, E minor and G minor'],
     notYet: ['a dotted quarter and an eighth', 'tied notes'],
     keys: [major(2), minor(1), minor(-2)],
@@ -67,6 +72,7 @@ export const BUILT_IN_GRADES: readonly Grade[] = [
   {
     id: 'grade-3',
     label: 'Grade 3',
+    short: '3',
     newHere: [
       'both hands beyond five fingers',
       'two-note chords in the left hand',
@@ -81,6 +87,7 @@ export const BUILT_IN_GRADES: readonly Grade[] = [
   {
     id: 'grade-4',
     label: 'Grade 4',
+    short: '4',
     newHere: ['six-eight', 'broken chords in both hands'],
     notYet: ['an upbeat', 'chromatic notes', 'pauses', 'tenuto'],
     keys: [],
@@ -89,6 +96,7 @@ export const BUILT_IN_GRADES: readonly Grade[] = [
   {
     id: 'grade-5',
     label: 'Grade 5',
+    short: '5',
     newHere: ['sequences', 'notes across the beat, and ties', 'E and A flat major, F sharp and C minor'],
     notYet: ['four-note chords', 'slowing at the end'],
     keys: [major(4), major(-4), minor(3), minor(-3)],

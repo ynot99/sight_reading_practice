@@ -43,6 +43,23 @@ function rules(): { selector: string; body: string; at: number }[] {
  * reader's iPad.
  */
 describe('the stylesheet', () => {
+  it('keeps the exercise button beside a fresh exercise, the row given to the words', () => {
+    const fresh = rules().find((rule) => rule.selector === '.scores__fresh');
+    const beside = rules().find((rule) => rule.selector === '.scores__exercise');
+    const row = rules().find((rule) => rule.selector === '.scores__fresh-row');
+
+    expect(row?.body).toMatch(/display\s*:\s*flex/);
+    expect(fresh?.body).toMatch(/flex\s*:\s*1 1 auto/);
+    expect(fresh?.body).toMatch(/min-width\s*:\s*0/);
+    expect(beside?.body).toMatch(/flex\s*:\s*none/);
+  });
+
+  it('lights the grade being read', () => {
+    const lit = rules().find((rule) => rule.selector === ".grades__grade[aria-pressed='true']");
+    expect(lit?.body).toMatch(/background\s*:\s*var\(--accent\)/);
+    expect(rules().find((rule) => rule.selector === '.grades')?.body).toMatch(/flex-wrap\s*:\s*wrap/);
+  });
+
   it('scrolls the squares inside their sheet', () => {
     // The panel has a height and hides what overflows it. `.controls` was given
     // a scroll of its own when the metronome sheet outgrew its panel; the modes

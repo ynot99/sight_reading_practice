@@ -59,11 +59,25 @@ export class PracticeLadder {
     this.grades = byId;
   }
 
+  /** The grades, in the order the rungs climb them. */
+  gradesInOrder(): readonly Grade[] {
+    return [...new Set(this.steps.map((step) => step.grade))].map((id) => this.gradeNamed(id));
+  }
+
+  /** The first rung of a grade, where choosing the grade puts the reader. */
+  firstOf(gradeId: string): LadderStep | null {
+    return this.steps.find((step) => step.grade === gradeId) ?? null;
+  }
+
   /** The grade a rung belongs to. */
   gradeOf(step: LadderStep): Grade {
-    const grade = this.grades.get(step.grade);
+    return this.gradeNamed(step.grade);
+  }
+
+  private gradeNamed(id: string): Grade {
+    const grade = this.grades.get(id);
     if (grade === undefined) {
-      throw new DomainError(`Unknown grade "${step.grade}".`);
+      throw new DomainError(`Unknown grade "${id}".`);
     }
     return grade;
   }

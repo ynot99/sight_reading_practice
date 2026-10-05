@@ -51,7 +51,7 @@ function leftHandOnFive(): PatternVoiceGenerator {
 }
 
 /**
- * The built-in difficulty ladder.
+ * The built-in material, which the grades of the ladder are made from.
  *
  * Each entry is data, not code: adding a level means adding an object here (or
  * registering one from anywhere else) rather than editing a switch statement.
@@ -66,7 +66,7 @@ function leftHandOnFive(): PatternVoiceGenerator {
 export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   {
     id: 'five-finger-c',
-    label: '1 · Five-finger position',
+    label: 'Both hands, five fingers',
     description: 'Both hands inside a five-finger position, one note at a time.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.five-finger',
@@ -112,7 +112,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   },
   {
     id: 'treble-only',
-    label: '2 · Right hand alone',
+    label: 'Right hand alone',
     description: 'Treble melody over a silent bass staff, one octave of motion.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.treble-only',
@@ -145,7 +145,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   },
   {
     id: 'bass-only',
-    label: '3 · Left hand alone',
+    label: 'Left hand alone',
     description: 'Bass clef reading practice with a silent treble staff.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.bass-only',
@@ -178,7 +178,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   },
   {
     id: 'melody-and-intervals',
-    label: '4 · Melody over intervals',
+    label: 'Melody over intervals',
     description: 'Treble melody against thirds, fifths and sixths in the left hand.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.melody-intervals',
@@ -221,7 +221,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   },
   {
     id: 'triads-left-hand',
-    label: '5 · Triads in the left hand',
+    label: 'Triads in the left hand',
     description: 'Root-position triads under a moving treble line: chord reading.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.triads',
@@ -272,7 +272,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
      * default, so what is being read is the stack.
      */
     id: 'chords-only',
-    label: '6 · Chords, both hands',
+    label: 'Chords in both hands',
     description: 'Nothing but chords, one to a bar: reading a stack rather than a line.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.chords',
@@ -314,7 +314,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   },
   {
     id: 'wide-grand-staff',
-    label: '6 · Full grand staff',
+    label: 'Full grand staff',
     description: 'Wider ranges and larger leaps, with both hands reading at once.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.wide',
@@ -360,7 +360,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   },
   {
     id: 'figures',
-    label: '7 · Broken chords in both hands',
+    label: 'Broken chords in both hands',
     description: 'Arpeggios under arpeggios: chord shapes read as shapes, not as stacks.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.figures',
@@ -408,7 +408,7 @@ export const BUILT_IN_PRESETS: readonly ExercisePreset[] = [
   },
   {
     id: 'sequences',
-    label: '8 · Sequences',
+    label: 'Sequences',
     description: 'Short motifs repeated a step higher or lower - reading by pattern, not by note.',
     generator: new GrandStaffExerciseGenerator({
       id: 'gen.sequences',

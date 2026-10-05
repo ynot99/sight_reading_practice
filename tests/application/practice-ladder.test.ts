@@ -8,7 +8,7 @@ import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile
 import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
 import { validateExercise } from '../../src/domain/model/Exercise.js';
 
-const GRADE: Grade = { id: 'g', label: 'G', newHere: [], notYet: [], keys: [], times: [] };
+const GRADE: Grade = { id: 'g', label: 'G', short: 'G', newHere: [], notYet: [], keys: [], times: [] };
 
 function rung(id: string, grade = 'g'): LadderStep {
   return { id, grade, label: id, description: id, settings: {} };

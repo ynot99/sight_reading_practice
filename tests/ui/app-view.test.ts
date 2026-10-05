@@ -6636,6 +6636,78 @@ describe('AppView', () => {
     expect(frameButton('listen').querySelector('.frame__what')?.textContent).toContain('machine');
   });
 
+  describe('the sheet of what a fresh exercise is made of', () => {
+    it('opens from beside the button that makes one, over the scores', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-scores').click();
+
+      element<HTMLButtonElement>('scores-exercise').click();
+
+      const sheet = element('sheet-exercise');
+      expect(sheet.hidden).toBe(false);
+      // Over the scores, so shutting it goes back to them.
+      expect(element('sheet-scores').hidden).toBe(false);
+      expect(Number(sheet.dataset['over'])).toBeGreaterThan(Number(element('sheet-scores').dataset['over']));
+      // Beside the button, in one row with it.
+      expect(element('scores-exercise').parentElement).toBe(element('scores-fresh').parentElement);
+    });
+
+    it('holds everything a fresh exercise is made of, and the settings no longer do', () => {
+      const sheet = element('sheet-exercise');
+      for (const id of ['grades', 'ladder-up', 'measures', 'tempo', 'preset', 'rhythm', 'key', 'time-signature']) {
+        expect({ id, here: sheet.contains(element(id)) }).toEqual({ id, here: true });
+      }
+      // What steps off the route is folded away under the rest.
+      for (const id of ['preset', 'rhythm', 'key', 'time-signature']) {
+        expect({ id, folded: element(id).closest('details') !== null }).toEqual({ id, folded: true });
+      }
+      const settings = element('sheet-settings');
+      expect(settings.querySelector('[data-chooses="exercise"]')).toBeNull();
+      expect(settings.querySelector('[data-pane~="exercise"]')).toBeNull();
+      // How a run is graded stays in the settings, beside the modes.
+      expect(element('scoring').closest('[data-pane]')?.getAttribute('data-pane')).toBe('modes');
+    });
+
+    it('offers each grade, lights the one being read, and puts a reader on its first rung', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const grades = [...element('grades').querySelectorAll<HTMLButtonElement>('.grades__grade')];
+      expect(grades.map((button) => button.textContent)).toEqual(['Initial', '1', '2', '3', '4', '5']);
+      expect(grades.map((button) => button.getAttribute('aria-label'))).toContain('Grade 3');
+      // Off the route, nothing is lit and nothing is said of a grade.
+      expect(grades.filter((button) => button.getAttribute('aria-pressed') === 'true')).toEqual([]);
+      expect(element('grade-new').textContent).toBe('');
+
+      const before = runtime.controller.currentExercise;
+      grades[3]?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.ladderStep?.id).toBe('grade-3.wide');
+      expect(grades.map((button) => button.getAttribute('aria-pressed'))).toEqual([
+        'false',
+        'false',
+        'false',
+        'true',
+        'false',
+        'false',
+      ]);
+      expect(element('grade-new').textContent).toContain('New at Grade 3');
+      expect(element<HTMLSelectElement>('preset').value).toBe('wide-grand-staff');
+      // A grade chosen is a page to read now.
+      expect(runtime.controller.currentExercise).not.toBe(before);
+
+      // A rhythm chosen by hand leaves the route, and the grade with it.
+      const rhythm = element<HTMLSelectElement>('rhythm');
+      rhythm.value = 'triplets';
+      rhythm.dispatchEvent(new Event('change'));
+      await Promise.resolve();
+      expect(grades.filter((button) => button.getAttribute('aria-pressed') === 'true')).toEqual([]);
+      expect(element('grade-new').textContent).toBe('');
+      expect(element('grade-not-yet').textContent).toBe('');
+    });
+  });
+
   describe('the ladder arrows', () => {
     it('starts at the first rung and names it', async () => {
       const { view, runtime } = createRig();
@@ -6646,11 +6718,12 @@ describe('AppView', () => {
 
       expect(runtime.controller.ladderStep?.label).toBe('Initial · a');
       expect(element('ladder-step').textContent).toBe('Initial · a, 1 of 24');
-      const said = element('ladder-description').textContent ?? '';
-      expect(said).toContain('five fingers from C');
+      expect(element('ladder-description').textContent).toContain('five fingers from C');
       // What the grade adds, and what a test at it has that is not written yet.
-      expect(said).toContain('New at Initial: each hand alone');
-      expect(said).toContain('Not written here yet: staccato and legato and loud and soft.');
+      expect(element('grade-new').textContent).toContain('New at Initial: each hand alone');
+      expect(element('grade-not-yet').textContent).toBe(
+        'Not written here yet: staccato and legato and loud and soft.',
+      );
       // Nowhere below the bottom to go.
       expect(element<HTMLButtonElement>('ladder-down').disabled).toBe(true);
     });

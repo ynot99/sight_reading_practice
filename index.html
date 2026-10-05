@@ -277,6 +277,7 @@
             stands above the shelf because it is the one that needs nothing
             kept.
           -->
+          <div class="scores__fresh-row">
           <button id="scores-fresh" type="button" class="button scores__fresh">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" />
@@ -292,6 +293,18 @@
               <span id="scores-rung" class="scores__fresh-rung"></span>
             </span>
           </button>
+          <!--
+            What a fresh exercise is made of, beside the button that makes
+            one: the grade, the bars, the tempo. It was a section of the
+            settings sheet, two sheets away from the only thing it is for.
+          -->
+          <button id="scores-exercise" type="button" class="button scores__exercise"
+            title="What a fresh exercise is made of" aria-label="What a fresh exercise is made of">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 7h10 M18 7h2 M4 17h2 M10 17h10 M16 4v6 M8 14v6" />
+            </svg>
+          </button>
+          </div>
           <ul id="scores-list" class="takes__list"></ul>
           <p id="scores-empty" class="hint">Nothing kept yet. Open a score and it is remembered here.</p>
           <!--
@@ -611,6 +624,89 @@
                 make the rows shorter. A wheel held down with Ctrl does it too,
                 round whatever the pointer is on.</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!--
+        What a fresh exercise is made of, opened from beside the button that
+        makes one. The grade is first because it is the one answer that
+        brings the rest with it; what is reached for between pages, the
+        bars and the tempo, is under it, and what steps off the route - a
+        material, a rhythm, a key or a metre chosen by hand - is folded away.
+      -->
+      <div id="sheet-exercise" class="sheet" hidden>
+        <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
+          aria-label="Exercise">
+          <div class="sheet__head">
+            <strong class="sheet__title">Exercise</strong>
+            <button id="exercise-close" type="button" data-shuts class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+          <div class="controls controls--stacked">
+            <div class="control-group">
+              <span class="control-group__label" id="grades-label">Grade</span>
+              <div id="grades" class="grades" role="group" aria-labelledby="grades-label"></div>
+            </div>
+
+            <div class="control-group">
+              <div class="ladder-row">
+                <button id="ladder-down" type="button" class="button" aria-label="Down a rung">◀</button>
+                <strong id="ladder-step" class="ladder-row__step">—</strong>
+                <button id="ladder-up" type="button" class="button" aria-label="Up a rung">▶</button>
+              </div>
+              <p id="ladder-description" class="hint"></p>
+              <p id="grade-new" class="hint"></p>
+              <p id="grade-not-yet" class="hint"></p>
+            </div>
+
+            <div class="control-group">
+              <label for="measures">
+                Bars:
+                <input
+                  id="measures-value"
+                  class="number-input"
+                  type="number"
+                  min="1"
+                  max="32"
+                  step="1"
+                  value="4"
+                  aria-label="Number of bars"
+                />
+              </label>
+              <input id="measures" type="range" min="1" max="32" step="1" value="4" />
+            </div>
+
+            <div class="control-group">
+              <label for="tempo">Tempo: <output id="tempo-value">60</output> bpm</label>
+              <input id="tempo" type="range" min="30" max="180" step="1" value="60" />
+            </div>
+
+            <details class="sheet__more">
+              <summary>More</summary>
+              <div class="control-group">
+                <label for="preset">Material</label>
+                <select id="preset"></select>
+                <p id="preset-description" class="hint"></p>
+              </div>
+
+              <div class="control-group">
+                <label for="rhythm">Rhythm</label>
+                <select id="rhythm"></select>
+                <p id="rhythm-description" class="hint"></p>
+              </div>
+
+              <div class="control-group">
+                <label for="key">Key</label>
+                <select id="key"></select>
+              </div>
+
+              <div class="control-group">
+                <label for="time-signature">Time</label>
+                <select id="time-signature"></select>
+              </div>
+              <p class="hint">Any of these chosen by hand steps off the route.</p>
+            </details>
           </div>
         </div>
       </div>
@@ -1016,10 +1112,6 @@
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 6h18v12H3z M7 6v8 M11 6v8 M15 6v8" />
             </svg><span>Instrument</span></button>
-          <button type="button" class="settings-sections__tab" data-chooses="exercise">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M9 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0 M9 18V6l10-2v10 M19 14a2 2 0 1 1-4 0 2 2 0 0 1 4 0" />
-            </svg><span>Exercise</span></button>
           <button type="button" class="settings-sections__tab" data-chooses="page">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M7 3h7l4 4v14H7z M14 3v4h4" />
@@ -1089,16 +1181,6 @@
           <p id="what-opens-description" class="hint"></p>
         </div>
 
-        <div class="control-group" data-pane="exercise">
-          <label for="ladder-down">Ladder</label>
-          <div class="ladder-row">
-            <button id="ladder-down" type="button" class="button" aria-label="Down a rung">◀</button>
-            <strong id="ladder-step" class="ladder-row__step">—</strong>
-            <button id="ladder-up" type="button" class="button" aria-label="Up a rung">▶</button>
-          </div>
-          <p id="ladder-description" class="hint"></p>
-        </div>
-
         <!--
           The instrument in the room. Only generated material is written for
           it: an imported score is what its writer wrote, and moving it would
@@ -1122,54 +1204,14 @@
           </p>
         </div>
 
-        <div class="control-group" data-pane="exercise">
-          <label for="preset">Level</label>
-          <select id="preset"></select>
-          <p id="preset-description" class="hint"></p>
-        </div>
-
-        <div class="control-group" data-pane="exercise">
-          <label for="rhythm">Rhythm</label>
-          <select id="rhythm"></select>
-          <p id="rhythm-description" class="hint"></p>
-        </div>
-
-        <div class="control-group" data-pane="exercise">
+        <!--
+          How a run is graded, beside the modes that each bring the grading
+          they are usually judged by.
+        -->
+        <div class="control-group" data-pane="modes">
           <label for="scoring">Graded on</label>
           <select id="scoring"></select>
           <p id="scoring-description" class="hint"></p>
-        </div>
-
-        <div class="control-group" data-pane="exercise">
-          <label for="key">Key</label>
-          <select id="key"></select>
-        </div>
-
-        <div class="control-group" data-pane="exercise">
-          <label for="time-signature">Time</label>
-          <select id="time-signature"></select>
-        </div>
-
-        <div class="control-group" data-pane="exercise">
-          <label for="measures">
-            Bars:
-            <input
-              id="measures-value"
-              class="number-input"
-              type="number"
-              min="1"
-              max="32"
-              step="1"
-              value="4"
-              aria-label="Number of bars"
-            />
-          </label>
-          <input id="measures" type="range" min="1" max="32" step="1" value="4" />
-        </div>
-
-        <div class="control-group" data-pane="exercise">
-          <label for="tempo">Tempo: <output id="tempo-value">60</output> bpm</label>
-          <input id="tempo" type="range" min="30" max="180" step="1" value="60" />
         </div>
 
         <!--

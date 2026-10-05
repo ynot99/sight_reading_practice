@@ -1,6 +1,6 @@
 import { DomainError } from '../../shared/errors.js';
-import { elementAt } from '../../shared/asserts.js';
-import { Pitch, alterationSuffix, stepAt, type Alteration, type Step } from './Pitch.js';
+import { elementAt, floorMod } from '../../shared/asserts.js';
+import { Pitch, STEPS, alterationSuffix, stepAt, type Alteration, type Step } from './Pitch.js';
 
 export type KeyMode = 'major' | 'minor';
 
@@ -99,6 +99,11 @@ export class KeySignature {
     const table = this.mode === 'major' ? MAJOR_TONICS : MINOR_TONICS;
     const [step, alter] = elementAt(table, this.fifths + 7);
     return { step, alter };
+  }
+
+  /** The scale degree of a staff position, counted from nought at the tonic. */
+  degreeOf(diatonicIndex: number): number {
+    return floorMod(diatonicIndex - this.tonicIndexAtOrAbove(0), STEPS.length);
   }
 
   /** Lowest staff position at or above `floorDiatonicIndex` that is the tonic. */

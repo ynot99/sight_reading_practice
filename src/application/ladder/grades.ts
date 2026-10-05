@@ -76,6 +76,7 @@ export const BUILT_IN_GRADES: readonly Grade[] = [
     newHere: [
       'both hands beyond five fingers',
       'two-note chords in the left hand',
+      'the seventh sharpened in minor keys, rising to the key note',
       'sixteenth notes',
       'three-eight',
       'A, B flat and E flat major, B minor',

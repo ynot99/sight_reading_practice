@@ -5,6 +5,7 @@ import type { VoiceRole } from '../RhythmProfile.js';
 import { FigureWalker, type WeightedFigure } from './figures.js';
 import { playableRange } from './IVoiceGenerator.js';
 import type { IVoiceGenerator, PitchRange, VoiceContext } from './IVoiceGenerator.js';
+import { leadingUpInMinor } from './minorKey.js';
 import { tonicNearestMiddle } from './voiceRange.js';
 
 export interface PatternVoiceOptions {
@@ -82,7 +83,7 @@ export class PatternVoiceGenerator implements IVoiceGenerator {
       measures.push(measureOf(entries));
     }
 
-    return measures;
+    return leadingUpInMinor(measures, context.key);
   }
 
   /** The staff positions the line may use, lowest and highest. */

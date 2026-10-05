@@ -6,6 +6,7 @@ import { fillMeasure } from '../RhythmFiller.js';
 import type { VoiceRole } from '../RhythmProfile.js';
 import { playableRange } from './IVoiceGenerator.js';
 import type { IVoiceGenerator, PitchRange, VoiceContext } from './IVoiceGenerator.js';
+import { chordToneInMinor } from './minorKey.js';
 
 export type HarmonyShape = 'single' | 'interval' | 'triad';
 
@@ -86,7 +87,7 @@ export class HarmonyVoiceGenerator implements IVoiceGenerator {
 
     const inRange = indices.filter((index) => index >= low && index <= high);
     const chosen = inRange.length > 0 ? inRange : [clamp(root, low, high)];
-    return chosen.map((index) => context.key.pitchAt(index));
+    return chosen.map((index) => chordToneInMinor(context.key, root, index));
   }
 
   private shapeIndices(context: VoiceContext, root: number): number[] {

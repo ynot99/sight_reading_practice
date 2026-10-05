@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
+import type { PrintedHere } from '../../src/domain/notation/printedIds.js';
 import {
   buildOverlayShapes,
   spellPlayed,
@@ -18,7 +19,7 @@ const geometry = fitStaffGeometry([
   { stepIndex: 0, page: 0, system: 0, staffNumber: 2, diatonicIndex: Pitch.parse('G2').diatonicIndex, y: 225.5 },
 ]);
 
-function layout(key = KeySignature.major(0)): OverlayLayout {
+function layout(key = KeySignature.major(0), printed: readonly PrintedHere[] = []): OverlayLayout {
   if (geometry === null) {
     throw new Error('expected geometry');
   }
@@ -30,6 +31,7 @@ function layout(key = KeySignature.major(0)): OverlayLayout {
     ]),
     clefAt: (staffNumber: number) => (staffNumber === 1 ? 'treble' : 'bass'),
     keyAt: () => key,
+    printedAt: (stepIndex: number) => (stepIndex === 0 ? printed : []),
   };
 }
 
@@ -241,8 +243,41 @@ describe('buildOverlayShapes', () => {
     );
     const accidental = flatKey.find((shape) => shape.kind === 'accidental');
     expect(accidental?.kind === 'accidental' ? accidental.text : '').toBe('♭');
-    expect(spellPlayed(61, KeySignature.major(-3)).toString()).toBe('Db4');
-    expect(spellPlayed(61, KeySignature.major(2)).toString()).toBe('C#4');
+    expect(spellPlayed(61, KeySignature.major(-3), []).toString()).toBe('Db4');
+    expect(spellPlayed(61, KeySignature.major(2), []).toString()).toBe('C#4');
+  });
+
+  describe('a key the page prints at that step', () => {
+    // F sharp written in F major, whose flats would spell the key G flat.
+    const fSharp: PrintedHere = {
+      id: 'n',
+      staffNumber: 1,
+      midi: 66,
+      diatonicIndex: Pitch.parse('F4').diatonicIndex,
+    };
+
+    function drawn(midi: number, printed: readonly PrintedHere[], stepIndex = 0) {
+      const shapes = buildOverlayShapes(
+        [{ stepIndex, midi, correct: true, offset: 0 }],
+        layout(KeySignature.major(-1), printed),
+      );
+      const accidental = shapes.find((shape) => shape.kind === 'accidental');
+      return {
+        y: noteheads(shapes)[0]?.y,
+        accidental: accidental?.kind === 'accidental' ? accidental.text : null,
+      };
+    }
+
+    it('is spelled as printed, on the printed note and with its sign', () => {
+      // C4 at 155.5, five units a position: F4 at 140.5, where G flat is 135.5.
+      expect(drawn(66, [fSharp])).toEqual({ y: 140.5, accidental: '♯' });
+    });
+
+    it('leaves a key the step does not print to the key signature', () => {
+      // Another key at that step, and the same key at a step that prints none.
+      expect(drawn(66, [{ ...fSharp, midi: 64 }])).toEqual({ y: 135.5, accidental: '♭' });
+      expect(drawn(66, [fSharp], 1)).toEqual({ y: 135.5, accidental: '♭' });
+    });
   });
 
   it('draws no accidental for a note the key signature already alters', () => {
@@ -277,6 +312,7 @@ describe('buildOverlayShapes', () => {
       stepX: new Map([[0, 240]]),
       clefAt: () => 'treble' as const,
       keyAt: () => KeySignature.major(0),
+      printedAt: () => [],
     });
 
     const [head] = noteheads(shapes);
@@ -320,6 +356,7 @@ describe('a page with only one staff', () => {
       stepX: new Map([[0, 120]]),
       clefAt: () => 'treble',
       keyAt: () => KeySignature.major(0),
+      printedAt: () => [],
     });
 
     expect(noteheads(shapes)).toHaveLength(1);

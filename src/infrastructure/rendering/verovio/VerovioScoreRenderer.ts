@@ -776,6 +776,7 @@ export class VerovioScoreRenderer
       stepX: overlay.stepX,
       clefAt: context.clefAt,
       keyAt: context.keyAt,
+      printedAt: (stepIndex) => this.printed[stepIndex]?.printed ?? [],
     });
     for (const shape of shapes) {
       const drawn = drawShape(shape, overlay.layer.ownerDocument);

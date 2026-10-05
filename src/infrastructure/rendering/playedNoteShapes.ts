@@ -1,6 +1,7 @@
 import type { ClefKind } from '../../domain/model/Clef.js';
 import type { NoteTier } from '../../domain/scoring/noteTiers.js';
 import type { KeySignature } from '../../domain/model/KeySignature.js';
+import type { PrintedHere } from '../../domain/notation/printedIds.js';
 import { Pitch } from '../../domain/model/Pitch.js';
 import {
   CLEF_LINE_RANGE,
@@ -32,6 +33,8 @@ export interface OverlayLayout {
   readonly stepX: ReadonlyMap<number, number>;
   readonly clefAt: (staffNumber: number, stepIndex: number) => ClefKind;
   readonly keyAt: (stepIndex: number) => KeySignature;
+  /** The notes the page prints at a step, which spell a press of one of them. */
+  readonly printedAt: (stepIndex: number) => readonly PrintedHere[];
 }
 
 export interface NoteheadShape {
@@ -87,9 +90,17 @@ const ACCIDENTAL_GLYPHS: Readonly<Record<number, string>> = {
   [2]: '𝄪',
 };
 
-/** Spelling for a played key, biased by the key signature. */
-export function spellPlayed(midi: number, key: KeySignature): Pitch {
-  return Pitch.fromMidi(midi, key.fifths < 0);
+/**
+ * Spelling for a played key: as the page prints it, where the step prints
+ * that key, and otherwise as the key signature leans.
+ *
+ * A key the page prints is the note it prints, and a mark spelled any other
+ * way - an F sharp the score wrote, drawn as G flat because the key has flats
+ * - stands a staff position away from the very note it was right about.
+ */
+export function spellPlayed(midi: number, key: KeySignature, printed: readonly PrintedHere[]): Pitch {
+  const written = printed.find((note) => note.midi === midi)?.diatonicIndex;
+  return written == null ? Pitch.fromMidi(midi, key.fifths < 0) : Pitch.writtenAt(written, midi);
 }
 
 /**
@@ -148,7 +159,7 @@ export function buildOverlayShapes(
     // said which it was; where the mark sits is a separate matter.
     const looseTiming = mark.tier === 'good';
     const key = layout.keyAt(mark.stepIndex);
-    const pitch = spellPlayed(mark.midi, key);
+    const pitch = spellPlayed(mark.midi, key, layout.printedAt(mark.stepIndex));
     const x = markX(
       layout.stepX,
       mark.stepIndex,

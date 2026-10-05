@@ -822,6 +822,35 @@ describe('what was played', () => {
     expect(Number(outside?.getAttribute('cy'))).toBe(headOf(stage.surface, 'n1-1-0-0').y);
   });
 
+  it('rings a black key on the note the page prints for it, spelled as printed', async () => {
+    // G flat written in C major, whose leaning spells the key F sharp: a
+    // place below the very note the press was right about.
+    const stage = aStage();
+    stage.renderer.setPaged(true);
+    const written = twoBarExercise();
+    const flat = printed({
+      ...written,
+      staves: written.staves.map((staff, at) =>
+        at === 0
+          ? {
+              ...staff,
+              measures: [
+                bar(...['Gb4', 'D4', 'E4', 'F4'].map((name) => noteEntry(p(name), Duration.QUARTER))),
+                ...staff.measures.slice(1),
+              ],
+            }
+          : staff,
+      ),
+    });
+    await stage.renderer.load(flat.xml, flat.steps);
+    stage.renderer.configureOverlay(context);
+
+    stage.renderer.showPlayed({ stepIndex: 0, midi: p('Gb4').midi, correct: true, offset: 0 });
+
+    expect(Number(ringsOf(stage.surface)[0]?.getAttribute('cy'))).toBe(headOf(stage.surface, 'n0-1-0-0').y);
+    expect(sheets(stage.surface)[0]?.querySelector('.played-overlay text.played-accidental')?.textContent).toBe('♭');
+  });
+
   it('rings the left hand’s note on the bass staff, where it is printed', async () => {
     const { renderer, surface } = await twoBarsOpen();
 

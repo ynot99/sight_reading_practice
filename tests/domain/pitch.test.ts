@@ -38,6 +38,19 @@ describe('Pitch', () => {
     expect(Pitch.fromDiatonicIndex(35).toString()).toBe('C5');
   });
 
+  it('spells a key by the staff position it is written at', () => {
+    const f4 = Pitch.parse('F4').diatonicIndex;
+    const g4 = Pitch.parse('G4').diatonicIndex;
+    expect(Pitch.writtenAt(f4, 66).toString()).toBe('F#4');
+    expect(Pitch.writtenAt(g4, 66).toString()).toBe('Gb4');
+    expect(Pitch.writtenAt(f4, 65).toString()).toBe('F4');
+    expect(Pitch.writtenAt(f4, 67).toString()).toBe('F##4');
+    // B sharp is written a line below the C it sounds as, an octave's edge.
+    expect(Pitch.writtenAt(Pitch.parse('B3').diatonicIndex, 60).toString()).toBe('B#3');
+    // No accidental reaches a key three semitones away.
+    expect(() => Pitch.writtenAt(f4, 68)).toThrow(DomainError);
+  });
+
   it('walks the staff one letter at a time', () => {
     const start = Pitch.parse('B3');
     expect(start.transposeDiatonic(1).toString()).toBe('C4');

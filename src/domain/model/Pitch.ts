@@ -137,6 +137,15 @@ export class Pitch {
   }
 
   /**
+   * The key `midi` as it is written at a staff position: F sharp and G flat
+   * are one key at two places, and the place decides the accidental.
+   */
+  static writtenAt(diatonicIndex: number, midi: number): Pitch {
+    const natural = Pitch.fromDiatonicIndex(diatonicIndex);
+    return natural.withAlteration(toAlteration(midi - natural.midi));
+  }
+
+  /**
    * Spells a MIDI note number without key context. Used for feedback labels;
    * notation always goes through {@link Pitch.fromDiatonicIndex} instead.
    */

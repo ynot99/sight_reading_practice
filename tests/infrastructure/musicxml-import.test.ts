@@ -1244,6 +1244,32 @@ const heldOver = `<?xml version="1.0" encoding="UTF-8"?>
     expect(new MusicXmlSerializer().serialize(exercise)).toContain('<staccato/>');
   });
 
+  it('carries an accent and a tenuto, and prints them again in one group', () => {
+    // Dropped like the dot was, and the same kind of instruction: how much
+    // weight is the performer's, so the mark is what is kept.
+    const accented = note('C', 4, 96, 'whole', '<notations><articulations><accent/></articulations></notations>');
+    const held = note('D', 4, 96, 'whole', '<notations><articulations><tenuto/></articulations></notations>');
+    const both = note(
+      'E',
+      4,
+      96,
+      'whole',
+      '<notations><articulations><accent/><staccato/><tenuto/></articulations></notations>',
+    );
+    for (const [xml, accent, tenuto] of [
+      [accented, true, false],
+      [held, false, true],
+      [both, true, true],
+    ] as const) {
+      const { exercise } = importer.read(scoreXml(xml));
+      expect(exercise.staves[0]?.measures[0]?.entries[0]).toMatchObject({ kind: 'note', accent, tenuto });
+      const printed = new MusicXmlSerializer().serialize(exercise);
+      expect(printed.includes('<accent/>')).toBe(accent);
+      expect(printed.includes('<tenuto/>')).toBe(tenuto);
+      expect(printed.match(/<articulations>/g)).toHaveLength(1);
+    }
+  });
+
   it('keeps a dot and a comma on one note in one group', () => {
     // `articulations` is the group, and two of them side by side is not what
     // the format means by it.

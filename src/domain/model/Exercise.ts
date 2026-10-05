@@ -110,6 +110,18 @@ export interface NoteEntry {
    */
   readonly staccato: boolean;
   /**
+   * Lean on this note - the wedge over the head.
+   *
+   * Like the staccato, a reading instruction that takes nothing from the bar:
+   * how much harder is the performer's.
+   */
+  readonly accent: boolean;
+  /**
+   * Hold this note its full length, and a little weight on it - the line
+   * over the head.
+   */
+  readonly tenuto: boolean;
+  /**
    * Lift after this note - the comma over the staff.
    *
    * A breath, and the shortest of all the writer's instructions: it takes no
@@ -1120,6 +1132,8 @@ export function barIsRepeated(exercise: Exercise, measureIndex: number): boolean
 export interface EntryMarks {
   readonly fermata?: boolean;
   readonly staccato?: boolean;
+  readonly accent?: boolean;
+  readonly tenuto?: boolean;
   readonly breath?: boolean;
   readonly graces?: readonly GraceNote[];
 }
@@ -1144,6 +1158,8 @@ export function noteEntry(
     arpeggiated,
     fermata: marks.fermata === true,
     staccato: marks.staccato === true,
+    accent: marks.accent === true,
+    tenuto: marks.tenuto === true,
     breath: marks.breath === true,
     graces: marks.graces === undefined ? [] : [...marks.graces],
   };

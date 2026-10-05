@@ -93,6 +93,8 @@ interface RawNote {
   readonly arpeggiated: boolean;
   readonly fermata: boolean;
   readonly staccato: boolean;
+  readonly accent: boolean;
+  readonly tenuto: boolean;
   readonly breath: boolean;
   /** Ornaments leaning on this note, which take none of its time. */
   readonly graces: readonly GraceNote[];
@@ -1239,6 +1241,8 @@ function readMeasureNotes(
       // cannot be turned into rhythm here.
       fermata: hasChild(child(node, 'notations'), 'fermata'),
       staccato: hasChild(child(child(node, 'notations'), 'articulations'), 'staccato'),
+      accent: hasChild(child(child(node, 'notations'), 'articulations'), 'accent'),
+      tenuto: hasChild(child(child(node, 'notations'), 'articulations'), 'tenuto'),
       breath: hasChild(child(child(node, 'notations'), 'articulations'), 'breath-mark'),
       graces,
       invisible,
@@ -1357,6 +1361,8 @@ function buildMeasure(
               ? {
                   fermata: group.some((note) => note.fermata),
                   staccato: group.some((note) => note.staccato),
+                  accent: group.some((note) => note.accent),
+                  tenuto: group.some((note) => note.tenuto),
                   breath: group.some((note) => note.breath),
                   // The ornament leans on the note as it was written, which is
                   // the first piece of it once a long value has been split.
@@ -1859,6 +1865,8 @@ function dropTiesThatLeadNowhere(
               {
                 fermata: entry.fermata,
                 staccato: entry.staccato,
+                accent: entry.accent,
+                tenuto: entry.tenuto,
                 breath: entry.breath,
                 graces: entry.graces,
               },

@@ -131,16 +131,10 @@ export class KeySignature {
   }
 }
 
-/** Keys offered by the UI, from no accidentals outwards. */
-export const COMMON_KEYS: readonly KeySignature[] = [
-  KeySignature.major(0),
-  KeySignature.major(1),
-  KeySignature.major(-1),
-  KeySignature.major(2),
-  KeySignature.major(-2),
-  KeySignature.major(3),
-  KeySignature.major(-3),
-  KeySignature.minor(0),
-  KeySignature.minor(1),
-  KeySignature.minor(-1),
-];
+/**
+ * Keys offered by the UI, from no accidentals outwards: every key up to four
+ * sharps or flats, which is every key a grade of the ladder may draw.
+ */
+export const COMMON_KEYS: readonly KeySignature[] = (['major', 'minor'] as const).flatMap((mode) =>
+  [0, 1, -1, 2, -2, 3, -3, 4, -4].map((fifths) => new KeySignature(fifths, mode)),
+);

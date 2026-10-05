@@ -41,10 +41,17 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
     assertPositive(request.tempoBpm, 'tempoBpm');
 
     const seed = request.seed ?? randomSeed();
+    const rng = createRng(seed);
+    // Drawn before any note, and only where there is a set to draw from, so a
+    // request for one key spends nothing on it and writes what it always has.
+    const keys = request.drawnFrom?.keys;
+    const key = keys === undefined ? request.key : rng.pick(keys);
+    const times = request.drawnFrom?.times;
+    const timeSignature = times === undefined ? request.timeSignature : rng.pick(times);
     const context: VoiceContext = {
-      rng: createRng(seed),
-      key: request.key,
-      timeSignature: request.timeSignature,
+      rng,
+      key,
+      timeSignature,
       measures: request.measures,
       rhythm: request.rhythm,
       ...(request.withinRange === undefined ? {} : { withinRange: request.withinRange }),
@@ -60,8 +67,8 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
 
     const exercise: Exercise = {
       id: `${this.id}-${seed.toString(16)}`,
-      title: `${request.key.name} · ${request.timeSignature.toString()} · ${request.measures} bars`,
-      key: request.key,
+      title: `${key.name} · ${timeSignature.toString()} · ${request.measures} bars`,
+      key,
       keyChanges: [],
       timeChanges: [],
       tempoChanges: [],
@@ -70,7 +77,7 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
       tempoWords: [],
       hairpins: [],
       octaveShifts: [],
-      timeSignature: request.timeSignature,
+      timeSignature,
       tempoBpm: request.tempoBpm,
       staves,
       firstBarNumber: 1,

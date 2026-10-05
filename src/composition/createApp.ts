@@ -74,6 +74,7 @@ import type { IStorageGauge } from '../application/ports/IStorageGauge.js';
 import { DownloadFileSink } from '../infrastructure/files/DownloadFileSink.js';
 import type { IFileSink } from '../application/ports/IFileSink.js';
 import { PracticeLadder } from '../application/ladder/PracticeLadder.js';
+import { BUILT_IN_GRADES } from '../application/ladder/grades.js';
 import { BUILT_IN_LADDER } from '../application/ladder/ladderSteps.js';
 import {
   DEFAULT_STORAGE_KEY,
@@ -369,7 +370,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     new NoteMode(),
     new WaitMode(),
   ]);
-  const ladder = new PracticeLadder(BUILT_IN_LADDER);
+  const ladder = new PracticeLadder(BUILT_IN_LADDER, BUILT_IN_GRADES);
 
   const settingsStore =
     options.settingsStore ?? new LocalStorageSettingsStore(browserStorage());

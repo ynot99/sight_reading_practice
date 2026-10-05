@@ -1707,6 +1707,9 @@ export class PracticeController {
       ...(keysOf(this.currentSettings.keyboard) === null
         ? {}
         : { withinRange: keysOf(this.currentSettings.keyboard) as PitchRange }),
+      // A rung that is a set of keys and metres rather than one: the page
+      // draws its own, by its seed, so going back to it is the same page.
+      ...(this.ladderStep?.draws === undefined ? {} : { drawnFrom: this.ladderStep.draws }),
     };
 
     return this.present(await this.provider.provide(request));

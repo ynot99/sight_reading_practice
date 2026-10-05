@@ -1,13 +1,39 @@
 import { KeySignature } from '../../domain/model/KeySignature.js';
 import { TimeSignature } from '../../domain/model/TimeSignature.js';
+import { keysAddedBy, keysUpTo, timesUpTo } from './grades.js';
 import type { LadderStep } from './PracticeLadder.js';
 
 const FOUR_FOUR = new TimeSignature(4, 4);
 const THREE_FOUR = new TimeSignature(3, 4);
 const SIX_EIGHT = new TimeSignature(6, 8);
+const C_MAJOR = KeySignature.major(0);
+
+/** The last rung of a grade: a test of it, in any of its keys and metres. */
+function theWholeOf(grade: string, label: string, description: string): LadderStep {
+  return {
+    id: `${grade}.all`,
+    grade,
+    label,
+    description,
+    settings: {},
+    draws: { keys: keysUpTo(grade), times: timesUpTo(grade) },
+  };
+}
+
+/** A rung that meets the keys a grade adds, one of them drawn each time. */
+function theNewKeysOf(grade: string, label: string, description: string): LadderStep {
+  return {
+    id: `${grade}.keys`,
+    grade,
+    label,
+    description,
+    settings: {},
+    draws: { keys: keysAddedBy(grade) },
+  };
+}
 
 /**
- * The route through the two axes, from a five-finger position to sequences.
+ * The route through the grades, from one hand on five notes to sequences.
  *
  * Material and rhythm are still independent settings; this only says which
  * combinations are worth meeting in which order, and it moves **one of them
@@ -17,199 +43,161 @@ const SIX_EIGHT = new TimeSignature(6, 8);
  * settings, and every rung after it changes exactly one. A test holds the
  * ladder to that.
  *
- * Keys widen slowly and lag behind the material on purpose: a new key on
- * familiar figures is a reading problem, while a new key on new figures is
- * two problems wearing one label.
+ * Keys arrive on familiar material: first the keys a grade adds, drawn one
+ * at a time, then the whole grade, where the key and the metre are whichever
+ * the exercise draws - which is what a test at that grade is.
  */
 export const BUILT_IN_LADDER: readonly LadderStep[] = [
   {
-    id: 'rung.1a',
-    label: '1a',
-    description: 'Five-finger position, C major, nothing shorter than a quarter.',
+    id: 'initial.right',
+    grade: 'initial',
+    label: 'Initial · a',
+    description: 'The right hand alone, five fingers from C, in whole, half and quarter notes.',
+    settings: {
+      presetId: 'right-hand-five',
+      rhythmProfileId: 'calm',
+      key: C_MAJOR,
+      timeSignature: FOUR_FOUR,
+    },
+  },
+  {
+    id: 'initial.left',
+    grade: 'initial',
+    label: 'Initial · b',
+    description: 'The left hand alone, five fingers from C, in the bass clef.',
+    settings: {
+      presetId: 'left-hand-five',
+      rhythmProfileId: 'calm',
+      key: C_MAJOR,
+      timeSignature: FOUR_FOUR,
+    },
+  },
+  {
+    id: 'initial.minor',
+    grade: 'initial',
+    label: 'Initial · c',
+    description: 'The left hand in D minor: five fingers from D.',
+    settings: { key: KeySignature.minor(-1) },
+  },
+  {
+    id: 'initial.turns',
+    grade: 'initial',
+    label: 'Initial · d',
+    description: 'One hand and then the other, two bars each.',
+    settings: {
+      presetId: 'hands-in-turn',
+      rhythmProfileId: 'calm',
+      key: C_MAJOR,
+      timeSignature: FOUR_FOUR,
+    },
+  },
+  theWholeOf('initial', 'Initial · e', 'All of Initial: the hands in turn, in C major or D minor.'),
+  {
+    id: 'grade-1.eighths',
+    grade: 'grade-1',
+    label: 'Grade 1 · a',
+    description: 'The hands in turn, with eighth notes.',
+    settings: { rhythmProfileId: 'flowing' },
+  },
+  {
+    id: 'grade-1.three',
+    grade: 'grade-1',
+    label: 'Grade 1 · b',
+    description: 'The hands in turn in three-four.',
+    settings: { timeSignature: THREE_FOUR },
+  },
+  theNewKeysOf('grade-1', 'Grade 1 · c', 'The new keys: G major, F major or A minor.'),
+  theWholeOf(
+    'grade-1',
+    'Grade 1 · d',
+    'All of Grade 1: any of its five keys, in four-four, three-four or two-four.',
+  ),
+  {
+    id: 'grade-2.together',
+    grade: 'grade-2',
+    label: 'Grade 2 · a',
+    description: 'Both hands at once, five fingers each.',
     settings: {
       presetId: 'five-finger-c',
-      rhythmProfileId: 'calm',
-      key: KeySignature.major(0),
+      rhythmProfileId: 'flowing',
+      key: C_MAJOR,
       timeSignature: FOUR_FOUR,
     },
   },
+  theNewKeysOf('grade-2', 'Grade 2 · b', 'The new keys: D major, E minor or G minor.'),
+  theWholeOf('grade-2', 'Grade 2 · c', 'All of Grade 2: both hands together, in any of its eight keys.'),
   {
-    id: 'rung.1b',
-    label: '1b',
-    description: 'The same position and key, now with eighth notes.',
-    settings: { rhythmProfileId: 'flowing' },
-  },
-  {
-    id: 'rung.1c',
-    label: '1c',
-    description: 'Five-finger position in three-four: the same reading, a new count.',
-    settings: { timeSignature: THREE_FOUR },
-  },
-  {
-    id: 'rung.2a',
-    label: '2a',
-    description: 'Right hand alone over an octave, quarters and halves.',
-    settings: {
-      presetId: 'treble-only',
-      rhythmProfileId: 'calm',
-      key: KeySignature.major(0),
-      timeSignature: FOUR_FOUR,
-    },
-  },
-  {
-    id: 'rung.2b',
-    label: '2b',
-    description: 'Right hand alone with eighth notes.',
-    settings: { rhythmProfileId: 'flowing' },
-  },
-  {
-    id: 'rung.2c',
-    label: '2c',
-    description: 'Right hand alone in G major: one sharp to keep in mind.',
-    settings: { key: KeySignature.major(1) },
-  },
-  {
-    id: 'rung.3a',
-    label: '3a',
-    description: 'Left hand alone in the bass clef, quarters and halves.',
-    settings: {
-      presetId: 'bass-only',
-      rhythmProfileId: 'calm',
-      key: KeySignature.major(0),
-      timeSignature: FOUR_FOUR,
-    },
-  },
-  {
-    id: 'rung.3b',
-    label: '3b',
-    description: 'Left hand alone with eighth notes.',
-    settings: { rhythmProfileId: 'flowing' },
-  },
-  {
-    id: 'rung.3c',
-    label: '3c',
-    description: 'Left hand alone in F major, where the B flat sits under the hand.',
-    settings: { key: KeySignature.major(-1) },
-  },
-  {
-    id: 'rung.4a',
-    label: '4a',
-    description: 'Both staves at once: a melody over held intervals.',
-    settings: {
-      presetId: 'melody-and-intervals',
-      rhythmProfileId: 'calm',
-      key: KeySignature.major(0),
-      timeSignature: FOUR_FOUR,
-    },
-  },
-  {
-    id: 'rung.4b',
-    label: '4b',
-    description: 'Melody over intervals, with eighth notes above.',
-    settings: { rhythmProfileId: 'flowing' },
-  },
-  {
-    id: 'rung.4c',
-    label: '4c',
-    description: 'Melody over intervals in G major.',
-    settings: { key: KeySignature.major(1) },
-  },
-  {
-    id: 'rung.5a',
-    label: '5a',
-    description: 'Triads under a moving line: a chord read as one shape.',
-    settings: {
-      presetId: 'triads-left-hand',
-      rhythmProfileId: 'calm',
-      key: KeySignature.major(0),
-      timeSignature: FOUR_FOUR,
-    },
-  },
-  {
-    id: 'rung.5b',
-    label: '5b',
-    description: 'Triads with eighth notes moving above them.',
-    settings: { rhythmProfileId: 'flowing' },
-  },
-  {
-    id: 'rung.5c',
-    label: '5c',
-    description: 'Triads in D major: two sharps, and both of them get used.',
-    settings: { key: KeySignature.major(2) },
-  },
-  {
-    id: 'rung.5d',
-    label: '5d',
-    description: 'Triads in three-four, where the chord falls on beat one only.',
-    settings: { timeSignature: THREE_FOUR },
-  },
-  {
-    id: 'rung.6a',
-    label: '6a',
-    description: 'The full grand staff: wider ranges and larger leaps.',
+    id: 'grade-3.wide',
+    grade: 'grade-3',
+    label: 'Grade 3 · a',
+    description: 'Both hands moving beyond five fingers, with larger leaps.',
     settings: {
       presetId: 'wide-grand-staff',
       rhythmProfileId: 'flowing',
-      key: KeySignature.major(0),
+      key: C_MAJOR,
       timeSignature: FOUR_FOUR,
     },
   },
   {
-    id: 'rung.6b',
-    label: '6b',
-    description: 'The full staff in B flat, where both flats are in the way.',
-    settings: { key: KeySignature.major(-2) },
+    id: 'grade-3.chords',
+    grade: 'grade-3',
+    label: 'Grade 3 · b',
+    description: 'A melody over two-note chords in the left hand.',
+    settings: {
+      presetId: 'melody-and-intervals',
+      rhythmProfileId: 'flowing',
+      key: C_MAJOR,
+      timeSignature: FOUR_FOUR,
+    },
   },
   {
-    id: 'rung.6c',
-    label: '6c',
-    description: 'The full staff in six-eight: two beats, three notes to each.',
+    id: 'grade-3.sixteenths',
+    grade: 'grade-3',
+    label: 'Grade 3 · c',
+    description: 'Two-note chords under sixteenths in pairs. Slow the tempo first.',
+    settings: { rhythmProfileId: 'sixteenths' },
+  },
+  theNewKeysOf('grade-3', 'Grade 3 · d', 'The new keys: A, B flat or E flat major, or B minor.'),
+  theWholeOf('grade-3', 'Grade 3 · e', 'All of Grade 3: any of its twelve keys, three-eight among the metres.'),
+  {
+    id: 'grade-4.six-eight',
+    grade: 'grade-4',
+    label: 'Grade 4 · a',
+    description: 'Two-note chords in six-eight: two beats of three.',
     settings: { timeSignature: SIX_EIGHT },
   },
   {
-    id: 'rung.7a',
-    label: '7a',
+    id: 'grade-4.broken',
+    grade: 'grade-4',
+    label: 'Grade 4 · b',
     description: 'Broken chords in both hands, read as shapes rather than stacks.',
     settings: {
       presetId: 'figures',
       rhythmProfileId: 'flowing',
-      key: KeySignature.major(0),
+      key: C_MAJOR,
       timeSignature: FOUR_FOUR,
     },
   },
+  theWholeOf('grade-4', 'Grade 4 · c', 'All of Grade 4: broken chords in any key and metre so far.'),
   {
-    id: 'rung.7b',
-    label: '7b',
-    description: 'Broken chords with sixteenths. Slow the tempo before you start.',
-    settings: { rhythmProfileId: 'sixteenths' },
-  },
-  {
-    id: 'rung.8a',
-    label: '8a',
-    description: 'Sequences: a motif repeated a step higher, in A minor.',
+    id: 'grade-5.sequences',
+    grade: 'grade-5',
+    label: 'Grade 5 · a',
+    description: 'Sequences: a figure repeated a step higher or lower.',
     settings: {
       presetId: 'sequences',
       rhythmProfileId: 'flowing',
-      key: KeySignature.minor(0),
+      key: C_MAJOR,
       timeSignature: FOUR_FOUR,
     },
   },
   {
-    id: 'rung.8b',
-    label: '8b',
+    id: 'grade-5.across',
+    grade: 'grade-5',
+    label: 'Grade 5 · b',
     description: 'Sequences that begin off the beat and hold across it.',
     settings: { rhythmProfileId: 'syncopated' },
   },
-  {
-    id: 'rung.8c',
-    label: '8c',
-    description: 'Sequences in triplets: three notes where two would go.',
-    settings: { rhythmProfileId: 'triplets' },
-  },
-  {
-    id: 'rung.8d',
-    label: '8d',
-    description: 'Sequences in E flat, three flats deep. The top of the ladder.',
-    settings: { key: KeySignature.major(-3) },
-  },
+  theNewKeysOf('grade-5', 'Grade 5 · c', 'The new keys: E or A flat major, F sharp or C minor.'),
+  theWholeOf('grade-5', 'Grade 5 · d', 'All of Grade 5: any of sixteen keys. The top of the ladder.'),
 ];

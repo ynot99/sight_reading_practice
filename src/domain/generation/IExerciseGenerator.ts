@@ -4,6 +4,18 @@ import type { TimeSignature } from '../model/TimeSignature.js';
 import type { RhythmProfile } from './RhythmProfile.js';
 import type { PitchRange } from './voices/IVoiceGenerator.js';
 
+/**
+ * Keys and metres an exercise draws its own from.
+ *
+ * A level that is a set rather than one key: an examination's sight-reading
+ * test is in whichever of its grade's keys it happens to be, and a reader who
+ * always knew the key in advance would be practising something easier.
+ */
+export interface DrawnFrom {
+  readonly keys?: readonly KeySignature[];
+  readonly times?: readonly TimeSignature[];
+}
+
 /** Everything the user (or the UI) gets to choose about an exercise. */
 export interface ExerciseRequest {
   readonly measures: number;
@@ -23,6 +35,11 @@ export interface ExerciseRequest {
    * grand, and only the octaves it can be played in differ.
    */
   readonly withinRange?: PitchRange;
+  /**
+   * Sets to draw the key and the metre from, in place of `key` and
+   * `timeSignature`. Drawn by the seed, so the same seed is the same key.
+   */
+  readonly drawnFrom?: DrawnFrom;
 }
 
 /**

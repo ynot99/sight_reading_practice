@@ -14,6 +14,7 @@ import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePres
 import type { ExerciseRequest } from '../../src/domain/generation/IExerciseGenerator.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
 import { PracticeLadder } from '../../src/application/ladder/PracticeLadder.js';
+import { BUILT_IN_GRADES } from '../../src/application/ladder/grades.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
 import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile.js';
@@ -121,7 +122,7 @@ function createController(
       new TimingWeightedScoringStrategy(),
       new ContinuityScoringStrategy(),
     ]),
-    ladder: new PracticeLadder(BUILT_IN_LADDER),
+    ladder: new PracticeLadder(BUILT_IN_LADDER, BUILT_IN_GRADES),
     ...(health === undefined ? {} : { health }),
     ...(fixedExercise
       ? { providerFor: () => ({ provide: () => Promise.resolve(twoBarExercise()) }) }
@@ -3676,7 +3677,7 @@ describe('climbing the ladder', () => {
     }
   }
 
-  async function onTheLadder(stepId = 'rung.2b') {
+  async function onTheLadder(stepId = 'grade-1.three') {
     const rig = createController(true);
     rig.controller.selectLadderStep(stepId);
     await rig.controller.loadNewExercise();
@@ -3684,31 +3685,31 @@ describe('climbing the ladder', () => {
   }
 
   it('adopts everything a rung stands for', async () => {
-    const rig = await onTheLadder('rung.8b');
+    const rig = await onTheLadder('grade-5.across');
 
     expect(rig.controller.settings.presetId).toBe('sequences');
     expect(rig.controller.settings.rhythmProfileId).toBe('syncopated');
-    expect(rig.controller.ladderStep?.label).toBe('8b');
+    expect(rig.controller.ladderStep?.label).toBe('Grade 5 · b');
   });
 
   it('moves up after two clean readings, and not after one', async () => {
     const rig = await onTheLadder();
 
     readCleanly(rig);
-    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
 
     readCleanly(rig);
-    expect(rig.controller.ladderStep?.id).toBe('rung.2c');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.keys');
   });
 
   it('moves down after two readings that came apart', async () => {
     const rig = await onTheLadder();
 
     readBadly(rig);
-    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
 
     readBadly(rig);
-    expect(rig.controller.ladderStep?.id).toBe('rung.2a');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.eighths');
   });
 
   it('ignores a run that was stopped, however it was scored', async () => {
@@ -3720,23 +3721,23 @@ describe('climbing the ladder', () => {
     rig.controller.start()?.abort();
     rig.controller.start()?.abort();
 
-    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
   });
 
   it('starts the count again on arriving, so it cannot bounce', async () => {
     const rig = await onTheLadder();
     readCleanly(rig);
     readCleanly(rig);
-    expect(rig.controller.ladderStep?.id).toBe('rung.2c');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.keys');
 
     // Two clean readings got the reader here. Falling straight back must not
     // hand those same two readings back as a reason to climb again.
     readBadly(rig);
     readBadly(rig);
-    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
 
     readBadly(rig);
-    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
   });
 
   it('says so when it moves', async () => {
@@ -3752,15 +3753,15 @@ describe('climbing the ladder', () => {
   });
 
   it('stays at the ends instead of falling off them', async () => {
-    const top = await onTheLadder('rung.8d');
+    const top = await onTheLadder('grade-5.all');
     readCleanly(top);
     readCleanly(top);
-    expect(top.controller.ladderStep?.id).toBe('rung.8d');
+    expect(top.controller.ladderStep?.id).toBe('grade-5.all');
 
-    const bottom = await onTheLadder('rung.1a');
+    const bottom = await onTheLadder('initial.right');
     readBadly(bottom);
     readBadly(bottom);
-    expect(bottom.controller.ladderStep?.id).toBe('rung.1a');
+    expect(bottom.controller.ladderStep?.id).toBe('initial.right');
   });
 
   it('does not count a passage being drilled', async () => {
@@ -3773,7 +3774,7 @@ describe('climbing the ladder', () => {
 
     // Reading the same two bars until they are right is practice, but it is
     // not evidence about the next unseen page.
-    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
   });
 
   it('does not count a run that repeats itself', async () => {
@@ -3783,7 +3784,7 @@ describe('climbing the ladder', () => {
     readCleanly(rig);
     readCleanly(rig);
 
-    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
   });
 
   it('steps off the ladder when the axes are set by hand', async () => {
@@ -3802,7 +3803,7 @@ describe('climbing the ladder', () => {
     rig.controller.updateSettings({ measures: 8 });
 
     // Slowing a rung down is how it is meant to be met, not a way off it.
-    expect(rig.controller.ladderStep?.id).toBe('rung.2b');
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
   });
 
   it('never moves a reader who is off the ladder', async () => {
@@ -3816,13 +3817,45 @@ describe('climbing the ladder', () => {
     expect(rig.controller.ladderStep).toBeNull();
   });
 
+  it('hands the generator the keys and metres a rung draws from, and none off it', async () => {
+    const requests: ExerciseRequest[] = [];
+    const rig = createController(false, () => ({
+      provide: (request) => {
+        requests.push(request);
+        return Promise.resolve(twoBarExercise());
+      },
+    }));
+    rig.controller.selectLadderStep('grade-1.all');
+    await rig.controller.loadNewExercise();
+    expect(requests.at(-1)?.drawnFrom?.keys?.map((key) => key.name)).toEqual([
+      'C major',
+      'D minor',
+      'G major',
+      'F major',
+      'A minor',
+    ]);
+    expect(requests.at(-1)?.drawnFrom?.times?.map(String)).toEqual(['4/4', '3/4', '2/4']);
+
+    // A rung of one key asks for that key.
+    rig.controller.selectLadderStep('grade-1.three');
+    await rig.controller.loadNewExercise();
+    expect(requests.at(-1)?.drawnFrom).toBeUndefined();
+
+    // And so does a key set by hand, which leaves the route.
+    rig.controller.selectLadderStep('grade-1.all');
+    rig.controller.updateSettings({ key: KeySignature.major(2) });
+    await rig.controller.loadNewExercise();
+    expect(requests.at(-1)?.drawnFrom).toBeUndefined();
+    expect(requests.at(-1)?.key.name).toBe('D major');
+  });
+
   it('puts a reader who left back on at the rung, not past it', async () => {
     const rig = createController(true);
     await rig.controller.loadNewExercise();
 
     const step = rig.controller.moveLadder(1);
 
-    expect(step?.id).toBe('rung.1a');
+    expect(step?.id).toBe('initial.right');
   });
 });
 

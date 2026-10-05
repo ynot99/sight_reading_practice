@@ -1,5 +1,7 @@
+import type { DrawnFrom } from '../../domain/generation/IExerciseGenerator.js';
 import { DomainError } from '../../shared/errors.js';
 import type { PracticeSettings } from '../PracticeController.js';
+import type { Grade } from './grades.js';
 
 /**
  * One rung of the practice ladder.
@@ -13,12 +15,20 @@ import type { PracticeSettings } from '../PracticeController.js';
 export interface LadderStep {
   /** Stable across releases: it is stored, and a run is keyed by it. */
   readonly id: string;
-  /** Short name, in the reader's terms: "2b", "4a". */
+  /** The grade the rung belongs to, by its id. */
+  readonly grade: string;
+  /** Short name, in the reader's terms: "Grade 2 · b". */
   readonly label: string;
   /** What this rung asks of them, in one line. */
   readonly description: string;
   /** The settings this rung *is*. Everything else is left as it was. */
   readonly settings: Partial<PracticeSettings>;
+  /**
+   * Keys and metres each exercise on this rung draws its own from, in place
+   * of the settings' one. Not folded into the rungs after it: drawing is
+   * what this rung asks, not a setting the route has reached.
+   */
+  readonly draws?: DrawnFrom;
 }
 
 /**
@@ -30,17 +40,32 @@ export interface LadderStep {
 export class PracticeLadder {
   private readonly steps: readonly LadderStep[];
   private readonly indexById: ReadonlyMap<string, number>;
+  private readonly grades: ReadonlyMap<string, Grade>;
 
-  constructor(steps: readonly LadderStep[]) {
+  constructor(steps: readonly LadderStep[], grades: readonly Grade[]) {
     const index = new Map<string, number>();
+    const byId = new Map(grades.map((grade) => [grade.id, grade]));
     steps.forEach((step, at) => {
       if (index.has(step.id)) {
         throw new DomainError(`Ladder step "${step.id}" is registered twice.`);
+      }
+      if (!byId.has(step.grade)) {
+        throw new DomainError(`Ladder step "${step.id}" names no grade there is ("${step.grade}").`);
       }
       index.set(step.id, at);
     });
     this.steps = steps;
     this.indexById = index;
+    this.grades = byId;
+  }
+
+  /** The grade a rung belongs to. */
+  gradeOf(step: LadderStep): Grade {
+    const grade = this.grades.get(step.grade);
+    if (grade === undefined) {
+      throw new DomainError(`Unknown grade "${step.grade}".`);
+    }
+    return grade;
   }
 
   list(): readonly LadderStep[] {

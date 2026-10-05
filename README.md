@@ -66,11 +66,20 @@ corner of the page and on the Start button itself, because Start means
 something different in each and a reader can be left in one.
 
 **The ladder** is a route through those settings rather than a replacement for
-them: twenty-four named rungs from a five-finger position in C to sequences in
-E flat, moved along with the arrows. Each rung changes exactly one thing —
-the material, the rhythm, the key or the metre — so a reader who comes unstuck
-can say which of the four undid them; a rung arriving at new material states
-all four, and a test holds the ladder to that. Two clean readings in a row
+them: twenty-four named rungs in six grades, Initial to Grade 5, moved along
+with the arrows. The grades follow the parameters the examining boards publish
+for piano sight-reading, in this program's own words - each adds keys, metres,
+rhythms and textures to everything below it, from one hand on five notes in C
+major or D minor to sequences across the beat in any of sixteen keys. Each
+grade says what it adds, and also what a test at it would have that these
+pages cannot write yet, so the top of a grade does not claim all of it. Each
+rung changes exactly one thing - the material, the rhythm, the key or the
+metre - so a reader who comes unstuck can say which of the four undid them; a
+rung arriving at new material states all four, and a test holds the ladder to
+that. A grade meets its new keys on a rung of their own and ends on a rung
+that is a test of the whole grade: there the key and the metre are drawn
+afresh for each exercise from every one the grade has reached, by the
+exercise's seed, so going back to a page is the same page. Two clean readings in a row
 move you up, two that come apart move you down, and the streak restarts on
 arrival so a fall cannot bounce straight back off the readings that preceded
 it. Only whole readings of fresh material count: a repeated passage is
@@ -875,7 +884,7 @@ src/
 │   │   ├── RhythmFiller.ts         #   fills a bar exactly, without syncopation
 │   │   ├── Rng.ts                  #   seeded, reproducible randomness
 │   │   ├── ExercisePresetRegistry.ts
-│   │   ├── presets.ts              #   the eight built-in levels (material)
+│   │   ├── presets.ts              #   the built-in levels (material)
 │   │   ├── RhythmProfile.ts        #   voice roles + the profile registry
 │   │   ├── rhythmProfiles.ts       #   the rhythmic levels (calm ➜ sixteenths)
 │   │   └── voices/                 #   IVoiceGenerator strategies
@@ -883,6 +892,7 @@ src/
 │   │       ├── PatternVoiceGenerator.ts
 │   │       ├── figures.ts          #     scales, arpeggios, sequences
 │   │       ├── HarmonyVoiceGenerator.ts
+│   │       ├── TakingTurnsVoiceGenerator.ts #  a hand only in its own bars
 │   │       └── SilentVoiceGenerator.ts
 │   └── scoring/
 │       ├── PerformanceReport.ts    #   StepResult ➜ aggregated report
@@ -896,6 +906,7 @@ src/
 │   ├── ExercisePlayer.ts           # plays a score back, cursor and all
 │   ├── PracticeHistory.ts          # how earlier readings of a passage went
 │   ├── SettingsRepository.ts       # what you chose last time, validated on the way in
+│   ├── ladder/                     # the route: grades and the rungs through them
 │   ├── ports/                      # IMidiSource, IMetronome, IClock,
 │   │                               # IScoreRenderer, IScoreCursor,
 │   │                               # IExerciseProvider, IPitchPlayer

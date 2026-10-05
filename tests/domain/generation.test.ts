@@ -385,6 +385,37 @@ describe('GrandStaffExerciseGenerator', () => {
     expect(exercise.metadata.generatorId).toBe('gen.test');
   });
 
+  it('draws its key and metre from the sets it is given, by its seed', () => {
+    const keys = [KeySignature.major(1), KeySignature.minor(-1), KeySignature.major(-2)];
+    const times = [new TimeSignature(3, 4), new TimeSignature(2, 4)];
+    const drawn = (seed: number) => {
+      const exercise = generator.generate({ ...request, seed, drawnFrom: { keys, times } });
+      return `${exercise.key.name} ${exercise.timeSignature.toString()}`;
+    };
+    const seen = new Set(Array.from({ length: 40 }, (_, seed) => drawn(seed)));
+
+    // Every key and metre of the sets, and nothing outside them.
+    expect([...seen].sort()).toEqual(
+      keys.flatMap((key) => times.map((time) => `${key.name} ${time.toString()}`)).sort(),
+    );
+    // The same seed is the same page, so a tempo nudge keeps the key.
+    expect(drawn(7)).toBe(drawn(7));
+    // And it says so on the page and in its title.
+    const exercise = generator.generate({ ...request, seed: 3, drawnFrom: { keys, times } });
+    expect(exercise.title.startsWith(`${exercise.key.name} · ${exercise.timeSignature.toString()}`)).toBe(
+      true,
+    );
+  });
+
+  it('draws only what it is given a set for', () => {
+    const keys = [KeySignature.major(1), KeySignature.major(-1)];
+    const exercise = generator.generate({ ...request, drawnFrom: { keys } });
+    expect(exercise.timeSignature.toString()).toBe(COMMON.toString());
+    const metre = generator.generate({ ...request, drawnFrom: { times: [new TimeSignature(3, 4)] } });
+    expect(metre.key.name).toBe('C major');
+    expect(metre.timeSignature.toString()).toBe('3/4');
+  });
+
   it('rejects impossible requests', () => {
     expect(() => generator.generate({ ...request, measures: 0 })).toThrow(DomainError);
     expect(() => generator.generate({ ...request, tempoBpm: 0 })).toThrow(DomainError);

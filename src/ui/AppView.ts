@@ -1189,7 +1189,34 @@ export function healthGlideMs(previousPaceMs: number, nowMs: number, lastDrainAt
 /** How far the handle must travel before a drag is a drag and not a tap. */
 const DRAWER_DRAG_PX = 24;
 
-const TIME_SIGNATURES = ['4/4', '3/4', '2/4', '6/8'] as const;
+const TIME_SIGNATURES = ['4/4', '3/4', '2/4', '3/8', '6/8'] as const;
+
+/**
+ * The selectors' answer where a rung draws its key or metre afresh for each
+ * exercise. Never a value the settings hold: choosing a key by hand is what
+ * leaves the route, and this is the route.
+ */
+const DRAWN = 'drawn';
+
+/** How a selector names the set a rung draws from. */
+function drawnFrom(names: readonly string[], noun: string): string {
+  return names.length <= 4
+    ? `Drawn each time: ${names.join(', ')}`
+    : `Drawn each time from ${String(names.length)} ${noun}`;
+}
+
+/** Offers, or takes away, the selector's answer for a rung that draws. */
+function offerTheDraw(select: HTMLSelectElement, label: string | null): void {
+  select.querySelector(`option[value="${DRAWN}"]`)?.remove();
+  if (label === null) {
+    return;
+  }
+  const option = select.ownerDocument.createElement('option');
+  option.value = DRAWN;
+  option.textContent = label;
+  select.prepend(option);
+  select.value = DRAWN;
+}
 
 const SAMPLE_LOADING_HINTS: Readonly<Record<SampleLoading, string>> = {
   eager: 'About 1 MB, fetched as the page opens.',
@@ -1281,6 +1308,13 @@ const MIDI_HINTS: Partial<Readonly<Record<MidiConnectionStatus, string>>> = {
     'Permission was refused. Allow MIDI access for this site in the browser settings, then reload.',
   error: 'The browser could not reach your MIDI devices. Reconnect the cable and try again.',
 };
+
+/** "a, b and c". */
+function listedInWords(items: readonly string[]): string {
+  return items.length <= 1
+    ? (items[0] ?? '')
+    : `${items.slice(0, -1).join(', ')} and ${items.at(-1) ?? ''}`;
+}
 
 function keyValue(key: KeySignature): string {
   return `${key.fifths}:${key.mode}`;
@@ -3554,11 +3588,17 @@ export class AppView {
     });
 
     this.listen(this.el.key, 'change', () => {
+      if (this.el.key.value === DRAWN) {
+        return;
+      }
       controller.updateSettings({ key: parseKeyValue(this.el.key.value) });
       void this.reload(true);
     });
 
     this.listen(this.el.timeSignature, 'change', () => {
+      if (this.el.timeSignature.value === DRAWN) {
+        return;
+      }
       controller.updateSettings({
         timeSignature: TimeSignature.parse(this.el.timeSignature.value),
       });
@@ -6807,6 +6847,16 @@ export class AppView {
     this.el.scoringDescription.textContent = SCORING_DESCRIPTIONS[settings.scoringId] ?? '';
     this.el.key.value = keyValue(settings.key);
     this.el.timeSignature.value = settings.timeSignature.toString();
+    // After the settings' own key, which a rung that draws does not use.
+    const draws = this.runtime.controller.ladderStep?.draws;
+    offerTheDraw(
+      this.el.key,
+      draws?.keys === undefined ? null : drawnFrom(draws.keys.map((key) => key.name), 'keys'),
+    );
+    offerTheDraw(
+      this.el.timeSignature,
+      draws?.times === undefined ? null : drawnFrom(draws.times.map(String), 'metres'),
+    );
     this.el.measures.value = String(settings.measures);
     this.el.measuresValue.value = String(settings.measures);
     this.el.tempo.value = String(this.runtime.controller.tempoBpm);
@@ -6988,8 +7038,13 @@ export class AppView {
       this.el.ladderUp.disabled = false;
       return;
     }
-    this.el.ladderStep.textContent = `${step.label} · ${ladder.positionOf(step.id)} of ${ladder.list().length}`;
-    this.el.ladderDescription.textContent = step.description;
+    this.el.ladderStep.textContent = `${step.label}, ${ladder.positionOf(step.id)} of ${ladder.list().length}`;
+    const grade = ladder.gradeOf(step);
+    // What the grade adds, and what a test at it would have that these pages
+    // cannot write yet: said, so the top of a grade does not claim all of it.
+    const notYet =
+      grade.notYet.length === 0 ? '' : ` Not written here yet: ${listedInWords(grade.notYet)}.`;
+    this.el.ladderDescription.textContent = `${step.description} New at ${grade.label}: ${listedInWords(grade.newHere)}.${notYet}`;
     this.el.scoresRung.textContent = `${step.label} — ${step.description}`;
     this.el.ladderDown.disabled = !ladder.canStep(step.id, -1);
     this.el.ladderUp.disabled = !ladder.canStep(step.id, 1);

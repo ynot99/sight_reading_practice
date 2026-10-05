@@ -44,6 +44,7 @@ import {
 } from '../../src/application/session/RunRoll.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
+import { BUILT_IN_GRADES } from '../../src/application/ladder/grades.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
 
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
@@ -299,7 +300,7 @@ function createRig(
   const screenWake = new CountingScreenWake();
   // Awake unless a test says otherwise, which is what a desk browser is.
   const audioWaking = new TestAudioWaking();
-  const ladder = new PracticeLadder(BUILT_IN_LADDER);
+  const ladder = new PracticeLadder(BUILT_IN_LADDER, BUILT_IN_GRADES);
   const recorder = new PerformanceRecorder(clock);
   recorder.listenTo(midi);
   const volumeKnob = new ControlBinding();
@@ -6643,12 +6644,49 @@ describe('AppView', () => {
       element<HTMLButtonElement>('ladder-up').click();
       await Promise.resolve();
 
-      expect(runtime.controller.ladderStep?.label).toBe('1a');
-      expect(element('ladder-step').textContent).toContain('1a');
-      expect(element('ladder-step').textContent).toContain('1 of');
-      expect(element('ladder-description').textContent).toContain('Five-finger');
+      expect(runtime.controller.ladderStep?.label).toBe('Initial · a');
+      expect(element('ladder-step').textContent).toBe('Initial · a, 1 of 24');
+      const said = element('ladder-description').textContent ?? '';
+      expect(said).toContain('five fingers from C');
+      // What the grade adds, and what a test at it has that is not written yet.
+      expect(said).toContain('New at Initial: each hand alone');
+      expect(said).toContain('Not written here yet: staccato and legato and loud and soft.');
       // Nowhere below the bottom to go.
       expect(element<HTMLButtonElement>('ladder-down').disabled).toBe(true);
+    });
+
+    it('says where a rung draws its key and metre, and takes it back on a rung that does not', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const key = element<HTMLSelectElement>('key');
+      const time = element<HTMLSelectElement>('time-signature');
+
+      runtime.controller.selectLadderStep('grade-1.keys');
+      element<HTMLButtonElement>('ladder-up').click();
+      element<HTMLButtonElement>('ladder-down').click();
+      await Promise.resolve();
+      expect(key.value).toBe('drawn');
+      expect(key.selectedOptions[0]?.textContent).toBe('Drawn each time: G major, F major, A minor');
+      // The new keys only: the metre is the route's own.
+      expect(time.value).toBe('3/4');
+      expect(time.querySelector('option[value="drawn"]')).toBeNull();
+
+      element<HTMLButtonElement>('ladder-up').click();
+      await Promise.resolve();
+      expect(key.selectedOptions[0]?.textContent).toBe('Drawn each time from 5 keys');
+      expect(time.selectedOptions[0]?.textContent).toBe('Drawn each time: 4/4, 3/4, 2/4');
+
+      // Choosing the drawn answer again is staying where the route put you.
+      key.dispatchEvent(new Event('change'));
+      expect(runtime.controller.ladderStep?.id).toBe('grade-1.all');
+
+      // And a rung of one key says that key, with nothing drawn left behind.
+      element<HTMLButtonElement>('ladder-down').click();
+      element<HTMLButtonElement>('ladder-down').click();
+      await Promise.resolve();
+      expect(key.value).toBe('0:major');
+      expect(key.querySelectorAll('option[value="drawn"]')).toHaveLength(0);
+      expect(time.querySelectorAll('option[value="drawn"]')).toHaveLength(0);
     });
 
     it('brings the selectors with it', async () => {
@@ -6660,10 +6698,10 @@ describe('AppView', () => {
       element<HTMLButtonElement>('ladder-up').click();
       await Promise.resolve();
 
-      expect(runtime.controller.ladderStep?.label).toBe('1b');
+      expect(runtime.controller.ladderStep?.label).toBe('Initial · b');
       // The rung is what is being practised, so the controls have to agree.
-      expect(element<HTMLSelectElement>('rhythm').value).toBe('flowing');
-      expect(element<HTMLSelectElement>('preset').value).toBe('five-finger-c');
+      expect(element<HTMLSelectElement>('rhythm').value).toBe('calm');
+      expect(element<HTMLSelectElement>('preset').value).toBe('left-hand-five');
     });
 
     it('says plainly when the reader has left the route', async () => {
@@ -10726,7 +10764,7 @@ describe('AppView', () => {
 
       const said = element('scores-rung').textContent ?? '';
       expect(said).toContain(runtime.controller.ladderStep?.label ?? 'nothing');
-      expect(said).toContain('Five-finger');
+      expect(said).toContain('five fingers from C');
     });
 
     it('puts away what a repeat says it was called, keeping where it is', async () => {

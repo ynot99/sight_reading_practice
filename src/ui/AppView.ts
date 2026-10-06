@@ -1704,6 +1704,7 @@ export class AppView {
     midiHint: HTMLElement;
     result: HTMLElement;
     drill: HTMLButtonElement;
+    verdictFresh: HTMLButtonElement;
     focusKeep: HTMLButtonElement;
     focusKeepText: HTMLElement;
     focusRecord: HTMLElement;
@@ -2018,6 +2019,7 @@ export class AppView {
       midiHint: requireElement(doc, 'midi-hint'),
       result: requireElement(doc, 'result'),
       drill: requireElement(doc, 'drill'),
+      verdictFresh: requireElement(doc, 'verdict-fresh'),
       focusKeep: requireElement(doc, 'focus-keep'),
       focusKeepText: requireElement(doc, 'focus-keep-text'),
       focusRecord: requireElement(doc, 'focus-record'),
@@ -3673,6 +3675,10 @@ export class AppView {
       }
       this.syncControlsFromSettings();
       void this.reload(false);
+    });
+
+    this.listen(this.el.verdictFresh, 'click', () => {
+      void this.reload(true);
     });
 
     /*
@@ -6403,6 +6409,7 @@ export class AppView {
   private sayInTheMiddle(message: string): void {
     this.el.result.replaceChildren(this.doc.createTextNode(message));
     this.el.drill.hidden = true;
+    this.el.verdictFresh.hidden = true;
     this.showVerdict(true);
   }
 
@@ -8282,6 +8289,9 @@ export class AppView {
     // Offered only when the run actually left something to work on; a clean
     // reading has no worst bars, and a button that says otherwise is noise.
     this.el.drill.hidden = worstPassage(report) === null;
+    // A score is the same score however often it is opened; only a generated
+    // page has another one behind it.
+    this.el.verdictFresh.hidden = this.runtime.controller.pieceKey.startsWith('score:');
     this.el.result.replaceChildren();
 
     const gradeElement = this.doc.createElement('div');

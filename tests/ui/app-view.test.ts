@@ -2222,6 +2222,31 @@ describe('AppView', () => {
       expect(element('score-verdict').hidden).toBe(false);
     });
 
+    it('offers the next page from the verdict on a generated one, and never on a score', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
+      const read = runtime.controller.currentExercise;
+      expect(element('verdict-fresh').hidden).toBe(false);
+
+      element<HTMLButtonElement>('verdict-fresh').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Other notes, not the same page written out again.
+      expect(runtime.controller.currentExercise?.staves).toBeDefined();
+      expect(runtime.controller.currentExercise?.staves).not.toEqual(read?.staves);
+      // The report was of the page that has gone.
+      expect(element('score-verdict').hidden).toBe(true);
+
+      // A score opened has no other page behind it.
+      await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      element<HTMLButtonElement>('focus-play').click();
+      element<HTMLButtonElement>('focus-stop').click();
+      expect(element('score-verdict').hidden).toBe(false);
+      expect(element('verdict-fresh').hidden).toBe(true);
+    });
+
     it('takes the verdict away when the music starts again', async () => {
       const { view } = createRig();
       await view.initialize();

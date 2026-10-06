@@ -3,6 +3,7 @@ import type { ClefKind } from '../model/Clef.js';
 import type { Exercise, StaffPart } from '../model/Exercise.js';
 import { validateExercise } from '../model/Exercise.js';
 import type { ExerciseRequest, IExerciseGenerator } from './IExerciseGenerator.js';
+import { beamedByTheBeat } from './beaming.js';
 import { createRng, randomSeed } from './Rng.js';
 import { written } from './writing.js';
 import type { IVoiceGenerator, VoiceContext } from './voices/IVoiceGenerator.js';
@@ -63,7 +64,8 @@ export class GrandStaffExerciseGenerator implements IExerciseGenerator {
       voice: index + 1,
       clef: plan.clef,
       clefChanges: [],
-      measures: plan.voice.generate(context),
+      // Beamed by the beat, which an engraver handed none does not do.
+      measures: plan.voice.generate(context).map((measure) => beamedByTheBeat(measure, timeSignature)),
     }));
 
     const plain: Exercise = {

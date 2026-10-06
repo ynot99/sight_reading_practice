@@ -1002,12 +1002,29 @@ describe('the stylesheet', () => {
     // which the bar itself is placed by, and its height, which the view tells.
     const card = rules().find((rule) => rule.selector === '.score-card');
     expect(card?.body).toMatch(
-      /padding-bottom\s*:\s*calc\(var\(--focus-bar-foot\)\s*\+\s*var\(--focus-bar-height\)/,
+      /--score-card-foot\s*:\s*calc\(var\(--focus-bar-foot\)\s*\+\s*var\(--focus-bar-height\)/,
     );
+    expect(card?.body).toMatch(/padding-bottom\s*:\s*var\(--score-card-foot\)/);
     const bar = rules().find((rule) => rule.selector === '.focus-bar');
     expect(bar?.body).toMatch(/bottom\s*:\s*var\(--focus-bar-foot\)/);
     const root = rules().find((rule) => rule.selector === ':root');
     expect(root?.body).toMatch(/--focus-bar-height\s*:\s*\d+px/);
+  });
+
+  it('lays a rest over the verdict, in the same room above the bar', () => {
+    // A rest falls due when the music stops, which is when a verdict goes up,
+    // and stacked in one column the two were taller than the page. Out of the
+    // flow and painted after it, the rest stands over the verdict; its insets
+    // are the card's own padding, so it is centred where the verdict is.
+    const rest = rules().find((rule) => rule.selector === '.score-card__rest');
+    expect(rest?.body).toMatch(/position\s*:\s*absolute/);
+    expect(rest?.body).toMatch(/inset\s*:\s*24px 24px var\(--score-card-foot\)/);
+    expect(rest?.body).toMatch(/max-height\s*:\s*calc\(100% - 24px - var\(--score-card-foot\)\)/);
+    // Raised by a number: the verdict comes later in the page, and its blur
+    // makes it a layer of its own, so without one it was painted on top.
+    expect(rest?.body).toMatch(/z-index\s*:\s*[1-9]/);
+    const verdict = rules().find((rule) => rule.selector === '.score-card__verdict');
+    expect(verdict?.body).not.toMatch(/z-index\s*:/);
   });
 
   it('says a marker will not scroll the page before anyone touches it', () => {

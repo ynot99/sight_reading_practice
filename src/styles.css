@@ -442,6 +442,7 @@ textarea {
  * bar ran on underneath it.
  */
 .score-card {
+  --score-card-foot: calc(var(--focus-bar-foot) + var(--focus-bar-height) + 16px);
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -451,7 +452,7 @@ textarea {
   justify-content: center;
   gap: 16px;
   padding: 24px;
-  padding-bottom: calc(var(--focus-bar-foot) + var(--focus-bar-height) + 16px);
+  padding-bottom: var(--score-card-foot);
   pointer-events: none;
 }
 
@@ -492,10 +493,25 @@ textarea {
  * The ring is drawn from a circle whose dash runs out over the length of the
  * rest, so the border thins away by itself: a thing to glance at from across
  * the room, with no number to read and nothing to keep looking at.
+ *
+ * Laid over the verdict rather than stacked above it. A rest falls due when
+ * the music stops, which is exactly when a verdict goes up, and in one column
+ * the two together were taller than the page. Out of the flow, it is centred
+ * in the same room the card leaves above the bar, and the verdict waits
+ * underneath until the rest is answered.
  */
 .score-card__rest {
   justify-items: center;
   text-align: center;
+  position: absolute;
+  /* Above the verdict, which comes later in the page and whose blur makes it
+     a layer of its own: without a number it is the one painted on top. */
+  z-index: 1;
+  inset: 24px 24px var(--score-card-foot);
+  margin: auto;
+  width: fit-content;
+  height: fit-content;
+  max-height: calc(100% - 24px - var(--score-card-foot));
 }
 
 .rest-ring {

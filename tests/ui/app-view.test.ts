@@ -1484,6 +1484,31 @@ describe('AppView', () => {
       }
     });
 
+    it('shuts every sheet with that control, and so with Escape', async () => {
+      // Escape and a tap outside both press the control, so a control that
+      // nothing listens to leaves all three ways out dead at once - the
+      // exercise sheet's was, the day it was added.
+      const { view } = createRig();
+      await view.initialize();
+      // A confirmation, a rename and a rating are each a question, and their
+      // controls are wired by the question while it waits for an answer:
+      // opened without one, there is nothing for them to answer.
+      const QUESTIONS = ['sheet-confirm', 'sheet-rename', 'sheet-stars'];
+      const sheets = [...document.querySelectorAll<HTMLElement>('.sheet')].filter(
+        (sheet) => !QUESTIONS.includes(sheet.id),
+      );
+
+      expect(sheets.length).toBeGreaterThan(8);
+      const left: string[] = [];
+      for (const sheet of sheets) {
+        sheet.hidden = false;
+        pressEscape();
+        if (!sheet.hidden) left.push(sheet.id);
+        sheet.hidden = true;
+      }
+      expect(left).toEqual([]);
+    });
+
     it('shuts on a tap outside its panel, every sheet there is', async () => {
       // Asked of the page, as Escape is. Wired sheet by sheet it was a list,
       // and the modes, the picture of a run and then a single reading were each

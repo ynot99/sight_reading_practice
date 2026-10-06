@@ -1692,6 +1692,7 @@ export class AppView {
     scoresRung: HTMLElement;
     scoresExercise: HTMLButtonElement;
     sheetExercise: HTMLElement;
+    exerciseClose: HTMLElement;
     grades: HTMLElement;
     gradeNew: HTMLElement;
     gradeNotYet: HTMLElement;
@@ -2005,6 +2006,7 @@ export class AppView {
       scoresRung: requireElement(doc, 'scores-rung'),
       scoresExercise: requireElement(doc, 'scores-exercise'),
       sheetExercise: requireElement(doc, 'sheet-exercise'),
+      exerciseClose: requireElement(doc, 'exercise-close'),
       grades: requireElement(doc, 'grades'),
       gradeNew: requireElement(doc, 'grade-new'),
       gradeNotYet: requireElement(doc, 'grade-not-yet'),
@@ -7467,6 +7469,9 @@ export class AppView {
     });
     this.listen(this.el.scoresClose, 'click', () => {
       this.el.sheetScores.hidden = true;
+    });
+    this.listen(this.el.exerciseClose, 'click', () => {
+      this.el.sheetExercise.hidden = true;
     });
     this.listen(this.el.metronomeClose, 'click', () => {
       this.el.sheetMetronome.hidden = true;

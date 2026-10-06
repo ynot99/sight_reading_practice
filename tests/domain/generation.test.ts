@@ -141,6 +141,31 @@ describe('fillMeasure', () => {
     );
   });
 
+  it('keeps compound time inside its dotted-quarter beats', () => {
+    // Six-eight is felt in two. A half note from the bar line is four
+    // eighths, across the middle of the bar, which is never how it is written.
+    const sixEight = new TimeSignature(6, 8);
+    const pulse = sixEight.ticksPerPulse;
+    for (const profile of BUILT_IN_RHYTHM_PROFILES) {
+      for (const role of ['lead', 'inner', 'accompaniment'] as const) {
+        for (let seed = 0; seed < 20; seed += 1) {
+          for (const slot of fillMeasure(sixEight, createRng(seed), profile.byRole[role])) {
+            const inside =
+              Math.floor(slot.onsetTicks / pulse) === Math.floor((slot.onsetTicks + slot.duration.ticks - 1) / pulse);
+            const wholeBeats = slot.onsetTicks % pulse === 0 && slot.duration.ticks % pulse === 0;
+            expect({ profile: profile.id, role, seed, slot: slot.onsetTicks, fits: inside || wholeBeats }).toEqual({
+              profile: profile.id,
+              role,
+              seed,
+              slot: slot.onsetTicks,
+              fits: true,
+            });
+          }
+        }
+      }
+    }
+  });
+
   it('tiles leftover space with notatable rests', () => {
     expect(splitIntoRests(Duration.WHOLE.ticks)).toEqual([Duration.WHOLE]);
     expect(splitIntoRests(Duration.DOTTED_HALF.ticks)).toEqual([Duration.DOTTED_HALF]);

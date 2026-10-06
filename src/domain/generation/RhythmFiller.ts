@@ -118,7 +118,11 @@ export function fillMeasure(
   options: RhythmOptions,
 ): RhythmSlot[] {
   const total = timeSignature.ticksPerMeasure;
-  const ticksPerBeat = timeSignature.ticksPerBeat;
+  // The beat that is felt, which is the one a value must not straddle: in
+  // six-eight a dotted quarter. Counted in the notated eighths instead, a
+  // half note was four whole beats and was written across the middle of the
+  // bar, where six-eight is never written. In simple time the two are one.
+  const ticksPerBeat = timeSignature.ticksPerPulse;
   const slots: RhythmSlot[] = [];
   let onsetTicks = 0;
 
@@ -148,7 +152,12 @@ export function fillMeasure(
       .map((candidate) => ({ value: candidate, weight: candidate.weight }));
 
     const drawn = candidates.length > 0 ? rng.weighted(candidates) : undefined;
-    const duration = drawn?.value ?? largestThatFits(remaining);
+    // Nothing in the pool fits here: the longest value that does, and off the
+    // beat no further than the beat's end - the bar's end would be a value
+    // written across the beat it started in.
+    const toTheBeat = (Math.floor(position / ticksPerBeat) + 1) * ticksPerBeat - position;
+    const room = options.keepInsideBeats && position % ticksPerBeat !== 0 ? Math.min(remaining, toTheBeat) : remaining;
+    const duration = drawn?.value ?? largestThatFits(room);
     const copies = drawn === undefined ? 1 : copiesOf(drawn);
 
     // A value that crosses the beat is written as tied pieces. Offered only

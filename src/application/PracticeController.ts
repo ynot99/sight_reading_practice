@@ -380,6 +380,15 @@ export interface PracticeSettings {
    */
   readonly ladderStepId: string | null;
   /**
+   * How the readings at this rung have gone so far: the number of clean ones
+   * in a row, or minus the number that came apart in a row, or 0.
+   *
+   * A setting rather than the controller's own memory, so it is kept with the
+   * rung it belongs to. Kept only in memory, it was lost to a reload, and the
+   * reader who had one clean reading behind them started again from nothing.
+   */
+  readonly ladderStreak: number;
+  /**
    * How much of the run the click sits out.
    *
    * Its own axis rather than a fifth {@link ClickPattern}: the pattern says
@@ -978,8 +987,6 @@ export class PracticeController {
   private finishedRoll: RunRoll | null = null;
   /** What the last run that reached an end was played with. */
   private finishedPlayedWith: PlayedWith | null = null;
-  private cleanReadings = 0;
-  private poorReadings = 0;
   /**
    * The seed of the generated page the reader has already played or heard.
    *
@@ -1041,6 +1048,7 @@ export class PracticeController {
       rangeToBar: null,
       repeatRange: false,
       ladderStepId: null,
+      ladderStreak: 0,
       clickWhen: 'always',
       clickOn: true,
       metronomeTap: 'opens-its-sheet',
@@ -1228,8 +1236,7 @@ export class PracticeController {
       // disagree about what is being practised, and one of them would be
       // lying. Tempo and bar count are deliberately not on the list: slowing
       // a rung down is how it is meant to be met.
-      next = { ...next, ladderStepId: null };
-      this.resetLadderStreaks();
+      next = { ...next, ladderStepId: null, ladderStreak: 0 };
     }
 
     if (changes.modeId !== undefined && changes.modeId !== this.currentSettings.modeId) {
@@ -3307,27 +3314,20 @@ export class PracticeController {
       return;
     }
 
-    if (overall >= LADDER_PROMOTE_AT) {
-      this.cleanReadings += 1;
-      this.poorReadings = 0;
-    } else if (overall <= LADDER_DEMOTE_AT) {
-      this.poorReadings += 1;
-      this.cleanReadings = 0;
-    } else {
-      this.cleanReadings = 0;
-      this.poorReadings = 0;
-    }
-
-    const offset =
-      this.cleanReadings >= LADDER_RUNS_TO_MOVE
-        ? 1
-        : this.poorReadings >= LADDER_RUNS_TO_MOVE
-          ? -1
+    const was = this.currentSettings.ladderStreak;
+    const streak =
+      overall >= LADDER_PROMOTE_AT
+        ? Math.max(was, 0) + 1
+        : overall <= LADDER_DEMOTE_AT
+          ? Math.min(was, 0) - 1
           : 0;
-    if (offset === 0) {
+
+    if (Math.abs(streak) < LADDER_RUNS_TO_MOVE) {
+      this.updateSettings({ ladderStreak: streak });
       return;
     }
-    this.moveLadder(offset, offset > 0 ? 'up' : 'down');
+    // Arriving starts the streak again, which `selectLadderStep` does.
+    this.moveLadder(Math.sign(streak), streak > 0 ? 'up' : 'down');
   }
 
   /**
@@ -3378,12 +3378,15 @@ export class PracticeController {
     if (step === null) {
       return null;
     }
-    this.resetLadderStreaks();
     // Resolved, not the rung's own delta: a rung says the one thing it moves,
     // and arriving at it has to bring everything the route had already set.
+    // And the streak starts again: it is about consecutive readings at one
+    // rung, and a reader sent down would otherwise be sent straight back up
+    // by the two clean readings that came before the fall.
     this.updateSettings({
       ...this.deps.ladder?.resolve(step.id),
       ladderStepId: step.id,
+      ladderStreak: 0,
     });
     return step;
   }
@@ -3392,18 +3395,6 @@ export class PracticeController {
   get ladderStep(): LadderStep | null {
     const stepId = this.currentSettings.ladderStepId;
     return stepId === null ? null : (this.deps.ladder?.find(stepId) ?? null);
-  }
-
-  /**
-   * Forgets how the last readings went.
-   *
-   * A streak is about consecutive readings *at one rung*, so arriving at one
-   * has to start it over - otherwise a reader sent down would be sent
-   * straight back up by the two clean runs that came before the fall.
-   */
-  private resetLadderStreaks(): void {
-    this.cleanReadings = 0;
-    this.poorReadings = 0;
   }
 
   /**

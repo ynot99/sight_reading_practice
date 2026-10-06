@@ -397,6 +397,9 @@ export function decodePracticeSettings(
       value['ladderStepId'] === null
         ? null
         : readId(value['ladderStepId'], known.ladderStepIds ?? []),
+    // Bounded loosely: a streak starts again at every move, so whatever the
+    // ladder can leave behind is well inside this.
+    ladderStreak: readInteger(value['ladderStreak'], -9, 9),
     // A device that stored `never` had the click turned off. That is the
     // switch now, and what it comes back on as is the default.
     clickWhen: storedWhen === 'never' ? undefined : storedWhen,
@@ -472,6 +475,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     rangeToBar: settings.rangeToBar,
     repeatRange: settings.repeatRange,
     ladderStepId: settings.ladderStepId,
+    ladderStreak: settings.ladderStreak,
     clickWhen: settings.clickWhen,
     clickOn: settings.clickOn,
     metronomeTap: settings.metronomeTap,

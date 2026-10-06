@@ -40,6 +40,7 @@ const SETTINGS: PracticeSettings = {
   rangeToBar: 6,
   repeatRange: true,
   ladderStepId: 'rung.2b',
+  ladderStreak: -1,
   clickWhen: 'cycle-2',
   clickOn: false,
   metronomeTap: 'turns-it-off-and-on',
@@ -260,6 +261,7 @@ describe('practice settings codec', () => {
         clickWhen: 'whenever',
         // Past the middle is past where the music still to come is looked at.
         rollHeadAtPercent: 80,
+        ladderStreak: 1.5,
       },
       KNOWN,
     );
@@ -271,6 +273,7 @@ describe('practice settings codec', () => {
     expect(restored.timeSignature).toBeUndefined();
     expect(restored.clickWhen).toBeUndefined();
     expect(restored.rollHeadAtPercent).toBeUndefined();
+    expect(restored.ladderStreak).toBeUndefined();
     expect(restored.presetId).toBe('triads-left-hand');
   });
 
@@ -500,6 +503,9 @@ describe('settings shared between devices', () => {
       expect(values).not.toHaveProperty(own);
     }
     expect(values['tempoPercent']).toBe(84);
+    // With the rung it belongs to, so another device carries on the streak.
+    expect(values['ladderStreak']).toBe(-1);
+    expect(values['ladderStepId']).toBe('rung.2b');
   });
 
   it('keeps the way of playing chosen in Modes to this device', () => {

@@ -3798,6 +3798,58 @@ describe('climbing the ladder', () => {
     expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
   });
 
+  it('keeps the streak in the settings, so a reload carries it on', async () => {
+    const rig = await onTheLadder();
+    await readCleanly(rig);
+    expect(rig.controller.settings.ladderStreak).toBe(1);
+
+    // What a reload hands the next controller: the settings as they were kept.
+    const reloaded = createController(true, undefined, rig.controller.settings);
+    await readCleanly(reloaded);
+
+    expect(reloaded.controller.ladderStep?.id).toBe('grade-1.keys');
+    // And starts again on arriving.
+    expect(reloaded.controller.settings.ladderStreak).toBe(0);
+  });
+
+  it('counts the readings that came apart below zero, and turns round either way', async () => {
+    const rig = await onTheLadder();
+    await readBadly(rig);
+    expect(rig.controller.settings.ladderStreak).toBe(-1);
+
+    await readCleanly(rig);
+    expect(rig.controller.settings.ladderStreak).toBe(1);
+    await readBadly(rig);
+    expect(rig.controller.settings.ladderStreak).toBe(-1);
+
+    // Neither clean nor come apart: one stray key at every step.
+    await rig.controller.loadNewExercise();
+    const session = rig.controller.start();
+    let overall = Number.NaN;
+    session?.events.on('finished', ({ score }) => {
+      overall = score.overall;
+    });
+    for (let guard = 200; session?.status === 'running' && guard > 0; guard -= 1) {
+      const step = session.currentStep;
+      if (step === null) {
+        break;
+      }
+      rig.midi.noteOn(21, 0);
+      for (const midi of step.expectedMidi) {
+        rig.midi.noteOn(midi, 0);
+      }
+    }
+    expect(overall).toBeGreaterThan(0.6);
+    expect(overall).toBeLessThan(0.9);
+    expect(rig.controller.settings.ladderStreak).toBe(0);
+
+    await readCleanly(rig);
+    expect(rig.controller.settings.ladderStreak).toBe(1);
+    // Stepping off the route by hand leaves nothing behind for coming back.
+    rig.controller.updateSettings({ rhythmProfileId: 'triplets' });
+    expect(rig.controller.settings.ladderStreak).toBe(0);
+  });
+
   it('counts only the first reading of a page', async () => {
     const rig = await onTheLadder();
 

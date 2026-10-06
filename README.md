@@ -93,7 +93,9 @@ Minor keys are written as minor is, the seventh sharpened where it rises to
 the key note. Off the route a page is the plain one the settings describe. Two clean readings in a row
 move you up, two that come apart move you down, and the streak restarts on
 arrival so a fall cannot bounce straight back off the readings that preceded
-it. Only whole first readings of fresh material count: a page played again,
+it. The streak is kept with the rung, across a reload and between devices, and
+drawn as a row of marks between the two rungs beside it: under the verdict, in
+the corner of the page while a generated page is open, and under the arrows. Only whole first readings of fresh material count: a page played again,
 or heard played first, passes on what was learnt from it, a repeated passage is
 practice but not sight-reading, and an abandoned run is not a reading at all —
 it also scores a flat 100% under accuracy grading, which counts the notes that

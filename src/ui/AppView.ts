@@ -37,7 +37,8 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
 import { writeMidiFile } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
-import { TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
+import { LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
+import { drawTheLadderTrack, type PlaceOnTheLadder } from './ladderTrack.js';
 import type { PracticeSettings } from '../application/PracticeController.js';
 import {
   RULER_DIVISIONS,
@@ -1693,6 +1694,9 @@ export class AppView {
     scoresExercise: HTMLButtonElement;
     sheetExercise: HTMLElement;
     exerciseClose: HTMLElement;
+    scoreRung: HTMLButtonElement;
+    scoreRungLabel: HTMLElement;
+    ladderTrack: HTMLElement;
     grades: HTMLElement;
     gradeNew: HTMLElement;
     gradeNotYet: HTMLElement;
@@ -2008,6 +2012,9 @@ export class AppView {
       scoresExercise: requireElement(doc, 'scores-exercise'),
       sheetExercise: requireElement(doc, 'sheet-exercise'),
       exerciseClose: requireElement(doc, 'exercise-close'),
+      scoreRung: requireElement(doc, 'score-rung'),
+      scoreRungLabel: requireElement(doc, 'score-rung-label'),
+      ladderTrack: requireElement(doc, 'ladder-track'),
       grades: requireElement(doc, 'grades'),
       gradeNew: requireElement(doc, 'grade-new'),
       gradeNotYet: requireElement(doc, 'grade-not-yet'),
@@ -5868,6 +5875,8 @@ export class AppView {
       // and a run beginning or ending changes it without any control at all.
       controller.events.on('settingsChanged', () => {
         this.showTheListening();
+        // The rung and the readings in a row at it are both settings.
+        this.showTheRung();
         // A shared setting changed is something the drive has not had.
         this.offerToSync();
       }),
@@ -5895,6 +5904,8 @@ export class AppView {
         // A performance does not survive its own score being replaced, so the
         // button that offers to stop one has to stop saying so.
         this.showThePerformance();
+        // A score opened or a page generated: the corner is about the second.
+        this.showTheRung();
       }),
     );
 
@@ -7018,6 +7029,7 @@ export class AppView {
     this.describeMetronomeButton(settings);
     this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
+    this.showTheRung();
     this.applyScoreCover();
     this.el.presetDescription.textContent = this.runtime.presets.get(settings.presetId).description;
     this.el.rhythmDescription.textContent = this.runtime.rhythms.get(
@@ -7129,6 +7141,56 @@ export class AppView {
     this.el.scoresRung.textContent = `${step.label} — ${step.description}`;
     this.el.ladderDown.disabled = !ladder.canStep(step.id, -1);
     this.el.ladderUp.disabled = !ladder.canStep(step.id, 1);
+  }
+
+  /**
+   * Where the reader stands on the ladder, or `null` off it.
+   *
+   * The two neighbours are the rungs the arrows would go to, and none where
+   * there is nowhere further that way.
+   */
+  private placeOnTheLadder(): PlaceOnTheLadder | null {
+    const { controller, ladder } = this.runtime;
+    const step = controller.ladderStep;
+    if (step === null) {
+      return null;
+    }
+    const neighbour = (offset: number): string | null =>
+      ladder.canStep(step.id, offset) ? ladder.step(step.id, offset).label : null;
+    return {
+      here: step.label,
+      below: neighbour(-1),
+      above: neighbour(1),
+      streak: controller.settings.ladderStreak,
+      toMove: LADDER_RUNS_TO_MOVE,
+    };
+  }
+
+  /** Whether the music on the stand is a generated page rather than a score. */
+  private aGeneratedPageIsOpen(): boolean {
+    return !this.runtime.controller.pieceKey.startsWith('score:');
+  }
+
+  /**
+   * The track in the corner and in the sheet of what an exercise is made of.
+   *
+   * The corner only over a generated page: a score is not on the ladder. The
+   * sheet whatever is open, since what it sets is the next generated page.
+   * The verdict draws its own, from the same place, as it is put up.
+   */
+  private showTheRung(): void {
+    const place = this.placeOnTheLadder();
+    this.el.ladderTrack.replaceChildren(
+      ...(place === null ? [] : [drawTheLadderTrack(this.doc, place)]),
+    );
+    const inTheCorner = place !== null && this.aGeneratedPageIsOpen();
+    this.el.scoreRung.hidden = !inTheCorner;
+    if (place === null || !inTheCorner) {
+      return;
+    }
+    this.el.scoreRungLabel.textContent = place.here;
+    this.el.scoreRung.replaceChildren(this.el.scoreRungLabel, drawTheLadderTrack(this.doc, place));
+    this.el.scoreRung.title = `${place.here}. Open what an exercise is made of.`;
   }
 
   /**
@@ -7424,9 +7486,10 @@ export class AppView {
       ],
       [
         // Over the scores it was opened from, so shutting it goes back to
-        // the button that makes the exercise it describes.
+        // the button that makes the exercise it describes. Or from the rung
+        // in the corner, which is what it sets.
         this.el.sheetExercise,
-        [this.el.scoresExercise],
+        [this.el.scoresExercise, this.el.scoreRung],
         () => this.syncControlsFromSettings(),
       ],
       [
@@ -8316,7 +8379,7 @@ export class AppView {
     this.el.drill.hidden = worstPassage(report) === null;
     // A score is the same score however often it is opened; only a generated
     // page has another one behind it.
-    this.el.verdictFresh.hidden = this.runtime.controller.pieceKey.startsWith('score:');
+    this.el.verdictFresh.hidden = !this.aGeneratedPageIsOpen();
     this.el.result.replaceChildren();
 
     const gradeElement = this.doc.createElement('div');
@@ -8326,6 +8389,11 @@ export class AppView {
     gradeElement.dataset['grade'] = score.grade;
     gradeElement.textContent = score.grade;
     this.el.result.append(gradeElement);
+    // Under the letter, where the reading that just moved it is being read.
+    const place = this.aGeneratedPageIsOpen() ? this.placeOnTheLadder() : null;
+    if (place !== null) {
+      this.el.result.append(drawTheLadderTrack(this.doc, place, { ends: true }));
+    }
 
     const rows: readonly (readonly [string, string])[] = [
       ['Overall', percent(score.overall)],

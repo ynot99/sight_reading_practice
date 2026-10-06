@@ -6841,6 +6841,96 @@ describe('AppView', () => {
     });
   });
 
+  describe('the readings in a row at a rung', () => {
+    /** Puts the reader on a rung, with a page from it on the stand. */
+    async function onARung(rig: ReturnType<typeof createRig>): Promise<void> {
+      await rig.view.initialize();
+      rig.runtime.controller.updateSettings({ modeId: 'mode.wait', countInBars: 0 });
+      rig.runtime.controller.selectLadderStep('grade-1.three');
+      element<HTMLButtonElement>('ladder-up').click();
+      element<HTMLButtonElement>('ladder-down').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    /** Plays every step of the page as written, to the end. */
+    function readItCleanly(rig: ReturnType<typeof createRig>): void {
+      element<HTMLButtonElement>('focus-play').click();
+      const session = rig.runtime.controller.session;
+      for (let guard = 400; session?.status === 'running' && guard > 0; guard -= 1) {
+        const step = session.currentStep;
+        if (step === null) {
+          break;
+        }
+        for (const midi of step.expectedMidi) {
+          rig.midi.noteOn(midi, rig.clock.now());
+        }
+      }
+    }
+
+    /** The marks of a track as `.` for each place and `|` where the reader is. */
+    function marksIn(within: HTMLElement): string {
+      return [...within.querySelectorAll('.ladder-track__mark')]
+        .map((mark) => (mark.classList.contains('ladder-track__mark--here') ? '|' : '.'))
+        .join('');
+    }
+
+    it('says the rung in the corner only while a generated page is on it', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      // Off the route, which is where a first visit begins.
+      expect(element('score-rung').hidden).toBe(true);
+
+      await onARung(rig);
+      expect(element('score-rung').hidden).toBe(false);
+      expect(element('score-rung-label').textContent).toBe('Grade 1 · b');
+      expect(marksIn(element('score-rung'))).toBe('..|..');
+      // And the sheet that sets it, under the arrows.
+      expect(marksIn(element('ladder-track'))).toBe('..|..');
+
+      // A score is not on the ladder.
+      await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      expect(element('score-rung').hidden).toBe(true);
+    });
+
+    it('opens what an exercise is made of from the rung in the corner', async () => {
+      const rig = createRig();
+      await onARung(rig);
+
+      element<HTMLButtonElement>('score-rung').click();
+
+      expect(element('sheet-exercise').hidden).toBe(false);
+    });
+
+    it('moves the mark for a clean reading, and draws the track under the verdict', async () => {
+      const rig = createRig();
+      await onARung(rig);
+
+      readItCleanly(rig);
+
+      expect(rig.runtime.controller.settings.ladderStreak).toBe(1);
+      expect(marksIn(element('score-rung'))).toBe('...|.');
+      const track = element('result').querySelector<HTMLElement>('.ladder-track');
+      expect(track).not.toBeNull();
+      expect(marksIn(track ?? element('result'))).toBe('...|.');
+      // Under the verdict, the two rungs either way are named.
+      expect([...(track?.querySelectorAll('.ladder-track__end') ?? [])].map((end) => end.textContent)).toEqual([
+        'Grade 1 · a',
+        'Grade 1 · c',
+      ]);
+    });
+
+    it('draws no track under the verdict on a score', async () => {
+      const rig = createRig();
+      await onARung(rig);
+      await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+
+      readItCleanly(rig);
+
+      expect(element('score-verdict').hidden).toBe(false);
+      expect(element('result').querySelector('.ladder-track')).toBeNull();
+    });
+  });
+
   describe('the ladder arrows', () => {
     it('starts at the first rung and names it', async () => {
       const { view, runtime } = createRig();

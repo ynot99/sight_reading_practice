@@ -222,7 +222,7 @@ function touchesTheRoute(changes: Partial<PracticeSettings>): boolean {
  */
 const LADDER_PROMOTE_AT = 0.9;
 const LADDER_DEMOTE_AT = 0.6;
-const LADDER_RUNS_TO_MOVE = 2;
+export const LADDER_RUNS_TO_MOVE = 2;
 
 /** Everything the user can dial in before pressing start. */
 export interface PracticeSettings {

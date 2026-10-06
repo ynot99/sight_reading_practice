@@ -122,6 +122,16 @@
           </div>
 
           <!--
+            The rung being read and the readings in a row at it, while a
+            generated page is open. A score is not on the ladder, so over one
+            this would be about nothing on the page. Pressed, it opens what a
+            fresh exercise is made of.
+          -->
+          <button id="score-rung" class="score__reading score__rung" type="button" hidden>
+            <span id="score-rung-label"></span>
+          </button>
+
+          <!--
             And which modes are on, under it and in the same corner.
 
             Empty on purpose: every mark here is one of the squares from the
@@ -660,6 +670,7 @@
                 <strong id="ladder-step" class="ladder-row__step">—</strong>
                 <button id="ladder-up" type="button" class="button" aria-label="Up a rung">▶</button>
               </div>
+              <div id="ladder-track" class="ladder-row__track"></div>
               <p id="ladder-description" class="hint"></p>
               <p id="grade-new" class="hint"></p>
               <p id="grade-not-yet" class="hint"></p>

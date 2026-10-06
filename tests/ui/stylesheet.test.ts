@@ -1011,6 +1011,18 @@ describe('the stylesheet', () => {
     expect(root?.body).toMatch(/--focus-bar-height\s*:\s*\d+px/);
   });
 
+  it('puts the rung in the corner away while the music is going', () => {
+    // The readings in a row move only when a run ends, so over the music the
+    // track would say nothing new. jsdom applies no stylesheet.
+    const playing = rules().find((rule) => rule.selector === "body[data-playing='true'] .score__rung");
+    expect(playing?.body).toMatch(/display\s*:\s*none/);
+    // An empty place is not drawn in the border colour, which in the dark is
+    // the near neighbour of a sheet's panel: the places vanished into it.
+    const mark = rules().find((rule) => rule.selector === '.ladder-track__mark');
+    expect(mark?.body).not.toMatch(/background\s*:\s*var\(--border\)/);
+    expect(mark?.body).toMatch(/background\s*:/);
+  });
+
   it('lays a rest over the verdict, in the same room above the bar', () => {
     // A rest falls due when the music stops, which is when a verdict goes up,
     // and stacked in one column the two were taller than the page. Out of the

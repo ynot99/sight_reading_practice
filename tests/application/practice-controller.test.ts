@@ -94,6 +94,7 @@ function createController(
   const metronome = new ManualMetronome(clock);
   const renderer = new FakeScoreRenderer();
   const instrument = new RecordingPitchPlayer();
+  let pagesWritten = 0;
 
   const controller = new PracticeController({
     presets: new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS),
@@ -125,7 +126,17 @@ function createController(
     ladder: new PracticeLadder(BUILT_IN_LADDER, BUILT_IN_GRADES),
     ...(health === undefined ? {} : { health }),
     ...(fixedExercise
-      ? { providerFor: () => ({ provide: () => Promise.resolve(twoBarExercise()) }) }
+      ? {
+          providerFor: () => ({
+            // The same notes, but each new page a page of its own, as a
+            // generator's are: asked for no seed, it draws a new one.
+            provide: (request: ExerciseRequest) =>
+              Promise.resolve({
+                ...twoBarExercise(),
+                metadata: { generatorId: 'fixture', seed: request.seed ?? (pagesWritten += 1) },
+              }),
+          }),
+        }
       : {}),
     ...(providerFor === undefined ? {} : { providerFor }),
     initialSettings: {
@@ -3638,8 +3649,17 @@ describe('cursor visibility', () => {
 });
 
 describe('climbing the ladder', () => {
-  /** Plays every step of the fixed exercise correctly, to the end. */
-  function readCleanly(rig: ReturnType<typeof createController>): void {
+  /**
+   * Plays every step of a page correctly, to the end - a new page, since only
+   * a first reading counts.
+   */
+  async function readCleanly(rig: ReturnType<typeof createController>): Promise<void> {
+    await rig.controller.loadNewExercise();
+    playCleanly(rig);
+  }
+
+  /** Plays every step of the page that is open correctly, to the end. */
+  function playCleanly(rig: ReturnType<typeof createController>): void {
     const session = rig.controller.start();
     let guard = 200;
     while (session?.status === 'running' && guard > 0) {
@@ -3660,7 +3680,8 @@ describe('climbing the ladder', () => {
    * The run has to *finish* to be evidence: an abandoned one is not a reading
    * at all, and under accuracy grading it scores a flat 100%.
    */
-  function readBadly(rig: ReturnType<typeof createController>): void {
+  async function readBadly(rig: ReturnType<typeof createController>): Promise<void> {
+    await rig.controller.loadNewExercise();
     const session = rig.controller.start();
     let guard = 200;
     while (session?.status === 'running' && guard > 0) {
@@ -3695,20 +3716,20 @@ describe('climbing the ladder', () => {
   it('moves up after two clean readings, and not after one', async () => {
     const rig = await onTheLadder();
 
-    readCleanly(rig);
+    await readCleanly(rig);
     expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
 
-    readCleanly(rig);
+    await readCleanly(rig);
     expect(rig.controller.ladderStep?.id).toBe('grade-1.keys');
   });
 
   it('moves down after two readings that came apart', async () => {
     const rig = await onTheLadder();
 
-    readBadly(rig);
+    await readBadly(rig);
     expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
 
-    readBadly(rig);
+    await readBadly(rig);
     expect(rig.controller.ladderStep?.id).toBe('grade-1.eighths');
   });
 
@@ -3726,17 +3747,17 @@ describe('climbing the ladder', () => {
 
   it('starts the count again on arriving, so it cannot bounce', async () => {
     const rig = await onTheLadder();
-    readCleanly(rig);
-    readCleanly(rig);
+    await readCleanly(rig);
+    await readCleanly(rig);
     expect(rig.controller.ladderStep?.id).toBe('grade-1.keys');
 
     // Two clean readings got the reader here. Falling straight back must not
     // hand those same two readings back as a reason to climb again.
-    readBadly(rig);
-    readBadly(rig);
+    await readBadly(rig);
+    await readBadly(rig);
     expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
 
-    readBadly(rig);
+    await readBadly(rig);
     expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
   });
 
@@ -3745,8 +3766,8 @@ describe('climbing the ladder', () => {
     const moved = vi.fn();
     rig.controller.events.on('ladderMoved', moved);
 
-    readCleanly(rig);
-    readCleanly(rig);
+    await readCleanly(rig);
+    await readCleanly(rig);
 
     expect(moved).toHaveBeenCalledTimes(1);
     expect(moved.mock.calls[0]?.[0]).toMatchObject({ direction: 'up' });
@@ -3754,13 +3775,13 @@ describe('climbing the ladder', () => {
 
   it('stays at the ends instead of falling off them', async () => {
     const top = await onTheLadder('grade-5.all');
-    readCleanly(top);
-    readCleanly(top);
+    await readCleanly(top);
+    await readCleanly(top);
     expect(top.controller.ladderStep?.id).toBe('grade-5.all');
 
     const bottom = await onTheLadder('initial.right');
-    readBadly(bottom);
-    readBadly(bottom);
+    await readBadly(bottom);
+    await readBadly(bottom);
     expect(bottom.controller.ladderStep?.id).toBe('initial.right');
   });
 
@@ -3769,20 +3790,54 @@ describe('climbing the ladder', () => {
     rig.controller.updateSettings({ rangeFromBar: 1, rangeToBar: 2 });
     await rig.controller.reloadExercise();
 
-    readCleanly(rig);
-    readCleanly(rig);
+    playCleanly(rig);
+    playCleanly(rig);
 
     // Reading the same two bars until they are right is practice, but it is
     // not evidence about the next unseen page.
     expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
   });
 
+  it('counts only the first reading of a page', async () => {
+    const rig = await onTheLadder();
+
+    playCleanly(rig);
+    // Read again, the page passes on what the first reading learnt from it.
+    playCleanly(rig);
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
+
+    // One more first reading makes the two that move the reader.
+    await readCleanly(rig);
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.keys');
+  });
+
+  it('does not count a reading of a page already heard played', async () => {
+    const rig = await onTheLadder();
+    rig.controller.listen();
+    rig.controller.stopListening();
+
+    playCleanly(rig);
+    await readCleanly(rig);
+
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
+  });
+
+  it('leaves the page unread by a run stopped before any key was played', async () => {
+    const rig = await onTheLadder();
+    rig.controller.start()?.abort();
+
+    playCleanly(rig);
+    await readCleanly(rig);
+
+    expect(rig.controller.ladderStep?.id).toBe('grade-1.keys');
+  });
+
   it('does not count a run that repeats itself', async () => {
     const rig = await onTheLadder();
     rig.controller.updateSettings({ repeatRange: true });
 
-    readCleanly(rig);
-    readCleanly(rig);
+    await readCleanly(rig);
+    await readCleanly(rig);
 
     expect(rig.controller.ladderStep?.id).toBe('grade-1.three');
   });
@@ -3811,8 +3866,8 @@ describe('climbing the ladder', () => {
     await rig.controller.loadNewExercise();
     expect(rig.controller.ladderStep).toBeNull();
 
-    readCleanly(rig);
-    readCleanly(rig);
+    await readCleanly(rig);
+    await readCleanly(rig);
 
     expect(rig.controller.ladderStep).toBeNull();
   });

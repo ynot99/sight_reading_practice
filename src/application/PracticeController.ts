@@ -980,6 +980,14 @@ export class PracticeController {
   private finishedPlayedWith: PlayedWith | null = null;
   private cleanReadings = 0;
   private poorReadings = 0;
+  /**
+   * The seed of the generated page the reader has already played or heard.
+   *
+   * A seed is the page: the same seed and settings write the same notes, and
+   * every new page is drawn with a new one. Kept for the ladder, which counts
+   * only a first reading.
+   */
+  private seedOfAPageKnown: number | null = null;
 
   constructor(dependencies: PracticeControllerDependencies) {
     this.deps = dependencies;
@@ -1850,6 +1858,9 @@ export class PracticeController {
       return;
     }
     this.disposeSession();
+    // Hearing the page played is learning it, so a reading after that is not
+    // the first.
+    this.seedOfAPageKnown = this.lastSeed;
     const player = this.ensurePlayer();
     const passage = this.passageSteps;
     player.start(timeline, {
@@ -3026,6 +3037,12 @@ export class PracticeController {
           roll: session.roll,
         });
         this.considerLadderMove(score.overall, report.completed);
+        // Known from here on, once anything was played on it - a run stopped
+        // after a bar has still shown the reader the bar. A Start pressed and
+        // stopped before a key was touched has shown them nothing new.
+        if (session.roll.presses.length > 0) {
+          this.seedOfAPageKnown = this.lastSeed;
+        }
         this.judgeTheDrill(report, score);
       }),
     );
@@ -3313,11 +3330,17 @@ export class PracticeController {
     this.moveLadder(offset, offset > 0 ? 'up' : 'down');
   }
 
-  /** Whether this reading was of something the reader had not seen before. */
+  /**
+   * Whether this reading was of something the reader had not seen before.
+   *
+   * The page must not have been played or heard before this reading. Read
+   * again, a page passes on what was learnt from it the first time.
+   */
   private isFreshReading(): boolean {
     const { rangeFromBar, rangeToBar, repeatRange } = this.currentSettings;
     return (
       this.openedScore === null &&
+      this.lastSeed !== this.seedOfAPageKnown &&
       rangeFromBar === null &&
       rangeToBar === null &&
       !repeatRange

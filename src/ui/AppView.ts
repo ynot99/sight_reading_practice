@@ -4961,6 +4961,29 @@ export class AppView {
     this.runtime.pitchPlayer.stop(midi, atMs + CHIME_NOTE_MS);
   }
 
+  /**
+   * Ends the rest without a sound when the music starts.
+   *
+   * A reader who starts playing during a rest has come back to the keys
+   * before the ring ran out. A chime in the middle of the music would only
+   * report a rest that is already over. If the rest was offered and not yet
+   * answered, starting to play means "not now", so it is put off and asked
+   * again a few minutes later, as a snooze would. Left up, either card would
+   * stand over the music being read.
+   */
+  private putTheRestAwayForTheMusic(): void {
+    if (this.el.scoreRest.hidden) {
+      return;
+    }
+    if (this.restTimer === null) {
+      this.runtime.controller.restPutOff();
+    } else {
+      clearTimeout(this.restTimer);
+      this.restTimer = null;
+    }
+    this.hideTheRest();
+  }
+
   private hideTheRest(): void {
     this.el.scoreRest.hidden = true;
     this.el.restRing.setAttribute('hidden', '');
@@ -8281,6 +8304,7 @@ export class AppView {
       // Shut rather than merely hidden, so what comes back when the music
       // stops is the bar the reader left, not a drawer they never opened.
       this.setDrawerOpen(false);
+      this.putTheRestAwayForTheMusic();
     }
   }
 

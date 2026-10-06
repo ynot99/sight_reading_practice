@@ -2466,6 +2466,54 @@ describe('AppView', () => {
       }
     });
 
+    it('ends a rest without its chime when the music starts', async () => {
+      // Back at the keys before the ring ran out: the card stood over the
+      // music being read, and the chime sounded in the middle of it.
+      vi.useFakeTimers();
+      try {
+        const { view, runtime, midi, instrument } = createRig();
+        await view.initialize();
+        runtime.controller.updateSettings({ restEveryMinutes: 30 });
+        for (let at = 0; at <= 31 * 60_000; at += 60_000) {
+          midi.noteOn(60, at);
+        }
+        element<HTMLButtonElement>('rest-take').click();
+
+        element<HTMLButtonElement>('focus-play').click();
+
+        expect(element('score-rest').hidden).toBe(true);
+        element<HTMLButtonElement>('focus-stop').click();
+        vi.advanceTimersByTime(3 * 60_000 + 500);
+        expect(instrument.played.filter((sounded) => sounded.midi === 83)).toEqual([]);
+        expect(element('score-rest').hidden).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('takes playing as "not now" to a rest only offered, and puts it off', async () => {
+      vi.useFakeTimers();
+      try {
+        const { view, runtime, midi } = createRig();
+        await view.initialize();
+        runtime.controller.updateSettings({ restEveryMinutes: 30 });
+        for (let at = 0; at <= 31 * 60_000; at += 60_000) {
+          midi.noteOn(60, at);
+        }
+        expect(element('score-rest').hidden).toBe(false);
+
+        element<HTMLButtonElement>('focus-play').click();
+
+        expect(element('score-rest').hidden).toBe(true);
+        // Put off, not left owed: an owed rest stops a repeat coming round.
+        expect(runtime.controller.restIsOwed).toBe(false);
+        // Nor taken: the time at the keys is still counted.
+        expect(runtime.controller.sittingMs).toBeGreaterThan(30 * 60_000);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('closes the modes on a tap outside them, like every other sheet', async () => {
       // It was bound its own opening and its own ×, which made it the one
       // sheet a tap on the dimmed ground did not close.

@@ -7514,6 +7514,7 @@ export class AppView {
     });
     this.repaintTheRollWhenTheScreenChanges();
     this.measureTheKeysAgainWhenTheyMove();
+    this.sayHowTallTheBarIs();
     this.listen(this.el.rollOptionsClose, 'click', () => {
       this.el.sheetRollOptions.hidden = true;
     });
@@ -8978,6 +8979,32 @@ export class AppView {
       toggle.title = `${said} Nothing falls while the keyboard is shown alone.`;
     }
     toggle.setAttribute('aria-label', toggle.title);
+  }
+
+  /**
+   * Tells the stylesheet how tall the transport bar is, whenever that changes.
+   *
+   * The bar is fixed to the foot of the window and out of the flow. Its height
+   * depends on the width, since on a narrow screen the pills join it as rows,
+   * and on whether the drawer is open, so the stylesheet has no way to know
+   * it. What stands over the page keeps clear of the bar by this number. The
+   * position is still the stylesheet's to work out; only the height is told.
+   */
+  private sayHowTallTheBarIs(): void {
+    const view = this.doc.defaultView;
+    if (view === null || typeof view.ResizeObserver !== 'function') {
+      return;
+    }
+    const watch = new view.ResizeObserver(() => {
+      this.doc.documentElement.style.setProperty(
+        '--focus-bar-height',
+        `${String(this.el.focusBar.offsetHeight)}px`,
+      );
+    });
+    watch.observe(this.el.focusBar);
+    this.subscriptions.push(() => {
+      watch.disconnect();
+    });
   }
 
   /**

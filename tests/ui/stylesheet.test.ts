@@ -995,6 +995,21 @@ describe('the stylesheet', () => {
     expect(count?.body).not.toMatch(/pointer-events\s*:\s*auto/);
   });
 
+  it('centres the middle of the page above the transport bar, not behind it', () => {
+    // The frame is the window and the bar floats over its foot: a verdict
+    // centred in the whole frame, taller than the room above the bar, ran on
+    // underneath it. The card keeps clear by where the bar stands - its foot,
+    // which the bar itself is placed by, and its height, which the view tells.
+    const card = rules().find((rule) => rule.selector === '.score-card');
+    expect(card?.body).toMatch(
+      /padding-bottom\s*:\s*calc\(var\(--focus-bar-foot\)\s*\+\s*var\(--focus-bar-height\)/,
+    );
+    const bar = rules().find((rule) => rule.selector === '.focus-bar');
+    expect(bar?.body).toMatch(/bottom\s*:\s*var\(--focus-bar-foot\)/);
+    const root = rules().find((rule) => rule.selector === ':root');
+    expect(root?.body).toMatch(/--focus-bar-height\s*:\s*\d+px/);
+  });
+
   it('says a marker will not scroll the page before anyone touches it', () => {
     // A browser decides whether a touch is going to scroll as the touch
     // begins, from what is under the finger. Said only once the drag had

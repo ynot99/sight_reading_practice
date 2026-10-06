@@ -2194,6 +2194,41 @@ describe('AppView', () => {
       expect(element('result').textContent).toContain('Overall');
     });
 
+    it('tells the stylesheet how tall the bar is, each time it changes', async () => {
+      // What keeps the verdict out from under the bar. The bar is out of the
+      // flow, and taller on a narrow screen and with the drawer open.
+      const watched: { report: () => void; target: Element }[] = [];
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          private readonly report: () => void;
+          constructor(report: () => void) {
+            this.report = report;
+          }
+          observe(target: Element): void {
+            watched.push({ report: this.report, target });
+          }
+          disconnect(): void {}
+        },
+      );
+      try {
+        const { view } = createRig();
+        await view.initialize();
+        const bar = element('focus-bar');
+        const ofTheBar = watched.filter((watch) => watch.target === bar);
+        expect(ofTheBar).toHaveLength(1);
+
+        for (const height of [76, 188]) {
+          Object.defineProperty(bar, 'offsetHeight', { configurable: true, value: height });
+          ofTheBar[0]?.report();
+          expect(document.documentElement.style.getPropertyValue('--focus-bar-height')).toBe(`${String(height)}px`);
+        }
+      } finally {
+        vi.unstubAllGlobals();
+        document.documentElement.style.removeProperty('--focus-bar-height');
+      }
+    });
+
     it('puts the verdict away on a tap, the card with it', async () => {
       // It is over the music the reader is about to go back to, and touching
       // a thing you have read is how you say you have read it.

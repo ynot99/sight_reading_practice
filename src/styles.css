@@ -1,5 +1,14 @@
 :root {
   color-scheme: light dark;
+  /*
+   * Where the transport bar stands, for everything that has to keep clear of
+   * it. The foot is how far it floats above the bottom of the window. The
+   * height is measured by the view, since the bar is out of the flow and its
+   * height changes with the width and the drawer; until it is measured, it is
+   * the height of the bar folded on a wide screen.
+   */
+  --focus-bar-foot: calc(16px + env(safe-area-inset-bottom, 0px));
+  --focus-bar-height: 76px;
   --bg: #f5f6f8;
   --surface: #ffffff;
   --surface-strong: #eef1f6;
@@ -426,6 +435,11 @@ textarea {
  * sheet over the whole page would swallow every one of them. Only the boxes
  * that are actually showing take a touch, which is what `auto` on the
  * children below does.
+ *
+ * Centred in what the transport bar leaves of the page, not in the whole of
+ * it. The frame is the height of the window and the bar floats over its foot,
+ * so a verdict centred in the whole frame and taller than the room above the
+ * bar ran on underneath it.
  */
 .score-card {
   position: absolute;
@@ -437,6 +451,7 @@ textarea {
   justify-content: center;
   gap: 16px;
   padding: 24px;
+  padding-bottom: calc(var(--focus-bar-foot) + var(--focus-bar-height) + 16px);
   pointer-events: none;
 }
 
@@ -2448,7 +2463,7 @@ body[data-bare='true'] .focus-aside {
 .focus-bar {
   position: fixed;
   left: 50%;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  bottom: var(--focus-bar-foot);
   transform: translateX(-50%);
   z-index: 20;
 
@@ -2550,15 +2565,15 @@ body[data-notes-falling='true'] .focus-bar:has(:focus-visible) {
 }
 
 body[data-replaying='true'] .focus-bar {
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-keys));
+  bottom: calc(var(--focus-bar-foot) + var(--replay-keys));
 }
 
 body[data-listening='true'] .focus-bar {
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--replay-keys));
+  bottom: calc(var(--focus-bar-foot) + var(--replay-keys));
 }
 
 body[data-keys-hidden='true'] .focus-bar {
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  bottom: var(--focus-bar-foot);
 }
 
 /*

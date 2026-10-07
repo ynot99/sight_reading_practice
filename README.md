@@ -79,7 +79,10 @@ rung arriving at new material states all four, and a test holds the ladder to
 that. A grade meets its new keys on a rung of their own and ends on a rung
 that is a test of the whole grade: there the key and the metre are drawn
 afresh for each exercise from every one the grade has reached, by the
-exercise's seed, so going back to a page is the same page.
+exercise's seed, so going back to a page is the same page. From Grade 3 the
+material is drawn as well, from the ones that grade names among those met so
+far - a melody over two-note chords stays in the tests of Grades 4 and 5,
+beside the broken chords and sequences that came after it.
 
 A grade also brings what a page is **written with** beyond its notes: the
 dot and the two plain dynamics from the start, accents, the mezzo levels and

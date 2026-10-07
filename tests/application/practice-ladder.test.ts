@@ -170,23 +170,46 @@ describe('the built-in ladder', () => {
     ]);
   });
 
-  it('writes a valid page on every rung, in every key and metre it may draw', () => {
+  it('writes a valid page on every rung, in every key, metre and material it may draw', () => {
     for (const step of ladder.list()) {
       const settings = ladder.resolve(step.id);
-      const preset = presets.get(settings.presetId ?? '');
-      for (let seed = 0; seed < 24; seed += 1) {
-        const exercise = preset.generator.generate({
-          measures: 4,
-          key: settings.key ?? preset.defaults.key,
-          timeSignature: settings.timeSignature ?? preset.defaults.timeSignature,
-          tempoBpm: 60,
-          rhythm: rhythms.get(settings.rhythmProfileId ?? ''),
-          seed,
-          ...(step.draws === undefined ? {} : { drawnFrom: step.draws }),
-          writing: ladder.writingAt(step.id),
-        });
-        expect(() => validateExercise(exercise)).not.toThrow();
+      const { materials, ...drawnFrom } = step.draws ?? {};
+      for (const material of materials ?? [settings.presetId ?? '']) {
+        const preset = presets.get(material);
+        for (let seed = 0; seed < 24; seed += 1) {
+          const exercise = preset.generator.generate({
+            measures: 4,
+            key: settings.key ?? preset.defaults.key,
+            timeSignature: settings.timeSignature ?? preset.defaults.timeSignature,
+            tempoBpm: 60,
+            rhythm: rhythms.get(settings.rhythmProfileId ?? ''),
+            seed,
+            drawnFrom,
+            writing: ladder.writingAt(step.id),
+          });
+          expect(() => validateExercise(exercise)).not.toThrow();
+        }
       }
+    }
+  });
+
+  it('tests a grade in the materials it met, the chords among them to the top', () => {
+    // A material a grade moved on from is still one a test at it can be in:
+    // keeping only the latest stopped asking for chords at Grade 4 b.
+    const materialsOf = (id: string) => ladder.get(id).draws?.materials;
+    expect(materialsOf('grade-3.all')).toEqual(['wide-grand-staff', 'melody-and-intervals']);
+    expect(materialsOf('grade-4.all')).toEqual(['melody-and-intervals', 'figures']);
+    expect(materialsOf('grade-5.all')).toEqual(['melody-and-intervals', 'figures', 'sequences']);
+    // Only ever something the route has already been through, and only on
+    // the last rung of a grade - every other one is the single thing it moves.
+    const met = new Set<string>();
+    for (const step of ladder.list()) {
+      const drawn = step.draws?.materials ?? [];
+      expect({ rung: step.id, unmet: drawn.filter((id) => !met.has(id)) }).toEqual({ rung: step.id, unmet: [] });
+      if (drawn.length > 0) {
+        expect(step.id).toMatch(/\.all$/);
+      }
+      met.add(ladder.resolve(step.id).presetId ?? '');
     }
   });
 

@@ -6984,6 +6984,24 @@ describe('AppView', () => {
       key.dispatchEvent(new Event('change'));
       expect(runtime.controller.ladderStep?.id).toBe('grade-1.all');
 
+      // The material too, where the rung draws it.
+      const preset = element<HTMLSelectElement>('preset');
+      expect(preset.querySelector('option[value="drawn"]')).toBeNull();
+      runtime.controller.selectLadderStep('grade-5.all');
+      element<HTMLButtonElement>('ladder-down').click();
+      element<HTMLButtonElement>('ladder-up').click();
+      await Promise.resolve();
+      expect(preset.selectedOptions[0]?.textContent).toBe(
+        'Drawn each time: Melody over intervals, Broken chords in both hands, Sequences',
+      );
+      preset.dispatchEvent(new Event('change'));
+      expect(runtime.controller.ladderStep?.id).toBe('grade-5.all');
+      runtime.controller.selectLadderStep('grade-1.all');
+      element<HTMLButtonElement>('ladder-down').click();
+      element<HTMLButtonElement>('ladder-up').click();
+      await Promise.resolve();
+      expect(preset.querySelector('option[value="drawn"]')).toBeNull();
+
       // And a rung of one key says that key, with nothing drawn left behind.
       element<HTMLButtonElement>('ladder-down').click();
       element<HTMLButtonElement>('ladder-down').click();

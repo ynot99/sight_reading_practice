@@ -8,15 +8,33 @@ const THREE_FOUR = new TimeSignature(3, 4);
 const SIX_EIGHT = new TimeSignature(6, 8);
 const C_MAJOR = KeySignature.major(0);
 
-/** The last rung of a grade: a test of it, in any of its keys and metres. */
-function theWholeOf(grade: string, label: string, description: string): LadderStep {
+/**
+ * The last rung of a grade: a test of it, in any of its keys and metres.
+ *
+ * And, where the grade has met more than one, in any of the materials named:
+ * a material a grade moved on from is still a thing a test at it can be in,
+ * and a route that only ever kept the latest would stop asking for the
+ * chords as soon as the broken ones arrived. Named rather than every one
+ * met so far, since the one-handed pages of the first grades would be the
+ * easy half of a test at the fifth.
+ */
+function theWholeOf(
+  grade: string,
+  label: string,
+  description: string,
+  materials?: readonly string[],
+): LadderStep {
   return {
     id: `${grade}.all`,
     grade,
     label,
     description,
     settings: {},
-    draws: { keys: keysUpTo(grade), times: timesUpTo(grade) },
+    draws: {
+      keys: keysUpTo(grade),
+      times: timesUpTo(grade),
+      ...(materials === undefined ? {} : { materials }),
+    },
   };
 }
 
@@ -161,7 +179,12 @@ export const BUILT_IN_LADDER: readonly LadderStep[] = [
     settings: { rhythmProfileId: 'sixteenths' },
   },
   theNewKeysOf('grade-3', 'Grade 3 · d', 'The new keys: A, B flat or E flat major, or B minor.'),
-  theWholeOf('grade-3', 'Grade 3 · e', 'All of Grade 3: any of its twelve keys, three-eight among the metres.'),
+  theWholeOf(
+    'grade-3',
+    'Grade 3 · e',
+    'All of Grade 3: any of its twelve keys, three-eight among the metres, with wide leaps or with chords.',
+    ['wide-grand-staff', 'melody-and-intervals'],
+  ),
   {
     id: 'grade-4.six-eight',
     grade: 'grade-4',
@@ -198,7 +221,12 @@ export const BUILT_IN_LADDER: readonly LadderStep[] = [
     settings: {},
     writes: { pauses: true },
   },
-  theWholeOf('grade-4', 'Grade 4 · e', 'All of Grade 4: broken chords in any key and metre so far.'),
+  theWholeOf(
+    'grade-4',
+    'Grade 4 · e',
+    'All of Grade 4: broken chords, or a melody over two-note ones, in any key and metre so far.',
+    ['melody-and-intervals', 'figures'],
+  ),
   {
     id: 'grade-5.sequences',
     grade: 'grade-5',
@@ -228,5 +256,10 @@ export const BUILT_IN_LADDER: readonly LadderStep[] = [
     writes: { slowingAtTheEnd: true },
   },
   theNewKeysOf('grade-5', 'Grade 5 · d', 'The new keys: E or A flat major, F sharp or C minor.'),
-  theWholeOf('grade-5', 'Grade 5 · e', 'All of Grade 5: any of sixteen keys. The top of the ladder.'),
+  theWholeOf(
+    'grade-5',
+    'Grade 5 · e',
+    'All of Grade 5: sequences, broken chords or two-note ones, in any of sixteen keys. The top of the ladder.',
+    ['melody-and-intervals', 'figures', 'sequences'],
+  ),
 ];

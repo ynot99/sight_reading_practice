@@ -3569,6 +3569,9 @@ export class AppView {
     });
 
     this.listen(this.el.preset, 'change', () => {
+      if (this.el.preset.value === DRAWN) {
+        return;
+      }
       controller.updateSettings({ presetId: this.el.preset.value });
       this.syncControlsFromSettings();
       void this.reload(true);
@@ -6900,6 +6903,15 @@ export class AppView {
     this.el.timeSignature.value = settings.timeSignature.toString();
     // After the settings' own key, which a rung that draws does not use.
     const draws = this.runtime.controller.ladderStep?.draws;
+    offerTheDraw(
+      this.el.preset,
+      draws?.materials === undefined
+        ? null
+        : drawnFrom(
+            draws.materials.map((id) => this.runtime.presets.get(id).label),
+            'materials',
+          ),
+    );
     offerTheDraw(
       this.el.key,
       draws?.keys === undefined ? null : drawnFrom(draws.keys.map((key) => key.name), 'keys'),

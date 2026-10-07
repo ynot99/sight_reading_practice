@@ -32,6 +32,7 @@ import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../share
 import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
 import type { IClock } from './ports/IClock.js';
 import { GeneratedExerciseProvider, type IExerciseProvider } from './ports/IExerciseProvider.js';
+import { OneOfTheGenerators } from '../domain/generation/OneOfTheGenerators.js';
 import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
@@ -1709,6 +1710,7 @@ export class PracticeController {
       return this.present(opened);
     }
 
+    const { materials, ...drawn } = this.ladderStep?.draws ?? {};
     const request: ExerciseRequest = {
       measures: this.currentSettings.measures,
       timeSignature: this.currentSettings.timeSignature,
@@ -1724,7 +1726,7 @@ export class PracticeController {
         : { withinRange: keysOf(this.currentSettings.keyboard) as PitchRange }),
       // A rung that is a set of keys and metres rather than one: the page
       // draws its own, by its seed, so going back to it is the same page.
-      ...(this.ladderStep?.draws === undefined ? {} : { drawnFrom: this.ladderStep.draws }),
+      ...(drawn.keys === undefined && drawn.times === undefined ? {} : { drawnFrom: drawn }),
       // And written as the route has reached: the marks a grade brings. Off
       // the route the page is the plain one the settings describe.
       ...(this.ladderStep === null || this.deps.ladder === undefined
@@ -1732,7 +1734,18 @@ export class PracticeController {
         : { writing: this.deps.ladder.writingAt(this.ladderStep.id) }),
     };
 
-    return this.present(await this.provider.provide(request));
+    // And a rung that is a set of materials draws one of them the same way.
+    const provider =
+      materials === undefined
+        ? this.provider
+        : this.providerOf(
+            new OneOfTheGenerators(
+              'gen.drawn',
+              'Drawn material',
+              materials.map((id) => this.deps.presets.get(id).generator),
+            ),
+          );
+    return this.present(await provider.provide(request));
   }
 
   /** Engraves an exercise and makes it the one being practised. */
@@ -4241,7 +4254,10 @@ export class PracticeController {
   }
 
   private createProvider(): IExerciseProvider {
-    const generator = this.deps.presets.get(this.currentSettings.presetId).generator;
+    return this.providerOf(this.deps.presets.get(this.currentSettings.presetId).generator);
+  }
+
+  private providerOf(generator: IExerciseGenerator): IExerciseProvider {
     const factory =
       this.deps.providerFor ?? ((source: IExerciseGenerator) => new GeneratedExerciseProvider(source));
     return factory(generator);

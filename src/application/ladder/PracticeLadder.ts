@@ -5,6 +5,14 @@ import type { PracticeSettings } from '../PracticeController.js';
 import type { Grade } from './grades.js';
 
 /**
+ * What each exercise on a rung draws for itself: the key and the metre, and
+ * the material, by the ids of the presets it may be any of.
+ */
+export interface LadderDraws extends DrawnFrom {
+  readonly materials?: readonly string[];
+}
+
+/**
  * One rung of the practice ladder.
  *
  * A rung is a *point in the settings space*, not a new kind of exercise: it
@@ -25,11 +33,11 @@ export interface LadderStep {
   /** The settings this rung *is*. Everything else is left as it was. */
   readonly settings: Partial<PracticeSettings>;
   /**
-   * Keys and metres each exercise on this rung draws its own from, in place
-   * of the settings' one. Not folded into the rungs after it: drawing is
-   * what this rung asks, not a setting the route has reached.
+   * Keys, metres and materials each exercise on this rung draws its own
+   * from, in place of the settings' one. Not folded into the rungs after it:
+   * drawing is what this rung asks, not a setting the route has reached.
    */
-  readonly draws?: DrawnFrom;
+  readonly draws?: LadderDraws;
   /**
    * What the page is written with from this rung on, over what the rungs
    * below already wrote: folded along the route like the settings, since a

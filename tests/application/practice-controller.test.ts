@@ -11,7 +11,8 @@ import { WAIT_MODE_ID, WaitMode } from '../../src/application/modes/WaitMode.js'
 import { NOTE_MODE_ID, NoteMode } from '../../src/application/modes/NoteMode.js';
 import { LISTEN_MODE_ID } from '../../src/application/modes/ListenFrame.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
-import type { ExerciseRequest } from '../../src/domain/generation/IExerciseGenerator.js';
+import type { ExerciseRequest, IExerciseGenerator } from '../../src/domain/generation/IExerciseGenerator.js';
+import { GeneratedExerciseProvider } from '../../src/application/ports/IExerciseProvider.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
 import { PracticeLadder } from '../../src/application/ladder/PracticeLadder.js';
 import { BUILT_IN_GRADES } from '../../src/application/ladder/grades.js';
@@ -3924,6 +3925,43 @@ describe('climbing the ladder', () => {
     expect(rig.controller.ladderStep).toBeNull();
   });
 
+  it('writes a rung that draws its material from one of them, chosen by the page', async () => {
+    const handed: IExerciseGenerator[] = [];
+    const requests: ExerciseRequest[] = [];
+    const rig = createController(false, (generator) => {
+      handed.push(generator);
+      return {
+        provide: (request) => {
+          requests.push(request);
+          return new GeneratedExerciseProvider(generator).provide(request);
+        },
+      };
+    });
+    rig.controller.selectLadderStep('grade-5.all');
+    await rig.controller.loadNewExercise();
+
+    const drawing = handed.at(-1);
+    const request = {
+      measures: 4,
+      key: KeySignature.major(0),
+      timeSignature: new TimeSignature(4, 4),
+      tempoBpm: 60,
+      rhythm: new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES).get('flowing'),
+    };
+    const madeBy = new Set<string>();
+    for (let seed = 0; seed < 40; seed += 1) {
+      madeBy.add(drawing?.generate({ ...request, seed }).metadata.generatorId ?? '');
+    }
+    expect([...madeBy].sort()).toEqual(['gen.figures', 'gen.melody-intervals', 'gen.sequences']);
+    // The material is not a key or a metre: the generator is not asked to draw it.
+    expect(Object.keys(requests.at(-1)?.drawnFrom ?? {}).sort()).toEqual(['keys', 'times']);
+
+    // A rung of one material writes with that material's own generator.
+    rig.controller.selectLadderStep('grade-5.slowing');
+    const page = await rig.controller.loadNewExercise();
+    expect(page.metadata.generatorId).toBe('gen.sequences');
+  });
+
   it('hands the generator the keys and metres a rung draws from, and none off it', async () => {
     const requests: ExerciseRequest[] = [];
     const rig = createController(false, () => ({
@@ -3942,6 +3980,7 @@ describe('climbing the ladder', () => {
       'A minor',
     ]);
     expect(requests.at(-1)?.drawnFrom?.times?.map(String)).toEqual(['4/4', '3/4', '2/4']);
+    expect(Object.keys(requests.at(-1)?.drawnFrom ?? {}).sort()).toEqual(['keys', 'times']);
 
     // Written as the route has reached by then.
     expect(requests.at(-1)?.writing).toEqual({

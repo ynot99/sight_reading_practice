@@ -6,6 +6,8 @@ import type {
   IPlayedNoteOverlay,
   IRhythmRuler,
   IClosingCursors,
+  IPageRung,
+  RungOnThePage,
   ClosingCue,
   IScoreCursor,
   IScoreFade,
@@ -38,7 +40,7 @@ import {
   TAP_SLACK_PX,
 } from '../furniture.js';
 import { drawShape } from '../overlayElements.js';
-import { PAGE_LABEL_INSET, pageLabelText } from '../pageLabel.js';
+import { PAGE_LABEL_INSET, pageLabelText, rungAfterTheTitle } from '../pageLabel.js';
 import { PREVIEW_CLIP_ID, PREVIEW_SYSTEM_CLIP_ID, previewPlacement } from '../pagePreview.js';
 import { timeTheStart } from '../../../shared/timeTheStart.js';
 import { buildOverlayShapes, type PlayedMark } from '../playedNoteShapes.js';
@@ -196,9 +198,12 @@ export class VerovioScoreRenderer
     IPlayedNoteOverlay,
     IScoreFade,
     IStuckMarker,
-    IClosingCursors
+    IClosingCursors,
+    IPageRung
 {
   private readonly container: HTMLElement;
+  /** What follows the title on a page; see `IPageRung`. */
+  private rung: RungOnThePage | null = null;
   private readonly engraver: VerovioEngraver;
   /** The reader's marker, and the fainter one where the other hand has got to. */
   private readonly reader = new MarkerOnThePage('shown', (byTheMusic) => {
@@ -917,6 +922,16 @@ export class VerovioScoreRenderer
       layer.append(label);
     }
     label.textContent = said;
+    if (this.rung !== null) {
+      label.append(rungAfterTheTitle(layer.ownerDocument, this.rung));
+    }
+  }
+
+  showTheRung(rung: RungOnThePage | null): void {
+    this.rung = rung;
+    for (const page of this.drawn) {
+      this.labelThePage(page);
+    }
   }
 
   private letTheFarPagesGo(): void {

@@ -2825,14 +2825,6 @@ body[data-bare='true'] .score__modes {
   display: none;
 }
 
-/*
- * The rung, between runs only. The readings in a row move only when a run
- * ends, so over the music it would be furniture that says nothing new.
- */
-body[data-playing='true'] .score__rung {
-  display: none;
-}
-
 body[data-bare='true'] .focus-bar__row > *:not([data-bare]) {
   display: none;
 }
@@ -3428,10 +3420,6 @@ body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard {
   width: 8px;
   height: 8px;
   background: var(--accent);
-}
-
-.score__rung {
-  gap: 8px;
 }
 
 .ladder-row__track {
@@ -4062,6 +4050,31 @@ body[data-playing='true'] .score__modes {
   user-select: none;
   -webkit-user-select: none;
   pointer-events: none;
+}
+
+/*
+ * The rung after the title, and the readings in a row at it: the marks of
+ * the track under the verdict, set as letters of the same line. The reader's
+ * mark in the accent; an end with no rung that way faint.
+ *
+ * Between runs only. The readings in a row move only when a run ends, so
+ * over the music it would be furniture that says nothing new; the title
+ * stays, since which piece this is is worth checking at any moment.
+ */
+.page-label__marks {
+  letter-spacing: 2px;
+}
+
+.page-label__mark--here {
+  fill: var(--accent);
+}
+
+.page-label__mark--none {
+  fill-opacity: 0.35;
+}
+
+body[data-playing='true'] .page-label__rung {
+  display: none;
 }
 
 /*

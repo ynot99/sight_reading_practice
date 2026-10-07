@@ -38,7 +38,7 @@ import { midiToLabel } from '../domain/model/Pitch.js';
 import { writeMidiFile } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
-import { drawTheLadderTrack, type PlaceOnTheLadder } from './ladderTrack.js';
+import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
 import type { PracticeSettings } from '../application/PracticeController.js';
 import {
   RULER_DIVISIONS,
@@ -1694,8 +1694,6 @@ export class AppView {
     scoresExercise: HTMLButtonElement;
     sheetExercise: HTMLElement;
     exerciseClose: HTMLElement;
-    scoreRung: HTMLButtonElement;
-    scoreRungLabel: HTMLElement;
     ladderTrack: HTMLElement;
     grades: HTMLElement;
     gradeNew: HTMLElement;
@@ -2012,8 +2010,6 @@ export class AppView {
       scoresExercise: requireElement(doc, 'scores-exercise'),
       sheetExercise: requireElement(doc, 'sheet-exercise'),
       exerciseClose: requireElement(doc, 'exercise-close'),
-      scoreRung: requireElement(doc, 'score-rung'),
-      scoreRungLabel: requireElement(doc, 'score-rung-label'),
       ladderTrack: requireElement(doc, 'ladder-track'),
       grades: requireElement(doc, 'grades'),
       gradeNew: requireElement(doc, 'grade-new'),
@@ -7172,25 +7168,23 @@ export class AppView {
   }
 
   /**
-   * The track in the corner and in the sheet of what an exercise is made of.
+   * The rung after the page's title, and the track in the sheet of what an
+   * exercise is made of.
    *
-   * The corner only over a generated page: a score is not on the ladder. The
-   * sheet whatever is open, since what it sets is the next generated page.
+   * On the page only over a generated one: a score is not on the ladder. The
+   * sheet whatever is open, since what it sets is the next generated page,
+   * and with the rungs either side named - without them the marks look the
+   * same on every rung, since arriving at one starts its readings afresh.
    * The verdict draws its own, from the same place, as it is put up.
    */
   private showTheRung(): void {
     const place = this.placeOnTheLadder();
     this.el.ladderTrack.replaceChildren(
-      ...(place === null ? [] : [drawTheLadderTrack(this.doc, place)]),
+      ...(place === null ? [] : [drawTheLadderTrack(this.doc, place, { ends: true })]),
     );
-    const inTheCorner = place !== null && this.aGeneratedPageIsOpen();
-    this.el.scoreRung.hidden = !inTheCorner;
-    if (place === null || !inTheCorner) {
-      return;
-    }
-    this.el.scoreRungLabel.textContent = place.here;
-    this.el.scoreRung.replaceChildren(this.el.scoreRungLabel, drawTheLadderTrack(this.doc, place));
-    this.el.scoreRung.title = `${place.here}. Open what an exercise is made of.`;
+    this.runtime.renderer.showTheRung(
+      place !== null && this.aGeneratedPageIsOpen() ? { label: place.here, marks: marksOfThePlace(place) } : null,
+    );
   }
 
   /**
@@ -7486,10 +7480,9 @@ export class AppView {
       ],
       [
         // Over the scores it was opened from, so shutting it goes back to
-        // the button that makes the exercise it describes. Or from the rung
-        // in the corner, which is what it sets.
+        // the button that makes the exercise it describes.
         this.el.sheetExercise,
-        [this.el.scoresExercise, this.el.scoreRung],
+        [this.el.scoresExercise],
         () => this.syncControlsFromSettings(),
       ],
       [

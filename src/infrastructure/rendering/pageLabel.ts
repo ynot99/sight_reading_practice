@@ -1,3 +1,7 @@
+import type { RungMark, RungOnThePage } from '../../application/ports/IScoreRenderer.js';
+
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+
 /**
  * What a page says about itself: which piece, and which page of it.
  *
@@ -34,6 +38,39 @@ const TITLE_LIMIT = 48;
 export function pageLabelText(title: string, at: number, count: number): string {
   const pages = count < 2 ? '' : `Page ${String(at + 1)} of ${String(count)}`;
   return [shortened(title), pages].filter((part) => part !== '').join(' · ');
+}
+
+/** A ring at an end, a dot for a place between, and filled where the reader is. */
+function glyphOf(mark: RungMark): string {
+  return mark.here ? '\u25CF' : mark.rung ? '\u25CB' : '\u2022';
+}
+
+/**
+ * The rung and its marks, to run on after the line a page says about itself.
+ *
+ * Spans of the same text and not a drawing of their own, so they follow the
+ * title wherever it ends without anything measuring where that is.
+ */
+export function rungAfterTheTitle(doc: Document, rung: RungOnThePage): SVGElement {
+  const span = (className: string, text: string): SVGElement => {
+    const made = doc.createElementNS(SVG_NAMESPACE, 'tspan');
+    made.setAttribute('class', className);
+    made.textContent = text;
+    return made;
+  };
+  const after = span('page-label__rung', ` \u00B7 ${rung.label} `);
+  const marks = span('page-label__marks', '');
+  for (const mark of rung.marks) {
+    const kinds = [
+      'page-label__mark',
+      ...(mark.rung ? ['page-label__mark--rung'] : []),
+      ...(mark.none ? ['page-label__mark--none'] : []),
+      ...(mark.here ? ['page-label__mark--here'] : []),
+    ];
+    marks.append(span(kinds.join(' '), glyphOf(mark)));
+  }
+  after.append(marks);
+  return after;
 }
 
 /**

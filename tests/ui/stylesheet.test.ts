@@ -1011,11 +1011,14 @@ describe('the stylesheet', () => {
     expect(root?.body).toMatch(/--focus-bar-height\s*:\s*\d+px/);
   });
 
-  it('puts the rung in the corner away while the music is going', () => {
+  it('puts the rung after the title away while the music is going, and keeps the title', () => {
     // The readings in a row move only when a run ends, so over the music the
-    // track would say nothing new. jsdom applies no stylesheet.
-    const playing = rules().find((rule) => rule.selector === "body[data-playing='true'] .score__rung");
+    // marks would say nothing new. jsdom applies no stylesheet.
+    const playing = rules().find((rule) => rule.selector === "body[data-playing='true'] .page-label__rung");
     expect(playing?.body).toMatch(/display\s*:\s*none/);
+    expect(rules().some((rule) => /data-playing='true'\][^,{]*\.page-label(?![_\w-])/.test(rule.selector))).toBe(false);
+    const here = rules().find((rule) => rule.selector === '.page-label__mark--here');
+    expect(here?.body).toMatch(/fill\s*:\s*var\(--accent\)/);
     // An empty place is not drawn in the border colour, which in the dark is
     // the near neighbour of a sheet's panel: the places vanished into it.
     const mark = rules().find((rule) => rule.selector === '.ladder-track__mark');

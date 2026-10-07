@@ -6874,31 +6874,44 @@ describe('AppView', () => {
         .join('');
     }
 
-    it('says the rung in the corner only while a generated page is on it', async () => {
+    /** The rungs a track names at its two ends. */
+    function endsIn(within: HTMLElement): (string | null)[] {
+      return [...within.querySelectorAll('.ladder-track__end')].map((end) => end.textContent);
+    }
+
+    /** What the page was told to print after its title, marks as in `marksIn`. */
+    function printedAfterTheTitle(rig: ReturnType<typeof createRig>): string | null {
+      const rung = rig.renderer.rung;
+      return rung === null ? null : `${rung.label} ${rung.marks.map((mark) => (mark.here ? '|' : '.')).join('')}`;
+    }
+
+    it('prints the rung after the title only while a generated page is on it', async () => {
       const rig = createRig();
       await rig.view.initialize();
       // Off the route, which is where a first visit begins.
-      expect(element('score-rung').hidden).toBe(true);
+      expect(rig.renderer.rung).toBeNull();
 
       await onARung(rig);
-      expect(element('score-rung').hidden).toBe(false);
-      expect(element('score-rung-label').textContent).toBe('Grade 1 · b');
-      expect(marksIn(element('score-rung'))).toBe('..|..');
+      expect(printedAfterTheTitle(rig)).toBe('Grade 1 · b ..|..');
       // And the sheet that sets it, under the arrows.
       expect(marksIn(element('ladder-track'))).toBe('..|..');
 
       // A score is not on the ladder.
       await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-      expect(element('score-rung').hidden).toBe(true);
+      expect(rig.renderer.rung).toBeNull();
     });
 
-    it('opens what an exercise is made of from the rung in the corner', async () => {
+    it('names the rungs either side under the arrows, so a step by hand shows', async () => {
+      // Arriving at a rung starts its readings afresh, so on their own the
+      // marks look the same on every rung.
       const rig = createRig();
       await onARung(rig);
+      expect(endsIn(element('ladder-track'))).toEqual(['Grade 1 · a', 'Grade 1 · c']);
 
-      element<HTMLButtonElement>('score-rung').click();
+      element<HTMLButtonElement>('ladder-up').click();
 
-      expect(element('sheet-exercise').hidden).toBe(false);
+      expect(endsIn(element('ladder-track'))[0]).toBe('Grade 1 · b');
+      expect(printedAfterTheTitle(rig)).toBe('Grade 1 · c ..|..');
     });
 
     it('moves the mark for a clean reading, and draws the track under the verdict', async () => {
@@ -6908,15 +6921,12 @@ describe('AppView', () => {
       readItCleanly(rig);
 
       expect(rig.runtime.controller.settings.ladderStreak).toBe(1);
-      expect(marksIn(element('score-rung'))).toBe('...|.');
+      expect(printedAfterTheTitle(rig)).toBe('Grade 1 · b ...|.');
       const track = element('result').querySelector<HTMLElement>('.ladder-track');
       expect(track).not.toBeNull();
       expect(marksIn(track ?? element('result'))).toBe('...|.');
       // Under the verdict, the two rungs either way are named.
-      expect([...(track?.querySelectorAll('.ladder-track__end') ?? [])].map((end) => end.textContent)).toEqual([
-        'Grade 1 · a',
-        'Grade 1 · c',
-      ]);
+      expect(endsIn(track ?? element('result'))).toEqual(['Grade 1 · a', 'Grade 1 · c']);
     });
 
     it('draws no track under the verdict on a score', async () => {

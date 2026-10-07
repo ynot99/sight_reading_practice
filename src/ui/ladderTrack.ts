@@ -1,3 +1,5 @@
+import type { RungMark } from '../application/ports/IScoreRenderer.js';
+
 /** Where a reader stands between two rungs, and what the track is to show. */
 export interface PlaceOnTheLadder {
   /** The rung being read. */
@@ -35,6 +37,27 @@ export function saidOfThePlace(place: PlaceOnTheLadder): string {
 }
 
 /**
+ * One mark for each place the run can stand, the middle one where it starts.
+ *
+ * The one answer to what the marks are, for the track drawn here and the one
+ * the page prints after its title.
+ */
+export function marksOfThePlace(place: PlaceOnTheLadder): RungMark[] {
+  const reach = Math.max(1, place.toMove);
+  const at = Math.max(-reach, Math.min(reach, place.streak));
+  const marks: RungMark[] = [];
+  for (let position = -reach; position <= reach; position += 1) {
+    const rung = Math.abs(position) === reach;
+    marks.push({
+      rung,
+      none: rung && (position < 0 ? place.below : place.above) === null,
+      here: position === at,
+    });
+  }
+  return marks;
+}
+
+/**
  * The readings in a row, as a line of marks between two rungs.
  *
  * Marks and not a bar that fills, because what is counted is a short run of
@@ -67,20 +90,11 @@ export function drawTheLadderTrack(
   };
 
   const marks = element(doc, 'span', 'ladder-track__marks');
-  const reach = Math.max(1, place.toMove);
-  const at = Math.max(-reach, Math.min(reach, place.streak));
-  for (let position = -reach; position <= reach; position += 1) {
+  for (const { rung, none, here } of marksOfThePlace(place)) {
     const mark = element(doc, 'span', 'ladder-track__mark');
-    mark.dataset['at'] = String(position);
-    if (Math.abs(position) === reach) {
-      mark.classList.add('ladder-track__mark--rung');
-      if ((position < 0 ? place.below : place.above) === null) {
-        mark.classList.add('ladder-track__mark--none');
-      }
-    }
-    if (position === at) {
-      mark.classList.add('ladder-track__mark--here');
-    }
+    mark.classList.toggle('ladder-track__mark--rung', rung);
+    mark.classList.toggle('ladder-track__mark--none', none);
+    mark.classList.toggle('ladder-track__mark--here', here);
     marks.append(mark);
   }
 

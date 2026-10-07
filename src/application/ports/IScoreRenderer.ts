@@ -50,6 +50,34 @@ export interface IOtherHandMarker {
   readonly otherHand: IScoreCursor;
 }
 
+/** One mark of the readings in a row at a rung. */
+export interface RungMark {
+  /** One of the two ends, which stand for the rungs either side. */
+  readonly rung: boolean;
+  /** An end with no rung that way: the bottom or the top of the ladder. */
+  readonly none: boolean;
+  /** Where the reader stands. */
+  readonly here: boolean;
+}
+
+/** The rung being read, and the readings in a row at it. */
+export interface RungOnThePage {
+  readonly label: string;
+  readonly marks: readonly RungMark[];
+}
+
+/**
+ * The rung, printed on the page after its title.
+ *
+ * On the page rather than floated over it, because the title it follows is
+ * printed there and moves with the page: a box put beside it from outside
+ * would have to be measured against a line of text the engraver set. Kept
+ * until it is changed, so a page drawn later prints it too.
+ */
+export interface IPageRung {
+  showTheRung(rung: RungOnThePage | null): void;
+}
+
 /** Where the reader is in a score that is turned rather than scrolled. */
 export interface ScorePageState {
   /** Zero-based, so `at + 1` is what a reader would be told. */

@@ -21,6 +21,7 @@ import type {
 } from '../application/ports/IMidiSource.js';
 import type {
   IClosingCursors,
+  IPageRung,
   IHandSwitches,
   IOtherHandMarker,
   IPassageMarkers,
@@ -246,7 +247,8 @@ export interface AppRuntime {
     IHandSwitches &
     IOtherHandMarker &
     IRhythmRuler &
-    IClosingCursors;
+    IClosingCursors &
+    IPageRung;
   /**
    * The page's own clock, which every moment the run announces is on.
    *

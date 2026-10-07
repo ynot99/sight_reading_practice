@@ -247,6 +247,36 @@ describe('a score scrolled rather than turned', () => {
     expect([...heights][0]).toMatch(/^\d+(\.\d+)?px$/);
   });
 
+  it('runs the rung on after the line a page says, and takes it off again', async () => {
+    const { renderer, surface } = await aPagedScore();
+    const count = String(renderer.pages.count);
+
+    renderer.showTheRung({
+      label: 'Grade 1 · b',
+      marks: [
+        { rung: true, none: true, here: false },
+        { rung: false, none: false, here: true },
+        { rung: true, none: false, here: false },
+      ],
+    });
+
+    expect(label(surface, 0)).toBe(`Long fixture · Page 1 of ${count} · Grade 1 · b \u25CB\u25CF\u25CB`);
+    const marks = [...(sheets(surface)[0]?.querySelectorAll('.page-label__mark') ?? [])];
+    expect(marks.map((mark) => mark.getAttribute('class'))).toEqual([
+      'page-label__mark page-label__mark--rung page-label__mark--none',
+      'page-label__mark page-label__mark--here',
+      'page-label__mark page-label__mark--rung',
+    ]);
+    // And on a page drawn after it was said.
+    renderer.turnPages(1);
+    await whenDrawn(() => {
+      expect(label(surface, 2)).toBe(`Long fixture · Page 3 of ${count} · Grade 1 · b \u25CB\u25CF\u25CB`);
+    });
+
+    renderer.showTheRung(null);
+    expect(label(surface, 2)).toBe(`Long fixture · Page 3 of ${count}`);
+  });
+
   it('names the piece at the top of the column only, and counts nothing', async () => {
     const { renderer, surface } = await aPagedScore();
 

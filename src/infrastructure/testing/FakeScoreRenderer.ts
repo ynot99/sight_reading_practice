@@ -19,6 +19,8 @@ import type {
   OverlayContext,
   PassageEnd,
   PlayedNote,
+  IPageRung,
+  RungOnThePage,
 } from '../../application/ports/IScoreRenderer.js';
 
 /** In-memory cursor that records every move. */
@@ -68,7 +70,8 @@ export class FakeScoreRenderer
     IHandSwitches,
     IStuckMarker,
     IRhythmRuler,
-    IClosingCursors
+    IClosingCursors,
+    IPageRung
 {
   readonly cursor = new FakeScoreCursor();
   /** The other hand's marker; see `IOtherHandMarker`. */
@@ -90,6 +93,13 @@ export class FakeScoreRenderer
   trouble = 0;
   /** The ruler it was last told to draw. */
   ruler: readonly RulerMark[] = [];
+
+  /** What it was last told to print after the title. */
+  rung: RungOnThePage | null = null;
+
+  showTheRung(rung: RungOnThePage | null): void {
+    this.rung = rung;
+  }
 
   showRhythmRuler(marks: readonly RulerMark[]): void {
     this.ruler = marks;

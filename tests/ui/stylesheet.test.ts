@@ -1816,3 +1816,44 @@ describe('a bar of what a whole is made of', () => {
     expect(body("[data-kind='free']")).not.toBe(body("[data-kind='other']"));
   });
 });
+
+describe('the two pills on a phone', () => {
+  // The media query a rule stands inside, or nothing where it stands at the
+  // top level - which the braces before it say, not the nearest @media.
+  const inWhichMedia = (at: number): string => {
+    const before = CSS.slice(0, at);
+    const open = (before.match(/\{/g) ?? []).length - (before.match(/\}/g) ?? []).length;
+    const opened = CSS.lastIndexOf('@media', at);
+    return open === 0 || opened === -1 ? '' : CSS.slice(opened, CSS.indexOf('{', opened)).trim();
+  };
+
+  it('are one row that scrolls there, and no box of their own anywhere wider', () => {
+    const held = rules().filter((rule) => rule.selector === '.focus-bar__opens');
+    const wide = held.find((rule) => /display\s*:\s*contents/.test(rule.body));
+    const narrow = held.find((rule) => /display\s*:\s*flex/.test(rule.body));
+
+    expect(wide).toBeDefined();
+    expect(inWhichMedia(wide?.at ?? 0)).not.toMatch(/max-width/);
+    expect(inWhichMedia(narrow?.at ?? 0)).toBe('@media (max-width: 700px)');
+    // Later than the box-less rule, or that one would win.
+    expect(narrow?.at ?? 0).toBeGreaterThan(wide?.at ?? 0);
+    expect(narrow?.body).toMatch(/overflow-x\s*:\s*auto/);
+    expect(narrow?.body).not.toMatch(/flex-wrap\s*:\s*wrap/);
+    // The bar is as wide as its transport row, whatever this row holds: the
+    // Keep button appearing may not widen it and move Play.
+    expect(narrow?.body).toMatch(/contain\s*:\s*inline-size/);
+    expect(rules().find((rule) => rule.selector === '.focus-bar__opens > *')?.body).toMatch(
+      /flex\s*:\s*none/,
+    );
+  });
+
+  it('leave no empty row behind while a run is going or the page is bare', () => {
+    const gone = rules().find(
+      (rule) =>
+        rule.selector ===
+        ".focus-bar[data-playing='true'] .focus-bar__opens, body[data-bare='true'] .focus-bar__opens",
+    );
+
+    expect(gone?.body).toMatch(/display\s*:\s*none/);
+  });
+});

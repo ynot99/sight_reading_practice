@@ -11058,6 +11058,9 @@ describe('AppView', () => {
       }
       // What was kept goes under the eye that reveals it, on the other side.
       expect(element('focus-record').contains(element('focus-takes'))).toBe(true);
+      // Both held in one box, which on a phone is the row they share.
+      expect(aside.parentElement).toBe(element('focus-opens'));
+      expect(element('focus-record').parentElement).toBe(element('focus-opens'));
       for (const id of ['focus-scores', 'focus-takes', 'focus-settings', 'focus-readings']) {
         expect(element('focus-row').contains(element(id))).toBe(false);
         expect(element('focus-drawer').contains(element(id))).toBe(false);

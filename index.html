@@ -1549,6 +1549,12 @@
 
       <div id="focus-bar" class="focus-bar" data-open="false">
         <!--
+          The two pills beside the bar, held together so that on a phone,
+          where they join the bar, they can be one row that scrolls. Anywhere
+          wider it is no box at all, and each pill stands where it always has.
+        -->
+        <div id="focus-opens" class="focus-bar__opens">
+        <!--
           What a reader *opens* rather than presses: which score, what kind
           of run and how hard, how the last ones went, and the whole desk of
           settings. They were scattered across the row and the drawer, which
@@ -1621,6 +1627,7 @@
               <path d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zm0 2a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6z" />
             </svg>
           </button>
+        </div>
         </div>
 
         <button id="focus-handle" type="button" class="focus-bar__handle"

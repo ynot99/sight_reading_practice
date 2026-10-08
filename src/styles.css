@@ -3146,6 +3146,66 @@ body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard {
 }
 
 /*
+ * The two pills, held together. No box of their own anywhere wide: each is
+ * placed against the bar, as a satellite or above it.
+ */
+.focus-bar__opens {
+  display: contents;
+}
+
+/*
+ * On a phone, one row of the column that scrolls sideways, rather than two
+ * rows. Six buttons need about 324px and the bar is 294 across, so about one
+ * button is cut at the edge, which is also what says the row goes on.
+ *
+ * The bar keeps the width its transport row gives it: contained, the row
+ * asks for no width of its own and is stretched to the bar's. Were it to
+ * size the bar, the Keep button appearing would widen it and move Play from
+ * under the thumb.
+ */
+@media (max-width: 700px) {
+  .focus-bar__opens {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    contain: inline-size;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .focus-bar__opens::-webkit-scrollbar {
+    display: none;
+  }
+
+  .focus-bar__opens > * {
+    flex: none;
+  }
+
+  /*
+   * The line where one pill ended and the other began, with room on both
+   * sides of it. The room is also what cuts the eye at the edge: closer, the
+   * eye ended exactly where the row does and the takes were wholly out of
+   * sight, with nothing to say the row went on.
+   */
+  .focus-bar__opens > .focus-record {
+    margin-left: 8px;
+    padding-left: 14px;
+    border-left: 1px solid var(--border);
+    border-radius: 0;
+  }
+
+  /*
+   * Gone with the pills it holds, or it stands in the column empty and the
+   * column's gap is left above the transport row.
+   */
+  .focus-bar[data-playing='true'] .focus-bar__opens,
+  body[data-bare='true'] .focus-bar__opens {
+    display: none;
+  }
+}
+
+/*
  * A sheet over the page: the kept lists, raised from either the panel or the
  * fullscreen drawer.
  *

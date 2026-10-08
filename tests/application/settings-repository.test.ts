@@ -50,7 +50,6 @@ const SETTINGS: PracticeSettings = {
   rhythmOnly: true,
   previewSeconds: 8,
   cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false,
-  strictTiming: true,
   pagedScore: true,
   playedNotes: 'at-end',
   survival: true,
@@ -114,7 +113,6 @@ describe('practice settings codec', () => {
     expect(restored.rhythmSoundsTheMusic).toBe(true);
     expect(restored.offerToSync).toBe(true);
     expect(restored.cursorWhileRunning).toBe(false);
-    expect(restored.strictTiming).toBe(true);
     expect(restored.pageTurns).toBe('manual');
     expect(restored.stopAtAMistake).toBe(true);
     expect(restored.clickSilences).toBe('the-downbeat');

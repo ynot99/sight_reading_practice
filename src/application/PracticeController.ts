@@ -482,18 +482,6 @@ export interface PracticeSettings {
   readonly cursorWhileListening: boolean;
   readonly cursorAtRest: boolean;
   /**
-   * Whether missing the beat makes a right note count as a wrong one.
-   *
-   * A display decision and only that: what was played and how far off the
-   * beat it was are measured the same either way, and how much timing counts
-   * towards the grade is the scoring strategy's question, not this one. This
-   * says what the *page* should show, and there are two honest answers - the
-   * colour can mean "the right note", with the outline saying it was late, or
-   * it can mean "the right note, in time", which is stricter and is how the
-   * graded trainers mark it.
-   */
-  readonly strictTiming: boolean;
-  /**
    * Whether the score is read by turning pages instead of by scrolling.
    *
    * The engraver lays a piece out as one tall column. That is right for
@@ -1064,7 +1052,6 @@ export class PracticeController {
       cursorWhileRunning: true,
       cursorWhileListening: true,
       cursorAtRest: true,
-      strictTiming: false,
       pagedScore: true,
       showRepeatNumbers: true,
       playedNotes: 'live',

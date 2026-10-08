@@ -419,7 +419,6 @@ export function decodePracticeSettings(
     cursorWhileListening:
       readBoolean(value['cursorWhileListening']) ?? readBoolean(value['showCursor']),
     cursorAtRest: readBoolean(value['cursorAtRest']) ?? readBoolean(value['showCursor']),
-    strictTiming: readBoolean(value['strictTiming']),
     pagedScore: readBoolean(value['pagedScore']),
     playedNotes: readPlayedNotes(value['playedNotes'], value['showPlayedNotes']),
     survival: readBoolean(value['survival']),
@@ -490,7 +489,6 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     cursorWhileRunning: settings.cursorWhileRunning,
     cursorWhileListening: settings.cursorWhileListening,
     cursorAtRest: settings.cursorAtRest,
-    strictTiming: settings.strictTiming,
     pagedScore: settings.pagedScore,
     playedNotes: settings.playedNotes,
     survival: settings.survival,

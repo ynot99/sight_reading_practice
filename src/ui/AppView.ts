@@ -1883,7 +1883,6 @@ export class AppView {
     cursorRunning: HTMLInputElement;
     cursorListening: HTMLInputElement;
     cursorRest: HTMLInputElement;
-    strictTiming: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
     sampleLoadingHint: HTMLElement;
     networkState: HTMLElement;
@@ -2201,7 +2200,6 @@ export class AppView {
       cursorRunning: requireElement(doc, 'cursor-running'),
       cursorListening: requireElement(doc, 'cursor-listening'),
       cursorRest: requireElement(doc, 'cursor-rest'),
-      strictTiming: requireElement(doc, 'strict-timing'),
       sampleLoading: requireElement(doc, 'sample-loading'),
       sampleLoadingHint: requireElement(doc, 'sample-loading-hint'),
       networkState: requireElement(doc, 'network-state'),
@@ -3793,11 +3791,6 @@ export class AppView {
 
     this.listen(this.el.cursorRunning, 'change', () => {
       controller.updateSettings({ cursorWhileRunning: this.el.cursorRunning.checked });
-    });
-
-    this.listen(this.el.strictTiming, 'change', () => {
-      controller.updateSettings({ strictTiming: this.el.strictTiming.checked });
-      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.sampleLoading, 'change', () => {
@@ -6957,7 +6950,6 @@ export class AppView {
     this.el.cursorRunning.checked = settings.cursorWhileRunning;
     this.el.cursorListening.checked = settings.cursorWhileListening;
     this.el.cursorRest.checked = settings.cursorAtRest;
-    this.el.strictTiming.checked = settings.strictTiming;
     this.el.pagedScore.checked = settings.pagedScore;
     this.el.repeatNumbers.checked = settings.showRepeatNumbers;
     // The switch as well as the box, and from here: this is where every setting
@@ -6970,10 +6962,6 @@ export class AppView {
     // whether they are shown - no re-engraving for a checkbox.
     this.doc.body.dataset['repeats'] = settings.showRepeatNumbers ? 'shown' : 'hidden';
     this.runtime.renderer.setPaged(settings.pagedScore);
-    // A display decision, so it is answered in the stylesheet: the marks
-    // themselves are the same either way, and what was measured about a press
-    // does not change because the reader wants stricter colours.
-    this.el.score.dataset['strict'] = String(settings.strictTiming);
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.playingAhead.value = settings.playingAhead;

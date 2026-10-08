@@ -1151,18 +1151,15 @@ describe('the stylesheet', () => {
     expect(page?.body).toMatch(/display\s*:\s*block/);
   });
 
-  it('answers strict marking in colour alone', () => {
-    // A note struck off its beat is measured the same either way; only what
-    // the page paints it changes. Kept here so it cannot quietly grow into a
-    // second answer to "how much does timing count", which is the scoring
-    // strategy's question and already has one.
-    const strict = rules().filter((rule) => rule.selector.includes("[data-strict='true']"));
+  it('never paints a Good note in the colour of a wrong one', () => {
+    // A press judged Good was right and a little off its beat. A switch once
+    // drew it red, the colour of Wrong, which is a verdict nobody gave: the
+    // colours are the verdicts, so a Good note is green whatever is set.
+    const good = rules().filter((rule) => rule.selector.includes('played--loose'));
 
-    expect(strict.length).toBeGreaterThan(0);
-    for (const rule of strict) {
-      expect(rule.selector).toContain('played--loose');
-      expect(rule.body).toMatch(/stroke|fill/);
-      expect(rule.body).not.toMatch(/display|visibility|opacity|transform/);
+    expect(good.length).toBeGreaterThan(0);
+    for (const rule of good) {
+      expect(rule.body).not.toMatch(/#b91c1c/);
     }
   });
 

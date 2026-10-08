@@ -1845,6 +1845,8 @@ export class AppView {
     networkState: HTMLElement;
     metronomeVolume: HTMLInputElement;
     metronomeVolumeValue: HTMLOutputElement;
+    soundMetronomeVolume: HTMLInputElement;
+    soundMetronomeVolumeValue: HTMLOutputElement;
     instrumentVolume: HTMLInputElement;
     instrumentVolumeValue: HTMLOutputElement;
     learnKnob: HTMLButtonElement;
@@ -2151,6 +2153,8 @@ export class AppView {
       networkState: requireElement(doc, 'network-state'),
       metronomeVolume: requireElement(doc, 'metronome-volume'),
       metronomeVolumeValue: requireElement(doc, 'metronome-volume-value'),
+      soundMetronomeVolume: requireElement(doc, 'sound-metronome-volume'),
+      soundMetronomeVolumeValue: requireElement(doc, 'sound-metronome-volume-value'),
       instrumentVolume: requireElement(doc, 'instrument-volume'),
       instrumentVolumeValue: requireElement(doc, 'instrument-volume-value'),
       learnKnob: requireElement(doc, 'learn-knob'),
@@ -3721,9 +3725,15 @@ export class AppView {
       this.applySampleLoading(readSampleLoading(this.el.sampleLoading.value));
     });
 
-    this.listen(this.el.metronomeVolume, 'input', () => {
-      this.applyVolumes(true);
-    });
+    // Two sliders for the metronome's loudness, one in its sheet and one
+    // beside the notes' in Sound. Either one moved is the value, and the
+    // other is drawn from it.
+    for (const slider of [this.el.metronomeVolume, this.el.soundMetronomeVolume]) {
+      this.listen(slider, 'input', () => {
+        this.el.metronomeVolume.value = slider.value;
+        this.applyVolumes(true);
+      });
+    }
 
     this.listen(this.el.instrumentVolume, 'input', () => {
       this.applyVolumes(true);
@@ -6393,6 +6403,8 @@ export class AppView {
     const instrument = Number.parseInt(this.el.instrumentVolume.value, 10) / 100;
 
     this.el.metronomeVolumeValue.value = this.el.metronomeVolume.value;
+    this.el.soundMetronomeVolume.value = this.el.metronomeVolume.value;
+    this.el.soundMetronomeVolumeValue.value = this.el.metronomeVolume.value;
     this.el.instrumentVolumeValue.value = this.el.instrumentVolume.value;
 
     this.runtime.metronomeVolume.setVolume(metronome);

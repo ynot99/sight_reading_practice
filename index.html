@@ -1383,19 +1383,6 @@
           <p id="latency-description" class="hint"></p>
         </div>
 
-        <div class="control-group" data-pane="instrument">
-          <label for="instrument-volume">
-            Note sound: <output id="instrument-volume-value">60</output>%
-          </label>
-          <input id="instrument-volume" type="range" min="0" max="100" step="5" value="60" />
-          <div class="knob-row">
-            <button id="learn-knob" type="button" class="button button--ghost knob-row__learn">
-              Use a knob
-            </button>
-            <span id="knob-status" class="hint knob-row__status"></span>
-          </div>
-        </div>
-
         <div class="control-group" data-pane="page">
           <label for="zoom">Note size: <output id="zoom-value">85</output>%</label>
           <input id="zoom" type="range" min="40" max="220" step="5" value="85" />
@@ -1411,6 +1398,33 @@
           <label for="read-ahead">Notes disappear</label>
           <select id="read-ahead"></select>
           <p id="read-ahead-description" class="hint"></p>
+        </div>
+
+        <div class="control-group" data-pane="sound">
+          <label for="instrument-volume">
+            Note sound: <output id="instrument-volume-value">60</output>%
+          </label>
+          <input id="instrument-volume" type="range" min="0" max="100" step="5" value="60" />
+          <div class="knob-row">
+            <button id="learn-knob" type="button" class="button button--ghost knob-row__learn">
+              Use a knob
+            </button>
+            <span id="knob-status" class="hint knob-row__status"></span>
+          </div>
+        </div>
+
+        <!--
+          The metronome's loudness a second time, beside the notes' own, so
+          the two can be balanced against each other in one place. The first
+          stays in the metronome's sheet, a tap from the bar mid-practice.
+          Both are drawn from the one saved value and either writes it, so
+          they cannot come to disagree.
+        -->
+        <div class="control-group" data-pane="sound">
+          <label for="sound-metronome-volume">
+            Metronome: <output id="sound-metronome-volume-value">60</output>%
+          </label>
+          <input id="sound-metronome-volume" type="range" min="0" max="100" step="5" value="60" />
         </div>
 
         <div class="control-group" data-pane="sound">

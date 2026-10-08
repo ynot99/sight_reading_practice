@@ -10291,6 +10291,47 @@ describe('AppView', () => {
       expect(element<HTMLOutputElement>('instrument-volume-value').value).toBe('0');
     });
 
+    it('keeps both metronome sliders on one loudness, whichever is moved', async () => {
+      // One in the metronome's sheet and one beside the notes' in Sound.
+      const rig = createRig();
+      await rig.view.initialize();
+      const inTheSheet = element<HTMLInputElement>('metronome-volume');
+      const inSound = element<HTMLInputElement>('sound-metronome-volume');
+      expect(inSound.closest('[data-pane~="sound"]')).not.toBeNull();
+      expect(element('instrument-volume').closest('[data-pane~="sound"]')).not.toBeNull();
+
+      inSound.value = '35';
+      inSound.dispatchEvent(new Event('input'));
+
+      expect(rig.metronomeVolume.volume).toBeCloseTo(0.35, 10);
+      expect(rig.settings.currentAudio.metronomeVolume).toBeCloseTo(0.35, 10);
+      expect(inTheSheet.value).toBe('35');
+      expect(element<HTMLOutputElement>('metronome-volume-value').value).toBe('35');
+
+      inTheSheet.value = '80';
+      inTheSheet.dispatchEvent(new Event('input'));
+
+      expect(rig.metronomeVolume.volume).toBeCloseTo(0.8, 10);
+      expect(inSound.value).toBe('80');
+      expect(element<HTMLOutputElement>('sound-metronome-volume-value').value).toBe('80');
+    });
+
+    it('draws the metronome slider in Sound from what was saved', async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      const slider = element<HTMLInputElement>('metronome-volume');
+      slider.value = '15';
+      slider.dispatchEvent(new Event('input'));
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      await second.view.initialize();
+
+      expect(element<HTMLInputElement>('sound-metronome-volume').value).toBe('15');
+      expect(element<HTMLOutputElement>('sound-metronome-volume-value').value).toBe('15');
+    });
+
     it('brings the sliders back where they were left', async () => {
       const store = new InMemorySettingsStore();
       const first = createRig(undefined, store);

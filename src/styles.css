@@ -2867,7 +2867,6 @@ body[data-keys-hidden='true'] .focus-bar {
   border-right: 1px solid #cbd5e1;
   border-radius: 0 0 3px 3px;
   background: #ffffff;
-  transition: background-color 300ms ease-out;
 }
 
 .replay-keys__black {
@@ -2879,43 +2878,65 @@ body[data-keys-hidden='true'] .focus-bar {
   height: 60%;
   border-radius: 0 0 2px 2px;
   background: #1f2937;
-  transition: background-color 300ms ease-out;
 }
 
 /*
- * Immediate strike on press, gentle fade on release.
+ * The light on a key: a layer over it, lit at once on a press and faded
+ * on release.
  *
- * Pressed keys light up with no transition so there is zero attack lag;
- * when released and data-shade is cleared, the key transitions back to resting white/black.
+ * A layer and its opacity, not the key's own background. Chrome runs a
+ * transition of `background-color` on the compositor, and where the page
+ * paints every frame - the notes falling - the end of one could show the
+ * light again for a frame: the key flickered after it had gone out, while
+ * the colour the page worked out never moved. Opacity is the animation the
+ * compositor has run longest, and with this the key's own colour never
+ * changes at all.
+ *
+ * The layer's colour is the light the key was last lit in, which outlives
+ * the press, so the fade is of that colour; whether it is lit is the press.
+ * Over the white key and under the black one standing in it, which is
+ * raised above it.
  */
-.replay-keys__white[data-shade],
-.replay-keys__black[data-shade] {
+.replay-keys__white::after,
+.replay-keys__black::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease-out;
+}
+
+.replay-keys__white[data-shade]::after,
+.replay-keys__black[data-shade]::after {
+  opacity: 1;
   transition: none;
 }
 
 /* Lit in the colours its ring on the page is drawn in. */
-.replay-keys__white[data-shade='perfect'],
-.replay-keys__black[data-shade='perfect'] {
+.replay-keys__white[data-lit='perfect']::after,
+.replay-keys__black[data-lit='perfect']::after {
   background: var(--keys-perfect);
 }
 
-.replay-keys__white[data-shade='good'],
-.replay-keys__black[data-shade='good'] {
+.replay-keys__white[data-lit='good']::after,
+.replay-keys__black[data-lit='good']::after {
   background: var(--keys-good);
 }
 
-.replay-keys__white[data-shade='wrong'],
-.replay-keys__black[data-shade='wrong'] {
+.replay-keys__white[data-lit='wrong']::after,
+.replay-keys__black[data-lit='wrong']::after {
   background: var(--keys-wrong);
 }
 
-.replay-keys__white[data-shade='aside'],
-.replay-keys__black[data-shade='aside'] {
+.replay-keys__white[data-lit='aside']::after,
+.replay-keys__black[data-lit='aside']::after {
   background: var(--keys-aside);
 }
 
-.replay-keys__white[data-shade='heard'],
-.replay-keys__black[data-shade='heard'] {
+.replay-keys__white[data-lit='heard']::after,
+.replay-keys__black[data-lit='heard']::after {
   background: var(--keys-heard);
 }
 

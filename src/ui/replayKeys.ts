@@ -143,6 +143,11 @@ export function whereTheKeysAre(keyboard: ReplayKeyboard): ReadonlyMap<number, K
  *
  * Only what changed is touched: this runs on every frame of a replay, and the
  * keys that change between two of them are a handful of eighty-eight.
+ *
+ * Two things are said of a key: `data-shade` while it is down, and
+ * `data-lit`, the light it was last lit in, which stays after it comes up.
+ * The stylesheet fades the light out in that colour, so it has to outlive
+ * the press.
  */
 export function lightTheKeys(
   keyboard: ReplayKeyboard,
@@ -160,6 +165,9 @@ export function lightTheKeys(
     }
     if (now !== shade) {
       key.dataset['shade'] = shade;
+    }
+    if (key.dataset['lit'] !== shade) {
+      key.dataset['lit'] = shade;
     }
   }
   const pedal = String(pedalDown);

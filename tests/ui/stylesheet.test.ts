@@ -201,9 +201,21 @@ describe('the stylesheet', () => {
     expect(body("body[data-keys-hidden='true'] .focus-bar")).not.toMatch(/var\(--replay-keys\)/);
     expect(body('.replay-keys__scroller')).toMatch(/overflow-x\s*:\s*auto/);
     expect(body('.replay-keys__white')).toMatch(/min-width\s*:\s*14px/);
-    expect(body('.replay-keys__white')).toMatch(/transition\s*:[^;]*background-color/);
-    expect(body('.replay-keys__black')).toMatch(/transition\s*:[^;]*background-color/);
-    expect(body('.replay-keys__white[data-shade], .replay-keys__black[data-shade]')).toMatch(/transition\s*:\s*none/);
+    // The key's own colour never moves: Chrome runs a background-color
+    // transition on the compositor, and the end of one flickered the light
+    // back on under a page painting every frame. A layer's opacity fades it.
+    expect(body('.replay-keys__white')).not.toMatch(/transition/);
+    expect(body('.replay-keys__black')).not.toMatch(/transition/);
+    const layer = body('.replay-keys__white::after, .replay-keys__black::after');
+    expect(layer).toMatch(/transition\s*:\s*opacity\s+300ms/);
+    expect(layer).toMatch(/opacity\s*:\s*0\s*;/);
+    expect(layer).toMatch(/inset\s*:\s*0/);
+    expect(layer).toMatch(/pointer-events\s*:\s*none/);
+    const down = body('.replay-keys__white[data-shade]::after, .replay-keys__black[data-shade]::after');
+    expect(down).toMatch(/opacity\s*:\s*1\s*;/);
+    expect(down).toMatch(/transition\s*:\s*none/);
+    // No colour by the press itself, or the light would lose it as it fades.
+    expect(rules().some((rule) => /\[data-shade='/.test(rule.selector) && /replay-keys/.test(rule.selector))).toBe(false);
     expect(body('.replay-keys__pedal')).toMatch(/transition\s*:[^;]*background-color/);
     expect(body(".replay-keys__pedal[data-down='true']")).toMatch(/transition\s*:\s*none/);
   });
@@ -365,7 +377,7 @@ describe('the stylesheet', () => {
     for (const shade of ['perfect', 'good', 'wrong', 'aside', 'heard']) {
       expect(body('.replay-keys'), shade).toMatch(new RegExp(`--keys-${shade}\\s*:`));
       expect(
-        body(`.replay-keys__white[data-shade='${shade}'], .replay-keys__black[data-shade='${shade}']`),
+        body(`.replay-keys__white[data-lit='${shade}']::after, .replay-keys__black[data-lit='${shade}']::after`),
         shade,
       ).toMatch(new RegExp(`background\\s*:\\s*var\\(--keys-${shade}\\)`));
     }

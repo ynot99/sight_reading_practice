@@ -82,6 +82,23 @@ describe('the keyboard a run is shown again over', () => {
     expect(keyboard.pedal.dataset['down']).toBe('false');
   });
 
+  it('keeps the light a key was lit in after it comes up, so it fades out in that colour', () => {
+    const keyboard = aKeyboard();
+    const lit = (midi: number): string | undefined => keyboard.keys.get(midi)?.dataset['lit'];
+
+    lightTheKeys(keyboard, new Map<number, KeyShade>([[60, 'wrong']]), false);
+    lightTheKeys(keyboard, new Map<number, KeyShade>(), false);
+
+    expect(keyboard.keys.get(60)?.dataset['shade']).toBeUndefined();
+    expect(lit(60)).toBe('wrong');
+    // Never lit, never coloured.
+    expect(lit(62)).toBeUndefined();
+
+    // Lit again in another light, that is the colour it fades in next.
+    lightTheKeys(keyboard, new Map<number, KeyShade>([[60, 'perfect']]), false);
+    expect(lit(60)).toBe('perfect');
+  });
+
   it('touches nothing that has not changed', async () => {
     // Asked on every frame of a replay, and a handful of eighty-eight change.
     const keyboard = aKeyboard();

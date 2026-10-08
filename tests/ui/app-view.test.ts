@@ -6300,9 +6300,27 @@ describe('AppView', () => {
       element<HTMLButtonElement>('settings-metronome').click();
 
       expect(element('sheet-metronome').hidden).toBe(false);
-      expect(element('sheet-settings').hidden).toBe(true);
       // One panel: the controls exist once in the document.
       expect(document.querySelectorAll('#count-in')).toHaveLength(1);
+    });
+
+    it('opens the metronome over the settings, and closing it goes back to them', async () => {
+      const { view } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-settings').click();
+
+      element<HTMLButtonElement>('settings-metronome').click();
+
+      // Drawn above the settings, which stay where they were underneath.
+      expect(element('sheet-settings').hidden).toBe(false);
+      expect(Number(element('sheet-metronome').dataset['over'])).toBeGreaterThan(
+        Number(element('sheet-settings').dataset['over'] ?? '1'),
+      );
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+      expect(element('sheet-metronome').hidden).toBe(true);
+      expect(element('sheet-settings').hidden).toBe(false);
     });
 
     it('says whether there is a network, by the control it decides', async () => {

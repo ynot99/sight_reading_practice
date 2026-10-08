@@ -4136,9 +4136,9 @@ export class AppView {
 
     // One panel and two doors to it. A second set of the same controls would
     // be two editors of one setting, disagreeing the moment one is wired up
-    // wrong - so this opens the panel the pill opens.
+    // wrong - so this opens the panel the pill opens. Over the settings, not
+    // instead of them: closing the metronome goes back to where it was opened.
     this.listen(this.el.settingsMetronome, 'click', () => {
-      this.el.sheetSettings.hidden = true;
       this.showTheSheet(this.el.sheetMetronome);
     });
   }

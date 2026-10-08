@@ -2720,7 +2720,8 @@ body[data-listening='true'] .focus-bar {
   bottom: calc(var(--focus-bar-foot) + var(--replay-keys));
 }
 
-body[data-free-play='true'] .focus-bar {
+body[data-free-play='true'] .focus-bar,
+body[data-take-on-keys='true'] .focus-bar {
   bottom: calc(var(--focus-bar-foot) + var(--replay-keys));
 }
 
@@ -3169,7 +3170,8 @@ body[data-replaying='true'] #focus-play-frame {
 
 body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard,
 body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard,
-body[data-free-play='true'] #focus-keyboard {
+body[data-free-play='true'] #focus-keyboard,
+body[data-take-on-keys='true'] #focus-keyboard {
   display: inline-flex;
 }
 
@@ -3204,7 +3206,11 @@ body[data-free-play='true'] #focus-keyboard {
 body[data-free-play='true'] #focus-play,
 body[data-free-play='true'] #focus-rewind,
 body[data-free-play='true'] #focus-repeat,
-body[data-free-play='true'] .focus-bar__row > #focus-speed {
+body[data-free-play='true'] .focus-bar__row > #focus-speed,
+body[data-take-on-keys='true'] #focus-play,
+body[data-take-on-keys='true'] #focus-rewind,
+body[data-take-on-keys='true'] #focus-repeat,
+body[data-take-on-keys='true'] .focus-bar__row > #focus-speed {
   display: none;
 }
 
@@ -3965,6 +3971,44 @@ body[data-playing='true'] .score__modes {
 .take-transport input[type='range'] {
   flex: 1;
   min-width: 0;
+}
+
+/* Watching the take on the keys is asked for from the list, and ended on the page. */
+#take-off-the-keys,
+body[data-take-on-keys='true'] #take-on-the-keys {
+  display: none;
+}
+
+body[data-take-on-keys='true'] #take-off-the-keys {
+  display: inline-flex;
+}
+
+/*
+ * The transport over the page while a take is watched on the keys: just
+ * above the bar, as wide as a hand can drag across, and over the lane the
+ * notes fall down. Wholly visible while the bar fades, being what is in use.
+ */
+.take-on-keys {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - 32px));
+  bottom: calc(var(--focus-bar-foot) + var(--replay-keys) + var(--focus-bar-height, 64px) + 10px);
+  z-index: 21;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.take-on-keys .take-transport {
+  border-top: 0;
+  padding-top: 0;
+}
+
+body[data-keys-hidden='true'] .take-on-keys {
+  bottom: calc(var(--focus-bar-foot) + var(--focus-bar-height, 64px) + 10px);
 }
 
 .sheet__head {

@@ -383,14 +383,14 @@ describe('the stylesheet', () => {
     }
   });
 
-  it('shows the keyboard toggle button only mid-run during replay and playback, and in free play', () => {
+  it('shows the keyboard toggle button only mid-run during replay and playback, in free play and over a take', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';
 
     expect(body('#focus-keyboard')).toMatch(/display\s*:\s*none/);
     expect(
       body(
-        "body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard, body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard, body[data-free-play='true'] #focus-keyboard",
+        "body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard, body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard, body[data-free-play='true'] #focus-keyboard, body[data-take-on-keys='true'] #focus-keyboard",
       ),
     ).toMatch(/display\s*:\s*inline-flex/);
   });
@@ -420,24 +420,44 @@ describe('the stylesheet', () => {
     expect(over).toBeGreaterThan(keys);
   });
 
-  it('puts away in free play what there is nothing to do with, and lifts the bar over the keys', () => {
+  it('puts away in free play and over a take what there is nothing to do with, and lifts the bar over the keys', () => {
     // No run to start or rewind, nothing to repeat or play faster - and no
     // fewer put away than the keyboard's button that comes in, so the row is
     // never longer than it is between runs.
     const hidden = rules().find((rule) => rule.selector.startsWith("body[data-free-play='true'] #focus-play"));
+    const putAway = ['#focus-play', '#focus-rewind', '#focus-repeat', '.focus-bar__row > #focus-speed'];
     expect(hidden?.selector.split(',').map((each) => each.trim())).toEqual([
-      "body[data-free-play='true'] #focus-play",
-      "body[data-free-play='true'] #focus-rewind",
-      "body[data-free-play='true'] #focus-repeat",
-      "body[data-free-play='true'] .focus-bar__row > #focus-speed",
+      ...putAway.map((what) => `body[data-free-play='true'] ${what}`),
+      ...putAway.map((what) => `body[data-take-on-keys='true'] ${what}`),
     ]);
     expect(hidden?.body).toMatch(/display\s*:\s*none/);
 
-    const lifted = rules().find((rule) => rule.selector === "body[data-free-play='true'] .focus-bar");
+    const lifted = rules().find(
+      (rule) => rule.selector === "body[data-free-play='true'] .focus-bar, body[data-take-on-keys='true'] .focus-bar",
+    );
     const keysHidden = rules().find((rule) => rule.selector === "body[data-keys-hidden='true'] .focus-bar");
     expect(lifted?.body).toMatch(/bottom\s*:\s*calc\(var\(--focus-bar-foot\) \+ var\(--replay-keys\)\)/);
     // Above the rule for keys put away, which weighs the same and has to win.
     expect(lifted?.at ?? Infinity).toBeLessThan(keysHidden?.at ?? 0);
+  });
+
+  it('stands the transport of a watched take just above the bar, over the lane, and lower when the keys are put away', () => {
+    const body = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
+    const over = body('.take-on-keys');
+
+    expect(over).toMatch(/position\s*:\s*fixed/);
+    expect(over).toMatch(
+      /bottom\s*:\s*calc\(var\(--focus-bar-foot\) \+ var\(--replay-keys\) \+ var\(--focus-bar-height, 64px\) \+ 10px\)/,
+    );
+    expect(Number(/z-index\s*:\s*(\d+)/.exec(over)?.[1])).toBeGreaterThan(
+      Number(/z-index\s*:\s*(\d+)/.exec(body('.replay-keys'))?.[1]),
+    );
+    expect(body("body[data-keys-hidden='true'] .take-on-keys")).toMatch(
+      /bottom\s*:\s*calc\(var\(--focus-bar-foot\) \+ var\(--focus-bar-height, 64px\) \+ 10px\)/,
+    );
+    // Watching is asked for from the list and ended on the page.
+    expect(body("#take-off-the-keys, body[data-take-on-keys='true'] #take-on-the-keys")).toMatch(/display\s*:\s*none/);
+    expect(body("body[data-take-on-keys='true'] #take-off-the-keys")).toMatch(/display\s*:\s*inline-flex/);
   });
 
   it('keeps the speed beside the run’s buttons over a replay, on a ground of its own', () => {

@@ -943,6 +943,21 @@
             <input id="take-scrub" type="range" min="0" max="1000" step="1" value="0"
               aria-label="Position in the take" />
             <output id="take-duration" class="take-transport__time">0:00</output>
+            <!--
+              The same take with the keys lit and its notes falling onto them,
+              over the page. Play beside it is for listening alone; this one
+              shuts the list, and the transport goes with the take onto the page.
+            -->
+            <button id="take-on-the-keys" type="button" class="button button--ghost"
+              title="Watch it on the keys" aria-label="Watch it on the keys">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="take-transport__icon">
+                <rect x="6.5" y="2" width="3" height="6" rx="1" />
+                <rect x="14.5" y="4" width="3" height="4" rx="1" />
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M3 12a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7zm2 0v7h14v-7H5zm3 0v4h2v-4H8zm6 0v4h2v-4h-2z" />
+              </svg>
+            </button>
+            <button id="take-off-the-keys" type="button" class="button button--ghost"
+              title="Stop watching" aria-label="Stop watching">×</button>
           </div>
         </div>
       </div>
@@ -1617,6 +1632,13 @@
         then - at the keys themselves it would be the eyes leaving the music.
       -->
       <div id="replay-keys" class="replay-keys" hidden aria-hidden="true"></div>
+
+      <!--
+        Where the takes' transport stands while a take is watched on the keys:
+        the one transport, moved here from its list and back, so there is one
+        set of its buttons to keep in step.
+      -->
+      <div id="take-on-keys" class="take-on-keys" hidden></div>
 
       <!--
         The chord the keys held make, in free play only, at the top of the

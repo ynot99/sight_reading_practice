@@ -9097,6 +9097,86 @@ describe('AppView', () => {
       expect(element('take-position').textContent).toBe('0:01');
     });
 
+    it('watches a take on the keys over the page, its transport with it, and gives the list it back', async () => {
+      // Play beside it is listening alone; this shuts the list, puts the keys
+      // up with the notes falling onto them, and the slider moves the picture.
+      const rig = createRig();
+      await rig.view.initialize();
+      const at = rig.clock.now();
+      rig.midi.noteOn(60, at);
+      rig.clock.advance(1_000);
+      rig.midi.noteOff(60, rig.clock.now());
+      rig.midi.noteOn(64, rig.clock.now());
+      rig.clock.advance(1_000);
+      rig.midi.noteOff(64, rig.clock.now());
+      element<HTMLButtonElement>('focus-keep').click();
+      element<HTMLButtonElement>('focus-takes').click();
+      rowButton('takes-list', 'Play this take').click();
+      // Held in the list first: watching it is asking to see it played.
+      element<HTMLButtonElement>('take-play').click();
+      expect(rig.runtime.takePlayer.playing).toBeNull();
+      const transport = element('take-transport');
+      const keys = element('replay-keys');
+      expect(keys.hidden).toBe(true);
+
+      element<HTMLButtonElement>('take-on-the-keys').click();
+
+      expect(element('sheet-takes').hidden).toBe(true);
+      expect(document.body.dataset['takeOnKeys']).toBe('true');
+      expect(transport.parentElement).toBe(element('take-on-keys'));
+      expect(element('take-on-keys').hidden).toBe(false);
+      expect(keys.hidden).toBe(false);
+      // Played from where the list had it, and lit as heard.
+      expect(rig.runtime.takePlayer.playing).not.toBeNull();
+      const lit = (): (string | undefined)[][] =>
+        [...keys.querySelectorAll<HTMLElement>('[data-shade]')].map((key) => [key.dataset['midi'], key.dataset['shade']]);
+      expect(lit()).toEqual([['60', 'heard']]);
+      // Three seconds of the take falling: middle C on its key, the E a second off.
+      const scene = (): (string | number)[][] =>
+        rig.view.fallingScene.map((bar) => [bar.midi, bar.shade, Number(bar.top.toFixed(3)), Number(bar.bottom.toFixed(3))]);
+      expect(scene()).toEqual([
+        [60, 'heard', 0.667, 1],
+        [64, 'heard', 0.333, 0.667],
+      ]);
+
+      // Held and dragged to a moment, the keys and the notes stand there.
+      element<HTMLButtonElement>('take-play').click();
+      const scrub = element<HTMLInputElement>('take-scrub');
+      scrub.value = '750';
+      scrub.dispatchEvent(new Event('input'));
+      expect(lit()).toEqual([['64', 'heard']]);
+      expect(scene()).toEqual([[64, 'heard', 0.833, 1]]);
+
+      // Ended on the page, playing: the sound stops, the keys go, the list has its transport.
+      element<HTMLButtonElement>('take-play').click();
+      expect(rig.runtime.takePlayer.playing).not.toBeNull();
+      element<HTMLButtonElement>('take-off-the-keys').click();
+      expect(document.body.dataset['takeOnKeys']).toBeUndefined();
+      expect(element('take-on-keys').hidden).toBe(true);
+      expect(transport.parentElement).toBe(element('sheet-takes').querySelector('.sheet__panel'));
+      expect(keys.hidden).toBe(true);
+      expect(lit()).toEqual([]);
+      expect(rig.runtime.takePlayer.playing).toBeNull();
+    });
+
+    it('takes the transport back to the list when the list is opened again, playing on', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      playSomething(rig);
+      element<HTMLButtonElement>('focus-keep').click();
+      element<HTMLButtonElement>('focus-takes').click();
+      rowButton('takes-list', 'Play this take').click();
+      element<HTMLButtonElement>('take-on-the-keys').click();
+
+      element<HTMLButtonElement>('focus-takes').click();
+
+      expect(element('sheet-takes').hidden).toBe(false);
+      expect(document.body.dataset['takeOnKeys']).toBeUndefined();
+      expect(element('take-transport').parentElement).toBe(element('sheet-takes').querySelector('.sheet__panel'));
+      expect(element('replay-keys').hidden).toBe(true);
+      expect(rig.runtime.takePlayer.playing).not.toBeNull();
+    });
+
     it('starts a finished take again from the top', async () => {
       // Pressing play on a take already at its end plays the nothing that is
       // left of it, so the reader had to drag the slider back by hand before

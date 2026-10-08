@@ -11,6 +11,14 @@ import { barCells } from '../domain/scoring/barCells.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
+import {
+  theTakeOnTheKeys,
+  theTakesKeysAt,
+  theTakesPedalAt,
+  theTakesPedalBetween,
+  theTakesPressesBetween,
+  type TakeOnTheKeys,
+} from '../application/takeOnTheKeys.js';
 import { BAR_MODE_ID } from '../application/modes/BarMode.js';
 import { NOTE_MODE_ID } from '../application/modes/NoteMode.js';
 import { WAIT_MODE_ID } from '../application/modes/WaitMode.js';
@@ -1399,6 +1407,8 @@ export class AppView {
   /** Pending return of the pill to what the run is saying. */
   /** Which take the transport is showing, playing or not. */
   private selectedTakeId: string | null = null;
+  /** The take being watched on the keys, and its presses; see `watchTheTakeOnTheKeys`. */
+  private takeOnTheKeys: { readonly id: string; readonly keys: TakeOnTheKeys } | null = null;
   /** Follows a sounding take, so the slider says where it has got to. */
   private takeTick: ReturnType<typeof setInterval> | null = null;
   private rollTick: ReturnType<typeof setInterval> | null = null;
@@ -1760,6 +1770,9 @@ export class AppView {
     takePosition: HTMLOutputElement;
     takeDuration: HTMLOutputElement;
     takeScrub: HTMLInputElement;
+    takeOnTheKeys: HTMLButtonElement;
+    takeOffTheKeys: HTMLButtonElement;
+    takeOnKeys: HTMLElement;
     scoresEmpty: HTMLElement;
     scoresAdded: HTMLElement;
     sheetConfirm: HTMLElement;
@@ -2066,6 +2079,9 @@ export class AppView {
       scoresClose: requireElement(doc, 'scores-close'),
       takesEmpty: requireElement(doc, 'takes-empty'),
       takeTransport: requireElement(doc, 'take-transport'),
+      takeOnTheKeys: requireElement(doc, 'take-on-the-keys'),
+      takeOffTheKeys: requireElement(doc, 'take-off-the-keys'),
+      takeOnKeys: requireElement(doc, 'take-on-keys'),
       takePlay: requireElement(doc, 'take-play'),
       takePlayIcon: requireElement(doc, 'take-play-icon'),
       takePosition: requireElement(doc, 'take-position'),
@@ -7368,7 +7384,11 @@ export class AppView {
       [
         this.el.sheetTakes,
         [this.el.focusTakes],
-        () => this.renderTakes(),
+        () => {
+          // The list takes its transport back, and goes on playing what it played.
+          this.letGoOfTheTakeOnTheKeys();
+          this.renderTakes();
+        },
       ],
       [
         this.el.sheetReadings,
@@ -7947,6 +7967,89 @@ export class AppView {
       player.stop();
       this.describeTakeTransport();
     });
+
+    this.listen(this.el.takeOnTheKeys, 'click', () => {
+      this.watchTheTakeOnTheKeys();
+    });
+    this.listen(this.el.takeOffTheKeys, 'click', () => {
+      player.stop();
+      this.letGoOfTheTakeOnTheKeys();
+    });
+  }
+
+  /**
+   * Shows the take chosen in the list on the keys: lit as it is played, its
+   * notes falling onto them over the page, and its transport with it, just
+   * above the bar - where the slider is dragged to any moment of it.
+   *
+   * The page stays: a reader who plays from the score with no frame at all
+   * keeps the recording, and looks at what they played against what is
+   * printed. How much of the keys and notes is shown is the keyboard's button,
+   * as for everything else that falls.
+   */
+  private watchTheTakeOnTheKeys(): void {
+    const id = this.selectedTakeId;
+    const take = id === null ? null : this.runtime.takes.find(id);
+    if (id === null || take === null) {
+      return;
+    }
+    const player = this.runtime.takePlayer;
+    this.endTheReplay();
+    this.el.sheetTakes.hidden = true;
+    this.takeOnTheKeys = { id, keys: theTakeOnTheKeys(take.events, take.durationMs) };
+    this.doc.body.dataset['takeOnKeys'] = 'true';
+    this.el.takeOnKeys.append(this.el.takeTransport);
+    this.el.takeOnKeys.hidden = false;
+    this.applyKeyboardVisibility();
+    // Going at once, from where the list had it - asking to watch it is asking
+    // to see it played.
+    const from = player.positionMs < player.durationMs ? player.positionMs : 0;
+    this.playTake(id, from);
+  }
+
+  /**
+   * Puts the take away from the keys and gives the list its transport back.
+   * Whatever is playing goes on: the list is where it can be stopped.
+   */
+  private letGoOfTheTakeOnTheKeys(): void {
+    if (this.takeOnTheKeys === null) {
+      return;
+    }
+    this.takeOnTheKeys = null;
+    delete this.doc.body.dataset['takeOnKeys'];
+    this.el.sheetTakes.querySelector('.sheet__panel')?.append(this.el.takeTransport);
+    this.el.takeOnKeys.hidden = true;
+    lightTheKeys(this.replayKeyboard, new Map(), false);
+    this.applyKeyboardVisibility();
+    this.describeTakeTransport();
+  }
+
+  /**
+   * The take being watched as it stands at the player's moment: its keys lit,
+   * and the notes moved there - falling while it plays, and painted once where
+   * it is held, so a take dragged to a moment shows that moment.
+   */
+  private showTheTakeOnTheKeys(): void {
+    const watched = this.takeOnTheKeys;
+    if (watched === null) {
+      return;
+    }
+    const at = this.runtime.takePlayer.positionMs;
+    const down = theTakesKeysAt(watched.keys, at);
+    lightTheKeys(
+      this.replayKeyboard,
+      new Map<number, KeyLight>(down.map((midi) => [midi, 'heard'])),
+      theTakesPedalAt(watched.keys, at),
+    );
+    if (down.length > 0) {
+      keepInView(this.replayKeyboard, Math.min(...down));
+    }
+    this.sayWhetherNotesFall();
+    if (this.notesAreFalling) {
+      this.letTheNotesFall();
+    } else if (!this.el.replayKeys.hidden && this.runtime.controller.settings.keysShown === 'falling-notes') {
+      this.paintTheFallingNotes();
+    }
   }
 
   /** Starts a take and follows it until it stops. */
@@ -7954,6 +8057,10 @@ export class AppView {
     const take = this.runtime.takes.find(id);
     if (take === null) {
       return;
+    }
+    // Another take than the one on the keys takes the player from under it.
+    if (this.takeOnTheKeys !== null && this.takeOnTheKeys.id !== id) {
+      this.letGoOfTheTakeOnTheKeys();
     }
     this.selectedTakeId = id;
     // At its own speed. The shelf offers no speed of its own, so a take played
@@ -8001,6 +8108,7 @@ export class AppView {
     const label = sounding ? 'Pause' : 'Play';
     this.el.takePlay.title = label;
     this.el.takePlay.setAttribute('aria-label', label);
+    this.showTheTakeOnTheKeys();
   }
 
   private renderTakes(): void {
@@ -8481,6 +8589,8 @@ export class AppView {
   private replayTheRun(roll: RunRoll, playedWith: PlayedWith): void {
     this.showVerdict(false);
     this.endTheReplay();
+    // The player is the run's now.
+    this.letGoOfTheTakeOnTheKeys();
     if (!this.runtime.controller.beginReplay(roll, playedWith)) {
       this.sayInTheMiddle(
         'This run was played on the piece as it was then, and does not fit it as it is now.',
@@ -8693,7 +8803,7 @@ export class AppView {
     const inReplay = this.replayRoll !== null;
     const inPlayback = controller.isListening || controller.isListeningPaused;
     const inFreePlay = this.inFreePlay;
-    const active = inReplay || inPlayback || inFreePlay;
+    const active = inReplay || inPlayback || inFreePlay || this.takeOnTheKeys !== null;
     // Said on the page for the stylesheet, which lifts the bar over the keys.
     if (inPlayback) {
       this.doc.body.dataset['listening'] = 'true';
@@ -8761,6 +8871,7 @@ export class AppView {
     return (
       controller.playsFreely &&
       this.replayRoll === null &&
+      this.takeOnTheKeys === null &&
       !controller.isListening &&
       !controller.isListeningPaused
     );
@@ -8807,6 +8918,11 @@ export class AppView {
    * time and a replay slowed down falls as slowly as it sounds.
    */
   private get laneClock(): { readonly nowMs: number; readonly aheadMs: number } {
+    // A take watched on the keys is on its own clock, as a replay is.
+    if (this.takeOnTheKeys !== null) {
+      const player = this.runtime.takePlayer;
+      return { nowMs: player.positionMs, aheadMs: FALLING_AHEAD_MS * player.speed };
+    }
     if (this.replayRoll !== null) {
       const player = this.runtime.takePlayer;
       return {
@@ -8838,6 +8954,15 @@ export class AppView {
       );
     }
     const until = nowMs + aheadMs;
+    const watched = this.takeOnTheKeys;
+    if (watched !== null) {
+      // As heard: a recording, and nobody judged it.
+      return theFallingNotes(
+        theTakesPressesBetween(watched.keys, nowMs, until).map((note) => ({ ...note, shade: 'heard' as const })),
+        nowMs,
+        aheadMs,
+      );
+    }
     return theFallingNotes(
       this.replayRoll !== null
         ? controller.replayPressesBetween(nowMs, until)
@@ -8898,6 +9023,9 @@ export class AppView {
     if (this.inFreePlay) {
       return theRisingPedal(controller.freePlayPedalBetween(nowMs - aheadMs, nowMs), nowMs, aheadMs);
     }
+    if (this.takeOnTheKeys !== null) {
+      return theFallingPedal(theTakesPedalBetween(this.takeOnTheKeys.keys, nowMs, nowMs + aheadMs), nowMs, aheadMs);
+    }
     const until = nowMs + aheadMs;
     return theFallingPedal(
       this.replayRoll !== null
@@ -8917,10 +9045,12 @@ export class AppView {
     const controller = this.runtime.controller;
     const rising =
       this.inFreePlay && controller.freePlayedSince(this.runtime.clock.now() - FALLING_AHEAD_MS);
+    const takeSounding =
+      this.takeOnTheKeys !== null && this.runtime.takePlayer.playing === this.takeOnTheKeys.id;
     return (
       !this.el.replayKeys.hidden &&
       controller.settings.keysShown === 'falling-notes' &&
-      (controller.isListening || this.replayIsSounding || rising)
+      (controller.isListening || this.replayIsSounding || rising || takeSounding)
     );
   }
 
@@ -10262,6 +10392,8 @@ export class AppView {
       clearInterval(this.takeTick);
       this.takeTick = null;
     }
+    // The player is the picture's now.
+    this.letGoOfTheTakeOnTheKeys();
     this.selectedTakeId = null;
     this.describeTakeTransport();
     // From wherever the head stands, which is nought unless the reader has put

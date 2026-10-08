@@ -2135,6 +2135,39 @@ describe('hearing the hand you are not reading', () => {
     expect(controller.machinePlays).toBe(true);
   });
 
+  it('begins nothing when the opening chord is played where the machine plays', async () => {
+    // Listening for it there reached for a practice mode the frame is not,
+    // and threw from inside the keyboard's listener.
+    const { controller, midi, clock } = createController(true, undefined, {
+      immediateStart: true,
+      modeId: LISTEN_MODE_ID,
+    });
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    const opening = controller.currentTimeline?.at(0)?.expectedMidi ?? [];
+    expect(opening.length).toBeGreaterThan(0);
+
+    expect(controller.waitingForTheOpening).toBe(false);
+    expect(controller.openingRefusedWhileTheMachinePlays).toBe(true);
+    expect(() => {
+      for (const key of opening) {
+        midi.noteOn(key, clock.now());
+      }
+    }).not.toThrow();
+    expect(controller.session).toBeNull();
+    expect(controller.isListening).toBe(false);
+
+    // Said only while nothing plays in it, and only where it was asked for.
+    controller.start();
+    expect(controller.isListening).toBe(true);
+    expect(controller.openingRefusedWhileTheMachinePlays).toBe(false);
+    controller.stop();
+    expect(controller.openingRefusedWhileTheMachinePlays).toBe(true);
+    controller.updateSettings({ immediateStart: false });
+    expect(controller.openingRefusedWhileTheMachinePlays).toBe(false);
+    controller.updateSettings({ immediateStart: true, modeId: FLOW_MODE_ID });
+    expect(controller.openingRefusedWhileTheMachinePlays).toBe(false);
+  });
+
   describe('free play', () => {
     it('begins nothing, by the button or by playing the opening, even when playing is how runs start', async () => {
       // A press in free play is the reader playing, never the opening of a

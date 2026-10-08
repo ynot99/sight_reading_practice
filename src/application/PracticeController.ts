@@ -2662,8 +2662,11 @@ export class PracticeController {
     const status = this.currentSession?.status;
     const wanted =
       this.currentSettings.immediateStart &&
-      // A press in free play is the reader playing, never a run beginning.
+      // A press in free play is the reader playing, never a run beginning;
+      // and where the machine plays there is no run to begin. Armed there,
+      // the opening chord reached for a practice mode the frame is not.
       !this.playsFreely &&
+      !this.machinePlays &&
       this.timeline !== null &&
       // A session that has *ended* is not something happening: it is the
       // report of the last run, and it stays around to be read. Asked whether
@@ -3898,6 +3901,23 @@ export class PracticeController {
    */
   get waitingForTheOpening(): boolean {
     return this.opening !== null;
+  }
+
+  /**
+   * Whether the reader asked to start by playing and the frame chosen is the
+   * one the machine plays, where playing starts nothing - while nothing is
+   * playing in it. Said on the page as plainly as the listening is, so a
+   * reader who plays the first chord there knows why nothing began.
+   */
+  get openingRefusedWhileTheMachinePlays(): boolean {
+    return (
+      this.currentSettings.immediateStart &&
+      this.machinePlays &&
+      this.timeline !== null &&
+      !this.isListening &&
+      !this.isListeningPaused &&
+      this.replay === null
+    );
   }
 
   /**

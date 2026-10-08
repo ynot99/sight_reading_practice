@@ -395,6 +395,18 @@ describe('the stylesheet', () => {
     ).toMatch(/display\s*:\s*inline-flex/);
   });
 
+  it('strikes the microphone through, and stills it, where playing starts nothing', () => {
+    const body = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    expect(body('.score__listening-struck')).toMatch(/display\s*:\s*none/);
+    expect(body(".score__listening[data-refused='true'] .score__listening-struck")).toMatch(
+      /display\s*:\s*inline/,
+    );
+    // Heavier than the breathing, which stands inside a media query.
+    expect(body(".score__listening[data-refused='true'] svg")).toMatch(/animation\s*:\s*none/);
+    expect(body('.score__listening svg')).toMatch(/fill\s*:\s*currentColor/);
+  });
+
   it('puts away in free play what there is nothing to do with, and lifts the bar over the keys', () => {
     // No run to start or rewind, nothing to repeat or play faster - and no
     // fewer put away than the keyboard's button that comes in, so the row is

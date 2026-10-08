@@ -4276,7 +4276,18 @@ export class AppView {
    */
   private showTheListening(): void {
     const waiting = this.runtime.controller.waitingForTheOpening;
-    this.el.scoreListening.hidden = !waiting;
+    // Where the machine plays, the same place says the opposite: the frame
+    // is Listen, and playing starts nothing. Still, so as not to say "live".
+    const refused = this.runtime.controller.openingRefusedWhileTheMachinePlays;
+    this.el.scoreListening.hidden = !waiting && !refused;
+    if (refused) {
+      this.el.scoreListening.dataset['refused'] = 'true';
+      this.el.scoreListeningText.textContent = 'Listening';
+      this.el.scoreListening.title = 'Listen is chosen: playing starts nothing.';
+      return;
+    }
+    delete this.el.scoreListening.dataset['refused'];
+    this.el.scoreListening.removeAttribute('title');
     if (!waiting) {
       return;
     }

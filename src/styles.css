@@ -3722,6 +3722,23 @@ body[data-free-play='true'] .focus-bar__row > #focus-speed {
   }
 }
 
+/*
+ * Where the machine plays and playing starts nothing: the microphone struck
+ * through, and still. Breathing is what says the page is live, and here it
+ * is not listening for anything.
+ */
+.score__listening-struck {
+  display: none;
+}
+
+.score__listening[data-refused='true'] .score__listening-struck {
+  display: inline;
+}
+
+.score__listening[data-refused='true'] svg {
+  animation: none;
+}
+
 .score__mode {
   display: flex;
   align-items: center;

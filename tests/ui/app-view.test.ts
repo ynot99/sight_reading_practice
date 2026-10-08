@@ -10266,6 +10266,39 @@ describe('AppView', () => {
       expect(element('score-listening').hidden).toBe(false);
     });
 
+    it('says in the corner that playing starts nothing where Listen is chosen', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ immediateStart: true });
+      expect(element('score-listening').dataset['refused']).toBeUndefined();
+
+      runtime.controller.updateSettings({ modeId: LISTEN_MODE_ID });
+
+      const pill = element('score-listening');
+      expect(pill.hidden).toBe(false);
+      expect(pill.dataset['refused']).toBe('true');
+      expect(element('score-listening-text').textContent).toBe('Listening');
+      expect(pill.title).toContain('playing starts nothing');
+
+      // Gone while the machine plays, as the listening goes during a run.
+      element<HTMLButtonElement>('focus-play').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runtime.controller.isListening).toBe(true);
+      expect(pill.hidden).toBe(true);
+      element<HTMLButtonElement>('focus-stop').click();
+      expect(pill.hidden).toBe(false);
+
+      // Back in a frame a run is played in, it is listening again.
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID });
+      expect(pill.dataset['refused']).toBeUndefined();
+      expect(pill.hasAttribute('title')).toBe(false);
+      expect(element('score-listening-text').textContent).not.toBe('Listening');
+
+      // And nothing at all said of it where the reader did not ask to start by playing.
+      runtime.controller.updateSettings({ modeId: LISTEN_MODE_ID, immediateStart: false });
+      expect(pill.hidden).toBe(true);
+    });
+
     it('asks for the keyboard before it asks for the music', async () => {
       // The music is the slow half - a database, then an engraving - and the
       // keyboard waits on neither. Asked for afterwards, the instrument was

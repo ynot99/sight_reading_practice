@@ -1650,11 +1650,9 @@ export class AppView {
     focusHandRight: SVGElement;
     focusHealthFill: HTMLElement;
     playingAhead: HTMLSelectElement;
-    survival: HTMLInputElement;
     survivalRefill: HTMLSelectElement;
     survivalPunish: HTMLInputElement;
     rhythmSoundsTheMusic: HTMLInputElement;
-    stopAtMistake: HTMLInputElement;
     immediateStart: HTMLInputElement;
     dimUnplayed: HTMLInputElement;
     pageTurns: HTMLSelectElement;
@@ -1876,7 +1874,6 @@ export class AppView {
     showPlayedDescription: HTMLElement;
     readAhead: HTMLSelectElement;
     readAheadDescription: HTMLElement;
-    cursorRunning: HTMLInputElement;
     cursorListening: HTMLInputElement;
     cursorRest: HTMLInputElement;
     sampleLoading: HTMLSelectElement;
@@ -1889,7 +1886,6 @@ export class AppView {
     learnKnob: HTMLButtonElement;
     knobStatus: HTMLElement;
     pitchClass: HTMLInputElement;
-    rhythmOnly: HTMLInputElement;
     audioFeedback: HTMLInputElement;
     computerKeyboard: HTMLInputElement;
   };
@@ -1965,11 +1961,9 @@ export class AppView {
       focusHandRight: requireElement(doc, 'focus-hand-right'),
       focusHealthFill: requireElement(doc, 'focus-health-fill'),
       playingAhead: requireElement(doc, 'playing-ahead'),
-      survival: requireElement(doc, 'survival'),
       survivalRefill: requireElement(doc, 'survival-refill'),
       survivalPunish: requireElement(doc, 'survival-punish'),
       rhythmSoundsTheMusic: requireElement(doc, 'rhythm-sounds-the-music'),
-      stopAtMistake: requireElement(doc, 'stop-at-mistake'),
       immediateStart: requireElement(doc, 'immediate-start'),
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
       pageTurns: requireElement(doc, 'page-turns'),
@@ -2193,7 +2187,6 @@ export class AppView {
       showPlayedDescription: requireElement(doc, 'show-played-description'),
       readAhead: requireElement(doc, 'read-ahead'),
       readAheadDescription: requireElement(doc, 'read-ahead-description'),
-      cursorRunning: requireElement(doc, 'cursor-running'),
       cursorListening: requireElement(doc, 'cursor-listening'),
       cursorRest: requireElement(doc, 'cursor-rest'),
       sampleLoading: requireElement(doc, 'sample-loading'),
@@ -2206,7 +2199,6 @@ export class AppView {
       learnKnob: requireElement(doc, 'learn-knob'),
       knobStatus: requireElement(doc, 'knob-status'),
       pitchClass: requireElement(doc, 'pitch-class'),
-      rhythmOnly: requireElement(doc, 'rhythm-only'),
       audioFeedback: requireElement(doc, 'audio-feedback'),
       computerKeyboard: requireElement(doc, 'computer-keyboard'),
     };
@@ -3785,10 +3777,6 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
-    this.listen(this.el.cursorRunning, 'change', () => {
-      controller.updateSettings({ cursorWhileRunning: this.el.cursorRunning.checked });
-    });
-
     this.listen(this.el.sampleLoading, 'change', () => {
       this.applySampleLoading(readSampleLoading(this.el.sampleLoading.value));
     });
@@ -3822,16 +3810,6 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
-    this.listen(this.el.survival, 'change', () => {
-      controller.updateSettings({ survival: this.el.survival.checked });
-      this.renderHealth(controller.health);
-      // A mode square and a switch are one question, and the two settings
-      // this empties are a second: both are read from here, so both have to
-      // be told. Set from the drawer and left alone, the square went on
-      // saying the opposite of what the setting said.
-      this.syncControlsFromSettings();
-    });
-
     this.listen(this.el.survivalRefill, 'change', () => {
       controller.updateSettings({ survivalRefillPercent: Number(this.el.survivalRefill.value) });
       this.syncControlsFromSettings();
@@ -3844,22 +3822,6 @@ export class AppView {
 
     this.listen(this.el.rhythmSoundsTheMusic, 'change', () => {
       controller.updateSettings({ rhythmSoundsTheMusic: this.el.rhythmSoundsTheMusic.checked });
-      this.syncControlsFromSettings();
-    });
-
-    this.listen(this.el.stopAtMistake, 'change', () => {
-      controller.updateSettings(
-        settingsForMode('strict', this.el.stopAtMistake.checked, controller.settings),
-      );
-      this.syncControlsFromSettings();
-    });
-
-    this.listen(this.el.rhythmOnly, 'change', () => {
-      // Through the squares' own rule, so the drawer cannot make the pair
-      // the squares will not: one switch, one answer, wherever it is asked.
-      controller.updateSettings(
-        settingsForMode('rhythm', this.el.rhythmOnly.checked, controller.settings),
-      );
       this.syncControlsFromSettings();
     });
 
@@ -6943,7 +6905,6 @@ export class AppView {
     this.el.readAhead.value = readAheadValue(settings.readAheadSteps);
     this.el.readAheadDescription.textContent =
       READ_AHEAD_DESCRIPTIONS[this.el.readAhead.value] ?? '';
-    this.el.cursorRunning.checked = settings.cursorWhileRunning;
     this.el.cursorListening.checked = settings.cursorWhileListening;
     this.el.cursorRest.checked = settings.cursorAtRest;
     this.el.pagedScore.checked = settings.pagedScore;
@@ -6959,14 +6920,11 @@ export class AppView {
     this.doc.body.dataset['repeats'] = settings.showRepeatNumbers ? 'shown' : 'hidden';
     this.runtime.renderer.setPaged(settings.pagedScore);
     this.el.pitchClass.checked = settings.pitchClassOnly;
-    this.el.rhythmOnly.checked = settings.rhythmOnly;
     this.el.playingAhead.value = settings.playingAhead;
-    this.el.survival.checked = settings.survival;
     this.el.survivalRefill.value = String(settings.survivalRefillPercent);
     this.el.survivalPunish.checked = settings.survivalPunishesMistakes;
     this.el.rhythmSoundsTheMusic.checked = settings.rhythmSoundsTheMusic;
     this.el.offerToSync.checked = settings.offerToSync;
-    this.el.stopAtMistake.checked = settings.stopAtAMistake;
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.renderPassages();

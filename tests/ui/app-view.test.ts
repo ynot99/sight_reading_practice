@@ -5859,10 +5859,8 @@ describe('AppView', () => {
       // The blind square goes with waiting, and stays.
       expect(square('blind').getAttribute('aria-pressed')).toBe('true');
 
-      // Asked for from the settings sheet, the same rule.
-      const rhythmOnly = element<HTMLInputElement>('rhythm-only');
-      rhythmOnly.checked = true;
-      rhythmOnly.dispatchEvent(new Event('change'));
+      // Asked for again, the frame that keeps time comes back with it.
+      square('rhythm').click();
 
       expect(runtime.controller.settings.rhythmOnly).toBe(true);
       expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
@@ -6051,7 +6049,6 @@ describe('AppView', () => {
 
       expect(runtime.controller.settings.cursorWhileRunning).toBe(false);
       expect(square.getAttribute('aria-pressed')).toBe('true');
-      expect(element<HTMLInputElement>('cursor-running').checked).toBe(false);
       // Untouched, both of them.
       expect(runtime.controller.settings.cursorWhileListening).toBe(true);
       expect(runtime.controller.settings.cursorAtRest).toBe(true);
@@ -6153,42 +6150,30 @@ describe('AppView', () => {
       expect(carrier('rushing-counts').dataset['idle']).toBeUndefined();
 
       // And the two settings Survival owns, which say nothing while the bar
-      // is not falling. Set from the drawer, so the drawer has to read the
-      // settings again afterwards - it did not, and everything downstream of
-      // one switch went on saying what it had said before.
+      // is not falling. Set from the square, so the settings sheet has to be
+      // read again afterwards, or everything downstream of one switch goes
+      // on saying what it said before.
       expect(carrier('survival-refill').dataset['idle']).toBe('true');
-      const survival = element<HTMLInputElement>('survival');
-      survival.checked = true;
-      survival.dispatchEvent(new Event('change'));
+      element<HTMLButtonElement>('focus-modes').click();
+      element('modes-grid').querySelector<HTMLButtonElement>('[data-mode="survival"]')?.click();
 
       expect(carrier('survival-refill').dataset['idle']).toBeUndefined();
       expect(carrier('survival-punish').dataset['idle']).toBeUndefined();
     });
 
-    it('gives the drawer the rule the squares follow', async () => {
-      // One question with two editors. The squares will not let the pair
-      // stand together; the drawer must not be a way round that, or the
-      // reader ends with a state the squares say is impossible.
-      const { view, runtime } = createRig();
+    it('asks each mode in one place: its square, and no box in the settings', async () => {
+      // A square and a box were two editors of one setting, and the box had
+      // to be taught the squares' rules so it could not make a pair they
+      // would not. The squares alone now.
+      const { view } = createRig();
       await view.initialize();
-      const tick = (id: string, on: boolean): void => {
-        const box = element<HTMLInputElement>(id);
-        box.checked = on;
-        box.dispatchEvent(new Event('change'));
-      };
-      tick('stop-at-mistake', true);
-      expect(runtime.controller.settings.stopAtAMistake).toBe(true);
 
-      tick('rhythm-only', true);
-
-      expect(runtime.controller.settings.rhythmOnly).toBe(true);
-      expect(runtime.controller.settings.stopAtAMistake).toBe(false);
-      expect(element<HTMLInputElement>('stop-at-mistake').checked).toBe(false);
-
-      tick('stop-at-mistake', true);
-
-      expect(runtime.controller.settings.rhythmOnly).toBe(false);
-      expect(element<HTMLInputElement>('rhythm-only').checked).toBe(false);
+      for (const id of ['survival', 'rhythm-only', 'stop-at-mistake', 'cursor-running']) {
+        expect({ id, there: document.getElementById(id) !== null }).toEqual({ id, there: false });
+      }
+      for (const mode of ['survival', 'rhythm', 'strict', 'cursor']) {
+        expect(element('modes-grid').querySelector(`[data-mode="${mode}"]`)).not.toBeNull();
+      }
     });
 
     it('says in the corner which modes are on, with the sheet shut', async () => {
@@ -11014,8 +10999,6 @@ describe('AppView', () => {
       (element('modes-grid').querySelector('[data-mode="survival"]') as HTMLButtonElement).click();
 
       expect(runtime.controller.settings.survival).toBe(true);
-      // The switch at the desk is the same value seen from the stand.
-      expect(element<HTMLInputElement>('survival').checked).toBe(true);
       expect(element('focus-health').hidden).toBe(true);
 
       element<HTMLButtonElement>('focus-play').click();
@@ -12152,7 +12135,7 @@ describe('searching the settings', () => {
     await rig.view.initialize();
     expect(showing()).not.toBe('modes');
 
-    search('keep the bar up');
+    search('a beat found is worth');
 
     expect(count()).toBe('1 / 1');
     expect(showing()).toBe('modes');
@@ -12163,7 +12146,7 @@ describe('searching the settings', () => {
     await rig.view.initialize();
 
     // Three or more, or a step back and a step on land in the same place.
-    search('cursor');
+    search('page');
     const total = Number(count().split(' / ')[1]);
     expect(total).toBeGreaterThan(2);
 

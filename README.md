@@ -821,7 +821,7 @@ missing was the thing that puts them in order and knows when one is done. A
 task is passed by a reading that reached the end and scored 95; short of that
 the same task comes round again.
 
-**One wrong note ends the run**, for when the point is counting a rhythm
+**One mistake**, the square that ends the run on a wrong note, for when the point is counting a rhythm
 rather than getting through: a slip that can be played over is worth nothing
 to count against. It does not start the run again by itself.
 

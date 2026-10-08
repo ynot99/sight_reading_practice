@@ -1474,12 +1474,13 @@
             point - and still want one while the machine plays the passage
             back, where following along is most of the value. The third is
             how they see where they stopped.
+
+            The first is the No cursor square in Modes, and only there: a
+            square and a box here were two editors of one setting.
           -->
-          <label data-pane="page"><input id="cursor-running" type="checkbox" checked /> Cursor while I play</label>
           <label data-pane="page"><input id="cursor-listening" type="checkbox" checked /> Cursor while it plays back</label>
           <label data-pane="page"><input id="cursor-rest" type="checkbox" checked /> Cursor when nothing is playing</label>
           <label data-pane="playing"><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
-          <label data-pane="playing"><input id="rhythm-only" type="checkbox" /> Rhythm only: any note counts</label>
           <!--
             His, and he asked for both answers: some readers press the next
             note to get to it, and some are learning not to press early at
@@ -1493,7 +1494,6 @@
               <option value="moves-on">Moves on to it</option>
             </select>
           </div>
-          <label data-pane="modes"><input id="survival" type="checkbox" /> Survival: keep the bar up</label>
           <!--
             His, and only where nothing keeps time. Filling the bar outright
             makes a clock that punishes stopping and nothing else: find one
@@ -1523,12 +1523,6 @@
             down for it, which is the one thing the page cannot do.
           -->
           <label data-pane="modes"><input id="rhythm-sounds-the-music" type="checkbox" /> Rhythm only: play the written notes, not my keys (turn the piano down)</label>
-          <!--
-            His line 112: counting a rhythm is worth nothing if a slip can be
-            played over. It does not start the run again by itself - a run
-            that began without anybody deciding to make it is not a reading.
-          -->
-          <label data-pane="playing"><input id="stop-at-mistake" type="checkbox" /> One wrong note ends the run</label>
           <!--
             The same setting as the drawer's button, seen from the desk. One
             question with two editors, the way the tempo has a slider here and

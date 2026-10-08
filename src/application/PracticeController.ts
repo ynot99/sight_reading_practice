@@ -656,6 +656,11 @@ export interface PracticeSettings {
    */
   readonly pedalFalls: boolean;
   /**
+   * Whether the slider through a take or a run shown again stands under the
+   * keys. Asked under the pedal's mark, beside the keys it is under.
+   */
+  readonly sliderShown: boolean;
+  /**
    * Two cursors closing on each note the reader owes, meeting on it as its
    * beat falls: see `notesClosingBetween`. A square of Modes.
    */
@@ -1052,6 +1057,7 @@ export class PracticeController {
       restEveryMinutes: 30,
       keysShown: 'falling-notes',
       pedalFalls: true,
+      sliderShown: true,
       closingCursors: false,
       ...dependencies.initialSettings,
     };

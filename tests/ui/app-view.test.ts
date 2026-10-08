@@ -9214,6 +9214,50 @@ describe('AppView', () => {
       expect(rig.runtime.takePlayer.playing).toBeNull();
     });
 
+    it('puts the slider away and back from under the pedal, and keeps it where the keys are put away', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const toggle = element('replay-keys').querySelector<HTMLButtonElement>('.replay-keys__slider-toggle');
+      if (toggle === null) {
+        throw new Error('No switch under the pedal.');
+      }
+      // Nothing to slide through, nothing said.
+      expect(document.body.dataset['slider']).toBeUndefined();
+
+      playSomething(rig);
+      element<HTMLButtonElement>('focus-keep').click();
+      element<HTMLButtonElement>('focus-takes').click();
+      rowButton('takes-list', 'Play this take').click();
+      element<HTMLButtonElement>('take-on-the-keys').click();
+      expect(document.body.dataset['slider']).toBe('shown');
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+      toggle.click();
+      expect(rig.runtime.controller.settings.sliderShown).toBe(false);
+      expect(document.body.dataset['slider']).toBe('put-away');
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+      expect(toggle.title).toBe('Show the slider under the keys');
+
+      // With the keys put away it is the only way through the take, so it stays.
+      const keys = element<HTMLButtonElement>('focus-keyboard');
+      const shows = (): string => rig.runtime.controller.settings.keysShown;
+      while (shows() !== 'none') {
+        keys.click();
+      }
+      expect(element('replay-keys').hidden).toBe(true);
+      expect(document.body.dataset['slider']).toBe('shown');
+      while (shows() !== 'falling-notes') {
+        keys.click();
+      }
+      expect(document.body.dataset['slider']).toBe('put-away');
+
+      toggle.click();
+      expect(document.body.dataset['slider']).toBe('shown');
+
+      element<HTMLButtonElement>('take-off-the-keys').click();
+      expect(document.body.dataset['slider']).toBeUndefined();
+    });
+
     it('takes the transport back to the list when the list is opened again, playing on', async () => {
       const rig = createRig();
       await rig.view.initialize();

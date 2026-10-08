@@ -4549,6 +4549,11 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    this.listen(this.replayKeyboard.sliderToggle, 'click', () => {
+      controller.updateSettings({ sliderShown: !controller.settings.sliderShown });
+      this.syncControlsFromSettings();
+    });
+
     this.listen(this.el.focusReplay, 'click', () => {
       this.replayRun();
     });
@@ -8889,7 +8894,28 @@ export class AppView {
       delete this.doc.body.dataset['keysHidden'];
     }
     this.sayWhetherNotesFall();
+    this.placeTheSlider();
     this.letTheNotesFall();
+  }
+
+  /**
+   * Says whether the slider through a take or a run shown again stands under
+   * the keys, as the switch under the pedal's mark has it - and always where
+   * the keys are put away, there being nowhere else to reach it from then.
+   */
+  private placeTheSlider(): void {
+    const settings = this.runtime.controller.settings;
+    const toggle = this.replayKeyboard.sliderToggle;
+    const said = settings.sliderShown ? 'Hide the slider' : 'Show the slider under the keys';
+    toggle.setAttribute('aria-pressed', String(settings.sliderShown));
+    toggle.title = said;
+    toggle.setAttribute('aria-label', said);
+    if (this.takeOnTheKeys === null && this.replayRoll === null) {
+      delete this.doc.body.dataset['slider'];
+      return;
+    }
+    const shown = settings.sliderShown || this.el.replayKeys.hidden;
+    this.doc.body.dataset['slider'] = shown ? 'shown' : 'put-away';
   }
 
   /**

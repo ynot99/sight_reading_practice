@@ -436,25 +436,39 @@ describe('the stylesheet', () => {
       (rule) => rule.selector === "body[data-free-play='true'] .focus-bar, body[data-take-on-keys='true'] .focus-bar",
     );
     const keysHidden = rules().find((rule) => rule.selector === "body[data-keys-hidden='true'] .focus-bar");
-    expect(lifted?.body).toMatch(/bottom\s*:\s*calc\(var\(--focus-bar-foot\) \+ var\(--replay-keys\)\)/);
+    expect(lifted?.body).toMatch(
+      /bottom\s*:\s*calc\(var\(--focus-bar-foot\) \+ var\(--replay-keys\) \+ var\(--under-the-keys\)\)/,
+    );
     // Above the rule for keys put away, which weighs the same and has to win.
     expect(lifted?.at ?? Infinity).toBeLessThan(keysHidden?.at ?? 0);
   });
 
-  it('stands the transport of a watched take just above the bar, over the lane, and lower when the keys are put away', () => {
+  it('stands the slider in a strip under the keys, lifting the keys and the bar by it, and nowhere when put away', () => {
+    // Over the page it covered the music and the notes falling onto it.
     const body = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
-    const over = body('.over-the-keys');
+    const strip = body('.under-the-keys');
 
-    expect(over).toMatch(/position\s*:\s*fixed/);
-    expect(over).toMatch(
-      /bottom\s*:\s*calc\(var\(--focus-bar-foot\) \+ var\(--replay-keys\) \+ var\(--focus-bar-height, 64px\) \+ 10px\)/,
-    );
-    expect(Number(/z-index\s*:\s*(\d+)/.exec(over)?.[1])).toBeGreaterThan(
+    expect(strip).toMatch(/position\s*:\s*fixed/);
+    expect(strip).toMatch(/bottom\s*:\s*env\(safe-area-inset-bottom, 0px\)/);
+    expect(strip).toMatch(/height\s*:\s*var\(--under-the-keys\)/);
+    expect(Number(/z-index\s*:\s*(\d+)/.exec(strip)?.[1])).toBeGreaterThan(
       Number(/z-index\s*:\s*(\d+)/.exec(body('.replay-keys'))?.[1]),
     );
-    expect(body("body[data-keys-hidden='true'] .over-the-keys")).toMatch(
-      /bottom\s*:\s*calc\(var\(--focus-bar-foot\) \+ var\(--focus-bar-height, 64px\) \+ 10px\)/,
+    // Nothing under the keys unless a slider stands there.
+    expect(rules().find((rule) => rule.selector === ':root' && rule.body.includes('--under-the-keys'))?.body).toMatch(
+      /--under-the-keys\s*:\s*0px/,
     );
+    expect(body("body[data-slider='shown']")).toMatch(/--under-the-keys\s*:\s*44px/);
+    expect(body("body[data-slider='put-away'] .under-the-keys")).toMatch(/display\s*:\s*none/);
+    // The keys stand on it, their ground reaching under it, and the bar over both.
+    expect(body('.replay-keys')).toMatch(/padding-bottom\s*:\s*calc\([^;]*var\(--under-the-keys\)\)/);
+    expect(body('.replay-keys::before')).toMatch(/height\s*:\s*calc\([^;]*var\(--under-the-keys\)\)/);
+    expect(body("body[data-keys-hidden='true'] .focus-bar")).toMatch(
+      /bottom\s*:\s*calc\(var\(--focus-bar-foot\) \+ var\(--under-the-keys\)\)/,
+    );
+    // Its switch under the pedal's mark, only where there is a slider.
+    expect(body('.replay-keys__slider-toggle')).toMatch(/display\s*:\s*none/);
+    expect(body('body[data-slider] .replay-keys__slider-toggle')).toMatch(/display\s*:\s*flex/);
     // Watching is asked for from the list and ended on the page.
     expect(body("#take-off-the-keys, body[data-take-on-keys='true'] #take-on-the-keys")).toMatch(/display\s*:\s*none/);
     expect(body("body[data-take-on-keys='true'] #take-off-the-keys")).toMatch(/display\s*:\s*inline-flex/);

@@ -35,6 +35,8 @@ export interface ReplayKeyboard {
   readonly pedalLane: HTMLCanvasElement;
   /** The mark's place, which turns the pedal falling onto it off and on. */
   readonly pedalToggle: HTMLButtonElement;
+  /** Under the mark: whether the slider through what is shown again stands under the keys. */
+  readonly sliderToggle: HTMLButtonElement;
 }
 
 /**
@@ -73,9 +75,21 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
   pedalLaneBox.className = 'replay-keys__lane replay-keys__pedal-lane';
   const pedalLane = doc.createElement('canvas');
   pedalLaneBox.append(pedalLane);
+  // Under the mark, the slider's switch: drawn as a slider, a line and its knob.
+  const sliderToggle = doc.createElement('button');
+  sliderToggle.type = 'button';
+  sliderToggle.className = 'replay-keys__slider-toggle';
+  const SVG = 'http://www.w3.org/2000/svg';
+  const icon = doc.createElementNS(SVG, 'svg');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('aria-hidden', 'true');
+  const knob = doc.createElementNS(SVG, 'path');
+  knob.setAttribute('d', 'M2 11h20v2H2z M9 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8z');
+  icon.append(knob);
+  sliderToggle.append(icon);
   const side = doc.createElement('span');
   side.className = 'replay-keys__side';
-  side.append(pedalLaneBox, foot);
+  side.append(pedalLaneBox, foot, sliderToggle);
 
   const scroller = doc.createElement('div');
   scroller.className = 'replay-keys__scroller';
@@ -111,7 +125,7 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
   }
 
   host.replaceChildren(side, scroller);
-  return { keys, pedal, scroller, row, lane, pedalLane, pedalToggle: foot };
+  return { keys, pedal, scroller, row, lane, pedalLane, pedalToggle: foot, sliderToggle };
 }
 
 /** Where a key stands along the row, and how wide it is drawn, in page pixels. */

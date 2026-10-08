@@ -458,6 +458,7 @@ export function decodePracticeSettings(
     restEveryMinutes: readInteger(value['restEveryMinutes'], 0, 180),
     keysShown: readKeysShown(value['keysShown'], value['showKeyboard']),
     pedalFalls: readBoolean(value['pedalFalls']),
+    sliderShown: readBoolean(value['sliderShown']),
     closingCursors: readBoolean(value['closingCursors']),
   } as PracticeSettings);
 }
@@ -525,6 +526,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     restEveryMinutes: settings.restEveryMinutes,
     keysShown: settings.keysShown,
     pedalFalls: settings.pedalFalls,
+    sliderShown: settings.sliderShown,
     closingCursors: settings.closingCursors,
     clickNotesOf: settings.clickNotesOf,
   };

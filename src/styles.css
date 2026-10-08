@@ -2670,6 +2670,8 @@ body[data-notes-falling='true'] .focus-bar:has(:focus-visible) {
  */
 :root {
   --replay-keys: 72px;
+  /* The strip under the keys a slider stands in, where there is one. */
+  --under-the-keys: 0px;
   /* How much of a falling note is seen, and so how much of the score. */
   --falling-notes-opacity: 0.45;
 }
@@ -2695,7 +2697,7 @@ body[data-notes-falling='true'] .focus-bar:has(:focus-visible) {
   inset: 0;
   z-index: 19;
   display: flex;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--under-the-keys));
   pointer-events: none;
 }
 
@@ -2706,27 +2708,98 @@ body[data-notes-falling='true'] .focus-bar:has(:focus-visible) {
   left: 0;
   right: 0;
   bottom: 0;
-  height: calc(var(--replay-keys) + env(safe-area-inset-bottom, 0px));
+  height: calc(var(--replay-keys) + env(safe-area-inset-bottom, 0px) + var(--under-the-keys));
   border-top: 1px solid var(--border);
   background: var(--surface);
   pointer-events: auto;
 }
 
 body[data-replaying='true'] .focus-bar {
-  bottom: calc(var(--focus-bar-foot) + var(--replay-keys));
+  bottom: calc(var(--focus-bar-foot) + var(--replay-keys) + var(--under-the-keys));
 }
 
 body[data-listening='true'] .focus-bar {
-  bottom: calc(var(--focus-bar-foot) + var(--replay-keys));
+  bottom: calc(var(--focus-bar-foot) + var(--replay-keys) + var(--under-the-keys));
 }
 
 body[data-free-play='true'] .focus-bar,
 body[data-take-on-keys='true'] .focus-bar {
-  bottom: calc(var(--focus-bar-foot) + var(--replay-keys));
+  bottom: calc(var(--focus-bar-foot) + var(--replay-keys) + var(--under-the-keys));
 }
 
 body[data-keys-hidden='true'] .focus-bar {
-  bottom: var(--focus-bar-foot);
+  bottom: calc(var(--focus-bar-foot) + var(--under-the-keys));
+}
+
+/*
+ * The slider through a take or a run shown again, in a strip of its own
+ * under the keys - out of the way of the music and the notes falling onto
+ * it. Without the keys it stands at the foot of the screen alone.
+ */
+body[data-slider='shown'] {
+  --under-the-keys: 44px;
+}
+
+.under-the-keys {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
+  height: var(--under-the-keys);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.under-the-keys .take-transport {
+  flex: 1;
+  border-top: 0;
+  padding-top: 0;
+}
+
+body[data-slider='put-away'] .under-the-keys {
+  display: none;
+}
+
+/*
+ * The slider's switch, under the pedal's mark and only where there is a
+ * slider: lit while the slider stands under the keys.
+ */
+.replay-keys__slider-toggle {
+  display: none;
+  position: absolute;
+  left: 6px;
+  bottom: 4px;
+  width: 28px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+body[data-slider] .replay-keys__slider-toggle {
+  display: flex;
+}
+
+.replay-keys__slider-toggle[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.replay-keys__slider-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  display: block;
 }
 
 /*
@@ -3981,35 +4054,6 @@ body[data-take-on-keys='true'] #take-on-the-keys {
 
 body[data-take-on-keys='true'] #take-off-the-keys {
   display: inline-flex;
-}
-
-/*
- * The transport over the page while a take or a run is watched on the keys:
- * just above the bar, as wide as a hand can drag across, and over the lane
- * the notes fall down. Wholly visible while the bar fades, being what is in
- * use.
- */
-.over-the-keys {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(720px, calc(100% - 32px));
-  bottom: calc(var(--focus-bar-foot) + var(--replay-keys) + var(--focus-bar-height, 64px) + 10px);
-  z-index: 21;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.over-the-keys .take-transport {
-  border-top: 0;
-  padding-top: 0;
-}
-
-body[data-keys-hidden='true'] .over-the-keys {
-  bottom: calc(var(--focus-bar-foot) + var(--focus-bar-height, 64px) + 10px);
 }
 
 .sheet__head {

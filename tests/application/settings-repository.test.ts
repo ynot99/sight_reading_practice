@@ -81,6 +81,7 @@ const SETTINGS: PracticeSettings = {
   countInPlayback: 'every',
   keysShown: 'keys',
   pedalFalls: false,
+  sliderShown: false,
   closingCursors: true,
   clickNotesOf: 'both-hands',
 };

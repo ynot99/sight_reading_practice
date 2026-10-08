@@ -1327,6 +1327,23 @@
           <p id="storage-kept" class="hint"></p>
           <p id="storage-small" class="hint"></p>
         </div>
+        <!--
+          How the last run was judged, press by press, to be read when a
+          verdict looks wrong. With the timings and not with the backup: it is
+          for finding out why, and a reader saving their scores should not have
+          to read past it.
+        -->
+        <div class="control-group" data-pane="developers">
+          <label for="copy-judging">How the last run was judged</label>
+          <div class="ladder-row">
+            <button id="copy-judging" type="button" class="button button--ghost">
+              Copy a judging log
+            </button>
+            <button id="save-judging" type="button" class="button button--ghost">
+              Save it as a file
+            </button>
+          </div>
+        </div>
         <div class="control-group" data-pane="developers">
           <label><input id="trace-the-start" type="checkbox" /> Print start timings to the console</label>
           <p class="hint">
@@ -1353,14 +1370,6 @@
             not recognise, which for a file we invented is everything.
           -->
           <input id="backup-file" type="file" hidden />
-          <div class="ladder-row">
-            <button id="copy-judging" type="button" class="button button--ghost">
-              Copy a judging log
-            </button>
-            <button id="save-judging" type="button" class="button button--ghost">
-              Save it as a file
-            </button>
-          </div>
           <label for="drive-sync">Google Drive</label>
           <div class="ladder-row">
             <button id="drive-sync" type="button" class="button">Sync with Google Drive</button>

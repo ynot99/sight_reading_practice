@@ -6800,6 +6800,14 @@ describe('AppView', () => {
       expect(settings.querySelector('[data-pane~="exercise"]')).toBeNull();
       // How a run is graded stays in the settings, beside the modes.
       expect(element('scoring').closest('[data-pane]')?.getAttribute('data-pane')).toBe('modes');
+      // And the judging log is for finding out why, with the timings, not
+      // beside the backup a reader saves their scores with.
+      for (const id of ['copy-judging', 'save-judging']) {
+        expect({ id, pane: element(id).closest('[data-pane]')?.getAttribute('data-pane') }).toEqual({
+          id,
+          pane: 'developers',
+        });
+      }
     });
 
     it('offers each grade, lights the one being read, and puts a reader on its first rung', async () => {

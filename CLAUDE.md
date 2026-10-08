@@ -31,8 +31,8 @@ This file is how the work is done here, and the rules that are easy to break.
 - **Measure before claiming a cause.** Every report so far meant something
   other than its wording. Reproduce, print the numbers, then fix. Where only
   the device can answer (timing, memory, the keyboard, a tablet), add logging
-  and say exactly how to reproduce, for the owner to run. Settings has "Copy a
-  judging log" and For developers → start timings. Headless numbers are
+  and say exactly how to reproduce, for the owner to run. Settings → For
+  developers has "Copy a judging log" and start timings. Headless numbers are
   ratios between variants, never the browser's cost.
 - A test "flaky under load" may be an unseeded exercise: view rigs generate
   from a fresh seed. Print the state on failure before blaming timing.

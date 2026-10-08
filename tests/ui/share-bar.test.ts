@@ -21,14 +21,15 @@ describe('a bar of what a whole is made of', () => {
 
     const parts = [...bar.children] as HTMLElement[];
     expect(parts.map((part) => part.dataset['kind'])).toEqual(['a', 'b', 'c']);
-    expect(parts.map((part) => Number(part.style.flexGrow))).toEqual([0.6, 0.3, 0.1]);
+    expect(parts.map((part) => parseFloat(part.style.width))).toEqual([60, 30, 10]);
+    expect(parts.every((part) => part.style.width.endsWith('%'))).toBe(true);
   });
 
   it('keeps a piece of nothing off the bar, and its line in the legend', () => {
     drawTheShareBar(bar, legend, [piece('a', 4), piece('empty', 0)]);
 
     expect([...bar.children].map((part) => (part as HTMLElement).dataset['kind'])).toEqual(['a']);
-    expect(Number((bar.children[0] as HTMLElement).style.flexGrow)).toBe(1);
+    expect((bar.children[0] as HTMLElement).style.width).toBe('100%');
     expect([...legend.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
       'a4 units',
       'empty0 units',

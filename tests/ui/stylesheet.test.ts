@@ -1801,12 +1801,14 @@ describe('a bar of what a whole is made of', () => {
   const body = (selector: string): string =>
     rules().find((rule) => rule.selector === selector)?.body ?? '';
 
-  it('divides the bar as the amounts are, and keeps a sliver of the smallest', () => {
-    // Grown from nothing by its share, so the flex layout divides the bar by
-    // the amounts alone; and wide enough to tell its colour by however small.
+  it('gives each part exactly its share of the bar, the smallest no wider', () => {
+    // A sliver kept for every part drew a few kilobytes as wide as some
+    // megabytes. Neither grown nor shrunk from the width it is given, and
+    // with no gap, which would widen a part the bar cannot show.
     expect(body('.share-bar')).toMatch(/display\s*:\s*flex/);
-    expect(body('.share-bar__part')).toMatch(/flex\s*:\s*0 0 0/);
-    expect(body('.share-bar__part')).toMatch(/min-width\s*:\s*6px/);
+    expect(body('.share-bar')).not.toMatch(/gap/);
+    expect(body('.share-bar__part')).toMatch(/flex\s*:\s*none/);
+    expect(body('.share-bar__part')).not.toMatch(/min-width/);
   });
 
   it('paints the room left grey, apart from anything kept', () => {

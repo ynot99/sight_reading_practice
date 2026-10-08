@@ -14,8 +14,12 @@ export interface BarPiece {
  * Handed amounts, not shares: how much of the bar each piece takes is worked
  * out here, from the pieces together, so a caller cannot hand over shares
  * that do not add up to the bar. A piece of nothing has no place on the bar
- * and keeps its line in the legend. One too small to see is the stylesheet's
- * to keep a sliver of, since only the laid-out bar knows how wide a sliver is.
+ * and keeps its line in the legend.
+ *
+ * Exactly its share and no wider, however small: a sliver kept for every
+ * piece would draw a few kilobytes as wide as some megabytes, and the bar
+ * would stop saying what it is made of. The legend names what is too small
+ * to see.
  */
 export function drawTheShareBar(
   bar: HTMLElement,
@@ -31,7 +35,7 @@ export function drawTheShareBar(
         const part = doc.createElement('span');
         part.className = 'share-bar__part';
         part.dataset['kind'] = piece.kind;
-        part.style.flexGrow = String(piece.amount / whole);
+        part.style.width = `${String((piece.amount / whole) * 100)}%`;
         part.title = `${piece.name}: ${piece.said}`;
         return part;
       }),

@@ -11682,7 +11682,7 @@ describe('what the device keeps', () => {
     ]);
     const bar = [...element('storage-bar').children] as HTMLElement[];
     expect(bar.map((part) => part.dataset['kind'])).toEqual(['sound', 'scores', 'other', 'free']);
-    expect(Number(bar[0]?.style.flexGrow)).toBeCloseTo(20 / (100 * 1024), 6);
+    expect(parseFloat(bar[0]?.style.width ?? '')).toBeCloseTo((20 / (100 * 1024)) * 100, 6);
     expect(element('storage-kept').textContent).toContain('Home Screen');
   });
 });

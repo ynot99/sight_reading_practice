@@ -1855,14 +1855,12 @@ textarea {
 /*
  * A bar of what a whole is made of, and its legend.
  *
- * Each part grows by its share from nothing, so the bar is divided as the
- * amounts are. A part too small to see keeps a sliver wide enough to tell
- * its colour by, so every line in the legend is somewhere on the bar; the
- * flex layout takes the slivers out of the bigger parts.
+ * Each part is as wide as its share and no wider: no sliver for a part too
+ * small to see, and no gap between parts, since a gap would give one the
+ * width a sliver would. The legend names what the bar cannot show.
  */
 .share-bar {
   display: flex;
-  gap: 2px;
   height: 14px;
   overflow: hidden;
   border-radius: 7px;
@@ -1870,8 +1868,7 @@ textarea {
 }
 
 .share-bar__part {
-  flex: 0 0 0;
-  min-width: 6px;
+  flex: none;
   background: var(--storage-ink);
 }
 

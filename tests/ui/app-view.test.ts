@@ -23,6 +23,7 @@ import { WaitMode } from '../../src/application/modes/WaitMode.js';
 import { CLICK_PATTERNS, CLICK_WHEN_CHOICES } from '../../src/application/ports/IMetronome.js';
 import { HOLD_MS } from '../../src/shared/holding.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
+import { clockTime } from '../../src/ui/scrubBar.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
@@ -3827,7 +3828,9 @@ describe('AppView', () => {
           vi.advanceTimersByTime(100);
           play.click();
           rig.renderer.holdBar(0);
-          expect(play.getAttribute('aria-label')).toBe('Resume');
+          expect(player.playing).toBeNull();
+          // Held at its very start it is ready rather than held part way.
+          expect(play.getAttribute('aria-label')).toBe((reached ?? 0) > 0 ? 'Resume' : 'Start');
 
           // A bar the run never got to says so, and moves nothing.
           rig.renderer.holdBar(1);
@@ -3840,6 +3843,58 @@ describe('AppView', () => {
         }
 
         element<HTMLButtonElement>('focus-stop').click();
+      });
+
+      it('says where a replay stands on a slider over the keys, and goes to where it is dragged', async () => {
+        const rig = await aRunPlayed('Slider');
+        const { runtime, renderer } = rig;
+        const player = runtime.takePlayer;
+        const play = element<HTMLButtonElement>('focus-play');
+        const bar = element('replay-on-keys');
+        const scrub = element<HTMLInputElement>('replay-scrub');
+        expect(bar.hidden).toBe(true);
+        vi.useFakeTimers();
+        try {
+          element<HTMLButtonElement>('run-replay').click();
+          expect(bar.hidden).toBe(false);
+          const lengthMs = player.durationMs;
+          expect(lengthMs).toBeGreaterThan(1_000);
+          expect(element('replay-duration').textContent).toBe(clockTime(lengthMs));
+
+          rig.clock.advance(1_000);
+          vi.advanceTimersByTime(100);
+          expect(Number(scrub.value)).toBe(Math.round((player.positionMs / lengthMs) * 1_000));
+
+          // Dragged while it plays: it plays on from there.
+          scrub.value = '0';
+          scrub.dispatchEvent(new Event('input'));
+          expect(player.positionMs).toBe(0);
+          expect(play.getAttribute('aria-label')).toBe('Pause');
+          const marksAtTheStart = renderer.played.length;
+
+          // Held and dragged, it stays held there.
+          play.click();
+          scrub.value = '500';
+          scrub.dispatchEvent(new Event('input'));
+          expect(play.getAttribute('aria-label')).toBe('Resume');
+          expect(player.playing).toBeNull();
+          expect(element('replay-position').textContent).toBe(clockTime(lengthMs / 2));
+
+          // Dragged to its end: the page has every mark the run made.
+          scrub.value = '1000';
+          scrub.dispatchEvent(new Event('input'));
+          expect(element('replay-position').textContent).toBe(clockTime(lengthMs));
+          expect(renderer.played.length).toBeGreaterThan(marksAtTheStart);
+          // And back again, the marks made later come off.
+          scrub.value = '0';
+          scrub.dispatchEvent(new Event('input'));
+          expect(renderer.played.length).toBe(marksAtTheStart);
+        } finally {
+          vi.useRealTimers();
+        }
+
+        element<HTMLButtonElement>('focus-stop').click();
+        expect(bar.hidden).toBe(true);
       });
 
       it('leaves nothing going behind it when the page is put away', async () => {

@@ -11,6 +11,7 @@ import { barCells } from '../domain/scoring/barCells.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
+import { clockTime, describeTheScrubBar, momentOfTheScrubBar, type ScrubBar } from './scrubBar.js';
 import {
   theTakeOnTheKeys,
   theTakesKeysAt,
@@ -922,12 +923,6 @@ function parseReadAhead(value: string): number | null {
   return Number.isFinite(steps) ? steps : null;
 }
 
-/** `m:ss`, which is how long a take feels rather than how long it is. */
-function clockTime(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1000));
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-}
-
 /** The moment it was kept, which is the only name a take has until it earns one. */
 /**
  * How long ago a score was last read, in the words a reader would use.
@@ -1468,6 +1463,8 @@ export class AppView {
    * See `replayTheRun`.
    */
   private replayRoll: RunRoll | null = null;
+  /** How long the run shown again lasts, to its last event: where its slider ends. */
+  private replayLengthMs = 0;
   private replayTick: ReturnType<typeof setInterval> | null = null;
   private replayAtMs = 0;
   private replayClicksSent = 0;
@@ -1773,6 +1770,10 @@ export class AppView {
     takeOnTheKeys: HTMLButtonElement;
     takeOffTheKeys: HTMLButtonElement;
     takeOnKeys: HTMLElement;
+    replayOnKeys: HTMLElement;
+    replayPosition: HTMLOutputElement;
+    replayScrub: HTMLInputElement;
+    replayDuration: HTMLOutputElement;
     scoresEmpty: HTMLElement;
     scoresAdded: HTMLElement;
     sheetConfirm: HTMLElement;
@@ -2082,6 +2083,10 @@ export class AppView {
       takeOnTheKeys: requireElement(doc, 'take-on-the-keys'),
       takeOffTheKeys: requireElement(doc, 'take-off-the-keys'),
       takeOnKeys: requireElement(doc, 'take-on-keys'),
+      replayOnKeys: requireElement(doc, 'replay-on-keys'),
+      replayPosition: requireElement(doc, 'replay-position'),
+      replayScrub: requireElement(doc, 'replay-scrub'),
+      replayDuration: requireElement(doc, 'replay-duration'),
       takePlay: requireElement(doc, 'take-play'),
       takePlayIcon: requireElement(doc, 'take-play-icon'),
       takePosition: requireElement(doc, 'take-position'),
@@ -7956,9 +7961,12 @@ export class AppView {
     });
 
     this.listen(this.el.takeScrub, 'input', () => {
-      const wanted = (Number(this.el.takeScrub.value) / 1_000) * player.durationMs;
-      player.seek(wanted);
+      player.seek(momentOfTheScrubBar(this.takeScrubBar, player.durationMs));
       this.describeTakeTransport();
+    });
+
+    this.listen(this.el.replayScrub, 'input', () => {
+      this.putTheReplayAt(momentOfTheScrubBar(this.replayScrubBar, this.replayLengthMs));
     });
 
     // Shut with the sheet: a take going on playing behind a closed list is a
@@ -8089,6 +8097,23 @@ export class AppView {
     this.describeTakeTransport();
   }
 
+  /** The takes' slider and the times either side of it. */
+  private get takeScrubBar(): ScrubBar {
+    return { position: this.el.takePosition, scrub: this.el.takeScrub, duration: this.el.takeDuration };
+  }
+
+  /** The slider through a run shown again. */
+  private get replayScrubBar(): ScrubBar {
+    return { position: this.el.replayPosition, scrub: this.el.replayScrub, duration: this.el.replayDuration };
+  }
+
+  /** Says where the run shown again stands, of how long. */
+  private describeTheReplaysBar(): void {
+    const player = this.runtime.takePlayer;
+    const at = this.replayIsSounding ? player.positionMs : this.replayAtMs;
+    describeTheScrubBar(this.replayScrubBar, at, this.replayLengthMs);
+  }
+
   private describeTakeTransport(): void {
     const player = this.runtime.takePlayer;
     const take = this.selectedTakeId === null ? null : this.runtime.takes.find(this.selectedTakeId);
@@ -8098,10 +8123,7 @@ export class AppView {
     }
 
     const total = player.durationMs > 0 ? player.durationMs : take.durationMs;
-    const at = player.positionMs;
-    this.el.takePosition.value = clockTime(at);
-    this.el.takeDuration.value = clockTime(total);
-    this.el.takeScrub.value = String(total > 0 ? Math.round((at / total) * 1_000) : 0);
+    describeTheScrubBar(this.takeScrubBar, player.positionMs, total);
 
     const sounding = player.playing !== null;
     this.el.takePlayIcon.setAttribute('d', sounding ? PAUSE_ICON : PLAY_ICON);
@@ -8599,6 +8621,9 @@ export class AppView {
     }
     this.replayRoll = roll;
     this.replayAtMs = 0;
+    this.replayLengthMs = rollAsEvents(roll).reduce((longest, event) => Math.max(longest, event.atMs), 0);
+    this.el.replayOnKeys.hidden = false;
+    this.describeTheReplaysBar();
     this.replayClicksSent = 0;
     this.placeTheSpeed();
     this.doc.body.dataset['replaying'] = 'true';
@@ -8682,6 +8707,7 @@ export class AppView {
     this.replayClicksSent = this.clickTheRunsBeats(roll, this.replayClicksSent, at);
     this.runtime.controller.replayAt(at);
     this.showTheReplaysKeys(at);
+    this.describeTheReplaysBar();
     // Over when it has played out, as a run is: the page comes back with the
     // whole run on it. His: "щоб не треба було додивлюватись до кінця" - Stop
     // is the way out before then.
@@ -8708,6 +8734,19 @@ export class AppView {
       this.sayInTheMiddle(`The run did not get to bar ${String(measureIndex + 1)}.`);
       return;
     }
+    this.putTheReplayAt(at);
+  }
+
+  /**
+   * Puts the replay at a moment of the run, playing on from there if it was
+   * playing and held there if it was held: the marks made by then on the
+   * page, the marker, the keys down, the notes falling, and the slider.
+   */
+  private putTheReplayAt(at: number): void {
+    if (this.replayRoll === null) {
+      return;
+    }
+    const controller = this.runtime.controller;
     const going = this.replayIsSounding;
     this.holdTheReplay();
     this.replayAtMs = at;
@@ -8721,6 +8760,9 @@ export class AppView {
     if (!this.el.replayKeys.hidden && controller.settings.keysShown === 'falling-notes') {
       this.paintTheFallingNotes();
     }
+    this.describeTheReplaysBar();
+    // Held at its start it is ready, and anywhere past it held: the bar says which.
+    this.showThePerformance();
   }
 
   /** Play it again, over a replay: the replay from its beginning. */
@@ -8743,6 +8785,7 @@ export class AppView {
       // Handed over ahead of the sound, as its notes are.
       this.runtime.metronomeClick.takeBackTheClicks();
     }
+    this.describeTheReplaysBar();
     this.showThePerformance();
   }
 
@@ -8766,6 +8809,7 @@ export class AppView {
     }
     this.holdTheReplay();
     this.replayRoll = null;
+    this.el.replayOnKeys.hidden = true;
     this.placeTheSpeed();
     lightTheKeys(this.replayKeyboard, new Map(), false);
     delete this.doc.body.dataset['replaying'];

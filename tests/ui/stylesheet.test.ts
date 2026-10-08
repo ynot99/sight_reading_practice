@@ -443,7 +443,7 @@ describe('the stylesheet', () => {
 
   it('stands the transport of a watched take just above the bar, over the lane, and lower when the keys are put away', () => {
     const body = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
-    const over = body('.take-on-keys');
+    const over = body('.over-the-keys');
 
     expect(over).toMatch(/position\s*:\s*fixed/);
     expect(over).toMatch(
@@ -452,7 +452,7 @@ describe('the stylesheet', () => {
     expect(Number(/z-index\s*:\s*(\d+)/.exec(over)?.[1])).toBeGreaterThan(
       Number(/z-index\s*:\s*(\d+)/.exec(body('.replay-keys'))?.[1]),
     );
-    expect(body("body[data-keys-hidden='true'] .take-on-keys")).toMatch(
+    expect(body("body[data-keys-hidden='true'] .over-the-keys")).toMatch(
       /bottom\s*:\s*calc\(var\(--focus-bar-foot\) \+ var\(--focus-bar-height, 64px\) \+ 10px\)/,
     );
     // Watching is asked for from the list and ended on the page.

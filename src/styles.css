@@ -3984,11 +3984,12 @@ body[data-take-on-keys='true'] #take-off-the-keys {
 }
 
 /*
- * The transport over the page while a take is watched on the keys: just
- * above the bar, as wide as a hand can drag across, and over the lane the
- * notes fall down. Wholly visible while the bar fades, being what is in use.
+ * The transport over the page while a take or a run is watched on the keys:
+ * just above the bar, as wide as a hand can drag across, and over the lane
+ * the notes fall down. Wholly visible while the bar fades, being what is in
+ * use.
  */
-.take-on-keys {
+.over-the-keys {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
@@ -4002,12 +4003,12 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   box-shadow: var(--shadow);
 }
 
-.take-on-keys .take-transport {
+.over-the-keys .take-transport {
   border-top: 0;
   padding-top: 0;
 }
 
-body[data-keys-hidden='true'] .take-on-keys {
+body[data-keys-hidden='true'] .over-the-keys {
   bottom: calc(var(--focus-bar-foot) + var(--focus-bar-height, 64px) + 10px);
 }
 

@@ -1394,7 +1394,7 @@ export class AppView {
   private rollTick: ReturnType<typeof setInterval> | null = null;
   /** A frame asked for to redraw the map's box, and not yet arrived. */
   private mapFrame: number | null = null;
-  /** Whether the Storage pane is weighing what is kept, which takes a moment. */
+  /** Whether what is kept is being weighed for the Library pane, which takes a moment. */
   private weighing = false;
   /** The notes of the drawing by pitch, for the map down its side. */
   private rollPitches: RollPitches | null = null;
@@ -6478,9 +6478,7 @@ export class AppView {
     // with the button is opened, not when it is pressed.
     if (pane === 'library') {
       this.runtime.cloudDrive.prepare();
-    }
-    // Weighed when it is looked at, which is when the question is asked.
-    if (pane === 'storage') {
+      // Weighed when it is looked at, which is when the question is asked.
       void this.showWhatIsKept();
     }
   }

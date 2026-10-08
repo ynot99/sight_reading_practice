@@ -4717,19 +4717,19 @@ body[data-playing='true'] .page-label__rung {
  * heavier than the tab's own rule cannot be answered by writing the tab's
  * rule again, so the tab stopped making the claim instead.
  *
- * Matched as a list, because one box belongs to several panes. The box of
- * checkboxes is shared: its labels are page's, playing's and sound's, each
- * hidden on its own. Naming no pane made it a cell in *every* pane - an
- * empty one, holding a column of the grid open, so Practice began a third of
- * the way in rather than at the left. His report.
+ * Matched as a word of a list, so a group may name more than one pane. One
+ * box of checkboxes was once shared that way, and naming no pane at all made
+ * it a cell in *every* pane - an empty one, holding a column of the grid
+ * open, so Practice began a third of the way in rather than at the left.
+ * His report.
  */
 .sheet__panel[data-showing='instrument'] [data-pane]:not([data-pane~='instrument']),
-.sheet__panel[data-showing='page'] [data-pane]:not([data-pane~='page']),
-.sheet__panel[data-showing='playing'] [data-pane]:not([data-pane~='playing']),
+.sheet__panel[data-showing='appearance'] [data-pane]:not([data-pane~='appearance']),
+.sheet__panel[data-showing='reading'] [data-pane]:not([data-pane~='reading']),
+.sheet__panel[data-showing='judging'] [data-pane]:not([data-pane~='judging']),
 .sheet__panel[data-showing='sound'] [data-pane]:not([data-pane~='sound']),
 .sheet__panel[data-showing='practice'] [data-pane]:not([data-pane~='practice']),
 .sheet__panel[data-showing='library'] [data-pane]:not([data-pane~='library']),
-.sheet__panel[data-showing='storage'] [data-pane]:not([data-pane~='storage']),
 .sheet__panel[data-showing='developers'] [data-pane]:not([data-pane~='developers']) {
   display: none;
 }

@@ -20,7 +20,7 @@ export interface StoragePiece {
   readonly count: number | null;
 }
 
-/** What the Storage pane says, worked out from what the gauge read. */
+/** What the Library pane says of what is kept, worked out from what the gauge read. */
 export interface StorageAccount {
   /** How much is kept, and how much may be: "26.0 MB / 9.6 GB". */
   readonly total: string;

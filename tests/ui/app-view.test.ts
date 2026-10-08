@@ -6276,6 +6276,86 @@ describe('AppView', () => {
       expect(shutAway).toEqual([]);
     });
 
+    it('keeps each setting in the section its question belongs to, the most changed first', () => {
+      // Page once held sixteen settings on four subjects - how the page is
+      // drawn, what it does while the reader plays, the playback, and what
+      // opens - and a reader looking for one read past the other fifteen.
+      const sheet = element('sheet-settings');
+      const tabs = [...element('settings-sections').querySelectorAll('button[data-chooses]')];
+      const inPane = (pane: string): string[] =>
+        [...sheet.querySelectorAll<HTMLElement>(`[data-pane~="${pane}"] input, [data-pane~="${pane}"] select`)]
+          .filter((control) => control.id !== '' && control.getAttribute('type') !== 'file')
+          .map((control) => control.id);
+
+      expect(tabs.map((tab) => [tab.getAttribute('data-chooses'), tab.textContent?.trim()])).toEqual([
+        ['instrument', 'Instrument'],
+        ['appearance', 'Appearance'],
+        ['reading', 'Reading'],
+        ['judging', 'Judging'],
+        ['sound', 'Sound & playback'],
+        ['practice', 'Practice'],
+        ['library', 'Library'],
+        ['developers', 'For developers'],
+      ]);
+      expect(inPane('instrument')).toEqual(['midi-input', 'computer-keyboard', 'latency']);
+      expect(inPane('appearance')).toEqual([
+        'theme',
+        'dark-system-theme',
+        'zoom',
+        'paged-score',
+        'repeat-numbers',
+        'page-turns',
+        'rhythm-ruler',
+        'ruler-strength',
+        'ruler-cursor',
+      ]);
+      // The ruler's three questions in one box, read as one thing.
+      const ruler = element('rhythm-ruler').closest('.control-group');
+      expect(element('ruler-strength').closest('.control-group')).toBe(ruler);
+      expect(element('ruler-cursor').closest('.control-group')).toBe(ruler);
+      expect(inPane('reading')).toEqual(['show-played', 'read-ahead', 'preview', 'cursor-rest', 'dim-unplayed']);
+      expect(inPane('judging')).toEqual([
+        'tolerance',
+        'playing-ahead',
+        'pitch-class',
+        'immediate-start',
+        'hear-other-hand',
+        'rushing-counts',
+      ]);
+      expect(inPane('sound')).toEqual([
+        'instrument-volume',
+        'sound-metronome-volume',
+        'sample-loading',
+        'audio-feedback',
+        'cursor-listening',
+        'show-playback-notes',
+        'mark-listening',
+      ]);
+      expect(inPane('practice')).toEqual(['what-opens', 'rest-every-settings']);
+      expect(inPane('library')).toEqual(['offer-to-sync']);
+      expect(element('storage-legend').closest('[data-pane]')?.getAttribute('data-pane')).toBe('library');
+      expect(inPane('developers')).toEqual(['trace-the-start']);
+
+      // One pane to a group: a group in two had to hide half of itself in each.
+      const shared = [...sheet.querySelectorAll('[data-pane]')]
+        .map((group) => group.getAttribute('data-pane') ?? '')
+        .filter((panes) => panes.trim().split(/\s+/).length > 1);
+      expect(shared).toEqual([]);
+    });
+
+    it('draws every checkbox as a choice, never as the heading of a group', () => {
+      // A label that is a group's own child is set as its heading, in
+      // capitals; a checkbox's label stood there in Library and For
+      // developers, and read as a title over nothing.
+      const sheet = element('sheet-settings');
+      const headings = [...sheet.querySelectorAll('input[type="checkbox"]')]
+        .filter((box) => box.closest('.control-group--checks') === null)
+        .map((box) => box.id);
+
+      expect(sheet.querySelectorAll('input[type="checkbox"]').length).toBeGreaterThan(10);
+      expect(headings).toEqual([]);
+    });
+
     it('shows one section at a time, and says which', async () => {
       const { view } = createRig();
       await view.initialize();
@@ -11716,7 +11796,7 @@ describe('what the device keeps', () => {
     element<HTMLButtonElement>('focus-settings').click();
     expect(legend.children).toHaveLength(0);
 
-    document.querySelector<HTMLButtonElement>('button[data-chooses="storage"]')?.click();
+    document.querySelector<HTMLButtonElement>('button[data-chooses="library"]')?.click();
     await waitFor(() => legend.children.length > 0);
 
     expect(element('storage-total').textContent).toBe('42.0 MB / 100 GB');
@@ -11755,12 +11835,12 @@ describe('the theme', () => {
     window.localStorage.clear();
   });
 
-  it("offers four themes in the page settings, the system's first", async () => {
+  it("offers four themes in the appearance settings, the system's first", async () => {
     const { view } = createRig();
     await view.initialize();
     const select = element<HTMLSelectElement>('theme');
 
-    expect(select.closest('[data-pane~="page"]')).not.toBeNull();
+    expect(select.closest('[data-pane~="appearance"]')).not.toBeNull();
     expect([...select.options].map((option) => option.value)).toEqual([...THEMES]);
     expect(THEMES).toEqual(['system', 'light', 'light-dark-dialogs', 'dark']);
     expect(select.value).toBe('system');
@@ -11772,7 +11852,7 @@ describe('the theme', () => {
     await view.initialize();
     const select = element<HTMLSelectElement>('dark-system-theme');
 
-    expect(select.closest('[data-pane~="page"]')).not.toBeNull();
+    expect(select.closest('[data-pane~="appearance"]')).not.toBeNull();
     expect([...select.options].map((option) => option.value)).toEqual(['dark', 'light-dark-dialogs']);
     // Named as the night, and saying underneath what decides it.
     expect(document.querySelector('label[for="dark-system-theme"]')?.textContent).toBe('Night theme');

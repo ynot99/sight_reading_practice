@@ -1159,10 +1159,12 @@
           finding the one you came for meant scrolling past every other. So
           the sheet asks which question you are answering first.
 
-          Nothing was moved to do it. Every group is where it always was and
-          carries the name of its pane, and the stylesheet decides what is on
+          Each group carries the name of its pane, and the panes' groups stand
+          one pane after another, in the order of the rail and, inside a pane,
+          the most often changed first. The stylesheet decides what is on
           screen - which is where layout lives here, and which means a control
-          cannot be lost in the sorting.
+          cannot be lost in the sorting. No group belongs to two panes: one
+          that did had to hide half of itself in each.
         -->
         <div class="settings-body">
         <nav id="settings-sections" class="settings-sections" aria-label="Settings sections">
@@ -1170,18 +1172,22 @@
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 6h18v12H3z M7 6v8 M11 6v8 M15 6v8" />
             </svg><span>Instrument</span></button>
-          <button type="button" class="settings-sections__tab" data-chooses="page">
+          <button type="button" class="settings-sections__tab" data-chooses="appearance">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 3v18 M12 8h5 M12 12h6 M12 16h5" />
+            </svg><span>Appearance</span></button>
+          <button type="button" class="settings-sections__tab" data-chooses="reading">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M7 3h7l4 4v14H7z M14 3v4h4" />
-            </svg><span>Page</span></button>
-          <button type="button" class="settings-sections__tab" data-chooses="playing">
+            </svg><span>Reading</span></button>
+          <button type="button" class="settings-sections__tab" data-chooses="judging">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />
-            </svg><span>Playing</span></button>
+            </svg><span>Judging</span></button>
           <button type="button" class="settings-sections__tab" data-chooses="sound">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M4 9h4l5-4v14l-5-4H4z M17 9a4 4 0 0 1 0 6" />
-            </svg><span>Sound</span></button>
+            </svg><span>Sound &amp; playback</span></button>
           <button type="button" class="settings-sections__tab" data-chooses="practice">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 7v5l3 2" />
@@ -1190,10 +1196,6 @@
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M5 4h4v16H5z M11 4h4v16h-4z M17 4h3v16h-3z" />
             </svg><span>Library</span></button>
-          <button type="button" class="settings-sections__tab" data-chooses="storage">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3z M4 6c0 1.7 3.6 3 8 3s8-1.3 8-3 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
-            </svg><span>Storage</span></button>
           <button type="button" class="settings-sections__tab" data-chooses="developers">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M4 7l1.4-1.4L11.8 12l-6.4 6.4L4 17l5-5z M12 16h8v2h-8z" />
@@ -1222,365 +1224,379 @@
             </div>
           </div>
 
-        <!--
-          The colours of everything, the music's page included: the
-          system's, or one of the three whatever the system says.
-        -->
-        <div class="control-group" data-pane="page">
-          <label for="theme">Theme</label>
-          <select id="theme"></select>
-        </div>
-
-        <!--
-          What System becomes while the system is dark, named as the night
-          rather than as the system's setting: the reader thinks of the hour,
-          and the hint says what decides it.
-        -->
-        <div class="control-group" data-pane="page">
-          <label for="dark-system-theme">Night theme</label>
-          <select id="dark-system-theme"></select>
-          <p class="hint">Used when the theme is System and the system is dark.</p>
-        </div>
-
-        <!--
-          What is here when the page opens. His own three answers: a new
-          exercise, the piece he was working on, or one of the kept scores at
-          random - which is osu's idea, that something is in front of you and
-          the question "shall I play this?" gets asked rather than having to
-          be thought of.
-        -->
-        <div class="control-group" data-pane="page">
-          <label for="what-opens">When I open this page</label>
-          <select id="what-opens"></select>
-          <p id="what-opens-description" class="hint"></p>
-        </div>
-
-        <!--
-          Playing the trainer from the letter keys. Two octaves from C3, so
-          the app is usable before a MIDI keyboard is plugged in or while
-          practising away from the instrument.
-        -->
-        <div class="control-group control-group--checks" data-pane="instrument">
-          <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
-          <p class="hint">
-            Two octaves from C3 laid across the letter keys: Z–M and Q–I.
-          </p>
-        </div>
-
-        <!--
-          Reading rhythm off the page, which used to be a sheet of its own
-          reached from the drawer. It is a way of working rather than a thing
-          pressed mid-run, so it belongs at the desk with everything else the
-          page is set up by.
-        -->
-        <div class="control-group" data-pane="page">
-          <label for="rhythm-ruler">Rule the bars in</label>
-          <select id="rhythm-ruler"></select>
-          <p id="rhythm-ruler-description" class="hint"></p>
-        </div>
-
-        <div class="control-group" data-pane="page">
-          <label for="ruler-strength">
-            How strongly: <output id="ruler-strength-value">100</output>%
-          </label>
-          <input id="ruler-strength" type="range" min="0" max="100" step="5" value="100" />
-          <p class="hint">At nothing at all the lines go, and the bars stay spaced by time.</p>
-        </div>
-
-        <!--
-          And the page itself: read as pages by default, since that is what a
-          score is. The button that turned it over lived in the drawer, which
-          is for what a reader presses while playing - this is set once and
-          left alone.
-        -->
-        <div class="control-group control-group--checks" data-pane="page">
-          <label><input id="ruler-cursor" type="checkbox" /> Run a marker along the ruler</label>
           <!--
-            His: knowing that a bar is being read again is worth having, and
-            worth being able to put away. What goes is the writer's own
-            number and the turning arrow above it - never the number in the
-            corner, which says where in the playing this bar is and is what
-            everything else here counts by.
+            Playing the trainer from the letter keys. Two octaves from C3, so
+            the app is usable before a MIDI keyboard is plugged in or while
+            practising away from the instrument.
           -->
-          <label><input id="repeat-numbers" type="checkbox" checked /> Say which bar a repeat is</label>
-          <label><input id="paged-score" type="checkbox" checked /> Read the score as pages</label>
-        </div>
-
-        <div class="control-group" data-pane="page">
-          <label for="preview">Look before playing: <output id="preview-value">0</output> s</label>
-          <input id="preview" type="range" min="0" max="20" step="1" value="0" />
-          <p class="hint">A scan the run starts itself after, so the look is deliberate.</p>
-        </div>
-
-        <!--
-          One question about the pages, where there were a behaviour nobody
-          could turn off and a checkbox beside it. Only says anything while
-          the score is read as pages at all, which is why it says so itself
-          rather than being hidden - a control that vanishes is one the
-          reader goes looking for.
-        -->
-        <div class="control-group" data-pane="page">
-          <label for="page-turns">Page turns</label>
-          <select id="page-turns"></select>
-          <p id="page-turns-description" class="hint"></p>
-        </div>
-
-        <div class="control-group" data-pane="playing">
-          <label for="tolerance">Chord window: <output id="tolerance-value">250</output> ms</label>
-          <input id="tolerance" type="range" min="40" max="800" step="10" value="250" />
-        </div>
-
-        <!--
-          What is only for finding out why something is slow or wrong. Last, and
-          behind its own tab, so that a reader looking for a setting never has to
-          read past it. His: "може їх лишити при опції з settings у розділі for
-          developers".
-        -->
-        <!--
-          What this device keeps, as one bar of what it is made of and a
-          legend under it. His, of iOS: "memory management табу в settings
-          як в ios що там є рисочка яка заповнюється різними кольорами - та
-          легенда знизу щоб сказати що скільки займає". Weighed when the pane
-          is opened, which is when the question is being asked.
-        -->
-        <div class="control-group storage" data-pane="storage">
-          <div class="storage__head">
-            <span>What this device keeps</span>
-            <span id="storage-total" class="storage__total"></span>
+          <div class="control-group control-group--checks" data-pane="instrument">
+            <label><input id="computer-keyboard" type="checkbox" checked /> Computer keyboard</label>
+            <p class="hint">
+              Two octaves from C3 laid across the letter keys: Z–M and Q–I.
+            </p>
           </div>
-          <div id="storage-bar" class="share-bar" role="img" aria-label="What this device keeps"></div>
-          <ul id="storage-legend" class="share-legend"></ul>
-          <p id="storage-kept" class="hint"></p>
-          <p id="storage-small" class="hint"></p>
-        </div>
-        <!--
-          How the last run was judged, press by press, to be read when a
-          verdict looks wrong. With the timings and not with the backup: it is
-          for finding out why, and a reader saving their scores should not have
-          to read past it.
-        -->
-        <div class="control-group" data-pane="developers">
-          <label for="copy-judging">How the last run was judged</label>
-          <div class="ladder-row">
-            <button id="copy-judging" type="button" class="button button--ghost">
-              Copy a judging log
-            </button>
-            <button id="save-judging" type="button" class="button button--ghost">
-              Save it as a file
-            </button>
+
+          <div class="control-group" data-pane="instrument">
+            <label for="latency">Input delay: <output id="latency-value">0</output> ms</label>
+            <input id="latency" type="range" min="-100" max="600" step="5" value="0" />
+            <div class="ladder-row">
+              <button id="latency-measure" type="button" class="button button--ghost" disabled>
+                Take it from the last run
+              </button>
+              <button id="latency-test" type="button" class="button">Play a test</button>
+            </div>
+            <p id="latency-description" class="hint"></p>
           </div>
-        </div>
-        <div class="control-group" data-pane="developers">
-          <label><input id="trace-the-start" type="checkbox" /> Print start timings to the console</label>
-          <p class="hint">
-            One line for each stage between asking for music and hearing it, or
-            opening a score and seeing it, and the gap since the last. The big
-            gap is where the time went. Kept as well, and shown below the next
-            time the page opens - so a page the browser closed still says how
-            far it got.
-          </p>
-          <div id="timing-trail" hidden>
-            <p class="hint">The last timings before this page was opened again:</p>
-            <pre id="timing-trail-lines" class="timing-trail"></pre>
-          </div>
-        </div>
-        <div class="control-group" data-pane="library">
-          <label for="save-backup">Everything on this device</label>
-          <div class="ladder-row">
-            <button id="save-backup" type="button" class="button">Save a backup</button>
-            <button id="open-backup" type="button" class="button">Restore…</button>
-          </div>
+
           <!--
-            No `accept`: the same reason the score picker has none. iOS
-            resolves it to its own file kinds and greys out everything it does
-            not recognise, which for a file we invented is everything.
+            Appearance: how the page and everything around it are drawn,
+            whatever is being played on it.
+
+            The colours of everything, the music's page included: the
+            system's, or one of the three whatever the system says.
           -->
-          <input id="backup-file" type="file" hidden />
-          <label for="drive-sync">Google Drive</label>
-          <div class="ladder-row">
-            <button id="drive-sync" type="button" class="button">Sync with Google Drive</button>
-            <!-- For a browser that will not open Google's window: the iPad's,
-                 the one there with Web MIDI. -->
-            <button id="drive-code" type="button" class="button button--ghost" hidden>
-              Sign in with a code
-            </button>
+          <div class="control-group" data-pane="appearance">
+            <label for="theme">Theme</label>
+            <select id="theme"></select>
           </div>
-          <p id="drive-status" class="hint">
-            Scores, their stars, clicks and passages, the same on every device.
-            The trainer sees only its own folder on your Drive.
-          </p>
-          <ul id="drive-only" class="drive-only" hidden></ul>
-          <label><input id="offer-to-sync" type="checkbox" /> A Sync button by the clock when this device has something to send, which presses itself half a minute after the last change</label>
-          <p id="backup-description" class="hint">
-            Settings, kept scores, takes and history, in one file. Installing this
-            page to the Home Screen gives it a store of its own, separate from the
-            browser tab — nothing in a browser can carry them across, but a file can.
-          </p>
-        </div>
 
-        <div class="control-group" data-pane="instrument">
-          <label for="latency">Input delay: <output id="latency-value">0</output> ms</label>
-          <input id="latency" type="range" min="-100" max="600" step="5" value="0" />
-          <div class="ladder-row">
-            <button id="latency-measure" type="button" class="button button--ghost" disabled>
-              Take it from the last run
-            </button>
-            <button id="latency-test" type="button" class="button">Play a test</button>
-          </div>
-          <p id="latency-description" class="hint"></p>
-        </div>
-
-        <div class="control-group" data-pane="page">
-          <label for="zoom">Note size: <output id="zoom-value">85</output>%</label>
-          <input id="zoom" type="range" min="40" max="220" step="5" value="85" />
-        </div>
-
-        <div class="control-group" data-pane="page">
-          <label for="show-played">Show what I played</label>
-          <select id="show-played"></select>
-          <p id="show-played-description" class="hint"></p>
-        </div>
-
-        <div class="control-group" data-pane="page">
-          <label for="read-ahead">Notes disappear</label>
-          <select id="read-ahead"></select>
-          <p id="read-ahead-description" class="hint"></p>
-        </div>
-
-        <div class="control-group" data-pane="sound">
-          <label for="instrument-volume">
-            Note sound: <output id="instrument-volume-value">60</output>%
-          </label>
-          <input id="instrument-volume" type="range" min="0" max="100" step="5" value="60" />
-          <div class="knob-row">
-            <button id="learn-knob" type="button" class="button button--ghost knob-row__learn">
-              Use a knob
-            </button>
-            <span id="knob-status" class="hint knob-row__status"></span>
-          </div>
-        </div>
-
-        <!--
-          The metronome's loudness a second time, beside the notes' own, so
-          the two can be balanced against each other in one place. The first
-          stays in the metronome's sheet, a tap from the bar mid-practice.
-          Both are drawn from the one saved value and either writes it, so
-          they cannot come to disagree.
-        -->
-        <div class="control-group" data-pane="sound">
-          <label for="sound-metronome-volume">
-            Metronome: <output id="sound-metronome-volume-value">60</output>%
-          </label>
-          <input id="sound-metronome-volume" type="range" min="0" max="100" step="5" value="60" />
-        </div>
-
-        <div class="control-group" data-pane="sound">
-          <label for="sample-loading">Piano samples</label>
-          <select id="sample-loading">
-            <option value="eager">Download on open</option>
-            <option value="lazy">Download on first note</option>
-            <option value="off">Do not download</option>
-          </select>
-          <p id="sample-loading-hint" class="hint"></p>
           <!--
-            Here rather than anywhere glanceable, because this is the one
-            control the answer changes: the recordings are the only thing the
-            application fetches after it has opened. Everything else it needs
-            is already on the device.
+            What System becomes while the system is dark, named as the night
+            rather than as the system's setting: the reader thinks of the hour,
+            and the hint says what decides it.
           -->
-          <p id="network-state" class="hint"></p>
-        </div>
+          <div class="control-group" data-pane="appearance">
+            <label for="dark-system-theme">Night theme</label>
+            <select id="dark-system-theme"></select>
+            <p class="hint">Used when the theme is System and the system is dark.</p>
+          </div>
 
-        <!--
-          The checkboxes, and the one box in here that three panes share: its
-          labels belong to page, playing and sound, each shown on its own. So
-          it names all three, matched with `~=`. Naming none made it a cell in
-          every pane - an empty one holding a column open, which is what put
-          Practice a third of the way in from the left - and naming a pane
-          none of its labels belongs to does the same there.
-        -->
-        <div class="control-group control-group--checks" data-pane="page playing sound">
+          <div class="control-group" data-pane="appearance">
+            <label for="zoom">Note size: <output id="zoom-value">85</output>%</label>
+            <input id="zoom" type="range" min="40" max="220" step="5" value="85" />
+          </div>
+
           <!--
-            Three answers and not one. A reader may want no marker at all
-            while *they* play - it is a crutch, and reading without it is the
-            point - and still want one while the machine plays the passage
-            back, where following along is most of the value. The third is
-            how they see where they stopped.
-
-            The first is the No cursor square in Modes, and only there: a
-            square and a box here were two editors of one setting.
+            And the page itself: read as pages by default, since that is what a
+            score is. The button that turned it over lived in the drawer, which
+            is for what a reader presses while playing - this is set once and
+            left alone.
           -->
-          <label data-pane="page"><input id="cursor-listening" type="checkbox" checked /> Cursor while it plays back</label>
-          <label data-pane="page"><input id="cursor-rest" type="checkbox" checked /> Cursor when nothing is playing</label>
-          <label data-pane="playing"><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
+          <div class="control-group control-group--checks" data-pane="appearance">
+            <label><input id="paged-score" type="checkbox" checked /> Read the score as pages</label>
+            <!--
+              His: knowing that a bar is being read again is worth having, and
+              worth being able to put away. What goes is the writer's own
+              number and the turning arrow above it - never the number in the
+              corner, which says where in the playing this bar is and is what
+              everything else here counts by.
+            -->
+            <label><input id="repeat-numbers" type="checkbox" checked /> Say which bar a repeat is</label>
+          </div>
+
+          <!--
+            One question about the pages, where there were a behaviour nobody
+            could turn off and a checkbox beside it. Only says anything while
+            the score is read as pages at all, which is why it says so itself
+            rather than being hidden - a control that vanishes is one the
+            reader goes looking for.
+          -->
+          <div class="control-group" data-pane="appearance">
+            <label for="page-turns">Page turns</label>
+            <select id="page-turns"></select>
+            <p id="page-turns-description" class="hint"></p>
+          </div>
+
+          <!--
+            Reading rhythm off the page, which used to be a sheet of its own
+            reached from the drawer. It is a way of working rather than a thing
+            pressed mid-run, so it belongs at the desk with everything else the
+            page is set up by.
+          -->
+          <div class="control-group" data-pane="appearance">
+            <label for="rhythm-ruler">Rule the bars in</label>
+            <select id="rhythm-ruler"></select>
+            <p id="rhythm-ruler-description" class="hint"></p>
+            <!-- The ruler's other two questions, in its own box, so it reads as one thing. -->
+            <label for="ruler-strength">
+              How strongly: <output id="ruler-strength-value">100</output>%
+            </label>
+            <input id="ruler-strength" type="range" min="0" max="100" step="5" value="100" />
+            <p class="hint">At nothing at all the lines go, and the bars stay spaced by time.</p>
+            <div class="control-group--checks">
+              <label><input id="ruler-cursor" type="checkbox" /> Run a marker along the ruler</label>
+            </div>
+          </div>
+
+          <!-- Reading: what the page does while the reader plays from it. -->
+          <div class="control-group" data-pane="reading">
+            <label for="show-played">Show what I played</label>
+            <select id="show-played"></select>
+            <p id="show-played-description" class="hint"></p>
+          </div>
+
+          <div class="control-group" data-pane="reading">
+            <label for="read-ahead">Notes disappear</label>
+            <select id="read-ahead"></select>
+            <p id="read-ahead-description" class="hint"></p>
+          </div>
+
+          <div class="control-group" data-pane="reading">
+            <label for="preview">Look before playing: <output id="preview-value">0</output> s</label>
+            <input id="preview" type="range" min="0" max="20" step="1" value="0" />
+            <p class="hint">A scan the run starts itself after, so the look is deliberate.</p>
+          </div>
+
+          <!--
+            The marker while the reader plays is the No cursor square in
+            Modes, and only there: a square and a box here were two editors of
+            one setting. Here is the one at rest, which is how a reader sees
+            where they stopped; the one during a playback is under Sound &
+            playback.
+          -->
+          <div class="control-group control-group--checks" data-pane="reading">
+            <label><input id="cursor-rest" type="checkbox" checked /> Cursor when nothing is playing</label>
+            <label><input id="dim-unplayed" type="checkbox" checked /> Dim what this run will not ask for</label>
+          </div>
+
+          <!-- Judging: what counts, and as what. -->
+          <div class="control-group" data-pane="judging">
+            <label for="tolerance">Chord window: <output id="tolerance-value">250</output> ms</label>
+            <input id="tolerance" type="range" min="40" max="800" step="10" value="250" />
+          </div>
+
           <!--
             His, and he asked for both answers: some readers press the next
             note to get to it, and some are learning not to press early at
             all. Where nothing keeps time but the reader, that difference is
             the whole of what the mode is teaching.
           -->
-          <div class="control-group" data-pane="playing">
+          <div class="control-group" data-pane="judging">
             <label for="playing-ahead">Pressing a note that comes later</label>
             <select id="playing-ahead">
               <option value="a-mistake">Counts as a wrong note</option>
               <option value="moves-on">Moves on to it</option>
             </select>
           </div>
-          <!--
-            The same setting as the drawer's button, seen from the desk. One
-            question with two editors, the way the tempo has a slider here and
-            a percentage in fullscreen.
-          -->
-          <label data-pane="playing"><input id="immediate-start" type="checkbox" /> Start when you play the first notes</label>
-          <label data-pane="page"><input id="dim-unplayed" type="checkbox" checked /> Dim what this run will not ask for</label>
-          <label data-pane="playing"><input id="hear-other-hand" type="checkbox" /> Hear the hand I am not playing</label>
-          <!--
-            His: late is allowed, early is not. Where the music waits for the
-            reader nothing can be late - but the hand they are hearing does
-            not wait, and a press before it got there is a reader going past
-            the thing they asked to play with. Nothing to be early against
-            without that other hand, so this does nothing until it is on.
-          -->
-          <label data-pane="playing"><input id="rushing-counts" type="checkbox" checked /> Playing ahead of that hand counts against you</label>
-          <!--
-            His: he plays along with the playback to check himself, and the
-            page said nothing either way. Off by default, because a
-            performance is also how a piece is listened to, and a page filling
-            with red while nobody is being judged would be the program marking
-            a reader who never asked to be.
-          -->
-          <label data-pane="sound"><input id="mark-listening" type="checkbox" /> Mark what I play along with a playback</label>
-          <!--
-            The other half of the same wish, and a different question: one
-            says "check yourself", this says "watch where the music is". The
-            marker already names the beat; this names which of its notes.
-          -->
-          <label data-pane="sound"><input id="show-playback-notes" type="checkbox" /> Light the notes a playback is sounding</label>
-          <label data-pane="sound"><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
-        </div>
 
-        <!--
-          The same setting the reminder itself offers, and here as well - the
-          card is only on the page once a rest has fallen due, so until then
-          there was nowhere to find this at all, not even to turn it off.
-          Two chairs, one value: both are filled from one list and both are
-          drawn from the settings, so they cannot come to disagree.
-        -->
-        <div class="control-group" data-pane="practice">
-          <label for="rest-every-settings">Remind me to rest every</label>
-          <select id="rest-every-settings"></select>
-          <p class="hint">
-            Never in the middle of playing: the reminder waits for the music to stop.
-          </p>
-          <div>
+          <div class="control-group control-group--checks" data-pane="judging">
+            <label><input id="pitch-class" type="checkbox" /> Ignore octaves</label>
             <!--
-              The same panel the pill opens, not a copy of it. Two sets of the
-              same controls are two editors of one setting, and they disagree
-              the moment one of them is wired up wrong.
+              The same setting as the drawer's button, seen from the desk. One
+              question with two editors, the way the tempo has a slider here and
+              a percentage in fullscreen.
             -->
-            <button id="settings-metronome" type="button" class="button">Metronome…</button>
+            <label><input id="immediate-start" type="checkbox" /> Start when you play the first notes</label>
+            <label><input id="hear-other-hand" type="checkbox" /> Hear the hand I am not playing</label>
+            <!--
+              His: late is allowed, early is not. Where the music waits for the
+              reader nothing can be late - but the hand they are hearing does
+              not wait, and a press before it got there is a reader going past
+              the thing they asked to play with. Nothing to be early against
+              without that other hand, so this does nothing until it is on.
+            -->
+            <label><input id="rushing-counts" type="checkbox" checked /> Playing ahead of that hand counts against you</label>
           </div>
-        </div>
+
+          <!-- Sound, and what the page does while the program plays. -->
+          <div class="control-group" data-pane="sound">
+            <label for="instrument-volume">
+              Note sound: <output id="instrument-volume-value">60</output>%
+            </label>
+            <input id="instrument-volume" type="range" min="0" max="100" step="5" value="60" />
+            <div class="knob-row">
+              <button id="learn-knob" type="button" class="button button--ghost knob-row__learn">
+                Use a knob
+              </button>
+              <span id="knob-status" class="hint knob-row__status"></span>
+            </div>
+          </div>
+
+          <!--
+            The metronome's loudness a second time, beside the notes' own, so
+            the two can be balanced against each other in one place. The first
+            stays in the metronome's sheet, a tap from the bar mid-practice.
+            Both are drawn from the one saved value and either writes it, so
+            they cannot come to disagree.
+          -->
+          <div class="control-group" data-pane="sound">
+            <label for="sound-metronome-volume">
+              Metronome: <output id="sound-metronome-volume-value">60</output>%
+            </label>
+            <input id="sound-metronome-volume" type="range" min="0" max="100" step="5" value="60" />
+          </div>
+
+          <div class="control-group" data-pane="sound">
+            <label for="sample-loading">Piano samples</label>
+            <select id="sample-loading">
+              <option value="eager">Download on open</option>
+              <option value="lazy">Download on first note</option>
+              <option value="off">Do not download</option>
+            </select>
+            <p id="sample-loading-hint" class="hint"></p>
+            <!--
+              Here rather than anywhere glanceable, because this is the one
+              control the answer changes: the recordings are the only thing the
+              application fetches after it has opened. Everything else it needs
+              is already on the device.
+            -->
+            <p id="network-state" class="hint"></p>
+          </div>
+
+          <div class="control-group control-group--checks" data-pane="sound">
+            <label><input id="audio-feedback" type="checkbox" checked /> Sound my notes</label>
+          </div>
+
+          <!--
+            While the program plays the music: a marker to follow it by, its
+            notes lit as they sound, and the reader's own presses marked if
+            they play along.
+          -->
+          <div class="control-group control-group--checks" data-pane="sound">
+            <span class="control-group__label">While it plays back</span>
+            <label><input id="cursor-listening" type="checkbox" checked /> Cursor while it plays back</label>
+            <!--
+              "Watch where the music is": the marker already names the beat;
+              this names which of its notes.
+            -->
+            <label><input id="show-playback-notes" type="checkbox" /> Light the notes a playback is sounding</label>
+            <!--
+              His: he plays along with the playback to check himself, and the
+              page said nothing either way. Off by default, because a
+              performance is also how a piece is listened to, and a page filling
+              with red while nobody is being judged would be the program marking
+              a reader who never asked to be.
+            -->
+            <label><input id="mark-listening" type="checkbox" /> Mark what I play along with a playback</label>
+          </div>
+
+          <!--
+            What is here when the page opens. His own three answers: a new
+            exercise, the piece he was working on, or one of the kept scores at
+            random - which is osu's idea, that something is in front of you and
+            the question "shall I play this?" gets asked rather than having to
+            be thought of.
+          -->
+          <div class="control-group" data-pane="practice">
+            <label for="what-opens">When I open this page</label>
+            <select id="what-opens"></select>
+            <p id="what-opens-description" class="hint"></p>
+          </div>
+
+          <!--
+            The same setting the reminder itself offers, and here as well - the
+            card is only on the page once a rest has fallen due, so until then
+            there was nowhere to find this at all, not even to turn it off.
+            Two chairs, one value: both are filled from one list and both are
+            drawn from the settings, so they cannot come to disagree.
+          -->
+          <div class="control-group" data-pane="practice">
+            <label for="rest-every-settings">Remind me to rest every</label>
+            <select id="rest-every-settings"></select>
+            <p class="hint">
+              Never in the middle of playing: the reminder waits for the music to stop.
+            </p>
+            <div>
+              <!--
+                The same panel the pill opens, not a copy of it. Two sets of the
+                same controls are two editors of one setting, and they disagree
+                the moment one of them is wired up wrong.
+              -->
+              <button id="settings-metronome" type="button" class="button">Metronome…</button>
+            </div>
+          </div>
+
+          <div class="control-group" data-pane="library">
+            <label for="save-backup">Everything on this device</label>
+            <div class="ladder-row">
+              <button id="save-backup" type="button" class="button">Save a backup</button>
+              <button id="open-backup" type="button" class="button">Restore…</button>
+            </div>
+            <!--
+              No `accept`: the same reason the score picker has none. iOS
+              resolves it to its own file kinds and greys out everything it does
+              not recognise, which for a file we invented is everything.
+            -->
+            <input id="backup-file" type="file" hidden />
+            <label for="drive-sync">Google Drive</label>
+            <div class="ladder-row">
+              <button id="drive-sync" type="button" class="button">Sync with Google Drive</button>
+              <!-- For a browser that will not open Google's window: the iPad's,
+                   the one there with Web MIDI. -->
+              <button id="drive-code" type="button" class="button button--ghost" hidden>
+                Sign in with a code
+              </button>
+            </div>
+            <p id="drive-status" class="hint">
+              Scores, their stars, clicks and passages, the same on every device.
+              The trainer sees only its own folder on your Drive.
+            </p>
+            <ul id="drive-only" class="drive-only" hidden></ul>
+            <div class="control-group--checks">
+              <label><input id="offer-to-sync" type="checkbox" /> A Sync button by the clock when this device has something to send, which presses itself half a minute after the last change</label>
+            </div>
+            <p id="backup-description" class="hint">
+              Settings, kept scores, takes and history, in one file. Installing this
+              page to the Home Screen gives it a store of its own, separate from the
+              browser tab — nothing in a browser can carry them across, but a file can.
+            </p>
+          </div>
+
+          <!--
+            What this device keeps, as one bar of what it is made of and a
+            legend under it. His, of iOS: "memory management табу в settings
+            як в ios що там є рисочка яка заповнюється різними кольорами - та
+            легенда знизу щоб сказати що скільки займає". Weighed when the pane
+            is opened, which is when the question is being asked. Beside the
+            backup and the drive, since all three are about what is kept.
+          -->
+          <div class="control-group storage" data-pane="library">
+            <div class="storage__head">
+              <span>What this device keeps</span>
+              <span id="storage-total" class="storage__total"></span>
+            </div>
+            <div id="storage-bar" class="share-bar" role="img" aria-label="What this device keeps"></div>
+            <ul id="storage-legend" class="share-legend"></ul>
+            <p id="storage-kept" class="hint"></p>
+            <p id="storage-small" class="hint"></p>
+          </div>
+
+          <!--
+            What is only for finding out why something is slow or wrong. Last, and
+            behind its own tab, so that a reader looking for a setting never has to
+            read past it. His: "може їх лишити при опції з settings у розділі for
+            developers".
+
+            How the last run was judged, press by press, to be read when a
+            verdict looks wrong. With the timings and not with the backup: it is
+            for finding out why, and a reader saving their scores should not have
+            to read past it.
+          -->
+          <div class="control-group" data-pane="developers">
+            <label for="copy-judging">How the last run was judged</label>
+            <div class="ladder-row">
+              <button id="copy-judging" type="button" class="button button--ghost">
+                Copy a judging log
+              </button>
+              <button id="save-judging" type="button" class="button button--ghost">
+                Save it as a file
+              </button>
+            </div>
+          </div>
+          <div class="control-group control-group--checks" data-pane="developers">
+            <label><input id="trace-the-start" type="checkbox" /> Print start timings to the console</label>
+            <p class="hint">
+              One line for each stage between asking for music and hearing it, or
+              opening a score and seeing it, and the gap since the last. The big
+              gap is where the time went. Kept as well, and shown below the next
+              time the page opens - so a page the browser closed still says how
+              far it got.
+            </p>
+            <div id="timing-trail" hidden>
+              <p class="hint">The last timings before this page was opened again:</p>
+              <pre id="timing-trail-lines" class="timing-trail"></pre>
+            </div>
+          </div>
         </div>
 
         </div>

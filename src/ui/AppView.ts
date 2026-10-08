@@ -66,9 +66,11 @@ import {
   KEYS_SHOWN,
   METRONOME_TAPS,
   PLAYED_NOTE_DISPLAYS,
+  THEMES,
   type KeysShown,
   type MetronomeTap,
   type PlayedNoteDisplay,
+  type Theme,
 } from '../application/PracticeController.js';
 import { HOLD_MS } from '../shared/holding.js';
 import { pieceOfKey, type PassageHistory, type PracticeReading } from '../application/PracticeHistory.js';
@@ -1046,6 +1048,12 @@ function takeFileName(savedAtMs: number): string {
   );
 }
 
+const THEME_LABELS: Readonly<Record<Theme, string>> = {
+  system: 'System',
+  light: 'Light',
+  dark: 'Dark',
+};
+
 const PLAYED_NOTE_LABELS: Readonly<Record<PlayedNoteDisplay, string>> = {
   live: 'As I play them',
   'at-end': 'Only when the run ends',
@@ -1835,6 +1843,7 @@ export class AppView {
     zoom: HTMLInputElement;
     zoomValue: HTMLOutputElement;
     showPlayed: HTMLSelectElement;
+    theme: HTMLSelectElement;
     showPlayedDescription: HTMLElement;
     readAhead: HTMLSelectElement;
     readAheadDescription: HTMLElement;
@@ -2143,6 +2152,7 @@ export class AppView {
       zoom: requireElement(doc, 'zoom'),
       zoomValue: requireElement(doc, 'zoom-value'),
       showPlayed: requireElement(doc, 'show-played'),
+      theme: requireElement(doc, 'theme'),
       showPlayedDescription: requireElement(doc, 'show-played-description'),
       readAhead: requireElement(doc, 'read-ahead'),
       readAheadDescription: requireElement(doc, 'read-ahead-description'),
@@ -3475,6 +3485,11 @@ export class AppView {
       );
     }
     fillSelect(
+      this.el.theme,
+      THEMES.map((choice) => ({ value: choice, label: THEME_LABELS[choice] })),
+      this.runtime.controller.settings.theme,
+    );
+    fillSelect(
       this.el.showPlayed,
       PLAYED_NOTE_DISPLAYS.map((choice) => ({ value: choice, label: PLAYED_NOTE_LABELS[choice] })),
       this.runtime.controller.settings.playedNotes,
@@ -3693,6 +3708,13 @@ export class AppView {
     });
 
     this.layTheGrades();
+
+    this.listen(this.el.theme, 'change', () => {
+      const theme = this.el.theme.value as Theme;
+      controller.updateSettings({ theme: THEMES.includes(theme) ? theme : 'system' });
+      this.syncControlsFromSettings();
+      this.paintInTheColoursNow();
+    });
 
     this.listen(this.el.showPlayed, 'change', () => {
       controller.updateSettings({ playedNotes: readPlayedNotes(this.el.showPlayed.value) });
@@ -6799,6 +6821,14 @@ export class AppView {
     this.describeZoom();
     this.el.zoomValue.value = this.el.zoom.value;
     this.el.showPlayed.value = settings.playedNotes;
+    this.el.theme.value = settings.theme;
+    // Said on the root, where the stylesheet's tokens are: no answer at all
+    // is the system's, which the stylesheet asks the system for itself.
+    if (settings.theme === 'system') {
+      delete this.doc.documentElement.dataset['theme'];
+    } else {
+      this.doc.documentElement.dataset['theme'] = settings.theme;
+    }
     this.el.showPlayedDescription.textContent = PLAYED_NOTE_DESCRIPTIONS[settings.playedNotes];
     this.el.readAhead.value = readAheadValue(settings.readAheadSteps);
     this.el.readAheadDescription.textContent =
@@ -9961,14 +9991,24 @@ export class AppView {
     if (typeof view.matchMedia === 'function') {
       const dark = view.matchMedia('(prefers-color-scheme: dark)');
       const repaint = (): void => {
-        this.rollInks = null;
-        this.askWhereTheViewIs();
+        this.paintInTheColoursNow();
       };
       dark.addEventListener('change', repaint);
       this.subscriptions.push(() => {
         dark.removeEventListener('change', repaint);
       });
     }
+  }
+
+  /**
+   * Paints what is painted on a canvas again, in the colours the page is in
+   * now: a canvas keeps the colours of the moment it was painted, and the
+   * theme has changed under it.
+   */
+  private paintInTheColoursNow(): void {
+    this.rollInks = null;
+    this.laneInks = null;
+    this.askWhereTheViewIs();
   }
 
   /**

@@ -109,6 +109,14 @@ import { timeTheStart } from '../shared/timeTheStart.js';
  */
 export const PLAYED_NOTE_DISPLAYS = ['live', 'at-end', 'hidden'] as const;
 
+/**
+ * The colours the whole page is in: the system's, whichever it is at the
+ * time, or one of the two whatever the system says.
+ */
+export const THEMES = ['system', 'light', 'dark'] as const;
+
+export type Theme = (typeof THEMES)[number];
+
 export type PlayedNoteDisplay = (typeof PLAYED_NOTE_DISPLAYS)[number];
 
 /**
@@ -458,6 +466,13 @@ export interface PracticeSettings {
    * and turning the next.
    */
   readonly pagedScore: boolean;
+  /**
+   * The colours of the page and the music on it.
+   *
+   * Kept on the device: a desk lit at night and a tablet by a window ask for
+   * different answers from the same reader.
+   */
+  readonly theme: Theme;
   /**
    * Whether a repeated bar says what the writer called it.
    *
@@ -991,6 +1006,7 @@ export class PracticeController {
       cursorWhileListening: true,
       cursorAtRest: true,
       pagedScore: true,
+      theme: 'system',
       showRepeatNumbers: true,
       playedNotes: 'live',
       survival: false,

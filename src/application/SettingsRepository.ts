@@ -24,9 +24,11 @@ import {
   KEYS_SHOWN,
   METRONOME_TAPS,
   PLAYED_NOTE_DISPLAYS,
+  THEMES,
   type KeysShown,
   type MetronomeTap,
   type PlayedNoteDisplay,
+  type Theme,
 } from './PracticeController.js';
 import { SETTINGS_THE_MODES_WRITE } from './modes/challengeModes.js';
 
@@ -97,10 +99,13 @@ const STORAGE_VERSION = 1;
  * And whether the click is heard at all, for the same reason: it is turned
  * off and on between runs, for the run about to be played here. What it
  * sounds like when it is on is shared.
+ *
+ * And the theme, which answers the room the screen is in.
  */
 export const SETTINGS_KEPT_ON_THE_DEVICE: readonly string[] = [
   'inputLatencyMs',
   'zoom',
+  'theme',
   'traceTheStart',
   'rangeFromBar',
   'rangeToBar',
@@ -165,6 +170,10 @@ function readScoreOrder(value: unknown): ScoreOrder | undefined {
   return typeof value === 'string' && SCORE_ORDER.includes(value as ScoreOrder)
     ? (value as ScoreOrder)
     : undefined;
+}
+
+function readTheme(value: unknown): Theme | undefined {
+  return typeof value === 'string' && THEMES.includes(value as Theme) ? (value as Theme) : undefined;
 }
 
 function readRuler(value: unknown): RulerDivision | undefined {
@@ -416,6 +425,7 @@ export function decodePracticeSettings(
       readBoolean(value['cursorWhileListening']) ?? readBoolean(value['showCursor']),
     cursorAtRest: readBoolean(value['cursorAtRest']) ?? readBoolean(value['showCursor']),
     pagedScore: readBoolean(value['pagedScore']),
+    theme: readTheme(value['theme']),
     playedNotes: readPlayedNotes(value['playedNotes'], value['showPlayedNotes']),
     survival: readBoolean(value['survival']),
     playingAhead: value['playingAhead'] === 'moves-on' ? 'moves-on' : undefined,
@@ -481,6 +491,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     cursorWhileListening: settings.cursorWhileListening,
     cursorAtRest: settings.cursorAtRest,
     pagedScore: settings.pagedScore,
+    theme: settings.theme,
     playedNotes: settings.playedNotes,
     survival: settings.survival,
     playingAhead: settings.playingAhead,

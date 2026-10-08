@@ -121,9 +121,10 @@ describe('the stylesheet', () => {
       const rule = all.find((each) => each.selector === `.scores__stars[data-band='${band}']`);
 
       expect(rule?.body ?? '', `band ${band}`).toContain(`color: var(--star-${band});`);
-      // Defined twice: once on the light ground and once on the dark. One
-      // definition is a ramp that disappears into one of the two themes.
-      expect(CSS.split(`--star-${band}:`).length - 1, `--star-${band}`).toBe(2);
+      // Defined on the light ground and on the dark - the dark written twice,
+      // for the system's dark and the reader's. One definition is a ramp that
+      // disappears into one of the two themes.
+      expect(CSS.split(`--star-${band}:`).length - 1, `--star-${band}`).toBe(3);
     }
   });
 
@@ -133,8 +134,8 @@ describe('the stylesheet', () => {
     // looks like ten answers.
     const grounds = rules().filter((rule) => rule.body.includes('--star-1:'));
 
-    // One block per theme, and neither may be short.
-    expect(grounds).toHaveLength(2);
+    // One block per theme, the dark one twice, and none may be short.
+    expect(grounds).toHaveLength(3);
     for (const ground of grounds) {
       const colours = [...Array(10).keys()].map((at) => {
         const found = new RegExp(`--star-${at + 1}:\s*([^;]+);`).exec(ground.body);
@@ -1777,9 +1778,7 @@ describe('the letter a run is graded with', () => {
   it('has a colour of its own, in both themes', () => {
     // His: "літери A/B/C мали свій особистий колір".
     const light = rules().find((rule) => rule.selector === ':root');
-    const dark = rules().find(
-      (rule, at) => rule.selector === ':root' && at > 0 && rule.at > (light?.at ?? 0),
-    );
+    const dark = rules().find((rule) => rule.selector === ":root:not([data-theme='light'])");
 
     for (const letter of ['a', 'b', 'c', 'd', 'f']) {
       expect(light?.body).toContain(`--grade-${letter}:`);
@@ -1903,5 +1902,30 @@ describe('the paper the music is printed on', () => {
     for (const selector of ['.played--correct', '.played--loose', '.played--wrong', '.played--sounding']) {
       expect(body(selector), selector).not.toMatch(/#[0-9a-f]{3,6}/);
     }
+  });
+});
+
+describe('the theme the reader chose', () => {
+  const darkBody = (selector: string): string =>
+    rules().find((rule) => rule.selector === selector && rule.body.includes('--bg'))?.body.replace(/\s+/g, ' ').trim() ?? '';
+
+  it('is the same dark whether the system asked for it or the reader did', () => {
+    // Written twice, since a stylesheet cannot say "the system is dark, or
+    // the reader chose dark" in one rule; the two may never come apart.
+    const bySystem = darkBody(":root:not([data-theme='light'])");
+    const byReader = darkBody(":root[data-theme='dark']");
+
+    expect(bySystem).toContain('--paper');
+    expect(byReader).toBe(bySystem);
+    // And the system's only where the reader has not chosen light.
+    expect(CSS).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme='light'\]\) \{/);
+  });
+
+  it("gives the browser's own controls the theme chosen", () => {
+    const scheme = (selector: string): string =>
+      rules().find((rule) => rule.selector === selector && /color-scheme/.test(rule.body))?.body ?? '';
+
+    expect(scheme(":root[data-theme='light']")).toMatch(/color-scheme\s*:\s*light\s*;/);
+    expect(scheme(":root[data-theme='dark']")).toMatch(/color-scheme\s*:\s*dark\s*;/);
   });
 });

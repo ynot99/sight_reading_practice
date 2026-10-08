@@ -49,6 +49,7 @@ const SETTINGS: PracticeSettings = {
   previewSeconds: 8,
   cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false,
   pagedScore: true,
+  theme: 'dark',
   playedNotes: 'at-end',
   survival: true,
   playingAhead: 'moves-on',
@@ -113,6 +114,13 @@ describe('practice settings codec', () => {
     expect(restored.countInPlayback).toBe('every');
     expect(restored.whatOpens).toBe('random');
     expect(restored.clickWhen).toBe('cycle-2');
+    expect(restored.theme).toBe('dark');
+  });
+
+  it('reads a theme it does not offer as not chosen', () => {
+    const stored = { ...(encodePracticeSettings(SETTINGS) as Record<string, unknown>), theme: 'sepia' };
+
+    expect(decodePracticeSettings(stored, KNOWN).theme).toBeUndefined();
   });
 
   it('reads the checkbox that page turns used to be', () => {
@@ -536,6 +544,22 @@ describe('settings shared between devices', () => {
     });
     expect(now.modeId).toBe('mode.wait');
     expect(now.survival).toBe(changed.survival);
+  });
+
+  it('keeps the theme to this device', () => {
+    // A desk lit at night and a tablet by a window ask for different answers.
+    const kept = repository();
+    kept.savePractice(SETTINGS, 1_000);
+
+    kept.savePractice({ ...SETTINGS, theme: 'light' }, 2_000);
+
+    expect(kept.sharedSettings().changedAtMs).toBe(1_000);
+    expect(kept.sharedSettings().values).not.toHaveProperty('theme');
+    const now = kept.adoptSettings({
+      values: { ...kept.sharedSettings().values, theme: 'dark' },
+      changedAtMs: 7_000,
+    });
+    expect(now.theme).toBe('light');
   });
 
   it('keeps whether the click is heard to this device, and shares what it sounds like', () => {

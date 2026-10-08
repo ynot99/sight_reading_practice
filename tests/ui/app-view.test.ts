@@ -11731,6 +11731,61 @@ describe('what the device keeps', () => {
   });
 });
 
+describe('the theme', () => {
+  beforeEach(() => {
+    mountRealMarkup();
+    delete document.documentElement.dataset['theme'];
+  });
+
+  it("offers the system's, light and dark, in the page settings, the system's first", async () => {
+    const { view } = createRig();
+    await view.initialize();
+    const select = element<HTMLSelectElement>('theme');
+
+    expect(select.closest('[data-pane~="page"]')).not.toBeNull();
+    expect([...select.options].map((option) => option.value)).toEqual(['system', 'light', 'dark']);
+    expect(select.value).toBe('system');
+    expect(document.documentElement.dataset['theme']).toBeUndefined();
+  });
+
+  it('says the theme chosen on the page, and leaves it to the system again', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+    const select = element<HTMLSelectElement>('theme');
+
+    select.value = 'dark';
+    select.dispatchEvent(new Event('change'));
+
+    expect(runtime.controller.settings.theme).toBe('dark');
+    expect(document.documentElement.dataset['theme']).toBe('dark');
+
+    select.value = 'light';
+    select.dispatchEvent(new Event('change'));
+    expect(document.documentElement.dataset['theme']).toBe('light');
+
+    select.value = 'system';
+    select.dispatchEvent(new Event('change'));
+    expect(document.documentElement.dataset['theme']).toBeUndefined();
+  });
+
+  it('puts the theme chosen back when the page opens again', async () => {
+    const store = new InMemorySettingsStore();
+    const first = createRig(undefined, store);
+    await first.view.initialize();
+    const select = element<HTMLSelectElement>('theme');
+    select.value = 'light';
+    select.dispatchEvent(new Event('change'));
+
+    mountRealMarkup();
+    delete document.documentElement.dataset['theme'];
+    const second = createRig(undefined, store);
+    await second.view.initialize();
+
+    expect(document.documentElement.dataset['theme']).toBe('light');
+    expect(element<HTMLSelectElement>('theme').value).toBe('light');
+  });
+});
+
 describe('a key in rhythm only', () => {
   beforeEach(() => {
     mountRealMarkup();

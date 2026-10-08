@@ -3,7 +3,6 @@ import type { Measure, MusicalEntry } from '../../model/Exercise.js';
 import { measureOf, noteEntry, restEntry } from '../../model/Exercise.js';
 import { fillMeasure } from '../RhythmFiller.js';
 import type { VoiceRole } from '../RhythmProfile.js';
-import { playableRange } from './IVoiceGenerator.js';
 import type { IVoiceGenerator, PitchRange, VoiceContext } from './IVoiceGenerator.js';
 import { tonicNearestMiddle } from './voiceRange.js';
 
@@ -32,8 +31,7 @@ export class MelodyVoiceGenerator implements IVoiceGenerator {
   }
 
   generate(context: VoiceContext): Measure[] {
-    // Inside the keys the reader has, where they said what those are.
-    const range = playableRange(this.options.range, context.withinRange);
+    const range = this.options.range;
     const low = range.lowest.diatonicIndex;
     const high = range.highest.diatonicIndex;
     let current = tonicNearestMiddle(context.key, low, high);

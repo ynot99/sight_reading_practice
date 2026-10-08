@@ -3,7 +3,6 @@ import { measureOf, noteEntry, restEntry } from '../../model/Exercise.js';
 import { fillMeasure } from '../RhythmFiller.js';
 import type { VoiceRole } from '../RhythmProfile.js';
 import { FigureWalker, type WeightedFigure } from './figures.js';
-import { playableRange } from './IVoiceGenerator.js';
 import type { IVoiceGenerator, PitchRange, VoiceContext } from './IVoiceGenerator.js';
 import { leadingUpInMinor } from './minorKey.js';
 import { tonicNearestMiddle } from './voiceRange.js';
@@ -88,17 +87,11 @@ export class PatternVoiceGenerator implements IVoiceGenerator {
 
   /** The staff positions the line may use, lowest and highest. */
   private theHand(context: VoiceContext): { readonly lowest: number; readonly highest: number } {
-    // Inside the keys the reader has, where they said what those are.
-    const range = playableRange(this.options.range, context.withinRange);
+    const range = this.options.range;
     if (this.options.fiveFingersFromTheTonic !== true) {
       return { lowest: range.lowest.diatonicIndex, highest: range.highest.diatonicIndex };
     }
-    let lowest = context.key.tonicIndexAtOrAbove(range.lowest.diatonicIndex);
-    // An octave down where the hand would run off the top of the keyboard.
-    const top = context.withinRange?.highest.midi;
-    if (top !== undefined && context.key.pitchAt(lowest + 4).midi > top) {
-      lowest -= 7;
-    }
+    const lowest = context.key.tonicIndexAtOrAbove(range.lowest.diatonicIndex);
     return { lowest, highest: lowest + 4 };
   }
 }

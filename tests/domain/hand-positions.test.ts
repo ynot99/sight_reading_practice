@@ -61,17 +61,6 @@ describe('five fingers from the tonic', () => {
     });
     expect(spanOf(plain.generate(contextIn(KeySignature.major(1))))).toBe('C4..G4');
   });
-
-  it('comes down an octave rather than off the top of a small keyboard', () => {
-    const keyboard = { lowest: Pitch.parse('C3'), highest: Pitch.parse('C5') };
-    expect(spanOf(hand.generate(contextIn(KeySignature.major(1), { withinRange: keyboard })))).toBe(
-      'G3..D4',
-    );
-    // A hand that fits stays where it was.
-    expect(spanOf(hand.generate(contextIn(KeySignature.major(0), { withinRange: keyboard })))).toBe(
-      'C4..G4',
-    );
-  });
 });
 
 describe('hands taking turns', () => {

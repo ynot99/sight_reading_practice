@@ -6157,7 +6157,10 @@ describe('AppView', () => {
       const { view } = createRig();
       await view.initialize();
 
-      for (const id of ['survival', 'rhythm-only', 'stop-at-mistake', 'cursor-running']) {
+      // Nor the size of the keyboard: an exercise is written for the range its
+      // level asks, and whether the instrument has those keys is the reader's
+      // to know.
+      for (const id of ['survival', 'rhythm-only', 'stop-at-mistake', 'cursor-running', 'keyboard']) {
         expect({ id, there: document.getElementById(id) !== null }).toEqual({ id, there: false });
       }
       for (const mode of ['survival', 'rhythm', 'strict', 'cursor']) {

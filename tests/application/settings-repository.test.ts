@@ -76,7 +76,6 @@ const SETTINGS: PracticeSettings = {
   traceTheStart: true,
   stopAtAMistake: true,
   clickSilences: 'the-downbeat',
-  keyboard: '61',
   countInRun: 'once',
   countInPlayback: 'every',
   keysShown: 'keys',
@@ -112,7 +111,6 @@ describe('practice settings codec', () => {
     expect(restored.pageTurns).toBe('manual');
     expect(restored.stopAtAMistake).toBe(true);
     expect(restored.clickSilences).toBe('the-downbeat');
-    expect(restored.keyboard).toBe('61');
     expect(restored.countInRun).toBe('once');
     expect(restored.countInPlayback).toBe('every');
     expect(restored.whatOpens).toBe('random');

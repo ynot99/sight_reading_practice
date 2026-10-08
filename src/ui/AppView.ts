@@ -54,7 +54,6 @@ import {
   type WhatOpens,
 } from '../application/ScoreLibrary.js';
 import { PAGE_TURNS, type PageTurns } from '../application/ports/IScoreRenderer.js';
-import { KEYBOARD_SIZES, keysOf, type KeyboardSize } from '../domain/generation/keyboards.js';
 import type { SavedPassage } from '../application/ports/IScoreStore.js';
 import {
   CLICK_SILENCES,
@@ -720,17 +719,6 @@ function countOf(many: number, thing: string): string {
 }
 
 /** When a count-in happens, said for a run and for a playback. */
-const KEYBOARD_LABELS: Readonly<Record<KeyboardSize, string>> = {
-  any: 'A whole piano',
-  '88': '88 keys',
-  '76': '76 keys',
-  '61': '61 keys',
-  '49': '49 keys',
-  '37': '37 keys',
-  '25': '25 keys',
-  laptop: 'This laptop, two octaves from C3',
-};
-
 const CLICK_SILENCE_LABELS: Readonly<Record<ClickSilence, string>> = {
   nothing: 'Nothing - click everything',
   'the-downbeat': 'The first beat of the bar',
@@ -1833,8 +1821,6 @@ export class AppView {
     passageEmpty: HTMLElement;
     passageName: HTMLInputElement;
     passageSave: HTMLButtonElement;
-    keyboard: HTMLSelectElement;
-    keyboardDescription: HTMLElement;
     clickSilences: HTMLSelectElement;
     clickSilencesDescription: HTMLElement;
     countInRun: HTMLSelectElement;
@@ -2143,8 +2129,6 @@ export class AppView {
       passageEmpty: requireElement(doc, 'passage-empty'),
       passageName: requireElement(doc, 'passage-name'),
       passageSave: requireElement(doc, 'passage-save'),
-      keyboard: requireElement(doc, 'keyboard'),
-      keyboardDescription: requireElement(doc, 'keyboard-description'),
       clickSilences: requireElement(doc, 'click-silences'),
       clickSilencesDescription: requireElement(doc, 'click-silences-description'),
       countInRun: requireElement(doc, 'count-in-run'),
@@ -3466,11 +3450,6 @@ export class AppView {
     // "Never" belongs to the length rather than to the when: nought bars is
     // no count-in, and two answers for one thing would let them disagree.
     fillSelect(
-      this.el.keyboard,
-      KEYBOARD_SIZES.map((choice) => ({ value: choice, label: KEYBOARD_LABELS[choice] })),
-      this.runtime.controller.settings.keyboard,
-    );
-    fillSelect(
       this.el.clickSilences,
       CLICK_SILENCES.map((choice) => ({ value: choice, label: CLICK_SILENCE_LABELS[choice] })),
       this.runtime.controller.settings.clickSilences,
@@ -3829,16 +3808,6 @@ export class AppView {
       ]).then(() => {
         this.el.passageName.value = '';
       });
-    });
-
-    this.listen(this.el.keyboard, 'change', () => {
-      const wanted = this.el.keyboard.value as KeyboardSize;
-      controller.updateSettings({
-        keyboard: KEYBOARD_SIZES.includes(wanted) ? wanted : 'any',
-      });
-      this.syncControlsFromSettings();
-      // The next exercise is written for it; the one on the stand was not.
-      void this.reload(true);
     });
 
     this.listen(this.el.clickSilences, 'change', () => {
@@ -6889,13 +6858,6 @@ export class AppView {
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;
     this.renderPassages();
-    this.el.keyboard.value = settings.keyboard;
-    const keys = keysOf(settings.keyboard);
-    this.el.keyboardDescription.textContent =
-      keys === null
-        ? 'Exercises use the whole range each level asks for.'
-        : `Exercises stay between ${keys.lowest.toString()} and ${keys.highest.toString()}. A part that ` +
-          'would fall outside is moved by octaves rather than cut.';
     this.el.clickSilences.value = settings.clickSilences;
     this.el.clickSilencesDescription.textContent =
       CLICK_SILENCE_DESCRIPTIONS[settings.clickSilences];

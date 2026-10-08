@@ -4,7 +4,6 @@ import type { PracticeSettings } from './PracticeController.js';
 import { RULER_DIVISIONS, type RulerDivision } from './rhythmRuler.js';
 import { SCORE_ORDER, WHAT_OPENS, type ScoreOrder, type WhatOpens } from './ScoreLibrary.js';
 import { PAGE_TURNS, type PageTurns } from './ports/IScoreRenderer.js';
-import { KEYBOARD_SIZES, type KeyboardSize } from '../domain/generation/keyboards.js';
 import {
   CLICK_SILENCES,
   COUNT_IN_WHEN,
@@ -143,12 +142,6 @@ function readPageTurns(value: unknown, legacyPreview: unknown): PageTurns | unde
     return legacyPreview ? 'preview' : 'automatic';
   }
   return undefined;
-}
-
-function readKeyboard(value: unknown): KeyboardSize | undefined {
-  return typeof value === 'string' && KEYBOARD_SIZES.includes(value as KeyboardSize)
-    ? (value as KeyboardSize)
-    : undefined;
 }
 
 function readClickSilence(value: unknown): ClickSilence | undefined {
@@ -440,7 +433,6 @@ export function decodePracticeSettings(
     traceTheStart: readBoolean(value['traceTheStart']),
     stopAtAMistake: readBoolean(value['stopAtAMistake']),
     clickSilences: readClickSilence(value['clickSilences']),
-    keyboard: readKeyboard(value['keyboard']),
     countInRun: readCountIn(value['countInRun']),
     countInPlayback: readCountIn(value['countInPlayback']),
     rulerCursor: readBoolean(value['rulerCursor']),
@@ -507,7 +499,6 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     traceTheStart: settings.traceTheStart,
     stopAtAMistake: settings.stopAtAMistake,
     clickSilences: settings.clickSilences,
-    keyboard: settings.keyboard,
     countInRun: settings.countInRun,
     countInPlayback: settings.countInPlayback,
     rulerCursor: settings.rulerCursor,

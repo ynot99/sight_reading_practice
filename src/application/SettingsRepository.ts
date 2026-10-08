@@ -287,6 +287,11 @@ function readPlayedNotes(value: unknown, legacyShow: unknown): PlayedNoteDisplay
   if (PLAYED_NOTE_DISPLAYS.includes(value as PlayedNoteDisplay)) {
     return value as PlayedNoteDisplay;
   }
+  // The wrong ones only while held, which is gone: the marks as they are
+  // played is what it was a kind of, and a wrong try is drawn pale there.
+  if (value === 'while-held') {
+    return 'live';
+  }
   const shown = readBoolean(legacyShow);
   return shown === undefined ? undefined : shown ? 'live' : 'hidden';
 }

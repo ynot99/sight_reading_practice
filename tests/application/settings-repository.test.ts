@@ -172,6 +172,16 @@ describe('practice settings codec', () => {
     expect(when({ dropoutBars: 3 })).toBeUndefined();
   });
 
+  it('reads the wrong marks only while held, which are gone, as the marks as played', () => {
+    const legacy = { ...encodePracticeSettings(SETTINGS), playedNotes: undefined };
+    const shown = (stored: Record<string, unknown>): string | undefined =>
+      decodePracticeSettings({ ...legacy, ...stored }, KNOWN).playedNotes;
+
+    expect(shown({ playedNotes: 'while-held' })).toBe('live');
+    expect(shown({ playedNotes: 'at-end' })).toBe('at-end');
+    expect(shown({ playedNotes: 'sideways' })).toBeUndefined();
+  });
+
   it('reads what stands over the page from the switch it used to be', () => {
     // The keyboard was shown or hidden; there are three answers now. Hidden
     // is still everything put away, and shown brings the notes falling onto

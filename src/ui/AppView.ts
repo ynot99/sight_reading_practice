@@ -1077,16 +1077,12 @@ function takeFileName(savedAtMs: number): string {
 
 const PLAYED_NOTE_LABELS: Readonly<Record<PlayedNoteDisplay, string>> = {
   live: 'As I play them',
-  'while-held': 'As I play them, a wrong one only while held',
   'at-end': 'Only when the run ends',
   hidden: 'Never',
 };
 
 const PLAYED_NOTE_DESCRIPTIONS: Readonly<Record<PlayedNoteDisplay, string>> = {
   live: 'Each press appears on the page the moment it lands.',
-  'while-held':
-    'A wrong note lasts as long as you hold the key, so hunting for an accidental does not ' +
-    'bury the note you are hunting for. They all come back when the run ends.',
   'at-end':
     'The page stays as the engraver drew it, and the whole reading appears at once when you stop.',
   hidden: 'Your presses are judged and scored, but never drawn.',

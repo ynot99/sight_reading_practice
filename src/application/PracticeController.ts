@@ -110,12 +110,23 @@ import { timeTheStart } from '../shared/timeTheStart.js';
 export const PLAYED_NOTE_DISPLAYS = ['live', 'at-end', 'hidden'] as const;
 
 /**
- * The colours the whole page is in: the system's, whichever it is at the
- * time, or one of the two whatever the system says.
+ * The colours the page is in: the system's, whichever it is at the time, or
+ * one of three whatever the system says. `light-dark-dialogs` is a white
+ * page under a dark interface - the music as printed, and nothing around it
+ * glaring.
  */
-export const THEMES = ['system', 'light', 'dark'] as const;
+export const THEMES = ['system', 'light', 'light-dark-dialogs', 'dark'] as const;
 
 export type Theme = (typeof THEMES)[number];
+
+/**
+ * What System becomes while the system is dark; while it is light, System is
+ * Light. Only the themes with dark dialogs, since those are what a dark
+ * system asks for.
+ */
+export const DARK_SYSTEM_THEMES = ['dark', 'light-dark-dialogs'] as const;
+
+export type DarkSystemTheme = (typeof DARK_SYSTEM_THEMES)[number];
 
 export type PlayedNoteDisplay = (typeof PLAYED_NOTE_DISPLAYS)[number];
 
@@ -473,6 +484,8 @@ export interface PracticeSettings {
    * different answers from the same reader.
    */
   readonly theme: Theme;
+  /** What System becomes while the system is dark; see `DARK_SYSTEM_THEMES`. */
+  readonly darkSystemTheme: DarkSystemTheme;
   /**
    * Whether a repeated bar says what the writer called it.
    *
@@ -1007,6 +1020,7 @@ export class PracticeController {
       cursorAtRest: true,
       pagedScore: true,
       theme: 'system',
+      darkSystemTheme: 'dark',
       showRepeatNumbers: true,
       playedNotes: 'live',
       survival: false,

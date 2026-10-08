@@ -23,8 +23,10 @@ import {
 import {
   KEYS_SHOWN,
   METRONOME_TAPS,
+  DARK_SYSTEM_THEMES,
   PLAYED_NOTE_DISPLAYS,
   THEMES,
+  type DarkSystemTheme,
   type KeysShown,
   type MetronomeTap,
   type PlayedNoteDisplay,
@@ -106,6 +108,7 @@ export const SETTINGS_KEPT_ON_THE_DEVICE: readonly string[] = [
   'inputLatencyMs',
   'zoom',
   'theme',
+  'darkSystemTheme',
   'traceTheStart',
   'rangeFromBar',
   'rangeToBar',
@@ -174,6 +177,12 @@ function readScoreOrder(value: unknown): ScoreOrder | undefined {
 
 function readTheme(value: unknown): Theme | undefined {
   return typeof value === 'string' && THEMES.includes(value as Theme) ? (value as Theme) : undefined;
+}
+
+function readDarkSystemTheme(value: unknown): DarkSystemTheme | undefined {
+  return typeof value === 'string' && DARK_SYSTEM_THEMES.includes(value as DarkSystemTheme)
+    ? (value as DarkSystemTheme)
+    : undefined;
 }
 
 function readRuler(value: unknown): RulerDivision | undefined {
@@ -426,6 +435,7 @@ export function decodePracticeSettings(
     cursorAtRest: readBoolean(value['cursorAtRest']) ?? readBoolean(value['showCursor']),
     pagedScore: readBoolean(value['pagedScore']),
     theme: readTheme(value['theme']),
+    darkSystemTheme: readDarkSystemTheme(value['darkSystemTheme']),
     playedNotes: readPlayedNotes(value['playedNotes'], value['showPlayedNotes']),
     survival: readBoolean(value['survival']),
     playingAhead: value['playingAhead'] === 'moves-on' ? 'moves-on' : undefined,
@@ -492,6 +502,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     cursorAtRest: settings.cursorAtRest,
     pagedScore: settings.pagedScore,
     theme: settings.theme,
+    darkSystemTheme: settings.darkSystemTheme,
     playedNotes: settings.playedNotes,
     survival: settings.survival,
     playingAhead: settings.playingAhead,

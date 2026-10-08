@@ -65,8 +65,10 @@ import { TimeToday } from '../application/TimeToday.js';
 import {
   KEYS_SHOWN,
   METRONOME_TAPS,
+  DARK_SYSTEM_THEMES,
   PLAYED_NOTE_DISPLAYS,
   THEMES,
+  type DarkSystemTheme,
   type KeysShown,
   type MetronomeTap,
   type PlayedNoteDisplay,
@@ -589,7 +591,8 @@ type IdleControl =
   | 'playing-ahead'
   | 'hear-other-hand'
   | 'rushing-counts'
-  | 'click-when';
+  | 'click-when'
+  | 'dark-system-theme';
 
 /**
  * Why a control has nothing to say just now, or `null` where it has.
@@ -633,6 +636,8 @@ function whyItIsIdle(
         : 'Nothing of the other hand is sounding to be ahead of.';
     case 'click-when':
       return settings.clickOn ? null : 'The metronome is off. The switch at the top turns it on.';
+    case 'dark-system-theme':
+      return settings.theme === 'system' ? null : 'Used only when the theme is System.';
     default:
       return null;
   }
@@ -1051,6 +1056,7 @@ function takeFileName(savedAtMs: number): string {
 const THEME_LABELS: Readonly<Record<Theme, string>> = {
   system: 'System',
   light: 'Light',
+  'light-dark-dialogs': 'Light, dark dialogs',
   dark: 'Dark',
 };
 
@@ -1844,6 +1850,7 @@ export class AppView {
     zoomValue: HTMLOutputElement;
     showPlayed: HTMLSelectElement;
     theme: HTMLSelectElement;
+    darkSystemTheme: HTMLSelectElement;
     showPlayedDescription: HTMLElement;
     readAhead: HTMLSelectElement;
     readAheadDescription: HTMLElement;
@@ -2153,6 +2160,7 @@ export class AppView {
       zoomValue: requireElement(doc, 'zoom-value'),
       showPlayed: requireElement(doc, 'show-played'),
       theme: requireElement(doc, 'theme'),
+      darkSystemTheme: requireElement(doc, 'dark-system-theme'),
       showPlayedDescription: requireElement(doc, 'show-played-description'),
       readAhead: requireElement(doc, 'read-ahead'),
       readAheadDescription: requireElement(doc, 'read-ahead-description'),
@@ -3490,6 +3498,11 @@ export class AppView {
       this.runtime.controller.settings.theme,
     );
     fillSelect(
+      this.el.darkSystemTheme,
+      DARK_SYSTEM_THEMES.map((choice) => ({ value: choice, label: THEME_LABELS[choice] })),
+      this.runtime.controller.settings.darkSystemTheme,
+    );
+    fillSelect(
       this.el.showPlayed,
       PLAYED_NOTE_DISPLAYS.map((choice) => ({ value: choice, label: PLAYED_NOTE_LABELS[choice] })),
       this.runtime.controller.settings.playedNotes,
@@ -3712,6 +3725,15 @@ export class AppView {
     this.listen(this.el.theme, 'change', () => {
       const theme = this.el.theme.value as Theme;
       controller.updateSettings({ theme: THEMES.includes(theme) ? theme : 'system' });
+      this.syncControlsFromSettings();
+      this.paintInTheColoursNow();
+    });
+
+    this.listen(this.el.darkSystemTheme, 'change', () => {
+      const theme = this.el.darkSystemTheme.value as DarkSystemTheme;
+      controller.updateSettings({
+        darkSystemTheme: DARK_SYSTEM_THEMES.includes(theme) ? theme : 'dark',
+      });
       this.syncControlsFromSettings();
       this.paintInTheColoursNow();
     });
@@ -4393,6 +4415,7 @@ export class AppView {
       ['hear-other-hand', this.el.hearOtherHand],
       ['rushing-counts', this.el.rushingCounts],
       ['click-when', this.el.dropout],
+      ['dark-system-theme', this.el.darkSystemTheme],
     ];
     for (const [name, control] of controls) {
       const carrier = control.closest('label, .control-group');
@@ -6822,13 +6845,12 @@ export class AppView {
     this.el.zoomValue.value = this.el.zoom.value;
     this.el.showPlayed.value = settings.playedNotes;
     this.el.theme.value = settings.theme;
-    // Said on the root, where the stylesheet's tokens are: no answer at all
-    // is the system's, which the stylesheet asks the system for itself.
-    if (settings.theme === 'system') {
-      delete this.doc.documentElement.dataset['theme'];
-    } else {
-      this.doc.documentElement.dataset['theme'] = settings.theme;
-    }
+    this.el.darkSystemTheme.value = settings.darkSystemTheme;
+    // Said on the root, where the stylesheet's tokens are, and said as they
+    // are: which of them the system's theme makes of System is the
+    // stylesheet's to ask the system, so a change of it needs nobody here.
+    this.doc.documentElement.dataset['theme'] = settings.theme;
+    this.doc.documentElement.dataset['darkSystem'] = settings.darkSystemTheme;
     this.el.showPlayedDescription.textContent = PLAYED_NOTE_DESCRIPTIONS[settings.playedNotes];
     this.el.readAhead.value = readAheadValue(settings.readAheadSteps);
     this.el.readAheadDescription.textContent =

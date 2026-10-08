@@ -1160,7 +1160,7 @@ describe('the stylesheet', () => {
     expect(good.length).toBeGreaterThan(0);
     for (const rule of good) {
       expect(rule.body).not.toMatch(/--wrong/);
-      expect(rule.body).toMatch(/var\(--good\)/);
+      expect(rule.body).toMatch(/var\(--mark-good\)/);
     }
   });
 
@@ -1674,8 +1674,10 @@ describe('the strip of where the notes landed', () => {
   it('marks each note in the green it is drawn in on the page', () => {
     expect(body(".hit-bar__tick[data-tier='perfect']")).toContain('var(--correct)');
     expect(body(".hit-bar__tick[data-tier='good']")).toContain('var(--good)');
-    expect(body('.played--correct')).toContain('var(--correct)');
-    expect(body('.played--loose')).toContain('var(--good)');
+    // The page's own verdict colours, which are its paper's; the strip is
+    // drawn in the dialogs' - the same verdicts, in the other part's theme.
+    expect(body('.played--correct')).toContain('var(--mark-perfect)');
+    expect(body('.played--loose')).toContain('var(--mark-good)');
   });
 
   it('colours a note played from past the edge by its verdict, not as a miss', () => {
@@ -1778,7 +1780,7 @@ describe('the letter a run is graded with', () => {
   it('has a colour of its own, in both themes', () => {
     // His: "літери A/B/C мали свій особистий колір".
     const light = rules().find((rule) => rule.selector === ':root');
-    const dark = rules().find((rule) => rule.selector === ":root:not([data-theme='light'])");
+    const dark = rules().find((rule) => rule.selector === ":root:not([data-theme]), :root[data-theme='system']");
 
     for (const letter of ['a', 'b', 'c', 'd', 'f']) {
       expect(light?.body).toContain(`--grade-${letter}:`);
@@ -1872,7 +1874,7 @@ describe('the paper the music is printed on', () => {
     expect(token('--paper')).toEqual({ light: '#ffffff', dark: '#1b1e24' });
     expect(token('--ink')).toEqual({ light: '#000000', dark: '#d5dae2' });
     // Each verdict a colour of its own on either paper.
-    for (const verdict of ['--good', '--sounding', '--ink-muted']) {
+    for (const verdict of ['--mark-perfect', '--mark-good', '--mark-wrong', '--mark-sounding', '--ink-muted']) {
       const { light, dark } = token(verdict);
       expect(light, verdict).toMatch(/^#[0-9a-f]{6}$/);
       expect(dark, verdict).toMatch(/^#[0-9a-f]{6}$/);
@@ -1906,26 +1908,51 @@ describe('the paper the music is printed on', () => {
 });
 
 describe('the theme the reader chose', () => {
-  const darkBody = (selector: string): string =>
-    rules().find((rule) => rule.selector === selector && rule.body.includes('--bg'))?.body.replace(/\s+/g, ' ').trim() ?? '';
+  /** A rule's body with its spacing evened, so two copies compare as text. */
+  const tokensOf = (selector: string): string =>
+    rules()
+      .find((rule) => rule.selector === selector && /--(bg|paper)\s*:/.test(rule.body))
+      ?.body.replace(/\s+/g, ' ')
+      .trim() ?? '';
 
-  it('is the same dark whether the system asked for it or the reader did', () => {
-    // Written twice, since a stylesheet cannot say "the system is dark, or
-    // the reader chose dark" in one rule; the two may never come apart.
-    const bySystem = darkBody(":root:not([data-theme='light'])");
-    const byReader = darkBody(":root[data-theme='dark']");
+  it('is the same dark interface whether the system asked for it or the reader did', () => {
+    const bySystem = tokensOf(":root:not([data-theme]), :root[data-theme='system']");
+    const byReader = tokensOf(":root[data-theme='dark'], :root[data-theme='light-dark-dialogs']");
 
-    expect(bySystem).toContain('--paper');
+    expect(bySystem).toContain('--surface');
+    expect(bySystem).not.toContain('--paper');
     expect(byReader).toBe(bySystem);
-    // And the system's only where the reader has not chosen light.
-    expect(CSS).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme='light'\]\) \{/);
   });
 
-  it("gives the browser's own controls the theme chosen", () => {
+  it('is the same dark page whether the system asked for it or the reader did', () => {
+    const bySystem = tokensOf(
+      ":root:not([data-theme]):not([data-dark-system='light-dark-dialogs']), " +
+        ":root[data-theme='system']:not([data-dark-system='light-dark-dialogs'])",
+    );
+    const byReader = tokensOf(":root[data-theme='dark']");
+
+    expect(bySystem).toContain('--paper');
+    expect(bySystem).not.toContain('--surface');
+    expect(byReader).toBe(bySystem);
+  });
+
+  it("asks the system only where System is chosen, or nothing is yet", () => {
+    // Inside the system's media query, and nowhere else.
+    expect(CSS).toMatch(
+      /@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme\]\),\s*:root\[data-theme='system'\] \{/,
+    );
+    const dark = CSS.indexOf('@media (prefers-color-scheme: dark)');
+    const close = CSS.indexOf("\n}\n", dark);
+    expect(CSS.slice(dark, close)).toContain(":root[data-theme='system']:not([data-dark-system='light-dark-dialogs'])");
+  });
+
+  it("gives the browser's own controls the interface's theme", () => {
     const scheme = (selector: string): string =>
       rules().find((rule) => rule.selector === selector && /color-scheme/.test(rule.body))?.body ?? '';
 
     expect(scheme(":root[data-theme='light']")).toMatch(/color-scheme\s*:\s*light\s*;/);
-    expect(scheme(":root[data-theme='dark']")).toMatch(/color-scheme\s*:\s*dark\s*;/);
+    expect(scheme(":root[data-theme='dark'], :root[data-theme='light-dark-dialogs']")).toMatch(
+      /color-scheme\s*:\s*dark\s*;/,
+    );
   });
 });

@@ -21,23 +21,26 @@
   --wrong: #b91c1c;
   --pending: #b45309;
   /*
-   * The page the music is printed on, and what it is printed in.
+   * Good: the same green as `--correct`, weaker - lighter on a light ground
+   * and darker on a dark one.
+   */
+  --good: #22c55e;
+  /*
+   * The page the music is printed on, what it is printed in, and the
+   * verdicts a note is marked with there.
    *
-   * White and black by day, as notation is; with the rest of the theme at
-   * night, so a reader opening the page in the dark is not handed a lamp.
-   * Everything placed on the page takes its colours from here or from the
-   * verdicts below, so the page and its marks change together.
+   * Their own names, apart from the interface's, because the two need not be
+   * the same theme: a white page under dark dialogs is one of the choices.
+   * Everything placed on the page takes its colours from here, so the page
+   * and its marks change together. A note being sounded is nobody's verdict.
    */
   --paper: #ffffff;
   --ink: #000000;
   --ink-muted: #6b7280;
-  /*
-   * The verdicts a note is marked with. Perfect is `--correct` and Wrong is
-   * `--wrong`; Good is the same green, weaker - lighter on white paper and
-   * darker on dark - and a note being sounded is nobody's verdict at all.
-   */
-  --good: #22c55e;
-  --sounding: #7c3aed;
+  --mark-perfect: #15803d;
+  --mark-good: #22c55e;
+  --mark-wrong: #b91c1c;
+  --mark-sounding: #7c3aed;
   --radius: 10px;
   --shadow: 0 1px 2px rgb(16 24 40 / 8%), 0 8px 24px rgb(16 24 40 / 6%);
   /*
@@ -90,13 +93,20 @@
 }
 
 /*
- * The dark theme, written twice because a stylesheet cannot say it once:
- * where the system is dark and the reader has not asked for light, and
- * wherever the reader has asked for dark. `tests/ui/stylesheet.test.ts`
- * holds the two the same.
+ * The dark theme, in two parts that need not go together: the interface and
+ * the page. `data-theme` on the root is the reader's choice and
+ * `data-dark-system` what System becomes while the system is dark; no
+ * `data-theme` at all is System, which is how a page opens before anything
+ * has said otherwise.
+ *
+ * Each part is written twice, because a stylesheet cannot say "the system is
+ * dark, or the reader chose this" in one rule: once inside the system's
+ * media query and once for the choices that ask for it whatever the system
+ * says. `tests/ui/stylesheet.test.ts` holds each pair the same.
  */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
+  :root:not([data-theme]),
+  :root[data-theme='system'] {
     --bg: #12151b;
     --surface: #1b1f27;
     --surface-strong: #232833;
@@ -108,12 +118,7 @@
     --correct: #4ade80;
     --wrong: #f87171;
     --pending: #fbbf24;
-    /* Not black and not white: a page read for an hour should not glare. */
-    --paper: #1b1e24;
-    --ink: #d5dae2;
-    --ink-muted: #8b94a3;
     --good: #16a34a;
-    --sounding: #a78bfa;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
     /* The same walks, lifted off a dark ground; see the light block above. */
     --grade-a: #4ade80;
@@ -133,9 +138,23 @@
     --star-9: #c084fc;
     --star-10: #a5b4fc;
   }
+
+  :root:not([data-theme]):not([data-dark-system='light-dark-dialogs']),
+  :root[data-theme='system']:not([data-dark-system='light-dark-dialogs']) {
+    /* Not black and not white: a page read for an hour should not glare. */
+    --paper: #1b1e24;
+    --ink: #d5dae2;
+    --ink-muted: #8b94a3;
+    --mark-perfect: #4ade80;
+    --mark-good: #16a34a;
+    --mark-wrong: #f87171;
+    --mark-sounding: #a78bfa;
+  }
 }
 
-:root[data-theme='dark'] {
+/* Dark dialogs: chosen outright, or under a white page. */
+:root[data-theme='dark'],
+:root[data-theme='light-dark-dialogs'] {
   --bg: #12151b;
   --surface: #1b1f27;
   --surface-strong: #232833;
@@ -147,12 +166,7 @@
   --correct: #4ade80;
   --wrong: #f87171;
   --pending: #fbbf24;
-  /* Not black and not white: a page read for an hour should not glare. */
-  --paper: #1b1e24;
-  --ink: #d5dae2;
-  --ink-muted: #8b94a3;
   --good: #16a34a;
-  --sounding: #a78bfa;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
   /* The same walks, lifted off a dark ground; see the light block above. */
   --grade-a: #4ade80;
@@ -173,12 +187,28 @@
   --star-10: #a5b4fc;
 }
 
-/* The browser's own controls and scrollbars, in the theme chosen. */
+/* A dark page, which only Dark asks for whatever the system says. */
+:root[data-theme='dark'] {
+  /* Not black and not white: a page read for an hour should not glare. */
+  --paper: #1b1e24;
+  --ink: #d5dae2;
+  --ink-muted: #8b94a3;
+  --mark-perfect: #4ade80;
+  --mark-good: #16a34a;
+  --mark-wrong: #f87171;
+  --mark-sounding: #a78bfa;
+}
+
+/*
+ * The browser's own controls and scrollbars, in the interface's theme. System
+ * leaves it to the system, which the root's `light dark` already does.
+ */
 :root[data-theme='light'] {
   color-scheme: light;
 }
 
-:root[data-theme='dark'] {
+:root[data-theme='dark'],
+:root[data-theme='light-dark-dialogs'] {
   color-scheme: dark;
 }
 
@@ -774,8 +804,8 @@ textarea {
 
 /*
  * A reading's notes: Perfect, Good, missed, wrong, each a number behind a dot
- * in the colour it is drawn on the page. Missed has no mark on the page and
- * is only quiet here.
+ * in its verdict's colour, as the dialogs are drawn. Missed has no mark on
+ * the page and is only quiet here.
  */
 .readings__notes {
   display: inline-flex;
@@ -5141,7 +5171,7 @@ body[data-repeats='hidden'] .repeat-mark {
 }
 
 .played--correct {
-  stroke: var(--correct);
+  stroke: var(--mark-perfect);
   fill: none;
 }
 
@@ -5154,7 +5184,7 @@ body[data-repeats='hidden'] .repeat-mark {
  * right" at the moment it matters most.
  */
 .played--sounding {
-  stroke: var(--sounding);
+  stroke: var(--mark-sounding);
   fill: none;
 }
 
@@ -5173,7 +5203,7 @@ body[data-repeats='hidden'] .repeat-mark {
 }
 
 .played-accidental.played--correct {
-  fill: var(--correct);
+  fill: var(--mark-perfect);
 }
 
 /*
@@ -5256,19 +5286,19 @@ body[data-repeats='hidden'] .repeat-mark {
 
 /* Right note, but it missed the beat: the same green, worn thinner. */
 .played--loose {
-  stroke: var(--good);
+  stroke: var(--mark-good);
   fill: none;
 }
 
 .played-accidental.played--loose {
-  fill: var(--good);
+  fill: var(--mark-good);
 }
 
 .played--wrong {
-  stroke: var(--wrong);
+  stroke: var(--mark-wrong);
   fill: none;
 }
 
 .played-accidental.played--wrong {
-  fill: var(--wrong);
+  fill: var(--mark-wrong);
 }

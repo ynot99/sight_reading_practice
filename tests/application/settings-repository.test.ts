@@ -50,6 +50,7 @@ const SETTINGS: PracticeSettings = {
   cursorWhileRunning: false, cursorWhileListening: false, cursorAtRest: false,
   pagedScore: true,
   theme: 'dark',
+  darkSystemTheme: 'light-dark-dialogs',
   playedNotes: 'at-end',
   survival: true,
   playingAhead: 'moves-on',
@@ -115,6 +116,7 @@ describe('practice settings codec', () => {
     expect(restored.whatOpens).toBe('random');
     expect(restored.clickWhen).toBe('cycle-2');
     expect(restored.theme).toBe('dark');
+    expect(restored.darkSystemTheme).toBe('light-dark-dialogs');
   });
 
   it('reads a theme it does not offer as not chosen', () => {
@@ -551,15 +553,24 @@ describe('settings shared between devices', () => {
     const kept = repository();
     kept.savePractice(SETTINGS, 1_000);
 
-    kept.savePractice({ ...SETTINGS, theme: 'light' }, 2_000);
+    kept.savePractice({ ...SETTINGS, theme: 'light', darkSystemTheme: 'dark' }, 2_000);
 
     expect(kept.sharedSettings().changedAtMs).toBe(1_000);
     expect(kept.sharedSettings().values).not.toHaveProperty('theme');
+    expect(kept.sharedSettings().values).not.toHaveProperty('darkSystemTheme');
     const now = kept.adoptSettings({
-      values: { ...kept.sharedSettings().values, theme: 'dark' },
+      values: { ...kept.sharedSettings().values, theme: 'dark', darkSystemTheme: 'light-dark-dialogs' },
       changedAtMs: 7_000,
     });
     expect(now.theme).toBe('light');
+    expect(now.darkSystemTheme).toBe('dark');
+  });
+
+  it('reads a theme for a dark system it does not offer as not chosen', () => {
+    // Light is not one: a dark system asks for dark dialogs.
+    const stored = { ...(encodePracticeSettings(SETTINGS) as Record<string, unknown>), darkSystemTheme: 'light' };
+
+    expect(decodePracticeSettings(stored, KNOWN).darkSystemTheme).toBeUndefined();
   });
 
   it('keeps whether the click is heard to this device, and shares what it sounds like', () => {

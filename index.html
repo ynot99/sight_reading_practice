@@ -22,6 +22,33 @@
     <title>Piano Sight-Reading Trainer</title>
 
     <!--
+      The theme chosen, said on the root before anything is painted. The
+      settings are read by the program only once the browser's database has
+      opened, and until then the page would be drawn in the system's theme -
+      a white flash at night for a reader who chose dark. So the two choices
+      are copied from where the settings are kept, here and nowhere else
+      outside the program; anything unreadable leaves the system's.
+      `tests/ui/app-view.test.ts` holds this to what the program itself says.
+    -->
+    <script id="theme-before-paint">
+      (function () {
+        try {
+          var kept = JSON.parse(localStorage.getItem('sight-reading-practice/settings') || 'null');
+          var practice = (kept && kept.practice) || {};
+          var root = document.documentElement;
+          if (['system', 'light', 'light-dark-dialogs', 'dark'].indexOf(practice.theme) >= 0) {
+            root.setAttribute('data-theme', practice.theme);
+          }
+          if (['dark', 'light-dark-dialogs'].indexOf(practice.darkSystemTheme) >= 0) {
+            root.setAttribute('data-dark-system', practice.darkSystemTheme);
+          }
+        } catch (unreadable) {
+          // The system's theme, which is what no answer means.
+        }
+      })();
+    </script>
+
+    <!--
       Added to the Home Screen, iPadOS runs this without Safari's chrome at
       all - which is the only way to be rid of the floating close button and
       the swipe-down gesture that fullscreen brings. Neither can be turned off
@@ -1202,6 +1229,11 @@
         <div class="control-group" data-pane="page">
           <label for="theme">Theme</label>
           <select id="theme"></select>
+        </div>
+
+        <div class="control-group" data-pane="page">
+          <label for="dark-system-theme">When the system is dark</label>
+          <select id="dark-system-theme"></select>
         </div>
 
         <!--

@@ -9,7 +9,11 @@ import { SettingsSync } from '../../src/application/SettingsSync.js';
 import { DriveSync } from '../../src/application/DriveSync.js';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PracticeController } from '../../src/application/PracticeController.js';
+import { DARK_SYSTEM_THEMES, PracticeController, THEMES } from '../../src/application/PracticeController.js';
+import {
+  DEFAULT_STORAGE_KEY,
+  LocalStorageSettingsStore,
+} from '../../src/infrastructure/storage/LocalStorageSettingsStore.js';
 import { FLOW_MODE_ID, FlowMode } from '../../src/application/modes/FlowMode.js';
 import { WAIT_MODE_ID } from '../../src/application/modes/WaitMode.js';
 import { PracticeModeRegistry } from '../../src/application/modes/PracticeModeRegistry.js';
@@ -11732,57 +11736,142 @@ describe('what the device keeps', () => {
 });
 
 describe('the theme', () => {
+  const root = document.documentElement;
+  /** What the page says of the theme, on the root the stylesheet reads. */
+  const said = (): { theme: string | undefined; darkSystem: string | undefined } => ({
+    theme: root.dataset['theme'],
+    darkSystem: root.dataset['darkSystem'],
+  });
+  const choose = (id: string, value: string): void => {
+    const select = element<HTMLSelectElement>(id);
+    select.value = value;
+    select.dispatchEvent(new Event('change'));
+  };
+
   beforeEach(() => {
     mountRealMarkup();
-    delete document.documentElement.dataset['theme'];
+    delete root.dataset['theme'];
+    delete root.dataset['darkSystem'];
+    window.localStorage.clear();
   });
 
-  it("offers the system's, light and dark, in the page settings, the system's first", async () => {
+  it("offers four themes in the page settings, the system's first", async () => {
     const { view } = createRig();
     await view.initialize();
     const select = element<HTMLSelectElement>('theme');
 
     expect(select.closest('[data-pane~="page"]')).not.toBeNull();
-    expect([...select.options].map((option) => option.value)).toEqual(['system', 'light', 'dark']);
+    expect([...select.options].map((option) => option.value)).toEqual([...THEMES]);
+    expect(THEMES).toEqual(['system', 'light', 'light-dark-dialogs', 'dark']);
     expect(select.value).toBe('system');
-    expect(document.documentElement.dataset['theme']).toBeUndefined();
+    expect(said()).toEqual({ theme: 'system', darkSystem: 'dark' });
   });
 
-  it('says the theme chosen on the page, and leaves it to the system again', async () => {
+  it('says what System becomes while the system is dark, from the two with dark dialogs', async () => {
     const { view, runtime } = createRig();
     await view.initialize();
-    const select = element<HTMLSelectElement>('theme');
+    const select = element<HTMLSelectElement>('dark-system-theme');
 
-    select.value = 'dark';
-    select.dispatchEvent(new Event('change'));
+    expect(select.closest('[data-pane~="page"]')).not.toBeNull();
+    expect([...select.options].map((option) => option.value)).toEqual(['dark', 'light-dark-dialogs']);
 
-    expect(runtime.controller.settings.theme).toBe('dark');
-    expect(document.documentElement.dataset['theme']).toBe('dark');
+    choose('dark-system-theme', 'light-dark-dialogs');
 
-    select.value = 'light';
-    select.dispatchEvent(new Event('change'));
-    expect(document.documentElement.dataset['theme']).toBe('light');
+    expect(runtime.controller.settings.darkSystemTheme).toBe('light-dark-dialogs');
+    expect(said().darkSystem).toBe('light-dark-dialogs');
+  });
 
-    select.value = 'system';
-    select.dispatchEvent(new Event('change'));
-    expect(document.documentElement.dataset['theme']).toBeUndefined();
+  it('dims what System becomes while the theme is not System, and says why', async () => {
+    const { view } = createRig();
+    await view.initialize();
+    const carrier = element('dark-system-theme').closest<HTMLElement>('.control-group');
+
+    expect(carrier?.dataset['idle']).toBeUndefined();
+
+    choose('theme', 'light');
+
+    expect(carrier?.dataset['idle']).toBe('true');
+    expect(carrier?.title).toContain('System');
+    // Dimmed and not disabled: an answer may be given before it is used.
+    expect(element<HTMLSelectElement>('dark-system-theme').disabled).toBe(false);
+
+    choose('theme', 'system');
+    expect(carrier?.dataset['idle']).toBeUndefined();
+  });
+
+  it('says each theme chosen on the root', async () => {
+    const { view, runtime } = createRig();
+    await view.initialize();
+
+    for (const theme of THEMES) {
+      choose('theme', theme);
+
+      expect(runtime.controller.settings.theme).toBe(theme);
+      expect(said().theme).toBe(theme);
+    }
   });
 
   it('puts the theme chosen back when the page opens again', async () => {
     const store = new InMemorySettingsStore();
     const first = createRig(undefined, store);
     await first.view.initialize();
-    const select = element<HTMLSelectElement>('theme');
-    select.value = 'light';
-    select.dispatchEvent(new Event('change'));
+    choose('theme', 'light-dark-dialogs');
+    choose('dark-system-theme', 'light-dark-dialogs');
 
     mountRealMarkup();
-    delete document.documentElement.dataset['theme'];
+    delete root.dataset['theme'];
+    delete root.dataset['darkSystem'];
     const second = createRig(undefined, store);
     await second.view.initialize();
 
-    expect(document.documentElement.dataset['theme']).toBe('light');
-    expect(element<HTMLSelectElement>('theme').value).toBe('light');
+    expect(said()).toEqual({ theme: 'light-dark-dialogs', darkSystem: 'light-dark-dialogs' });
+    expect(element<HTMLSelectElement>('theme').value).toBe('light-dark-dialogs');
+  });
+
+  it('is said before the first paint exactly as the program says it, for every choice', async () => {
+    // The script in the head copies the two choices from where the settings
+    // are kept, before the program has read them. Run against what the
+    // program itself wrote, it must leave the root as the program would.
+    const script = /<script id="theme-before-paint">([\s\S]*?)<\/script>/.exec(INDEX_HTML)?.[1] ?? '';
+    expect(script).not.toBe('');
+    const runTheScript = new Function(script) as () => void;
+
+    for (const theme of THEMES) {
+      for (const darkSystem of DARK_SYSTEM_THEMES) {
+        mountRealMarkup();
+        window.localStorage.clear();
+        const store = new InMemorySettingsStore();
+        const { view } = createRig(undefined, store);
+        await view.initialize();
+        choose('theme', theme);
+        choose('dark-system-theme', darkSystem);
+        view.dispose();
+        const byTheProgram = said();
+        // Kept where the browser keeps it, by the store the program uses there.
+        new LocalStorageSettingsStore(window.localStorage, DEFAULT_STORAGE_KEY).write(store.read());
+
+        delete root.dataset['theme'];
+        delete root.dataset['darkSystem'];
+        runTheScript();
+
+        expect(said(), `${theme} / ${darkSystem}`).toEqual(byTheProgram);
+      }
+    }
+  });
+
+  it('leaves the system its theme when nothing readable is kept', () => {
+    const script = /<script id="theme-before-paint">([\s\S]*?)<\/script>/.exec(INDEX_HTML)?.[1] ?? '';
+    const runTheScript = new Function(script) as () => void;
+
+    for (const kept of [null, '{not json', JSON.stringify({ practice: { theme: 'sepia', darkSystemTheme: 'light' } })]) {
+      window.localStorage.clear();
+      if (kept !== null) {
+        window.localStorage.setItem(DEFAULT_STORAGE_KEY, kept);
+      }
+      runTheScript();
+
+      expect(said(), String(kept)).toEqual({ theme: undefined, darkSystem: undefined });
+    }
   });
 });
 

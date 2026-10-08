@@ -383,15 +383,36 @@ describe('the stylesheet', () => {
     }
   });
 
-  it('shows the keyboard toggle button only mid-run during replay and playback', () => {
+  it('shows the keyboard toggle button only mid-run during replay and playback, and in free play', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';
 
     expect(body('#focus-keyboard')).toMatch(/display\s*:\s*none/);
     expect(
-      body("body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard, body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard") ||
-      body("body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard"),
+      body(
+        "body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard, body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard, body[data-free-play='true'] #focus-keyboard",
+      ),
     ).toMatch(/display\s*:\s*inline-flex/);
+  });
+
+  it('puts away in free play what there is nothing to do with, and lifts the bar over the keys', () => {
+    // No run to start or rewind, nothing to repeat or play faster - and no
+    // fewer put away than the keyboard's button that comes in, so the row is
+    // never longer than it is between runs.
+    const hidden = rules().find((rule) => rule.selector.startsWith("body[data-free-play='true'] #focus-play"));
+    expect(hidden?.selector.split(',').map((each) => each.trim())).toEqual([
+      "body[data-free-play='true'] #focus-play",
+      "body[data-free-play='true'] #focus-rewind",
+      "body[data-free-play='true'] #focus-repeat",
+      "body[data-free-play='true'] .focus-bar__row > #focus-speed",
+    ]);
+    expect(hidden?.body).toMatch(/display\s*:\s*none/);
+
+    const lifted = rules().find((rule) => rule.selector === "body[data-free-play='true'] .focus-bar");
+    const keysHidden = rules().find((rule) => rule.selector === "body[data-keys-hidden='true'] .focus-bar");
+    expect(lifted?.body).toMatch(/bottom\s*:\s*calc\(var\(--focus-bar-foot\) \+ var\(--replay-keys\)\)/);
+    // Above the rule for keys put away, which weighs the same and has to win.
+    expect(lifted?.at ?? Infinity).toBeLessThan(keysHidden?.at ?? 0);
   });
 
   it('keeps the speed beside the run’s buttons over a replay, on a ground of its own', () => {

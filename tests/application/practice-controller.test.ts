@@ -10,6 +10,7 @@ import { BarMode, BAR_MODE_ID } from '../../src/application/modes/BarMode.js';
 import { WAIT_MODE_ID, WaitMode } from '../../src/application/modes/WaitMode.js';
 import { NOTE_MODE_ID, NoteMode } from '../../src/application/modes/NoteMode.js';
 import { LISTEN_MODE_ID } from '../../src/application/modes/ListenFrame.js';
+import { FREE_PLAY_MODE_ID } from '../../src/application/modes/FreePlayFrame.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
 import type { ExerciseRequest, IExerciseGenerator } from '../../src/domain/generation/IExerciseGenerator.js';
 import { GeneratedExerciseProvider } from '../../src/application/ports/IExerciseProvider.js';
@@ -2132,6 +2133,102 @@ describe('hearing the hand you are not reading', () => {
 
     expect(controller.settings.modeId).toBe(LISTEN_MODE_ID);
     expect(controller.machinePlays).toBe(true);
+  });
+
+  describe('free play', () => {
+    it('begins nothing, by the button or by playing the opening, even when playing is how runs start', async () => {
+      // A press in free play is the reader playing, never the opening of a
+      // run - and the opening chord is exactly what a reader idly playing
+      // the piece in front of them is most likely to play.
+      const { controller, midi, clock } = createController(true, undefined, {
+        immediateStart: true,
+        modeId: FREE_PLAY_MODE_ID,
+      });
+      await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      const opening = controller.currentTimeline?.at(0)?.expectedMidi ?? [];
+      expect(opening.length).toBeGreaterThan(0);
+
+      for (const key of opening) {
+        midi.noteOn(key, clock.now());
+      }
+      expect(controller.session).toBeNull();
+      expect(controller.start()).toBeNull();
+      expect(controller.session).toBeNull();
+      expect(controller.isListening).toBe(false);
+
+      // And the same opening, the moment the frame is one a run is played in.
+      for (const key of opening) {
+        midi.noteOff(key, clock.now());
+      }
+      controller.updateSettings({ modeId: FLOW_MODE_ID });
+      for (const key of opening) {
+        midi.noteOn(key, clock.now());
+      }
+      expect(controller.session).not.toBeNull();
+    });
+
+    it('keeps what is played, at the moments it was heard, and says each time something went down or up', async () => {
+      const { controller, midi, clock } = createController(true, undefined, { modeId: FREE_PLAY_MODE_ID });
+      let told = 0;
+      controller.events.on('freePlayed', () => {
+        told += 1;
+      });
+      const at = clock.now();
+
+      // Stamped by the keyboard on a clock of its own, a minute away: what is
+      // drawn is drawn at the moment the page heard it.
+      midi.noteOn(60, at - 60_000);
+      midi.pedal(true, at);
+      clock.advance(400);
+      midi.noteOff(60, at + 400);
+      midi.noteOn(64, at + 400);
+      clock.advance(100);
+
+      expect(told).toBe(4);
+      expect(controller.freePlayKeysDown).toEqual([64]);
+      expect(controller.freePlayPedalDown).toBe(true);
+      expect(controller.freePlayBetween(at - 1000, at + 1000)).toEqual([
+        { midi: 60, fromMs: at, untilMs: at + 400 },
+        { midi: 64, fromMs: at + 400, untilMs: at + 500 },
+      ]);
+      expect(controller.freePlayPedalBetween(at - 1000, at + 1000)).toEqual([{ fromMs: at, untilMs: at + 500 }]);
+      expect(controller.freePlayedSince(at + 10_000)).toBe(true);
+    });
+
+    it('hears nothing in any other frame, and lets go of what was played on leaving', async () => {
+      const { controller, midi, clock } = createController(true, undefined, { modeId: FREE_PLAY_MODE_ID });
+      midi.noteOn(60, clock.now());
+      let told = 0;
+      controller.events.on('freePlayed', () => {
+        told += 1;
+      });
+
+      controller.updateSettings({ modeId: FLOW_MODE_ID });
+
+      // Leaving says so once, since what was lit has gone.
+      expect(told).toBe(1);
+      expect(controller.freePlayKeysDown).toEqual([]);
+      expect(controller.freePlayedSince(Number.NEGATIVE_INFINITY)).toBe(false);
+      midi.noteOn(62, clock.now());
+      expect(controller.freePlayKeysDown).toEqual([]);
+      expect(told).toBe(1);
+
+      // Back in, it hears again, from an empty keyboard.
+      controller.updateSettings({ modeId: FREE_PLAY_MODE_ID });
+      midi.noteOn(65, clock.now());
+      expect(controller.freePlayKeysDown).toEqual([65]);
+    });
+
+    it('is still the frame the reader left the app in, and keeps no time', () => {
+      // Not a practice mode, so asking the registry about it would throw.
+      const { controller } = createController(true, undefined, { modeId: FREE_PLAY_MODE_ID });
+
+      expect(controller.settings.modeId).toBe(FREE_PLAY_MODE_ID);
+      expect(controller.playsFreely).toBe(true);
+      expect(controller.machinePlays).toBe(false);
+      controller.updateSettings({ clickOn: false, countInBars: 0 });
+      expect(controller.needsTheAudioClock).toBe(false);
+    });
   });
 
   it('waits for the reader before answering them', async () => {

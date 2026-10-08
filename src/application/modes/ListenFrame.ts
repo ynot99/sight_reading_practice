@@ -1,3 +1,5 @@
+import { FREE_PLAY_MODE_ID } from './FreePlayFrame.js';
+
 /**
  * The frame in which the machine plays and the reader listens.
  *
@@ -18,13 +20,14 @@ export const LISTEN_MODE_ID = 'mode.listen';
 /**
  * Every frame id a stored setting may name.
  *
- * The registry holds the practice modes and this one is not among them, so
- * anything validating a restored setting against the registry alone would
- * throw the listening frame away on the way back in. Said once, because the
- * composition root and the test rig both have to say it and two lists drift.
+ * The registry holds the practice modes, and neither this one nor free play
+ * is among them, so anything validating a restored setting against the
+ * registry alone would throw them away on the way back in. Said once, because
+ * the composition root and the test rig both have to say it and two lists
+ * drift.
  */
 export function knownFrameIds(modeIds: readonly string[]): readonly string[] {
-  return [...modeIds, LISTEN_MODE_ID];
+  return [...modeIds, LISTEN_MODE_ID, FREE_PLAY_MODE_ID];
 }
 
 /** Whether the chosen frame is the one nobody plays. */

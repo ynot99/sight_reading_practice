@@ -15,6 +15,7 @@ import { SettingsSync } from '../../src/application/SettingsSync.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
+import { FREE_PLAY_MODE_ID } from '../../src/application/modes/FreePlayFrame.js';
 
 const KNOWN: KnownIds = {
   presetIds: ['five-finger-c', 'triads-left-hand'],
@@ -245,6 +246,10 @@ describe('practice settings codec', () => {
     const read = decodePracticeSettings({ ...SETTINGS, modeId: LISTEN_MODE_ID }, known);
 
     expect(read.modeId).toBe(LISTEN_MODE_ID);
+    // And free play, which no registry holds either.
+    expect(decodePracticeSettings({ ...SETTINGS, modeId: FREE_PLAY_MODE_ID }, known).modeId).toBe(
+      FREE_PLAY_MODE_ID,
+    );
   });
 
   it('drops a preset or mode that no longer exists', () => {

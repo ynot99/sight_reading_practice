@@ -2720,6 +2720,10 @@ body[data-listening='true'] .focus-bar {
   bottom: calc(var(--focus-bar-foot) + var(--replay-keys));
 }
 
+body[data-free-play='true'] .focus-bar {
+  bottom: calc(var(--focus-bar-foot) + var(--replay-keys));
+}
+
 body[data-keys-hidden='true'] .focus-bar {
   bottom: var(--focus-bar-foot);
 }
@@ -3164,8 +3168,22 @@ body[data-replaying='true'] #focus-play-frame {
 }
 
 body[data-replaying='true'] .focus-bar[data-playing='true'] #focus-keyboard,
-body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard {
+body[data-listening='true'] .focus-bar[data-playing='true'] #focus-keyboard,
+body[data-free-play='true'] #focus-keyboard {
   display: inline-flex;
+}
+
+/*
+ * Free play, where the keys are the whole of it: no run to start or to go
+ * back to the beginning of, and nothing to repeat or to play faster. What is
+ * put away is no fewer than the keyboard's button that comes in, so the row
+ * is never longer than it is between runs.
+ */
+body[data-free-play='true'] #focus-play,
+body[data-free-play='true'] #focus-rewind,
+body[data-free-play='true'] #focus-repeat,
+body[data-free-play='true'] .focus-bar__row > #focus-speed {
+  display: none;
 }
 
 /*
@@ -4403,13 +4421,19 @@ body[data-playing='true'] .page-label__rung {
   --mode-ground: #3730a3;
 }
 
+.frame__choice[data-frame='free'],
+.score__mode--free {
+  --mode-ground: #334155;
+}
+
 /* Solid drawings, where the squares' are drawn with a line. */
 .frame__choice svg,
 .score__mode--bar svg,
 .score__mode--note svg,
 .score__mode--wait svg,
 .score__mode--flow svg,
-.score__mode--listen svg {
+.score__mode--listen svg,
+.score__mode--free svg {
   fill: currentColor;
   stroke: none;
 }

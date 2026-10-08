@@ -1,5 +1,6 @@
 import type { PracticeSettings } from '../PracticeController.js';
 import { FLOW_MODE_ID } from './FlowMode.js';
+import { FREE_PLAY_MODE_ID } from './FreePlayFrame.js';
 import { LISTEN_MODE_ID } from './ListenFrame.js';
 import { WAIT_MODE_ID } from './WaitMode.js';
 
@@ -77,20 +78,20 @@ export function modesOn(settings: PracticeSettings): readonly string[] {
  *
  * Choosing one of the two turns the other off, whichever was chosen last - his,
  * after the mods of a rhythm game, where each button knows what it cannot go
- * with and the other simply goes out. Listening asks nothing of the reader, so
- * nothing that makes the reading harder has anything to act on there. And
- * rhythm only asks for the time between notes, which the frame that waits for
- * the reader never keeps.
+ * with and the other simply goes out. Listening and free play ask nothing of
+ * the reader, so nothing that makes the reading harder has anything to act on
+ * there. And rhythm only asks for the time between notes, which the frame
+ * that waits for the reader never keeps.
  */
 const FRAMES_A_SQUARE_REFUSES: Readonly<Record<string, readonly string[]>> = {
-  survival: [LISTEN_MODE_ID],
-  blind: [LISTEN_MODE_ID],
-  rhythm: [LISTEN_MODE_ID, WAIT_MODE_ID],
-  strict: [LISTEN_MODE_ID],
-  cursor: [LISTEN_MODE_ID],
+  survival: [LISTEN_MODE_ID, FREE_PLAY_MODE_ID],
+  blind: [LISTEN_MODE_ID, FREE_PLAY_MODE_ID],
+  rhythm: [LISTEN_MODE_ID, FREE_PLAY_MODE_ID, WAIT_MODE_ID],
+  strict: [LISTEN_MODE_ID, FREE_PLAY_MODE_ID],
+  cursor: [LISTEN_MODE_ID, FREE_PLAY_MODE_ID],
   // The cursors close on a beat, and the frame that waits for the reader
   // keeps none.
-  closing: [LISTEN_MODE_ID, WAIT_MODE_ID],
+  closing: [LISTEN_MODE_ID, FREE_PLAY_MODE_ID, WAIT_MODE_ID],
 };
 
 /**

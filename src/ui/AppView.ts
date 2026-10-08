@@ -10,6 +10,7 @@ import {
 import { barCells } from '../domain/scoring/barCells.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
+import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
 import { BAR_MODE_ID } from '../application/modes/BarMode.js';
 import { NOTE_MODE_ID } from '../application/modes/NoteMode.js';
 import { WAIT_MODE_ID } from '../application/modes/WaitMode.js';
@@ -95,6 +96,8 @@ import {
   theFallingNotes,
   theFallingPedal,
   theFallingRuling,
+  theRisingNotes,
+  theRisingPedal,
   type LanePedal,
   theLaneInks,
   type LaneRuling,
@@ -487,14 +490,16 @@ const PLAIN_FRAME = FLOW_MODE_ID;
  * His, and it is a ladder: the least help first and the most last. The bar
  * line gives one place a bar to be found again, every note gives one at each
  * note while the beat still runs, waiting gives one at every note with no beat
- * to keep, and listening asks for nothing. Flowing in time, which gives no help
- * at all, has no button: it is what is left when none is pressed.
+ * at all. Flowing in time, which gives no help
+ * at all, has no button: it is what is left when none is pressed. Free play
+ * comes last, off the ladder: there is nothing on the page to be helped with.
  */
 const FRAMES_OFFERED: readonly string[] = [
   BAR_MODE_ID,
   NOTE_MODE_ID,
   WAIT_MODE_ID,
   LISTEN_MODE_ID,
+  FREE_PLAY_MODE_ID,
 ];
 
 /**
@@ -509,6 +514,7 @@ const FRAME_SLUG: Readonly<Record<string, string>> = {
   [WAIT_MODE_ID]: 'wait',
   [FLOW_MODE_ID]: 'flow',
   [LISTEN_MODE_ID]: 'listen',
+  [FREE_PLAY_MODE_ID]: 'free',
 };
 
 /** What the button is called while it stands for each of them. */
@@ -518,6 +524,7 @@ const FRAME_NAME: Readonly<Record<string, string>> = {
   [WAIT_MODE_ID]: 'Wait for me',
   [FLOW_MODE_ID]: 'Flow in time',
   [LISTEN_MODE_ID]: 'Listen to it',
+  [FREE_PLAY_MODE_ID]: 'Free play',
 };
 
 /** And what it is drawn as, one path each, the way the transport icons are. */
@@ -530,6 +537,8 @@ const FRAME_ICON: Readonly<Record<string, string>> = {
     'M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm1 3v5.3l3.6 2.1-1 1.7L11 13.5V7h2z',
   [FLOW_MODE_ID]: 'M12 3h2l4 16H6L10 3h2zm-1 3-2.6 11h7.2L13 6h-2z M6 15h12v2H6z',
   [LISTEN_MODE_ID]: 'M4 9v6h4l5 4V5L8 9H4zm12-.5a4.5 4.5 0 0 1 0 7v-2a2.5 2.5 0 0 0 0-3v-2z',
+  // Notes rising off a row of keys.
+  [FREE_PLAY_MODE_ID]: 'M3 16h18v5H3z M5 6h3v8H5z M10.5 3h3v11h-3z M16 8h3v6h-3z',
 };
 
 /** The frame a button stands for, read off the slug it is marked with. */
@@ -551,6 +560,7 @@ const FRAME_WHAT: Readonly<Record<string, string>> = {
   [WAIT_MODE_ID]: 'The cursor waits for you',
   [FLOW_MODE_ID]: 'The beat carries the music',
   [LISTEN_MODE_ID]: 'The machine plays it to you',
+  [FREE_PLAY_MODE_ID]: 'Play anything, nothing is judged',
 };
 
 /**
@@ -5892,6 +5902,12 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      controller.events.on('freePlayed', () => {
+        this.showTheFreePlay();
+      }),
+    );
+
+    this.subscriptions.push(
       controller.events.on('sessionDiscarded', () => {
         // Asked rather than assumed: this fires on the way into starting a
         // run as well as on the way out of one, and the answer differs.
@@ -8663,12 +8679,20 @@ export class AppView {
 
     const inReplay = this.replayRoll !== null;
     const inPlayback = controller.isListening || controller.isListeningPaused;
-    const active = inReplay || inPlayback;
+    const inFreePlay = this.inFreePlay;
+    const active = inReplay || inPlayback || inFreePlay;
     // Said on the page for the stylesheet, which lifts the bar over the keys.
     if (inPlayback) {
       this.doc.body.dataset['listening'] = 'true';
     } else {
       delete this.doc.body.dataset['listening'];
+    }
+    // And which, in free play, puts away what there is nothing to do with:
+    // no run to start or rewind, and nothing to repeat or play faster.
+    if (inFreePlay) {
+      this.doc.body.dataset['freePlay'] = 'true';
+    } else {
+      delete this.doc.body.dataset['freePlay'];
     }
     if (!active) {
       lightTheKeys(this.replayKeyboard, new Map(), false);
@@ -8694,14 +8718,62 @@ export class AppView {
       this.el.replayKeys.hidden = true;
       delete this.doc.body.dataset['keysHidden'];
     }
-    // Said on the page for the stylesheet, which lets the notes be seen
-    // through the bar while they fall behind it. Only while they fall: held,
-    // the bar is what the reader is about to press.
+    this.sayWhetherNotesFall();
+    this.letTheNotesFall();
+  }
+
+  /**
+   * Says on the page for the stylesheet whether notes are moving, which lets
+   * them be seen through the bar while they go behind it. Only while they
+   * move: held, the bar is what the reader is about to press.
+   */
+  private sayWhetherNotesFall(): void {
     if (this.notesAreFalling) {
       this.doc.body.dataset['notesFalling'] = 'true';
     } else {
       delete this.doc.body.dataset['notesFalling'];
     }
+  }
+
+  /**
+   * Whether the reader is playing freely: the frame chosen, and nothing else
+   * using the keyboard - a run shown again or a performance - which, started
+   * from another frame, is still going.
+   */
+  private get inFreePlay(): boolean {
+    const controller = this.runtime.controller;
+    return (
+      controller.playsFreely &&
+      this.replayRoll === null &&
+      !controller.isListening &&
+      !controller.isListeningPaused
+    );
+  }
+
+  /** Lights the keys down in free play, and the pedal, as heard: nobody judged them. */
+  private lightTheFreePlay(): void {
+    const controller = this.runtime.controller;
+    const down = controller.freePlayKeysDown;
+    lightTheKeys(
+      this.replayKeyboard,
+      new Map<number, KeyLight>(down.map((midi) => [midi, 'heard'])),
+      controller.freePlayPedalDown,
+    );
+    if (down.length > 0) {
+      keepInView(this.replayKeyboard, Math.min(...down));
+    }
+  }
+
+  /**
+   * A key or the pedal went down or came up in free play: lights what is
+   * down now, and sets the notes rising if they were standing still.
+   */
+  private showTheFreePlay(): void {
+    if (!this.inFreePlay) {
+      return;
+    }
+    this.lightTheFreePlay();
+    this.sayWhetherNotesFall();
     this.letTheNotesFall();
   }
 
@@ -8734,6 +8806,16 @@ export class AppView {
   get fallingScene(): readonly LaneNote[] {
     const controller = this.runtime.controller;
     const { nowMs, aheadMs } = this.laneClock;
+    if (this.inFreePlay) {
+      // What has been played rises instead, as heard: nobody judged it.
+      return theRisingNotes(
+        controller
+          .freePlayBetween(nowMs - aheadMs, nowMs)
+          .map((note) => ({ ...note, shade: 'heard' as const })),
+        nowMs,
+        aheadMs,
+      );
+    }
     const until = nowMs + aheadMs;
     return theFallingNotes(
       this.replayRoll !== null
@@ -8792,6 +8874,9 @@ export class AppView {
   get fallingPedal(): readonly LanePedal[] {
     const controller = this.runtime.controller;
     const { nowMs, aheadMs } = this.laneClock;
+    if (this.inFreePlay) {
+      return theRisingPedal(controller.freePlayPedalBetween(nowMs - aheadMs, nowMs), nowMs, aheadMs);
+    }
     const until = nowMs + aheadMs;
     return theFallingPedal(
       this.replayRoll !== null
@@ -8802,13 +8887,19 @@ export class AppView {
     );
   }
 
-  /** Whether notes are falling now, rather than held, put away or gone. */
+  /**
+   * Whether notes are moving now, rather than held, put away or gone: falling
+   * under a performance or a replay, or rising in free play for as long as
+   * anything played is still in the lane.
+   */
   private get notesAreFalling(): boolean {
     const controller = this.runtime.controller;
+    const rising =
+      this.inFreePlay && controller.freePlayedSince(this.runtime.clock.now() - FALLING_AHEAD_MS);
     return (
       !this.el.replayKeys.hidden &&
       controller.settings.keysShown === 'falling-notes' &&
-      (controller.isListening || this.replayIsSounding)
+      (controller.isListening || this.replayIsSounding || rising)
     );
   }
 
@@ -8837,6 +8928,12 @@ export class AppView {
     const frame = (): void => {
       this.fallingFrame = null;
       if (!this.notesAreFalling) {
+        // Played freely, the last note has risen out of the lane: it is
+        // painted once more, empty, and the bar stops letting it through.
+        if (this.inFreePlay) {
+          this.paintTheFallingNotes();
+          this.sayWhetherNotesFall();
+        }
         return;
       }
       this.paintTheFallingNotes();

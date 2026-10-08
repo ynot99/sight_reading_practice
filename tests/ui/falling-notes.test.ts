@@ -7,6 +7,8 @@ import {
   theFallingNotes,
   theFallingPedal,
   theFallingRuling,
+  theRisingNotes,
+  theRisingPedal,
   type FallingNote,
   type LaneInks,
   type LaneNote,
@@ -145,6 +147,75 @@ describe('the notes falling onto the keys', () => {
     expect(recorder.marks.map(({ how, y, tall }) => [how, y, tall])).toEqual([
       ['fill', 198, 2],
       ['stroke', 198, 2],
+    ]);
+  });
+});
+
+describe('the notes rising from the keys in free play', () => {
+  it('stands a key still down on its key and grows it as it is held, and lets one let go of rise', () => {
+    // Ten seconds in, three seconds of what was played above the keys.
+    const bars = theRisingNotes(
+      [
+        // Down since a second ago, and held: asked about now, it lasts until now.
+        note(9_000, 10_000, 60),
+        // Down at 7.5 s, up at 8.5 s.
+        note(7_500, 8_500, 62),
+        // Went down before the lane's top, came up inside it.
+        note(5_000, 7_600, 64),
+      ],
+      10_000,
+      3_000,
+    );
+
+    expect(ends(bars)).toEqual([
+      [60, 0.667, 1],
+      [62, 0.167, 0.5],
+      [64, 0, 0.2],
+    ]);
+  });
+
+  it('leaves out what has risen past the top, and what lasts no time', () => {
+    const bars = theRisingNotes(
+      [
+        // Came up the instant the lane's top was reached.
+        note(5_000, 7_000),
+        // Pressed this instant: nothing to draw yet.
+        note(10_000, 10_000),
+      ],
+      10_000,
+      3_000,
+    );
+
+    expect(bars).toEqual([]);
+  });
+
+  it('rises at one speed up the whole lane', () => {
+    // Swept across the lane a tenth at a time: a note let go of a share of
+    // the lane ago has its foot that share of the way up.
+    for (let tenth = 0; tenth < 10; tenth += 1) {
+      const [bar] = theRisingNotes([note(-3_500, -tenth * 300)], 0, 3_000);
+      expect(bar?.bottom ?? Number.NaN, String(tenth)).toBeCloseTo(1 - tenth / 10, 9);
+    }
+  });
+
+  it('stands a press of the pedal on its mark while it is down, its top where it went down', () => {
+    const shown = theRisingPedal(
+      [
+        // Down two seconds ago and still down.
+        { fromMs: 8_000, untilMs: 10_000 },
+        // Down and up again inside the column.
+        { fromMs: 7_000, untilMs: 7_900 },
+        // Gone over the top, and not yet anything.
+        { fromMs: 5_000, untilMs: 7_000 },
+        { fromMs: 10_000, untilMs: 10_000 },
+      ],
+      10_000,
+      3_000,
+    );
+
+    expect(shown.map((press) => [Number(press.lift.toFixed(3)), Number(press.foot.toFixed(3))])).toEqual([
+      [0.333, 1],
+      [0, 0.3],
     ]);
   });
 });

@@ -925,6 +925,54 @@ describe('AppView', () => {
     expect(lane.width).toBe(0);
   });
 
+  it('puts the keyboard up in free play, lights what is held, and lets what was played rise off the keys', async () => {
+    // Nothing is coming, so the lane holds what has been played: the newest
+    // at the keys, a key still down growing out of its key.
+    const { view, runtime, midi, clock } = createRig();
+    await view.initialize();
+    await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    const keys = element('replay-keys');
+    expect(keys.hidden).toBe(true);
+
+    element<HTMLButtonElement>('focus-modes').click();
+    frameButton('free').click();
+
+    expect(runtime.controller.playsFreely).toBe(true);
+    expect(keys.hidden).toBe(false);
+    expect(document.body.dataset['freePlay']).toBe('true');
+
+    const at = clock.now();
+    midi.noteOn(60, at);
+    clock.advance(1_500);
+    midi.noteOff(60, clock.now());
+    midi.noteOn(64, clock.now());
+    clock.advance(750);
+
+    const lit = [...keys.querySelectorAll<HTMLElement>('[data-shade]')];
+    expect(lit.map((key) => [key.dataset['midi'], key.dataset['shade']])).toEqual([['64', 'heard']]);
+    // Three seconds of what was played over the keys: middle C let go of
+    // three quarters of a second ago, the E held since then.
+    const scene = view.fallingScene.map((bar) => [
+      bar.midi,
+      bar.shade,
+      Number(bar.top.toFixed(3)),
+      Number(bar.bottom.toFixed(3)),
+    ]);
+    expect(scene).toEqual([
+      [60, 'heard', 0.25, 0.75],
+      [64, 'heard', 0.75, 1],
+    ]);
+    expect(view.fallingBarLines).toEqual([]);
+    expect(view.fallingRuling).toEqual([]);
+
+    // Out of free play, the keyboard goes with it and no key stays lit.
+    frameButton('free').click();
+    expect(runtime.controller.playsFreely).toBe(false);
+    expect(keys.hidden).toBe(true);
+    expect(document.body.dataset['freePlay']).toBeUndefined();
+    expect(keys.querySelectorAll('[data-shade]')).toHaveLength(0);
+  });
+
   it('paints the falling notes a frame at a time while the music moves, and not once it is held', async () => {
     // However it is held: the lane asks the controller at every frame, so a
     // performance stopped without the page being told stops the lane too.
@@ -5768,7 +5816,7 @@ describe('AppView', () => {
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
       const buttons = [...element('modes-grid').querySelectorAll<HTMLButtonElement>('button[data-frame]')];
-      expect(buttons.map((button) => button.dataset['frame'])).toEqual(['bar', 'note', 'wait', 'listen']);
+      expect(buttons.map((button) => button.dataset['frame'])).toEqual(['bar', 'note', 'wait', 'listen', 'free']);
       expect(element('modes-grid').firstElementChild).toBe(buttons[0]);
       expect(buttons.every((button) => button.classList.contains('mode-card'))).toBe(true);
       const lit = (): string[] =>
@@ -5779,7 +5827,8 @@ describe('AppView', () => {
       expect(frameButton('bar').querySelector('.frame__what')?.textContent).toContain('bar line');
       expect(frameButton('note').querySelector('.frame__name')?.textContent).toBe('Wait each note');
       expect(frameButton('listen').querySelector('.frame__what')?.textContent).toContain('machine');
-      expect(new Set(buttons.map((button) => button.querySelector('path')?.getAttribute('d'))).size).toBe(4);
+      expect(frameButton('free').querySelector('.frame__name')?.textContent).toBe('Free play');
+      expect(new Set(buttons.map((button) => button.querySelector('path')?.getAttribute('d'))).size).toBe(5);
       // The rig starts where it waits.
       expect(lit()).toEqual(['wait']);
 

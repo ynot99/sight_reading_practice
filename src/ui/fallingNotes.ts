@@ -71,6 +71,60 @@ function inTheLane(
 }
 
 /**
+ * Where each note played freely stands in the lane at a moment: risen from
+ * its key, the other way from the notes that fall.
+ *
+ * Nothing is coming, so the lane holds what has been played instead - `aheadMs`
+ * of it, the newest at the keys. A key still down stands on its key and grows
+ * up out of it as it is held; let go of, it leaves the key and rises, its top
+ * where it went down and its foot where it came up, until it goes over the
+ * top of the lane.
+ */
+export function theRisingNotes(
+  notes: readonly FallingNote[],
+  nowMs: number,
+  aheadMs: number,
+): readonly LaneNote[] {
+  const at = (ms: number): number => 1 - (nowMs - ms) / aheadMs;
+  const bars: LaneNote[] = [];
+  for (const note of notes) {
+    const top = Math.max(0, at(note.fromMs));
+    const bottom = Math.min(1, at(note.untilMs));
+    if (top < bottom) {
+      bars.push({ midi: note.midi, shade: note.shade, top, bottom });
+    }
+  }
+  return bars;
+}
+
+/**
+ * Where each press of the pedal played freely stands over its mark, risen as
+ * the notes are: going down at its top, coming up at its foot, and standing
+ * on the mark while it is still down.
+ *
+ * Painted as a falling press is, by its two ends: the painter's `lift` is the
+ * top of a press and its `foot` the bottom, and risen, the top is the moment
+ * it went down.
+ */
+export function theRisingPedal(
+  presses: readonly { readonly fromMs: number; readonly untilMs: number }[],
+  nowMs: number,
+  aheadMs: number,
+): readonly LanePedal[] {
+  const at = (ms: number): number => 1 - (nowMs - ms) / aheadMs;
+  const shown: LanePedal[] = [];
+  for (const press of presses) {
+    const lift = at(press.fromMs);
+    const foot = at(press.untilMs);
+    if (foot <= 0 || lift >= 1 || lift >= foot) {
+      continue;
+    }
+    shown.push({ lift, foot });
+  }
+  return shown;
+}
+
+/**
  * A press of the pedal as the column over its mark shows it, as shares of its
  * height: `lift` where the pedal comes up and `foot` where it goes down. Not
  * cut to the column, since what is painted is its two ends: a foot gone down

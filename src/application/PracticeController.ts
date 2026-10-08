@@ -94,6 +94,8 @@ import {
   type ReplayedPress,
 } from './runReplay.js';
 import { machineIsPlaying } from './modes/ListenFrame.js';
+import { playsFreely } from './modes/FreePlayFrame.js';
+import { FreePlayed } from './freePlay.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMeter.js';
 import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
@@ -705,6 +707,11 @@ export interface ControllerEventMap {
    */
   replayEnded: Record<string, never>;
   /**
+   * A key or the pedal went down or came up in free play: what is lit and
+   * what rises from the keys has changed.
+   */
+  freePlayed: Record<string, never>;
+  /**
    * Whether the engraver is drawing a page right now.
    *
    * Seconds on a long score, and more of them since the bars can be ruled:
@@ -852,6 +859,9 @@ export class PracticeController {
   private listeningStep = 0;
   /** The subscription that marks a reader playing along, while there is one. */
   private playAlong: Unsubscribe | null = null;
+  /** What has been played in free play, while it is the frame; see {@link watchTheFreePlay}. */
+  private readonly freePlayed = new FreePlayed();
+  private freePlayWatch: Unsubscribe | null = null;
   /** The notes a performance is lighting right now, so they can be put out. */
   private litNotes: { readonly stepIndex: number; readonly midi: number }[] = [];
   /** The plan being worked through, or `[]` when nothing is being drilled. */
@@ -1045,6 +1055,9 @@ export class PracticeController {
       ...dependencies.initialSettings,
     };
     this.provider = this.createProvider();
+    // A reader who left the app playing freely comes back to keys that are
+    // heard, before any music is on the page.
+    this.watchTheFreePlay();
   }
 
   get events(): IEventSource<ControllerEventMap> {
@@ -1114,7 +1127,7 @@ export class PracticeController {
       report,
       bars,
       velocities: roll.presses.map((press) => press.velocity),
-      keepsTime: this.deps.modes.get(this.currentSettings.modeId).requiresMetronome,
+      keepsTime: this.keepsTime,
       owedAtMs: this.whereTheJudgedEntriesFall(report),
       toleranceMs: this.currentSettings.matchToleranceMs,
     });
@@ -2550,6 +2563,31 @@ export class PracticeController {
   }
 
   /**
+   * Hears the keys while the reader plays freely, and forgets them otherwise.
+   *
+   * Armed and disarmed with the other watchers, because the question is the
+   * same one at the same moments: what the keys are for just now. Leaving the
+   * frame lets go of everything played in it, so coming back starts on an
+   * empty keyboard rather than on keys held down an hour ago.
+   */
+  private watchTheFreePlay(): void {
+    if (!this.playsFreely) {
+      this.freePlayWatch?.();
+      this.freePlayWatch = null;
+      if (this.freePlayed.anythingSince(Number.NEGATIVE_INFINITY)) {
+        this.freePlayed.forget();
+        this.emitter.emit('freePlayed', {});
+      }
+      return;
+    }
+    this.freePlayWatch ??= this.deps.midi.subscribe((event) => {
+      if (this.freePlayed.hear(event, this.deps.clock.now())) {
+        this.emitter.emit('freePlayed', {});
+      }
+    });
+  }
+
+  /**
    * Lights the notes a performance is sounding, and puts out the last ones.
    *
    * A moving light rather than a trail: what has been played is already said
@@ -2617,12 +2655,15 @@ export class PracticeController {
    */
   private watchForTheOpening(): void {
     // Asked here because it is the same question at the same moments: what is
-    // happening to the music. Two watchers, one answer, and no chance of one
-    // of them being armed at a moment the other was not.
+    // happening to the music. Three watchers, one answer, and no chance of one
+    // of them being armed at a moment another was not.
     this.watchThePlayAlong();
+    this.watchTheFreePlay();
     const status = this.currentSession?.status;
     const wanted =
       this.currentSettings.immediateStart &&
+      // A press in free play is the reader playing, never a run beginning.
+      !this.playsFreely &&
       this.timeline !== null &&
       // A session that has *ended* is not something happening: it is the
       // report of the last run, and it stays around to be read. Asked whether
@@ -2732,6 +2773,11 @@ export class PracticeController {
     // performance that has always existed rather than for a session.
     if (this.machinePlays) {
       this.listen();
+      return null;
+    }
+    // Nothing to begin where the reader plays freely: there is no run, and
+    // the keys are already doing what this frame is for.
+    if (this.playsFreely) {
       return null;
     }
     const bars = options.countIn === false ? 0 : this.currentSettings.countInBars;
@@ -3374,8 +3420,10 @@ export class PracticeController {
    * have had to learn about it separately.
    */
   private get keepsTime(): boolean {
+    // Asked of the registry, which holds only the frames a run is played in:
+    // listening and free play keep no time because nobody is being timed.
     return (
-      !machineIsPlaying(this.currentSettings.modeId) &&
+      this.deps.modes.has(this.currentSettings.modeId) &&
       this.deps.modes.get(this.currentSettings.modeId).requiresMetronome
     );
   }
@@ -3383,6 +3431,41 @@ export class PracticeController {
   /** Whether the frame now chosen is the one the machine plays. */
   get machinePlays(): boolean {
     return machineIsPlaying(this.currentSettings.modeId);
+  }
+
+  /** Whether the frame now chosen is the one where the reader plays freely. */
+  get playsFreely(): boolean {
+    return playsFreely(this.currentSettings.modeId);
+  }
+
+  /** The keys down in free play now, none outside it. */
+  get freePlayKeysDown(): readonly number[] {
+    return this.freePlayed.keysDown;
+  }
+
+  /** Whether the pedal is down in free play now. */
+  get freePlayPedalDown(): boolean {
+    return this.freePlayed.pedalDown;
+  }
+
+  /**
+   * The presses in free play down at some time between two moments on the
+   * clock, a key still down lasting until now. What ended before the first
+   * moment is let go of: whatever draws it has moved on past it.
+   */
+  freePlayBetween(fromMs: number, untilMs: number): readonly KeyDown[] {
+    this.freePlayed.forgetBefore(fromMs);
+    return this.freePlayed.pressesBetween(fromMs, untilMs, this.deps.clock.now());
+  }
+
+  /** The pedal in free play between two moments on the clock, as the presses are. */
+  freePlayPedalBetween(fromMs: number, untilMs: number): readonly PedalDown[] {
+    return this.freePlayed.pedalBetween(fromMs, untilMs, this.deps.clock.now());
+  }
+
+  /** Whether anything played in free play is down now, or came up at or after a moment. */
+  freePlayedSince(ms: number): boolean {
+    return this.freePlayed.anythingSince(ms);
   }
 
   /**
@@ -3834,7 +3917,7 @@ export class PracticeController {
     if (this.machinePlays) {
       return true;
     }
-    if (this.deps.modes.get(this.currentSettings.modeId).requiresMetronome) {
+    if (this.keepsTime) {
       return true;
     }
     if (this.currentSettings.countInBars > 0) {

@@ -9,6 +9,7 @@ import {
 } from '../../src/application/modes/challengeModes.js';
 import { FLOW_MODE_ID } from '../../src/application/modes/FlowMode.js';
 import { LISTEN_MODE_ID } from '../../src/application/modes/ListenFrame.js';
+import { FREE_PLAY_MODE_ID } from '../../src/application/modes/FreePlayFrame.js';
 import { NOTE_MODE_ID } from '../../src/application/modes/NoteMode.js';
 import { WAIT_MODE_ID } from '../../src/application/modes/WaitMode.js';
 
@@ -57,6 +58,16 @@ describe('the frames, one at a time', () => {
 
     expect(now.modeId).toBe(LISTEN_MODE_ID);
     expect(modesOn(now)).toEqual([]);
+  });
+
+  it('puts out every square in free play, where nothing is read or judged', () => {
+    const now = after(EVERYTHING_ON, settingsForFrame(FREE_PLAY_MODE_ID, EVERYTHING_ON));
+
+    expect(now.modeId).toBe(FREE_PLAY_MODE_ID);
+    expect(modesOn(now)).toEqual([]);
+    for (const mode of CHALLENGE_MODES) {
+      expect(settingsForMode(mode, true, settings({ modeId: FREE_PLAY_MODE_ID })).modeId, mode).toBe(FLOW_MODE_ID);
+    }
   });
 
   it('puts out only rhythm where the music waits with no beat', () => {

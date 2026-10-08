@@ -11774,6 +11774,9 @@ describe('the theme', () => {
 
     expect(select.closest('[data-pane~="page"]')).not.toBeNull();
     expect([...select.options].map((option) => option.value)).toEqual(['dark', 'light-dark-dialogs']);
+    // Named as the night, and saying underneath what decides it.
+    expect(document.querySelector('label[for="dark-system-theme"]')?.textContent).toBe('Night theme');
+    expect(select.closest('.control-group')?.querySelector('.hint')?.textContent).toContain('system is dark');
 
     choose('dark-system-theme', 'light-dark-dialogs');
 

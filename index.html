@@ -1224,16 +1224,22 @@
 
         <!--
           The colours of everything, the music's page included: the
-          system's, or light or dark whatever the system says.
+          system's, or one of the three whatever the system says.
         -->
         <div class="control-group" data-pane="page">
           <label for="theme">Theme</label>
           <select id="theme"></select>
         </div>
 
+        <!--
+          What System becomes while the system is dark, named as the night
+          rather than as the system's setting: the reader thinks of the hour,
+          and the hint says what decides it.
+        -->
         <div class="control-group" data-pane="page">
-          <label for="dark-system-theme">When the system is dark</label>
+          <label for="dark-system-theme">Night theme</label>
           <select id="dark-system-theme"></select>
+          <p class="hint">Used when the theme is System and the system is dark.</p>
         </div>
 
         <!--

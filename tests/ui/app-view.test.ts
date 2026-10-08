@@ -3041,16 +3041,20 @@ describe('AppView', () => {
       return Number.parseFloat(head?.style.getPropertyValue('--roll-x') ?? '0');
     }
 
-    function finger(type: string, clientX: number, pointerType = 'touch'): void {
-      element('roll-body').dispatchEvent(
-        new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType, clientX, clientY: 50 }),
-      );
+    /**
+     * A finger on the drawing, at a moment of the test's own where it says one.
+     * How fast a finger was going is read off the events' own moments, and a
+     * test that waited on the wall clock between them measured how busy the
+     * machine was: under load a twelve-millisecond wait outlasted the hundred
+     * milliseconds a throw is measured over, and the throw read as still.
+     */
+    function finger(type: string, clientX: number, pointerType = 'touch', atMs?: number): void {
+      const event = new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType, clientX, clientY: 50 });
+      if (atMs !== undefined) {
+        Object.defineProperty(event, 'timeStamp', { value: atMs });
+      }
+      element('roll-body').dispatchEvent(event);
     }
-
-    const aMoment = (): Promise<void> =>
-      new Promise((done) => {
-        setTimeout(done, 12);
-      });
 
     it('moves the drawing with a finger, and lets it glide on when it is thrown', async () => {
       // Kept by the program rather than the page, so a finger's pan and its
@@ -3060,29 +3064,22 @@ describe('AppView', () => {
       try {
         const { view } = await openThePictureOfARun();
         const whole = ((view.rollScene?.lengthMs ?? 0) / 1000) * 140;
-        finger('pointerdown', 90);
-        await aMoment();
-        finger('pointermove', 80);
-        await aMoment();
-        finger('pointermove', 70);
+        finger('pointerdown', 90, 'touch', 1_000);
+        finger('pointermove', 80, 'touch', 1_012);
+        finger('pointermove', 70, 'touch', 1_024);
         await aFrame();
         // Twenty pixels to the left is twenty pixels further along.
         expect(scrolledAlong()).toBe(20);
         // Held there before letting go: put down, not thrown.
-        await new Promise((done) => {
-          setTimeout(done, 80);
-        });
-        finger('pointerup', 70);
+        finger('pointerup', 70, 'touch', 1_104);
         await aFrame();
         expect(scrolledAlong()).toBe(20);
 
         // And thrown, it goes on - as far as the run lets it.
-        finger('pointerdown', 70);
-        await aMoment();
-        finger('pointermove', 65);
-        await aMoment();
-        finger('pointermove', 60);
-        finger('pointerup', 60);
+        finger('pointerdown', 70, 'touch', 2_000);
+        finger('pointermove', 65, 'touch', 2_012);
+        finger('pointermove', 60, 'touch', 2_024);
+        finger('pointerup', 60, 'touch', 2_024);
         await aFrame();
         await aFrame();
         expect(scrolledAlong()).toBeGreaterThan(30);

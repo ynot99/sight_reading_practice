@@ -75,7 +75,8 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
   pedalLaneBox.className = 'replay-keys__lane replay-keys__pedal-lane';
   const pedalLane = doc.createElement('canvas');
   pedalLaneBox.append(pedalLane);
-  // Under the mark, the slider's switch: drawn as a slider, a line and its knob.
+  // Under the mark, the slider's switch: an arrow, pointing the way the
+  // strip goes when it is pressed - down while it is shown, up while it is not.
   const sliderToggle = doc.createElement('button');
   sliderToggle.type = 'button';
   sliderToggle.className = 'replay-keys__slider-toggle';
@@ -84,7 +85,7 @@ export function drawTheKeyboard(host: HTMLElement): ReplayKeyboard {
   icon.setAttribute('viewBox', '0 0 24 24');
   icon.setAttribute('aria-hidden', 'true');
   const knob = doc.createElementNS(SVG, 'path');
-  knob.setAttribute('d', 'M2 11h20v2H2z M9 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8z');
+  knob.setAttribute('d', 'M6 9.4 7.4 8l4.6 4.6L16.6 8 18 9.4l-6 6z');
   icon.append(knob);
   sliderToggle.append(icon);
   const side = doc.createElement('span');

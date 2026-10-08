@@ -2766,15 +2766,16 @@ body[data-slider='put-away'] .under-the-keys {
 
 /*
  * The slider's switch, under the pedal's mark and only where there is a
- * slider: lit while the slider stands under the keys.
+ * slider: as wide as the mark's column, lit while the slider stands under
+ * the keys, its arrow pointing the way the strip goes when it is pressed.
  */
 .replay-keys__slider-toggle {
   display: none;
   position: absolute;
-  left: 6px;
+  left: 4px;
+  right: 4px;
   bottom: 4px;
-  width: 28px;
-  height: 20px;
+  height: 22px;
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -2796,10 +2797,20 @@ body[data-slider] .replay-keys__slider-toggle {
 }
 
 .replay-keys__slider-toggle svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   fill: currentColor;
   display: block;
+}
+
+.replay-keys__slider-toggle[aria-pressed='false'] svg {
+  transform: rotate(180deg);
+}
+
+/* And the mark itself raised over it, so the two do not touch. */
+body[data-slider] .replay-keys__pedal-foot {
+  align-items: flex-start;
+  padding-top: 10px;
 }
 
 /*

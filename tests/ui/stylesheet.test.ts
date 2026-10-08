@@ -469,6 +469,15 @@ describe('the stylesheet', () => {
     // Its switch under the pedal's mark, only where there is a slider.
     expect(body('.replay-keys__slider-toggle')).toMatch(/display\s*:\s*none/);
     expect(body('body[data-slider] .replay-keys__slider-toggle')).toMatch(/display\s*:\s*flex/);
+    // The width of the mark's column, an arrow turned up while the strip is away,
+    // and the mark raised over it so the two do not touch.
+    expect(body('.replay-keys__slider-toggle')).toMatch(/left\s*:\s*4px/);
+    expect(body('.replay-keys__slider-toggle')).toMatch(/right\s*:\s*4px/);
+    expect(body('.replay-keys__slider-toggle')).not.toMatch(/(^|[\s;])width\s*:/);
+    expect(body(".replay-keys__slider-toggle[aria-pressed='false'] svg")).toMatch(/transform\s*:\s*rotate\(180deg\)/);
+    expect(body('.replay-keys__slider-toggle svg')).not.toMatch(/transform/);
+    expect(body('body[data-slider] .replay-keys__pedal-foot')).toMatch(/align-items\s*:\s*flex-start/);
+    expect(body('body[data-slider] .replay-keys__pedal-foot')).toMatch(/padding-top\s*:\s*10px/);
     // Watching is asked for from the list and ended on the page.
     expect(body("#take-off-the-keys, body[data-take-on-keys='true'] #take-on-the-keys")).toMatch(/display\s*:\s*none/);
     expect(body("body[data-take-on-keys='true'] #take-off-the-keys")).toMatch(/display\s*:\s*inline-flex/);

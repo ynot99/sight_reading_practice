@@ -4669,9 +4669,13 @@ body[data-playing='true'] .page-label__rung {
 }
 
 /*
- * Everything belonging to another pane, which is everything else. Written as
- * "not this one" rather than a rule per pane, so a pane added later needs no
- * stylesheet at all.
+ * Everything belonging to another pane than the one showing.
+ *
+ * Hidden, and nothing shown: the pane showing is simply what is left, and
+ * each of its controls keeps the display its own rule gives it. A rule that
+ * showed the chosen pane had to say what to show it as, and `revert` said
+ * the browser's own - a label inline - over the stylesheet's, so the
+ * checkboxes of a pane ran on in one line instead of standing in a column.
  *
  * Only a group of controls says `data-pane`. The tabs in the rail say which
  * pane they *choose*, in a word of their own: when they claimed to be panes,
@@ -4679,29 +4683,22 @@ body[data-playing='true'] .page-label__rung {
  * inline-block, which put the mark on a line above the name. A selector
  * heavier than the tab's own rule cannot be answered by writing the tab's
  * rule again, so the tab stopped making the claim instead.
- */
-.sheet__panel [data-pane] {
-  display: none;
-}
-
-/*
- * Matched as a list, because one box belongs to four panes.
  *
- * The box of checkboxes is shared: its labels are page's, playing's, modes'
- * and sound's, each hidden or shown on its own. Naming no pane made it a cell
- * in *every* pane - an empty one, holding a column of the grid open, so
- * Practice began a third of the way in rather than at the left. His report.
+ * Matched as a list, because one box belongs to several panes. The box of
+ * checkboxes is shared: its labels are page's, playing's and sound's, each
+ * hidden on its own. Naming no pane made it a cell in *every* pane - an
+ * empty one, holding a column of the grid open, so Practice began a third of
+ * the way in rather than at the left. His report.
  */
-.sheet__panel[data-showing='instrument'] [data-pane~='instrument'],
-.sheet__panel[data-showing='exercise'] [data-pane~='exercise'],
-.sheet__panel[data-showing='page'] [data-pane~='page'],
-.sheet__panel[data-showing='playing'] [data-pane~='playing'],
-.sheet__panel[data-showing='sound'] [data-pane~='sound'],
-.sheet__panel[data-showing='practice'] [data-pane~='practice'],
-.sheet__panel[data-showing='library'] [data-pane~='library'],
-.sheet__panel[data-showing='storage'] [data-pane~='storage'],
-.sheet__panel[data-showing='developers'] [data-pane~='developers'] {
-  display: revert;
+.sheet__panel[data-showing='instrument'] [data-pane]:not([data-pane~='instrument']),
+.sheet__panel[data-showing='page'] [data-pane]:not([data-pane~='page']),
+.sheet__panel[data-showing='playing'] [data-pane]:not([data-pane~='playing']),
+.sheet__panel[data-showing='sound'] [data-pane]:not([data-pane~='sound']),
+.sheet__panel[data-showing='practice'] [data-pane]:not([data-pane~='practice']),
+.sheet__panel[data-showing='library'] [data-pane]:not([data-pane~='library']),
+.sheet__panel[data-showing='storage'] [data-pane]:not([data-pane~='storage']),
+.sheet__panel[data-showing='developers'] [data-pane]:not([data-pane~='developers']) {
+  display: none;
 }
 
 /*

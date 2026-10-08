@@ -526,6 +526,31 @@ describe('the stylesheet', () => {
     expect(showing[0]?.selector).not.toContain("[data-pane='");
   });
 
+  it('hides every pane but the one showing, and never says how to show one', () => {
+    // A rule showing the chosen pane had to name a display, and `revert`
+    // named the browser's: a checkbox's label went back to inline, over the
+    // column the stylesheet puts them in, and a pane's boxes ran on in one
+    // line. Hidden only, each control keeps the display of its own rule.
+    const panes = [...HTML.matchAll(/data-chooses="([a-z-]+)"/g)].map((match) => match[1] ?? '');
+    const showing = rules().filter((rule) => rule.selector.includes("[data-showing='"));
+
+    expect(panes.length).toBeGreaterThan(5);
+    for (const pane of panes) {
+      expect(showing[0]?.selector, pane).toContain(
+        `.sheet__panel[data-showing='${pane}'] [data-pane]:not([data-pane~='${pane}'])`,
+      );
+    }
+    expect(showing[0]?.body).toMatch(/display\s*:\s*none/);
+    const panesShown = rules()
+      .filter((rule) => rule.selector.includes('[data-pane'))
+      .filter((rule) => /display\s*:(?!\s*none)/.test(rule.body));
+    expect(panesShown.map((rule) => rule.selector)).toEqual([]);
+    // Each checkbox a line of its own, by its own rule.
+    expect(rules().find((rule) => rule.selector === '.control-group--checks label')?.body).toMatch(
+      /display\s*:\s*flex/,
+    );
+  });
+
   it('writes every variant below the rule it varies', () => {
     // A variant of a class weighs exactly what the class weighs, so between
     // `.sheet__panel` and `.sheet__panel--wide` nothing decides but which

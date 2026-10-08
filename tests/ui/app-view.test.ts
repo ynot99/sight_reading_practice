@@ -965,12 +965,29 @@ describe('AppView', () => {
     expect(view.fallingBarLines).toEqual([]);
     expect(view.fallingRuling).toEqual([]);
 
+    // The chord held, named at the top while it is held.
+    const chord = element<HTMLOutputElement>('free-chord');
+    expect(chord.hidden).toBe(true);
+    midi.noteOn(67, clock.now());
+    midi.noteOn(60, clock.now());
+    expect(chord.hidden).toBe(false);
+    expect(chord.textContent).toBe('C');
+    midi.noteOff(60, clock.now());
+    // E and G alone make no chord with a name.
+    expect(chord.hidden).toBe(true);
+    midi.noteOn(60, clock.now());
+    expect(chord.textContent).toBe('C');
+
     // Out of free play, the keyboard goes with it and no key stays lit.
     frameButton('free').click();
     expect(runtime.controller.playsFreely).toBe(false);
     expect(keys.hidden).toBe(true);
     expect(document.body.dataset['freePlay']).toBeUndefined();
     expect(keys.querySelectorAll('[data-shade]')).toHaveLength(0);
+    // And the name with it: a chord named during a run is the score read out.
+    expect(chord.hidden).toBe(true);
+    midi.noteOn(72, clock.now());
+    expect(chord.hidden).toBe(true);
   });
 
   it('paints the falling notes a frame at a time while the music moves, and not once it is held', async () => {

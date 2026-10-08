@@ -96,6 +96,7 @@ import {
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { playsFreely } from './modes/FreePlayFrame.js';
 import { FreePlayed } from './freePlay.js';
+import { nameTheChord } from '../domain/harmony/chordName.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
 import { HealthMeter, type HealthMeterOptions } from '../domain/scoring/HealthMeter.js';
 import type { LadderStep, PracticeLadder } from './ladder/PracticeLadder.js';
@@ -3449,6 +3450,15 @@ export class PracticeController {
   /** Whether the pedal is down in free play now. */
   get freePlayPedalDown(): boolean {
     return this.freePlayed.pedalDown;
+  }
+
+  /**
+   * The chord the keys held in free play make, or `null` where they make none
+   * with a name. Spelled as the page's key signature spells its black keys,
+   * the one it opens in; with nothing on the page, as chord charts do.
+   */
+  get freePlayChord(): string | null {
+    return nameTheChord(this.freePlayed.keysDown, this.exercise?.key.fifths ?? null);
   }
 
   /**

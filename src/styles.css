@@ -3174,6 +3174,28 @@ body[data-free-play='true'] #focus-keyboard {
 }
 
 /*
+ * The chord held in free play: large, at the top of the screen and over the
+ * lane, and nothing to press, so a touch goes through to what is under it.
+ */
+.free-chord {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 6px 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) var(--over-the-page), transparent);
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgb(16 24 40 / 22%);
+}
+
+/*
  * Free play, where the keys are the whole of it: no run to start or to go
  * back to the beginning of, and nothing to repeat or to play faster. What is
  * put away is no fewer than the keyboard's button that comes in, so the row

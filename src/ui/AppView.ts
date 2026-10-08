@@ -1614,6 +1614,7 @@ export class AppView {
     focusMetronome: HTMLButtonElement;
     metronomeOn: HTMLButtonElement;
     scoreListening: HTMLButtonElement;
+    freeChord: HTMLOutputElement;
     scoreListeningText: HTMLElement;
     focusRepeat: HTMLButtonElement;
     focusBare: HTMLButtonElement;
@@ -1922,6 +1923,7 @@ export class AppView {
       focusMetronome: requireElement(doc, 'focus-metronome'),
       metronomeOn: requireElement(doc, 'metronome-on'),
       scoreListening: requireElement(doc, 'score-listening'),
+      freeChord: requireElement(doc, 'free-chord'),
       scoreListeningText: requireElement(doc, 'score-listening-text'),
       focusRepeat: requireElement(doc, 'focus-repeat'),
       focusBare: requireElement(doc, 'focus-bare'),
@@ -8708,6 +8710,9 @@ export class AppView {
     if (!active) {
       lightTheKeys(this.replayKeyboard, new Map(), false);
     }
+    if (!inFreePlay) {
+      this.el.freeChord.hidden = true;
+    }
     if (!active || shows !== 'falling-notes') {
       // Nothing is falling, and the picture of what was is let go of with
       // the memory it holds - the height of the screen of it. Painting sizes
@@ -8764,6 +8769,11 @@ export class AppView {
   /** Lights the keys down in free play, and the pedal, as heard: nobody judged them. */
   private lightTheFreePlay(): void {
     const controller = this.runtime.controller;
+    // And the chord they make, while they make one. Only here: during a run
+    // the name would be the score read out for the reader.
+    const chord = controller.freePlayChord;
+    this.el.freeChord.textContent = chord ?? '';
+    this.el.freeChord.hidden = chord === null;
     const down = controller.freePlayKeysDown;
     lightTheKeys(
       this.replayKeyboard,

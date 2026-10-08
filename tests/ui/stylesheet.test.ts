@@ -407,6 +407,19 @@ describe('the stylesheet', () => {
     expect(body('.score__listening svg')).toMatch(/fill\s*:\s*currentColor/);
   });
 
+  it('names the chord held at the top of the screen, over the lane and out of the way of a touch', () => {
+    const body = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
+    const pill = body('.free-chord');
+
+    expect(pill).toMatch(/position\s*:\s*fixed/);
+    expect(pill).toMatch(/top\s*:\s*calc\(env\(safe-area-inset-top/);
+    expect(pill).toMatch(/pointer-events\s*:\s*none/);
+    // Over the keys' layer, which is where the notes rise.
+    const over = Number(/z-index\s*:\s*(\d+)/.exec(pill)?.[1]);
+    const keys = Number(/z-index\s*:\s*(\d+)/.exec(body('.replay-keys'))?.[1]);
+    expect(over).toBeGreaterThan(keys);
+  });
+
   it('puts away in free play what there is nothing to do with, and lifts the bar over the keys', () => {
     // No run to start or rewind, nothing to repeat or play faster - and no
     // fewer put away than the keyboard's button that comes in, so the row is

@@ -2252,6 +2252,28 @@ describe('hearing the hand you are not reading', () => {
       expect(controller.freePlayKeysDown).toEqual([65]);
     });
 
+    it('names the chord the keys held make, spelled as the page spells its black keys', async () => {
+      const { controller, midi, clock } = createController(true, undefined, { modeId: FREE_PLAY_MODE_ID });
+      expect(controller.freePlayChord).toBeNull();
+
+      // With nothing on the page, as chord charts spell it.
+      for (const key of [58, 62, 65]) {
+        midi.noteOn(key, clock.now());
+      }
+      expect(controller.freePlayChord).toBe('B♭');
+      midi.noteOn(68, clock.now());
+      expect(controller.freePlayChord).toBe('B♭7');
+
+      // A page in a sharp key spells the same keys with sharps.
+      await controller.openScore(twoBarExercise({ key: KeySignature.major(5) }));
+      expect(controller.freePlayChord).toBe('A♯7');
+
+      for (const key of [58, 62, 65, 68]) {
+        midi.noteOff(key, clock.now());
+      }
+      expect(controller.freePlayChord).toBeNull();
+    });
+
     it('is still the frame the reader left the app in, and keeps no time', () => {
       // Not a practice mode, so asking the registry about it would throw.
       const { controller } = createController(true, undefined, { modeId: FREE_PLAY_MODE_ID });

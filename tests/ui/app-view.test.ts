@@ -8650,6 +8650,9 @@ describe('AppView', () => {
       const rig = createRig();
       await rig.view.initialize();
       await rig.runtime.controller.openScore(longExercise({ bars: 8 }));
+      // Started from the sheet of the ways to go about a run, not the settings.
+      element<HTMLButtonElement>('focus-modes').click();
+      expect(element('drill-start').closest('.sheet')?.id).toBe('sheet-modes');
 
       element<HTMLInputElement>('drill-bars').value = '4';
       element<HTMLButtonElement>('drill-start').click();
@@ -8661,7 +8664,7 @@ describe('AppView', () => {
       // The ordinary passage, not a private one: the drawer says it too.
       expect(element<HTMLInputElement>('focus-to').value).toBe('4');
       // And it gets out of the way so the reader can play.
-      expect(element('sheet-settings').hidden).toBe(true);
+      expect(element('sheet-modes').hidden).toBe(true);
     });
 
     it('puts the plan away when asked', async () => {

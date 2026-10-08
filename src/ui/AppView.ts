@@ -3992,7 +3992,7 @@ export class AppView {
       this.syncControlsFromSettings();
       // Straight to the music: the plan is set, and what it asks for is
       // said in the middle of the page.
-      this.el.sheetSettings.hidden = true;
+      this.el.sheetModes.hidden = true;
     });
 
     this.listen(this.el.drillStop, 'click', () => {

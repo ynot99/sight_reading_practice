@@ -1077,6 +1077,31 @@
               <span class="mode-card__what">A wrong note ends the run</span>
             </button>
           </div>
+          <!--
+            His line 93: the piece taken apart and learned a section at a time,
+            each one slowly with one hand, then the other, then both, and the
+            sections glued together afterwards. Everything it uses is already
+            here - the passage, the hand, the speed - so this is only the thing
+            that puts them in order.
+
+            Under the squares and not among the settings: it is not a setting
+            but a way of going about the next runs, which is what this sheet is
+            opened to choose. Not a square either, since a square stays on and
+            this is started.
+          -->
+          <div class="control-group modes__plan">
+            <label for="drill-bars">Learn it section by section</label>
+            <div class="ladder-row">
+              <input id="drill-bars" class="focus-bar__bar" type="number" min="1" max="64"
+                inputmode="numeric" value="4" title="Bars in a section"
+                aria-label="Bars in a section" />
+              <button id="drill-start" type="button" class="button">Start the plan</button>
+            </div>
+            <p id="drill-description" class="hint">
+              Each section slowly with one hand, then the other, then both; then the sections
+              joined up, until the whole piece holds together.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1272,27 +1297,6 @@
           rather than being hidden - a control that vanishes is one the
           reader goes looking for.
         -->
-        <!--
-          His line 93: the piece taken apart and learned a section at a time,
-          each one slowly with one hand, then the other, then both, and the
-          sections glued together afterwards. Everything it uses is already
-          here - the passage, the hand, the speed - so this is only the thing
-          that puts them in order.
-        -->
-        <div class="control-group" data-pane="modes">
-          <label for="drill-bars">Learn it section by section</label>
-          <div class="ladder-row">
-            <input id="drill-bars" class="focus-bar__bar" type="number" min="1" max="64"
-              inputmode="numeric" value="4" title="Bars in a section"
-              aria-label="Bars in a section" />
-            <button id="drill-start" type="button" class="button">Start the plan</button>
-          </div>
-          <p id="drill-description" class="hint">
-            Each section slowly with one hand, then the other, then both; then the sections
-            joined up, until the whole piece holds together.
-          </p>
-        </div>
-
         <div class="control-group" data-pane="page">
           <label for="page-turns">Page turns</label>
           <select id="page-turns"></select>

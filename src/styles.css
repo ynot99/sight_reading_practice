@@ -4991,11 +4991,14 @@ body[data-repeats='hidden'] .repeat-mark {
 }
 
 /*
- * A right note in a beat that is not finished yet.
+ * A mark in a beat that is not finished yet.
  *
  * Paler rather than another colour: it is the same verdict, and what it adds
- * is only "there is more of this chord to find". It becomes the ordinary
- * green the moment the beat is complete.
+ * is only that the beat is still being played. On a right note, that there
+ * is more of this chord to find; on a wrong one, that the reader is still
+ * looking, and the printed notes they are looking for must stay readable
+ * under however many tries. Each takes its full colour the moment the beat
+ * is complete.
  */
 .played--unsettled {
   opacity: 0.42;

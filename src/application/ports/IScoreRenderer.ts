@@ -420,10 +420,13 @@ export interface IPlayedNoteOverlay {
   /**
    * Says that a step has been played in full.
    *
-   * Until then its right notes are drawn palely: a chord half found is not a
-   * chord, and the reader wants to know which of the two they are looking at
-   * without counting noteheads. What settles is the drawing only - what was
-   * played, and how it was judged, is settled the moment it is judged.
+   * Until then its marks are drawn palely. A right one, because a chord half
+   * found is not a chord, and the reader wants to know which of the two they
+   * are looking at without counting noteheads. A wrong one, because the
+   * reader is still at that step looking for the right keys, and wrong tries
+   * in full red pile up over the very notes being looked for. What settles is
+   * the drawing only - what was played, and how it was judged, is settled
+   * the moment it is judged.
    */
   settlePlayed(stepIndex: number): void;
   clearPlayed(): void;

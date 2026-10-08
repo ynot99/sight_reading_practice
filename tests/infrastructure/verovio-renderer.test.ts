@@ -973,6 +973,20 @@ describe('what was played', () => {
     expect(ringsOf(surface)[0]?.getAttribute('class')).not.toContain('played--unsettled');
   });
 
+  it('draws a wrong try pale too while its beat is still being played, and red once it is not', async () => {
+    // In red at full strength, the tries at one step piled up over the notes
+    // the reader was still looking for.
+    const { renderer, surface } = await twoBarsOpen();
+
+    renderer.showPlayed({ stepIndex: 0, midi: 65, correct: false, offset: 0, settled: false });
+    const ring = ringsOf(surface)[0];
+    expect(ring?.getAttribute('class')).toContain('played--wrong');
+    expect(ring?.getAttribute('class')).toContain('played--unsettled');
+
+    renderer.settlePlayed(0);
+    expect(ringsOf(surface)[0]?.getAttribute('class')).not.toContain('played--unsettled');
+  });
+
   it('takes one press off again, and leaves the others', async () => {
     const { renderer, surface } = await twoBarsOpen();
     renderer.showPlayed({ stepIndex: 0, midi: 60, correct: true, offset: 0 });

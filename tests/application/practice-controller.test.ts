@@ -1587,6 +1587,26 @@ describe('what you played, drawn over the score', () => {
       expect(await marksWith('at-end')).toEqual(await marksWith('live'));
     });
 
+    it('draws them as their beats ended: settled where the beat was finished', async () => {
+      const rig = createController(true);
+      rig.controller.updateSettings({ playedNotes: 'at-end' });
+      await rig.controller.loadNewExercise();
+      const session = rig.controller.start();
+      const first = session?.currentStep?.expectedMidi ?? [];
+      rig.midi.noteOn(21, 0);
+      for (const note of first) {
+        rig.midi.noteOn(note, 0);
+      }
+      // A try at the next step, which the run stops in the middle of.
+      rig.midi.noteOn(22, 5);
+      session?.abort();
+
+      const settledAt = (stepIndex: number) =>
+        rig.renderer.played.filter((mark) => mark.stepIndex === stepIndex).map((mark) => mark.settled);
+      expect(settledAt(0)).toEqual(Array.from({ length: first.length + 1 }, () => true));
+      expect(settledAt(1)).toEqual([false]);
+    });
+
     it('starts each run with a clean page', async () => {
       const rig = createController(true);
       rig.controller.updateSettings({ playedNotes: 'at-end' });

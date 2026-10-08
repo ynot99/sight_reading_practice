@@ -786,7 +786,7 @@ export class VerovioScoreRenderer
     for (const shape of shapes) {
       const drawn = drawShape(shape, overlay.layer.ownerDocument);
       drawn.setAttribute('data-mark', `${String(mark.stepIndex)}:${String(mark.midi)}`);
-      if (mark.correct && mark.settled === false) {
+      if (mark.settled === false) {
         drawn.classList.add('played--unsettled');
       }
       overlay.layer.append(drawn);
@@ -1716,7 +1716,7 @@ export class VerovioScoreRenderer
     }
   }
 
-  /** Says a beat has been played in full: its right notes stop being pale. */
+  /** Says a beat has been played in full: its marks stop being pale. */
   settlePlayed(stepIndex: number): void {
     this.marks = this.marks.map((mark) =>
       mark.stepIndex === stepIndex ? { ...mark, settled: true } : mark,

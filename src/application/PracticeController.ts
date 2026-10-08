@@ -2880,6 +2880,12 @@ export class PracticeController {
         // alternative is the controller keeping a second account of which
         // steps have marks on them.
         this.deps.overlay.settlePlayed(result.index);
+        // And those still held back for the end, which are drawn then as
+        // their beats finished: settled, or still pale where the run stopped
+        // partway through one. All of them, since a press is marked at the
+        // beat that judges it, and so none held yet belongs to a later one -
+        // even a note taken early is marked once the beat before it is over.
+        this.heldMarks = this.heldMarks.map((mark) => ({ ...mark, settled: true }));
         if (this.currentSettings.readAheadSteps !== null) {
           this.fadeThrough(result.index);
         }
@@ -2961,8 +2967,8 @@ export class PracticeController {
           stepIndex,
           midi,
           // Palely until the beat is finished: a chord half found is not a
-          // chord, and the reader should be able to see which of the two
-          // they are looking at without counting noteheads.
+          // chord, and a wrong try is drawn under the notes still being
+          // looked for. See `settlePlayed`.
           settled: false,
           // Right against the page, which is what the mark is about: a note
           // the other hand was going to play was read correctly, and one

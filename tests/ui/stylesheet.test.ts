@@ -359,9 +359,8 @@ describe('the stylesheet', () => {
     const body = (selector: string): string =>
       rules().find((rule) => rule.selector === selector)?.body ?? '';
     expect(body('.replay-keys')).toMatch(/--keys-edge\s*:/);
-    // In the page's ink and not the theme's: the score is white in either.
-    expect(body('.score')).toMatch(/background\s*:\s*#ffffff/);
-    expect(body('.replay-keys')).toMatch(/--keys-bar-line\s*:\s*#[0-9a-f]{6}\s*;/);
+    // In the page's ink, so a bar line reads on whichever paper it falls over.
+    expect(body('.replay-keys')).toMatch(/--keys-bar-line\s*:\s*var\(--ink\)\s*;/);
     for (const shade of ['perfect', 'good', 'wrong', 'aside', 'heard']) {
       expect(body('.replay-keys'), shade).toMatch(new RegExp(`--keys-${shade}\\s*:`));
       expect(
@@ -1159,7 +1158,8 @@ describe('the stylesheet', () => {
 
     expect(good.length).toBeGreaterThan(0);
     for (const rule of good) {
-      expect(rule.body).not.toMatch(/#b91c1c/);
+      expect(rule.body).not.toMatch(/--wrong/);
+      expect(rule.body).toMatch(/var\(--good\)/);
     }
   });
 
@@ -1655,8 +1655,8 @@ describe('the four numbers of a reading', () => {
       .join(';');
 
   it('puts each behind a dot in the colour it is drawn on the page', () => {
-    expect(body(".readings__count[data-kind='perfect']")).toContain('#15803d');
-    expect(body(".readings__count[data-kind='good']")).toContain('#22c55e');
+    expect(body(".readings__count[data-kind='perfect']")).toContain('var(--correct)');
+    expect(body(".readings__count[data-kind='good']")).toContain('var(--good)');
     expect(body(".readings__count[data-kind='wrong']")).toContain('var(--wrong)');
     expect(body(".readings__count[data-kind='missed']")).toContain('var(--text-muted)');
     expect(body('.readings__count::before')).toMatch(/background:\s*var\(--count-dot\)/);
@@ -1671,10 +1671,10 @@ describe('the strip of where the notes landed', () => {
       .join(';');
 
   it('marks each note in the green it is drawn in on the page', () => {
-    expect(body(".hit-bar__tick[data-tier='perfect']")).toContain('#15803d');
-    expect(body(".hit-bar__tick[data-tier='good']")).toContain('#22c55e');
-    expect(body('.played--correct')).toContain('#15803d');
-    expect(body('.played--loose')).toContain('#22c55e');
+    expect(body(".hit-bar__tick[data-tier='perfect']")).toContain('var(--correct)');
+    expect(body(".hit-bar__tick[data-tier='good']")).toContain('var(--good)');
+    expect(body('.played--correct')).toContain('var(--correct)');
+    expect(body('.played--loose')).toContain('var(--good)');
   });
 
   it('colours a note played from past the edge by its verdict, not as a miss', () => {
@@ -1855,5 +1855,53 @@ describe('the two pills on a phone', () => {
     );
 
     expect(gone?.body).toMatch(/display\s*:\s*none/);
+  });
+});
+
+describe('the paper the music is printed on', () => {
+  const body = (selector: string): string =>
+    rules().find((rule) => rule.selector === selector)?.body ?? '';
+  /** A token as the light theme sets it, and as the dark one does. */
+  const token = (name: string): { light: string; dark: string } => {
+    const dark = CSS.indexOf('@media (prefers-color-scheme: dark)');
+    const read = (from: number): string =>
+      new RegExp(`${name}\\s*:\\s*([^;]+);`).exec(CSS.slice(from))?.[1]?.trim() ?? '';
+    return { light: read(0), dark: dark === -1 ? '' : read(dark) };
+  };
+
+  it('is white with black ink by day, and dark with light ink at night', () => {
+    expect(token('--paper')).toEqual({ light: '#ffffff', dark: '#1b1e24' });
+    expect(token('--ink')).toEqual({ light: '#000000', dark: '#d5dae2' });
+    // Each verdict a colour of its own on either paper.
+    for (const verdict of ['--good', '--sounding', '--ink-muted']) {
+      const { light, dark } = token(verdict);
+      expect(light, verdict).toMatch(/^#[0-9a-f]{6}$/);
+      expect(dark, verdict).toMatch(/^#[0-9a-f]{6}$/);
+      expect(dark, verdict).not.toBe(light);
+    }
+  });
+
+  it('prints the page, its ground and its own words on that paper', () => {
+    expect(body('.score')).toMatch(/background\s*:\s*var\(--paper\)/);
+    expect(
+      rules().some((rule) => rule.selector === '.app' && /background\s*:\s*var\(--paper\)/.test(rule.body)),
+    ).toBe(true);
+    expect(body('.page-preview__ground')).toMatch(/fill\s*:\s*var\(--paper\)/);
+    expect(body('.page-label')).toMatch(/fill\s*:\s*var\(--ink-muted\)/);
+    expect(body('.bar-position')).toMatch(/fill\s*:\s*var\(--ink\)/);
+  });
+
+  it("inks the engraver's drawing, over the black it writes on itself", () => {
+    // Its strokes are the colour of the text and its fills the default black,
+    // and the drawing inside each page says color="black" outright.
+    expect(body('.score__surface')).toMatch(/(^|[^-])color\s*:\s*var\(--ink\)/);
+    expect(body('.score__surface svg')).toMatch(/fill\s*:\s*currentcolor/);
+    expect(body('.score__surface svg.definition-scale')).toMatch(/color\s*:\s*inherit/);
+  });
+
+  it('marks no verdict in a colour written for one paper only', () => {
+    for (const selector of ['.played--correct', '.played--loose', '.played--wrong', '.played--sounding']) {
+      expect(body(selector), selector).not.toMatch(/#[0-9a-f]{3,6}/);
+    }
   });
 });

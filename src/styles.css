@@ -20,6 +20,24 @@
   --correct: #15803d;
   --wrong: #b91c1c;
   --pending: #b45309;
+  /*
+   * The page the music is printed on, and what it is printed in.
+   *
+   * White and black by day, as notation is; with the rest of the theme at
+   * night, so a reader opening the page in the dark is not handed a lamp.
+   * Everything placed on the page takes its colours from here or from the
+   * verdicts below, so the page and its marks change together.
+   */
+  --paper: #ffffff;
+  --ink: #000000;
+  --ink-muted: #6b7280;
+  /*
+   * The verdicts a note is marked with. Perfect is `--correct` and Wrong is
+   * `--wrong`; Good is the same green, weaker - lighter on white paper and
+   * darker on dark - and a note being sounded is nobody's verdict at all.
+   */
+  --good: #22c55e;
+  --sounding: #7c3aed;
   --radius: 10px;
   --shadow: 0 1px 2px rgb(16 24 40 / 8%), 0 8px 24px rgb(16 24 40 / 6%);
   /*
@@ -84,6 +102,12 @@
     --correct: #4ade80;
     --wrong: #f87171;
     --pending: #fbbf24;
+    /* Not black and not white: a page read for an hour should not glare. */
+    --paper: #1b1e24;
+    --ink: #d5dae2;
+    --ink-muted: #8b94a3;
+    --good: #16a34a;
+    --sounding: #a78bfa;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
     /* The same walks, lifted off a dark ground; see the light block above. */
     --grade-a: #4ade80;
@@ -200,7 +224,7 @@ textarea {
  */
 .score {
   position: relative;
-  background: #ffffff;
+  background: var(--paper);
   overflow: hidden;
   display: flex;
   /*
@@ -277,6 +301,22 @@ textarea {
  */
 .score__surface {
   width: 100%;
+  /*
+   * The engraver's ink. Its drawing strokes every shape in the colour of the
+   * text and leaves each fill to the default, which is black: both are
+   * pointed at the page's ink, so the notes and the lines between them are
+   * one colour on either paper.
+   */
+  color: var(--ink);
+}
+
+/*
+ * Verovio writes `color="black"` on the drawing inside its page, and every
+ * note and line under it took that black on either paper. An attribute is
+ * the weakest thing that can set a colour, so this is enough to take it back.
+ */
+.score__surface svg.definition-scale {
+  color: inherit;
 }
 
 /*
@@ -289,6 +329,8 @@ textarea {
  */
 .score__surface svg {
   display: block;
+  /* The engraver's fills, which it leaves to the default black, in the ink. */
+  fill: currentcolor;
 }
 
 /*
@@ -355,7 +397,7 @@ textarea {
 /*
  * The cursors closing on a step the reader owes: the marker's band, in two
  * halves growing towards each other. Where they meet, white with the band's
- * blue at its edges - white alone is nothing on the white page - and seen
+ * blue at its edges - white alone is nothing on a white page - and seen
  * through, so the notes under it are not lost for the moment it lasts.
  */
 .score__closing {
@@ -679,9 +721,8 @@ textarea {
 
 /*
  * A reading's notes: Perfect, Good, missed, wrong, each a number behind a dot
- * in the colour it is drawn on the page. The two greens are the page's own,
- * fixed like the page's white; missed has no mark on the page and is only
- * quiet here, and wrong is the page's red.
+ * in the colour it is drawn on the page. Missed has no mark on the page and
+ * is only quiet here.
  */
 .readings__notes {
   display: inline-flex;
@@ -705,11 +746,11 @@ textarea {
 }
 
 .readings__count[data-kind='perfect'] {
-  --count-dot: #15803d;
+  --count-dot: var(--correct);
 }
 
 .readings__count[data-kind='good'] {
-  --count-dot: #22c55e;
+  --count-dot: var(--good);
 }
 
 .readings__count[data-kind='missed'] {
@@ -956,11 +997,11 @@ textarea {
  * because it came from past it.
  */
 .hit-bar__tick[data-tier='perfect'] {
-  background: #15803d;
+  background: var(--correct);
 }
 
 .hit-bar__tick[data-tier='good'] {
-  background: #22c55e;
+  background: var(--good);
 }
 
 /*
@@ -2426,7 +2467,7 @@ select {
 .app {
   padding: 0;
   gap: 0;
-  background: #ffffff;
+  background: var(--paper);
   /*
    * Nothing here is text to be read as text. A long press on a tablet used to
    * raise a selection handle and a Copy bubble over the score, which is a menu
@@ -2563,10 +2604,9 @@ body[data-notes-falling='true'] .focus-bar:has(:focus-visible) {
   --keys-edge: rgb(15 23 42 / 70%);
   /*
    * A bar line among the falling notes, and its number: in the ink of the
-   * page it falls over, which is white in either theme. The theme's own text
-   * colour is near white in the dark one, and the lines went with the paper.
+   * page it falls over, so it reads on that paper whichever it is.
    */
-  --keys-bar-line: #1e293b;
+  --keys-bar-line: var(--ink);
 
   position: fixed;
   inset: 0;
@@ -4095,10 +4135,10 @@ body[data-playing='true'] .score__modes {
  *
  * Solid ground under it, because it *replaces* the system it stands on: two
  * systems of notation printed over one another are no clearer than the page
- * turn this exists to soften. The page is white because notation is.
+ * turn this exists to soften. The page's own paper, so it is a piece of it.
  */
 .page-preview__ground {
-  fill: #fff;
+  fill: var(--paper);
 }
 
 /*
@@ -4115,7 +4155,7 @@ body[data-playing='true'] .score__modes {
 
 .page-label {
   font: 12px/1 ui-serif, Georgia, 'Times New Roman', serif;
-  fill: #6b7280;
+  fill: var(--ink-muted);
   user-select: none;
   -webkit-user-select: none;
   pointer-events: none;
@@ -4588,7 +4628,7 @@ body[data-repeats='hidden'] .repeat-mark {
 }
 
 .bar-position {
-  fill: #000;
+  fill: var(--ink);
   user-select: none;
   -webkit-user-select: none;
   pointer-events: none;
@@ -5048,7 +5088,7 @@ body[data-repeats='hidden'] .repeat-mark {
 }
 
 .played--correct {
-  stroke: #15803d;
+  stroke: var(--correct);
   fill: none;
 }
 
@@ -5061,7 +5101,7 @@ body[data-repeats='hidden'] .repeat-mark {
  * right" at the moment it matters most.
  */
 .played--sounding {
-  stroke: #7c3aed;
+  stroke: var(--sounding);
   fill: none;
 }
 
@@ -5080,7 +5120,7 @@ body[data-repeats='hidden'] .repeat-mark {
 }
 
 .played-accidental.played--correct {
-  fill: #15803d;
+  fill: var(--correct);
 }
 
 /*
@@ -5163,19 +5203,19 @@ body[data-repeats='hidden'] .repeat-mark {
 
 /* Right note, but it missed the beat: the same green, worn thinner. */
 .played--loose {
-  stroke: #22c55e;
+  stroke: var(--good);
   fill: none;
 }
 
 .played-accidental.played--loose {
-  fill: #22c55e;
+  fill: var(--good);
 }
 
 .played--wrong {
-  stroke: #b91c1c;
+  stroke: var(--wrong);
   fill: none;
 }
 
 .played-accidental.played--wrong {
-  fill: #b91c1c;
+  fill: var(--wrong);
 }

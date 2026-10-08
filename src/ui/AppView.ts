@@ -107,6 +107,7 @@ import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
 import { drawTheHitErrors } from './hitErrorBar.js';
 import { sizeOf, theStorageAccount } from './storageReport.js';
+import { drawTheShareBar } from './shareBar.js';
 import { findAll, wordsIn, type Found } from './settingsSearch.js';
 import type { DriveScore } from '../application/LibrarySync.js';
 import type { SettingsSyncOutcome } from '../application/SettingsSync.js';
@@ -6697,7 +6698,7 @@ export class AppView {
 
   /**
    * Weighs what the device keeps for the trainer, and draws it as a bar of
-   * its parts with a legend under it.
+   * its parts and the room left, with a legend under it.
    *
    * Asked when the pane is opened, not watched: whether there is room, what
    * is taking it and whether it will be kept is the question, and it is the
@@ -6713,37 +6714,16 @@ export class AppView {
     try {
       const account = theStorageAccount(await this.runtime.storage.read());
       this.el.storageTotal.textContent = account.total;
-      this.el.storageBar.replaceChildren(
-        ...account.pieces
-          .filter((piece) => piece.bytes > 0)
-          .map((piece) => {
-            const part = this.doc.createElement('span');
-            part.className = 'storage-bar__part';
-            part.dataset['kind'] = piece.kind;
-            part.style.flexGrow = String(piece.share);
-            part.title = `${piece.name}: ${sizeOf(piece.bytes)}`;
-            return part;
-          }),
-      );
-      this.el.storageBar.setAttribute(
-        'aria-label',
-        account.pieces.map((piece) => `${piece.name} ${sizeOf(piece.bytes)}`).join(', '),
-      );
-      this.el.storageLegend.replaceChildren(
-        ...account.pieces.map((piece) => {
-          const item = this.doc.createElement('li');
-          const dot = this.doc.createElement('span');
-          dot.className = 'storage-legend__dot';
-          dot.dataset['kind'] = piece.kind;
-          const name = this.doc.createElement('span');
-          name.textContent = piece.name;
-          const size = this.doc.createElement('span');
-          size.className = 'storage-legend__size';
-          size.textContent =
-            piece.count === null ? sizeOf(piece.bytes) : `${sizeOf(piece.bytes)} · ${String(piece.count)}`;
-          item.append(dot, name, size);
-          return item;
-        }),
+      drawTheShareBar(
+        this.el.storageBar,
+        this.el.storageLegend,
+        account.pieces.map((piece) => ({
+          kind: piece.kind,
+          name: piece.name,
+          amount: piece.bytes,
+          said:
+            piece.count === null ? sizeOf(piece.bytes) : `${sizeOf(piece.bytes)} · ${String(piece.count)}`,
+        })),
       );
       this.el.storageKept.textContent = account.kept;
       this.el.storageSmall.textContent = account.small;

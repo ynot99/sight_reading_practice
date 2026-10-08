@@ -11672,15 +11672,17 @@ describe('what the device keeps', () => {
     await waitFor(() => legend.children.length > 0);
 
     expect(element('storage-total').textContent).toBe('42.0 MB / 100 GB');
-    // Biggest first, and the rest of the total as a part of its own.
+    // Biggest first, the rest of the total as a part of its own, and the
+    // room left closing the bar.
     expect([...legend.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
       'Piano sound20.0 MB',
       'Scores12.0 MB · 98',
       'Other10.0 MB',
+      'Free100.0 GB',
     ]);
     const bar = [...element('storage-bar').children] as HTMLElement[];
-    expect(bar.map((part) => part.dataset['kind'])).toEqual(['sound', 'scores', 'other']);
-    expect(Number(bar[0]?.style.flexGrow)).toBeCloseTo(20 / 42, 6);
+    expect(bar.map((part) => part.dataset['kind'])).toEqual(['sound', 'scores', 'other', 'free']);
+    expect(Number(bar[0]?.style.flexGrow)).toBeCloseTo(20 / (100 * 1024), 6);
     expect(element('storage-kept').textContent).toContain('Home Screen');
   });
 });

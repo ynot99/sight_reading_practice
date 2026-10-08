@@ -28,9 +28,7 @@ describe('what the device keeps, said to the reader', () => {
     expect(theStorageAccount(reading()).total).toBe('26.0 MB / 9.6 GB');
   });
 
-  it('draws the bar as what is kept, biggest part first, and every part in it', () => {
-    // Twenty-six megabytes of nine gigabytes is a bar with a hair in it, so
-    // the whole bar is what is kept.
+  it('draws the bar as what is kept, biggest part first, then the room left', () => {
     const pieces = theStorageAccount(reading()).pieces;
 
     expect(pieces.map((piece) => [piece.name, piece.bytes / MB, piece.count])).toEqual([
@@ -39,9 +37,22 @@ describe('what the device keeps, said to the reader', () => {
       // What the parts do not account for, which is the browser's own keeping.
       ['Other', 5, null],
       ['Readings', 1, 340],
+      // Last whatever its size: it is what the rest is measured against.
+      ['Free', 9.6 * 1024 - 26, null],
     ]);
-    expect(pieces.reduce((sum, piece) => sum + piece.share, 0)).toBeCloseTo(1, 10);
-    expect(pieces[0]?.share).toBeCloseTo(14 / 26, 10);
+  });
+
+  it('leaves the room left out where the browser will not say how much may be kept', () => {
+    const pieces = theStorageAccount(reading({ quotaBytes: null })).pieces;
+
+    expect(pieces.map((piece) => piece.kind)).not.toContain('free');
+  });
+
+  it('counts the room left from what the parts come to, where the browser will not say what is used', () => {
+    // Twenty-one megabytes weighed, no total given.
+    const pieces = theStorageAccount(reading({ usedBytes: null })).pieces;
+
+    expect(pieces.at(-1)?.bytes).toBe(9.6 * 1024 * MB - 21 * MB);
   });
 
   it('has no Other where the parts account for all of it', () => {
@@ -70,9 +81,15 @@ describe('what the device keeps, said to the reader', () => {
   });
 
   it('draws nothing out of nothing', () => {
-    const account = theStorageAccount(reading({ usedBytes: 0, parts: [] }));
+    const account = theStorageAccount(reading({ usedBytes: 0, quotaBytes: null, parts: [] }));
 
     expect(account.pieces).toEqual([]);
+  });
+
+  it('draws only the room where nothing is kept yet', () => {
+    const account = theStorageAccount(reading({ usedBytes: 0, parts: [] }));
+
+    expect(account.pieces.map((piece) => piece.kind)).toEqual(['free']);
   });
 
   it('says a size the way a reader would', () => {

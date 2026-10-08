@@ -1796,3 +1796,21 @@ describe('the letter a run is graded with', () => {
     expect(worn[0]?.body).toContain('var(--grade-c)');
   });
 });
+
+describe('a bar of what a whole is made of', () => {
+  const body = (selector: string): string =>
+    rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+  it('divides the bar as the amounts are, and keeps a sliver of the smallest', () => {
+    // Grown from nothing by its share, so the flex layout divides the bar by
+    // the amounts alone; and wide enough to tell its colour by however small.
+    expect(body('.share-bar')).toMatch(/display\s*:\s*flex/);
+    expect(body('.share-bar__part')).toMatch(/flex\s*:\s*0 0 0/);
+    expect(body('.share-bar__part')).toMatch(/min-width\s*:\s*6px/);
+  });
+
+  it('paints the room left grey, apart from anything kept', () => {
+    expect(body("[data-kind='free']")).toMatch(/--storage-ink\s*:[^;]*var\(--text-muted\)/);
+    expect(body("[data-kind='free']")).not.toBe(body("[data-kind='other']"));
+  });
+});

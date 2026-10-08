@@ -9,13 +9,14 @@ import type { StoragePartKind, StorageReading } from '../application/ports/IStor
  */
 export const SMALL_STORE_BYTES = 5 * 1024 * 1024;
 
-/** A piece of the bar: one part of what is kept, or what the parts do not account for. */
+/**
+ * A piece of the bar: one part of what is kept, what the parts do not account
+ * for, or the room left.
+ */
 export interface StoragePiece {
-  readonly kind: StoragePartKind | 'other';
+  readonly kind: StoragePartKind | 'other' | 'free';
   readonly name: string;
   readonly bytes: number;
-  /** How much of the bar it takes, nought to one. */
-  readonly share: number;
   readonly count: number | null;
 }
 
@@ -23,7 +24,7 @@ export interface StoragePiece {
 export interface StorageAccount {
   /** How much is kept, and how much may be: "26.0 MB / 9.6 GB". */
   readonly total: string;
-  /** The bar and its legend, in one order, biggest first. */
+  /** The bar and its legend, in one order: what is kept biggest first, then the room left. */
   readonly pieces: readonly StoragePiece[];
   /** Whether it will be kept, and what that means. */
   readonly kept: string;
@@ -39,16 +40,16 @@ const NAMES: Readonly<Record<StoragePiece['kind'], string>> = {
   app: 'App',
   settings: 'Settings',
   other: 'Other',
+  free: 'Free',
 };
 
 /**
  * What the device keeps for the trainer, as a bar of what it is made of.
  *
  * His, of iOS: "рисочка яка заповнюється різними кольорами - та легенда
- * знизу щоб сказати що скільки займає". The whole bar is what is kept rather
- * than the room there is for it: twenty-six megabytes of nine gigabytes is a
- * bar with a hair in it, and nothing to read. The room is said in words,
- * as he asked - "3Gb/9Gb".
+ * знизу щоб сказати що скільки займає". The room left closes the bar, so it
+ * reads as how much is kept against how much may be; where the browser will
+ * not say how much may be, the bar is what is kept and nothing more.
  *
  * What the parts do not account for is the browser's own keeping of them,
  * and is a piece of its own rather than spread over the others. Every answer
@@ -59,23 +60,25 @@ export function theStorageAccount(reading: StorageReading): StorageAccount {
   const weighed = reading.parts.reduce((sum, part) => sum + part.bytes, 0);
   const other =
     reading.usedBytes === null ? 0 : Math.max(0, reading.usedBytes - weighed);
-  const whole = weighed + other;
-  const pieces: StoragePiece[] = [
+  const kept = [
     ...reading.parts.map((part) => ({
       kind: part.kind,
       name: NAMES[part.kind],
       bytes: part.bytes,
-      share: whole > 0 ? part.bytes / whole : 0,
       count: part.count,
     })),
-    ...(other > 0
-      ? [{ kind: 'other' as const, name: NAMES.other, bytes: other, share: other / whole, count: null }]
-      : []),
+    ...(other > 0 ? [{ kind: 'other' as const, name: NAMES.other, bytes: other, count: null }] : []),
   ].sort((left, right) => right.bytes - left.bytes);
+  const free =
+    reading.quotaBytes === null ? 0 : Math.max(0, reading.quotaBytes - (weighed + other));
+  const pieces: StoragePiece[] = [
+    ...kept,
+    ...(free > 0 ? [{ kind: 'free' as const, name: NAMES.free, bytes: free, count: null }] : []),
+  ];
 
   const used = reading.usedBytes === null ? `about ${sizeOf(weighed)}` : sizeOf(reading.usedBytes);
   const total = reading.quotaBytes === null ? used : `${used} / ${sizeOf(reading.quotaBytes)}`;
-  const kept =
+  const keptFromClearing =
     reading.persisted === null
       ? 'Whether it is kept from being cleared, the browser does not say.'
       : reading.persisted
@@ -90,7 +93,7 @@ export function theStorageAccount(reading: StorageReading): StorageAccount {
   return {
     total,
     pieces,
-    kept,
+    kept: keptFromClearing,
     small: `Small store: ${sizeOf(small)} of about ${sizeOf(SMALL_STORE_BYTES)}${shelves === '' ? '' : ` (${shelves})`}`,
   };
 }

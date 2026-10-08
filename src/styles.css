@@ -1830,12 +1830,11 @@ textarea {
 }
 
 /*
- * What the device keeps, as one bar of what it is made of.
+ * What the device keeps, and the room left beside it, as one bar.
  *
- * The whole bar is what is kept, not the room there is for it: twenty-six
- * megabytes of nine gigabytes is a bar with a hair in it. The room is said
- * in words at the head. A part too small to see keeps a sliver, so every
- * part in the legend is somewhere on the bar.
+ * The room is on the bar, in grey at its end, because how much is left is
+ * what the bar is read for - and twenty-six megabytes of nine gigabytes is
+ * a bar of slivers and grey, which is the answer.
  */
 .storage {
   display: grid;
@@ -1853,7 +1852,15 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
-.storage-bar {
+/*
+ * A bar of what a whole is made of, and its legend.
+ *
+ * Each part grows by its share from nothing, so the bar is divided as the
+ * amounts are. A part too small to see keeps a sliver wide enough to tell
+ * its colour by, so every line in the legend is somewhere on the bar; the
+ * flex layout takes the slivers out of the bigger parts.
+ */
+.share-bar {
   display: flex;
   gap: 2px;
   height: 14px;
@@ -1862,13 +1869,13 @@ textarea {
   background: var(--surface-strong);
 }
 
-.storage-bar__part {
+.share-bar__part {
   flex: 0 0 0;
-  min-width: 3px;
+  min-width: 6px;
   background: var(--storage-ink);
 }
 
-.storage-legend {
+.share-legend {
   display: grid;
   gap: 6px;
   margin: 0;
@@ -1876,13 +1883,13 @@ textarea {
   list-style: none;
 }
 
-.storage-legend li {
+.share-legend li {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.storage-legend__dot {
+.share-legend__dot {
   flex: none;
   width: 10px;
   height: 10px;
@@ -1890,7 +1897,7 @@ textarea {
   background: var(--storage-ink);
 }
 
-.storage-legend__size {
+.share-legend__size {
   margin-left: auto;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
@@ -1923,6 +1930,11 @@ textarea {
 
 [data-kind='other'] {
   --storage-ink: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+
+/* The room left: grey, and plainer than anything kept. */
+[data-kind='free'] {
+  --storage-ink: color-mix(in srgb, var(--text-muted) 18%, transparent);
 }
 
 /*

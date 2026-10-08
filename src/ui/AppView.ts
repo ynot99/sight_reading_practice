@@ -1652,7 +1652,6 @@ export class AppView {
     playingAhead: HTMLSelectElement;
     survivalRefill: HTMLSelectElement;
     survivalPunish: HTMLInputElement;
-    rhythmSoundsTheMusic: HTMLInputElement;
     immediateStart: HTMLInputElement;
     dimUnplayed: HTMLInputElement;
     pageTurns: HTMLSelectElement;
@@ -1963,7 +1962,6 @@ export class AppView {
       playingAhead: requireElement(doc, 'playing-ahead'),
       survivalRefill: requireElement(doc, 'survival-refill'),
       survivalPunish: requireElement(doc, 'survival-punish'),
-      rhythmSoundsTheMusic: requireElement(doc, 'rhythm-sounds-the-music'),
       immediateStart: requireElement(doc, 'immediate-start'),
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
       pageTurns: requireElement(doc, 'page-turns'),
@@ -3817,11 +3815,6 @@ export class AppView {
 
     this.listen(this.el.survivalPunish, 'change', () => {
       controller.updateSettings({ survivalPunishesMistakes: this.el.survivalPunish.checked });
-      this.syncControlsFromSettings();
-    });
-
-    this.listen(this.el.rhythmSoundsTheMusic, 'change', () => {
-      controller.updateSettings({ rhythmSoundsTheMusic: this.el.rhythmSoundsTheMusic.checked });
       this.syncControlsFromSettings();
     });
 
@@ -6260,10 +6253,6 @@ export class AppView {
       }
       switch (event.type) {
         case 'noteon':
-          // The run sounds what is written for this key instead.
-          if (this.runtime.controller.replacesTheReadersKeys) {
-            return;
-          }
           this.runtime.pitchPlayer.play(event.midi, event.velocity);
           return;
         case 'noteoff':
@@ -6923,7 +6912,6 @@ export class AppView {
     this.el.playingAhead.value = settings.playingAhead;
     this.el.survivalRefill.value = String(settings.survivalRefillPercent);
     this.el.survivalPunish.checked = settings.survivalPunishesMistakes;
-    this.el.rhythmSoundsTheMusic.checked = settings.rhythmSoundsTheMusic;
     this.el.offerToSync.checked = settings.offerToSync;
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;

@@ -16,7 +16,6 @@ import type { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyR
 import {
   buildTimeline,
   expectedFor,
-  notesStruckAt,
   notesStruckOutside,
   soundsFor,
   type ExerciseTimeline,
@@ -69,14 +68,12 @@ import type {
   IScoreZoom,
 } from './ports/IScoreRenderer.js';
 import {
-  barLines,
   barNumberOf,
   clefAtMeasure,
   keyAtMeasure,
   measureCount,
   measureIndexAt,
   spanMs,
-  velocityAt,
 } from '../domain/model/Exercise.js';
 import { worstPassage, type Passage } from '../domain/scoring/troubleSpots.js';
 import { PracticeSession, type NotesComing } from './session/PracticeSession.js';
@@ -435,16 +432,6 @@ export interface PracticeSettings {
    * one of its own, since nothing about *when the cursor moves* changes.
    */
   readonly rhythmOnly: boolean;
-  /**
-   * In rhythm only, whether a press sounds the notes written at that beat
-   * instead of the key that was pressed.
-   *
-   * The key is ignored for judging already; this ignores it for the ear too,
-   * so a rhythm tapped on one key comes out as the music - and a rhythm
-   * tapped wrong comes out as the music gone wrong, which is the lesson. A
-   * piano that sounds its own keys has to be turned down for it. His.
-   */
-  readonly rhythmSoundsTheMusic: boolean;
   /**
    * Whether a Sync button stands by the clock while this device has something
    * the drive has not had. His, and his to turn on.
@@ -907,13 +894,6 @@ export class PracticeController {
     atStep: number | null;
   } | null = null;
   /**
-   * Steps of this run whose written notes a press has sounded, in rhythm only.
-   *
-   * Once a step: every note of a chord is a press, and a press kept for the
-   * next beat is announced when it is made and judged again when it opens.
-   */
-  private readonly stepsSoundedForTheReader = new Set<number>();
-  /**
    * When the reader last moved the music on, and where the music was then.
    *
    * A mode that waits has no clock of its own: it reaches every step the
@@ -1042,7 +1022,6 @@ export class PracticeController {
       playingAhead: 'a-mistake',
       pitchClassOnly: false,
       rhythmOnly: false,
-      rhythmSoundsTheMusic: false,
       offerToSync: false,
       previewSeconds: 0,
       cursorWhileRunning: true,
@@ -2833,7 +2812,6 @@ export class PracticeController {
     });
 
     this.currentSession = session;
-    this.stepsSoundedForTheReader.clear();
     // Back to the first note before a beat of the count-in is heard. The
     // cursor used to be left wherever the run before it was paused until the
     // music began, so the reader spent the count-in looking at the wrong bar
@@ -2886,21 +2864,6 @@ export class PracticeController {
             'settle',
           );
         }
-      }),
-    );
-
-    this.sessionSubscriptions.push(
-      // Rhythm only, sounding the music: a press sounds the notes written for
-      // the step it was for, when it was made. On the press and not when the
-      // step is finished, which under the metronome is the end of the step's
-      // written time: the notes came a beat late, or - later than the
-      // instrument will play anything - not at all. His: "з клавіатури
-      // неможливо грати у ритм, бо натискання пальцем грає ноти із затримкою".
-      session.events.on('pressKept', ({ stepIndex, atMs }) => {
-        this.soundTheStepPlayed(stepIndex, atMs);
-      }),
-      session.events.on('noteJudged', ({ stepIndex, atMs }) => {
-        this.soundTheStepPlayed(stepIndex, atMs);
       }),
     );
 
@@ -3909,68 +3872,6 @@ export class PracticeController {
   /** Whether this step is one the reader has to play. */
   private owedByTheReader(step: TimelineStep): boolean {
     return expectedFor(step, this.currentSettings.handStaff).length > 0;
-  }
-
-  /** Rhythm only, asked to sound the music rather than the reader's keys. */
-  private get soundsTheMusicForTheReader(): boolean {
-    return this.currentSettings.rhythmOnly && this.currentSettings.rhythmSoundsTheMusic;
-  }
-
-  /**
-   * Whether a key pressed now stands for the written notes rather than
-   * sounding as itself: while a run is going, in rhythm only, asked to sound
-   * the music. The page sounds a keyboard that has no voice of its own, and
-   * this is when it must not.
-   */
-  get replacesTheReadersKeys(): boolean {
-    const status = this.currentSession?.status;
-    return this.soundsTheMusicForTheReader && (status === 'running' || status === 'counting-in');
-  }
-
-  /**
-   * Sounds a step a press was for, once, where the run sounds the music.
-   *
-   * Only a step somebody pressed a key for: one the music went past unplayed
-   * is silence, as it was on the keys.
-   */
-  private soundTheStepPlayed(index: number, atMs: number): void {
-    if (!this.soundsTheMusicForTheReader || this.stepsSoundedForTheReader.has(index)) {
-      return;
-    }
-    const step = this.timeline?.at(index);
-    if (step === undefined || step === null) {
-      return;
-    }
-    this.stepsSoundedForTheReader.add(index);
-    this.soundTheWrittenNotes(step, atMs);
-  }
-
-  /**
-   * The notes written for the reader at this step, sounded when they played it.
-   *
-   * At the moment the key went down, early or late as it was, so the rhythm
-   * heard is the one played. Only the reader's hand: the other one, where it
-   * is heard, is sounded as it always is. As loud as the page asks there, and
-   * as long as each note sounds - a tie is one press and one sound.
-   */
-  private soundTheWrittenNotes(step: TimelineStep, atMs: number): void {
-    const exercise = this.exercise;
-    if (exercise === null) {
-      return;
-    }
-    const measureStart = barLines(exercise)[step.measureIndex]?.startTicks ?? 0;
-    for (const note of notesStruckAt(step, this.currentSettings.handStaff)) {
-      this.deps.instrument.play(
-        note.midi,
-        velocityAt(exercise, step.measureIndex, step.onsetTicks - measureStart, note.staffNumber),
-        atMs,
-      );
-      this.deps.instrument.stop(
-        note.midi,
-        atMs + spanMs(exercise, step.onsetTicks, step.onsetTicks + soundsFor(note)),
-      );
-      this.sounding.add(note.midi);
-    }
   }
 
   private soundTheOtherHand(step: TimelineStep, atMs: number): void {

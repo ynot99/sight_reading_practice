@@ -11694,42 +11694,24 @@ describe('what the device keeps', () => {
   });
 });
 
-describe('a key that stands for the music', () => {
+describe('a key in rhythm only', () => {
   beforeEach(() => {
     mountRealMarkup();
   });
 
-  async function tapping(soundsTheMusic: boolean): Promise<Rig> {
+  it('sounds as itself, the written notes being nobody else to sound', async () => {
+    // A run could once sound the notes written at the beat in place of the
+    // key tapped; that is gone, and the key is heard as on any other run.
     const rig = createRig();
     await rig.view.initialize();
     await rig.runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
-    rig.runtime.controller.updateSettings({
-      rhythmOnly: true,
-      rhythmSoundsTheMusic: soundsTheMusic,
-      hearTheOtherHand: false,
-    });
+    rig.runtime.controller.updateSettings({ rhythmOnly: true, hearTheOtherHand: false });
     rig.runtime.controller.start();
-    return rig;
-  }
-
-  it('does not sound the key pressed while the run sounds the written notes', async () => {
-    // Rhythm only, asked to play the music: the key is a tap, and the page
-    // sounding it as well would be a wrong note over every right one.
-    const rig = await tapping(true);
 
     rig.midi.noteOn(MIDI.G4);
 
     const heard = rig.instrument.played.map((note) => note.midi);
-    expect(heard).not.toContain(MIDI.G4);
-    expect(heard).toContain(MIDI.C4);
-  });
-
-  it('sounds the key as it always did otherwise', async () => {
-    const rig = await tapping(false);
-
-    rig.midi.noteOn(MIDI.G4);
-
-    expect(rig.instrument.played.map((note) => note.midi)).toContain(MIDI.G4);
+    expect(heard).toEqual([MIDI.G4]);
   });
 });
 
@@ -12184,13 +12166,12 @@ describe('searching the settings', () => {
       const rig = createRig();
       await rig.view.initialize();
 
-      search('rhythm only');
+      search('cursor');
 
       const total = Number(count().split(' / ')[1]);
+      expect(total).toBeGreaterThan(1);
       expect(highlights.get('settings-found')?.ranges).toHaveLength(total);
-      expect(highlights.get('settings-found-here')?.ranges[0]?.toString().toLowerCase()).toBe(
-        'rhythm only',
-      );
+      expect(highlights.get('settings-found-here')?.ranges[0]?.toString().toLowerCase()).toBe('cursor');
     } finally {
       view.CSS = hadCss;
     }

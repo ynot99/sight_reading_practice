@@ -56,7 +56,6 @@ const SETTINGS: PracticeSettings = {
   playingAhead: 'moves-on',
   survivalRefillPercent: 40,
   survivalPunishesMistakes: true,
-  rhythmSoundsTheMusic: true,
   offerToSync: true,
   readAheadSteps: 2,
   zoom: 1.2,
@@ -110,7 +109,6 @@ describe('practice settings codec', () => {
     expect(restored.clickWhen).toBe('cycle-2');
     expect(restored.matchToleranceMs).toBe(180);
     expect(restored.pitchClassOnly).toBe(true);
-    expect(restored.rhythmSoundsTheMusic).toBe(true);
     expect(restored.offerToSync).toBe(true);
     expect(restored.cursorWhileRunning).toBe(false);
     expect(restored.pageTurns).toBe('manual');

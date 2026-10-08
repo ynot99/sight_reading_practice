@@ -223,14 +223,6 @@ export interface PracticeSettings {
   readonly presetId: string;
   readonly modeId: string;
   /**
-   * What the run is graded on.
-   *
-   * Its own axis, not a consequence of the mode: the same Flow run is worth
-   * grading for accuracy, for timing, or for how far it went unbroken, and
-   * which of those you are working on is a choice.
-   */
-  readonly scoringId: string;
-  /**
    * Rhythmic level, chosen independently of the preset.
    *
    * Material and rhythm are separate axes: any preset combines with any
@@ -956,7 +948,6 @@ export class PracticeController {
     this.currentSettings = {
       presetId: preset.id,
       modeId: mode.id,
-      scoringId: mode.defaultScoringId,
       rhythmProfileId: preset.defaults.rhythmProfileId,
       key: preset.defaults.key,
       timeSignature: preset.defaults.timeSignature,
@@ -1186,10 +1177,6 @@ export class PracticeController {
       // say so.
       this.stopListening();
       this.currentSession?.abort();
-      const grading = machineIsPlaying(changes.modeId)
-        ? next.scoringId
-        : this.deps.modes.get(changes.modeId).defaultScoringId;
-      next = { ...next, scoringId: changes.scoringId ?? grading };
     }
 
     if (changes.presetId !== undefined && changes.presetId !== this.currentSettings.presetId) {
@@ -2750,7 +2737,10 @@ export class PracticeController {
       midi: this.deps.midi,
       metronome: this.deps.metronome,
       clock: this.deps.clock,
-      scoring: this.deps.scorings.get(this.currentSettings.scoringId),
+      // Graded as its frame grades: in time where the music keeps time,
+      // on the notes alone where it waits. One answer, so a reading means
+      // the same thing to the ladder whoever is reading it.
+      scoring: this.deps.scorings.get(mode.defaultScoringId),
       options: {
         matchPolicy: {
           toleranceMs: this.currentSettings.matchToleranceMs,

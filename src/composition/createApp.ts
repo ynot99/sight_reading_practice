@@ -106,7 +106,6 @@ import { PrintedOnce } from '../domain/notation/printedOnce.js';
 import { ScoringStrategyRegistry } from '../domain/scoring/ScoringStrategyRegistry.js';
 import {
   AccuracyScoringStrategy,
-  ContinuityScoringStrategy,
   TimingWeightedScoringStrategy,
 } from '../domain/scoring/strategies.js';
 import { keepAudioAwake } from '../infrastructure/audio/keepAudioAwake.js';
@@ -364,7 +363,6 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const scorings = new ScoringStrategyRegistry().registerAll([
     new AccuracyScoringStrategy(),
     new TimingWeightedScoringStrategy(),
-    new ContinuityScoringStrategy(),
   ]);
   const modes = new PracticeModeRegistry().registerAll([
     new FlowMode(),
@@ -385,7 +383,6 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       // the machine play should find it there when they come back.
       modeIds: knownFrameIds(modes.list().map((mode) => mode.id)),
       rhythmProfileIds: rhythms.list().map((profile) => profile.id),
-      scoringIds: scorings.list().map((strategy) => strategy.id),
       ladderStepIds: ladder.list().map((step) => step.id),
     },
   );

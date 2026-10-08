@@ -4483,7 +4483,6 @@ body[data-playing='true'] .page-label__rung {
 .sheet__panel[data-showing='exercise'] [data-pane~='exercise'],
 .sheet__panel[data-showing='page'] [data-pane~='page'],
 .sheet__panel[data-showing='playing'] [data-pane~='playing'],
-.sheet__panel[data-showing='modes'] [data-pane~='modes'],
 .sheet__panel[data-showing='sound'] [data-pane~='sound'],
 .sheet__panel[data-showing='practice'] [data-pane~='practice'],
 .sheet__panel[data-showing='library'] [data-pane~='library'],

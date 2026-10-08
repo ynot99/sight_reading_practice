@@ -16,7 +16,6 @@ import type { SessionScore } from '../../src/domain/scoring/IScoringStrategy.js'
 import { ScoringStrategyRegistry } from '../../src/domain/scoring/ScoringStrategyRegistry.js';
 import {
   AccuracyScoringStrategy,
-  ContinuityScoringStrategy,
   TimingWeightedScoringStrategy,
 } from '../../src/domain/scoring/strategies.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
@@ -58,7 +57,6 @@ function createRig(initial: Parameters<PracticeController['updateSettings']>[0] 
     scorings: new ScoringStrategyRegistry().registerAll([
       new AccuracyScoringStrategy(),
       new TimingWeightedScoringStrategy(),
-      new ContinuityScoringStrategy(),
     ]),
     initialSettings: {
       presetId: 'melody-and-intervals',

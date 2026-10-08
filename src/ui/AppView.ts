@@ -364,15 +364,6 @@ import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
 
-const SCORING_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  'scoring.accuracy': 'The notes alone. You set the pace, so timing is not judged.',
-  'scoring.timing-weighted': 'The notes, and how close each press was to its beat.',
-  'scoring.continuity':
-    'How far you got without the music leaving you behind. A fluffed note costs ' +
-    'little; stopping costs everything. Says nothing in Wait mode, where nothing ' +
-    'moves without you.',
-};
-
 /** How far a wheel's line is, for a wheel that counts in lines. */
 const LINE_PX = 16;
 /** How far a finger may wander and still be tapping, in pixels. */
@@ -1796,8 +1787,6 @@ export class AppView {
     presetDescription: HTMLElement;
     rhythm: HTMLSelectElement;
     rhythmDescription: HTMLElement;
-    scoring: HTMLSelectElement;
-    scoringDescription: HTMLElement;
     key: HTMLSelectElement;
     timeSignature: HTMLSelectElement;
     measures: HTMLInputElement;
@@ -2104,8 +2093,6 @@ export class AppView {
       presetDescription: requireElement(doc, 'preset-description'),
       rhythm: requireElement(doc, 'rhythm'),
       rhythmDescription: requireElement(doc, 'rhythm-description'),
-      scoring: requireElement(doc, 'scoring'),
-      scoringDescription: requireElement(doc, 'scoring-description'),
       key: requireElement(doc, 'key'),
       timeSignature: requireElement(doc, 'time-signature'),
       measures: requireElement(doc, 'measures'),
@@ -3421,13 +3408,6 @@ export class AppView {
       this.runtime.controller.settings.rhythmProfileId,
     );
     fillSelect(
-      this.el.scoring,
-      this.runtime.scorings
-        .list()
-        .map((strategy) => ({ value: strategy.id, label: strategy.label })),
-      this.runtime.controller.settings.scoringId,
-    );
-    fillSelect(
       this.el.click,
       CLICK_PATTERNS.map((pattern) => ({ value: pattern, label: CLICK_LABELS[pattern] })),
       this.runtime.controller.settings.clickPattern,
@@ -3531,11 +3511,6 @@ export class AppView {
       controller.updateSettings({ rhythmProfileId: this.el.rhythm.value });
       this.syncControlsFromSettings();
       void this.reload(true);
-    });
-
-    this.listen(this.el.scoring, 'change', () => {
-      controller.updateSettings({ scoringId: this.el.scoring.value });
-      this.syncControlsFromSettings();
     });
 
     this.listen(this.el.click, 'change', () => {
@@ -6781,8 +6756,6 @@ export class AppView {
     const settings = this.runtime.controller.settings;
     this.el.preset.value = settings.presetId;
     this.el.rhythm.value = settings.rhythmProfileId;
-    this.el.scoring.value = settings.scoringId;
-    this.el.scoringDescription.textContent = SCORING_DESCRIPTIONS[settings.scoringId] ?? '';
     this.el.key.value = keyValue(settings.key);
     this.el.timeSignature.value = settings.timeSignature.toString();
     // After the settings' own key, which a rung that draws does not use.

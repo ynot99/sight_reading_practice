@@ -51,7 +51,6 @@ import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer
 import { PrintedOnce } from '../../src/domain/notation/printedOnce.js';
 import {
   AccuracyScoringStrategy,
-  ContinuityScoringStrategy,
   TimingWeightedScoringStrategy,
 } from '../../src/domain/scoring/strategies.js';
 import { ScoringStrategyRegistry } from '../../src/domain/scoring/ScoringStrategyRegistry.js';
@@ -319,14 +318,12 @@ function createRig(
   const scorings = new ScoringStrategyRegistry().registerAll([
     new AccuracyScoringStrategy(),
     new TimingWeightedScoringStrategy(),
-    new ContinuityScoringStrategy(),
   ]);
 
   const settings = new SettingsRepository(store, {
     presetIds: presets.list().map((preset) => preset.id),
     modeIds: knownFrameIds(modes.list().map((mode) => mode.id)),
     rhythmProfileIds: rhythms.list().map((profile) => profile.id),
-    scoringIds: scorings.list().map((strategy) => strategy.id),
     ladderStepIds: ladder.list().map((step) => step.id),
   });
   const restored = settings.load();
@@ -612,8 +609,6 @@ describe('AppView', () => {
       expect(said, choice).not.toBe('');
       expect(said, choice).not.toContain('0 bar');
     }
-    expect(element<HTMLSelectElement>('scoring').options).toHaveLength(3);
-    expect(element('scoring-description').textContent).not.toBe('');
   });
 
   it('loads and renders an exercise on start-up', async () => {
@@ -654,29 +649,6 @@ describe('AppView', () => {
     expect(element('click-description').textContent).toContain('One click per bar');
     // The click is not part of the exercise, so nothing is regenerated.
     expect(renderer.loadCount).toBe(before);
-  });
-
-  it('follows the mode with a grading, and lets it be overridden', async () => {
-    const { view, runtime } = createRig();
-    await view.initialize();
-
-    // From the one place the frame is chosen now: its button in the Modes
-    // sheet. The rig starts where it waits, and pressing that one again puts
-    // it out, which is flowing in time.
-    frameButton('wait').click();
-    await Promise.resolve();
-
-    expect(runtime.controller.settings.modeId).toBe(FLOW_MODE_ID);
-    expect(runtime.controller.settings.scoringId).toBe('scoring.timing-weighted');
-    expect(element<HTMLSelectElement>('scoring').value).toBe('scoring.timing-weighted');
-
-    const scoring = element<HTMLSelectElement>('scoring');
-    scoring.value = 'scoring.continuity';
-    scoring.dispatchEvent(new Event('change'));
-    await Promise.resolve();
-
-    expect(runtime.controller.settings.scoringId).toBe('scoring.continuity');
-    expect(element('scoring-description').textContent).toContain('without the music leaving you');
   });
 
   it('gives the reader a look at the page before it starts', async () => {
@@ -6116,8 +6088,6 @@ describe('AppView', () => {
         expect(carrier(id).dataset['idle']).toBe('true');
       }
       expect(carrier('preset').getAttribute('title')).toContain('on the stand');
-      // And what is about the reading rather than the material stays.
-      expect(carrier('scoring').dataset['idle']).toBeUndefined();
     });
 
     it('dims a control that another setting has emptied', async () => {
@@ -6788,8 +6758,6 @@ describe('AppView', () => {
       const settings = element('sheet-settings');
       expect(settings.querySelector('[data-chooses="exercise"]')).toBeNull();
       expect(settings.querySelector('[data-pane~="exercise"]')).toBeNull();
-      // How a run is graded stays in the settings, beside the modes.
-      expect(element('scoring').closest('[data-pane]')?.getAttribute('data-pane')).toBe('modes');
       // And the judging log is for finding out why, with the timings, not
       // beside the backup a reader saves their scores with.
       for (const id of ['copy-judging', 'save-judging']) {
@@ -12120,12 +12088,12 @@ describe('searching the settings', () => {
     // pane other than the one being looked at.
     const rig = createRig();
     await rig.view.initialize();
-    expect(showing()).not.toBe('modes');
+    expect(showing()).not.toBe('sound');
 
-    search('graded on');
+    search('piano samples');
 
     expect(count()).toBe('1 / 1');
-    expect(showing()).toBe('modes');
+    expect(showing()).toBe('sound');
   });
 
   it('goes on with Enter and back with Shift+Enter, round from the end', async () => {

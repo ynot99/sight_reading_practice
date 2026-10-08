@@ -4,7 +4,7 @@ import type { StoredScoreSummary } from '../../src/application/ports/IScoreStore
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../../src/application/SettingsRepository.js';
 
-const KNOWN = { presetIds: [], modeIds: [], scoringIds: [], rhythmProfileIds: [] };
+const KNOWN = { presetIds: [], modeIds: [], rhythmProfileIds: [] };
 
 function kept(title: string, fields: Partial<StoredScoreSummary> = {}): StoredScoreSummary {
   return { id: `score:${title}`, title, savedAtMs: 1_000, openedAtMs: 1_000, bars: 8, passages: [], ...fields };

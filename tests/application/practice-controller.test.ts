@@ -25,7 +25,6 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import {
   AccuracyScoringStrategy,
-  ContinuityScoringStrategy,
   TimingWeightedScoringStrategy,
 } from '../../src/domain/scoring/strategies.js';
 import { ScoringStrategyRegistry } from '../../src/domain/scoring/ScoringStrategyRegistry.js';
@@ -121,7 +120,6 @@ function createController(
     scorings: new ScoringStrategyRegistry().registerAll([
       new AccuracyScoringStrategy(),
       new TimingWeightedScoringStrategy(),
-      new ContinuityScoringStrategy(),
     ]),
     ladder: new PracticeLadder(BUILT_IN_LADDER, BUILT_IN_GRADES),
     ...(health === undefined ? {} : { health }),
@@ -282,34 +280,29 @@ describe('PracticeController', () => {
     expect(settings.measures).toBe(7);
   });
 
-  it('adopts the grading a mode is usually judged by', () => {
-    const { controller } = createController();
-    expect(controller.settings.modeId).toBe(new WaitMode().id);
-    expect(controller.settings.scoringId).toBe('scoring.accuracy');
+  it('grades a run as its frame grades: in time under a pulse, on the notes where it waits', async () => {
+    // One answer, with no choice beside it: what a reading scored is what
+    // moves the ladder, and it means the same thing whoever is reading.
+    const timedIn = async (modeId: string): Promise<boolean> => {
+      const rig = createController(true, undefined, { modeId, countInBars: 0 });
+      await rig.controller.loadNewExercise();
+      const session = rig.controller.start();
+      let timed: boolean | null = null;
+      session?.events.on('finished', ({ score }) => {
+        timed = 'meanAbsoluteDeviationMs' in score.details;
+      });
+      // Into the music, which under a pulse is a subdivision after the start,
+      // and the first beat played, so there is a reading to grade.
+      rig.metronome.advanceSubdivisions(1);
+      for (const note of session?.currentStep?.expectedMidi ?? []) {
+        rig.midi.noteOn(note, rig.clock.now());
+      }
+      session?.abort();
+      return timed ?? false;
+    };
 
-    const settings = controller.updateSettings({ modeId: FLOW_MODE_ID });
-    expect(settings.scoringId).toBe('scoring.timing-weighted');
-  });
-
-  it('lets the reader grade a mode however they like', () => {
-    const { controller } = createController();
-
-    // Named in the same breath as the mode, so it is not a default to adopt.
-    const together = controller.updateSettings({
-      modeId: FLOW_MODE_ID,
-      scoringId: 'scoring.continuity',
-    });
-    expect(together.scoringId).toBe('scoring.continuity');
-
-    // And chosen on its own, it simply stays.
-    const alone = controller.updateSettings({ scoringId: 'scoring.accuracy' });
-    expect(alone.scoringId).toBe('scoring.accuracy');
-    expect(alone.modeId).toBe(FLOW_MODE_ID);
-  });
-
-  it('takes its grading from the restored mode, not from mode one', () => {
-    const { controller } = createController(false, undefined, { modeId: FLOW_MODE_ID });
-    expect(controller.settings.scoringId).toBe('scoring.timing-weighted');
+    expect(await timedIn(FLOW_MODE_ID)).toBe(true);
+    expect(await timedIn(new WaitMode().id)).toBe(false);
   });
 
   it('adopts a preset’s rhythm profile with its other defaults', () => {

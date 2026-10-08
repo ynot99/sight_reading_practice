@@ -7,7 +7,6 @@ import {
 } from '../../src/domain/scoring/PerformanceReport.js';
 import {
   AccuracyScoringStrategy,
-  ContinuityScoringStrategy,
   TimingWeightedScoringStrategy,
 } from '../../src/domain/scoring/strategies.js';
 import { ScoringStrategyRegistry } from '../../src/domain/scoring/ScoringStrategyRegistry.js';
@@ -250,94 +249,6 @@ describe('gradeFor', () => {
   });
 });
 
-describe('ContinuityScoringStrategy', () => {
-  const strategy = new ContinuityScoringStrategy();
-
-  /** A step that was reached but never completed in time. */
-  function missed(index: number): StepResult {
-    return step({ index, status: 'missed', hits: [], missing: [60] });
-  }
-
-  it('measures the longest stretch the reader stayed with', () => {
-    const score = strategy.score(
-      reportOf([
-        step({ index: 0, status: 'correct' }),
-        step({ index: 1, status: 'correct' }),
-        missed(2),
-        step({ index: 3, status: 'correct' }),
-        step({ index: 4, status: 'correct' }),
-        step({ index: 5, status: 'correct' }),
-      ]),
-    );
-
-    expect(score.details['longestRun']).toBe(3);
-    expect(score.details['playableSteps']).toBe(6);
-    expect(score.details['breaks']).toBe(1);
-    expect(score.details['continuity']).toBeCloseTo(0.5, 10);
-  });
-
-  it('forgives a fluffed note but not a step the music took away', () => {
-    const played = [
-      step({ index: 0, status: 'correct' }),
-      // Right notes plus a wrong one: the reader carried on, which is the
-      // whole habit being trained.
-      step({ index: 1, status: 'incorrect', wrong: [61] }),
-      step({ index: 2, status: 'correct' }),
-    ];
-    expect(strategy.score(reportOf(played)).details['longestRun']).toBe(3);
-
-    const stopped = [played[0]!, missed(1), played[2]!];
-    expect(strategy.score(reportOf(stopped)).details['longestRun']).toBe(1);
-  });
-
-  it('lets rests pass without extending or breaking a run', () => {
-    const score = strategy.score(
-      reportOf([
-        step({ index: 0, status: 'correct' }),
-        step({ index: 1, status: 'skipped', expected: [], hits: [] }),
-        step({ index: 2, status: 'correct' }),
-      ]),
-    );
-
-    expect(score.details['longestRun']).toBe(2);
-    expect(score.details['playableSteps']).toBe(2);
-  });
-
-  it('refuses to call an abandoned run flawless', () => {
-    // Two clean steps, then the reader gave up on a sixteen-step exercise.
-    const score = strategy.score(
-      reportOf([step({ index: 0, status: 'correct' }), step({ index: 1, status: 'correct' })], 16),
-    );
-
-    expect(score.details['longestRun']).toBe(2);
-    expect(score.details['continuity']).toBeCloseTo(0.125, 10);
-    expect(score.grade).toBe('F');
-  });
-
-  it('separates runs that counting notes scores identically', () => {
-    // Same eight steps, same two breaks, same notes played and missed - so
-    // accuracy cannot tell them apart. One reader derailed once and held on
-    // afterwards; the other kept falling out. That difference is the whole
-    // reason this strategy exists.
-    const statuses = (marks: string): StepResult[] =>
-      [...marks].map((mark, index) =>
-        mark === 'x' ? missed(index) : step({ index, status: 'correct' }),
-      );
-
-    const oneBreak = reportOf(statuses('.xx.....'));
-    const twoBreaks = reportOf(statuses('.x..x...'));
-
-    const accuracy = new AccuracyScoringStrategy();
-    expect(accuracy.score(oneBreak).overall).toBe(accuracy.score(twoBreaks).overall);
-
-    expect(strategy.score(oneBreak).details['longestRun']).toBe(5);
-    expect(strategy.score(twoBreaks).details['longestRun']).toBe(3);
-    expect(strategy.score(oneBreak).overall).toBeGreaterThan(
-      strategy.score(twoBreaks).overall,
-    );
-  });
-});
-
 describe('a reading told as four numbers', () => {
   it('counts the notes Perfect, Good and missed, and the presses that were wrong', () => {
     const report = reportOf([
@@ -373,7 +284,6 @@ describe('a Good note in the grade', () => {
 
   it('counts whole where the timing part charges for where it landed', () => {
     expect(new TimingWeightedScoringStrategy().score(report).accuracy).toBe(1);
-    expect(new ContinuityScoringStrategy().score(report).accuracy).toBe(1);
   });
 });
 
@@ -381,7 +291,6 @@ describe('a run that played nothing', () => {
   const strategies = [
     new AccuracyScoringStrategy(),
     new TimingWeightedScoringStrategy(),
-    new ContinuityScoringStrategy(),
   ];
 
   it('scores nothing for a run stopped before a note was asked for', () => {
@@ -403,13 +312,13 @@ describe('ScoringStrategyRegistry', () => {
   it('registers, lists and resolves strategies', () => {
     const registry = new ScoringStrategyRegistry().registerAll([
       new AccuracyScoringStrategy(),
-      new ContinuityScoringStrategy(),
+      new TimingWeightedScoringStrategy(),
     ]);
 
     expect(registry.list()).toHaveLength(2);
     expect(registry.first().id).toBe('scoring.accuracy');
-    expect(registry.get('scoring.continuity').label).toBe('Keeping going');
-    expect(registry.has('scoring.continuity')).toBe(true);
+    expect(registry.get('scoring.timing-weighted').id).toBe('scoring.timing-weighted');
+    expect(registry.has('scoring.timing-weighted')).toBe(true);
   });
 
   it('rejects duplicates, unknown lookups and an empty catalogue', () => {

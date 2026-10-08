@@ -112,7 +112,8 @@ section of the settings two sheets away. The grades are a row of buttons, and
 choosing one puts you on its first rung; under them the arrows, what the rung
 and its grade ask, the bars and the tempo. The material, rhythm, key and metre,
 which step off the route, are folded away under *More*. How a run is graded is
-not about the notes, and stays in the settings beside the modes.
+not a choice: it is the frame's, in time where the music keeps time and on the
+notes alone where it waits.
 
 A score opened from disk is **kept**, and appears in a list beside the page:
 the file is chosen once and afterwards the piece is simply there. What is
@@ -926,7 +927,7 @@ src/
 │       ├── IScoringStrategy.ts
 │       ├── ScoringStrategyRegistry.ts
 │       ├── troubleSpots.ts           #   report ➜ the bars worth drilling
-│       └── strategies.ts           #   Accuracy | TimingWeighted | Continuity
+│       └── strategies.ts           #   Accuracy | TimingWeighted
 │
 ├── application/                    # orchestration; depends only on interfaces
 │   ├── PracticeController.ts       # settings ➜ exercise ➜ render ➜ session ➜ cursor
@@ -1126,10 +1127,10 @@ degrees, so a figure is in key and correctly spelled for free.
 about, register it. Adding a hook to the interface later cannot break existing
 modes, because the base class supplies no-op defaults.
 
-**A different grading policy.** Implement `IScoringStrategy` and register it.
-Grading is its own axis: a mode names the policy it is usually judged by, but
-the reader can grade any mode by any of them. Three ship — the notes alone, the
-notes and their timing, and how far the run got without breaking.
+**A different grading policy.** Implement `IScoringStrategy`, register it, and
+name it as a mode's `defaultScoringId`. A run is graded by its mode's policy
+and by nothing else, since the score is what moves the ladder. Two ship — the
+notes alone, and the notes and their timing.
 
 **A new click pattern.** Add it to `CLICK_PATTERNS` and say how many clicks a
 beat holds in `clicksPerPulse`. `subdivisionsPerPulseFor` takes the lowest

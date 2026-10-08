@@ -9,6 +9,7 @@ import { ScreenWakeLock } from '../infrastructure/screen/ScreenWakeLock.js';
 import { knownFrameIds } from '../application/modes/ListenFrame.js';
 import { PracticeModeRegistry } from '../application/modes/PracticeModeRegistry.js';
 import { WaitMode } from '../application/modes/WaitMode.js';
+import { ScreenKeysMidiSource, type IPlayableKeys } from '../infrastructure/midi/ScreenKeysMidiSource.js';
 import type {
   IPitchPlayer,
   ISampleLibrary,
@@ -231,6 +232,8 @@ export interface AppRuntime {
   /** `null` when the page cannot reach a bridge, e.g. on the public site. */
   readonly bridge: IMidiBridge | null;
   readonly computerKeyboard: IMidiSource & IToggleableInput;
+  /** The keys drawn on the screen, which play where the reader plays freely. */
+  readonly screenKeys: IMidiSource & IPlayableKeys;
   readonly pitchPlayer: IPitchPlayer;
   /** Keeps the screen up while the reader is playing. */
   readonly screenWake: IScreenWake;
@@ -334,6 +337,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
 
   const webMidi = new WebMidiAdapter(browserMidiAccessProvider(), clock);
   const computerKeyboard = new ComputerKeyboardMidiSource(options.keyboardTarget, clock);
+  const screenKeys = new ScreenKeysMidiSource(clock);
 
   // On a tablet the keyboard is plugged into a computer on the same network,
   // not into the device showing the page.
@@ -341,7 +345,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const bridge =
     bridgeUrl === null ? null : new WebSocketMidiSource({ url: bridgeUrl, clock });
 
-  const sources: IMidiSource[] = [webMidi, computerKeyboard];
+  const sources: IMidiSource[] = [webMidi, computerKeyboard, screenKeys];
   if (bridge !== null) {
     sources.push(bridge);
   }
@@ -543,6 +547,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     webMidi,
     bridge,
     computerKeyboard,
+    screenKeys,
     pitchPlayer,
     // A tablet on a music stand is looked at and not touched: a piece played
     // through sends every note as MIDI and nothing at all to the screen, so

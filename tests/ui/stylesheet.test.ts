@@ -395,6 +395,22 @@ describe('the stylesheet', () => {
     ).toMatch(/display\s*:\s*inline-flex/);
   });
 
+  it('darkens the key under a resting pointer in free play only, and the white one only off its black key', () => {
+    const hovered = rules().filter((rule) => rule.selector.includes(':hover') && rule.selector.includes('replay-keys__'));
+    const white = hovered.find((rule) => rule.selector.includes('replay-keys__white:hover'));
+    const black = hovered.find((rule) => rule.selector.includes('replay-keys__black:hover') && !rule.selector.includes(':has'));
+
+    expect(hovered.length).toBeGreaterThanOrEqual(2);
+    for (const rule of hovered) {
+      // Free play only, and not where a touch leaves the last key "hovered".
+      expect(rule.selector, rule.selector).toMatch(/^body\[data-free-play='true'\] /);
+      expect(inWhichMedia(rule.at), rule.selector).toBe('@media (hover: hover)');
+    }
+    expect(white?.selector).toContain(':not(:has(.replay-keys__black:hover))');
+    expect(white?.body).toMatch(/background\s*:/);
+    expect(black?.body).toMatch(/background\s*:/);
+  });
+
   it('strikes the microphone through, and stills it, where playing starts nothing', () => {
     const body = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
 

@@ -4549,6 +4549,8 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    this.bindTheKeysOnTheScreen();
+
     this.listen(this.replayKeyboard.sliderToggle, 'click', () => {
       controller.updateSettings({ sliderShown: !controller.settings.sliderShown });
       this.syncControlsFromSettings();
@@ -6299,10 +6301,12 @@ export class AppView {
     };
     const fromHardware = this.runtime.webMidi.subscribe(handler);
     const fromKeyboard = this.runtime.computerKeyboard.subscribe(handler);
+    const fromTheScreen = this.runtime.screenKeys.subscribe(handler);
     const fromBridge = this.runtime.bridge?.subscribe(handler) ?? (() => undefined);
     return () => {
       fromHardware();
       fromKeyboard();
+      fromTheScreen();
       fromBridge();
     };
   }
@@ -8871,6 +8875,8 @@ export class AppView {
     }
     if (!inFreePlay) {
       this.el.freeChord.hidden = true;
+      // A key held on the screen as free play ended is let go of with it.
+      this.runtime.screenKeys.releaseAll();
     }
     if (!active || shows !== 'falling-notes') {
       // Nothing is falling, and the picture of what was is let go of with
@@ -8896,6 +8902,46 @@ export class AppView {
     this.sayWhetherNotesFall();
     this.placeTheSlider();
     this.letTheNotesFall();
+  }
+
+  /**
+   * Plays the keys drawn on the screen, where the reader plays freely.
+   *
+   * Each finger or the pointer is one key, from going down on it to coming
+   * up; one that slides the row along instead is let go of as the slide
+   * begins, the browser cancelling it. Anywhere else the keys only show what
+   * is played, and touching them does nothing.
+   */
+  private bindTheKeysOnTheScreen(): void {
+    const keys = this.runtime.screenKeys;
+    const down = new Map<number, number>();
+    const letGo = (event: PointerEvent): void => {
+      const midi = down.get(event.pointerId);
+      if (midi === undefined) {
+        return;
+      }
+      down.delete(event.pointerId);
+      keys.release(midi);
+    };
+    this.listen(this.replayKeyboard.row, 'pointerdown', (event) => {
+      if (!(event instanceof PointerEvent) || !this.inFreePlay) {
+        return;
+      }
+      const key = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-midi]') : null;
+      const midi = Number(key?.dataset['midi']);
+      if (key === null || !Number.isInteger(midi)) {
+        return;
+      }
+      down.set(event.pointerId, midi);
+      keys.press(midi);
+    });
+    for (const type of ['pointerup', 'pointercancel'] as const) {
+      this.listen(this.doc, type, (event) => {
+        if (event instanceof PointerEvent) {
+          letGo(event);
+        }
+      });
+    }
   }
 
   /**

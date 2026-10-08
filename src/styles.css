@@ -3024,6 +3024,29 @@ body[data-slider] .replay-keys__pedal-foot {
   background: var(--keys-aside);
 }
 
+/*
+ * Played on the screen where the reader plays freely: a key under the pointer
+ * darkens, the one it would sound. Only for a pointer that can rest over a
+ * key - after a touch the browser leaves the last key "hovered", and a key
+ * left dark is a key that looks held. A black key stands inside its white
+ * one, so the white one darkens only when the black one is not what is under
+ * the pointer.
+ */
+@media (hover: hover) {
+  body[data-free-play='true'] .replay-keys__white,
+  body[data-free-play='true'] .replay-keys__black {
+    cursor: pointer;
+  }
+
+  body[data-free-play='true'] .replay-keys__white:hover:not(:has(.replay-keys__black:hover)) {
+    background: #d7dde6;
+  }
+
+  body[data-free-play='true'] .replay-keys__black:hover {
+    background: #020617;
+  }
+}
+
 .replay-keys__white[data-lit='heard']::after,
 .replay-keys__black[data-lit='heard']::after {
   background: var(--keys-heard);

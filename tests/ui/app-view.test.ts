@@ -283,6 +283,35 @@ class FolderDrive implements ICloudDrive, ICodeSignIn {
   }
 }
 
+/**
+ * The keys on the screen, played into the rig's one keyboard - which is what
+ * the controller and the instrument both hear here, as the composite source
+ * is in `createApp`.
+ */
+function keysOnTheScreen(midi: MockMidiAdapter, clock: ManualClock): AppRuntime['screenKeys'] {
+  const held = new Set<number>();
+  const release = (key: number): void => {
+    if (held.delete(key)) {
+      midi.noteOff(key, clock.now());
+    }
+  };
+  return {
+    subscribe: () => () => undefined,
+    press: (key) => {
+      if (!held.has(key)) {
+        held.add(key);
+        midi.noteOn(key, clock.now());
+      }
+    },
+    release,
+    releaseAll: () => {
+      for (const key of [...held]) {
+        release(key);
+      }
+    },
+  };
+}
+
 function createRig(
   webMidiOverride?: AppRuntime['webMidi'],
   store: InMemorySettingsStore = new InMemorySettingsStore(),
@@ -440,6 +469,7 @@ function createRig(
       document as unknown as KeyboardTarget,
       clock,
     ),
+    screenKeys: keysOnTheScreen(midi, clock),
     // The same object the session sounds through, as in `createApp`: one
     // instrument stands behind the reader's keys, the playback and the rest's
     // chime, and splitting it here hid a note that was left ringing.
@@ -989,6 +1019,55 @@ describe('AppView', () => {
     expect(chord.hidden).toBe(true);
     midi.noteOn(72, clock.now());
     expect(chord.hidden).toBe(true);
+  });
+
+  it('plays the keys on the screen in free play, and nowhere else', async () => {
+    const { view, runtime, instrument } = createRig();
+    await view.initialize();
+    const keys = element('replay-keys');
+    const key = (midi: number): HTMLElement => {
+      const found = keys.querySelector<HTMLElement>(`[data-midi="${String(midi)}"]`);
+      if (found === null) {
+        throw new Error(`No key ${String(midi)} on the screen.`);
+      }
+      return found;
+    };
+    const touch = (type: string, target: EventTarget, pointerId: number): void => {
+      target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId, pointerType: 'touch' }));
+    };
+
+    // Not in a frame a run is played in: the keys only show what is played.
+    touch('pointerdown', key(60), 1);
+    expect(instrument.played).toHaveLength(0);
+    touch('pointerup', key(60), 1);
+
+    element<HTMLButtonElement>('focus-modes').click();
+    frameButton('free').click();
+
+    // Two fingers, one on a white key and one on the black key inside another.
+    touch('pointerdown', key(60), 1);
+    touch('pointerdown', key(61), 2);
+    expect(runtime.controller.freePlayKeysDown).toEqual([60, 61]);
+    expect(instrument.played.map((note) => note.midi)).toEqual([60, 61]);
+    expect(element('free-chord').hidden).toBe(true);
+
+    // Let go anywhere, the key that finger was on comes up.
+    touch('pointerup', document.body, 1);
+    expect(runtime.controller.freePlayKeysDown).toEqual([61]);
+    // A finger that slides the row instead is let go of as the slide begins.
+    touch('pointercancel', key(61), 2);
+    expect(runtime.controller.freePlayKeysDown).toEqual([]);
+
+    // A key held as free play ends is let go of with it.
+    touch('pointerdown', key(64), 3);
+    expect(runtime.controller.freePlayKeysDown).toEqual([64]);
+    frameButton('free').click();
+    frameButton('free').click();
+    expect(runtime.controller.freePlayKeysDown).toEqual([]);
+    // So back in free play the same key sounds again rather than reading as still down.
+    touch('pointerdown', key(64), 4);
+    expect(runtime.controller.freePlayKeysDown).toEqual([64]);
+    touch('pointerup', key(64), 4);
   });
 
   it('paints the falling notes a frame at a time while the music moves, and not once it is held', async () => {

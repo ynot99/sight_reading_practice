@@ -8,6 +8,7 @@ import {
   type KeyboardTarget,
 } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
+import { ScreenKeysMidiSource } from '../../src/infrastructure/midi/ScreenKeysMidiSource.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';
 
 type KeyListener = (event: KeyboardEventLike) => void;
@@ -238,6 +239,48 @@ describe('ComputerKeyboardMidiSource', () => {
     source.enable();
     source.enable();
     expect(target.listenerCount).toBe(2);
+  });
+});
+
+describe('ScreenKeysMidiSource', () => {
+  it('sounds a key touched on the screen, at the moment it is touched, and lets it go once', () => {
+    const clock = new ManualClock(500);
+    const keys = new ScreenKeysMidiSource(clock);
+    const heard: MidiEvent[] = [];
+    keys.subscribe((event) => heard.push(event));
+
+    keys.press(60);
+    // A second finger on a key already down is the same press.
+    keys.press(60);
+    clock.advance(250);
+    keys.release(60);
+    // And a key never pressed has nothing to let go of.
+    keys.release(60);
+    keys.release(62);
+
+    expect(heard).toEqual([
+      { type: 'noteon', midi: 60, velocity: 0.7, timestampMs: 500, sourceId: 'screen-keys' },
+      { type: 'noteoff', midi: 60, timestampMs: 750, sourceId: 'screen-keys' },
+    ]);
+  });
+
+  it('lets every key still down go at once', () => {
+    const keys = new ScreenKeysMidiSource(new ManualClock());
+    const heard: MidiEvent[] = [];
+    keys.subscribe((event) => heard.push(event));
+    keys.press(60);
+    keys.press(64);
+    keys.release(60);
+
+    keys.releaseAll();
+    keys.releaseAll();
+
+    expect(heard.map((event) => [event.type, 'midi' in event ? event.midi : null])).toEqual([
+      ['noteon', 60],
+      ['noteon', 64],
+      ['noteoff', 60],
+      ['noteoff', 64],
+    ]);
   });
 });
 

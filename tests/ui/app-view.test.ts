@@ -6148,17 +6148,6 @@ describe('AppView', () => {
       hear.dispatchEvent(new Event('change'));
 
       expect(carrier('rushing-counts').dataset['idle']).toBeUndefined();
-
-      // And the two settings Survival owns, which say nothing while the bar
-      // is not falling. Set from the square, so the settings sheet has to be
-      // read again afterwards, or everything downstream of one switch goes
-      // on saying what it said before.
-      expect(carrier('survival-refill').dataset['idle']).toBe('true');
-      element<HTMLButtonElement>('focus-modes').click();
-      element('modes-grid').querySelector<HTMLButtonElement>('[data-mode="survival"]')?.click();
-
-      expect(carrier('survival-refill').dataset['idle']).toBeUndefined();
-      expect(carrier('survival-punish').dataset['idle']).toBeUndefined();
     });
 
     it('asks each mode in one place: its square, and no box in the settings', async () => {
@@ -6261,6 +6250,19 @@ describe('AppView', () => {
         .map((child) => child.className);
 
       expect(unnamed).toEqual([]);
+
+      // A box several panes share holds something for each it names, or it
+      // is an empty cell holding a column open in the one it holds nothing for.
+      const emptyFor = [...(grid?.children ?? [])].flatMap((child) => {
+        const named = (child.getAttribute('data-pane') ?? '').trim().split(/\s+/);
+        return named.length < 2
+          ? []
+          : named
+              .filter((pane) => child.querySelector(`[data-pane~="${pane}"]`) === null)
+              .map((pane) => `${child.className} / ${pane}`);
+      });
+
+      expect(emptyFor).toEqual([]);
 
       // The search stands in the sheet's head, over every pane and always in
       // view: the one control that belongs to no pane because it is for all.
@@ -12117,7 +12119,7 @@ describe('searching the settings', () => {
     await rig.view.initialize();
     expect(showing()).not.toBe('modes');
 
-    search('a beat found is worth');
+    search('graded on');
 
     expect(count()).toBe('1 / 1');
     expect(showing()).toBe('modes');

@@ -593,8 +593,6 @@ type IdleControl =
   | 'key'
   | 'time-signature'
   | 'measures'
-  | 'survival-refill'
-  | 'survival-punish'
   | 'playing-ahead'
   | 'hear-other-hand'
   | 'rushing-counts'
@@ -630,13 +628,6 @@ function whyItIsIdle(
     case 'time-signature':
     case 'measures':
       return opened ? 'A score is on the stand; this writes the exercises.' : null;
-    case 'survival-refill':
-    case 'survival-punish':
-      return !settings.survival
-        ? 'Nothing is falling: Survival is off.'
-        : keepsTime
-          ? 'Under a pulse the bar falls with the beats, and a beat found is worth the beat it took.'
-          : null;
     case 'playing-ahead':
       return keepsTime ? 'Under a pulse the beat says where a press belongs, not the reader.' : null;
     case 'hear-other-hand':
@@ -1650,8 +1641,6 @@ export class AppView {
     focusHandRight: SVGElement;
     focusHealthFill: HTMLElement;
     playingAhead: HTMLSelectElement;
-    survivalRefill: HTMLSelectElement;
-    survivalPunish: HTMLInputElement;
     immediateStart: HTMLInputElement;
     dimUnplayed: HTMLInputElement;
     pageTurns: HTMLSelectElement;
@@ -1960,8 +1949,6 @@ export class AppView {
       focusHandRight: requireElement(doc, 'focus-hand-right'),
       focusHealthFill: requireElement(doc, 'focus-health-fill'),
       playingAhead: requireElement(doc, 'playing-ahead'),
-      survivalRefill: requireElement(doc, 'survival-refill'),
-      survivalPunish: requireElement(doc, 'survival-punish'),
       immediateStart: requireElement(doc, 'immediate-start'),
       dimUnplayed: requireElement(doc, 'dim-unplayed'),
       pageTurns: requireElement(doc, 'page-turns'),
@@ -3808,16 +3795,6 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
-    this.listen(this.el.survivalRefill, 'change', () => {
-      controller.updateSettings({ survivalRefillPercent: Number(this.el.survivalRefill.value) });
-      this.syncControlsFromSettings();
-    });
-
-    this.listen(this.el.survivalPunish, 'change', () => {
-      controller.updateSettings({ survivalPunishesMistakes: this.el.survivalPunish.checked });
-      this.syncControlsFromSettings();
-    });
-
     this.listen(this.el.immediateStart, 'change', () => {
       controller.updateSettings({ immediateStart: this.el.immediateStart.checked });
       this.syncControlsFromSettings();
@@ -4435,8 +4412,6 @@ export class AppView {
       ['key', this.el.key],
       ['time-signature', this.el.timeSignature],
       ['measures', this.el.measures],
-      ['survival-refill', this.el.survivalRefill],
-      ['survival-punish', this.el.survivalPunish],
       ['playing-ahead', this.el.playingAhead],
       ['hear-other-hand', this.el.hearOtherHand],
       ['rushing-counts', this.el.rushingCounts],
@@ -6910,8 +6885,6 @@ export class AppView {
     this.runtime.renderer.setPaged(settings.pagedScore);
     this.el.pitchClass.checked = settings.pitchClassOnly;
     this.el.playingAhead.value = settings.playingAhead;
-    this.el.survivalRefill.value = String(settings.survivalRefillPercent);
-    this.el.survivalPunish.checked = settings.survivalPunishesMistakes;
     this.el.offerToSync.checked = settings.offerToSync;
     this.el.immediateStart.checked = settings.immediateStart;
     this.el.dimUnplayed.checked = settings.dimUnplayed;

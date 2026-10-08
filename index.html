@@ -1456,18 +1456,14 @@
         </div>
 
         <!--
-          The loose checkboxes, which answer five different questions and so
-          belong to five panes. The block itself belongs to none: tagged with
-          one of them it would hide the other four along with itself.
+          The checkboxes, and the one box in here that three panes share: its
+          labels belong to page, playing and sound, each shown on its own. So
+          it names all three, matched with `~=`. Naming none made it a cell in
+          every pane - an empty one holding a column open, which is what put
+          Practice a third of the way in from the left - and naming a pane
+          none of its labels belongs to does the same there.
         -->
-        <!--
-          The checkboxes, and the one box in here that four panes share: its
-          labels belong to page, playing, modes and sound, each shown on its
-          own. So it names all four, matched with `~=`. Naming none made it a
-          cell in every pane - an empty one holding a column open, which is
-          what put Practice a third of the way in from the left.
-        -->
-        <div class="control-group control-group--checks" data-pane="page playing modes sound">
+        <div class="control-group control-group--checks" data-pane="page playing sound">
           <!--
             Three answers and not one. A reader may want no marker at all
             while *they* play - it is a crutch, and reading without it is the
@@ -1494,28 +1490,6 @@
               <option value="moves-on">Moves on to it</option>
             </select>
           </div>
-          <!--
-            His, and only where nothing keeps time. Filling the bar outright
-            makes a clock that punishes stopping and nothing else: find one
-            beat and it is full again however long the last one took. A share
-            asks the reader to keep finding them.
-          -->
-          <div class="control-group" data-pane="modes">
-            <label for="survival-refill">A beat found is worth</label>
-            <select id="survival-refill">
-              <option value="10">10% of the bar</option>
-              <option value="20">20% of the bar</option>
-              <option value="30">30% of the bar</option>
-              <option value="40">40% of the bar</option>
-              <option value="50">50% of the bar</option>
-              <option value="60">60% of the bar</option>
-              <option value="70">70% of the bar</option>
-              <option value="80">80% of the bar</option>
-              <option value="90">90% of the bar</option>
-              <option value="100">All of it</option>
-            </select>
-          </div>
-          <label data-pane="modes"><input id="survival-punish" type="checkbox" /> Wrong notes cost as well</label>
           <!--
             The same setting as the drawer's button, seen from the desk. One
             question with two editors, the way the tempo has a slider here and

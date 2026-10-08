@@ -54,8 +54,6 @@ const SETTINGS: PracticeSettings = {
   playedNotes: 'at-end',
   survival: true,
   playingAhead: 'moves-on',
-  survivalRefillPercent: 40,
-  survivalPunishesMistakes: true,
   offerToSync: true,
   readAheadSteps: 2,
   zoom: 1.2,

@@ -1855,16 +1855,54 @@ describe('a bar of what a whole is made of', () => {
   });
 });
 
-describe('the two pills on a phone', () => {
-  // The media query a rule stands inside, or nothing where it stands at the
-  // top level - which the braces before it say, not the nearest @media.
-  const inWhichMedia = (at: number): string => {
-    const before = CSS.slice(0, at);
-    const open = (before.match(/\{/g) ?? []).length - (before.match(/\}/g) ?? []).length;
-    const opened = CSS.lastIndexOf('@media', at);
-    return open === 0 || opened === -1 ? '' : CSS.slice(opened, CSS.indexOf('{', opened)).trim();
-  };
+/**
+ * The media query a rule stands inside, or nothing where it stands at the top
+ * level - which the braces before it say, not the nearest @media.
+ */
+function inWhichMedia(at: number): string {
+  const before = CSS.slice(0, at);
+  const open = (before.match(/\{/g) ?? []).length - (before.match(/\}/g) ?? []).length;
+  const opened = CSS.lastIndexOf('@media', at);
+  return open === 0 || opened === -1 ? '' : CSS.slice(opened, CSS.indexOf('{', opened)).trim();
+}
 
+describe('searching the settings', () => {
+  it('is a field like the others, and keeps the size iOS does not zoom on', () => {
+    const field = rules().filter((rule) => rule.selector === '.settings-search input');
+    const wide = field.find((rule) => inWhichMedia(rule.at) === '');
+
+    expect(wide?.body).toMatch(/background\s*:\s*var\(--surface-strong\)/);
+    expect(wide?.body).toMatch(/border\s*:\s*1px solid var\(--border\)/);
+    expect(wide?.body).toMatch(/color\s*:\s*var\(--text\)/);
+    // The shorthand would put the size back to the page's fifteen pixels.
+    for (const rule of field) {
+      expect(rule.body).not.toMatch(/(^|[\s;])font\s*:/);
+      expect(rule.body).not.toMatch(/font-size/);
+    }
+  });
+
+  it('is a row of its own under the title on a phone, leaving the title its room', () => {
+    const phone = '@media (max-width: 620px)';
+    const head = rules().find((rule) => rule.selector === '.sheet__head' && inWhichMedia(rule.at) === phone);
+    const search = rules().find((rule) => rule.selector === '.settings-search' && inWhichMedia(rule.at) === phone);
+    const field = rules().find(
+      (rule) => rule.selector === '.settings-search input' && inWhichMedia(rule.at) === phone,
+    );
+
+    expect(head?.body).toMatch(/flex-wrap\s*:\s*wrap/);
+    // After the title and the close button, and the whole width.
+    expect(search?.body).toMatch(/order\s*:\s*1/);
+    expect(search?.body).toMatch(/flex\s*:\s*1 0 100%/);
+    expect(field?.body).toMatch(/width\s*:\s*auto/);
+    expect(field?.body).toMatch(/flex\s*:\s*1 1 auto/);
+    // The same width the rail turns into a row at.
+    expect(rules().some((rule) => rule.selector === '.settings-sections' && inWhichMedia(rule.at) === phone)).toBe(
+      true,
+    );
+  });
+});
+
+describe('the two pills on a phone', () => {
   it('are one row that scrolls there, and no box of their own anywhere wider', () => {
     const held = rules().filter((rule) => rule.selector === '.focus-bar__opens');
     const wide = held.find((rule) => /display\s*:\s*contents/.test(rule.body));

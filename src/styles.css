@@ -3941,9 +3941,42 @@ body[data-playing='true'] .score__modes {
   min-width: 0;
 }
 
+/*
+ * A field like the others in the sheet, not the browser's own. Its family
+ * only, never the `font` shorthand: that would take back the sixteen pixels
+ * a field needs so that iOS does not zoom in on it.
+ */
 .settings-search input {
   width: 12em;
   min-width: 0;
+  appearance: none;
+  background: var(--surface-strong);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-family: inherit;
+}
+
+/*
+ * On a phone, a row of its own under the title. Beside it, at a width of its
+ * own, it left the title no room at all: the word "Settings" was cut to its
+ * first letter and drawn under the field.
+ */
+@media (max-width: 620px) {
+  .sheet__head {
+    flex-wrap: wrap;
+  }
+
+  .settings-search {
+    order: 1;
+    flex: 1 0 100%;
+  }
+
+  .settings-search input {
+    flex: 1 1 auto;
+    width: auto;
+  }
 }
 
 .settings-search__count {

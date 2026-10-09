@@ -2372,6 +2372,9 @@ export class AppView {
       this.silenceWatch = null;
     }
     this.stopTheOtherHandsMarker();
+    // Given back before the page goes, or they are swallowed from whatever the
+    // reader plays next by a view that is no longer there to answer them.
+    this.runtime.mediaKeys.sounding(null);
     this.runtime.takePlayer.stop();
     for (const unsubscribe of [...this.subscriptions, ...this.sessionSubscriptions]) {
       unsubscribe();
@@ -3345,6 +3348,23 @@ export class AppView {
    * makes them mutually exclusive; the button only has to say which of the two
    * it is offering.
    */
+  /** Holds the performance where it has got to, to be picked up from there. */
+  private holdThePerformance(): void {
+    this.runtime.controller.pauseListening();
+    // Held music has no next beat until it is picked up again.
+    this.forgetTheBeats();
+    lightTheKeys(this.replayKeyboard, new Map(), false);
+    this.showThePerformance();
+  }
+
+  /**
+   * Picks a held performance up from where it was held. The page is shown it
+   * by the performance saying it has started, as a fresh one is.
+   */
+  private resumeThePerformance(): void {
+    this.runtime.controller.resumeListening();
+  }
+
   private async toggleListening(): Promise<void> {
     const { controller } = this.runtime;
     // Pressing it again holds the music rather than throwing it away. It is
@@ -3353,16 +3373,11 @@ export class AppView {
     // it used to here, so listening to a phrase twice meant sitting through
     // everything in front of it again. Stop is what ends a performance.
     if (controller.isListening) {
-      controller.pauseListening();
-      // Held music has no next beat until it is picked up again.
-      this.forgetTheBeats();
-      lightTheKeys(this.replayKeyboard, new Map(), false);
-      this.showThePerformance();
+      this.holdThePerformance();
       return;
     }
     if (controller.isListeningPaused) {
-      controller.resumeListening();
-      this.showThePerformance();
+      this.resumeThePerformance();
       return;
     }
     // The recordings download on first use, and playback fires a whole piece
@@ -3444,6 +3459,53 @@ export class AppView {
     this.applyPlayingChrome();
     this.updateButtons(controller.session?.status ?? 'idle');
     this.describeStopping();
+    this.sayWhatIsSounding();
+  }
+
+  /**
+   * Hands the platform's transport keys to a performance, and takes them back.
+   *
+   * Said from the one place every change to a performance already goes
+   * through, so the panel on a lock screen cannot come to disagree with the
+   * button on the page - the two would drift the first time a way of stopping
+   * was added to one of them.
+   *
+   * Only a performance, and never a run. A reader mid-run who presses pause on
+   * their headphones means the thing they are listening to elsewhere; the run
+   * in front of them is not media, and stopping it from another application
+   * would be a practice thrown away by a key press meant for something else.
+   *
+   * Only resuming, too, and never starting. These keys are pressed by somebody
+   * who is not looking at this page, and a fresh performance beginning in a tab
+   * they have forgotten is not what Play means to them.
+   */
+  private sayWhatIsSounding(): void {
+    const { controller } = this.runtime;
+    const playing = controller.isListening;
+    if (!playing && !controller.isListeningPaused) {
+      this.runtime.mediaKeys.sounding(null);
+      return;
+    }
+    this.runtime.mediaKeys.sounding({
+      title: controller.currentExercise?.title ?? 'Sight reading',
+      playing,
+      // The same roads as the button on the page, each asking first whether
+      // there is anything for it to do: a key pressed after the music moved
+      // on must neither hold what is held nor start what has ended.
+      play: () => {
+        if (this.runtime.controller.isListeningPaused) {
+          this.resumeThePerformance();
+        }
+      },
+      pause: () => {
+        if (this.runtime.controller.isListening) {
+          this.holdThePerformance();
+        }
+      },
+      stop: () => {
+        this.stopEverything();
+      },
+    });
   }
 
   /**

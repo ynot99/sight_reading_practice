@@ -25,6 +25,7 @@ import { HOLD_MS } from '../../src/shared/holding.js';
 import { LISTEN_MODE_ID, knownFrameIds } from '../../src/application/modes/ListenFrame.js';
 import { clockTime } from '../../src/ui/scrubBar.js';
 import type { AppRuntime } from '../../src/composition/createApp.js';
+import type { IMediaKeys, WhatIsSounding } from '../../src/application/ports/IMediaKeys.js';
 import { ExercisePresetRegistry } from '../../src/domain/generation/ExercisePresetRegistry.js';
 import { BUILT_IN_PRESETS } from '../../src/domain/generation/presets.js';
 import { BUILT_IN_RHYTHM_PROFILES } from '../../src/domain/generation/rhythmProfiles.js';
@@ -208,6 +209,7 @@ interface Rig {
   readonly runtime: AppRuntime;
   readonly screenWake: CountingScreenWake;
   readonly audioWaking: TestAudioWaking;
+  readonly mediaKeys: RecordingMediaKeys;
   readonly view: AppView;
   readonly instrument: RecordingPitchPlayer;
   readonly metronome: ManualMetronome;
@@ -334,6 +336,7 @@ function createRig(
   const screenWake = new CountingScreenWake();
   // Awake unless a test says otherwise, which is what a desk browser is.
   const audioWaking = new TestAudioWaking();
+  const mediaKeys = new RecordingMediaKeys();
   const ladder = new PracticeLadder(BUILT_IN_LADDER, BUILT_IN_GRADES);
   const recorder = new PerformanceRecorder(clock);
   recorder.listenTo(midi);
@@ -480,6 +483,7 @@ function createRig(
     pitchPlayer: instrument,
     screenWake,
     audio: audioWaking,
+    mediaKeys,
     sustain,
     samples,
     renderer,
@@ -498,6 +502,7 @@ function createRig(
     view,
     screenWake,
     audioWaking,
+    mediaKeys,
     instrument,
     metronome,
     midi,
@@ -563,6 +568,20 @@ function tapOutside(sheet: HTMLElement): void {
  * when it is already named costs nothing - the controller only acts on a
  * frame that actually changes.
  */
+/** Remembers what the page said it was sounding, and answers for it. */
+class RecordingMediaKeys implements IMediaKeys {
+  readonly said: (WhatIsSounding | null)[] = [];
+
+  sounding(what: WhatIsSounding | null): void {
+    this.said.push(what);
+  }
+
+  /** What is being said now, which is the last thing said. */
+  get now(): WhatIsSounding | null {
+    return this.said[this.said.length - 1] ?? null;
+  }
+}
+
 async function pressListen(controller: PracticeController): Promise<void> {
   controller.updateSettings({ modeId: LISTEN_MODE_ID });
   element<HTMLButtonElement>('focus-play').click();
@@ -1913,6 +1932,102 @@ describe('AppView', () => {
       expect(() => pressEscape()).not.toThrow();
       // It is not a second Stop: a run behind nothing is a run in progress.
       expect(runtime.controller.session?.status).toBe('running');
+    });
+  });
+
+  describe('the keys the platform has outside this page', () => {
+    it('hands them over while a performance plays, and names the piece', async () => {
+      // They reach a page nobody is looking at, which is the whole point: a
+      // piece going on a loop can be stopped without finding the tab again.
+      const { view, runtime, mediaKeys } = createRig();
+      await view.initialize();
+
+      await pressListen(runtime.controller);
+
+      expect(mediaKeys.now?.playing).toBe(true);
+      expect(mediaKeys.now?.title).toBe(runtime.controller.currentExercise?.title);
+    });
+
+    it('holds a performance from the key, and picks it up from it', async () => {
+      const { view, runtime, mediaKeys } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+
+      mediaKeys.now?.pause();
+
+      expect(runtime.controller.isListening).toBe(false);
+      expect(runtime.controller.isListeningPaused).toBe(true);
+      // And the panel says so, rather than going on offering Pause over music
+      // that has stopped.
+      expect(mediaKeys.now?.playing).toBe(false);
+      // The page agrees, which is the thing two places drift apart on.
+      expect(element('focus-play').getAttribute('aria-label')).toBe('Resume');
+
+      mediaKeys.now?.play();
+
+      expect(runtime.controller.isListening).toBe(true);
+      expect(mediaKeys.now?.playing).toBe(true);
+      expect(element('focus-play').getAttribute('aria-label')).not.toBe('Resume');
+    });
+
+    it('gives them back when the performance ends', async () => {
+      // A page that keeps them after its music has ended swallows them from
+      // whatever the reader plays next.
+      const { view, runtime, mediaKeys } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+
+      mediaKeys.now?.stop();
+
+      expect(runtime.controller.isListening).toBe(false);
+      expect(runtime.controller.isListeningPaused).toBe(false);
+      expect(mediaKeys.now).toBeNull();
+    });
+
+    it('never takes them for a run', async () => {
+      // A reader mid-run who presses pause on their headphones means the thing
+      // they are listening to elsewhere. The run in front of them is not media,
+      // and losing it to a key meant for something else is a practice thrown
+      // away.
+      const { view, runtime, mediaKeys } = createRig();
+      await view.initialize();
+
+      element<HTMLButtonElement>('focus-play').click();
+
+      expect(runtime.controller.session?.status).toBe('running');
+      expect(mediaKeys.now).toBeNull();
+    });
+
+    it('does not begin a performance from a key nobody is watching, nor hold one already held', async () => {
+      // These are pressed by somebody who is not looking at this page, and a
+      // fresh performance starting in a tab they have forgotten is not what
+      // Play means to them.
+      const { view, runtime, mediaKeys } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+      const answering = mediaKeys.now;
+      answering?.pause();
+      answering?.pause();
+      expect(runtime.controller.isListeningPaused).toBe(true);
+      answering?.stop();
+
+      answering?.play();
+      // A start waits on the samples first, so a performance begun here would
+      // be under way a turn later.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runtime.controller.isListening).toBe(false);
+      expect(runtime.controller.isListeningPaused).toBe(false);
+    });
+
+    it('gives them back when the view goes', async () => {
+      const { view, runtime, mediaKeys } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+
+      view.dispose();
+
+      expect(mediaKeys.now).toBeNull();
     });
   });
 

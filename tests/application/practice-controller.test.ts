@@ -36,6 +36,7 @@ import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapte
 import { RecordingPitchPlayer } from '../../src/infrastructure/testing/RecordingPitchPlayer.js';
 import { rollBeganAtMs } from '../../src/application/session/RunRoll.js';
 import { PracticeHistory } from '../../src/application/PracticeHistory.js';
+import { DrillProgress } from '../../src/application/drill/DrillProgress.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { DomainError } from '../../src/shared/errors.js';
 import {
@@ -82,6 +83,7 @@ function createController(
   extraSettings: Partial<PracticeSettings> = {},
   history?: PracticeHistory,
   health?: PracticeControllerDependencies['health'],
+  drillProgress?: DrillProgress,
 ): {
   controller: PracticeController;
   renderer: FakeScoreRenderer;
@@ -118,6 +120,7 @@ function createController(
     metronome,
     instrument,
     ...(history === undefined ? {} : { history }),
+    ...(drillProgress === undefined ? {} : { drillProgress }),
     clock,
     scorings: new ScoringStrategyRegistry().registerAll([
       new AccuracyScoringStrategy(),
@@ -1358,6 +1361,155 @@ describe('what you played, drawn over the score', () => {
     expect(controller.drillProgress).toEqual({ at: of, of });
     controller.stopTheDrill();
     expect(controller.drillProgress).toEqual({ at: 0, of: 0 });
+  });
+
+  describe('kept with its piece', () => {
+    const kept = (): DrillProgress => new DrillProgress(new InMemorySettingsStore());
+    const withThe = (progress?: DrillProgress) =>
+      createController(true, undefined, {}, undefined, undefined, progress);
+
+    it('writes down where the plan has got to, against the piece', async () => {
+      const progress = kept();
+      const { controller, midi } = withThe(progress);
+      await controller.openScore(longExercise({ bars: 8, title: 'Berceuse' }));
+
+      controller.startTheDrill(4);
+      expect(progress.of('score:Berceuse')).toEqual({ sectionBars: 4, at: 0, finishedAtMs: null });
+
+      playItThrough(controller, midi);
+      expect(progress.of('score:Berceuse')).toEqual({ sectionBars: 4, at: 1, finishedAtMs: null });
+    });
+
+    it('takes a piece’s plan up where it was left, and each piece keeps its own', async () => {
+      // A plan in hand went on setting the bars and the hand of the piece it
+      // was started on over whatever was opened next.
+      const progress = kept();
+      progress.keep('score:Berceuse', { sectionBars: 4, at: 1, finishedAtMs: null });
+      const { controller } = withThe(progress);
+
+      await controller.openScore(longExercise({ bars: 8, title: 'Berceuse' }));
+      expect(controller.drillProgress).toEqual({ at: 1, of: 3 });
+      expect(controller.settings.rangeFromBar).toBe(5);
+
+      await controller.openScore(longExercise({ bars: 8, title: 'Canon' }));
+      expect(controller.drillTask).toBeNull();
+      expect(controller.drillProgress.of).toBe(0);
+
+      await controller.openScore(longExercise({ bars: 8, title: 'Berceuse' }));
+      expect(controller.drillProgress).toEqual({ at: 1, of: 3 });
+    });
+
+    it('keeps the plan in hand when the same piece is opened again', async () => {
+      const { controller, midi } = withThe();
+      await controller.openScore(longExercise({ bars: 8, title: 'Berceuse' }));
+      controller.startTheDrill(4);
+      playItThrough(controller, midi);
+
+      await controller.openScore(longExercise({ bars: 8, title: 'Berceuse' }));
+
+      expect(controller.drillProgress).toEqual({ at: 1, of: 3 });
+    });
+
+    it('cuts the place back to the plan a piece now makes', async () => {
+      const progress = kept();
+      progress.keep('score:Berceuse', { sectionBars: 4, at: 2, finishedAtMs: null });
+      const { controller } = withThe(progress);
+
+      // Read back with half its bars, it is one section and done.
+      await controller.openScore(longExercise({ bars: 4, title: 'Berceuse' }));
+
+      expect(controller.drillTask).toBeNull();
+    });
+
+    it('records the day the plan is played through, and does not take a finished one up', async () => {
+      const progress = kept();
+      const { controller, midi } = withThe(progress);
+      await controller.openScore(longExercise({ bars: 4, title: 'Berceuse' }));
+      controller.startTheDrill(4);
+      const before = Date.now();
+
+      playItThrough(controller, midi);
+
+      const saved = progress.of('score:Berceuse');
+      expect(saved?.at).toBe(1);
+      expect(saved?.finishedAtMs ?? 0).toBeGreaterThanOrEqual(before);
+      expect(controller.drillFinishedAtMs).toBe(saved?.finishedAtMs);
+
+      const another = withThe(progress).controller;
+      await another.openScore(longExercise({ bars: 4, title: 'Berceuse' }));
+      expect(another.drillTask).toBeNull();
+      // Not in hand at all, not even as done: the page would say "done" over
+      // a piece the reader has only opened.
+      expect(another.drillProgress.of).toBe(0);
+      expect(another.drillFinishedAtMs).toBe(saved?.finishedAtMs);
+    });
+
+    it('forgets where it got to when stopped, but not that it was once played through', async () => {
+      const progress = kept();
+      const { controller } = withThe(progress);
+      await controller.openScore(longExercise({ bars: 8, title: 'Berceuse' }));
+      controller.startTheDrill(4);
+
+      controller.stopTheDrill();
+      expect(progress.of('score:Berceuse')).toBeNull();
+
+      progress.keep('score:Berceuse', { sectionBars: 4, at: 3, finishedAtMs: 77 });
+      controller.startTheDrill(2);
+      expect(progress.of('score:Berceuse')).toEqual({ sectionBars: 2, at: 0, finishedAtMs: 77 });
+      const { of } = controller.drillProgress;
+      controller.stopTheDrill();
+      // Put away as a plan played through, so it is not taken up again.
+      expect(progress.of('score:Berceuse')).toEqual({ sectionBars: 2, at: of, finishedAtMs: 77 });
+    });
+
+    it('goes back to a step played through, and never forward', async () => {
+      const progress = kept();
+      const { controller, midi } = withThe(progress);
+      await controller.openScore(longExercise({ bars: 8, title: 'Berceuse' }));
+      controller.startTheDrill(4);
+      playItThrough(controller, midi);
+
+      expect(controller.goBackInTheDrill(1)).toBeNull();
+      expect(controller.goBackInTheDrill(2)).toBeNull();
+      expect(controller.goBackInTheDrill(-1)).toBeNull();
+      expect(controller.drillProgress.at).toBe(1);
+
+      const said: (number | null)[] = [];
+      controller.events.on('drillChanged', ({ at }) => said.push(at));
+      expect(controller.goBackInTheDrill(0)?.toBar).toBe(4);
+
+      expect(controller.drillProgress.at).toBe(0);
+      expect(said).toEqual([0]);
+      expect(controller.settings.rangeToBar).toBe(4);
+      expect(progress.of('score:Berceuse')?.at).toBe(0);
+    });
+
+    it('goes back into a plan played through', async () => {
+      const { controller, midi } = withThe(kept());
+      await controller.openScore(longExercise({ bars: 8, title: 'Berceuse' }));
+      controller.startTheDrill(4);
+      for (let step = 0; step < 3; step += 1) {
+        playItThrough(controller, midi);
+      }
+      expect(controller.drillTask).toBeNull();
+
+      controller.goBackInTheDrill(2);
+
+      expect(controller.drillTask?.stage).toBe('whole');
+    });
+
+    it('follows the piece through a rename', async () => {
+      const progress = kept();
+      const { controller, midi } = withThe(progress);
+      await controller.openScore(longExercise({ bars: 8, title: 'Old' }));
+      controller.startTheDrill(4);
+
+      controller.followTheRename('Old', 'New');
+      playItThrough(controller, midi);
+
+      expect(progress.of('score:Old')).toBeNull();
+      expect(progress.of('score:New')?.at).toBe(1);
+    });
   });
 
   it('is put away without disturbing what it set', async () => {

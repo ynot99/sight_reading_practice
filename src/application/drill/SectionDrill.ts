@@ -30,8 +30,11 @@ export interface DrillPlanOptions {
   readonly wholePercent?: number;
 }
 
+/** Bars in a section where the reader does not say. */
+export const DEFAULT_SECTION_BARS = 4;
+
 const DEFAULTS = {
-  sectionBars: 4,
+  sectionBars: DEFAULT_SECTION_BARS,
   sectionPercent: 70,
   joinedPercent: 85,
   wholePercent: 100,

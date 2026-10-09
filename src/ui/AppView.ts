@@ -1637,6 +1637,7 @@ export class AppView {
     drillClose: HTMLButtonElement;
     drillStop: HTMLButtonElement;
     drillStart: HTMLButtonElement;
+    drillDescription: HTMLElement;
     drillBars: HTMLInputElement;
     scoreRest: HTMLElement;
     restHeading: HTMLElement;
@@ -1961,6 +1962,7 @@ export class AppView {
       drillClose: requireElement(doc, 'drill-close'),
       drillStop: requireElement(doc, 'drill-stop'),
       drillStart: requireElement(doc, 'drill-start'),
+      drillDescription: requireElement(doc, 'drill-description'),
       drillBars: requireElement(doc, 'drill-bars'),
       scoreRest: requireElement(doc, 'score-rest'),
       restHeading: requireElement(doc, 'rest-heading'),
@@ -4088,16 +4090,24 @@ export class AppView {
     });
 
     this.listen(this.el.drillStart, 'click', () => {
-      const bars = Math.max(1, Math.round(Number(this.el.drillBars.value) || 4));
-      controller.startTheDrill(bars);
-      this.syncControlsFromSettings();
-      // Straight to the music: the plan is set, and what it asks for is
-      // said in the middle of the page.
-      this.el.sheetModes.hidden = true;
+      void this.startThePlan();
     });
 
     this.listen(this.el.drillPill, 'click', () => {
       this.showTheSheet(this.el.sheetDrill);
+    });
+
+    // On the list rather than on each step: the list is drawn again whenever
+    // the plan moves, and a listener on each step drawn would be one more
+    // every time.
+    this.listen(this.el.drillSteps, 'click', (event) => {
+      const back = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-step]') : null;
+      if (back === null) {
+        return;
+      }
+      controller.goBackInTheDrill(Number(back.dataset['step']));
+      this.syncControlsFromSettings();
+      this.el.sheetDrill.hidden = true;
     });
 
     this.listen(this.el.drillClose, 'click', () => {
@@ -4105,9 +4115,7 @@ export class AppView {
     });
 
     this.listen(this.el.drillStop, 'click', () => {
-      controller.stopTheDrill();
-      this.el.sheetDrill.hidden = true;
-      this.showTheDrill();
+      void this.stopThePlan();
     });
 
     this.listen(this.el.restTake, 'click', () => {
@@ -5312,6 +5320,44 @@ export class AppView {
   }
 
   /**
+   * Starts the section plan from its first step, asking first where one is
+   * under way - starting it over forgets where that had got to.
+   */
+  private async startThePlan(): Promise<void> {
+    const controller = this.runtime.controller;
+    if (
+      controller.drillTask !== null &&
+      !(await this.ask('Start the plan over? Where it has got to on this piece is forgotten.', null, 'Start over'))
+    ) {
+      return;
+    }
+    const bars = Math.max(1, Math.round(Number(this.el.drillBars.value) || 4));
+    controller.startTheDrill(bars);
+    this.syncControlsFromSettings();
+    // Straight to the music: the plan is set, and what it asks for is said
+    // at the top of the screen.
+    this.el.sheetModes.hidden = true;
+  }
+
+  /**
+   * Puts the plan away - asking first where it is under way, since where it
+   * has got to on this piece goes with it. One played through is only put
+   * away: that it was played through is kept.
+   */
+  private async stopThePlan(): Promise<void> {
+    const controller = this.runtime.controller;
+    if (
+      controller.drillTask !== null &&
+      !(await this.ask('Stop the plan? Where it has got to on this piece is forgotten.', null, 'Stop the plan'))
+    ) {
+      return;
+    }
+    controller.stopTheDrill();
+    this.el.sheetDrill.hidden = true;
+    this.showTheDrill();
+  }
+
+  /**
    * Says where the plan of learning the piece by sections stands: on the pill
    * at the top of the screen, and step by step in its sheet.
    *
@@ -5337,20 +5383,56 @@ export class AppView {
     this.el.drillPill.title = `${said}. Press for the whole plan.`;
     this.el.drillPill.setAttribute('aria-label', this.el.drillPill.title);
     this.el.drillWhere.textContent = done
-      ? 'Every section, and then all of them together, played through cleanly.'
-      : `Step ${String(at + 1)} of ${String(of)}. Each step moves on once it is played through cleanly.`;
+      ? 'Every section, and then all of them together, played through cleanly. Press a step to go back to it.'
+      : `Step ${String(at + 1)} of ${String(of)}. Each moves on once it is played through cleanly; press one played already to go back to it.`;
     this.el.drillStop.textContent = done ? 'Done' : 'Stop the plan';
+    this.el.drillStart.textContent = task === null ? 'Start the plan' : 'Start over';
+    this.el.drillDescription.textContent = this.whereThePieceIsInThePlan();
     this.el.drillSteps.replaceChildren(
       ...plan.map((step, index) => {
         const item = this.doc.createElement('li');
         item.dataset['state'] = index < at ? 'done' : index === at ? 'now' : 'later';
-        item.textContent = describeTheDrillTask(step);
         if (index === at) {
           item.setAttribute('aria-current', 'step');
         }
+        if (index >= at) {
+          item.textContent = describeTheDrillTask(step);
+          return item;
+        }
+        // A step behind is one to go back to, if something has gone again.
+        const back = this.doc.createElement('button');
+        back.type = 'button';
+        back.className = 'drill-steps__back';
+        back.textContent = describeTheDrillTask(step);
+        back.title = 'Go back to this step';
+        back.dataset['step'] = String(index);
+        item.append(back);
         return item;
       }),
     );
+  }
+
+  /**
+   * What the plan beside the button that starts it says of the piece that is
+   * open: how to go about it, where it has got to, and when it was last
+   * played through.
+   */
+  private whereThePieceIsInThePlan(): string {
+    const controller = this.runtime.controller;
+    const { at, of } = controller.drillProgress;
+    const finishedAtMs = controller.drillFinishedAtMs;
+    const said = [
+      'Each section slowly with one hand, then the other, then both; then the sections joined up, until the whole piece holds together.',
+    ];
+    if (controller.drillTask !== null) {
+      said.push(`This piece: step ${String(at + 1)} of ${String(of)}.`);
+    }
+    if (finishedAtMs !== null) {
+      said.push(
+        `Played through on ${new Date(finishedAtMs).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}.`,
+      );
+    }
+    return said.join(' ');
   }
 
   /**
@@ -6051,6 +6133,9 @@ export class AppView {
 
     this.subscriptions.push(
       controller.events.on('drillChanged', () => {
+        // The plan sets the passage, the hand and the speed - taken up as a
+        // piece opens as well as started here - and the drawer shows them.
+        this.syncControlsFromSettings();
         this.showTheDrill();
       }),
     );
@@ -8044,8 +8129,10 @@ export class AppView {
    * unimplemented in the environment the UI tests run in, so every deletion
    * would be a path no test could take.
    */
-  private ask(question: string, typed: string | null): Promise<boolean> {
+  private ask(question: string, typed: string | null, yes = 'Delete'): Promise<boolean> {
     this.el.confirmText.textContent = question;
+    // Said each time, since the same sheet asks about more than deleting.
+    this.el.confirmYes.textContent = yes;
     this.el.confirmTyped.value = '';
     this.el.confirmTyped.hidden = typed === null;
     // Refused until the word is there, rather than refusing afterwards: the

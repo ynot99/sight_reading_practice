@@ -33,6 +33,7 @@ import { RhythmProfileRegistry } from '../../src/domain/generation/RhythmProfile
 import { PracticeLadder } from '../../src/application/ladder/PracticeLadder.js';
 import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.js';
 import { ControlBinding } from '../../src/application/ControlBinding.js';
+import { DrillProgress } from '../../src/application/drill/DrillProgress.js';
 import { TakeLibrary } from '../../src/application/TakeLibrary.js';
 import { TakePlayer } from '../../src/application/TakePlayer.js';
 import { BackupService } from '../../src/application/Backup.js';
@@ -319,6 +320,7 @@ function createRig(
   webMidiOverride?: AppRuntime['webMidi'],
   store: InMemorySettingsStore = new InMemorySettingsStore(),
   scoreStore: InMemoryScoreStore = new InMemoryScoreStore(),
+  drillStore: InMemorySettingsStore = new InMemorySettingsStore(),
 ): Rig {
   const clock = new ManualClock();
   const midi = new MockMidiAdapter({ clock });
@@ -390,6 +392,11 @@ function createRig(
     clock,
     scorings,
     ladder,
+    drillProgress: (() => {
+      const progress = new DrillProgress(drillStore);
+      progress.load();
+      return progress;
+    })(),
     initialSettings: {
       countInBars: 0,
       clickOn: false,
@@ -9341,6 +9348,58 @@ describe('AppView', () => {
       expect(element('sheet-drill').hidden).toBe(true);
     });
 
+    it('goes back to a step played through, from the plan', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await rig.runtime.controller.openScore(longExercise({ bars: 8 }));
+      element<HTMLButtonElement>('drill-start').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const session = rig.runtime.controller.start();
+      for (let guard = 0; guard < 500 && session?.status === 'running'; guard += 1) {
+        for (const note of session.currentStep?.expectedMidi ?? []) {
+          rig.midi.noteOn(note, rig.clock.now());
+        }
+      }
+      expect(element('drill-pill').textContent).toContain('Plan 2/');
+      element<HTMLButtonElement>('drill-pill').click();
+      // The step ahead is not one to press.
+      expect(element('drill-steps').querySelectorAll('button')).toHaveLength(1);
+
+      element('drill-steps').querySelector<HTMLButtonElement>('button')?.click();
+
+      expect(rig.runtime.controller.drillProgress.at).toBe(0);
+      expect(element('drill-pill').textContent).toContain('Plan 1/');
+      expect(element<HTMLInputElement>('focus-to').value).toBe('4');
+      expect(element('sheet-drill').hidden).toBe(true);
+    });
+
+    it('takes the plan up again when the piece is opened on another visit', async () => {
+      const drillStore = new InMemorySettingsStore();
+      const first = createRig(undefined, undefined, undefined, drillStore);
+      await first.view.initialize();
+      await first.runtime.controller.openScore(longExercise({ bars: 8, title: 'Berceuse' }));
+      element<HTMLButtonElement>('drill-start').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const session = first.runtime.controller.start();
+      for (let guard = 0; guard < 500 && session?.status === 'running'; guard += 1) {
+        for (const note of session.currentStep?.expectedMidi ?? []) {
+          first.midi.noteOn(note, first.clock.now());
+        }
+      }
+
+      mountRealMarkup();
+      const second = createRig(undefined, undefined, undefined, drillStore);
+      await second.view.initialize();
+      await second.runtime.controller.openScore(longExercise({ bars: 8, title: 'Berceuse' }));
+
+      expect(element('drill-pill').hidden).toBe(false);
+      expect(element('drill-pill').textContent).toContain('Plan 2/3');
+      expect(element<HTMLInputElement>('focus-from').value).toBe('5');
+      // And the sheet it is started from says where this piece is in it.
+      expect(element('drill-description').textContent).toContain('step 2 of 3');
+      expect(element('drill-start').textContent).toBe('Start over');
+    });
+
     it('puts the plan away when asked', async () => {
       const rig = createRig();
       await rig.view.initialize();
@@ -9350,6 +9409,16 @@ describe('AppView', () => {
 
       element<HTMLButtonElement>('drill-pill').click();
       element<HTMLButtonElement>('drill-stop').click();
+      // Where it had got to goes with it, so it is asked first, and said so.
+      expect(element('sheet-confirm').hidden).toBe(false);
+      expect(element('confirm-yes').textContent).toBe('Stop the plan');
+      element<HTMLButtonElement>('confirm-no').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(rig.runtime.controller.drillTask).not.toBeNull();
+
+      element<HTMLButtonElement>('drill-stop').click();
+      element<HTMLButtonElement>('confirm-yes').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(element('drill-pill').hidden).toBe(true);
       expect(element('sheet-drill').hidden).toBe(true);

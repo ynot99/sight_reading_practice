@@ -38,6 +38,7 @@ import type { ISettingsStore } from '../application/ports/ISettingsStore.js';
 import { SettingsRepository } from '../application/SettingsRepository.js';
 import { PracticeHistory } from '../application/PracticeHistory.js';
 import { TimeToday } from '../application/TimeToday.js';
+import { DrillProgress } from '../application/drill/DrillProgress.js';
 import { PerformanceRecorder } from '../application/PerformanceRecorder.js';
 import { ControlBinding } from '../application/ControlBinding.js';
 import { TakeLibrary } from '../application/TakeLibrary.js';
@@ -82,6 +83,7 @@ import { BUILT_IN_GRADES } from '../application/ladder/grades.js';
 import { BUILT_IN_LADDER } from '../application/ladder/ladderSteps.js';
 import {
   DEFAULT_STORAGE_KEY,
+  DRILL_STORAGE_KEY,
   HISTORY_STORAGE_KEY,
   KEPT_STORAGE_KEYS,
   TAKES_STORAGE_KEY,
@@ -142,6 +144,8 @@ export interface AppRuntimeOptions {
   readonly historyStore?: ISettingsStore;
   /** Where the day counter is kept, so a test can hand it nothing. */
   readonly timeStore?: ISettingsStore;
+  /** Where each piece's section plan has got to; tests pass their own. */
+  readonly drillStore?: ISettingsStore;
   /** Where kept takes live; browser storage by default. */
   readonly takeStore?: ISettingsStore;
   /** Where kept scores live; the browser's database by default. */
@@ -428,6 +432,11 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const timeToday = new TimeToday(timeStore);
   timeToday.load();
 
+  const drillStore =
+    options.drillStore ?? new LocalStorageSettingsStore(browserStorage(), DRILL_STORAGE_KEY);
+  const drillProgress = new DrillProgress(drillStore);
+  drillProgress.load();
+
   const scoreStore = options.scoreStore ?? new IndexedDbScoreStore();
   const storage = new BrowserStorageGauge(
     browserStorageManager(),
@@ -437,13 +446,14 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       { name: 'readings', key: HISTORY_STORAGE_KEY },
       { name: 'time today', key: TIME_STORAGE_KEY },
       { name: 'takes', key: TAKES_STORAGE_KEY },
+      { name: 'section plans', key: DRILL_STORAGE_KEY },
     ],
     {
       parts: [
         keptScores(scoreStore),
         keptWhole('readings', [historyStore], () => history.everyReading().length),
         keptWhole('takes', [takeStore], () => takes.list().length),
-        keptWhole('settings', [settingsStore, timeStore], () => null),
+        keptWhole('settings', [settingsStore, timeStore, drillStore], () => null),
       ],
       caches: browserCaches(),
     },
@@ -477,6 +487,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     [TAKES_STORAGE_KEY, takeStore],
     [HISTORY_STORAGE_KEY, historyStore],
     [TIME_STORAGE_KEY, timeStore],
+    [DRILL_STORAGE_KEY, drillStore],
   ]);
   // Loudly, and at startup. A store that is kept but not carried costs
   // nothing until the day the reader needs the file, and then it costs them
@@ -513,6 +524,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     metronome,
     instrument: pitchPlayer,
     history,
+    drillProgress,
     clock,
     scorings,
     initialSettings: restored.practice,

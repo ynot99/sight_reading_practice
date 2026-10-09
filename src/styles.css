@@ -3357,7 +3357,24 @@ body[data-free-play='true'] .drill-pill {
 
 .drill-steps li[data-state='done'] {
   color: var(--text-muted);
+}
+
+/* A step played through, struck out, and pressed to go back to it. */
+.drill-steps__back {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
   text-decoration: line-through;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .drill-steps__back:hover {
+    color: var(--text);
+    text-decoration: underline;
+  }
 }
 
 .drill-steps li[data-state='now'] {

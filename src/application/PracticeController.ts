@@ -22,7 +22,8 @@ import {
   type TimelineStep,
 } from '../domain/timeline/Timeline.js';
 import { playedNoteOffset } from './playedNoteOffset.js';
-import { drillTaskPassed, planTheDrill, type DrillTask } from './drill/SectionDrill.js';
+import { DEFAULT_SECTION_BARS, drillTaskPassed, planTheDrill, type DrillTask } from './drill/SectionDrill.js';
+import type { DrillProgress } from './drill/DrillProgress.js';
 import type { ScoreOrder, WhatOpens } from './ScoreLibrary.js';
 import type { PageTurns } from './ports/IScoreRenderer.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
@@ -817,6 +818,8 @@ export interface PracticeControllerDependencies {
   readonly ladder?: PracticeLadder;
   /** Remembers how earlier readings of the same passage went. */
   readonly history?: PracticeHistory;
+  /** Remembers where each piece's section plan has got to. */
+  readonly drillProgress?: DrillProgress;
   /** How hard the survival bar is, for tuning and for tests. */
   readonly health?: HealthMeterOptions;
   /** Seam for alternative exercise sources (files, network, ear training). */
@@ -873,6 +876,10 @@ export class PracticeController {
   /** The plan being worked through, or `[]` when nothing is being drilled. */
   private drill: readonly DrillTask[] = [];
   private drillAt = 0;
+  /** The size of a section in the plan in hand, which is what is kept of it. */
+  private drillSectionBars = DEFAULT_SECTION_BARS;
+  /** The piece the plan in hand is of, as it is kept; `null` for generated material. */
+  private drillPiece: string | null = null;
   /** When the waiting bar was last drained, on the page's own clock. */
   private lastWaitDrainMs: number | null = null;
   /** Wrong notes played at the step the marker is standing on. */
@@ -1821,6 +1828,7 @@ export class PracticeController {
     this.applyDimming();
     this.drawTheRuler();
     this.emitter.emit('exerciseLoaded', { exercise, timeline: this.timeline, musicXml });
+    this.takeUpThePiecesPlan();
     return exercise;
   }
 
@@ -2004,31 +2012,132 @@ export class PracticeController {
    * reader: the plan *is* a way of cutting the piece up, and starting it
    * inside somebody else's cut would give sections of a section.
    */
-  startTheDrill(sectionBars?: number): DrillTask | null {
+  startTheDrill(sectionBars = DEFAULT_SECTION_BARS): DrillTask | null {
     const exercise = this.exercise;
     if (exercise === null) {
       return null;
     }
-    const hands = [...new Set(exercise.staves.map((staff) => staff.staffNumber))].sort(
-      (left, right) => left - right,
-    );
-    this.drill = planTheDrill(measureCount(exercise), {
-      ...(sectionBars === undefined ? {} : { sectionBars }),
-      hands,
-    });
+    this.drillSectionBars = Math.max(1, Math.round(sectionBars));
+    this.drill = this.planOf(exercise, this.drillSectionBars);
     this.drillAt = 0;
+    this.drillPiece = this.pieceOfThePlan();
+    this.keepTheDrill();
     this.emitter.emit('drillChanged', { task: this.drillTask, at: 0, of: this.drill.length });
     return this.applyTheDrill();
   }
 
-  /** Puts the drill away. The passage and the hand stay where it left them. */
+  /**
+   * Puts the drill away. The passage and the hand stay where it left them.
+   *
+   * Where it had got to is forgotten with it - kept, it would be taken up
+   * again the next time the piece is opened, which is the plan the reader
+   * just put away. That it was once played through is not: a piece whose
+   * plan has been finished keeps saying so.
+   */
   stopTheDrill(): void {
     if (this.drill.length === 0) {
       return;
     }
+    const piece = this.drillPiece;
+    const of = this.drill.length;
     this.drill = [];
     this.drillAt = 0;
+    const progress = this.deps.drillProgress;
+    if (piece !== null && progress !== undefined) {
+      const finishedAtMs = progress.of(piece)?.finishedAtMs ?? null;
+      if (finishedAtMs === null) {
+        progress.forget(piece);
+      } else {
+        progress.keep(piece, { sectionBars: this.drillSectionBars, at: of, finishedAtMs });
+      }
+    }
     this.emitter.emit('drillChanged', { task: null, at: 0, of: 0 });
+  }
+
+  /**
+   * Goes back to an earlier step of the plan - or to any of them, once it
+   * has all been played - and asks for it again. Not forward: a step is
+   * passed by playing it through, which is the whole of the plan.
+   */
+  goBackInTheDrill(step: number): DrillTask | null {
+    if (this.drill.length === 0 || !Number.isInteger(step) || step < 0 || step >= this.drillAt) {
+      return null;
+    }
+    this.drillAt = step;
+    this.keepTheDrill();
+    this.emitter.emit('drillChanged', { task: this.drillTask, at: this.drillAt, of: this.drill.length });
+    return this.applyTheDrill();
+  }
+
+  /** When the plan of the piece that is open was last played through, on the calendar; `null` if never. */
+  get drillFinishedAtMs(): number | null {
+    const piece = this.pieceOfThePlan();
+    return piece === null ? null : (this.deps.drillProgress?.of(piece)?.finishedAtMs ?? null);
+  }
+
+  /**
+   * What a plan is kept under: the piece, by its title, as the readings of it
+   * are. Generated material has none - a plan of it lasts as long as it does.
+   */
+  private pieceOfThePlan(): string | null {
+    return this.openedScore === null ? null : `score:${this.openedScore.title}`;
+  }
+
+  /** The plan of a piece, for sections of so many bars and the staves it has. */
+  private planOf(exercise: Exercise, sectionBars: number): readonly DrillTask[] {
+    const hands = [...new Set(exercise.staves.map((staff) => staff.staffNumber))].sort(
+      (left, right) => left - right,
+    );
+    return planTheDrill(measureCount(exercise), { sectionBars, hands });
+  }
+
+  /** Writes down where the plan in hand has got to, against its piece. */
+  private keepTheDrill(finishedAtMs?: number): void {
+    const piece = this.drillPiece;
+    const progress = this.deps.drillProgress;
+    if (piece === null || progress === undefined) {
+      return;
+    }
+    progress.keep(piece, {
+      sectionBars: this.drillSectionBars,
+      at: this.drillAt,
+      finishedAtMs: finishedAtMs ?? progress.of(piece)?.finishedAtMs ?? null,
+    });
+  }
+
+  /**
+   * Takes up the plan of the piece just loaded, where it had got to.
+   *
+   * A plan belongs to a piece. Kept in hand across a change of piece, it went
+   * on setting the passage and the hand of the last one over the next; now
+   * each piece has its own, taken up from where it was left - on this visit
+   * or another - and a piece opened again with its plan in hand keeps it.
+   * One played through is not taken up: it is done, and says so where it is
+   * started from.
+   */
+  private takeUpThePiecesPlan(): void {
+    const piece = this.pieceOfThePlan();
+    if (piece === this.drillPiece && this.drill.length > 0) {
+      return;
+    }
+    const hadOne = this.drill.length > 0;
+    this.drill = [];
+    this.drillAt = 0;
+    this.drillPiece = piece;
+    const saved = piece === null ? null : (this.deps.drillProgress?.of(piece) ?? null);
+    const exercise = this.exercise;
+    if (saved !== null && exercise !== null) {
+      const plan = this.planOf(exercise, saved.sectionBars);
+      if (saved.at < plan.length) {
+        this.drill = plan;
+        this.drillAt = saved.at;
+        this.drillSectionBars = saved.sectionBars;
+        this.applyTheDrill();
+      }
+    }
+    if (hadOne || this.drill.length > 0) {
+      this.emitter.emit('drillChanged', { task: this.drillTask, at: this.drillAt, of: this.drill.length });
+    }
   }
 
   /** What the drill is asking for, or `null` when nothing is being drilled or it is all done. */
@@ -2084,6 +2193,8 @@ export class PracticeController {
     if (passed) {
       this.drillAt += 1;
     }
+    // On the calendar, so the piece can say when it was finished.
+    this.keepTheDrill(this.drillAt >= this.drill.length ? Date.now() : undefined);
     if (this.drillAt >= this.drill.length) {
       // Finished, and said so: the piece has been through every stage of the
       // plan, which is the only ending this has. Kept, every step done, until
@@ -2114,6 +2225,11 @@ export class PracticeController {
     }
     const was = `score:${fromTitle}`;
     const now = `score:${toTitle}`;
+    // Its plan too, which is kept under the same name.
+    this.deps.drillProgress?.rename(was, now);
+    if (this.drillPiece === was) {
+      this.drillPiece = now;
+    }
     this.deps.history?.rekey((key) => {
       // The whole key is the piece, or the piece and then the passage's bars.
       // Nothing else counts: titles have spaces in them, so "Old Man" would

@@ -111,6 +111,13 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
    * Taken again whenever the device wakes - see {@link watchTheDevice}.
    */
   private audioEpochMs = 0;
+  /**
+   * Whether the epoch above has been taken since the pulse began or the
+   * device last changed state - which waits for the device to be sounding.
+   */
+  private clocksRead = false;
+  /** Where the audio clock stood when it was last asked to run: moved past, it is running. */
+  private clockStoodAt = 0;
   private currentVolume = 1;
   /** Where the epoch above is lent, while the pulse beats, to what sounds beside it. */
   private readonly reading: AudioClockReading;
@@ -192,8 +199,9 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
 
     this.nextTickIndex = 0;
     this.nextTickAudioTime = context.currentTime + this.options.firstClickLeadSec;
-    this.audioEpochMs = performance.now() - context.currentTime * 1000;
-    this.reading.hold(this.audioEpochMs);
+    // Read once the device is sounding, not here: see `readTheClocks`.
+    this.clocksRead = false;
+    this.clockStoodAt = context.currentTime;
     timeTheStart('metronome: the device at the start', () => describeTheDevice(context));
 
     this.timer = setInterval(() => {
@@ -227,6 +235,36 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   }
 
   /**
+   * Takes where the two clocks stand against each other, once the device is
+   * sounding - and says whether it is.
+   *
+   * Not before. A device asked to run says it is running at once, while its
+   * clock stands still for as long as it takes to begin: measured in headless
+   * Chrome, four hundred and thirty milliseconds at nought on a page's first
+   * run. A reading taken then is wrong by all of that ever after - every tick
+   * stamped that far in the past, every reader judged that far out, and every
+   * sound placed by the reading that far late. So nothing is placed until it
+   * can be read: the first click waits for the device, which no click could be
+   * heard before anyway, and is placed from where the device has got to.
+   */
+  private readTheClocks(context: AudioContext): boolean {
+    if (!deviceIsSounding(context, this.clockStoodAt)) {
+      return false;
+    }
+    this.audioEpochMs = performance.now() - context.currentTime * 1000;
+    this.reading.hold(this.audioEpochMs);
+    this.clocksRead = true;
+    if (this.nextTickIndex === 0) {
+      this.nextTickAudioTime = Math.max(
+        this.nextTickAudioTime,
+        context.currentTime + this.options.firstClickLeadSec,
+      );
+    }
+    timeTheStart('metronome: the clocks read', () => describeTheDevice(context));
+    return true;
+  }
+
+  /**
    * Takes the clocks' difference again whenever the device wakes.
    *
    * A tablet suspends its audio device the moment the screen goes off: its
@@ -238,7 +276,8 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
    *
    * On the device saying so and not on a timer, because that is the event:
    * waking is the one moment the two clocks part company, and between two of
-   * them the difference is a constant worth keeping.
+   * them the difference is a constant worth keeping. Taken once it is
+   * sounding again, as at a start - see `readTheClocks`.
    */
   private watchTheDevice(context: AudioContext): void {
     if (typeof context.addEventListener !== 'function') {
@@ -249,10 +288,8 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     // it; awake, it is the one that matters and it is taken again. A branch
     // here would be a rule with no case that reaches it.
     context.addEventListener('statechange', () => {
-      this.audioEpochMs = performance.now() - context.currentTime * 1000;
-      if (this.timer !== null) {
-        this.reading.hold(this.audioEpochMs);
-      }
+      this.clocksRead = false;
+      this.clockStoodAt = context.currentTime;
       timeTheStart(`metronome: the device went ${context.state}`, () =>
         describeTheDevice(context),
       );
@@ -272,6 +309,9 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     // between the two clocks is taken again (see `watchTheDevice`) and the
     // first beat is placed from there.
     if (context.state !== 'running') {
+      return;
+    }
+    if (!this.clocksRead && !this.readTheClocks(context)) {
       return;
     }
     const horizon = context.currentTime + this.options.scheduleAheadSec;
@@ -461,6 +501,39 @@ function describeTheDevice(context: AudioContext): string {
     );
   }
   return parts.join(', ');
+}
+
+/**
+ * How recently the device must have put out a sound for its own word on
+ * where its clock stands to be taken as current, in milliseconds.
+ *
+ * Measured in headless Chrome: a device sounding reports a moment it put out
+ * one to nine milliseconds ago; one asleep goes on reporting the last moment
+ * it did, hundreds of milliseconds ago and growing.
+ */
+const SOUNDING_WITHIN_MS = 100;
+
+/**
+ * Whether the device is putting out sound, rather than only saying it runs.
+ *
+ * Its clock moving past where it stood says so; so does the browser's own
+ * word on the last moment it put out, where that moment is a recent one - a
+ * device already sounding when the pulse begins has not moved in the instant
+ * since, and waiting for it to would put a scheduling lead of silence in front
+ * of the downbeat a reader's press began. A browser with neither word is
+ * taken at the state it gives, as it always was.
+ */
+function deviceIsSounding(context: AudioContext, clockStoodAt: number): boolean {
+  if (context.currentTime > clockStoodAt) {
+    return true;
+  }
+  if (typeof context.getOutputTimestamp !== 'function') {
+    return true;
+  }
+  const heard = context.getOutputTimestamp();
+  const contextTime = heard.contextTime ?? 0;
+  const performanceTime = heard.performanceTime ?? 0;
+  return contextTime > 0 && performanceTime > 0 && performance.now() - performanceTime < SOUNDING_WITHIN_MS;
 }
 
 /** Lazily creates a single shared AudioContext, resumed on first use. */

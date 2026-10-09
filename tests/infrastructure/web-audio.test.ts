@@ -136,6 +136,15 @@ class FakeAudioContext {
   }
 }
 
+/** A device that says, as a browser's does, the last moment it put out a sound. */
+class StampingAudioContext extends FakeAudioContext {
+  stamp: { contextTime: number; performanceTime: number } = { contextTime: 0, performanceTime: 0 };
+
+  getOutputTimestamp(): { contextTime: number; performanceTime: number } {
+    return this.stamp;
+  }
+}
+
 function contextFactory(context: FakeAudioContext): () => AudioContext {
   return () => context as unknown as AudioContext;
 }
@@ -218,6 +227,10 @@ describe('WebAudioMetronome', () => {
     metronome.start();
     context.wakeAfter(0.3);
     const woke = performance.now();
+    // Its clock seen moving, the first click is placed a lead ahead of where
+    // the clock has got to; and heard a moment after that.
+    context.advance(0.06);
+    vi.advanceTimersByTime(20);
     context.advance(0.06);
     vi.advanceTimersByTime(20);
 
@@ -658,6 +671,125 @@ describe('WebAudioPitchPlayer', () => {
     player.stopAll();
 
     expect(tone?.stoppedAt).toBeNull();
+  });
+});
+
+describe('a device that says it runs before it sounds', () => {
+  function aPulseOn(context: FakeAudioContext): { metronome: WebAudioMetronome; placed: MetronomeTick[] } {
+    const metronome = new WebAudioMetronome(contextFactory(context), {
+      schedulerIntervalMs: 20,
+      scheduleAheadSec: 0.12,
+      firstClickLeadSec: 0.06,
+    });
+    metronome.configure({
+      bpm: 60,
+      timeSignature: new TimeSignature(4, 4),
+      bars: [],
+      tempos: [],
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      dropout: null,
+      endsAtTicks: null,
+      muted: false,
+    });
+    const placed: MetronomeTick[] = [];
+    metronome.onTickPlaced((tick) => placed.push(tick));
+    return { metronome, placed };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('places nothing until the device sounds, and stamps the clicks from where it is then', () => {
+    // Measured on a page's first run in headless Chrome: the device said it
+    // was running at once and its clock stood at nought for four hundred and
+    // thirty milliseconds. Read at the start, every tick was stamped that far
+    // in the past.
+    const context = new StampingAudioContext();
+    context.outputLatency = 0.08;
+    const { metronome, placed } = aPulseOn(context);
+
+    metronome.start();
+    vi.advanceTimersByTime(400);
+    expect(placed).toEqual([]);
+    expect(context.oscillators).toEqual([]);
+
+    context.advance(0.01);
+    vi.advanceTimersByTime(20);
+
+    // A lead ahead of where the clock had got, heard the device's delay after.
+    expect(context.oscillators[0]?.startedAt).toBeCloseTo(0.07, 6);
+    expect(placed[0]?.scheduledTimeMs).toBeCloseTo(420 - 10 + 70 + 80, 6);
+    metronome.stop();
+  });
+
+  it('begins at once on a device already sounding', () => {
+    // Its clock has not moved in the instant since the pulse was asked for,
+    // and waiting for it to would be silence in front of a downbeat the
+    // reader's own press began.
+    const context = new StampingAudioContext();
+    context.advance(5);
+    vi.advanceTimersByTime(5_000);
+    context.stamp = { contextTime: 4.99, performanceTime: performance.now() - 3 };
+    const { metronome, placed } = aPulseOn(context);
+
+    metronome.start();
+
+    expect(placed).toHaveLength(1);
+    expect(context.oscillators[0]?.startedAt).toBeCloseTo(5.06, 6);
+    metronome.stop();
+  });
+
+  it('takes a device that never says when it last sounded as sounding once its clock moves', () => {
+    const context = new StampingAudioContext();
+    const { metronome, placed } = aPulseOn(context);
+
+    metronome.start();
+    vi.advanceTimersByTime(100);
+    expect(placed).toEqual([]);
+
+    context.advance(0.02);
+    vi.advanceTimersByTime(20);
+
+    expect(placed).toHaveLength(1);
+    metronome.stop();
+  });
+
+  it('waits again after a nap, for the device to be sounding rather than only awake', () => {
+    // Asleep, a device goes on reporting the last moment it put out, ever
+    // further in the past: that is no word on where its clock stands now.
+    const context = new StampingAudioContext();
+    context.advance(1);
+    vi.advanceTimersByTime(1_000);
+    context.stamp = { contextTime: 0.99, performanceTime: performance.now() - 2 };
+    const { metronome, placed } = aPulseOn(context);
+    metronome.start();
+    const before = placed.length;
+
+    // Awake again, and its clock still standing for a while, as a device
+    // starting does.
+    context.napFor(30);
+    vi.advanceTimersByTime(300);
+    const moved = performance.now();
+    // Then going, in step with the page's clock, to past the next beat - a
+    // second on at sixty.
+    for (let step = 0; step < 55; step += 1) {
+      context.advance(0.02);
+      vi.advanceTimersByTime(20);
+    }
+
+    // Placed again, and stamped from where the clock was once it moved: the
+    // beat a second and sixty milliseconds of the device's clock from there.
+    // A reading taken while it stood puts it three tenths of a second early.
+    expect(placed.length).toBeGreaterThan(before);
+    expect(placed.at(-1)?.scheduledTimeMs ?? 0).toBeCloseTo(moved + 1_060, 3);
+    metronome.stop();
   });
 });
 

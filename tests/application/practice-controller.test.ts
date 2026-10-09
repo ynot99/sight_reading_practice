@@ -1363,6 +1363,20 @@ describe('what you played, drawn over the score', () => {
     expect(controller.drillProgress).toEqual({ at: 0, of: 0 });
   });
 
+  it('takes each section with the left hand first, then the right, then both', async () => {
+    // As it was asked for: the left hand is usually the ground the rest is
+    // heard against. Staves are numbered down the page, so the left hand's is
+    // the higher number, and handed over in counting order the right came
+    // first.
+    const { controller } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+
+    controller.startTheDrill(1);
+
+    expect(controller.drillPlan.slice(0, 3).map((task) => task.hand)).toEqual([2, 1, null]);
+    expect(controller.settings.handStaff).toBe(2);
+  });
+
   describe('kept with its piece', () => {
     const kept = (): DrillProgress => new DrillProgress(new InMemorySettingsStore());
     const withThe = (progress?: DrillProgress) =>

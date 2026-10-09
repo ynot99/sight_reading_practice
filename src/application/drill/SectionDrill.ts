@@ -20,7 +20,10 @@ export interface DrillTask {
 export interface DrillPlanOptions {
   /** Bars in a section. His own word for it: a piece is split into stretches. */
   readonly sectionBars?: number;
-  /** The staves the piece actually has, low to high; `[]` for one voice. */
+  /**
+   * The staves the piece actually has, low to high on the page - the left
+   * hand's first on a piano; `[]` for one voice.
+   */
   readonly hands?: readonly number[];
   /** How slow a section is taken while it is being learned. */
   readonly sectionPercent?: number;

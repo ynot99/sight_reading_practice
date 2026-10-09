@@ -15,15 +15,16 @@ describe('learning a piece section by section', () => {
   it('takes each section with one hand, then the other, then both', () => {
     // His line 93, in his order: slowly with the left, then the right, then
     // both - the left hand first because it is usually the ground the rest
-    // is heard against.
-    const plan = planTheDrill(8, { sectionBars: 4, hands: [1, 2] });
+    // is heard against. The hands as a piano's staves are handed over, low
+    // to high: the bass staff, numbered 2, first.
+    const plan = planTheDrill(8, { sectionBars: 4, hands: [2, 1] });
 
     expect(plan.slice(0, 6).map(said)).toEqual([
-      '1-4 1 70%',
       '1-4 2 70%',
+      '1-4 1 70%',
       '1-4 both 70%',
-      '5-8 1 70%',
       '5-8 2 70%',
+      '5-8 1 70%',
       '5-8 both 70%',
     ]);
   });

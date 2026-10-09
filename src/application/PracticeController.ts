@@ -2083,10 +2083,17 @@ export class PracticeController {
     return this.openedScore === null ? null : `score:${this.openedScore.title}`;
   }
 
-  /** The plan of a piece, for sections of so many bars and the staves it has. */
+  /**
+   * The plan of a piece, for sections of so many bars and the staves it has.
+   *
+   * Its staves handed over low to high, as the plan takes them. Staves are
+   * numbered down the page, so that is the highest number first: given in
+   * counting order, the treble came first and every section began with the
+   * right hand, where it was meant to begin with the left.
+   */
   private planOf(exercise: Exercise, sectionBars: number): readonly DrillTask[] {
     const hands = [...new Set(exercise.staves.map((staff) => staff.staffNumber))].sort(
-      (left, right) => left - right,
+      (upper, lower) => lower - upper,
     );
     return planTheDrill(measureCount(exercise), { sectionBars, hands });
   }

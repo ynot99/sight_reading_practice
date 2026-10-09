@@ -222,6 +222,7 @@ interface Rig {
   readonly samples: FakeSampleLibrary;
   readonly recorder: PerformanceRecorder;
   readonly volumeKnob: ControlBinding;
+  readonly metronomeKnob: ControlBinding;
   readonly takes: TakeLibrary;
   readonly scores: ScoreLibrary;
   readonly scoreStore: InMemoryScoreStore;
@@ -338,6 +339,8 @@ function createRig(
   recorder.listenTo(midi);
   const volumeKnob = new ControlBinding();
   volumeKnob.listenTo(midi);
+  const metronomeKnob = new ControlBinding();
+  metronomeKnob.listenTo(midi);
   const takes = new TakeLibrary(new InMemorySettingsStore());
   const files = new RecordingFileSink();
   const importer = new DomScoreImporter();
@@ -457,6 +460,7 @@ function createRig(
     librarySync,
     driveSync,
     volumeKnob,
+    metronomeKnob,
     takes,
     scores,
     files,
@@ -507,6 +511,7 @@ function createRig(
     samples,
     recorder,
     volumeKnob,
+    metronomeKnob,
     takes,
     scores,
     scoreStore,
@@ -9600,6 +9605,75 @@ describe('AppView', () => {
       expect(rig.runtime.volumeKnob.controller).toBeNull();
       expect(rig.settings.currentAudio.volumeController).toBeNull();
       expect(element('learn-knob').textContent?.trim()).toBe('Use a knob');
+    });
+
+    it("drives the metronome's slider with a knob of its own, leaving the notes' alone", async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('learn-knob').click();
+      turn(rig, 7);
+      element<HTMLButtonElement>('learn-metronome-knob').click();
+      turn(rig, 11);
+      expect(element('metronome-knob-status').textContent).toContain('CC 11');
+      const notes = element<HTMLInputElement>('instrument-volume').value;
+
+      rig.midi.control(11, 0.25);
+
+      expect(element<HTMLInputElement>('metronome-volume').value).toBe('25');
+      expect(element<HTMLInputElement>('sound-metronome-volume').value).toBe('25');
+      expect(rig.metronomeVolume.volume).toBeCloseTo(0.25, 5);
+      expect(element<HTMLInputElement>('instrument-volume').value).toBe(notes);
+      expect(rig.settings.currentAudio.metronomeController).toBe(11);
+      expect(rig.settings.currentAudio.volumeController).toBe(7);
+    });
+
+    it('turns both loudnesses with one knob when both were taught it', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('learn-knob').click();
+      turn(rig, 7);
+      element<HTMLButtonElement>('learn-metronome-knob').click();
+      turn(rig, 7);
+
+      rig.midi.control(7, 0.3);
+
+      expect(rig.instrumentVolume.volume).toBeCloseTo(0.3, 5);
+      expect(rig.metronomeVolume.volume).toBeCloseTo(0.3, 5);
+    });
+
+    it('teaches one knob at a time', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      element<HTMLButtonElement>('learn-knob').click();
+      element<HTMLButtonElement>('learn-metronome-knob').click();
+
+      turn(rig, 11);
+
+      // The turn was taken for the metronome, the last asked: the notes'
+      // knob stopped listening when the metronome's started.
+      expect(rig.runtime.metronomeKnob.controller).toBe(11);
+      expect(rig.runtime.volumeKnob.controller).toBeNull();
+      expect(element('learn-knob').textContent?.trim()).toBe('Use a knob');
+    });
+
+    it("remembers the metronome's knob for the next visit, and gives it back when asked", async () => {
+      const store = new InMemorySettingsStore();
+      const first = createRig(undefined, store);
+      await first.view.initialize();
+      element<HTMLButtonElement>('learn-metronome-knob').click();
+      turn(first, 9);
+
+      mountRealMarkup();
+      const second = createRig(undefined, store);
+      second.runtime.metronomeKnob.bindTo(second.settings.currentAudio.metronomeController);
+      await second.view.initialize();
+      expect(element('metronome-knob-status').textContent).toContain("CC 9 sets the metronome's volume");
+
+      element<HTMLButtonElement>('learn-metronome-knob').click();
+
+      expect(second.runtime.metronomeKnob.controller).toBeNull();
+      expect(second.settings.currentAudio.metronomeController).toBeNull();
+      expect(element('learn-metronome-knob').textContent?.trim()).toBe('Use a knob');
     });
   });
 

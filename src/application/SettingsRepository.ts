@@ -55,6 +55,14 @@ export interface AudioSettings {
    * device alongside them.
    */
   readonly volumeController: number | null;
+  /**
+   * The knob taught to drive the metronome's volume, or `null` for none.
+   *
+   * A knob of its own rather than a second meaning for the note volume's, so
+   * each loudness is turned by whichever control the reader chose for it -
+   * the same one for both, where they should move together.
+   */
+  readonly metronomeController: number | null;
   /** Sound the reader's own presses back to them. */
   readonly audioFeedback: boolean;
   /** Accept the computer keyboard as a second MIDI source. */
@@ -66,6 +74,7 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   instrumentVolume: 0.6,
   sampleLoading: 'lazy',
   volumeController: null,
+  metronomeController: null,
   audioFeedback: true,
   computerKeyboard: true,
 };
@@ -548,6 +557,7 @@ export function decodeAudioSettings(value: unknown): AudioSettings {
     // `null` is the real answer for "no knob taught", so it has to survive a
     // reload rather than falling back to a default that means the same thing.
     volumeController: readInteger(value['volumeController'], 0, 127) ?? null,
+    metronomeController: readInteger(value['metronomeController'], 0, 127) ?? null,
     audioFeedback: readBoolean(value['audioFeedback']) ?? DEFAULT_AUDIO_SETTINGS.audioFeedback,
     computerKeyboard:
       readBoolean(value['computerKeyboard']) ?? DEFAULT_AUDIO_SETTINGS.computerKeyboard,

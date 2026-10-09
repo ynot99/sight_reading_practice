@@ -190,6 +190,8 @@ export interface AppRuntime {
   readonly recorder: PerformanceRecorder;
   /** The knob the reader taught to drive the note volume, if they have. */
   readonly volumeKnob: ControlBinding;
+  /** The knob the reader taught to drive the metronome's volume - the same one, if they chose so. */
+  readonly metronomeKnob: ControlBinding;
   readonly takes: TakeLibrary;
   /**
    * Every reading that has been recorded, for the list of them.
@@ -399,6 +401,8 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   // work without the reader teaching it again.
   const volumeKnob = new ControlBinding();
   const disposeKnob = volumeKnob.listenTo(midi);
+  const metronomeKnob = new ControlBinding();
+  const disposeMetronomeKnob = metronomeKnob.listenTo(midi);
   const takeStore =
     options.takeStore ?? new LocalStorageSettingsStore(browserStorage(), TAKES_STORAGE_KEY);
   const takes = new TakeLibrary(takeStore);
@@ -479,6 +483,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   pitchPlayer.setVolume(restored.audio.instrumentVolume);
   pitchPlayer.setLoading(restored.audio.sampleLoading);
   volumeKnob.bindTo(restored.audio.volumeController);
+  metronomeKnob.bindTo(restored.audio.metronomeController);
 
 
   const controller = new PracticeController({
@@ -536,6 +541,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     librarySync,
     driveSync,
     volumeKnob,
+    metronomeKnob,
     takes,
     history,
     timeToday,
@@ -570,6 +576,8 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       disposeRecorder();
       disposeKnob();
       volumeKnob.dispose();
+      disposeMetronomeKnob();
+      metronomeKnob.dispose();
       computerKeyboard.disable();
       void webMidi.disconnect();
       void bridge?.disconnect();

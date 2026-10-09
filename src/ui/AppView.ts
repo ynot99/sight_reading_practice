@@ -50,6 +50,7 @@ import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
 import type { PracticeSettings } from '../application/PracticeController.js';
+import type { ControlBinding } from '../application/ControlBinding.js';
 import {
   RULER_DIVISIONS,
   type RulerDivision,
@@ -1354,6 +1355,19 @@ const KEYS_SHOWN_SAID: Readonly<Record<KeysShown, string>> = {
   none: 'The score only',
 };
 
+/** A knob the reader may teach, with the loudness it turns and where it is described. */
+interface KnobPlace {
+  readonly knob: ControlBinding;
+  readonly button: HTMLButtonElement;
+  readonly status: HTMLElement;
+  /** The slider the knob writes through. */
+  readonly slider: HTMLInputElement;
+  /** What the knob sets, as its description finishes the sentence. */
+  readonly sets: string;
+  /** The saved setting saying which control drives it. */
+  remember(controller: number | null): { volumeController: number | null } | { metronomeController: number | null };
+}
+
 /**
  * Vanilla DOM presentation layer.
  *
@@ -1892,6 +1906,8 @@ export class AppView {
     instrumentVolumeValue: HTMLOutputElement;
     learnKnob: HTMLButtonElement;
     knobStatus: HTMLElement;
+    learnMetronomeKnob: HTMLButtonElement;
+    metronomeKnobStatus: HTMLElement;
     pitchClass: HTMLInputElement;
     audioFeedback: HTMLInputElement;
     computerKeyboard: HTMLInputElement;
@@ -2210,6 +2226,8 @@ export class AppView {
       instrumentVolumeValue: requireElement(doc, 'instrument-volume-value'),
       learnKnob: requireElement(doc, 'learn-knob'),
       knobStatus: requireElement(doc, 'knob-status'),
+      learnMetronomeKnob: requireElement(doc, 'learn-metronome-knob'),
+      metronomeKnobStatus: requireElement(doc, 'metronome-knob-status'),
       pitchClass: requireElement(doc, 'pitch-class'),
       audioFeedback: requireElement(doc, 'audio-feedback'),
       computerKeyboard: requireElement(doc, 'computer-keyboard'),
@@ -2246,7 +2264,7 @@ export class AppView {
     this.updateButtons('idle');
     this.describeTake();
     this.renderTakes();
-    this.bindVolumeKnob();
+    this.bindTheKnobs();
     this.countTheTime();
     await this.openWhatWasAskedFor();
     // Again, and after the material this time. Opening material settles
@@ -3816,19 +3834,26 @@ export class AppView {
       this.applyVolumes(true);
     });
 
-    this.listen(this.el.learnKnob, 'click', () => {
-      const knob = this.runtime.volumeKnob;
-      if (knob.isLearning) {
-        knob.cancelLearning();
-      } else if (knob.controller !== null) {
-        // A bound knob's button gives it back, since teaching a second one
-        // over the top would leave the reader unable to say which is in use.
-        knob.forget();
-      } else {
-        knob.learn();
-      }
-      this.describeKnob();
-    });
+    for (const place of this.theKnobs()) {
+      this.listen(place.button, 'click', () => {
+        const knob = place.knob;
+        if (knob.isLearning) {
+          knob.cancelLearning();
+        } else if (knob.controller !== null) {
+          // A bound knob's button gives it back, since teaching a second one
+          // over the top would leave the reader unable to say which is in use.
+          knob.forget();
+        } else {
+          // One knob learned at a time: a turn taken for both would teach
+          // the other one a knob the reader never asked it to follow.
+          for (const other of this.theKnobs()) {
+            other.knob.cancelLearning();
+          }
+          knob.learn();
+        }
+        this.describeKnob(place);
+      });
+    }
 
     this.listen(this.el.playingAhead, 'change', () => {
       controller.updateSettings({
@@ -8238,63 +8263,90 @@ export class AppView {
   }
 
   /**
-   * Follows the knob the reader taught, and says what it is doing.
-   *
-   * The knob writes through the slider rather than past it, so the two can
-   * never disagree about how loud the piano is - a hidden second volume is
-   * how a reader ends up turning something that changes nothing.
+   * The knobs a reader may teach, one under each loudness in Sound: the
+   * notes' and the metronome's. Each is taught on its own, and both may be
+   * taught the same control, which then turns the two together.
    */
-  private bindVolumeKnob(): void {
-    const knob = this.runtime.volumeKnob;
-
-    this.subscriptions.push(
-      knob.events.on('moved', ({ value }) => {
-        this.el.instrumentVolume.value = String(Math.round(value * 100));
-        this.applyVolumes(true);
-      }),
-    );
-
-    this.subscriptions.push(
-      knob.events.on('learned', ({ controller }) => {
-        this.runtime.settings.saveAudio({
-          ...this.runtime.settings.currentAudio,
-          volumeController: controller,
-        });
-        this.describeKnob();
-      }),
-    );
-
-    this.subscriptions.push(
-      knob.events.on('heard', ({ controller, value, positions }) => {
-        // Says what arrived even when it is the wrong control, so silence
-        // here means the keyboard sent nothing rather than that the app did.
-        this.el.knobStatus.textContent =
-          positions < 2
-            ? `Heard CC ${controller} at ${Math.round(value * 100)}% — keep turning.`
-            : `Heard CC ${controller} at ${Math.round(value * 100)}% — nearly there.`;
-      }),
-    );
-
-    this.subscriptions.push(knob.events.on('listeningChanged', () => this.describeKnob()));
-    this.describeKnob();
+  private theKnobs(): readonly KnobPlace[] {
+    return [
+      {
+        knob: this.runtime.volumeKnob,
+        button: this.el.learnKnob,
+        status: this.el.knobStatus,
+        slider: this.el.instrumentVolume,
+        sets: 'the note volume',
+        remember: (controller) => ({ volumeController: controller }),
+      },
+      {
+        knob: this.runtime.metronomeKnob,
+        button: this.el.learnMetronomeKnob,
+        status: this.el.metronomeKnobStatus,
+        slider: this.el.metronomeVolume,
+        sets: "the metronome's volume",
+        remember: (controller) => ({ metronomeController: controller }),
+      },
+    ];
   }
 
-  private describeKnob(): void {
-    const knob = this.runtime.volumeKnob;
-    this.el.learnKnob.dataset['listening'] = String(knob.isLearning);
+  /**
+   * Follows the knobs the reader taught, and says what each is doing.
+   *
+   * A knob writes through its slider rather than past it, so the two can
+   * never disagree about how loud something is - a hidden second volume is
+   * how a reader ends up turning something that changes nothing.
+   */
+  private bindTheKnobs(): void {
+    for (const place of this.theKnobs()) {
+      const knob = place.knob;
+
+      this.subscriptions.push(
+        knob.events.on('moved', ({ value }) => {
+          place.slider.value = String(Math.round(value * 100));
+          this.applyVolumes(true);
+        }),
+      );
+
+      this.subscriptions.push(
+        knob.events.on('learned', ({ controller }) => {
+          this.runtime.settings.saveAudio({
+            ...this.runtime.settings.currentAudio,
+            ...place.remember(controller),
+          });
+          this.describeKnob(place);
+        }),
+      );
+
+      this.subscriptions.push(
+        knob.events.on('heard', ({ controller, value, positions }) => {
+          // Says what arrived even when it is the wrong control, so silence
+          // here means the keyboard sent nothing rather than that the app did.
+          place.status.textContent =
+            positions < 2
+              ? `Heard CC ${controller} at ${Math.round(value * 100)}% — keep turning.`
+              : `Heard CC ${controller} at ${Math.round(value * 100)}% — nearly there.`;
+        }),
+      );
+
+      this.subscriptions.push(knob.events.on('listeningChanged', () => this.describeKnob(place)));
+      this.describeKnob(place);
+    }
+  }
+
+  private describeKnob(place: KnobPlace): void {
+    const { knob, button, status } = place;
+    button.dataset['listening'] = String(knob.isLearning);
     if (knob.isLearning) {
-      this.el.learnKnob.textContent = 'Cancel';
-      this.el.knobStatus.textContent =
-        'Turn the knob you want to use. Nothing here means it sends no MIDI.';
+      button.textContent = 'Cancel';
+      status.textContent = 'Turn the knob you want to use. Nothing here means it sends no MIDI.';
       return;
     }
     if (knob.controller !== null) {
-      this.el.learnKnob.textContent = 'Forget';
-      this.el.knobStatus.textContent = `Knob CC ${knob.controller} sets the note volume.`;
+      button.textContent = 'Forget';
+      status.textContent = `Knob CC ${knob.controller} sets ${place.sets}.`;
       return;
     }
-    this.el.learnKnob.textContent = 'Use a knob';
-    this.el.knobStatus.textContent = 'Teach the app which control on your keyboard to follow.';
+    button.textContent = 'Use a knob';
+    status.textContent = 'Teach the app which control on your keyboard to follow.';
   }
 
   /** True while a run is under way, paused included: it is still that run. */

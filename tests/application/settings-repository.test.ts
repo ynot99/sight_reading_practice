@@ -319,6 +319,7 @@ describe('audio settings codec', () => {
       instrumentVolume: 0,
       sampleLoading: 'eager',
       volumeController: null,
+      metronomeController: null,
       audioFeedback: true,
       computerKeyboard: true,
     });
@@ -329,6 +330,8 @@ describe('audio settings codec', () => {
     expect(decodeAudioSettings({ volumeController: 11 }).volumeController).toBe(11);
     // A controller number no keyboard can send is dropped, not trusted.
     expect(decodeAudioSettings({ volumeController: 900 }).volumeController).toBeNull();
+    expect(decodeAudioSettings({ metronomeController: 11 }).metronomeController).toBe(11);
+    expect(decodeAudioSettings({ metronomeController: -1 }).metronomeController).toBeNull();
     // An unknown mode falls back rather than reaching the player.
     expect(decodeAudioSettings({ sampleLoading: 'whenever' }).sampleLoading).toBe('lazy');
     expect(decodeAudioSettings({ metronomeVolume: 4 })).toEqual(DEFAULT_AUDIO_SETTINGS);
@@ -356,6 +359,7 @@ describe('SettingsRepository', () => {
       instrumentVolume: 0.9,
       sampleLoading: 'off',
       volumeController: 7,
+      metronomeController: 7,
       audioFeedback: false,
       computerKeyboard: false,
     });
@@ -370,6 +374,7 @@ describe('SettingsRepository', () => {
       instrumentVolume: 0.9,
       sampleLoading: 'off',
       volumeController: 7,
+      metronomeController: 7,
       audioFeedback: false,
       computerKeyboard: false,
     });
@@ -386,6 +391,7 @@ describe('SettingsRepository', () => {
       instrumentVolume: 0,
       sampleLoading: 'eager',
       volumeController: null,
+      metronomeController: null,
       audioFeedback: true,
       computerKeyboard: true,
     });

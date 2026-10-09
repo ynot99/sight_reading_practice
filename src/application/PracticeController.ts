@@ -880,6 +880,12 @@ export class PracticeController {
   /** Notes of the other hand still sounding, so a stop can take them back. */
   private readonly sounding = new Set<number>();
   /**
+   * Steps whose other hand has been laid on the audio clock ahead of the run
+   * reaching them, each let go of as the run enters it - so a bar played
+   * again after a pause sounds its other hand again.
+   */
+  private readonly otherHandLaidAhead = new Set<number>();
+  /**
    * The lines the page is ruled in, as the renderer was last given them:
    * what anything else that draws the ruler reads, so the two cannot differ.
    */
@@ -3026,6 +3032,21 @@ export class PracticeController {
       }),
     );
     this.sessionSubscriptions.push(
+      session.events.on('musicPlaced', ({ steps }) => {
+        this.layTheOtherHandAhead(steps);
+      }),
+    );
+    this.sessionSubscriptions.push(
+      // Held, the music stops where it is: what was laid ahead of it and has
+      // not begun must not sound into the pause, and is sounded again when
+      // the bar is played again.
+      session.events.on('statusChanged', ({ status }) => {
+        if (status === 'paused') {
+          this.takeBackWhatWasLaidAhead();
+        }
+      }),
+    );
+    this.sessionSubscriptions.push(
       session.events.on('finished', ({ report, score }) => {
         this.finishedReport = report;
         this.finishedRoll = session.roll;
@@ -3628,7 +3649,12 @@ export class PracticeController {
         return;
       }
       const now = atMs ?? this.deps.clock.now();
-      this.soundTheOtherHand(step, now);
+      // Laid on the audio clock already with the click it sounds with, and
+      // only now being reached; sounded now, it would be heard the device's
+      // delay after that click.
+      if (!this.otherHandLaidAhead.delete(step.index)) {
+        this.soundTheOtherHand(step, now);
+      }
       // As far as the next step and no further: under a pulse the music
       // arrives on its own, and each step will say for itself when it does.
       // The beats *inside* a held note have nothing else to announce them,
@@ -4018,6 +4044,33 @@ export class PracticeController {
   }
 
   /**
+   * Sounds the other hand on the steps the pulse will reach by itself, as
+   * the clicks they fall on are placed, at the moments those clicks are
+   * heard - so the two hands sound together, on the beat. Each step once.
+   */
+  private layTheOtherHandAhead(steps: readonly { readonly stepIndex: number; readonly atMs: number }[]): void {
+    if (!this.wantsTheOtherHand()) {
+      return;
+    }
+    for (const { stepIndex, atMs } of steps) {
+      const step = this.timeline?.at(stepIndex) ?? null;
+      if (step === null) {
+        continue;
+      }
+      this.otherHandLaidAhead.add(stepIndex);
+      this.soundTheOtherHand(step, atMs);
+    }
+  }
+
+  /** Takes back the other hand laid ahead of the run and not begun, and forgets it was laid. */
+  private takeBackWhatWasLaidAhead(): void {
+    if (this.otherHandLaidAhead.size > 0) {
+      this.deps.instrument.takeBackFrom(this.deps.clock.now());
+    }
+    this.otherHandLaidAhead.clear();
+  }
+
+  /**
    * Takes back what the other hand was holding, or was about to.
    *
    * Stopping a note that has not started yet is what silences the rest of a
@@ -4032,6 +4085,7 @@ export class PracticeController {
     this.sounding.clear();
     this.otherHandAnchor = null;
     this.otherHandLaidUntilMs = null;
+    this.takeBackWhatWasLaidAhead();
     this.readersLastEntry = null;
     // And the beats laid out with them. A run walked away from must not go on
     // counting itself in an empty room.

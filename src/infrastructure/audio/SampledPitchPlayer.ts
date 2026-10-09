@@ -256,7 +256,8 @@ export class SampledPitchPlayer
     }
     // Asked before anything is fetched or decoded, so that a page catching up
     // after a stall does no work at all for the notes it is dropping.
-    if (tooLateToSound(atMs, performance.now())) {
+    const context = this.ensureContext();
+    if (tooLateToSound(atMs, performance.now(), { context, reading: this.reading })) {
       timeTheStart(
         'instrument: a note dropped as too late',
         () => `${String(Math.round(performance.now() - (atMs ?? 0)))} ms late`,
@@ -277,7 +278,6 @@ export class SampledPitchPlayer
       return;
     }
 
-    const context = this.ensureContext();
     // Striking the key again re-hits the string, pedal or no pedal, so this
     // must not go through stop(), which would hand the voice to the pedal.
     // It happens when the new note sounds, not when it was handed over: a

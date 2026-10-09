@@ -783,10 +783,16 @@ describe('when the click is actually heard', () => {
     const click = context.oscillators[0];
     expect(click?.startedAt).toBeCloseTo(0.06, 6);
 
-    // The page's clock runs on a tenth of a second while the device's stands.
-    vi.advanceTimersByTime(100);
+    // The page's clock runs on while the device's stands - longer than a
+    // note may be late by, so a note judged late by the page's clock rather
+    // than the reading it is placed by would not be sounded at all.
+    vi.advanceTimersByTime(400);
+    const sounding = context.oscillators.length;
     piano.play(60, 0.5, placed[0]?.scheduledTimeMs);
 
+    // A note, and not the click it was compared with.
+    expect(context.oscillators).toHaveLength(sounding + 1);
+    expect(context.oscillators.at(-1)?.frequency.value).toBeCloseTo(261.63, 1);
     expect(context.oscillators.at(-1)?.startedAt).toBeCloseTo(click?.startedAt ?? -1, 6);
 
     // Stopped, nothing sounds beside it, and a note is placed by a fresh

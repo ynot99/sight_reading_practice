@@ -173,6 +173,8 @@ export class PracticeSession {
    */
   private theFirstBarHasBegun = false;
   private positionOffsetTicks = 0;
+  /** Musical divisions one tick of the pulse covers, as it was last set up. */
+  private pulseSpanTicks = 0;
   /** Musical position last published, so an unchanged one is not republished. */
   private publishedPositionTicks: number | null = null;
   private countInRemaining = 0;
@@ -355,6 +357,7 @@ export class PracticeSession {
 
     this.subscriptions.push(this.midi.subscribe((event) => this.handleMidi(event)));
     this.subscriptions.push(this.metronome.onTick((tick) => this.handleTick(tick)));
+    this.subscriptions.push(this.metronome.onTickPlaced((tick) => this.sayWhatATickCarries(tick)));
 
     if (this.usesPulse()) {
       this.countInRemaining = Math.max(0, this.countInPulses());
@@ -416,6 +419,12 @@ export class PracticeSession {
     // counted from the front of it, and a different one would move every bar
     // and every tempo under a pulse that is not going to start again.
     this.pulseCountInBars = countInBars;
+    const subdivisionsPerPulse = subdivisionsPerPulseFor(
+      this.timeline,
+      this.timeline.exercise.timeSignature,
+      this.options.click,
+    );
+    this.pulseSpanTicks = this.timeline.exercise.timeSignature.ticksPerPulse / subdivisionsPerPulse;
     this.metronome.configure({
       bpm: this.tempoBpm,
       timeSignature: this.timeline.exercise.timeSignature,
@@ -423,11 +432,7 @@ export class PracticeSession {
       tempos: this.temposToBeat(countInBars),
       endsAtTicks: this.endOfTheMusic(countInBars, stopAtTicks),
       holdsPastTicks: this.theNextGate(countInBars),
-      subdivisionsPerPulse: subdivisionsPerPulseFor(
-        this.timeline,
-        this.timeline.exercise.timeSignature,
-        this.options.click,
-      ),
+      subdivisionsPerPulse,
       click: this.options.click,
       dropout: resolveDropout(this.clickForThePulse(), countInBars),
       silences: this.options.clickSilences,
@@ -604,6 +609,114 @@ export class PracticeSession {
       }
     }
     return coming;
+  }
+
+  /**
+   * Says which steps a tick being placed carries the music into, and when
+   * each is heard. See {@link MusicPlacedEvent}.
+   */
+  private sayWhatATickCarries(tick: MetronomeTick): void {
+    const steps = this.stepsCarriedBy(tick);
+    if (steps.length > 0) {
+      this.emitter.emit('musicPlaced', { steps });
+    }
+  }
+
+  /**
+   * The steps from where a tick being placed stands to where the next will,
+   * timed from the tick's own moment - the moment its click is heard, which
+   * is what the run's clock is set by as the tick is heard, after a pulse is
+   * begun again by the reader's own press above all.
+   *
+   * Never onto a place the music may stand: where it waits at bar lines,
+   * the first note in a bar the reader owes - the step the mode holds at -
+   * and where it waits at every note, any note the reader owes. Those steps,
+   * and the one a pulse begun mid-run starts on - begun by the reader's
+   * press, or by a resume - are sounded as they are entered, which is when
+   * the reader gives them.
+   */
+  private stepsCarriedBy(tick: MetronomeTick): readonly NotesComing[] {
+    if (!this.mode.requiresMetronome) {
+      return [];
+    }
+    let at: number;
+    let from: TimelineStep | null;
+    if (this.status === 'counting-in') {
+      if (this.mode.waitsForTheFirstBeat) {
+        return [];
+      }
+      // Where the music will begin on the pulse's count: the count-in is
+      // placed ahead of being heard, and so is the first beat after it. A
+      // click of the count-in stands before the music, and carries none of it.
+      const musicFrom = metronomeEnd(this.timeline.exercise, {
+        countInBars: this.pulseCountInBars,
+        fromTicks: this.resumeAtTicks,
+        untilTicks: this.resumeAtTicks,
+      });
+      at = tick.positionTicks - musicFrom + this.resumeAtTicks;
+      from = this.timeline.at(this.resumeAtIndex);
+    } else if (this.status === 'running') {
+      if (this.heldAtBarTicks !== null && !this.mode.holdsPastTheGate) {
+        return [];
+      }
+      at = tick.positionTicks - this.positionOffsetTicks;
+      from = this.currentStep;
+    } else {
+      return [];
+    }
+    const begunNow = this.status === 'running' && tick.positionTicks === 0;
+    const until = at + this.pulseSpanTicks;
+    const coming: NotesComing[] = [];
+    const fromIndex = from?.index ?? 0;
+    // Walked from where the run stands rather than from the tick: a place the
+    // music may stand anywhere between the two is as far as it goes by itself.
+    for (let index = fromIndex; index <= this.lastIndex; index += 1) {
+      const step = this.timeline.at(index);
+      if (step === null || step.onsetTicks >= until) {
+        break;
+      }
+      // A bar waits for the reader at its first note that is theirs, which is
+      // its bar line unless the bar opens on something only the other hand
+      // plays - and that the pulse reaches by itself. The bar the run is in
+      // has been given its beat already, or the run would be standing.
+      if (this.mode.standsStill === 'at-bar-lines' && index > fromIndex && this.opensItsBar(step)) {
+        break;
+      }
+      // Every note the reader owes, unless it is the one the run is at and
+      // they have played it.
+      if (
+        this.mode.standsStill === 'at-notes' &&
+        this.expectedAt(step).length > 0 &&
+        (index > fromIndex || this.matcher?.completed !== true)
+      ) {
+        break;
+      }
+      if (step.onsetTicks < at || (begunNow && step.onsetTicks === at)) {
+        continue;
+      }
+      coming.push({
+        stepIndex: step.index,
+        atMs: tick.scheduledTimeMs + this.elapsedTo(step.onsetTicks) - this.elapsedTo(at),
+      });
+    }
+    return coming;
+  }
+
+  /** Whether a step is the first in its bar the reader owes, which a bar waits at. */
+  private opensItsBar(step: TimelineStep): boolean {
+    if (this.expectedAt(step).length === 0) {
+      return false;
+    }
+    for (let index = step.index - 1; index >= 0; index -= 1) {
+      const before = this.timeline.at(index);
+      if (before === null || before.measureIndex !== step.measureIndex) {
+        return true;
+      }
+      if (this.expectedAt(before).length > 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

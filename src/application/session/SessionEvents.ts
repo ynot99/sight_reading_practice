@@ -101,6 +101,20 @@ export interface BarBeganEvent {
   readonly atMs: number;
 }
 
+/**
+ * The steps the music reaches on its own with a tick of the pulse being
+ * placed, and when each is heard.
+ *
+ * Said as the tick's click goes onto the audio clock, ahead of its being
+ * heard, for what has to sound on those steps: anything started when the
+ * step is entered is started when its beat is already being heard, and is
+ * heard the device's delay after it. Only steps the music will reach by
+ * itself - never one it stands at waiting for the reader.
+ */
+export interface MusicPlacedEvent {
+  readonly steps: readonly { readonly stepIndex: number; readonly atMs: number }[];
+}
+
 export interface SessionFinishedEvent {
   readonly report: PerformanceReport;
   readonly score: SessionScore;
@@ -117,5 +131,6 @@ export interface SessionEventMap {
   pressKept: PressKeptEvent;
   beat: MetronomeTick;
   barBegan: BarBeganEvent;
+  musicPlaced: MusicPlacedEvent;
   finished: SessionFinishedEvent;
 }

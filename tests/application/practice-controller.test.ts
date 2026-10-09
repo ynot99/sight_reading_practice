@@ -59,6 +59,7 @@ import { emptyRoll, theWaits, type RunRoll } from '../../src/application/session
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, restEntry } from '../../src/domain/model/Exercise.js';
 import type { Exercise } from '../../src/domain/model/Exercise.js';
+import type { MetronomeTick } from '../../src/application/ports/IMetronome.js';
 
 /** Strips the printed tempo so two renderings can be compared note for note. */
 function withoutTempoMark(xml: string): string {
@@ -2047,6 +2048,259 @@ describe('hearing the hand you are not reading', () => {
     // the pair it was finding was two beats at the very start of the run at one
     // moment - a wait of no width, which says nothing about a gate at all.
     expect(theWaits(played).map((wait) => wait.untilMs - wait.fromMs)).toEqual([700]);
+  });
+
+  describe('on the beat, under a pulse', () => {
+    /**
+     * Treble: C4 | rest, D4, E4 (half). Bass: C3 | G2, D3, C3 (half). The
+     * second bar opens on the bass alone, so where the music waits at bar
+     * lines it waits at the D, the first note in it the treble owes.
+     */
+    function aBarThatOpensOnTheBass(): Exercise {
+      const base = twoBarExercise({ tempoBpm: 60 });
+      return {
+        ...base,
+        id: 'fixture-bar-opens-on-the-bass',
+        staves: [
+          {
+            staffNumber: 1,
+            voice: 1,
+            clef: 'treble',
+            clefChanges: [],
+            measures: [
+              bar(noteEntry(p('C4'), Duration.WHOLE)),
+              bar(restEntry(Duration.QUARTER), noteEntry(p('D4'), Duration.QUARTER), noteEntry(p('E4'), Duration.HALF)),
+            ],
+          },
+          {
+            staffNumber: 2,
+            voice: 2,
+            clef: 'bass',
+            clefChanges: [],
+            measures: [
+              bar(noteEntry(p('C3'), Duration.WHOLE)),
+              bar(noteEntry(p('G2'), Duration.QUARTER), noteEntry(p('D3'), Duration.QUARTER), noteEntry(p('C3'), Duration.HALF)),
+            ],
+          },
+        ],
+      };
+    }
+
+    /** Places ticks ahead of their being heard until one stands at a place in the plan. */
+    function placeUntil(metronome: ManualMetronome, positionTicks: number): MetronomeTick[] {
+      const placed: MetronomeTick[] = [];
+      while (placed.at(-1)?.positionTicks !== positionTicks) {
+        const [next] = metronome.placeAhead(1);
+        if (next === undefined) {
+          throw new Error('The pulse never got there.');
+        }
+        placed.push(next);
+      }
+      return placed;
+    }
+
+    it('lays the other hand on the click it sounds with, as the click is placed', async () => {
+      // Sounded as each step was entered - when its beat was already being
+      // heard - the other hand came the device's delay after the click and
+      // the reader playing to it.
+      const { controller, metronome, instrument } = await readingTheTreble();
+      controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 1 });
+      controller.start();
+      const quarter = Duration.QUARTER.ticks;
+
+      const first = placeUntil(metronome, 4 * quarter).at(-1);
+      expect(controller.session?.status).toBe('counting-in');
+      expect(instrument.played.filter((note) => note.midi === MIDI.C3).map((note) => note.atMs)).toEqual([
+        first?.scheduledTimeMs,
+      ]);
+
+      const second = placeUntil(metronome, 8 * quarter).at(-1);
+      expect(instrument.played.filter((note) => note.midi === MIDI.G2).map((note) => note.atMs)).toEqual([
+        second?.scheduledTimeMs,
+      ]);
+
+      // Heard, each is sounded once.
+      metronome.advanceSubdivisions(16);
+      expect(sounded(instrument).filter((midi) => midi === MIDI.C3)).toHaveLength(1);
+      expect(sounded(instrument).filter((midi) => midi === MIDI.G2)).toHaveLength(1);
+    });
+
+    it('lays a bar that opens on the other hand alone, and stops at the first note in it the reader owes', async () => {
+      const rig = createController(true);
+      await rig.controller.openScore(aBarThatOpensOnTheBass());
+      rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true, modeId: BAR_MODE_ID, countInBars: 0 });
+      rig.controller.start();
+      rig.metronome.advanceSubdivisions(1);
+      rig.midi.noteOn(MIDI.C4, rig.clock.now());
+      const quarter = Duration.QUARTER.ticks;
+
+      const placed = placeUntil(rig.metronome, 4 * quarter + 2 * quarter);
+      const opening = placed.find((tick) => tick.positionTicks === 4 * quarter);
+
+      // The G the pulse reaches by itself, on its click; not the D under the
+      // reader's first note of the bar, nor anything after it.
+      expect(rig.instrument.played.filter((note) => note.midi === MIDI.G2).map((note) => note.atMs)).toEqual([
+        opening?.scheduledTimeMs,
+      ]);
+      expect(sounded(rig.instrument)).not.toContain(MIDI.D3);
+      expect(sounded(rig.instrument).filter((midi) => midi === MIDI.C3)).toHaveLength(1);
+
+      // Heard up to the D, where the bar stands - the pulse began again at
+      // the reader's C, so from nought; given its beat, it begins again from
+      // the press, and the C under the reader's E - a note of theirs that is
+      // not the bar's first - is laid on its click.
+      rig.metronome.advanceSubdivisions(6);
+      expect(rig.controller.session?.waitingAtTheBarLine).toBe(true);
+      rig.midi.noteOn(MIDI.D4, rig.clock.now());
+      const third = placeUntil(rig.metronome, quarter).at(-1);
+      expect(rig.instrument.played.filter((note) => note.midi === MIDI.C3).map((note) => note.atMs)).toEqual([
+        0,
+        third?.scheduledTimeMs,
+      ]);
+    });
+
+    it('lays nothing where the other hand is not to be heard', async () => {
+      const { controller, metronome, instrument } = await readingTheTreble();
+      controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 1, hearTheOtherHand: false });
+      controller.start();
+
+      placeUntil(metronome, 8 * Duration.QUARTER.ticks);
+
+      expect(instrument.played).toEqual([]);
+    });
+
+    it('lays a note that falls between two clicks where the grid is too fine to tick on every one', async () => {
+      // Fives, sevens and thirty-seconds in one bar ask for more ticks to the
+      // beat than the loop is ever run at, so a note of the fives falls
+      // between two of them: laid by the one before it, at its own moment.
+      const quintuplet = Duration.of('16th', 0, { actual: 5, normal: 4 });
+      const septuplet = Duration.of('16th', 0, { actual: 7, normal: 4 });
+      const thirtySecond = Duration.of('32nd');
+      const base = twoBarExercise({ tempoBpm: 60 });
+      const exercise: Exercise = {
+        ...base,
+        id: 'fixture-a-grid-too-fine',
+        staves: [
+          {
+            staffNumber: 1,
+            voice: 1,
+            clef: 'treble',
+            clefChanges: [],
+            measures: [bar(noteEntry(p('C4'), Duration.WHOLE)), bar(noteEntry(p('D4'), Duration.WHOLE))],
+          },
+          {
+            staffNumber: 2,
+            voice: 2,
+            clef: 'bass',
+            clefChanges: [],
+            measures: [
+              bar(
+                ...['C3', 'D3', 'E3', 'F3', 'G3'].map((name) => noteEntry(p(name), quintuplet)),
+                ...['C3', 'D3', 'E3', 'F3', 'G3', 'A3', 'B3'].map((name) => noteEntry(p(name), septuplet)),
+                ...['C3', 'D3', 'E3', 'F3', 'G3', 'A3', 'B3', 'C4'].map((name) => noteEntry(p(name), thirtySecond)),
+                noteEntry(p('C3'), Duration.QUARTER),
+              ),
+              bar(noteEntry(p('G2'), Duration.WHOLE)),
+            ],
+          },
+        ],
+      };
+      const rig = createController(true);
+      await rig.controller.openScore(exercise);
+      rig.controller.updateSettings({ handStaff: 1, hearTheOtherHand: true, modeId: FLOW_MODE_ID, countInBars: 1 });
+      rig.controller.start();
+      const quarter = Duration.QUARTER.ticks;
+      const placed = placeUntil(rig.metronome, 4 * quarter + quarter / 2);
+      const music = placed.find((tick) => tick.positionTicks === 4 * quarter);
+
+      // The D of the fives, a fifth of a beat in: two hundred milliseconds.
+      expect((quarter / 5) % (placed[1]?.positionTicks ?? 1)).not.toBe(0);
+      const d = rig.instrument.played.find((note) => note.midi === MIDI.D3);
+      expect(d?.atMs).toBeCloseTo((music?.scheduledTimeMs ?? -1) + 200, 6);
+    });
+
+    it('forgets what a run laid ahead when it ends, so the next run sounds it', async () => {
+      // Laid in one run and never reached, a step was still counted as laid
+      // in the next - where, given by the reader at a bar line, it was never
+      // sounded at all.
+      const { controller, metronome, midi, clock, instrument } = await readingTheTreble();
+      controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      controller.start();
+      metronome.advanceSubdivisions(1);
+      placeUntil(metronome, 4 * Duration.QUARTER.ticks);
+      expect(sounded(instrument)).toContain(MIDI.G2);
+      controller.stop();
+
+      controller.updateSettings({ modeId: BAR_MODE_ID });
+      controller.start();
+      metronome.advanceSubdivisions(1);
+      midi.noteOn(MIDI.C4, clock.now());
+      metronome.advanceToTicks(4 * Duration.QUARTER.ticks);
+      const before = instrument.played.length;
+      midi.noteOn(MIDI.G4, clock.now());
+
+      expect(instrument.played.slice(before).map((note) => note.midi)).toContain(MIDI.G2);
+    });
+
+    it('leaves the step a pulse begun by the reader starts on to sound with their key', async () => {
+      const { controller, metronome, midi, clock } = await readingTheTreble();
+      controller.updateSettings({ modeId: BAR_MODE_ID, countInBars: 0 });
+      const session = controller.start();
+      const placedSteps: number[] = [];
+      session?.events.on('musicPlaced', ({ steps }) => {
+        placedSteps.push(...steps.map((step) => step.stepIndex));
+      });
+      metronome.advanceSubdivisions(1);
+      midi.noteOn(MIDI.C4, clock.now());
+      metronome.advanceToTicks(4 * Duration.QUARTER.ticks);
+      placedSteps.length = 0;
+      const downbeat = controller.session?.currentStep?.index;
+
+      midi.noteOn(MIDI.G4, clock.now());
+
+      expect(downbeat).toBeDefined();
+      expect(placedSteps).not.toContain(downbeat);
+    });
+
+    it('lays nothing the reader owes where the music waits at every note', async () => {
+      const { controller, metronome, midi, clock } = await readingTheTreble();
+      controller.updateSettings({ modeId: NOTE_MODE_ID, countInBars: 0 });
+      const session = controller.start();
+      const placedSteps: number[] = [];
+      session?.events.on('musicPlaced', ({ steps }) => {
+        placedSteps.push(...steps.map((step) => step.stepIndex));
+      });
+      metronome.advanceSubdivisions(1);
+      midi.noteOn(MIDI.C4, clock.now());
+
+      metronome.placeAhead(16);
+
+      // Every step of this treble is the reader's.
+      expect(placedSteps).toEqual([]);
+    });
+
+    it('takes back what was laid ahead when the run is held, and sounds it again as the bar is played again', async () => {
+      const { controller, metronome, instrument } = await readingTheTreble();
+      controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      controller.start();
+      metronome.advanceSubdivisions(1);
+      const quarter = Duration.QUARTER.ticks;
+      // The second bar's bass laid, and not yet begun.
+      placeUntil(metronome, 4 * quarter);
+      const laid = instrument.played.find((note) => note.midi === MIDI.G2);
+      expect(laid).toBeDefined();
+
+      controller.pause();
+
+      expect(instrument.heard).not.toContain(laid);
+
+      // Picked up from the top of the bar it was held in, and on to the
+      // second bar again: its bass is laid again, rather than counted as done.
+      controller.resume();
+      const before = instrument.played.length;
+      metronome.placeAhead(8);
+      expect(instrument.played.slice(before).map((note) => note.midi)).toContain(MIDI.G2);
+    });
   });
 
   it('holds the other hand at a bar line until the reader gives the beat', async () => {

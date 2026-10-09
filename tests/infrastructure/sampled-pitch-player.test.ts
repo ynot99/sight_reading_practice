@@ -431,6 +431,9 @@ describe('SampledPitchPlayer', () => {
       player.play(64, 1, now + 500);
       player.stop(60, now + 1_000);
       player.takeBackFrom(now + 400);
+      // Half a second gone by the page's clock, and still to come by the
+      // reading it is placed by: sounded, where it was.
+      player.play(67, 1, now - 500);
     } finally {
       still.mockRestore();
     }
@@ -444,6 +447,7 @@ describe('SampledPitchPlayer', () => {
     expect(context.sources[1]?.stoppedAt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
       context.sources[1]?.startedAt ?? 0,
     );
+    expect(context.sources[2]?.startedAt).toBeCloseTo((now + 1_500) / 1000, 6);
   });
 
   it('ends the ringing note on a key when it is struck again, not when the repeat is handed over', async () => {

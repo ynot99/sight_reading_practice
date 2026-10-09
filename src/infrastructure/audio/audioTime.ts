@@ -24,11 +24,25 @@ export const TOO_LATE_MS = 200;
  *
  * A note from a moment that has gone is not played late. It is not played.
  */
-export function tooLateToSound(atMs: number | undefined, nowMs: number): boolean {
+export function tooLateToSound(
+  atMs: number | undefined,
+  nowMs: number,
+  onTheAudioClock?: { readonly context: BaseAudioContext; readonly reading?: AudioClockReading },
+): boolean {
   if (atMs === undefined) {
     return false;
   }
-  return nowMs - atMs > TOO_LATE_MS;
+  if (onTheAudioClock === undefined) {
+    return nowMs - atMs > TOO_LATE_MS;
+  }
+  // Now as the same reading of the clocks puts it that the moment will be
+  // placed by. A moment stamped by the metronome is in the metronome's
+  // reading, which a device waking slowly leaves hundreds of milliseconds
+  // from the page's own clock: asked against that, a note laid on its click
+  // ahead of time read as long gone and was never sounded.
+  const { context, reading } = onTheAudioClock;
+  const pageAtNought = reading?.of(context) ?? pageMsAtAudioNought(context);
+  return pageAtNought + context.currentTime * 1000 - atMs > TOO_LATE_MS;
 }
 
 /**

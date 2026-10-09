@@ -202,6 +202,12 @@ export interface PlayerEventMap {
   };
 }
 
+/** Where a performance stands in the stretch it plays, and how long that is, in milliseconds. */
+export interface PlaceInThePerformance {
+  readonly positionMs: number;
+  readonly durationMs: number;
+}
+
 const DEFAULT_HORIZON_MS = 250;
 /**
  * How many laps of a repeating passage the plan is written out for at a time.
@@ -480,6 +486,74 @@ export class ExercisePlayer {
   /** Where a held performance would pick up, or `null` if none is held. */
   get pausedAt(): number | null {
     return this.playing ? null : this.pausedAtIndex;
+  }
+
+  /**
+   * Where the performance stands in the stretch it plays, and how long that
+   * stretch is, in milliseconds as it is played: what a player outside the
+   * page shows as its position. The stretch is one lap - from where the laps
+   * begin to where they end - so a performance going round shows its place
+   * in the lap, and one picked up partway through starts partway along.
+   * `null` with nothing playing or held.
+   */
+  whereItStands(nowMs: number): PlaceInThePerformance | null {
+    const timeline = this.timeline;
+    if (timeline === null || (!this.playing && this.pausedAtIndex === null)) {
+      return null;
+    }
+    const durationMs = this.lapMs;
+    const along = (ticks: number): number => spanMs(timeline.exercise, this.loopFromTicks, ticks);
+    const within = (ms: number): PlaceInThePerformance => ({
+      positionMs: Math.min(durationMs, Math.max(0, ms)),
+      durationMs,
+    });
+    if (!this.playing) {
+      return within(along(timeline.at(this.pausedAtIndex ?? 0)?.onsetTicks ?? this.loopFromTicks));
+    }
+    // Through a count-in the music has not begun, so it stands where it will.
+    const began = this.startedAtMs ?? this.countedInToMs;
+    const elapsedMs = began === null ? 0 : Math.max(0, nowMs - began);
+    if (!this.looping || elapsedMs < this.firstLapMs || this.lapMs <= 0) {
+      return within(along(this.fromTicks) + elapsedMs);
+    }
+    return within((elapsedMs - this.firstLapMs) % this.lapMs);
+  }
+
+  /**
+   * The step a moment of the stretch falls in: the last one begun by then,
+   * as `whereItStands` measures, or the first where the moment is before
+   * them all. `null` with nothing to play.
+   */
+  stepAt(positionMs: number): number | null {
+    const timeline = this.timeline;
+    if (timeline === null) {
+      return null;
+    }
+    let found: number | null = null;
+    for (const step of timeline.steps) {
+      if (step.onsetTicks < this.loopFromTicks || step.onsetTicks >= this.untilTicks) {
+        continue;
+      }
+      if (found !== null && spanMs(timeline.exercise, this.loopFromTicks, step.onsetTicks) > positionMs) {
+        break;
+      }
+      found = step.index;
+    }
+    return found;
+  }
+
+  /**
+   * Moves where a held performance picks up. Only a held one: a playing one
+   * is moved by starting it again from there, and an ended one has nowhere
+   * to pick up from - neither has a place it is held at. Says whether it
+   * moved.
+   */
+  holdAt(stepIndex: number): boolean {
+    if (this.pausedAtIndex === null) {
+      return false;
+    }
+    this.pausedAtIndex = stepIndex;
+    return true;
   }
 
   /**

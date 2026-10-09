@@ -34,7 +34,7 @@ import type { IMetronome } from './ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
-import type { BarStart, KeyDown, PedalDown, PlayerEventMap } from './ExercisePlayer.js';
+import type { BarStart, KeyDown, PedalDown, PlaceInThePerformance, PlayerEventMap } from './ExercisePlayer.js';
 import type { PassageHistory, PracticeHistory } from './PracticeHistory.js';
 import type {
   ChosenClickWhen,
@@ -2465,6 +2465,31 @@ export class PracticeController {
   /** Whether a performance is being held rather than played or ended. */
   get isListeningPaused(): boolean {
     return this.player?.pausedAt !== null && this.player?.pausedAt !== undefined;
+  }
+
+  /** Where the performance stands in the stretch it plays, or `null` with none playing or held. */
+  get performancePlace(): PlaceInThePerformance | null {
+    return this.player?.whereItStands(this.deps.clock.now()) ?? null;
+  }
+
+  /**
+   * Moves the performance to a moment of the stretch it plays, at the step
+   * there: playing on from it - picked up as a held one is, through the same
+   * road - or, held, to be picked up from it, the marker standing on it.
+   */
+  movePerformanceTo(positionMs: number): void {
+    const player = this.player;
+    const index = player?.stepAt(positionMs) ?? null;
+    if (player === null || index === null) {
+      return;
+    }
+    if (player.isPlaying) {
+      this.listen(index);
+      return;
+    }
+    if (player.holdAt(index)) {
+      this.deps.cursor.moveTo(index);
+    }
   }
 
   /**

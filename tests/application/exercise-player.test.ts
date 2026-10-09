@@ -1655,6 +1655,114 @@ describe('the pedal down between two moments', () => {
   });
 });
 
+describe('where a performance stands, for a player outside the page', () => {
+  /** Two bars, the second at twice the speed: four seconds and two. */
+  const quickening = (): Exercise => ({
+    ...twoBarExercise({ tempoBpm: 60 }),
+    tempoChanges: [{ measureIndex: 1, offsetTicks: 0, tempoBpm: 120 }],
+  });
+
+  /** How far into the piece a place is, in milliseconds: four seconds a bar, then two. */
+  const msInto = (exercise: Exercise, ticks: number): number => {
+    const bar = exercise.timeSignature.ticksPerMeasure;
+    return ticks <= bar ? (ticks / bar) * 4_000 : 4_000 + ((ticks - bar) / bar) * 2_000;
+  };
+
+  /** Ticks the metronome on until the music itself begins, and says when that is. */
+  function untilTheMusic(metronome: ManualMetronome, countIn: number): number {
+    for (let tick = 0; tick < 64; tick += 1) {
+      const [at] = metronome.advanceSubdivisions(1);
+      if (at !== undefined && at.positionTicks >= countIn) {
+        return at.scheduledTimeMs;
+      }
+    }
+    throw new Error('The music never began.');
+  }
+
+  it('stands at the top through the count-in, then goes along the lap and round it', () => {
+    const { player, metronome, timeline } = rig(quickening());
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never', countInBars: 1, repeat: true });
+    const countIn = timeline.exercise.timeSignature.ticksPerMeasure;
+
+    expect(player.whereItStands(0)).toEqual({ positionMs: 0, durationMs: 6_000 });
+    const began = untilTheMusic(metronome, countIn);
+
+    // Across the change of tempo, and round: a lap is six seconds, not eight.
+    for (const [after, at] of [[0, 0], [2_500, 2_500], [5_000, 5_000], [6_000, 0], [7_250, 1_250], [13_000, 1_000]]) {
+      expect(player.whereItStands(began + (after ?? 0))?.positionMs, String(after)).toBeCloseTo(at ?? 0, 6);
+    }
+  });
+
+  it('stops at the end of a performance that does not go round', () => {
+    const { player, metronome, timeline } = rig(quickening());
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    const began = untilTheMusic(metronome, 0);
+
+    expect(player.whereItStands(began + 9_000)?.positionMs).toBe(6_000);
+  });
+
+  it('starts partway along a lap picked up partway through, and stands where it was held', () => {
+    const { player, metronome, timeline } = rig(quickening());
+    // Laps from the top, as a passage's are, picked up on the second beat
+    // after a bar of count-in: the lap is the whole six seconds still.
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      fromIndex: 1,
+      loopFromIndex: 0,
+      countInBars: 1,
+      repeat: true,
+    });
+    const [counting] = metronome.advanceSubdivisions(1);
+    expect(player.whereItStands(counting?.scheduledTimeMs ?? 0)).toEqual({ positionMs: 1_000, durationMs: 6_000 });
+    const began = untilTheMusic(metronome, timeline.exercise.timeSignature.ticksPerMeasure);
+
+    expect(player.whereItStands(began + 500)?.positionMs).toBe(1_500);
+    // Round to the top after the five seconds left of the first lap.
+    expect(player.whereItStands(began + 5_250)?.positionMs).toBeCloseTo(250, 6);
+
+    player.pause();
+    const held = timeline.at(player.pausedAt ?? -1);
+    expect(held).not.toBeNull();
+    expect(player.whereItStands(began + 60_000)?.positionMs).toBe(msInto(timeline.exercise, held?.onsetTicks ?? -1));
+
+    player.end();
+    expect(player.whereItStands(began)).toBeNull();
+  });
+
+  it('finds the step a moment falls in, the first before them all', () => {
+    const { player, timeline } = rig(quickening());
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    const onsetMsOf = (index: number | null): number | null => {
+      const step = index === null ? null : timeline.at(index);
+      return step === null ? null : msInto(timeline.exercise, step.onsetTicks);
+    };
+
+    expect(onsetMsOf(player.stepAt(-50))).toBe(0);
+    expect(onsetMsOf(player.stepAt(999))).toBe(0);
+    expect(onsetMsOf(player.stepAt(1_000))).toBe(1_000);
+    expect(onsetMsOf(player.stepAt(4_700))).toBe(4_000);
+    expect(onsetMsOf(player.stepAt(5_000))).toBe(5_000);
+    expect(onsetMsOf(player.stepAt(60_000))).toBe(5_000);
+  });
+
+  it('moves where a held performance picks up, and only a held one', () => {
+    const { player, timeline } = rig(quickening());
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+
+    expect(player.holdAt(3)).toBe(false);
+    player.pause();
+    expect(player.holdAt(3)).toBe(true);
+    expect(player.pausedAt).toBe(3);
+    expect(player.whereItStands(0)?.positionMs).toBe(3_000);
+
+    player.end();
+    expect(player.holdAt(2)).toBe(false);
+    expect(player.pausedAt).toBeNull();
+  });
+});
+
 describe('the bars begun between two moments', () => {
   /** Two bars, the second at twice the speed: a lap is six seconds. */
   const quickening = (): Exercise => ({

@@ -2020,6 +2020,47 @@ describe('AppView', () => {
       expect(runtime.controller.isListeningPaused).toBe(false);
     });
 
+    it('skips a playing performance to a moment of it, and a held one to be picked up there', async () => {
+      const { view, runtime, mediaKeys, renderer } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+      const place = mediaKeys.now?.placeNow();
+      expect(place?.durationMs).toBeGreaterThan(0);
+      const halfway = (place?.durationMs ?? 0) / 2;
+
+      mediaKeys.now?.seekTo(halfway);
+
+      // Playing on, from the step the moment falls in.
+      expect(runtime.controller.isListening).toBe(true);
+      const moved = runtime.controller.performancePlace?.positionMs ?? -1;
+      expect(moved).toBeGreaterThan(0);
+      expect(moved).toBeLessThanOrEqual(halfway);
+
+      mediaKeys.now?.pause();
+      expect(renderer.cursor.position).toBeGreaterThan(0);
+      const toldBefore = mediaKeys.said.length;
+      mediaKeys.now?.seekTo(0);
+      expect(mediaKeys.said.length).toBeGreaterThan(toldBefore);
+
+      // Still held, from the top now, the marker on it and the panel told.
+      expect(runtime.controller.isListeningPaused).toBe(true);
+      expect(renderer.cursor.position).toBe(0);
+      expect(mediaKeys.now?.placeNow()?.positionMs).toBe(0);
+      expect(mediaKeys.now?.playing).toBe(false);
+    });
+
+    it('tells the panel where the performance stands at every step', async () => {
+      const { view, runtime, mediaKeys, metronome } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+      const before = mediaKeys.said.length;
+
+      metronome.advanceSubdivisions(16);
+
+      expect(mediaKeys.said.length).toBeGreaterThan(before);
+      expect(mediaKeys.now?.playing).toBe(true);
+    });
+
     it('gives them back when the view goes', async () => {
       const { view, runtime, mediaKeys } = createRig();
       await view.initialize();

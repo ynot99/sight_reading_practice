@@ -3505,6 +3505,12 @@ export class AppView {
       stop: () => {
         this.stopEverything();
       },
+      placeNow: () => this.runtime.controller.performancePlace,
+      seekTo: (positionMs) => {
+        this.runtime.controller.movePerformanceTo(positionMs);
+        // A held one moved says so here; a playing one says so as it starts.
+        this.showThePerformance();
+      },
     });
   }
 
@@ -6092,6 +6098,10 @@ export class AppView {
     this.subscriptions.push(
       controller.playbackEvents.on('stepReached', ({ stepIndex }) => {
         this.showThePlaybackKeys(stepIndex);
+        // Where it stands, told again at every step: a panel outside the
+        // page carries the position on by itself, and a lap going round, a
+        // change of tempo or a skip is where it would come to disagree.
+        this.sayWhatIsSounding();
       }),
     );
 

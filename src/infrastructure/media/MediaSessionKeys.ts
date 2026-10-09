@@ -4,8 +4,19 @@ import type { IMediaKeys, WhatIsSounding } from '../../application/ports/IMediaK
 export interface MediaSessionLike {
   metadata: unknown;
   playbackState: string;
-  setActionHandler(action: string, handler: (() => void) | null): void;
+  setActionHandler(action: string, handler: ((details: SeekDetails) => void) | null): void;
+  /** Missing on an older browser; called with nothing, it forgets the position. */
+  setPositionState?(state?: { duration: number; position: number; playbackRate: number }): void;
 }
+
+/** What a seeking key says: a moment to go to, or how far to skip. */
+export interface SeekDetails {
+  readonly seekTime?: number;
+  readonly seekOffset?: number;
+}
+
+/** How far a key that skips goes where the platform does not say, in seconds. */
+const SKIP_SECONDS = 10;
 
 /** An element playing nothing, which is what makes a browser count the page as a player. */
 export interface SilentPlayer {
@@ -14,7 +25,7 @@ export interface SilentPlayer {
 }
 
 /** The actions taken, and given back in the same order they were taken. */
-const ACTIONS = ['play', 'pause', 'stop'] as const;
+const ACTIONS = ['play', 'pause', 'stop', 'seekto', 'seekbackward', 'seekforward'] as const;
 
 /**
  * The platform's transport keys, through the Media Session API.
@@ -38,6 +49,7 @@ export class MediaSessionKeys implements IMediaKeys {
   private readonly makeMetadata: ((title: string) => unknown) | null;
   private readonly silence: SilentPlayer | null;
   private held = false;
+  private namedAs: string | null = null;
 
   constructor(
     session: MediaSessionLike | null,
@@ -63,11 +75,13 @@ export class MediaSessionKeys implements IMediaKeys {
       }
       this.silence?.pause();
       for (const action of ACTIONS) {
-        session.setActionHandler(action, null);
+        take(session, action, null);
       }
       session.metadata = null;
       session.playbackState = 'none';
+      forgetThePosition(session);
       this.held = false;
+      this.namedAs = null;
       return;
     }
     // Held with the music rather than played on: a player that is still
@@ -77,17 +91,73 @@ export class MediaSessionKeys implements IMediaKeys {
     } else {
       this.silence?.pause();
     }
-    if (this.makeMetadata !== null) {
+    // Named again only when the name changes: this is said at every step, and
+    // a panel handed a new name redraws itself.
+    if (this.makeMetadata !== null && this.namedAs !== what.title) {
       session.metadata = this.makeMetadata(what.title);
+      this.namedAs = what.title;
     }
     // Which of play and pause the panel offers is read off this, not guessed
     // from which handlers are set: both are set the whole time, because a
     // performance being held is one the same keys have to be able to resume.
     session.playbackState = what.playing ? 'playing' : 'paused';
-    session.setActionHandler('play', what.play);
-    session.setActionHandler('pause', what.pause);
-    session.setActionHandler('stop', what.stop);
+    // Where it stands, in place of the silence's own ten seconds - which is
+    // the only length the panel would otherwise know of.
+    const place = what.placeNow();
+    if (place === null) {
+      forgetThePosition(session);
+    } else {
+      try {
+        session.setPositionState?.({
+          duration: place.durationMs / 1000,
+          position: Math.min(place.durationMs, Math.max(0, place.positionMs)) / 1000,
+          playbackRate: 1,
+        });
+      } catch {
+        // A length the platform refuses is a panel without a slider, no more.
+      }
+    }
+    take(session, 'play', () => what.play());
+    take(session, 'pause', () => what.pause());
+    take(session, 'stop', () => what.stop());
+    take(session, 'seekto', (details) => {
+      if (details.seekTime !== undefined) {
+        what.seekTo(details.seekTime * 1000);
+      }
+    });
+    const skip = (direction: number) => (details: SeekDetails): void => {
+      const now = what.placeNow();
+      if (now !== null) {
+        what.seekTo(now.positionMs + direction * (details.seekOffset ?? SKIP_SECONDS) * 1000);
+      }
+    };
+    take(session, 'seekbackward', skip(-1));
+    take(session, 'seekforward', skip(1));
     this.held = true;
+  }
+}
+
+/**
+ * Sets one key's handler. A browser that does not know an action refuses it
+ * rather than ignoring it, and one key it lacks is no reason to lose the rest.
+ */
+function take(
+  session: MediaSessionLike,
+  action: (typeof ACTIONS)[number],
+  handler: ((details: SeekDetails) => void) | null,
+): void {
+  try {
+    session.setActionHandler(action, handler);
+  } catch {
+    // Not a key this browser has.
+  }
+}
+
+function forgetThePosition(session: MediaSessionLike): void {
+  try {
+    session.setPositionState?.();
+  } catch {
+    // Nothing set is nothing to forget.
   }
 }
 

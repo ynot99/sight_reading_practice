@@ -3,6 +3,7 @@ import {
   MediaSessionKeys,
   silentWav,
   type MediaSessionLike,
+  type SeekDetails,
   type SilentPlayer,
 } from '../../src/infrastructure/media/MediaSessionKeys.js';
 import type { WhatIsSounding } from '../../src/application/ports/IMediaKeys.js';
@@ -10,10 +11,19 @@ import type { WhatIsSounding } from '../../src/application/ports/IMediaKeys.js';
 class FakeSession implements MediaSessionLike {
   metadata: unknown = null;
   playbackState = 'none';
-  readonly handlers = new Map<string, (() => void) | null>();
+  position: { duration: number; position: number; playbackRate: number } | null = null;
+  readonly handlers = new Map<string, ((details: SeekDetails) => void) | null>();
 
-  setActionHandler(action: string, handler: (() => void) | null): void {
+  setActionHandler(action: string, handler: ((details: SeekDetails) => void) | null): void {
     this.handlers.set(action, handler);
+  }
+
+  setPositionState(state?: { duration: number; position: number; playbackRate: number }): void {
+    this.position = state ?? null;
+  }
+
+  press(action: string, details: SeekDetails = {}): void {
+    this.handlers.get(action)?.(details);
   }
 }
 
@@ -29,13 +39,19 @@ class FakeSilence implements SilentPlayer {
   }
 }
 
-function performanceOf(playing: boolean, pressed: string[] = []): WhatIsSounding {
+function performanceOf(
+  playing: boolean,
+  pressed: string[] = [],
+  place: { positionMs: number; durationMs: number } | null = { positionMs: 30_000, durationMs: 120_000 },
+): WhatIsSounding {
   return {
     title: 'City of Tears',
     playing,
     play: () => pressed.push('play'),
     pause: () => pressed.push('pause'),
     stop: () => pressed.push('stop'),
+    placeNow: () => place,
+    seekTo: (positionMs) => pressed.push(`seek ${String(positionMs)}`),
   };
 }
 
@@ -51,16 +67,76 @@ describe('the platform transport keys', () => {
     new MediaSessionKeys(session, named, null).sounding(performanceOf(true, pressed));
 
     for (const action of ['play', 'pause', 'stop']) {
-      session.handlers.get(action)?.();
+      session.press(action);
     }
     expect(pressed).toEqual(['play', 'pause', 'stop']);
   });
 
-  it('names the piece, so the panel is not a blank one', () => {
+  it('shows where the performance stands and how long it is, not the silence beside it', () => {
     const session = new FakeSession();
+    const keys = new MediaSessionKeys(session, named, null);
 
-    new MediaSessionKeys(session, named, null).sounding(performanceOf(true));
+    keys.sounding(performanceOf(true));
+    expect(session.position).toEqual({ duration: 120, position: 30, playbackRate: 1 });
 
+    // A place past the end is the end, which the platform would refuse.
+    keys.sounding(performanceOf(true, [], { positionMs: 125_000, durationMs: 120_000 }));
+    expect(session.position).toEqual({ duration: 120, position: 120, playbackRate: 1 });
+
+    // Nothing to say is nothing shown, rather than the last thing said.
+    keys.sounding(performanceOf(true, [], null));
+    expect(session.position).toBeNull();
+  });
+
+  it('goes to the moment the slider is dragged to, and skips from where it stands now', () => {
+    const session = new FakeSession();
+    const pressed: string[] = [];
+    new MediaSessionKeys(session, named, null).sounding(performanceOf(true, pressed));
+
+    session.press('seekto', { seekTime: 42.5 });
+    session.press('seekto', {});
+    session.press('seekforward', { seekOffset: 5 });
+    session.press('seekbackward', {});
+
+    expect(pressed).toEqual(['seek 42500', 'seek 35000', 'seek 20000']);
+  });
+
+  it('keeps the keys it can where the browser refuses one', () => {
+    const session = new FakeSession();
+    const refusing: MediaSessionLike = {
+      metadata: null,
+      playbackState: 'none',
+      setActionHandler: (action, handler) => {
+        if (action === 'seekbackward') {
+          throw new TypeError('Not a key this browser has.');
+        }
+        session.setActionHandler(action, handler);
+      },
+    };
+    const pressed: string[] = [];
+
+    new MediaSessionKeys(refusing, named, null).sounding(performanceOf(true, pressed));
+    session.press('seekforward');
+    session.press('pause');
+
+    expect(pressed).toEqual(['seek 40000', 'pause']);
+  });
+
+  it('names the piece, so the panel is not a blank one, and names it again only when it changes', () => {
+    const session = new FakeSession();
+    const keys = new MediaSessionKeys(session, named, null);
+
+    keys.sounding(performanceOf(true));
+    expect(session.metadata).toEqual({ title: 'City of Tears' });
+
+    // Said at every step: the panel is handed its name once.
+    const first = session.metadata;
+    keys.sounding(performanceOf(true));
+    expect(session.metadata).toBe(first);
+
+    // Given back and taken again, it is named again.
+    keys.sounding(null);
+    keys.sounding(performanceOf(true));
     expect(session.metadata).toEqual({ title: 'City of Tears' });
   });
 
@@ -108,7 +184,8 @@ describe('the platform transport keys', () => {
 
     expect(session.playbackState).toBe('none');
     expect(session.metadata).toBeNull();
-    expect([...session.handlers.values()]).toEqual([null, null, null]);
+    expect(session.position).toBeNull();
+    expect([...session.handlers.values()]).toEqual([null, null, null, null, null, null]);
   });
 
   it('stands on nothing it never took', () => {

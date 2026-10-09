@@ -7,6 +7,14 @@ export interface WhatIsSounding {
   readonly play: () => void;
   readonly pause: () => void;
   readonly stop: () => void;
+  /**
+   * Where it stands now, and how long it is, in milliseconds; `null` where it
+   * cannot say. Asked rather than told, since a key pressed to skip on is
+   * pressed some time after the page last said anything.
+   */
+  readonly placeNow: () => { readonly positionMs: number; readonly durationMs: number } | null;
+  /** Moves it to a moment, playing on from there or held there as it was. */
+  readonly seekTo: (positionMs: number) => void;
 }
 
 /**

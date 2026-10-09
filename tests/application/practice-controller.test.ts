@@ -1350,6 +1350,14 @@ describe('what you played, drawn over the score', () => {
 
     expect(finished).toBe(true);
     expect(controller.drillTask).toBeNull();
+    // Kept, every step done, for the page to say so until it is put away;
+    // and nothing more is asked of the runs after it.
+    expect(controller.drillProgress).toEqual({ at: of, of });
+    expect(controller.drillPlan).toHaveLength(of);
+    playItThrough(controller, midi);
+    expect(controller.drillProgress).toEqual({ at: of, of });
+    controller.stopTheDrill();
+    expect(controller.drillProgress).toEqual({ at: 0, of: 0 });
   });
 
   it('is put away without disturbing what it set', async () => {

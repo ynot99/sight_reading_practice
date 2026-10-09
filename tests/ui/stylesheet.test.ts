@@ -403,6 +403,17 @@ describe('the stylesheet', () => {
     ]);
   });
 
+  it('says where the section plan stands at the top of the screen, out of the music, and not in free play', () => {
+    const body = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    expect(body('.drill-pill')).toMatch(/position\s*:\s*fixed/);
+    expect(body('.drill-pill')).toMatch(/top\s*:\s*calc\(env\(safe-area-inset-top/);
+    // One line, cut short rather than wrapped down onto the score.
+    expect(body('.drill-pill')).toMatch(/white-space\s*:\s*nowrap/);
+    expect(body('.drill-pill')).toMatch(/text-overflow\s*:\s*ellipsis/);
+    expect(body("body[data-free-play='true'] .drill-pill")).toMatch(/display\s*:\s*none/);
+  });
+
   it('darkens the key under a resting pointer in free play only, and the white one only off its black key', () => {
     const hovered = rules().filter((rule) => rule.selector.includes(':hover') && rule.selector.includes('replay-keys__'));
     const white = hovered.find((rule) => rule.selector.includes('replay-keys__white:hover'));

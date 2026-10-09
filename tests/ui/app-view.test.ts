@@ -9273,13 +9273,72 @@ describe('AppView', () => {
       element<HTMLButtonElement>('drill-start').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(element('score-drill').hidden).toBe(false);
-      expect(element('drill-where').textContent).toContain('Step 1 of');
-      expect(element('drill-what').textContent).toContain('Bars 1-4');
+      // Said at the top, out of the music, and not in the middle of it.
+      const pill = element<HTMLButtonElement>('drill-pill');
+      expect(pill.hidden).toBe(false);
+      expect(pill.textContent).toContain('Plan 1/');
+      expect(pill.textContent).toContain('Bars 1-4');
+      expect(element('score-card').hidden).toBe(true);
       // The ordinary passage, not a private one: the drawer says it too.
       expect(element<HTMLInputElement>('focus-to').value).toBe('4');
       // And it gets out of the way so the reader can play.
       expect(element('sheet-modes').hidden).toBe(true);
+    });
+
+    it('stays at the top through a run, and opens the whole plan when pressed', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await rig.runtime.controller.openScore(longExercise({ bars: 8 }));
+      element<HTMLButtonElement>('drill-start').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      element<HTMLButtonElement>('focus-play').click();
+      expect(element('drill-pill').hidden).toBe(false);
+      element<HTMLButtonElement>('focus-stop').click();
+
+      element<HTMLButtonElement>('drill-pill').click();
+
+      expect(element('sheet-drill').hidden).toBe(false);
+      const steps = [...element('drill-steps').querySelectorAll('li')];
+      expect(steps).toHaveLength(rig.runtime.controller.drillProgress.of);
+      expect(steps.map((step) => step.dataset['state'])).toEqual([
+        'now',
+        ...steps.slice(1).map(() => 'later'),
+      ]);
+      expect(steps[0]?.textContent).toBe(element('drill-pill').textContent?.replace(/^Plan 1\/\d+ · /, ''));
+    });
+
+    it('marks the steps played through, and says when the whole plan is', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      await rig.runtime.controller.openScore(longExercise({ bars: 8 }));
+      element<HTMLButtonElement>('drill-start').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const { of } = rig.runtime.controller.drillProgress;
+      expect(of).toBeGreaterThan(2);
+
+      for (let step = 0; step < of; step += 1) {
+        const session = rig.runtime.controller.start();
+        for (let guard = 0; guard < 500 && session?.status === 'running'; guard += 1) {
+          for (const note of session.currentStep?.expectedMidi ?? []) {
+            rig.midi.noteOn(note, rig.clock.now());
+          }
+        }
+        if (step === 0) {
+          element<HTMLButtonElement>('drill-pill').click();
+          const states = [...element('drill-steps').querySelectorAll('li')].map((li) => li.dataset['state']);
+          expect(states.slice(0, 2)).toEqual(['done', 'now']);
+          element<HTMLButtonElement>('drill-close').click();
+        }
+      }
+
+      // Said, and kept until put away.
+      expect(element('drill-pill').hidden).toBe(false);
+      expect(element('drill-pill').textContent).toContain('Plan done');
+      element<HTMLButtonElement>('drill-pill').click();
+      expect(element('drill-stop').textContent).toBe('Done');
+      element<HTMLButtonElement>('drill-stop').click();
+      expect(element('drill-pill').hidden).toBe(true);
+      expect(element('sheet-drill').hidden).toBe(true);
     });
 
     it('puts the plan away when asked', async () => {
@@ -9289,9 +9348,11 @@ describe('AppView', () => {
       element<HTMLButtonElement>('drill-start').click();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
+      element<HTMLButtonElement>('drill-pill').click();
       element<HTMLButtonElement>('drill-stop').click();
 
-      expect(element('score-drill').hidden).toBe(true);
+      expect(element('drill-pill').hidden).toBe(true);
+      expect(element('sheet-drill').hidden).toBe(true);
       expect(rig.runtime.controller.drillTask).toBeNull();
     });
   });

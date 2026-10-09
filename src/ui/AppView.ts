@@ -50,6 +50,7 @@ import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
 import type { PracticeSettings } from '../application/PracticeController.js';
+import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
 import {
   RULER_DIVISIONS,
@@ -1368,6 +1369,13 @@ interface KnobPlace {
   remember(controller: number | null): { volumeController: number | null } | { metronomeController: number | null };
 }
 
+/** A step of the section plan in a few words: the bars, the hand, the speed. */
+function describeTheDrillTask(task: DrillTask): string {
+  const bars = task.fromBar === task.toBar ? `Bar ${String(task.fromBar)}` : `Bars ${String(task.fromBar)}-${String(task.toBar)}`;
+  const hand = task.hand === null ? 'both hands' : task.hand === 1 ? 'right hand' : 'left hand';
+  return `${bars} · ${hand} · ${String(task.tempoPercent)}%`;
+}
+
 /**
  * Vanilla DOM presentation layer.
  *
@@ -1622,9 +1630,11 @@ export class AppView {
     scoreCard: HTMLElement;
     scoreCount: HTMLElement;
     scoreEngraving: HTMLElement;
-    scoreDrill: HTMLElement;
+    drillPill: HTMLButtonElement;
+    sheetDrill: HTMLElement;
     drillWhere: HTMLElement;
-    drillWhat: HTMLElement;
+    drillSteps: HTMLOListElement;
+    drillClose: HTMLButtonElement;
     drillStop: HTMLButtonElement;
     drillStart: HTMLButtonElement;
     drillBars: HTMLInputElement;
@@ -1944,9 +1954,11 @@ export class AppView {
       scoreCard: requireElement(doc, 'score-card'),
       scoreCount: requireElement(doc, 'score-count'),
       scoreEngraving: requireElement(doc, 'score-engraving'),
-      scoreDrill: requireElement(doc, 'score-drill'),
+      drillPill: requireElement(doc, 'drill-pill'),
+      sheetDrill: requireElement(doc, 'sheet-drill'),
       drillWhere: requireElement(doc, 'drill-where'),
-      drillWhat: requireElement(doc, 'drill-what'),
+      drillSteps: requireElement(doc, 'drill-steps'),
+      drillClose: requireElement(doc, 'drill-close'),
       drillStop: requireElement(doc, 'drill-stop'),
       drillStart: requireElement(doc, 'drill-start'),
       drillBars: requireElement(doc, 'drill-bars'),
@@ -4084,8 +4096,17 @@ export class AppView {
       this.el.sheetModes.hidden = true;
     });
 
+    this.listen(this.el.drillPill, 'click', () => {
+      this.showTheSheet(this.el.sheetDrill);
+    });
+
+    this.listen(this.el.drillClose, 'click', () => {
+      this.el.sheetDrill.hidden = true;
+    });
+
     this.listen(this.el.drillStop, 'click', () => {
       controller.stopTheDrill();
+      this.el.sheetDrill.hidden = true;
       this.showTheDrill();
     });
 
@@ -4982,7 +5003,6 @@ export class AppView {
       this.el.scoreCount.hidden &&
       this.el.scoreVerdict.hidden &&
       this.el.scoreEngraving.hidden &&
-      this.el.scoreDrill.hidden &&
       this.el.scoreRest.hidden;
   }
 
@@ -5292,40 +5312,45 @@ export class AppView {
   }
 
   /**
-   * Says what the drill is asking for, between runs.
+   * Says where the plan of learning the piece by sections stands: on the pill
+   * at the top of the screen, and step by step in its sheet.
    *
-   * Only between runs: it is an instruction to read before playing, and a
-   * card in the middle of the page while the music is going would be over
-   * the music. What it says is where in the plan the reader is and what this
-   * task is - the bars are in the drawer as well, because the drill sets the
-   * ordinary passage rather than a private one of its own.
+   * At the top and all the time, rather than in a card in the middle of the
+   * page between runs: the card stood over the very bars it asked to be
+   * played. What it says is the step and what it asks - the bars are in the
+   * drawer as well, because the plan sets the ordinary passage rather than a
+   * private one of its own.
    */
   private showTheDrill(): void {
     const controller = this.runtime.controller;
-    const task = controller.drillTask;
+    const plan = controller.drillPlan;
     const { at, of } = controller.drillProgress;
-    const idle = !this.isPlaying && !controller.isListening;
-    if (task === null) {
-      // Finished the whole plan, rather than never started: worth saying, and
-      // it stays until the reader does something else.
-      const done = of > 0 && at >= of;
-      this.el.scoreDrill.hidden = !done || !idle;
-      if (done) {
-        this.el.drillWhere.textContent = 'The whole piece has been through the plan';
-        this.el.drillWhat.textContent = 'Every section, and then all of them together.';
-        this.el.drillStop.textContent = 'Done';
-      }
-      this.syncCard();
-      return;
-    }
-    this.el.drillStop.textContent = 'Stop the plan';
-    this.el.drillWhere.textContent = `Step ${at + 1} of ${of}`;
-    const hand =
-      task.hand === null ? 'both hands' : task.hand === 1 ? 'the right hand' : 'the left hand';
-    const bars = task.fromBar === task.toBar ? `Bar ${task.fromBar}` : `Bars ${task.fromBar}-${task.toBar}`;
-    this.el.drillWhat.textContent = `${bars}, ${hand}, at ${task.tempoPercent}% - play it through cleanly.`;
-    this.el.scoreDrill.hidden = !idle;
-    this.syncCard();
+    this.el.drillPill.hidden = of === 0;
+    const done = of > 0 && at >= of;
+    const task = controller.drillTask;
+    const said = done
+      ? 'Plan done: the whole piece holds together'
+      : task === null
+        ? ''
+        : `Plan ${String(at + 1)}/${String(of)} · ${describeTheDrillTask(task)}`;
+    this.el.drillPill.textContent = said;
+    this.el.drillPill.title = `${said}. Press for the whole plan.`;
+    this.el.drillPill.setAttribute('aria-label', this.el.drillPill.title);
+    this.el.drillWhere.textContent = done
+      ? 'Every section, and then all of them together, played through cleanly.'
+      : `Step ${String(at + 1)} of ${String(of)}. Each step moves on once it is played through cleanly.`;
+    this.el.drillStop.textContent = done ? 'Done' : 'Stop the plan';
+    this.el.drillSteps.replaceChildren(
+      ...plan.map((step, index) => {
+        const item = this.doc.createElement('li');
+        item.dataset['state'] = index < at ? 'done' : index === at ? 'now' : 'later';
+        item.textContent = describeTheDrillTask(step);
+        if (index === at) {
+          item.setAttribute('aria-current', 'step');
+        }
+        return item;
+      }),
+    );
   }
 
   /**

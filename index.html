@@ -240,22 +240,6 @@
             </div>
           </div>
 
-          <!--
-            What the drill is asking for. In the card because that is where
-            this page says things between runs, and only between runs: it is
-            an instruction to read before playing, not something to watch
-            while playing.
-          -->
-          <div id="score-drill" class="score-card__verdict" hidden>
-            <strong id="drill-where">Section 1 of 1</strong>
-            <p id="drill-what" class="hint"></p>
-            <div class="control-group control-group--actions">
-              <button id="drill-stop" type="button" class="button button--ghost">
-                Stop the plan
-              </button>
-            </div>
-          </div>
-
           <div id="score-verdict" class="score-card__verdict" hidden>
             <div id="result" class="result"></div>
             <button id="drill" type="button" class="button" hidden>Drill the worst bars</button>
@@ -898,6 +882,23 @@
         Over the list rather than instead of it: the reader is comparing, and
         shutting this puts them back where they were comparing from.
       -->
+      <!-- The plan of learning the piece section by section, step by step. -->
+      <div id="sheet-drill" class="sheet sheet--over" hidden>
+        <div class="sheet__panel sheet__panel--narrow" role="dialog" aria-modal="true"
+          aria-labelledby="drill-title">
+          <div class="sheet__head">
+            <strong id="drill-title" class="sheet__title">Learning it section by section</strong>
+            <button id="drill-close" type="button" data-shuts class="button button--ghost sheet__close"
+              title="Close" aria-label="Close">×</button>
+          </div>
+          <p id="drill-where" class="hint"></p>
+          <ol id="drill-steps" class="drill-steps"></ol>
+          <div class="sheet__actions">
+            <button id="drill-stop" type="button" class="button button--ghost">Stop the plan</button>
+          </div>
+        </div>
+      </div>
+
       <div id="sheet-reading" class="sheet sheet--over" hidden>
         <div class="sheet__panel sheet__panel--wide" role="dialog" aria-modal="true"
           aria-labelledby="reading-title">
@@ -1679,6 +1680,14 @@
         screen where it is read without looking away from the keys' lane.
       -->
       <output id="free-chord" class="free-chord" hidden aria-live="polite"></output>
+
+      <!--
+        Where the plan of learning the piece section by section stands: at the
+        top of the screen, out of the music. It was a card in the middle of
+        the page between runs, over the very bars it asked to be played. One
+        line says the step; pressed, the whole plan opens.
+      -->
+      <button id="drill-pill" type="button" class="drill-pill" hidden></button>
 
       <div id="focus-bar" class="focus-bar" data-open="false">
         <!--

@@ -2031,9 +2031,14 @@ export class PracticeController {
     this.emitter.emit('drillChanged', { task: null, at: 0, of: 0 });
   }
 
-  /** What the drill is asking for, or `null` when nothing is being drilled. */
+  /** What the drill is asking for, or `null` when nothing is being drilled or it is all done. */
   get drillTask(): DrillTask | null {
     return this.drill[this.drillAt] ?? null;
+  }
+
+  /** Every step of the plan in order, done and to come; empty with no plan. */
+  get drillPlan(): readonly DrillTask[] {
+    return this.drill;
   }
 
   /** How far through the plan the reader is, for anything that shows it. */
@@ -2072,7 +2077,7 @@ export class PracticeController {
    * the passage or the hand while they were in the middle of it.
    */
   private judgeTheDrill(report: PerformanceReport, score: { readonly overall: number }): void {
-    if (this.drill.length === 0) {
+    if (this.drillTask === null) {
       return;
     }
     const passed = drillTaskPassed({ completed: report.completed, overall: score.overall });
@@ -2080,11 +2085,11 @@ export class PracticeController {
       this.drillAt += 1;
     }
     if (this.drillAt >= this.drill.length) {
-      const of = this.drill.length;
-      this.drill = [];
-      this.drillAt = 0;
       // Finished, and said so: the piece has been through every stage of the
-      // plan, which is the only ending this has.
+      // plan, which is the only ending this has. Kept, every step done, until
+      // the reader puts it away - emptied here, the page asking where the
+      // plan stood found nothing, and the ending was never said at all.
+      const of = this.drill.length;
       this.emitter.emit('drillChanged', { task: null, at: of, of });
       return;
     }

@@ -3315,6 +3315,56 @@ body[data-take-on-keys='true'] #focus-keyboard {
 }
 
 /*
+ * Where the section plan stands, at the top of the screen and out of the
+ * music - it was a card in the middle of the page, over the bars it asked to
+ * be played. One line, cut short rather than wrapped onto the score, between
+ * the pills at either side of the top. Not in free play, where the chord's
+ * name stands in that place and the plan has no runs to move on with.
+ */
+.drill-pill {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  max-width: min(560px, calc(100% - 200px));
+  overflow: hidden;
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) var(--over-the-page), transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgb(16 24 40 / 22%);
+}
+
+body[data-free-play='true'] .drill-pill {
+  display: none;
+}
+
+.drill-steps {
+  margin: 0;
+  padding-left: 1.6em;
+  max-height: 50vh;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.drill-steps li[data-state='done'] {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.drill-steps li[data-state='now'] {
+  font-weight: 700;
+}
+
+/*
  * Free play, where the keys are the whole of it: no run to start or to go
  * back to the beginning of, and nothing to repeat or to play faster. What is
  * put away is no fewer than the keyboard's button that comes in, so the row

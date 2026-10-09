@@ -3025,6 +3025,16 @@ body[data-slider] .replay-keys__pedal-foot {
 }
 
 /*
+ * Where the whole keyboard is on the screen there is no row to slide along,
+ * so a finger sliding across the keys in free play plays them instead. The
+ * browser has to know before the finger lands, or it takes the slide for a
+ * scroll and cancels the press.
+ */
+body[data-free-play='true'] .replay-keys__row[data-scrolls='false'] {
+  touch-action: none;
+}
+
+/*
  * Played on the screen where the reader plays freely: a key under the pointer
  * darkens, the one it would sound. Only for a pointer that can rest over a
  * key - after a touch the browser leaves the last key "hovered", and a key

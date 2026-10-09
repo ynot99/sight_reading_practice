@@ -395,6 +395,14 @@ describe('the stylesheet', () => {
     ).toMatch(/display\s*:\s*inline-flex/);
   });
 
+  it('lets a finger slide along the keys in free play only where there is no row to scroll', () => {
+    const still = rules().filter((rule) => /touch-action\s*:\s*none/.test(rule.body) && rule.selector.includes('replay-keys__row'));
+
+    expect(still.map((rule) => rule.selector)).toEqual([
+      "body[data-free-play='true'] .replay-keys__row[data-scrolls='false']",
+    ]);
+  });
+
   it('darkens the key under a resting pointer in free play only, and the white one only off its black key', () => {
     const hovered = rules().filter((rule) => rule.selector.includes(':hover') && rule.selector.includes('replay-keys__'));
     const white = hovered.find((rule) => rule.selector.includes('replay-keys__white:hover'));

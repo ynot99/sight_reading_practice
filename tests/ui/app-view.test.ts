@@ -1075,6 +1075,114 @@ describe('AppView', () => {
     touch('pointerup', key(64), 4);
   });
 
+  it('plays each key a pointer slides onto in free play, and a finger only where the keys fit the screen', async () => {
+    const watched: (() => void)[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        private readonly report: () => void;
+        constructor(report: () => void) {
+          this.report = report;
+        }
+        observe(): void {
+          watched.push(this.report);
+        }
+        disconnect(): void {}
+      },
+    );
+    // jsdom lays nothing out, so where a pointer is says which key it is over:
+    // x is the key's number, and anywhere else is off the keys.
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: (x: number): Element | null =>
+        document.querySelector(`#replay-keys [data-midi="${String(x)}"]`) ?? document.body,
+    });
+    try {
+      const { view, runtime, instrument } = createRig();
+      await view.initialize();
+      const keys = element('replay-keys');
+      const row = keys.querySelector<HTMLElement>('.replay-keys__row');
+      const scroller = keys.querySelector<HTMLElement>('.replay-keys__scroller');
+      if (row === null || scroller === null) {
+        throw new Error('No row of keys.');
+      }
+      const key = (midi: number): HTMLElement => {
+        const found = keys.querySelector<HTMLElement>(`[data-midi="${String(midi)}"]`);
+        if (found === null) {
+          throw new Error(`No key ${String(midi)} on the screen.`);
+        }
+        return found;
+      };
+      const pointer = (
+        type: string,
+        target: EventTarget,
+        pointerId: number,
+        clientX: number,
+        pointerType = 'touch',
+      ): void => {
+        target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId, pointerType, clientX }));
+      };
+      const fitTheScreen = (fits: boolean): void => {
+        Object.defineProperty(scroller, 'scrollWidth', { configurable: true, value: 728 });
+        Object.defineProperty(scroller, 'clientWidth', { configurable: true, value: fits ? 1000 : 400 });
+        for (const report of watched) {
+          report();
+        }
+      };
+      element<HTMLButtonElement>('focus-modes').click();
+      frameButton('free').click();
+
+      // The whole keyboard on the screen: a finger plays what it slides onto.
+      fitTheScreen(true);
+      expect(row.dataset['scrolls']).toBe('false');
+      // A finger's events keep going to the key it went down on.
+      pointer('pointerdown', key(60), 1, 60);
+      pointer('pointermove', key(60), 1, 60);
+      pointer('pointermove', key(60), 1, 62);
+      expect(runtime.controller.freePlayKeysDown).toEqual([62]);
+      expect(instrument.played.map((note) => note.midi)).toEqual([60, 62]);
+
+      // A second finger on a key the first slides over: the first leaves it,
+      // and it stays down under the second.
+      pointer('pointerdown', key(64), 2, 64);
+      pointer('pointermove', key(60), 1, 64);
+      pointer('pointermove', key(60), 1, 65);
+      expect(runtime.controller.freePlayKeysDown).toEqual([64, 65]);
+
+      // Off the keys, nothing sounds; back on, it plays again.
+      pointer('pointermove', key(60), 1, 0);
+      expect(runtime.controller.freePlayKeysDown).toEqual([64]);
+      pointer('pointermove', key(60), 1, 67);
+      expect(runtime.controller.freePlayKeysDown).toEqual([64, 67]);
+      pointer('pointerup', document.body, 1, 67);
+      pointer('pointerup', document.body, 2, 64);
+      expect(runtime.controller.freePlayKeysDown).toEqual([]);
+
+      // A row wider than its screen: a finger's slide moves the row, and the
+      // key it went down on is all it plays.
+      fitTheScreen(false);
+      expect(row.dataset['scrolls']).toBe('true');
+      pointer('pointerdown', key(60), 3, 60);
+      pointer('pointermove', key(60), 3, 62);
+      expect(runtime.controller.freePlayKeysDown).toEqual([60]);
+      pointer('pointerup', document.body, 3, 62);
+      // The mouse slides the row along nothing, and plays.
+      pointer('pointerdown', key(60), 4, 60, 'mouse');
+      pointer('pointermove', document.body, 4, 62, 'mouse');
+      expect(runtime.controller.freePlayKeysDown).toEqual([62]);
+
+      // Out of free play a pointer still held plays nothing as it moves.
+      frameButton('free').click();
+      pointer('pointermove', document.body, 4, 64, 'mouse');
+      expect(runtime.controller.freePlayKeysDown).toEqual([]);
+      expect(instrument.played.filter((note) => note.midi === 64)).toHaveLength(1);
+      pointer('pointerup', document.body, 4, 64, 'mouse');
+    } finally {
+      vi.unstubAllGlobals();
+      Reflect.deleteProperty(document, 'elementFromPoint');
+    }
+  });
+
   it('paints the falling notes a frame at a time while the music moves, and not once it is held', async () => {
     // However it is held: the lane asks the controller at every frame, so a
     // performance stopped without the page being told stops the lane too.

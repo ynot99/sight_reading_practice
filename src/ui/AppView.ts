@@ -1444,6 +1444,12 @@ export class AppView {
   private closingFrame: number | null = null;
   /** Where each key stands along the row, until the row changes size. */
   private keyPlaces: ReadonlyMap<number, KeyPlace> | null = null;
+  /**
+   * Whether the keys are wider than their screen, so a finger sliding along
+   * them moves the row rather than playing. Taken as so until measured, which
+   * is how the keys behaved before a slide could play.
+   */
+  private keysScroll = true;
   /** The lane's colours, read again each time notes begin to fall. */
   private laneInks: LaneInks | null = null;
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
@@ -7550,6 +7556,7 @@ export class AppView {
     });
     this.repaintTheRollWhenTheScreenChanges();
     this.measureTheKeysAgainWhenTheyMove();
+    this.sayWhetherTheKeysScroll();
     this.sayHowTallTheBarIs();
     this.listen(this.el.rollOptionsClose, 'click', () => {
       this.el.sheetRollOptions.hidden = true;
@@ -8959,39 +8966,65 @@ export class AppView {
   /**
    * Plays the keys drawn on the screen, where the reader plays freely.
    *
-   * Each finger or the pointer is one key, from going down on it to coming
-   * up; one that slides the row along instead is let go of as the slide
-   * begins, the browser cancelling it. Anywhere else the keys only show what
-   * is played, and touching them does nothing.
+   * Each finger or the pointer is on one key at a time, from going down on
+   * it to coming up. Slid along the keys it plays each one it comes to and
+   * lets go of the one it left - the mouse always, a finger only where the
+   * whole keyboard is on the screen. Where the row is wider than the screen
+   * a finger's slide moves the row along instead, and the key it went down
+   * on is let go of as the slide begins, the browser cancelling it. Anywhere
+   * else the keys only show what is played, and touching them does nothing.
    */
   private bindTheKeysOnTheScreen(): void {
     const keys = this.runtime.screenKeys;
-    const down = new Map<number, number>();
-    const letGo = (event: PointerEvent): void => {
-      const midi = down.get(event.pointerId);
-      if (midi === undefined) {
-        return;
-      }
-      down.delete(event.pointerId);
-      keys.release(midi);
+    const row = this.replayKeyboard.row;
+    const fingers = new Map<number, { readonly midi: number | null; readonly slides: boolean }>();
+    const keyAt = (under: Element | null): number | null => {
+      const key = under?.closest<HTMLElement>('[data-midi]') ?? null;
+      const midi = Number(key?.dataset['midi']);
+      return key !== null && row.contains(key) && Number.isInteger(midi) ? midi : null;
     };
-    this.listen(this.replayKeyboard.row, 'pointerdown', (event) => {
+    // A key one finger has left may still be under another.
+    const leave = (midi: number | null): void => {
+      if (midi !== null && ![...fingers.values()].some((finger) => finger.midi === midi)) {
+        keys.release(midi);
+      }
+    };
+    this.listen(row, 'pointerdown', (event) => {
       if (!(event instanceof PointerEvent) || !this.inFreePlay) {
         return;
       }
-      const key = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-midi]') : null;
-      const midi = Number(key?.dataset['midi']);
-      if (key === null || !Number.isInteger(midi)) {
+      const midi = keyAt(event.target instanceof Element ? event.target : null);
+      if (midi === null) {
         return;
       }
-      down.set(event.pointerId, midi);
+      fingers.set(event.pointerId, { midi, slides: event.pointerType === 'mouse' || !this.keysScroll });
       keys.press(midi);
+    });
+    this.listen(this.doc, 'pointermove', (event) => {
+      const finger = event instanceof PointerEvent ? fingers.get(event.pointerId) : undefined;
+      if (!(event instanceof PointerEvent) || finger === undefined || !finger.slides || !this.inFreePlay) {
+        return;
+      }
+      // Asked of the point and not of the event: a finger's events keep
+      // going to the key it went down on, wherever it has slid since.
+      const midi = keyAt(this.doc.elementFromPoint(event.clientX, event.clientY));
+      if (midi === finger.midi) {
+        return;
+      }
+      fingers.set(event.pointerId, { midi, slides: true });
+      leave(finger.midi);
+      if (midi !== null) {
+        keys.press(midi);
+      }
     });
     for (const type of ['pointerup', 'pointercancel'] as const) {
       this.listen(this.doc, type, (event) => {
-        if (event instanceof PointerEvent) {
-          letGo(event);
+        const finger = event instanceof PointerEvent ? fingers.get(event.pointerId) : undefined;
+        if (!(event instanceof PointerEvent) || finger === undefined) {
+          return;
         }
+        fingers.delete(event.pointerId);
+        leave(finger.midi);
       });
     }
   }
@@ -9371,6 +9404,29 @@ export class AppView {
       );
     });
     watch.observe(this.el.focusBar);
+    this.subscriptions.push(() => {
+      watch.disconnect();
+    });
+  }
+
+  /**
+   * Says whether the keys are wider than their screen, each time either
+   * changes size: the browser has to be told before a finger lands whether a
+   * slide along the keys plays them or moves the row, and only the laid-out
+   * page knows whether there is anywhere to move it.
+   */
+  private sayWhetherTheKeysScroll(): void {
+    const view = this.doc.defaultView;
+    if (view === null || typeof view.ResizeObserver !== 'function') {
+      return;
+    }
+    const { scroller, row } = this.replayKeyboard;
+    const watch = new view.ResizeObserver(() => {
+      this.keysScroll = scroller.scrollWidth > scroller.clientWidth;
+      row.dataset['scrolls'] = String(this.keysScroll);
+    });
+    watch.observe(scroller);
+    watch.observe(row);
     this.subscriptions.push(() => {
       watch.disconnect();
     });

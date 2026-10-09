@@ -1440,6 +1440,8 @@ export class AppView {
   private readonly replayKeyboard: ReplayKeyboard;
   /** The frame the notes over the keys are painted on next, while any fall. */
   private fallingFrame: number | null = null;
+  /** The frame the keys under a take or a run shown again are next lit in, while it sounds. */
+  private keysFrame: number | null = null;
   /** The frame the closing cursors are next drawn in, while they are. */
   private closingFrame: number | null = null;
   /** Where each key stands along the row, until the row changes size. */
@@ -2344,6 +2346,10 @@ export class AppView {
     }
     this.forgetTheMapFrame();
     this.stopTheNotesFalling();
+    if (this.keysFrame !== null) {
+      this.doc.defaultView?.cancelAnimationFrame(this.keysFrame);
+      this.keysFrame = null;
+    }
     if (this.closingFrame !== null) {
       this.doc.defaultView?.cancelAnimationFrame(this.closingFrame);
       this.closingFrame = null;
@@ -8079,6 +8085,21 @@ export class AppView {
    * it is held, so a take dragged to a moment shows that moment.
    */
   private showTheTakeOnTheKeys(): void {
+    if (this.takeOnTheKeys === null) {
+      return;
+    }
+    this.lightTheTakesKeys();
+    this.letTheKeysFollow();
+    this.sayWhetherNotesFall();
+    if (this.notesAreFalling) {
+      this.letTheNotesFall();
+    } else if (!this.el.replayKeys.hidden && this.runtime.controller.settings.keysShown === 'falling-notes') {
+      this.paintTheFallingNotes();
+    }
+  }
+
+  /** The keys of the take being watched lit as they stand at the player's moment. */
+  private lightTheTakesKeys(): void {
     const watched = this.takeOnTheKeys;
     if (watched === null) {
       return;
@@ -8093,12 +8114,50 @@ export class AppView {
     if (down.length > 0) {
       keepInView(this.replayKeyboard, Math.min(...down));
     }
-    this.sayWhetherNotesFall();
-    if (this.notesAreFalling) {
-      this.letTheNotesFall();
-    } else if (!this.el.replayKeys.hidden && this.runtime.controller.settings.keysShown === 'falling-notes') {
-      this.paintTheFallingNotes();
+  }
+
+  /**
+   * Lights the keys under a take or a run shown again a frame at a time while
+   * it sounds, and stops where it stops.
+   *
+   * The timer that hands the notes to the instrument wakes only every
+   * `TAKE_TICK_MS`, and a key lit there went down anything up to that long
+   * after its note was heard - behind the sound, and behind the notes falling
+   * onto it, which are drawn every frame. Each frame asks the player again,
+   * so the keys stop with the music however it was stopped.
+   */
+  private letTheKeysFollow(): void {
+    const view = this.doc.defaultView;
+    if (
+      !this.keysFollowThePlayer ||
+      this.keysFrame !== null ||
+      view === null ||
+      typeof view.requestAnimationFrame !== 'function'
+    ) {
+      return;
     }
+    const frame = (): void => {
+      this.keysFrame = null;
+      if (!this.keysFollowThePlayer) {
+        return;
+      }
+      if (this.takeOnTheKeys !== null) {
+        this.lightTheTakesKeys();
+      } else {
+        this.showTheReplaysKeys(this.runtime.takePlayer.positionMs);
+      }
+      this.keysFrame = view.requestAnimationFrame(frame);
+    };
+    this.keysFrame = view.requestAnimationFrame(frame);
+  }
+
+  /** Whether a take watched on the keys, or a run shown again, is sounding now. */
+  private get keysFollowThePlayer(): boolean {
+    const watched = this.takeOnTheKeys;
+    return (
+      (watched !== null && this.runtime.takePlayer.playing === watched.id) ||
+      (watched === null && this.replayIsSounding)
+    );
   }
 
   /** Starts a take and follows it until it stops. */
@@ -8749,6 +8808,7 @@ export class AppView {
     this.replayClicksSent = clicksBefore(roll, from, this.theRollsGrid());
     this.runtime.controller.replayAt(from);
     this.showTheReplaysKeys(from);
+    this.letTheKeysFollow();
     if (this.replayTick === null) {
       this.replayTick = setInterval(() => {
         this.followTheReplay();

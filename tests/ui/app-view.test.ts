@@ -9403,6 +9403,89 @@ describe('AppView', () => {
       expect(rig.runtime.takePlayer.playing).toBeNull();
     });
 
+    it('lights the keys under a take or a run shown again in the frame that draws them, not the timer that sounds them', async () => {
+      // The timer hands notes to the instrument every eighty milliseconds; a
+      // key lit there went down that much after its note was heard.
+      const frames = new Map<number, FrameRequestCallback>();
+      let asked = 0;
+      const ask = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+        asked += 1;
+        frames.set(asked, callback);
+        return asked;
+      });
+      const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {
+        frames.delete(id);
+      });
+      const runTheFrames = (): void => {
+        const due = [...frames.values()];
+        frames.clear();
+        for (const frame of due) {
+          frame(0);
+        }
+      };
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        const keys = element('replay-keys');
+        const lit = (): string[] =>
+          [...keys.querySelectorAll<HTMLElement>('[data-shade]')].map((key) => key.dataset['midi'] ?? '');
+        rig.midi.noteOn(60, rig.clock.now());
+        rig.clock.advance(1_000);
+        rig.midi.noteOff(60, rig.clock.now());
+        rig.midi.noteOn(64, rig.clock.now());
+        rig.clock.advance(1_000);
+        rig.midi.noteOff(64, rig.clock.now());
+        element<HTMLButtonElement>('focus-keep').click();
+        element<HTMLButtonElement>('focus-takes').click();
+        rowButton('takes-list', 'Play this take').click();
+        element<HTMLButtonElement>('take-play').click();
+        element<HTMLButtonElement>('take-on-the-keys').click();
+        expect(lit()).toEqual(['60']);
+
+        // The E heard, and no timer woken since: the next frame lights it.
+        rig.clock.advance(1_010);
+        expect(lit()).toEqual(['60']);
+        runTheFrames();
+        expect(lit()).toEqual(['64']);
+
+        // Held, the frames stop; the keys stand where it was held.
+        element<HTMLButtonElement>('take-play').click();
+        runTheFrames();
+        expect(frames.size).toBe(0);
+        element<HTMLButtonElement>('take-off-the-keys').click();
+
+        // A run shown again, the same: lit in the frame, as the run pressed them.
+        rig.runtime.controller.updateSettings({ modeId: WAIT_MODE_ID });
+        element<HTMLButtonElement>('focus-play').click();
+        for (const _ of [1, 2]) {
+          rig.clock.advance(1_000);
+          for (const midi of rig.runtime.controller.session?.currentStep?.expectedMidi ?? []) {
+            rig.midi.noteOn(midi, rig.clock.now());
+          }
+        }
+        element<HTMLButtonElement>('focus-stop').click();
+        element<HTMLButtonElement>('run-replay').click();
+        const player = rig.runtime.takePlayer;
+        const pressedAt = (): string[] =>
+          [...(rig.runtime.controller.replayKeysAt(player.positionMs)?.keys.keys() ?? [])].map(String).sort();
+        const before = lit().sort();
+        let steps = 0;
+        while (JSON.stringify(pressedAt()) === JSON.stringify(before) && steps < 100) {
+          rig.clock.advance(20);
+          steps += 1;
+        }
+        expect(steps).toBeLessThan(100);
+        expect(lit().sort()).toEqual(before);
+        runTheFrames();
+        expect(lit().sort()).toEqual(pressedAt());
+      } finally {
+        vi.useRealTimers();
+        ask.mockRestore();
+        cancel.mockRestore();
+      }
+    });
+
     it('puts the slider away and back from under the pedal, and keeps it where the keys are put away', async () => {
       const rig = createRig();
       await rig.view.initialize();

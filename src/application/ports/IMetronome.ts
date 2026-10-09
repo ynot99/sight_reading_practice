@@ -419,5 +419,21 @@ export interface IMetronome extends IClickOnce {
    */
   start(): void;
   stop(): void;
+  /**
+   * A tick as it is *heard*: what is seen moves on this - the marker, the
+   * step, the beat a reader is judged against.
+   */
   onTick(listener: (tick: MetronomeTick) => void): Unsubscribe;
+  /**
+   * The same tick as its click is put on the audio clock, ahead of being
+   * heard: for whatever else is to sound with it.
+   *
+   * A sound has to be placed before its moment by as long as the device takes
+   * to get it to the speaker, and a tick heard is a tick whose moment has
+   * come - a note placed from it is late by that much, and the click it was
+   * meant to sound with is not. Placed from this, the two go onto the audio
+   * clock together. Each tick is placed before it is heard, and both carry
+   * the moment it is heard.
+   */
+  onTickPlaced(listener: (tick: MetronomeTick) => void): Unsubscribe;
 }

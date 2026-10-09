@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ExercisePlayer, type BarStart, type KeyDown } from '../../src/application/ExercisePlayer.js';
+import type { MetronomeTick } from '../../src/application/ports/IMetronome.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
@@ -1652,6 +1653,132 @@ describe('the pedal down between two moments', () => {
     expect(spans(player.pedalDownBetween(8_000, 9_000))).toEqual([[8_000, 10_000]]);
     expect(spans(player.pedalDownBetween(6_000, 7_000))).toEqual([[6_000, 8_000]]);
     expect(spans(player.pedalDownBetween(3_000, 3_500))).toEqual([[2_000, 4_000]]);
+  });
+});
+
+describe('sounding with the click and moving with what is heard', () => {
+  it('hands a beat its notes as its click is placed, and moves the marker as it is heard', () => {
+    // A tick heard has its moment already come: a note handed over then was
+    // started at once and heard a device's delay after its click.
+    const { player, metronome, instrument, timeline } = rig();
+    const reached: number[] = [];
+    player.events.on('stepReached', ({ stepIndex }) => reached.push(stepIndex));
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+
+    const [first] = metronome.placeAhead(1);
+
+    expect(instrument.played.map((note) => note.atMs)).toContain(first?.scheduledTimeMs);
+    expect(reached).toEqual([]);
+    const handed = instrument.played.length;
+
+    metronome.advanceSubdivisions(1);
+
+    expect(reached).toEqual([0]);
+    // Heard, it hands nothing over a second time.
+    expect(instrument.played).toHaveLength(handed);
+  });
+
+  it('lets go of both as it stops, so a performance started again listens once', () => {
+    // Every listen, resume and seek is a start: a listener left behind by
+    // each would be one more call on every tick for the rest of the visit.
+    const { player, metronome, instrument, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    expect(metronome.listeners).toEqual({ heard: 1, placed: 1 });
+
+    player.end();
+    expect(metronome.listeners).toEqual({ heard: 0, placed: 0 });
+
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    expect(metronome.listeners).toEqual({ heard: 1, placed: 1 });
+    metronome.placeAhead(1);
+    expect(instrument.played.length).toBeGreaterThan(0);
+  });
+
+  it('times the notes from each click as it is placed, so a device that grows slower moves them with it', () => {
+    // Measured on the first performance after the page opened: the device's
+    // delay went from nought to forty-eight milliseconds as it woke, and the
+    // notes timed from the first click alone were heard that far ahead of
+    // their own.
+    const { player, metronome, instrument, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(2);
+
+    metronome.delayBy(48);
+    const placed = metronome.placeAhead(64);
+    const bar = timeline.exercise.timeSignature.ticksPerMeasure;
+    const secondBar = placed.find((tick) => tick.positionTicks === bar);
+
+    // The G that opens the second bar, handed over after the change.
+    const g = instrument.played.find((note) => note.midi === MIDI.G4);
+    expect(secondBar).toBeDefined();
+    expect(g?.atMs).toBeCloseTo(secondBar?.scheduledTimeMs ?? -1, 6);
+  });
+
+  it('times the notes of a later lap from their own clicks, the first lap having been shorter', () => {
+    // Picked up on the second beat and going round from the top: the first
+    // time round is seven seconds and every one after it eight.
+    const { player, metronome, instrument, timeline } = rig();
+    player.start(timeline, {
+      staffNumber: null,
+      click: 'pulse',
+      clickWhen: 'never',
+      fromIndex: 1,
+      loopFromIndex: 0,
+      repeat: true,
+    });
+    const placed = metronome.placeAhead(24);
+    const quarter = Duration.QUARTER.ticks;
+    const firstLap = 7 * quarter;
+    // The E of the second time round, handed over by a tick of that lap.
+    const itsClick = placed.find((tick) => tick.positionTicks === firstLap + 2 * quarter);
+    const es = instrument.played.filter((note) => note.midi === MIDI.E4).map((note) => note.atMs ?? -1);
+
+    expect(itsClick).toBeDefined();
+    expect(es.length).toBeGreaterThanOrEqual(2);
+    expect(es[1]).toBeCloseTo(itsClick?.scheduledTimeMs ?? -1, 6);
+  });
+
+  it('hands nothing over twice when the hand is changed after the clicks have moved', () => {
+    const { player, metronome, instrument, timeline } = rig();
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });
+    metronome.advanceSubdivisions(2);
+    metronome.delayBy(48);
+    metronome.placeAhead(1);
+    metronome.delayBy(20);
+    metronome.placeAhead(1);
+
+    player.playWithHand(1);
+    player.playWithHand(null);
+    metronome.placeAhead(8);
+
+    const g = instrument.played.filter((note) => note.midi === MIDI.G4);
+    expect(g).toHaveLength(1);
+  });
+
+  it('keeps the marker still through a count-in whose music has already been placed', () => {
+    // The music's start is known as its first tick is placed, while the last
+    // clicks of the count-in are still to be heard: those move nothing.
+    const { player, metronome, instrument, timeline } = rig();
+    const reached: number[] = [];
+    player.events.on('stepReached', ({ stepIndex }) => reached.push(stepIndex));
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never', countInBars: 1 });
+    const countIn = timeline.exercise.timeSignature.ticksPerMeasure;
+    const placed: MetronomeTick[] = [];
+    while (placed.at(-1)?.positionTicks !== countIn) {
+      const [next] = metronome.placeAhead(1);
+      if (next === undefined) {
+        throw new Error('The music was never placed.');
+      }
+      placed.push(next);
+    }
+
+    expect(instrument.played.map((note) => note.atMs)).toContain(placed.at(-1)?.scheduledTimeMs);
+
+    metronome.advanceSubdivisions(placed.length - 1);
+    expect(reached).toEqual([]);
+
+    metronome.advanceSubdivisions(1);
+    expect(reached).toEqual([0]);
   });
 });
 

@@ -292,13 +292,15 @@ export class ExercisePlayer {
   private lapNotes: GatheredNotes | null = null;
   private lapsDone = 0;
   /**
-   * The furthest moment already handed to the instrument.
+   * The furthest moment already handed to the instrument, into the music
+   * rather than on the clock: the music's start on the clock is taken again
+   * at every tick, and a moment kept on the clock would move against it.
    *
    * Kept in time rather than as a count, because a count means nothing once
    * the list it counts into has been rebuilt - and it is rebuilt whenever the
    * reader moves a passage marker while the music plays.
    */
-  private scheduledThroughMs = Number.NEGATIVE_INFINITY;
+  private scheduledThroughMusicMs = Number.NEGATIVE_INFINITY;
   private click: ClickPattern = 'pulse';
   private silences: ClickSilence = 'nothing';
   private clickWhen: ClickWhen = 'never';
@@ -410,7 +412,7 @@ export class ExercisePlayer {
       this.nextToSchedule = 0;
       return;
     }
-    const since = this.scheduledThroughMs - this.startedAtMs;
+    const since = this.scheduledThroughMusicMs;
     let at = 0;
     // Walked rather than divided into, because the first time round is a
     // different length from the ones after it. It runs to the moment already
@@ -831,7 +833,7 @@ export class ExercisePlayer {
     this.stretchPedal = null;
     this.pending = null;
     this.nextToSchedule = 0;
-    this.scheduledThroughMs = Number.NEGATIVE_INFINITY;
+    this.scheduledThroughMusicMs = Number.NEGATIVE_INFINITY;
     this.startedAtMs = null;
     this.playing = true;
     this.looping = options.repeat === true;
@@ -852,7 +854,13 @@ export class ExercisePlayer {
 
     this.deps.metronome.configure(this.planFrom(0));
 
-    this.subscription = this.deps.metronome.onTick((tick) => this.handleTick(tick));
+    // Sound from a tick as it is placed, and the page from it as it is heard.
+    const placing = this.deps.metronome.onTickPlaced((tick) => this.soundFrom(tick));
+    const hearing = this.deps.metronome.onTick((tick) => this.handleTick(tick));
+    this.subscription = () => {
+      placing();
+      hearing();
+    };
     // Everything that takes time first, and the clock after it.
     //
     // It was the other way round, on the grounds that the first tick is placed
@@ -1085,6 +1093,23 @@ export class ExercisePlayer {
   }
 
   /**
+   * How long into the music a tick of the plan falls, in milliseconds as it
+   * is played: through the first time round, then whole laps and the way
+   * into the one it is in. The same reckoning the notes are timed by.
+   */
+  private msIntoTheMusic(planTicks: number): number {
+    const timeline = this.timeline;
+    if (timeline === null) {
+      return 0;
+    }
+    const { lap, position } = this.lapAt(planTicks);
+    if (lap === 0) {
+      return spanMs(timeline.exercise, this.fromTicks, position);
+    }
+    return this.firstLapMs + (lap - 1) * this.lapMs + spanMs(timeline.exercise, this.loopFromTicks, position);
+  }
+
+  /**
    * How far round the music has got, and how many times it has been round.
    *
    * The metronome counts from nought whatever the music does, so where the
@@ -1118,7 +1143,18 @@ export class ExercisePlayer {
     return new GatheredNotes(timeline, staffNumber, fromTicks, this.untilTicks);
   }
 
-  private handleTick(tick: MetronomeTick): void {
+  /**
+   * Hands the instrument the notes due by a tick's horizon, as the tick's
+   * click is put on the audio clock.
+   *
+   * Not as it is heard. A tick heard has its moment already come, and the
+   * device takes a while to get a sound to the speaker: a note on that beat
+   * handed over then was started at once and heard that long after its
+   * click - a beat late by the device's delay, measured at 49-51 ms in
+   * headless Chrome, with the notes between beats on time, so the music
+   * limped against its own click. Placed with the click, it is heard with it.
+   */
+  private soundFrom(tick: MetronomeTick): void {
     if (!this.playing || this.timeline === null) {
       return;
     }
@@ -1126,22 +1162,24 @@ export class ExercisePlayer {
     // in front is not the first tick of the plan. Taken off the same clock
     // the clicks are on rather than worked out from the tempo, so a count-in
     // in front of a piece that changes speed needs no arithmetic at all.
-    if (this.startedAtMs === null) {
-      if (tick.positionTicks < this.countInTicks) {
-        // Taken again at every tick of it, from the latest, so the moment
-        // drifts no further than one subdivision's arithmetic.
-        this.countedInToMs =
-          tick.scheduledTimeMs +
-          ticksToMilliseconds(this.countInTicks - tick.positionTicks, this.countInBpm);
-        return;
-      }
-      this.startedAtMs = tick.scheduledTimeMs;
+    if (this.startedAtMs === null && tick.positionTicks < this.countInTicks) {
+      // Taken again at every tick of it, from the latest, so the moment
+      // drifts no further than one subdivision's arithmetic.
+      this.countedInToMs =
+        tick.scheduledTimeMs +
+        ticksToMilliseconds(this.countInTicks - tick.positionTicks, this.countInBpm);
+      return;
     }
+    // And taken again at every tick of the music, from where the tick says
+    // its click is heard. The tick is the click: what the device takes to
+    // sound it changes as it wakes - nought, then forty-eight milliseconds,
+    // measured in headless Chrome on the first performance after the page
+    // opened - and a device that naps comes back with its clock elsewhere.
+    // Timed from the first tick alone, every note after such a change was
+    // placed by the click the device had then, and was heard that much away
+    // from its own.
+    this.startedAtMs = tick.scheduledTimeMs - this.msIntoTheMusic(tick.positionTicks);
     const from = this.startedAtMs;
-    // What has finished sounding is no longer anything to show.
-    if (this.handedOver.some((note) => note.untilMs <= tick.scheduledTimeMs)) {
-      this.handedOver = this.handedOver.filter((note) => note.untilMs > tick.scheduledTimeMs);
-    }
 
     // Scheduled straight through the seam, which is the whole of being
     // seamless. The notes of the next lap are handed over while the last of
@@ -1163,7 +1201,7 @@ export class ExercisePlayer {
         break;
       }
       this.nextToSchedule += 1;
-      this.scheduledThroughMs = Math.max(this.scheduledThroughMs, from + note.atMs);
+      this.scheduledThroughMusicMs = Math.max(this.scheduledThroughMusicMs, note.atMs);
       this.handedOver.push({
         midi: note.midi,
         fromMs: from + note.atMs,
@@ -1175,6 +1213,22 @@ export class ExercisePlayer {
         () => `${String(this.pending?.stepsGathered ?? 0)} steps of the music gathered`,
       );
       this.deps.instrument.stop(note.midi, from + note.untilMs);
+    }
+  }
+
+  /** Moves the page with a tick as it is heard: the marker, the step, the place. */
+  private handleTick(tick: MetronomeTick): void {
+    // Through the count-in the music has not begun, and nothing moves. Asked
+    // of the tick and not of whether the music has a start yet: that is set
+    // as the first tick of it is placed, while the last of the count-in is
+    // still to be heard.
+    if (!this.playing || this.timeline === null || tick.positionTicks < this.countInTicks) {
+      return;
+    }
+    // What has finished sounding is no longer anything to show. Asked as it
+    // is heard, since that is what it is shown against.
+    if (this.handedOver.some((note) => note.untilMs <= tick.scheduledTimeMs)) {
+      this.handedOver = this.handedOver.filter((note) => note.untilMs > tick.scheduledTimeMs);
     }
 
     // The metronome counts from nought whatever the music does, so where the

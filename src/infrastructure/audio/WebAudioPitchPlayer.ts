@@ -1,12 +1,21 @@
 import type { IPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
-import { audioTimeFor, beginRelease, takeBack, tooLateToSound, unplug } from './audioTime.js';
+import {
+  AudioClockReading,
+  audioTimeFor,
+  beginRelease,
+  takeBack,
+  tooLateToSound,
+  unplug,
+} from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 
 export interface WebAudioPitchPlayerOptions {
   readonly gain?: number;
   readonly releaseSec?: number;
   readonly maxVoices?: number;
+  /** The crossing between the clocks shared with the metronome, so a note lands where its click does. */
+  readonly reading?: AudioClockReading;
 }
 
 interface Voice {
@@ -31,7 +40,7 @@ function frequencyOf(midi: number): number {
  */
 export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
   private readonly contextFactory: () => AudioContext;
-  private readonly options: Required<WebAudioPitchPlayerOptions>;
+  private readonly options: Required<Omit<WebAudioPitchPlayerOptions, 'reading'>>;
   /** The note each key is sounding, while its key is down. */
   private readonly voices = new Map<number, Voice>();
   /**
@@ -41,9 +50,11 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
   private readonly sounding = new Set<Voice>();
   private context: AudioContext | null = null;
   private currentVolume = 1;
+  private readonly reading: AudioClockReading;
 
   constructor(contextFactory: () => AudioContext, options: WebAudioPitchPlayerOptions = {}) {
     this.contextFactory = contextFactory;
+    this.reading = options.reading ?? new AudioClockReading();
     this.options = {
       gain: options.gain ?? 0.16,
       releaseSec: options.releaseSec ?? 0.25,
@@ -87,7 +98,7 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
       }
     }
 
-    const now = audioTimeFor(context, atMs);
+    const now = audioTimeFor(context, atMs, this.reading);
     const oscillator = context.createOscillator();
     const envelope = context.createGain();
     oscillator.type = 'triangle';
@@ -118,7 +129,7 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
       return;
     }
     this.voices.delete(midi);
-    this.release(voice, this.context, audioTimeFor(this.context, atMs));
+    this.release(voice, this.context, audioTimeFor(this.context, atMs, this.reading));
   }
 
   stopAll(): void {
@@ -144,7 +155,7 @@ export class WebAudioPitchPlayer implements IPitchPlayer, IVolumeControl {
     if (context === null) {
       return;
     }
-    const from = audioTimeFor(context, atMs);
+    const from = audioTimeFor(context, atMs, this.reading);
     const now = context.currentTime;
     // As the sampled player does, and for the same reason.
     for (const voice of [...this.sounding]) {

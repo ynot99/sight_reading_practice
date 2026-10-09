@@ -4,7 +4,7 @@ import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { WebAudioMetronome } from '../../src/infrastructure/audio/WebAudioMetronome.js';
 import { WebAudioPitchPlayer } from '../../src/infrastructure/audio/WebAudioPitchPlayer.js';
-import { outputLatencySeconds } from '../../src/infrastructure/audio/audioTime.js';
+import { AudioClockReading, outputLatencySeconds } from '../../src/infrastructure/audio/audioTime.js';
 
 /**
  * The page's clock, held still for the length of `body`.
@@ -706,6 +706,99 @@ describe('when the click is actually heard', () => {
     expect(first).toBeDefined();
     // Queued 60 ms in, heard 80 ms after that.
     expect(first?.scheduledTimeMs).toBeCloseTo(60 + 80, 3);
+    vi.useRealTimers();
+  });
+
+  it('says a tick is placed as its click goes onto the audio clock, before it is heard', () => {
+    // What sounds with the click has to go on with it: a tick heard is too
+    // late to place a note beside it.
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const context = new FakeAudioContext();
+    context.outputLatency = 0.08;
+    const metronome = new WebAudioMetronome(contextFactory(context), {
+      schedulerIntervalMs: 20,
+      scheduleAheadSec: 0.12,
+      firstClickLeadSec: 0.06,
+    });
+    metronome.configure({
+      bpm: 60,
+      timeSignature: new TimeSignature(4, 4),
+      bars: [],
+      tempos: [],
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      dropout: null,
+      endsAtTicks: null,
+      muted: true,
+    });
+    const placed: MetronomeTick[] = [];
+    const heard: MetronomeTick[] = [];
+    metronome.onTickPlaced((tick) => placed.push(tick));
+    metronome.onTick((tick) => heard.push(tick));
+
+    metronome.start();
+
+    expect(placed).toHaveLength(1);
+    expect(heard).toHaveLength(0);
+    // Carrying the moment it will be heard, which is the one moment both
+    // events speak of.
+    expect(placed[0]?.scheduledTimeMs).toBeCloseTo(60 + 80, 3);
+
+    context.advance(0.2);
+    vi.advanceTimersByTime(120);
+    expect(heard[0]).toBe(placed[0]);
+    vi.useRealTimers();
+  });
+
+  it('places a note from a tick where its click is, however far the clocks have parted since', () => {
+    // A device just woken runs slow, and its clock moves in whole buffers: a
+    // reading taken afresh for the note disagreed with the one the tick was
+    // stamped by, and the note landed elsewhere than its click.
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const context = new FakeAudioContext();
+    context.outputLatency = 0.08;
+    const reading = new AudioClockReading();
+    const metronome = new WebAudioMetronome(
+      contextFactory(context),
+      { schedulerIntervalMs: 20, scheduleAheadSec: 0.12, firstClickLeadSec: 0.06 },
+      reading,
+    );
+    const piano = new WebAudioPitchPlayer(contextFactory(context), { reading });
+    metronome.configure({
+      bpm: 60,
+      timeSignature: new TimeSignature(4, 4),
+      bars: [],
+      tempos: [],
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      dropout: null,
+      endsAtTicks: null,
+      muted: false,
+    });
+    const placed: MetronomeTick[] = [];
+    metronome.onTickPlaced((tick) => placed.push(tick));
+    metronome.start();
+    const click = context.oscillators[0];
+    expect(click?.startedAt).toBeCloseTo(0.06, 6);
+
+    // The page's clock runs on a tenth of a second while the device's stands.
+    vi.advanceTimersByTime(100);
+    piano.play(60, 0.5, placed[0]?.scheduledTimeMs);
+
+    expect(context.oscillators.at(-1)?.startedAt).toBeCloseTo(click?.startedAt ?? -1, 6);
+
+    // Stopped, nothing sounds beside it, and a note is placed by a fresh
+    // reading again - one kept from the start would have drifted, as the
+    // device waking does again here.
+    metronome.stop();
+    context.napFor(1);
+    vi.advanceTimersByTime(100);
+    withTheClockStill((now) => {
+      piano.play(62, 0.5, now + 500);
+    });
+    expect(context.oscillators.at(-1)?.startedAt).toBeCloseTo(0.42, 6);
     vi.useRealTimers();
   });
 

@@ -113,6 +113,7 @@ import {
 } from '../domain/scoring/strategies.js';
 import { keepAudioAwake } from '../infrastructure/audio/keepAudioAwake.js';
 import { WebAudioMetronome, createAudioContextFactory } from '../infrastructure/audio/WebAudioMetronome.js';
+import { AudioClockReading } from '../infrastructure/audio/audioTime.js';
 import { WebAudioPitchPlayer } from '../infrastructure/audio/WebAudioPitchPlayer.js';
 import { SampledPitchPlayer } from '../infrastructure/audio/SampledPitchPlayer.js';
 import { CompositeMidiSource } from '../infrastructure/midi/CompositeMidiSource.js';
@@ -332,13 +333,18 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const waking =
     typeof document === 'undefined' ? null : keepAudioAwake(audioContextFactory, document);
 
-  const metronome = new WebAudioMetronome(audioContextFactory);
+  // One crossing between the page's clock and the audio clock for the click
+  // and the notes beside it, or a note placed from a tick lands elsewhere on
+  // the audio clock than the tick's own click.
+  const reading = new AudioClockReading();
+  const metronome = new WebAudioMetronome(audioContextFactory, {}, reading);
 
   // Recorded piano, with the synthesised tone standing in until the samples
   // have downloaded - a key must never be silent while waiting on the network.
   const pitchPlayer = new SampledPitchPlayer(audioContextFactory, {
     baseUrl: options.sampleBaseUrl ?? 'samples/piano/',
-    fallback: new WebAudioPitchPlayer(audioContextFactory),
+    fallback: new WebAudioPitchPlayer(audioContextFactory, { reading }),
+    reading,
   });
 
   const webMidi = new WebMidiAdapter(browserMidiAccessProvider(), clock);

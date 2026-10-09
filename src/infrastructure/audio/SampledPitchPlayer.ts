@@ -7,7 +7,14 @@ import type {
 import { SilentPitchPlayer } from '../../application/ports/IPitchPlayer.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { PIANO_SAMPLES, nearestSample, playbackRateFor } from './pianoSampleMap.js';
-import { audioTimeFor, beginRelease, takeBack, tooLateToSound, unplug } from './audioTime.js';
+import {
+  AudioClockReading,
+  audioTimeFor,
+  beginRelease,
+  takeBack,
+  tooLateToSound,
+  unplug,
+} from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 
 export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
@@ -51,6 +58,8 @@ export interface SampledPitchPlayerOptions {
   readonly maxVoices?: number;
   readonly fetchAudio?: AudioFetcher;
   readonly loading?: SampleLoading;
+  /** The crossing between the clocks shared with the metronome, so a note lands where its click does. */
+  readonly reading?: AudioClockReading;
 }
 
 /** Fade applied at the end of a recording, which is cut rather than faded. */
@@ -108,7 +117,7 @@ export class SampledPitchPlayer
   private readonly fallback: IPitchPlayer;
   private readonly fetchAudio: AudioFetcher;
   private readonly options: Required<
-    Omit<SampledPitchPlayerOptions, 'baseUrl' | 'fallback' | 'fetchAudio' | 'loading'>
+    Omit<SampledPitchPlayerOptions, 'baseUrl' | 'fallback' | 'fetchAudio' | 'loading' | 'reading'>
   >;
 
   private readonly buffers = new Map<number, AudioBuffer>();
@@ -135,6 +144,7 @@ export class SampledPitchPlayer
   private currentVolume = 1;
   private pedalDown = false;
   private loadingMode: SampleLoading;
+  private readonly reading: AudioClockReading;
 
   constructor(contextFactory: () => AudioContext, options: SampledPitchPlayerOptions) {
     this.contextFactory = contextFactory;
@@ -142,6 +152,7 @@ export class SampledPitchPlayer
     this.fallback = options.fallback ?? new SilentPitchPlayer();
     this.fetchAudio = options.fetchAudio ?? fetchAudioBuffer;
     this.loadingMode = options.loading ?? 'lazy';
+    this.reading = options.reading ?? new AudioClockReading();
     this.options = {
       gain: options.gain ?? 1,
       releaseSec: options.releaseSec ?? 0.35,
@@ -275,7 +286,7 @@ export class SampledPitchPlayer
     this.releaseNow(midi, atMs);
     this.evictOldestIfFull();
 
-    const now = audioTimeFor(context, atMs);
+    const now = audioTimeFor(context, atMs, this.reading);
     const source = context.createBufferSource();
     const envelope = context.createGain();
     source.buffer = buffer;
@@ -344,7 +355,7 @@ export class SampledPitchPlayer
       return;
     }
     this.voices.delete(midi);
-    this.release(voice, audioTimeFor(this.context, atMs));
+    this.release(voice, audioTimeFor(this.context, atMs, this.reading));
   }
 
   stopAll(): void {
@@ -377,7 +388,7 @@ export class SampledPitchPlayer
     if (context === null) {
       return;
     }
-    const from = audioTimeFor(context, atMs);
+    const from = audioTimeFor(context, atMs, this.reading);
     const now = context.currentTime;
     // Only from what is sounding: a note handed over ahead was told its end
     // with it, so no key is still down on one that has not begun.

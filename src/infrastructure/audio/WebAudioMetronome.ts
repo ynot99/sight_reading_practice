@@ -7,7 +7,14 @@ import type {
 } from '../../application/ports/IMetronome.js';
 import { volumeToGain, type IVolumeControl } from '../../application/ports/IVolumeControl.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
-import { TOO_LATE_MS, audioTimeFor, outputLatencySeconds, takeBack, unplug } from './audioTime.js';
+import {
+  AudioClockReading,
+  TOO_LATE_MS,
+  audioTimeFor,
+  outputLatencySeconds,
+  takeBack,
+  unplug,
+} from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
 import {
   buildMetronomeTick,
@@ -78,7 +85,7 @@ const DEFAULT_CONFIG: MetronomeConfig = {
  * lets Flow mode grade timing without inheriting any scheduler jitter.
  */
 export class WebAudioMetronome implements IMetronome, IVolumeControl {
-  private readonly emitter = new TypedEventEmitter<{ tick: MetronomeTick }>();
+  private readonly emitter = new TypedEventEmitter<{ tick: MetronomeTick; placed: MetronomeTick }>();
   private readonly contextFactory: () => AudioContext;
   private readonly options: Required<WebAudioMetronomeOptions>;
 
@@ -105,9 +112,16 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
    */
   private audioEpochMs = 0;
   private currentVolume = 1;
+  /** Where the epoch above is lent, while the pulse beats, to what sounds beside it. */
+  private readonly reading: AudioClockReading;
 
-  constructor(contextFactory: () => AudioContext, options: WebAudioMetronomeOptions = {}) {
+  constructor(
+    contextFactory: () => AudioContext,
+    options: WebAudioMetronomeOptions = {},
+    reading: AudioClockReading = new AudioClockReading(),
+  ) {
     this.contextFactory = contextFactory;
+    this.reading = reading;
     this.options = {
       schedulerIntervalMs: options.schedulerIntervalMs ?? 20,
       scheduleAheadSec: options.scheduleAheadSec ?? 0.12,
@@ -154,6 +168,10 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     return this.emitter.on('tick', listener);
   }
 
+  onTickPlaced(listener: (tick: MetronomeTick) => void): Unsubscribe {
+    return this.emitter.on('placed', listener);
+  }
+
   start(): void {
     timeTheStart('metronome started');
     // Told to start while it is already running, a pulse begins again rather
@@ -175,6 +193,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     this.nextTickIndex = 0;
     this.nextTickAudioTime = context.currentTime + this.options.firstClickLeadSec;
     this.audioEpochMs = performance.now() - context.currentTime * 1000;
+    this.reading.hold(this.audioEpochMs);
     timeTheStart('metronome: the device at the start', () => describeTheDevice(context));
 
     this.timer = setInterval(() => {
@@ -196,6 +215,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     }
     this.queue = [];
     this.takeBackTheClicks();
+    this.reading.release();
   }
 
   private ensureContext(): AudioContext {
@@ -230,6 +250,9 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     // here would be a rule with no case that reaches it.
     context.addEventListener('statechange', () => {
       this.audioEpochMs = performance.now() - context.currentTime * 1000;
+      if (this.timer !== null) {
+        this.reading.hold(this.audioEpochMs);
+      }
       timeTheStart(`metronome: the device went ${context.state}`, () =>
         describeTheDevice(context),
       );
@@ -274,6 +297,9 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
         this.playClick(context, tick, this.nextTickAudioTime);
       }
       this.queue.push({ tick, audioTime: this.nextTickAudioTime });
+      // Said now, a look-ahead and the device's delay before it is heard,
+      // so what sounds with the click can be placed beside it.
+      this.emitter.emit('placed', tick);
       this.nextTickIndex += 1;
       this.nextTickAudioTime += subdivisionSecondsAt(this.config, this.nextTickIndex - 1);
     }
@@ -348,7 +374,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     // held note is a bar or more of beats waiting to be heard.
     const sounded = this.sound(
       context,
-      audioTimeFor(context, atMs),
+      audioTimeFor(context, atMs, this.reading),
       weight === 'downbeat',
       weight !== 'division',
     );

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { IPitchPlayer, SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { SampledPitchPlayer } from '../../src/infrastructure/audio/SampledPitchPlayer.js';
+import { AudioClockReading } from '../../src/infrastructure/audio/audioTime.js';
 import {
   HIGHEST_SAMPLED_MIDI,
   LOWEST_SAMPLED_MIDI,
@@ -135,7 +136,9 @@ class RecordingFallback implements IPitchPlayer {
   }
 }
 
-function createPlayer(options: { failing?: readonly string[]; loading?: SampleLoading } = {}): {
+function createPlayer(
+  options: { failing?: readonly string[]; loading?: SampleLoading; reading?: AudioClockReading } = {},
+): {
   player: SampledPitchPlayer;
   context: FakeAudioContext;
   fallback: RecordingFallback;
@@ -149,6 +152,7 @@ function createPlayer(options: { failing?: readonly string[]; loading?: SampleLo
     baseUrl: 'samples/piano',
     fallback,
     ...(options.loading === undefined ? {} : { loading: options.loading }),
+    ...(options.reading === undefined ? {} : { reading: options.reading }),
     fetchAudio: (url) => {
       requested.push(url);
       if ((options.failing ?? []).some((name) => url.endsWith(`${name}.mp3`))) {
@@ -411,6 +415,35 @@ describe('SampledPitchPlayer', () => {
     );
     // And the stand-in, which may be sounding some of them, is asked the same.
     expect(fallback.takenBackFrom).toEqual([now]);
+  });
+
+  it('crosses to the audio clock by the reading it shares with the metronome', async () => {
+    // Held by a metronome beating: the page's clock stood at two seconds
+    // before nought when the audio clock read nought.
+    const reading = new AudioClockReading();
+    reading.hold(-2_000);
+    const { player, context } = createPlayer({ reading });
+    await player.load();
+    const now = performance.now();
+    const still = vi.spyOn(performance, 'now').mockReturnValue(now);
+    try {
+      player.play(60, 1, now + 300);
+      player.play(64, 1, now + 500);
+      player.stop(60, now + 1_000);
+      player.takeBackFrom(now + 400);
+    } finally {
+      still.mockRestore();
+    }
+
+    // Begun, let go of and taken back where that reading puts them.
+    expect(context.sources[0]?.startedAt).toBeCloseTo((now + 2_300) / 1000, 6);
+    expect(context.gains[0]?.gain.ramps.map((ramp) => ramp.time)).toContainEqual(
+      expect.closeTo((now + 3_000) / 1000, 6),
+    );
+    expect(context.sources[0]?.stoppedAt).toBeGreaterThan(context.sources[0]?.startedAt ?? Number.POSITIVE_INFINITY);
+    expect(context.sources[1]?.stoppedAt ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
+      context.sources[1]?.startedAt ?? 0,
+    );
   });
 
   it('ends the ringing note on a key when it is struck again, not when the repeat is handed over', async () => {

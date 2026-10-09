@@ -74,12 +74,58 @@ export function outputLatencySeconds(context: BaseAudioContext): number {
  * much after the click it was placed by and after the cursor that stepped on
  * it - his "курсор зовсім трішки поспішає за саму гру", on the PC.
  */
-export function audioTimeFor(context: BaseAudioContext, atMs: number | undefined): number {
+export function audioTimeFor(
+  context: BaseAudioContext,
+  atMs: number | undefined,
+  reading?: AudioClockReading,
+): number {
   if (atMs === undefined) {
     return context.currentTime;
   }
-  const ahead = (atMs - performance.now()) / 1000 - outputLatencySeconds(context);
-  return context.currentTime + Math.max(0, ahead);
+  const pageAtNought = reading?.of(context) ?? pageMsAtAudioNought(context);
+  const at = (atMs - pageAtNought) / 1000 - outputLatencySeconds(context);
+  return Math.max(context.currentTime, at);
+}
+
+/** Where the page's clock stood when the audio clock read nought, taken now. */
+function pageMsAtAudioNought(context: BaseAudioContext): number {
+  return performance.now() - context.currentTime * 1000;
+}
+
+/**
+ * The one crossing between the page's clock and the audio clock that every
+ * sound beside the metronome's makes, for as long as the metronome beats.
+ *
+ * Read fresh, the two clocks disagree from one moment to the next: the audio
+ * clock moves in whole buffers, and a device just woken runs slow for a
+ * while. The metronome takes one reading at its start and stamps every tick
+ * with it, and a note placed from a tick was crossed back with a reading of
+ * its own - measured in headless Chrome, a performance's notes were 109 ms
+ * ahead of their clicks while the device was waking, and 8 ms behind them on
+ * a later start. Crossed back by the reading the tick was stamped with, a
+ * note lands on the audio clock where its click is.
+ *
+ * Fresh whenever the metronome is not beating: then nothing sounds beside
+ * it, and a reading kept from its last start would drift from the page's
+ * clock over a session.
+ */
+export class AudioClockReading {
+  private held: number | null = null;
+
+  /** The metronome's reading, kept while it beats. */
+  hold(pageMsAtAudioNought: number): void {
+    this.held = pageMsAtAudioNought;
+  }
+
+  /** Back to reading fresh, the metronome having stopped. */
+  release(): void {
+    this.held = null;
+  }
+
+  /** Where the page's clock stands at the audio clock's nought, as sounds are to be placed now. */
+  of(context: BaseAudioContext): number {
+    return this.held ?? pageMsAtAudioNought(context);
+  }
 }
 
 /**

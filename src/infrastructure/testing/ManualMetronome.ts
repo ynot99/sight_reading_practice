@@ -34,7 +34,7 @@ const DEFAULT_CONFIG: MetronomeConfig = {
  * the timing arithmetic exactly as it runs in the browser.
  */
 export class ManualMetronome implements IMetronome {
-  private readonly emitter = new TypedEventEmitter<{ tick: MetronomeTick }>();
+  private readonly emitter = new TypedEventEmitter<{ tick: MetronomeTick; placed: MetronomeTick }>();
   private readonly clock: ManualClock | null;
 
   private config: MetronomeConfig = DEFAULT_CONFIG;
@@ -48,6 +48,12 @@ export class ManualMetronome implements IMetronome {
    * either way.
    */
   private nextTimeMs = 0;
+
+  /**
+   * Ticks placed by {@link placeAhead} and not heard yet, oldest first: what
+   * a real metronome has on the audio clock ahead of the speaker.
+   */
+  private readonly placedNotHeard: MetronomeTick[] = [];
 
   /** Every tick emitted so far, for assertions. */
   readonly emitted: MetronomeTick[] = [];
@@ -89,9 +95,14 @@ export class ManualMetronome implements IMetronome {
     return this.config;
   }
 
+  /** How many are listening for ticks heard and for ticks placed, for a test of letting go. */
+  get listeners(): { readonly heard: number; readonly placed: number } {
+    return { heard: this.emitter.listenerCount('tick'), placed: this.emitter.listenerCount('placed') };
+  }
+
   /** Index of the next tick that {@link advanceSubdivisions} will emit. */
   get nextTickIndex(): number {
-    return this.nextIndex;
+    return this.nextIndex - this.placedNotHeard.length;
   }
 
   configure(config: MetronomeConfig): void {
@@ -112,8 +123,13 @@ export class ManualMetronome implements IMetronome {
     return this.emitter.on('tick', listener);
   }
 
+  onTickPlaced(listener: (tick: MetronomeTick) => void): Unsubscribe {
+    return this.emitter.on('placed', listener);
+  }
+
   start(): void {
     this.running = true;
+    this.placedNotHeard.length = 0;
     this.nextIndex = 0;
     this.nextTimeMs = (this.clock?.now() ?? 0) + this.leadMs;
   }
@@ -134,21 +150,58 @@ export class ManualMetronome implements IMetronome {
   advanceSubdivisions(count = 1): MetronomeTick[] {
     const ticks: MetronomeTick[] = [];
     for (let step = 0; step < count; step += 1) {
-      // Held at a gate, as the real one is: nothing past it is built, and
-      // the clock stands where the test left it.
-      if (!this.running || isHeldBack(this.nextIndex, this.config)) {
+      // Placed now and heard at once, unless it was placed ahead already:
+      // there is no device here to wait for, but the order is the real one's.
+      const tick = this.placedNotHeard.shift() ?? this.placeNext();
+      if (tick === null) {
         break;
       }
-      const scheduledTimeMs = this.nextTimeMs;
-      const tick = buildMetronomeTick(this.nextIndex, this.config, scheduledTimeMs);
-      this.nextTimeMs += subdivisionSecondsAt(this.config, this.nextIndex) * 1000;
-      this.nextIndex += 1;
-      this.clock?.set(scheduledTimeMs);
+      this.clock?.set(tick.scheduledTimeMs);
       this.emitted.push(tick);
       ticks.push(tick);
       this.emitter.emit('tick', tick);
     }
     return ticks;
+  }
+
+  /**
+   * Hears every tick not yet placed `ms` later, as a device does whose delay
+   * to the speaker grows - one waking up, or headphones plugged in.
+   */
+  delayBy(ms: number): void {
+    this.nextTimeMs += ms;
+  }
+
+  /**
+   * Places the next `count` ticks on the clock without their being heard, as
+   * a real metronome places its clicks a look-ahead and the device's delay
+   * before the speaker gets to them. {@link advanceSubdivisions} then hears
+   * them, and places nothing twice.
+   */
+  placeAhead(count = 1): MetronomeTick[] {
+    const placed: MetronomeTick[] = [];
+    for (let step = 0; step < count; step += 1) {
+      const tick = this.placeNext();
+      if (tick === null) {
+        break;
+      }
+      this.placedNotHeard.push(tick);
+      placed.push(tick);
+    }
+    return placed;
+  }
+
+  private placeNext(): MetronomeTick | null {
+    // Held at a gate, as the real one is: nothing past it is built, and the
+    // clock stands where the test left it.
+    if (!this.running || isHeldBack(this.nextIndex, this.config)) {
+      return null;
+    }
+    const tick = buildMetronomeTick(this.nextIndex, this.config, this.nextTimeMs);
+    this.nextTimeMs += subdivisionSecondsAt(this.config, this.nextIndex) * 1000;
+    this.nextIndex += 1;
+    this.emitter.emit('placed', tick);
+    return tick;
   }
 
   /** Emits whole beats' worth of subdivisions. */

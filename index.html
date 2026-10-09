@@ -1662,6 +1662,19 @@
       </div>
 
       <!--
+        The same under a performance: where it stands in what it plays - one
+        time round the passage - and dragged, the place it plays on from.
+      -->
+      <div id="listen-on-keys" class="under-the-keys" hidden>
+        <div class="take-transport">
+          <output id="listen-position" class="take-transport__time">0:00</output>
+          <input id="listen-scrub" type="range" min="0" max="1000" step="1" value="0"
+            aria-label="Position in the playback" />
+          <output id="listen-duration" class="take-transport__time">0:00</output>
+        </div>
+      </div>
+
+      <!--
         The chord the keys held make, in free play only, at the top of the
         screen where it is read without looking away from the keys' lane.
       -->

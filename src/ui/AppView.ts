@@ -1488,6 +1488,13 @@ export class AppView {
   /** How long the run shown again lasts, to its last event: where its slider ends. */
   private replayLengthMs = 0;
   private replayTick: ReturnType<typeof setInterval> | null = null;
+  /** Moves the slider under a performance along with it, while it plays. */
+  private listenTick: ReturnType<typeof setInterval> | null = null;
+  /**
+   * Whether the performance was playing when the slider under it was taken
+   * hold of: held for the drag, it plays on from where it is let go.
+   */
+  private playsOnAfterTheDrag = false;
   private replayAtMs = 0;
   private replayClicksSent = 0;
   /** Puts the speed in the row or the drawer, as fits now. See `bindNarrowLayout`. */
@@ -1793,6 +1800,10 @@ export class AppView {
     takeOffTheKeys: HTMLButtonElement;
     takeOnKeys: HTMLElement;
     replayOnKeys: HTMLElement;
+    listenOnKeys: HTMLElement;
+    listenPosition: HTMLOutputElement;
+    listenScrub: HTMLInputElement;
+    listenDuration: HTMLOutputElement;
     replayPosition: HTMLOutputElement;
     replayScrub: HTMLInputElement;
     replayDuration: HTMLOutputElement;
@@ -2108,6 +2119,10 @@ export class AppView {
       takeOffTheKeys: requireElement(doc, 'take-off-the-keys'),
       takeOnKeys: requireElement(doc, 'take-on-keys'),
       replayOnKeys: requireElement(doc, 'replay-on-keys'),
+      listenOnKeys: requireElement(doc, 'listen-on-keys'),
+      listenPosition: requireElement(doc, 'listen-position'),
+      listenScrub: requireElement(doc, 'listen-scrub'),
+      listenDuration: requireElement(doc, 'listen-duration'),
       replayPosition: requireElement(doc, 'replay-position'),
       replayScrub: requireElement(doc, 'replay-scrub'),
       replayDuration: requireElement(doc, 'replay-duration'),
@@ -2343,6 +2358,10 @@ export class AppView {
     if (this.replayTick !== null) {
       clearInterval(this.replayTick);
       this.replayTick = null;
+    }
+    if (this.listenTick !== null) {
+      clearInterval(this.listenTick);
+      this.listenTick = null;
     }
     this.forgetTheMapFrame();
     this.stopTheNotesFalling();
@@ -3460,6 +3479,7 @@ export class AppView {
     this.updateButtons(controller.session?.status ?? 'idle');
     this.describeStopping();
     this.sayWhatIsSounding();
+    this.followThePerformance();
   }
 
   /**
@@ -8084,6 +8104,34 @@ export class AppView {
       this.describeTakeTransport();
     });
 
+    // Held while it is dragged and played on where it is let go, rather than
+    // started again at every step of the drag: each start is a performance
+    // begun, with its count-in where one is set.
+    this.listen(this.el.listenScrub, 'input', () => {
+      const controller = this.runtime.controller;
+      const place = controller.performancePlace;
+      if (place === null) {
+        return;
+      }
+      // Read before holding: holding draws the slider where the music was.
+      const to = momentOfTheScrubBar(this.performanceScrubBar, place.durationMs);
+      if (controller.isListening) {
+        this.playsOnAfterTheDrag = true;
+        this.holdThePerformance();
+      }
+      controller.movePerformanceTo(to);
+      this.showThePerformance();
+    });
+    this.listen(this.el.listenScrub, 'change', () => {
+      if (!this.playsOnAfterTheDrag) {
+        return;
+      }
+      this.playsOnAfterTheDrag = false;
+      if (this.runtime.controller.isListeningPaused) {
+        this.resumeThePerformance();
+      }
+    });
+
     this.listen(this.el.replayScrub, 'input', () => {
       this.putTheReplayAt(momentOfTheScrubBar(this.replayScrubBar, this.replayLengthMs));
     });
@@ -8277,6 +8325,31 @@ export class AppView {
   /** The slider through a run shown again. */
   private get replayScrubBar(): ScrubBar {
     return { position: this.el.replayPosition, scrub: this.el.replayScrub, duration: this.el.replayDuration };
+  }
+
+  /** The slider through a performance. */
+  private get performanceScrubBar(): ScrubBar {
+    return { position: this.el.listenPosition, scrub: this.el.listenScrub, duration: this.el.listenDuration };
+  }
+
+  /**
+   * Says where the performance stands, of how long, and keeps saying it while
+   * it plays: it moves between the steps that are all the page is told of.
+   */
+  private followThePerformance(): void {
+    const controller = this.runtime.controller;
+    const place = controller.performancePlace;
+    if (place !== null) {
+      describeTheScrubBar(this.performanceScrubBar, place.positionMs, place.durationMs);
+    }
+    if (controller.isListening && this.listenTick === null) {
+      this.listenTick = setInterval(() => {
+        this.followThePerformance();
+      }, TAKE_TICK_MS);
+    } else if (!controller.isListening && this.listenTick !== null) {
+      clearInterval(this.listenTick);
+      this.listenTick = null;
+    }
   }
 
   /** Says where the run shown again stands, of how long. */
@@ -9054,6 +9127,7 @@ export class AppView {
     } else {
       delete this.doc.body.dataset['listening'];
     }
+    this.el.listenOnKeys.hidden = !inPlayback;
     // And which, in free play, puts away what there is nothing to do with:
     // no run to start or rewind, and nothing to repeat or play faster.
     if (inFreePlay) {
@@ -9162,8 +9236,8 @@ export class AppView {
   }
 
   /**
-   * Says whether the slider through a take or a run shown again stands under
-   * the keys, as the switch under the pedal's mark has it - and always where
+   * Says whether the slider through a take, a run shown again or a
+   * performance stands under the keys, as the switch under the pedal's mark has it - and always where
    * the keys are put away, there being nowhere else to reach it from then.
    */
   private placeTheSlider(): void {
@@ -9173,7 +9247,13 @@ export class AppView {
     toggle.setAttribute('aria-pressed', String(settings.sliderShown));
     toggle.title = said;
     toggle.setAttribute('aria-label', said);
-    if (this.takeOnTheKeys === null && this.replayRoll === null) {
+    const controller = this.runtime.controller;
+    if (
+      this.takeOnTheKeys === null &&
+      this.replayRoll === null &&
+      !controller.isListening &&
+      !controller.isListeningPaused
+    ) {
       delete this.doc.body.dataset['slider'];
       return;
     }

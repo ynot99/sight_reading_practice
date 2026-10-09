@@ -2072,6 +2072,95 @@ describe('AppView', () => {
     });
   });
 
+  describe('the slider under a performance', () => {
+    it('stands under the keys while a performance plays or is held, and goes with it', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const strip = element('listen-on-keys');
+      expect(strip.hidden).toBe(true);
+
+      await pressListen(runtime.controller);
+      const place = runtime.controller.performancePlace;
+      expect(strip.hidden).toBe(false);
+      expect(document.body.dataset['slider']).toBe('shown');
+      expect(element('listen-duration').textContent).toBe(clockTime(place?.durationMs ?? -1));
+
+      element<HTMLButtonElement>('focus-play').click();
+      expect(runtime.controller.isListeningPaused).toBe(true);
+      expect(strip.hidden).toBe(false);
+
+      element<HTMLButtonElement>('focus-stop').click();
+      expect(strip.hidden).toBe(true);
+      expect(document.body.dataset['slider']).toBeUndefined();
+    });
+
+    it('moves along with the performance between its steps, and stops moving when it stops', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      try {
+        const { view, runtime, metronome } = createRig();
+        await view.initialize();
+        const timers = vi.getTimerCount();
+        await pressListen(runtime.controller);
+        const scrub = element<HTMLInputElement>('listen-scrub');
+        const before = scrub.value;
+
+        // Into the music, and on past the step it reached.
+        metronome.advanceSubdivisions(6);
+        vi.advanceTimersByTime(100);
+
+        const place = runtime.controller.performancePlace;
+        expect(scrub.value).not.toBe(before);
+        expect(Number(scrub.value)).toBe(Math.round(((place?.positionMs ?? 0) / (place?.durationMs ?? 1)) * 1_000));
+        expect(element('listen-position').textContent).toBe(clockTime(place?.positionMs ?? -1));
+
+        element<HTMLButtonElement>('focus-stop').click();
+        expect(vi.getTimerCount()).toBe(timers);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('holds a playing performance while dragged, and plays on from where it is let go', async () => {
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+      const scrub = element<HTMLInputElement>('listen-scrub');
+      const duration = runtime.controller.performancePlace?.durationMs ?? 0;
+
+      scrub.value = '600';
+      scrub.dispatchEvent(new Event('input'));
+
+      // Held for the drag, at the step the slider is over.
+      expect(runtime.controller.isListeningPaused).toBe(true);
+      const held = runtime.controller.performancePlace?.positionMs ?? -1;
+      expect(held).toBeGreaterThan(0);
+      expect(held).toBeLessThanOrEqual(duration * 0.6);
+      const marker = renderer.cursor.position;
+      expect(marker).toBeGreaterThan(0);
+
+      scrub.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.isListening).toBe(true);
+      expect(runtime.controller.performancePlace?.positionMs).toBe(held);
+    });
+
+    it('moves a held performance while dragged, and leaves it held', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+      element<HTMLButtonElement>('focus-play').click();
+      const scrub = element<HTMLInputElement>('listen-scrub');
+
+      scrub.value = '0';
+      scrub.dispatchEvent(new Event('input'));
+      scrub.dispatchEvent(new Event('change'));
+
+      expect(runtime.controller.isListeningPaused).toBe(true);
+      expect(runtime.controller.performancePlace?.positionMs).toBe(0);
+      expect(element('focus-play').getAttribute('aria-label')).toBe('Resume');
+    });
+  });
+
   it('ends a held performance with Stop, which is what Stop is for', async () => {
     const { view, runtime } = createRig();
     await view.initialize();

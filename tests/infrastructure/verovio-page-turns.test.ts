@@ -4,7 +4,7 @@ import type { Exercise } from '../../src/domain/model/Exercise.js';
 import { readThePage, type PageLayout } from '../../src/infrastructure/rendering/verovio/pageLayout.js';
 import { elementAt } from '../../src/shared/asserts.js';
 import { twoBarExercise } from '../support/fixtures.js';
-import { printed, sheets, verovioStages, whenDrawn, type Stage } from '../support/verovioStage.js';
+import { laidOutAt, printed, sheets, verovioStages, whenDrawn, type Stage } from '../support/verovioStage.js';
 
 /**
  * Pages that follow the music under Verovio: turned as it leaves one,
@@ -84,6 +84,71 @@ describe('a page turned by the music', () => {
     renderer.cursor.moveTo(far);
     renderer.cursor.moveTo(firstStepOf(surface, 0, 1));
     await new Promise((done) => setTimeout(done, 200));
+
+    expect(renderer.pages.at).toBe(0);
+  });
+
+  it('asks the engraver once for a bar, however often the music says it is there', async () => {
+    // Every beat and every note asked, and the engraver answers one question
+    // at a time: on a long piece the pages wanted after a seek waited behind
+    // hundreds of the same question.
+    const { renderer, engraver, surface } = await aScore();
+    const far = PIECE.steps.findIndex((each) => each.barId === 'm110');
+    const page = ((await engraver.pageOf('m110')) ?? NaN) - 1;
+    const asked = vi.spyOn(engraver, 'pageOf');
+
+    for (let beat = 0; beat < 10; beat += 1) {
+      renderer.showMeasure(110);
+      renderer.cursor.moveTo(far + (beat % 2));
+    }
+    await whenDrawn(() => {
+      expect(renderer.pages.at).toBe(page);
+      expect(sheets(surface)[page]?.querySelector('svg')).not.toBeNull();
+    });
+    renderer.showMeasure(110);
+
+    expect(asked.mock.calls.filter(([bar]) => bar === 'm110')).toHaveLength(1);
+    // And a bar on a page drawn is not asked about at all.
+    const onThePage = readingOf(surface, page).layout.systems.at(-1)?.bars[0]?.id ?? '';
+    expect(onThePage).not.toBe('m110');
+    renderer.showMeasure(Number(onThePage.slice(1)));
+    await new Promise((done) => setTimeout(done, 50));
+    expect(asked.mock.calls.map(([bar]) => bar)).toEqual(['m110']);
+    expect(renderer.pages.at).toBe(page);
+  });
+
+  it('asks again where a bar is once the music is laid out afresh', async () => {
+    const { renderer, engraver, surface } = await aScore();
+    renderer.showMeasure(110);
+    await whenDrawn(() => {
+      expect(renderer.pages.at).toBeGreaterThan(2);
+    });
+    const before = renderer.pages.at;
+    renderer.showMeasure(0);
+    await whenDrawn(() => {
+      expect(renderer.pages.at).toBe(0);
+    });
+
+    // Larger print, so more pages, and the bar on another one of them.
+    await laidOutAt(renderer, surface, 1.5);
+    const page = ((await engraver.pageOf('m110')) ?? NaN) - 1;
+    expect(renderer.pages.at).toBe(0);
+    expect(page).not.toBe(before);
+    renderer.showMeasure(110);
+
+    await whenDrawn(() => {
+      expect(renderer.pages.at).toBe(page);
+    });
+  });
+
+  it('turns to where the music is now, not to a bar it left before the answer came', async () => {
+    // Sought to the end and straight back: the answer for the end comes after
+    // the start, which is on a page already drawn and answered at once.
+    const { renderer } = await aScore();
+
+    renderer.showMeasure(110);
+    renderer.showMeasure(0);
+    await new Promise((done) => setTimeout(done, 300));
 
     expect(renderer.pages.at).toBe(0);
   });

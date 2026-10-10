@@ -253,6 +253,13 @@ export class VerovioScoreRenderer
    * is for the layout it was asked of, and one older than this is dropped.
    */
   private layout = 0;
+  /**
+   * The page each bar is on, as the engraver said or is about to say, for the
+   * latest layout: see `pageOfBar`.
+   */
+  private readonly pagesOfBars = new Map<string, Promise<number | null>>();
+  /** The bar the music last asked the page to show; see `showMeasure`. */
+  private measureShown: number | null = null;
   /** Whether the engraver has music to lay out again; true from the moment it is sent. */
   private hasMusic = false;
   /** The piece's name, for the corner of its pages. */
@@ -344,8 +351,7 @@ export class VerovioScoreRenderer
   }
 
   async load(musicXml: string, printed: readonly PrintedStep[]): Promise<void> {
-    this.layout += 1;
-    const layout = this.layout;
+    const layout = this.beginALayout();
     this.hasMusic = true;
     this.title = titleOf(musicXml);
     this.printed = printed;
@@ -397,7 +403,7 @@ export class VerovioScoreRenderer
   }
 
   clear(): void {
-    this.layout += 1;
+    this.beginALayout();
     this.hasMusic = false;
     this.title = '';
     this.printed = [];
@@ -464,15 +470,64 @@ export class VerovioScoreRenderer
       return;
     }
     const layout = this.layout;
+    this.measureShown = measureIndex;
     this.inTheBackground(
-      this.engraver.pageOf(`m${String(measureIndex)}`).then((page) => {
+      this.pageOfBar(`m${String(measureIndex)}`).then((page) => {
+        // Only for the bar the music is at now: an answer for one it has
+        // since left - the end of the piece, before a seek back to the top -
+        // would turn the reader away from where the music went.
+        if (layout !== this.layout || this.measureShown !== measureIndex) {
+          return;
+        }
         // Only when the bar has left the page: turning to the page it is
         // already on would fight a reader who has looked ahead.
-        if (layout === this.layout && page !== null && page - 1 !== this.pageAt) {
+        if (page !== null && page - 1 !== this.pageAt) {
           this.turnToPage(page - 1);
         }
       }),
     );
+  }
+
+  /**
+   * Starts a new layout: answers about the last one are no longer true.
+   * Returns its number, which an answer is checked against when it comes.
+   */
+  private beginALayout(): number {
+    this.layout += 1;
+    this.pagesOfBars.clear();
+    this.measureShown = null;
+    return this.layout;
+  }
+
+  /**
+   * The page a bar is on, counted from one, asked of the engraver once for
+   * each bar in a layout.
+   *
+   * The music asks on every beat and every note, and the engraver answers in
+   * the order it was asked, one question at a time. On the Alkan - thirteen
+   * hundred bars - that was a question every twenty milliseconds, the same
+   * bar hundreds of times over, while a page was laid out; the pages asked
+   * for after a seek waited behind all of them for ten seconds and more.
+   * Asked once, the answer is kept for the layout it is true of.
+   */
+  private pageOfBar(bar: string): Promise<number | null> {
+    const drawn = this.pageOfName.get(bar);
+    if (drawn !== undefined) {
+      return Promise.resolve(drawn + 1);
+    }
+    const asked = this.pagesOfBars.get(bar);
+    if (asked !== undefined) {
+      return asked;
+    }
+    const asking = this.engraver.pageOf(bar);
+    this.pagesOfBars.set(bar, asking);
+    // A question that failed is not an answer: the next one asks again.
+    asking.catch(() => {
+      if (this.pagesOfBars.get(bar) === asking) {
+        this.pagesOfBars.delete(bar);
+      }
+    });
+    return asking;
   }
 
   onPagesChanged(listener: (state: ScorePageState) => void): () => void {
@@ -959,8 +1014,7 @@ export class VerovioScoreRenderer
     if (!this.hasMusic) {
       return;
     }
-    this.layout += 1;
-    const layout = this.layout;
+    const layout = this.beginALayout();
     const anchor = this.barAtTheTop();
     const shape = this.shape();
     const count = await this.engraver.relayout(shape);
@@ -2041,7 +2095,7 @@ export class VerovioScoreRenderer
     }
     const layout = this.layout;
     this.inTheBackground(
-      this.engraver.pageOf(bar).then((found) => {
+      this.pageOfBar(bar).then((found) => {
         // The music may have gone on meanwhile, and that move answers for itself.
         if (layout !== this.layout || found === null || this.reader.position !== stepIndex) {
           return;

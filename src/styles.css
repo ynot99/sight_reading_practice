@@ -1963,6 +1963,13 @@ textarea {
 .storage {
   display: grid;
   gap: 10px;
+  /*
+   * Its rows as tall as what is in them. The pane's grid stretches it to the
+   * height of the group beside it, and a grid shares that height out among
+   * its rows: a list of scores loading from the drive next door pulled the
+   * bar and its legend apart.
+   */
+  align-content: start;
 }
 
 .storage__head {

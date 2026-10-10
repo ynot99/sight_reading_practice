@@ -2006,6 +2006,15 @@ describe('a bar of what a whole is made of', () => {
     expect(body('.share-bar__part')).not.toMatch(/min-width/);
   });
 
+  it('keeps the bar and its legend together when the group beside it grows', () => {
+    // Stretched to the height of the drive's list of scores next door, the
+    // grid shared the room out among its rows and pulled them apart.
+    const storage = rules().filter((rule) => rule.selector === '.storage');
+    expect(storage).toHaveLength(1);
+    expect(storage[0]?.body).toMatch(/display\s*:\s*grid/);
+    expect(storage[0]?.body).toMatch(/align-content\s*:\s*start/);
+  });
+
   it('paints the room left grey, apart from anything kept', () => {
     expect(body("[data-kind='free']")).toMatch(/--storage-ink\s*:[^;]*var\(--text-muted\)/);
     expect(body("[data-kind='free']")).not.toBe(body("[data-kind='other']"));

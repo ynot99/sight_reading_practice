@@ -5929,14 +5929,33 @@ describe('a run shown again on the page', () => {
       ['beat', 1_000],
     ]);
 
-    // Ruled afresh, read afresh; and nothing where nothing is ruled.
+    // Ruled afresh, read afresh.
     controller.updateSettings({ rhythmRuler: 'quarter' });
     expect(ruled()).toEqual([
       ['downbeat', 0],
       ['beat', 1_000],
     ]);
-    controller.updateSettings({ rhythmRuler: 'off' });
-    expect(ruled()).toEqual([]);
+  });
+
+  it('rules the run where the click falls where the page is not ruled', async () => {
+    const { controller, roll, renderer } = await aRunPlayed();
+    controller.updateSettings({ rhythmRuler: 'off', clickPattern: 'pulse' });
+    controller.beginReplay(roll, { modeId: FLOW_MODE_ID, modes: [] });
+    const ruled = (): [string, number][] =>
+      controller.replayRulingBetween(0, 1_001).map((moment) => [moment.weight, Math.round(moment.atMs)]);
+
+    expect(ruled()).toEqual([
+      ['downbeat', 0],
+      ['beat', 1_000],
+    ]);
+    // The click divided, the lane divided with it - and the page left bare.
+    controller.updateSettings({ clickPattern: 'division' });
+    expect(ruled()).toEqual([
+      ['downbeat', 0],
+      ['division', 500],
+      ['beat', 1_000],
+    ]);
+    expect(renderer.ruler).toEqual([]);
   });
 
   it('clears the page and puts the marker where the music began', async () => {

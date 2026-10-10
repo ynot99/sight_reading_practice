@@ -1345,17 +1345,20 @@ describe('AppView', () => {
     expect(view.fallingBarLines).toEqual([]);
   });
 
-  it('rules the beats and their divisions at the sides of the lane, in the grid the page is ruled in', async () => {
+  it('rules the beats and their divisions at the sides of the lane, in the grid the page is ruled in, or else the click\'s', async () => {
     const { view, runtime, metronome } = createRig();
     await view.initialize();
     await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
     const ruling = (): [string, number][] =>
       view.fallingRuling.map((line) => [line.weight, Number(line.at.toFixed(3))]);
 
-    // Not ruled, nothing ruled.
+    // The page not ruled, the lane is ruled where the click falls: on the beat.
     await pressListen(runtime.controller);
     metronome.advanceSubdivisions(1);
-    expect(ruling()).toEqual([]);
+    expect(ruling()).toEqual([
+      ['beat', 0.667],
+      ['beat', 0.333],
+    ]);
     element<HTMLButtonElement>('focus-stop').click();
 
     // In eighths: a beat a second, a division between, over the lane's three

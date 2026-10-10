@@ -898,6 +898,13 @@ export class PracticeController {
    */
   private ruled: readonly RulerMark[] = [];
   /**
+   * The lines that fall with the notes onto the keys: the page's where the
+   * page is ruled, so the two never show different grids, and otherwise the
+   * metronome's - the beat is always worth seeing coming, and the lane rules
+   * it at its edges, out of the notes' way, as it always draws the bar lines.
+   */
+  private laneRuled: readonly RulerMark[] = [];
+  /**
    * A run being shown again on the page, and how far into it the page is.
    * See `beginReplay`.
    */
@@ -1329,12 +1336,15 @@ export class PracticeController {
     }
 
     // Ruled where the click falls, the ruler moves with the click: chosen
-    // in the drawer, or brought with the piece opened.
+    // in the drawer, or brought with the piece opened. The lane follows the
+    // click wherever the page is not ruled.
     if (
       changes.rhythmRuler !== undefined ||
       (changes.clickPattern !== undefined && next.rhythmRuler === 'metronome')
     ) {
       this.drawTheRuler();
+    } else if (changes.clickPattern !== undefined) {
+      this.ruleTheLane();
     }
 
     if (changes.readAheadSteps !== undefined) {
@@ -2467,28 +2477,26 @@ export class PracticeController {
   }
 
   /**
-   * The ruler's lines the run being shown again reached between two moments
-   * on its own clock - none where no run is, or nothing is ruled. See
-   * `theRulingOfTheRun`.
+   * The lane's lines the run being shown again reached between two moments
+   * on its own clock - none where no run is. See `theRulingOfTheRun`.
    */
   replayRulingBetween(fromMs: number, untilMs: number): readonly RuledMoment[] {
     const replay = this.replay;
     if (replay === null) {
       return [];
     }
-    if (replay.ruling?.of !== this.ruled) {
-      replay.ruling = { of: this.ruled, moments: theRulingOfTheRun(replay.roll, this.ruled) };
+    if (replay.ruling?.of !== this.laneRuled) {
+      replay.ruling = { of: this.laneRuled, moments: theRulingOfTheRun(replay.roll, this.laneRuled) };
     }
     return replay.ruling.moments.filter((moment) => moment.atMs >= fromMs && moment.atMs < untilMs);
   }
 
   /**
-   * The ruler's lines a playback reaches between two moments on the clock -
-   * the same lines the page is ruled in, none where it is not. See
+   * The lane's lines a playback reaches between two moments on the clock. See
    * `ExercisePlayer.placesBetween`.
    */
   playbackRulingBetween(fromMs: number, untilMs: number): readonly RuledMoment[] {
-    return (this.player?.placesBetween(this.ruled, fromMs, untilMs) ?? []).map(({ place, atMs }) => ({
+    return (this.player?.placesBetween(this.laneRuled, fromMs, untilMs) ?? []).map(({ place, atMs }) => ({
       weight: place.weight,
       atMs,
     }));
@@ -4085,6 +4093,16 @@ export class PracticeController {
         ? []
         : rulerMarks(timeline, this.currentSettings.rhythmRuler, this.currentSettings.clickPattern);
     this.deps.ruler.showRhythmRuler(this.ruled);
+    this.ruleTheLane();
+  }
+
+  /** Works out the lines that fall with the notes: see `laneRuled`. */
+  private ruleTheLane(): void {
+    const timeline = this.timeline;
+    this.laneRuled =
+      timeline === null || isRuled(this.currentSettings.rhythmRuler)
+        ? this.ruled
+        : rulerMarks(timeline, 'metronome', this.currentSettings.clickPattern);
   }
 
   /** Whether there is another hand to hear at all. */

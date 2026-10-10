@@ -1,6 +1,8 @@
 import { barLines, type Exercise } from '../domain/model/Exercise.js';
 import { Duration } from '../domain/model/Duration.js';
+import type { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
+import { clickStepTicks, type ClickPattern } from './ports/IMetronome.js';
 
 /**
  * How finely the ruler is ruled, or `off` for no ruler at all.
@@ -9,9 +11,15 @@ import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
  * reader is counting in: "eighths" is a thing they say about a bar, and "8"
  * would have to be read as eighths of a bar in some metres and eighths of a
  * beat in others.
+ *
+ * `metronome` is ruled where the click falls: the felt beat, or its parts as
+ * finely as the click divides it. Not a note value, because the beat is not
+ * one - in 6/8 it is a dotted quarter, and a ruler of quarters there misses
+ * the second beat of every bar.
  */
 export type RulerDivision =
   | 'off'
+  | 'metronome'
   | 'half'
   | 'quarter'
   | 'eighth'
@@ -20,6 +28,7 @@ export type RulerDivision =
 
 export const RULER_DIVISIONS: readonly RulerDivision[] = [
   'off',
+  'metronome',
   'half',
   'quarter',
   'eighth',
@@ -27,7 +36,7 @@ export const RULER_DIVISIONS: readonly RulerDivision[] = [
   'thirty-second',
 ];
 
-const RULER_TICKS: Readonly<Record<Exclude<RulerDivision, 'off'>, number>> = {
+const RULER_TICKS: Readonly<Record<Exclude<RulerDivision, 'off' | 'metronome'>, number>> = {
   half: Duration.HALF.ticks,
   quarter: Duration.QUARTER.ticks,
   eighth: Duration.EIGHTH.ticks,
@@ -35,15 +44,25 @@ const RULER_TICKS: Readonly<Record<Exclude<RulerDivision, 'off'>, number>> = {
   'thirty-second': Duration.SIXTEENTH.ticks / 2,
 };
 
+/** Whether the bars are ruled at all. */
+export function isRuled(division: RulerDivision): boolean {
+  return division !== 'off';
+}
+
 /**
- * The grid one ruling steps by, in divisions - nought for no ruler.
+ * The grid a bar is ruled at, in divisions.
  *
- * The same number twice over: it is where the lines are drawn, and it is
- * where the invisible rests go that make the page even enough for them to be
- * worth drawing. Two grids would be two answers to one question.
+ * Asked bar by bar, since following the metronome follows the metre, and the
+ * metre can change from one bar to the next. A click that marks no grid of
+ * its own - only the bar, or the notes - is ruled at the beat it is counted
+ * in by.
  */
-export function rulerStepTicks(division: RulerDivision): number {
-  return division === 'off' ? 0 : RULER_TICKS[division];
+function stepIn(
+  division: Exclude<RulerDivision, 'off'>,
+  timeSignature: TimeSignature,
+  click: ClickPattern,
+): number {
+  return division === 'metronome' ? clickStepTicks(click, timeSignature) : RULER_TICKS[division];
 }
 
 /** What a ruled line is marking, which is how strongly it is drawn. */
@@ -102,8 +121,9 @@ export interface RulerMark {
 export function rulerMarks(
   timeline: ExerciseTimeline,
   division: RulerDivision,
+  click: ClickPattern,
 ): readonly RulerMark[] {
-  return rulerMarksBetween(timeline, division, 0, Number.POSITIVE_INFINITY);
+  return rulerMarksBetween(timeline, division, click, 0, Number.POSITIVE_INFINITY);
 }
 
 /**
@@ -118,13 +138,13 @@ export function rulerMarks(
 export function rulerMarksBetween(
   timeline: ExerciseTimeline,
   division: RulerDivision,
+  click: ClickPattern,
   fromTicks: number,
   untilTicks: number,
 ): readonly RulerMark[] {
   if (division === 'off') {
     return [];
   }
-  const step = RULER_TICKS[division];
   const exercise: Exercise = timeline.exercise;
   const marks: RulerMark[] = [];
   const bars = barLines(exercise);
@@ -137,6 +157,7 @@ export function rulerMarksBetween(
       break;
     }
     const pulse = bar.timeSignature.ticksPerPulse;
+    const step = stepIn(division, bar.timeSignature, click);
     for (let at = bar.startTicks; at < end; at += step) {
       if (at < fromTicks || at >= untilTicks) {
         continue;

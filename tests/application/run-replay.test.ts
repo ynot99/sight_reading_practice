@@ -234,7 +234,7 @@ describe('when the run reached a bar', () => {
 });
 
 describe('where the run reached the ruler', () => {
-  const eighths = rulerMarks(timeline, 'eighth');
+  const eighths = rulerMarks(timeline, 'eighth', 'pulse');
   const ruled = (run: RunRoll): [string, number][] =>
     theRulingOfTheRun(run, eighths).map((moment) => [moment.weight, Math.round(moment.atMs)]);
 

@@ -49,9 +49,9 @@ import type {
 import { clickFollowsTheReader, clickIsSilent } from './ports/IMetronome.js';
 import { PracticeTimer } from './PracticeTimer.js';
 import {
+  isRuled,
   rulerMarks,
   rulerMarksBetween,
-  rulerStepTicks,
   type RuledMoment,
   type RulerDivision,
   type RulerMark,
@@ -1328,7 +1328,12 @@ export class PracticeController {
       this.applyDimming();
     }
 
-    if (changes.rhythmRuler !== undefined) {
+    // Ruled where the click falls, the ruler moves with the click: chosen
+    // in the drawer, or brought with the piece opened.
+    if (
+      changes.rhythmRuler !== undefined ||
+      (changes.clickPattern !== undefined && next.rhythmRuler === 'metronome')
+    ) {
       this.drawTheRuler();
     }
 
@@ -1760,7 +1765,7 @@ export class PracticeController {
     // rather than the ruler's: measured, a ruler of halves over a bar of
     // quarters changes nothing at all, because the notes between two spacers
     // are back to being spaced by the engraver's judgement.
-    const evenBars = rulerStepTicks(this.currentSettings.rhythmRuler) > 0;
+    const evenBars = isRuled(this.currentSettings.rhythmRuler);
     const printed = evenBars
       ? this.deps.serializer.serialize(source, { evenBars: true })
       : musicXml;
@@ -4016,7 +4021,7 @@ export class PracticeController {
     if (!this.currentSettings.rulerCursor || timeline === null || exercise === null) {
       return;
     }
-    if (rulerStepTicks(this.currentSettings.rhythmRuler) <= 0) {
+    if (!isRuled(this.currentSettings.rhythmRuler)) {
       return;
     }
     // The ruler's own lines, and not the click's beats: the two are separate
@@ -4031,6 +4036,7 @@ export class PracticeController {
     const beats = rulerMarksBetween(
       timeline,
       this.currentSettings.rhythmRuler,
+      this.currentSettings.clickPattern,
       fromTicks,
       untilTicks,
     ).map((mark) => ({
@@ -4074,7 +4080,10 @@ export class PracticeController {
    */
   private drawTheRuler(): void {
     const timeline = this.timeline;
-    this.ruled = timeline === null ? [] : rulerMarks(timeline, this.currentSettings.rhythmRuler);
+    this.ruled =
+      timeline === null
+        ? []
+        : rulerMarks(timeline, this.currentSettings.rhythmRuler, this.currentSettings.clickPattern);
     this.deps.ruler.showRhythmRuler(this.ruled);
   }
 

@@ -121,6 +121,12 @@ describe('practice settings codec', () => {
     expect(restored.darkSystemTheme).toBe('light-dark-dialogs');
   });
 
+  it('keeps a ruler that follows the metronome', () => {
+    const stored = encodePracticeSettings({ ...SETTINGS, rhythmRuler: 'metronome' });
+
+    expect(decodePracticeSettings(stored, KNOWN).rhythmRuler).toBe('metronome');
+  });
+
   it('reads a theme it does not offer as not chosen', () => {
     const stored = { ...(encodePracticeSettings(SETTINGS) as Record<string, unknown>), theme: 'sepia' };
 

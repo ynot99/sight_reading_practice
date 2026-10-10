@@ -697,6 +697,7 @@ function readClickNotesOf(value: string): ClickNotesOf {
  */
 const RULER_LABELS: Readonly<Record<RulerDivision, string>> = {
   off: 'None',
+  metronome: 'Follow metronome',
   half: 'Halves',
   quarter: 'Quarters',
   eighth: 'Eighths',
@@ -799,6 +800,7 @@ const OPENING_DESCRIPTIONS: Readonly<Record<WhatOpens, string>> = {
 
 const RULER_DESCRIPTIONS: Readonly<Record<RulerDivision, string>> = {
   off: 'Nothing ruled through the bars.',
+  metronome: 'A line wherever the metronome clicks - on the beat, or on its parts - in the metre of each bar, 6/8 as well.',
   half: 'A line at every half note - the broad shape of a slow piece.',
   quarter: 'A line at every quarter, so the beats of the bar can be seen.',
   eighth: 'A line at every eighth, for reading offbeats against the beat.',

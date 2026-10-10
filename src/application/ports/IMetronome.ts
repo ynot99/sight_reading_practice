@@ -86,6 +86,11 @@ export function clicksPerPulse(pattern: ClickPattern, timeSignature: TimeSignatu
   }
 }
 
+/** How far apart the clicks of a pattern fall in a bar of this metre, in divisions. */
+export function clickStepTicks(pattern: ClickPattern, timeSignature: TimeSignature): number {
+  return timeSignature.ticksPerPulse / Math.max(1, clicksPerPulse(pattern, timeSignature));
+}
+
 /**
  * Bars of click and bars of silence, alternating.
  *

@@ -3212,6 +3212,26 @@ describe('ruling the bars', () => {
     expect(renderer.ruler).toEqual([]);
   });
 
+  it('rules where the metronome clicks, and moves the lines when the click changes', async () => {
+    const { controller, renderer } = createController();
+    await controller.openScore(twoBarExercise());
+
+    controller.updateSettings({ rhythmRuler: 'metronome', clickPattern: 'pulse' });
+    await controller.reloadExercise();
+    // A ruled page, so evened out for the lines like any other.
+    expect(renderer.loadedXml).toMatch(UNSEEN_NOTE);
+    expect(renderer.ruler).toHaveLength(8);
+
+    // Chosen in the drawer, or brought with the piece: no new page needed.
+    controller.updateSettings({ clickPattern: 'division' });
+    expect(renderer.ruler).toHaveLength(16);
+
+    // A ruler of note values pays the click no attention.
+    controller.updateSettings({ rhythmRuler: 'quarter' });
+    controller.updateSettings({ clickPattern: 'subdivision' });
+    expect(renderer.ruler).toHaveLength(8);
+  });
+
   it('changes the hand a playback is sounding, without stopping it', async () => {
     // His line 76, reported from the page: the hand was read once when the
     // performance started, so a reader listening to both hands who asked for
@@ -3331,6 +3351,28 @@ describe('ruling the bars', () => {
       Duration.QUARTER.ticks,
       Duration.HALF.ticks,
       Duration.HALF.ticks + Duration.QUARTER.ticks,
+    ]);
+  });
+
+  it('runs the marker along the clicks when the ruler follows the metronome', async () => {
+    const { controller, metronome } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ rhythmRuler: 'metronome', clickPattern: 'division', rulerCursor: true });
+    const promised: number[] = [];
+    controller.events.on('beatsAhead', ({ beats }) => {
+      for (const beat of beats) {
+        promised.push(beat.mark.ticks);
+      }
+    });
+
+    controller.listen();
+    metronome.advanceSubdivisions(4);
+
+    expect(promised.slice(0, 4)).toEqual([
+      0,
+      Duration.EIGHTH.ticks,
+      Duration.QUARTER.ticks,
+      Duration.QUARTER.ticks + Duration.EIGHTH.ticks,
     ]);
   });
 

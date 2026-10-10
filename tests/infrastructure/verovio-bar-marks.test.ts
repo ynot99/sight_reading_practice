@@ -176,7 +176,7 @@ describe('the rhythm ruler', () => {
   //   bass:   C3 (whole)  | [G2 D3] (half) + half rest
   const EIGHT = grandStaff(8);
   const EIGHT_PRINTED = printed(EIGHT);
-  const QUARTERS = rulerMarks(buildTimeline(EIGHT), 'quarter');
+  const QUARTERS = rulerMarks(buildTimeline(EIGHT), 'quarter', 'pulse');
 
   function lines(surface: HTMLElement, page = 0): { x: number; top: number; bottom: number; weight: string }[] {
     return [...(sheets(surface)[page]?.querySelectorAll('g.rhythm-ruler line') ?? [])].map((line) => ({
@@ -362,7 +362,7 @@ describe('the rhythm ruler', () => {
 
   it('is ruled on a page drawn later, and again on a new layout', async () => {
     const long = grandStaff(60);
-    const marks = rulerMarks(buildTimeline(long), 'quarter');
+    const marks = rulerMarks(buildTimeline(long), 'quarter', 'pulse');
     const { renderer, surface } = await aScore(printed(long));
     renderer.showRhythmRuler(marks);
     expect(lines(surface, 2)).toHaveLength(0);
@@ -412,7 +412,7 @@ describe('the rhythm ruler', () => {
 
     it('stands on the page its step is on, and comes back with that page', async () => {
       const long = grandStaff(60);
-      const marks = rulerMarks(buildTimeline(long), 'quarter');
+      const marks = rulerMarks(buildTimeline(long), 'quarter', 'pulse');
       const { renderer, surface } = await aScore(printed(long));
       const onPageTwo = marks.find((mark) => mark.bar === 59);
 

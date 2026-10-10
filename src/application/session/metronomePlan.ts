@@ -3,6 +3,7 @@ import { barLines, tempoAtTick, tempoSpans } from '../../domain/model/Exercise.j
 import type { TimeSignature } from '../../domain/model/TimeSignature.js';
 import type { ExerciseTimeline } from '../../domain/timeline/Timeline.js';
 import {
+  clickStepTicks,
   clicksPerPulse,
   type ClickPattern,
   type MetronomeBar,
@@ -95,7 +96,7 @@ function beatsOf(
   pattern: ClickPattern,
 ): readonly WrittenBeat[] {
   const pulse = timeSignature.ticksPerPulse;
-  const step = pulse / Math.max(1, clicksPerPulse(pattern, timeSignature));
+  const step = clickStepTicks(pattern, timeSignature);
   const beats: WrittenBeat[] = [];
   for (let at = startTicks; at < startTicks + timeSignature.ticksPerMeasure; at += step) {
     const into = at - startTicks;

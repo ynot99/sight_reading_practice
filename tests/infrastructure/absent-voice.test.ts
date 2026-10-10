@@ -4,10 +4,10 @@ import { Duration } from '../../src/domain/model/Duration.js';
 import { measureTicks, validateExercise } from '../../src/domain/model/Exercise.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
-import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
+import { ScoreFileImporter } from '../../src/infrastructure/notation/ScoreFileImporter.js';
 import { UNSEEN_NOTE, UNSEEN_NOTES } from '../support/printed.js';
 
-const importer = new DomScoreImporter();
+const importer = new ScoreFileImporter();
 const serializer = new MusicXmlSerializer();
 
 /** One bar of 4/4 at 4 divisions to the quarter, with a second voice in it. */

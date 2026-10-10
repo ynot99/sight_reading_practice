@@ -20,10 +20,10 @@ import {
 } from '../../src/domain/notation/unrollRepeats.js';
 import { longExercise } from '../support/fixtures.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
+import { ScoreFileImporter } from '../../src/infrastructure/notation/ScoreFileImporter.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 
-const importer = new DomScoreImporter();
+const importer = new ScoreFileImporter();
 const serializer = new MusicXmlSerializer();
 
 function bars(...marks: Partial<BarRepeat>[]): BarRepeat[] {

@@ -4,7 +4,7 @@ import { ScoreLibrary, scoresInOrder, theStarBand, theStarsIn } from '../../src/
 import type { StoredScoreSummary } from '../../src/application/ports/IScoreStore.js';
 import { InMemoryScoreStore } from '../../src/application/ports/IScoreStore.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
+import { ScoreFileImporter } from '../../src/infrastructure/notation/ScoreFileImporter.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { tiedExercise, twoBarExercise } from '../support/fixtures.js';
 
@@ -16,7 +16,7 @@ function library(store = new InMemoryScoreStore()) {
     scores: new ScoreLibrary({
       store,
       serializer: new MusicXmlSerializer(),
-      importer: new DomScoreImporter(),
+      importer: new ScoreFileImporter(),
       keeper: {
         askToKeep: () => {
           asked.push('keep');

@@ -11,10 +11,10 @@ import {
   validateExercise,
 } from '../../src/domain/model/Exercise.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
+import { ScoreFileImporter } from '../../src/infrastructure/notation/ScoreFileImporter.js';
 import { twoBarExercise } from '../support/fixtures.js';
 
-const importer = new DomScoreImporter();
+const importer = new ScoreFileImporter();
 const serializer = new MusicXmlSerializer();
 
 /** Two bars of 4/4 at 60, with whatever tempo marks are asked for. */

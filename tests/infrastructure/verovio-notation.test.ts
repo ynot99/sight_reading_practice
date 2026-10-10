@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { noteEntry, type Exercise } from '../../src/domain/model/Exercise.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
+import { ScoreFileImporter } from '../../src/infrastructure/notation/ScoreFileImporter.js';
 import { readThePage } from '../../src/infrastructure/rendering/verovio/pageLayout.js';
 import { VerovioCore, type PageShape } from '../../src/infrastructure/rendering/verovio/VerovioCore.js';
 import { allowTheEngraverItsTime } from '../support/verovioStage.js';
@@ -24,7 +24,7 @@ beforeAll(async () => {
 allowTheEngraverItsTime();
 
 const serializer = new MusicXmlSerializer();
-const importer = new DomScoreImporter();
+const importer = new ScoreFileImporter();
 const SHAPE: PageShape = { pageWidth: 2200, pageHeight: 1400, scale: 50 };
 
 /** The first page Verovio draws of an exercise. */

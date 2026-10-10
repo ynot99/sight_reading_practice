@@ -103,7 +103,7 @@ import {
 import { ExercisePresetRegistry } from '../domain/generation/ExercisePresetRegistry.js';
 import { BUILT_IN_PRESETS } from '../domain/generation/presets.js';
 import type { IScoreImporter } from '../application/ports/IScoreImporter.js';
-import { DomScoreImporter } from '../infrastructure/notation/DomScoreImporter.js';
+import { ScoreFileImporter } from '../infrastructure/notation/ScoreFileImporter.js';
 import { BUILT_IN_RHYTHM_PROFILES } from '../domain/generation/rhythmProfiles.js';
 import { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.js';
 import { MusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
@@ -377,7 +377,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   // opened the same way one after the other: see `PrintedOnce`.
   const serializer = new PrintedOnce(new MusicXmlSerializer());
 
-  const importer = new DomScoreImporter();
+  const importer = new ScoreFileImporter();
   const presets = new ExercisePresetRegistry().registerAll(BUILT_IN_PRESETS);
   const rhythms = new RhythmProfileRegistry().registerAll(BUILT_IN_RHYTHM_PROFILES);
   const scorings = new ScoringStrategyRegistry().registerAll([

@@ -61,7 +61,7 @@ import {
   TimingWeightedScoringStrategy,
 } from '../../src/domain/scoring/strategies.js';
 import { ScoringStrategyRegistry } from '../../src/domain/scoring/ScoringStrategyRegistry.js';
-import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
+import { ScoreFileImporter } from '../../src/infrastructure/notation/ScoreFileImporter.js';
 import type { KeyboardTarget } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { ComputerKeyboardMidiSource } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
 import { FakeScoreRenderer } from '../../src/infrastructure/testing/FakeScoreRenderer.js';
@@ -348,7 +348,7 @@ function createRig(
   metronomeKnob.listenTo(midi);
   const takes = new TakeLibrary(new InMemorySettingsStore());
   const files = new RecordingFileSink();
-  const importer = new DomScoreImporter();
+  const importer = new ScoreFileImporter();
   // As `createApp` has it.
   const serializer = new PrintedOnce(new MusicXmlSerializer());
   const scores = new ScoreLibrary({

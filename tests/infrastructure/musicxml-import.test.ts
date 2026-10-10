@@ -19,13 +19,13 @@ import {
 import { Duration } from '../../src/domain/model/Duration.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
-import { DomScoreImporter } from '../../src/infrastructure/notation/DomScoreImporter.js';
+import { ScoreFileImporter } from '../../src/infrastructure/notation/ScoreFileImporter.js';
 import { looksZipped } from '../../src/infrastructure/notation/zip.js';
 import { DomainError } from '../../src/shared/errors.js';
 import { bar, longExercise, p, tiedExercise, twoBarExercise } from '../support/fixtures.js';
 import { UNSEEN_NOTE, UNSEEN_NOTES } from '../support/printed.js';
 
-const importer = new DomScoreImporter();
+const importer = new ScoreFileImporter();
 const serializer = new MusicXmlSerializer();
 
 /** What the player is asked to press, step by step. */
@@ -1801,7 +1801,7 @@ function packMxl(files: readonly { readonly name: string; readonly body: string 
 describe('compressed scores', () => {
   // Node's inflater stands in for the browser's, so the archive reading is
   // tested rather than the platform's decompressor.
-  const zipped = new DomScoreImporter(undefined, async (bytes) =>
+  const zipped = new ScoreFileImporter(async (bytes) =>
     new Uint8Array(inflateRawSync(bytes)),
   );
 

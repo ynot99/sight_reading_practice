@@ -1426,6 +1426,39 @@ describe('the stylesheet', () => {
     expect(viewport).toContain('viewport-fit=cover');
   });
 
+  it('keeps the title and the corner clear of a phone’s notch, and a tablet’s layout as it was', () => {
+    const notched = ['.score__scroll', '.score__corner', '.score__pages'].flatMap((selector) =>
+      rules().filter((rule) => rule.selector === selector && /safe-area-inset/.test(rule.body)),
+    );
+    const phone = (rule: { at: number }): string => inWhichMedia(rule.at);
+
+    expect(notched).toHaveLength(3);
+    for (const rule of notched) {
+      // Only on a screen with a side under the smallest tablet's, which is
+      // 744px on an iPad mini.
+      const sides = [...phone(rule).matchAll(/max-(?:width|height):\s*(\d+)px/g)].map((match) => Number(match[1]));
+      expect(sides).toHaveLength(2);
+      for (const side of sides) {
+        expect(side).toBeLessThan(744);
+      }
+      // Later than every rule it narrows, or that one would win.
+      const plain = rules().filter((other) => other.selector === rule.selector && phone(other) === '');
+      expect(plain.length).toBeGreaterThan(0);
+      for (const other of plain) {
+        expect(other.body).not.toMatch(/safe-area-inset/);
+        expect(rule.at).toBeGreaterThan(other.at);
+      }
+    }
+    // Never less room than before, where the screen keeps nothing back.
+    const body = (selector: string): string => notched.find((rule) => rule.selector === selector)?.body ?? '';
+    expect(body('.score__scroll')).toMatch(/padding-top\s*:\s*max\(8px, env\(safe-area-inset-top, 0px\)\)/);
+    expect(body('.score__scroll')).toMatch(/padding-left\s*:\s*env\(safe-area-inset-left, 0px\)/);
+    expect(body('.score__scroll')).toMatch(/padding-right\s*:\s*env\(safe-area-inset-right, 0px\)/);
+    expect(body('.score__corner')).toMatch(/top\s*:\s*max\(12px, env\(safe-area-inset-top, 0px\)\)/);
+    expect(body('.score__corner')).toMatch(/right\s*:\s*max\(12px, env\(safe-area-inset-right, 0px\)\)/);
+    expect(body('.score__pages')).toMatch(/right\s*:\s*max\(8px, env\(safe-area-inset-right, 0px\)\)/);
+  });
+
   it('can be installed, which is the only way off the fullscreen chrome', () => {
     // Safari's floating close button and its swipe-down cannot be turned off
     // from a page - a browser has to leave a way out of fullscreen. Added to

@@ -4013,6 +4013,33 @@ body[data-playing='true'] .score__modes {
   box-shadow: var(--shadow);
 }
 
+/*
+ * Clear of a phone's notch.
+ *
+ * `viewport-fit=cover` lays the page under the whole screen, and on a phone
+ * the top of it - or a side, held sideways - is the camera's. The title and
+ * the corner went under it there. Only a phone: one of its sides is under
+ * 500px, where every tablet has both over 700, so a tablet's layout is not
+ * touched by any of this. And never less room than there was: `max` keeps
+ * the edges where they stood wherever the screen keeps nothing back.
+ */
+@media (max-width: 500px), (max-height: 500px) {
+  .score__scroll {
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .score__corner {
+    top: max(12px, env(safe-area-inset-top, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  .score__pages {
+    right: max(8px, env(safe-area-inset-right, 0px));
+  }
+}
+
 .score__page-turn {
   appearance: none;
   border: none;

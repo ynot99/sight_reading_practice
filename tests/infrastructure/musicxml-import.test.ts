@@ -6,7 +6,7 @@ import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { Pitch } from '../../src/domain/model/Pitch.js';
 import { TimeSignature } from '../../src/domain/model/TimeSignature.js';
 import { MusicXmlSerializer } from '../../src/domain/notation/MusicXmlSerializer.js';
-import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY, velocityAt } from '../../src/domain/model/Exercise.js';
+import { DYNAMIC_LEVELS, DYNAMIC_VELOCITY, pedalSpans, velocityAt } from '../../src/domain/model/Exercise.js';
 import {
   clefAt,
   measureTicks,
@@ -2022,5 +2022,94 @@ describe('a pedal written as a bracket', () => {
     expect(exercise.pedalMarks).toHaveLength(2);
     expect(exercise.pedalMarks.every((mark) => mark.line)).toBe(true);
     expect(serializer.serialize(exercise)).toContain('line="yes"');
+  });
+});
+
+describe('pedal brackets that meet', () => {
+  const QUARTER = Duration.QUARTER.ticks;
+  const BAR = 4 * QUARTER;
+
+  /** Bars of a two-staff piano part, four divisions to the quarter. */
+  function twoStaves(...bars: string[]): string {
+    const measures = bars.map((body, index) => {
+      const opening =
+        index === 0
+          ? '<attributes><divisions>4</divisions><key><fifths>0</fifths></key>' +
+            '<time><beats>4</beats><beat-type>4</beat-type></time><staves>2</staves>' +
+            '<clef number="1"><sign>G</sign><line>2</line></clef>' +
+            '<clef number="2"><sign>F</sign><line>4</line></clef></attributes>'
+          : '';
+      return `<measure number="${String(index + 1)}">${opening}${body}</measure>`;
+    });
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">${measures.join('')}</part>
+</score-partwise>`;
+  }
+
+  const pedal = (type: 'start' | 'stop', staff: number): string =>
+    `<direction placement="below"><direction-type><pedal type="${type}" line="yes"/></direction-type>` +
+    `<staff>${String(staff)}</staff></direction>`;
+  const treble = (step: string, duration: number, type: string): string =>
+    `<note><pitch><step>${step}</step><octave>5</octave></pitch><duration>${String(duration)}</duration>` +
+    `<voice>1</voice><type>${type}</type><staff>1</staff></note>`;
+  const bass = (duration: number, type: string): string =>
+    `<note><pitch><step>C</step><octave>3</octave></pitch><duration>${String(duration)}</duration>` +
+    `<voice>5</voice><type>${type}</type><staff>2</staff></note>`;
+  const backToTheBarLine = '<backup><duration>16</duration></backup>';
+
+  it('changes the pedal where the next bracket begins, though the last one is closed after it', () => {
+    // A bracket's stop comes after the last chord it covers, so the bracket
+    // beginning on that chord is opened first. Paired as they come, each
+    // stop lifted the pedal half a bar into the bracket it did not belong to.
+    const { exercise } = importer.read(
+      twoStaves(
+        pedal('start', 1) + treble('C', 8, 'half') + treble('D', 8, 'half') + backToTheBarLine + bass(16, 'whole'),
+        pedal('start', 1) + treble('C', 8, 'half') + pedal('stop', 1) + treble('D', 8, 'half') +
+          backToTheBarLine + bass(16, 'whole'),
+        pedal('start', 1) + treble('C', 8, 'half') + pedal('stop', 1) + treble('D', 8, 'half') + pedal('stop', 1) +
+          backToTheBarLine + bass(16, 'whole'),
+      ),
+    );
+
+    const changedAtEveryBar = [
+      [0, BAR],
+      [BAR, 2 * BAR],
+      [2 * BAR, 3 * BAR],
+    ];
+    expect(pedalSpans(exercise)).toEqual(changedAtEveryBar);
+    // Kept in the library and opened again, it is the same pedal.
+    expect(pedalSpans(importer.read(serializer.serialize(exercise)).exercise)).toEqual(changedAtEveryBar);
+  });
+
+  it('presses once for the same bracket written under both staves', () => {
+    const { exercise } = importer.read(
+      twoStaves(
+        pedal('start', 1) + treble('C', 16, 'whole') + pedal('stop', 1) + backToTheBarLine +
+          pedal('start', 2) + bass(16, 'whole') + pedal('stop', 2),
+        treble('C', 16, 'whole') + backToTheBarLine + bass(16, 'whole'),
+      ),
+    );
+
+    expect(pedalSpans(exercise)).toEqual([[0, BAR]]);
+  });
+
+  it('ends the bracket before with a stop at the downbeat another bracket opens on', () => {
+    // Written in the second voice, after the start the first voice carries:
+    // taken in the file's order it closed the new bracket the moment it opened.
+    const { exercise } = importer.read(
+      twoStaves(
+        pedal('start', 1) + treble('C', 16, 'whole') + pedal('stop', 1) + backToTheBarLine + bass(16, 'whole'),
+        pedal('start', 1) + treble('C', 16, 'whole') + backToTheBarLine + pedal('stop', 2) + bass(16, 'whole') +
+          pedal('stop', 2),
+        treble('C', 16, 'whole') + backToTheBarLine + bass(16, 'whole'),
+      ),
+    );
+
+    expect(pedalSpans(exercise)).toEqual([
+      [0, BAR],
+      [BAR, 2 * BAR],
+    ]);
   });
 });

@@ -186,7 +186,7 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
     tempoChanges: tempoMarks.filter(
       (mark) => !(mark.measureIndex === 0 && mark.offsetTicks === 0),
     ),
-    pedalMarks,
+    pedalMarks: pedalAsPressed(pedalMarks),
     dynamicMarks,
     tempoWords,
     hairpins,
@@ -234,6 +234,62 @@ export function parseMusicXml(root: XmlNode): ImportedScore {
   const breathing = withFermatasHeld(spoken);
   validateExercise(breathing);
   return { exercise: breathing, warnings };
+}
+
+/**
+ * The pedal as it is pressed, read from the brackets the file draws.
+ *
+ * A bracket is a start and a stop, and a pedal changed at a bar line is two
+ * brackets meeting there. MuseScore writes a bracket's stop after the last
+ * chord it covers, so where the next bracket begins on that same chord, its
+ * start is written before the stop of the one it follows. Paired in the order
+ * they come, each such stop lifted the pedal the new bracket had just pressed:
+ * a score changing the pedal at every bar held it for the first eighth of
+ * each bar and played the rest dry.
+ *
+ * So a start while the pedal is down is a change, lifted and pressed again
+ * there, and a stop lifts it only once every bracket begun has been closed.
+ * A start at the very moment of the last press is the same pedal written on
+ * another staff, and adds nothing. The marks come back as a plain stop and
+ * start at each change, which is how the page draws its notch and how
+ * everything that sounds or shows the pedal already reads one.
+ *
+ * Read in time rather than in the file's order, which goes staff by staff
+ * and voice by voice, and at one moment the bracket ending before the one
+ * beginning: a stop written in another voice at the downbeat a bracket opens
+ * on ends the bracket before it, and taken after the start it ended the new
+ * one as soon as it began.
+ */
+function pedalAsPressed(marks: readonly PedalMark[]): PedalMark[] {
+  const endsFirst = (mark: PedalMark): number => (mark.type === 'stop' ? 0 : 1);
+  const inTime = [...marks].sort(
+    (left, right) =>
+      left.measureIndex - right.measureIndex ||
+      left.offsetTicks - right.offsetTicks ||
+      endsFirst(left) - endsFirst(right),
+  );
+  const pressed: PedalMark[] = [];
+  let open = 0;
+  for (const mark of inTime) {
+    if (mark.type === 'stop') {
+      if (open === 1) {
+        pressed.push(mark);
+      }
+      open = Math.max(0, open - 1);
+      continue;
+    }
+    const last = pressed.at(-1);
+    const pressedHere =
+      last?.type === 'start' && last.measureIndex === mark.measureIndex && last.offsetTicks === mark.offsetTicks;
+    if (!pressedHere) {
+      if (open > 0) {
+        pressed.push({ ...mark, type: 'stop' });
+      }
+      pressed.push(mark);
+    }
+    open += 1;
+  }
+  return pressed;
 }
 
 /**

@@ -2091,6 +2091,43 @@ describe('AppView', () => {
       await playing(rig, 'Second');
     });
 
+    it('goes to the next piece and back from the buttons either side', async () => {
+      const rig = await aShelf();
+      await pressListen(rig.runtime.controller);
+      expect(element('listen-next').dataset['idle']).toBeUndefined();
+      expect(element('listen-next').title).toBe('The next piece');
+
+      element<HTMLButtonElement>('listen-next').click();
+      await playing(rig, 'First');
+
+      element<HTMLButtonElement>('listen-previous').click();
+      await playing(rig, 'Second');
+    });
+
+    it('dims the buttons either side, and says why, with nothing kept to go to', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+      const title = runtime.controller.currentExercise?.title;
+
+      for (const id of ['listen-previous', 'listen-next']) {
+        expect(element(id).dataset['idle']).toBe('true');
+        expect(element(id).title).toMatch(/Nothing is kept on the shelf/);
+        expect(element(id).getAttribute('aria-label')).toBe(element(id).title);
+      }
+      element<HTMLButtonElement>('listen-next').click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      // And a press that goes nowhere leaves the music playing.
+      expect(runtime.controller.currentExercise?.title).toBe(title);
+      expect(runtime.controller.isListening).toBe(true);
+
+      // A piece kept since, and the next playback has somewhere to go.
+      element<HTMLButtonElement>('focus-stop').click();
+      await runtime.scores.keep(twoBarExercise({ title: 'Kept' }), 1_000);
+      await pressListen(runtime.controller);
+      expect(element('listen-next').dataset['idle']).toBeUndefined();
+    });
+
     it('plays nothing it was opening once stopped', async () => {
       const rig = await aShelf();
       await pressListen(rig.runtime.controller);

@@ -1842,6 +1842,8 @@ export class AppView {
     listenOnKeys: HTMLElement;
     listenGoesOn: HTMLButtonElement;
     listenGoesOnIcon: SVGPathElement;
+    listenPrevious: HTMLButtonElement;
+    listenNext: HTMLButtonElement;
     listenPosition: HTMLOutputElement;
     listenScrub: HTMLInputElement;
     listenDuration: HTMLOutputElement;
@@ -2166,6 +2168,8 @@ export class AppView {
       listenOnKeys: requireElement(doc, 'listen-on-keys'),
       listenGoesOn: requireElement(doc, 'listen-goes-on'),
       listenGoesOnIcon: requireElement(doc, 'listen-goes-on-icon'),
+      listenPrevious: requireElement(doc, 'listen-previous'),
+      listenNext: requireElement(doc, 'listen-next'),
       listenPosition: requireElement(doc, 'listen-position'),
       listenScrub: requireElement(doc, 'listen-scrub'),
       listenDuration: requireElement(doc, 'listen-duration'),
@@ -3499,22 +3503,24 @@ export class AppView {
   /**
    * Opens the next piece, or the one before, and plays it.
    *
-   * What is playing is stopped first. Opening a long score takes seconds,
-   * and a stop, or another press, meanwhile is the reader's later word: the
-   * piece opened then is left on the stand, unplayed.
+   * What is playing is stopped first - where there is a piece to go to, and
+   * not otherwise: a press that goes nowhere leaves the music playing.
+   * Opening a long score takes seconds, and a stop, or another press,
+   * meanwhile is the reader's later word: the piece opened then is left on
+   * the stand, unplayed.
    */
   private async goOnToAnotherPiece(direction: 1 | -1): Promise<void> {
     const { controller } = this.runtime;
-    if (controller.isListening || controller.isListeningPaused) {
-      this.stopEverything();
-    }
-    this.goingOn += 1;
-    const asked = this.goingOn;
     const turn = this.theTurnOfPieces();
     const piece = direction > 0 ? turn.next() : turn.previous();
     if (piece === null) {
       return;
     }
+    if (controller.isListening || controller.isListeningPaused) {
+      this.stopEverything();
+    }
+    this.goingOn += 1;
+    const asked = this.goingOn;
     this.openingToPlay = true;
     this.describeStopping();
     try {
@@ -3540,6 +3546,22 @@ export class AppView {
     this.el.listenGoesOn.title = said;
     this.el.listenGoesOn.setAttribute('aria-label', said);
     this.el.listenGoesOnIcon.setAttribute('d', GOES_ON_DRAWN[goesOn]);
+    // The two either side go through the shelf, the way the platform's keys
+    // do, and have nowhere to go while nothing is kept: dimmed, and said so.
+    const empty = this.runtime.scores.isEmpty;
+    for (const [button, said] of [
+      [this.el.listenPrevious, 'The piece before'],
+      [this.el.listenNext, 'The next piece'],
+    ] as const) {
+      if (empty) {
+        button.dataset['idle'] = 'true';
+        button.title = `${said}. Nothing is kept on the shelf to go to.`;
+      } else {
+        delete button.dataset['idle'];
+        button.title = said;
+      }
+      button.setAttribute('aria-label', button.title);
+    }
   }
 
   /**
@@ -3623,6 +3645,7 @@ export class AppView {
     const controller = this.runtime.controller;
     this.applyPlayingChrome();
     this.describeTheRepeat();
+    this.describeWhatPlaysNext();
     this.updateButtons(controller.session?.status ?? 'idle');
     this.describeStopping();
     this.sayWhatIsSounding();
@@ -8378,6 +8401,13 @@ export class AppView {
       controller.updateSettings({ playbackGoesOn: next });
       this.describeWhatPlaysNext();
       this.describeTheRepeat();
+    });
+
+    this.listen(this.el.listenPrevious, 'click', () => {
+      void this.goOnToAnotherPiece(-1);
+    });
+    this.listen(this.el.listenNext, 'click', () => {
+      void this.goOnToAnotherPiece(1);
     });
 
     // Held while it is dragged and played on where it is let go, rather than

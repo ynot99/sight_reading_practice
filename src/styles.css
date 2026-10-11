@@ -4199,6 +4199,11 @@ body[data-playing='true'] .score__modes {
   opacity: 0.45;
 }
 
+/* The pieces either side, with nothing kept to go to. */
+.take-transport .button[data-idle='true'] {
+  opacity: 0.45;
+}
+
 /* Watching the take on the keys is asked for from the list, and ended on the page. */
 #take-off-the-keys,
 body[data-take-on-keys='true'] #take-on-the-keys {

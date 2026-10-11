@@ -236,6 +236,31 @@ class LoopedSilence implements SilentPlayer {
   }
 }
 
+/** What the platform's panel is told about a piece. */
+export interface PanelMetadata {
+  readonly title: string;
+  readonly artwork: readonly { readonly src: string; readonly sizes: string; readonly type: string }[];
+}
+
+/**
+ * The name of the piece, and the program's own icon beside it.
+ *
+ * Without a picture the panel shows the browser's, and what is playing reads
+ * as the browser rather than this. The icons are the ones the page is
+ * installed with, at the sizes it already has; their addresses are made
+ * whole against the page's, since the panel lives outside it and the
+ * program is served from a folder of a site rather than from its root.
+ */
+export function panelMetadataFor(title: string, pageAddress: string): PanelMetadata {
+  return {
+    title,
+    artwork: [
+      { src: new URL('icon-192.png', pageAddress).href, sizes: '192x192', type: 'image/png' },
+      { src: new URL('icon-512.png', pageAddress).href, sizes: '512x512', type: 'image/png' },
+    ],
+  };
+}
+
 /**
  * The page's own media session, where the browser has one.
  *
@@ -247,11 +272,11 @@ export function theMediaSession(): MediaSessionKeys {
     return new MediaSessionKeys(null, null, null);
   }
   const session = (navigator as unknown as { mediaSession?: MediaSessionLike }).mediaSession;
-  const Metadata = (globalThis as unknown as { MediaMetadata?: new (init: { title: string }) => unknown })
+  const Metadata = (globalThis as unknown as { MediaMetadata?: new (init: PanelMetadata) => unknown })
     .MediaMetadata;
   return new MediaSessionKeys(
     session ?? null,
-    Metadata === undefined ? null : (title: string) => new Metadata({ title }),
+    Metadata === undefined ? null : (title: string) => new Metadata(panelMetadataFor(title, document.baseURI)),
     typeof Audio === 'function' && typeof URL.createObjectURL === 'function' ? new LoopedSilence() : null,
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MediaSessionKeys,
+  panelMetadataFor,
   silentWav,
   type MediaSessionLike,
   type SeekDetails,
@@ -238,6 +239,16 @@ describe('the platform transport keys', () => {
 });
 
 describe('the silence played beside the music', () => {
+  it('shows the program’s own icon beside the piece, wherever the program is served from', () => {
+    const told = panelMetadataFor('City of Tears', 'https://example.org/sight_reading_practice/?score=1#top');
+
+    expect(told.title).toBe('City of Tears');
+    expect(told.artwork).toEqual([
+      { src: 'https://example.org/sight_reading_practice/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: 'https://example.org/sight_reading_practice/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ]);
+  });
+
   it('is a WAV file of zeros, as long as it says', () => {
     const bytes = silentWav(2, 8_000);
     const view = new DataView(bytes.buffer);

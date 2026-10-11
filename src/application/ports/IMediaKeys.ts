@@ -15,6 +15,9 @@ export interface WhatIsSounding {
   readonly placeNow: () => { readonly positionMs: number; readonly durationMs: number } | null;
   /** Moves it to a moment, playing on from there or held there as it was. */
   readonly seekTo: (positionMs: number) => void;
+  /** Goes on to the next piece, or back to the one before; `null` where there is none. */
+  readonly next: (() => void) | null;
+  readonly previous: (() => void) | null;
 }
 
 /**

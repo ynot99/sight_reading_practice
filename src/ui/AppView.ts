@@ -57,6 +57,7 @@ import {
   type RulerDivision,
   type RulerMark,
 } from '../application/rhythmRuler.js';
+import { PLAYBACK_GOES_ON, PiecesInTurn, type PlaybackGoesOn } from '../application/PiecesInTurn.js';
 import {
   scoresInOrder,
   theStarBand,
@@ -695,6 +696,21 @@ function readClickNotesOf(value: string): ClickNotesOf {
  * standard exercise, and it makes each one a number the reader can reason
  * about.
  */
+/** What a playback goes on to, as its button says it. */
+const GOES_ON_SAID: Readonly<Record<PlaybackGoesOn, string>> = {
+  this: 'Only this piece',
+  list: 'The shelf in its order',
+  random: 'The shelf shuffled',
+};
+
+/** The button's picture for each: a note, a list playing, and the shuffle. */
+const GOES_ON_DRAWN: Readonly<Record<PlaybackGoesOn, string>> = {
+  this: 'M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z',
+  list: 'M4 10h12v2H4zm0-4h12v2H4zm0 8h8v2H4zm10 0v6l5-3z',
+  random:
+    'M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z',
+};
+
 const RULER_LABELS: Readonly<Record<RulerDivision, string>> = {
   off: 'None',
   metronome: 'Follow metronome',
@@ -1505,6 +1521,16 @@ export class AppView {
    * hold of: held for the drag, it plays on from where it is let go.
    */
   private playsOnAfterTheDrag = false;
+  /** The pieces a playback goes through; see `theTurnOfPieces`. */
+  private piecesInTurn: PiecesInTurn | null = null;
+  /**
+   * Counts the ways a playback was asked to go on to another piece, and the
+   * stops. One that finds the count moved on by the time its piece is open
+   * has been overtaken - by a stop, or by a later press - and plays nothing.
+   */
+  private goingOn = 0;
+  /** Whether a piece is being opened to be played; Stop is for that too. */
+  private openingToPlay = false;
   private replayAtMs = 0;
   private replayClicksSent = 0;
   /** Puts the speed in the row or the drawer, as fits now. See `bindNarrowLayout`. */
@@ -1814,6 +1840,8 @@ export class AppView {
     takeOnKeys: HTMLElement;
     replayOnKeys: HTMLElement;
     listenOnKeys: HTMLElement;
+    listenGoesOn: HTMLButtonElement;
+    listenGoesOnIcon: SVGPathElement;
     listenPosition: HTMLOutputElement;
     listenScrub: HTMLInputElement;
     listenDuration: HTMLOutputElement;
@@ -2136,6 +2164,8 @@ export class AppView {
       takeOnKeys: requireElement(doc, 'take-on-keys'),
       replayOnKeys: requireElement(doc, 'replay-on-keys'),
       listenOnKeys: requireElement(doc, 'listen-on-keys'),
+      listenGoesOn: requireElement(doc, 'listen-goes-on'),
+      listenGoesOnIcon: requireElement(doc, 'listen-goes-on-icon'),
       listenPosition: requireElement(doc, 'listen-position'),
       listenScrub: requireElement(doc, 'listen-scrub'),
       listenDuration: requireElement(doc, 'listen-duration'),
@@ -3144,7 +3174,12 @@ export class AppView {
     this.el.timingTrailLines.textContent = lines.join('\n');
   }
 
-  private async openKeptScore(id: string, title: string): Promise<void> {
+  /**
+   * Opens a kept score. `asARead` is false where the program chose it - a
+   * playback going on to the next piece - which is not the reader reading
+   * it, and does not move it up the shelf.
+   */
+  private async openKeptScore(id: string, title: string, asARead = true): Promise<void> {
     // Out of the way first. Engraving a long score takes the thread for
     // seconds, and nothing on the page can be drawn or pressed while it does -
     // so the shelf stayed up, over music the reader had already asked for,
@@ -3173,7 +3208,9 @@ export class AppView {
       }
       // Choosing one from the sheet is a reading, and the calendar is what
       // says so - `IClock` counts from an arbitrary zero for measuring music.
-      void this.runtime.scores.markRead(exercise.title, Date.now());
+      if (asARead) {
+        void this.runtime.scores.markRead(exercise.title, Date.now());
+      }
       this.syncControlsFromSettings();
     } catch (error) {
       reportToTheConsole(`Could not open ${title}.`, error);
@@ -3415,6 +3452,10 @@ export class AppView {
       this.resumeThePerformance();
       return;
     }
+    await this.beginThePerformance();
+  }
+
+  private async beginThePerformance(): Promise<void> {
     // The recordings download on first use, and playback fires a whole piece
     // at once: without waiting, its opening seconds come out on the synthesised
     // fallback and the instrument appears to change halfway through.
@@ -3427,8 +3468,97 @@ export class AppView {
     // The last run's verdict is over the music the performance is about to
     // walk through, which the reader asked to watch.
     this.showVerdict(false);
-    controller.listen();
+    this.runtime.controller.listen();
     this.showThePerformance();
+  }
+
+  /**
+   * The pieces a playback goes through, from the one open now.
+   *
+   * Taken from the shelf, in the order it is read in, the first time it is
+   * asked for and again only when it no longer answers: the way asked for is
+   * a shuffle where it was not, or the other way round, or the piece open is
+   * not the one it stands at - the reader opened another.
+   */
+  private theTurnOfPieces(): PiecesInTurn {
+    const settings = this.runtime.controller.settings;
+    const isShuffled = settings.playbackGoesOn === 'random';
+    const open = this.runtime.controller.openedExercise?.title ?? null;
+    const turn = this.piecesInTurn;
+    if (turn !== null && turn.shuffled === isShuffled && open !== null && turn.playing?.title === open) {
+      return turn;
+    }
+    const shelf = scoresInOrder(this.runtime.scores.list(), settings.scoreOrder).map(({ id, title }) => ({
+      id,
+      title,
+    }));
+    this.piecesInTurn = PiecesInTurn.fromTheShelf(shelf, open, isShuffled, Math.random);
+    return this.piecesInTurn;
+  }
+
+  /**
+   * Opens the next piece, or the one before, and plays it.
+   *
+   * What is playing is stopped first. Opening a long score takes seconds,
+   * and a stop, or another press, meanwhile is the reader's later word: the
+   * piece opened then is left on the stand, unplayed.
+   */
+  private async goOnToAnotherPiece(direction: 1 | -1): Promise<void> {
+    const { controller } = this.runtime;
+    if (controller.isListening || controller.isListeningPaused) {
+      this.stopEverything();
+    }
+    this.goingOn += 1;
+    const asked = this.goingOn;
+    const turn = this.theTurnOfPieces();
+    const piece = direction > 0 ? turn.next() : turn.previous();
+    if (piece === null) {
+      return;
+    }
+    this.openingToPlay = true;
+    this.describeStopping();
+    try {
+      await this.openKeptScore(piece.id, piece.title, false);
+    } finally {
+      if (asked === this.goingOn) {
+        this.openingToPlay = false;
+        this.describeStopping();
+      }
+    }
+    if (asked !== this.goingOn || controller.session !== null || controller.isListening) {
+      return;
+    }
+    await this.beginThePerformance();
+  }
+
+  /** Says on its button what a playback goes on to, and what a press makes it. */
+  private describeWhatPlaysNext(): void {
+    const goesOn = this.runtime.controller.settings.playbackGoesOn;
+    const next = PLAYBACK_GOES_ON[(PLAYBACK_GOES_ON.indexOf(goesOn) + 1) % PLAYBACK_GOES_ON.length] ?? 'this';
+    const said = `${GOES_ON_SAID[goesOn]}. Press for ${GOES_ON_SAID[next].toLowerCase()}.`;
+    this.el.listenGoesOn.dataset['goesOn'] = goesOn;
+    this.el.listenGoesOn.title = said;
+    this.el.listenGoesOn.setAttribute('aria-label', said);
+    this.el.listenGoesOnIcon.setAttribute('d', GOES_ON_DRAWN[goesOn]);
+  }
+
+  /**
+   * Whether the repeat is pressed, and - in a playback going on to other
+   * pieces, where it has nothing to say - dimmed, with the reason.
+   */
+  private describeTheRepeat(): void {
+    const { controller } = this.runtime;
+    const settings = controller.settings;
+    this.el.focusRepeat.setAttribute('aria-pressed', String(settings.repeatRange));
+    const listening = controller.isListening || controller.isListeningPaused;
+    if (listening && settings.playbackGoesOn !== 'this') {
+      this.el.focusRepeat.dataset['idle'] = 'true';
+      this.el.focusRepeat.title = 'Play the passage again and again. Not while the playback goes on to other pieces.';
+    } else {
+      delete this.el.focusRepeat.dataset['idle'];
+      this.el.focusRepeat.title = 'Play the passage again and again';
+    }
+    this.el.focusRepeat.setAttribute('aria-label', this.el.focusRepeat.title);
   }
 
   /**
@@ -3492,6 +3622,7 @@ export class AppView {
   private showThePerformance(): void {
     const controller = this.runtime.controller;
     this.applyPlayingChrome();
+    this.describeTheRepeat();
     this.updateButtons(controller.session?.status ?? 'idle');
     this.describeStopping();
     this.sayWhatIsSounding();
@@ -3547,6 +3678,11 @@ export class AppView {
         // A held one moved says so here; a playing one says so as it starts.
         this.showThePerformance();
       },
+      // Through the shelf whatever the playback goes on to: a key for the next
+      // piece is pressed to hear another piece, and one that did nothing
+      // while the button said "only this piece" would seem broken.
+      next: this.runtime.scores.isEmpty ? null : () => void this.goOnToAnotherPiece(1),
+      previous: this.runtime.scores.isEmpty ? null : () => void this.goOnToAnotherPiece(-1),
     });
   }
 
@@ -3580,7 +3716,8 @@ export class AppView {
       this.isPreviewing ||
       this.runtime.controller.isListening ||
       this.runtime.controller.isListeningPaused ||
-      this.runtime.controller.replaying
+      this.runtime.controller.replaying ||
+      this.openingToPlay
     );
   }
 
@@ -5153,6 +5290,8 @@ export class AppView {
    */
   private stopEverything(): void {
     const controller = this.runtime.controller;
+    this.goingOn += 1;
+    this.openingToPlay = false;
     this.forgetTheBeats();
     this.cancelPreview();
     this.endTheReplay();
@@ -6245,12 +6384,25 @@ export class AppView {
         // Deferred for the reason the run's repeat is - beginning a
         // performance from inside its own finish is how re-entrancy bugs are
         // made, and this layer is the one with a timer.
-        if (!controller.countsInEveryLap || !controller.settings.repeatRange) {
+        if (!controller.countsInEveryLap || !controller.playbackRepeats) {
           return;
         }
         setTimeout(() => {
-          if (controller.countsInEveryLap && controller.settings.repeatRange) {
+          if (controller.countsInEveryLap && controller.playbackRepeats) {
             controller.listen();
+          }
+        }, 0);
+      }),
+    );
+
+    this.subscriptions.push(
+      // On to the next piece, where the playback goes on: deferred, for the
+      // reason the lap above is.
+      controller.playbackEvents.on('finished', () => {
+        const asked = this.goingOn;
+        setTimeout(() => {
+          if (asked === this.goingOn && controller.settings.playbackGoesOn !== 'this') {
+            void this.goOnToAnotherPiece(1);
           }
         }, 0);
       }),
@@ -7129,7 +7281,8 @@ export class AppView {
     // Here as well as on a new engraving: the repeat button changes what the
     // markers say without changing what is on the page.
     this.showPassageMarkers();
-    this.el.focusRepeat.setAttribute('aria-pressed', String(settings.repeatRange));
+    this.describeTheRepeat();
+    this.describeWhatPlaysNext();
     this.el.preview.value = String(settings.previewSeconds);
     this.el.previewValue.value = String(settings.previewSeconds);
     this.el.countIn.value = String(settings.countInBars);
@@ -8216,6 +8369,15 @@ export class AppView {
     this.listen(this.el.takeScrub, 'input', () => {
       player.seek(momentOfTheScrubBar(this.takeScrubBar, player.durationMs));
       this.describeTakeTransport();
+    });
+
+    this.listen(this.el.listenGoesOn, 'click', () => {
+      const controller = this.runtime.controller;
+      const goesOn = controller.settings.playbackGoesOn;
+      const next = PLAYBACK_GOES_ON[(PLAYBACK_GOES_ON.indexOf(goesOn) + 1) % PLAYBACK_GOES_ON.length] ?? 'this';
+      controller.updateSettings({ playbackGoesOn: next });
+      this.describeWhatPlaysNext();
+      this.describeTheRepeat();
     });
 
     // Held while it is dragged and played on where it is let go, rather than

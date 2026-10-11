@@ -3,6 +3,7 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { PracticeSettings } from './PracticeController.js';
 import { RULER_DIVISIONS, type RulerDivision } from './rhythmRuler.js';
 import { SCORE_ORDER, WHAT_OPENS, type ScoreOrder, type WhatOpens } from './ScoreLibrary.js';
+import { PLAYBACK_GOES_ON, type PlaybackGoesOn } from './PiecesInTurn.js';
 import { PAGE_TURNS, type PageTurns } from './ports/IScoreRenderer.js';
 import {
   CLICK_SILENCES,
@@ -181,6 +182,12 @@ function readWhatOpens(value: unknown): WhatOpens | undefined {
 function readScoreOrder(value: unknown): ScoreOrder | undefined {
   return typeof value === 'string' && SCORE_ORDER.includes(value as ScoreOrder)
     ? (value as ScoreOrder)
+    : undefined;
+}
+
+function readPlaybackGoesOn(value: unknown): PlaybackGoesOn | undefined {
+  return typeof value === 'string' && PLAYBACK_GOES_ON.includes(value as PlaybackGoesOn)
+    ? (value as PlaybackGoesOn)
     : undefined;
 }
 
@@ -457,6 +464,7 @@ export function decodePracticeSettings(
     rhythmRuler: readRuler(value['rhythmRuler']),
     whatOpens: readWhatOpens(value['whatOpens']),
     scoreOrder: readScoreOrder(value['scoreOrder']),
+    playbackGoesOn: readPlaybackGoesOn(value['playbackGoesOn']),
     traceTheStart: readBoolean(value['traceTheStart']),
     stopAtAMistake: readBoolean(value['stopAtAMistake']),
     clickSilences: readClickSilence(value['clickSilences']),
@@ -525,6 +533,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     rhythmRuler: settings.rhythmRuler,
     whatOpens: settings.whatOpens,
     scoreOrder: settings.scoreOrder,
+    playbackGoesOn: settings.playbackGoesOn,
     traceTheStart: settings.traceTheStart,
     stopAtAMistake: settings.stopAtAMistake,
     clickSilences: settings.clickSilences,

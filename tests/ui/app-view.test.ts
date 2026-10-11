@@ -1945,6 +1945,166 @@ describe('AppView', () => {
     });
   });
 
+  describe('a playback going on to other pieces', () => {
+    /** Three pieces kept, the latest opened last, and the page started. */
+    async function aShelf(): Promise<Rig> {
+      const rig = createRig();
+      let at = 1_000;
+      for (const title of ['First', 'Second', 'Third']) {
+        await rig.runtime.scores.keep(twoBarExercise({ title }), at);
+        at += 1_000;
+      }
+      await rig.view.initialize();
+      await rig.runtime.controller.openScore(twoBarExercise({ title: 'Second' }));
+      return rig;
+    }
+
+    const playing = (rig: Rig, title: string): Promise<void> =>
+      vi.waitFor(() => {
+        expect(rig.runtime.controller.currentExercise?.title).toBe(title);
+        expect(rig.runtime.controller.isListening).toBe(true);
+      });
+
+    it('says on its button what comes after the piece, and goes round the three when pressed', async () => {
+      const { view, runtime, mediaKeys } = createRig();
+      await view.initialize();
+      await pressListen(runtime.controller);
+      const button = element<HTMLButtonElement>('listen-goes-on');
+      const drawn = (): string => element('listen-goes-on-icon').getAttribute('d') ?? '';
+
+      expect(button.dataset['goesOn']).toBe('this');
+      expect(button.title).toBe('Only this piece. Press for the shelf in its order.');
+      const pictures = [drawn()];
+
+      for (const [goesOn, said] of [
+        ['list', 'The shelf in its order.'],
+        ['random', 'The shelf shuffled.'],
+        ['this', 'Only this piece.'],
+      ] as const) {
+        button.click();
+        expect(runtime.controller.settings.playbackGoesOn).toBe(goesOn);
+        expect(button.dataset['goesOn']).toBe(goesOn);
+        expect(button.title.startsWith(said)).toBe(true);
+        expect(button.getAttribute('aria-label')).toBe(button.title);
+        pictures.push(drawn());
+      }
+      expect(new Set(pictures).size).toBe(3);
+      expect(pictures.at(-1)).toBe(pictures[0]);
+      // With nothing kept there is no other piece for a key to go to.
+      expect(mediaKeys.now?.next).toBeNull();
+      expect(mediaKeys.now?.previous).toBeNull();
+    });
+
+    it('dims the repeat while the playback goes on to other pieces, and says why', async () => {
+      const { view, runtime } = createRig();
+      await view.initialize();
+      const repeat = element<HTMLButtonElement>('focus-repeat');
+      element<HTMLButtonElement>('listen-goes-on').click();
+      expect(runtime.controller.settings.playbackGoesOn).toBe('list');
+      // A run still repeats, so nothing is dimmed outside a playback.
+      expect(repeat.dataset['idle']).toBeUndefined();
+
+      await pressListen(runtime.controller);
+      expect(repeat.dataset['idle']).toBe('true');
+      expect(repeat.title).toMatch(/other pieces/);
+
+      element<HTMLButtonElement>('listen-goes-on').click();
+      element<HTMLButtonElement>('listen-goes-on').click();
+      expect(runtime.controller.settings.playbackGoesOn).toBe('this');
+      expect(repeat.dataset['idle']).toBeUndefined();
+      expect(repeat.title).toBe('Play the passage again and again');
+    });
+
+    it('plays the next piece on the shelf once one ends, without moving it up the shelf', async () => {
+      const rig = await aShelf();
+      rig.runtime.controller.updateSettings({ playbackGoesOn: 'list', countInBars: 0 });
+      await pressListen(rig.runtime.controller);
+
+      rig.metronome.advanceSubdivisions(40);
+
+      // The shelf reads latest first: Third, Second, First.
+      await playing(rig, 'First');
+      expect(rig.runtime.scores.list().map((score) => score.title)).toEqual(['Third', 'Second', 'First']);
+    });
+
+    it('goes on rather than round where every lap would be counted in and repeated', async () => {
+      const rig = await aShelf();
+      rig.runtime.controller.updateSettings({
+        playbackGoesOn: 'list',
+        countInBars: 1,
+        countInPlayback: 'every',
+        repeatRange: true,
+      });
+      await pressListen(rig.runtime.controller);
+      const begun = vi.spyOn(rig.runtime.controller, 'listen');
+
+      rig.metronome.advanceSubdivisions(60);
+
+      await playing(rig, 'First');
+      // The piece that ended was not begun again on the way.
+      expect(begun).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops at the end of the piece where it is only this piece', async () => {
+      const rig = await aShelf();
+      rig.runtime.controller.updateSettings({ countInBars: 0 });
+      await pressListen(rig.runtime.controller);
+
+      rig.metronome.advanceSubdivisions(40);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(rig.runtime.controller.isListening).toBe(false);
+      expect(rig.runtime.controller.currentExercise?.title).toBe('Second');
+    });
+
+    it('takes the shelf in its order again once the shuffle is turned off', async () => {
+      const rig = await aShelf();
+      // A shuffle that leaves the order as it is: Second, then Third, First.
+      // Given back at once: everything generated after it draws its seed here.
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0.99);
+      rig.runtime.controller.updateSettings({ playbackGoesOn: 'random' });
+      await pressListen(rig.runtime.controller);
+      try {
+        rig.mediaKeys.now?.next?.();
+        await playing(rig, 'Third');
+      } finally {
+        random.mockRestore();
+      }
+
+      element<HTMLButtonElement>('listen-goes-on').click();
+      expect(rig.runtime.controller.settings.playbackGoesOn).toBe('this');
+      element<HTMLButtonElement>('listen-goes-on').click();
+      rig.mediaKeys.now?.next?.();
+
+      // The shelf after Third, rather than the shuffle's First.
+      await playing(rig, 'Second');
+    });
+
+    it('goes on to the next piece from the key, and back, whatever comes after the piece', async () => {
+      const rig = await aShelf();
+      await pressListen(rig.runtime.controller);
+
+      rig.mediaKeys.now?.next?.();
+      await playing(rig, 'First');
+
+      rig.mediaKeys.now?.previous?.();
+      await playing(rig, 'Second');
+    });
+
+    it('plays nothing it was opening once stopped', async () => {
+      const rig = await aShelf();
+      await pressListen(rig.runtime.controller);
+
+      rig.mediaKeys.now?.next?.();
+      // Stop is for a piece being opened to play, as for one playing.
+      expect(element<HTMLButtonElement>('focus-stop').disabled).toBe(false);
+      element<HTMLButtonElement>('focus-stop').click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(rig.runtime.controller.isListening).toBe(false);
+    });
+  });
+
   describe('the keys the platform has outside this page', () => {
     it('hands them over while a performance plays, and names the piece', async () => {
       // They reach a page nobody is looking at, which is the whole point: a

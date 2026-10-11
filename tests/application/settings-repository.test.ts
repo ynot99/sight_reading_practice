@@ -74,6 +74,7 @@ const SETTINGS: PracticeSettings = {
   restEveryMinutes: 45,
   whatOpens: 'random',
   scoreOrder: 'hardest',
+  playbackGoesOn: 'random',
   traceTheStart: true,
   stopAtAMistake: true,
   clickSilences: 'the-downbeat',
@@ -116,6 +117,7 @@ describe('practice settings codec', () => {
     expect(restored.countInRun).toBe('once');
     expect(restored.countInPlayback).toBe('every');
     expect(restored.whatOpens).toBe('random');
+    expect(restored.playbackGoesOn).toBe('random');
     expect(restored.clickWhen).toBe('cycle-2');
     expect(restored.theme).toBe('dark');
     expect(restored.darkSystemTheme).toBe('light-dark-dialogs');

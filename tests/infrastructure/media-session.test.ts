@@ -52,6 +52,8 @@ function performanceOf(
     stop: () => pressed.push('stop'),
     placeNow: () => place,
     seekTo: (positionMs) => pressed.push(`seek ${String(positionMs)}`),
+    next: () => pressed.push('next'),
+    previous: () => pressed.push('previous'),
   };
 }
 
@@ -70,6 +72,21 @@ describe('the platform transport keys', () => {
       session.press(action);
     }
     expect(pressed).toEqual(['play', 'pause', 'stop']);
+  });
+
+  it('goes on to the next piece and back, and offers neither where there is no piece to go to', () => {
+    const session = new FakeSession();
+    const pressed: string[] = [];
+    const keys = new MediaSessionKeys(session, named, null);
+
+    keys.sounding(performanceOf(true, pressed));
+    session.press('nexttrack');
+    session.press('previoustrack');
+    expect(pressed).toEqual(['next', 'previous']);
+
+    keys.sounding({ ...performanceOf(true, pressed), next: null, previous: null });
+    expect(session.handlers.get('nexttrack')).toBeNull();
+    expect(session.handlers.get('previoustrack')).toBeNull();
   });
 
   it('shows where the performance stands and how long it is, not the silence beside it', () => {
@@ -185,7 +202,7 @@ describe('the platform transport keys', () => {
     expect(session.playbackState).toBe('none');
     expect(session.metadata).toBeNull();
     expect(session.position).toBeNull();
-    expect([...session.handlers.values()]).toEqual([null, null, null, null, null, null]);
+    expect([...session.handlers.values()]).toEqual([null, null, null, null, null, null, null, null]);
   });
 
   it('stands on nothing it never took', () => {

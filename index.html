@@ -1669,6 +1669,14 @@
       -->
       <div id="listen-on-keys" class="under-the-keys" hidden>
         <div class="take-transport">
+          <!-- What the playback goes on to when its piece ends: the piece and
+               no further, the shelf in its order, or the shelf shuffled. -->
+          <button id="listen-goes-on" type="button" class="button" data-goes-on="this"
+            title="Only this piece" aria-label="Only this piece">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="take-transport__icon">
+              <path id="listen-goes-on-icon" d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
+            </svg>
+          </button>
           <output id="listen-position" class="take-transport__time">0:00</output>
           <input id="listen-scrub" type="range" min="0" max="1000" step="1" value="0"
             aria-label="Position in the playback" />

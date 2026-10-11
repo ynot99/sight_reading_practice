@@ -25,6 +25,7 @@ import { playedNoteOffset } from './playedNoteOffset.js';
 import { DEFAULT_SECTION_BARS, drillTaskPassed, planTheDrill, type DrillTask } from './drill/SectionDrill.js';
 import type { DrillProgress } from './drill/DrillProgress.js';
 import type { ScoreOrder, WhatOpens } from './ScoreLibrary.js';
+import type { PlaybackGoesOn } from './PiecesInTurn.js';
 import type { PageTurns } from './ports/IScoreRenderer.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
 import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
@@ -604,6 +605,13 @@ export interface PracticeSettings {
    */
   readonly scoreOrder: ScoreOrder;
   /**
+   * What a playback goes on to once its piece has been played: see
+   * `PLAYBACK_GOES_ON`. The page opens the next piece; what this controller
+   * does with it is not go round the one being played - see
+   * `playbackRepeats`.
+   */
+  readonly playbackGoesOn: PlaybackGoesOn;
+  /**
    * Print, in the console, how long each stage of starting took.
    *
    * For finding what makes a long score slow to begin; see `timeTheStart`.
@@ -1071,6 +1079,8 @@ export class PracticeController {
       whatOpens: 'generated',
       // The order the shelf has always been in.
       scoreOrder: 'recent',
+      // The piece and no further, as a playback has always been.
+      playbackGoesOn: 'this',
       traceTheStart: false,
       rulerCursor: false,
       rulerStrength: 1,
@@ -1298,8 +1308,8 @@ export class PracticeController {
     // repeat off means this reading to be the last, and one who turns it on
     // means this one to come round - and neither should have to stop the
     // music to say so.
-    if (changes.repeatRange !== undefined) {
-      this.player?.setRepeating(changes.repeatRange);
+    if (changes.repeatRange !== undefined || changes.playbackGoesOn !== undefined) {
+      this.player?.setRepeating(this.playbackRepeats);
     }
 
     // And the same for the hand. Reported from the page: it was read once
@@ -1889,7 +1899,7 @@ export class PracticeController {
       // a count-in *between* laps is a break by definition, and a seam that
       // is meant to be there is better made by starting again than by
       // teaching the player's clock to stop in the middle.
-      repeat: this.currentSettings.repeatRange && !this.countsInEveryLap,
+      repeat: this.playbackRepeats && !this.countsInEveryLap,
       countInBars: this.aPlaybackIsCountedIn ? this.currentSettings.countInBars : 0,
       // And round to the *passage*, wherever this performance was picked up.
       // A pause halfway through the bar being looped otherwise made that half
@@ -2647,6 +2657,16 @@ export class PracticeController {
    * defer with, and starting a performance from inside its own finish is how
    * re-entrancy bugs are made.
    */
+  /**
+   * Whether a playback goes round its passage again.
+   *
+   * Asked for, and only while it is not to go on to another piece: a piece
+   * that went round for ever would never let the next one begin.
+   */
+  get playbackRepeats(): boolean {
+    return this.currentSettings.repeatRange && this.currentSettings.playbackGoesOn === 'this';
+  }
+
   get countsInEveryLap(): boolean {
     return this.currentSettings.countInPlayback === 'every' && this.aPlaybackIsCountedIn;
   }

@@ -25,7 +25,16 @@ export interface SilentPlayer {
 }
 
 /** The actions taken, and given back in the same order they were taken. */
-const ACTIONS = ['play', 'pause', 'stop', 'seekto', 'seekbackward', 'seekforward'] as const;
+const ACTIONS = [
+  'play',
+  'pause',
+  'stop',
+  'seekto',
+  'seekbackward',
+  'seekforward',
+  'nexttrack',
+  'previoustrack',
+] as const;
 
 /**
  * The platform's transport keys, through the Media Session API.
@@ -133,6 +142,12 @@ export class MediaSessionKeys implements IMediaKeys {
     };
     take(session, 'seekbackward', skip(-1));
     take(session, 'seekforward', skip(1));
+    // Offered only where there is a piece to go to: a panel shows the
+    // buttons of the actions it was handed, and one that goes nowhere is
+    // worse than none.
+    const { next, previous } = what;
+    take(session, 'nexttrack', next === null ? null : () => next());
+    take(session, 'previoustrack', previous === null ? null : () => previous());
     this.held = true;
   }
 }

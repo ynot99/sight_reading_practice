@@ -1270,6 +1270,35 @@ describe('what you played, drawn over the score', () => {
     expect(instrument.played.length).toBeGreaterThan(0);
   });
 
+  it('does not go round a piece the playback goes on from', async () => {
+    // A piece that went round for ever would never let the next one begin.
+    const { controller, metronome } = createController(true);
+    await controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+    controller.updateSettings({ countInBars: 0, repeatRange: true });
+    expect(controller.playbackRepeats).toBe(true);
+    let finished = 0;
+    controller.playbackEvents.on('finished', () => {
+      finished += 1;
+    });
+
+    controller.updateSettings({ playbackGoesOn: 'list' });
+    expect(controller.playbackRepeats).toBe(false);
+    controller.listen();
+    metronome.advanceSubdivisions(40);
+    expect(finished).toBe(1);
+
+    // The piece and no further goes round, as it always has.
+    controller.updateSettings({ playbackGoesOn: 'this' });
+    controller.listen();
+    metronome.advanceSubdivisions(40);
+    expect(finished).toBe(1);
+
+    // And told while it plays, it lets the piece end.
+    controller.updateSettings({ playbackGoesOn: 'random' });
+    metronome.advanceSubdivisions(40);
+    expect(finished).toBe(2);
+  });
+
   it('does not go round inside the player when every lap is counted in', async () => {
     // A count-in between laps is a break by definition, and the player's
     // repeat exists precisely to leave no gap. So the page starts each lap.

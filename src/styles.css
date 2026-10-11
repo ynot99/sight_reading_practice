@@ -4191,6 +4191,14 @@ body[data-playing='true'] .score__modes {
   min-width: 0;
 }
 
+/*
+ * The repeat, in a playback going on to other pieces: dimmed rather than
+ * refused, the way a control another setting has emptied is.
+ */
+.focus-bar__toggle[data-idle='true'] {
+  opacity: 0.45;
+}
+
 /* Watching the take on the keys is asked for from the list, and ended on the page. */
 #take-off-the-keys,
 body[data-take-on-keys='true'] #take-on-the-keys {

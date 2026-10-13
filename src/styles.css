@@ -1692,6 +1692,8 @@ textarea {
   --roll-ink-correct: var(--correct);
   --roll-ink-wrong: var(--wrong);
   --roll-ink-aside: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  /* A note chosen to be changed: no verdict, so the accent. */
+  --roll-ink-chosen: var(--accent);
   /*
    * The metre on the ruler: the same lines as the grid, cut to their weight,
    * and small and bright at his asking. The grid's own grey is right behind
@@ -4283,6 +4285,11 @@ body[data-playing='true'] .score__modes {
   opacity: 0.45;
 }
 
+/* Changing a recording in its viewer, with nothing chosen or nothing to put back. */
+.sheet__head .button[data-idle='true'] {
+  opacity: 0.45;
+}
+
 /* Watching the take on the keys is asked for from the list, and ended on the page. */
 #take-off-the-keys,
 body[data-take-on-keys='true'] #take-on-the-keys {
@@ -4395,6 +4402,24 @@ body[data-take-on-keys='true'] #take-off-the-keys {
     order: 1;
     flex: 1 0 100%;
     flex-wrap: wrap;
+  }
+}
+
+/*
+ * A drawing's buttons, together. On a phone a row of their own under the
+ * title: six beside it left the title a few letters wide and pushed the
+ * close button onto a line of its own.
+ */
+.sheet__tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 620px) {
+  .sheet__tools {
+    order: 1;
+    flex: 1 0 100%;
   }
 }
 

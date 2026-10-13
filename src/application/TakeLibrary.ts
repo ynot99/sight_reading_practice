@@ -260,6 +260,25 @@ export class TakeLibrary {
     return this.takes.find((take) => take.id === id) ?? null;
   }
 
+  /**
+   * Gives a take new events, the same take changed rather than a copy: it keeps
+   * its name, its shelf and the click it was played to.
+   */
+  changeTheNotes(id: string, events: readonly MidiFileEvent[]): StoredTake | null {
+    const found = this.takes.find((take) => take.id === id);
+    if (found === undefined) {
+      return null;
+    }
+    const changed: StoredTake = {
+      ...found,
+      events,
+      noteCount: events.filter((event) => event.kind === 'noteOn').length,
+    };
+    this.takes = this.takes.map((take) => (take.id === id ? changed : take));
+    this.persist();
+    return changed;
+  }
+
   remove(id: string): void {
     const before = this.takes.length;
     this.takes = this.takes.filter((take) => take.id !== id);

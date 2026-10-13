@@ -31,6 +31,7 @@ const INKS: RollInks = {
   correct: 'correct',
   wrong: 'wrong',
   aside: 'aside',
+  chosen: 'chosen',
   tickDivision: 'tick-division',
   tickBeat: 'tick-beat',
   tickDownbeat: 'tick-downbeat',
@@ -155,6 +156,25 @@ describe('painting the grid', () => {
     expect(recorder.inked('correct')[0]?.corners).toEqual([2, 0, 0, 2]);
     // An outline, because a fill in any colour is a verdict and there was not one.
     expect(recorder.inked('note').map((mark) => mark.how)).toEqual(['stroke']);
+  });
+
+  it('rims the note chosen to be changed in the accent, inside its own edge, and no other', () => {
+    const chosen = press({ midi: MIDI.C4 + 2, downAtMs: 1000, upAtMs: 1500, verdict: null });
+    const scene = theSceneOfTheRoll({
+      roll: roll({ presses: [press({ verdict: null }), chosen] }),
+      barLabel: () => null,
+      chosen: { midi: chosen.midi, downAtMs: chosen.downAtMs },
+    });
+    const { surface: canvas, recorder } = surface();
+
+    paintTheGrid(canvas, scene, at(), INKS, 1);
+
+    const row = scene.notes.find((note) => note.chosen === true)?.row ?? -1;
+    expect(scene.notes.filter((note) => note.chosen === true)).toHaveLength(1);
+    const [rim, ...more] = recorder.inked('chosen');
+    expect(more).toEqual([]);
+    expect(rim).toMatchObject({ how: 'stroke', x: 1, y: row * 14 + 1, tall: 12, corners: 2 });
+    expect(rim?.wide).toBeCloseTo(68, 6);
   });
 
   it('colours each press by its verdict', () => {

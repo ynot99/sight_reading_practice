@@ -10,6 +10,7 @@ import {
   theCanvasesOf,
   theSceneOfTheRoll,
   whatThePedalSaysAt,
+  theKeyAt,
   whatTheGridSaysAt,
   whatTheRulerSaysAt,
   keepTheHeadInView,
@@ -876,6 +877,23 @@ describe('what a pointer resting on the drawing is told', () => {
     // And nothing a row away, or after the key came up.
     expect(whatTheGridSaysAt(scene, 1200, row + 1, zoom)).toBeNull();
     expect(whatTheGridSaysAt(scene, 1600, row, zoom)).toBeNull();
+  });
+
+  it('finds the key a finger is on, as the pointer is told of it, by its pitch and its moment', () => {
+    const first = press({ midi: MIDI.C4, downAtMs: 1000, upAtMs: 1500 });
+    const again = press({ midi: MIDI.C4, downAtMs: 1600, upAtMs: 2000 });
+    // Too short to see, so drawn two pixels wide, and found over them.
+    const blip = press({ midi: MIDI.C4 + 2, downAtMs: 1000, upAtMs: 1001 });
+    const run = roll({ beats: grid, presses: [first, again, blip] });
+    const scene = sceneOf(run);
+    const row = (midi: number): number => scene.highest - midi;
+
+    expect(theKeyAt(run, scene, 1200, row(MIDI.C4), zoom)).toBe(first);
+    expect(theKeyAt(run, scene, 1700, row(MIDI.C4), zoom)).toBe(again);
+    expect(theKeyAt(run, scene, 1550, row(MIDI.C4), zoom)).toBeNull();
+    expect(theKeyAt(run, scene, 1200, row(MIDI.C4) + 1, zoom)).toBeNull();
+    expect(theKeyAt(run, scene, 1012, row(MIDI.C4 + 2), zoom)).toBe(blip);
+    expect(theKeyAt(run, scene, 1016, row(MIDI.C4 + 2), zoom)).toBeNull();
   });
 
   it('answers for the press under an outline, and not for the outline', () => {

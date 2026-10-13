@@ -877,36 +877,19 @@ export function takeOfTheRun(roll: RunRoll): Take | null {
  * for a key still down when a run stops.
  */
 export function rollOfTheTake(take: Take): RunRoll {
-  const presses: RolledPress[] = [];
+  const presses: RolledPress[] = theKeysOfTheTake(take.events).map((key) => ({
+    midi: key.midi,
+    downAtMs: key.downAtMs,
+    upAtMs: key.upAtMs,
+    velocity: key.velocity,
+    verdict: null,
+    stepIndex: null,
+    deviationMs: null,
+  }));
   const pedal: RolledPedal[] = [];
-  const open = new Map<number, number[]>();
   let pedalDownAt: number | null = null;
   for (const event of take.events) {
-    if (event.kind === 'noteOn') {
-      const at = presses.length;
-      presses.push({
-        midi: event.midi,
-        downAtMs: event.atMs,
-        upAtMs: null,
-        velocity: event.velocity,
-        verdict: null,
-        stepIndex: null,
-        deviationMs: null,
-      });
-      open.set(event.midi, [...(open.get(event.midi) ?? []), at]);
-      continue;
-    }
-    if (event.kind === 'noteOff') {
-      // The oldest press of that pitch, for the reason the recorder has: one
-      // pitch struck twice inside a trill has two presses waiting, and closing
-      // the newest leaves the first ringing to the end of the piece.
-      const waiting = open.get(event.midi) ?? [];
-      const at = waiting.shift();
-      open.set(event.midi, waiting);
-      const press = at === undefined ? undefined : presses[at];
-      if (at !== undefined && press !== undefined) {
-        presses[at] = { ...press, upAtMs: event.atMs };
-      }
+    if (event.kind !== 'sustain') {
       continue;
     }
     const down = event.value >= 0.5;
@@ -928,6 +911,70 @@ export function rollOfTheTake(take: Take): RunRoll {
     positionTicks: at * Duration.QUARTER.ticks,
   }));
   return { presses, beats, pedal, rushes: [], truncated: false };
+}
+
+/** A key of a take, and where in its events it went down and came up, if it did. */
+export interface KeyOfTheTake {
+  readonly midi: number;
+  readonly velocity: number;
+  readonly downAtMs: number;
+  readonly upAtMs: number | null;
+  readonly on: number;
+  readonly off: number | null;
+}
+
+/**
+ * Each key struck in a take, paired with the release that ends it: the
+ * oldest press of that pitch still down, for the reason the recorder has -
+ * one pitch struck twice inside a trill has two presses waiting, and closing
+ * the newest leaves the first ringing to the end of the piece.
+ *
+ * One pairing for drawing a take and for changing it, so the note a finger
+ * chooses on the drawing is the note taken out of the take.
+ */
+export function theKeysOfTheTake(events: readonly MidiFileEvent[]): readonly KeyOfTheTake[] {
+  const keys: KeyOfTheTake[] = [];
+  const open = new Map<number, number[]>();
+  events.forEach((event, at) => {
+    if (event.kind === 'noteOn') {
+      open.set(event.midi, [...(open.get(event.midi) ?? []), keys.length]);
+      keys.push({
+        midi: event.midi,
+        velocity: event.velocity,
+        downAtMs: event.atMs,
+        upAtMs: null,
+        on: at,
+        off: null,
+      });
+    } else if (event.kind === 'noteOff') {
+      const waiting = open.get(event.midi) ?? [];
+      const index = waiting.shift();
+      const key = index === undefined ? undefined : keys[index];
+      if (index !== undefined && key !== undefined) {
+        keys[index] = { ...key, upAtMs: event.atMs, off: at };
+      }
+    }
+  });
+  return keys;
+}
+
+/**
+ * A take's events with one key taken out, its press and its release, named by
+ * its pitch and the moment it went down; or `null` where there is no such key,
+ * or it is the take's only one - a take of no notes is the nothing the list
+ * refuses to file.
+ */
+export function takeWithoutTheKey(
+  events: readonly MidiFileEvent[],
+  midi: number,
+  downAtMs: number,
+): readonly MidiFileEvent[] | null {
+  const keys = theKeysOfTheTake(events);
+  const key = keys.find((each) => each.midi === midi && each.downAtMs === downAtMs);
+  if (key === undefined || keys.length < 2) {
+    return null;
+  }
+  return events.filter((_, at) => at !== key.on && at !== key.off);
 }
 
 /**

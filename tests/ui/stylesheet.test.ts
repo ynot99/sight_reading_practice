@@ -1018,6 +1018,9 @@ describe('the stylesheet', () => {
     // written down.
     const take = rules().find((rule) => rule.selector === ".takes__list button[data-idle='true']");
     expect(take?.body).toMatch(/opacity\s*:\s*0?\.\d+/);
+    // And the buttons that change a recording, over its drawing.
+    const head = rules().find((rule) => rule.selector === ".sheet__head .button[data-idle='true']");
+    expect(head?.body).toMatch(/opacity\s*:\s*0?\.\d+/);
   });
 
   it('hides only what a repeat says it was called', () => {
@@ -2119,6 +2122,23 @@ describe('searching the settings', () => {
     expect(narrow?.body).toMatch(/order\s*:\s*1/);
     expect(narrow?.body).toMatch(/flex\s*:\s*1 0 100%/);
     expect(narrow?.body).toMatch(/flex-wrap\s*:\s*wrap/);
+    expect(narrow?.at ?? 0).toBeGreaterThan(wide?.at ?? Infinity);
+  });
+
+  it("puts a drawing's buttons in a row of their own under the title on a phone", () => {
+    // Six beside the title left it a few letters wide and pushed the close
+    // button onto a line of its own; the close button stays by the title.
+    const phone = '@media (max-width: 620px)';
+    const tools = rules().filter((rule) => rule.selector === '.sheet__tools');
+    const narrow = tools.find((rule) => inWhichMedia(rule.at) === phone);
+    const wide = tools.find((rule) => inWhichMedia(rule.at) === '');
+
+    expect(HTML).toMatch(
+      /<div class="sheet__tools">[\s\S]*id="roll-play"[\s\S]*id="roll-delete"[\s\S]*id="roll-undo"[\s\S]*id="roll-options"[\s\S]*<\/div>\s*<button id="roll-close"/,
+    );
+    expect(wide?.body).toMatch(/display\s*:\s*flex/);
+    expect(narrow?.body).toMatch(/order\s*:\s*1/);
+    expect(narrow?.body).toMatch(/flex\s*:\s*1 0 100%/);
     expect(narrow?.at ?? 0).toBeGreaterThan(wide?.at ?? Infinity);
   });
 });

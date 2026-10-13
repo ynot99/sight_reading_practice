@@ -4090,6 +4090,101 @@ describe('AppView', () => {
     });
 
 
+    it('takes a note out of a recording where it is drawn, and puts it back', async () => {
+      const { view, runtime, midi, clock, takes } = createRig();
+      await view.initialize();
+      // Not on a run: what was read is not changed.
+      element<HTMLButtonElement>('focus-play').click();
+      midi.noteOn(runtime.controller.session?.currentStep?.expectedMidi[0] ?? 60, clock.now());
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      const remove = element<HTMLButtonElement>('roll-delete');
+      const undo = element<HTMLButtonElement>('roll-undo');
+      expect(remove.dataset['idle']).toBe('true');
+      expect(remove.title).toBe('Delete a note. Only a recording is changed: this is a reading as it was played.');
+      expect(undo.hidden).toBe(true);
+      element<HTMLButtonElement>('roll-close').click();
+
+      // Three notes half a second apart, played freely and kept.
+      clock.advance(10_000);
+      for (const pitch of [60, 64, 67]) {
+        midi.noteOn(pitch, clock.now());
+        clock.advance(300);
+        midi.noteOff(pitch, clock.now());
+        clock.advance(200);
+      }
+      element<HTMLButtonElement>('focus-keep').click();
+      const kept = takes.list()[0];
+      expect(kept?.noteCount).toBe(3);
+      rowButton('takes-list', 'Look at this take').click();
+      expect(remove.dataset['idle']).toBe('true');
+      expect(remove.title).toBe('Delete a note. Tap one to choose it.');
+      expect(remove.getAttribute('aria-label')).toBe(remove.title);
+      expect(undo.hidden).toBe(false);
+      expect(undo.dataset['idle']).toBe('true');
+
+      // A finger on a note, a little into it, on its row; the grid stands at
+      // the drawing's corner, and a row is thirteen pixels until it is drawn.
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const tapOn = (fromMs: number): void => {
+        const note = view.rollScene?.notes.find((each) => each.fromMs === fromMs);
+        element('roll-body').dispatchEvent(
+          new MouseEvent('click', {
+            bubbles: true,
+            clientX: ((fromMs + 100) / 1000) * zoom,
+            clientY: ((note?.row ?? 0) + 0.5) * 13,
+          }),
+        );
+      };
+      const chosen = (): number[] =>
+        (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+      tapOn(500);
+      expect(chosen()).toEqual([500]);
+      // And the head goes where it went down.
+      expect(headAt(element('roll-body'))).toBe('0.500');
+      expect(remove.dataset['idle']).toBeUndefined();
+      expect(remove.title).toBe('Delete the chosen note, E4');
+
+      // A playback going is of the recording before the change, so it is held.
+      element<HTMLButtonElement>('roll-play').click();
+      expect(runtime.takePlayer.playing).not.toBeNull();
+      remove.click();
+      expect(runtime.takePlayer.playing).toBeNull();
+      expect(takes.find(kept?.id ?? '')?.noteCount).toBe(2);
+      expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([0, 1_000]);
+      expect(chosen()).toEqual([]);
+      // Nothing is chosen once it has gone.
+      expect(remove.dataset['idle']).toBe('true');
+      expect(remove.title).toBe('Delete a note. Tap one to choose it.');
+      expect(element('takes-list').textContent).toContain('2 notes');
+      expect(undo.dataset['idle']).toBeUndefined();
+      expect(undo.title).toBe('Put back the last note deleted');
+
+      // The last one out, then the one before it, comes back.
+      tapOn(0);
+      remove.click();
+      // Drawn from its first note now, as every recording played freely is.
+      expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([0]);
+      tapOn(0);
+      expect(remove.dataset['idle']).toBe('true');
+      expect(remove.title).toBe('Delete a note. It is the only one in this recording.');
+      remove.click();
+      expect(takes.find(kept?.id ?? '')?.noteCount).toBe(1);
+      undo.click();
+      expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([0, 1_000]);
+      undo.click();
+      expect(takes.find(kept?.id ?? '')?.events).toEqual(kept?.events);
+      expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([0, 500, 1_000]);
+      expect(undo.dataset['idle']).toBe('true');
+      undo.click();
+      expect(takes.find(kept?.id ?? '')?.noteCount).toBe(3);
+
+      // A tap beside every note chooses nothing, and only moves the head.
+      tapOn(500);
+      element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: (1.8 * zoom), clientY: 2 }));
+      expect(chosen()).toEqual([]);
+    });
+
     it('counts the bar out over the drawing, and can be put away', async () => {
       // A row of squares saying where written time has got to, over a picture
       // of where the reader actually got to. His: "квадратики які

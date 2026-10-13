@@ -43,6 +43,8 @@ export interface RollInks {
   readonly correct: string;
   readonly wrong: string;
   readonly aside: string;
+  /** The rim of a note chosen to be changed: no verdict, so the accent. */
+  readonly chosen: string;
   readonly tickDivision: string;
   readonly tickBeat: string;
   readonly tickDownbeat: string;
@@ -68,6 +70,7 @@ export const INKS: Readonly<Record<Exclude<keyof RollInks, 'font'>, string>> = {
   correct: 'correct',
   wrong: 'wrong',
   aside: 'aside',
+  chosen: 'chosen',
   tickDivision: 'tick-division',
   tickBeat: 'tick-beat',
   tickDownbeat: 'tick-downbeat',
@@ -243,6 +246,8 @@ const DASHES = [3, 3];
 
 /** How round the corners of a note, a band and a capsule are. */
 const CORNER_PX = 2;
+/** How heavy the rim of a chosen note is: enough to find it among its neighbours. */
+const CHOSEN_RIM_PX = 2;
 
 function inkOfLine(inks: RollInks, kind: LineKind): string {
   switch (kind) {
@@ -365,6 +370,24 @@ export function paintTheGrid(
     paint.fillStyle = inkOfNote(inks, note.shade);
     box(paint, left, y(note.row), wide(note.fromMs, note.untilMs), rowPx, corners);
     paint.fill();
+  }
+  // Rimmed after every note is down, so a neighbour drawn later cannot cover it.
+  paint.strokeStyle = inks.chosen;
+  paint.lineWidth = CHOSEN_RIM_PX;
+  for (const note of stretchesIn(scene.notes, fromMs - ms(NARROWEST_PX), untilMs)) {
+    if (note.chosen !== true || !shows(note.row)) {
+      continue;
+    }
+    const inset = CHOSEN_RIM_PX / 2;
+    box(
+      paint,
+      x(note.fromMs) + inset,
+      y(note.row) + inset,
+      wide(note.fromMs, note.untilMs) - CHOSEN_RIM_PX,
+      rowPx - CHOSEN_RIM_PX,
+      CORNER_PX,
+    );
+    paint.stroke();
   }
 
   // A capsule the press sits inside: filled, so it is a container rather than

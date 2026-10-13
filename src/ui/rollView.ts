@@ -66,6 +66,8 @@ export interface RollDrawing {
    * сих пір малюєш жовті ноти замість жовтих секцій".
    */
   readonly keepsTime?: boolean;
+  /** The key chosen on the drawing to be changed, by its pitch and when it went down. */
+  readonly chosen?: { readonly midi: number; readonly downAtMs: number } | null;
 }
 
 /** One note the music asked for, in the music's own time. */
@@ -240,6 +242,8 @@ export interface SceneNote extends SceneRowed {
   readonly shade: NoteShade;
   /** Still down when the run ended, so it runs to the edge rather than stopping. */
   readonly open: boolean;
+  /** Chosen on the drawing to be changed. */
+  readonly chosen?: boolean;
 }
 
 /** The gap between where a note was owed and where it was taken: see `slipBetween`. */
@@ -368,7 +372,13 @@ function waitOf(wait: RolledWait, origin: number): SceneStretch {
   };
 }
 
-function noteOf(press: RolledPress, origin: number, high: number, endMs: number): SceneNote {
+function noteOf(
+  press: RolledPress,
+  origin: number,
+  high: number,
+  endMs: number,
+  chosen: RollDrawing['chosen'],
+): SceneNote {
   const until = press.upAtMs ?? endMs;
   // What it was, for a finger on a cell. The deviation is the reason the view
   // exists, so it is said in milliseconds and signed: behind the beat is
@@ -382,6 +392,7 @@ function noteOf(press: RolledPress, origin: number, high: number, endMs: number)
     shade: shadeOf(press),
     open: press.upAtMs === null,
     says: `${midiToLabel(press.midi)} · ${press.verdict ?? 'not judged'}${off}`,
+    ...(chosen?.midi === press.midi && chosen.downAtMs === press.downAtMs ? { chosen: true } : {}),
   };
 }
 
@@ -1026,7 +1037,7 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     lines: momentsInTimeOrder(theGrid(roll, drawing.grid).map((beat) => lineOf(beat, origin))),
     rushes: momentsInTimeOrder(theRushes(roll).map((rush) => rushOf(rush, origin))),
     slips: inTimeOrder(slips),
-    notes: inTimeOrder(roll.presses.map((press) => noteOf(press, origin, band.high, endMs))),
+    notes: inTimeOrder(roll.presses.map((press) => noteOf(press, origin, band.high, endMs, drawing.chosen))),
     ghosts: inTimeOrder(
       outlines.map(({ ghost, from, until }) => ({
         fromMs: from,
@@ -1156,6 +1167,43 @@ export const NARROWEST_PX = 2;
  * note is asking is what that note was *and* how far off the beat it came, and
  * the outline can answer only the first.
  */
+/** The last of some marks on a row under a point, each as wide as it is drawn. */
+function onTheRow<T extends SceneRowed>(
+  marks: readonly T[],
+  atMs: number,
+  row: number,
+  pxPerSecond: number,
+): T | undefined {
+  const narrowestMs = (NARROWEST_PX / pxPerSecond) * 1000;
+  return stretchesIn(marks, atMs - narrowestMs, atMs)
+    .filter((mark) => mark.row === row && Math.max(mark.untilMs, mark.fromMs + narrowestMs) >= atMs)
+    .at(-1);
+}
+
+/**
+ * The key a finger is on, as the roll has it: the note drawn under the point,
+ * found as a pointer resting there finds it, so what is chosen is what was
+ * said to be there.
+ */
+export function theKeyAt(
+  roll: RunRoll,
+  scene: RollScene,
+  atMs: number,
+  row: number,
+  pxPerSecond: number,
+): RolledPress | null {
+  const note = onTheRow(scene.notes, atMs, row, pxPerSecond);
+  if (note === undefined) {
+    return null;
+  }
+  const origin = rollBeganAtMs(roll);
+  return (
+    roll.presses.find(
+      (press) => press.downAtMs - origin === note.fromMs && scene.highest - press.midi === note.row,
+    ) ?? null
+  );
+}
+
 export function whatTheGridSaysAt(
   scene: RollScene,
   atMs: number,
@@ -1163,14 +1211,8 @@ export function whatTheGridSaysAt(
   pxPerSecond: number,
 ): string | null {
   const slackMs = (POINTER_REACH_PX / pxPerSecond) * 1000;
-  const narrowestMs = (NARROWEST_PX / pxPerSecond) * 1000;
   const onRow = <T extends SceneRowed>(marks: readonly T[]): T | undefined =>
-    stretchesIn(marks, atMs - narrowestMs, atMs)
-      .filter(
-        (mark) =>
-          mark.row === row && Math.max(mark.untilMs, mark.fromMs + narrowestMs) >= atMs,
-      )
-      .at(-1);
+    onTheRow(marks, atMs, row, pxPerSecond);
   const near = <T extends SceneMoment>(marks: readonly T[]): T | undefined =>
     momentsIn(marks, atMs - slackMs, atMs + slackMs)
       .filter((mark) => mark.says !== null)

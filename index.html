@@ -437,6 +437,7 @@
           aria-modal="true" aria-label="What you played">
           <div class="sheet__head">
             <strong id="roll-title" class="sheet__title">What you played</strong>
+            <div class="sheet__tools">
             <button id="roll-play" type="button" class="button" title="Play" aria-label="Play">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
                 class="take-transport__icon">
@@ -458,6 +459,24 @@
             -->
             <button id="roll-keep" type="button" class="button"
               title="Keep this run with the recordings">Keep</button>
+            <!--
+              A recording changed where it is looked at: a tap on a note
+              chooses it, and this takes it out. What was taken out can be put
+              back, last first, while the recording stays open.
+            -->
+            <button id="roll-delete" type="button" class="button" title="Delete a note"
+              aria-label="Delete a note">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                class="take-transport__icon">
+                <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+              </svg>
+            </button>
+            <button id="roll-undo" type="button" class="button" title="Undo" aria-label="Undo" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                class="take-transport__icon">
+                <path d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.6-3.6c1.4-1.2 3.2-1.9 5.1-1.9 3.5 0 6.6 2.3 7.6 5.5l2.4-.8C21.1 11 17.2 8 12.5 8z" />
+              </svg>
+            </button>
             <button id="roll-options" type="button" class="button button--ghost roll__gear"
               title="Options" aria-label="Options">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
@@ -469,6 +488,7 @@
                   2-3.4z" />
               </svg>
             </button>
+            </div>
             <button id="roll-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">&times;</button>
           </div>

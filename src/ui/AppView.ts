@@ -45,7 +45,7 @@ import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
-import { barsAreHeardIn, writeMidiFile } from '../domain/midi/MidiFile.js';
+import { barsAreHeardIn, writeMidiFile, type MidiFileEvent } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { FREE_CLICK_STEP_BPM, LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
@@ -151,6 +151,7 @@ import {
   rollOfTheScore,
   barsCountedOnItsBeats,
   rollOfTheTake,
+  takeWithoutTheKey,
   takeOfTheRun,
   type RunRoll,
   theBeatNearest,
@@ -178,6 +179,7 @@ import {
   thePitchesOfTheRun,
   theSceneOfTheRoll,
   whatThePedalSaysAt,
+  theKeyAt,
   whatTheGridSaysAt,
   whatTheRulerSaysAt,
   type RollCanvases,
@@ -1666,6 +1668,15 @@ export class AppView {
     readonly ofTheOpenScore: boolean;
     /** What its bars are called, where the open score's numbers are not theirs. */
     readonly barLabel?: (positionTicks: number) => string | null;
+    /**
+     * The recording it is, where it is one: which, the key chosen on it to be
+     * changed, and what it was before each change, the last change last.
+     */
+    readonly take?: {
+      readonly id: string;
+      readonly chosen: { readonly midi: number; readonly downAtMs: number } | null;
+      readonly before: readonly (readonly MidiFileEvent[])[];
+    };
   } | null = null;
 
   /** The reading the sheet over the list is showing, so its buttons know theirs. */
@@ -1845,6 +1856,8 @@ export class AppView {
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
     rollKeep: HTMLButtonElement;
+    rollDelete: HTMLButtonElement;
+    rollUndo: HTMLButtonElement;
     rollTitle: HTMLElement;
     rollBeats: HTMLElement;
     rollBeatsShown: HTMLInputElement;
@@ -2180,6 +2193,8 @@ export class AppView {
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
       rollKeep: requireElement(doc, 'roll-keep'),
+      rollDelete: requireElement(doc, 'roll-delete'),
+      rollUndo: requireElement(doc, 'roll-undo'),
       rollTitle: requireElement(doc, 'roll-title'),
       rollBeats: requireElement(doc, 'roll-beats'),
       rollBeatsShown: requireElement(doc, 'roll-beats-shown'),
@@ -8344,7 +8359,16 @@ export class AppView {
       if (this.pinched || this.panned) {
         return;
       }
+      if (this.chooseTheKeyTapped(event)) {
+        return;
+      }
       this.putTheHeadWhereItWasTapped(event);
+    });
+    this.listen(this.el.rollDelete, 'click', () => {
+      this.deleteTheChosenKey();
+    });
+    this.listen(this.el.rollUndo, 'click', () => {
+      this.putBackTheLastKeyDeleted();
     });
     this.listen(this.el.rollBody, 'pointerdown', (event) => {
       this.pinched = false;
@@ -11142,6 +11166,7 @@ export class AppView {
       ofTheOpenScore: false,
       // Played to the click, its bars are its own, counted from its first.
       barLabel: barsCountedOnItsBeats(roll),
+      take: { id, chosen: null, before: [] },
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -11193,6 +11218,7 @@ export class AppView {
   private sayWhatThePictureIsOf(): void {
     const other = this.theOtherRollShowing;
     this.el.rollKeep.hidden = other !== null;
+    this.sayWhatCanBeChanged();
     const isScore = other?.isScore ?? false;
     this.el.rollFrom.disabled = other !== null && !isScore;
     this.el.rollTo.disabled = other !== null && !isScore;
@@ -11205,6 +11231,131 @@ export class AppView {
         this.el.rollPassageWhat.textContent = other.why;
       }
     }
+  }
+
+  /**
+   * The two buttons that change a recording, as the drawing stands: deleting
+   * needs a recording and a key chosen on it that is not its only one, and
+   * putting back needs something deleted. Each says what it is waiting for
+   * rather than going grey without a word.
+   */
+  private sayWhatCanBeChanged(): void {
+    const take = this.theOtherRollShowing?.take;
+    const chosen = take?.chosen ?? null;
+    const notes = take === undefined ? 0 : (this.runtime.takes.find(take.id)?.noteCount ?? 0);
+    let waiting: string | null = null;
+    if (take === undefined) {
+      waiting = 'Delete a note. Only a recording is changed: this is a reading as it was played.';
+    } else if (chosen === null) {
+      waiting = 'Delete a note. Tap one to choose it.';
+    } else if (notes < 2) {
+      waiting = 'Delete a note. It is the only one in this recording.';
+    }
+    if (waiting === null) {
+      delete this.el.rollDelete.dataset['idle'];
+      this.el.rollDelete.title = `Delete the chosen note, ${midiToLabel(chosen?.midi ?? 0)}`;
+    } else {
+      this.el.rollDelete.dataset['idle'] = 'true';
+      this.el.rollDelete.title = waiting;
+    }
+    this.el.rollDelete.setAttribute('aria-label', this.el.rollDelete.title);
+
+    this.el.rollUndo.hidden = take === undefined;
+    if ((take?.before.length ?? 0) > 0) {
+      delete this.el.rollUndo.dataset['idle'];
+      this.el.rollUndo.title = 'Put back the last note deleted';
+    } else {
+      this.el.rollUndo.dataset['idle'] = 'true';
+      this.el.rollUndo.title = 'Undo. Nothing has been deleted to put back.';
+    }
+    this.el.rollUndo.setAttribute('aria-label', this.el.rollUndo.title);
+  }
+
+  /**
+   * Chooses the key of a recording a tap landed on, and puts the head where it
+   * went down. Says whether there was one: a tap beside every note chooses
+   * nothing and puts the head where it always has.
+   */
+  private chooseTheKeyTapped(event: MouseEvent): boolean {
+    const showing = this.theOtherRollShowing;
+    const take = showing?.take;
+    const grid = this.el.rollBody.firstElementChild?.querySelector<HTMLElement>('.roll__grid') ?? null;
+    const scene = this.drawnScene;
+    if (showing === null || take === undefined || grid === null || scene === null) {
+      return false;
+    }
+    const pxPerSecond = Number(this.el.rollZoom.value);
+    // The grid stands still over the run, which is where the view says.
+    const box = grid.getBoundingClientRect();
+    const atMs = timeFromTap(event.clientX - box.left + this.rollScroller.x, pxPerSecond);
+    const row = rowFromTap(event.clientY - box.top + this.rollScroller.y, this.rollLook.rowPx);
+    const key = atMs === null || row === null ? null : theKeyAt(showing.roll, scene, atMs, row, pxPerSecond);
+    this.theOtherRollShowing = {
+      ...showing,
+      take: { ...take, chosen: key === null ? null : { midi: key.midi, downAtMs: key.downAtMs } },
+    };
+    this.drawTheRollInto();
+    this.sayWhatCanBeChanged();
+    if (key === null) {
+      return false;
+    }
+    this.putTheHeadAt(key.downAtMs - rollBeganAtMs(showing.roll));
+    return true;
+  }
+
+  /** Takes the chosen key out of the recording, keeping what it was to be put back. */
+  private deleteTheChosenKey(): void {
+    const take = this.theOtherRollShowing?.take;
+    const chosen = take?.chosen ?? null;
+    const stored = take === undefined ? null : this.runtime.takes.find(take.id);
+    if (take === undefined || chosen === null || stored === null) {
+      return;
+    }
+    const events = takeWithoutTheKey(stored.events, chosen.midi, chosen.downAtMs);
+    if (events !== null) {
+      this.changeTheTakeShowing(events, [...take.before, stored.events]);
+    }
+  }
+
+  /** Puts the recording back as it was before its last change. */
+  private putBackTheLastKeyDeleted(): void {
+    const before = this.theOtherRollShowing?.take?.before ?? [];
+    const last = before.at(-1);
+    if (last !== undefined) {
+      this.changeTheTakeShowing(last, before.slice(0, -1));
+    }
+  }
+
+  /**
+   * Changes the recording on the drawing, and everything drawn from it: the
+   * recording kept, its drawing and its row in the list. A playback going is
+   * held where it stands, since it was sounding the recording before the
+   * change.
+   */
+  private changeTheTakeShowing(
+    events: readonly MidiFileEvent[],
+    before: readonly (readonly MidiFileEvent[])[],
+  ): void {
+    const showing = this.theOtherRollShowing;
+    const take = showing?.take;
+    if (showing === null || take === undefined) {
+      return;
+    }
+    const changed = this.runtime.takes.changeTheNotes(take.id, events);
+    if (changed === null) {
+      return;
+    }
+    this.holdTheRoll();
+    const roll = rollOfTheTake(changed);
+    this.theOtherRollShowing = {
+      ...showing,
+      roll,
+      barLabel: barsCountedOnItsBeats(roll),
+      take: { id: take.id, chosen: null, before },
+    };
+    this.drawTheRollInto();
+    this.sayWhatCanBeChanged();
+    this.renderTakes();
   }
 
   /** Says which bars the buttons have settled on, and whether there is one. */
@@ -11238,6 +11389,7 @@ export class AppView {
       ghosts,
       slips: this.el.rollSlips.checked,
       keepsTime: this.theRunKeptTime(),
+      chosen: this.theOtherRollShowing?.take?.chosen ?? null,
     });
     this.drawnScene = scene;
     this.el.rollBody.replaceChildren(drawTheRoll(scene));
@@ -11605,6 +11757,15 @@ export class AppView {
     const at = this.el.rollSnap.checked
       ? theBeatNearest(roll, tapped, this.theRollsGrid())
       : tapped;
+    this.putTheHeadAt(at);
+  }
+
+  /** Puts the head at a moment of the run, sounding on from there if it was. */
+  private putTheHeadAt(at: number): void {
+    const roll = this.theRoll();
+    if (roll === null) {
+      return;
+    }
     this.rollAtMs = at;
     this.takeBackTheRollsClicks();
     this.rollClicksSent = clicksBefore(roll, at, this.theRollsGrid());

@@ -18,6 +18,8 @@ import {
   rollOfTheTake,
   barsCountedOnItsBeats,
   takeOfTheRun,
+  takeWithoutTheKey,
+  theKeysOfTheTake,
   type RolledBeat,
   type RolledPress,
   type RunRoll,
@@ -1163,3 +1165,36 @@ describe('the roll of a score', () => {
   });
 });
 
+
+describe('changing a recording', () => {
+  const on = (atMs: number, midi: number): MidiFileEvent => ({ kind: 'noteOn', atMs, midi, velocity: 0.7 });
+  const off = (atMs: number, midi: number): MidiFileEvent => ({ kind: 'noteOff', atMs, midi });
+
+  it('pairs each key with the release of the oldest press of its pitch still down', () => {
+    const events = [on(0, MIDI.C4), on(100, MIDI.C4), on(120, MIDI.E4), off(150, MIDI.C4), off(300, MIDI.C4)];
+
+    expect(theKeysOfTheTake(events).map(({ midi, downAtMs, upAtMs, on: down, off: up }) => [midi, downAtMs, upAtMs, down, up])).toEqual([
+      [MIDI.C4, 0, 150, 0, 3],
+      [MIDI.C4, 100, 300, 1, 4],
+      [MIDI.E4, 120, null, 2, null],
+    ]);
+  });
+
+  it('takes a key out, its press and its release, and leaves every other alone', () => {
+    const pedal: MidiFileEvent = { kind: 'sustain', atMs: 50, value: 1 };
+    const events = [on(0, MIDI.C4), pedal, on(100, MIDI.C4), off(150, MIDI.C4), on(200, MIDI.E4), off(300, MIDI.C4)];
+
+    // The second C, which is let go of last: the pairing the drawing has.
+    expect(takeWithoutTheKey(events, MIDI.C4, 100)).toEqual([on(0, MIDI.C4), pedal, off(150, MIDI.C4), on(200, MIDI.E4)]);
+    // A key still down at the end has no release to take.
+    expect(takeWithoutTheKey(events, MIDI.E4, 200)).toEqual([on(0, MIDI.C4), pedal, on(100, MIDI.C4), off(150, MIDI.C4), off(300, MIDI.C4)]);
+  });
+
+  it('takes out nothing that is not there, and never the only key', () => {
+    const events = [on(0, MIDI.C4), off(150, MIDI.C4), on(200, MIDI.E4), off(300, MIDI.E4)];
+
+    expect(takeWithoutTheKey(events, MIDI.C4, 1)).toBeNull();
+    expect(takeWithoutTheKey(events, MIDI.D4, 0)).toBeNull();
+    expect(takeWithoutTheKey([on(0, MIDI.C4), off(150, MIDI.C4)], MIDI.C4, 0)).toBeNull();
+  });
+});

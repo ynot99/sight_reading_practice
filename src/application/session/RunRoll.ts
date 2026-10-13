@@ -876,7 +876,7 @@ export function takeOfTheRun(roll: RunRoll): Take | null {
  * A note still sounding at the end is left open, the same answer the roll gives
  * for a key still down when a run stops.
  */
-export function rollOfTheTake(take: Pick<Take, 'events' | 'beats'>): RunRoll {
+export function rollOfTheTake(take: Pick<Take, 'events' | 'beats'>, beatsAfter = 0): RunRoll {
   const presses: RolledPress[] = theKeysOfTheTake(take.events).map((key) => ({
     midi: key.midi,
     downAtMs: key.downAtMs,
@@ -907,7 +907,7 @@ export function rollOfTheTake(take: Pick<Take, 'events' | 'beats'>): RunRoll {
   }
   // Each beat as long as its value, as the file has them.
   let positionTicks = 0;
-  const beats: RolledBeat[] = (theClickOfTheTake(take.events, take.beats) ?? []).map((beat) => {
+  const beats: RolledBeat[] = (theClickOfTheTake(take.events, take.beats, beatsAfter) ?? []).map((beat) => {
     const placed: RolledBeat = { atMs: beat.atMs, weight: beat.beat === 0 ? 'downbeat' : 'beat', positionTicks };
     positionTicks += (Duration.QUARTER.ticks * 4) / (beat.beatType ?? 4);
     return placed;
@@ -962,21 +962,27 @@ export function theKeysOfTheTake(events: readonly MidiFileEvent[]): readonly Key
 
 /**
  * A take's events with one key taken out, its press and its release, named by
- * its pitch and the moment it went down; or `null` where there is no such key,
- * or it is the take's only one - a take of no notes is the nothing the list
- * refuses to file.
+ * its pitch and the moment it went down; or `null` where there is no such key.
  */
 export function takeWithoutTheKey(
   events: readonly MidiFileEvent[],
   midi: number,
   downAtMs: number,
 ): readonly MidiFileEvent[] | null {
-  const keys = theKeysOfTheTake(events);
-  const key = keys.find((each) => each.midi === midi && each.downAtMs === downAtMs);
-  if (key === undefined || keys.length < 2) {
-    return null;
-  }
-  return events.filter((_, at) => at !== key.on && at !== key.off);
+  const key = theKeysOfTheTake(events).find((each) => each.midi === midi && each.downAtMs === downAtMs);
+  return key === undefined ? null : events.filter((_, at) => at !== key.on && at !== key.off);
+}
+
+/** A take's events with a key added, struck and let go of, in its place in time. */
+export function takeWithAKeyAdded(
+  events: readonly MidiFileEvent[],
+  key: { readonly midi: number; readonly downAtMs: number; readonly upAtMs: number; readonly velocity: number },
+): readonly MidiFileEvent[] {
+  return inTheOrderPlayed([
+    ...events,
+    { kind: 'noteOn', atMs: key.downAtMs, midi: key.midi, velocity: key.velocity },
+    { kind: 'noteOff', atMs: key.upAtMs, midi: key.midi },
+  ]);
 }
 
 /**

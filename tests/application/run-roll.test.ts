@@ -19,6 +19,7 @@ import {
   barsCountedOnItsBeats,
   takeOfTheRun,
   takeWithoutTheKey,
+  takeWithAKeyAdded,
   takeWithTheKeyMoved,
   theKeysOfTheTake,
   type RolledBeat,
@@ -1224,11 +1225,35 @@ describe('changing a recording', () => {
     expect(takeWithTheKeyMoved(events, { midi: MIDI.C4, downAtMs: 1 }, { midi: MIDI.C4, downAtMs: 9 })).toBeNull();
   });
 
-  it('takes out nothing that is not there, and never the only key', () => {
+  it('takes out nothing that is not there, and the only key as well as any', () => {
     const events = [on(0, MIDI.C4), off(150, MIDI.C4), on(200, MIDI.E4), off(300, MIDI.E4)];
 
     expect(takeWithoutTheKey(events, MIDI.C4, 1)).toBeNull();
     expect(takeWithoutTheKey(events, MIDI.D4, 0)).toBeNull();
-    expect(takeWithoutTheKey([on(0, MIDI.C4), off(150, MIDI.C4)], MIDI.C4, 0)).toBeNull();
+    // A sketch may be emptied, to be written again.
+    expect(takeWithoutTheKey([on(0, MIDI.C4), off(150, MIDI.C4)], MIDI.C4, 0)).toEqual([]);
+  });
+
+  it('adds a key, struck and let go of, in its place in time', () => {
+    const events = [on(0, MIDI.C4), off(500, MIDI.C4), on(500, MIDI.E4), off(1_000, MIDI.E4)];
+
+    expect(takeWithAKeyAdded(events, { midi: MIDI.D4, downAtMs: 250, upAtMs: 500, velocity: 0.5 })).toEqual([
+      on(0, MIDI.C4),
+      { kind: 'noteOn', atMs: 250, midi: MIDI.D4, velocity: 0.5 },
+      off(500, MIDI.C4),
+      off(500, MIDI.D4),
+      on(500, MIDI.E4),
+      off(1_000, MIDI.E4),
+    ]);
+  });
+
+  it('draws room past the end of a sketch where it is asked for, an empty one included', () => {
+    const beats = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+    const played = rollOfTheTake({ events: [on(0, MIDI.C4), off(900, MIDI.C4)], beats }, 3);
+    const empty = rollOfTheTake({ events: [], beats }, 8);
+
+    expect(played.beats.map((beat) => beat.atMs)).toEqual([0, 500, 1_000, 1_500, 2_000, 2_500]);
+    expect(empty.beats.map((beat) => beat.atMs)).toEqual([0, 500, 1_000, 1_500, 2_000, 2_500, 3_000, 3_500, 4_000, 4_500]);
+    expect(rollOfTheTake({ events: [on(0, MIDI.C4), off(900, MIDI.C4)], beats }).beats).toHaveLength(3);
   });
 });

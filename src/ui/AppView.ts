@@ -95,6 +95,8 @@ import { barItBeganIn, pieceOfKey, type PassageHistory, type PracticeReading } f
 import {
   drawTheKeyboard,
   keepInView,
+  HIGHEST_KEY,
+  LOWEST_KEY,
   lightTheKeys,
   MIDDLE_C,
   scrollToShow,
@@ -152,6 +154,7 @@ import {
   rollOfTheScore,
   barsCountedOnItsBeats,
   rollOfTheTake,
+  takeWithAKeyAdded,
   takeWithoutTheKey,
   takeWithTheKeyMoved,
   type RolledPress,
@@ -406,6 +409,37 @@ import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStar
 
 /** How far a wheel's line is, for a wheel that counts in lines. */
 const LINE_PX = 16;
+/**
+ * Beats of empty grid drawn past the end of a sketch: room for the next notes,
+ * two bars of common time, and all of an empty sketch.
+ */
+const ROOM_IN_A_SKETCH = 8;
+
+/**
+ * How long a beat lasts where a moment falls, on a roll's beats: a note
+ * written there is that long. Half a second where the roll has no beats.
+ */
+function theBeatAt(roll: RunRoll, atMs: number): number {
+  const beats = roll.beats;
+  let at = 0;
+  while (at + 1 < beats.length && (beats[at + 1]?.atMs ?? 0) <= atMs) {
+    at += 1;
+  }
+  const here = beats[at]?.atMs;
+  const next = beats[at + 1]?.atMs ?? null;
+  const before = beats[at - 1]?.atMs ?? null;
+  if (here !== undefined && next !== null) {
+    return next - here;
+  }
+  return here !== undefined && before !== null ? here - before : 500;
+}
+
+/** How loud a note is written: as the sketch's notes are on the whole, and moderately where it has none. */
+function theUsualLoudness(events: readonly MidiFileEvent[]): number {
+  const loudness = events.flatMap((event) => (event.kind === 'noteOn' ? [event.velocity] : [])).sort((a, b) => a - b);
+  return loudness[Math.floor(loudness.length / 2)] ?? 0.7;
+}
+
 /** How far a finger may wander and still be tapping, in pixels. */
 const TAP_SLOP_PX = 6;
 
@@ -1867,6 +1901,7 @@ export class AppView {
     scoresShowSketches: HTMLButtonElement;
     sketchesList: HTMLElement;
     sketchesEmpty: HTMLElement;
+    sketchesNew: HTMLButtonElement;
     scoresRung: HTMLElement;
     scoresExercise: HTMLButtonElement;
     sheetExercise: HTMLElement;
@@ -2210,6 +2245,7 @@ export class AppView {
       scoresShowSketches: requireElement(doc, 'scores-show-sketches'),
       sketchesList: requireElement(doc, 'sketches-list'),
       sketchesEmpty: requireElement(doc, 'sketches-empty'),
+      sketchesNew: requireElement(doc, 'sketches-new'),
       scoresRung: requireElement(doc, 'scores-rung'),
       scoresExercise: requireElement(doc, 'scores-exercise'),
       sheetExercise: requireElement(doc, 'sheet-exercise'),
@@ -8430,6 +8466,12 @@ export class AppView {
     this.listen(this.el.scoresShowSketches, 'click', () => {
       this.showTheList('sketches');
     });
+    this.listen(this.el.sketchesNew, 'click', () => {
+      const now = Date.now();
+      const sketch = this.runtime.sketches.begin({ events: [], beats: [] }, `Sketch, ${whenItWas(now)}`, now);
+      this.renderSketches();
+      this.showTheSketch(sketch.id);
+    });
     this.listen(this.el.rollDelete, 'click', () => {
       this.deleteTheChosenKey();
     });
@@ -9217,6 +9259,7 @@ export class AppView {
       part.hidden = sketches;
     }
     this.el.sketchesList.hidden = !sketches;
+    this.el.sketchesNew.hidden = !sketches;
     if (sketches) {
       this.el.scoresEmpty.hidden = true;
       this.el.scoresAdded.hidden = true;
@@ -11443,12 +11486,9 @@ export class AppView {
     }
 
     const chosen = sketch?.chosen ?? null;
-    const notes = sketch === undefined ? 0 : (this.runtime.sketches.find(sketch.id)?.noteCount ?? 0);
     let waiting: string | null = null;
     if (chosen === null) {
       waiting = 'Delete a note. Tap one to choose it.';
-    } else if (notes < 2) {
-      waiting = 'Delete a note. It is the only one in this sketch.';
     }
     if (waiting === null) {
       delete this.el.rollDelete.dataset['idle'];
@@ -11513,7 +11553,7 @@ export class AppView {
     this.stopTheRoll();
     this.el.sheetTakes.hidden = true;
     this.el.sheetScores.hidden = true;
-    const roll = rollOfTheTake(sketch);
+    const roll = rollOfTheTake(sketch, ROOM_IN_A_SKETCH);
     this.theOtherRollShowing = {
       roll,
       what: sketch.title,
@@ -11570,28 +11610,75 @@ export class AppView {
       return;
     }
     const key = this.theKeyUnder(event);
+    if (key === null) {
+      this.addAKeyWhereTapped(event);
+      return;
+    }
+    // The chosen one tapped again is let go of: a tap on nothing writes a note.
+    const chosen = sketch.chosen;
+    const again = chosen !== null && chosen.midi === key.midi && chosen.downAtMs === key.downAtMs;
     this.theOtherRollShowing = {
       ...showing,
-      sketch: { ...sketch, chosen: key === null ? null : { midi: key.midi, downAtMs: key.downAtMs } },
+      sketch: { ...sketch, chosen: again ? null : { midi: key.midi, downAtMs: key.downAtMs } },
     };
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();
   }
 
+  /**
+   * Writes a note into the sketch where a tap found none: on the key of the
+   * row, on the nearest line of the grid where the marker is put on one,
+   * a beat long, as loud as the notes around it are on the whole. It is
+   * chosen, to be moved where it was not quite meant.
+   */
+  private addAKeyWhereTapped(event: MouseEvent): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const at = this.thePointOnTheDrawing(event);
+    const scene = this.drawnScene;
+    if (showing === null || sketch === undefined || stored === null || at === null || scene === null) {
+      return;
+    }
+    const midi = scene.highest - at.row;
+    if (midi < LOWEST_KEY || midi > HIGHEST_KEY) {
+      return;
+    }
+    const roll = showing.roll;
+    const origin = rollBeganAtMs(roll);
+    const snapped = this.el.rollSnap.checked ? theBeatNearest(roll, at.atMs, this.theRollsGrid()) : at.atMs;
+    const downAtMs = Math.round(snapped + origin);
+    const key = { midi, downAtMs, upAtMs: downAtMs + theBeatAt(roll, downAtMs), velocity: theUsualLoudness(stored.events) };
+    this.changeTheSketchShowing(takeWithAKeyAdded(stored.events, key), [...sketch.before, stored.events], {
+      midi,
+      downAtMs,
+    });
+  }
+
   /** The key of the drawing under a point on the screen, as the pointer's hover finds it. */
   private theKeyUnder(point: { readonly clientX: number; readonly clientY: number }): RolledPress | null {
     const roll = this.theRoll();
-    const grid = this.el.rollBody.firstElementChild?.querySelector<HTMLElement>('.roll__grid') ?? null;
     const scene = this.drawnScene;
-    if (roll === null || grid === null || scene === null) {
+    const at = this.thePointOnTheDrawing(point);
+    return roll === null || scene === null || at === null
+      ? null
+      : theKeyAt(roll, scene, at.atMs, at.row, Number(this.el.rollZoom.value));
+  }
+
+  /** Where a point on the screen is on the drawing: a moment of the run, and a row. */
+  private thePointOnTheDrawing(point: {
+    readonly clientX: number;
+    readonly clientY: number;
+  }): { readonly atMs: number; readonly row: number } | null {
+    const grid = this.el.rollBody.firstElementChild?.querySelector<HTMLElement>('.roll__grid') ?? null;
+    if (grid === null) {
       return null;
     }
-    const pxPerSecond = Number(this.el.rollZoom.value);
     // The grid stands still over the run, which is where the view says.
     const box = grid.getBoundingClientRect();
-    const atMs = timeFromTap(point.clientX - box.left + this.rollScroller.x, pxPerSecond);
+    const atMs = timeFromTap(point.clientX - box.left + this.rollScroller.x, Number(this.el.rollZoom.value));
     const row = rowFromTap(point.clientY - box.top + this.rollScroller.y, this.rollLook.rowPx);
-    return atMs === null || row === null ? null : theKeyAt(roll, scene, atMs, row, pxPerSecond);
+    return atMs === null || row === null ? null : { atMs, row };
   }
 
   /**
@@ -11657,7 +11744,7 @@ export class AppView {
       return;
     }
     this.rollDrag = { ...drag, moved: { to, events } };
-    this.drawnScene = this.theSceneToDraw(rollOfTheTake({ ...stored, events }), to);
+    this.drawnScene = this.theSceneToDraw(rollOfTheTake({ ...stored, events }, ROOM_IN_A_SKETCH), to);
     this.paintTheRoll();
   }
 
@@ -11725,7 +11812,7 @@ export class AppView {
       return;
     }
     this.holdTheRoll();
-    const roll = rollOfTheTake(changed);
+    const roll = rollOfTheTake(changed, ROOM_IN_A_SKETCH);
     this.theOtherRollShowing = {
       ...showing,
       roll,

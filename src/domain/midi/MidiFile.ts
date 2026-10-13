@@ -164,7 +164,8 @@ export function theBeatsFromTheFirstBar(
 /**
  * The beats a take is written in: from the first beat of the bar its first
  * event falls in, on to its last event, the click carried on at its last
- * pace and in its last bar wherever it stopped before the playing did.
+ * pace and in its last bar wherever it stopped before the playing did - and
+ * `beatsAfter` more past it, where there is to be room for more.
  *
  * One answer for the file, the page read from it and the drawing of the
  * take, so the three cannot disagree about where a bar is. `null` where the
@@ -173,6 +174,7 @@ export function theBeatsFromTheFirstBar(
 export function theClickOfTheTake(
   events: readonly MidiFileEvent[],
   beats: readonly HeardBeat[],
+  beatsAfter = 0,
 ): readonly HeardBeat[] | null {
   const firstMs = events.reduce((earliest, event) => Math.min(earliest, event.atMs), Number.POSITIVE_INFINITY);
   const lastMs = events.reduce((latest, event) => Math.max(latest, event.atMs), Number.NEGATIVE_INFINITY);
@@ -181,7 +183,11 @@ export function theClickOfTheTake(
     return null;
   }
   const carried = [...from];
-  for (let last = elementAt(carried, carried.length - 1); last.atMs < lastMs; ) {
+  let after = beatsAfter;
+  for (let last = elementAt(carried, carried.length - 1); last.atMs < lastMs || after > 0; ) {
+    if (last.atMs >= lastMs) {
+      after -= 1;
+    }
     const gap = gapAfter(carried, carried.length - 1);
     // A pace of nothing never arrives anywhere; the click said so itself.
     if (gap <= 0) {

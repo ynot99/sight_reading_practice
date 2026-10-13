@@ -4178,10 +4178,11 @@ describe('AppView', () => {
       expect(sketch?.title).toMatch(/^Sketch of the take at \d\d:\d\d:\d\d, \d\d\.\d\d\.\d{4}$/);
       expect(element('roll-title').textContent).toBe(sketch?.title);
       // Opened being edited, in common time at 120 from its first note, since
-      // it was played without the click: a bar line every two seconds.
+      // it was played without the click: a bar line every two seconds, with
+      // two bars of room after it.
       expect(edit.getAttribute('aria-pressed')).toBe('true');
       expect(edit.title).toBe('Back to listening: a tap puts the marker');
-      expect(view.rollScene?.bars.map((bar) => bar.atMs)).toEqual([0]);
+      expect(view.rollScene?.bars.map((bar) => bar.atMs)).toEqual([0, 2_000, 4_000]);
       expect([view.rollScene?.highest, view.rollScene?.rows]).toEqual([108, 88]);
       expect([remove.hidden, undo.hidden]).toEqual([false, false]);
       expect([remove.dataset['away'], undo.dataset['away']]).toEqual([undefined, undefined]);
@@ -4227,6 +4228,8 @@ describe('AppView', () => {
       expect(runtime.takePlayer.playing).toBeNull();
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(2);
       expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([0, 1_000]);
+      // Drawn again with its room after it.
+      expect(view.rollScene?.bars.map((bar) => bar.atMs)).toEqual([0, 2_000, 4_000]);
       // The recording it was begun from is as it was played, and the list of
       // sketches says what this one now holds.
       expect(takes.find(kept?.id ?? '')?.events).toEqual(kept?.events);
@@ -4243,10 +4246,13 @@ describe('AppView', () => {
       remove.click();
       // Still in its bars, which begin where they began.
       expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([1_000]);
+      // The last one too: a sketch may be emptied, to be written again.
       tapOn(1_000);
-      expect(remove.dataset['idle']).toBe('true');
-      expect(remove.title).toBe('Delete a note. It is the only one in this sketch.');
+      expect(remove.dataset['idle']).toBeUndefined();
       remove.click();
+      expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(0);
+      expect(view.rollScene?.notes).toEqual([]);
+      undo.click();
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(1);
       undo.click();
       expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([0, 1_000]);
@@ -4257,10 +4263,29 @@ describe('AppView', () => {
       undo.click();
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
 
-      // A tap beside every note chooses nothing.
+      // The chosen one tapped again is let go of.
       tapOn(500);
-      element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 1.8 * zoom, clientY: 2 }));
+      tapOn(500);
       expect(chosen()).toEqual([]);
+      // A tap where there is no note writes one: on the key of its row, on the
+      // nearest beat, a beat long, as loud as the others, and chosen.
+      const onTheRowOf = view.rollScene?.notes.find((note) => note.fromMs === 500)?.row ?? 0;
+      element('roll-body').dispatchEvent(
+        new MouseEvent('click', { bubbles: true, clientX: 1.4 * zoom, clientY: (onTheRowOf + 0.5) * 13 - scrolledDown() }),
+      );
+      const written = (sketches.find(sketch?.id ?? '')?.events ?? []).filter((event) => event.kind !== 'sustain');
+      expect(written.slice(-2)).toEqual([
+        { kind: 'noteOn', atMs: 1_500, midi: 64, velocity: kept?.events[0]?.kind === 'noteOn' ? kept.events[0].velocity : -1 },
+        { kind: 'noteOff', atMs: 2_000, midi: 64 },
+      ]);
+      expect(chosen()).toEqual([1_500]);
+      undo.click();
+      expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
+      // Below the lowest key there is nothing to write.
+      element('roll-body').dispatchEvent(
+        new MouseEvent('click', { bubbles: true, clientX: 1.4 * zoom, clientY: 88.5 * 13 - scrolledDown() }),
+      );
+      expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
       // And listening lets go of what was chosen, and of the keys nobody
       // played; the trash and the undo keep their places, out of sight, and a
       // tap puts the marker on the nearest beat.
@@ -4310,8 +4335,10 @@ describe('AppView', () => {
       expect([scoresShown.getAttribute('aria-pressed'), sketchesShown.getAttribute('aria-pressed')]).toEqual(['true', 'false']);
       expect(shown().every(Boolean)).toBe(true);
       expect([element('sketches-list').hidden, element('sketches-empty').hidden]).toEqual([true, true]);
+      expect(element('sketches-new').hidden).toBe(true);
 
       sketchesShown.click();
+      expect(element('sketches-new').hidden).toBe(false);
       expect([scoresShown.getAttribute('aria-pressed'), sketchesShown.getAttribute('aria-pressed')]).toEqual(['false', 'true']);
       expect(shown().some(Boolean)).toBe(false);
       expect([element('scores-empty').hidden, element('sketches-list').hidden, element('sketches-empty').hidden]).toEqual([
@@ -4365,9 +4392,26 @@ describe('AppView', () => {
       expect(sketches.list()).toHaveLength(0);
       expect(element('sketches-empty').hidden).toBe(false);
 
+      // One begun with nothing in it, opened to be written, in common time.
+      element<HTMLButtonElement>('sketches-new').click();
+      const empty = sketches.list()[0];
+      expect(empty?.title).toMatch(/^Sketch, \d\d:\d\d:\d\d, \d\d\.\d\d\.\d{4}$/);
+      expect(empty?.noteCount).toBe(0);
+      expect(empty?.beats.map((beat) => [beat.atMs, beat.beatsInBar])).toEqual([
+        [0, 4],
+        [500, 4],
+      ]);
+      expect(element('sheet-scores').hidden).toBe(true);
+      expect(element('roll-title').textContent).toBe(empty?.title);
+      expect(element('roll-edit').getAttribute('aria-pressed')).toBe('true');
+      expect(view.rollScene?.bars.map((bar) => bar.atMs)).toEqual([0, 2_000, 4_000]);
+      element<HTMLButtonElement>('roll-close').click();
+
+      element<HTMLButtonElement>('focus-scores').click();
       scoresShown.click();
       expect(shown().every(Boolean)).toBe(true);
       expect([element('sketches-list').hidden, element('sketches-empty').hidden]).toEqual([true, true]);
+      expect(element('sketches-new').hidden).toBe(true);
     });
 
     it('counts the bar out over the drawing, and can be put away', async () => {
@@ -12513,7 +12557,10 @@ describe('AppView', () => {
       point('pointermove', wavered);
       point('pointerup', wavered);
       click(wavered);
+      // A tap, so on the chosen note it lets it go; moved, nothing.
       expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
+      expect(chosen()).toEqual([]);
+      tap(second);
       expect(chosen()).toEqual([[62, 600]]);
       point('pointerdown', second);
       point('pointermove', dragged);

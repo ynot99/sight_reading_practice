@@ -4462,6 +4462,12 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   font-weight: 700;
 }
 
+/* Under the list, as the end of it: the next one begun. */
+.sketches__new-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
 /* Reads as part of the heading rather than as another control in a row. */
 .sheet__filter {
   display: inline-flex;

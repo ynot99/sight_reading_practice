@@ -18,10 +18,9 @@ import {
   rollOfTheTake,
   barsCountedOnItsBeats,
   takeOfTheRun,
-  takeWithoutTheKey,
+  takeWithoutTheKeys,
+  takeWithTheKeysChanged,
   takeWithAKeyAdded,
-  takeWithTheKeyHeldUntil,
-  takeWithTheKeyMoved,
   theKeysOfTheTake,
   type RolledBeat,
   type RolledPress,
@@ -1195,63 +1194,80 @@ describe('changing a recording', () => {
     ]);
   });
 
-  it('takes a key out, its press and its release, and leaves every other alone', () => {
+  it('takes keys out, each its press and its release, and leaves every other alone', () => {
     const pedal: MidiFileEvent = { kind: 'sustain', atMs: 50, value: 1 };
     const events = [on(0, MIDI.C4), pedal, on(100, MIDI.C4), off(150, MIDI.C4), on(200, MIDI.E4), off(300, MIDI.C4)];
 
     // The second C, which is let go of last: the pairing the drawing has.
-    expect(takeWithoutTheKey(events, MIDI.C4, 100)).toEqual([on(0, MIDI.C4), pedal, off(150, MIDI.C4), on(200, MIDI.E4)]);
-    // A key still down at the end has no release to take.
-    expect(takeWithoutTheKey(events, MIDI.E4, 200)).toEqual([on(0, MIDI.C4), pedal, on(100, MIDI.C4), off(150, MIDI.C4), off(300, MIDI.C4)]);
+    expect(takeWithoutTheKeys(events, [{ midi: MIDI.C4, downAtMs: 100 }])).toEqual([
+      on(0, MIDI.C4),
+      pedal,
+      off(150, MIDI.C4),
+      on(200, MIDI.E4),
+    ]);
+    // A key still down at the end has no release to take; and two at once.
+    expect(
+      takeWithoutTheKeys(events, [
+        { midi: MIDI.E4, downAtMs: 200 },
+        { midi: MIDI.C4, downAtMs: 0 },
+      ]),
+    ).toEqual([pedal, on(100, MIDI.C4), off(300, MIDI.C4)]);
   });
 
-  it('moves a key, its press and its release together, to another moment and pitch, in its place in time', () => {
+  it('takes out nothing where any key named is not there, and the only key as well as any', () => {
+    const events = [on(0, MIDI.C4), off(150, MIDI.C4), on(200, MIDI.E4), off(300, MIDI.E4)];
+
+    expect(takeWithoutTheKeys(events, [{ midi: MIDI.C4, downAtMs: 1 }])).toBeNull();
+    expect(
+      takeWithoutTheKeys(events, [
+        { midi: MIDI.C4, downAtMs: 0 },
+        { midi: MIDI.D4, downAtMs: 0 },
+      ]),
+    ).toBeNull();
+    // A sketch may be emptied, to be written again.
+    expect(takeWithoutTheKeys([on(0, MIDI.C4), off(150, MIDI.C4)], [{ midi: MIDI.C4, downAtMs: 0 }])).toEqual([]);
+  });
+
+  it('changes keys all at once, press and release, in their places in time', () => {
     const pedal: MidiFileEvent = { kind: 'sustain', atMs: 50, value: 1 };
     const events = [on(0, MIDI.C4), pedal, off(150, MIDI.C4), on(200, MIDI.E4), off(300, MIDI.E4)];
 
-    // Past the E, a tone higher.
-    expect(takeWithTheKeyMoved(events, { midi: MIDI.C4, downAtMs: 0 }, { midi: MIDI.D4, downAtMs: 250 })).toEqual([
-      pedal,
-      on(200, MIDI.E4),
-      on(250, MIDI.D4),
-      off(300, MIDI.E4),
-      off(400, MIDI.D4),
-    ]);
-    // A key still down at the end has only its press to move.
-    expect(takeWithTheKeyMoved([on(0, MIDI.C4), on(100, MIDI.E4), off(200, MIDI.C4)], { midi: MIDI.E4, downAtMs: 100 }, { midi: MIDI.E4, downAtMs: 50 })).toEqual([
-      on(0, MIDI.C4),
-      on(50, MIDI.E4),
-      off(200, MIDI.C4),
-    ]);
-    expect(takeWithTheKeyMoved(events, { midi: MIDI.C4, downAtMs: 1 }, { midi: MIDI.C4, downAtMs: 9 })).toBeNull();
+    // The C past the E and a tone higher, and the E where the C was, held
+    // longer: each found where it was, though the other has moved there.
+    expect(
+      takeWithTheKeysChanged(events, [
+        { key: { midi: MIDI.C4, downAtMs: 0 }, midi: MIDI.D4, downAtMs: 250, upAtMs: 400 },
+        { key: { midi: MIDI.E4, downAtMs: 200 }, midi: MIDI.E4, downAtMs: 0, upAtMs: 500 },
+      ]),
+    ).toEqual([on(0, MIDI.E4), pedal, on(250, MIDI.D4), off(400, MIDI.D4), off(500, MIDI.E4)]);
   });
 
-  it('takes out nothing that is not there, and the only key as well as any', () => {
-    const events = [on(0, MIDI.C4), off(150, MIDI.C4), on(200, MIDI.E4), off(300, MIDI.E4)];
+  it('lets a key still down at the end go where asked, or leaves it down', () => {
+    const events = [on(0, MIDI.C4), on(100, MIDI.E4), off(200, MIDI.E4)];
+    const c = { midi: MIDI.C4, downAtMs: 0 };
 
-    expect(takeWithoutTheKey(events, MIDI.C4, 1)).toBeNull();
-    expect(takeWithoutTheKey(events, MIDI.D4, 0)).toBeNull();
-    // A sketch may be emptied, to be written again.
-    expect(takeWithoutTheKey([on(0, MIDI.C4), off(150, MIDI.C4)], MIDI.C4, 0)).toEqual([]);
-  });
-
-  it('lets a key go at another moment, in its place in time, and one still down at all', () => {
-    const events = [on(0, MIDI.C4), off(300, MIDI.C4), on(500, MIDI.E4), off(1_000, MIDI.E4)];
-
-    expect(takeWithTheKeyHeldUntil(events, { midi: MIDI.C4, downAtMs: 0 }, 700)).toEqual([
-      on(0, MIDI.C4),
-      on(500, MIDI.E4),
-      off(700, MIDI.C4),
-      off(1_000, MIDI.E4),
-    ]);
-    expect(takeWithTheKeyHeldUntil(events, { midi: MIDI.E4, downAtMs: 500 }, 600)?.at(-1)).toEqual(off(600, MIDI.E4));
-    expect(takeWithTheKeyHeldUntil([on(0, MIDI.C4), on(100, MIDI.E4), off(200, MIDI.E4)], { midi: MIDI.C4, downAtMs: 0 }, 150)).toEqual([
+    expect(takeWithTheKeysChanged(events, [{ key: c, midi: MIDI.C4, downAtMs: 0, upAtMs: 150 }])).toEqual([
       on(0, MIDI.C4),
       on(100, MIDI.E4),
       off(150, MIDI.C4),
       off(200, MIDI.E4),
     ]);
-    expect(takeWithTheKeyHeldUntil(events, { midi: MIDI.C4, downAtMs: 1 }, 700)).toBeNull();
+    expect(takeWithTheKeysChanged(events, [{ key: c, midi: MIDI.D4, downAtMs: 50, upAtMs: null }])).toEqual([
+      on(50, MIDI.D4),
+      on(100, MIDI.E4),
+      off(200, MIDI.E4),
+    ]);
+  });
+
+  it('changes nothing where any key named is not there', () => {
+    const events = [on(0, MIDI.C4), off(150, MIDI.C4)];
+
+    expect(
+      takeWithTheKeysChanged(events, [
+        { key: { midi: MIDI.C4, downAtMs: 0 }, midi: MIDI.D4, downAtMs: 0, upAtMs: 150 },
+        { key: { midi: MIDI.C4, downAtMs: 1 }, midi: MIDI.D4, downAtMs: 9, upAtMs: 150 },
+      ]),
+    ).toBeNull();
   });
 
   it('adds a key, struck and let go of, in its place in time', () => {

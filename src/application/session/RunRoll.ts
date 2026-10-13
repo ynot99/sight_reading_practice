@@ -960,41 +960,91 @@ export function theKeysOfTheTake(events: readonly MidiFileEvent[]): readonly Key
   return keys;
 }
 
-/**
- * A take's events with one key taken out, its press and its release, named by
- * its pitch and the moment it went down; or `null` where there is no such key.
- */
-export function takeWithoutTheKey(
-  events: readonly MidiFileEvent[],
-  midi: number,
-  downAtMs: number,
-): readonly MidiFileEvent[] | null {
-  const key = theKeysOfTheTake(events).find((each) => each.midi === midi && each.downAtMs === downAtMs);
-  return key === undefined ? null : events.filter((_, at) => at !== key.on && at !== key.off);
+/** A key of a take, named by its pitch and the moment it went down. */
+export interface KeyNamed {
+  readonly midi: number;
+  readonly downAtMs: number;
 }
 
 /**
- * A take's events with one key let go of at another moment, struck where it
- * was; one still down at the end is let go of there. `null` where there is
- * no such key.
+ * Where a key of a take is to be: struck at a moment as a pitch, and let go
+ * of at another - or `null` to leave one still down at the end as it is.
  */
-export function takeWithTheKeyHeldUntil(
+export interface KeyChange {
+  readonly key: KeyNamed;
+  readonly midi: number;
+  readonly downAtMs: number;
+  readonly upAtMs: number | null;
+}
+
+/** Each named key's place in the take's pairing, or `null` where any is not there. */
+function theKeysNamed(events: readonly MidiFileEvent[], named: readonly KeyNamed[]): KeyOfTheTake[] | null {
+  const keys = theKeysOfTheTake(events);
+  const found: KeyOfTheTake[] = [];
+  for (const { midi, downAtMs } of named) {
+    const key = keys.find((each) => each.midi === midi && each.downAtMs === downAtMs);
+    if (key === undefined) {
+      return null;
+    }
+    found.push(key);
+  }
+  return found;
+}
+
+/**
+ * A take's events with keys taken out, each its press and its release; or
+ * `null` where any is not there.
+ */
+export function takeWithoutTheKeys(
   events: readonly MidiFileEvent[],
-  key: { readonly midi: number; readonly downAtMs: number },
-  upAtMs: number,
+  named: readonly KeyNamed[],
 ): readonly MidiFileEvent[] | null {
-  const found = theKeysOfTheTake(events).find(
-    (each) => each.midi === key.midi && each.downAtMs === key.downAtMs,
-  );
-  if (found === undefined) {
+  const keys = theKeysNamed(events, named);
+  if (keys === null) {
     return null;
   }
-  const released: MidiFileEvent = { kind: 'noteOff', atMs: upAtMs, midi: key.midi };
-  return inTheOrderPlayed(
-    found.off === null
-      ? [...events, released]
-      : events.map((event, at) => (at === found.off ? released : event)),
+  const gone = new Set(keys.flatMap(({ on, off }) => (off === null ? [on] : [on, off])));
+  return events.filter((_, at) => !gone.has(at));
+}
+
+/**
+ * A take's events with keys changed all at once - moved, held longer or
+ * shorter - and put in their places in time again; or `null` where any is
+ * not there. At once, because the keys are found by where they are, and
+ * changed one at a time the second would be looked for after the first had
+ * moved.
+ */
+export function takeWithTheKeysChanged(
+  events: readonly MidiFileEvent[],
+  changes: readonly KeyChange[],
+): readonly MidiFileEvent[] | null {
+  const keys = theKeysNamed(
+    events,
+    changes.map((change) => change.key),
   );
+  if (keys === null) {
+    return null;
+  }
+  const changed = new Map<number, MidiFileEvent>();
+  const added: MidiFileEvent[] = [];
+  changes.forEach((change, at) => {
+    const key = keys[at];
+    const struck = key === undefined ? undefined : events[key.on];
+    if (key === undefined || struck?.kind !== 'noteOn') {
+      return;
+    }
+    changed.set(key.on, { ...struck, atMs: change.downAtMs, midi: change.midi });
+    if (change.upAtMs === null) {
+      return;
+    }
+    const released: MidiFileEvent = { kind: 'noteOff', atMs: change.upAtMs, midi: change.midi };
+    if (key.off === null) {
+      added.push(released);
+    } else {
+      changed.set(key.off, released);
+    }
+  });
+  return inTheOrderPlayed([...events.map((event, at) => changed.get(at) ?? event), ...added]);
 }
 
 /** A take's events with a key added, struck and let go of, in its place in time. */
@@ -1007,32 +1057,6 @@ export function takeWithAKeyAdded(
     { kind: 'noteOn', atMs: key.downAtMs, midi: key.midi, velocity: key.velocity },
     { kind: 'noteOff', atMs: key.upAtMs, midi: key.midi },
   ]);
-}
-
-/**
- * A take's events with one key moved: struck at another moment and as
- * another pitch, held as long as it was, and put in its place in time
- * again. `null` where there is no such key.
- */
-export function takeWithTheKeyMoved(
-  events: readonly MidiFileEvent[],
-  key: { readonly midi: number; readonly downAtMs: number },
-  to: { readonly midi: number; readonly downAtMs: number },
-): readonly MidiFileEvent[] | null {
-  const found = theKeysOfTheTake(events).find(
-    (each) => each.midi === key.midi && each.downAtMs === key.downAtMs,
-  );
-  if (found === undefined) {
-    return null;
-  }
-  const byMs = to.downAtMs - key.downAtMs;
-  return inTheOrderPlayed(
-    events.map((event, at) =>
-      event.kind !== 'sustain' && (at === found.on || at === found.off)
-        ? { ...event, atMs: event.atMs + byMs, midi: to.midi }
-        : event,
-    ),
-  );
 }
 
 /**

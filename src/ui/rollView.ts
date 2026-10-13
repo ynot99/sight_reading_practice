@@ -67,8 +67,8 @@ export interface RollDrawing {
    * сих пір малюєш жовті ноти замість жовтих секцій".
    */
   readonly keepsTime?: boolean;
-  /** The key chosen on the drawing to be changed, by its pitch and when it went down. */
-  readonly chosen?: { readonly midi: number; readonly downAtMs: number } | null;
+  /** The keys chosen on the drawing to be changed, each by its pitch and when it went down. */
+  readonly chosen?: readonly { readonly midi: number; readonly downAtMs: number }[];
   /**
    * Whether every key of the piano has its row, rather than the notes played
    * and a little room round them: so a note being edited can be taken to any
@@ -404,7 +404,9 @@ function noteOf(
     shade: shadeOf(press),
     open: press.upAtMs === null,
     says: `${midiToLabel(press.midi)} · ${press.verdict ?? 'not judged'}${off}`,
-    ...(chosen?.midi === press.midi && chosen.downAtMs === press.downAtMs ? { chosen: true } : {}),
+    ...(chosen?.some((each) => each.midi === press.midi && each.downAtMs === press.downAtMs) === true
+      ? { chosen: true }
+      : {}),
   };
 }
 

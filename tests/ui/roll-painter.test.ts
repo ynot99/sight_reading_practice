@@ -163,7 +163,7 @@ describe('painting the grid', () => {
     const scene = theSceneOfTheRoll({
       roll: roll({ presses: [press({ verdict: null }), chosen] }),
       barLabel: () => null,
-      chosen: { midi: chosen.midi, downAtMs: chosen.downAtMs },
+      chosen: [{ midi: chosen.midi, downAtMs: chosen.downAtMs }],
     });
     const { surface: canvas, recorder } = surface();
 

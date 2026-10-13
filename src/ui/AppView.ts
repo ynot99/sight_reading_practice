@@ -52,7 +52,7 @@ import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './la
 import type { PracticeSettings } from '../application/PracticeController.js';
 import type { StoredTake } from '../application/TakeLibrary.js';
 import { isTypedInto, type TypedInto } from '../shared/typedInto.js';
-import { theSketchOfTheScore } from '../application/SketchLibrary.js';
+import { theSketchOfTheScore, type StoredSketch } from '../application/SketchLibrary.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
 import {
@@ -157,9 +157,12 @@ import {
   barsCountedOnItsBeats,
   rollOfTheTake,
   takeWithAKeyAdded,
-  takeWithTheKeyHeldUntil,
-  takeWithoutTheKey,
-  takeWithTheKeyMoved,
+  takeWithoutTheKeys,
+  takeWithTheKeysChanged,
+  theKeysOfTheTake,
+  type KeyChange,
+  type KeyNamed,
+  type KeyOfTheTake,
   type RolledPress,
   takeOfTheRun,
   type RunRoll,
@@ -415,6 +418,11 @@ const LINE_PX = 16;
 /** The viewer's Back button as a rewind, and as a stop. */
 const REWIND_ICON = 'M6 6h2v12H6zM9.5 12l8.5 6V6z';
 const STOP_ICON = 'M6 6h12v12H6z';
+
+/** Whether two names are of one key: the same pitch, gone down at the same moment. */
+function sameKey(one: KeyNamed, other: KeyNamed): boolean {
+  return one.midi === other.midi && one.downAtMs === other.downAtMs;
+}
 
 /** How near the end of a note the mouse or a finger takes hold of its end, in pixels. */
 const GRIP_PX = 10;
@@ -1629,14 +1637,16 @@ export class AppView {
     readonly clientX: number;
     readonly clientY: number;
     readonly scene: RollScene;
-    /** Whether it was chosen by this pointer going down, rather than before. */
-    readonly chosenNow: boolean;
+    /** The key it went down on. */
+    readonly key: KeyNamed;
+    /** Whether that key was among those chosen as it went down. */
+    readonly wasChosen: boolean;
     /** What of it was taken hold of: the whole note, moved, or its end, held longer or shorter. */
     readonly grip: 'whole' | 'end';
     /** When it was let go of, which a drag of its end moves. */
     readonly upAtMs: number;
     readonly moved: {
-      readonly to: { readonly midi: number; readonly downAtMs: number };
+      readonly to: readonly KeyNamed[];
       readonly events: readonly MidiFileEvent[];
     } | null;
   } | null = null;
@@ -1769,7 +1779,8 @@ export class AppView {
       readonly id: string;
       /** Whether a touch on the drawing edits the notes rather than placing the marker. */
       readonly editing: boolean;
-      readonly chosen: { readonly midi: number; readonly downAtMs: number } | null;
+      /** The keys chosen on it to be changed, a tap at a time. */
+      readonly chosen: readonly KeyNamed[];
       readonly before: readonly (readonly MidiFileEvent[])[];
     };
   } | null = null;
@@ -8503,7 +8514,7 @@ export class AppView {
       this.showTheSketch(sketch.id);
     });
     this.listen(this.el.rollDelete, 'click', () => {
-      this.deleteTheChosenKey();
+      this.deleteTheChosenKeys();
     });
     this.listen(this.el.rollUndo, 'click', () => {
       this.putBackTheLastChange();
@@ -8534,7 +8545,7 @@ export class AppView {
     });
     this.listen(this.el.rollBody, 'pointermove', (event) => {
       if (this.rollDrag?.pointerId === event.pointerId) {
-        this.dragTheChosenKey(event);
+        this.dragTheHeldKey(event);
         return;
       }
       if (event.pointerType === 'mouse' && this.rollDrag === null && !this.rollFingers.has(event.pointerId)) {
@@ -8550,7 +8561,7 @@ export class AppView {
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
         if (this.rollDrag?.pointerId === event.pointerId) {
-          this.letGoOfTheChosenKey(ending === 'pointerup');
+          this.letGoOfTheHeldKey(ending === 'pointerup');
           return;
         }
         if (!this.rollFingers.has(event.pointerId)) {
@@ -11521,17 +11532,17 @@ export class AppView {
       }
     }
 
-    const chosen = sketch?.chosen ?? null;
-    let waiting: string | null = null;
-    if (chosen === null) {
-      waiting = 'Delete a note. Tap one to choose it.';
-    }
-    if (waiting === null) {
-      delete this.el.rollDelete.dataset['idle'];
-      this.el.rollDelete.title = `Delete the chosen note, ${midiToLabel(chosen?.midi ?? 0)}`;
-    } else {
+    const chosen = sketch?.chosen ?? [];
+    const [only] = chosen;
+    if (chosen.length === 0) {
       this.el.rollDelete.dataset['idle'] = 'true';
-      this.el.rollDelete.title = waiting;
+      this.el.rollDelete.title = 'Delete a note. Tap one to choose it.';
+    } else {
+      delete this.el.rollDelete.dataset['idle'];
+      this.el.rollDelete.title =
+        chosen.length === 1 && only !== undefined
+          ? `Delete the chosen note, ${midiToLabel(only.midi)}`
+          : `Delete the ${String(chosen.length)} chosen notes`;
     }
     this.el.rollDelete.setAttribute('aria-label', this.el.rollDelete.title);
 
@@ -11596,7 +11607,7 @@ export class AppView {
       why: 'A sketch: no bars to practise until it is written down.',
       ofTheOpenScore: false,
       barLabel: barsCountedOnItsBeats(roll),
-      sketch: { id, editing: false, chosen: null, before: [] },
+      sketch: { id, editing: false, chosen: [], before: [] },
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -11623,7 +11634,7 @@ export class AppView {
     // the stylesheet stretches a few rows to fill the room, and eighty-eight
     // would otherwise come back thinner than the notes the finger was on.
     this.rollRowPx = this.theRowAsDrawn();
-    this.theOtherRollShowing = { ...showing, sketch: { ...sketch, editing, chosen: null } };
+    this.theOtherRollShowing = { ...showing, sketch: { ...sketch, editing, chosen: [] } };
     this.drawTheRollInto();
     // The rows above grow or go, and the notes on the screen stay where they
     // were on it.
@@ -11636,27 +11647,31 @@ export class AppView {
   }
 
   /**
-   * Chooses the key of a recording a tap landed on, or none for a tap beside
-   * every note. The head stays where it is: placing it is listening's.
+   * A tap on a sketch being edited: on a note, it is added to the notes
+   * chosen or let go of from them, so several are chosen a tap at a time;
+   * where there is none, a note is written. The head stays where it is:
+   * placing it is listening's, and the ruler's.
    */
   private chooseTheKeyTapped(event: MouseEvent): void {
-    const showing = this.theOtherRollShowing;
-    const sketch = showing?.sketch;
-    if (showing === null || sketch === undefined) {
-      return;
-    }
     const key = this.theKeyUnder(event);
     if (key === null) {
       this.addAKeyWhereTapped(event);
       return;
     }
-    // The chosen one tapped again is let go of: a tap on nothing writes a note.
-    const chosen = sketch.chosen;
-    const again = chosen !== null && chosen.midi === key.midi && chosen.downAtMs === key.downAtMs;
-    this.theOtherRollShowing = {
-      ...showing,
-      sketch: { ...sketch, chosen: again ? null : { midi: key.midi, downAtMs: key.downAtMs } },
-    };
+    this.chooseOrLetGo(key);
+  }
+
+  /** Adds a key to the notes chosen, or lets go of it where it was one of them. */
+  private chooseOrLetGo(key: KeyNamed): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    if (showing === null || sketch === undefined) {
+      return;
+    }
+    const chosen = sketch.chosen.some((each) => sameKey(each, key))
+      ? sketch.chosen.filter((each) => !sameKey(each, key))
+      : [...sketch.chosen, { midi: key.midi, downAtMs: key.downAtMs }];
+    this.theOtherRollShowing = { ...showing, sketch: { ...sketch, chosen } };
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();
   }
@@ -11664,8 +11679,8 @@ export class AppView {
   /**
    * Writes a note into the sketch where a tap found none: on the key of the
    * row, on the nearest line of the grid where the marker is put on one,
-   * a beat long, as loud as the notes around it are on the whole. It is
-   * chosen, to be moved where it was not quite meant.
+   * a beat long, as loud as the notes around it are on the whole. It is the
+   * one chosen, to be moved where it was not quite meant.
    */
   private addAKeyWhereTapped(event: MouseEvent): void {
     const showing = this.theOtherRollShowing;
@@ -11685,10 +11700,9 @@ export class AppView {
     const snapped = this.el.rollSnap.checked ? theBeatNearest(roll, at.atMs, this.theRollsGrid()) : at.atMs;
     const downAtMs = Math.round(snapped + origin);
     const key = { midi, downAtMs, upAtMs: downAtMs + theBeatAt(roll, downAtMs), velocity: theUsualLoudness(stored.events) };
-    this.changeTheSketchShowing(takeWithAKeyAdded(stored.events, key), [...sketch.before, stored.events], {
-      midi,
-      downAtMs,
-    });
+    this.changeTheSketchShowing(takeWithAKeyAdded(stored.events, key), [...sketch.before, stored.events], [
+      { midi, downAtMs },
+    ]);
   }
 
   /** The key of the drawing under a point on the screen, as the pointer's hover finds it. */
@@ -11719,31 +11733,21 @@ export class AppView {
 
   /**
    * Takes hold of a key of a sketch being edited, where a finger or the mouse
-   * goes down on it, and chooses it if it was not: a note is moved in one
-   * gesture, as in any editor. Says whether it did. Anywhere else the
-   * drawing is moved, as it always was. A pointer taken off the drawing lets
-   * go of it as it was, which is what a drag carried off the edge of anything
-   * means.
+   * goes down on it. Says whether it did. Anywhere else the drawing is moved,
+   * as it always was. What a drag from it moves is decided as it begins, and
+   * a press let go of without one is a tap: see `letGoOfTheHeldKey`. A
+   * pointer taken off the drawing lets go of it as it was, which is what a
+   * drag carried off the edge of anything means.
    */
   private takeHoldOfAKey(event: PointerEvent): boolean {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    if (showing === null || sketch === undefined || !sketch.editing || this.rollDrag !== null) {
+    const scene = this.drawnScene;
+    if (showing === null || sketch === undefined || !sketch.editing || this.rollDrag !== null || scene === null) {
       return false;
     }
     const key = this.theKeyUnder(event);
     if (key === null) {
-      return false;
-    }
-    const chosen = sketch.chosen;
-    const already = chosen !== null && chosen.midi === key.midi && chosen.downAtMs === key.downAtMs;
-    if (!already) {
-      this.theOtherRollShowing = { ...showing, sketch: { ...sketch, chosen: { midi: key.midi, downAtMs: key.downAtMs } } };
-      this.drawTheRollInto();
-      this.sayWhatCanBeChanged();
-    }
-    const scene = this.drawnScene;
-    if (scene === null) {
       return false;
     }
     this.rollDrag = {
@@ -11752,7 +11756,8 @@ export class AppView {
       clientY: event.clientY,
       scene,
       moved: null,
-      chosenNow: !already,
+      key: { midi: key.midi, downAtMs: key.downAtMs },
+      wasChosen: sketch.chosen.some((each) => sameKey(each, key)),
       grip: this.theGripOn(key, event),
       upAtMs: key.upAtMs ?? rollEndedAtMs(showing.roll),
     };
@@ -11792,18 +11797,29 @@ export class AppView {
   }
 
   /**
-   * Moves the key held to where the pointer has taken it: across by time, on
-   * the nearest line of the grid where the marker would be put on one, and up
-   * or down by pitch inside the rows drawn. Shown by painting the drawing
-   * again, not by building it again, which is too slow to follow a finger.
+   * The keys a drag from a held key changes, as they are in the sketch now:
+   * all the chosen ones where it was one of them, and only itself where it
+   * was not - a note dragged out of nowhere is moved alone, as in any editor.
    */
-  private dragTheChosenKey(event: PointerEvent): void {
+  private theKeysDragged(drag: NonNullable<AppView['rollDrag']>, events: readonly MidiFileEvent[]): KeyOfTheTake[] {
+    const moving = drag.wasChosen ? (this.theOtherRollShowing?.sketch?.chosen ?? []) : [drag.key];
+    return theKeysOfTheTake(events).filter((key) => moving.some((each) => sameKey(each, key)));
+  }
+
+  /**
+   * Moves the keys a drag holds to where the pointer has taken the one it
+   * began on: across by time, that one on the nearest line of the grid where
+   * the marker would be put on one and the others by as much, and up or down
+   * by pitch as far as all of them stay inside the rows drawn. Shown by
+   * painting the drawing again, not by building it again, which is too slow
+   * to follow a finger.
+   */
+  private dragTheHeldKey(event: PointerEvent): void {
     const drag = this.rollDrag;
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
-    const chosen = sketch?.chosen ?? null;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    if (drag === null || showing === null || sketch === undefined || chosen === null || stored === null) {
+    if (drag === null || showing === null || stored === null) {
       return;
     }
     const acrossPx = event.clientX - drag.clientX;
@@ -11814,57 +11830,84 @@ export class AppView {
     // A drag, so the click the finger makes on letting go is not a tap.
     this.panned = true;
     const origin = rollBeganAtMs(showing.roll);
+    const keys = this.theKeysDragged(drag, stored.events);
     if (drag.grip === 'end') {
-      this.dragTheEndOfTheChosenKey(drag, acrossPx, origin);
+      this.dragTheEndsOfTheKeys(drag, keys, stored, acrossPx, origin);
       return;
     }
-    const wanted = chosen.downAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
+    const wanted = drag.key.downAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
     const at = this.el.rollSnap.checked ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
+    const byMs = Math.round(at + origin) - drag.key.downAtMs;
     const lowest = drag.scene.highest - drag.scene.rows + 1;
-    const to = {
-      midi: Math.min(drag.scene.highest, Math.max(lowest, chosen.midi - Math.round(downPx / this.rollLook.rowPx))),
-      downAtMs: Math.round(at + origin),
-    };
-    const events = takeWithTheKeyMoved(stored.events, chosen, to);
+    const pitches = keys.map((key) => key.midi);
+    const bySemitones = Math.min(
+      drag.scene.highest - Math.max(...pitches),
+      Math.max(lowest - Math.min(...pitches), -Math.round(downPx / this.rollLook.rowPx)),
+    );
+    this.showTheDrag(
+      drag,
+      stored,
+      keys.map((key) => ({
+        key,
+        midi: key.midi + bySemitones,
+        downAtMs: key.downAtMs + byMs,
+        upAtMs: key.upAtMs === null ? null : key.upAtMs + byMs,
+      })),
+    );
+  }
+
+  /**
+   * Holds the keys a drag holds longer or shorter: the end of the one it began
+   * on where the pointer has taken it, on the nearest line of the grid where
+   * the marker would be put on one, and the others' by as much - none shorter
+   * than a note can be heard as one.
+   */
+  private dragTheEndsOfTheKeys(
+    drag: NonNullable<AppView['rollDrag']>,
+    keys: readonly KeyOfTheTake[],
+    stored: StoredSketch,
+    acrossPx: number,
+    origin: number,
+  ): void {
+    const showing = this.theOtherRollShowing;
+    if (showing === null) {
+      return;
+    }
+    const wanted = drag.upAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
+    const at = this.el.rollSnap.checked ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
+    const byMs = Math.round(at + origin) - drag.upAtMs;
+    const end = rollEndedAtMs(showing.roll);
+    this.showTheDrag(
+      drag,
+      stored,
+      keys.map((key) => ({
+        key,
+        midi: key.midi,
+        downAtMs: key.downAtMs,
+        upAtMs: Math.max((key.upAtMs ?? end) + byMs, key.downAtMs + SHORTEST_NOTE_MS),
+      })),
+    );
+  }
+
+  /** Paints the sketch as a drag has it so far, and keeps it to be kept when the pointer lets go. */
+  private showTheDrag(drag: NonNullable<AppView['rollDrag']>, stored: StoredSketch, changes: readonly KeyChange[]): void {
+    const events = takeWithTheKeysChanged(stored.events, changes);
     if (events === null) {
       return;
     }
+    const to = changes.map(({ midi, downAtMs }) => ({ midi, downAtMs }));
     this.rollDrag = { ...drag, moved: { to, events } };
     this.drawnScene = this.theSceneToDraw(rollOfTheTake({ ...stored, events }, ROOM_IN_A_SKETCH), to);
     this.paintTheRoll();
   }
 
   /**
-   * Holds the chosen key longer or shorter, its end where the pointer has
-   * taken it: on the nearest line of the grid where the marker would be put
-   * on one, and never shorter than a note can be heard as one.
+   * Lets go of the key held: where a drag took the keys on a finger lifted,
+   * the sketch changed as a delete changes it, those keys chosen; drawn as it
+   * was where the pointer was taken away instead. Without a drag it was a tap
+   * on the note, and the click of letting go is taken as answered here.
    */
-  private dragTheEndOfTheChosenKey(drag: NonNullable<AppView['rollDrag']>, acrossPx: number, origin: number): void {
-    const showing = this.theOtherRollShowing;
-    const sketch = showing?.sketch;
-    const chosen = sketch?.chosen ?? null;
-    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    if (showing === null || chosen === null || stored === null) {
-      return;
-    }
-    const wanted = drag.upAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
-    const at = this.el.rollSnap.checked ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
-    const upAtMs = Math.round(Math.max(at + origin, chosen.downAtMs + SHORTEST_NOTE_MS));
-    const events = takeWithTheKeyHeldUntil(stored.events, chosen, upAtMs);
-    if (events === null) {
-      return;
-    }
-    this.rollDrag = { ...drag, moved: { to: chosen, events } };
-    this.drawnScene = this.theSceneToDraw(rollOfTheTake({ ...stored, events }, ROOM_IN_A_SKETCH), chosen);
-    this.paintTheRoll();
-  }
-
-  /**
-   * Lets go of the key held: where it was moved to on a finger lifted, the
-   * recording changed as a delete changes it; and drawn as it was where the
-   * pointer was taken away instead.
-   */
-  private letGoOfTheChosenKey(lifted: boolean): void {
+  private letGoOfTheHeldKey(lifted: boolean): void {
     const drag = this.rollDrag;
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
@@ -11873,10 +11916,9 @@ export class AppView {
       return;
     }
     if (drag.moved === null) {
-      // Chosen as it went down: the click of letting go is not a second tap,
-      // which would let go of it again.
-      if (drag.chosenNow) {
+      if (lifted) {
         this.panned = true;
+        this.chooseOrLetGo(drag.key);
       }
       return;
     }
@@ -11889,7 +11931,7 @@ export class AppView {
 
   /**
    * The keys an editor answers to, while a sketch is being edited and nothing
-   * is being typed: Delete or Backspace takes the chosen note out, and Ctrl+Z
+   * is being typed: Delete or Backspace takes the chosen notes out, and Ctrl+Z
    * (Cmd+Z on a Mac) puts back the last change - the trash and the undo
    * buttons, without leaving the keyboard.
    */
@@ -11905,25 +11947,24 @@ export class AppView {
       this.putBackTheLastChange();
     } else if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
-      this.deleteTheChosenKey();
+      this.deleteTheChosenKeys();
     }
   }
 
-  /** Takes the chosen key out of the recording, keeping what it was to be put back. */
-  private deleteTheChosenKey(): void {
+  /** Takes the chosen keys out of the sketch, keeping what it was to be put back. */
+  private deleteTheChosenKeys(): void {
     const sketch = this.theOtherRollShowing?.sketch;
-    const chosen = sketch?.chosen ?? null;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    if (sketch === undefined || chosen === null || stored === null) {
+    if (sketch === undefined || sketch.chosen.length === 0 || stored === null) {
       return;
     }
-    const events = takeWithoutTheKey(stored.events, chosen.midi, chosen.downAtMs);
+    const events = takeWithoutTheKeys(stored.events, sketch.chosen);
     if (events !== null) {
       this.changeTheSketchShowing(events, [...sketch.before, stored.events]);
     }
   }
 
-  /** Puts the recording back as it was before its last change. */
+  /** Puts the sketch back as it was before its last change. */
   private putBackTheLastChange(): void {
     const before = this.theOtherRollShowing?.sketch?.before ?? [];
     const last = before.at(-1);
@@ -11933,15 +11974,14 @@ export class AppView {
   }
 
   /**
-   * Changes the recording on the drawing, and everything drawn from it: the
-   * recording kept, its drawing and its row in the list. A playback going is
-   * held where it stands, since it was sounding the recording before the
-   * change.
+   * Changes the sketch on the drawing, and everything drawn from it: the
+   * sketch kept, its drawing and its row in the list. A playback going is
+   * held where it stands, since it was sounding the sketch before the change.
    */
   private changeTheSketchShowing(
     events: readonly MidiFileEvent[],
     before: readonly (readonly MidiFileEvent[])[],
-    chosen: { readonly midi: number; readonly downAtMs: number } | null = null,
+    chosen: readonly KeyNamed[] = [],
   ): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
@@ -11979,7 +12019,7 @@ export class AppView {
   /** What a roll is drawn as, as the options in the sheet stand. */
   private theSceneToDraw(
     roll: RunRoll,
-    chosen: { readonly midi: number; readonly downAtMs: number } | null,
+    chosen: readonly KeyNamed[],
     ghosts: readonly RollGhost[] = this.theNotesAskedFor(),
   ): RollScene {
     return theSceneOfTheRoll({
@@ -12007,7 +12047,7 @@ export class AppView {
       return;
     }
     const ghosts = this.theNotesAskedFor();
-    const scene = this.theSceneToDraw(roll, this.theOtherRollShowing?.sketch?.chosen ?? null, ghosts);
+    const scene = this.theSceneToDraw(roll, this.theOtherRollShowing?.sketch?.chosen ?? [], ghosts);
     this.drawnScene = scene;
     this.el.rollBody.replaceChildren(drawTheRoll(scene));
     this.rollHeads = theHeadsOf(this.el.rollBody);

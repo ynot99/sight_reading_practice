@@ -4223,9 +4223,13 @@ describe('AppView', () => {
       expect(headAt(element('roll-body'))).toBe('0.500');
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
       expect(chosen()).toEqual([1_000]);
+      // Another tapped is chosen as well; tapped again, let go of.
       tapOn(500);
-      expect(chosen()).toEqual([500]);
+      expect(chosen()).toEqual([500, 1_000]);
       expect(remove.dataset['idle']).toBeUndefined();
+      expect(remove.title).toBe('Delete the 2 chosen notes');
+      tapOn(1_000);
+      expect(chosen()).toEqual([500]);
       expect(remove.title).toBe('Delete the chosen note, E4');
 
       // A playback going is of the sketch before the change, so it is held.
@@ -4462,6 +4466,17 @@ describe('AppView', () => {
       expect(press({ key: 'Delete', code: 'Delete' }, search).defaultPrevented).toBe(false);
       expect(notes()).toBe(3);
 
+      // Two chosen go together, and come back together.
+      element('roll-body').dispatchEvent(
+        new MouseEvent('click', { bubbles: true, clientX: 0.1 * zoom, clientY: (row + 2.5) * 13 - scrolledDown() }),
+      );
+      press({ key: 'Delete', code: 'Delete' });
+      expect(notes()).toBe(1);
+      press({ key: 'z', code: 'KeyZ', ctrlKey: true });
+      expect(notes()).toBe(3);
+      element('roll-body').dispatchEvent(
+        new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() }),
+      );
       expect(press({ key: 'Delete', code: 'Delete' }).defaultPrevented).toBe(true);
       expect(notes()).toBe(2);
       // Redo is not offered, so its keys do nothing.
@@ -12741,22 +12756,69 @@ describe('AppView', () => {
       point('pointermove', { x: onNote(0, 60).x + 0.3 * zoom, y: onNote(0, 60).y });
       point('pointercancel', { x: onNote(0, 60).x + 0.3 * zoom, y: onNote(0, 60).y });
       expect(struck()).toEqual(now);
-      expect(chosen()).toEqual([[60, 0]]);
+      expect(chosen()).toEqual([
+        [60, 0],
+        [62, 750],
+      ]);
 
-      // Not chosen yet: taken hold of as it is pressed, and moved in the same
-      // gesture - exactly, the grid being off.
+      // The chosen are dragged together, by as much as the one taken hold of.
+      point('pointerdown', onNote(0, 60));
+      point('pointermove', { x: onNote(0, 60).x + 0.3 * zoom, y: onNote(0, 60).y - 13 });
+      point('pointerup', { x: onNote(0, 60).x + 0.3 * zoom, y: onNote(0, 60).y - 13 });
+      expect(struck()).toEqual([[61, 300], [63, (now[1]?.[1] ?? 0) + 300], now[2]]);
+      expect(chosen()).toEqual([
+        [61, 300],
+        [63, 1_050],
+      ]);
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(struck()).toEqual(now);
+      expect(chosen()).toEqual([]);
+      // Taken far above the keyboard, the highest of them stops on its top key.
+      tap(onNote(0, 60));
+      tap(onNote(750, 62));
+      point('pointerdown', onNote(0, 60));
+      point('pointermove', { x: onNote(0, 60).x, y: onNote(0, 60).y - 80 * 13 });
+      point('pointerup', { x: onNote(0, 60).x, y: onNote(0, 60).y - 80 * 13 });
+      expect(struck().slice(0, 2)).toEqual([
+        [106, 0],
+        [108, now[1]?.[1] ?? 0],
+      ]);
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(struck()).toEqual(now);
+      // And far below it, the lowest on its bottom key.
+      tap(onNote(0, 60));
+      tap(onNote(750, 62));
+      point('pointerdown', onNote(0, 60));
+      point('pointermove', { x: onNote(0, 60).x, y: onNote(0, 60).y + 80 * 13 });
+      point('pointerup', { x: onNote(0, 60).x, y: onNote(0, 60).y + 80 * 13 });
+      expect(struck().slice(0, 2)).toEqual([
+        [21, 0],
+        [23, now[1]?.[1] ?? 0],
+      ]);
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(struck()).toEqual(now);
+
+      // Not chosen: taken hold of as it is pressed, and moved alone in the
+      // same gesture - exactly, the grid being off.
+      tap(onNote(750, 62));
       const third = onNote(1_200, 64);
       point('pointerdown', third);
-      expect(chosen()).toEqual([[64, 1_200]]);
+      expect(chosen()).toEqual([[62, 750]]);
       point('pointermove', { x: third.x + 0.7 * 0.6 * zoom, y: third.y - 13 });
       point('pointerup', { x: third.x + 0.7 * 0.6 * zoom, y: third.y - 13 });
       expect(struck()).toEqual([...now.slice(0, 2), [65, (now[2]?.[1] ?? 0) + 420]]);
       expect(chosen()).toEqual([[65, 1_620]]);
-      // And pressed and let go of without moving, it stays chosen.
+      // Pressed and let go of without moving, a note is a tap: chosen as well,
+      // and once alone.
       const first = onNote(0, 60);
       point('pointerdown', first);
       point('pointerup', first);
       click(first);
+      expect(chosen()).toEqual([
+        [60, 0],
+        [65, 1_620],
+      ]);
+      tap(onNote(1_620, 65));
       expect(chosen()).toEqual([[60, 0]]);
 
       // Its end taken hold of, in its last few pixels, it is held longer, to
@@ -12775,19 +12837,27 @@ describe('AppView', () => {
       expect(element('roll-body').dataset['grip']).toBe('end');
       mouse('pointermove', { x: first.x, y: first.y - 13 });
       expect(element('roll-body').dataset['grip']).toBeUndefined();
+      // Two chosen, both by as much.
+      tap(onNote(750, 62));
+      const heldToo = (): number | undefined =>
+        sketches.find(id)?.events.find((event) => event.kind === 'noteOff' && event.midi === 62)?.atMs;
+      expect(heldToo()).toBe(1_050);
       mouse('pointerdown', end);
       mouse('pointermove', { x: end.x + 0.25 * zoom, y: end.y + 13 });
       mouse('pointerup', { x: end.x + 0.25 * zoom, y: end.y + 13 });
-      expect(held()).toBe(600);
-      expect(chosen()).toEqual([[60, 0]]);
+      expect([held(), heldToo()]).toEqual([600, 1_350]);
+      expect(chosen()).toEqual([
+        [60, 0],
+        [62, 750],
+      ]);
       const longer = { x: (580 / 1000) * zoom, y: first.y };
       element<HTMLInputElement>('roll-snap').click();
       mouse('pointerdown', longer);
       mouse('pointermove', { x: 0, y: longer.y });
       mouse('pointerup', { x: 0, y: longer.y });
-      expect(held()).toBe(30);
+      expect([held(), heldToo()]).toEqual([30, 780]);
       element<HTMLButtonElement>('roll-undo').click();
-      expect(held()).toBe(600);
+      expect([held(), heldToo()]).toEqual([600, 1_350]);
     });
 
     it('says so in the middle of the page when a take played to the click cannot be written down', async () => {

@@ -19,6 +19,7 @@ import {
   barsCountedOnItsBeats,
   takeOfTheRun,
   takeWithoutTheKey,
+  takeWithTheKeyMoved,
   theKeysOfTheTake,
   type RolledBeat,
   type RolledPress,
@@ -1188,6 +1189,27 @@ describe('changing a recording', () => {
     expect(takeWithoutTheKey(events, MIDI.C4, 100)).toEqual([on(0, MIDI.C4), pedal, off(150, MIDI.C4), on(200, MIDI.E4)]);
     // A key still down at the end has no release to take.
     expect(takeWithoutTheKey(events, MIDI.E4, 200)).toEqual([on(0, MIDI.C4), pedal, on(100, MIDI.C4), off(150, MIDI.C4), off(300, MIDI.C4)]);
+  });
+
+  it('moves a key, its press and its release together, to another moment and pitch, in its place in time', () => {
+    const pedal: MidiFileEvent = { kind: 'sustain', atMs: 50, value: 1 };
+    const events = [on(0, MIDI.C4), pedal, off(150, MIDI.C4), on(200, MIDI.E4), off(300, MIDI.E4)];
+
+    // Past the E, a tone higher.
+    expect(takeWithTheKeyMoved(events, { midi: MIDI.C4, downAtMs: 0 }, { midi: MIDI.D4, downAtMs: 250 })).toEqual([
+      pedal,
+      on(200, MIDI.E4),
+      on(250, MIDI.D4),
+      off(300, MIDI.E4),
+      off(400, MIDI.D4),
+    ]);
+    // A key still down at the end has only its press to move.
+    expect(takeWithTheKeyMoved([on(0, MIDI.C4), on(100, MIDI.E4), off(200, MIDI.C4)], { midi: MIDI.E4, downAtMs: 100 }, { midi: MIDI.E4, downAtMs: 50 })).toEqual([
+      on(0, MIDI.C4),
+      on(50, MIDI.E4),
+      off(200, MIDI.C4),
+    ]);
+    expect(takeWithTheKeyMoved(events, { midi: MIDI.C4, downAtMs: 1 }, { midi: MIDI.C4, downAtMs: 9 })).toBeNull();
   });
 
   it('takes out nothing that is not there, and never the only key', () => {

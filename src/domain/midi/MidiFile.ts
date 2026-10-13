@@ -203,6 +203,26 @@ function gapAfter(beats: readonly HeardBeat[], at: number): number {
   return next === undefined ? here.atMs - elementAt(beats, at - 1).atMs : next.atMs - here.atMs;
 }
 
+/**
+ * Events in time order. Stable: two at the same instant keep the order they
+ * arrived in, except that a release always comes before a press, so
+ * re-striking a key that is still down cannot silence the note that just
+ * started.
+ */
+export function inTheOrderPlayed(events: readonly MidiFileEvent[]): readonly MidiFileEvent[] {
+  return events
+    .map((event, index) => ({ event, index }))
+    .sort((left, right) => {
+      const byTime = left.event.atMs - right.event.atMs;
+      if (byTime !== 0) {
+        return byTime;
+      }
+      const byKind = orderAt(left.event) - orderAt(right.event);
+      return byKind === 0 ? left.index - right.index : byKind;
+    })
+    .map(({ event }) => event);
+}
+
 /** Rank at one instant: a release must be written before the next press. */
 function orderAt(event: MidiFileEvent): number {
   switch (event.kind) {
@@ -292,20 +312,7 @@ export function writeMidiFile(
   // same moment.
   const grid = options.beats === undefined ? null : theClickOfTheTake(events, options.beats);
 
-  // Stable: two events at the same instant keep the order they arrived in,
-  // except that a release always precedes a press, so re-striking a key that
-  // is still down cannot silence the note that just started.
-  const ordered = events
-    .map((event, index) => ({ event, index }))
-    .sort((left, right) => {
-      const byTime = left.event.atMs - right.event.atMs;
-      if (byTime !== 0) {
-        return byTime;
-      }
-      const byKind = orderAt(left.event) - orderAt(right.event);
-      return byKind === 0 ? left.index - right.index : byKind;
-    })
-    .map(({ event }) => event);
+  const ordered = inTheOrderPlayed(events);
 
   const marks = grid === null ? [] : theMarksOfTheClick(grid);
   const track: number[] = [];

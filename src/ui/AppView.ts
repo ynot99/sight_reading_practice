@@ -152,6 +152,8 @@ import {
   barsCountedOnItsBeats,
   rollOfTheTake,
   takeWithoutTheKey,
+  takeWithTheKeyMoved,
+  type RolledPress,
   takeOfTheRun,
   type RunRoll,
   theBeatNearest,
@@ -1548,6 +1550,21 @@ export class AppView {
     readonly clientY: number;
     readonly trail: FingerAt[];
     moved: boolean;
+  } | null = null;
+  /**
+   * The chosen key of a recording held by a finger or the mouse: where it came
+   * down, the drawing as it was then, and where the key has been moved to so
+   * far, if anywhere.
+   */
+  private rollDrag: {
+    readonly pointerId: number;
+    readonly clientX: number;
+    readonly clientY: number;
+    readonly scene: RollScene;
+    readonly moved: {
+      readonly to: { readonly midi: number; readonly downAtMs: number };
+      readonly events: readonly MidiFileEvent[];
+    } | null;
   } | null = null;
   /** The colours it is painted in, read off the stylesheet once and again when those change. */
   private rollInks: RollInks | null = null;
@@ -8368,12 +8385,15 @@ export class AppView {
       this.deleteTheChosenKey();
     });
     this.listen(this.el.rollUndo, 'click', () => {
-      this.putBackTheLastKeyDeleted();
+      this.putBackTheLastChange();
     });
     this.listen(this.el.rollBody, 'pointerdown', (event) => {
       this.pinched = false;
       this.panned = false;
       this.stopTheFling();
+      if (this.rollFingers.size === 0 && this.takeHoldOfTheChosenKey(event)) {
+        return;
+      }
       this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       this.beginAPinch();
       // One finger, or a pen, moves the drawing; a mouse points at it, as it
@@ -8392,6 +8412,10 @@ export class AppView {
           : null;
     });
     this.listen(this.el.rollBody, 'pointermove', (event) => {
+      if (this.rollDrag?.pointerId === event.pointerId) {
+        this.dragTheChosenKey(event);
+        return;
+      }
       if (!this.rollFingers.has(event.pointerId)) {
         return;
       }
@@ -8401,6 +8425,10 @@ export class AppView {
     });
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
+        if (this.rollDrag?.pointerId === event.pointerId) {
+          this.letGoOfTheChosenKey(ending === 'pointerup');
+          return;
+        }
         if (!this.rollFingers.has(event.pointerId)) {
           return;
         }
@@ -11236,7 +11264,7 @@ export class AppView {
   /**
    * The two buttons that change a recording, as the drawing stands: deleting
    * needs a recording and a key chosen on it that is not its only one, and
-   * putting back needs something deleted. Each says what it is waiting for
+   * putting back needs something deleted or moved. Each says what it is waiting for
    * rather than going grey without a word.
    */
   private sayWhatCanBeChanged(): void {
@@ -11263,10 +11291,10 @@ export class AppView {
     this.el.rollUndo.hidden = take === undefined;
     if ((take?.before.length ?? 0) > 0) {
       delete this.el.rollUndo.dataset['idle'];
-      this.el.rollUndo.title = 'Put back the last note deleted';
+      this.el.rollUndo.title = 'Put back the last change';
     } else {
       this.el.rollUndo.dataset['idle'] = 'true';
-      this.el.rollUndo.title = 'Undo. Nothing has been deleted to put back.';
+      this.el.rollUndo.title = 'Undo. Nothing has been changed to put back.';
     }
     this.el.rollUndo.setAttribute('aria-label', this.el.rollUndo.title);
   }
@@ -11279,17 +11307,10 @@ export class AppView {
   private chooseTheKeyTapped(event: MouseEvent): boolean {
     const showing = this.theOtherRollShowing;
     const take = showing?.take;
-    const grid = this.el.rollBody.firstElementChild?.querySelector<HTMLElement>('.roll__grid') ?? null;
-    const scene = this.drawnScene;
-    if (showing === null || take === undefined || grid === null || scene === null) {
+    if (showing === null || take === undefined) {
       return false;
     }
-    const pxPerSecond = Number(this.el.rollZoom.value);
-    // The grid stands still over the run, which is where the view says.
-    const box = grid.getBoundingClientRect();
-    const atMs = timeFromTap(event.clientX - box.left + this.rollScroller.x, pxPerSecond);
-    const row = rowFromTap(event.clientY - box.top + this.rollScroller.y, this.rollLook.rowPx);
-    const key = atMs === null || row === null ? null : theKeyAt(showing.roll, scene, atMs, row, pxPerSecond);
+    const key = this.theKeyUnder(event);
     this.theOtherRollShowing = {
       ...showing,
       take: { ...take, chosen: key === null ? null : { midi: key.midi, downAtMs: key.downAtMs } },
@@ -11301,6 +11322,109 @@ export class AppView {
     }
     this.putTheHeadAt(key.downAtMs - rollBeganAtMs(showing.roll));
     return true;
+  }
+
+  /** The key of the drawing under a point on the screen, as the pointer's hover finds it. */
+  private theKeyUnder(point: { readonly clientX: number; readonly clientY: number }): RolledPress | null {
+    const roll = this.theRoll();
+    const grid = this.el.rollBody.firstElementChild?.querySelector<HTMLElement>('.roll__grid') ?? null;
+    const scene = this.drawnScene;
+    if (roll === null || grid === null || scene === null) {
+      return null;
+    }
+    const pxPerSecond = Number(this.el.rollZoom.value);
+    // The grid stands still over the run, which is where the view says.
+    const box = grid.getBoundingClientRect();
+    const atMs = timeFromTap(point.clientX - box.left + this.rollScroller.x, pxPerSecond);
+    const row = rowFromTap(point.clientY - box.top + this.rollScroller.y, this.rollLook.rowPx);
+    return atMs === null || row === null ? null : theKeyAt(roll, scene, atMs, row, pxPerSecond);
+  }
+
+  /**
+   * Takes hold of the chosen key of a recording, where a finger or the mouse
+   * goes down on it; says whether it did. Anywhere else the drawing is moved,
+   * as it always was - so a note is dragged only once it has been chosen. A
+   * pointer taken off the drawing lets go of it as it was, which is what a
+   * drag carried off the edge of anything means.
+   */
+  private takeHoldOfTheChosenKey(event: PointerEvent): boolean {
+    const showing = this.theOtherRollShowing;
+    const chosen = showing?.take?.chosen ?? null;
+    const scene = this.drawnScene;
+    if (showing === null || chosen === null || scene === null || this.rollDrag !== null) {
+      return false;
+    }
+    const key = this.theKeyUnder(event);
+    if (key === null || key.midi !== chosen.midi || key.downAtMs !== chosen.downAtMs) {
+      return false;
+    }
+    this.rollDrag = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      scene,
+      moved: null,
+    };
+    return true;
+  }
+
+  /**
+   * Moves the key held to where the pointer has taken it: across by time, on
+   * the nearest line of the grid where the marker would be put on one, and up
+   * or down by pitch inside the rows drawn. Shown by painting the drawing
+   * again, not by building it again, which is too slow to follow a finger.
+   */
+  private dragTheChosenKey(event: PointerEvent): void {
+    const drag = this.rollDrag;
+    const showing = this.theOtherRollShowing;
+    const take = showing?.take;
+    const chosen = take?.chosen ?? null;
+    const stored = take === undefined ? null : this.runtime.takes.find(take.id);
+    if (drag === null || showing === null || take === undefined || chosen === null || stored === null) {
+      return;
+    }
+    const acrossPx = event.clientX - drag.clientX;
+    const downPx = event.clientY - drag.clientY;
+    if (drag.moved === null && Math.hypot(acrossPx, downPx) < TAP_SLOP_PX) {
+      return;
+    }
+    // A drag, so the click the finger makes on letting go is not a tap.
+    this.panned = true;
+    const origin = rollBeganAtMs(showing.roll);
+    const wanted = chosen.downAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
+    const at = this.el.rollSnap.checked ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
+    const lowest = drag.scene.highest - drag.scene.rows + 1;
+    const to = {
+      midi: Math.min(drag.scene.highest, Math.max(lowest, chosen.midi - Math.round(downPx / this.rollLook.rowPx))),
+      downAtMs: Math.round(at + origin),
+    };
+    const events = takeWithTheKeyMoved(stored.events, chosen, to);
+    if (events === null) {
+      return;
+    }
+    this.rollDrag = { ...drag, moved: { to, events } };
+    this.drawnScene = this.theSceneToDraw(rollOfTheTake({ ...stored, events }), to);
+    this.paintTheRoll();
+  }
+
+  /**
+   * Lets go of the key held: where it was moved to on a finger lifted, the
+   * recording changed as a delete changes it; and drawn as it was where the
+   * pointer was taken away instead.
+   */
+  private letGoOfTheChosenKey(lifted: boolean): void {
+    const drag = this.rollDrag;
+    const take = this.theOtherRollShowing?.take;
+    const stored = take === undefined ? null : this.runtime.takes.find(take.id);
+    this.rollDrag = null;
+    if (drag === null || drag.moved === null) {
+      return;
+    }
+    if (lifted && take !== undefined && stored !== null) {
+      this.changeTheTakeShowing(drag.moved.events, [...take.before, stored.events], drag.moved.to);
+    } else {
+      this.drawTheRollInto();
+    }
   }
 
   /** Takes the chosen key out of the recording, keeping what it was to be put back. */
@@ -11318,7 +11442,7 @@ export class AppView {
   }
 
   /** Puts the recording back as it was before its last change. */
-  private putBackTheLastKeyDeleted(): void {
+  private putBackTheLastChange(): void {
     const before = this.theOtherRollShowing?.take?.before ?? [];
     const last = before.at(-1);
     if (last !== undefined) {
@@ -11335,6 +11459,7 @@ export class AppView {
   private changeTheTakeShowing(
     events: readonly MidiFileEvent[],
     before: readonly (readonly MidiFileEvent[])[],
+    chosen: { readonly midi: number; readonly downAtMs: number } | null = null,
   ): void {
     const showing = this.theOtherRollShowing;
     const take = showing?.take;
@@ -11351,7 +11476,7 @@ export class AppView {
       ...showing,
       roll,
       barLabel: barsCountedOnItsBeats(roll),
-      take: { id: take.id, chosen: null, before },
+      take: { id: take.id, chosen, before },
     };
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();
@@ -11369,6 +11494,23 @@ export class AppView {
     this.el.rollPractise.disabled = !chosen;
   }
 
+  /** What a roll is drawn as, as the options in the sheet stand. */
+  private theSceneToDraw(
+    roll: RunRoll,
+    chosen: { readonly midi: number; readonly downAtMs: number } | null,
+    ghosts: readonly RollGhost[] = this.theNotesAskedFor(),
+  ): RollScene {
+    return theSceneOfTheRoll({
+      roll,
+      barLabel: this.barNamer(),
+      grid: this.theRollsGrid(),
+      ghosts,
+      slips: this.el.rollSlips.checked,
+      keepsTime: this.theRunKeptTime(),
+      chosen,
+    });
+  }
+
   /**
    * Builds the drawing again, leaving the playback alone.
    *
@@ -11382,15 +11524,7 @@ export class AppView {
       return;
     }
     const ghosts = this.theNotesAskedFor();
-    const scene = theSceneOfTheRoll({
-      roll,
-      barLabel: this.barNamer(),
-      grid: this.theRollsGrid(),
-      ghosts,
-      slips: this.el.rollSlips.checked,
-      keepsTime: this.theRunKeptTime(),
-      chosen: this.theOtherRollShowing?.take?.chosen ?? null,
-    });
+    const scene = this.theSceneToDraw(roll, this.theOtherRollShowing?.take?.chosen ?? null, ghosts);
     this.drawnScene = scene;
     this.el.rollBody.replaceChildren(drawTheRoll(scene));
     this.rollHeads = theHeadsOf(this.el.rollBody);

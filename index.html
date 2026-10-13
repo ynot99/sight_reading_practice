@@ -461,8 +461,9 @@
               title="Keep this run with the recordings">Keep</button>
             <!--
               A recording changed where it is looked at: a tap on a note
-              chooses it, and this takes it out. What was taken out can be put
-              back, last first, while the recording stays open.
+              chooses it, a drag moves it once chosen, and this takes it out.
+              Each change can be put back, last first, while the recording
+              stays open.
             -->
             <button id="roll-delete" type="button" class="button" title="Delete a note"
               aria-label="Delete a note">
@@ -601,7 +602,7 @@
               </label>
               <label class="checkbox" for="roll-snap">
                 <input id="roll-snap" type="checkbox" checked />
-                Put the marker on the nearest beat
+                Put the marker, and a note moved, on the nearest beat
               </label>
               <label class="checkbox" for="roll-ghosts">
                 <input id="roll-ghosts" type="checkbox" checked />

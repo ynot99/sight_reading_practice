@@ -1,5 +1,5 @@
 import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
-import { theClickOfTheTake, type MidiFileEvent } from '../../domain/midi/MidiFile.js';
+import { inTheOrderPlayed, theClickOfTheTake, type MidiFileEvent } from '../../domain/midi/MidiFile.js';
 import { Duration } from '../../domain/model/Duration.js';
 import {
   barLines,
@@ -975,6 +975,32 @@ export function takeWithoutTheKey(
     return null;
   }
   return events.filter((_, at) => at !== key.on && at !== key.off);
+}
+
+/**
+ * A take's events with one key moved: struck at another moment and as
+ * another pitch, held as long as it was, and put in its place in time
+ * again. `null` where there is no such key.
+ */
+export function takeWithTheKeyMoved(
+  events: readonly MidiFileEvent[],
+  key: { readonly midi: number; readonly downAtMs: number },
+  to: { readonly midi: number; readonly downAtMs: number },
+): readonly MidiFileEvent[] | null {
+  const found = theKeysOfTheTake(events).find(
+    (each) => each.midi === key.midi && each.downAtMs === key.downAtMs,
+  );
+  if (found === undefined) {
+    return null;
+  }
+  const byMs = to.downAtMs - key.downAtMs;
+  return inTheOrderPlayed(
+    events.map((event, at) =>
+      event.kind !== 'sustain' && (at === found.on || at === found.off)
+        ? { ...event, atMs: event.atMs + byMs, midi: to.midi }
+        : event,
+    ),
+  );
 }
 
 /**

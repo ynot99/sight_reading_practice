@@ -4158,7 +4158,7 @@ describe('AppView', () => {
       expect(remove.title).toBe('Delete a note. Tap one to choose it.');
       expect(element('takes-list').textContent).toContain('2 notes');
       expect(undo.dataset['idle']).toBeUndefined();
-      expect(undo.title).toBe('Put back the last note deleted');
+      expect(undo.title).toBe('Put back the last change');
 
       // The last one out, then the one before it, comes back.
       tapOn(0);
@@ -12261,6 +12261,104 @@ describe('AppView', () => {
       without?.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(runtime.controller.openedExercise).toBe(opened);
+    });
+
+    it('moves the chosen note of a recording where it is dragged, onto the beat, and only once chosen', async () => {
+      const { view, metronome, clock, midi, takes } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      frameButton('free').click();
+      element<HTMLButtonElement>('free-beats-fewer').click();
+      holdTheMetronome();
+      // A note on each of three beats of the click's 100 bpm, 600 ms apart.
+      for (const pitch of [60, 62, 64]) {
+        metronome.advanceBeats(1);
+        midi.noteOn(pitch, clock.now());
+        clock.advance(300);
+        midi.noteOff(pitch, clock.now());
+      }
+      holdTheMetronome();
+      element<HTMLButtonElement>('focus-keep').click();
+      const id = takes.list()[0]?.id ?? '';
+      const struck = (): number[][] =>
+        (takes.find(id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [[event.midi, event.atMs]] : []));
+      const before = struck();
+      expect(before.map(([pitch]) => pitch)).toEqual([60, 62, 64]);
+      rowButton('takes-list', 'Look at this take').click();
+
+      // On the grid that stands at the drawing's corner, a row thirteen pixels.
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const onNote = (fromMs: number, pitch: number): { x: number; y: number } => ({
+        x: ((fromMs + 100) / 1000) * zoom,
+        y: (highest - pitch + 0.5) * 13,
+      });
+      const point = (type: string, at: { x: number; y: number }, pointerType = 'touch'): void => {
+        element('roll-body').dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId: 3, pointerType, clientX: at.x, clientY: at.y }),
+        );
+      };
+      const click = (at: { x: number; y: number }): void => {
+        element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: at.x, clientY: at.y }));
+      };
+      const tap = (at: { x: number; y: number }): void => {
+        point('pointerdown', at);
+        point('pointerup', at);
+        click(at);
+      };
+      const chosen = (): number[][] =>
+        (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => [highest - note.row, note.fromMs]);
+      const second = onNote(600, 62);
+      // Seven tenths of a beat on, and a row up.
+      const dragged = { x: second.x + 0.7 * 0.6 * zoom, y: second.y - 13 };
+
+      tap(second);
+      expect(chosen()).toEqual([[62, 600]]);
+      // A finger that wavers a little on it is still tapping, and moves nothing.
+      const wavered = { x: second.x + 3, y: second.y + 2 };
+      point('pointerdown', second);
+      point('pointermove', wavered);
+      point('pointerup', wavered);
+      click(wavered);
+      expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
+      expect(chosen()).toEqual([[62, 600]]);
+      point('pointerdown', second);
+      point('pointermove', dragged);
+      // Shown where it is going before it is let go of, and kept nowhere yet.
+      expect(chosen()).toEqual([[63, 1_200]]);
+      expect(struck()).toEqual(before);
+      point('pointerup', dragged);
+      // The click a finger makes letting go is not a tap on the drawing.
+      click(dragged);
+      expect(struck()).toEqual([before[0], [63, (before[1]?.[1] ?? 0) + 600], before[2]]);
+      expect(chosen()).toEqual([[63, 1_200]]);
+      expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBeUndefined();
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(struck()).toEqual(before);
+
+      // Off the grid where the marker is put exactly, with the mouse as well.
+      element<HTMLInputElement>('roll-snap').click();
+      tap(second);
+      point('pointerdown', second, 'mouse');
+      point('pointermove', { x: second.x + 0.15 * zoom, y: second.y }, 'mouse');
+      point('pointerup', { x: second.x + 0.15 * zoom, y: second.y }, 'mouse');
+      expect(struck()[1]).toEqual([62, (before[1]?.[1] ?? 0) + 150]);
+
+      // Taken away rather than let go of: nothing changes.
+      const now = struck();
+      tap(onNote(0, 60));
+      point('pointerdown', onNote(0, 60));
+      point('pointermove', { x: onNote(0, 60).x + 0.3 * zoom, y: onNote(0, 60).y });
+      point('pointercancel', { x: onNote(0, 60).x + 0.3 * zoom, y: onNote(0, 60).y });
+      expect(struck()).toEqual(now);
+      expect(chosen()).toEqual([[60, 0]]);
+
+      // Not chosen: a finger on it moves the drawing, as it always has.
+      const third = onNote(1_200, 64);
+      point('pointerdown', third);
+      point('pointermove', { x: third.x + 0.7 * 0.6 * zoom, y: third.y - 13 });
+      point('pointerup', { x: third.x + 0.7 * 0.6 * zoom, y: third.y - 13 });
+      expect(struck()).toEqual(now);
     });
 
     it('says so in the middle of the page when a take played to the click cannot be written down', async () => {

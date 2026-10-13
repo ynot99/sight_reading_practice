@@ -454,6 +454,14 @@ const SHORTEST_NOTE_MS = 30;
  */
 const ROOM_IN_A_SKETCH = 8;
 
+/** How far down the run the view stood, and the place down it a change of row height is held at. */
+interface RowsHeld {
+  readonly scrolledDownPx: number;
+  readonly viewTallPx: number;
+  readonly wholeTallPx: number;
+  readonly atPx: number;
+}
+
 /**
  * How long a beat lasts where a moment falls, on a roll's beats: a note
  * written there is that long. Half a second where the roll has no beats.
@@ -10916,7 +10924,7 @@ export class AppView {
     // the browser too, which may otherwise go back a page on it.
     if (event.altKey) {
       event.preventDefault();
-      this.zoomTheRowsByWheel(theWheelsTurn(event));
+      this.zoomTheRowsByWheel(theWheelsTurn(event), event.clientY);
       return;
     }
     // Otherwise it scrolls, as it would have scrolled the page: both ways from
@@ -10963,12 +10971,44 @@ export class AppView {
    * row asked for, a turn up would move nothing until it had made up the
    * difference.
    */
-  private zoomTheRowsByWheel(deltaPx: number): void {
+  private zoomTheRowsByWheel(deltaPx: number, clientY: number | null): void {
     const was = Math.round(this.theRowAsDrawn());
     const now = zoomAfterWheel(was, deltaPx, LEAST_ROW, MOST_ROW);
     if (now !== was) {
+      const held = this.theRowsHeldAt(clientY);
       this.rollRowPx = now;
       this.applyTheZoom();
+      this.holdTheRows(held);
+    }
+  }
+
+  /**
+   * The pitch under a place down the view, as the rows are about to grow or
+   * shrink: under `clientY`, or under the middle of the view where nothing on
+   * the drawing was pointed at.
+   *
+   * Read before anything is written, as `holdTheZoomAround` reads its widths.
+   */
+  private theRowsHeldAt(clientY: number | null): RowsHeld {
+    const heights = this.theRunsHeights();
+    const top = clientY === null ? null : this.rollCanvases?.grid.getBoundingClientRect().top;
+    return {
+      ...heights,
+      atPx: top === null || top === undefined || clientY === null ? heights.viewTallPx / 2 : clientY - top,
+    };
+  }
+
+  /**
+   * Scrolls the view down or up so the pitch that was under the place held is
+   * under it again, now that the rows are a new height.
+   *
+   * Without it the top of the view stayed where it was in pixels, so a taller
+   * row pushed what was in the middle down the view and out of it.
+   */
+  private holdTheRows(held: RowsHeld): void {
+    const to = scrollAfterZoom(held.scrolledDownPx, held.atPx, held.wholeTallPx, this.rollScroller.wholeTallPx);
+    if (this.rollScroller.to(this.rollScroller.x, to)) {
+      this.askWhereTheViewIs();
     }
   }
 
@@ -10989,7 +11029,7 @@ export class AppView {
       event.preventDefault();
     }
     if (axis === 'down') {
-      this.zoomTheRowsByWheel(theWheelsTurn(event));
+      this.zoomTheRowsByWheel(theWheelsTurn(event), null);
       return;
     }
     const grid = this.rollCanvases?.grid.getBoundingClientRect();
@@ -12965,21 +13005,30 @@ export class AppView {
     this.pinched = true;
     const asked = pinchedTo(from, now);
     const was = Number(this.el.rollZoom.value);
+    const middle = this.theMiddleOfTheFingers();
+    const held = asked.row === this.rollRowPx ? null : this.theRowsHeldAt(middle.y);
     this.el.rollZoom.value = String(asked.zoom);
     this.rollRowPx = asked.row;
     // Held around the point between the fingers, for the same reason the wheel
-    // is held around the pointer: a pinch aimed at a bar means that bar.
+    // is held around the pointer: a pinch aimed at a bar means that bar, and
+    // one aimed at a pitch that pitch.
     if (asked.zoom !== was) {
-      this.holdTheZoomAround(this.theMiddleOfTheFingers(), was, asked.zoom);
-      return;
+      this.holdTheZoomAround(middle.x, was, asked.zoom);
+    } else {
+      this.applyTheZoom();
     }
-    this.applyTheZoom();
+    if (held !== null) {
+      this.holdTheRows(held);
+    }
   }
 
-  /** Where two fingers are, across the screen, as one number. */
-  private theMiddleOfTheFingers(): number {
+  /** Where the point between two fingers is on the screen. */
+  private theMiddleOfTheFingers(): { readonly x: number; readonly y: number } {
     const [first, second] = [...this.rollFingers.values()];
-    return ((first?.x ?? 0) + (second?.x ?? first?.x ?? 0)) / 2;
+    return {
+      x: ((first?.x ?? 0) + (second?.x ?? first?.x ?? 0)) / 2,
+      y: ((first?.y ?? 0) + (second?.y ?? first?.y ?? 0)) / 2,
+    };
   }
 
   /** How fast the reader has asked to hear the run, as a multiple of its own time. */
@@ -12998,8 +13047,10 @@ export class AppView {
       this.rollHeads?.place.style.setProperty('--roll-second', second);
       roll.style.setProperty('--roll-row-asked', `${this.rollRowPx}px`);
     }
-    // How long the run now is follows from the zoom, so the scroller is told at
-    // once - a place set next is kept inside the new length, not the old.
+    // How long and how tall the run now is follow from the zoom, so the
+    // scroller is told at once - a place set next is kept inside the new size,
+    // not the old. Rows shorter than the room, which the stylesheet stretches
+    // to fill it, leave nowhere to scroll to either way.
     const scene = this.drawnScene;
     const scrolled = this.rollScroller;
     if (scene !== null) {
@@ -13007,7 +13058,7 @@ export class AppView {
         { widePx: scrolled.viewWidePx, tallPx: scrolled.viewTallPx },
         {
           widePx: (scene.lengthMs / 1000) * Number(this.el.rollZoom.value),
-          tallPx: scrolled.wholeTallPx,
+          tallPx: scene.rows * this.rollRowPx,
         },
       );
     }

@@ -3708,6 +3708,64 @@ describe('AppView', () => {
       }
     });
 
+    it('keeps the pitch where it was as the rows grow or shrink: the middle from the strip, the pointer, the fingers', async () => {
+      // Only the height changed, and the top of the view stayed where it was in
+      // pixels: a taller row pushed what had been in the middle down the view.
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 60 });
+      try {
+        await openThePictureOfARun();
+        // The view a hundred pixels down the screen, so a place on the screen
+        // and one down the view are not the same number.
+        for (const canvas of element('roll-body').querySelectorAll('canvas')) {
+          canvas.getBoundingClientRect = () => new DOMRect(0, 100, 100, 60);
+        }
+        const down = (): number =>
+          Number.parseFloat(
+            element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+          );
+        const asked = (): number => Number.parseFloat(theRowsAsked() || '13');
+        // The row, counted from the top, under a place down the view.
+        const rowUnder = async (atPx: number): Promise<number> => {
+          await aFrame();
+          return (down() + atPx) / asked();
+        };
+        wheel(0, 40);
+        const before = await rowUnder(30);
+        expect(down()).toBe(40);
+
+        // Over the strip: around the middle of the view, either way.
+        element('roll-pitch-map').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120 }));
+        expect(asked()).toBe(15);
+        expect(await rowUnder(30)).toBeCloseTo(before, 6);
+        element('roll-pitch-map').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120 }));
+        expect(asked()).toBe(13);
+        expect(await rowUnder(30)).toBeCloseTo(before, 6);
+
+        // With Alt over the drawing: around the pointer.
+        const underThePointer = await rowUnder(10);
+        element('roll-body').dispatchEvent(
+          new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120, altKey: true, clientY: 110 }),
+        );
+        expect(asked()).toBe(15);
+        expect(await rowUnder(10)).toBeCloseTo(underThePointer, 6);
+
+        // Two fingers drawn apart down the page: around the point between them.
+        const finger = (type: string, pointerId: number, clientY: number): void => {
+          element('roll-body').dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId, clientX: 0, clientY }));
+        };
+        finger('pointerdown', 1, 110);
+        finger('pointerdown', 2, 150);
+        const underTheFingers = await rowUnder(50);
+        finger('pointermove', 2, 190);
+        expect(asked()).toBe(30);
+        expect(await rowUnder(50)).toBeCloseTo(underTheFingers, 6);
+        finger('pointerup', 2, 190);
+        finger('pointerup', 1, 110);
+      } finally {
+        giveBack();
+      }
+    });
+
     it('scrolls up and down to where a finger is on the strip', async () => {
       // Centred on the finger, as along the run: half way down the strip is
       // half the rows' worth, less half of the sixty on the screen.

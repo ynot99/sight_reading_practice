@@ -20,6 +20,7 @@ import {
   takeOfTheRun,
   takeWithoutTheKey,
   takeWithAKeyAdded,
+  takeWithTheKeyHeldUntil,
   takeWithTheKeyMoved,
   theKeysOfTheTake,
   type RolledBeat,
@@ -1232,6 +1233,25 @@ describe('changing a recording', () => {
     expect(takeWithoutTheKey(events, MIDI.D4, 0)).toBeNull();
     // A sketch may be emptied, to be written again.
     expect(takeWithoutTheKey([on(0, MIDI.C4), off(150, MIDI.C4)], MIDI.C4, 0)).toEqual([]);
+  });
+
+  it('lets a key go at another moment, in its place in time, and one still down at all', () => {
+    const events = [on(0, MIDI.C4), off(300, MIDI.C4), on(500, MIDI.E4), off(1_000, MIDI.E4)];
+
+    expect(takeWithTheKeyHeldUntil(events, { midi: MIDI.C4, downAtMs: 0 }, 700)).toEqual([
+      on(0, MIDI.C4),
+      on(500, MIDI.E4),
+      off(700, MIDI.C4),
+      off(1_000, MIDI.E4),
+    ]);
+    expect(takeWithTheKeyHeldUntil(events, { midi: MIDI.E4, downAtMs: 500 }, 600)?.at(-1)).toEqual(off(600, MIDI.E4));
+    expect(takeWithTheKeyHeldUntil([on(0, MIDI.C4), on(100, MIDI.E4), off(200, MIDI.E4)], { midi: MIDI.C4, downAtMs: 0 }, 150)).toEqual([
+      on(0, MIDI.C4),
+      on(100, MIDI.E4),
+      off(150, MIDI.C4),
+      off(200, MIDI.E4),
+    ]);
+    expect(takeWithTheKeyHeldUntil(events, { midi: MIDI.C4, downAtMs: 1 }, 700)).toBeNull();
   });
 
   it('adds a key, struck and let go of, in its place in time', () => {

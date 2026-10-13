@@ -12617,6 +12617,36 @@ describe('AppView', () => {
       point('pointerup', first);
       click(first);
       expect(chosen()).toEqual([[60, 0]]);
+
+      // Its end taken hold of, in its last few pixels, it is held longer, to
+      // the nearest beat; and shorter, never to nothing.
+      element<HTMLInputElement>('roll-snap').click();
+      const held = (): number | undefined =>
+        sketches.find(id)?.events.find((event) => event.kind === 'noteOff' && event.midi === 60)?.atMs;
+      expect(held()).toBe(300);
+      const end = { x: (280 / 1000) * zoom, y: first.y };
+      const mouse = (type: string, at: { x: number; y: number }): void => {
+        point(type, at, 'mouse');
+      };
+      mouse('pointermove', first);
+      expect(element('roll-body').dataset['grip']).toBe('note');
+      mouse('pointermove', end);
+      expect(element('roll-body').dataset['grip']).toBe('end');
+      mouse('pointermove', { x: first.x, y: first.y - 13 });
+      expect(element('roll-body').dataset['grip']).toBeUndefined();
+      mouse('pointerdown', end);
+      mouse('pointermove', { x: end.x + 0.25 * zoom, y: end.y + 13 });
+      mouse('pointerup', { x: end.x + 0.25 * zoom, y: end.y + 13 });
+      expect(held()).toBe(600);
+      expect(chosen()).toEqual([[60, 0]]);
+      const longer = { x: (580 / 1000) * zoom, y: first.y };
+      element<HTMLInputElement>('roll-snap').click();
+      mouse('pointerdown', longer);
+      mouse('pointermove', { x: 0, y: longer.y });
+      mouse('pointerup', { x: 0, y: longer.y });
+      expect(held()).toBe(30);
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(held()).toBe(600);
     });
 
     it('says so in the middle of the page when a take played to the click cannot be written down', async () => {

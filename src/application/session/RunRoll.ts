@@ -973,6 +973,30 @@ export function takeWithoutTheKey(
   return key === undefined ? null : events.filter((_, at) => at !== key.on && at !== key.off);
 }
 
+/**
+ * A take's events with one key let go of at another moment, struck where it
+ * was; one still down at the end is let go of there. `null` where there is
+ * no such key.
+ */
+export function takeWithTheKeyHeldUntil(
+  events: readonly MidiFileEvent[],
+  key: { readonly midi: number; readonly downAtMs: number },
+  upAtMs: number,
+): readonly MidiFileEvent[] | null {
+  const found = theKeysOfTheTake(events).find(
+    (each) => each.midi === key.midi && each.downAtMs === key.downAtMs,
+  );
+  if (found === undefined) {
+    return null;
+  }
+  const released: MidiFileEvent = { kind: 'noteOff', atMs: upAtMs, midi: key.midi };
+  return inTheOrderPlayed(
+    found.off === null
+      ? [...events, released]
+      : events.map((event, at) => (at === found.off ? released : event)),
+  );
+}
+
 /** A take's events with a key added, struck and let go of, in its place in time. */
 export function takeWithAKeyAdded(
   events: readonly MidiFileEvent[],

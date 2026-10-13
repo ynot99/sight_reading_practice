@@ -2144,6 +2144,11 @@ describe('searching the settings', () => {
     expect(chosen?.body).toMatch(/font-weight\s*:\s*700/);
   });
 
+  it('shows the mouse what it would take hold of on a sketch: a note, or its end', () => {
+    expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='note']")?.body).toMatch(/cursor\s*:\s*grab/);
+    expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='end']")?.body).toMatch(/cursor\s*:\s*ew-resize/);
+  });
+
   it("puts a drawing's buttons in a row of their own under the title on a phone", () => {
     // Six beside the title left it a few letters wide and pushed the close
     // button onto a line of its own; the close button stays by the title.

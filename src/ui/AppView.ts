@@ -151,10 +151,12 @@ import {
   clicksUpTo,
   rollAsEvents,
   rollBeganAtMs,
+  rollEndedAtMs,
   rollOfTheScore,
   barsCountedOnItsBeats,
   rollOfTheTake,
   takeWithAKeyAdded,
+  takeWithTheKeyHeldUntil,
   takeWithoutTheKey,
   takeWithTheKeyMoved,
   type RolledPress,
@@ -409,6 +411,12 @@ import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStar
 
 /** How far a wheel's line is, for a wheel that counts in lines. */
 const LINE_PX = 16;
+/** How near the end of a note the mouse or a finger takes hold of its end, in pixels. */
+const GRIP_PX = 10;
+
+/** The shortest a note can be held: shorter is a click rather than a note. */
+const SHORTEST_NOTE_MS = 30;
+
 /**
  * Beats of empty grid drawn past the end of a sketch: room for the next notes,
  * two bars of common time, and all of an empty sketch.
@@ -1613,6 +1621,10 @@ export class AppView {
     readonly scene: RollScene;
     /** Whether it was chosen by this pointer going down, rather than before. */
     readonly chosenNow: boolean;
+    /** What of it was taken hold of: the whole note, moved, or its end, held longer or shorter. */
+    readonly grip: 'whole' | 'end';
+    /** When it was let go of, which a drag of its end moves. */
+    readonly upAtMs: number;
     readonly moved: {
       readonly to: { readonly midi: number; readonly downAtMs: number };
       readonly events: readonly MidiFileEvent[];
@@ -8509,6 +8521,9 @@ export class AppView {
         this.dragTheChosenKey(event);
         return;
       }
+      if (event.pointerType === 'mouse' && this.rollDrag === null && !this.rollFingers.has(event.pointerId)) {
+        this.showTheGrip(event);
+      }
       if (!this.rollFingers.has(event.pointerId)) {
         return;
       }
@@ -11719,8 +11734,42 @@ export class AppView {
       scene,
       moved: null,
       chosenNow: !already,
+      grip: this.theGripOn(key, event),
+      upAtMs: key.upAtMs ?? rollEndedAtMs(showing.roll),
     };
     return true;
+  }
+
+  /**
+   * Which part of a key a point is on: its end, for the last few pixels of
+   * it - a third of a note too short for that, so the rest of it can still
+   * be moved - or the whole of it.
+   */
+  private theGripOn(key: RolledPress, point: { readonly clientX: number; readonly clientY: number }): 'whole' | 'end' {
+    const roll = this.theRoll();
+    const at = this.thePointOnTheDrawing(point);
+    if (roll === null || at === null) {
+      return 'whole';
+    }
+    const pxPerMs = Number(this.el.rollZoom.value) / 1000;
+    const origin = rollBeganAtMs(roll);
+    const endMs = (key.upAtMs ?? rollEndedAtMs(roll)) - origin;
+    const widePx = (endMs - (key.downAtMs - origin)) * pxPerMs;
+    return (endMs - at.atMs) * pxPerMs <= Math.min(GRIP_PX, widePx / 3) ? 'end' : 'whole';
+  }
+
+  /**
+   * Says, by the pointer's shape, what the mouse would take hold of where it
+   * rests on a sketch being edited.
+   */
+  private showTheGrip(event: PointerEvent): void {
+    const editing = this.theOtherRollShowing?.sketch?.editing === true;
+    const key = editing ? this.theKeyUnder(event) : null;
+    if (key === null) {
+      delete this.el.rollBody.dataset['grip'];
+      return;
+    }
+    this.el.rollBody.dataset['grip'] = this.theGripOn(key, event) === 'end' ? 'end' : 'note';
   }
 
   /**
@@ -11746,6 +11795,10 @@ export class AppView {
     // A drag, so the click the finger makes on letting go is not a tap.
     this.panned = true;
     const origin = rollBeganAtMs(showing.roll);
+    if (drag.grip === 'end') {
+      this.dragTheEndOfTheChosenKey(drag, acrossPx, origin);
+      return;
+    }
     const wanted = chosen.downAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
     const at = this.el.rollSnap.checked ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
     const lowest = drag.scene.highest - drag.scene.rows + 1;
@@ -11759,6 +11812,31 @@ export class AppView {
     }
     this.rollDrag = { ...drag, moved: { to, events } };
     this.drawnScene = this.theSceneToDraw(rollOfTheTake({ ...stored, events }, ROOM_IN_A_SKETCH), to);
+    this.paintTheRoll();
+  }
+
+  /**
+   * Holds the chosen key longer or shorter, its end where the pointer has
+   * taken it: on the nearest line of the grid where the marker would be put
+   * on one, and never shorter than a note can be heard as one.
+   */
+  private dragTheEndOfTheChosenKey(drag: NonNullable<AppView['rollDrag']>, acrossPx: number, origin: number): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const chosen = sketch?.chosen ?? null;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (showing === null || chosen === null || stored === null) {
+      return;
+    }
+    const wanted = drag.upAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
+    const at = this.el.rollSnap.checked ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
+    const upAtMs = Math.round(Math.max(at + origin, chosen.downAtMs + SHORTEST_NOTE_MS));
+    const events = takeWithTheKeyHeldUntil(stored.events, chosen, upAtMs);
+    if (events === null) {
+      return;
+    }
+    this.rollDrag = { ...drag, moved: { to: chosen, events } };
+    this.drawnScene = this.theSceneToDraw(rollOfTheTake({ ...stored, events }, ROOM_IN_A_SKETCH), chosen);
     this.paintTheRoll();
   }
 

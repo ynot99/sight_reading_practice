@@ -4462,6 +4462,15 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   font-weight: 700;
 }
 
+/* What the mouse would take hold of on a sketch being edited: a note, or its end. */
+.roll-body[data-grip='note'] {
+  cursor: grab;
+}
+
+.roll-body[data-grip='end'] {
+  cursor: ew-resize;
+}
+
 /* Under the list, as the end of it: the next one begun. */
 .sketches__new-row {
   display: flex;

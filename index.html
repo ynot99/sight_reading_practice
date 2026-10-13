@@ -262,7 +262,7 @@
       -->
       <div id="sheet-scores" class="sheet" hidden>
         <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Kept scores">
-          <div class="sheet__head">
+          <div class="sheet__head sheet__head--two-rows">
             <!--
               Two lists in one sheet: the scores kept, and the sketches being
               written. A switch in the title rather than a second pill, since
@@ -274,6 +274,11 @@
               <button id="scores-show-sketches" type="button" class="sheet__switch-choice"
                 aria-pressed="false">Sketches</button>
             </div>
+            <!--
+              The means of finding and adding scores, a row of their own under
+              the title: beside the two lists' names they left neither room.
+            -->
+            <div id="scores-tools" class="sheet__row">
             <!--
               Thirty-odd arrangements is more than a list anybody reads. The
               box is emptied every time the sheet is raised: a search left
@@ -295,6 +300,7 @@
             </select>
             <button id="scores-add" type="button" class="button">Add a score…</button>
             <button id="scores-clear" type="button" class="button button--ghost">Delete all</button>
+            </div>
             <button id="scores-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>

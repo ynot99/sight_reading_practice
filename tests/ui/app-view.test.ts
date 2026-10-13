@@ -4348,7 +4348,7 @@ describe('AppView', () => {
       await view.initialize();
       const scoresShown = element<HTMLButtonElement>('scores-show-scores');
       const sketchesShown = element<HTMLButtonElement>('scores-show-sketches');
-      const ofTheScores = ['scores-search', 'scores-order', 'scores-add', 'scores-clear', 'scores-fresh-row', 'scores-list'];
+      const ofTheScores = ['scores-tools', 'scores-fresh-row', 'scores-list'];
       const shown = (): boolean[] => ofTheScores.map((id) => !element(id).hidden);
 
       element<HTMLButtonElement>('focus-scores').click();

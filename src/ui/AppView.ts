@@ -1942,6 +1942,7 @@ export class AppView {
     focusTempo: HTMLOutputElement;
     scoresFresh: HTMLButtonElement;
     scoresFreshRow: HTMLElement;
+    scoresTools: HTMLElement;
     scoresShowScores: HTMLButtonElement;
     scoresShowSketches: HTMLButtonElement;
     sketchesList: HTMLElement;
@@ -2292,6 +2293,7 @@ export class AppView {
       focusTempo: requireElement(doc, 'focus-tempo'),
       scoresFresh: requireElement(doc, 'scores-fresh'),
       scoresFreshRow: requireElement(doc, 'scores-fresh-row'),
+      scoresTools: requireElement(doc, 'scores-tools'),
       scoresShowScores: requireElement(doc, 'scores-show-scores'),
       scoresShowSketches: requireElement(doc, 'scores-show-sketches'),
       sketchesList: requireElement(doc, 'sketches-list'),
@@ -9321,14 +9323,7 @@ export class AppView {
     const sketches = which === 'sketches';
     this.el.scoresShowScores.setAttribute('aria-pressed', String(!sketches));
     this.el.scoresShowSketches.setAttribute('aria-pressed', String(sketches));
-    for (const part of [
-      this.el.scoresSearch,
-      this.el.scoresOrder,
-      this.el.scoresAdd,
-      this.el.scoresClear,
-      this.el.scoresFreshRow,
-      this.el.scoresList,
-    ]) {
+    for (const part of [this.el.scoresTools, this.el.scoresFreshRow, this.el.scoresList]) {
       part.hidden = sketches;
     }
     this.el.sketchesList.hidden = !sketches;

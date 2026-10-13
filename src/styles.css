@@ -4515,6 +4515,23 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   gap: 12px;
 }
 
+/*
+ * A head of two rows at every width: the title and the close button, and
+ * under them a row of controls that beside the title left it no room.
+ */
+.sheet__head--two-rows {
+  flex-wrap: wrap;
+}
+
+.sheet__row {
+  order: 1;
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .sheet__switch-choice {
   appearance: none;
   border: 0;

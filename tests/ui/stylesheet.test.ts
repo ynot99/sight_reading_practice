@@ -2169,6 +2169,19 @@ describe('searching the settings', () => {
     expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='end']")?.body).toMatch(/cursor\s*:\s*ew-resize/);
   });
 
+  it('gives the scores their means of finding and adding a row under the title at every width', () => {
+    const rows = rules().find((rule) => rule.selector === '.sheet__row');
+    const head = rules().find((rule) => rule.selector === '.sheet__head--two-rows');
+
+    expect(HTML).toMatch(
+      /<div class="sheet__head sheet__head--two-rows">[\s\S]*?<div id="scores-tools" class="sheet__row">[\s\S]*?id="scores-search"[\s\S]*?id="scores-clear"[^>]*>[^<]*<\/button>\s*<\/div>\s*<button id="scores-close"/,
+    );
+    expect(inWhichMedia(rows?.at ?? 0)).toBe('');
+    expect(rows?.body).toMatch(/flex\s*:\s*1 0 100%/);
+    expect(rows?.body).toMatch(/order\s*:\s*1/);
+    expect(head?.body).toMatch(/flex-wrap\s*:\s*wrap/);
+  });
+
   it("puts a drawing's buttons in a row of their own under the title on a phone", () => {
     // Six beside the title left it a few letters wide and pushed the close
     // button onto a line of its own; the close button stays by the title.

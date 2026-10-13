@@ -5812,7 +5812,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
       const drawn = element('roll-body').querySelector<HTMLElement>('.roll');
-      expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(true);
+      expect(element<HTMLButtonElement>('roll-stop').dataset['idle']).toBe('true');
 
       vi.useFakeTimers();
       try {
@@ -5827,14 +5827,85 @@ describe('AppView', () => {
 
       expect(runtime.takePlayer.playing).toBeNull();
       expect(headAt(drawn)).toBe('0.300');
-      expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(false);
+      expect(element<HTMLButtonElement>('roll-stop').dataset['idle']).toBeUndefined();
       expect(element('roll-play').getAttribute('aria-label')).toBe('Play');
 
       element<HTMLButtonElement>('roll-stop').click();
 
       // Stopped: back to the beginning, which is what stopping means.
       expect(headAt(drawn)).toBe('0.000');
-      expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(true);
+      expect(element<HTMLButtonElement>('roll-stop').dataset['idle']).toBe('true');
+    });
+
+    it('goes back to where the marker was put, and pressed there, back to the beginning with the marker', async () => {
+      const { view, runtime, midi, clock } = createRig();
+      await view.initialize();
+      // A recording two seconds long, played freely.
+      for (const pitch of [60, 64, 67, 72]) {
+        midi.noteOn(pitch, clock.now());
+        clock.advance(400);
+        midi.noteOff(pitch, clock.now());
+        clock.advance(100);
+      }
+      element<HTMLButtonElement>('focus-keep').click();
+      rowButton('takes-list', 'Look at this take').click();
+      const drawn = element('roll-body');
+      const back = element<HTMLButtonElement>('roll-stop');
+      const place = (): string | undefined =>
+        drawn.querySelector<HTMLElement>('.roll__place-mark')?.style.getPropertyValue('--roll-at');
+      const icon = (): string | null => element('roll-stop-icon').getAttribute('d');
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      expect(back.dataset['idle']).toBe('true');
+      expect(back.title).toBe('Back to the beginning. It is there already.');
+      expect(back.getAttribute('aria-label')).toBe(back.title);
+
+      // Put at 0.6 s: marked there, and the button would take it to the beginning.
+      drawn.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: 1_000 }));
+      expect([headAt(drawn), place()]).toEqual(['0.600', '0.600']);
+      expect(back.dataset['idle']).toBeUndefined();
+      expect(back.title).toBe('Back to the beginning, and the marker with it');
+      const stop = icon();
+      // Another drawing opened is put nowhere yet.
+      element<HTMLButtonElement>('focus-takes').click();
+      rowButton('takes-list', 'Look at this take').click();
+      expect([headAt(drawn), place()]).toEqual(['0.000', '0.000']);
+      drawn.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: 1_000 }));
+
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(500);
+        vi.advanceTimersByTime(100);
+        // Playing, it goes back to the marker; the marker stays where it was put.
+        expect(back.title).toBe('Back to where the marker was put');
+        expect(icon()).not.toBe(stop);
+        back.click();
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(runtime.takePlayer.playing).toBeNull();
+      expect([headAt(drawn), place()]).toEqual(['0.600', '0.600']);
+      expect(icon()).toBe(stop);
+
+      // Held elsewhere, the same.
+      vi.useFakeTimers();
+      try {
+        element<HTMLButtonElement>('roll-play').click();
+        clock.advance(300);
+        vi.advanceTimersByTime(100);
+        element<HTMLButtonElement>('roll-play').click();
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(headAt(drawn)).toBe('0.900');
+      expect(back.title).toBe('Back to where the marker was put');
+      back.click();
+      expect(headAt(drawn)).toBe('0.600');
+
+      // And there already, back to the beginning, the marker with it.
+      back.click();
+      expect([headAt(drawn), place()]).toEqual(['0.000', '0.000']);
+      expect(back.dataset['idle']).toBe('true');
     });
 
     it('tells a pointer resting on a note what it was, painted as it is', async () => {
@@ -11631,7 +11702,7 @@ describe('AppView', () => {
       expect(runtime.takePlayer.playing).toBeNull();
       // Back at the beginning, which is the whole difference from holding it:
       // Stop has nothing left to do and says so.
-      expect(element<HTMLButtonElement>('roll-stop').disabled).toBe(true);
+      expect(element<HTMLButtonElement>('roll-stop').dataset['idle']).toBe('true');
     });
 
     it('agrees with the pill about what play means', async () => {

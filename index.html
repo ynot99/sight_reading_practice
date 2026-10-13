@@ -461,11 +461,16 @@
                 <path id="roll-play-icon" d="M8 5l11 7-11 7z" />
               </svg>
             </button>
-            <button id="roll-stop" type="button" class="button" title="Stop" aria-label="Stop"
-              disabled>
+            <!--
+              Back to where the marker was put; and pressed there, back to the
+              beginning with the marker. A transport's rewind and stop as one
+              button that says which it is.
+            -->
+            <button id="roll-stop" type="button" class="button" title="Back to the beginning"
+              aria-label="Back to the beginning">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
                 class="take-transport__icon">
-                <path d="M6 6h12v12H6z" />
+                <path id="roll-stop-icon" d="M6 6h12v12H6z" />
               </svg>
             </button>
             <!--

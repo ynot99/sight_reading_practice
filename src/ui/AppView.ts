@@ -412,6 +412,10 @@ import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStar
 
 /** How far a wheel's line is, for a wheel that counts in lines. */
 const LINE_PX = 16;
+/** The viewer's Back button as a rewind, and as a stop. */
+const REWIND_ICON = 'M6 6h2v12H6zM9.5 12l8.5 6V6z';
+const STOP_ICON = 'M6 6h12v12H6z';
+
 /** How near the end of a note the mouse or a finger takes hold of its end, in pixels. */
 const GRIP_PX = 10;
 
@@ -1590,6 +1594,11 @@ export class AppView {
   private keysScroll = true;
   /** The lane's colours, read again each time notes begin to fall. */
   private laneInks: LaneInks | null = null;
+  /**
+   * Where the marker was last put on the drawing, which Back returns the head
+   * to; the beginning until it is put anywhere.
+   */
+  private rollPlacedAtMs = 0;
   /** Which of the scores sheet's two lists it shows; see `showTheList`. */
   private scoresListShown: 'scores' | 'sketches' = 'scores';
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
@@ -1979,6 +1988,7 @@ export class AppView {
     rollPlay: HTMLButtonElement;
     rollPlayIcon: SVGPathElement;
     rollStop: HTMLButtonElement;
+    rollStopIcon: SVGPathElement;
     rollClose: HTMLElement;
     sheetSettings: HTMLElement;
     settingsSections: HTMLElement;
@@ -2323,6 +2333,7 @@ export class AppView {
       rollPlay: requireElement(doc, 'roll-play'),
       rollPlayIcon: requireElement(doc, 'roll-play-icon'),
       rollStop: requireElement(doc, 'roll-stop'),
+      rollStopIcon: requireElement(doc, 'roll-stop-icon'),
       rollClose: requireElement(doc, 'roll-close'),
       sheetSettings: requireElement(doc, 'sheet-settings'),
       settingsSections: requireElement(doc, 'settings-sections'),
@@ -8380,7 +8391,7 @@ export class AppView {
       this.togglePlayingTheRoll();
     });
     this.listen(this.el.rollStop, 'click', () => {
-      this.stopTheRoll();
+      this.goBackInTheRoll();
     });
     this.el.rollBody.addEventListener(
       'wheel',
@@ -12080,6 +12091,7 @@ export class AppView {
     const along = `${String(scrolled.x)}px`;
     this.rollHeads?.line.style.setProperty('--roll-x', along);
     this.rollHeads?.mark.style.setProperty('--roll-x', along);
+    this.rollHeads?.place.style.setProperty('--roll-x', along);
     this.rollKeysStrip?.style.setProperty('--roll-y', `${String(scrolled.y)}px`);
     // Nothing on the screen to paint for: the sheet is shut, or nothing has
     // been laid out yet.
@@ -12294,12 +12306,53 @@ export class AppView {
     this.describeTheRoll();
   }
 
+  /**
+   * Back to where the marker was put, sound stopped; and pressed with the
+   * head there already, back to the beginning, the marker with it - a
+   * transport's rewind and stop as one button.
+   */
+  private goBackInTheRoll(): void {
+    const sounding = this.runtime.takePlayer.playing === RUN_ROLL_ID;
+    if (!sounding && this.rollAtMs === this.rollPlacedAtMs) {
+      this.stopTheRoll();
+      return;
+    }
+    if (sounding) {
+      this.runtime.takePlayer.stop();
+    }
+    this.rollAtMs = this.rollPlacedAtMs;
+    this.rollClicksSent = 0;
+    this.letTheRollTickGo();
+    this.describeTheRoll();
+  }
+
+  /** Says which of the two the button would do, and dims it where neither has anywhere to go. */
+  private sayWhereBackGoes(sounding: boolean): void {
+    const back = sounding || this.rollAtMs !== this.rollPlacedAtMs;
+    const icon = back ? REWIND_ICON : STOP_ICON;
+    if (this.el.rollStopIcon.getAttribute('d') !== icon) {
+      this.el.rollStopIcon.setAttribute('d', icon);
+    }
+    if (back) {
+      delete this.el.rollStop.dataset['idle'];
+      this.el.rollStop.title = 'Back to where the marker was put';
+    } else if (this.rollPlacedAtMs !== 0) {
+      delete this.el.rollStop.dataset['idle'];
+      this.el.rollStop.title = 'Back to the beginning, and the marker with it';
+    } else {
+      this.el.rollStop.dataset['idle'] = 'true';
+      this.el.rollStop.title = 'Back to the beginning. It is there already.';
+    }
+    this.el.rollStop.setAttribute('aria-label', this.el.rollStop.title);
+  }
+
   private stopTheRoll(): void {
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
       this.runtime.takePlayer.stop();
     }
     // Back to the beginning, which is what stopping means and pausing does not.
     this.rollAtMs = 0;
+    this.rollPlacedAtMs = 0;
     this.rollClicksSent = 0;
     this.letTheRollTickGo();
     this.describeTheRoll();
@@ -12366,13 +12419,17 @@ export class AppView {
     this.putTheHeadAt(at);
   }
 
-  /** Puts the head at a moment of the run, sounding on from there if it was. */
+  /**
+   * Puts the head at a moment of the run, sounding on from there if it was,
+   * and marks it as the place a playback goes back to.
+   */
   private putTheHeadAt(at: number): void {
     const roll = this.theRoll();
     if (roll === null) {
       return;
     }
     this.rollAtMs = at;
+    this.rollPlacedAtMs = at;
     this.takeBackTheRollsClicks();
     this.rollClicksSent = clicksBefore(roll, at, this.theRollsGrid());
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
@@ -12477,8 +12534,7 @@ export class AppView {
       this.el.rollPlay.title = label;
       this.el.rollPlay.setAttribute('aria-label', label);
     }
-    // Nothing to stop where the head is already at the beginning and silent.
-    this.el.rollStop.disabled = !sounding && this.rollAtMs === 0;
+    this.sayWhereBackGoes(sounding);
 
     const drawn = this.el.rollBody.firstElementChild;
     if (!(drawn instanceof HTMLElement)) {
@@ -12499,6 +12555,7 @@ export class AppView {
     const at = (this.headIsAtMs() / 1000).toFixed(3);
     heads.line.style.setProperty('--roll-at', at);
     heads.mark.style.setProperty('--roll-at', at);
+    heads.place.style.setProperty('--roll-at', (this.rollPlacedAtMs / 1000).toFixed(3));
     this.sayWhereTheHeadIs();
     this.countTheBarOut();
     if (!sounding) {
@@ -12634,6 +12691,7 @@ export class AppView {
       // Only where it places something: see `--roll-second` in the stylesheet.
       this.rollHeads?.line.style.setProperty('--roll-second', second);
       this.rollHeads?.mark.style.setProperty('--roll-second', second);
+      this.rollHeads?.place.style.setProperty('--roll-second', second);
       roll.style.setProperty('--roll-row-asked', `${this.rollRowPx}px`);
     }
     // How long the run now is follows from the zoom, so the scroller is told at

@@ -1851,6 +1851,23 @@ textarea {
   background: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+/*
+ * Where the marker was put: the same mark, hollow, left behind while the
+ * head goes on with the sound, so it is plain where Back goes to.
+ */
+.roll__place-mark {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  transform: translateX(calc(var(--roll-second) * var(--roll-at, 0) - var(--roll-x)));
+  will-change: transform;
+  width: 12px;
+  height: 12px;
+  margin-left: -5px;
+  clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 .roll--sounding .roll__head-mark {
   background: var(--accent);
 }

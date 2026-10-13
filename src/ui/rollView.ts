@@ -412,13 +412,16 @@ function noteOf(
 export interface RollHeads {
   readonly line: HTMLElement;
   readonly mark: HTMLElement;
+  /** Where the marker was last put, which a playback goes back to. */
+  readonly place: HTMLElement;
 }
 
 /** The head's marks in a drawing, or `null` where nothing has been drawn. */
 export function theHeadsOf(within: ParentNode): RollHeads | null {
   const line = within.querySelector<HTMLElement>('.roll__grid > .roll__head');
   const mark = within.querySelector<HTMLElement>('.roll__ruler > .roll__head-mark');
-  return line === null || mark === null ? null : { line, mark };
+  const place = within.querySelector<HTMLElement>('.roll__ruler > .roll__place-mark');
+  return line === null || mark === null || place === null ? null : { line, mark, place };
 }
 
 /**
@@ -1285,7 +1288,8 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
   // The head, marked on the strip that names the bars: its line is drawn in
   // the grid and stops where the ruler begins. His: "на ruler теж додати мітку
   // над курсором".
-  ruler.append(element('canvas', 'roll__paint'), element('div', 'roll__head-mark'));
+  // And where the marker was last put, which a playback goes back to.
+  ruler.append(element('canvas', 'roll__paint'), element('div', 'roll__place-mark'), element('div', 'roll__head-mark'));
 
   const keys = element('div', 'roll__keys');
   const strip = element('div', 'roll__keys-strip');

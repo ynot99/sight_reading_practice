@@ -2144,6 +2144,16 @@ describe('searching the settings', () => {
     expect(chosen?.body).toMatch(/font-weight\s*:\s*700/);
   });
 
+  it('marks where the marker was put as the head is marked, moved with the drawing, in a fainter accent', () => {
+    const place = rules().find((rule) => rule.selector === '.roll__place-mark')?.body ?? '';
+    const head = rules().find((rule) => rule.selector === '.roll__head-mark')?.body ?? '';
+    const moved = /transform\s*:\s*translateX\(calc\(var\(--roll-second\) \* var\(--roll-at, 0\) - var\(--roll-x\)\)\)/;
+
+    expect(place).toMatch(moved);
+    expect(head).toMatch(moved);
+    expect(place).toMatch(/background\s*:\s*color-mix\(in srgb, var\(--accent\) 35%, transparent\)/);
+  });
+
   it('shows the mouse what it would take hold of on a sketch: a note, or its end', () => {
     expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='note']")?.body).toMatch(/cursor\s*:\s*grab/);
     expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='end']")?.body).toMatch(/cursor\s*:\s*ew-resize/);

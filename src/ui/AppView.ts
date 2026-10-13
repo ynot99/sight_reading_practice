@@ -4467,10 +4467,8 @@ export class AppView {
 
     this.subscriptions.push(
       // Everything that was played is filed, whether or not the reader
-      // reached for a button. They notice the idea afterwards, and the take
-      // before this one used to be gone by then with nothing to say so.
-      this.runtime.recorder.events.on('takeClosed', ({ take }) => {
-        this.runtime.takes.file(take, Date.now(), 'recent');
+      // reached for a button - see `TakeOnOffer`.
+      this.runtime.takeOnOffer.events.on('filed', () => {
         this.renderTakes();
       }),
     );
@@ -7686,14 +7684,9 @@ export class AppView {
    * played, and a Record button would arrive after the thing it was for.
    */
   private keepTake(): void {
-    const take = this.runtime.recorder.take();
-    if (take === null) {
+    if (this.runtime.takeOnOffer.keep() === null) {
       return;
     }
-    this.runtime.takes.keepTake(take, Date.now());
-    // The take is cut at silences, so leaving it in the buffer would let the
-    // next press keep it a second time.
-    this.runtime.recorder.clear();
     this.renderTakes();
     this.describeTake();
   }
@@ -7718,7 +7711,8 @@ export class AppView {
       ? 'Play something and this keeps it.'
       : open
         ? 'Keeps what you have just played, back to the last pause. Playing on adds to it.'
-        : 'Keeps what you have just played. The next key you press starts a new take.';
+        : 'Already among the takes, until newer ones push it out: this keeps it for good. ' +
+          'The next key you press starts a new take.';
 
     this.el.focusKeep.disabled = !playing;
     this.el.focusKeepText.textContent = playing ? clockTime(ms) : 'Keep';
@@ -7754,6 +7748,10 @@ export class AppView {
     const until = Math.min(TAKE_COUNTER_MS, recorder.silenceMs - quiet + 50);
     this.silenceWatch = setTimeout(() => {
       this.silenceWatch = null;
+      // The silence has ended the take if this is the last of the waiting,
+      // and it goes onto the list now rather than when the next key is
+      // pressed - which may be never, if the page is closed first.
+      this.runtime.takeOnOffer.fileItIfItHasEnded();
       this.describeTake();
     }, until);
   }

@@ -35,6 +35,7 @@ import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.j
 import { ControlBinding } from '../../src/application/ControlBinding.js';
 import { DrillProgress } from '../../src/application/drill/DrillProgress.js';
 import { TakeLibrary } from '../../src/application/TakeLibrary.js';
+import { TakeOnOffer } from '../../src/application/TakeOnOffer.js';
 import { TakePlayer } from '../../src/application/TakePlayer.js';
 import { BackupService } from '../../src/application/Backup.js';
 import { ScoreLibrary } from '../../src/application/ScoreLibrary.js';
@@ -347,6 +348,7 @@ function createRig(
   const metronomeKnob = new ControlBinding();
   metronomeKnob.listenTo(midi);
   const takes = new TakeLibrary(new InMemorySettingsStore());
+  const takeOnOffer = new TakeOnOffer(recorder, takes, () => Date.now());
   const files = new RecordingFileSink();
   const importer = new ScoreFileImporter();
   // As `createApp` has it.
@@ -472,6 +474,7 @@ function createRig(
     volumeKnob,
     metronomeKnob,
     takes,
+    takeOnOffer,
     scores,
     files,
     importer,
@@ -9911,6 +9914,35 @@ describe('AppView', () => {
 
       expect(rig.takes.list()).toHaveLength(1);
       expect(rig.takes.list()[0]?.shelf).toBe('recent');
+    });
+
+    it('files a take on the list as the silence ends it, and keeps that one from the button', async () => {
+      // Filed only when the next key was pressed, the last idea of a sitting
+      // was lost when the page was closed or reloaded before it.
+      const rig = createRig();
+      await rig.view.initialize();
+      const keep = element<HTMLButtonElement>('focus-keep');
+
+      vi.useFakeTimers();
+      try {
+        playSomething(rig);
+        rig.clock.advance(rig.recorder.silenceMs + 1);
+        vi.advanceTimersByTime(rig.recorder.silenceMs + 100);
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(rig.takes.list().map((take) => take.shelf)).toEqual(['recent']);
+      expect(element('takes-list').childElementCount).toBe(1);
+      // Still on offer, with how long it was.
+      expect(keep.disabled).toBe(false);
+      expect(keep.textContent).toContain('0:00');
+      expect(keep.title).toContain('Already among the takes');
+
+      keep.click();
+
+      expect(rig.takes.list().map((take) => take.shelf)).toEqual(['kept']);
+      expect(keep.disabled).toBe(true);
     });
 
     it('moves one off the shelf that gets tidied', async () => {

@@ -765,11 +765,13 @@ describe('PracticeController', () => {
 
     controller.beginAtBar(2);
     controller.start()?.abort();
-    expect(history.lastReadings()[0]?.startedAtBar).toBe(3);
-
     controller.beginAtTheStart();
     controller.start()?.abort();
-    expect(history.lastReadings()[0]?.startedAtBar).toBeNull();
+
+    // Both runs can end in the same millisecond, so not by which is newer.
+    const began = history.lastReadings().map((reading) => reading.startedAtBar);
+    expect(began).toHaveLength(2);
+    expect(began).toEqual(expect.arrayContaining([3, null]));
   });
 
   it('begins at the start a run opened on the first chord this reader owes', async () => {

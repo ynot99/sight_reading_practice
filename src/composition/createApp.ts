@@ -42,6 +42,7 @@ import { DrillProgress } from '../application/drill/DrillProgress.js';
 import { PerformanceRecorder } from '../application/PerformanceRecorder.js';
 import { ControlBinding } from '../application/ControlBinding.js';
 import { TakeLibrary } from '../application/TakeLibrary.js';
+import { TakeOnOffer } from '../application/TakeOnOffer.js';
 import { TakePlayer } from '../application/TakePlayer.js';
 import { BackupService } from '../application/Backup.js';
 import { ScoreLibrary } from '../application/ScoreLibrary.js';
@@ -200,6 +201,8 @@ export interface AppRuntime {
   /** The knob the reader taught to drive the metronome's volume - the same one, if they chose so. */
   readonly metronomeKnob: ControlBinding;
   readonly takes: TakeLibrary;
+  /** The take the keep button offers, filed on the list as soon as it ends. */
+  readonly takeOnOffer: TakeOnOffer;
   /**
    * Every reading that has been recorded, for the list of them.
    *
@@ -421,6 +424,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     options.takeStore ?? new LocalStorageSettingsStore(browserStorage(), TAKES_STORAGE_KEY);
   const takes = new TakeLibrary(takeStore);
   takes.load();
+  const takeOnOffer = new TakeOnOffer(recorder, takes, () => Date.now());
 
   const historyStore =
     options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY);
@@ -565,6 +569,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     volumeKnob,
     metronomeKnob,
     takes,
+    takeOnOffer,
     history,
     timeToday,
     scores,
@@ -598,6 +603,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     instrumentVolume: pitchPlayer,
     dispose(): void {
       controller.dispose();
+      takeOnOffer.dispose();
       disposeRecorder();
       disposeKnob();
       volumeKnob.dispose();

@@ -9,7 +9,7 @@ import { SettingsSync } from '../../src/application/SettingsSync.js';
 import { DriveSync } from '../../src/application/DriveSync.js';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DARK_SYSTEM_THEMES, PracticeController, THEMES } from '../../src/application/PracticeController.js';
+import { DARK_SYSTEM_THEMES, PracticeController, TEMPO_STEP_PERCENT, THEMES } from '../../src/application/PracticeController.js';
 import {
   DEFAULT_STORAGE_KEY,
   LocalStorageSettingsStore,
@@ -12188,13 +12188,47 @@ describe('AppView', () => {
 
       // Faster from the next beat, and the piece's own speed left alone.
       element<HTMLButtonElement>('focus-faster').click();
-      expect(metronome.currentConfig.bpm).toBe(105);
-      expect(tempo.value).toBe('105');
-      expect(tempo.title).toBe('The metronome: 105 bpm');
+      expect(metronome.currentConfig.bpm).toBe(101);
+      expect(tempo.value).toBe('101');
+      expect(tempo.title).toBe('The metronome: 101 bpm');
       element<HTMLButtonElement>('focus-slower').click();
       element<HTMLButtonElement>('focus-slower').click();
-      expect(runtime.controller.settings.freePlayBpm).toBe(95);
+      expect(runtime.controller.settings.freePlayBpm).toBe(99);
       expect(runtime.controller.tempoPercent).toBe(percent);
+
+      // Held, a bpm a step and the steps closing up; let go, it stops, and
+      // the click of letting go is not one more.
+      const faster = element<HTMLButtonElement>('focus-faster');
+      let reached = 0;
+      vi.useFakeTimers();
+      try {
+        faster.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        vi.advanceTimersByTime(HOLD_MS - 1);
+        expect(runtime.controller.settings.freePlayBpm).toBe(99);
+        vi.advanceTimersByTime(1);
+        expect(runtime.controller.settings.freePlayBpm).toBe(100);
+        // The next after 150 ms, then 138, then 126.
+        vi.advanceTimersByTime(150);
+        expect(runtime.controller.settings.freePlayBpm).toBe(101);
+        vi.advanceTimersByTime(137);
+        expect(runtime.controller.settings.freePlayBpm).toBe(101);
+        vi.advanceTimersByTime(1);
+        expect(runtime.controller.settings.freePlayBpm).toBe(102);
+        vi.advanceTimersByTime(126);
+        expect(runtime.controller.settings.freePlayBpm).toBe(103);
+        // Seconds later, thirty milliseconds a step.
+        vi.advanceTimersByTime(3_000);
+        reached = runtime.controller.settings.freePlayBpm;
+        expect(reached).toBeGreaterThan(160);
+        faster.dispatchEvent(new Event('pointerup', { bubbles: true }));
+        faster.click();
+        vi.advanceTimersByTime(1_000);
+        expect(runtime.controller.settings.freePlayBpm).toBe(reached);
+      } finally {
+        vi.useRealTimers();
+      }
+      faster.click();
+      expect(runtime.controller.settings.freePlayBpm).toBe(reached + 1);
 
       // Held, it opens the sheet and leaves the click going.
       holdTheMetronome();
@@ -12215,6 +12249,21 @@ describe('AppView', () => {
       button.click();
       expect(element('sheet-metronome').hidden).toBe(false);
       expect(metronome.isRunning).toBe(false);
+
+      // Outside free play a held button is a tap, and the piece's speed moves
+      // by its own step once.
+      element<HTMLButtonElement>('metronome-close').click();
+      vi.useFakeTimers();
+      try {
+        faster.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        vi.advanceTimersByTime(2_000);
+        expect(runtime.controller.tempoPercent).toBe(percent);
+        faster.dispatchEvent(new Event('pointerup', { bubbles: true }));
+        faster.click();
+        expect(runtime.controller.tempoPercent).toBe(percent + TEMPO_STEP_PERCENT);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('swaps what a tap and a hold do at the foot of its sheet', async () => {

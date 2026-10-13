@@ -355,6 +355,16 @@ const NEWLINE = String.fromCharCode(10);
 
 /** How often the take slider is moved while something is sounding. */
 const TAKE_TICK_MS = 80;
+
+/**
+ * How long a held step button waits before its `count`th step after the
+ * first: a hundred and fifty milliseconds, then twelve fewer each time down
+ * to thirty, so a tempo a few beats away is easy to land on and one a hundred
+ * away is reached in seconds.
+ */
+function repeatGapMs(count: number): number {
+  return Math.max(30, 150 - 12 * (count - 1));
+}
 /**
  * What the player is asked to call the run it is sounding.
  *
@@ -4985,13 +4995,11 @@ export class AppView {
 
     this.bindDrawerDrag();
 
-    this.listen(this.el.focusSlower, 'click', () => {
-      this.nudgeTempo(-TEMPO_STEP_PERCENT);
-    });
-
-    this.listen(this.el.focusFaster, 'click', () => {
-      this.nudgeTempo(TEMPO_STEP_PERCENT);
-    });
+    // Held in free play, they step the click's tempo again and again: a bpm
+    // at a time reaches any tempo, and a long way only by holding.
+    const repeats = (): boolean => this.runtime.controller.playsFreely;
+    this.holdToRepeat(this.el.focusSlower, () => this.nudgeTempo(-TEMPO_STEP_PERCENT), repeats);
+    this.holdToRepeat(this.el.focusFaster, () => this.nudgeTempo(TEMPO_STEP_PERCENT), repeats);
 
     this.listen(this.el.scoresFresh, 'click', () => {
       // The sheet asks what to put on the stand, and this is the answer that
@@ -5877,6 +5885,52 @@ export class AppView {
       this.tempoRedraw = null;
       void this.reload(false);
     }, TEMPO_REDRAW_DELAY_MS);
+  }
+
+  /**
+   * A step button that steps once on a tap and, where `repeats` says so,
+   * again and again while it is held - faster the longer it is held, as a
+   * clock's buttons go.
+   *
+   * The click a held finger makes on letting go is the hold's, not one more
+   * step.
+   */
+  private holdToRepeat(button: HTMLButtonElement, step: () => void, repeats: () => boolean): void {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stepped = false;
+    const letGo = (): void => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+    const again = (count: number): void => {
+      timer = setTimeout(
+        () => {
+          stepped = true;
+          step();
+          again(count + 1);
+        },
+        count === 0 ? HOLD_MS : repeatGapMs(count),
+      );
+    };
+    this.listen(button, 'pointerdown', () => {
+      stepped = false;
+      letGo();
+      if (repeats()) {
+        again(0);
+      }
+    });
+    this.listen(button, 'pointerup', letGo);
+    this.listen(button, 'pointercancel', letGo);
+    this.listen(button, 'pointerleave', letGo);
+    this.listen(button, 'click', () => {
+      if (stepped) {
+        stepped = false;
+        return;
+      }
+      step();
+    });
   }
 
   /**

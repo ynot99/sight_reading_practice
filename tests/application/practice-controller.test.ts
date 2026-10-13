@@ -6272,14 +6272,14 @@ describe('the click in free play', () => {
     expect(metronome.currentConfig.click).toBe('pulse');
     expect(metronome.currentConfig.timeSignature.beats).toBe(4);
 
-    // A tempo typed elsewhere is taken to the nearest step before it moves.
-    controller.updateSettings({ freePlayBpm: 97 });
-    expect(controller.nudgeFreePlayBpm(5)).toBe(100);
-    expect(metronome.currentConfig.bpm).toBe(100);
-    controller.updateSettings({ freePlayBpm: 298 });
-    expect(controller.nudgeFreePlayBpm(5)).toBe(300);
-    controller.updateSettings({ freePlayBpm: 22 });
-    expect(controller.nudgeFreePlayBpm(-5)).toBe(20);
+    // A bpm at a time, from a whole number of them.
+    controller.updateSettings({ freePlayBpm: 97.4 });
+    expect(controller.nudgeFreePlayBpm(1)).toBe(98);
+    expect(metronome.currentConfig.bpm).toBe(98);
+    controller.updateSettings({ freePlayBpm: 300 });
+    expect(controller.nudgeFreePlayBpm(1)).toBe(300);
+    controller.updateSettings({ freePlayBpm: 20 });
+    expect(controller.nudgeFreePlayBpm(-1)).toBe(20);
   });
 
   it('beats in the bar the reader lays out, a beat at a time, from the next click', async () => {

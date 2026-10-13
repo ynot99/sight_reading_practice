@@ -198,8 +198,12 @@ const OTHER_HAND_VELOCITY = 0.45;
 const MIN_TEMPO_BPM = 20;
 const MAX_TEMPO_BPM = 300;
 
-/** How far one press of the tempo buttons moves the click in free play, in beats a minute. */
-export const FREE_CLICK_STEP_BPM = 5;
+/**
+ * How far one press of the tempo buttons moves the click in free play, in
+ * beats a minute: one, so any tempo can be reached. Holding a button steps
+ * again and again, which is how a long way is covered.
+ */
+export const FREE_CLICK_STEP_BPM = 1;
 
 /** What a beat of the click in free play becomes when it is tapped. */
 const NEXT_BEAT_SOUND: Readonly<Record<BeatSound, BeatSound>> = {
@@ -3730,7 +3734,7 @@ export class PracticeController {
 
   /** The click in free play faster or slower, held to what a metronome can play. */
   nudgeFreePlayBpm(deltaBpm: number): number {
-    const from = Math.round(this.currentSettings.freePlayBpm / FREE_CLICK_STEP_BPM) * FREE_CLICK_STEP_BPM;
+    const from = Math.round(this.currentSettings.freePlayBpm);
     this.updateSettings({
       freePlayBpm: Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, from + deltaBpm)),
     });

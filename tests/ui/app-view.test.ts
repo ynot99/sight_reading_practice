@@ -8970,6 +8970,47 @@ describe('AppView', () => {
       expect(row.querySelector('.scores__stars')?.getAttribute('data-band')).not.toBeNull();
     });
 
+    it('lists only the readings played through when asked, and says where one picked up partway began', async () => {
+      const rig = createRig();
+      await rig.view.initialize();
+      const read = (title: string, how: Partial<PracticeAttempt>): void => {
+        rig.runtime.history.record(`score:${title}`, {
+          atMs: Date.now(),
+          overall: 0.8,
+          grade: 'B',
+          completed: true,
+          startedAtBar: null,
+          ...how,
+        });
+      };
+      read('Through', {});
+      read('Picked up', { startedAtBar: 30 });
+      read('Stopped', { completed: false, stoppedAtBar: 4 });
+      element<HTMLButtonElement>('focus-readings').click();
+      const names = (): (string | null)[] =>
+        [...element('readings-list').querySelectorAll('.readings__name')].map((name) => name.textContent);
+
+      // Reaching the end from bar thirty is not the whole piece.
+      const pickedUp = [...element('readings-list').querySelectorAll('li')].find((row) =>
+        row.textContent?.includes('Picked up'),
+      );
+      expect(pickedUp?.querySelector('.pill--slice')?.textContent).toBe('from bar 30');
+      expect(names()).toHaveLength(3);
+
+      const through = element<HTMLInputElement>('readings-through');
+      through.checked = true;
+      through.dispatchEvent(new Event('change'));
+      expect(names()).toEqual(['Through']);
+
+      for (const id of ['readings-best', 'readings-this-piece']) {
+        const box = element<HTMLInputElement>(id);
+        box.checked = true;
+        box.dispatchEvent(new Event('change'));
+      }
+      expect(element('readings-empty').hidden).toBe(false);
+      expect(element('readings-empty').textContent).toContain('played through');
+    });
+
     it('wears the squares it was played under, drawn as the squares themselves are', async () => {
       const rig = createRig();
       await rig.view.initialize();

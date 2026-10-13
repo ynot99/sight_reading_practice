@@ -3009,6 +3009,13 @@ export class PracticeController {
     // Where the reader put the cursor, unless a run begun by playing has
     // already been told otherwise - and never outside the passage they chose.
     const beginsAt = this.whereARunBegins(from);
+    // Begun at the start where nothing this reader owes in the passage comes
+    // before it - a run begun by playing opens on the first chord they owe,
+    // which in a piece whose other hand opens alone is not the passage's
+    // first step. Kept with the reading, so the list can tell a run played
+    // through from one picked up partway that also reached the end.
+    const firstOwed = this.theFirstStepTheReaderOwes(passage.from)?.index ?? passage.from;
+    const startedAtBar = beginsAt <= firstOwed ? null : (timeline.at(beginsAt)?.measureIndex ?? 0) + 1;
     const session = new PracticeSession({
       timeline,
       mode,
@@ -3234,6 +3241,7 @@ export class PracticeController {
           tempoPercent: Math.round(this.currentSettings.tempoPercent),
           hand: this.currentSettings.handStaff,
           stoppedAtBar: picture.stoppedAtBar,
+          startedAtBar,
           modeId: this.currentSettings.modeId,
           ...(modes.length > 0 ? { modes } : {}),
           picture,

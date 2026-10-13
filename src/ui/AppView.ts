@@ -88,7 +88,7 @@ import {
   type Theme,
 } from '../application/PracticeController.js';
 import { HOLD_MS } from '../shared/holding.js';
-import { pieceOfKey, type PassageHistory, type PracticeReading } from '../application/PracticeHistory.js';
+import { barItBeganIn, pieceOfKey, type PassageHistory, type PracticeReading } from '../application/PracticeHistory.js';
 import {
   drawTheKeyboard,
   keepInView,
@@ -1870,6 +1870,7 @@ export class AppView {
     readingsEmpty: HTMLElement;
     readingsBest: HTMLInputElement;
     readingsThisPiece: HTMLInputElement;
+    readingsThrough: HTMLInputElement;
     sheetReading: HTMLElement;
     readingTitle: HTMLElement;
     readingWhat: HTMLElement;
@@ -2201,6 +2202,7 @@ export class AppView {
       readingsEmpty: requireElement(doc, 'readings-empty'),
       readingsBest: requireElement(doc, 'readings-best'),
       readingsThisPiece: requireElement(doc, 'readings-this-piece'),
+      readingsThrough: requireElement(doc, 'readings-through'),
       sheetReading: requireElement(doc, 'sheet-reading'),
       readingTitle: requireElement(doc, 'reading-title'),
       readingWhat: requireElement(doc, 'reading-what'),
@@ -2691,14 +2693,19 @@ export class AppView {
     const piece = this.el.readingsThisPiece.checked
       ? this.runtime.controller.pieceKey
       : undefined;
+    const through = this.el.readingsThrough.checked;
     const readings = best
-      ? history.bestReadings(50, piece, (key) => this.howHardThePieceIs(key))
-      : history.lastReadings(50, piece);
+      ? history.bestReadings(50, piece, (key) => this.howHardThePieceIs(key), through)
+      : history.lastReadings(50, piece, through);
     this.el.readingsEmpty.hidden = readings.length > 0;
     // Whichever order, the list is empty only when nothing has been read:
-    // the best of it include the readings that stopped.
-    this.el.readingsEmpty.textContent =
-      piece === undefined
+    // the best of it include the readings that stopped. Unless only those
+    // played through are asked for, and then it is those there are none of.
+    this.el.readingsEmpty.textContent = through
+      ? piece === undefined
+        ? 'Nothing played through yet, from the start to the end.'
+        : 'Nothing of this piece played through yet, from the start to the end.'
+      : piece === undefined
         ? 'Nothing read yet. Play something and it is remembered here.'
         : 'Nothing read of this piece yet.';
     this.el.readingsList.replaceChildren();
@@ -2806,10 +2813,19 @@ export class AppView {
     };
 
     const [, bars] = reading.key.split(' bars:');
+    // A run picked up partway says where, rather than calling itself the
+    // whole piece or the whole passage it was only the end of.
+    const began = barItBeganIn(reading);
     marks.push(
-      bars === undefined
-        ? pill('slice', 'whole piece', 'Read from beginning to end')
-        : pill('slice', `bars ${bars}`, 'A passage of it'),
+      began !== null
+        ? pill(
+            'slice',
+            `from bar ${String(began)}`,
+            bars === undefined ? 'Picked up partway through the piece' : `Picked up partway through bars ${bars}`,
+          )
+        : bars === undefined
+          ? pill('slice', 'whole piece', 'Read from beginning to end')
+          : pill('slice', `bars ${bars}`, 'A passage of it'),
     );
 
     if (reading.hand === 1 || reading.hand === 2) {
@@ -4199,6 +4215,10 @@ export class AppView {
     });
 
     this.listen(this.el.readingsThisPiece, 'change', () => {
+      this.renderReadings();
+    });
+
+    this.listen(this.el.readingsThrough, 'change', () => {
       this.renderReadings();
     });
 

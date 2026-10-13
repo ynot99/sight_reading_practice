@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { PracticeHistory, type PracticeAttempt } from '../../src/application/PracticeHistory.js';
+import {
+  barItBeganIn,
+  playedThrough,
+  PracticeHistory,
+  type PracticeAttempt,
+} from '../../src/application/PracticeHistory.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import type { NoteCounts } from '../../src/domain/scoring/PerformanceReport.js';
 
@@ -774,5 +779,60 @@ describe('taking one reading out', () => {
     history.remove('score:A bars:1-4', 1_000);
 
     expect(history.summary('score:A bars:1-4')).toBeNull();
+  });
+});
+
+describe('readings played through', () => {
+  /** A reading kept before where a run began was recorded, with its bar strip. */
+  function strip(bars: string, completed = true): PracticeAttempt {
+    return { ...attempt(0.8), completed, picture: { ...picture(0), bars } };
+  }
+
+  it('goes from the start of what was practised to its end', () => {
+    const reading = (how: Partial<PracticeAttempt>) => ({ ...attempt(0.8), key: 'score:A', ...how });
+
+    expect(playedThrough(reading({ startedAtBar: null }))).toBe(true);
+    expect(playedThrough(reading({ startedAtBar: 12 }))).toBe(false);
+    expect(playedThrough(reading({ startedAtBar: null, completed: false }))).toBe(false);
+  });
+
+  it('reads where an older reading began off its bar strip', () => {
+    // The first bar of the passage the run reached: a dot is a bar never reached.
+    expect(barItBeganIn({ ...strip('cccc'), key: 'score:A' })).toBeNull();
+    expect(barItBeganIn({ ...strip('..cw'), key: 'score:A' })).toBe(3);
+    expect(barItBeganIn({ ...strip('..cc..'), key: 'score:A bars:3-4' })).toBeNull();
+    expect(barItBeganIn({ ...strip('...c..'), key: 'score:A bars:3-4' })).toBe(4);
+    // Nothing reached says nothing about where it began.
+    expect(barItBeganIn({ ...strip('....', false), key: 'score:A' })).toBeNull();
+    // And with no strip left, it is taken to have begun at the start.
+    expect(barItBeganIn({ ...attempt(0.8), key: 'score:A' })).toBeNull();
+  });
+
+  it('keeps where a run began across a reload, a start as well as a bar', () => {
+    const store = new InMemorySettingsStore();
+    const first = new PracticeHistory(store);
+    first.record('score:A', { ...attempt(0.8, 1), startedAtBar: null });
+    first.record('score:A', { ...attempt(0.8, 2), startedAtBar: 7 });
+
+    const next = new PracticeHistory(store);
+    next.load();
+
+    expect(next.lastReadings().map((reading) => reading.startedAtBar)).toEqual([7, null]);
+  });
+
+  it('lists only those played through where that is asked, newest or best first', () => {
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    history.record('score:A', { ...attempt(0.6, 1), startedAtBar: null });
+    history.record('score:A', { ...attempt(0.9, 2), startedAtBar: 5 });
+    history.record('score:A', { ...attempt(0.95, 3), completed: false, startedAtBar: null });
+    history.record('score:B', { ...attempt(0.7, 4), startedAtBar: null });
+
+    expect(history.lastReadings(10, undefined, true).map((reading) => reading.atMs)).toEqual([4, 1]);
+    expect(history.lastReadings(10, 'score:A', true).map((reading) => reading.atMs)).toEqual([1]);
+    expect(history.lastReadings(10).map((reading) => reading.atMs)).toEqual([4, 3, 2, 1]);
+    // The best of each piece among those played through, not the best of it.
+    expect(
+      history.bestReadings(10, undefined, () => null, true).map((reading) => reading.atMs).sort(),
+    ).toEqual([1, 4]);
   });
 });

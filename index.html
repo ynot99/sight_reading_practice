@@ -850,19 +850,30 @@
         <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Readings">
           <div class="sheet__head">
             <strong class="sheet__title">Readings</strong>
-            <label class="sheet__filter">
-              <input id="readings-best" type="checkbox" />
-              <span>Best first</span>
-            </label>
-            <!--
-              The piece in front of the reader, when there is one. An hour on
-              one piece is an hour of rows to scroll past before the reader
-              finds out whether this morning was better than last night's.
-            -->
-            <label class="sheet__filter">
-              <input id="readings-this-piece" type="checkbox" />
-              <span>This piece</span>
-            </label>
+            <span class="sheet__filters">
+              <label class="sheet__filter">
+                <input id="readings-best" type="checkbox" />
+                <span>Best first</span>
+              </label>
+              <!--
+                The piece in front of the reader, when there is one. An hour on
+                one piece is an hour of rows to scroll past before the reader
+                finds out whether this morning was better than last night's.
+              -->
+              <label class="sheet__filter">
+                <input id="readings-this-piece" type="checkbox" />
+                <span>This piece</span>
+              </label>
+              <!--
+                Only the readings that went from the start of the piece or the
+                passage to its end: a run stopped after two bars, or picked up
+                from the marker halfway, is not the reading being compared.
+              -->
+              <label class="sheet__filter">
+                <input id="readings-through" type="checkbox" />
+                <span>Played through</span>
+              </label>
+            </span>
             <button id="readings-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">×</button>
           </div>

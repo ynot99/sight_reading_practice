@@ -37,6 +37,16 @@ export interface PracticeAttempt {
    * reading old enough to have lost its picture can still say where it ended.
    */
   readonly stoppedAtBar?: number | null;
+  /**
+   * The bar a run picked up partway began in, one-based, or `null` where it
+   * began at the start of what was practised.
+   *
+   * Reaching the end is not reading the passage: a run begun from the marker
+   * at bar thirty and played to the last bar reached the end too. Absent from
+   * readings kept before it was recorded, whose bar strip answers instead -
+   * see {@link barItBeganIn}.
+   */
+  readonly startedAtBar?: number | null;
   /** What was switched on for it, as the badges over the score name them. */
   readonly modes?: readonly string[];
   /** The kind of run it was: the frame's own id, as the settings carry it. */
@@ -78,6 +88,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** The piece a key belongs to, without the bars of it that were read. */
 export function pieceOfKey(key: string): string {
   return key.split(' bars:')[0] ?? key;
+}
+
+/** The first bar of what a key says was practised, one-based. */
+function firstBarOfKey(key: string): number {
+  const bars = key.split(' bars:')[1];
+  const first = bars === undefined ? 1 : Number.parseInt(bars, 10);
+  return Number.isNaN(first) ? 1 : first;
+}
+
+/**
+ * The bar a run picked up partway began in, or `null` where it began at the
+ * start of what was practised.
+ *
+ * Recorded since; before that, read off the bar strip, where a bar never
+ * reached is a dot. The strip covers the whole piece and a run never leaves
+ * its passage, so the first bar reached is where it began - partway, if not
+ * the passage's own first. A reading with no strip left has nothing to say,
+ * and is taken to have begun at the start.
+ */
+export function barItBeganIn(reading: PracticeReading): number | null {
+  if (reading.startedAtBar !== undefined) {
+    return reading.startedAtBar;
+  }
+  const bars = reading.picture?.bars;
+  if (bars === undefined) {
+    return null;
+  }
+  const first = firstBarOfKey(reading.key);
+  const reached = [...bars].findIndex((bar) => bar !== '.');
+  return reached === -1 || reached === first - 1 ? null : reached + 1;
+}
+
+/** Whether a reading went from the start of what was practised to its end. */
+export function playedThrough(reading: PracticeReading): boolean {
+  return reading.completed && barItBeganIn(reading) === null;
 }
 
 function readNumbers(value: unknown): readonly number[] {
@@ -230,6 +275,7 @@ function readAttempt(value: unknown): PracticeAttempt | null {
   const tempoPercent = value['tempoPercent'];
   const hand = value['hand'];
   const stoppedAtBar = value['stoppedAtBar'];
+  const startedAtBar = value['startedAtBar'];
   const modeId = value['modeId'];
   const modes = readStrings(value['modes']);
   const picture = readPicture(value['picture']);
@@ -243,6 +289,7 @@ function readAttempt(value: unknown): PracticeAttempt | null {
     ...(typeof tempoPercent === 'number' ? { tempoPercent } : {}),
     ...(typeof hand === 'number' || hand === null ? { hand: hand as number | null } : {}),
     ...(typeof stoppedAtBar === 'number' ? { stoppedAtBar } : {}),
+    ...(typeof startedAtBar === 'number' || startedAtBar === null ? { startedAtBar } : {}),
     ...(notes !== null ? { notes } : {}),
     ...(typeof modeId === 'string' ? { modeId } : {}),
     ...(modes.length > 0 ? { modes } : {}),
@@ -350,9 +397,12 @@ export class PracticeHistory {
     return all.sort((left, right) => right.atMs - left.atMs);
   }
 
-  /** The readings most recently played, of one piece where one is named. */
-  lastReadings(limit = 20, ofPiece?: string): readonly PracticeReading[] {
-    return this.readingsOf(ofPiece).slice(0, Math.max(0, limit));
+  /**
+   * The readings most recently played, of one piece where one is named, and
+   * only those played through where that is asked - see {@link playedThrough}.
+   */
+  lastReadings(limit = 20, ofPiece?: string, onlyPlayedThrough = false): readonly PracticeReading[] {
+    return this.readingsOf(ofPiece, onlyPlayedThrough).slice(0, Math.max(0, limit));
   }
 
   /**
@@ -383,8 +433,9 @@ export class PracticeHistory {
     limit = 10,
     ofPiece?: string,
     howHard: (key: string) => number | null = () => null,
+    onlyPlayedThrough = false,
   ): readonly PracticeReading[] {
-    const readings = this.readingsOf(ofPiece);
+    const readings = this.readingsOf(ofPiece, onlyPlayedThrough);
     const hardness = new Map(readings.map((reading) => [reading, howHard(reading.key)]));
     type Order = (left: PracticeReading, right: PracticeReading) => number;
     const hardestFirst: Order = (left, right) => {
@@ -441,9 +492,12 @@ export class PracticeHistory {
     return true;
   }
 
-  private readingsOf(piece: string | undefined): readonly PracticeReading[] {
-    const all = this.everyReading();
-    return piece === undefined ? all : all.filter((reading) => pieceOfKey(reading.key) === piece);
+  private readingsOf(piece: string | undefined, onlyPlayedThrough: boolean): readonly PracticeReading[] {
+    return this.everyReading().filter(
+      (reading) =>
+        (piece === undefined || pieceOfKey(reading.key) === piece) &&
+        (!onlyPlayedThrough || playedThrough(reading)),
+    );
   }
 
   summary(key: string): PassageHistory | null {

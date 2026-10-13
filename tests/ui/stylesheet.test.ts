@@ -2066,6 +2066,24 @@ describe('searching the settings', () => {
       true,
     );
   });
+
+  it('puts the readings filters in a row of their own under the title on a phone', () => {
+    // Three beside the title left it a few letters wide and pushed the close
+    // button onto a line of its own.
+    const phone = '@media (max-width: 620px)';
+    const filters = rules().filter((rule) => rule.selector === '.sheet__filters');
+    const narrow = filters.find((rule) => inWhichMedia(rule.at) === phone);
+    const wide = filters.find((rule) => inWhichMedia(rule.at) === '');
+
+    expect(HTML).toMatch(
+      /<span class="sheet__filters">[\s\S]*id="readings-best"[\s\S]*id="readings-this-piece"[\s\S]*id="readings-through"[\s\S]*<\/span>\s*<button id="readings-close"/,
+    );
+    expect(wide?.body).toMatch(/display\s*:\s*flex/);
+    expect(narrow?.body).toMatch(/order\s*:\s*1/);
+    expect(narrow?.body).toMatch(/flex\s*:\s*1 0 100%/);
+    expect(narrow?.body).toMatch(/flex-wrap\s*:\s*wrap/);
+    expect(narrow?.at ?? 0).toBeGreaterThan(wide?.at ?? Infinity);
+  });
 });
 
 describe('the two pills on a phone', () => {

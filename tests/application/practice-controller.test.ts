@@ -756,6 +756,42 @@ describe('PracticeController', () => {
     expect(kept?.stoppedAtBar).not.toBeNull();
   });
 
+  it('records the bar a run picked up partway began in, and nothing where it began at the start', async () => {
+    // Reaching the end is not reading the passage: begun from the marker at
+    // bar three, a run that reaches the last bar has read the last six.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller } = createController(true, undefined, {}, history);
+    await controller.openScore(longExercise());
+
+    controller.beginAtBar(2);
+    controller.start()?.abort();
+    expect(history.lastReadings()[0]?.startedAtBar).toBe(3);
+
+    controller.beginAtTheStart();
+    controller.start()?.abort();
+    expect(history.lastReadings()[0]?.startedAtBar).toBeNull();
+  });
+
+  it('begins at the start a run opened on the first chord this reader owes', async () => {
+    // Read with the right hand, a piece whose left hand opens alone begins at
+    // the right hand's first chord - which is still the start of the reading.
+    const history = new PracticeHistory(new InMemorySettingsStore());
+    const { controller, midi, clock, metronome } = createController(
+      true,
+      undefined,
+      { immediateStart: true, modeId: FLOW_MODE_ID, handStaff: 1 },
+      history,
+    );
+    await controller.openScore(oneHandOpensAlone());
+
+    midi.noteOn(MIDI.G4, clock.now());
+    metronome.advanceSubdivisions(1);
+    expect(controller.session?.currentStep?.index).toBe(1);
+    controller.session?.abort();
+
+    expect(history.lastReadings()[0]?.startedAtBar).toBeNull();
+  });
+
   it('keeps no reading of a run stopped while it was being counted in', async () => {
     // His: begun, thought better of in the count-in, and kept as a reading
     // of C, 70% for keys never touched. Nothing was played, so there is

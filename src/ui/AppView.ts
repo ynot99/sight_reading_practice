@@ -45,7 +45,15 @@ import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
-import { barsAreHeardIn, writeMidiFile, type Hand, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
+import {
+  barsAreHeardIn,
+  theClickInAnotherMetre,
+  theClickOfTheTake,
+  writeMidiFile,
+  type Hand,
+  type HeardBeat,
+  type MidiFileEvent,
+} from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { FREE_CLICK_STEP_BPM, LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
@@ -1147,6 +1155,9 @@ function thePlayingAsAFile(
   });
 }
 
+/** The metres a sketch may be written in: the simple and compound ones a pianist meets. */
+const SKETCH_METRES = ['2/4', '3/4', '4/4', '5/4', '6/4', '2/2', '3/2', '3/8', '5/8', '6/8', '7/8', '9/8', '12/8'] as const;
+
 /** Every key a signature can be, major and minor, for a sketch to be written in. */
 const EVERY_KEY: readonly KeySignature[] = (['major', 'minor'] as const).flatMap((mode) =>
   [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7].map((fifths) => new KeySignature(fifths, mode)),
@@ -2001,6 +2012,7 @@ export class AppView {
     rollVelocitySaid: HTMLOutputElement;
     rollHands: HTMLElement;
     rollKey: HTMLSelectElement;
+    rollMetre: HTMLSelectElement;
     rollHandLeft: HTMLButtonElement;
     rollHandPitch: HTMLButtonElement;
     rollHandRight: HTMLButtonElement;
@@ -2357,6 +2369,7 @@ export class AppView {
       rollVelocitySaid: requireElement(doc, 'roll-velocity-said'),
       rollHands: requireElement(doc, 'roll-hands'),
       rollKey: requireElement(doc, 'roll-key'),
+      rollMetre: requireElement(doc, 'roll-metre'),
       rollHandLeft: requireElement(doc, 'roll-hand-left'),
       rollHandPitch: requireElement(doc, 'roll-hand-pitch'),
       rollHandRight: requireElement(doc, 'roll-hand-right'),
@@ -8565,6 +8578,9 @@ export class AppView {
         this.runtime.sketches.changeTheKey(sketch.id, { fifths: key.fifths, mode: key.mode });
       }
     });
+    this.listen(this.el.rollMetre, 'change', () => {
+      this.countTheSketchIn(this.el.rollMetre.value);
+    });
     for (const [button, hand] of [
       [this.el.rollHandLeft, 'left'],
       [this.el.rollHandPitch, null],
@@ -11641,6 +11657,18 @@ export class AppView {
     if (key !== undefined && key !== null) {
       this.el.rollKey.value = keyValue(new KeySignature(key.fifths, key.mode));
     }
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const first = stored === null ? undefined : theClickOfTheTake(stored.events, stored.beats)?.[0];
+    if (first !== undefined) {
+      // A score may be in a metre the list does not offer, and it is shown as it is.
+      const metre = `${String(first.beatsInBar)}/${String(first.beatType ?? 4)}`;
+      const metres: readonly string[] = SKETCH_METRES.includes(metre as never) ? SKETCH_METRES : [metre, ...SKETCH_METRES];
+      fillSelect(
+        this.el.rollMetre,
+        metres.map((each) => ({ value: each, label: each })),
+        metre,
+      );
+    }
     const loudness = this.theLoudnessOfTheChosen();
     if (loudness.length === 0) {
       this.el.rollVelocity.dataset['idle'] = 'true';
@@ -11689,6 +11717,31 @@ export class AppView {
       return [];
     }
     return theKeysOfTheTake(stored.events).filter((key) => sketch.chosen.some((each) => sameKey(each, key)));
+  }
+
+  /**
+   * Counts the sketch on the drawing in another metre: its bars laid afresh,
+   * its notes where they were. Kept with the sketch, as its key is.
+   */
+  private countTheSketchIn(metre: string): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const [beatsInBar, beatType] = metre.split('/').map(Number);
+    if (showing === null || stored === null || beatsInBar === undefined || beatType === undefined) {
+      return;
+    }
+    const changed = this.runtime.sketches.changeTheBeats(
+      stored.id,
+      theClickInAnotherMetre(stored.events, stored.beats, beatsInBar, beatType),
+    );
+    if (changed === null) {
+      return;
+    }
+    const roll = rollOfTheTake(changed, ROOM_IN_A_SKETCH);
+    this.theOtherRollShowing = { ...showing, roll, barLabel: barsCountedOnItsBeats(roll) };
+    this.drawTheRollInto();
+    this.sayWhatCanBeChanged();
   }
 
   /** Gives the chosen notes to a hand, or back to their pitch: one change. */

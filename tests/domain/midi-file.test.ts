@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   barsAreHeardIn,
   damperIsDown,
+  theClickInAnotherMetre,
   theClickOfTheTake,
   TRACK_OF_A_HAND,
   writeMidiFile,
@@ -377,6 +378,59 @@ describe('the beats a take is written in', () => {
 
   it('says nothing for a click that says nothing', () => {
     expect(theClickOfTheTake(struck(0), click(0, 600, 1))).toBeNull();
+  });
+});
+
+describe('a click counted in another metre', () => {
+  const at = (beats: readonly HeardBeat[]): number[][] =>
+    beats.map((beat) => [beat.atMs, beat.beat, beat.beatsInBar, beat.beatType ?? 4]);
+
+  it('keeps every moment where it was and lays the bars afresh from the first', () => {
+    // A bar of 4/4 at 120 and the start of the next, the playing to its third beat.
+    const beats = click(0, 500, 6);
+
+    expect(at(theClickInAnotherMetre(struck(0, 2_400), beats, 3, 4))).toEqual([
+      [0, 0, 3, 4],
+      [500, 1, 3, 4],
+      [1_000, 2, 3, 4],
+      [1_500, 0, 3, 4],
+      [2_000, 1, 3, 4],
+      [2_500, 2, 3, 4],
+    ]);
+    // A quaver beat is half a crotchet's time, a minim twice it; and every beat
+    // the click gave is counted, past the playing too.
+    expect(at(theClickInAnotherMetre(struck(0, 900), beats, 6, 8))).toEqual(
+      Array.from({ length: 12 }, (_, beat) => [beat * 250, beat % 6, 6, 8]),
+    );
+    expect(at(theClickInAnotherMetre(struck(0, 2_400), beats, 2, 2))).toEqual([
+      [0, 0, 2, 2],
+      [1_000, 1, 2, 2],
+      [2_000, 0, 2, 2],
+    ]);
+  });
+
+  it('follows a change of pace, a beat that falls between two of the click as far between them as it is', () => {
+    // Two crotchets at 100 bpm, then two at 120.
+    const beats = click(0, 600, 4);
+    const changed = [...beats.slice(0, 2), { atMs: 1_200, beat: 2, beatsInBar: 4 }, { atMs: 1_700, beat: 3, beatsInBar: 4 }];
+
+    expect(at(theClickInAnotherMetre(struck(0, 1_800), changed, 6, 8)).map(([atMs]) => atMs)).toEqual([
+      // Carried on past its last beat to the last of the playing, at its last pace.
+      0, 300, 600, 900, 1_200, 1_450, 1_700, 1_950, 2_200, 2_450,
+    ]);
+  });
+
+  it('comes back to the click it was counted from', () => {
+    const beats = theClickOfTheTake(struck(0, 2_400), click(0, 500, 6));
+    const there = theClickInAnotherMetre(struck(0, 2_400), click(0, 500, 6), 3, 4);
+
+    expect(at(theClickInAnotherMetre(struck(0, 2_400), there, 4, 4))).toEqual(at(beats ?? []));
+  });
+
+  it('gives back a click that says nothing as it was', () => {
+    const silent = click(0, 600, 1);
+
+    expect(theClickInAnotherMetre(struck(0), silent, 3, 4)).toBe(silent);
   });
 });
 

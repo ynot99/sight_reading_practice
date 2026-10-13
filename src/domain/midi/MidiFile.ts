@@ -227,6 +227,48 @@ export function theClickOfTheTake(
 }
 
 /**
+ * The beats of a click as another metre counts them: at the same pace, with
+ * every moment where it was, the bars and the beats laid afresh from the
+ * first beat of the first bar - so the notes stay where they were played or
+ * put, and only the bars they are written in change. Where the click says
+ * nothing it is given back as it was.
+ */
+export function theClickInAnotherMetre(
+  events: readonly MidiFileEvent[],
+  beats: readonly HeardBeat[],
+  beatsInBar: number,
+  beatType: number,
+): readonly HeardBeat[] {
+  const grid = theClickOfTheTake(events, beats);
+  if (grid === null) {
+    return beats;
+  }
+  // Where each beat of the click is, in crotchets from the first, and when.
+  // Past the last, its pace goes on, as the click itself is carried on.
+  const points: { readonly crotchets: number; readonly atMs: number }[] = [];
+  let crotchets = 0;
+  for (const beat of grid) {
+    points.push({ crotchets, atMs: beat.atMs });
+    crotchets += 4 / valueOf(beat);
+  }
+  const when = (at: number): number => {
+    let segment = 0;
+    while (segment + 2 < points.length && elementAt(points, segment + 1).crotchets <= at) {
+      segment += 1;
+    }
+    const from = elementAt(points, segment);
+    const to = elementAt(points, segment + 1);
+    return from.atMs + ((at - from.crotchets) * (to.atMs - from.atMs)) / (to.crotchets - from.crotchets);
+  };
+  const unit = 4 / beatType;
+  const counted: HeardBeat[] = [];
+  for (let at = 0; at * unit < crotchets; at += 1) {
+    counted.push({ atMs: when(at * unit), beat: at % beatsInBar, beatsInBar, beatType });
+  }
+  return counted;
+}
+
+/**
  * Whether a click says where its bars are: two beats heard apart, the
  * least a pace is read from.
  */

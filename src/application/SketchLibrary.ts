@@ -199,6 +199,18 @@ export class SketchLibrary {
     return changed;
   }
 
+  /** Gives a sketch the beats another metre counts in: see `theClickInAnotherMetre`. */
+  changeTheBeats(id: string, beats: readonly HeardBeat[]): StoredSketch | null {
+    const found = this.find(id);
+    if (found === null) {
+      return null;
+    }
+    const changed = { ...found, beats };
+    this.sketches = this.sketches.map((sketch) => (sketch.id === id ? changed : sketch));
+    this.persist();
+    return changed;
+  }
+
   /** Writes a sketch in another key: its notes are where they were, spelt in that key. */
   changeTheKey(id: string, key: SketchKey): StoredSketch | null {
     const found = this.find(id);

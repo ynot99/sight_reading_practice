@@ -4325,6 +4325,9 @@ describe('AppView', () => {
       expect(chosen()).toEqual([]);
     });
 
+    // The metres offered for a sketch, simple and compound.
+    const SKETCH_METRE_CHOICES = ['2/4', '3/4', '4/4', '5/4', '6/4', '2/2', '3/2', '3/8', '5/8', '6/8', '7/8', '9/8', '12/8'];
+
     it('begins a sketch of the score open, in its own bars, and leaves the score as it is written', async () => {
       const { view, runtime, sketches, files } = createRig();
       await view.initialize();
@@ -4348,6 +4351,33 @@ describe('AppView', () => {
       expect(sketches.find(sketch?.id ?? '')?.key).toEqual({ fifths: -3, mode: 'minor' });
       expect(sketch?.noteCount).toBe(7);
       expect(sketch?.beats.map((beat) => beat.beatType)).toEqual([8, 8, 8, 8, 8, 8]);
+      // In the score's metre, which the editor shows and changes: the notes
+      // stay, the bars are counted afresh, and the drawing is in them.
+      const metre = element<HTMLSelectElement>('roll-metre');
+      expect(metre.value).toBe('6/8');
+      expect([...metre.options].map((option) => option.value)).toEqual([...SKETCH_METRE_CHOICES]);
+      const quavers = sketch?.beats.map((beat) => beat.atMs) ?? [];
+      metre.value = '3/4';
+      metre.dispatchEvent(new Event('change'));
+      const counted = sketches.find(sketch?.id ?? '');
+      expect(counted?.events).toEqual(sketch?.events);
+      expect(counted?.beats.map((beat) => [beat.atMs, beat.beat, beat.beatsInBar, beat.beatType])).toEqual(
+        // The last of the score's notes is let go of a quaver after its bar, so the click runs on to a beat there.
+        [0, 2, 4, 6].map((quaver, at) => [quavers[quaver] ?? 3_000, at % 3, 3, 4]),
+      );
+      const barsDrawn = (): (string | number)[][] => view.rollScene?.bars.map((bar) => [bar.name, bar.atMs]) ?? [];
+      expect(barsDrawn().slice(0, 3)).toEqual([
+        ['1', 0],
+        ['2', 3_000],
+        ['3', 6_000],
+      ]);
+      metre.value = '2/4';
+      metre.dispatchEvent(new Event('change'));
+      expect(barsDrawn().slice(0, 3)).toEqual([
+        ['1', 0],
+        ['2', 2_000],
+        ['3', 4_000],
+      ]);
       expect(element('roll-title').textContent).toBe('Sketch of In six');
       expect(edit.getAttribute('aria-pressed')).toBe('true');
       expect(runtime.controller.openedExercise).toBe(written);
@@ -4359,6 +4389,34 @@ describe('AppView', () => {
       rowButton('sketches-list', 'Save this sketch as a MIDI file').click();
       const saved = readMidiFile(files.saved[0]?.bytes ?? new Uint8Array());
       expect([saved.fifths, saved.minor]).toEqual([-3, true]);
+      // And in the metre it was last counted in.
+      expect([saved.beats, saved.beatType]).toEqual([2, 4]);
+    });
+
+    it('shows a sketch in a metre the list does not offer as it is', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff', atMs: 400, midi: 60 },
+          ],
+          beats: [
+            { atMs: 0, beat: 0, beatsInBar: 11, beatType: 16 },
+            { atMs: 125, beat: 1, beatsInBar: 11, beatType: 16 },
+          ],
+        },
+        'In eleven',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+
+      const metre = element<HTMLSelectElement>('roll-metre');
+      expect(metre.value).toBe('11/16');
+      expect([...metre.options].map((option) => option.value)).toEqual(['11/16', ...SKETCH_METRE_CHOICES]);
     });
 
     it('lists the sketches beside the scores, switched to in the title, each to be edited, read, saved or deleted', async () => {

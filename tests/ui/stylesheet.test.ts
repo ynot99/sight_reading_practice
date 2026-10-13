@@ -2139,7 +2139,14 @@ describe('searching the settings', () => {
     expect(wide?.body).toMatch(/display\s*:\s*flex/);
     expect(narrow?.body).toMatch(/order\s*:\s*1/);
     expect(narrow?.body).toMatch(/flex\s*:\s*1 0 100%/);
+    // Six of them in the row at 390 pixels: forty-eight each leave room for
+    // gaps of six, not eight.
+    expect(narrow?.body).toMatch(/gap\s*:\s*6px/);
     expect(narrow?.at ?? 0).toBeGreaterThan(wide?.at ?? Infinity);
+    // One there only while editing keeps its room, so the others stay put.
+    const away = rules().find((rule) => rule.selector === ".sheet__tools [data-away='true']");
+    expect(away?.body).toMatch(/visibility\s*:\s*hidden/);
+    expect(away?.body).not.toMatch(/display/);
   });
 });
 

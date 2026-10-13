@@ -1691,6 +1691,8 @@ export class AppView {
      */
     readonly take?: {
       readonly id: string;
+      /** Whether a touch on the drawing edits the notes rather than placing the marker. */
+      readonly editing: boolean;
       readonly chosen: { readonly midi: number; readonly downAtMs: number } | null;
       readonly before: readonly (readonly MidiFileEvent[])[];
     };
@@ -1873,6 +1875,7 @@ export class AppView {
     sheetRoll: HTMLElement;
     rollBody: HTMLElement;
     rollKeep: HTMLButtonElement;
+    rollEdit: HTMLButtonElement;
     rollDelete: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
     rollTitle: HTMLElement;
@@ -2210,6 +2213,7 @@ export class AppView {
       sheetRoll: requireElement(doc, 'sheet-roll'),
       rollBody: requireElement(doc, 'roll-body'),
       rollKeep: requireElement(doc, 'roll-keep'),
+      rollEdit: requireElement(doc, 'roll-edit'),
       rollDelete: requireElement(doc, 'roll-delete'),
       rollUndo: requireElement(doc, 'roll-undo'),
       rollTitle: requireElement(doc, 'roll-title'),
@@ -8376,10 +8380,14 @@ export class AppView {
       if (this.pinched || this.panned) {
         return;
       }
-      if (this.chooseTheKeyTapped(event)) {
+      if (this.theOtherRollShowing?.take?.editing === true) {
+        this.chooseTheKeyTapped(event);
         return;
       }
       this.putTheHeadWhereItWasTapped(event);
+    });
+    this.listen(this.el.rollEdit, 'click', () => {
+      this.editTheRecording(this.theOtherRollShowing?.take?.editing !== true);
     });
     this.listen(this.el.rollDelete, 'click', () => {
       this.deleteTheChosenKey();
@@ -11194,7 +11202,7 @@ export class AppView {
       ofTheOpenScore: false,
       // Played to the click, its bars are its own, counted from its first.
       barLabel: barsCountedOnItsBeats(roll),
-      take: { id, chosen: null, before: [] },
+      take: { id, editing: false, chosen: null, before: [] },
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -11269,12 +11277,32 @@ export class AppView {
    */
   private sayWhatCanBeChanged(): void {
     const take = this.theOtherRollShowing?.take;
+    const editing = take?.editing === true;
+    this.el.rollEdit.setAttribute('aria-pressed', String(editing));
+    if (take === undefined) {
+      this.el.rollEdit.dataset['idle'] = 'true';
+      this.el.rollEdit.title = 'Edit the notes. Only a recording is changed: this is a reading as it was played.';
+    } else {
+      delete this.el.rollEdit.dataset['idle'];
+      this.el.rollEdit.title = editing
+        ? 'Back to listening: a tap puts the marker'
+        : 'Edit the notes: a tap chooses one, a drag moves it';
+    }
+    this.el.rollEdit.setAttribute('aria-label', this.el.rollEdit.title);
+    // Only a recording has them, and they are there only while it is edited.
+    for (const button of [this.el.rollDelete, this.el.rollUndo]) {
+      button.hidden = take === undefined;
+      if (editing) {
+        delete button.dataset['away'];
+      } else {
+        button.dataset['away'] = 'true';
+      }
+    }
+
     const chosen = take?.chosen ?? null;
     const notes = take === undefined ? 0 : (this.runtime.takes.find(take.id)?.noteCount ?? 0);
     let waiting: string | null = null;
-    if (take === undefined) {
-      waiting = 'Delete a note. Only a recording is changed: this is a reading as it was played.';
-    } else if (chosen === null) {
+    if (chosen === null) {
       waiting = 'Delete a note. Tap one to choose it.';
     } else if (notes < 2) {
       waiting = 'Delete a note. It is the only one in this recording.';
@@ -11288,7 +11316,6 @@ export class AppView {
     }
     this.el.rollDelete.setAttribute('aria-label', this.el.rollDelete.title);
 
-    this.el.rollUndo.hidden = take === undefined;
     if ((take?.before.length ?? 0) > 0) {
       delete this.el.rollUndo.dataset['idle'];
       this.el.rollUndo.title = 'Put back the last change';
@@ -11300,15 +11327,29 @@ export class AppView {
   }
 
   /**
-   * Chooses the key of a recording a tap landed on, and puts the head where it
-   * went down. Says whether there was one: a tap beside every note chooses
-   * nothing and puts the head where it always has.
+   * Turns editing a recording on or off. What was chosen is let go of either
+   * way: a choice belongs to the editing it was made in.
    */
-  private chooseTheKeyTapped(event: MouseEvent): boolean {
+  private editTheRecording(editing: boolean): void {
     const showing = this.theOtherRollShowing;
     const take = showing?.take;
     if (showing === null || take === undefined) {
-      return false;
+      return;
+    }
+    this.theOtherRollShowing = { ...showing, take: { ...take, editing, chosen: null } };
+    this.drawTheRollInto();
+    this.sayWhatCanBeChanged();
+  }
+
+  /**
+   * Chooses the key of a recording a tap landed on, or none for a tap beside
+   * every note. The head stays where it is: placing it is listening's.
+   */
+  private chooseTheKeyTapped(event: MouseEvent): void {
+    const showing = this.theOtherRollShowing;
+    const take = showing?.take;
+    if (showing === null || take === undefined) {
+      return;
     }
     const key = this.theKeyUnder(event);
     this.theOtherRollShowing = {
@@ -11317,11 +11358,6 @@ export class AppView {
     };
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();
-    if (key === null) {
-      return false;
-    }
-    this.putTheHeadAt(key.downAtMs - rollBeganAtMs(showing.roll));
-    return true;
   }
 
   /** The key of the drawing under a point on the screen, as the pointer's hover finds it. */
@@ -11476,7 +11512,7 @@ export class AppView {
       ...showing,
       roll,
       barLabel: barsCountedOnItsBeats(roll),
-      take: { id: take.id, chosen, before },
+      take: { ...take, chosen, before },
     };
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();

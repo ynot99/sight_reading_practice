@@ -4420,7 +4420,16 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   .sheet__tools {
     order: 1;
     flex: 1 0 100%;
+    gap: 6px;
   }
+}
+
+/*
+ * A button there only while editing, its room kept while listening: the
+ * buttons beside it stay where the finger left them as the mode turns.
+ */
+.sheet__tools [data-away='true'] {
+  visibility: hidden;
 }
 
 /* Reads as part of the heading rather than as another control in a row. */

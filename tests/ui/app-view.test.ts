@@ -4098,11 +4098,14 @@ describe('AppView', () => {
       midi.noteOn(runtime.controller.session?.currentStep?.expectedMidi[0] ?? 60, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
       element<HTMLButtonElement>('run-roll-open').click();
+      const edit = element<HTMLButtonElement>('roll-edit');
       const remove = element<HTMLButtonElement>('roll-delete');
       const undo = element<HTMLButtonElement>('roll-undo');
-      expect(remove.dataset['idle']).toBe('true');
-      expect(remove.title).toBe('Delete a note. Only a recording is changed: this is a reading as it was played.');
-      expect(undo.hidden).toBe(true);
+      expect(edit.dataset['idle']).toBe('true');
+      expect(edit.title).toBe('Edit the notes. Only a recording is changed: this is a reading as it was played.');
+      edit.click();
+      expect(edit.getAttribute('aria-pressed')).toBe('false');
+      expect([remove.hidden, undo.hidden]).toEqual([true, true]);
       element<HTMLButtonElement>('roll-close').click();
 
       // Three notes half a second apart, played freely and kept.
@@ -4117,8 +4120,13 @@ describe('AppView', () => {
       const kept = takes.list()[0];
       expect(kept?.noteCount).toBe(3);
       rowButton('takes-list', 'Look at this take').click();
-      expect(remove.dataset['idle']).toBe('true');
-      expect(remove.title).toBe('Delete a note. Tap one to choose it.');
+      // Listening: the trash and the undo keep their places, out of sight, and
+      // a tap on a note puts the marker there and chooses nothing.
+      expect(edit.dataset['idle']).toBeUndefined();
+      expect(edit.title).toBe('Edit the notes: a tap chooses one, a drag moves it');
+      expect(edit.getAttribute('aria-label')).toBe(edit.title);
+      expect([remove.hidden, undo.hidden]).toEqual([false, false]);
+      expect([remove.dataset['away'], undo.dataset['away']]).toEqual(['true', 'true']);
       expect(remove.getAttribute('aria-label')).toBe(remove.title);
       expect(undo.hidden).toBe(false);
       expect(undo.dataset['idle']).toBe('true');
@@ -4139,9 +4147,22 @@ describe('AppView', () => {
       const chosen = (): number[] =>
         (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
       tapOn(500);
+      expect(chosen()).toEqual([]);
+      // Where the finger was: a recording played freely has no beat to snap to.
+      expect(headAt(element('roll-body'))).toBe('0.600');
+
+      edit.click();
+      expect(edit.getAttribute('aria-pressed')).toBe('true');
+      expect(edit.title).toBe('Back to listening: a tap puts the marker');
+      expect([remove.dataset['away'], undo.dataset['away']]).toEqual([undefined, undefined]);
+      expect(remove.dataset['idle']).toBe('true');
+      expect(remove.title).toBe('Delete a note. Tap one to choose it.');
+      // Editing: the tap chooses, and the marker stays where it was.
+      tapOn(1_000);
+      expect(chosen()).toEqual([1_000]);
+      expect(headAt(element('roll-body'))).toBe('0.600');
+      tapOn(500);
       expect(chosen()).toEqual([500]);
-      // And the head goes where it went down.
-      expect(headAt(element('roll-body'))).toBe('0.500');
       expect(remove.dataset['idle']).toBeUndefined();
       expect(remove.title).toBe('Delete the chosen note, E4');
 
@@ -4179,10 +4200,15 @@ describe('AppView', () => {
       undo.click();
       expect(takes.find(kept?.id ?? '')?.noteCount).toBe(3);
 
-      // A tap beside every note chooses nothing, and only moves the head.
+      // A tap beside every note chooses nothing.
       tapOn(500);
       element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: (1.8 * zoom), clientY: 2 }));
       expect(chosen()).toEqual([]);
+      // And back to listening lets go of what was chosen.
+      tapOn(500);
+      edit.click();
+      expect(chosen()).toEqual([]);
+      expect(remove.dataset['away']).toBe('true');
     });
 
     it('counts the bar out over the drawing, and can be put away', async () => {
@@ -12285,6 +12311,7 @@ describe('AppView', () => {
       const before = struck();
       expect(before.map(([pitch]) => pitch)).toEqual([60, 62, 64]);
       rowButton('takes-list', 'Look at this take').click();
+      element<HTMLButtonElement>('roll-edit').click();
 
       // On the grid that stands at the drawing's corner, a row thirteen pixels.
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);

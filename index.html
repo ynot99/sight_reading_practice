@@ -460,13 +460,21 @@
             <button id="roll-keep" type="button" class="button"
               title="Keep this run with the recordings">Keep</button>
             <!--
-              A recording changed where it is looked at: a tap on a note
-              chooses it, a drag moves it once chosen, and this takes it out.
-              Each change can be put back, last first, while the recording
-              stays open.
+              A recording changed where it is looked at, while editing: a tap
+              on a note chooses it, a drag moves it once chosen, and the trash
+              takes it out. Each change can be put back, last first, while the
+              recording stays open. Listening, a tap puts the marker, as it
+              always has, and the two never answer the same touch.
             -->
+            <button id="roll-edit" type="button" class="button" title="Edit the notes"
+              aria-label="Edit the notes" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                class="take-transport__icon">
+                <path d="M3 17.2V21h3.8l11-11-3.8-3.8-11 11zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.8 3.8L20.7 7z" />
+              </svg>
+            </button>
             <button id="roll-delete" type="button" class="button" title="Delete a note"
-              aria-label="Delete a note">
+              aria-label="Delete a note" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
                 class="take-transport__icon">
                 <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />

@@ -187,25 +187,16 @@ export class SketchLibrary {
     return sketch;
   }
 
-  /** Gives a sketch new notes: the same sketch changed, its name and bars kept. */
-  changeTheNotes(id: string, events: readonly MidiFileEvent[]): StoredSketch | null {
+  /**
+   * Gives a sketch new notes, and new beats where they are given - another
+   * metre, another pace: the same sketch changed, its name and key kept.
+   */
+  changeTheNotes(id: string, events: readonly MidiFileEvent[], beats?: readonly HeardBeat[]): StoredSketch | null {
     const found = this.find(id);
     if (found === null) {
       return null;
     }
-    const changed = sketchOf(found.id, found.title, found.begunAtMs, events, found.beats, found.key);
-    this.sketches = this.sketches.map((sketch) => (sketch.id === id ? changed : sketch));
-    this.persist();
-    return changed;
-  }
-
-  /** Gives a sketch the beats another metre counts in: see `theClickInAnotherMetre`. */
-  changeTheBeats(id: string, beats: readonly HeardBeat[]): StoredSketch | null {
-    const found = this.find(id);
-    if (found === null) {
-      return null;
-    }
-    const changed = { ...found, beats };
+    const changed = sketchOf(found.id, found.title, found.begunAtMs, events, beats ?? found.beats, found.key);
     this.sketches = this.sketches.map((sketch) => (sketch.id === id ? changed : sketch));
     this.persist();
     return changed;

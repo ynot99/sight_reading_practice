@@ -243,29 +243,102 @@ export function theClickInAnotherMetre(
   if (grid === null) {
     return beats;
   }
-  // Where each beat of the click is, in crotchets from the first, and when.
-  // Past the last, its pace goes on, as the click itself is carried on.
-  const points: { readonly crotchets: number; readonly atMs: number }[] = [];
+  const marks = theCrotchetsOfTheClick(grid);
+  const unit = 4 / beatType;
+  const counted: HeardBeat[] = [];
+  for (let at = 0; at * unit < marks.crotchets; at += 1) {
+    counted.push({ atMs: theMomentOfACrotchet(marks.points, at * unit), beat: at % beatsInBar, beatsInBar, beatType });
+  }
+  return counted;
+}
+
+/**
+ * How many crotchets a minute a click goes at where it begins: the pace a
+ * tempo mark would say. Null where the click says nothing.
+ */
+export function thePaceOfTheClick(events: readonly MidiFileEvent[], beats: readonly HeardBeat[]): number | null {
+  const grid = theClickOfTheTake(events, beats);
+  if (grid === null) {
+    return null;
+  }
+  const [first, second] = theCrotchetsOfTheClick(grid).points;
+  return first === undefined || second === undefined
+    ? null
+    : (MILLISECONDS_PER_MINUTE * (second.crotchets - first.crotchets)) / (second.atMs - first.atMs);
+}
+
+/**
+ * Some playing at another pace, all of it at one: every note, every pedal and
+ * every beat moved to where the same place in the bar falls at that many
+ * crotchets a minute, from the first beat of the first bar, which stays. The
+ * notes keep their places in the bars and their lengths in beats, and the
+ * music goes faster or slower. Where the click says nothing it is given back
+ * as it was.
+ */
+export function thePlayingAtAnotherPace(
+  events: readonly MidiFileEvent[],
+  beats: readonly HeardBeat[],
+  crotchetsPerMinute: number,
+): { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] } {
+  const grid = theClickOfTheTake(events, beats);
+  if (grid === null || !(crotchetsPerMinute > 0)) {
+    return { events, beats };
+  }
+  const { points } = theCrotchetsOfTheClick(grid);
+  const from = elementAt(grid, 0).atMs;
+  const moved = (atMs: number): number =>
+    from + (theCrotchetAtAMoment(points, atMs) * MILLISECONDS_PER_MINUTE) / crotchetsPerMinute;
+  return {
+    events: events.map((event) => ({ ...event, atMs: moved(event.atMs) })),
+    beats: beats.map((beat) => ({ ...beat, atMs: moved(beat.atMs) })),
+  };
+}
+
+const MILLISECONDS_PER_MINUTE = 60_000;
+
+/** A beat of a click: how many crotchets after its first it falls, and when. */
+interface CrotchetMark {
+  readonly crotchets: number;
+  readonly atMs: number;
+}
+
+/** Where each beat of a click is, in crotchets from the first, and when; and how many crotchets its beats hold. */
+function theCrotchetsOfTheClick(grid: readonly HeardBeat[]): {
+  readonly points: readonly CrotchetMark[];
+  readonly crotchets: number;
+} {
+  const points: CrotchetMark[] = [];
   let crotchets = 0;
   for (const beat of grid) {
     points.push({ crotchets, atMs: beat.atMs });
     crotchets += 4 / valueOf(beat);
   }
-  const when = (at: number): number => {
-    let segment = 0;
-    while (segment + 2 < points.length && elementAt(points, segment + 1).crotchets <= at) {
-      segment += 1;
-    }
-    const from = elementAt(points, segment);
-    const to = elementAt(points, segment + 1);
-    return from.atMs + ((at - from.crotchets) * (to.atMs - from.atMs)) / (to.crotchets - from.crotchets);
-  };
-  const unit = 4 / beatType;
-  const counted: HeardBeat[] = [];
-  for (let at = 0; at * unit < crotchets; at += 1) {
-    counted.push({ atMs: when(at * unit), beat: at % beatsInBar, beatsInBar, beatType });
+  return { points, crotchets };
+}
+
+/**
+ * The two beats of a click a place falls between - or, before the first or
+ * after the last, the two nearest it, their pace carried on as the click
+ * itself is carried on.
+ */
+function theBeatsAround(points: readonly CrotchetMark[], isPast: (mark: CrotchetMark) => boolean): [CrotchetMark, CrotchetMark] {
+  let segment = 0;
+  while (segment + 2 < points.length && isPast(elementAt(points, segment + 1))) {
+    segment += 1;
   }
-  return counted;
+  return [elementAt(points, segment), elementAt(points, segment + 1)];
+}
+
+/** When a place so many crotchets after a click's first beat falls. */
+function theMomentOfACrotchet(points: readonly CrotchetMark[], at: number): number {
+  const [from, to] = theBeatsAround(points, (mark) => mark.crotchets <= at);
+  return from.atMs + ((at - from.crotchets) * (to.atMs - from.atMs)) / (to.crotchets - from.crotchets);
+}
+
+/** How many crotchets after a click's first beat a moment falls. */
+function theCrotchetAtAMoment(points: readonly CrotchetMark[], atMs: number): number {
+  const [from, to] = theBeatsAround(points, (mark) => mark.atMs <= atMs);
+  return from.crotchets + ((atMs - from.atMs) * (to.crotchets - from.crotchets)) / (to.atMs - from.atMs);
 }
 
 /**

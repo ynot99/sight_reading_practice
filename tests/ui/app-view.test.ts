@@ -53,6 +53,7 @@ import {
 } from '../../src/application/session/RunRoll.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
+import type { MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
@@ -4449,6 +4450,80 @@ describe('AppView', () => {
       expect([saved.fifths, saved.minor]).toEqual([-3, true]);
       // And in the metre it was last counted in.
       expect([saved.beats, saved.beatType]).toEqual([2, 4]);
+    });
+
+    it('sets the pace of a sketch, its notes keeping their beats, and puts a pace or a metre back as one change', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const played: MidiFileEvent[] = [
+        { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+        { kind: 'noteOff', atMs: 400, midi: 60 },
+        { kind: 'noteOn', atMs: 500, midi: 64, velocity: 0.5 },
+        { kind: 'noteOff', atMs: 900, midi: 64 },
+      ];
+      const sketch = sketches.begin(
+        { events: played, beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })) },
+        'At 120',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const scrolledDown = (): number =>
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const tapOn = (fromMs: number): void => {
+        const note = view.rollScene?.notes.find((each) => each.fromMs === fromMs);
+        element('roll-body').dispatchEvent(
+          new MouseEvent('click', { bubbles: true, clientX: ((fromMs + 100) / 1000) * zoom, clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown() }),
+        );
+      };
+      const chosen = (): number[] =>
+        (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+      const tempo = element<HTMLInputElement>('roll-tempo');
+      const set = (value: string): void => {
+        tempo.value = value;
+        tempo.dispatchEvent(new Event('change'));
+      };
+      const struck = (): number[] =>
+        (sketches.find(sketch.id)?.events ?? []).filter((event) => event.kind === 'noteOn').map((event) => event.atMs);
+      expect(tempo.value).toBe('120');
+
+      // The E chosen, and the sketch at half the pace: twice as far apart, the E still chosen.
+      tapOn(500);
+      expect(chosen()).toEqual([500]);
+      set('60');
+      expect(struck()).toEqual([0, 1_000]);
+      expect(chosen()).toEqual([1_000]);
+      expect(sketches.find(sketch.id)?.beats.slice(0, 2).map((beat) => beat.atMs)).toEqual([0, 1_000]);
+      expect(tempo.value).toBe('60');
+
+      // Out of the metronome's range, it is the nearest end of it; not a number, nothing.
+      set('1000');
+      expect(tempo.value).toBe('400');
+      expect(struck()).toEqual([0, 150]);
+      set('');
+      expect(tempo.value).toBe('400');
+      expect(struck()).toEqual([0, 150]);
+
+      // Each put back as one change, the beats with the notes.
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(struck()).toEqual([0, 1_000]);
+      expect(tempo.value).toBe('60');
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(struck()).toEqual([0, 500]);
+      expect(tempo.value).toBe('120');
+
+      // And a metre the same way.
+      const metre = element<HTMLSelectElement>('roll-metre');
+      metre.value = '3/4';
+      metre.dispatchEvent(new Event('change'));
+      expect(sketches.find(sketch.id)?.beats[0]?.beatsInBar).toBe(3);
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(sketches.find(sketch.id)?.beats[0]?.beatsInBar).toBe(4);
+      expect(metre.value).toBe('4/4');
     });
 
     it('shows a sketch in a metre the list does not offer as it is', async () => {

@@ -175,8 +175,8 @@ describe('the sketches being written', () => {
       { atMs: 200, beat: 1, beatsInBar: 2, beatType: 8 },
     ];
 
-    expect(library.changeTheBeats(sketch.id, inTwo)?.beats).toEqual(inTwo);
-    expect(library.changeTheBeats('sketch-nobody', inTwo)).toBeNull();
+    expect(library.changeTheNotes(sketch.id, PLAYED, inTwo)?.beats).toEqual(inTwo);
+    expect(library.changeTheNotes('sketch-nobody', PLAYED, inTwo)).toBeNull();
     const next = new SketchLibrary(store);
     next.load();
     expect(next.find(sketch.id)?.beats).toEqual(inTwo);

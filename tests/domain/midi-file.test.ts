@@ -4,6 +4,8 @@ import {
   damperIsDown,
   theClickInAnotherMetre,
   theClickOfTheTake,
+  thePaceOfTheClick,
+  thePlayingAtAnotherPace,
   TRACK_OF_A_HAND,
   writeMidiFile,
   type HeardBeat,
@@ -431,6 +433,86 @@ describe('a click counted in another metre', () => {
     const silent = click(0, 600, 1);
 
     expect(theClickInAnotherMetre(struck(0), silent, 3, 4)).toBe(silent);
+  });
+});
+
+describe('the pace of a click', () => {
+  it('is how many crotchets a minute it goes at where it begins, whatever its beats are worth', () => {
+    expect(thePaceOfTheClick(struck(0, 900), click(0, 500, 4))).toBe(120);
+    const quavers = click(0, 250, 6, 6).map((beat) => ({ ...beat, beatType: 8 }));
+    expect(thePaceOfTheClick(struck(0, 900), quavers)).toBe(120);
+    const minims = click(0, 1_500, 2, 2).map((beat) => ({ ...beat, beatType: 2 }));
+    expect(thePaceOfTheClick(struck(0, 900), minims)).toBe(80);
+    // From where it begins, though it changes after.
+    expect(thePaceOfTheClick(struck(0, 900), [...click(0, 600, 2), { atMs: 1_100, beat: 2, beatsInBar: 4 }])).toBe(100);
+  });
+
+  it('is nothing for a click that says nothing', () => {
+    expect(thePaceOfTheClick(struck(0), click(0, 600, 1))).toBeNull();
+  });
+});
+
+describe('playing at another pace', () => {
+  it('moves every moment across a beat to the same place in it at the new pace, from the first beat', () => {
+    // A bar of 4/4 at 120 beginning at 300 ms, a moment every 25 ms across it.
+    const beats = click(300, 500, 4);
+    const moments = Array.from({ length: 80 }, (_, at) => 300 + at * 25);
+    const paced = thePlayingAtAnotherPace(struck(...moments), beats, 60);
+    const at = (kind: string): number[] =>
+      paced.events.filter((event) => event.kind === kind).map((event) => Math.round(event.atMs * 1e6) / 1e6);
+
+    expect(at('noteOn')).toEqual(moments.map((atMs) => 300 + (atMs - 300) * 2));
+    // A note keeps its length in beats: here twice as long in time.
+    expect(at('noteOff')).toEqual(moments.map((atMs) => 300 + (atMs + 1 - 300) * 2));
+    expect(paced.beats.map((beat) => [beat.atMs, beat.beat])).toEqual([
+      [300, 0],
+      [1_300, 1],
+      [2_300, 2],
+      [3_300, 3],
+    ]);
+  });
+
+  it('counts a beat as what it is worth: a quaver of 6/8 half a crotchet', () => {
+    const quavers = click(0, 250, 6, 6).map((beat) => ({ ...beat, beatType: 8 }));
+    const paced = thePlayingAtAnotherPace(struck(375, 1_000), quavers, 60);
+
+    expect(paced.events.filter((event) => event.kind === 'noteOn').map((event) => event.atMs)).toEqual([750, 2_000]);
+    expect(paced.beats.map((beat) => beat.atMs)).toEqual([0, 500, 1_000, 1_500, 2_000, 2_500]);
+  });
+
+  it('makes a click that changed pace go at one', () => {
+    // Two crotchets at 100 bpm, then two at 120, played to their end.
+    const beats = [...click(0, 600, 2), { atMs: 1_200, beat: 2, beatsInBar: 4 }, { atMs: 1_700, beat: 3, beatsInBar: 4 }];
+    const paced = thePlayingAtAnotherPace(struck(300, 1_450, 2_000), beats, 120);
+
+    expect(paced.beats.map((beat) => beat.atMs)).toEqual([0, 500, 1_000, 1_500]);
+    // Half way through the second beat, through the fourth, and a beat and two fifths after it.
+    const struckAt = paced.events.filter((event) => event.kind === 'noteOn').map((event) => event.atMs);
+    expect(struckAt.map((atMs) => Math.round(atMs * 1000) / 1000)).toEqual([250, 1_250, 1_800]);
+  });
+
+  it('keeps everything else a note or the pedal says', () => {
+    const events: MidiFileEvent[] = [
+      { kind: 'noteOn', atMs: 500, midi: 64, velocity: 0.3, hand: 'left' },
+      { kind: 'sustain', atMs: 600, value: 1 },
+      { kind: 'noteOff', atMs: 1_000, midi: 64 },
+    ];
+
+    expect(thePlayingAtAnotherPace(events, click(0, 500, 4), 240).events).toEqual([
+      { kind: 'noteOn', atMs: 250, midi: 64, velocity: 0.3, hand: 'left' },
+      { kind: 'sustain', atMs: 300, value: 1 },
+      { kind: 'noteOff', atMs: 500, midi: 64 },
+    ]);
+  });
+
+  it('gives back what a click that says nothing, or no pace, cannot move', () => {
+    const events = struck(0, 500);
+    const silent = click(0, 600, 1);
+    const beats = click(0, 500, 4);
+
+    expect(thePlayingAtAnotherPace(events, silent, 60)).toEqual({ events, beats: silent });
+    expect(thePlayingAtAnotherPace(events, beats, 0).events).toBe(events);
+    expect(thePlayingAtAnotherPace(events, beats, Number.NaN).events).toBe(events);
   });
 });
 

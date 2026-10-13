@@ -49,6 +49,8 @@ import {
   barsAreHeardIn,
   theClickInAnotherMetre,
   theClickOfTheTake,
+  thePaceOfTheClick,
+  thePlayingAtAnotherPace,
   writeMidiFile,
   type Hand,
   type HeardBeat,
@@ -453,6 +455,12 @@ const SHORTEST_NOTE_MS = 30;
  * two bars of common time, and all of an empty sketch.
  */
 const ROOM_IN_A_SKETCH = 8;
+
+/** A sketch as it was before a change, to be put back: a change of metre or pace moves its beats as well. */
+interface SketchAsItWas {
+  readonly events: readonly MidiFileEvent[];
+  readonly beats: readonly HeardBeat[];
+}
 
 /** How far down the run the view stood, and the place down it a change of row height is held at. */
 interface RowsHeld {
@@ -1163,6 +1171,10 @@ function thePlayingAsAFile(
   });
 }
 
+/** The paces a sketch may be set to, in crotchets a minute: those a metronome offers. */
+const SLOWEST_SKETCH_BPM = 20;
+const FASTEST_SKETCH_BPM = 400;
+
 /** The metres a sketch may be written in: the simple and compound ones a pianist meets. */
 const SKETCH_METRES = ['2/4', '3/4', '4/4', '5/4', '6/4', '2/2', '3/2', '3/8', '5/8', '6/8', '7/8', '9/8', '12/8'] as const;
 
@@ -1824,7 +1836,8 @@ export class AppView {
       readonly editing: boolean;
       /** The keys chosen on it to be changed, a tap at a time. */
       readonly chosen: readonly KeyNamed[];
-      readonly before: readonly (readonly MidiFileEvent[])[];
+      /** What it was before each change, the last last: its notes and its beats. */
+      readonly before: readonly SketchAsItWas[];
     };
   } | null = null;
 
@@ -2021,6 +2034,7 @@ export class AppView {
     rollHands: HTMLElement;
     rollKey: HTMLSelectElement;
     rollMetre: HTMLSelectElement;
+    rollTempo: HTMLInputElement;
     rollHandLeft: HTMLButtonElement;
     rollHandPitch: HTMLButtonElement;
     rollHandRight: HTMLButtonElement;
@@ -2378,6 +2392,7 @@ export class AppView {
       rollHands: requireElement(doc, 'roll-hands'),
       rollKey: requireElement(doc, 'roll-key'),
       rollMetre: requireElement(doc, 'roll-metre'),
+      rollTempo: requireElement(doc, 'roll-tempo'),
       rollHandLeft: requireElement(doc, 'roll-hand-left'),
       rollHandPitch: requireElement(doc, 'roll-hand-pitch'),
       rollHandRight: requireElement(doc, 'roll-hand-right'),
@@ -8589,6 +8604,14 @@ export class AppView {
     this.listen(this.el.rollMetre, 'change', () => {
       this.countTheSketchIn(this.el.rollMetre.value);
     });
+    this.listen(this.el.rollTempo, 'change', () => {
+      const asked = Math.round(Number(this.el.rollTempo.value));
+      if (Number.isFinite(asked) && asked > 0) {
+        this.paceTheSketchAt(Math.min(FASTEST_SKETCH_BPM, Math.max(SLOWEST_SKETCH_BPM, asked)));
+      } else {
+        this.sayWhatCanBeChanged();
+      }
+    });
     for (const [button, hand] of [
       [this.el.rollHandLeft, 'left'],
       [this.el.rollHandPitch, null],
@@ -11699,6 +11722,8 @@ export class AppView {
     }
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     const first = stored === null ? undefined : theClickOfTheTake(stored.events, stored.beats)?.[0];
+    const pace = stored === null ? null : thePaceOfTheClick(stored.events, stored.beats);
+    this.el.rollTempo.value = pace === null ? '' : String(Math.round(pace));
     if (first !== undefined) {
       // A score may be in a metre the list does not offer, and it is shown as it is.
       const metre = `${String(first.beatsInBar)}/${String(first.beatType ?? 4)}`;
@@ -11771,17 +11796,34 @@ export class AppView {
     if (showing === null || stored === null || beatsInBar === undefined || beatType === undefined) {
       return;
     }
-    const changed = this.runtime.sketches.changeTheBeats(
-      stored.id,
+    this.changeTheSketchShowing(
+      stored.events,
+      [...(sketch?.before ?? []), stored],
+      sketch?.chosen,
       theClickInAnotherMetre(stored.events, stored.beats, beatsInBar, beatType),
     );
-    if (changed === null) {
+  }
+
+  /**
+   * Plays the sketch on the drawing at another pace: its notes keep their
+   * places in the bars and go faster or slower. One change, put back as one.
+   */
+  private paceTheSketchAt(crotchetsPerMinute: number): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (sketch === undefined || stored === null) {
       return;
     }
-    const roll = rollOfTheTake(changed, ROOM_IN_A_SKETCH);
-    this.theOtherRollShowing = { ...showing, roll, barLabel: barsCountedOnItsBeats(roll) };
-    this.drawTheRollInto();
-    this.sayWhatCanBeChanged();
+    const paced = thePlayingAtAnotherPace(stored.events, stored.beats, crotchetsPerMinute);
+    // The chosen notes are named by when they begin, which has moved with them.
+    const chosen = sketch.chosen.flatMap((key) => {
+      const at = stored.events.findIndex(
+        (event) => event.kind === 'noteOn' && event.midi === key.midi && event.atMs === key.downAtMs,
+      );
+      const now = paced.events[at];
+      return now === undefined ? [] : [{ midi: key.midi, downAtMs: now.atMs }];
+    });
+    this.changeTheSketchShowing(paced.events, [...sketch.before, stored], chosen, paced.beats);
   }
 
   /** Gives the chosen notes to a hand, or back to their pitch: one change. */
@@ -11797,7 +11839,7 @@ export class AppView {
       keys.map((key) => ({ key, midi: key.midi, downAtMs: key.downAtMs, upAtMs: key.upAtMs, hand })),
     );
     if (events !== null) {
-      this.changeTheSketchShowing(events, [...sketch.before, stored.events], sketch.chosen);
+      this.changeTheSketchShowing(events, [...sketch.before, stored], sketch.chosen);
     }
   }
 
@@ -11854,7 +11896,7 @@ export class AppView {
     }));
     const events = takeWithTheKeysChanged(stored.events, changes);
     if (events !== null) {
-      this.changeTheSketchShowing(events, [...sketch.before, stored.events], sketch.chosen);
+      this.changeTheSketchShowing(events, [...sketch.before, stored], sketch.chosen);
     }
   }
 
@@ -12003,7 +12045,7 @@ export class AppView {
     const snapped = this.el.rollSnap.checked ? theBeatNearest(roll, at.atMs, this.theRollsGrid()) : at.atMs;
     const downAtMs = Math.round(snapped + origin);
     const key = { midi, downAtMs, upAtMs: downAtMs + theBeatAt(roll, downAtMs), velocity: theUsualLoudness(stored.events) };
-    this.changeTheSketchShowing(takeWithAKeyAdded(stored.events, key), [...sketch.before, stored.events], [
+    this.changeTheSketchShowing(takeWithAKeyAdded(stored.events, key), [...sketch.before, stored], [
       { midi, downAtMs },
     ]);
   }
@@ -12226,7 +12268,7 @@ export class AppView {
       return;
     }
     if (lifted && sketch !== undefined && stored !== null) {
-      this.changeTheSketchShowing(drag.moved.events, [...sketch.before, stored.events], drag.moved.to);
+      this.changeTheSketchShowing(drag.moved.events, [...sketch.before, stored], drag.moved.to);
     } else {
       this.drawTheRollInto();
     }
@@ -12263,7 +12305,7 @@ export class AppView {
     }
     const events = takeWithoutTheKeys(stored.events, sketch.chosen);
     if (events !== null) {
-      this.changeTheSketchShowing(events, [...sketch.before, stored.events]);
+      this.changeTheSketchShowing(events, [...sketch.before, stored]);
     }
   }
 
@@ -12272,7 +12314,7 @@ export class AppView {
     const before = this.theOtherRollShowing?.sketch?.before ?? [];
     const last = before.at(-1);
     if (last !== undefined) {
-      this.changeTheSketchShowing(last, before.slice(0, -1));
+      this.changeTheSketchShowing(last.events, before.slice(0, -1), [], last.beats);
     }
   }
 
@@ -12283,15 +12325,16 @@ export class AppView {
    */
   private changeTheSketchShowing(
     events: readonly MidiFileEvent[],
-    before: readonly (readonly MidiFileEvent[])[],
+    before: readonly SketchAsItWas[],
     chosen: readonly KeyNamed[] = [],
+    beats?: readonly HeardBeat[],
   ): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     if (showing === null || sketch === undefined) {
       return;
     }
-    const changed = this.runtime.sketches.changeTheNotes(sketch.id, events);
+    const changed = this.runtime.sketches.changeTheNotes(sketch.id, events, beats);
     if (changed === null) {
       return;
     }

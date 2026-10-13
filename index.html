@@ -612,6 +612,20 @@
               <label class="roll-velocity__name" for="roll-metre">Time</label>
               <select id="roll-metre" class="roll-velocity__key"></select>
             </span>
+            <!-- Its pace, in crotchets a minute: the notes keep their beats and go faster or slower. -->
+            <span class="roll-velocity__group">
+              <label class="roll-velocity__name" for="roll-tempo">♩ =</label>
+              <input
+                id="roll-tempo"
+                class="number-input"
+                type="number"
+                min="20"
+                max="400"
+                step="1"
+                inputmode="numeric"
+                title="Crotchets a minute"
+              />
+            </span>
             <span class="roll-velocity__group roll-velocity__group--wide">
               <label class="roll-velocity__name" for="roll-velocity-level">Velocity</label>
               <span class="roll-velocity__track">

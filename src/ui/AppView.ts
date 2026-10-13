@@ -8459,7 +8459,11 @@ export class AppView {
       if (this.pinched || this.panned) {
         return;
       }
-      if (this.theOtherRollShowing?.sketch?.editing === true) {
+      // The ruler places the marker whatever the drawing is for: editing, the
+      // notes under it answer a tap, and the marker still has to be put
+      // somewhere to listen from.
+      const onTheRuler = event.target instanceof Element && event.target.closest('.roll__ruler') !== null;
+      if (!onTheRuler && this.theOtherRollShowing?.sketch?.editing === true) {
         this.chooseTheKeyTapped(event);
         return;
       }

@@ -4216,6 +4216,13 @@ describe('AppView', () => {
       tapOn(1_000);
       expect(chosen()).toEqual([1_000]);
       expect(headAt(element('roll-body'))).toBe('0.000');
+      // The ruler still puts it somewhere to listen from, and writes nothing.
+      element('roll-body')
+        .querySelector('.roll__ruler')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: 0 }));
+      expect(headAt(element('roll-body'))).toBe('0.500');
+      expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
+      expect(chosen()).toEqual([1_000]);
       tapOn(500);
       expect(chosen()).toEqual([500]);
       expect(remove.dataset['idle']).toBeUndefined();

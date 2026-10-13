@@ -36,6 +36,7 @@ const NAMES: Readonly<Record<StoragePiece['kind'], string>> = {
   scores: 'Scores',
   readings: 'Readings',
   takes: 'Takes',
+  sketches: 'Sketches',
   sound: 'Piano sound',
   app: 'App',
   settings: 'Settings',

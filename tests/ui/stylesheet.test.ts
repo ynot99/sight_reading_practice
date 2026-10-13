@@ -2023,6 +2023,14 @@ describe('a bar of what a whole is made of', () => {
     expect(storage[0]?.body).toMatch(/align-content\s*:\s*start/);
   });
 
+  it('paints every part kept in a colour of its own', () => {
+    const kinds = ['scores', 'readings', 'takes', 'sketches', 'sound', 'app', 'settings'];
+    const inks = kinds.map((kind) => body(`[data-kind='${kind}']`).match(/--storage-ink\s*:\s*([^;]+);/)?.[1]);
+
+    expect(inks.every((ink) => ink !== undefined)).toBe(true);
+    expect(new Set(inks).size).toBe(kinds.length);
+  });
+
   it('paints the room left grey, apart from anything kept', () => {
     expect(body("[data-kind='free']")).toMatch(/--storage-ink\s*:[^;]*var\(--text-muted\)/);
     expect(body("[data-kind='free']")).not.toBe(body("[data-kind='other']"));
@@ -2123,6 +2131,17 @@ describe('searching the settings', () => {
     expect(narrow?.body).toMatch(/flex\s*:\s*1 0 100%/);
     expect(narrow?.body).toMatch(/flex-wrap\s*:\s*wrap/);
     expect(narrow?.at ?? 0).toBeGreaterThan(wide?.at ?? Infinity);
+  });
+
+  it('says which list a sheet shows in its title, the one shown in the weight of the heading', () => {
+    const choice = rules().find((rule) => rule.selector === '.sheet__switch-choice');
+    const chosen = rules().find((rule) => rule.selector === ".sheet__switch-choice[aria-pressed='true']");
+
+    expect(HTML).toMatch(/<div class="sheet__title sheet__switch"[^>]*>\s*<button id="scores-show-scores"[\s\S]*?<button id="scores-show-sketches"/);
+    expect(choice?.body).toMatch(/color\s*:\s*var\(--text-muted\)/);
+    expect(choice?.body).toMatch(/background\s*:\s*none/);
+    expect(chosen?.body).toMatch(/color\s*:\s*var\(--text\)/);
+    expect(chosen?.body).toMatch(/font-weight\s*:\s*700/);
   });
 
   it("puts a drawing's buttons in a row of their own under the title on a phone", () => {

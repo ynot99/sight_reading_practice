@@ -876,7 +876,7 @@ export function takeOfTheRun(roll: RunRoll): Take | null {
  * A note still sounding at the end is left open, the same answer the roll gives
  * for a key still down when a run stops.
  */
-export function rollOfTheTake(take: Take): RunRoll {
+export function rollOfTheTake(take: Pick<Take, 'events' | 'beats'>): RunRoll {
   const presses: RolledPress[] = theKeysOfTheTake(take.events).map((key) => ({
     midi: key.midi,
     downAtMs: key.downAtMs,

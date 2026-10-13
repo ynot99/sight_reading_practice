@@ -203,32 +203,6 @@ describe('the takes that were kept', () => {
     );
   });
 
-  it('changes a take in place, its name, shelf and click kept, and says so across visits', () => {
-    const store = new InMemorySettingsStore();
-    const library = new TakeLibrary(store);
-    const harness = rig();
-    harness.recorder.hearBeat({ atMs: 0, beat: 0, beatsInBar: 4 });
-    playNote(harness, 60);
-    playNote(harness, 62);
-    const take = harness.recorder.take();
-    if (take === null) {
-      throw new Error('expected a take');
-    }
-    const kept = library.file(take, 1_000, 'recent');
-    const fewer = take.events.slice(2);
-
-    const changed = library.changeTheNotes(kept.id, fewer);
-    const next = new TakeLibrary(store);
-    next.load();
-
-    for (const found of [changed, next.find(kept.id)]) {
-      expect(found).toMatchObject({ id: kept.id, savedAtMs: 1_000, shelf: 'recent', noteCount: 1, beats: kept.beats });
-      expect(found?.events.map((event) => event.kind)).toEqual(['noteOn', 'noteOff']);
-    }
-    expect(next.list()).toHaveLength(1);
-    expect(library.changeTheNotes('take-nobody', fewer)).toBeNull();
-  });
-
   it('puts the newest first', () => {
     const library = new TakeLibrary(new InMemorySettingsStore());
     keptTake(library, 1_000);

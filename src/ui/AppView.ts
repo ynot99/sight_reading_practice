@@ -45,7 +45,7 @@ import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
-import { barsAreHeardIn, writeMidiFile, type MidiFileEvent } from '../domain/midi/MidiFile.js';
+import { barsAreHeardIn, writeMidiFile, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { FREE_CLICK_STEP_BPM, LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
@@ -1061,7 +1061,15 @@ function describeWhen(atMs: number, nowMs: number): string {
  * it was played to, where it was played to one.
  */
 function theTakeAsAFile(take: StoredTake): Uint8Array {
-  return writeMidiFile(take.events, { trackName: takeName(take.savedAtMs), beats: take.beats });
+  return thePlayingAsAFile(take, takeName(take.savedAtMs));
+}
+
+/** Some playing as a MIDI file, in the bars of its click where it has one. */
+function thePlayingAsAFile(
+  playing: { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] },
+  name: string,
+): Uint8Array {
+  return writeMidiFile(playing.events, { trackName: name, beats: playing.beats });
 }
 
 function takeName(savedAtMs: number): string {
@@ -1122,10 +1130,15 @@ function backupFileName(savedAtMs: number): string {
 
 /** A take's name as a score on the shelf, which goes by name: so to the second, and dated. */
 function takeTitle(savedAtMs: number): string {
-  const at = new Date(savedAtMs);
+  return `Take ${whenItWas(savedAtMs)}`;
+}
+
+/** A moment to the second, and its day: what a title made from one goes by. */
+function whenItWas(atMs: number): string {
+  const at = new Date(atMs);
   const pad = (value: number): string => String(value).padStart(2, '0');
   return (
-    `Take ${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}, ` +
+    `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}, ` +
     `${pad(at.getDate())}.${pad(at.getMonth() + 1)}.${at.getFullYear()}`
   );
 }
@@ -1533,6 +1546,8 @@ export class AppView {
   private keysScroll = true;
   /** The lane's colours, read again each time notes begin to fall. */
   private laneInks: LaneInks | null = null;
+  /** Which of the scores sheet's two lists it shows; see `showTheList`. */
+  private scoresListShown: 'scores' | 'sketches' = 'scores';
   /** How tall a row is, and the ruler and the pedal lane, as last measured. */
   private rollLook = { rowPx: 13, rulerTallPx: 0, pedalTallPx: 0 };
   /** The frame a fling is going on in, if one is. */
@@ -1685,11 +1700,13 @@ export class AppView {
     readonly ofTheOpenScore: boolean;
     /** What its bars are called, where the open score's numbers are not theirs. */
     readonly barLabel?: (positionTicks: number) => string | null;
+    /** The recording it is, where it is one, which a sketch can be begun from. */
+    readonly recording?: string;
     /**
      * The recording it is, where it is one: which, the key chosen on it to be
      * changed, and what it was before each change, the last change last.
      */
-    readonly take?: {
+    readonly sketch?: {
       readonly id: string;
       /** Whether a touch on the drawing edits the notes rather than placing the marker. */
       readonly editing: boolean;
@@ -1844,6 +1861,11 @@ export class AppView {
     focusFaster: HTMLButtonElement;
     focusTempo: HTMLOutputElement;
     scoresFresh: HTMLButtonElement;
+    scoresFreshRow: HTMLElement;
+    scoresShowScores: HTMLButtonElement;
+    scoresShowSketches: HTMLButtonElement;
+    sketchesList: HTMLElement;
+    sketchesEmpty: HTMLElement;
     scoresRung: HTMLElement;
     scoresExercise: HTMLButtonElement;
     sheetExercise: HTMLElement;
@@ -2182,6 +2204,11 @@ export class AppView {
       focusFaster: requireElement(doc, 'focus-faster'),
       focusTempo: requireElement(doc, 'focus-tempo'),
       scoresFresh: requireElement(doc, 'scores-fresh'),
+      scoresFreshRow: requireElement(doc, 'scores-fresh-row'),
+      scoresShowScores: requireElement(doc, 'scores-show-scores'),
+      scoresShowSketches: requireElement(doc, 'scores-show-sketches'),
+      sketchesList: requireElement(doc, 'sketches-list'),
+      sketchesEmpty: requireElement(doc, 'sketches-empty'),
       scoresRung: requireElement(doc, 'scores-rung'),
       scoresExercise: requireElement(doc, 'scores-exercise'),
       sheetExercise: requireElement(doc, 'sheet-exercise'),
@@ -8183,7 +8210,7 @@ export class AppView {
           this.el.scoresSearch.value = '';
           // Last time's tally is not this time's news.
           this.el.scoresAdded.hidden = true;
-          this.renderScores();
+          this.showTheList(this.scoresListShown);
         },
       ],
       [
@@ -8380,14 +8407,25 @@ export class AppView {
       if (this.pinched || this.panned) {
         return;
       }
-      if (this.theOtherRollShowing?.take?.editing === true) {
+      if (this.theOtherRollShowing?.sketch?.editing === true) {
         this.chooseTheKeyTapped(event);
         return;
       }
       this.putTheHeadWhereItWasTapped(event);
     });
     this.listen(this.el.rollEdit, 'click', () => {
-      this.editTheRecording(this.theOtherRollShowing?.take?.editing !== true);
+      const showing = this.theOtherRollShowing;
+      if (showing?.sketch !== undefined) {
+        this.editTheSketch(!showing.sketch.editing);
+      } else if (showing?.recording !== undefined) {
+        this.beginASketchOf(showing.recording);
+      }
+    });
+    this.listen(this.el.scoresShowScores, 'click', () => {
+      this.showTheList('scores');
+    });
+    this.listen(this.el.scoresShowSketches, 'click', () => {
+      this.showTheList('sketches');
     });
     this.listen(this.el.rollDelete, 'click', () => {
       this.deleteTheChosenKey();
@@ -9156,6 +9194,88 @@ export class AppView {
     }
   }
 
+  /**
+   * Shows one of the two lists of the scores sheet: the scores kept, with the
+   * means of finding and adding them, or the sketches being written.
+   */
+  private showTheList(which: 'scores' | 'sketches'): void {
+    this.scoresListShown = which;
+    const sketches = which === 'sketches';
+    this.el.scoresShowScores.setAttribute('aria-pressed', String(!sketches));
+    this.el.scoresShowSketches.setAttribute('aria-pressed', String(sketches));
+    for (const part of [
+      this.el.scoresSearch,
+      this.el.scoresOrder,
+      this.el.scoresAdd,
+      this.el.scoresClear,
+      this.el.scoresFreshRow,
+      this.el.scoresList,
+    ]) {
+      part.hidden = sketches;
+    }
+    this.el.sketchesList.hidden = !sketches;
+    if (sketches) {
+      this.el.scoresEmpty.hidden = true;
+      this.el.scoresAdded.hidden = true;
+      this.renderSketches();
+    } else {
+      this.el.sketchesEmpty.hidden = true;
+      this.renderScores();
+    }
+  }
+
+  private renderSketches(): void {
+    const sketches = this.runtime.sketches.list();
+    this.el.sketchesEmpty.hidden = this.scoresListShown !== 'sketches' || sketches.length > 0;
+    this.el.sketchesList.replaceChildren();
+    for (const sketch of sketches) {
+      const row = this.doc.createElement('li');
+      const name = this.doc.createElement('span');
+      name.className = 'takes__name';
+      name.textContent = `${sketch.title} · ${sketch.noteCount} notes`;
+      name.title = sketch.title;
+
+      const edit = this.doc.createElement('button');
+      edit.type = 'button';
+      edit.textContent = 'Edit';
+      edit.title = 'Edit this sketch';
+      edit.setAttribute('aria-label', `Edit ${sketch.title}`);
+      this.listen(edit, 'click', () => this.showTheSketch(sketch.id));
+
+      const write = this.doc.createElement('button');
+      write.type = 'button';
+      write.textContent = 'Score';
+      write.title = 'Write this sketch down as a score';
+      write.setAttribute('aria-label', `Write ${sketch.title} down as a score`);
+      this.listen(write, 'click', () => void this.writeDown(sketch, sketch.title, this.el.sheetScores));
+
+      const save = this.doc.createElement('button');
+      save.type = 'button';
+      save.textContent = 'MIDI';
+      save.title = 'Save this sketch as a MIDI file';
+      this.listen(save, 'click', () => {
+        this.runtime.files.save(`${sketch.title}.mid`, thePlayingAsAFile(sketch, sketch.title), 'audio/midi');
+      });
+
+      const remove = this.doc.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.title = 'Delete this sketch';
+      remove.setAttribute('aria-label', `Delete ${sketch.title}`);
+      this.listen(remove, 'click', () => {
+        void this.askToDelete(`Delete ${sketch.title}?`).then((yes) => {
+          if (yes) {
+            this.runtime.sketches.remove(sketch.id);
+            this.renderSketches();
+          }
+        });
+      });
+
+      row.append(name, edit, write, save, remove);
+      this.el.sketchesList.append(row);
+    }
+  }
+
   private exportTake(id: string): void {
     const take = this.runtime.takes.find(id);
     if (take === null) {
@@ -9175,13 +9295,24 @@ export class AppView {
     if (take === null || !barsAreHeardIn(take.beats)) {
       return;
     }
-    // Out of the way first, as a kept score is: the page is what was asked for.
-    this.el.sheetTakes.hidden = true;
-    const title = takeTitle(take.savedAtMs);
+    await this.writeDown(take, takeTitle(take.savedAtMs), this.el.sheetTakes);
+  }
+
+  /**
+   * Opens some playing as a score: the file it would be saved as, read the
+   * way a chosen MIDI file is, and kept on the shelf as an opened file is.
+   * The sheet it was asked from goes first: the page is what was asked for.
+   */
+  private async writeDown(
+    playing: { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] },
+    title: string,
+    from: HTMLElement,
+  ): Promise<void> {
+    from.hidden = true;
     timeTheStart('score asked for', () => title);
     try {
       const { exercise, warnings } = await this.runtime.importer.readFile(
-        theTakeAsAFile(take).slice().buffer,
+        thePlayingAsAFile(playing, title).slice().buffer,
         `${title}.mid`,
       );
       await this.runtime.scores.keep(exercise, Date.now());
@@ -11202,7 +11333,7 @@ export class AppView {
       ofTheOpenScore: false,
       // Played to the click, its bars are its own, counted from its first.
       barLabel: barsCountedOnItsBeats(roll),
-      take: { id, editing: false, chosen: null, before: [] },
+      recording: id,
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -11276,12 +11407,17 @@ export class AppView {
    * rather than going grey without a word.
    */
   private sayWhatCanBeChanged(): void {
-    const take = this.theOtherRollShowing?.take;
-    const editing = take?.editing === true;
+    const sketch = this.theOtherRollShowing?.sketch;
+    const editing = sketch?.editing === true;
     this.el.rollEdit.setAttribute('aria-pressed', String(editing));
-    if (take === undefined) {
+    if (this.theOtherRollShowing?.recording !== undefined) {
+      // A recording is a record of what was played: what is edited is a sketch
+      // begun from it.
+      delete this.el.rollEdit.dataset['idle'];
+      this.el.rollEdit.title = 'Begin a sketch of this recording to edit; the recording stays as it was played';
+    } else if (sketch === undefined) {
       this.el.rollEdit.dataset['idle'] = 'true';
-      this.el.rollEdit.title = 'Edit the notes. Only a recording is changed: this is a reading as it was played.';
+      this.el.rollEdit.title = 'Edit the notes. Only a sketch is edited: begin one from a recording.';
     } else {
       delete this.el.rollEdit.dataset['idle'];
       this.el.rollEdit.title = editing
@@ -11291,7 +11427,7 @@ export class AppView {
     this.el.rollEdit.setAttribute('aria-label', this.el.rollEdit.title);
     // Only a recording has them, and they are there only while it is edited.
     for (const button of [this.el.rollDelete, this.el.rollUndo]) {
-      button.hidden = take === undefined;
+      button.hidden = sketch === undefined;
       if (editing) {
         delete button.dataset['away'];
       } else {
@@ -11299,13 +11435,13 @@ export class AppView {
       }
     }
 
-    const chosen = take?.chosen ?? null;
-    const notes = take === undefined ? 0 : (this.runtime.takes.find(take.id)?.noteCount ?? 0);
+    const chosen = sketch?.chosen ?? null;
+    const notes = sketch === undefined ? 0 : (this.runtime.sketches.find(sketch.id)?.noteCount ?? 0);
     let waiting: string | null = null;
     if (chosen === null) {
       waiting = 'Delete a note. Tap one to choose it.';
     } else if (notes < 2) {
-      waiting = 'Delete a note. It is the only one in this recording.';
+      waiting = 'Delete a note. It is the only one in this sketch.';
     }
     if (waiting === null) {
       delete this.el.rollDelete.dataset['idle'];
@@ -11316,7 +11452,7 @@ export class AppView {
     }
     this.el.rollDelete.setAttribute('aria-label', this.el.rollDelete.title);
 
-    if ((take?.before.length ?? 0) > 0) {
+    if ((sketch?.before.length ?? 0) > 0) {
       delete this.el.rollUndo.dataset['idle'];
       this.el.rollUndo.title = 'Put back the last change';
     } else {
@@ -11327,13 +11463,60 @@ export class AppView {
   }
 
   /**
-   * Turns editing a recording on or off. What was chosen is let go of either
+   * Begins a sketch of a recording, a copy of it in its bars or the assumed
+   * ones, and opens it to be edited. The recording is left as it was played.
+   */
+  private beginASketchOf(id: string): void {
+    const take = this.runtime.takes.find(id);
+    if (take === null) {
+      return;
+    }
+    const sketch = this.runtime.sketches.begin(take, `Sketch of the take at ${whenItWas(take.savedAtMs)}`, Date.now());
+    this.renderSketches();
+    this.showTheSketch(sketch.id);
+  }
+
+  /**
+   * Opens a sketch in the viewer, being edited: that is what a sketch is for,
+   * and the pencil turns it to listening. Drawn first as it is listened to and
+   * then turned to editing, as the pencil turns it, so it opens on its notes
+   * rather than at the top of the keyboard.
+   */
+  private showTheSketch(id: string): void {
+    const sketch = this.runtime.sketches.find(id);
+    if (sketch === null) {
+      return;
+    }
+    this.stopTheRoll();
+    this.el.sheetTakes.hidden = true;
+    this.el.sheetScores.hidden = true;
+    const roll = rollOfTheTake(sketch);
+    this.theOtherRollShowing = {
+      roll,
+      what: sketch.title,
+      why: 'A sketch: no bars to practise until it is written down.',
+      ofTheOpenScore: false,
+      barLabel: barsCountedOnItsBeats(roll),
+      sketch: { id, editing: false, chosen: null, before: [] },
+    };
+    this.rollAtMs = 0;
+    this.rollScroller.to(0, 0);
+    this.drawTheRollInto();
+    this.showTheSheet(this.el.sheetRoll);
+    this.showTheView();
+    this.sayWhatWouldBePractised();
+    this.sayWhatThePictureIsOf();
+    this.editTheSketch(true);
+  }
+
+  /**
+   * Turns editing a sketch on or off. What was chosen is let go of either
    * way: a choice belongs to the editing it was made in.
    */
-  private editTheRecording(editing: boolean): void {
+  private editTheSketch(editing: boolean): void {
     const showing = this.theOtherRollShowing;
-    const take = showing?.take;
-    if (showing === null || take === undefined) {
+    const sketch = showing?.sketch;
+    if (showing === null || sketch === undefined) {
       return;
     }
     const highest = this.drawnScene?.highest ?? null;
@@ -11341,7 +11524,7 @@ export class AppView {
     // the stylesheet stretches a few rows to fill the room, and eighty-eight
     // would otherwise come back thinner than the notes the finger was on.
     this.rollRowPx = this.theRowAsDrawn();
-    this.theOtherRollShowing = { ...showing, take: { ...take, editing, chosen: null } };
+    this.theOtherRollShowing = { ...showing, sketch: { ...sketch, editing, chosen: null } };
     this.drawTheRollInto();
     // The rows above grow or go, and the notes on the screen stay where they
     // were on it.
@@ -11359,14 +11542,14 @@ export class AppView {
    */
   private chooseTheKeyTapped(event: MouseEvent): void {
     const showing = this.theOtherRollShowing;
-    const take = showing?.take;
-    if (showing === null || take === undefined) {
+    const sketch = showing?.sketch;
+    if (showing === null || sketch === undefined) {
       return;
     }
     const key = this.theKeyUnder(event);
     this.theOtherRollShowing = {
       ...showing,
-      take: { ...take, chosen: key === null ? null : { midi: key.midi, downAtMs: key.downAtMs } },
+      sketch: { ...sketch, chosen: key === null ? null : { midi: key.midi, downAtMs: key.downAtMs } },
     };
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();
@@ -11397,7 +11580,7 @@ export class AppView {
    */
   private takeHoldOfTheChosenKey(event: PointerEvent): boolean {
     const showing = this.theOtherRollShowing;
-    const chosen = showing?.take?.chosen ?? null;
+    const chosen = showing?.sketch?.chosen ?? null;
     const scene = this.drawnScene;
     if (showing === null || chosen === null || scene === null || this.rollDrag !== null) {
       return false;
@@ -11425,10 +11608,10 @@ export class AppView {
   private dragTheChosenKey(event: PointerEvent): void {
     const drag = this.rollDrag;
     const showing = this.theOtherRollShowing;
-    const take = showing?.take;
-    const chosen = take?.chosen ?? null;
-    const stored = take === undefined ? null : this.runtime.takes.find(take.id);
-    if (drag === null || showing === null || take === undefined || chosen === null || stored === null) {
+    const sketch = showing?.sketch;
+    const chosen = sketch?.chosen ?? null;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (drag === null || showing === null || sketch === undefined || chosen === null || stored === null) {
       return;
     }
     const acrossPx = event.clientX - drag.clientX;
@@ -11462,14 +11645,14 @@ export class AppView {
    */
   private letGoOfTheChosenKey(lifted: boolean): void {
     const drag = this.rollDrag;
-    const take = this.theOtherRollShowing?.take;
-    const stored = take === undefined ? null : this.runtime.takes.find(take.id);
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     this.rollDrag = null;
     if (drag === null || drag.moved === null) {
       return;
     }
-    if (lifted && take !== undefined && stored !== null) {
-      this.changeTheTakeShowing(drag.moved.events, [...take.before, stored.events], drag.moved.to);
+    if (lifted && sketch !== undefined && stored !== null) {
+      this.changeTheSketchShowing(drag.moved.events, [...sketch.before, stored.events], drag.moved.to);
     } else {
       this.drawTheRollInto();
     }
@@ -11477,24 +11660,24 @@ export class AppView {
 
   /** Takes the chosen key out of the recording, keeping what it was to be put back. */
   private deleteTheChosenKey(): void {
-    const take = this.theOtherRollShowing?.take;
-    const chosen = take?.chosen ?? null;
-    const stored = take === undefined ? null : this.runtime.takes.find(take.id);
-    if (take === undefined || chosen === null || stored === null) {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const chosen = sketch?.chosen ?? null;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (sketch === undefined || chosen === null || stored === null) {
       return;
     }
     const events = takeWithoutTheKey(stored.events, chosen.midi, chosen.downAtMs);
     if (events !== null) {
-      this.changeTheTakeShowing(events, [...take.before, stored.events]);
+      this.changeTheSketchShowing(events, [...sketch.before, stored.events]);
     }
   }
 
   /** Puts the recording back as it was before its last change. */
   private putBackTheLastChange(): void {
-    const before = this.theOtherRollShowing?.take?.before ?? [];
+    const before = this.theOtherRollShowing?.sketch?.before ?? [];
     const last = before.at(-1);
     if (last !== undefined) {
-      this.changeTheTakeShowing(last, before.slice(0, -1));
+      this.changeTheSketchShowing(last, before.slice(0, -1));
     }
   }
 
@@ -11504,17 +11687,17 @@ export class AppView {
    * held where it stands, since it was sounding the recording before the
    * change.
    */
-  private changeTheTakeShowing(
+  private changeTheSketchShowing(
     events: readonly MidiFileEvent[],
     before: readonly (readonly MidiFileEvent[])[],
     chosen: { readonly midi: number; readonly downAtMs: number } | null = null,
   ): void {
     const showing = this.theOtherRollShowing;
-    const take = showing?.take;
-    if (showing === null || take === undefined) {
+    const sketch = showing?.sketch;
+    if (showing === null || sketch === undefined) {
       return;
     }
-    const changed = this.runtime.takes.changeTheNotes(take.id, events);
+    const changed = this.runtime.sketches.changeTheNotes(sketch.id, events);
     if (changed === null) {
       return;
     }
@@ -11524,11 +11707,11 @@ export class AppView {
       ...showing,
       roll,
       barLabel: barsCountedOnItsBeats(roll),
-      take: { ...take, chosen, before },
+      sketch: { ...sketch, chosen, before },
     };
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();
-    this.renderTakes();
+    this.renderSketches();
   }
 
   /** Says which bars the buttons have settled on, and whether there is one. */
@@ -11556,7 +11739,7 @@ export class AppView {
       slips: this.el.rollSlips.checked,
       keepsTime: this.theRunKeptTime(),
       chosen,
-      wholeKeyboard: this.theOtherRollShowing?.take?.editing === true,
+      wholeKeyboard: this.theOtherRollShowing?.sketch?.editing === true,
     });
   }
 
@@ -11573,14 +11756,14 @@ export class AppView {
       return;
     }
     const ghosts = this.theNotesAskedFor();
-    const scene = this.theSceneToDraw(roll, this.theOtherRollShowing?.take?.chosen ?? null, ghosts);
+    const scene = this.theSceneToDraw(roll, this.theOtherRollShowing?.sketch?.chosen ?? null, ghosts);
     this.drawnScene = scene;
     this.el.rollBody.replaceChildren(drawTheRoll(scene));
     this.rollHeads = theHeadsOf(this.el.rollBody);
     this.rollCanvases = theCanvasesOf(this.el.rollBody);
     this.rollKeysStrip = theKeysStripOf(this.el.rollBody);
     this.rollInks = null;
-    this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.take?.editing === true);
+    this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.sketch?.editing === true);
     this.applyTheZoom();
     this.el.rollMap.replaceChildren(
       drawTheMap(roll),

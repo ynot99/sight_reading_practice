@@ -2046,6 +2046,10 @@ textarea {
   --storage-ink: var(--pending);
 }
 
+[data-kind='sketches'] {
+  --storage-ink: var(--star-4);
+}
+
 [data-kind='sound'] {
   --storage-ink: var(--star-8);
 }
@@ -4430,6 +4434,32 @@ body[data-take-on-keys='true'] #take-off-the-keys {
  */
 .sheet__tools [data-away='true'] {
   visibility: hidden;
+}
+
+/*
+ * Which list a sheet shows, in its title: the words of a heading, the one
+ * shown in the heading's own weight and the other quieter, like a pair of
+ * tabs.
+ */
+.sheet__switch {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.sheet__switch-choice {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.sheet__switch-choice[aria-pressed='true'] {
+  color: var(--text);
+  font-weight: 700;
 }
 
 /* Reads as part of the heading rather than as another control in a row. */

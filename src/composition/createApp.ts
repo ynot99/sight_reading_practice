@@ -43,6 +43,7 @@ import { PerformanceRecorder } from '../application/PerformanceRecorder.js';
 import { ControlBinding } from '../application/ControlBinding.js';
 import { TakeLibrary } from '../application/TakeLibrary.js';
 import { TakeOnOffer } from '../application/TakeOnOffer.js';
+import { SketchLibrary } from '../application/SketchLibrary.js';
 import { TakePlayer } from '../application/TakePlayer.js';
 import { BackupService } from '../application/Backup.js';
 import { ScoreLibrary } from '../application/ScoreLibrary.js';
@@ -87,6 +88,7 @@ import {
   DRILL_STORAGE_KEY,
   HISTORY_STORAGE_KEY,
   KEPT_STORAGE_KEYS,
+  SKETCHES_STORAGE_KEY,
   TAKES_STORAGE_KEY,
   TIME_STORAGE_KEY,
   LocalStorageSettingsStore,
@@ -149,6 +151,8 @@ export interface AppRuntimeOptions {
   readonly drillStore?: ISettingsStore;
   /** Where kept takes live; browser storage by default. */
   readonly takeStore?: ISettingsStore;
+  /** Where the sketches live; browser storage by default. */
+  readonly sketchStore?: ISettingsStore;
   /** Where kept scores live; the browser's database by default. */
   readonly scoreStore?: IScoreStore;
   /** Where a finished file is handed over; a download by default. */
@@ -201,6 +205,8 @@ export interface AppRuntime {
   /** The knob the reader taught to drive the metronome's volume - the same one, if they chose so. */
   readonly metronomeKnob: ControlBinding;
   readonly takes: TakeLibrary;
+  /** The sketches being written, each begun from a recording. */
+  readonly sketches: SketchLibrary;
   /** The take the keep button offers, filed on the list as soon as it ends. */
   readonly takeOnOffer: TakeOnOffer;
   /**
@@ -297,6 +303,7 @@ export interface IToggleableInput {
 /** The shelves that outgrew the small store, which take a moment to open. */
 export interface KeptShelves {
   readonly takes: ISettingsStore;
+  readonly sketches: ISettingsStore;
   readonly history: ISettingsStore;
 }
 
@@ -313,6 +320,7 @@ export async function openTheShelves(): Promise<KeptShelves> {
   const local = browserStorage();
   return {
     takes: await openShelf(database, local, TAKES_STORAGE_KEY),
+    sketches: await openShelf(database, local, SKETCHES_STORAGE_KEY),
     history: await openShelf(database, local, HISTORY_STORAGE_KEY),
   };
 }
@@ -425,6 +433,10 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const takes = new TakeLibrary(takeStore);
   takes.load();
   const takeOnOffer = new TakeOnOffer(recorder, takes, () => Date.now());
+  const sketchStore =
+    options.sketchStore ?? new LocalStorageSettingsStore(browserStorage(), SKETCHES_STORAGE_KEY);
+  const sketches = new SketchLibrary(sketchStore);
+  sketches.load();
 
   const historyStore =
     options.historyStore ?? new LocalStorageSettingsStore(browserStorage(), HISTORY_STORAGE_KEY);
@@ -450,6 +462,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
       { name: 'readings', key: HISTORY_STORAGE_KEY },
       { name: 'time today', key: TIME_STORAGE_KEY },
       { name: 'takes', key: TAKES_STORAGE_KEY },
+      { name: 'sketches', key: SKETCHES_STORAGE_KEY },
       { name: 'section plans', key: DRILL_STORAGE_KEY },
     ],
     {
@@ -457,6 +470,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
         keptScores(scoreStore),
         keptWhole('readings', [historyStore], () => history.everyReading().length),
         keptWhole('takes', [takeStore], () => takes.list().length),
+        keptWhole('sketches', [sketchStore], () => sketches.list().length),
         keptWhole('settings', [settingsStore, timeStore, drillStore], () => null),
       ],
       caches: browserCaches(),
@@ -489,6 +503,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
   const kept = new Map([
     [DEFAULT_STORAGE_KEY, settingsStore],
     [TAKES_STORAGE_KEY, takeStore],
+    [SKETCHES_STORAGE_KEY, sketchStore],
     [HISTORY_STORAGE_KEY, historyStore],
     [TIME_STORAGE_KEY, timeStore],
     [DRILL_STORAGE_KEY, drillStore],
@@ -570,6 +585,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     volumeKnob,
     metronomeKnob,
     takes,
+    sketches,
     takeOnOffer,
     history,
     timeToday,

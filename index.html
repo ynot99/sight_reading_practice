@@ -263,7 +263,17 @@
       <div id="sheet-scores" class="sheet" hidden>
         <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Kept scores">
           <div class="sheet__head">
-            <strong class="sheet__title">Scores</strong>
+            <!--
+              Two lists in one sheet: the scores kept, and the sketches being
+              written. A switch in the title rather than a second pill, since
+              both answer one question - which music is on the shelf.
+            -->
+            <div class="sheet__title sheet__switch" role="group" aria-label="Which list">
+              <button id="scores-show-scores" type="button" class="sheet__switch-choice"
+                aria-pressed="true">Scores</button>
+              <button id="scores-show-sketches" type="button" class="sheet__switch-choice"
+                aria-pressed="false">Sketches</button>
+            </div>
             <!--
               Thirty-odd arrangements is more than a list anybody reads. The
               box is emptied every time the sheet is raised: a search left
@@ -295,7 +305,7 @@
             stands above the shelf because it is the one that needs nothing
             kept.
           -->
-          <div class="scores__fresh-row">
+          <div id="scores-fresh-row" class="scores__fresh-row">
           <button id="scores-fresh" type="button" class="button scores__fresh">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" />
@@ -332,6 +342,9 @@
             can see.
           -->
           <p id="scores-added" class="hint" hidden></p>
+          <ul id="sketches-list" class="takes__list" hidden></ul>
+          <p id="sketches-empty" class="hint" hidden>No sketches yet. Look at a recording and press
+            the pencil: a sketch of it is begun here, and the recording stays as it was played.</p>
         </div>
       </div>
 

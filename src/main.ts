@@ -22,6 +22,7 @@ async function bootstrap(): Promise<void> {
   const runtime = createApp({
     scoreContainer,
     takeStore: shelves.takes,
+    sketchStore: shelves.sketches,
     historyStore: shelves.history,
     // The DOM's overloaded listener signature is wider than the port needs.
     keyboardTarget: document as unknown as KeyboardTarget,

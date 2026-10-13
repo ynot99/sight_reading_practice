@@ -35,6 +35,7 @@ import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.j
 import { ControlBinding } from '../../src/application/ControlBinding.js';
 import { DrillProgress } from '../../src/application/drill/DrillProgress.js';
 import { TakeLibrary } from '../../src/application/TakeLibrary.js';
+import { SketchLibrary } from '../../src/application/SketchLibrary.js';
 import { TakeOnOffer } from '../../src/application/TakeOnOffer.js';
 import { TakePlayer } from '../../src/application/TakePlayer.js';
 import { BackupService } from '../../src/application/Backup.js';
@@ -230,6 +231,7 @@ interface Rig {
   readonly volumeKnob: ControlBinding;
   readonly metronomeKnob: ControlBinding;
   readonly takes: TakeLibrary;
+  readonly sketches: SketchLibrary;
   readonly scores: ScoreLibrary;
   readonly scoreStore: InMemoryScoreStore;
   readonly files: RecordingFileSink;
@@ -350,6 +352,7 @@ function createRig(
   const metronomeKnob = new ControlBinding();
   metronomeKnob.listenTo(midi);
   const takes = new TakeLibrary(new InMemorySettingsStore());
+  const sketches = new SketchLibrary(new InMemorySettingsStore());
   const takeOnOffer = new TakeOnOffer(recorder, takes, () => Date.now());
   const files = new RecordingFileSink();
   const importer = new ScoreFileImporter();
@@ -478,6 +481,7 @@ function createRig(
     volumeKnob,
     metronomeKnob,
     takes,
+    sketches,
     takeOnOffer,
     scores,
     files,
@@ -532,6 +536,7 @@ function createRig(
     volumeKnob,
     metronomeKnob,
     takes,
+    sketches,
     scores,
     scoreStore,
     drive,
@@ -3484,7 +3489,7 @@ describe('AppView', () => {
       }
     });
 
-    it('marks down the side among every key of the piano while a recording is edited', async () => {
+    it('marks down the side among every key of the piano while a sketch is edited', async () => {
       const giveBack = lendTheDrawingASize({ wide: 100, tall: 0 });
       try {
         const rig = createRig();
@@ -4129,10 +4134,10 @@ describe('AppView', () => {
     });
 
 
-    it('takes a note out of a recording where it is drawn, and puts it back', async () => {
-      const { view, runtime, midi, clock, takes } = createRig();
+    it('begins a sketch of a recording, takes a note out of it where it is drawn, and puts it back', async () => {
+      const { view, runtime, midi, clock, takes, sketches } = createRig();
       await view.initialize();
-      // Not on a run: what was read is not changed.
+      // Not on a run: what was read is not changed, nor begun from.
       element<HTMLButtonElement>('focus-play').click();
       midi.noteOn(runtime.controller.session?.currentStep?.expectedMidi[0] ?? 60, clock.now());
       element<HTMLButtonElement>('focus-stop').click();
@@ -4141,9 +4146,10 @@ describe('AppView', () => {
       const remove = element<HTMLButtonElement>('roll-delete');
       const undo = element<HTMLButtonElement>('roll-undo');
       expect(edit.dataset['idle']).toBe('true');
-      expect(edit.title).toBe('Edit the notes. Only a recording is changed: this is a reading as it was played.');
+      expect(edit.title).toBe('Edit the notes. Only a sketch is edited: begin one from a recording.');
       edit.click();
       expect(edit.getAttribute('aria-pressed')).toBe('false');
+      expect(sketches.list()).toHaveLength(0);
       expect([remove.hidden, undo.hidden]).toEqual([true, true]);
       element<HTMLButtonElement>('roll-close').click();
 
@@ -4159,16 +4165,30 @@ describe('AppView', () => {
       const kept = takes.list()[0];
       expect(kept?.noteCount).toBe(3);
       rowButton('takes-list', 'Look at this take').click();
-      // Listening: the trash and the undo keep their places, out of sight, and
-      // a tap on a note puts the marker there and chooses nothing.
+      // A recording is a record of what was played: the pencil begins a sketch.
       expect(edit.dataset['idle']).toBeUndefined();
-      expect(edit.title).toBe('Edit the notes: a tap chooses one, a drag moves it');
+      expect(edit.title).toBe('Begin a sketch of this recording to edit; the recording stays as it was played');
       expect(edit.getAttribute('aria-label')).toBe(edit.title);
+      expect([remove.hidden, undo.hidden]).toEqual([true, true]);
+      const highest = view.rollScene?.highest ?? 0;
+      edit.click();
+      const sketch = sketches.list()[0];
+      expect(sketches.list()).toHaveLength(1);
+      expect(sketch?.title).toMatch(/^Sketch of the take at \d\d:\d\d:\d\d, \d\d\.\d\d\.\d{4}$/);
+      expect(element('roll-title').textContent).toBe(sketch?.title);
+      // Opened being edited, in common time at 120 from its first note, since
+      // it was played without the click: a bar line every two seconds.
+      expect(edit.getAttribute('aria-pressed')).toBe('true');
+      expect(edit.title).toBe('Back to listening: a tap puts the marker');
+      expect(view.rollScene?.bars.map((bar) => bar.atMs)).toEqual([0]);
+      expect([view.rollScene?.highest, view.rollScene?.rows]).toEqual([108, 88]);
       expect([remove.hidden, undo.hidden]).toEqual([false, false]);
-      expect([remove.dataset['away'], undo.dataset['away']]).toEqual(['true', 'true']);
+      expect([remove.dataset['away'], undo.dataset['away']]).toEqual([undefined, undefined]);
+      expect(remove.dataset['idle']).toBe('true');
+      expect(remove.title).toBe('Delete a note. Tap one to choose it.');
       expect(remove.getAttribute('aria-label')).toBe(remove.title);
-      expect(undo.hidden).toBe(false);
       expect(undo.dataset['idle']).toBe('true');
+      expect(undo.title).toBe('Undo. Nothing has been changed to put back.');
 
       // A finger on a note, a little into it, on its row; the grid stands at
       // the drawing's corner, and a row is thirteen pixels until it is drawn.
@@ -4190,79 +4210,142 @@ describe('AppView', () => {
       };
       const chosen = (): number[] =>
         (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
-      tapOn(500);
-      expect(chosen()).toEqual([]);
-      // Where the finger was: a recording played freely has no beat to snap to.
-      expect(headAt(element('roll-body'))).toBe('0.600');
-
-      const highest = view.rollScene?.highest ?? 0;
-      const strip = (): string =>
-        element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '';
-      expect(strip()).toBe('0px');
-      edit.click();
-      expect(edit.getAttribute('aria-pressed')).toBe('true');
-      expect(edit.title).toBe('Back to listening: a tap puts the marker');
-      // Every key, scrolled so the notes stand where they stood.
-      expect([view.rollScene?.highest, view.rollScene?.rows]).toEqual([108, 88]);
-      expect(strip()).toBe(`${String((108 - highest) * 13)}px`);
-      expect([remove.dataset['away'], undo.dataset['away']]).toEqual([undefined, undefined]);
-      expect(remove.dataset['idle']).toBe('true');
-      expect(remove.title).toBe('Delete a note. Tap one to choose it.');
       // Editing: the tap chooses, and the marker stays where it was.
       tapOn(1_000);
       expect(chosen()).toEqual([1_000]);
-      expect(headAt(element('roll-body'))).toBe('0.600');
+      expect(headAt(element('roll-body'))).toBe('0.000');
       tapOn(500);
       expect(chosen()).toEqual([500]);
       expect(remove.dataset['idle']).toBeUndefined();
       expect(remove.title).toBe('Delete the chosen note, E4');
 
-      // A playback going is of the recording before the change, so it is held.
+      // A playback going is of the sketch before the change, so it is held.
       element<HTMLButtonElement>('roll-play').click();
       expect(runtime.takePlayer.playing).not.toBeNull();
       remove.click();
       expect(runtime.takePlayer.playing).toBeNull();
-      expect(takes.find(kept?.id ?? '')?.noteCount).toBe(2);
+      expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(2);
       expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([0, 1_000]);
+      // The recording it was begun from is as it was played, and the list of
+      // sketches says what this one now holds.
+      expect(takes.find(kept?.id ?? '')?.events).toEqual(kept?.events);
+      expect(element('sketches-list').textContent).toContain(`${sketch?.title ?? ''} · 2 notes`);
       expect(chosen()).toEqual([]);
       // Nothing is chosen once it has gone.
       expect(remove.dataset['idle']).toBe('true');
       expect(remove.title).toBe('Delete a note. Tap one to choose it.');
-      expect(element('takes-list').textContent).toContain('2 notes');
       expect(undo.dataset['idle']).toBeUndefined();
       expect(undo.title).toBe('Put back the last change');
 
       // The last one out, then the one before it, comes back.
       tapOn(0);
       remove.click();
-      // Drawn from its first note now, as every recording played freely is.
-      expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([0]);
-      tapOn(0);
+      // Still in its bars, which begin where they began.
+      expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([1_000]);
+      tapOn(1_000);
       expect(remove.dataset['idle']).toBe('true');
-      expect(remove.title).toBe('Delete a note. It is the only one in this recording.');
+      expect(remove.title).toBe('Delete a note. It is the only one in this sketch.');
       remove.click();
-      expect(takes.find(kept?.id ?? '')?.noteCount).toBe(1);
+      expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(1);
       undo.click();
       expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([0, 1_000]);
       undo.click();
-      expect(takes.find(kept?.id ?? '')?.events).toEqual(kept?.events);
+      expect(sketches.find(sketch?.id ?? '')?.events).toEqual(kept?.events);
       expect(view.rollScene?.notes.map((note) => note.fromMs)).toEqual([0, 500, 1_000]);
       expect(undo.dataset['idle']).toBe('true');
       undo.click();
-      expect(takes.find(kept?.id ?? '')?.noteCount).toBe(3);
+      expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
 
       // A tap beside every note chooses nothing.
       tapOn(500);
-      element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: (1.8 * zoom), clientY: 2 }));
+      element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 1.8 * zoom, clientY: 2 }));
       expect(chosen()).toEqual([]);
-      // And back to listening lets go of what was chosen, and of the keys
-      // nobody played.
+      // And listening lets go of what was chosen, and of the keys nobody
+      // played; the trash and the undo keep their places, out of sight, and a
+      // tap puts the marker on the nearest beat.
       tapOn(500);
       edit.click();
+      expect(edit.getAttribute('aria-pressed')).toBe('false');
+      expect(edit.title).toBe('Edit the notes: a tap chooses one, a drag moves it');
       expect(chosen()).toEqual([]);
       expect(view.rollScene?.highest).toBe(highest);
-      expect(strip()).toBe('0px');
-      expect(remove.dataset['away']).toBe('true');
+      expect(scrolledDown()).toBe(0);
+      expect([remove.dataset['away'], undo.dataset['away']]).toEqual(['true', 'true']);
+      tapOn(1_000);
+      expect(chosen()).toEqual([]);
+      expect(headAt(element('roll-body'))).toBe('1.000');
+    });
+
+    it('lists the sketches beside the scores, switched to in the title, each to be edited, read, saved or deleted', async () => {
+      const { view, runtime, midi, clock, sketches, files } = createRig();
+      await view.initialize();
+      const scoresShown = element<HTMLButtonElement>('scores-show-scores');
+      const sketchesShown = element<HTMLButtonElement>('scores-show-sketches');
+      const ofTheScores = ['scores-search', 'scores-order', 'scores-add', 'scores-clear', 'scores-fresh-row', 'scores-list'];
+      const shown = (): boolean[] => ofTheScores.map((id) => !element(id).hidden);
+
+      element<HTMLButtonElement>('focus-scores').click();
+      expect([scoresShown.getAttribute('aria-pressed'), sketchesShown.getAttribute('aria-pressed')]).toEqual(['true', 'false']);
+      expect(shown().every(Boolean)).toBe(true);
+      expect([element('sketches-list').hidden, element('sketches-empty').hidden]).toEqual([true, true]);
+
+      sketchesShown.click();
+      expect([scoresShown.getAttribute('aria-pressed'), sketchesShown.getAttribute('aria-pressed')]).toEqual(['false', 'true']);
+      expect(shown().some(Boolean)).toBe(false);
+      expect([element('scores-empty').hidden, element('sketches-list').hidden, element('sketches-empty').hidden]).toEqual([
+        true,
+        false,
+        false,
+      ]);
+      element<HTMLButtonElement>('scores-close').click();
+
+      // Four notes on the beats of the assumed 120, played freely; a sketch of them.
+      for (const pitch of [60, 62, 64, 65]) {
+        midi.noteOn(pitch, clock.now());
+        clock.advance(250);
+        midi.noteOff(pitch, clock.now());
+        clock.advance(250);
+      }
+      element<HTMLButtonElement>('focus-keep').click();
+      rowButton('takes-list', 'Look at this take').click();
+      element<HTMLButtonElement>('roll-edit').click();
+      element<HTMLButtonElement>('roll-close').click();
+      const sketch = sketches.list()[0];
+
+      // The list it was left on is the one it opens on.
+      element<HTMLButtonElement>('focus-scores').click();
+      expect(sketchesShown.getAttribute('aria-pressed')).toBe('true');
+      expect(element('sketches-empty').hidden).toBe(true);
+      expect(element('sketches-list').textContent).toContain(`${sketch?.title ?? ''} · 4 notes`);
+
+      rowButton('sketches-list', 'Edit this sketch').click();
+      expect(element('sheet-scores').hidden).toBe(true);
+      expect(element('roll-title').textContent).toBe(sketch?.title);
+      expect(element('roll-edit').getAttribute('aria-pressed')).toBe('true');
+      element<HTMLButtonElement>('roll-close').click();
+
+      element<HTMLButtonElement>('focus-scores').click();
+      rowButton('sketches-list', 'Save this sketch as a MIDI file').click();
+      expect(files.saved[0]?.fileName).toBe(`${sketch?.title ?? ''}.mid`);
+      const saved = readMidiFile(files.saved[0]?.bytes ?? new Uint8Array());
+      expect([saved.beats, saved.tempoBpm]).toEqual([4, 120]);
+
+      rowButton('sketches-list', 'Write this sketch down as a score').click();
+      await waitFor(() => runtime.controller.openedExercise?.title === sketch?.title);
+      expect(element('sheet-scores').hidden).toBe(true);
+      const written = runtime.controller.openedExercise;
+      const steps = written === null ? [] : buildTimeline(written).steps.filter((step) => step.expectedMidi.length > 0);
+      expect(steps.map((step) => step.onsetTicks)).toEqual([0, 1, 2, 3].map((at) => at * Duration.QUARTER.ticks));
+
+      element<HTMLButtonElement>('focus-scores').click();
+      rowButton('sketches-list', 'Delete this sketch').click();
+      await confirmDeletion();
+      expect(sketches.list()).toHaveLength(0);
+      expect(element('sketches-empty').hidden).toBe(false);
+
+      scoresShown.click();
+      expect(shown().every(Boolean)).toBe(true);
+      expect([element('sketches-list').hidden, element('sketches-empty').hidden]).toEqual([true, true]);
     });
 
     it('counts the bar out over the drawing, and can be put away', async () => {
@@ -12343,8 +12426,8 @@ describe('AppView', () => {
       expect(runtime.controller.openedExercise).toBe(opened);
     });
 
-    it('moves the chosen note of a recording where it is dragged, onto the beat, and only once chosen', async () => {
-      const { view, metronome, clock, midi, takes } = createRig();
+    it('moves the chosen note of a sketch where it is dragged, onto the beat, and only once chosen', async () => {
+      const { view, metronome, clock, midi, sketches } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
       frameButton('free').click();
@@ -12359,13 +12442,13 @@ describe('AppView', () => {
       }
       holdTheMetronome();
       element<HTMLButtonElement>('focus-keep').click();
-      const id = takes.list()[0]?.id ?? '';
-      const struck = (): number[][] =>
-        (takes.find(id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [[event.midi, event.atMs]] : []));
-      const before = struck();
-      expect(before.map(([pitch]) => pitch)).toEqual([60, 62, 64]);
       rowButton('takes-list', 'Look at this take').click();
       element<HTMLButtonElement>('roll-edit').click();
+      const id = sketches.list()[0]?.id ?? '';
+      const struck = (): number[][] =>
+        (sketches.find(id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [[event.midi, event.atMs]] : []));
+      const before = struck();
+      expect(before.map(([pitch]) => pitch)).toEqual([60, 62, 64]);
 
       // On the grid that stands at the drawing's corner, a row thirteen pixels.
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);

@@ -38,7 +38,7 @@ export interface StorageReading {
 }
 
 /** What a part of the site's keeping is. */
-export type StoragePartKind = 'scores' | 'readings' | 'takes' | 'sound' | 'app' | 'settings';
+export type StoragePartKind = 'scores' | 'readings' | 'takes' | 'sketches' | 'sound' | 'app' | 'settings';
 
 /** One part of what the site keeps, and about how much of it there is. */
 export interface StoragePart {

@@ -17,6 +17,9 @@ export const TIME_STORAGE_KEY = 'sight-reading-practice/time';
 /** Where the takes live, which is a blob like any other. */
 export const TAKES_STORAGE_KEY = 'sight-reading-practice.takes.v1';
 
+/** Where the sketches being written live. */
+export const SKETCHES_STORAGE_KEY = 'sight-reading-practice/sketches';
+
 /** Where each piece's section plan has got to. */
 export const DRILL_STORAGE_KEY = 'sight-reading-practice/drill';
 
@@ -35,6 +38,7 @@ export const KEPT_STORAGE_KEYS: readonly string[] = [
   HISTORY_STORAGE_KEY,
   TIME_STORAGE_KEY,
   TAKES_STORAGE_KEY,
+  SKETCHES_STORAGE_KEY,
   DRILL_STORAGE_KEY,
 ];
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { damperIsDown, writeMidiFile, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
+import {
+  barsAreHeardIn,
+  damperIsDown,
+  writeMidiFile,
+  type HeardBeat,
+  type MidiFileEvent,
+} from '../../src/domain/midi/MidiFile.js';
 import { DomainError } from '../../src/shared/errors.js';
 
 function ascii(bytes: Uint8Array, from: number, length: number): string {
@@ -149,5 +155,174 @@ describe('reading the damper pedal', () => {
     expect(damperIsDown(64 / 127)).toBe(false);
     expect(damperIsDown(63 / 127)).toBe(false);
     expect(damperIsDown(65 / 127)).toBe(true);
+  });
+});
+
+/** One thing written in the track: the tick it is at, and its bytes. */
+interface Written {
+  readonly tick: number;
+  readonly bytes: readonly number[];
+}
+
+/** Reads the track back event by event; the writer never uses running status. */
+function written(bytes: Uint8Array): Written[] {
+  const track = trackBytes(bytes);
+  const found: Written[] = [];
+  let at = 0;
+  let tick = 0;
+  while (at < track.length) {
+    let delta = 0;
+    for (;;) {
+      const byte = track[at] ?? 0;
+      at += 1;
+      delta = (delta << 7) | (byte & 0x7f);
+      if (byte < 0x80) {
+        break;
+      }
+    }
+    tick += delta;
+    const length = track[at] === 0xff ? 3 + (track[at + 2] ?? 0) : 3;
+    found.push({ tick, bytes: track.slice(at, at + length) });
+    at += length;
+  }
+  return found;
+}
+
+function struckAt(bytes: Uint8Array): number[] {
+  return written(bytes)
+    .filter((each) => each.bytes[0] === 0x90)
+    .map((each) => each.tick);
+}
+
+function temposIn(bytes: Uint8Array): { readonly tick: number; readonly microseconds: number }[] {
+  return written(bytes)
+    .filter((each) => each.bytes[0] === 0xff && each.bytes[1] === 0x51)
+    .map(({ tick, bytes: [, , , high = 0, middle = 0, low = 0] }) => ({
+      tick,
+      microseconds: (high << 16) | (middle << 8) | low,
+    }));
+}
+
+function barsIn(bytes: Uint8Array): { readonly tick: number; readonly beats: number }[] {
+  return written(bytes)
+    .filter((each) => each.bytes[0] === 0xff && each.bytes[1] === 0x58)
+    .map((each) => ({ tick: each.tick, beats: each.bytes[3] ?? 0 }));
+}
+
+/** `count` beats of a click, `gapMs` apart from `fromMs`, the first at `firstBeat` of its bar. */
+function click(fromMs: number, gapMs: number, count: number, beatsInBar = 4, firstBeat = 0): HeardBeat[] {
+  return Array.from({ length: count }, (_, at) => ({
+    atMs: fromMs + at * gapMs,
+    beat: (firstBeat + at) % beatsInBar,
+    beatsInBar,
+  }));
+}
+
+/** A short note struck at each moment. */
+function struck(...moments: number[]): MidiFileEvent[] {
+  return moments.flatMap((atMs) => [
+    { kind: 'noteOn' as const, atMs, midi: 60, velocity: 0.8 },
+    { kind: 'noteOff' as const, atMs: atMs + 1, midi: 60 },
+  ]);
+}
+
+/** A crotchet's ticks in the files this writes. */
+const BEAT = 480;
+
+describe('writing a take in the bars of the click it was played to', () => {
+  it('places every moment as far between two beats as it fell, through a change of pace', () => {
+    // Four beats at 100 bpm, then four at 120: across the whole of each beat.
+    const beats = [...click(0, 600, 4), ...click(2_400, 500, 5)];
+    const moments: number[] = [];
+    const expected: number[] = [];
+    beats.slice(0, -1).forEach((beat, at) => {
+      const gap = (beats[at + 1]?.atMs ?? 0) - beat.atMs;
+      for (let part = 0; part < 24; part += 1) {
+        moments.push(beat.atMs + (gap * part) / 24);
+        expected.push(Math.round(BEAT * (at + part / 24)));
+      }
+    });
+
+    expect(struckAt(writeMidiFile(struck(...moments), { beats }))).toEqual(expected);
+  });
+
+  it('opens on the bar the first note falls in, a phrase begun partway in on rests', () => {
+    // A bar of the click before the playing began, and then two beats of the
+    // bar it began in: that bar is the first.
+    const bytes = writeMidiFile(struck(1_200, 1_800), { beats: click(-2_400, 600, 10) });
+
+    expect(struckAt(bytes)).toEqual([2 * BEAT, 3 * BEAT]);
+  });
+
+  it('counts a first note up to half a beat ahead of a bar as one in that bar', () => {
+    // The downbeat of the second bar at 2400 ms, beats 600 ms apart.
+    for (let early = 0; early <= 600; early += 25) {
+      const bytes = writeMidiFile(struck(2_400 - early), { beats: click(0, 600, 8) });
+      const expected = early <= 300 ? 0 : Math.round(BEAT * (3 + (600 - early) / 600));
+
+      expect(struckAt(bytes), `${early} ms early`).toEqual([expected]);
+    }
+  });
+
+  it('carries a click set going after the playing began back at its pace and in its bars', () => {
+    // Bars of three, the click starting on the second beat of one, a second
+    // after the first note: two beats back is a downbeat, at 0 ms, and three
+    // before that the one the playing began in.
+    const bytes = writeMidiFile(struck(0, 1_000), { beats: click(1_000, 500, 6, 3, 1) });
+
+    expect(struckAt(bytes)).toEqual([2 * BEAT, 4 * BEAT]);
+    expect(barsIn(bytes)).toEqual([{ tick: 0, beats: 3 }]);
+  });
+
+  it('carries the click on at its last pace past its last beat', () => {
+    const bytes = writeMidiFile(struck(0, 2_700, 3_000), { beats: click(0, 600, 4) });
+
+    expect(struckAt(bytes)).toEqual([0, 4.5 * BEAT, 5 * BEAT]);
+  });
+
+  it('writes the tempo of a beat and the bar at a downbeat only where either changes', () => {
+    // Two bars of four at 100 bpm, then bars of three at 120.
+    const beats = [...click(0, 600, 8), ...click(4_800, 500, 6, 3)];
+    const bytes = writeMidiFile(struck(0, 7_300), { beats });
+
+    expect(temposIn(bytes)).toEqual([
+      { tick: 0, microseconds: 600_000 },
+      { tick: 8 * BEAT, microseconds: 500_000 },
+    ]);
+    expect(barsIn(bytes)).toEqual([
+      { tick: 0, beats: 4 },
+      { tick: 8 * BEAT, beats: 3 },
+    ]);
+    expect(struckAt(bytes)).toEqual([0, 13 * BEAT]);
+  });
+
+  it('marks a new bar on the first beat of one, wherever the click began counting it', () => {
+    // Bars of four, and then of three from the third beat of one: the bar
+    // it was third in is still four long, and the next is three.
+    const beats = [...click(0, 600, 6), ...click(3_600, 600, 4, 3, 2)];
+    const bytes = writeMidiFile(struck(0, 5_400), { beats });
+
+    expect(barsIn(bytes)).toEqual([
+      { tick: 0, beats: 4 },
+      { tick: 7 * BEAT, beats: 3 },
+    ]);
+  });
+
+  it('writes what it always wrote without two beats apart to read a pace from', () => {
+    const events = struck(0, 450, 1_300);
+    const plain = writeMidiFile(events, { trackName: 'Idea' });
+
+    for (const beats of [[], click(0, 600, 1), click(0, 0, 2)]) {
+      expect(writeMidiFile(events, { trackName: 'Idea', beats })).toEqual(plain);
+    }
+  });
+});
+
+describe('whether a click says where its bars are', () => {
+  it('needs two beats heard apart', () => {
+    expect(barsAreHeardIn([])).toBe(false);
+    expect(barsAreHeardIn(click(0, 600, 1))).toBe(false);
+    expect(barsAreHeardIn(click(0, 0, 2))).toBe(false);
+    expect(barsAreHeardIn(click(0, 600, 2))).toBe(true);
   });
 });

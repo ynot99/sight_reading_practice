@@ -761,9 +761,10 @@ export interface ControllerEventMap {
    * the ones left out as well, so the count can be seen going through them.
    * Said a look-ahead before it sounds, so whatever shows it can show it on
    * the moment rather than after hearing of it. `null` once the click stops,
-   * at the moment it stopped.
+   * at the moment it stopped. With how many beats the bar has, which is
+   * what a take played to it is written down in.
    */
-  freeClickPlaced: { readonly beat: number | null; readonly atMs: number };
+  freeClickPlaced: { readonly beat: number | null; readonly beatsInBar: number; readonly atMs: number };
   /**
    * Whether the engraver is drawing a page right now.
    *
@@ -3758,7 +3759,11 @@ export class PracticeController {
       this.freeClickWatch = this.deps.metronome.onTickPlaced((tick) => {
         if (tick.isPulse) {
           this.freeBeats.push({ weight: tick.isDownbeat ? 'downbeat' : 'beat', atMs: tick.scheduledTimeMs });
-          this.emitter.emit('freeClickPlaced', { beat: tick.beat - 1, atMs: tick.scheduledTimeMs });
+          this.emitter.emit('freeClickPlaced', {
+            beat: tick.beat - 1,
+            beatsInBar: this.currentSettings.freePlayBeats.length,
+            atMs: tick.scheduledTimeMs,
+          });
         }
       });
       this.deps.metronome.start();
@@ -3766,7 +3771,11 @@ export class PracticeController {
       this.freeClickWatch?.();
       this.freeClickWatch = null;
       this.deps.metronome.stop();
-      this.emitter.emit('freeClickPlaced', { beat: null, atMs: this.deps.clock.now() });
+      this.emitter.emit('freeClickPlaced', {
+        beat: null,
+        beatsInBar: this.currentSettings.freePlayBeats.length,
+        atMs: this.deps.clock.now(),
+      });
     }
   }
 

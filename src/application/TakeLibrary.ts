@@ -1,4 +1,4 @@
-import type { MidiFileEvent } from '../domain/midi/MidiFile.js';
+import type { HeardBeat, MidiFileEvent } from '../domain/midi/MidiFile.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import type { Take } from './PerformanceRecorder.js';
 
@@ -26,6 +26,8 @@ export interface StoredTake {
   readonly noteCount: number;
   readonly shelf: TakeShelf;
   readonly events: readonly MidiFileEvent[];
+  /** The click it was played against, empty for none; see `Take`. */
+  readonly beats: readonly HeardBeat[];
 }
 
 const STORAGE_VERSION = 1;
@@ -86,11 +88,34 @@ function unpack(value: unknown): MidiFileEvent | null {
   }
 }
 
+/** A beat as a tuple, as the events are: `[atMs, beat, beatsInBar]`. */
+function packBeat(beat: HeardBeat): readonly [number, number, number] {
+  return [Math.round(beat.atMs), beat.beat, beat.beatsInBar];
+}
+
+function unpackBeat(value: unknown): HeardBeat | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const [atMs, beat, beatsInBar] = value as readonly unknown[];
+  // Its place has to be one its bar has: the bars are counted back from it.
+  if (
+    typeof atMs !== 'number' ||
+    !Number.isInteger(beat) ||
+    !Number.isInteger(beatsInBar) ||
+    (beat as number) < 0 ||
+    (beat as number) >= (beatsInBar as number)
+  ) {
+    return null;
+  }
+  return { atMs, beat: beat as number, beatsInBar: beatsInBar as number };
+}
+
 function readTake(value: unknown): StoredTake | null {
   if (!isRecord(value)) {
     return null;
   }
-  const { id, savedAtMs, durationMs, noteCount, events, shelf } = value;
+  const { id, savedAtMs, durationMs, noteCount, events, shelf, beats } = value;
   if (typeof id !== 'string' || typeof savedAtMs !== 'number' || typeof durationMs !== 'number') {
     return null;
   }
@@ -110,7 +135,19 @@ function readTake(value: unknown): StoredTake | null {
     // since keeping was the only way a take got here at all.
     shelf: shelf === 'recent' ? 'recent' : 'kept',
     events: unpacked,
+    // A bar is read off every beat of it, so one beat unreadable costs the
+    // click and not the take; and a take kept before the click was is one
+    // played without it.
+    beats: theBeatsIfWhole(beats),
   };
+}
+
+function theBeatsIfWhole(value: unknown): readonly HeardBeat[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const beats = value.map(unpackBeat);
+  return beats.every((beat) => beat !== null) ? (beats as HeardBeat[]) : [];
 }
 
 /**
@@ -170,6 +207,7 @@ export class TakeLibrary {
       noteCount: take.noteCount,
       shelf,
       events: take.events,
+      beats: take.beats,
     };
     this.takes = [...this.takes, stored];
     this.prune();
@@ -269,6 +307,7 @@ export class TakeLibrary {
         noteCount: take.noteCount,
         shelf: take.shelf,
         events: take.events.map(pack),
+        beats: take.beats.map(packBeat),
       })),
     });
   }

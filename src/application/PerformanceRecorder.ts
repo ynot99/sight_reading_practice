@@ -1,4 +1,4 @@
-import type { MidiFileEvent } from '../domain/midi/MidiFile.js';
+import type { HeardBeat, MidiFileEvent } from '../domain/midi/MidiFile.js';
 import type { IClock } from './ports/IClock.js';
 import type { IMidiSource, MidiEvent } from './ports/IMidiSource.js';
 import { TypedEventEmitter, type IEventSource, type Unsubscribe } from '../shared/EventEmitter.js';
@@ -32,6 +32,17 @@ export interface Take {
   readonly events: readonly MidiFileEvent[];
   readonly durationMs: number;
   readonly noteCount: number;
+  /**
+   * The beats of the click it was played against, on its own clock, from the
+   * first beat of the bar it began in; empty where no click was heard while
+   * it was played.
+   */
+  readonly beats: readonly HeardBeat[];
+}
+
+/** What a click says as it goes: a beat of its bar placed, or `null` once it stops. */
+export interface ClickEventMap {
+  freeClickPlaced: { readonly beat: number | null; readonly beatsInBar: number; readonly atMs: number };
 }
 
 /** What a recorder publishes. */
@@ -88,6 +99,10 @@ export class PerformanceRecorder {
   private closedAtLength = -1;
   /** Keys still down, so a take can release what it cut through. */
   private readonly holding = new Map<number, number>();
+  /** The beats of a click heard, on the clock the playing is stamped on. */
+  private readonly heard: HeardBeat[] = [];
+  /** When a click stopped: beats before one are another click's. */
+  private readonly clickStops: number[] = [];
 
   constructor(clock: IClock, options: PerformanceRecorderOptions = {}) {
     this.clock = clock;
@@ -108,6 +123,45 @@ export class PerformanceRecorder {
   stop(): void {
     this.subscription?.();
     this.subscription = null;
+  }
+
+  /**
+   * Keeps the beats of the click in free play, so a take played to it knows
+   * where its bars are: the file written from it and the page read from that
+   * file need them, and nothing can find them afterwards.
+   */
+  followTheClick(click: IEventSource<ClickEventMap>): Unsubscribe {
+    return click.on('freeClickPlaced', ({ beat, beatsInBar, atMs }) => {
+      if (beat === null) {
+        this.clickStoppedAt(atMs);
+      } else {
+        this.hearBeat({ atMs, beat, beatsInBar });
+      }
+    });
+  }
+
+  /**
+   * A beat of a click, heard at `beat.atMs`: told as it is placed, which may
+   * be a little before it sounds.
+   */
+  hearBeat(beat: HeardBeat): void {
+    this.heard.push(beat);
+    while (this.heard.length > this.capacity) {
+      this.heard.shift();
+    }
+  }
+
+  /**
+   * The click stopped at `atMs`. A beat it had placed for later is never
+   * heard, and the playing after it was not played against it.
+   */
+  clickStoppedAt(atMs: number): void {
+    const kept = this.heard.filter((beat) => beat.atMs <= atMs);
+    this.heard.splice(0, this.heard.length, ...kept);
+    this.clickStops.push(atMs);
+    while (this.clickStops.length > this.capacity) {
+      this.clickStops.shift();
+    }
   }
 
   /** Everything still held, for tests and for the take's closing releases. */
@@ -268,7 +322,32 @@ export class PerformanceRecorder {
       events,
       durationMs: endMs,
       noteCount: events.filter((event) => event.kind === 'noteOn').length,
+      beats: this.beatsBetween(origin, last.atMs),
     };
+  }
+
+  /**
+   * The beats of the click a take from `origin` to `end` was played against,
+   * rebased as its events are: the ones heard while it was played, and those
+   * of the bar it began in heard before it - which is the bar its first
+   * note falls in. A click stopped before the take began is another
+   * click's, and none of it is carried.
+   */
+  private beatsBetween(origin: number, end: number): readonly HeardBeat[] {
+    const during = this.heard.filter((beat) => beat.atMs >= origin && beat.atMs <= end);
+    const before = this.heard.filter(
+      (beat) =>
+        beat.atMs < origin &&
+        !this.clickStops.some((stop) => stop >= beat.atMs && stop <= origin),
+    );
+    let bar = before.length;
+    for (let at = before.length - 1; at >= 0; at -= 1) {
+      if (before[at]?.beat === 0) {
+        bar = at;
+        break;
+      }
+    }
+    return [...before.slice(bar), ...during].map((beat) => ({ ...beat, atMs: beat.atMs - origin }));
   }
 
   /** How long the take on offer is, without building it. */

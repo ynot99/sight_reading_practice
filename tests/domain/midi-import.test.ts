@@ -350,3 +350,27 @@ describe('a file that separates the hands itself', () => {
     expect(pitchesIn(bass)).toEqual([48, 64]);
   });
 });
+
+describe('a take played to a click, written down', () => {
+  it('comes out in the bars of the click, each beat played where it was meant', () => {
+    // Bars of three at 90 bpm, the playing a little uneven, as a hand is,
+    // and begun a beat into the first bar.
+    const gap = 60_000 / 90;
+    const beats = Array.from({ length: 9 }, (_, at) => ({ atMs: at * gap, beat: at % 3, beatsInBar: 3 }));
+    const unevenness = [12, -18, 25, -9, 20];
+    const events = [62, 64, 65, 67, 69].flatMap((midi, at) => note(midi, (at + 1) * gap + (unevenness[at] ?? 0), gap * 0.8));
+    const bytes = writeMidiFile(
+      [...events].sort((left, right) => left.atMs - right.atMs),
+      { trackName: 'Idea', beats },
+    );
+
+    const { exercise } = midiToExercise(readMidiFile(bytes), 'Idea');
+
+    expect(() => validateExercise(exercise)).not.toThrow();
+    expect(exercise.timeSignature.toString()).toBe('3/4');
+    expect(measureCount(exercise)).toBe(2);
+    const steps = buildTimeline(exercise).steps.filter((step) => step.expectedMidi.length > 0);
+    expect(steps.map((step) => step.expectedMidi)).toEqual([[62], [64], [65], [67], [69]]);
+    expect(steps.map((step) => step.onsetTicks)).toEqual([1, 2, 3, 4, 5].map((at) => at * Duration.QUARTER.ticks));
+  });
+});

@@ -45,11 +45,12 @@ import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
-import { writeMidiFile } from '../domain/midi/MidiFile.js';
+import { barsAreHeardIn, writeMidiFile } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { FREE_CLICK_STEP_BPM, LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
 import type { PracticeSettings } from '../application/PracticeController.js';
+import type { StoredTake } from '../application/TakeLibrary.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
 import {
@@ -123,7 +124,8 @@ import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
 import { replayFits } from '../application/runReplay.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { ClosingCue, DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { barLines, barNumberOf, measureCount, pedalHeldUntil, spanMs } from '../domain/model/Exercise.js';
+import { barLines, barNumberOf, measureCount, pedalHeldUntil, spanMs, type Exercise } from '../domain/model/Exercise.js';
+import type { ImportWarning } from '../domain/notation/MusicXmlParser.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
 import { drawTheHitErrors } from './hitErrorBar.js';
@@ -1047,6 +1049,16 @@ function describeWhen(atMs: number, nowMs: number): string {
   return 'over a year ago';
 }
 
+/**
+ * A take as a MIDI file. Written from the events, never stored as bytes: the
+ * performance is the kept thing and the file is derived from it, the same way
+ * the printed MusicXML is derived from an `Exercise`. In the bars of the click
+ * it was played to, where it was played to one.
+ */
+function theTakeAsAFile(take: StoredTake): Uint8Array {
+  return writeMidiFile(take.events, { trackName: takeName(take.savedAtMs), beats: take.beats });
+}
+
 function takeName(savedAtMs: number): string {
   const at = new Date(savedAtMs);
   const pad = (value: number): string => String(value).padStart(2, '0');
@@ -1100,6 +1112,16 @@ function backupFileName(savedAtMs: number): string {
   return (
     `sight-reading-${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}` +
     `-${pad(at.getHours())}${pad(at.getMinutes())}.json`
+  );
+}
+
+/** A take's name as a score on the shelf, which goes by name: so to the second, and dated. */
+function takeTitle(savedAtMs: number): string {
+  const at = new Date(savedAtMs);
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return (
+    `Take ${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}, ` +
+    `${pad(at.getDate())}.${pad(at.getMonth() + 1)}.${at.getFullYear()}`
   );
 }
 
@@ -2543,19 +2565,9 @@ export class AppView {
         timeTheStart('score: kept in the library');
         kept.push(exercise.title);
         if (alone) {
-          await this.runtime.controller.openScore(exercise);
-          timeTheStart('score opened');
-          // Opening a piece can put the passage back to the two ends, and the
-          // boxes in the sheet are the same setting seen from another chair.
-          this.syncControlsFromSettings();
+          await this.pickUpTheFile(exercise);
         }
-        // What the file did not bring with it goes to the console and no
-        // further. It is worth keeping - several faults here were found
-        // through one of these - and it is not worth a line across the music:
-        // the page says which piece opened by printing its name in the corner.
-        for (const warning of warnings) {
-          reportToTheConsole(`Opening ${exercise.title}:`, warning.detail);
-        }
+        this.sayWhatTheFileLeftOut(exercise, warnings);
       } catch (error) {
         reportToTheConsole(`Could not open ${file.name}.`, error);
         refused.push({ name: file.name, why: whyAScoreWasRefused(error) });
@@ -2564,6 +2576,27 @@ export class AppView {
 
     this.renderScores();
     this.sayWhatTheFilesDid(kept, refused, alone);
+  }
+
+  /** Puts a piece just read from a file on the stand. */
+  private async pickUpTheFile(exercise: Exercise): Promise<void> {
+    await this.runtime.controller.openScore(exercise);
+    timeTheStart('score opened');
+    // Opening a piece can put the passage back to the two ends, and the
+    // boxes in the sheet are the same setting seen from another chair.
+    this.syncControlsFromSettings();
+  }
+
+  /**
+   * What a file did not bring with it goes to the console and no further. It
+   * is worth keeping - several faults here were found through one of these -
+   * and it is not worth a line across the music: the page says which piece
+   * opened by printing its name in the corner.
+   */
+  private sayWhatTheFileLeftOut(exercise: Exercise, warnings: readonly ImportWarning[]): void {
+    for (const warning of warnings) {
+      reportToTheConsole(`Opening ${exercise.title}:`, warning.detail);
+    }
   }
 
   /**
@@ -9001,6 +9034,21 @@ export class AppView {
       look.setAttribute('aria-label', `Look at the take from ${takeName(take.savedAtMs)}`);
       this.listen(look, 'click', () => this.showTheTake(take.id));
 
+      const write = this.doc.createElement('button');
+      write.type = 'button';
+      write.textContent = 'Score';
+      write.className = 'takes__score';
+      // Played without the click, a take has no bars to be written in, and
+      // a page of guessed ones is worse than none.
+      if (barsAreHeardIn(take.beats)) {
+        write.title = 'Write this take down as a score, in the bars of the click it was played to';
+      } else {
+        write.dataset['idle'] = 'true';
+        write.title = 'Write this take down as a score. Played without the click, it has no bars to be written in.';
+      }
+      write.setAttribute('aria-label', write.title);
+      this.listen(write, 'click', () => void this.writeTheTakeDown(take.id));
+
       const save = this.doc.createElement('button');
       save.type = 'button';
       save.textContent = 'MIDI';
@@ -9040,7 +9088,7 @@ export class AppView {
         });
       });
 
-      row.append(name, hear, look, promote, save, remove);
+      row.append(name, hear, look, write, promote, save, remove);
       this.el.takesList.append(row);
     }
   }
@@ -9050,11 +9098,36 @@ export class AppView {
     if (take === null) {
       return;
     }
-    // Written from the events, never stored as bytes: the performance is the
-    // kept thing and the file is derived from it, the same way the printed
-    // MusicXML is derived from an `Exercise`.
-    const bytes = writeMidiFile(take.events, { trackName: takeName(take.savedAtMs) });
-    this.runtime.files.save(`${takeFileName(take.savedAtMs)}.mid`, bytes, 'audio/midi');
+    this.runtime.files.save(`${takeFileName(take.savedAtMs)}.mid`, theTakeAsAFile(take), 'audio/midi');
+  }
+
+  /**
+   * Opens a take played to the click as a score: the file it would be saved
+   * as, read the way a chosen MIDI file is, so its page is the one any other
+   * program opening that file is given the bars of. Kept on the shelf as an
+   * opened file is.
+   */
+  private async writeTheTakeDown(id: string): Promise<void> {
+    const take = this.runtime.takes.find(id);
+    if (take === null || !barsAreHeardIn(take.beats)) {
+      return;
+    }
+    // Out of the way first, as a kept score is: the page is what was asked for.
+    this.el.sheetTakes.hidden = true;
+    const title = takeTitle(take.savedAtMs);
+    timeTheStart('score asked for', () => title);
+    try {
+      const { exercise, warnings } = await this.runtime.importer.readFile(
+        theTakeAsAFile(take).slice().buffer,
+        `${title}.mid`,
+      );
+      await this.runtime.scores.keep(exercise, Date.now());
+      await this.pickUpTheFile(exercise);
+      this.sayWhatTheFileLeftOut(exercise, warnings);
+    } catch (error) {
+      reportToTheConsole(`Could not write ${title} down.`, error);
+      this.sayInTheMiddle(`Could not write ${title} down. ${whyAScoreWasRefused(error)}`);
+    }
   }
 
   /**

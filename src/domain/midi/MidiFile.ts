@@ -1,3 +1,4 @@
+import { elementAt } from '../../shared/asserts.js';
 import { DomainError } from '../../shared/errors.js';
 
 /**
@@ -11,6 +12,18 @@ export type MidiFileEvent =
   | { readonly kind: 'noteOff'; readonly atMs: number; readonly midi: number }
   | { readonly kind: 'sustain'; readonly atMs: number; readonly value: number };
 
+/**
+ * A beat of a click the playing was heard against, on the same clock as the
+ * events.
+ */
+export interface HeardBeat {
+  readonly atMs: number;
+  /** Its place in its bar, the first beat being 0. */
+  readonly beat: number;
+  /** How many beats the bar it is in has. */
+  readonly beatsInBar: number;
+}
+
 export interface MidiFileOptions {
   /**
    * The tempo the file declares.
@@ -23,6 +36,13 @@ export interface MidiFileOptions {
    */
   readonly tempoBpm?: number;
   readonly trackName?: string;
+  /**
+   * The click the playing was heard against, in the order its beats were
+   * heard, which says where its beats and bars are, so nothing has to be
+   * guessed: see {@link theBeatsFromTheFirstBar}. Given two beats apart it
+   * takes the place of `tempoBpm`.
+   */
+  readonly beats?: readonly HeardBeat[];
 }
 
 const DEFAULT_TEMPO_BPM = 120;
@@ -96,6 +116,61 @@ function uint32(value: number): number[] {
   return [(value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
+/**
+ * The beats of a click from the first beat of the bar the playing begins in.
+ *
+ * That bar is the file's first, so a phrase begun on the third beat opens on
+ * two beats of rest rather than with everything moved two beats early. A
+ * first note played a little ahead of a bar's first beat is still that bar's,
+ * up to half a beat early - it is the beat it was aimed at. Where the click
+ * was set going after the playing began, its beats are carried back at the
+ * pace and in the bars they were first heard in.
+ *
+ * `null` where two beats were not heard, which is the least a pace is read
+ * from.
+ */
+export function theBeatsFromTheFirstBar(
+  beats: readonly HeardBeat[],
+  firstNoteMs: number,
+): readonly HeardBeat[] | null {
+  const heard = [...beats];
+  const [first, second] = heard;
+  if (!barsAreHeardIn(beats) || first === undefined || second === undefined) {
+    return null;
+  }
+  const gap = second.atMs - first.atMs;
+  for (;;) {
+    for (let at = heard.length - 1; at >= 0; at -= 1) {
+      const beat = elementAt(heard, at);
+      if (beat.beat === 0 && beat.atMs <= firstNoteMs + gapAfter(heard, at) / 2) {
+        return heard.slice(at);
+      }
+    }
+    const earliest = elementAt(heard, 0);
+    heard.unshift({
+      atMs: earliest.atMs - gap,
+      beat: (earliest.beat + earliest.beatsInBar - 1) % earliest.beatsInBar,
+      beatsInBar: earliest.beatsInBar,
+    });
+  }
+}
+
+/**
+ * Whether a click says where its bars are: two beats heard apart, the
+ * least a pace is read from.
+ */
+export function barsAreHeardIn(beats: readonly HeardBeat[]): boolean {
+  const [first, second] = beats;
+  return first !== undefined && second !== undefined && second.atMs > first.atMs;
+}
+
+/** How long the beat at `at` lasts: until the next, or as long as the one before it. */
+function gapAfter(beats: readonly HeardBeat[], at: number): number {
+  const next = beats[at + 1];
+  const here = elementAt(beats, at);
+  return next === undefined ? here.atMs - elementAt(beats, at - 1).atMs : next.atMs - here.atMs;
+}
+
 /** Rank at one instant: a release must be written before the next press. */
 function orderAt(event: MidiFileEvent): number {
   switch (event.kind) {
@@ -106,6 +181,61 @@ function orderAt(event: MidiFileEvent): number {
     default:
       return 2;
   }
+}
+
+function tempoMark(microsecondsPerQuarter: number): number[] {
+  return [0xff, 0x51, 0x03, ...uint32(microsecondsPerQuarter).slice(1)];
+}
+
+/** A bar of `beats` crotchets, with MIDI's ordinary clock and thirty-second counts. */
+function barMark(beats: number): number[] {
+  return [0xff, 0x58, 0x04, beats & 0xff, 0x02, 24, 8];
+}
+
+/**
+ * The tempo and the bar at each beat of the click where either changes, a
+ * crotchet a beat: a tempo read off how long each beat lasted, so a click
+ * sped up partway through is followed rather than averaged.
+ */
+function theMarksOfTheClick(
+  grid: readonly HeardBeat[],
+): readonly { readonly tick: number; readonly bytes: readonly number[] }[] {
+  const marks: { tick: number; bytes: number[] }[] = [];
+  let tempo = -1;
+  let bar = -1;
+  grid.forEach((beat, at) => {
+    const tick = at * TICKS_PER_QUARTER;
+    const lasts = Math.round(gapAfter(grid, at) * 1_000);
+    if (lasts !== tempo) {
+      tempo = lasts;
+      marks.push({ tick, bytes: tempoMark(lasts) });
+    }
+    if (beat.beat === 0 && beat.beatsInBar !== bar) {
+      bar = beat.beatsInBar;
+      marks.push({ tick, bytes: barMark(bar) });
+    }
+  });
+  return marks;
+}
+
+/**
+ * Where a moment falls on the click, in ticks from its first bar: a
+ * crotchet for each beat heard, and a moment between two beats as far
+ * between them as it fell. Past the last beat the click is carried on at its
+ * last pace.
+ *
+ * Asked in order of time, as the events are written, so the beat reached is
+ * kept between asks.
+ */
+function onTheClick(grid: readonly HeardBeat[]): (ms: number) => number {
+  let at = 0;
+  return (ms) => {
+    while (at + 1 < grid.length && elementAt(grid, at + 1).atMs <= ms) {
+      at += 1;
+    }
+    const beat = elementAt(grid, at);
+    return Math.round(TICKS_PER_QUARTER * (at + (ms - beat.atMs) / gapAfter(grid, at)));
+  };
 }
 
 /**
@@ -127,6 +257,10 @@ export function writeMidiFile(
     throw new DomainError(`A tempo must be positive, got ${tempoBpm}.`);
   }
   const msPerTick = 60_000 / (tempoBpm * TICKS_PER_QUARTER);
+  // A take opens on its first note; a pedal already down is said at the
+  // same moment.
+  const firstNote = events.reduce((earliest, event) => Math.min(earliest, event.atMs), Number.POSITIVE_INFINITY);
+  const grid = options.beats === undefined ? null : theBeatsFromTheFirstBar(options.beats, firstNote);
 
   // Stable: two events at the same instant keep the order they arrived in,
   // except that a release always precedes a press, so re-striking a key that
@@ -143,24 +277,32 @@ export function writeMidiFile(
     })
     .map(({ event }) => event);
 
+  const marks = grid === null ? [] : theMarksOfTheClick(grid);
   const track: number[] = [];
-  // Tempo, so the notes mean the same thing wherever the file is opened.
-  track.push(
-    ...variableLength(0),
-    0xff,
-    0x51,
-    0x03,
-    ...uint32(Math.round(MICROSECONDS_PER_MINUTE / tempoBpm)).slice(1),
-  );
+  if (grid === null) {
+    // Tempo, so the notes mean the same thing wherever the file is opened.
+    // A click's own is among its marks.
+    track.push(...variableLength(0), ...tempoMark(Math.round(MICROSECONDS_PER_MINUTE / tempoBpm)));
+  }
   const name = options.trackName;
+  let previousTick = 0;
+  let marked = 0;
+  const markUpTo = (tick: number): void => {
+    for (let mark = marks[marked]; mark !== undefined && mark.tick <= tick; mark = marks[marked]) {
+      track.push(...variableLength(mark.tick - previousTick), ...mark.bytes);
+      previousTick = mark.tick;
+      marked += 1;
+    }
+  };
   if (name !== undefined && name.length > 0) {
     const text = ascii(name);
     track.push(...variableLength(0), 0xff, 0x03, ...variableLength(text.length), ...text);
   }
 
-  let previousTick = 0;
+  const tickOf = grid === null ? (ms: number) => Math.round(ms / msPerTick) : onTheClick(grid);
   for (const event of ordered) {
-    const tick = Math.max(0, Math.round(event.atMs / msPerTick));
+    const tick = Math.max(0, tickOf(event.atMs));
+    markUpTo(tick);
     track.push(...variableLength(Math.max(0, tick - previousTick)));
     previousTick = Math.max(previousTick, tick);
     switch (event.kind) {

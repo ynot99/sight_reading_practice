@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PerformanceRecorder } from '../../src/application/PerformanceRecorder.js';
+import { PerformanceRecorder, type ClickEventMap } from '../../src/application/PerformanceRecorder.js';
+import { TypedEventEmitter } from '../../src/shared/EventEmitter.js';
 import { type TakeShelf, TakeLibrary } from '../../src/application/TakeLibrary.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
@@ -484,5 +485,184 @@ describe('showing when the next press would start a new take', () => {
 
     expect(harness.recorder.silenceSoFarMs).toBeNull();
     expect(harness.recorder.takeIsSealed).toBe(false);
+  });
+});
+
+describe('a take played to the click', () => {
+  /** Beats of a click `gapMs` apart from `fromMs`, in bars of four. */
+  function hearTheClick(harness: Rig, fromMs: number, gapMs: number, count: number): void {
+    for (let at = 0; at < count; at += 1) {
+      harness.recorder.hearBeat({ atMs: fromMs + at * gapMs, beat: at % 4, beatsInBar: 4 });
+    }
+  }
+
+  function playedAt(harness: Rig, atMs: number, holdMs = 100): void {
+    harness.clock.set(atMs);
+    playNote(harness, 60, holdMs);
+  }
+
+  function beatsOf(harness: Rig): readonly { atMs: number; beat: number }[] {
+    return (harness.recorder.take()?.beats ?? []).map(({ atMs, beat }) => ({ atMs, beat }));
+  }
+
+  it('carries the beats heard while it was played, from the first of the bar it began in', () => {
+    const harness = rig();
+    // Bars from 8000 and 10000 ms; the playing begins on the second beat of
+    // the later one, and ends before its fourth.
+    hearTheClick(harness, 8_000, 500, 9);
+    playedAt(harness, 10_300);
+    playedAt(harness, 11_000);
+
+    // On the take's own clock, as its events are.
+    expect(beatsOf(harness)).toEqual([
+      { atMs: -300, beat: 0 },
+      { atMs: 200, beat: 1 },
+      { atMs: 700, beat: 2 },
+    ]);
+  });
+
+  it('carries the bar it began in where it ended before the next beat', () => {
+    const harness = rig();
+    hearTheClick(harness, 0, 600, 4);
+    playedAt(harness, 650, 50);
+
+    expect(beatsOf(harness)).toEqual([
+      { atMs: -650, beat: 0 },
+      { atMs: -50, beat: 1 },
+    ]);
+  });
+
+  it('carries none where the click had stopped before it was played', () => {
+    const harness = rig();
+    hearTheClick(harness, 0, 500, 5);
+    harness.recorder.clickStoppedAt(2_000);
+    playedAt(harness, 5_000);
+
+    expect(beatsOf(harness)).toEqual([]);
+  });
+
+  it('follows the click it is told of, beat by beat and to its stop', () => {
+    const harness = rig();
+    const click = new TypedEventEmitter<ClickEventMap>();
+    harness.recorder.followTheClick(click.asSource());
+    for (const [beat, atMs] of [[0, 1_000], [1, 1_500], [2, 2_000]] as const) {
+      click.emit('freeClickPlaced', { beat, beatsInBar: 3, atMs });
+    }
+    click.emit('freeClickPlaced', { beat: null, beatsInBar: 3, atMs: 1_700 });
+    playedAt(harness, 1_200, 1_000);
+
+    expect(harness.recorder.take()?.beats).toEqual([
+      { atMs: -200, beat: 0, beatsInBar: 3 },
+      { atMs: 300, beat: 1, beatsInBar: 3 },
+    ]);
+  });
+
+  it('lets go of a beat a stopped click had placed for later', () => {
+    const harness = rig();
+    hearTheClick(harness, 10_000, 500, 3);
+    harness.recorder.clickStoppedAt(10_600);
+    playedAt(harness, 10_100, 900);
+
+    expect(beatsOf(harness)).toEqual([
+      { atMs: -100, beat: 0 },
+      { atMs: 400, beat: 1 },
+    ]);
+  });
+
+  it('carries no beat of a click stopped before the take began, up to the moment it began', () => {
+    // Stopped on its own last beat, a downbeat, or on the moment the playing
+    // began: either way that click is over.
+    for (const stoppedAt of [1_000, 2_000]) {
+      const harness = rig();
+      hearTheClick(harness, -1_000, 500, 5);
+      harness.recorder.clickStoppedAt(stoppedAt);
+      // Another click, set going after the playing began.
+      hearTheClick(harness, 2_500, 500, 2);
+      playedAt(harness, 2_000, 1_000);
+
+      expect(beatsOf(harness), `stopped at ${stoppedAt}`).toEqual([
+        { atMs: 500, beat: 0 },
+        { atMs: 1_000, beat: 1 },
+      ]);
+    }
+  });
+
+  it('remembers no more beats than it remembers events, and carries back only from a downbeat', () => {
+    // Of 0, 500, 1000, 1500 and 2000 ms, the last three: the bar the playing
+    // began in has lost its first beat, so nothing of it before the playing is
+    // carried.
+    const harness = rig({ capacity: 3 });
+    hearTheClick(harness, 0, 500, 5);
+    playedAt(harness, 1_600, 500);
+
+    expect(beatsOf(harness)).toEqual([{ atMs: 400, beat: 0 }]);
+  });
+
+  it('keeps them with the take across visits, to the millisecond', () => {
+    const harness = rig();
+    hearTheClick(harness, 0, 500.4, 4);
+    playedAt(harness, 0, 1_001);
+    const take = harness.recorder.take();
+    if (take === null) {
+      throw new Error('expected a take');
+    }
+    const store = new InMemorySettingsStore();
+    const kept = new TakeLibrary(store).file(take, 1_000, 'kept');
+
+    const next = new TakeLibrary(store);
+    next.load();
+
+    expect(next.find(kept.id)?.beats).toEqual([
+      { atMs: 0, beat: 0, beatsInBar: 4 },
+      { atMs: 500, beat: 1, beatsInBar: 4 },
+      { atMs: 1_001, beat: 2, beatsInBar: 4 },
+    ]);
+  });
+
+  it('reads a take kept before there were beats, or with one it cannot read, as played without a click', () => {
+    const stored = (beats: unknown): unknown => ({
+      version: 1,
+      takes: [
+        {
+          id: 'take-a',
+          savedAtMs: 1,
+          durationMs: 100,
+          noteCount: 1,
+          shelf: 'kept',
+          events: [
+            [0, 0, 60, 100],
+            [1, 100, 60, 0],
+          ],
+          ...(beats === undefined ? {} : { beats }),
+        },
+      ],
+    });
+    const read = (beats: unknown) => {
+      const store = new InMemorySettingsStore();
+      store.write(stored(beats));
+      const library = new TakeLibrary(store);
+      library.load();
+      return library.find('take-a');
+    };
+
+    expect(read([[0, 0, 3], [500, 2, 3]])?.beats).toEqual([
+      { atMs: 0, beat: 0, beatsInBar: 3 },
+      { atMs: 500, beat: 2, beatsInBar: 3 },
+    ]);
+    for (const beats of [
+      undefined,
+      'none',
+      [[0, 0, 3], 'beat'],
+      [[0, 0, 3], 7],
+      [[0, 0, 3], ['500', 1, 3]],
+      [[0, 0, 3], [500, -1, 3]],
+      [[0, 0, 3], [500, 3, 3]],
+      [[0, 0, 3], [500, 0.5, 3]],
+      [[0, 0, 3], [500, 1, 3.5]],
+    ]) {
+      const take = read(beats);
+      expect(take?.events, JSON.stringify(beats)).toHaveLength(2);
+      expect(take?.beats, JSON.stringify(beats)).toEqual([]);
+    }
   });
 });

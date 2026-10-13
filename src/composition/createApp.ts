@@ -533,6 +533,7 @@ export function createApp(options: AppRuntimeOptions): AppRuntime {
     scorings,
     initialSettings: restored.practice,
   });
+  recorder.followTheClick(controller.events);
 
   // Whatever the reader changes is what they will find next time.
   controller.events.on('settingsChanged', ({ settings: current }) => {

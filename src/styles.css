@@ -2395,6 +2395,11 @@ select {
   filter: brightness(1.08);
 }
 
+/* A take played without the click, which has no bars to be written down in. */
+.takes__list button[data-idle='true'] {
+  opacity: 0.45;
+}
+
 /*
  * The list of places, given room to be a list.
  *

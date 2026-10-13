@@ -51,6 +51,8 @@ import {
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
 import { Duration } from '../../src/domain/model/Duration.js';
+import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
+import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
 import { BUILT_IN_GRADES } from '../../src/application/ladder/grades.js';
 import { BUILT_IN_LADDER } from '../../src/application/ladder/ladderSteps.js';
@@ -409,6 +411,8 @@ function createRig(
   controller.events.on('settingsChanged', ({ settings: current }) => {
     settings.savePractice(current, Date.now());
   });
+  // As `createApp` has it.
+  recorder.followTheClick(controller.events);
 
   const takePlayer = new TakePlayer({ instrument, clock });
   const backup = new BackupService({
@@ -12100,6 +12104,85 @@ describe('AppView', () => {
         vi.useRealTimers();
       }
     }
+
+    it('writes a take played to the click down in its bars, and dims that for one played without', async () => {
+      const { view, runtime, metronome, clock, midi, takes, files } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      frameButton('free').click();
+      element<HTMLButtonElement>('free-beats-fewer').click();
+      holdTheMetronome();
+      // Bars of three at the click's 100 bpm, a note struck on each beat.
+      for (const pitch of [60, 62, 64, 65]) {
+        metronome.advanceBeats(1);
+        midi.noteOn(pitch, clock.now());
+        clock.advance(300);
+        midi.noteOff(pitch, clock.now());
+      }
+      holdTheMetronome();
+      expect(metronome.isRunning).toBe(false);
+      element<HTMLButtonElement>('focus-keep').click();
+      element<HTMLButtonElement>('focus-takes').click();
+      expect(element('sheet-takes').hidden).toBe(false);
+
+      const write = 'Write this take down as a score, in the bars of the click it was played to';
+      rowButton('takes-list', write).click();
+      await waitFor(() => runtime.controller.openedExercise?.title.startsWith('Take ') === true);
+
+      const exercise = runtime.controller.openedExercise;
+      expect(exercise?.timeSignature.toString()).toBe('3/4');
+      const steps = exercise === null ? [] : buildTimeline(exercise).steps.filter((step) => step.expectedMidi.length > 0);
+      expect(steps.map((step) => step.expectedMidi)).toEqual([[60], [62], [64], [65]]);
+      expect(steps.map((step) => step.onsetTicks)).toEqual([0, 1, 2, 3].map((at) => at * Duration.QUARTER.ticks));
+      // On the shelf, as a file opened is, and the takes out of its way.
+      expect(runtime.scores.list().map((score) => score.title)).toContain(exercise?.title);
+      expect(element('sheet-takes').hidden).toBe(true);
+      // And saved as a file, in the same bars at the click's tempo.
+      rowButton('takes-list', 'Save this take as a MIDI file').click();
+      const saved = readMidiFile(files.saved[0]?.bytes ?? new Uint8Array());
+      expect([saved.beats, saved.tempoBpm]).toEqual([3, 100]);
+      expect(saved.notes.map((note) => note.startTicks)).toEqual([0, 1, 2, 3].map((at) => at * saved.division));
+
+      // Played with the click stopped: there are no bars to write it in.
+      clock.advance(10_000);
+      midi.noteOn(67, clock.now());
+      clock.advance(300);
+      midi.noteOff(67, clock.now());
+      element<HTMLButtonElement>('focus-keep').click();
+      expect(takes.list()).toHaveLength(2);
+      const without = element('takes-list').querySelectorAll<HTMLButtonElement>('button.takes__score')[0];
+      expect(without?.dataset['idle']).toBe('true');
+      expect(without?.title).toBe(
+        'Write this take down as a score. Played without the click, it has no bars to be written in.',
+      );
+      expect(without?.getAttribute('aria-label')).toBe(without?.title);
+      const opened = runtime.controller.openedExercise;
+      without?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runtime.controller.openedExercise).toBe(opened);
+    });
+
+    it('says so in the middle of the page when a take played to the click cannot be written down', async () => {
+      const { view, runtime, metronome, clock, midi } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      frameButton('free').click();
+      holdTheMetronome();
+      // Struck and let go at once on two beats: too short for any value to write.
+      for (const pitch of [60, 62]) {
+        metronome.advanceBeats(1);
+        midi.noteOn(pitch, clock.now());
+        midi.noteOff(pitch, clock.now() + 1);
+      }
+      element<HTMLButtonElement>('focus-keep').click();
+      const opened = runtime.controller.openedExercise;
+
+      rowButton('takes-list', 'Write this take down as a score, in the bars of the click it was played to').click();
+      await waitFor(() => element('result').textContent.startsWith('Could not write'));
+
+      expect(element('result').textContent).toContain('too short to write down');
+      expect(runtime.controller.openedExercise).toBe(opened);
+    });
 
     it('turns the click off and on when its button is held, and opens the sheet on a tap', async () => {
       const { view, runtime } = createRig();

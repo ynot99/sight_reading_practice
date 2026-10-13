@@ -1014,6 +1014,10 @@ describe('the stylesheet', () => {
 
     expect(dimmed?.body).toMatch(/opacity\s*:\s*0?\.\d+/);
     expect(dimmed?.body).not.toMatch(/display\s*:\s*none/);
+    // A take's own row, where one played without the click cannot be
+    // written down.
+    const take = rules().find((rule) => rule.selector === ".takes__list button[data-idle='true']");
+    expect(take?.body).toMatch(/opacity\s*:\s*0?\.\d+/);
   });
 
   it('hides only what a repeat says it was called', () => {

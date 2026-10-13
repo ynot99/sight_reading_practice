@@ -1000,6 +1000,7 @@ describe('a recording drawn by the same machinery', () => {
       events,
       durationMs: 2_000,
       noteCount: events.filter((event) => event.kind === 'noteOn').length,
+      beats: [],
     };
   }
 

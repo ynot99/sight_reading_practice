@@ -848,6 +848,8 @@ export function takeOfTheRun(roll: RunRoll): Take | null {
     events,
     durationMs: Math.max(0, rollEndedAtMs(roll) - rollBeganAtMs(roll)),
     noteCount,
+    // A run's bars are the score's, which is already written down.
+    beats: [],
   };
 }
 

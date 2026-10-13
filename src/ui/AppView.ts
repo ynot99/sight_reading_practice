@@ -1611,6 +1611,8 @@ export class AppView {
     readonly clientX: number;
     readonly clientY: number;
     readonly scene: RollScene;
+    /** Whether it was chosen by this pointer going down, rather than before. */
+    readonly chosenNow: boolean;
     readonly moved: {
       readonly to: { readonly midi: number; readonly downAtMs: number };
       readonly events: readonly MidiFileEvent[];
@@ -8482,7 +8484,7 @@ export class AppView {
       this.pinched = false;
       this.panned = false;
       this.stopTheFling();
-      if (this.rollFingers.size === 0 && this.takeHoldOfTheChosenKey(event)) {
+      if (this.rollFingers.size === 0 && this.takeHoldOfAKey(event)) {
         return;
       }
       this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -11682,21 +11684,32 @@ export class AppView {
   }
 
   /**
-   * Takes hold of the chosen key of a recording, where a finger or the mouse
-   * goes down on it; says whether it did. Anywhere else the drawing is moved,
-   * as it always was - so a note is dragged only once it has been chosen. A
-   * pointer taken off the drawing lets go of it as it was, which is what a
-   * drag carried off the edge of anything means.
+   * Takes hold of a key of a sketch being edited, where a finger or the mouse
+   * goes down on it, and chooses it if it was not: a note is moved in one
+   * gesture, as in any editor. Says whether it did. Anywhere else the
+   * drawing is moved, as it always was. A pointer taken off the drawing lets
+   * go of it as it was, which is what a drag carried off the edge of anything
+   * means.
    */
-  private takeHoldOfTheChosenKey(event: PointerEvent): boolean {
+  private takeHoldOfAKey(event: PointerEvent): boolean {
     const showing = this.theOtherRollShowing;
-    const chosen = showing?.sketch?.chosen ?? null;
-    const scene = this.drawnScene;
-    if (showing === null || chosen === null || scene === null || this.rollDrag !== null) {
+    const sketch = showing?.sketch;
+    if (showing === null || sketch === undefined || !sketch.editing || this.rollDrag !== null) {
       return false;
     }
     const key = this.theKeyUnder(event);
-    if (key === null || key.midi !== chosen.midi || key.downAtMs !== chosen.downAtMs) {
+    if (key === null) {
+      return false;
+    }
+    const chosen = sketch.chosen;
+    const already = chosen !== null && chosen.midi === key.midi && chosen.downAtMs === key.downAtMs;
+    if (!already) {
+      this.theOtherRollShowing = { ...showing, sketch: { ...sketch, chosen: { midi: key.midi, downAtMs: key.downAtMs } } };
+      this.drawTheRollInto();
+      this.sayWhatCanBeChanged();
+    }
+    const scene = this.drawnScene;
+    if (scene === null) {
       return false;
     }
     this.rollDrag = {
@@ -11705,6 +11718,7 @@ export class AppView {
       clientY: event.clientY,
       scene,
       moved: null,
+      chosenNow: !already,
     };
     return true;
   }
@@ -11758,7 +11772,15 @@ export class AppView {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     this.rollDrag = null;
-    if (drag === null || drag.moved === null) {
+    if (drag === null) {
+      return;
+    }
+    if (drag.moved === null) {
+      // Chosen as it went down: the click of letting go is not a second tap,
+      // which would let go of it again.
+      if (drag.chosenNow) {
+        this.panned = true;
+      }
       return;
     }
     if (lifted && sketch !== undefined && stored !== null) {

@@ -4300,6 +4300,15 @@ describe('AppView', () => {
       tapOn(1_000);
       expect(chosen()).toEqual([]);
       expect(headAt(element('roll-body'))).toBe('1.000');
+      // Nor is a note taken hold of: a finger on one moves the drawing.
+      const onIt = { clientX: (1.1 * zoom), clientY: ((view.rollScene?.notes.find((note) => note.fromMs === 1_000)?.row ?? 0) + 0.5) * 13 };
+      for (const [type, along] of [['pointerdown', 0], ['pointermove', 0.3 * zoom], ['pointerup', 0.3 * zoom]] as const) {
+        element('roll-body').dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId: 4, pointerType: 'mouse', clientX: onIt.clientX + along, clientY: onIt.clientY }),
+        );
+      }
+      expect(sketches.find(sketch?.id ?? '')?.events).toEqual(kept?.events);
+      expect(chosen()).toEqual([]);
     });
 
     it('begins a sketch of the score open, in its own bars, and leaves the score as it is written', async () => {
@@ -12492,7 +12501,7 @@ describe('AppView', () => {
       expect(runtime.controller.openedExercise).toBe(opened);
     });
 
-    it('moves the chosen note of a sketch where it is dragged, onto the beat, and only once chosen', async () => {
+    it('moves a note of a sketch where it is dragged from, onto the beat', async () => {
       const { view, metronome, clock, midi, sketches } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
@@ -12593,12 +12602,21 @@ describe('AppView', () => {
       expect(struck()).toEqual(now);
       expect(chosen()).toEqual([[60, 0]]);
 
-      // Not chosen: a finger on it moves the drawing, as it always has.
+      // Not chosen yet: taken hold of as it is pressed, and moved in the same
+      // gesture - exactly, the grid being off.
       const third = onNote(1_200, 64);
       point('pointerdown', third);
+      expect(chosen()).toEqual([[64, 1_200]]);
       point('pointermove', { x: third.x + 0.7 * 0.6 * zoom, y: third.y - 13 });
       point('pointerup', { x: third.x + 0.7 * 0.6 * zoom, y: third.y - 13 });
-      expect(struck()).toEqual(now);
+      expect(struck()).toEqual([...now.slice(0, 2), [65, (now[2]?.[1] ?? 0) + 420]]);
+      expect(chosen()).toEqual([[65, 1_620]]);
+      // And pressed and let go of without moving, it stays chosen.
+      const first = onNote(0, 60);
+      point('pointerdown', first);
+      point('pointerup', first);
+      click(first);
+      expect(chosen()).toEqual([[60, 0]]);
     });
 
     it('says so in the middle of the page when a take played to the click cannot be written down', async () => {

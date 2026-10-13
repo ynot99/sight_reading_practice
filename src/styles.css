@@ -1533,9 +1533,10 @@ textarea {
   padding: 8px 0 0;
 }
 
-/* How hard the chosen notes are, in the passage's place on a sketch. */
+/* How hard the chosen notes are, and which hand plays them, in the passage's place on a sketch. */
 .roll-velocity {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 8px 0 0;
@@ -1575,6 +1576,21 @@ textarea {
   margin-left: -1px;
   background: var(--accent);
   opacity: 0.6;
+}
+
+.roll-hands {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.roll-hands .button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.roll-hands[data-idle='true'] {
+  opacity: 0.45;
 }
 
 .roll-velocity__said {

@@ -120,6 +120,23 @@ describe('the sketches being written', () => {
     expect(next.find('a')?.beats).toEqual([]);
   });
 
+  it('keeps the hand a note is said to be played by across visits, and no hand it cannot read', () => {
+    const store = new InMemorySettingsStore();
+    const handed: MidiFileEvent[] = [
+      { kind: 'noteOn', atMs: 0, midi: 72, velocity: 89 / 127, hand: 'left' },
+      { kind: 'noteOn', atMs: 0, midi: 48, velocity: 89 / 127, hand: 'right' },
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 89 / 127 },
+    ];
+    const begun = new SketchLibrary(store).begin({ events: handed, beats: THREE }, 'Hands', 1);
+    const next = new SketchLibrary(store);
+    next.load();
+    expect(next.find(begun.id)?.events).toEqual(handed);
+
+    store.write({ version: 1, sketches: [{ id: 'a', title: 'Odd', begunAtMs: 1, events: [[0, 0, 60, 89, 3]], beats: [] }] });
+    next.load();
+    expect(next.find('a')?.events).toEqual([{ kind: 'noteOn', atMs: 0, midi: 60, velocity: 89 / 127 }]);
+  });
+
   it('deletes one, and keeps that across visits', () => {
     const store = new InMemorySettingsStore();
     const library = new SketchLibrary(store);

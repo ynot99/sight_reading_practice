@@ -1,4 +1,4 @@
-import type { HeardBeat, MidiFileEvent } from '../domain/midi/MidiFile.js';
+import type { Hand, HeardBeat, MidiFileEvent } from '../domain/midi/MidiFile.js';
 
 /*
  * How a stream of playing is written into browser storage, for every shelf
@@ -14,12 +14,17 @@ import type { HeardBeat, MidiFileEvent } from '../domain/midi/MidiFile.js';
  * derived from them on export, never the other way round, for the same
  * reason an `Exercise` and not its MusicXML is what this project keeps.
  */
-type Packed = readonly [kind: number, atMs: number, a: number, b: number];
+type Packed = readonly number[];
+
+/** A hand as a number after a press's four, where one is said: 1 the right, 2 the left. */
+const HAND_CODES: Readonly<Record<Hand, number>> = { right: 1, left: 2 };
 
 export function pack(event: MidiFileEvent): Packed {
   switch (event.kind) {
-    case 'noteOn':
-      return [0, Math.round(event.atMs), event.midi, Math.round(event.velocity * 127)];
+    case 'noteOn': {
+      const packed = [0, Math.round(event.atMs), event.midi, Math.round(event.velocity * 127)];
+      return event.hand === undefined ? packed : [...packed, HAND_CODES[event.hand]];
+    }
     case 'noteOff':
       return [1, Math.round(event.atMs), event.midi, 0];
     case 'sustain':
@@ -31,13 +36,20 @@ export function unpack(value: unknown): MidiFileEvent | null {
   if (!Array.isArray(value) || value.length < 4) {
     return null;
   }
-  const [kind, atMs, a, b] = value as readonly unknown[];
+  const [kind, atMs, a, b, hand] = value as readonly unknown[];
   if (typeof kind !== 'number' || typeof atMs !== 'number' || typeof a !== 'number' || typeof b !== 'number') {
     return null;
   }
   switch (kind) {
-    case 0:
-      return { kind: 'noteOn', atMs, midi: a, velocity: b / 127 };
+    case 0: {
+      const struck = { kind: 'noteOn' as const, atMs, midi: a, velocity: b / 127 };
+      // A hand not known is no hand said, which is what the note had before.
+      return hand === HAND_CODES.right
+        ? { ...struck, hand: 'right' }
+        : hand === HAND_CODES.left
+          ? { ...struck, hand: 'left' }
+          : struck;
+    }
     case 1:
       return { kind: 'noteOff', atMs, midi: a };
     case 2:

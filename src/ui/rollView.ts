@@ -256,6 +256,8 @@ export interface SceneNote extends SceneRowed {
   readonly open: boolean;
   /** Chosen on the drawing to be changed. */
   readonly chosen?: boolean;
+  /** Which hand plays it, where that has been said. */
+  readonly hand?: 'left' | 'right';
 }
 
 /** The gap between where a note was owed and where it was taken: see `slipBetween`. */
@@ -403,7 +405,8 @@ function noteOf(
     row: high - press.midi,
     shade: shadeOf(press),
     open: press.upAtMs === null,
-    says: `${midiToLabel(press.midi)} · ${press.verdict ?? 'not judged'}${off}`,
+    says: `${midiToLabel(press.midi)} · ${press.verdict ?? 'not judged'}${off}${press.hand === undefined ? '' : ` · ${press.hand} hand`}`,
+    ...(press.hand === undefined ? {} : { hand: press.hand }),
     ...(chosen?.some((each) => each.midi === press.midi && each.downAtMs === press.downAtMs) === true
       ? { chosen: true }
       : {}),

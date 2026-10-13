@@ -246,6 +246,9 @@ const DASHES = [3, 3];
 
 /** How round the corners of a note, a band and a capsule are. */
 const CORNER_PX = 2;
+/** The outline of a note the left hand plays: broken, as a dashed line is. */
+const LEFT_HAND_DASH: readonly number[] = [3, 2];
+
 /** How heavy the rim of a chosen note is: enough to find it among its neighbours. */
 const CHOSEN_RIM_PX = 2;
 
@@ -360,11 +363,14 @@ export function paintTheGrid(
     // Still down when the run ended, so it runs to the edge rather than stopping.
     const corners = note.open ? [CORNER_PX, 0, 0, CORNER_PX] : CORNER_PX;
     if (note.shade === 'unjudged') {
-      // An outline, because a fill in any colour is a verdict and there was not one.
+      // An outline, because a fill in any colour is a verdict and there was not one;
+      // broken for the left hand, so the two hands are told apart without one.
       paint.strokeStyle = inks.note;
       paint.lineWidth = 1;
+      paint.setLineDash(note.hand === 'left' ? LEFT_HAND_DASH : []);
       box(paint, left + 0.5, y(note.row) + 0.5, wide(note.fromMs, note.untilMs) - 1, rowPx - 1, corners);
       paint.stroke();
+      paint.setLineDash([]);
       continue;
     }
     paint.fillStyle = inkOfNote(inks, note.shade);

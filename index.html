@@ -604,6 +604,16 @@
               <div id="roll-velocity-ticks" class="roll-velocity__ticks" aria-hidden="true"></div>
             </div>
             <output id="roll-velocity-said" class="roll-velocity__said" for="roll-velocity-level"></output>
+            <!--
+              Which hand plays the chosen notes, and so which staff they are
+              written on: by their pitch unless one is said. A file saved from
+              a sketch with a hand said has a track for each.
+            -->
+            <div id="roll-hands" class="roll-hands" role="group" aria-label="Which hand plays the chosen notes">
+              <button id="roll-hand-left" type="button" class="button" aria-pressed="false">L</button>
+              <button id="roll-hand-pitch" type="button" class="button" aria-pressed="false">Auto</button>
+              <button id="roll-hand-right" type="button" class="button" aria-pressed="false">R</button>
+            </div>
           </div>
           <div id="roll-passage" class="roll-passage">
             <button id="roll-from" type="button" class="button">Start here</button>

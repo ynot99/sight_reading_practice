@@ -29,6 +29,8 @@ export interface MidiFileDocument {
   readonly fifths: number;
   readonly tempoBpm: number;
   readonly title: string | null;
+  /** Each track's own name where it gives one, by the track's number. */
+  readonly trackNames: readonly (string | null)[];
 }
 
 const HEADER = 0x4d546864; // "MThd"
@@ -133,6 +135,8 @@ interface TrackResult {
   fifths: number | null;
   microsecondsPerQuarter: number | null;
   name: string | null;
+  /** Its track name, apart from any other text: a file's title may be either. */
+  trackName: string | null;
 }
 
 function decodeText(bytes: Uint8Array): string {
@@ -156,6 +160,7 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
     fifths: null,
     microsecondsPerQuarter: null,
     name: null,
+    trackName: null,
   };
   // Keyed by channel and pitch: the same pitch on two channels is two notes.
   const open = new Map<number, OpenNote>();
@@ -207,8 +212,11 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
         // Signed: one byte, two's complement, flats negative.
         const raw = data[0] ?? 0;
         result.fifths = raw > 127 ? raw - 256 : raw;
-      } else if ((type === 0x03 || type === 0x01) && result.name === null && size > 0) {
-        result.name = decodeText(data);
+      } else if ((type === 0x03 || type === 0x01) && size > 0) {
+        result.name ??= decodeText(data);
+        if (type === 0x03) {
+          result.trackName ??= decodeText(data);
+        }
       }
       continue;
     }
@@ -312,6 +320,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
   let fifths: number | null = null;
   let microsecondsPerQuarter: number | null = null;
   let title: string | null = null;
+  const trackNames: (string | null)[] = [];
   let track = 0;
 
   while (!bytes.done) {
@@ -331,6 +340,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
     fifths = fifths ?? read.fifths;
     microsecondsPerQuarter = microsecondsPerQuarter ?? read.microsecondsPerQuarter;
     title = title ?? read.name;
+    trackNames.push(read.trackName);
     track += 1;
   }
 
@@ -350,5 +360,6 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
         ? DEFAULT_TEMPO_BPM
         : Math.round(60_000_000 / microsecondsPerQuarter),
     title,
+    trackNames,
   };
 }

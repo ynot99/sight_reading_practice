@@ -45,7 +45,7 @@ import type { PerformanceReport } from '../domain/scoring/PerformanceReport.js';
 import { COMMON_KEYS, KeySignature } from '../domain/model/KeySignature.js';
 import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
-import { barsAreHeardIn, writeMidiFile, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
+import { barsAreHeardIn, writeMidiFile, type Hand, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
 import { FREE_CLICK_STEP_BPM, LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
@@ -1985,6 +1985,10 @@ export class AppView {
     rollVelocityLevel: HTMLInputElement;
     rollVelocityTicks: HTMLElement;
     rollVelocitySaid: HTMLOutputElement;
+    rollHands: HTMLElement;
+    rollHandLeft: HTMLButtonElement;
+    rollHandPitch: HTMLButtonElement;
+    rollHandRight: HTMLButtonElement;
     rollDelete: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
     rollTitle: HTMLElement;
@@ -2336,6 +2340,10 @@ export class AppView {
       rollVelocityLevel: requireElement(doc, 'roll-velocity-level'),
       rollVelocityTicks: requireElement(doc, 'roll-velocity-ticks'),
       rollVelocitySaid: requireElement(doc, 'roll-velocity-said'),
+      rollHands: requireElement(doc, 'roll-hands'),
+      rollHandLeft: requireElement(doc, 'roll-hand-left'),
+      rollHandPitch: requireElement(doc, 'roll-hand-pitch'),
+      rollHandRight: requireElement(doc, 'roll-hand-right'),
       rollDelete: requireElement(doc, 'roll-delete'),
       rollUndo: requireElement(doc, 'roll-undo'),
       rollTitle: requireElement(doc, 'roll-title'),
@@ -8529,6 +8537,15 @@ export class AppView {
     this.listen(this.el.rollVelocityLevel, 'change', () => {
       this.setTheLoudnessAsked();
     });
+    for (const [button, hand] of [
+      [this.el.rollHandLeft, 'left'],
+      [this.el.rollHandPitch, null],
+      [this.el.rollHandRight, 'right'],
+    ] as const) {
+      this.listen(button, 'click', () => {
+        this.giveTheChosenToAHand(hand);
+      });
+    }
     this.listen(this.el.scoresShowScores, 'click', () => {
       this.showTheList('scores');
     });
@@ -11599,18 +11616,65 @@ export class AppView {
     this.el.rollVelocityLevel.setAttribute('aria-label', this.el.rollVelocityLevel.title);
     this.el.rollVelocityLevel.value = String(theMiddleOf(loudness));
     this.markTheLoudness(loudness);
+    this.sayWhichHand();
   }
 
-  /** How hard each chosen note of the sketch is struck, from 1 to 127. */
-  private theLoudnessOfTheChosen(): number[] {
+  /**
+   * The three hand buttons: the one the chosen notes all are pressed - by
+   * their pitch where none is said - and none where they differ; dimmed, with
+   * the reason, while none is chosen.
+   */
+  private sayWhichHand(): void {
+    const hands = this.theChosenKeys().map((key) => key.hand ?? null);
+    const idle = hands.length === 0;
+    const all = (hand: Hand | null): boolean => !idle && hands.every((each) => each === hand);
+    if (idle) {
+      this.el.rollHands.dataset['idle'] = 'true';
+    } else {
+      delete this.el.rollHands.dataset['idle'];
+    }
+    const first = idle ? ' Choose a note first.' : '';
+    for (const [button, hand, says] of [
+      [this.el.rollHandLeft, 'left', 'Left hand: the chosen notes on the lower staff.'],
+      [this.el.rollHandPitch, null, 'By pitch: below middle C the left hand, from it the right.'],
+      [this.el.rollHandRight, 'right', 'Right hand: the chosen notes on the upper staff.'],
+    ] as const) {
+      button.setAttribute('aria-pressed', String(all(hand)));
+      button.title = `${says}${first}`;
+      button.setAttribute('aria-label', button.title);
+    }
+  }
+
+  /** The chosen keys of the sketch, as they are in it now. */
+  private theChosenKeys(): KeyOfTheTake[] {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
     if (sketch === undefined || stored === null) {
       return [];
     }
-    return theKeysOfTheTake(stored.events)
-      .filter((key) => sketch.chosen.some((each) => sameKey(each, key)))
-      .map((key) => Math.round(key.velocity * 127));
+    return theKeysOfTheTake(stored.events).filter((key) => sketch.chosen.some((each) => sameKey(each, key)));
+  }
+
+  /** Gives the chosen notes to a hand, or back to their pitch: one change. */
+  private giveTheChosenToAHand(hand: Hand | null): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const keys = this.theChosenKeys();
+    if (sketch === undefined || stored === null || keys.length === 0 || keys.every((key) => (key.hand ?? null) === hand)) {
+      return;
+    }
+    const events = takeWithTheKeysChanged(
+      stored.events,
+      keys.map((key) => ({ key, midi: key.midi, downAtMs: key.downAtMs, upAtMs: key.upAtMs, hand })),
+    );
+    if (events !== null) {
+      this.changeTheSketchShowing(events, [...sketch.before, stored.events], sketch.chosen);
+    }
+  }
+
+  /** How hard each chosen note of the sketch is struck, from 1 to 127. */
+  private theLoudnessOfTheChosen(): number[] {
+    return this.theChosenKeys().map((key) => Math.round(key.velocity * 127));
   }
 
   /** The marks over the slider, and the number beside it: one, or the softest to the loudest. */
@@ -11652,15 +11716,13 @@ export class AppView {
     if (by === 0) {
       return;
     }
-    const changes: KeyChange[] = theKeysOfTheTake(stored.events)
-      .filter((key) => sketch.chosen.some((each) => sameKey(each, key)))
-      .map((key) => ({
-        key,
-        midi: key.midi,
-        downAtMs: key.downAtMs,
-        upAtMs: key.upAtMs,
-        velocity: clampTheLoudness(Math.round(key.velocity * 127) + by) / 127,
-      }));
+    const changes: KeyChange[] = this.theChosenKeys().map((key) => ({
+      key,
+      midi: key.midi,
+      downAtMs: key.downAtMs,
+      upAtMs: key.upAtMs,
+      velocity: clampTheLoudness(Math.round(key.velocity * 127) + by) / 127,
+    }));
     const events = takeWithTheKeysChanged(stored.events, changes);
     if (events !== null) {
       this.changeTheSketchShowing(events, [...sketch.before, stored.events], sketch.chosen);

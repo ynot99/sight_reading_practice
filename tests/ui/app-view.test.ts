@@ -4592,6 +4592,84 @@ describe('AppView', () => {
       element<HTMLButtonElement>('roll-close').click();
     });
 
+    it('gives the chosen notes of a sketch to a hand, so they are written on its staff', async () => {
+      const { view, runtime, sketches, files } = createRig();
+      await view.initialize();
+      const played = [
+        [0, 72],
+        [500, 76],
+      ].flatMap(([atMs = 0, midi = 0]) => [
+        { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+        { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+      ]);
+      const sketch = sketches.begin({ events: played, beats: [] }, 'Crossed', 1);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const hands = element('roll-hands');
+      const [left, pitch, right] = ['roll-hand-left', 'roll-hand-pitch', 'roll-hand-right'].map((id) => element<HTMLButtonElement>(id));
+      const pressed = (): string[] => [left, pitch, right].map((button) => button?.getAttribute('aria-pressed') ?? '');
+      const handsOf = (): (string | undefined)[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [event.hand] : []));
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const scrolledDown = (): number =>
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const tapOn = (fromMs: number): void => {
+        const note = view.rollScene?.notes.find((each) => each.fromMs === fromMs);
+        element('roll-body').dispatchEvent(
+          new MouseEvent('click', { bubbles: true, clientX: ((fromMs + 100) / 1000) * zoom, clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown() }),
+        );
+      };
+
+      // Nothing chosen: dimmed, saying so, and doing nothing.
+      expect(hands.dataset['idle']).toBe('true');
+      expect(left?.title).toBe('Left hand: the chosen notes on the lower staff. Choose a note first.');
+      expect(left?.getAttribute('aria-label')).toBe(left?.title);
+      left?.click();
+      expect(handsOf()).toEqual([undefined, undefined]);
+      expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
+
+      tapOn(0);
+      tapOn(500);
+      expect(hands.dataset['idle']).toBeUndefined();
+      expect(pitch?.title).toBe('By pitch: below middle C the left hand, from it the right.');
+      expect(pressed()).toEqual(['false', 'true', 'false']);
+      left?.click();
+      expect(handsOf()).toEqual(['left', 'left']);
+      expect(pressed()).toEqual(['true', 'false', 'false']);
+      expect(view.rollScene?.notes.map((note) => note.hand)).toEqual(['left', 'left']);
+      // Pressed again, nothing to change, and nothing to undo for it.
+      left?.click();
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(handsOf()).toEqual([undefined, undefined]);
+      tapOn(0);
+      tapOn(500);
+      left?.click();
+
+      // One of them back to its pitch: the two differ, and neither is pressed.
+      tapOn(0);
+      pitch?.click();
+      expect(handsOf()).toEqual(['left', undefined]);
+      tapOn(0);
+      expect(pressed()).toEqual(['false', 'false', 'false']);
+      right?.click();
+      expect(handsOf()).toEqual(['right', 'right']);
+      left?.click();
+      element<HTMLButtonElement>('roll-close').click();
+
+      // Saved, a track for each hand; written down, on the lower staff.
+      element<HTMLButtonElement>('focus-scores').click();
+      rowButton('sketches-list', 'Save this sketch as a MIDI file').click();
+      expect(readMidiFile(files.saved[0]?.bytes ?? new Uint8Array()).trackNames).toEqual(['Right hand', 'Left hand']);
+      rowButton('sketches-list', 'Write this sketch down as a score').click();
+      await waitFor(() => runtime.controller.openedExercise?.title === 'Crossed');
+      const written = runtime.controller.openedExercise;
+      const staves = written === null ? [] : buildTimeline(written).steps.flatMap((step) => step.notes.map((note) => note.staffNumber));
+      expect(staves).toEqual([2, 2]);
+    });
+
     it('counts the bar out over the drawing, and can be put away', async () => {
       // A row of squares saying where written time has got to, over a picture
       // of where the reader actually got to. His: "квадратики які

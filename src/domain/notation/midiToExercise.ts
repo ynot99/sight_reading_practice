@@ -7,6 +7,7 @@ import { Pitch } from '../model/Pitch.js';
 import { TimeSignature } from '../model/TimeSignature.js';
 import { splitIntoRests } from '../generation/RhythmFiller.js';
 import type { MidiFileDocument, MidiFileNote } from '../midi/readMidiFile.js';
+import { HANDS_SPLIT_AT_MIDI } from '../midi/MidiFile.js';
 import type { ImportWarning, ImportedScore } from './MusicXmlParser.js';
 
 export interface MidiImportOptions {
@@ -21,7 +22,7 @@ export interface MidiImportOptions {
   readonly splitAtMidi?: number;
 }
 
-const DEFAULT_SPLIT_MIDI = 60;
+const DEFAULT_SPLIT_MIDI = HANDS_SPLIT_AT_MIDI;
 const RIGHT_HAND = 1;
 const LEFT_HAND = 2;
 
@@ -145,7 +146,21 @@ function snapToBeat(
 function assignStaves(
   notes: readonly MidiFileNote[],
   splitAtMidi: number,
+  trackNames: readonly (string | null)[] = [],
 ): { readonly byNote: ReadonlyMap<MidiFileNote, number>; readonly fromPitch: boolean } {
+  // A track that says which hand it is says it outright, whatever its notes
+  // are: a left hand may climb over the right, or one hand play everything.
+  const handOf = (track: number): number | null => {
+    const name = trackNames[track] ?? '';
+    return /\bright\b/i.test(name) ? RIGHT_HAND : /\bleft\b/i.test(name) ? LEFT_HAND : null;
+  };
+  if (trackNames.some((_, track) => handOf(track) !== null)) {
+    const byNote = new Map<MidiFileNote, number>();
+    for (const note of notes) {
+      byNote.set(note, handOf(note.track) ?? (note.midi < splitAtMidi ? LEFT_HAND : RIGHT_HAND));
+    }
+    return { byNote, fromPitch: false };
+  }
   const tracks = new Map<number, MidiFileNote[]>();
   for (const note of notes) {
     const bucket = tracks.get(note.track) ?? [];
@@ -413,7 +428,7 @@ export function midiToExercise(
   const bars = Math.max(1, Math.ceil(lastTick / ticksPerMeasure));
   const preferFlats = document.fifths < 0;
 
-  const { byNote, fromPitch } = assignStaves(notes, splitAtMidi);
+  const { byNote, fromPitch } = assignStaves(notes, splitAtMidi, document.trackNames);
   const right = notes.filter((note) => byNote.get(note) === RIGHT_HAND);
   const left = notes.filter((note) => byNote.get(note) === LEFT_HAND);
 

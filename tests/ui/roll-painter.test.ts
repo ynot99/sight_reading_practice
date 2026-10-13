@@ -177,6 +177,28 @@ describe('painting the grid', () => {
     expect(rim?.wide).toBeCloseTo(68, 6);
   });
 
+  it('draws the outline of a note the left hand plays broken, and others whole', () => {
+    const scene = sceneOf(
+      roll({
+        presses: [
+          press({ verdict: null, hand: 'left' }),
+          press({ midi: MIDI.C4 + 2, verdict: null, hand: 'right' }),
+          press({ midi: MIDI.C4 + 4, verdict: null }),
+        ],
+      }),
+    );
+    const { surface: canvas, recorder } = surface();
+
+    paintTheGrid(canvas, scene, at(), INKS, 1);
+
+    expect(recorder.inked('note').map((mark) => mark.dashes ?? [])).toEqual([[3, 2], [], []]);
+    expect(scene.notes.map((note) => note.says)).toEqual([
+      'C4 · not judged · left hand',
+      'D4 · not judged · right hand',
+      'E4 · not judged',
+    ]);
+  });
+
   it('colours each press by its verdict', () => {
     const scene = sceneOf(
       roll({

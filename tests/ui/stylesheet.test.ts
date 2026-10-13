@@ -2162,6 +2162,11 @@ describe('searching the settings', () => {
     expect(body('.roll-velocity__ticks')).toMatch(/pointer-events\s*:\s*none/);
     expect(body('.roll-velocity__tick')).toMatch(/position\s*:\s*absolute/);
     expect(body(".roll-velocity[data-idle='true'] .roll-velocity__track")).toMatch(/opacity\s*:\s*0?\.\d+/);
+    // The hand the chosen notes are in, pressed in the accent; all three dimmed with none chosen.
+    expect(body(".roll-hands .button[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
+    expect(body(".roll-hands[data-idle='true']")).toMatch(/opacity\s*:\s*0?\.\d+/);
+    // And the row wraps on a phone rather than running off it.
+    expect(body('.roll-velocity')).toMatch(/flex-wrap\s*:\s*wrap/);
   });
 
   it('shows the mouse what it would take hold of on a sketch: a note, or its end', () => {

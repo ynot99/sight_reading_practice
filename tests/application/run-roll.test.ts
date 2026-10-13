@@ -1259,6 +1259,19 @@ describe('changing a recording', () => {
     ]);
   });
 
+  it('gives a key to a hand, back to its pitch, or leaves its hand as it was', () => {
+    const handed: MidiFileEvent = { kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.7, hand: 'left' };
+    const events = [handed, off(300, MIDI.C4), on(500, MIDI.E4), off(800, MIDI.E4)];
+    const c = { key: { midi: MIDI.C4, downAtMs: 0 }, midi: MIDI.C4, downAtMs: 0, upAtMs: 300 };
+    const e = { key: { midi: MIDI.E4, downAtMs: 500 }, midi: MIDI.E4, downAtMs: 500, upAtMs: 800 };
+
+    expect(theKeysOfTheTake(events).map((key) => key.hand)).toEqual(['left', undefined]);
+    expect(rollOfTheTake({ events, beats: [] }).presses.map((press) => press.hand)).toEqual(['left', undefined]);
+    expect(takeWithTheKeysChanged(events, [{ ...e, hand: 'right' }])?.[2]).toEqual({ ...on(500, MIDI.E4), hand: 'right' });
+    expect(takeWithTheKeysChanged(events, [{ ...c, hand: null }])?.[0]).toEqual(on(0, MIDI.C4));
+    expect(takeWithTheKeysChanged(events, [{ ...c, downAtMs: 100, upAtMs: 400 }])?.[0]).toEqual({ ...handed, atMs: 100 });
+  });
+
   it('changes nothing where any key named is not there', () => {
     const events = [on(0, MIDI.C4), off(150, MIDI.C4)];
 

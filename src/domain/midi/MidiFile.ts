@@ -8,9 +8,31 @@ import { DomainError } from '../../shared/errors.js';
  * came from and when it was delivered, neither of which belongs in a file.
  */
 export type MidiFileEvent =
-  | { readonly kind: 'noteOn'; readonly atMs: number; readonly midi: number; readonly velocity: number }
+  | {
+      readonly kind: 'noteOn';
+      readonly atMs: number;
+      readonly midi: number;
+      readonly velocity: number;
+      /** Which hand plays it, where that has been said: see {@link HANDS_SPLIT_AT_MIDI}. */
+      readonly hand?: Hand;
+    }
   | { readonly kind: 'noteOff'; readonly atMs: number; readonly midi: number }
   | { readonly kind: 'sustain'; readonly atMs: number; readonly value: number };
+
+/** The two hands, as the two staves of a piano score are theirs. */
+export type Hand = 'left' | 'right';
+
+/**
+ * The lowest key of the right hand, for a note nothing says the hand of:
+ * middle C, where the two staves of a piano score meet.
+ */
+export const HANDS_SPLIT_AT_MIDI = 60;
+
+/** What each hand's track is called in a file, which is how a reader knows it. */
+export const TRACK_OF_A_HAND: Readonly<Record<Hand, string>> = {
+  right: 'Right hand',
+  left: 'Left hand',
+};
 
 /**
  * A beat of a click the playing was heard against, on the same clock as the
@@ -331,6 +353,10 @@ function onTheClick(grid: readonly HeardBeat[]): (ms: number) => number {
  *
  * Format 0 - one track, every channel in it - because a capture of one
  * keyboard is one stream, and format 0 is the shape every program reads.
+ * Where any note says which hand plays it, format 1 instead: a track for
+ * each hand, named so (see {@link TRACK_OF_A_HAND}), so a notation program -
+ * this one included - puts each on its own staff, and a sequencer shows
+ * them apart.
  *
  * Pure by design, like {@link ../notation/MusicXmlSerializer.js}: bytes in,
  * bytes out, no clock and no I/O, so a whole recording can be asserted on
@@ -348,17 +374,72 @@ export function writeMidiFile(
   // A take opens on its first note; a pedal already down is said at the
   // same moment.
   const grid = options.beats === undefined ? null : theClickOfTheTake(events, options.beats);
-
-  const ordered = inTheOrderPlayed(events);
-
   const marks = grid === null ? [] : theMarksOfTheClick(grid);
-  const track: number[] = [];
-  if (grid === null) {
-    // Tempo, so the notes mean the same thing wherever the file is opened.
-    // A click's own is among its marks.
-    track.push(...variableLength(0), ...tempoMark(Math.round(MICROSECONDS_PER_MINUTE / tempoBpm)));
+  // Tempo, so the notes mean the same thing wherever the file is opened. A
+  // click's own is among its marks.
+  const opening =
+    grid === null ? [...variableLength(0), ...tempoMark(Math.round(MICROSECONDS_PER_MINUTE / tempoBpm))] : [];
+  // Asked again for each track: it keeps its place between asks, in time.
+  const ticks = (): ((ms: number) => number) =>
+    grid === null ? (ms: number) => Math.round(ms / msPerTick) : onTheClick(grid);
+  const ordered = inTheOrderPlayed(events);
+  const lastTick = Math.max(0, ...ordered.map((event) => Math.max(0, ticks()(event.atMs))));
+
+  const hands = theHandsOf(ordered);
+  if (hands === null) {
+    return theFile(0, [theTrack(ordered, { marks, opening, name: options.trackName, tickOf: ticks(), lastTick })]);
   }
-  const name = options.trackName;
+  return theFile(1, [
+    // The tempo and the bars go with the first, as a conductor's do.
+    theTrack(hands.right, { marks, opening, name: TRACK_OF_A_HAND.right, tickOf: ticks(), lastTick }),
+    theTrack(hands.left, { marks: [], opening: [], name: TRACK_OF_A_HAND.left, tickOf: ticks(), lastTick }),
+  ]);
+}
+
+/**
+ * The events of each hand, where any note says which hand plays it; `null`
+ * where none does. A note that does not say is the hand its pitch is in (see
+ * {@link HANDS_SPLIT_AT_MIDI}), a release goes with the press it ends, and
+ * the pedal with the right hand, which is the track a file's pedal is
+ * looked for on first.
+ */
+function theHandsOf(
+  ordered: readonly MidiFileEvent[],
+): { readonly right: readonly MidiFileEvent[]; readonly left: readonly MidiFileEvent[] } | null {
+  if (!ordered.some((event) => event.kind === 'noteOn' && event.hand !== undefined)) {
+    return null;
+  }
+  const right: MidiFileEvent[] = [];
+  const left: MidiFileEvent[] = [];
+  const open = new Map<number, Hand[]>();
+  const byPitch = (midi: number): Hand => (midi >= HANDS_SPLIT_AT_MIDI ? 'right' : 'left');
+  for (const event of ordered) {
+    let hand: Hand = 'right';
+    if (event.kind === 'noteOn') {
+      hand = event.hand ?? byPitch(event.midi);
+      open.set(event.midi, [...(open.get(event.midi) ?? []), hand]);
+    } else if (event.kind === 'noteOff') {
+      hand = open.get(event.midi)?.shift() ?? byPitch(event.midi);
+    }
+    (hand === 'right' ? right : left).push(event);
+  }
+  return { right, left };
+}
+
+/** One track's bytes: its opening, its name, its events, and the marks of the click among them. */
+function theTrack(
+  ordered: readonly MidiFileEvent[],
+  given: {
+    readonly marks: readonly { readonly tick: number; readonly bytes: readonly number[] }[];
+    readonly opening: readonly number[];
+    readonly name: string | undefined;
+    readonly tickOf: (ms: number) => number;
+    /** The file's last tick, which the marks are written up to wherever this track ends. */
+    readonly lastTick: number;
+  },
+): number[] {
+  const track: number[] = [...given.opening];
+  const { marks } = given;
   let previousTick = 0;
   let marked = 0;
   const markUpTo = (tick: number): void => {
@@ -368,14 +449,13 @@ export function writeMidiFile(
       marked += 1;
     }
   };
+  const name = given.name;
   if (name !== undefined && name.length > 0) {
     const text = ascii(name);
     track.push(...variableLength(0), 0xff, 0x03, ...variableLength(text.length), ...text);
   }
-
-  const tickOf = grid === null ? (ms: number) => Math.round(ms / msPerTick) : onTheClick(grid);
   for (const event of ordered) {
-    const tick = Math.max(0, tickOf(event.atMs));
+    const tick = Math.max(0, given.tickOf(event.atMs));
     markUpTo(tick);
     track.push(...variableLength(Math.max(0, tick - previousTick)));
     previousTick = Math.max(previousTick, tick);
@@ -391,19 +471,22 @@ export function writeMidiFile(
         break;
     }
   }
+  markUpTo(given.lastTick);
   track.push(...variableLength(0), 0xff, 0x2f, 0x00);
+  return track;
+}
 
+/** A file of the format and tracks given, at this writer's ticks to the quarter. */
+function theFile(format: 0 | 1, tracks: readonly (readonly number[])[]): Uint8Array {
   return Uint8Array.from([
     ...ascii('MThd'),
     ...uint32(6),
     0x00,
+    format,
     0x00,
-    0x00,
-    0x01,
+    tracks.length,
     (TICKS_PER_QUARTER >> 8) & 0xff,
     TICKS_PER_QUARTER & 0xff,
-    ...ascii('MTrk'),
-    ...uint32(track.length),
-    ...track,
+    ...tracks.flatMap((track) => [...ascii('MTrk'), ...uint32(track.length), ...track]),
   ]);
 }

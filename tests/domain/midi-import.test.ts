@@ -351,6 +351,57 @@ describe('a file that separates the hands itself', () => {
   });
 });
 
+describe('a file that names its hands', () => {
+  it('puts each hand on its staff by its name, whatever its notes are', () => {
+    // The left hand above the right, crossed: named, they are where they are named.
+    const crossed = twoTracks(
+      [0x00, 0xff, 0x03, 0x0a, ...[...'Right hand'].map((c) => c.charCodeAt(0)), 0x00, 0x90, 48, 80, 0x83, 0x60, 0x80, 48, 0x40],
+      [0x00, 0xff, 0x03, 0x09, ...[...'Left hand'].map((c) => c.charCodeAt(0)), 0x00, 0x90, 72, 80, 0x83, 0x60, 0x80, 72, 0x40],
+    );
+    const document = readMidiFile(crossed);
+    expect(document.trackNames).toEqual(['Right hand', 'Left hand']);
+
+    const { exercise, warnings } = midiToExercise(document, 'Crossed');
+    const pitchesOn = (staff: number): number[] =>
+      buildTimeline(exercise)
+        .steps.flatMap((step) => step.notes)
+        .filter((note) => note.staffNumber === staff)
+        .map((note) => note.midi);
+    expect(pitchesOn(1)).toEqual([48]);
+    expect(pitchesOn(2)).toEqual([72]);
+    expect(warnings.map((warning) => warning.kind)).not.toContain('split-by-pitch');
+  });
+
+  it('reads a hand only from a track name, not from any other text in the track', () => {
+    // A text event (type 1) saying "Left hand" over a high note is a remark,
+    // not the track's name: the note goes by its pitch.
+    const remark = twoTracks(
+      [0x00, 0xff, 0x01, 0x09, ...[...'Left hand'].map((c) => c.charCodeAt(0)), 0x00, 0x90, 72, 80, 0x83, 0x60, 0x80, 72, 0x40],
+      [0x00, 0x90, 40, 80, 0x83, 0x60, 0x80, 40, 0x40],
+    );
+    const document = readMidiFile(remark);
+    expect(document.trackNames).toEqual([null, null]);
+    const staffOf = (midi: number): number | undefined =>
+      buildTimeline(midiToExercise(document, 'Remark').exercise)
+        .steps.flatMap((step) => step.notes)
+        .find((note) => note.midi === midi)?.staffNumber;
+    expect([staffOf(72), staffOf(40)]).toEqual([1, 2]);
+  });
+
+  it('puts every note of one named hand on its staff, and a note on a track of no name by its pitch', () => {
+    const left = twoTracks(
+      [0x00, 0xff, 0x03, 0x09, ...[...'Left hand'].map((c) => c.charCodeAt(0)), 0x00, 0x90, 72, 80, 0x83, 0x60, 0x80, 72, 0x40],
+      [0x00, 0x90, 74, 80, 0x83, 0x60, 0x80, 74, 0x40, 0x00, 0x90, 40, 80, 0x83, 0x60, 0x80, 40, 0x40],
+    );
+    const { exercise } = midiToExercise(readMidiFile(left), 'Left');
+    const staffOf = (midi: number): number | undefined =>
+      buildTimeline(exercise)
+        .steps.flatMap((step) => step.notes)
+        .find((note) => note.midi === midi)?.staffNumber;
+    expect([staffOf(72), staffOf(74), staffOf(40)]).toEqual([2, 1, 2]);
+  });
+});
+
 describe('a take played to a click, written down', () => {
   it('comes out in the bars of the click, each beat played where it was meant', () => {
     // Bars of three at 90 bpm, the playing a little uneven, as a hand is,

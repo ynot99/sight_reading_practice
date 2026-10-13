@@ -3,11 +3,13 @@ import {
   barsAreHeardIn,
   damperIsDown,
   theClickOfTheTake,
+  TRACK_OF_A_HAND,
   writeMidiFile,
   type HeardBeat,
   type MidiFileEvent,
 } from '../../src/domain/midi/MidiFile.js';
 import { DomainError } from '../../src/shared/errors.js';
+import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
 
 function ascii(bytes: Uint8Array, from: number, length: number): string {
   return [...bytes.slice(from, from + length)].map((byte) => String.fromCharCode(byte)).join('');
@@ -375,6 +377,68 @@ describe('the beats a take is written in', () => {
 
   it('says nothing for a click that says nothing', () => {
     expect(theClickOfTheTake(struck(0), click(0, 600, 1))).toBeNull();
+  });
+});
+
+describe('a file of two hands', () => {
+  /** A track's events, by its place among the file's tracks. */
+  function trackOf(bytes: Uint8Array, which: number): Uint8Array {
+    let at = 14;
+    for (let track = 0; ; track += 1) {
+      const length = ((bytes[at + 4] ?? 0) << 24) | ((bytes[at + 5] ?? 0) << 16) | ((bytes[at + 6] ?? 0) << 8) | (bytes[at + 7] ?? 0);
+      if (track === which) {
+        // Put back behind a header of its own, so the format 0 readers here read it.
+        return Uint8Array.from([...bytes.slice(0, 14), ...bytes.slice(at, at + 8 + length)]);
+      }
+      at += 8 + length;
+    }
+  }
+
+  it('gives each hand a track of its own, named, where any note says which hand plays it', () => {
+    const events: MidiFileEvent[] = [
+      { kind: 'sustain', atMs: 0, value: 1 },
+      // Said: a high note the left hand plays.
+      { kind: 'noteOn', atMs: 0, midi: 72, velocity: 0.5, hand: 'left' },
+      // Not said: each the hand its pitch is in, middle C the right's.
+      { kind: 'noteOn', atMs: 0, midi: 59, velocity: 0.5 },
+      { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+      { kind: 'noteOff', atMs: 500, midi: 72 },
+      { kind: 'noteOff', atMs: 500, midi: 60 },
+      { kind: 'noteOff', atMs: 3_000, midi: 59 },
+    ];
+    // The pace doubles at 2.5 s, after the right hand has finished.
+    const beats = [...click(0, 500, 5), ...click(2_500, 250, 4, 4, 1)];
+    const bytes = writeMidiFile(events, { beats });
+
+    expect([...bytes.slice(8, 12)]).toEqual([0, 1, 0, 2]);
+    const read = readMidiFile(bytes);
+    expect(read.trackNames).toEqual([TRACK_OF_A_HAND.right, TRACK_OF_A_HAND.left]);
+    expect(read.notes.map((note) => [note.midi, note.track])).toEqual([
+      [59, 1],
+      [60, 0],
+      [72, 1],
+    ]);
+    expect(read.notes.find((note) => note.midi === 59)?.endTicks).toBe(7 * BEAT);
+    // The pedal goes with the right hand, and so do the tempo and the bars -
+    // to the end of the file, past where that hand stops.
+    const right = trackOf(bytes, 0);
+    const left = trackOf(bytes, 1);
+    expect(readMidiFile(right).pedal).toHaveLength(1);
+    expect(temposIn(right)).toEqual([
+      { tick: 0, microseconds: 500_000 },
+      { tick: 5 * BEAT, microseconds: 250_000 },
+    ]);
+    expect(temposIn(left)).toEqual([]);
+    expect(barsIn(right)).toEqual([{ tick: 0, beats: 4 }]);
+  });
+
+  it('writes one track as it always did where no note says', () => {
+    const events = struck(0, 500);
+
+    expect(writeMidiFile(events, { trackName: 'Idea' })).toEqual(
+      writeMidiFile(events.map((event) => ({ ...event })), { trackName: 'Idea' }),
+    );
+    expect([...writeMidiFile(events).slice(8, 12)]).toEqual([0, 0, 0, 1]);
   });
 });
 

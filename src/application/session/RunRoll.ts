@@ -1,5 +1,5 @@
 import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
-import { inTheOrderPlayed, theClickOfTheTake, type MidiFileEvent } from '../../domain/midi/MidiFile.js';
+import { inTheOrderPlayed, theClickOfTheTake, type Hand, type MidiFileEvent } from '../../domain/midi/MidiFile.js';
 import { Duration } from '../../domain/model/Duration.js';
 import {
   barLines,
@@ -49,6 +49,8 @@ export interface RolledPress {
   readonly stepIndex: number | null;
   /** How far from the beat, where the mode judges timing at all. */
   readonly deviationMs: number | null;
+  /** Which hand plays it, where that has been said: a sketch's notes may say. */
+  readonly hand?: Hand;
 }
 
 /** One click of the pulse, at the moment it was heard. */
@@ -885,6 +887,7 @@ export function rollOfTheTake(take: Pick<Take, 'events' | 'beats'>, beatsAfter =
     verdict: null,
     stepIndex: null,
     deviationMs: null,
+    ...(key.hand === undefined ? {} : { hand: key.hand }),
   }));
   const pedal: RolledPedal[] = [];
   let pedalDownAt: number | null = null;
@@ -919,6 +922,7 @@ export function rollOfTheTake(take: Pick<Take, 'events' | 'beats'>, beatsAfter =
 export interface KeyOfTheTake {
   readonly midi: number;
   readonly velocity: number;
+  readonly hand?: Hand;
   readonly downAtMs: number;
   readonly upAtMs: number | null;
   readonly on: number;
@@ -943,6 +947,7 @@ export function theKeysOfTheTake(events: readonly MidiFileEvent[]): readonly Key
       keys.push({
         midi: event.midi,
         velocity: event.velocity,
+        ...(event.hand === undefined ? {} : { hand: event.hand }),
         downAtMs: event.atMs,
         upAtMs: null,
         on: at,
@@ -977,6 +982,8 @@ export interface KeyChange {
   readonly downAtMs: number;
   readonly upAtMs: number | null;
   readonly velocity?: number;
+  /** The hand that plays it, `null` for whichever its pitch is in; left as it was where not said. */
+  readonly hand?: Hand | null;
 }
 
 /** Each named key's place in the take's pairing, or `null` where any is not there. */
@@ -1035,11 +1042,14 @@ export function takeWithTheKeysChanged(
     if (key === undefined || struck?.kind !== 'noteOn') {
       return;
     }
+    const { hand: was, ...rest } = struck;
+    const hand = change.hand === undefined ? was : (change.hand ?? undefined);
     changed.set(key.on, {
-      ...struck,
+      ...rest,
       atMs: change.downAtMs,
       midi: change.midi,
       velocity: change.velocity ?? struck.velocity,
+      ...(hand === undefined ? {} : { hand }),
     });
     if (change.upAtMs === null) {
       return;

@@ -6021,7 +6021,27 @@ export class AppView {
       // The beat a minute as a score marks it, a crotchet and its number,
       // which fits where the percentage does: the row may not change size.
       const bpm = this.runtime.controller.settings.freePlayBpm;
-      this.el.focusTempo.value = `♩${String(bpm)}`;
+      // The crotchet drawn rather than typed: the font's own was a speck at
+      // the digits' size, and larger it lost its stem. The bpm is said in
+      // words in the title.
+      const svg = 'http://www.w3.org/2000/svg';
+      const note = this.doc.createElementNS(svg, 'svg');
+      note.setAttribute('class', 'focus-bar__note');
+      note.setAttribute('viewBox', '0 0 10 24');
+      note.setAttribute('aria-hidden', 'true');
+      const head = this.doc.createElementNS(svg, 'ellipse');
+      head.setAttribute('cx', '4.6');
+      head.setAttribute('cy', '19.5');
+      head.setAttribute('rx', '4.2');
+      head.setAttribute('ry', '3.1');
+      head.setAttribute('transform', 'rotate(-22 4.6 19.5)');
+      const stem = this.doc.createElementNS(svg, 'rect');
+      stem.setAttribute('x', '7.4');
+      stem.setAttribute('y', '1');
+      stem.setAttribute('width', '1.5');
+      stem.setAttribute('height', '18');
+      note.append(head, stem);
+      this.el.focusTempo.replaceChildren(note, String(bpm));
       this.el.focusTempo.title = `The metronome: ${String(bpm)} bpm`;
       return;
     }

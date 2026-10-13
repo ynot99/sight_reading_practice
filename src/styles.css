@@ -5452,6 +5452,19 @@ body[data-repeats='hidden'] .repeat-mark {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The crotchet before the click's bpm in free play, taller than the digits
+ * and drawn in their colour. Narrow enough that the output stays the width
+ * it is.
+ */
+.focus-bar__note {
+  width: 7px;
+  height: 16px;
+  margin-right: 1px;
+  vertical-align: -3px;
+  fill: currentColor;
+}
+
 .focus-bar__button {
   appearance: none;
   border: 1px solid var(--border);

@@ -12175,7 +12175,9 @@ describe('AppView', () => {
       const tempo = element<HTMLOutputElement>('focus-tempo');
       const percent = runtime.controller.tempoPercent;
 
-      expect(tempo.value).toBe('♩100');
+      expect(tempo.value).toBe('100');
+      // A crotchet drawn before the number, so it reads as a tempo.
+      expect(tempo.querySelector('svg.focus-bar__note')).not.toBeNull();
       expect(button.title).toContain('Tap to start it, hold for its settings.');
       button.click();
       expect(metronome.isRunning).toBe(true);
@@ -12187,7 +12189,7 @@ describe('AppView', () => {
       // Faster from the next beat, and the piece's own speed left alone.
       element<HTMLButtonElement>('focus-faster').click();
       expect(metronome.currentConfig.bpm).toBe(105);
-      expect(tempo.value).toBe('♩105');
+      expect(tempo.value).toBe('105');
       expect(tempo.title).toBe('The metronome: 105 bpm');
       element<HTMLButtonElement>('focus-slower').click();
       element<HTMLButtonElement>('focus-slower').click();

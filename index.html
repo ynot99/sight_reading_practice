@@ -585,7 +585,21 @@
             sheet that already means "here". His: "додати можливість ставити
             слайс прямо з MIDI viewer, та кнопку apply and jump to the slice".
           -->
-          <div class="roll-passage">
+          <!--
+            How hard the chosen notes of a sketch are struck, in place of the
+            passage, which a sketch has none of to practise. A mark over the
+            track for each, so how they differ is seen; the slider moves them
+            all by as much, and they keep their differences.
+          -->
+          <div id="roll-velocity" class="roll-velocity" hidden>
+            <label class="roll-velocity__name" for="roll-velocity-level">Velocity</label>
+            <div class="roll-velocity__track">
+              <input id="roll-velocity-level" type="range" min="1" max="127" step="1" value="64" />
+              <div id="roll-velocity-ticks" class="roll-velocity__ticks" aria-hidden="true"></div>
+            </div>
+            <output id="roll-velocity-said" class="roll-velocity__said" for="roll-velocity-level"></output>
+          </div>
+          <div id="roll-passage" class="roll-passage">
             <button id="roll-from" type="button" class="button">Start here</button>
             <button id="roll-to" type="button" class="button">End here</button>
             <span id="roll-passage-what" class="roll-passage__what"></span>

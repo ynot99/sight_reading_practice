@@ -4508,6 +4508,90 @@ describe('AppView', () => {
       expect(notes()).toBe(2);
     });
 
+    it('sets how hard the chosen notes of a sketch are struck, by as much each, in the passage row', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const played = [
+        [0, 60, 64],
+        [500, 62, 96],
+        [1_000, 64, 100],
+      ].flatMap(([atMs = 0, midi = 0, level = 0]) => [
+        { kind: 'noteOn' as const, atMs, midi, velocity: level / 127 },
+        { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+      ]);
+      const sketch = sketches.begin({ events: played, beats: [] }, 'Loud', 1);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const row = element('roll-velocity');
+      const level = element<HTMLInputElement>('roll-velocity-level');
+      const said = (): string => element<HTMLOutputElement>('roll-velocity-said').value;
+      const ticks = (): string[] =>
+        [...element('roll-velocity-ticks').querySelectorAll<HTMLElement>('.roll-velocity__tick')].map((tick) => tick.style.left);
+      const loudness = (): number[] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [Math.round(event.velocity * 127)] : []));
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const scrolledDown = (): number =>
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const tapOn = (fromMs: number): void => {
+        const note = view.rollScene?.notes.find((each) => each.fromMs === fromMs);
+        element('roll-body').dispatchEvent(
+          new MouseEvent('click', { bubbles: true, clientX: ((fromMs + 100) / 1000) * zoom, clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown() }),
+        );
+      };
+
+      // A sketch has no passage to practise: the slider is in its place.
+      expect([element('roll-passage').hidden, row.hidden]).toEqual([true, false]);
+      expect(row.dataset['idle']).toBe('true');
+      expect(level.title).toBe('How hard the chosen notes are struck. Choose a note first.');
+      expect(level.getAttribute('aria-label')).toBe(level.title);
+      level.value = '100';
+      level.dispatchEvent(new Event('input'));
+      expect(level.value).toBe('64');
+      level.dispatchEvent(new Event('change'));
+      expect(loudness()).toEqual([64, 96, 100]);
+
+      tapOn(0);
+      tapOn(500);
+      expect(row.dataset['idle']).toBeUndefined();
+      expect(level.title).toBe('How hard the chosen notes are struck');
+      // At their average, a mark for each, softest to loudest said.
+      expect(level.value).toBe('80');
+      // 64 halfway along 1 to 127, and 96 three quarters of the way and a little.
+      expect(ticks()).toEqual(['50%', '75.4%']);
+      expect(said()).toBe('64–96');
+      // Let go of where it was, nothing changes, and nothing is offered to undo.
+      level.dispatchEvent(new Event('change'));
+      expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
+
+      // Moved, they are shown by as much each, and kept only when let go of.
+      level.value = '100';
+      level.dispatchEvent(new Event('input'));
+      expect(said()).toBe('84–116');
+      expect(loudness()).toEqual([64, 96, 100]);
+      level.dispatchEvent(new Event('change'));
+      expect(loudness()).toEqual([84, 116, 100]);
+      // No louder than a note can be, nor softer.
+      level.value = '127';
+      level.dispatchEvent(new Event('change'));
+      expect(loudness()).toEqual([111, 127, 100]);
+      // From their average of 119 down to 1 is 118 softer: the softer stops at 1.
+      level.value = '1';
+      level.dispatchEvent(new Event('change'));
+      expect(loudness()).toEqual([1, 9, 100]);
+      element<HTMLButtonElement>('roll-undo').click();
+      element<HTMLButtonElement>('roll-undo').click();
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(loudness()).toEqual([64, 96, 100]);
+
+      // Listening, it is put away; a recording keeps its passage row.
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(row.hidden).toBe(true);
+      element<HTMLButtonElement>('roll-close').click();
+    });
+
     it('counts the bar out over the drawing, and can be put away', async () => {
       // A row of squares saying where written time has got to, over a picture
       // of where the reader actually got to. His: "квадратики які

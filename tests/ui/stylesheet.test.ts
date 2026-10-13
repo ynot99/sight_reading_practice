@@ -2154,6 +2154,16 @@ describe('searching the settings', () => {
     expect(place).toMatch(/background\s*:\s*color-mix\(in srgb, var\(--accent\) 35%, transparent\)/);
   });
 
+  it('marks how hard each chosen note is over the slider, the slider dimmed while none is chosen', () => {
+    const body = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
+
+    expect(body('.roll-velocity__track')).toMatch(/position\s*:\s*relative/);
+    expect(body('.roll-velocity__ticks')).toMatch(/position\s*:\s*absolute/);
+    expect(body('.roll-velocity__ticks')).toMatch(/pointer-events\s*:\s*none/);
+    expect(body('.roll-velocity__tick')).toMatch(/position\s*:\s*absolute/);
+    expect(body(".roll-velocity[data-idle='true'] .roll-velocity__track")).toMatch(/opacity\s*:\s*0?\.\d+/);
+  });
+
   it('shows the mouse what it would take hold of on a sketch: a note, or its end', () => {
     expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='note']")?.body).toMatch(/cursor\s*:\s*grab/);
     expect(rules().find((rule) => rule.selector === ".roll-body[data-grip='end']")?.body).toMatch(/cursor\s*:\s*ew-resize/);

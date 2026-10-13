@@ -968,13 +968,15 @@ export interface KeyNamed {
 
 /**
  * Where a key of a take is to be: struck at a moment as a pitch, and let go
- * of at another - or `null` to leave one still down at the end as it is.
+ * of at another - or `null` to leave one still down at the end as it is -
+ * and how hard, where that changes too.
  */
 export interface KeyChange {
   readonly key: KeyNamed;
   readonly midi: number;
   readonly downAtMs: number;
   readonly upAtMs: number | null;
+  readonly velocity?: number;
 }
 
 /** Each named key's place in the take's pairing, or `null` where any is not there. */
@@ -1033,7 +1035,12 @@ export function takeWithTheKeysChanged(
     if (key === undefined || struck?.kind !== 'noteOn') {
       return;
     }
-    changed.set(key.on, { ...struck, atMs: change.downAtMs, midi: change.midi });
+    changed.set(key.on, {
+      ...struck,
+      atMs: change.downAtMs,
+      midi: change.midi,
+      velocity: change.velocity ?? struck.velocity,
+    });
     if (change.upAtMs === null) {
       return;
     }

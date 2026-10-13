@@ -419,6 +419,16 @@ const LINE_PX = 16;
 const REWIND_ICON = 'M6 6h2v12H6zM9.5 12l8.5 6V6z';
 const STOP_ICON = 'M6 6h12v12H6z';
 
+/** The average of some loudnesses, rounded; the middle of the range where there are none. */
+function theMiddleOf(loudness: readonly number[]): number {
+  return loudness.length === 0 ? 64 : Math.round(loudness.reduce((sum, level) => sum + level, 0) / loudness.length);
+}
+
+/** A loudness MIDI can strike a note at: 1 to 127, since nought is no note. */
+function clampTheLoudness(level: number): number {
+  return Math.min(127, Math.max(1, level));
+}
+
 /** Whether two names are of one key: the same pitch, gone down at the same moment. */
 function sameKey(one: KeyNamed, other: KeyNamed): boolean {
   return one.midi === other.midi && one.downAtMs === other.downAtMs;
@@ -1969,6 +1979,11 @@ export class AppView {
     rollBody: HTMLElement;
     rollKeep: HTMLButtonElement;
     rollEdit: HTMLButtonElement;
+    rollPassage: HTMLElement;
+    rollVelocity: HTMLElement;
+    rollVelocityLevel: HTMLInputElement;
+    rollVelocityTicks: HTMLElement;
+    rollVelocitySaid: HTMLOutputElement;
     rollDelete: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
     rollTitle: HTMLElement;
@@ -2314,6 +2329,11 @@ export class AppView {
       rollBody: requireElement(doc, 'roll-body'),
       rollKeep: requireElement(doc, 'roll-keep'),
       rollEdit: requireElement(doc, 'roll-edit'),
+      rollPassage: requireElement(doc, 'roll-passage'),
+      rollVelocity: requireElement(doc, 'roll-velocity'),
+      rollVelocityLevel: requireElement(doc, 'roll-velocity-level'),
+      rollVelocityTicks: requireElement(doc, 'roll-velocity-ticks'),
+      rollVelocitySaid: requireElement(doc, 'roll-velocity-said'),
       rollDelete: requireElement(doc, 'roll-delete'),
       rollUndo: requireElement(doc, 'roll-undo'),
       rollTitle: requireElement(doc, 'roll-title'),
@@ -8501,6 +8521,12 @@ export class AppView {
         this.beginASketchOfTheScore();
       }
     });
+    this.listen(this.el.rollVelocityLevel, 'input', () => {
+      this.showTheLoudnessAsked();
+    });
+    this.listen(this.el.rollVelocityLevel, 'change', () => {
+      this.setTheLoudnessAsked();
+    });
     this.listen(this.el.scoresShowScores, 'click', () => {
       this.showTheList('scores');
     });
@@ -11546,6 +11572,8 @@ export class AppView {
     }
     this.el.rollDelete.setAttribute('aria-label', this.el.rollDelete.title);
 
+    this.sayHowLoudTheChosenAre();
+
     if ((sketch?.before.length ?? 0) > 0) {
       delete this.el.rollUndo.dataset['idle'];
       this.el.rollUndo.title = 'Put back the last change';
@@ -11554,6 +11582,94 @@ export class AppView {
       this.el.rollUndo.title = 'Undo. Nothing has been changed to put back.';
     }
     this.el.rollUndo.setAttribute('aria-label', this.el.rollUndo.title);
+  }
+
+  /**
+   * The slider of how hard the chosen notes are struck: shown, in the
+   * passage's place, while a sketch is edited; at their average, with a mark
+   * for each; and dimmed, with the reason, while none is chosen.
+   */
+  private sayHowLoudTheChosenAre(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    this.el.rollPassage.hidden = sketch !== undefined;
+    this.el.rollVelocity.hidden = sketch?.editing !== true;
+    const loudness = this.theLoudnessOfTheChosen();
+    if (loudness.length === 0) {
+      this.el.rollVelocity.dataset['idle'] = 'true';
+      this.el.rollVelocityLevel.title = 'How hard the chosen notes are struck. Choose a note first.';
+    } else {
+      delete this.el.rollVelocity.dataset['idle'];
+      this.el.rollVelocityLevel.title = 'How hard the chosen notes are struck';
+    }
+    this.el.rollVelocityLevel.setAttribute('aria-label', this.el.rollVelocityLevel.title);
+    this.el.rollVelocityLevel.value = String(theMiddleOf(loudness));
+    this.markTheLoudness(loudness);
+  }
+
+  /** How hard each chosen note of the sketch is struck, from 1 to 127. */
+  private theLoudnessOfTheChosen(): number[] {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (sketch === undefined || stored === null) {
+      return [];
+    }
+    return theKeysOfTheTake(stored.events)
+      .filter((key) => sketch.chosen.some((each) => sameKey(each, key)))
+      .map((key) => Math.round(key.velocity * 127));
+  }
+
+  /** The marks over the slider, and the number beside it: one, or the softest to the loudest. */
+  private markTheLoudness(loudness: readonly number[]): void {
+    this.el.rollVelocityTicks.replaceChildren(
+      ...loudness.map((level) => {
+        const tick = this.doc.createElement('div');
+        tick.className = 'roll-velocity__tick';
+        tick.style.left = `${(((level - 1) / 126) * 100).toFixed(2)}%`;
+        return tick;
+      }),
+    );
+    const soft = Math.min(...loudness);
+    const loud = Math.max(...loudness);
+    this.el.rollVelocitySaid.value =
+      loudness.length === 0 ? '' : soft === loud ? String(soft) : `${String(soft)}\u2013${String(loud)}`;
+  }
+
+  /** The chosen notes as loud as the slider is being moved to: shown, not kept. */
+  private showTheLoudnessAsked(): void {
+    const loudness = this.theLoudnessOfTheChosen();
+    if (loudness.length === 0) {
+      this.el.rollVelocityLevel.value = String(theMiddleOf(loudness));
+      return;
+    }
+    const by = Number(this.el.rollVelocityLevel.value) - theMiddleOf(loudness);
+    this.markTheLoudness(loudness.map((level) => clampTheLoudness(level + by)));
+  }
+
+  /** The chosen notes made as loud as the slider was let go at, by as much each: one change. */
+  private setTheLoudnessAsked(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const loudness = this.theLoudnessOfTheChosen();
+    if (sketch === undefined || stored === null || loudness.length === 0) {
+      return;
+    }
+    const by = Number(this.el.rollVelocityLevel.value) - theMiddleOf(loudness);
+    if (by === 0) {
+      return;
+    }
+    const changes: KeyChange[] = theKeysOfTheTake(stored.events)
+      .filter((key) => sketch.chosen.some((each) => sameKey(each, key)))
+      .map((key) => ({
+        key,
+        midi: key.midi,
+        downAtMs: key.downAtMs,
+        upAtMs: key.upAtMs,
+        velocity: clampTheLoudness(Math.round(key.velocity * 127) + by) / 127,
+      }));
+    const events = takeWithTheKeysChanged(stored.events, changes);
+    if (events !== null) {
+      this.changeTheSketchShowing(events, [...sketch.before, stored.events], sketch.chosen);
+    }
   }
 
   /**

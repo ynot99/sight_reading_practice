@@ -2068,14 +2068,14 @@ describe('searching the settings', () => {
     );
   });
 
-  it('shows in the metronome sheet in free play only the switch, the bar and the volume, and the bar nowhere else', () => {
+  it('shows in the metronome sheet in free play only the switch, the bar, the volume and what a tap does, and the bar nowhere else', () => {
     const rule = rules().find((each) => each.selector.includes('[data-in-free-play]'));
     expect(rule?.selector.split(',').map((each) => each.trim())).toEqual([
       "body[data-free-play='true'] #sheet-metronome .controls > :not([data-in-free-play])",
       "body:not([data-free-play='true']) #free-beats",
     ]);
     expect(rule?.body).toMatch(/display\s*:\s*none/);
-    const sheet = /<div id="sheet-metronome"[\s\S]*?<details class="sheet__more">/.exec(HTML)?.[0] ?? '';
+    const sheet = /<div id="sheet-metronome"[\s\S]*?<details class="sheet__more" data-in-free-play>/.exec(HTML)?.[0] ?? '';
     const kept = [...sheet.matchAll(/<div ([^>]*)data-in-free-play>\s*<([a-z]+ [a-z]+="[^"]*")/g)].map(
       (match) => `${match[1] ?? ''}${match[2] ?? ''}`,
     );

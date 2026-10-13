@@ -6201,15 +6201,19 @@ export class AppView {
   private describeMetronomeButton(settings: PracticeSettings): void {
     const controller = this.runtime.controller;
     if (controller.playsFreely) {
-      // Free play has no run for the click to follow, so the button is the
-      // click itself: a tap starts and stops it, as on any metronome, and the
-      // sheet is the hold.
+      // Free play has no run for the click to follow, so turning it off and
+      // on is starting and stopping it; which of a tap and a hold does that
+      // is the reader's one choice for both.
       const going = controller.clicksFreely;
       const beats = settings.freePlayBeats.length;
-      const label =
+      const said =
         `Metronome ${going ? 'going' : 'stopped'}, ${String(settings.freePlayBpm)} bpm, ` +
-        `${String(beats)} ${beats === 1 ? 'beat' : 'beats'} a bar. ` +
-        `Tap to ${going ? 'stop' : 'start'} it, hold for its settings.`;
+        `${String(beats)} ${beats === 1 ? 'beat' : 'beats'} a bar.`;
+      const turn = going ? 'stop it' : 'start it';
+      const label =
+        settings.metronomeTap === 'opens-its-sheet'
+          ? `${said} Tap for its settings, hold to ${turn}.`
+          : `${said} Tap to ${turn}, hold for its settings.`;
       this.el.focusMetronome.dataset['click'] = going ? 'on' : 'off';
       this.el.focusMetronome.title = label;
       this.el.focusMetronome.setAttribute('aria-label', label);
@@ -6264,10 +6268,6 @@ export class AppView {
       this.syncControlsFromSettings();
     };
     const tapped = (): void => {
-      if (controller.playsFreely) {
-        turnItOffOrOn();
-        return;
-      }
       if (controller.settings.metronomeTap === 'opens-its-sheet') {
         openTheSheet();
       } else {
@@ -6275,7 +6275,7 @@ export class AppView {
       }
     };
     const held = (): void => {
-      if (controller.settings.metronomeTap === 'opens-its-sheet' && !controller.playsFreely) {
+      if (controller.settings.metronomeTap === 'opens-its-sheet') {
         turnItOffOrOn();
       } else {
         openTheSheet();

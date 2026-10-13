@@ -6313,6 +6313,28 @@ describe('the click in free play', () => {
     expect(metronome.currentConfig.timeSignature.pulsesPerMeasure).toBe(12);
   });
 
+  it('takes the tempo of taps a few at a time, held to what a metronome can play', async () => {
+    const { controller, clock, metronome } = createController(true, undefined, { modeId: FREE_PLAY_MODE_ID });
+    await controller.loadNewExercise();
+    controller.clickFreely(true);
+
+    expect(controller.tapTheFreeTempo()).toBeNull();
+    clock.advance(600);
+    expect(controller.tapTheFreeTempo()).toBe(100);
+    clock.advance(400);
+    // Six hundred and four hundred apart: a hundred and twenty.
+    expect(controller.tapTheFreeTempo()).toBe(120);
+    expect(metronome.currentConfig.bpm).toBe(120);
+
+    // A pause, and the next tap only begins again.
+    clock.advance(5_000);
+    expect(controller.tapTheFreeTempo()).toBeNull();
+    expect(controller.settings.freePlayBpm).toBe(120);
+
+    clock.advance(150);
+    expect(controller.tapTheFreeTempo()).toBe(300);
+  });
+
   it('gives the metronome up to a performance', async () => {
     const { controller, metronome } = createController(true, undefined, {
       modeId: FREE_PLAY_MODE_ID,

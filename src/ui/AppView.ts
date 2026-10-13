@@ -1718,6 +1718,7 @@ export class AppView {
     freeBeatsMore: HTMLButtonElement;
     freeBeatsCount: HTMLOutputElement;
     freeBeatsDots: HTMLElement;
+    freeTap: HTMLButtonElement;
     metronomeOn: HTMLButtonElement;
     scoreListening: HTMLButtonElement;
     freeChord: HTMLOutputElement;
@@ -2052,6 +2053,7 @@ export class AppView {
       freeBeatsMore: requireElement(doc, 'free-beats-more'),
       freeBeatsCount: requireElement(doc, 'free-beats-count'),
       freeBeatsDots: requireElement(doc, 'free-beats-dots'),
+      freeTap: requireElement(doc, 'free-tap'),
       metronomeOn: requireElement(doc, 'metronome-on'),
       scoreListening: requireElement(doc, 'score-listening'),
       freeChord: requireElement(doc, 'free-chord'),
@@ -6327,6 +6329,20 @@ export class AppView {
     this.listen(this.el.freeBeatsMore, 'click', () => {
       controller.changeTheFreeBeats(1);
       this.syncControlsFromSettings();
+    });
+    // On the finger going down, which is the moment the beat is meant: a
+    // click arrives on letting go, as much later as the finger rested. A
+    // click with no pointer behind it is the keyboard's, and counts.
+    const tapTheTempo = (): void => {
+      if (controller.tapTheFreeTempo() !== null) {
+        this.syncControlsFromSettings();
+      }
+    };
+    this.listen(this.el.freeTap, 'pointerdown', tapTheTempo);
+    this.listen(this.el.freeTap, 'click', (event) => {
+      if (event.detail === 0) {
+        tapTheTempo();
+      }
     });
     // One listener for the row rather than one a dot: the dots are drawn
     // again whenever the bar changes, and a listener each would outlive them.

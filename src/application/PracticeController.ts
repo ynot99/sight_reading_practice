@@ -97,6 +97,7 @@ import {
 } from './runReplay.js';
 import { machineIsPlaying } from './modes/ListenFrame.js';
 import { playsFreely } from './modes/FreePlayFrame.js';
+import { tapsWith, tempoOfTaps } from './tapTempo.js';
 import { FreePlayed } from './freePlay.js';
 import { nameTheChord } from '../domain/harmony/chordName.js';
 import { ChordMatcher, type NoteVerdict } from '../domain/matching/ChordMatcher.js';
@@ -914,6 +915,8 @@ export class PracticeController {
   private readonly freePlayed = new FreePlayed();
   /** See {@link clicksFreely}. */
   private clickingFreely = false;
+  /** The taps of a tempo for the click in free play still counting; see `tapTheFreeTempo`. */
+  private freeTaps: readonly number[] = [];
   /** Listening to the click in free play, to say each beat as it is heard. */
   private freeClickWatch: Unsubscribe | null = null;
   private freePlayWatch: Unsubscribe | null = null;
@@ -3755,6 +3758,24 @@ export class PracticeController {
     const from = Math.round(this.currentSettings.freePlayBpm);
     this.updateSettings({
       freePlayBpm: Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, from + deltaBpm)),
+    });
+    return this.currentSettings.freePlayBpm;
+  }
+
+  /**
+   * A tap of the beat for the click in free play, read off the clock: two or
+   * more close together set its bpm to what they were tapped at, and each
+   * one after moves it to what the latest few say. Returns the bpm, or
+   * `null` where this tap only began a count.
+   */
+  tapTheFreeTempo(): number | null {
+    this.freeTaps = tapsWith(this.freeTaps, this.deps.clock.now());
+    const bpm = tempoOfTaps(this.freeTaps);
+    if (bpm === null) {
+      return null;
+    }
+    this.updateSettings({
+      freePlayBpm: Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, Math.round(bpm))),
     });
     return this.currentSettings.freePlayBpm;
   }

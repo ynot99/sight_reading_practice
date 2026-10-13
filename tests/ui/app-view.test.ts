@@ -12141,7 +12141,7 @@ describe('AppView', () => {
     });
 
     it('lays the bar of the click in free play out in dots, a tap on one turning it round', async () => {
-      const { view, runtime, metronome } = createRig();
+      const { view, runtime, metronome, clock } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
       frameButton('free').click();
@@ -12191,6 +12191,20 @@ describe('AppView', () => {
       element<HTMLButtonElement>('metronome-on').click();
       expect(metronome.isRunning).toBe(false);
       expect(lit()).toEqual([]);
+
+      // The tempo tapped: on the finger going down, the click of letting go
+      // not a tap of its own, and the keyboard's press a tap.
+      const tap = element<HTMLButtonElement>('free-tap');
+      tap.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      tap.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      clock.advance(500);
+      tap.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      tap.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      expect(runtime.controller.settings.freePlayBpm).toBe(120);
+      expect(element<HTMLOutputElement>('focus-tempo').value).toBe('120');
+      clock.advance(1_000);
+      tap.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+      expect(runtime.controller.settings.freePlayBpm).toBe(80);
     });
 
     it('starts and stops the click in free play on a tap, at a tempo of its own the speed buttons set', async () => {

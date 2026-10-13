@@ -3441,6 +3441,13 @@ body:not([data-free-play='true']) #free-beats {
   border-color: var(--text-muted);
 }
 
+/* Large enough to be tapped in time without looking for it. */
+.free-beats__tap {
+  align-self: flex-start;
+  min-width: 160px;
+  min-height: 44px;
+}
+
 /*
  * The beat just heard, ringed and a little larger. Grown by a transform, so
  * the row of dots does not move under a finger reaching for one.

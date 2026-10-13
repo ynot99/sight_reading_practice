@@ -1542,6 +1542,20 @@ textarea {
   padding: 8px 0 0;
 }
 
+/* A name and what it names, kept on one line together. */
+.roll-velocity__group {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The slider's group takes the room the row has, and gives it up first. */
+.roll-velocity__group--wide {
+  flex: 1 1 14em;
+  min-width: 0;
+}
+
 .roll-velocity__name {
   color: var(--text-muted);
   font-size: 12px;

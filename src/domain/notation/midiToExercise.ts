@@ -485,7 +485,7 @@ export function midiToExercise(
   const exercise: Exercise = {
     id: `midi-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
     title,
-    key: KeySignature.major(document.fifths),
+    key: new KeySignature(document.fifths, document.minor ? 'minor' : 'major'),
     keyChanges: [],
     timeChanges: [],
     tempoChanges: [],

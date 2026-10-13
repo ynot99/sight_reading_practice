@@ -52,6 +52,7 @@ import {
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
 import { Duration } from '../../src/domain/model/Duration.js';
+import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
 import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
 import { RecordingFileSink } from '../../src/application/ports/IFileSink.js';
@@ -4325,9 +4326,9 @@ describe('AppView', () => {
     });
 
     it('begins a sketch of the score open, in its own bars, and leaves the score as it is written', async () => {
-      const { view, runtime, sketches } = createRig();
+      const { view, runtime, sketches, files } = createRig();
       await view.initialize();
-      await runtime.controller.openScore(compoundBarExercise({ title: 'In six' }));
+      await runtime.controller.openScore(compoundBarExercise({ title: 'In six', key: KeySignature.minor(-2) }));
       const written = runtime.controller.openedExercise;
       element<HTMLButtonElement>('focus-roll').click();
       const edit = element<HTMLButtonElement>('roll-edit');
@@ -4338,11 +4339,26 @@ describe('AppView', () => {
 
       const sketch = sketches.list()[0];
       expect(sketch?.title).toBe('Sketch of In six');
+      // In the score's key, which the editor shows and changes.
+      expect(sketch?.key).toEqual({ fifths: written?.key.fifths, mode: written?.key.mode });
+      expect(element<HTMLSelectElement>('roll-key').value).toBe(`${String(written?.key.fifths)}:${written?.key.mode ?? ''}`);
+      expect(element<HTMLSelectElement>('roll-key').options).toHaveLength(30);
+      element<HTMLSelectElement>('roll-key').value = '-3:minor';
+      element<HTMLSelectElement>('roll-key').dispatchEvent(new Event('change'));
+      expect(sketches.find(sketch?.id ?? '')?.key).toEqual({ fifths: -3, mode: 'minor' });
       expect(sketch?.noteCount).toBe(7);
       expect(sketch?.beats.map((beat) => beat.beatType)).toEqual([8, 8, 8, 8, 8, 8]);
       expect(element('roll-title').textContent).toBe('Sketch of In six');
       expect(edit.getAttribute('aria-pressed')).toBe('true');
       expect(runtime.controller.openedExercise).toBe(written);
+
+      // And saved in its key.
+      element<HTMLButtonElement>('roll-close').click();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Save this sketch as a MIDI file').click();
+      const saved = readMidiFile(files.saved[0]?.bytes ?? new Uint8Array());
+      expect([saved.fifths, saved.minor]).toEqual([-3, true]);
     });
 
     it('lists the sketches beside the scores, switched to in the title, each to be edited, read, saved or deleted', async () => {

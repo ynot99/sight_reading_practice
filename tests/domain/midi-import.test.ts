@@ -351,6 +351,16 @@ describe('a file that separates the hands itself', () => {
   });
 });
 
+describe('the key a file says', () => {
+  it('is the key of the page, minor where it says minor', () => {
+    const minor = handWritten([0x00, 0xff, 0x59, 0x02, 0xfd, 0x01, 0x00, 0x90, 60, 80, 0x83, 0x60, 0x80, 60, 0x40]);
+    const major = handWritten([0x00, 0xff, 0x59, 0x02, 0x02, 0x00, 0x00, 0x90, 60, 80, 0x83, 0x60, 0x80, 60, 0x40]);
+
+    expect(midiToExercise(readMidiFile(minor), 'C minor').exercise.key.name).toBe('C minor');
+    expect(midiToExercise(readMidiFile(major), 'D major').exercise.key.name).toBe('D major');
+  });
+});
+
 describe('a file that names its hands', () => {
   it('puts each hand on its staff by its name, whatever its notes are', () => {
     // The left hand above the right, crossed: named, they are where they are named.

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ASSUMED_BEATS_IN_A_BAR,
   ASSUMED_BPM,
+  C_MAJOR,
   SketchLibrary,
   theBeatsToBeginIn,
 } from '../../src/application/SketchLibrary.js';
@@ -135,6 +136,34 @@ describe('the sketches being written', () => {
     store.write({ version: 1, sketches: [{ id: 'a', title: 'Odd', begunAtMs: 1, events: [[0, 0, 60, 89, 3]], beats: [] }] });
     next.load();
     expect(next.find('a')?.events).toEqual([{ kind: 'noteOn', atMs: 0, midi: 60, velocity: 89 / 127 }]);
+  });
+
+  it('keeps the key a sketch is written in across visits, C major where none was given', () => {
+    const store = new InMemorySettingsStore();
+    const library = new SketchLibrary(store);
+    const plain = library.begin({ events: PLAYED, beats: THREE }, 'Plain', 1);
+    const minor = library.begin({ events: PLAYED, beats: THREE }, 'Minor', 2, { fifths: -3, mode: 'minor' });
+    expect([plain.key, minor.key]).toEqual([C_MAJOR, { fifths: -3, mode: 'minor' }]);
+    expect(C_MAJOR).toEqual({ fifths: 0, mode: 'major' });
+
+    expect(library.changeTheKey(plain.id, { fifths: 6, mode: 'major' })?.key).toEqual({ fifths: 6, mode: 'major' });
+    const between = new SketchLibrary(store);
+    between.load();
+    expect(between.find(plain.id)?.key).toEqual({ fifths: 6, mode: 'major' });
+    expect(library.changeTheNotes(plain.id, PLAYED.slice(2))?.key).toEqual({ fifths: 6, mode: 'major' });
+    expect(library.changeTheKey('sketch-nobody', C_MAJOR)).toBeNull();
+    const next = new SketchLibrary(store);
+    next.load();
+    expect([next.find(plain.id)?.key, next.find(minor.id)?.key]).toEqual([
+      { fifths: 6, mode: 'major' },
+      { fifths: -3, mode: 'minor' },
+    ]);
+
+    for (const key of [undefined, 'D', [8, 0], [1.5, 0], ['1', 0]]) {
+      store.write({ version: 1, sketches: [{ id: 'a', title: 'Odd', begunAtMs: 1, events: [], beats: [], key }] });
+      next.load();
+      expect(next.find('a')?.key, JSON.stringify(key)).toEqual(C_MAJOR);
+    }
   });
 
   it('deletes one, and keeps that across visits', () => {

@@ -380,6 +380,22 @@ describe('the beats a take is written in', () => {
   });
 });
 
+describe('the key a file is written in', () => {
+  it('writes the key at the start, its flats as a negative byte and minor as one', () => {
+    const marks = (bytes: Uint8Array): number[][] =>
+      written(bytes)
+        .filter((each) => each.bytes[0] === 0xff && each.bytes[1] === 0x59)
+        .map((each) => [each.tick, ...each.bytes.slice(3)]);
+
+    expect(marks(writeMidiFile(struck(0, 500), { key: { fifths: -3, minor: true } }))).toEqual([[0, 0xfd, 1]]);
+    expect(marks(writeMidiFile(struck(0, 500), { key: { fifths: 2, minor: false } }))).toEqual([[0, 2, 0]]);
+    expect(marks(writeMidiFile(struck(0, 500)))).toEqual([]);
+
+    const read = readMidiFile(writeMidiFile(struck(0, 500), { key: { fifths: -3, minor: true } }));
+    expect([read.fifths, read.minor]).toEqual([-3, true]);
+  });
+});
+
 describe('a file of two hands', () => {
   /** A track's events, by its place among the file's tracks. */
   function trackOf(bytes: Uint8Array, which: number): Uint8Array {

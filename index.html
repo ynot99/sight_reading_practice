@@ -598,12 +598,23 @@
             all by as much, and they keep their differences.
           -->
           <div id="roll-velocity" class="roll-velocity" hidden>
-            <label class="roll-velocity__name" for="roll-velocity-level">Velocity</label>
-            <div class="roll-velocity__track">
-              <input id="roll-velocity-level" type="range" min="1" max="127" step="1" value="64" />
-              <div id="roll-velocity-ticks" class="roll-velocity__ticks" aria-hidden="true"></div>
-            </div>
-            <output id="roll-velocity-said" class="roll-velocity__said" for="roll-velocity-level"></output>
+            <!--
+              Each name with what it names, so a row that wraps on a phone
+              never leaves a word on one line and its slider on the next.
+            -->
+            <!-- The key the sketch is written in, which its notes are spelt in. -->
+            <span class="roll-velocity__group">
+              <label class="roll-velocity__name" for="roll-key">Key</label>
+              <select id="roll-key" class="roll-velocity__key"></select>
+            </span>
+            <span class="roll-velocity__group roll-velocity__group--wide">
+              <label class="roll-velocity__name" for="roll-velocity-level">Velocity</label>
+              <span class="roll-velocity__track">
+                <input id="roll-velocity-level" type="range" min="1" max="127" step="1" value="64" />
+                <span id="roll-velocity-ticks" class="roll-velocity__ticks" aria-hidden="true"></span>
+              </span>
+              <output id="roll-velocity-said" class="roll-velocity__said" for="roll-velocity-level"></output>
+            </span>
             <!--
               Which hand plays the chosen notes, and so which staff they are
               written on: by their pitch unless one is said. A file saved from

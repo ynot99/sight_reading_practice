@@ -27,6 +27,8 @@ export interface MidiFileDocument {
   readonly beatType: number;
   /** Sharps positive, flats negative, as MIDI writes it. */
   readonly fifths: number;
+  /** Whether the key it says is the minor of those sharps or flats. */
+  readonly minor: boolean;
   readonly tempoBpm: number;
   readonly title: string | null;
   /** Each track's own name where it gives one, by the track's number. */
@@ -133,6 +135,7 @@ interface TrackResult {
   beats: number | null;
   beatType: number | null;
   fifths: number | null;
+  minor: boolean | null;
   microsecondsPerQuarter: number | null;
   name: string | null;
   /** Its track name, apart from any other text: a file's title may be either. */
@@ -158,6 +161,7 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
     beats: null,
     beatType: null,
     fifths: null,
+    minor: null,
     microsecondsPerQuarter: null,
     name: null,
     trackName: null,
@@ -212,6 +216,7 @@ function readTrack(bytes: Bytes, length: number, track: number): TrackResult {
         // Signed: one byte, two's complement, flats negative.
         const raw = data[0] ?? 0;
         result.fifths = raw > 127 ? raw - 256 : raw;
+        result.minor = (data[1] ?? 0) === 1;
       } else if ((type === 0x03 || type === 0x01) && size > 0) {
         result.name ??= decodeText(data);
         if (type === 0x03) {
@@ -318,6 +323,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
   let beats: number | null = null;
   let beatType: number | null = null;
   let fifths: number | null = null;
+  let minor: boolean | null = null;
   let microsecondsPerQuarter: number | null = null;
   let title: string | null = null;
   const trackNames: (string | null)[] = [];
@@ -338,6 +344,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
     beats = beats ?? read.beats;
     beatType = beatType ?? read.beatType;
     fifths = fifths ?? read.fifths;
+    minor = minor ?? read.minor;
     microsecondsPerQuarter = microsecondsPerQuarter ?? read.microsecondsPerQuarter;
     title = title ?? read.name;
     trackNames.push(read.trackName);
@@ -355,6 +362,7 @@ export function readMidiFile(data: Uint8Array): MidiFileDocument {
     beats: beats ?? 4,
     beatType: beatType ?? 4,
     fifths: fifths ?? 0,
+    minor: minor ?? false,
     tempoBpm:
       microsecondsPerQuarter === null || microsecondsPerQuarter <= 0
         ? DEFAULT_TEMPO_BPM

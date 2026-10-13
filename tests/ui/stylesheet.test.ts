@@ -2165,8 +2165,12 @@ describe('searching the settings', () => {
     // The hand the chosen notes are in, pressed in the accent; all three dimmed with none chosen.
     expect(body(".roll-hands .button[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
     expect(body(".roll-hands[data-idle='true']")).toMatch(/opacity\s*:\s*0?\.\d+/);
-    // And the row wraps on a phone rather than running off it.
+    // And the row wraps on a phone rather than running off it, each name with
+    // what it names, the slider's group taking the room.
     expect(body('.roll-velocity')).toMatch(/flex-wrap\s*:\s*wrap/);
+    expect(body('.roll-velocity__group')).toMatch(/flex\s*:\s*none/);
+    expect(body('.roll-velocity__group--wide')).toMatch(/flex\s*:\s*1 1 14em/);
+    expect(HTML).toMatch(/<span class="roll-velocity__group roll-velocity__group--wide">\s*<label[^>]*>Velocity<\/label>\s*<span class="roll-velocity__track">/);
   });
 
   it('shows the mouse what it would take hold of on a sketch: a note, or its end', () => {

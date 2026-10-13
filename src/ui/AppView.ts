@@ -52,7 +52,7 @@ import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './la
 import type { PracticeSettings } from '../application/PracticeController.js';
 import type { StoredTake } from '../application/TakeLibrary.js';
 import { isTypedInto, type TypedInto } from '../shared/typedInto.js';
-import { theSketchOfTheScore, type StoredSketch } from '../application/SketchLibrary.js';
+import { theSketchOfTheScore, type SketchKey, type StoredSketch } from '../application/SketchLibrary.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
 import {
@@ -1130,13 +1130,27 @@ function theTakeAsAFile(take: StoredTake): Uint8Array {
   return thePlayingAsAFile(take, takeName(take.savedAtMs));
 }
 
-/** Some playing as a MIDI file, in the bars of its click where it has one. */
+/** Some playing as a MIDI file, in the bars of its click where it has one, and in its key where it has one. */
 function thePlayingAsAFile(
-  playing: { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] },
+  playing: {
+    readonly events: readonly MidiFileEvent[];
+    readonly beats: readonly HeardBeat[];
+    readonly key?: SketchKey;
+  },
   name: string,
 ): Uint8Array {
-  return writeMidiFile(playing.events, { trackName: name, beats: playing.beats });
+  const key = playing.key;
+  return writeMidiFile(playing.events, {
+    trackName: name,
+    beats: playing.beats,
+    ...(key === undefined ? {} : { key: { fifths: key.fifths, minor: key.mode === 'minor' } }),
+  });
 }
+
+/** Every key a signature can be, major and minor, for a sketch to be written in. */
+const EVERY_KEY: readonly KeySignature[] = (['major', 'minor'] as const).flatMap((mode) =>
+  [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7].map((fifths) => new KeySignature(fifths, mode)),
+);
 
 function takeName(savedAtMs: number): string {
   const at = new Date(savedAtMs);
@@ -1986,6 +2000,7 @@ export class AppView {
     rollVelocityTicks: HTMLElement;
     rollVelocitySaid: HTMLOutputElement;
     rollHands: HTMLElement;
+    rollKey: HTMLSelectElement;
     rollHandLeft: HTMLButtonElement;
     rollHandPitch: HTMLButtonElement;
     rollHandRight: HTMLButtonElement;
@@ -2341,6 +2356,7 @@ export class AppView {
       rollVelocityTicks: requireElement(doc, 'roll-velocity-ticks'),
       rollVelocitySaid: requireElement(doc, 'roll-velocity-said'),
       rollHands: requireElement(doc, 'roll-hands'),
+      rollKey: requireElement(doc, 'roll-key'),
       rollHandLeft: requireElement(doc, 'roll-hand-left'),
       rollHandPitch: requireElement(doc, 'roll-hand-pitch'),
       rollHandRight: requireElement(doc, 'roll-hand-right'),
@@ -8537,6 +8553,18 @@ export class AppView {
     this.listen(this.el.rollVelocityLevel, 'change', () => {
       this.setTheLoudnessAsked();
     });
+    fillSelect(
+      this.el.rollKey,
+      EVERY_KEY.map((key) => ({ value: keyValue(key), label: key.name })),
+      keyValue(KeySignature.C_MAJOR),
+    );
+    this.listen(this.el.rollKey, 'change', () => {
+      const sketch = this.theOtherRollShowing?.sketch;
+      if (sketch !== undefined) {
+        const key = parseKeyValue(this.el.rollKey.value);
+        this.runtime.sketches.changeTheKey(sketch.id, { fifths: key.fifths, mode: key.mode });
+      }
+    });
     for (const [button, hand] of [
       [this.el.rollHandLeft, 'left'],
       [this.el.rollHandPitch, null],
@@ -9435,7 +9463,11 @@ export class AppView {
    * The sheet it was asked from goes first: the page is what was asked for.
    */
   private async writeDown(
-    playing: { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] },
+    playing: {
+      readonly events: readonly MidiFileEvent[];
+      readonly beats: readonly HeardBeat[];
+      readonly key?: SketchKey;
+    },
     title: string,
     from: HTMLElement,
   ): Promise<void> {
@@ -11605,6 +11637,10 @@ export class AppView {
     const sketch = this.theOtherRollShowing?.sketch;
     this.el.rollPassage.hidden = sketch !== undefined;
     this.el.rollVelocity.hidden = sketch?.editing !== true;
+    const key = sketch === undefined ? null : this.runtime.sketches.find(sketch.id)?.key;
+    if (key !== undefined && key !== null) {
+      this.el.rollKey.value = keyValue(new KeySignature(key.fifths, key.mode));
+    }
     const loudness = this.theLoudnessOfTheChosen();
     if (loudness.length === 0) {
       this.el.rollVelocity.dataset['idle'] = 'true';
@@ -11681,7 +11717,7 @@ export class AppView {
   private markTheLoudness(loudness: readonly number[]): void {
     this.el.rollVelocityTicks.replaceChildren(
       ...loudness.map((level) => {
-        const tick = this.doc.createElement('div');
+        const tick = this.doc.createElement('span');
         tick.className = 'roll-velocity__tick';
         tick.style.left = `${(((level - 1) / 126) * 100).toFixed(2)}%`;
         return tick;
@@ -11754,6 +11790,7 @@ export class AppView {
       theSketchOfTheScore(exercise, timeline),
       `Sketch of ${exercise.title || 'the score'}`,
       Date.now(),
+      { fifths: exercise.key.fifths, mode: exercise.key.mode },
     );
     this.renderSketches();
     this.showTheSketch(sketch.id);

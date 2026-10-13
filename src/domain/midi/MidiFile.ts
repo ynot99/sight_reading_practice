@@ -71,6 +71,11 @@ export interface MidiFileOptions {
    * takes the place of `tempoBpm`.
    */
   readonly beats?: readonly HeardBeat[];
+  /**
+   * The key the music is in, written for whatever opens the file to spell its
+   * notes in: sharps positive and flats negative, as MIDI counts them.
+   */
+  readonly key?: { readonly fifths: number; readonly minor: boolean };
 }
 
 const DEFAULT_TEMPO_BPM = 120;
@@ -269,6 +274,11 @@ function orderAt(event: MidiFileEvent): number {
   }
 }
 
+/** A key signature: its sharps or flats as a signed byte, and whether it is minor. */
+function keyMark(key: { readonly fifths: number; readonly minor: boolean }): number[] {
+  return [0xff, 0x59, 0x02, key.fifths & 0xff, key.minor ? 1 : 0];
+}
+
 function tempoMark(microsecondsPerQuarter: number): number[] {
   return [0xff, 0x51, 0x03, ...uint32(microsecondsPerQuarter).slice(1)];
 }
@@ -377,8 +387,10 @@ export function writeMidiFile(
   const marks = grid === null ? [] : theMarksOfTheClick(grid);
   // Tempo, so the notes mean the same thing wherever the file is opened. A
   // click's own is among its marks.
-  const opening =
-    grid === null ? [...variableLength(0), ...tempoMark(Math.round(MICROSECONDS_PER_MINUTE / tempoBpm))] : [];
+  const opening = [
+    ...(grid === null ? [...variableLength(0), ...tempoMark(Math.round(MICROSECONDS_PER_MINUTE / tempoBpm))] : []),
+    ...(options.key === undefined ? [] : [...variableLength(0), ...keyMark(options.key)]),
+  ];
   // Asked again for each track: it keeps its place between asks, in time.
   const ticks = (): ((ms: number) => number) =>
     grid === null ? (ms: number) => Math.round(ms / msPerTick) : onTheClick(grid);

@@ -23,6 +23,28 @@ export interface StoredSketch {
   /** The beats its bars are written in: see `theClickOfTheTake`. */
   readonly beats: readonly HeardBeat[];
   readonly noteCount: number;
+  /** The key it is written in: C major unless it was begun from a score in another. */
+  readonly key: SketchKey;
+}
+
+/** A key as a sketch keeps it: its sharps or flats, and whether it is minor. */
+export interface SketchKey {
+  readonly fifths: number;
+  readonly mode: 'major' | 'minor';
+}
+
+/** The key of a sketch nothing gave one. */
+export const C_MAJOR: SketchKey = { fifths: 0, mode: 'major' };
+
+/** A key read back, where it is one a key signature can have. */
+function readKey(value: unknown): SketchKey {
+  if (!Array.isArray(value)) {
+    return C_MAJOR;
+  }
+  const [fifths, minor] = value as readonly unknown[];
+  return Number.isInteger(fifths) && (fifths as number) >= -7 && (fifths as number) <= 7
+    ? { fifths: fifths as number, mode: minor === 1 ? 'minor' : 'major' }
+    : C_MAJOR;
 }
 
 const STORAGE_VERSION = 1;
@@ -88,12 +110,12 @@ function readSketch(value: unknown): StoredSketch | null {
   if (!isRecord(value)) {
     return null;
   }
-  const { id, title, begunAtMs, events, beats } = value;
+  const { id, title, begunAtMs, events, beats, key } = value;
   if (typeof id !== 'string' || typeof title !== 'string' || typeof begunAtMs !== 'number' || !Array.isArray(events)) {
     return null;
   }
   const unpacked = events.map(unpack).filter((event): event is MidiFileEvent => event !== null);
-  return sketchOf(id, title, begunAtMs, unpacked, theBeatsIfWhole(beats));
+  return sketchOf(id, title, begunAtMs, unpacked, theBeatsIfWhole(beats), readKey(key));
 }
 
 function sketchOf(
@@ -102,6 +124,7 @@ function sketchOf(
   begunAtMs: number,
   events: readonly MidiFileEvent[],
   beats: readonly HeardBeat[],
+  key: SketchKey,
 ): StoredSketch {
   return {
     id,
@@ -110,6 +133,7 @@ function sketchOf(
     events,
     beats,
     noteCount: events.filter((event) => event.kind === 'noteOn').length,
+    key,
   };
 }
 
@@ -148,6 +172,7 @@ export class SketchLibrary {
     playing: { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] },
     title: string,
     begunAtMs: number,
+    key: SketchKey = C_MAJOR,
   ): StoredSketch {
     const sketch = sketchOf(
       this.unusedId(`sketch-${begunAtMs.toString(36)}`),
@@ -155,6 +180,7 @@ export class SketchLibrary {
       begunAtMs,
       playing.events,
       theBeatsToBeginIn(playing.events, playing.beats),
+      key,
     );
     this.sketches = [...this.sketches, sketch];
     this.persist();
@@ -167,7 +193,19 @@ export class SketchLibrary {
     if (found === null) {
       return null;
     }
-    const changed = sketchOf(found.id, found.title, found.begunAtMs, events, found.beats);
+    const changed = sketchOf(found.id, found.title, found.begunAtMs, events, found.beats, found.key);
+    this.sketches = this.sketches.map((sketch) => (sketch.id === id ? changed : sketch));
+    this.persist();
+    return changed;
+  }
+
+  /** Writes a sketch in another key: its notes are where they were, spelt in that key. */
+  changeTheKey(id: string, key: SketchKey): StoredSketch | null {
+    const found = this.find(id);
+    if (found === null) {
+      return null;
+    }
+    const changed = { ...found, key };
     this.sketches = this.sketches.map((sketch) => (sketch.id === id ? changed : sketch));
     this.persist();
     return changed;
@@ -199,6 +237,7 @@ export class SketchLibrary {
         begunAtMs: sketch.begunAtMs,
         events: sketch.events.map(pack),
         beats: sketch.beats.map(packBeat),
+        key: [sketch.key.fifths, sketch.key.mode === 'minor' ? 1 : 0],
       })),
     });
   }

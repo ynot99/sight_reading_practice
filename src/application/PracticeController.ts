@@ -755,6 +755,12 @@ export interface ControllerEventMap {
    */
   freePlayed: Record<string, never>;
   /**
+   * A beat of the click in free play was heard: which of the bar, from
+   * nought - every beat, the ones left out as well, so the count can be seen
+   * going through them. `null` once the click stops.
+   */
+  freeClickHeard: { readonly beat: number | null };
+  /**
    * Whether the engraver is drawing a page right now.
    *
    * Seconds on a long score, and more of them since the bars can be ruled:
@@ -908,6 +914,8 @@ export class PracticeController {
   private readonly freePlayed = new FreePlayed();
   /** See {@link clicksFreely}. */
   private clickingFreely = false;
+  /** Listening to the click in free play, to say each beat as it is heard. */
+  private freeClickWatch: Unsubscribe | null = null;
   private freePlayWatch: Unsubscribe | null = null;
   /** The notes a performance is lighting right now, so they can be put out. */
   private litNotes: { readonly stepIndex: number; readonly midi: number }[] = [];
@@ -3420,6 +3428,8 @@ export class PracticeController {
     this.watchingThePedal = null;
     this.listeningForTheOpening?.();
     this.listeningForTheOpening = null;
+    this.freeClickWatch?.();
+    this.freeClickWatch = null;
     this.player?.dispose();
     this.player = null;
     this.disposeSession();
@@ -3726,9 +3736,17 @@ export class PracticeController {
     this.clickingFreely = wanted;
     if (wanted) {
       this.deps.metronome.configure(this.theFreeClick());
+      this.freeClickWatch = this.deps.metronome.onTick((tick) => {
+        if (tick.isPulse) {
+          this.emitter.emit('freeClickHeard', { beat: tick.beat - 1 });
+        }
+      });
       this.deps.metronome.start();
     } else {
+      this.freeClickWatch?.();
+      this.freeClickWatch = null;
       this.deps.metronome.stop();
+      this.emitter.emit('freeClickHeard', { beat: null });
     }
   }
 

@@ -12174,6 +12174,23 @@ describe('AppView', () => {
       element<HTMLButtonElement>('free-beats-more').click();
       expect(runtime.controller.settings.freePlayBeats).toEqual(['accent', 'silent', 'beat', 'beat', 'beat']);
       expect(element('focus-metronome').title).toContain('5 beats a bar');
+
+      // Each beat's dot lit as it is heard, the one left out as well, and none
+      // once the click stops.
+      const lit = (): number[] => dots().flatMap((dot, at) => (dot.dataset['now'] === 'true' ? [at] : []));
+      expect(lit()).toEqual([]);
+      metronome.advanceSubdivisions(1);
+      expect(lit()).toEqual([0]);
+      metronome.advanceSubdivisions(1);
+      expect(lit()).toEqual([1]);
+      // Drawn again, the dots keep the beat.
+      element<HTMLButtonElement>('free-beats-more').click();
+      expect(lit()).toEqual([1]);
+      metronome.advanceSubdivisions(5);
+      expect(lit()).toEqual([0]);
+      element<HTMLButtonElement>('metronome-on').click();
+      expect(metronome.isRunning).toBe(false);
+      expect(lit()).toEqual([]);
     });
 
     it('starts and stops the click in free play on a tap, at a tempo of its own the speed buttons set', async () => {

@@ -1647,6 +1647,8 @@ export class AppView {
   private theOtherHandsWalk: { readonly stepIndex: number; readonly atMs: number }[] = [];
   private theOtherHandsStep: ReturnType<typeof setTimeout> | null = null;
   private silenceWatch: ReturnType<typeof setTimeout> | null = null;
+  /** The beat of the click in free play last heard, from nought, or `null` while it is not going. */
+  private freeBeatHeard: number | null = null;
   private lastDrainAtMs: number | null = null;
   private healthPaceMs = SETTLE_MS;
   /** Whether the reader has already been given this page. */
@@ -6345,6 +6347,7 @@ export class AppView {
    */
   private describeTheFreeBeats(settings: PracticeSettings): void {
     const beats = settings.freePlayBeats;
+    const heard = this.freeBeatHeard;
     this.el.freeBeatsCount.value = String(beats.length);
     this.el.freeBeatsDots.replaceChildren(
       ...beats.map((sound, index) => {
@@ -6353,6 +6356,7 @@ export class AppView {
         dot.className = 'free-beats__dot';
         dot.dataset['index'] = String(index);
         dot.dataset['sound'] = sound;
+        dot.dataset['now'] = String(index === heard);
         const said = `Beat ${String(index + 1)}: ${BEAT_SOUND_SAID[sound]}. Tap to ${BEAT_SOUND_NEXT[sound]}.`;
         dot.title = said;
         dot.setAttribute('aria-label', said);
@@ -6544,6 +6548,17 @@ export class AppView {
     this.subscriptions.push(
       controller.events.on('freePlayed', () => {
         this.showTheFreePlay();
+      }),
+    );
+
+    this.subscriptions.push(
+      // The dot of the beat just heard, lit as on a metronome's own face; the
+      // others are put out.
+      controller.events.on('freeClickHeard', ({ beat }) => {
+        this.freeBeatHeard = beat;
+        for (const dot of this.el.freeBeatsDots.querySelectorAll<HTMLElement>('.free-beats__dot')) {
+          dot.dataset['now'] = String(Number(dot.dataset['index']) === beat);
+        }
       }),
     );
 

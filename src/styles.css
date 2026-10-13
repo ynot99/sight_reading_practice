@@ -3442,6 +3442,15 @@ body:not([data-free-play='true']) #free-beats {
 }
 
 /*
+ * The beat just heard, ringed and a little larger. Grown by a transform, so
+ * the row of dots does not move under a finger reaching for one.
+ */
+.free-beats__dot[data-now='true'] {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+  transform: scale(1.15);
+}
+
+/*
  * Free play, where the keys are the whole of it: no run to start or to go
  * back to the beginning of, and nothing to repeat. The speed stays, as the
  * click's tempo. What is put away is no fewer than the keyboard's button

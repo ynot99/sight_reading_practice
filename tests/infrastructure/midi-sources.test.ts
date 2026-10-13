@@ -3,10 +3,10 @@ import type { MidiEvent } from '../../src/application/ports/IMidiSource.js';
 import { CompositeMidiSource, ONE_PRESS_MS } from '../../src/infrastructure/midi/CompositeMidiSource.js';
 import {
   ComputerKeyboardMidiSource,
-  isTypedInto,
   type KeyboardEventLike,
   type KeyboardTarget,
 } from '../../src/infrastructure/midi/ComputerKeyboardMidiSource.js';
+import { isTypedInto } from '../../src/shared/typedInto.js';
 import { ManualClock } from '../../src/infrastructure/testing/ManualClock.js';
 import { ScreenKeysMidiSource } from '../../src/infrastructure/midi/ScreenKeysMidiSource.js';
 import { MockMidiAdapter } from '../../src/infrastructure/testing/MockMidiAdapter.js';

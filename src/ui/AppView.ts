@@ -51,6 +51,7 @@ import { FREE_CLICK_STEP_BPM, LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '..
 import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
 import type { PracticeSettings } from '../application/PracticeController.js';
 import type { StoredTake } from '../application/TakeLibrary.js';
+import { isTypedInto, type TypedInto } from '../shared/typedInto.js';
 import { theSketchOfTheScore } from '../application/SketchLibrary.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
@@ -8581,6 +8582,9 @@ export class AppView {
     });
 
     this.listen(this.doc, 'keydown', (event) => {
+      this.editByTheKeys(event as KeyboardEvent);
+    });
+    this.listen(this.doc, 'keydown', (event) => {
       if ((event as KeyboardEvent).key !== 'Escape') {
         return;
       }
@@ -11865,6 +11869,28 @@ export class AppView {
       this.changeTheSketchShowing(drag.moved.events, [...sketch.before, stored.events], drag.moved.to);
     } else {
       this.drawTheRollInto();
+    }
+  }
+
+  /**
+   * The keys an editor answers to, while a sketch is being edited and nothing
+   * is being typed: Delete or Backspace takes the chosen note out, and Ctrl+Z
+   * (Cmd+Z on a Mac) puts back the last change - the trash and the undo
+   * buttons, without leaving the keyboard.
+   */
+  private editByTheKeys(event: KeyboardEvent): void {
+    if (this.el.sheetRoll.hidden || this.theOtherRollShowing?.sketch?.editing !== true) {
+      return;
+    }
+    if (isTypedInto(event.target as TypedInto | null)) {
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === 'KeyZ') {
+      event.preventDefault();
+      this.putBackTheLastChange();
+    } else if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      this.deleteTheChosenKey();
     }
   }
 

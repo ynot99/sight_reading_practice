@@ -4423,6 +4423,69 @@ describe('AppView', () => {
       expect(element('sketches-new').hidden).toBe(true);
     });
 
+    it('takes the chosen note out with Delete and puts it back with Ctrl+Z, while a sketch is edited and nothing is typed', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const played = [0, 500, 1_000].flatMap((atMs, at) => [
+        { kind: 'noteOn' as const, atMs, midi: 60 + 2 * at, velocity: 0.5 },
+        { kind: 'noteOff' as const, atMs: atMs + 400, midi: 60 + 2 * at },
+      ]);
+      const sketch = sketches.begin({ events: played, beats: [] }, 'Keys', 1);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const scrolledDown = (): number =>
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const row = view.rollScene?.notes.find((note) => note.fromMs === 500)?.row ?? 0;
+      element('roll-body').dispatchEvent(
+        new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() }),
+      );
+      const notes = (): number => sketches.find(sketch.id)?.noteCount ?? -1;
+      const press = (init: KeyboardEventInit, on: EventTarget = document.body): KeyboardEvent => {
+        const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+        on.dispatchEvent(event);
+        return event;
+      };
+
+      // Typed into a box, a key is the box's.
+      const search = element<HTMLInputElement>('scores-search');
+      expect(press({ key: 'Delete', code: 'Delete' }, search).defaultPrevented).toBe(false);
+      expect(notes()).toBe(3);
+
+      expect(press({ key: 'Delete', code: 'Delete' }).defaultPrevented).toBe(true);
+      expect(notes()).toBe(2);
+      // Redo is not offered, so its keys do nothing.
+      press({ key: 'Z', code: 'KeyZ', ctrlKey: true, shiftKey: true });
+      expect(notes()).toBe(2);
+      expect(press({ key: 'z', code: 'KeyZ', ctrlKey: true }).defaultPrevented).toBe(true);
+      expect(notes()).toBe(3);
+      // On a Mac, the command key; and Backspace as well as Delete.
+      element('roll-body').dispatchEvent(
+        new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() }),
+      );
+      press({ key: 'Backspace', code: 'Backspace' });
+      expect(notes()).toBe(2);
+      press({ key: 'z', code: 'KeyZ', metaKey: true });
+      expect(notes()).toBe(3);
+
+      // Listening, and with the viewer shut, the keys are nobody's here.
+      element('roll-body').dispatchEvent(
+        new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() }),
+      );
+      press({ key: 'Delete', code: 'Delete' });
+      expect(notes()).toBe(2);
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(press({ key: 'z', code: 'KeyZ', ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(notes()).toBe(2);
+      element<HTMLButtonElement>('roll-edit').click();
+      element<HTMLButtonElement>('roll-close').click();
+      expect(press({ key: 'z', code: 'KeyZ', ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(notes()).toBe(2);
+    });
+
     it('counts the bar out over the drawing, and can be put away', async () => {
       // A row of squares saying where written time has got to, over a picture
       // of where the reader actually got to. His: "квадратики які

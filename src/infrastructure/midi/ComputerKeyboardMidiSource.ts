@@ -1,3 +1,4 @@
+import { isTypedInto, type TypedInto } from '../../shared/typedInto.js';
 import type { IClock } from '../../application/ports/IClock.js';
 import type { IMidiSource, MidiEvent } from '../../application/ports/IMidiSource.js';
 import { TypedEventEmitter, type Unsubscribe } from '../../shared/EventEmitter.js';
@@ -39,18 +40,6 @@ export interface ComputerKeyboardOptions {
   readonly velocity?: number;
 }
 
-/**
- * As much of where a key went as this needs to know.
- *
- * Shaped rather than taken as an `Element`, for the reason `KeyboardEventLike`
- * beside it is: nothing here touches the document, and a test can hand it a
- * plain object.
- */
-export interface TypedInto {
-  readonly tagName?: string;
-  readonly type?: string;
-  readonly isContentEditable?: boolean;
-}
 
 export interface KeyboardEventLike {
   readonly code: string;
@@ -61,51 +50,6 @@ export interface KeyboardEventLike {
   /** Where the key went, which on a keydown is whatever has the focus. */
   readonly target?: TypedInto | null;
   preventDefault(): void;
-}
-
-/**
- * Inputs that letters do nothing in.
- *
- * The list is of what to *let through*, not of what to catch, and that way
- * round on purpose: an input type nobody thought of here is treated as one that
- * takes text, so an unknown box swallows a note rather than a name.
- */
-const NOT_TYPED_IN = new Set([
-  'checkbox',
-  'radio',
-  'button',
-  'submit',
-  'reset',
-  'range',
-  'color',
-  'file',
-  'image',
-]);
-
-/**
- * Whether a key was typed into something that takes text.
- *
- * Narrower than the question the space bar asks, and deliberately. That one
- * counts a focused button, because space presses buttons; this one must not, or
- * the keyboard would go dead the moment the reader pressed Start with a mouse
- * and left the focus sitting on it. Same for a checkbox: it keeps the focus
- * after a tick, and letters mean nothing to it.
- */
-export function isTypedInto(target: TypedInto | null | undefined): boolean {
-  if (target === null || target === undefined) {
-    return false;
-  }
-  if (target.isContentEditable === true) {
-    return true;
-  }
-  const tag = target.tagName;
-  if (tag === 'TEXTAREA' || tag === 'SELECT') {
-    return true;
-  }
-  if (tag !== 'INPUT') {
-    return false;
-  }
-  return !NOT_TYPED_IN.has((target.type ?? 'text').toLowerCase());
 }
 
 export interface KeyboardTarget {

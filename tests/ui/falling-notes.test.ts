@@ -7,6 +7,7 @@ import {
   theFallingNotes,
   theFallingPedal,
   theFallingRuling,
+  theRisingClick,
   theRisingNotes,
   theRisingPedal,
   type FallingNote,
@@ -404,6 +405,36 @@ describe('the bar lines falling with the notes', () => {
       ['fill', 'heard', 101, 0, 18, 150, undefined, undefined],
       ['stroke', 'edge', 101, 0, 18, 150, undefined, []],
     ]);
+  });
+});
+
+describe('the click rising with what was played freely', () => {
+  it('stands each beat at the keys as it is heard and rises with the notes, the first of a bar a bar line', () => {
+    const { barLines, ruling } = theRisingClick(
+      [
+        // Gone over the top, one not heard yet, and one just at the top.
+        { weight: 'downbeat', atMs: 0 },
+        { weight: 'beat', atMs: 7_000 },
+        { weight: 'downbeat', atMs: 4_000 },
+        { weight: 'beat', atMs: 5_000 },
+        { weight: 'beat', atMs: 6_000 },
+      ],
+      6_000,
+      2_000,
+    );
+
+    expect(barLines).toEqual([]);
+    expect(ruling).toEqual([
+      { weight: 'beat', at: 0.5 },
+      { weight: 'beat', at: 1 },
+    ]);
+  });
+
+  it('draws the first of a bar as a bar line, numbered by nothing', () => {
+    const { barLines, ruling } = theRisingClick([{ weight: 'downbeat', atMs: 5_500 }], 6_000, 2_000);
+
+    expect(barLines).toEqual([{ label: '', at: 0.75 }]);
+    expect(ruling).toEqual([]);
   });
 });
 

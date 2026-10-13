@@ -12188,6 +12188,16 @@ describe('AppView', () => {
       expect(lit()).toEqual([1]);
       metronome.advanceSubdivisions(5);
       expect(lit()).toEqual([0]);
+      // Each beat heard ruled across the lane, rising as time goes: the one
+      // just heard, the first of a bar, a bar line at the keys, and the beats
+      // before it higher up.
+      expect(view.fallingBarLines.at(-1)).toEqual({ label: '', at: 1 });
+      // And the lane moving to carry them, though nothing has been played.
+      expect(document.body.dataset['notesFalling']).toBe('true');
+      expect(view.fallingRuling.length).toBeGreaterThan(0);
+      expect(view.fallingRuling.every((line) => line.weight === 'beat' && line.at < 1)).toBe(true);
+      clock.advance(1_000);
+      expect(view.fallingBarLines.at(-1)?.at).toBeLessThan(1);
       element<HTMLButtonElement>('metronome-on').click();
       expect(metronome.isRunning).toBe(false);
       expect(lit()).toEqual([]);

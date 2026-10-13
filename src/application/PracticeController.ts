@@ -917,6 +917,11 @@ export class PracticeController {
   private clickingFreely = false;
   /** The taps of a tempo for the click in free play still counting; see `tapTheFreeTempo`. */
   private freeTaps: readonly number[] = [];
+  /**
+   * The beats of the click in free play heard lately, on the clock, the
+   * first of each bar a downbeat; see `freeClickBetween`.
+   */
+  private freeBeats: RuledMoment[] = [];
   /** Listening to the click in free play, to say each beat as it is heard. */
   private freeClickWatch: Unsubscribe | null = null;
   private freePlayWatch: Unsubscribe | null = null;
@@ -2822,8 +2827,10 @@ export class PracticeController {
    */
   private watchTheFreePlay(): void {
     if (!this.playsFreely) {
-      // The click belongs to the frame as the keys do, and goes with them.
+      // The click belongs to the frame as the keys do, and goes with them,
+      // and so do the beats of it ruled across what was played.
       this.clickFreely(false);
+      this.freeBeats = [];
       this.freePlayWatch?.();
       this.freePlayWatch = null;
       if (this.freePlayed.anythingSince(Number.NEGATIVE_INFINITY)) {
@@ -3741,6 +3748,7 @@ export class PracticeController {
       this.deps.metronome.configure(this.theFreeClick());
       this.freeClickWatch = this.deps.metronome.onTick((tick) => {
         if (tick.isPulse) {
+          this.freeBeats.push({ weight: tick.isDownbeat ? 'downbeat' : 'beat', atMs: tick.scheduledTimeMs });
           this.emitter.emit('freeClickHeard', { beat: tick.beat - 1 });
         }
       });
@@ -3857,6 +3865,22 @@ export class PracticeController {
   /** Whether anything played in free play is down now, or came up at or after a moment. */
   freePlayedSince(ms: number): boolean {
     return this.freePlayed.anythingSince(ms);
+  }
+
+  /**
+   * The beats of the click in free play heard between two moments on the
+   * clock, to be ruled across what was played as they were. What was heard
+   * before the first moment is let go of, as the presses are: whatever draws
+   * it has moved on past it.
+   */
+  freeClickBetween(fromMs: number, untilMs: number): readonly RuledMoment[] {
+    this.freeBeats = this.freeBeats.filter((beat) => beat.atMs >= fromMs);
+    return this.freeBeats.filter((beat) => beat.atMs <= untilMs);
+  }
+
+  /** Whether the click in free play is going, or a beat of it was heard at or after a moment. */
+  freeClickHeardSince(ms: number): boolean {
+    return this.clickingFreely || this.freeBeats.some((beat) => beat.atMs >= ms);
   }
 
   /**

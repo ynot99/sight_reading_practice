@@ -250,6 +250,33 @@ export function theFallingRuling(
   return shown;
 }
 
+/**
+ * Where each line of the click played freely stands, risen as the notes
+ * played with it are: at the keys the moment it is heard, gone at the top of
+ * the lane. A bar's first beat is a bar line, numbered by nothing, since
+ * nothing is being read; the rest are beats of the ruler.
+ */
+export function theRisingClick(
+  moments: readonly RuledMoment[],
+  nowMs: number,
+  aheadMs: number,
+): { readonly barLines: readonly LaneBarLine[]; readonly ruling: readonly LaneRuling[] } {
+  const barLines: LaneBarLine[] = [];
+  const ruling: LaneRuling[] = [];
+  for (const moment of moments) {
+    const at = 1 - (nowMs - moment.atMs) / aheadMs;
+    if (at <= 0 || at > 1) {
+      continue;
+    }
+    if (moment.weight === 'downbeat') {
+      barLines.push({ label: '', at });
+    } else {
+      ruling.push({ weight: moment.weight, at });
+    }
+  }
+  return { barLines, ruling };
+}
+
 /** Everything the lane shows at a moment. */
 export interface LaneScene {
   readonly notes: readonly LaneNote[];

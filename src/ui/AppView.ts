@@ -109,6 +109,7 @@ import {
   theFallingNotes,
   theFallingPedal,
   theFallingRuling,
+  theRisingClick,
   theRisingNotes,
   theRisingPedal,
   type LanePedal,
@@ -9933,6 +9934,9 @@ export class AppView {
   get fallingBarLines(): readonly LaneBarLine[] {
     const controller = this.runtime.controller;
     const { nowMs, aheadMs } = this.laneClock;
+    if (this.inFreePlay) {
+      return theRisingClick(controller.freeClickBetween(nowMs - aheadMs, nowMs), nowMs, aheadMs).barLines;
+    }
     const until = nowMs + aheadMs;
     const bars =
       this.replayRoll !== null
@@ -9954,6 +9958,10 @@ export class AppView {
   get fallingRuling(): readonly LaneRuling[] {
     const controller = this.runtime.controller;
     const { nowMs, aheadMs } = this.laneClock;
+    if (this.inFreePlay) {
+      // The click's beats, rising with what was played against them.
+      return theRisingClick(controller.freeClickBetween(nowMs - aheadMs, nowMs), nowMs, aheadMs).ruling;
+    }
     const until = nowMs + aheadMs;
     return theFallingRuling(
       this.replayRoll !== null
@@ -9990,12 +9998,14 @@ export class AppView {
   /**
    * Whether notes are moving now, rather than held, put away or gone: falling
    * under a performance or a replay, or rising in free play for as long as
-   * anything played is still in the lane.
+   * anything played is still in the lane - or the click is going, or a beat
+   * of it is, since its beats rise with the notes.
    */
   private get notesAreFalling(): boolean {
     const controller = this.runtime.controller;
+    const since = this.runtime.clock.now() - FALLING_AHEAD_MS;
     const rising =
-      this.inFreePlay && controller.freePlayedSince(this.runtime.clock.now() - FALLING_AHEAD_MS);
+      this.inFreePlay && (controller.freePlayedSince(since) || controller.freeClickHeardSince(since));
     const takeSounding =
       this.takeOnTheKeys !== null && this.runtime.takePlayer.playing === this.takeOnTheKeys.id;
     return (

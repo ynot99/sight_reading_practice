@@ -6335,6 +6335,33 @@ describe('the click in free play', () => {
     expect(controller.tapTheFreeTempo()).toBe(300);
   });
 
+  it('keeps the beats heard, to be ruled across what was played, and lets them go with the frame', async () => {
+    const { controller, metronome, clock } = createController(true, undefined, { modeId: FREE_PLAY_MODE_ID });
+    await controller.loadNewExercise();
+    const began = clock.now();
+    controller.clickFreely(true);
+
+    metronome.advanceSubdivisions(5);
+
+    // A hundred beats a minute, so six hundred milliseconds apart.
+    const heard = controller.freeClickBetween(began, began + 10_000);
+    expect(heard.map((beat) => beat.weight)).toEqual(['downbeat', 'beat', 'beat', 'beat', 'downbeat']);
+    expect(heard.map((beat) => beat.atMs - began)).toEqual([0, 600, 1_200, 1_800, 2_400]);
+    expect(controller.freeClickBetween(began, began + 1_200)).toHaveLength(3);
+    // What is before the moment asked from is let go of.
+    expect(controller.freeClickBetween(began + 1_000, began + 10_000)).toHaveLength(3);
+    expect(controller.freeClickBetween(began, began + 10_000)).toHaveLength(3);
+
+    // Heard lately while it goes, and after it stops for as long as a beat is.
+    expect(controller.freeClickHeardSince(began + 5_000)).toBe(true);
+    controller.clickFreely(false);
+    expect(controller.freeClickHeardSince(began + 2_400)).toBe(true);
+    expect(controller.freeClickHeardSince(began + 2_401)).toBe(false);
+
+    controller.updateSettings({ modeId: FLOW_MODE_ID });
+    expect(controller.freeClickBetween(Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY)).toEqual([]);
+  });
+
   it('gives the metronome up to a performance', async () => {
     const { controller, metronome } = createController(true, undefined, {
       modeId: FREE_PLAY_MODE_ID,

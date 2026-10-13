@@ -15,6 +15,7 @@ import {
 } from '../application/session/RunRoll.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
 import { HIGHEST_KEY, LOWEST_KEY } from './replayKeys.js';
+import { HANDS_SPLIT_AT_MIDI } from '../domain/midi/MidiFile.js';
 
 /**
  * What the drawing needs beyond the roll itself.
@@ -69,6 +70,11 @@ export interface RollDrawing {
   readonly keepsTime?: boolean;
   /** The keys chosen on the drawing to be changed, each by its pitch and when it went down. */
   readonly chosen?: readonly { readonly midi: number; readonly downAtMs: number }[];
+  /**
+   * Whether nothing in it was judged - a recording, or a sketch - so its notes
+   * are drawn by the hand that plays them rather than by a verdict.
+   */
+  readonly freely?: boolean;
   /**
    * Whether every key of the piano has its row, rather than the notes played
    * and a little room round them: so a note being edited can be taken to any
@@ -204,7 +210,13 @@ function placedGhosts(roll: RunRoll, ghosts: readonly RollGhost[]): PlacedGhost[
  * the run said nothing about is drawn plainly rather than as a fault, which is
  * the difference between "this was wrong" and "nothing was decided here".
  */
-function shadeOf(press: RolledPress): NoteShade {
+function shadeOf(press: RolledPress, freely: boolean): NoteShade {
+  // Nothing was judged in playing freely or in writing, so a note is drawn
+  // by the hand that plays it, the one its pitch is in where none is said:
+  // the staff it will be written on.
+  if (freely && press.verdict === null) {
+    return press.hand ?? (press.midi >= HANDS_SPLIT_AT_MIDI ? 'right' : 'left');
+  }
   switch (press.verdict) {
     case 'correct':
       return 'correct';
@@ -232,7 +244,7 @@ function element(tag: string, className: string): HTMLElement {
 }
 
 /** How a press is coloured: see `shadeOf`. */
-export type NoteShade = 'correct' | 'wrong' | 'aside' | 'unjudged';
+export type NoteShade = 'correct' | 'wrong' | 'aside' | 'unjudged' | 'right' | 'left';
 
 /** How a line of the grid is drawn: the metre's own weights, and a bar line the reader gave. */
 export type LineKind = 'downbeat' | 'beat' | 'division' | 'given';
@@ -256,8 +268,8 @@ export interface SceneNote extends SceneRowed {
   readonly open: boolean;
   /** Chosen on the drawing to be changed. */
   readonly chosen?: boolean;
-  /** Which hand plays it, where that has been said. */
-  readonly hand?: 'left' | 'right';
+  /** How hard it was struck, `0..1`: a note drawn by its hand is as strong as it is loud. */
+  readonly loudness: number;
 }
 
 /** The gap between where a note was owed and where it was taken: see `slipBetween`. */
@@ -392,6 +404,7 @@ function noteOf(
   high: number,
   endMs: number,
   chosen: RollDrawing['chosen'],
+  freely: boolean,
 ): SceneNote {
   const until = press.upAtMs ?? endMs;
   // What it was, for a finger on a cell. The deviation is the reason the view
@@ -403,10 +416,10 @@ function noteOf(
     fromMs: press.downAtMs - origin,
     untilMs: press.downAtMs - origin + Math.max(0, until - press.downAtMs),
     row: high - press.midi,
-    shade: shadeOf(press),
+    shade: shadeOf(press, freely),
+    loudness: press.velocity,
     open: press.upAtMs === null,
     says: `${midiToLabel(press.midi)} · ${press.verdict ?? 'not judged'}${off}${press.hand === undefined ? '' : ` · ${press.hand} hand`}`,
-    ...(press.hand === undefined ? {} : { hand: press.hand }),
     ...(chosen?.some((each) => each.midi === press.midi && each.downAtMs === press.downAtMs) === true
       ? { chosen: true }
       : {}),
@@ -874,7 +887,7 @@ export function thePitchesOfTheRun(
   const endMs = rollEndedAtMs(roll);
   const band = bandOf(roll.presses, ghosts, wholeKeyboard);
   const notes: PitchedNote[] = roll.presses.map((press) => {
-    const shade = shadeOf(press);
+    const shade = shadeOf(press, false);
     return {
       row: band.high - press.midi,
       fromMs: press.downAtMs - origin,
@@ -1058,7 +1071,9 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
     lines: momentsInTimeOrder(theGrid(roll, drawing.grid).map((beat) => lineOf(beat, origin))),
     rushes: momentsInTimeOrder(theRushes(roll).map((rush) => rushOf(rush, origin))),
     slips: inTimeOrder(slips),
-    notes: inTimeOrder(roll.presses.map((press) => noteOf(press, origin, band.high, endMs, drawing.chosen))),
+    notes: inTimeOrder(
+      roll.presses.map((press) => noteOf(press, origin, band.high, endMs, drawing.chosen, drawing.freely === true)),
+    ),
     ghosts: inTimeOrder(
       outlines.map(({ ghost, from, until }) => ({
         fromMs: from,

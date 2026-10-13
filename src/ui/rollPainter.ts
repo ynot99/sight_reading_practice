@@ -45,6 +45,9 @@ export interface RollInks {
   readonly aside: string;
   /** The rim of a note chosen to be changed: no verdict, so the accent. */
   readonly chosen: string;
+  /** A note nothing judged, by the hand that plays it: colours no verdict wears. */
+  readonly right: string;
+  readonly left: string;
   readonly tickDivision: string;
   readonly tickBeat: string;
   readonly tickDownbeat: string;
@@ -71,6 +74,8 @@ export const INKS: Readonly<Record<Exclude<keyof RollInks, 'font'>, string>> = {
   wrong: 'wrong',
   aside: 'aside',
   chosen: 'chosen',
+  right: 'right',
+  left: 'left',
   tickDivision: 'tick-division',
   tickBeat: 'tick-beat',
   tickDownbeat: 'tick-downbeat',
@@ -246,9 +251,6 @@ const DASHES = [3, 3];
 
 /** How round the corners of a note, a band and a capsule are. */
 const CORNER_PX = 2;
-/** The outline of a note the left hand plays: broken, as a dashed line is. */
-const LEFT_HAND_DASH: readonly number[] = [3, 2];
-
 /** How heavy the rim of a chosen note is: enough to find it among its neighbours. */
 const CHOSEN_RIM_PX = 2;
 
@@ -275,8 +277,23 @@ function inkOfNote(inks: RollInks, shade: NoteShade): string {
       return inks.aside;
     case 'unjudged':
       return inks.note;
+    case 'right':
+      return inks.right;
+    case 'left':
+      return inks.left;
   }
 }
+
+/**
+ * How strongly a note drawn by its hand is filled, by how hard it was struck:
+ * never so faint it is lost, and full only at the loudest.
+ */
+export function strengthOf(loudness: number): number {
+  return FAINTEST_NOTE + (1 - FAINTEST_NOTE) * Math.min(1, Math.max(0, loudness));
+}
+
+/** The strength of the softest note drawn by its hand. */
+const FAINTEST_NOTE = 0.3;
 
 /**
  * Paints the part of the grid a canvas covers: see `RollTiles`.
@@ -363,14 +380,19 @@ export function paintTheGrid(
     // Still down when the run ended, so it runs to the edge rather than stopping.
     const corners = note.open ? [CORNER_PX, 0, 0, CORNER_PX] : CORNER_PX;
     if (note.shade === 'unjudged') {
-      // An outline, because a fill in any colour is a verdict and there was not one;
-      // broken for the left hand, so the two hands are told apart without one.
+      // An outline, because a fill in any colour is a verdict and there was not one.
       paint.strokeStyle = inks.note;
       paint.lineWidth = 1;
-      paint.setLineDash(note.hand === 'left' ? LEFT_HAND_DASH : []);
       box(paint, left + 0.5, y(note.row) + 0.5, wide(note.fromMs, note.untilMs) - 1, rowPx - 1, corners);
       paint.stroke();
-      paint.setLineDash([]);
+      continue;
+    }
+    if (note.shade === 'right' || note.shade === 'left') {
+      paint.globalAlpha = strengthOf(note.loudness);
+      paint.fillStyle = inkOfNote(inks, note.shade);
+      box(paint, left, y(note.row), wide(note.fromMs, note.untilMs), rowPx, corners);
+      paint.fill();
+      paint.globalAlpha = 1;
       continue;
     }
     paint.fillStyle = inkOfNote(inks, note.shade);

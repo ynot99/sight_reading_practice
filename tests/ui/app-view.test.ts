@@ -4166,6 +4166,8 @@ describe('AppView', () => {
       const kept = takes.list()[0];
       expect(kept?.noteCount).toBe(3);
       rowButton('takes-list', 'Look at this take').click();
+      // Nothing judged in it: its notes filled by the hand their pitch is in.
+      expect(view.rollScene?.notes.map((note) => note.shade)).toEqual(['right', 'right', 'right']);
       // A recording is a record of what was played: the pencil begins a sketch.
       expect(edit.dataset['idle']).toBeUndefined();
       expect(edit.title).toBe('Begin a sketch of this recording to edit; the recording stays as it was played');
@@ -4639,7 +4641,7 @@ describe('AppView', () => {
       left?.click();
       expect(handsOf()).toEqual(['left', 'left']);
       expect(pressed()).toEqual(['true', 'false', 'false']);
-      expect(view.rollScene?.notes.map((note) => note.hand)).toEqual(['left', 'left']);
+      expect(view.rollScene?.notes.map((note) => note.shade)).toEqual(['left', 'left']);
       // Pressed again, nothing to change, and nothing to undo for it.
       left?.click();
       element<HTMLButtonElement>('roll-undo').click();

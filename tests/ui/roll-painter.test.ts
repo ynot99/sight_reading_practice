@@ -32,6 +32,8 @@ const INKS: RollInks = {
   wrong: 'wrong',
   aside: 'aside',
   chosen: 'chosen',
+  right: 'right',
+  left: 'left',
   tickDivision: 'tick-division',
   tickBeat: 'tick-beat',
   tickDownbeat: 'tick-downbeat',
@@ -177,26 +179,39 @@ describe('painting the grid', () => {
     expect(rim?.wide).toBeCloseTo(68, 6);
   });
 
-  it('draws the outline of a note the left hand plays broken, and others whole', () => {
-    const scene = sceneOf(
-      roll({
-        presses: [
-          press({ verdict: null, hand: 'left' }),
-          press({ midi: MIDI.C4 + 2, verdict: null, hand: 'right' }),
-          press({ midi: MIDI.C4 + 4, verdict: null }),
-        ],
-      }),
-    );
+  it('fills a note nothing judged by the hand that plays it, as strongly as it was struck', () => {
+    const presses = [
+      // Said: the left hand, though its pitch is the right's.
+      press({ midi: MIDI.C4 + 4, verdict: null, hand: 'left', velocity: 1 }),
+      // Not said: by pitch, middle C the right hand's, B below it the left's.
+      press({ midi: MIDI.C4, downAtMs: 1600, upAtMs: 1900, verdict: null, velocity: 0 }),
+      press({ midi: MIDI.C4 - 1, downAtMs: 2000, upAtMs: 2400, verdict: null, velocity: 0.5 }),
+    ];
+    const freely = theSceneOfTheRoll({
+      roll: roll({ presses }),
+      barLabel: () => null,
+      freely: true,
+      chosen: [{ midi: MIDI.C4 + 4, downAtMs: 1000 }],
+    });
     const { surface: canvas, recorder } = surface();
 
-    paintTheGrid(canvas, scene, at(), INKS, 1);
+    paintTheGrid(canvas, freely, at(), INKS, 1);
 
-    expect(recorder.inked('note').map((mark) => mark.dashes ?? [])).toEqual([[3, 2], [], []]);
-    expect(scene.notes.map((note) => note.says)).toEqual([
-      'C4 · not judged · left hand',
-      'D4 · not judged · right hand',
-      'E4 · not judged',
+    expect(freely.notes.map((note) => note.shade)).toEqual(['left', 'right', 'left']);
+    expect(recorder.inked('left').map((mark) => [mark.how, mark.alpha])).toEqual([
+      ['fill', 1],
+      ['fill', 0.3 + 0.7 * 0.5],
     ]);
+    expect(recorder.inked('right').map((mark) => [mark.how, mark.alpha])).toEqual([['fill', 0.3]]);
+    // And what is painted after a faint one is painted at full strength.
+    expect(recorder.inked('chosen').map((mark) => mark.alpha)).toEqual([1]);
+    expect(freely.notes.map((note) => note.says)).toEqual([
+      'E4 · not judged · left hand',
+      'C4 · not judged',
+      'B3 · not judged',
+    ]);
+    // A run's unjudged notes are still an outline: nothing was decided about them.
+    expect(sceneOf(roll({ presses })).notes.map((note) => note.shade)).toEqual(['unjudged', 'unjudged', 'unjudged']);
   });
 
   it('colours each press by its verdict', () => {

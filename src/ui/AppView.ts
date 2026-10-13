@@ -12204,6 +12204,7 @@ export class AppView {
       keepsTime: this.theRunKeptTime(),
       chosen,
       wholeKeyboard: this.theOtherRollShowing?.sketch?.editing === true,
+      freely: this.theOtherRollShowing?.recording !== undefined || this.theOtherRollShowing?.sketch !== undefined,
     });
   }
 

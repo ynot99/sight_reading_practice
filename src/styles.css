@@ -1762,6 +1762,12 @@ textarea {
   /* A note chosen to be changed: no verdict, so the accent. */
   --roll-ink-chosen: var(--accent);
   /*
+   * A note nothing judged - a recording, a sketch - by the hand that plays
+   * it: a blue and a violet, neither of which a verdict wears.
+   */
+  --roll-ink-right: color-mix(in srgb, var(--accent) 70%, var(--surface));
+  --roll-ink-left: color-mix(in srgb, var(--star-8) 70%, var(--surface));
+  /*
    * The metre on the ruler: the same lines as the grid, cut to their weight,
    * and small and bright at his asking. The grid's own grey is right behind
    * the music, where the lines must not compete with the notes, and wrong on a

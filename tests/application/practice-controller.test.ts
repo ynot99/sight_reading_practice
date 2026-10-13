@@ -6253,3 +6253,45 @@ describe('telling the page where the steps are', () => {
     ]);
   });
 });
+
+describe('the click in free play', () => {
+  it('goes only in free play, at its own tempo held to what a metronome can play', async () => {
+    const { controller, metronome } = createController(true);
+    await controller.loadNewExercise();
+
+    controller.clickFreely(true);
+    expect(controller.clicksFreely).toBe(false);
+    expect(metronome.isRunning).toBe(false);
+
+    controller.updateSettings({ modeId: FREE_PLAY_MODE_ID });
+    controller.clickFreely(true);
+    expect(metronome.isRunning).toBe(true);
+    expect(metronome.currentConfig.bpm).toBe(100);
+    expect(metronome.currentConfig.click).toBe('pulse');
+    expect(metronome.currentConfig.timeSignature.beats).toBe(4);
+
+    // A tempo typed elsewhere is taken to the nearest step before it moves.
+    controller.updateSettings({ freePlayBpm: 97 });
+    expect(controller.nudgeFreePlayBpm(5)).toBe(100);
+    expect(metronome.currentConfig.bpm).toBe(100);
+    controller.updateSettings({ freePlayBpm: 298 });
+    expect(controller.nudgeFreePlayBpm(5)).toBe(300);
+    controller.updateSettings({ freePlayBpm: 22 });
+    expect(controller.nudgeFreePlayBpm(-5)).toBe(20);
+  });
+
+  it('gives the metronome up to a performance', async () => {
+    const { controller, metronome } = createController(true, undefined, {
+      modeId: FREE_PLAY_MODE_ID,
+      freePlayBpm: 137,
+    });
+    await controller.loadNewExercise();
+    controller.clickFreely(true);
+
+    controller.listen();
+
+    expect(controller.clicksFreely).toBe(false);
+    expect(metronome.isRunning).toBe(true);
+    expect(metronome.currentConfig.bpm).not.toBe(controller.settings.freePlayBpm);
+  });
+});

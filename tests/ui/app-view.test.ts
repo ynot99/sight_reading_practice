@@ -12108,6 +12108,55 @@ describe('AppView', () => {
       expect(element('sheet-metronome').hidden).toBe(true);
     });
 
+    it('starts and stops the click in free play on a tap, at a tempo of its own the speed buttons set', async () => {
+      const { view, runtime, metronome } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      frameButton('free').click();
+      const button = element<HTMLButtonElement>('focus-metronome');
+      const tempo = element<HTMLOutputElement>('focus-tempo');
+      const percent = runtime.controller.tempoPercent;
+
+      expect(tempo.value).toBe('♩100');
+      expect(button.title).toContain('Tap to start it, hold for its settings.');
+      button.click();
+      expect(metronome.isRunning).toBe(true);
+      expect(metronome.currentConfig.bpm).toBe(100);
+      expect(element('sheet-metronome').hidden).toBe(true);
+      expect(button.dataset['click']).toBe('on');
+      expect(button.title).toContain('Tap to stop it');
+
+      // Faster from the next beat, and the piece's own speed left alone.
+      element<HTMLButtonElement>('focus-faster').click();
+      expect(metronome.currentConfig.bpm).toBe(105);
+      expect(tempo.value).toBe('♩105');
+      expect(tempo.title).toBe('The metronome: 105 bpm');
+      element<HTMLButtonElement>('focus-slower').click();
+      element<HTMLButtonElement>('focus-slower').click();
+      expect(runtime.controller.settings.freePlayBpm).toBe(95);
+      expect(runtime.controller.tempoPercent).toBe(percent);
+
+      // Held, it opens the sheet and leaves the click going.
+      holdTheMetronome();
+      expect(element('sheet-metronome').hidden).toBe(false);
+      expect(metronome.isRunning).toBe(true);
+      element<HTMLButtonElement>('metronome-close').click();
+
+      button.click();
+      expect(metronome.isRunning).toBe(false);
+      expect(button.dataset['click']).toBe('off');
+
+      // Out of free play it goes with the keys, and the button is the run's again.
+      button.click();
+      frameButton('free').click();
+      expect(metronome.isRunning).toBe(false);
+      expect(runtime.controller.clicksFreely).toBe(false);
+      expect(tempo.value).toBe(`${String(percent)}%`);
+      button.click();
+      expect(element('sheet-metronome').hidden).toBe(false);
+      expect(metronome.isRunning).toBe(false);
+    });
+
     it('swaps what a tap and a hold do at the foot of its sheet', async () => {
       // A reader who has set the click once and only turns it off and on can
       // have that on the tap; the sheet is then a hold, or a right click, away.

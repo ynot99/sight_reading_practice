@@ -3390,14 +3390,13 @@ body[data-free-play='true'] .drill-pill {
 
 /*
  * Free play, where the keys are the whole of it: no run to start or to go
- * back to the beginning of, and nothing to repeat or to play faster. What is
- * put away is no fewer than the keyboard's button that comes in, so the row
- * is never longer than it is between runs.
+ * back to the beginning of, and nothing to repeat. The speed stays, as the
+ * click's tempo. What is put away is no fewer than the keyboard's button
+ * that comes in, so the row is never longer than it is between runs.
  */
 body[data-free-play='true'] #focus-play,
 body[data-free-play='true'] #focus-rewind,
 body[data-free-play='true'] #focus-repeat,
-body[data-free-play='true'] .focus-bar__row > #focus-speed,
 body[data-take-on-keys='true'] #focus-play,
 body[data-take-on-keys='true'] #focus-rewind,
 body[data-take-on-keys='true'] #focus-repeat,

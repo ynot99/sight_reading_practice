@@ -456,14 +456,15 @@ describe('the stylesheet', () => {
   });
 
   it('puts away in free play and over a take what there is nothing to do with, and lifts the bar over the keys', () => {
-    // No run to start or rewind, nothing to repeat or play faster - and no
-    // fewer put away than the keyboard's button that comes in, so the row is
-    // never longer than it is between runs.
+    // No run to start or rewind, nothing to repeat - and no fewer put away
+    // than the keyboard's button that comes in, so the row is never longer
+    // than it is between runs. In free play the speed stays, as the click's
+    // tempo; over a take there is nothing to play faster.
     const hidden = rules().find((rule) => rule.selector.startsWith("body[data-free-play='true'] #focus-play"));
-    const putAway = ['#focus-play', '#focus-rewind', '#focus-repeat', '.focus-bar__row > #focus-speed'];
+    const putAway = ['#focus-play', '#focus-rewind', '#focus-repeat'];
     expect(hidden?.selector.split(',').map((each) => each.trim())).toEqual([
       ...putAway.map((what) => `body[data-free-play='true'] ${what}`),
-      ...putAway.map((what) => `body[data-take-on-keys='true'] ${what}`),
+      ...[...putAway, '.focus-bar__row > #focus-speed'].map((what) => `body[data-take-on-keys='true'] ${what}`),
     ]);
     expect(hidden?.body).toMatch(/display\s*:\s*none/);
 

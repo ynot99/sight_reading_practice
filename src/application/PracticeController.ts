@@ -4,7 +4,7 @@ import type { RhythmProfileRegistry } from '../domain/generation/RhythmProfile.j
 import type { Exercise } from '../domain/model/Exercise.js';
 import type { PlayingAhead } from './session/PracticeContext.js';
 import type { KeySignature } from '../domain/model/KeySignature.js';
-import type { TimeSignature } from '../domain/model/TimeSignature.js';
+import { TimeSignature } from '../domain/model/TimeSignature.js';
 import type { IMusicXmlSerializer } from '../domain/notation/MusicXmlSerializer.js';
 import { printedAtEachStep } from '../domain/notation/printedIds.js';
 import { noteCountsOf, type PerformanceReport, type StepStatus } from '../domain/scoring/PerformanceReport.js';
@@ -32,7 +32,7 @@ import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
 import type { IClock } from './ports/IClock.js';
 import { GeneratedExerciseProvider, type IExerciseProvider } from './ports/IExerciseProvider.js';
 import { OneOfTheGenerators } from '../domain/generation/OneOfTheGenerators.js';
-import type { IMetronome } from './ports/IMetronome.js';
+import type { IMetronome, MetronomeConfig } from './ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
@@ -197,6 +197,9 @@ const OTHER_HAND_VELOCITY = 0.45;
 
 const MIN_TEMPO_BPM = 20;
 const MAX_TEMPO_BPM = 300;
+
+/** How far one press of the tempo buttons moves the click in free play, in beats a minute. */
+export const FREE_CLICK_STEP_BPM = 5;
 
 /**
  * A written tempo taken at the reader's share of it.
@@ -612,6 +615,14 @@ export interface PracticeSettings {
    */
   readonly playbackGoesOn: PlaybackGoesOn;
   /**
+   * How fast the click goes in free play, in beats a minute.
+   *
+   * Its own number and not the piece's: there is no music being read in free
+   * play to take a tempo from, and the piece's tempo at the reader's share of
+   * it is an answer to how fast to read that piece.
+   */
+  readonly freePlayBpm: number;
+  /**
    * Print, in the console, how long each stage of starting took.
    *
    * For finding what makes a long score slow to begin; see `timeTheStart`.
@@ -878,6 +889,8 @@ export class PracticeController {
   private playAlong: Unsubscribe | null = null;
   /** What has been played in free play, while it is the frame; see {@link watchTheFreePlay}. */
   private readonly freePlayed = new FreePlayed();
+  /** See {@link clicksFreely}. */
+  private clickingFreely = false;
   private freePlayWatch: Unsubscribe | null = null;
   /** The notes a performance is lighting right now, so they can be put out. */
   private litNotes: { readonly stepIndex: number; readonly midi: number }[] = [];
@@ -1081,6 +1094,7 @@ export class PracticeController {
       scoreOrder: 'recent',
       // The piece and no further, as a playback has always been.
       playbackGoesOn: 'this',
+      freePlayBpm: 100,
       traceTheStart: false,
       rulerCursor: false,
       rulerStrength: 1,
@@ -1310,6 +1324,11 @@ export class PracticeController {
     // music to say so.
     if (changes.repeatRange !== undefined || changes.playbackGoesOn !== undefined) {
       this.player?.setRepeating(this.playbackRepeats);
+    }
+
+    // Faster or slower from the next click, without starting the bar again.
+    if (changes.freePlayBpm !== undefined && this.clickingFreely) {
+      this.deps.metronome.configure(this.theFreeClick());
     }
 
     // And the same for the hand. Reported from the page: it was read once
@@ -1875,6 +1894,9 @@ export class PracticeController {
       return;
     }
     this.disposeSession();
+    // The metronome is the performance's now. A click left thinking it was
+    // going would be a button saying so over a pulse it no longer owns.
+    this.clickFreely(false);
     // Hearing the page played is learning it, so a reading after that is not
     // the first.
     this.seedOfAPageKnown = this.lastSeed;
@@ -2771,6 +2793,8 @@ export class PracticeController {
    */
   private watchTheFreePlay(): void {
     if (!this.playsFreely) {
+      // The click belongs to the frame as the keys do, and goes with them.
+      this.clickFreely(false);
       this.freePlayWatch?.();
       this.freePlayWatch = null;
       if (this.freePlayed.anythingSince(Number.NEGATIVE_INFINITY)) {
@@ -3661,6 +3685,57 @@ export class PracticeController {
   /** Whether the frame now chosen is the one where the reader plays freely. */
   get playsFreely(): boolean {
     return playsFreely(this.currentSettings.modeId);
+  }
+
+  /** Whether the click is going in free play. */
+  get clicksFreely(): boolean {
+    return this.clickingFreely;
+  }
+
+  /**
+   * Starts or stops the click in free play, and nowhere else.
+   *
+   * A pulse with nothing to follow: beats at the reader's own tempo, the
+   * first of each bar marked, until it is stopped or the frame is left.
+   * Outside free play the metronome belongs to the runs and performances,
+   * which set it going themselves.
+   */
+  clickFreely(on: boolean): void {
+    const wanted = on && this.playsFreely;
+    if (wanted === this.clickingFreely) {
+      return;
+    }
+    this.clickingFreely = wanted;
+    if (wanted) {
+      this.deps.metronome.configure(this.theFreeClick());
+      this.deps.metronome.start();
+    } else {
+      this.deps.metronome.stop();
+    }
+  }
+
+  /** The click in free play faster or slower, held to what a metronome can play. */
+  nudgeFreePlayBpm(deltaBpm: number): number {
+    const from = Math.round(this.currentSettings.freePlayBpm / FREE_CLICK_STEP_BPM) * FREE_CLICK_STEP_BPM;
+    this.updateSettings({
+      freePlayBpm: Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, from + deltaBpm)),
+    });
+    return this.currentSettings.freePlayBpm;
+  }
+
+  /** What the metronome is told in free play: the beat, in bars of four. */
+  private theFreeClick(): MetronomeConfig {
+    return {
+      bpm: this.currentSettings.freePlayBpm,
+      tempos: [],
+      timeSignature: new TimeSignature(4, 4),
+      bars: [],
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      dropout: null,
+      endsAtTicks: null,
+      muted: false,
+    };
   }
 
   /** The keys down in free play now, none outside it. */

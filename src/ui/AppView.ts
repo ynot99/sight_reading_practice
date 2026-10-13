@@ -47,7 +47,7 @@ import { TimeSignature } from '../domain/model/TimeSignature.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
 import { writeMidiFile } from '../domain/midi/MidiFile.js';
 import { worstPassage } from '../domain/scoring/troubleSpots.js';
-import { LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
+import { FREE_CLICK_STEP_BPM, LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '../application/PracticeController.js';
 import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
 import type { PracticeSettings } from '../application/PracticeController.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
@@ -5838,6 +5838,13 @@ export class AppView {
       this.changeTheReplaySpeed(deltaPercent > 0 ? 1 : -1);
       return;
     }
+    // In free play the buttons are the click's tempo: there is no piece being
+    // read there to play faster, and nothing to engrave again.
+    if (this.runtime.controller.playsFreely) {
+      this.runtime.controller.nudgeFreePlayBpm(deltaPercent > 0 ? FREE_CLICK_STEP_BPM : -FREE_CLICK_STEP_BPM);
+      this.syncControlsFromSettings();
+      return;
+    }
     this.runtime.controller.nudgeTempoPercent(deltaPercent);
     this.describeTempo();
     this.syncControlsFromSettings();
@@ -5989,6 +5996,14 @@ export class AppView {
       this.el.focusTempo.title = 'How fast the run is played back';
       return;
     }
+    if (this.runtime.controller.playsFreely) {
+      // The beat a minute as a score marks it, a crotchet and its number,
+      // which fits where the percentage does: the row may not change size.
+      const bpm = this.runtime.controller.settings.freePlayBpm;
+      this.el.focusTempo.value = `♩${String(bpm)}`;
+      this.el.focusTempo.title = `The metronome: ${String(bpm)} bpm`;
+      return;
+    }
     const percent = this.runtime.controller.tempoPercent;
     this.el.focusTempo.value = `${percent}%`;
     this.el.focusTempo.title = `${this.runtime.controller.tempoBpm} bpm`;
@@ -6089,6 +6104,20 @@ export class AppView {
    * tap and a hold do is said too, a hold being nowhere to be seen.
    */
   private describeMetronomeButton(settings: PracticeSettings): void {
+    const controller = this.runtime.controller;
+    if (controller.playsFreely) {
+      // Free play has no run for the click to follow, so the button is the
+      // click itself: a tap starts and stops it, as on any metronome, and the
+      // sheet is the hold.
+      const going = controller.clicksFreely;
+      const label = `Metronome ${going ? 'going' : 'stopped'}, ${String(settings.freePlayBpm)} bpm. ` +
+        `Tap to ${going ? 'stop' : 'start'} it, hold for its settings.`;
+      this.el.focusMetronome.dataset['click'] = going ? 'on' : 'off';
+      this.el.focusMetronome.title = label;
+      this.el.focusMetronome.setAttribute('aria-label', label);
+      this.el.metronomeOn.setAttribute('aria-checked', String(settings.clickOn));
+      return;
+    }
     const on = settings.clickOn;
     const set = on
       ? `Metronome: ${CLICK_WHEN_LABELS[settings.clickWhen].toLowerCase()}, ` +
@@ -6130,6 +6159,11 @@ export class AppView {
       this.syncControlsFromSettings();
     };
     const tapped = (): void => {
+      if (controller.playsFreely) {
+        controller.clickFreely(!controller.clicksFreely);
+        this.syncControlsFromSettings();
+        return;
+      }
       if (controller.settings.metronomeTap === 'opens-its-sheet') {
         openTheSheet();
       } else {
@@ -6137,7 +6171,7 @@ export class AppView {
       }
     };
     const held = (): void => {
-      if (controller.settings.metronomeTap === 'opens-its-sheet') {
+      if (controller.settings.metronomeTap === 'opens-its-sheet' && !controller.playsFreely) {
         turnItOffOrOn();
       } else {
         openTheSheet();

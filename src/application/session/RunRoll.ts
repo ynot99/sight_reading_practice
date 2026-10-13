@@ -1,5 +1,6 @@
 import type { NoteVerdict } from '../../domain/matching/ChordMatcher.js';
-import type { MidiFileEvent } from '../../domain/midi/MidiFile.js';
+import { theClickOfTheTake, type MidiFileEvent } from '../../domain/midi/MidiFile.js';
+import { Duration } from '../../domain/model/Duration.js';
 import {
   barLines,
   elapsedMsAt,
@@ -860,12 +861,17 @@ export function takeOfTheRun(roll: RunRoll): Take | null {
  * at rather than only heard: the drawing asks for presses and pedal spans, and
  * a recording is those written down as a stream.
  *
- * With no beats, which is not an omission. A run has a grid because something
- * was keeping its time - a pulse, or the reader's own entries against the page.
- * Free playing has neither, and lines drawn across it would be a metre nobody
- * played claiming to be the one that was. His: "for each recording add a button
- * to add a MIDI viewer, but without vertical lines to indicate the beat,
- * because the beat can be gibberish".
+ * With no beats where it was played without the click, which is not an
+ * omission. A run has a grid because something was keeping its time - a
+ * pulse, or the reader's own entries against the page. Free playing alone has
+ * neither, and lines drawn across it would be a metre nobody played claiming
+ * to be the one that was. His: "for each recording add a button to add a MIDI
+ * viewer, but without vertical lines to indicate the beat, because the beat
+ * can be gibberish".
+ *
+ * Played to the click, it has the beats of the click as its file and its
+ * page have them - from the first beat of the bar it began in, a crotchet
+ * each - so the bars drawn are the bars written.
  *
  * A note still sounding at the end is left open, the same answer the roll gives
  * for a key still down when a run stops.
@@ -916,7 +922,24 @@ export function rollOfTheTake(take: Take): RunRoll {
   if (pedalDownAt !== null) {
     pedal.push({ downAtMs: pedalDownAt, upAtMs: null });
   }
-  return { presses, beats: [], pedal, rushes: [], truncated: false };
+  const beats: RolledBeat[] = (theClickOfTheTake(take.events, take.beats) ?? []).map((beat, at) => ({
+    atMs: beat.atMs,
+    weight: beat.beat === 0 ? 'downbeat' : 'beat',
+    positionTicks: at * Duration.QUARTER.ticks,
+  }));
+  return { presses, beats, pedal, rushes: [], truncated: false };
+}
+
+/**
+ * The bars of a roll counted on its own downbeats, from one: for a drawing
+ * that is of no score, whose bars have no other number.
+ */
+export function barsCountedOnItsBeats(roll: RunRoll): (positionTicks: number) => string | null {
+  const downbeats = roll.beats.filter((beat) => beat.weight === 'downbeat').map((beat) => beat.positionTicks);
+  return (positionTicks) => {
+    const at = downbeats.indexOf(positionTicks);
+    return at < 0 ? null : String(at + 1);
+  };
 }
 
 /**

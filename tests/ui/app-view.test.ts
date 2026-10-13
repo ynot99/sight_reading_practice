@@ -12122,6 +12122,12 @@ describe('AppView', () => {
       holdTheMetronome();
       expect(metronome.isRunning).toBe(false);
       element<HTMLButtonElement>('focus-keep').click();
+      // Looked at, it is drawn in the same bars, counted from its first.
+      rowButton('takes-list', 'Look at this take').click();
+      expect(view.rollScene?.bars).toEqual([
+        { atMs: 0, name: '1' },
+        { atMs: 1_800, name: '2' },
+      ]);
       element<HTMLButtonElement>('focus-takes').click();
       expect(element('sheet-takes').hidden).toBe(false);
 

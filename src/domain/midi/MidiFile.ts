@@ -156,6 +156,38 @@ export function theBeatsFromTheFirstBar(
 }
 
 /**
+ * The beats a take is written in: from the first beat of the bar its first
+ * event falls in, on to its last event, the click carried on at its last
+ * pace and in its last bar wherever it stopped before the playing did.
+ *
+ * One answer for the file, the page read from it and the drawing of the
+ * take, so the three cannot disagree about where a bar is. `null` where the
+ * click says nothing: see {@link barsAreHeardIn}.
+ */
+export function theClickOfTheTake(
+  events: readonly MidiFileEvent[],
+  beats: readonly HeardBeat[],
+): readonly HeardBeat[] | null {
+  const firstMs = events.reduce((earliest, event) => Math.min(earliest, event.atMs), Number.POSITIVE_INFINITY);
+  const lastMs = events.reduce((latest, event) => Math.max(latest, event.atMs), Number.NEGATIVE_INFINITY);
+  const from = theBeatsFromTheFirstBar(beats, firstMs);
+  if (from === null) {
+    return null;
+  }
+  const carried = [...from];
+  for (let last = elementAt(carried, carried.length - 1); last.atMs < lastMs; ) {
+    const gap = gapAfter(carried, carried.length - 1);
+    // A pace of nothing never arrives anywhere; the click said so itself.
+    if (gap <= 0) {
+      break;
+    }
+    last = { atMs: last.atMs + gap, beat: (last.beat + 1) % last.beatsInBar, beatsInBar: last.beatsInBar };
+    carried.push(last);
+  }
+  return carried;
+}
+
+/**
  * Whether a click says where its bars are: two beats heard apart, the
  * least a pace is read from.
  */
@@ -221,8 +253,7 @@ function theMarksOfTheClick(
 /**
  * Where a moment falls on the click, in ticks from its first bar: a
  * crotchet for each beat heard, and a moment between two beats as far
- * between them as it fell. Past the last beat the click is carried on at its
- * last pace.
+ * between them as it fell.
  *
  * Asked in order of time, as the events are written, so the beat reached is
  * kept between asks.
@@ -259,8 +290,7 @@ export function writeMidiFile(
   const msPerTick = 60_000 / (tempoBpm * TICKS_PER_QUARTER);
   // A take opens on its first note; a pedal already down is said at the
   // same moment.
-  const firstNote = events.reduce((earliest, event) => Math.min(earliest, event.atMs), Number.POSITIVE_INFINITY);
-  const grid = options.beats === undefined ? null : theBeatsFromTheFirstBar(options.beats, firstNote);
+  const grid = options.beats === undefined ? null : theClickOfTheTake(events, options.beats);
 
   // Stable: two events at the same instant keep the order they arrived in,
   // except that a release always precedes a press, so re-striking a key that

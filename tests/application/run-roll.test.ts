@@ -16,6 +16,7 @@ import {
   rollEndedAtMs,
   rollOfTheScore,
   rollOfTheTake,
+  barsCountedOnItsBeats,
   takeOfTheRun,
   type RolledBeat,
   type RolledPress,
@@ -1056,7 +1057,29 @@ describe('a recording drawn by the same machinery', () => {
     ]);
   });
 
-  it('gives it no grid at all', () => {
+  it('gives it the beats of the click it was played to, from the first of its first bar, and its bars a count of their own', () => {
+    // Bars of three, 500 ms a beat; the playing begins on the third beat of a
+    // bar and goes on past the last beat heard.
+    const roll = rollOfTheTake({
+      ...takeOf([
+        { kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.7 },
+        { kind: 'noteOff', atMs: 2_100, midi: MIDI.C4 },
+      ]),
+      beats: [-1_000, -500, 0, 500, 1_000].map((atMs, at) => ({ atMs, beat: at % 3, beatsInBar: 3 })),
+    });
+
+    expect(roll.beats).toEqual(
+      [-1_000, -500, 0, 500, 1_000, 1_500, 2_000, 2_500].map((atMs, at) => ({
+        atMs,
+        weight: at % 3 === 0 ? 'downbeat' : 'beat',
+        positionTicks: at * Duration.QUARTER.ticks,
+      })),
+    );
+    const name = barsCountedOnItsBeats(roll);
+    expect([0, 3, 6, 1].map((at) => name(at * Duration.QUARTER.ticks))).toEqual(['1', '2', '3', null]);
+  });
+
+  it('gives it no grid at all where it was played without the click', () => {
     // Not an omission: a run has beats because something kept its time, and
     // free playing had nothing keeping it. Lines across it would be a metre
     // nobody played claiming to be the one that was. His: "without vertical

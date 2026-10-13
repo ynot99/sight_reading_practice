@@ -149,6 +149,7 @@ import {
   rollAsEvents,
   rollBeganAtMs,
   rollOfTheScore,
+  barsCountedOnItsBeats,
   rollOfTheTake,
   takeOfTheRun,
   type RunRoll,
@@ -1663,6 +1664,8 @@ export class AppView {
      * so that the notes the score asks for belong under it.
      */
     readonly ofTheOpenScore: boolean;
+    /** What its bars are called, where the open score's numbers are not theirs. */
+    readonly barLabel?: (positionTicks: number) => string | null;
   } | null = null;
 
   /** The reading the sheet over the list is showing, so its buttons know theirs. */
@@ -11131,11 +11134,14 @@ export class AppView {
     // opened. His: "діалог з recordings перекриває сам MIDI viewer коли я обрав
     // look at this take".
     this.el.sheetTakes.hidden = true;
+    const roll = rollOfTheTake(take);
     this.theOtherRollShowing = {
-      roll: rollOfTheTake(take),
+      roll,
       what: 'A recording',
       why: 'Free playing: no bars to practise.',
       ofTheOpenScore: false,
+      // Played to the click, its bars are its own, counted from its first.
+      barLabel: barsCountedOnItsBeats(roll),
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -11464,6 +11470,10 @@ export class AppView {
    * counter, which a frame with gates resets at every bar line.
    */
   private barNamer(): (positionTicks: number) => string | null {
+    const own = this.theOtherRollShowing?.barLabel;
+    if (own !== undefined) {
+      return own;
+    }
     const exercise = this.runtime.controller.currentExercise;
     if (exercise === null) {
       return () => null;

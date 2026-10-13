@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   barsAreHeardIn,
   damperIsDown,
+  theClickOfTheTake,
   writeMidiFile,
   type HeardBeat,
   type MidiFileEvent,
@@ -315,6 +316,30 @@ describe('writing a take in the bars of the click it was played to', () => {
     for (const beats of [[], click(0, 600, 1), click(0, 0, 2)]) {
       expect(writeMidiFile(events, { trackName: 'Idea', beats })).toEqual(plain);
     }
+  });
+});
+
+describe('the beats a take is written in', () => {
+  it('carries a click stopped before the playing did on to its last event, in its last bar', () => {
+    const beats = theClickOfTheTake(struck(0, 2_000), click(0, 600, 4, 3));
+
+    expect(beats?.map((beat) => [beat.atMs, beat.beat])).toEqual([
+      [0, 0],
+      [600, 1],
+      [1_200, 2],
+      [1_800, 0],
+      [2_400, 1],
+    ]);
+  });
+
+  it('carries on nothing at a pace of nothing', () => {
+    const beats = [...click(0, 600, 2), { atMs: 600, beat: 2, beatsInBar: 4 }];
+
+    expect(theClickOfTheTake(struck(0, 3_000), beats)).toHaveLength(3);
+  });
+
+  it('says nothing for a click that says nothing', () => {
+    expect(theClickOfTheTake(struck(0), click(0, 600, 1))).toBeNull();
   });
 });
 

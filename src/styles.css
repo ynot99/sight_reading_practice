@@ -3410,11 +3410,17 @@ body:not([data-free-play='true']) #free-beats {
   font-variant-numeric: tabular-nums;
 }
 
-/* A dot a beat: filled where marked, half where plain, an empty ring where left out. */
+/*
+ * A dot a beat: filled where marked, half where plain, an empty ring where left
+ * out. Room around them for the beat just heard to grow into: the sheet's
+ * controls scroll, and so cut off whatever passes their edge - the first dot,
+ * grown, lost its left side.
+ */
 .free-beats__dots {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  padding: 6px;
 }
 
 .free-beats__dot {

@@ -6352,11 +6352,17 @@ describe('the click in free play', () => {
     expect(controller.freeClickBetween(began + 1_000, began + 10_000)).toHaveLength(3);
     expect(controller.freeClickBetween(began, began + 10_000)).toHaveLength(3);
 
+    // Placed ahead of being heard, a beat is kept from then, at the moment
+    // it will be heard - which is not yet.
+    metronome.placeAhead(1);
+    expect(controller.freeClickBetween(began, clock.now())).toHaveLength(3);
+    expect(controller.freeClickBetween(began, began + 10_000).at(-1)?.atMs).toBe(began + 3_000);
+
     // Heard lately while it goes, and after it stops for as long as a beat is.
     expect(controller.freeClickHeardSince(began + 5_000)).toBe(true);
     controller.clickFreely(false);
-    expect(controller.freeClickHeardSince(began + 2_400)).toBe(true);
-    expect(controller.freeClickHeardSince(began + 2_401)).toBe(false);
+    expect(controller.freeClickHeardSince(began + 3_000)).toBe(true);
+    expect(controller.freeClickHeardSince(began + 3_001)).toBe(false);
 
     controller.updateSettings({ modeId: FLOW_MODE_ID });
     expect(controller.freeClickBetween(Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY)).toEqual([]);

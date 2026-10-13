@@ -2086,6 +2086,20 @@ describe('searching the settings', () => {
     ]);
   });
 
+  it('leaves the beat just heard room to grow into inside the sheet that scrolls', () => {
+    // The sheet's controls scroll and cut off what passes their edge: the
+    // first dot, grown, lost its left side. Worked out from the rules
+    // themselves, so a larger dot or ring asks for more room.
+    const body = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
+    const dot = Number(/width\s*:\s*(\d+)px/.exec(body('.free-beats__dot'))?.[1]);
+    const lit = body(".free-beats__dot[data-now='true']");
+    const grows = Number(/scale\(([\d.]+)\)/.exec(lit)?.[1]);
+    const ring = Number(/box-shadow\s*:\s*0 0 0 (\d+)px/.exec(lit)?.[1]);
+    const room = Number(/padding\s*:\s*(\d+)px/.exec(body('.free-beats__dots'))?.[1]);
+
+    expect(room).toBeGreaterThanOrEqual((dot * (grows - 1)) / 2 + ring);
+  });
+
   it('puts the readings filters in a row of their own under the title on a phone', () => {
     // Three beside the title left it a few letters wide and pushed the close
     // button onto a line of its own.

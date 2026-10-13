@@ -756,11 +756,14 @@ export interface ControllerEventMap {
    */
   freePlayed: Record<string, never>;
   /**
-   * A beat of the click in free play was heard: which of the bar, from
-   * nought - every beat, the ones left out as well, so the count can be seen
-   * going through them. `null` once the click stops.
+   * A beat of the click in free play was placed on the device: which of the
+   * bar, from nought, and when on the clock it will be heard - every beat,
+   * the ones left out as well, so the count can be seen going through them.
+   * Said a look-ahead before it sounds, so whatever shows it can show it on
+   * the moment rather than after hearing of it. `null` once the click stops,
+   * at the moment it stopped.
    */
-  freeClickHeard: { readonly beat: number | null };
+  freeClickPlaced: { readonly beat: number | null; readonly atMs: number };
   /**
    * Whether the engraver is drawing a page right now.
    *
@@ -3746,10 +3749,16 @@ export class PracticeController {
     this.clickingFreely = wanted;
     if (wanted) {
       this.deps.metronome.configure(this.theFreeClick());
-      this.freeClickWatch = this.deps.metronome.onTick((tick) => {
+      // On the beat being placed, a look-ahead before it is heard, and not
+      // on its being heard. The metronome only finds a beat has been heard
+      // when it next looks, every twenty milliseconds, and the page then
+      // waits for a frame to show it: measured in Chrome, the dot lit 10 to
+      // 19 ms after the click, and later where timers are coarser. Placed,
+      // the moment it will be heard is known, and shown on it.
+      this.freeClickWatch = this.deps.metronome.onTickPlaced((tick) => {
         if (tick.isPulse) {
           this.freeBeats.push({ weight: tick.isDownbeat ? 'downbeat' : 'beat', atMs: tick.scheduledTimeMs });
-          this.emitter.emit('freeClickHeard', { beat: tick.beat - 1 });
+          this.emitter.emit('freeClickPlaced', { beat: tick.beat - 1, atMs: tick.scheduledTimeMs });
         }
       });
       this.deps.metronome.start();
@@ -3757,7 +3766,7 @@ export class PracticeController {
       this.freeClickWatch?.();
       this.freeClickWatch = null;
       this.deps.metronome.stop();
-      this.emitter.emit('freeClickHeard', { beat: null });
+      this.emitter.emit('freeClickPlaced', { beat: null, atMs: this.deps.clock.now() });
     }
   }
 

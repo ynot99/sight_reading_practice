@@ -1650,6 +1650,10 @@ export class AppView {
   private silenceWatch: ReturnType<typeof setTimeout> | null = null;
   /** The beat of the click in free play last heard, from nought, or `null` while it is not going. */
   private freeBeatHeard: number | null = null;
+  /** Beats of the click in free play placed and not yet heard, by when they will be. */
+  private beatsComing: { readonly beat: number; readonly atMs: number }[] = [];
+  /** The frame that lights them, while any are coming. */
+  private beatFrame: number | null = null;
   private lastDrainAtMs: number | null = null;
   private healthPaceMs = SETTLE_MS;
   /** Whether the reader has already been given this page. */
@@ -2455,6 +2459,10 @@ export class AppView {
     }
     this.forgetTheMapFrame();
     this.stopTheNotesFalling();
+    if (this.beatFrame !== null) {
+      this.doc.defaultView?.cancelAnimationFrame(this.beatFrame);
+      this.beatFrame = null;
+    }
     if (this.keysFrame !== null) {
       this.doc.defaultView?.cancelAnimationFrame(this.keysFrame);
       this.keysFrame = null;
@@ -6359,6 +6367,40 @@ export class AppView {
   }
 
   /**
+   * Lights each beat of the click in free play on the first frame at or
+   * after the moment it is heard, a frame at a time while any are coming.
+   */
+  private lightTheBeatsOnTime(): void {
+    const view = this.doc.defaultView;
+    if (this.beatFrame !== null || view === null || typeof view.requestAnimationFrame !== 'function') {
+      return;
+    }
+    const frame = (): void => {
+      this.beatFrame = null;
+      const now = this.runtime.clock.now();
+      let heard: number | null = null;
+      while ((this.beatsComing[0]?.atMs ?? Number.POSITIVE_INFINITY) <= now) {
+        heard = this.beatsComing.shift()?.beat ?? heard;
+      }
+      if (heard !== null) {
+        this.lightTheHeardBeat(heard);
+      }
+      if (this.beatsComing.length > 0) {
+        this.beatFrame = view.requestAnimationFrame(frame);
+      }
+    };
+    this.beatFrame = view.requestAnimationFrame(frame);
+  }
+
+  /** Lights one beat's dot and puts the others out, or puts them all out. */
+  private lightTheHeardBeat(beat: number | null): void {
+    this.freeBeatHeard = beat;
+    for (const dot of this.el.freeBeatsDots.querySelectorAll<HTMLElement>('.free-beats__dot')) {
+      dot.dataset['now'] = String(Number(dot.dataset['index']) === beat);
+    }
+  }
+
+  /**
    * The bar the click beats in free play, a dot a beat, each saying what it
    * is and what a tap makes it.
    */
@@ -6569,13 +6611,16 @@ export class AppView {
     );
 
     this.subscriptions.push(
-      // The dot of the beat just heard, lit as on a metronome's own face; the
-      // others are put out.
-      controller.events.on('freeClickHeard', ({ beat }) => {
-        this.freeBeatHeard = beat;
-        for (const dot of this.el.freeBeatsDots.querySelectorAll<HTMLElement>('.free-beats__dot')) {
-          dot.dataset['now'] = String(Number(dot.dataset['index']) === beat);
+      // The dot of each beat lit on the frame it is heard, as on a
+      // metronome's own face; put out at once when the click stops.
+      controller.events.on('freeClickPlaced', ({ beat, atMs }) => {
+        if (beat === null) {
+          this.beatsComing = [];
+          this.lightTheHeardBeat(null);
+          return;
         }
+        this.beatsComing.push({ beat, atMs });
+        this.lightTheBeatsOnTime();
       }),
     );
 

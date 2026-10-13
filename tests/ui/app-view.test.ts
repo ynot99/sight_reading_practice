@@ -12175,19 +12175,49 @@ describe('AppView', () => {
       expect(runtime.controller.settings.freePlayBeats).toEqual(['accent', 'silent', 'beat', 'beat', 'beat']);
       expect(element('focus-metronome').title).toContain('5 beats a bar');
 
-      // Each beat's dot lit as it is heard, the one left out as well, and none
-      // once the click stops.
+      // Each beat's dot lit on the first frame at its moment, the one left
+      // out as well, and none once the click stops. Frames are run by hand.
+      const frames: FrameRequestCallback[] = [];
+      const ask = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+        frames.push(callback);
+        return frames.length;
+      });
+      const runTheFrames = (): void => {
+        for (const frame of frames.splice(0)) {
+          frame(0);
+        }
+      };
       const lit = (): number[] => dots().flatMap((dot, at) => (dot.dataset['now'] === 'true' ? [at] : []));
-      expect(lit()).toEqual([]);
-      metronome.advanceSubdivisions(1);
-      expect(lit()).toEqual([0]);
-      metronome.advanceSubdivisions(1);
-      expect(lit()).toEqual([1]);
-      // Drawn again, the dots keep the beat.
-      element<HTMLButtonElement>('free-beats-more').click();
-      expect(lit()).toEqual([1]);
-      metronome.advanceSubdivisions(5);
-      expect(lit()).toEqual([0]);
+      try {
+        expect(lit()).toEqual([]);
+        metronome.advanceSubdivisions(1);
+        runTheFrames();
+        expect(lit()).toEqual([0]);
+        // Placed ahead of being heard, as the device places it: not lit early.
+        const [second] = metronome.placeAhead(1);
+        runTheFrames();
+        expect(lit()).toEqual([0]);
+        clock.set((second?.scheduledTimeMs ?? 0) - 1);
+        runTheFrames();
+        expect(lit()).toEqual([0]);
+        clock.set(second?.scheduledTimeMs ?? 0);
+        runTheFrames();
+        expect(lit()).toEqual([1]);
+        // Nothing more coming, the frames stop being asked for.
+        expect(frames).toHaveLength(0);
+        // Heard, it is not lit a second time.
+        metronome.advanceSubdivisions(1);
+        runTheFrames();
+        expect(lit()).toEqual([1]);
+        // Drawn again, the dots keep the beat.
+        element<HTMLButtonElement>('free-beats-more').click();
+        expect(lit()).toEqual([1]);
+        metronome.advanceSubdivisions(5);
+        runTheFrames();
+        expect(lit()).toEqual([0]);
+      } finally {
+        ask.mockRestore();
+      }
       // Each beat heard ruled across the lane, rising as time goes: the one
       // just heard, the first of a bar, a bar line at the keys, and the beats
       // before it higher up.

@@ -6213,7 +6213,7 @@ export class AppView {
       this.el.focusMetronome.dataset['click'] = going ? 'on' : 'off';
       this.el.focusMetronome.title = label;
       this.el.focusMetronome.setAttribute('aria-label', label);
-      this.el.metronomeOn.setAttribute('aria-checked', String(settings.clickOn));
+      this.el.metronomeOn.setAttribute('aria-checked', String(going));
       return;
     }
     const on = settings.clickOn;
@@ -6252,14 +6252,20 @@ export class AppView {
       this.syncControlsFromSettings();
       this.showTheSheet(this.el.sheetMetronome);
     };
+    // In free play there is no run for the click to follow, so turning it
+    // off and on is starting and stopping it - from the button and from the
+    // switch at the head of its sheet alike.
     const turnItOffOrOn = (): void => {
-      controller.updateSettings({ clickOn: !controller.settings.clickOn });
+      if (controller.playsFreely) {
+        controller.clickFreely(!controller.clicksFreely);
+      } else {
+        controller.updateSettings({ clickOn: !controller.settings.clickOn });
+      }
       this.syncControlsFromSettings();
     };
     const tapped = (): void => {
       if (controller.playsFreely) {
-        controller.clickFreely(!controller.clicksFreely);
-        this.syncControlsFromSettings();
+        turnItOffOrOn();
         return;
       }
       if (controller.settings.metronomeTap === 'opens-its-sheet') {

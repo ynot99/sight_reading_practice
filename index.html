@@ -742,9 +742,10 @@
             <!--
               Whether it is heard at all, over everything about how it
               sounds. Turned off, what it is set to stays as it was, for when
-              it is turned on again.
+              it is turned on again. In free play it starts and stops the
+              click, as a tap on the metronome's button does there.
             -->
-            <div class="control-group">
+            <div class="control-group" data-in-free-play>
               <button id="metronome-on" type="button" class="switch" role="switch" aria-checked="true">
                 <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
                 <span>Hear the metronome</span>

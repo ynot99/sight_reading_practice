@@ -2068,7 +2068,7 @@ describe('searching the settings', () => {
     );
   });
 
-  it('shows in the metronome sheet in free play only the bar and the volume, and the bar nowhere else', () => {
+  it('shows in the metronome sheet in free play only the switch, the bar and the volume, and the bar nowhere else', () => {
     const rule = rules().find((each) => each.selector.includes('[data-in-free-play]'));
     expect(rule?.selector.split(',').map((each) => each.trim())).toEqual([
       "body[data-free-play='true'] #sheet-metronome .controls > :not([data-in-free-play])",
@@ -2076,10 +2076,14 @@ describe('searching the settings', () => {
     ]);
     expect(rule?.body).toMatch(/display\s*:\s*none/);
     const sheet = /<div id="sheet-metronome"[\s\S]*?<details class="sheet__more">/.exec(HTML)?.[0] ?? '';
-    const kept = [...sheet.matchAll(/<div ([^>]*)data-in-free-play/g)].map((match) => match[1]);
-    expect(kept).toHaveLength(2);
-    expect(kept[0]).toContain('id="free-beats"');
-    expect(sheet).toMatch(/<div class="control-group" data-in-free-play>\s*<label for="metronome-volume">/);
+    const kept = [...sheet.matchAll(/<div ([^>]*)data-in-free-play>\s*<([a-z]+ [a-z]+="[^"]*")/g)].map(
+      (match) => `${match[1] ?? ''}${match[2] ?? ''}`,
+    );
+    expect(kept).toEqual([
+      'class="control-group" button id="metronome-on"',
+      'id="free-beats" class="control-group free-beats" div class="free-beats__count"',
+      'class="control-group" label for="metronome-volume"',
+    ]);
   });
 
   it('puts the readings filters in a row of their own under the title on a phone', () => {

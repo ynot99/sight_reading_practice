@@ -12174,6 +12174,7 @@ describe('AppView', () => {
       const button = element<HTMLButtonElement>('focus-metronome');
       const tempo = element<HTMLOutputElement>('focus-tempo');
       const percent = runtime.controller.tempoPercent;
+      const clickOn = runtime.controller.settings.clickOn;
 
       expect(tempo.value).toBe('100');
       // A crotchet drawn before the number, so it reads as a tempo.
@@ -12230,9 +12231,18 @@ describe('AppView', () => {
       faster.click();
       expect(runtime.controller.settings.freePlayBpm).toBe(reached + 1);
 
-      // Held, it opens the sheet and leaves the click going.
+      // Held, it opens the sheet and leaves the click going - and the switch
+      // at its head stops and starts it, saying which.
       holdTheMetronome();
       expect(element('sheet-metronome').hidden).toBe(false);
+      expect(metronome.isRunning).toBe(true);
+      const on = element<HTMLButtonElement>('metronome-on');
+      expect(on.getAttribute('aria-checked')).toBe('true');
+      on.click();
+      expect(metronome.isRunning).toBe(false);
+      expect(on.getAttribute('aria-checked')).toBe('false');
+      expect(runtime.controller.settings.clickOn).toBe(clickOn);
+      on.click();
       expect(metronome.isRunning).toBe(true);
       element<HTMLButtonElement>('metronome-close').click();
 

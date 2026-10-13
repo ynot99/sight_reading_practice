@@ -65,6 +65,18 @@ export type ClickPattern = (typeof CLICK_PATTERNS)[number];
  */
 export const CLICK_SILENCES = ['nothing', 'the-downbeat', 'the-beats'] as const;
 
+/**
+ * How one beat of a bar is sounded, where the bar is laid out beat by beat:
+ * marked, plain, or left out.
+ */
+export const BEAT_SOUNDS = ['accent', 'beat', 'silent'] as const;
+
+export type BeatSound = (typeof BEAT_SOUNDS)[number];
+
+/** The fewest and most beats a bar laid out beat by beat may have. */
+export const FEWEST_BEATS_LAID_OUT = 1;
+export const MOST_BEATS_LAID_OUT = 12;
+
 export type ClickSilence = (typeof CLICK_SILENCES)[number];
 
 /** Audible clicks in one felt beat, for a given pattern. */
@@ -297,6 +309,14 @@ export interface MetronomeConfig {
   readonly bars: readonly MetronomeBar[];
   /** Which clicks are left out, so the reader supplies them. */
   readonly silences?: ClickSilence;
+  /**
+   * How each beat of the bar is sounded, by its place in the bar - for a
+   * click the reader lays out themselves, a beat at a time.
+   *
+   * Absent or `null`: the first beat of each bar is marked and the rest are
+   * plain, which is what a click following a piece is.
+   */
+  readonly beatsOfTheBar?: readonly BeatSound[] | null;
   /**
    * Where the notes fall, for a click on the notes: the tick on the pulse's
    * own count the music begins at - before it, the count-in is beaten as a

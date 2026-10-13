@@ -186,6 +186,17 @@ export function isHeldBack(index: number, config: MetronomeConfig): boolean {
 }
 
 /**
+ * Whether a tick is sounded as a marked beat rather than a plain one.
+ *
+ * The first of the bar, unless the bar is laid out beat by beat; then the
+ * beats laid out as marked, wherever they fall in it.
+ */
+export function isAccented(tick: MetronomeTick, config: MetronomeConfig): boolean {
+  const sounds = config.beatsOfTheBar ?? null;
+  return sounds === null ? tick.isDownbeat : tick.isPulse && sounds[tick.beat - 1] === 'accent';
+}
+
+/**
  * Whether a tick is one the reader hears.
  *
  * The metronome always ticks at the resolution the loop needs; this decides
@@ -202,6 +213,9 @@ export function isAudibleClick(tick: MetronomeTick, config: MetronomeConfig): bo
     return false;
   }
   if (!survivesTheSilence(tick, config)) {
+    return false;
+  }
+  if (tick.isPulse && config.beatsOfTheBar?.[tick.beat - 1] === 'silent') {
     return false;
   }
   const notes = config.clickedNotes;

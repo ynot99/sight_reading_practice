@@ -18,6 +18,7 @@ import {
 import { timeTheStart } from '../../shared/timeTheStart.js';
 import {
   buildMetronomeTick,
+  isAccented,
   isAudibleClick,
   isHeldBack,
   subdivisionSecondsAt,
@@ -433,7 +434,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   }
 
   private playClick(context: AudioContext, tick: MetronomeTick, at: number): void {
-    this.sound(context, at, tick.isDownbeat, tick.isPulse);
+    this.sound(context, at, isAccented(tick, this.config), tick.isPulse);
   }
 
   private sound(

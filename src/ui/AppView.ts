@@ -71,6 +71,7 @@ import type { SavedPassage } from '../application/ports/IScoreStore.js';
 import {
   CLICK_SILENCES,
   COUNT_IN_WHEN,
+  type BeatSound,
   type ClickSilence,
   type CountInWhen,
 } from '../application/ports/IMetronome.js';
@@ -696,6 +697,20 @@ function readClickNotesOf(value: string): ClickNotesOf {
  * standard exercise, and it makes each one a number the reader can reason
  * about.
  */
+/** What a beat of the click in free play is, in words. */
+const BEAT_SOUND_SAID: Readonly<Record<BeatSound, string>> = {
+  accent: 'marked',
+  beat: 'plain',
+  silent: 'left out',
+};
+
+/** What a tap on a beat of the click in free play makes it. */
+const BEAT_SOUND_NEXT: Readonly<Record<BeatSound, string>> = {
+  accent: 'leave it plain',
+  beat: 'leave it out',
+  silent: 'mark it',
+};
+
 /** What a playback goes on to, as its button says it. */
 const GOES_ON_SAID: Readonly<Record<PlaybackGoesOn, string>> = {
   this: 'Only this piece',
@@ -1687,6 +1702,10 @@ export class AppView {
     focusPlayFrame: HTMLElement;
     focusHands: HTMLButtonElement;
     focusMetronome: HTMLButtonElement;
+    freeBeatsFewer: HTMLButtonElement;
+    freeBeatsMore: HTMLButtonElement;
+    freeBeatsCount: HTMLOutputElement;
+    freeBeatsDots: HTMLElement;
     metronomeOn: HTMLButtonElement;
     scoreListening: HTMLButtonElement;
     freeChord: HTMLOutputElement;
@@ -2017,6 +2036,10 @@ export class AppView {
       focusPlayFrame: requireElement(doc, 'focus-play-frame'),
       focusHands: requireElement(doc, 'focus-hands'),
       focusMetronome: requireElement(doc, 'focus-metronome'),
+      freeBeatsFewer: requireElement(doc, 'free-beats-fewer'),
+      freeBeatsMore: requireElement(doc, 'free-beats-more'),
+      freeBeatsCount: requireElement(doc, 'free-beats-count'),
+      freeBeatsDots: requireElement(doc, 'free-beats-dots'),
       metronomeOn: requireElement(doc, 'metronome-on'),
       scoreListening: requireElement(doc, 'score-listening'),
       freeChord: requireElement(doc, 'free-chord'),
@@ -6110,7 +6133,10 @@ export class AppView {
       // click itself: a tap starts and stops it, as on any metronome, and the
       // sheet is the hold.
       const going = controller.clicksFreely;
-      const label = `Metronome ${going ? 'going' : 'stopped'}, ${String(settings.freePlayBpm)} bpm. ` +
+      const beats = settings.freePlayBeats.length;
+      const label =
+        `Metronome ${going ? 'going' : 'stopped'}, ${String(settings.freePlayBpm)} bpm, ` +
+        `${String(beats)} ${beats === 1 ? 'beat' : 'beats'} a bar. ` +
         `Tap to ${going ? 'stop' : 'start'} it, hold for its settings.`;
       this.el.focusMetronome.dataset['click'] = going ? 'on' : 'off';
       this.el.focusMetronome.title = label;
@@ -6213,6 +6239,48 @@ export class AppView {
       tapped();
     });
     this.listen(this.el.metronomeOn, 'click', turnItOffOrOn);
+
+    this.listen(this.el.freeBeatsFewer, 'click', () => {
+      controller.changeTheFreeBeats(-1);
+      this.syncControlsFromSettings();
+    });
+    this.listen(this.el.freeBeatsMore, 'click', () => {
+      controller.changeTheFreeBeats(1);
+      this.syncControlsFromSettings();
+    });
+    // One listener for the row rather than one a dot: the dots are drawn
+    // again whenever the bar changes, and a listener each would outlive them.
+    this.listen(this.el.freeBeatsDots, 'click', (event) => {
+      const dot = (event.target as Element | null)?.closest<HTMLElement>('.free-beats__dot');
+      const index = Number(dot?.dataset['index']);
+      if (dot === null || dot === undefined || !Number.isInteger(index)) {
+        return;
+      }
+      controller.turnTheFreeBeat(index);
+      this.syncControlsFromSettings();
+    });
+  }
+
+  /**
+   * The bar the click beats in free play, a dot a beat, each saying what it
+   * is and what a tap makes it.
+   */
+  private describeTheFreeBeats(settings: PracticeSettings): void {
+    const beats = settings.freePlayBeats;
+    this.el.freeBeatsCount.value = String(beats.length);
+    this.el.freeBeatsDots.replaceChildren(
+      ...beats.map((sound, index) => {
+        const dot = this.doc.createElement('button');
+        dot.type = 'button';
+        dot.className = 'free-beats__dot';
+        dot.dataset['index'] = String(index);
+        dot.dataset['sound'] = sound;
+        const said = `Beat ${String(index + 1)}: ${BEAT_SOUND_SAID[sound]}. Tap to ${BEAT_SOUND_NEXT[sound]}.`;
+        dot.title = said;
+        dot.setAttribute('aria-label', said);
+        return dot;
+      }),
+    );
   }
 
   /**
@@ -7445,6 +7513,7 @@ export class AppView {
     this.el.metronomeTapDescription.textContent = METRONOME_TAP_DESCRIPTIONS[settings.metronomeTap];
     this.applyPreview();
     this.describeMetronomeButton(settings);
+    this.describeTheFreeBeats(settings);
     this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
     this.showTheRung();

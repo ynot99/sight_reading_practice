@@ -6,8 +6,12 @@ import { SCORE_ORDER, WHAT_OPENS, type ScoreOrder, type WhatOpens } from './Scor
 import { PLAYBACK_GOES_ON, type PlaybackGoesOn } from './PiecesInTurn.js';
 import { PAGE_TURNS, type PageTurns } from './ports/IScoreRenderer.js';
 import {
+  BEAT_SOUNDS,
   CLICK_SILENCES,
   COUNT_IN_WHEN,
+  FEWEST_BEATS_LAID_OUT,
+  MOST_BEATS_LAID_OUT,
+  type BeatSound,
   type ClickSilence,
   type CountInWhen,
 } from './ports/IMetronome.js';
@@ -183,6 +187,19 @@ function readScoreOrder(value: unknown): ScoreOrder | undefined {
   return typeof value === 'string' && SCORE_ORDER.includes(value as ScoreOrder)
     ? (value as ScoreOrder)
     : undefined;
+}
+
+/** A bar laid out beat by beat, or nothing where any beat is not one or the count is out of bounds. */
+function readFreeBeats(value: unknown): readonly BeatSound[] | undefined {
+  if (
+    !Array.isArray(value) ||
+    value.length < FEWEST_BEATS_LAID_OUT ||
+    value.length > MOST_BEATS_LAID_OUT ||
+    !value.every((each) => BEAT_SOUNDS.includes(each as BeatSound))
+  ) {
+    return undefined;
+  }
+  return value as BeatSound[];
 }
 
 function readPlaybackGoesOn(value: unknown): PlaybackGoesOn | undefined {
@@ -466,6 +483,7 @@ export function decodePracticeSettings(
     scoreOrder: readScoreOrder(value['scoreOrder']),
     playbackGoesOn: readPlaybackGoesOn(value['playbackGoesOn']),
     freePlayBpm: readNumber(value['freePlayBpm'], 20, 300),
+    freePlayBeats: readFreeBeats(value['freePlayBeats']),
     traceTheStart: readBoolean(value['traceTheStart']),
     stopAtAMistake: readBoolean(value['stopAtAMistake']),
     clickSilences: readClickSilence(value['clickSilences']),
@@ -536,6 +554,7 @@ export function encodePracticeSettings(settings: PracticeSettings): Record<strin
     scoreOrder: settings.scoreOrder,
     playbackGoesOn: settings.playbackGoesOn,
     freePlayBpm: settings.freePlayBpm,
+    freePlayBeats: settings.freePlayBeats,
     traceTheStart: settings.traceTheStart,
     stopAtAMistake: settings.stopAtAMistake,
     clickSilences: settings.clickSilences,

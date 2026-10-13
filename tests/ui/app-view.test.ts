@@ -12108,6 +12108,32 @@ describe('AppView', () => {
       expect(element('sheet-metronome').hidden).toBe(true);
     });
 
+    it('lays the bar of the click in free play out in dots, a tap on one turning it round', async () => {
+      const { view, runtime, metronome } = createRig();
+      await view.initialize();
+      element<HTMLButtonElement>('focus-modes').click();
+      frameButton('free').click();
+      element<HTMLButtonElement>('focus-metronome').click();
+      const dots = (): HTMLElement[] => [...element('free-beats-dots').querySelectorAll<HTMLElement>('.free-beats__dot')];
+
+      expect(dots().map((dot) => dot.dataset['sound'])).toEqual(['accent', 'beat', 'beat', 'beat']);
+      expect(element<HTMLOutputElement>('free-beats-count').value).toBe('4');
+      expect(dots()[1]?.title).toBe('Beat 2: plain. Tap to leave it out.');
+
+      dots()[1]?.click();
+      expect(dots()[1]?.dataset['sound']).toBe('silent');
+      expect(dots()[1]?.getAttribute('aria-label')).toBe('Beat 2: left out. Tap to mark it.');
+      expect(metronome.currentConfig.beatsOfTheBar).toEqual(['accent', 'silent', 'beat', 'beat']);
+
+      element<HTMLButtonElement>('free-beats-fewer').click();
+      expect(dots()).toHaveLength(3);
+      expect(element<HTMLOutputElement>('free-beats-count').value).toBe('3');
+      element<HTMLButtonElement>('free-beats-more').click();
+      element<HTMLButtonElement>('free-beats-more').click();
+      expect(runtime.controller.settings.freePlayBeats).toEqual(['accent', 'silent', 'beat', 'beat', 'beat']);
+      expect(element('focus-metronome').title).toContain('5 beats a bar');
+    });
+
     it('starts and stops the click in free play on a tap, at a tempo of its own the speed buttons set', async () => {
       const { view, runtime, metronome } = createRig();
       await view.initialize();

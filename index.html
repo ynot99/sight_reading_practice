@@ -751,6 +751,24 @@
               </button>
             </div>
 
+            <!--
+              The bar the click beats in free play, a dot a beat - there only,
+              since a run's click follows the piece's own bars. A tap on a dot
+              marks it, leaves it plain or leaves it out, in turn.
+            -->
+            <div id="free-beats" class="control-group free-beats" data-in-free-play>
+              <div class="free-beats__count">
+                <label for="free-beats-count" class="control-group__label">Beats in a bar</label>
+                <button id="free-beats-fewer" type="button" class="focus-bar__button focus-bar__button--step"
+                  title="One beat fewer" aria-label="One beat fewer">−</button>
+                <output id="free-beats-count">4</output>
+                <button id="free-beats-more" type="button" class="focus-bar__button focus-bar__button--step"
+                  title="One beat more" aria-label="One beat more">+</button>
+              </div>
+              <div id="free-beats-dots" class="free-beats__dots" role="group" aria-label="The beats of the bar"></div>
+              <p class="hint">Tap a beat to mark it, leave it plain, or leave it out.</p>
+            </div>
+
             <div class="control-group">
               <label for="dropout">Metronome sounds</label>
               <select id="dropout"></select>
@@ -807,7 +825,7 @@
               <p id="count-in-playback-description" class="hint"></p>
             </div>
 
-            <div class="control-group">
+            <div class="control-group" data-in-free-play>
               <label for="metronome-volume">
                 Metronome: <output id="metronome-volume-value">60</output>%
               </label>

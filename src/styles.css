@@ -3389,6 +3389,59 @@ body[data-free-play='true'] .drill-pill {
 }
 
 /*
+ * The metronome's sheet in free play: the bar its click beats and how loud,
+ * and nothing about runs, which free play has none of. The bar is free
+ * play's alone - a run's click follows the piece's own bars.
+ */
+body[data-free-play='true'] #sheet-metronome .controls > :not([data-in-free-play]),
+body:not([data-free-play='true']) #free-beats {
+  display: none;
+}
+
+.free-beats__count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.free-beats__count output {
+  min-width: 2ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A dot a beat: filled where marked, half where plain, an empty ring where left out. */
+.free-beats__dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.free-beats__dot {
+  appearance: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.free-beats__dot[data-sound='accent'] {
+  background: var(--accent);
+}
+
+.free-beats__dot[data-sound='beat'] {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.free-beats__dot[data-sound='silent'] {
+  border-style: dashed;
+  border-color: var(--text-muted);
+}
+
+/*
  * Free play, where the keys are the whole of it: no run to start or to go
  * back to the beginning of, and nothing to repeat. The speed stays, as the
  * click's tempo. What is put away is no fewer than the keyboard's button

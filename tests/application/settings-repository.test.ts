@@ -76,6 +76,7 @@ const SETTINGS: PracticeSettings = {
   scoreOrder: 'hardest',
   playbackGoesOn: 'random',
   freePlayBpm: 132,
+  freePlayBeats: ['accent', 'beat', 'silent', 'accent', 'beat', 'silent'],
   traceTheStart: true,
   stopAtAMistake: true,
   clickSilences: 'the-downbeat',
@@ -120,6 +121,7 @@ describe('practice settings codec', () => {
     expect(restored.whatOpens).toBe('random');
     expect(restored.playbackGoesOn).toBe('random');
     expect(restored.freePlayBpm).toBe(132);
+    expect(restored.freePlayBeats).toEqual(['accent', 'beat', 'silent', 'accent', 'beat', 'silent']);
     expect(restored.clickWhen).toBe('cycle-2');
     expect(restored.theme).toBe('dark');
     expect(restored.darkSystemTheme).toBe('light-dark-dialogs');
@@ -231,6 +233,19 @@ describe('practice settings codec', () => {
     expect(tap('turns-it-off-and-on')).toBe('turns-it-off-and-on');
     expect(tap('rings-a-bell')).toBeUndefined();
     expect(tap(undefined)).toBeUndefined();
+  });
+
+  it('reads the bar of the click in free play only where every beat is one and there are one to twelve', () => {
+    const stored = encodePracticeSettings(SETTINGS);
+    const beats = (value: unknown): readonly string[] | undefined =>
+      decodePracticeSettings({ ...stored, freePlayBeats: value }, KNOWN).freePlayBeats;
+
+    expect(beats(['silent'])).toEqual(['silent']);
+    expect(beats(Array.from({ length: 12 }, () => 'beat'))).toHaveLength(12);
+    expect(beats([])).toBeUndefined();
+    expect(beats(Array.from({ length: 13 }, () => 'beat'))).toBeUndefined();
+    expect(beats(['accent', 'loud'])).toBeUndefined();
+    expect(beats('accent')).toBeUndefined();
   });
 
   it('reads a click stored as never as the click turned off', () => {

@@ -6280,6 +6280,37 @@ describe('the click in free play', () => {
     expect(controller.nudgeFreePlayBpm(-5)).toBe(20);
   });
 
+  it('beats in the bar the reader lays out, a beat at a time, from the next click', async () => {
+    const { controller, metronome } = createController(true, undefined, { modeId: FREE_PLAY_MODE_ID });
+    await controller.loadNewExercise();
+    controller.clickFreely(true);
+    expect(metronome.currentConfig.beatsOfTheBar).toEqual(['accent', 'beat', 'beat', 'beat']);
+
+    // Tapped round: marked, plain, left out, and marked again.
+    expect(controller.turnTheFreeBeat(1)).toEqual(['accent', 'silent', 'beat', 'beat']);
+    expect(controller.turnTheFreeBeat(1)).toEqual(['accent', 'accent', 'beat', 'beat']);
+    expect(controller.turnTheFreeBeat(0)).toEqual(['beat', 'accent', 'beat', 'beat']);
+    expect(controller.turnTheFreeBeat(9)).toEqual(['beat', 'accent', 'beat', 'beat']);
+
+    // One fewer from the end, and one more plain.
+    expect(controller.changeTheFreeBeats(-1)).toEqual(['beat', 'accent', 'beat']);
+    expect(metronome.currentConfig.timeSignature.beats).toBe(3);
+    expect(metronome.currentConfig.beatsOfTheBar).toEqual(['beat', 'accent', 'beat']);
+    expect(controller.changeTheFreeBeats(1)).toEqual(['beat', 'accent', 'beat', 'beat']);
+
+    // Never fewer than one, nor more than twelve.
+    for (let press = 0; press < 5; press += 1) {
+      controller.changeTheFreeBeats(-1);
+    }
+    expect(controller.settings.freePlayBeats).toEqual(['beat']);
+    for (let press = 0; press < 15; press += 1) {
+      controller.changeTheFreeBeats(1);
+    }
+    expect(controller.settings.freePlayBeats).toHaveLength(12);
+    // Six and more beats of a crotchet each, not two of a dotted minim.
+    expect(metronome.currentConfig.timeSignature.pulsesPerMeasure).toBe(12);
+  });
+
   it('gives the metronome up to a performance', async () => {
     const { controller, metronome } = createController(true, undefined, {
       modeId: FREE_PLAY_MODE_ID,

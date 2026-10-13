@@ -32,7 +32,7 @@ import type { PracticeModeRegistry } from './modes/PracticeModeRegistry.js';
 import type { IClock } from './ports/IClock.js';
 import { GeneratedExerciseProvider, type IExerciseProvider } from './ports/IExerciseProvider.js';
 import { OneOfTheGenerators } from '../domain/generation/OneOfTheGenerators.js';
-import type { IMetronome, MetronomeConfig } from './ports/IMetronome.js';
+import { FEWEST_BEATS_LAID_OUT, MOST_BEATS_LAID_OUT, type BeatSound, type IMetronome, type MetronomeConfig } from './ports/IMetronome.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
@@ -200,6 +200,13 @@ const MAX_TEMPO_BPM = 300;
 
 /** How far one press of the tempo buttons moves the click in free play, in beats a minute. */
 export const FREE_CLICK_STEP_BPM = 5;
+
+/** What a beat of the click in free play becomes when it is tapped. */
+const NEXT_BEAT_SOUND: Readonly<Record<BeatSound, BeatSound>> = {
+  accent: 'beat',
+  beat: 'silent',
+  silent: 'accent',
+};
 
 /**
  * A written tempo taken at the reader's share of it.
@@ -622,6 +629,12 @@ export interface PracticeSettings {
    * it is an answer to how fast to read that piece.
    */
   readonly freePlayBpm: number;
+  /**
+   * The bar the click beats in free play, a beat at a time: how many beats,
+   * and which are marked, plain or left out. Three is a bar of three; six
+   * with the first and fourth marked is a bar of six eight.
+   */
+  readonly freePlayBeats: readonly BeatSound[];
   /**
    * Print, in the console, how long each stage of starting took.
    *
@@ -1095,6 +1108,7 @@ export class PracticeController {
       // The piece and no further, as a playback has always been.
       playbackGoesOn: 'this',
       freePlayBpm: 100,
+      freePlayBeats: ['accent', 'beat', 'beat', 'beat'],
       traceTheStart: false,
       rulerCursor: false,
       rulerStrength: 1,
@@ -1327,7 +1341,7 @@ export class PracticeController {
     }
 
     // Faster or slower from the next click, without starting the bar again.
-    if (changes.freePlayBpm !== undefined && this.clickingFreely) {
+    if ((changes.freePlayBpm !== undefined || changes.freePlayBeats !== undefined) && this.clickingFreely) {
       this.deps.metronome.configure(this.theFreeClick());
     }
 
@@ -3723,13 +3737,38 @@ export class PracticeController {
     return this.currentSettings.freePlayBpm;
   }
 
-  /** What the metronome is told in free play: the beat, in bars of four. */
+  /** A beat more in the bar of the click in free play, plain, or one fewer from its end. */
+  changeTheFreeBeats(delta: 1 | -1): readonly BeatSound[] {
+    const beats = this.currentSettings.freePlayBeats;
+    const wanted = Math.min(MOST_BEATS_LAID_OUT, Math.max(FEWEST_BEATS_LAID_OUT, beats.length + delta));
+    this.updateSettings({
+      freePlayBeats: wanted > beats.length ? [...beats, 'beat'] : beats.slice(0, wanted),
+    });
+    return this.currentSettings.freePlayBeats;
+  }
+
+  /** Marks a beat of the click in free play, leaves it plain, or leaves it out, in turn. */
+  turnTheFreeBeat(index: number): readonly BeatSound[] {
+    const beats = this.currentSettings.freePlayBeats;
+    const sound = beats[index];
+    if (sound !== undefined) {
+      this.updateSettings({
+        freePlayBeats: beats.map((each, at) => (at === index ? NEXT_BEAT_SOUND[sound] : each)),
+      });
+    }
+    return this.currentSettings.freePlayBeats;
+  }
+
+  /** What the metronome is told in free play: the beat, in the bar the reader laid out. */
   private theFreeClick(): MetronomeConfig {
+    const beats = this.currentSettings.freePlayBeats;
     return {
       bpm: this.currentSettings.freePlayBpm,
       tempos: [],
-      timeSignature: new TimeSignature(4, 4),
+      // Every beat a crotchet, so a bar of six is six beats and not two.
+      timeSignature: new TimeSignature(beats.length, 4),
       bars: [],
+      beatsOfTheBar: beats,
       subdivisionsPerPulse: 1,
       click: 'pulse',
       dropout: null,

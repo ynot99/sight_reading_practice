@@ -9,6 +9,7 @@ import { Duration } from '../../src/domain/model/Duration.js';
 import {
   bpmAt,
   buildMetronomeTick,
+  isAccented,
   isAudibleClick,
   subdivisionSeconds,
   subdivisionSecondsAt,
@@ -36,6 +37,34 @@ function audibleIndices(config: MetronomeConfig, count: number): number[] {
     isAudibleClick(buildMetronomeTick(index, config, 0), config),
   );
 }
+
+describe('a bar laid out beat by beat', () => {
+  // Three beats a bar, each a crotchet, ticking in eighths: the second marked,
+  // the third left out.
+  const LAID_OUT: MetronomeConfig = {
+    ...COMMON,
+    timeSignature: new TimeSignature(3, 4),
+    subdivisionsPerPulse: 2,
+    click: 'pulse',
+    muted: false,
+    beatsOfTheBar: ['beat', 'accent', 'silent'],
+  };
+  const ticks = Array.from({ length: 12 }, (_, index) => buildMetronomeTick(index, LAID_OUT, 0));
+
+  it('sounds each beat as it is laid out, bar after bar, and nothing between them', () => {
+    expect(ticks.filter((tick) => isAudibleClick(tick, LAID_OUT)).map((tick) => tick.index)).toEqual([0, 2, 6, 8]);
+  });
+
+  it('marks the beats laid out as marked, and not the first of the bar for being first', () => {
+    expect(ticks.filter((tick) => isAccented(tick, LAID_OUT)).map((tick) => tick.index)).toEqual([2, 8]);
+  });
+
+  it('marks the first of the bar where nothing is laid out', () => {
+    const plain: MetronomeConfig = { ...LAID_OUT, beatsOfTheBar: null };
+    expect(ticks.filter((tick) => isAccented(tick, plain)).map((tick) => tick.index)).toEqual([0, 6]);
+    expect(ticks.filter((tick) => isAudibleClick(tick, plain)).map((tick) => tick.index)).toEqual([0, 2, 4, 6, 8, 10]);
+  });
+});
 
 describe('which ticks are heard', () => {
   it('sounds as much of the pulse as was asked for', () => {
@@ -525,6 +554,69 @@ class StubContext {
     return Promise.resolve();
   }
 }
+
+/** A clock that also builds the clicks it is asked to sound, and keeps their pitches. */
+class SoundingContext extends StubContext {
+  readonly destination = {};
+  readonly pitches: number[] = [];
+
+  createOscillator(): object {
+    const frequency = { value: 0 };
+    const pitches = this.pitches;
+    return {
+      frequency,
+      type: 'sine',
+      onended: null,
+      connect: (next: unknown) => next,
+      start: () => pitches.push(frequency.value),
+      stop: () => undefined,
+      disconnect: () => undefined,
+    };
+  }
+
+  createGain(): object {
+    const ramp = (): undefined => undefined;
+    return {
+      gain: { setValueAtTime: ramp, exponentialRampToValueAtTime: ramp, cancelScheduledValues: ramp },
+      connect: (next: unknown) => next,
+      disconnect: () => undefined,
+    };
+  }
+}
+
+describe('a bar laid out beat by beat, sounded', () => {
+  it('sounds the marked beats high, the plain ones lower, and the left-out ones not at all', () => {
+    vi.useFakeTimers();
+    try {
+      const context = new SoundingContext();
+      const metronome = new WebAudioMetronome(() => context as unknown as AudioContext, {
+        schedulerIntervalMs: 10,
+        scheduleAheadSec: 1,
+        firstClickLeadSec: 0,
+        downbeatFrequency: 1600,
+        beatFrequency: 1000,
+      });
+      metronome.configure({
+        ...COMMON,
+        bpm: 600,
+        timeSignature: new TimeSignature(3, 4),
+        subdivisionsPerPulse: 1,
+        click: 'pulse',
+        muted: false,
+        beatsOfTheBar: ['beat', 'accent', 'silent'],
+      });
+
+      metronome.start();
+      context.currentTime = 0.001;
+      vi.advanceTimersByTime(20);
+      metronome.stop();
+
+      expect(context.pitches.slice(0, 6)).toEqual([1000, 1600, 1000, 1600, 1000, 1600]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('a pulse told to start while it is already running', () => {
   /** Once a bar, so a handful of ticks is a handful of bars. */

@@ -51,6 +51,7 @@ import { FREE_CLICK_STEP_BPM, LADDER_RUNS_TO_MOVE, TEMPO_STEP_PERCENT } from '..
 import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './ladderTrack.js';
 import type { PracticeSettings } from '../application/PracticeController.js';
 import type { StoredTake } from '../application/TakeLibrary.js';
+import { theSketchOfTheScore } from '../application/SketchLibrary.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
 import {
@@ -8419,6 +8420,8 @@ export class AppView {
         this.editTheSketch(!showing.sketch.editing);
       } else if (showing?.recording !== undefined) {
         this.beginASketchOf(showing.recording);
+      } else if (showing?.isScore === true) {
+        this.beginASketchOfTheScore();
       }
     });
     this.listen(this.el.scoresShowScores, 'click', () => {
@@ -11415,9 +11418,13 @@ export class AppView {
       // begun from it.
       delete this.el.rollEdit.dataset['idle'];
       this.el.rollEdit.title = 'Begin a sketch of this recording to edit; the recording stays as it was played';
+    } else if (this.theOtherRollShowing?.isScore === true) {
+      // And a score is what was written, for the same reason.
+      delete this.el.rollEdit.dataset['idle'];
+      this.el.rollEdit.title = 'Begin a sketch of this score to edit; the score stays as it is written';
     } else if (sketch === undefined) {
       this.el.rollEdit.dataset['idle'] = 'true';
-      this.el.rollEdit.title = 'Edit the notes. Only a sketch is edited: begin one from a recording.';
+      this.el.rollEdit.title = 'Edit the notes. Only a sketch is edited: begin one from a recording or a score.';
     } else {
       delete this.el.rollEdit.dataset['idle'];
       this.el.rollEdit.title = editing
@@ -11472,6 +11479,22 @@ export class AppView {
       return;
     }
     const sketch = this.runtime.sketches.begin(take, `Sketch of the take at ${whenItWas(take.savedAtMs)}`, Date.now());
+    this.renderSketches();
+    this.showTheSketch(sketch.id);
+  }
+
+  /** Begins a sketch of the score open now, and opens it to be edited. */
+  private beginASketchOfTheScore(): void {
+    const timeline = this.runtime.controller.currentTimeline;
+    const exercise = timeline?.exercise ?? null;
+    if (timeline === null || exercise === null) {
+      return;
+    }
+    const sketch = this.runtime.sketches.begin(
+      theSketchOfTheScore(exercise, timeline),
+      `Sketch of ${exercise.title || 'the score'}`,
+      Date.now(),
+    );
     this.renderSketches();
     this.showTheSketch(sketch.id);
   }

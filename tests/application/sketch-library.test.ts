@@ -6,6 +6,13 @@ import {
   theBeatsToBeginIn,
 } from '../../src/application/SketchLibrary.js';
 import { InMemorySettingsStore } from '../../src/application/ports/ISettingsStore.js';
+import { theSketchOfTheScore } from '../../src/application/SketchLibrary.js';
+import { readMidiFile } from '../../src/domain/midi/readMidiFile.js';
+import { writeMidiFile } from '../../src/domain/midi/MidiFile.js';
+import { midiToExercise } from '../../src/domain/notation/midiToExercise.js';
+import { buildTimeline } from '../../src/domain/timeline/Timeline.js';
+import { Duration } from '../../src/domain/model/Duration.js';
+import { compoundBarExercise } from '../support/fixtures.js';
 import type { HeardBeat, MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 
 // A velocity the stored form of 127 steps gives back exactly.
@@ -32,6 +39,28 @@ describe('the bars a sketch is begun in', () => {
       ]);
     }
     expect(theBeatsToBeginIn([], [])[0]?.atMs).toBe(0);
+  });
+});
+
+describe('a sketch of a score', () => {
+  it('has its notes as they sound and a beat on every beat of its bars, of their own value, and is written down as it was', () => {
+    const score = compoundBarExercise();
+    const { events, beats } = theSketchOfTheScore(score, buildTimeline(score));
+
+    expect(beats.map((beat) => [beat.beat, beat.beatsInBar, beat.beatType])).toEqual(
+      [0, 1, 2, 3, 4, 5].map((beat) => [beat, 6, 8]),
+    );
+    const gaps = beats.slice(1).map((beat, at) => beat.atMs - (beats[at]?.atMs ?? 0));
+    expect(new Set(gaps).size).toBe(1);
+    expect(beats[0]?.atMs).toBe(0);
+    expect(events.filter((event) => event.kind === 'noteOn').map((event) => (event.kind === 'noteOn' ? event.midi : 0))).toEqual(
+      [48, 60, 62, 64, 65, 67, 69],
+    );
+
+    const page = midiToExercise(readMidiFile(writeMidiFile(events, { beats })), 'Again').exercise;
+    expect(page.timeSignature.toString()).toBe('6/8');
+    const treble = buildTimeline(page).steps.flatMap((step) => (step.expectedMidi.some((midi) => midi >= 60) ? [step.onsetTicks] : []));
+    expect(treble).toEqual([0, 1, 2, 3, 4, 5].map((at) => at * Duration.EIGHTH.ticks));
   });
 });
 
@@ -76,6 +105,19 @@ describe('the sketches being written', () => {
     }
     expect(next.list()).toHaveLength(1);
     expect(library.changeTheNotes('sketch-nobody', PLAYED)).toBeNull();
+  });
+
+  it('keeps the value of each beat across visits, and drops a click whose value is not one', () => {
+    const store = new InMemorySettingsStore();
+    const quavers = THREE.map((beat) => ({ ...beat, beatType: 8 }));
+    const begun = new SketchLibrary(store).begin({ events: PLAYED, beats: quavers }, 'In eights', 1_000);
+    const next = new SketchLibrary(store);
+    next.load();
+    expect(next.find(begun.id)?.beats).toEqual(quavers);
+
+    store.write({ version: 1, sketches: [{ id: 'a', title: 'Odd', begunAtMs: 1, events: [[0, 0, 60, 90]], beats: [[0, 0, 3, 8], [500, 1, 3, 3]] }] });
+    next.load();
+    expect(next.find('a')?.beats).toEqual([]);
   });
 
   it('deletes one, and keeps that across visits', () => {

@@ -1082,6 +1082,18 @@ describe('a recording drawn by the same machinery', () => {
     expect([0, 3, 6, 1].map((at) => name(at * Duration.QUARTER.ticks))).toEqual(['1', '2', '3', null]);
   });
 
+  it('places the beats of a click by their own value', () => {
+    const roll = rollOfTheTake({
+      events: [
+        { kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.7 },
+        { kind: 'noteOff', atMs: 600, midi: MIDI.C4 },
+      ],
+      beats: [0, 250, 500].map((atMs, at) => ({ atMs, beat: at, beatsInBar: 6, beatType: 8 })),
+    });
+
+    expect(roll.beats.map((beat) => beat.positionTicks)).toEqual([0, 1, 2, 3].map((at) => at * Duration.EIGHTH.ticks));
+  });
+
   it('gives it no grid at all where it was played without the click', () => {
     // Not an omission: a run has beats because something kept its time, and
     // free playing had nothing keeping it. Lines across it would be a metre

@@ -47,16 +47,23 @@ export function unpack(value: unknown): MidiFileEvent | null {
   }
 }
 
-/** A beat as a tuple, as the events are: `[atMs, beat, beatsInBar]`. */
-export function packBeat(beat: HeardBeat): readonly [number, number, number] {
-  return [Math.round(beat.atMs), beat.beat, beat.beatsInBar];
+/**
+ * A beat as a tuple, as the events are: `[atMs, beat, beatsInBar]`, and its
+ * value after them where it says one.
+ */
+export function packBeat(beat: HeardBeat): readonly number[] {
+  const packed = [Math.round(beat.atMs), beat.beat, beat.beatsInBar];
+  return beat.beatType === undefined ? packed : [...packed, beat.beatType];
 }
+
+/** The values a beat may be written as: a breve's half down to a demisemiquaver. */
+const BEAT_TYPES: readonly number[] = [1, 2, 4, 8, 16, 32];
 
 export function unpackBeat(value: unknown): HeardBeat | null {
   if (!Array.isArray(value)) {
     return null;
   }
-  const [atMs, beat, beatsInBar] = value as readonly unknown[];
+  const [atMs, beat, beatsInBar, beatType] = value as readonly unknown[];
   // Its place has to be one its bar has: the bars are counted back from it.
   if (
     typeof atMs !== 'number' ||
@@ -67,7 +74,12 @@ export function unpackBeat(value: unknown): HeardBeat | null {
   ) {
     return null;
   }
-  return { atMs, beat: beat as number, beatsInBar: beatsInBar as number };
+  const read = { atMs, beat: beat as number, beatsInBar: beatsInBar as number };
+  if (beatType === undefined) {
+    return read;
+  }
+  // A value no bar is written in would give its beats no length to be.
+  return BEAT_TYPES.includes(beatType as number) ? { ...read, beatType: beatType as number } : null;
 }
 
 /**

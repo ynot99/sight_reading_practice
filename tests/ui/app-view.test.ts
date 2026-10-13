@@ -137,6 +137,7 @@ import {
 import {
   MIDI,
   beamedSixteenths,
+  compoundBarExercise,
   longExercise,
   offBeatAfterALongNote,
   oneHandWalksUnderAHeldNote,
@@ -4146,7 +4147,7 @@ describe('AppView', () => {
       const remove = element<HTMLButtonElement>('roll-delete');
       const undo = element<HTMLButtonElement>('roll-undo');
       expect(edit.dataset['idle']).toBe('true');
-      expect(edit.title).toBe('Edit the notes. Only a sketch is edited: begin one from a recording.');
+      expect(edit.title).toBe('Edit the notes. Only a sketch is edited: begin one from a recording or a score.');
       edit.click();
       expect(edit.getAttribute('aria-pressed')).toBe('false');
       expect(sketches.list()).toHaveLength(0);
@@ -4274,6 +4275,27 @@ describe('AppView', () => {
       tapOn(1_000);
       expect(chosen()).toEqual([]);
       expect(headAt(element('roll-body'))).toBe('1.000');
+    });
+
+    it('begins a sketch of the score open, in its own bars, and leaves the score as it is written', async () => {
+      const { view, runtime, sketches } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(compoundBarExercise({ title: 'In six' }));
+      const written = runtime.controller.openedExercise;
+      element<HTMLButtonElement>('focus-roll').click();
+      const edit = element<HTMLButtonElement>('roll-edit');
+      expect(edit.dataset['idle']).toBeUndefined();
+      expect(edit.title).toBe('Begin a sketch of this score to edit; the score stays as it is written');
+
+      edit.click();
+
+      const sketch = sketches.list()[0];
+      expect(sketch?.title).toBe('Sketch of In six');
+      expect(sketch?.noteCount).toBe(7);
+      expect(sketch?.beats.map((beat) => beat.beatType)).toEqual([8, 8, 8, 8, 8, 8]);
+      expect(element('roll-title').textContent).toBe('Sketch of In six');
+      expect(edit.getAttribute('aria-pressed')).toBe('true');
+      expect(runtime.controller.openedExercise).toBe(written);
     });
 
     it('lists the sketches beside the scores, switched to in the title, each to be edited, read, saved or deleted', async () => {

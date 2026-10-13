@@ -905,11 +905,13 @@ export function rollOfTheTake(take: Pick<Take, 'events' | 'beats'>): RunRoll {
   if (pedalDownAt !== null) {
     pedal.push({ downAtMs: pedalDownAt, upAtMs: null });
   }
-  const beats: RolledBeat[] = (theClickOfTheTake(take.events, take.beats) ?? []).map((beat, at) => ({
-    atMs: beat.atMs,
-    weight: beat.beat === 0 ? 'downbeat' : 'beat',
-    positionTicks: at * Duration.QUARTER.ticks,
-  }));
+  // Each beat as long as its value, as the file has them.
+  let positionTicks = 0;
+  const beats: RolledBeat[] = (theClickOfTheTake(take.events, take.beats) ?? []).map((beat) => {
+    const placed: RolledBeat = { atMs: beat.atMs, weight: beat.beat === 0 ? 'downbeat' : 'beat', positionTicks };
+    positionTicks += (Duration.QUARTER.ticks * 4) / (beat.beatType ?? 4);
+    return placed;
+  });
   return { presses, beats, pedal, rushes: [], truncated: false };
 }
 

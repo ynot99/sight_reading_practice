@@ -22,6 +22,12 @@ export interface HeardBeat {
   readonly beat: number;
   /** How many beats the bar it is in has. */
   readonly beatsInBar: number;
+  /**
+   * The value its beat is written as, as a time signature's lower number
+   * says it: 8 for a bar of quavers. A crotchet where nothing says, which is
+   * what a metronome's click is.
+   */
+  readonly beatType?: number;
 }
 
 export interface MidiFileOptions {
@@ -148,9 +154,9 @@ export function theBeatsFromTheFirstBar(
     }
     const earliest = elementAt(heard, 0);
     heard.unshift({
+      ...earliest,
       atMs: earliest.atMs - gap,
       beat: (earliest.beat + earliest.beatsInBar - 1) % earliest.beatsInBar,
-      beatsInBar: earliest.beatsInBar,
     });
   }
 }
@@ -181,7 +187,7 @@ export function theClickOfTheTake(
     if (gap <= 0) {
       break;
     }
-    last = { atMs: last.atMs + gap, beat: (last.beat + 1) % last.beatsInBar, beatsInBar: last.beatsInBar };
+    last = { ...last, atMs: last.atMs + gap, beat: (last.beat + 1) % last.beatsInBar };
     carried.push(last);
   }
   return carried;
@@ -240,52 +246,77 @@ function tempoMark(microsecondsPerQuarter: number): number[] {
 }
 
 /** A bar of `beats` crotchets, with MIDI's ordinary clock and thirty-second counts. */
-function barMark(beats: number): number[] {
-  return [0xff, 0x58, 0x04, beats & 0xff, 0x02, 24, 8];
+/** A bar of `beats` beats of the value `beatType`, with MIDI's ordinary clock and thirty-second counts. */
+function barMark(beats: number, beatType: number): number[] {
+  return [0xff, 0x58, 0x04, beats & 0xff, Math.round(Math.log2(beatType)) & 0xff, 24, 8];
+}
+
+/** The value a beat is written as: a crotchet where it does not say. */
+function valueOf(beat: HeardBeat): number {
+  return beat.beatType ?? 4;
+}
+
+/** Ticks of a beat of its own value. */
+function ticksOfABeat(beat: HeardBeat): number {
+  return (TICKS_PER_QUARTER * 4) / valueOf(beat);
+}
+
+/** The tick each beat begins on, from the first: each as long as its value. */
+function theTicksOfTheBeats(grid: readonly HeardBeat[]): readonly number[] {
+  const starts: number[] = [];
+  let tick = 0;
+  for (const beat of grid) {
+    starts.push(tick);
+    tick += ticksOfABeat(beat);
+  }
+  return starts;
 }
 
 /**
- * The tempo and the bar at each beat of the click where either changes, a
- * crotchet a beat: a tempo read off how long each beat lasted, so a click
- * sped up partway through is followed rather than averaged.
+ * The tempo and the bar at each beat of the click where either changes: a
+ * tempo read off how long each beat lasted, as a crotchet a minute, so a
+ * click sped up partway through is followed rather than averaged.
  */
 function theMarksOfTheClick(
   grid: readonly HeardBeat[],
 ): readonly { readonly tick: number; readonly bytes: readonly number[] }[] {
   const marks: { tick: number; bytes: number[] }[] = [];
+  const starts = theTicksOfTheBeats(grid);
   let tempo = -1;
-  let bar = -1;
+  let bar = '';
   grid.forEach((beat, at) => {
-    const tick = at * TICKS_PER_QUARTER;
-    const lasts = Math.round(gapAfter(grid, at) * 1_000);
+    const tick = elementAt(starts, at);
+    const lasts = Math.round((gapAfter(grid, at) * 1_000 * valueOf(beat)) / 4);
     if (lasts !== tempo) {
       tempo = lasts;
       marks.push({ tick, bytes: tempoMark(lasts) });
     }
-    if (beat.beat === 0 && beat.beatsInBar !== bar) {
-      bar = beat.beatsInBar;
-      marks.push({ tick, bytes: barMark(bar) });
+    const metre = `${String(beat.beatsInBar)}/${String(valueOf(beat))}`;
+    if (beat.beat === 0 && metre !== bar) {
+      bar = metre;
+      marks.push({ tick, bytes: barMark(beat.beatsInBar, valueOf(beat)) });
     }
   });
   return marks;
 }
 
 /**
- * Where a moment falls on the click, in ticks from its first bar: a
- * crotchet for each beat heard, and a moment between two beats as far
- * between them as it fell.
+ * Where a moment falls on the click, in ticks from its first bar: each beat
+ * as long as its value, and a moment between two beats as far between them
+ * as it fell.
  *
  * Asked in order of time, as the events are written, so the beat reached is
  * kept between asks.
  */
 function onTheClick(grid: readonly HeardBeat[]): (ms: number) => number {
+  const starts = theTicksOfTheBeats(grid);
   let at = 0;
   return (ms) => {
     while (at + 1 < grid.length && elementAt(grid, at + 1).atMs <= ms) {
       at += 1;
     }
     const beat = elementAt(grid, at);
-    return Math.round(TICKS_PER_QUARTER * (at + (ms - beat.atMs) / gapAfter(grid, at)));
+    return Math.round(elementAt(starts, at) + (ticksOfABeat(beat) * (ms - beat.atMs)) / gapAfter(grid, at));
   };
 }
 

@@ -1,6 +1,9 @@
 import { barsAreHeardIn, type HeardBeat, type MidiFileEvent } from '../domain/midi/MidiFile.js';
+import { barLines, elapsedMsAt, type Exercise } from '../domain/model/Exercise.js';
+import type { ExerciseTimeline } from '../domain/timeline/Timeline.js';
 import type { ISettingsStore } from './ports/ISettingsStore.js';
 import { pack, packBeat, theBeatsIfWhole, unpack } from './packedPlaying.js';
+import { rollAsEvents, rollBeganAtMs, rollOfTheScore } from './session/RunRoll.js';
 
 /**
  * Music being written: notes on the bars of a click, to be changed until
@@ -51,6 +54,30 @@ export function theBeatsToBeginIn(
     beat,
     beatsInBar: ASSUMED_BEATS_IN_A_BAR,
   }));
+}
+
+/**
+ * A score as something a sketch can be begun from: its notes as they sound,
+ * pedal and loudness and all, and a beat on every beat of every bar, each of
+ * the value its bar is written in - so a bar of six quavers is six quavers
+ * and not three crotchets, and a change of tempo is where the beats say.
+ */
+export function theSketchOfTheScore(
+  exercise: Exercise,
+  timeline: ExerciseTimeline,
+): { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] } {
+  // The notes are the score's own drawing of itself, rebased as it plays them.
+  const roll = rollOfTheScore(exercise, timeline);
+  const origin = rollBeganAtMs(roll);
+  const beats = barLines(exercise).flatMap(({ startTicks, timeSignature }) =>
+    Array.from({ length: timeSignature.beats }, (_, beat) => ({
+      atMs: elapsedMsAt(exercise, startTicks + beat * timeSignature.ticksPerBeat) - origin,
+      beat,
+      beatsInBar: timeSignature.beats,
+      beatType: timeSignature.beatType,
+    })),
+  );
+  return { events: rollAsEvents(roll), beats };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

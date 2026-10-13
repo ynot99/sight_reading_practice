@@ -309,6 +309,41 @@ describe('writing a take in the bars of the click it was played to', () => {
     ]);
   });
 
+  it('gives each beat the length of its own value, and writes the bar in it', () => {
+    // Six quavers a bar, a quaver every 250 ms: a crotchet every half second.
+    const quavers = click(0, 250, 12, 6).map((beat) => ({ ...beat, beatType: 8 }));
+    const sixEight = writeMidiFile(struck(0, 250, 375, 1_500), { beats: quavers });
+
+    expect(barsIn(sixEight)).toEqual([{ tick: 0, beats: 6 }]);
+    expect(written(sixEight).find((each) => each.bytes[1] === 0x58)?.bytes.slice(3, 5)).toEqual([6, 3]);
+    expect(temposIn(sixEight)).toEqual([{ tick: 0, microseconds: 500_000 }]);
+    expect(struckAt(sixEight)).toEqual([0, BEAT / 2, (3 * BEAT) / 4, 3 * BEAT]);
+
+    // Two minims a bar, a minim every second.
+    const minims = click(0, 1_000, 4, 2).map((beat) => ({ ...beat, beatType: 2 }));
+    const cut = writeMidiFile(struck(0, 1_500, 2_000), { beats: minims });
+    expect(written(cut).find((each) => each.bytes[1] === 0x58)?.bytes.slice(3, 5)).toEqual([2, 1]);
+    expect(temposIn(cut)).toEqual([{ tick: 0, microseconds: 500_000 }]);
+    expect(struckAt(cut)).toEqual([0, 3 * BEAT, 4 * BEAT]);
+
+    // Three crotchets a bar and then three quavers: the count the same, the bar not.
+    const threes = [...click(0, 500, 3, 3), ...click(1_500, 250, 3, 3).map((beat) => ({ ...beat, beatType: 8 }))];
+    const changed = writeMidiFile(struck(0, 1_750), { beats: threes });
+    expect(
+      written(changed)
+        .filter((each) => each.bytes[1] === 0x58)
+        .map((each) => [each.tick, each.bytes[3], each.bytes[4]]),
+    ).toEqual([
+      [0, 3, 2],
+      [3 * BEAT, 3, 3],
+    ]);
+
+    // A click of quavers set going on the third of a bar after the playing
+    // began is carried back in quavers.
+    const late = click(500, 250, 4, 6, 2).map((beat) => ({ ...beat, beatType: 8 }));
+    expect(struckAt(writeMidiFile(struck(0, 500), { beats: late }))).toEqual([0, BEAT]);
+  });
+
   it('writes what it always wrote without two beats apart to read a pace from', () => {
     const events = struck(0, 450, 1_300);
     const plain = writeMidiFile(events, { trackName: 'Idea' });

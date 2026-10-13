@@ -14,6 +14,7 @@ import {
   type RunRoll,
 } from '../application/session/RunRoll.js';
 import { midiToLabel } from '../domain/model/Pitch.js';
+import { HIGHEST_KEY, LOWEST_KEY } from './replayKeys.js';
 
 /**
  * What the drawing needs beyond the roll itself.
@@ -68,6 +69,12 @@ export interface RollDrawing {
   readonly keepsTime?: boolean;
   /** The key chosen on the drawing to be changed, by its pitch and when it went down. */
   readonly chosen?: { readonly midi: number; readonly downAtMs: number } | null;
+  /**
+   * Whether every key of the piano has its row, rather than the notes played
+   * and a little room round them: so a note being edited can be taken to any
+   * of them.
+   */
+  readonly wholeKeyboard?: boolean;
 }
 
 /** One note the music asked for, in the music's own time. */
@@ -123,7 +130,12 @@ function atRow(row: number): string {
 function bandOf(
   presses: readonly RolledPress[],
   ghosts: readonly RollGhost[],
+  wholeKeyboard = false,
 ): { readonly low: number; readonly high: number } {
+  // Every key, where a note may be put on any of them.
+  if (wholeKeyboard) {
+    return { low: LOWEST_KEY, high: HIGHEST_KEY };
+  }
   // The notes asked for count as much as the ones played: a note that was missed
   // altogether is the one worth seeing, and a band drawn round the presses alone
   // would leave it outside the picture.
@@ -848,10 +860,11 @@ export interface RollPitches {
 export function thePitchesOfTheRun(
   roll: RunRoll,
   ghosts: readonly RollGhost[] = [],
+  wholeKeyboard = false,
 ): RollPitches {
   const origin = rollBeganAtMs(roll);
   const endMs = rollEndedAtMs(roll);
-  const band = bandOf(roll.presses, ghosts);
+  const band = bandOf(roll.presses, ghosts, wholeKeyboard);
   const notes: PitchedNote[] = roll.presses.map((press) => {
     const shade = shadeOf(press);
     return {
@@ -977,7 +990,7 @@ export function theSceneOfTheRoll(drawing: RollDrawing): RollScene {
   const origin = rollBeganAtMs(roll);
   const endMs = rollEndedAtMs(roll);
   const ghosts = drawing.ghosts ?? [];
-  const band = bandOf(roll.presses, ghosts);
+  const band = bandOf(roll.presses, ghosts, drawing.wholeKeyboard);
 
   const blackRows: number[] = [];
   for (let midi = band.high; midi >= band.low; midi -= 1) {

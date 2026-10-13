@@ -3484,6 +3484,45 @@ describe('AppView', () => {
       }
     });
 
+    it('marks down the side among every key of the piano while a recording is edited', async () => {
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 0 });
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.midi.noteOn(60, rig.clock.now());
+        rig.clock.advance(300);
+        rig.midi.noteOff(60, rig.clock.now());
+        element<HTMLButtonElement>('focus-keep').click();
+        rowButton('takes-list', 'Look at this take').click();
+        const top = (): string | undefined =>
+          element('roll-pitch-map').querySelector<HTMLElement>('.roll-pitch-map__mark')?.style.top;
+        const listening = top();
+
+        // Rows drawn thirty pixels tall, stretched to fill the room.
+        const drawn = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+          this: HTMLElement,
+        ) {
+          return new DOMRect(0, 0, 0, this.classList.contains('roll__key') ? 30 : 0);
+        });
+        try {
+          element<HTMLButtonElement>('roll-edit').click();
+        } finally {
+          drawn.mockRestore();
+        }
+        await aFrame();
+
+        // Middle C among eighty-eight keys, C8 at the top.
+        expect(top()).toBe(`${(((108 - 60) / 88) * 100).toFixed(3)}%`);
+        expect(top()).not.toBe(listening);
+        // And the rows as tall as they were drawn, not thinned to fit.
+        expect(element('roll-body').querySelector<HTMLElement>('.roll')?.style.getPropertyValue('--roll-row-asked')).toBe(
+          '30px',
+        );
+      } finally {
+        giveBack();
+      }
+    });
+
     it('marks down the side the notes in the time on the screen', async () => {
       // His: "існують для мене часто ноти які вилазять out of view". The run is
       // one note, pressed and let go at its start, and a second of air - so
@@ -4134,13 +4173,18 @@ describe('AppView', () => {
       // A finger on a note, a little into it, on its row; the grid stands at
       // the drawing's corner, and a row is thirteen pixels until it is drawn.
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      // Less however far the drawing has been scrolled down.
+      const scrolledDown = (): number =>
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
       const tapOn = (fromMs: number): void => {
         const note = view.rollScene?.notes.find((each) => each.fromMs === fromMs);
         element('roll-body').dispatchEvent(
           new MouseEvent('click', {
             bubbles: true,
             clientX: ((fromMs + 100) / 1000) * zoom,
-            clientY: ((note?.row ?? 0) + 0.5) * 13,
+            clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown(),
           }),
         );
       };
@@ -4151,9 +4195,16 @@ describe('AppView', () => {
       // Where the finger was: a recording played freely has no beat to snap to.
       expect(headAt(element('roll-body'))).toBe('0.600');
 
+      const highest = view.rollScene?.highest ?? 0;
+      const strip = (): string =>
+        element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '';
+      expect(strip()).toBe('0px');
       edit.click();
       expect(edit.getAttribute('aria-pressed')).toBe('true');
       expect(edit.title).toBe('Back to listening: a tap puts the marker');
+      // Every key, scrolled so the notes stand where they stood.
+      expect([view.rollScene?.highest, view.rollScene?.rows]).toEqual([108, 88]);
+      expect(strip()).toBe(`${String((108 - highest) * 13)}px`);
       expect([remove.dataset['away'], undo.dataset['away']]).toEqual([undefined, undefined]);
       expect(remove.dataset['idle']).toBe('true');
       expect(remove.title).toBe('Delete a note. Tap one to choose it.');
@@ -4204,10 +4255,13 @@ describe('AppView', () => {
       tapOn(500);
       element('roll-body').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: (1.8 * zoom), clientY: 2 }));
       expect(chosen()).toEqual([]);
-      // And back to listening lets go of what was chosen.
+      // And back to listening lets go of what was chosen, and of the keys
+      // nobody played.
       tapOn(500);
       edit.click();
       expect(chosen()).toEqual([]);
+      expect(view.rollScene?.highest).toBe(highest);
+      expect(strip()).toBe('0px');
       expect(remove.dataset['away']).toBe('true');
     });
 
@@ -12316,9 +12370,16 @@ describe('AppView', () => {
       // On the grid that stands at the drawing's corner, a row thirteen pixels.
       const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
       const highest = view.rollScene?.highest ?? 0;
+      // Editing, every key has its row, and the drawing is scrolled down to the notes.
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      expect(highest).toBe(108);
+      expect(scrolledDown).toBeGreaterThan(0);
       const onNote = (fromMs: number, pitch: number): { x: number; y: number } => ({
         x: ((fromMs + 100) / 1000) * zoom,
-        y: (highest - pitch + 0.5) * 13,
+        y: (highest - pitch + 0.5) * 13 - scrolledDown,
       });
       const point = (type: string, at: { x: number; y: number }, pointerType = 'touch'): void => {
         element('roll-body').dispatchEvent(

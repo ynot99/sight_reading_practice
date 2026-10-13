@@ -11336,8 +11336,20 @@ export class AppView {
     if (showing === null || take === undefined) {
       return;
     }
+    const highest = this.drawnScene?.highest ?? null;
+    // The rows asked for are the rows as drawn, as a pinch starts from them:
+    // the stylesheet stretches a few rows to fill the room, and eighty-eight
+    // would otherwise come back thinner than the notes the finger was on.
+    this.rollRowPx = this.theRowAsDrawn();
     this.theOtherRollShowing = { ...showing, take: { ...take, editing, chosen: null } };
     this.drawTheRollInto();
+    // The rows above grow or go, and the notes on the screen stay where they
+    // were on it.
+    const now = this.drawnScene?.highest ?? null;
+    if (highest !== null && now !== null) {
+      this.rollScroller.to(this.rollScroller.x, this.rollScroller.y + (now - highest) * this.rollLook.rowPx);
+      this.paintTheRoll();
+    }
     this.sayWhatCanBeChanged();
   }
 
@@ -11544,6 +11556,7 @@ export class AppView {
       slips: this.el.rollSlips.checked,
       keepsTime: this.theRunKeptTime(),
       chosen,
+      wholeKeyboard: this.theOtherRollShowing?.take?.editing === true,
     });
   }
 
@@ -11567,7 +11580,7 @@ export class AppView {
     this.rollCanvases = theCanvasesOf(this.el.rollBody);
     this.rollKeysStrip = theKeysStripOf(this.el.rollBody);
     this.rollInks = null;
-    this.rollPitches = thePitchesOfTheRun(roll, ghosts);
+    this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.take?.editing === true);
     this.applyTheZoom();
     this.el.rollMap.replaceChildren(
       drawTheMap(roll),

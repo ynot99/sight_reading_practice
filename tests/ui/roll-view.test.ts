@@ -1116,6 +1116,24 @@ describe('the notes in view, by pitch', () => {
     expect(atTheEnd.map((mark) => [mark.kind, mark.fromShare])).toEqual([['correct', 22 / 29]]);
   });
 
+  it('gives every key of the piano its row where the whole keyboard is asked for, the drawing and the map alike', () => {
+    const run = spread();
+    const scene = theSceneOfTheRoll({ roll: run, barLabel: () => null, wholeKeyboard: true });
+    const pitches = thePitchesOfTheRun(run, [], true);
+
+    // A0 at the bottom, C8 at the top: eighty-eight rows.
+    expect([scene.highest, scene.rows, pitches.rows]).toEqual([108, 88, 88]);
+    expect(scene.notes.map((note) => note.row).sort((a, b) => a - b)).toEqual(
+      [108 - (MIDI.C4 + 24), 108 - MIDI.E4, 108 - MIDI.C4],
+    );
+    expect(theMapOfThePitches(pitches, { fromShare: 0, widthShare: 0.1 }).map((mark) => mark.fromShare)).toEqual([
+      (108 - MIDI.C4 - 24) / 88,
+      (108 - MIDI.C4) / 88,
+    ]);
+    // Not asked for, the notes and a little room round them, as before.
+    expect(theSceneOfTheRoll({ roll: run, barLabel: () => null }).rows).toBe(29);
+  });
+
   it('counts a note still sounding where the screen begins', () => {
     const pitches = thePitchesOfTheRun(
       roll({ presses: [press({ midi: MIDI.C4, downAtMs: 0, upAtMs: 9_000 })] }),

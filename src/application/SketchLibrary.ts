@@ -214,6 +214,18 @@ export class SketchLibrary {
     return changed;
   }
 
+  /** Gives a sketch another name, its music as it was. */
+  rename(id: string, title: string): StoredSketch | null {
+    const found = this.find(id);
+    if (found === null) {
+      return null;
+    }
+    const changed = { ...found, title };
+    this.sketches = this.sketches.map((sketch) => (sketch.id === id ? changed : sketch));
+    this.persist();
+    return changed;
+  }
+
   remove(id: string): void {
     const before = this.sketches.length;
     this.sketches = this.sketches.filter((sketch) => sketch.id !== id);

@@ -4419,6 +4419,29 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   min-width: 0;
 }
 
+/* A name that can be written over says so to a pointer. */
+.sheet__title[data-renamable] {
+  cursor: text;
+}
+
+/*
+ * The name being written, in the title's own letters and line, so the head
+ * does not move when the one takes the other's place.
+ */
+.roll-rename {
+  font: inherit;
+  /* Never below sixteen pixels, or Safari magnifies the page to type in it. */
+  font-size: max(16px, 1em);
+  font-weight: 700;
+  line-height: inherit;
+  color: var(--text);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 4px;
+  margin: -1px -5px;
+}
+
 /* Searching the settings: a field, where it is in what it found, and the way through. */
 /* The last timings a closed page left: long lines, read rather than wrapped. */
 .timing-trail {

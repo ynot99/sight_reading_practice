@@ -183,6 +183,19 @@ describe('the sketches being written', () => {
     expect(next.find(sketch.id)?.events).toEqual(PLAYED);
   });
 
+  it('renames one, its music as it was, and keeps the name across visits', () => {
+    const store = new InMemorySettingsStore();
+    const library = new SketchLibrary(store);
+    const sketch = library.begin({ events: PLAYED, beats: THREE }, 'Sketch, 14.10.2026', 1, { fifths: 2, mode: 'major' });
+
+    const renamed = library.rename(sketch.id, 'Waltz in A');
+    expect(renamed).toEqual({ ...sketch, title: 'Waltz in A' });
+    expect(library.rename('sketch-nobody', 'Nobody')).toBeNull();
+    const next = new SketchLibrary(store);
+    next.load();
+    expect(next.find(sketch.id)?.title).toBe('Waltz in A');
+  });
+
   it('deletes one, and keeps that across visits', () => {
     const store = new InMemorySettingsStore();
     const library = new SketchLibrary(store);

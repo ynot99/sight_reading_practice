@@ -1768,6 +1768,8 @@ export class AppView {
    * number, and is what is drawn until the first pinch.
    */
   private rollRowPx = 13;
+  /** The sketch whose name is being written over, while it is. */
+  private sketchBeingRenamed: string | null = null;
   /**
    * Whether the gesture that is ending was a pinch.
    *
@@ -2048,6 +2050,7 @@ export class AppView {
     rollDelete: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
     rollTitle: HTMLElement;
+    rollRename: HTMLInputElement;
     rollBeats: HTMLElement;
     rollBeatsShown: HTMLInputElement;
     rollMap: HTMLElement;
@@ -2406,6 +2409,7 @@ export class AppView {
       rollDelete: requireElement(doc, 'roll-delete'),
       rollUndo: requireElement(doc, 'roll-undo'),
       rollTitle: requireElement(doc, 'roll-title'),
+      rollRename: requireElement(doc, 'roll-rename'),
       rollBeats: requireElement(doc, 'roll-beats'),
       rollBeatsShown: requireElement(doc, 'roll-beats-shown'),
       rollMap: requireElement(doc, 'roll-map'),
@@ -8480,6 +8484,21 @@ export class AppView {
     this.listen(this.el.rollClose, 'click', () => {
       this.closeTheRoll();
     });
+    this.listen(this.el.rollTitle, 'click', () => {
+      this.beginRenamingTheSketch();
+    });
+    this.listen(this.el.rollRename, 'keydown', (event) => {
+      const key = (event as KeyboardEvent).key;
+      if (key === 'Enter' || key === 'Escape') {
+        // Escape leaves the name, and not the sheet as well.
+        event.preventDefault();
+        event.stopPropagation();
+        this.endRenamingTheSketch(key === 'Enter');
+      }
+    });
+    this.listen(this.el.rollRename, 'blur', () => {
+      this.endRenamingTheSketch(true);
+    });
     this.repaintTheRollWhenTheScreenChanges();
     this.measureTheKeysAgainWhenTheyMove();
     this.sayWhetherTheKeysScroll();
@@ -11639,6 +11658,15 @@ export class AppView {
     this.el.rollFrom.disabled = other !== null && !isScore;
     this.el.rollTo.disabled = other !== null && !isScore;
     this.el.rollTitle.textContent = other?.what ?? 'What you played';
+    // Only a sketch is named by the reader; a recording and a score are what
+    // they were.
+    if (other?.sketch === undefined) {
+      delete this.el.rollTitle.dataset['renamable'];
+      this.el.rollTitle.removeAttribute('title');
+    } else {
+      this.el.rollTitle.dataset['renamable'] = 'true';
+      this.el.rollTitle.title = 'Rename this sketch';
+    }
     if (other !== null) {
       if (isScore) {
         this.sayWhatWouldBePractised();
@@ -11831,6 +11859,50 @@ export class AppView {
       return now === undefined ? [] : [{ midi: key.midi, downAtMs: now.atMs }];
     });
     this.changeTheSketchShowing(paced.events, [...sketch.before, stored], chosen, paced.beats);
+  }
+
+  /** Puts a field in place of the name of the sketch on the drawing, its name in it to write over. */
+  private beginRenamingTheSketch(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    if (sketch === undefined || this.sketchBeingRenamed !== null) {
+      return;
+    }
+    this.sketchBeingRenamed = sketch.id;
+    this.el.rollRename.value = this.theOtherRollShowing?.what ?? '';
+    this.el.rollTitle.hidden = true;
+    this.el.rollRename.hidden = false;
+    this.el.rollRename.focus();
+    this.el.rollRename.select();
+  }
+
+  /**
+   * Puts the name back in place of the field, kept where it was asked to be
+   * and says something; a name of nothing is no name, and the old one stays.
+   * The sketch is the one the field was opened for, though the viewer has
+   * been shut since.
+   */
+  private endRenamingTheSketch(keep: boolean): void {
+    const id = this.sketchBeingRenamed;
+    if (id === null) {
+      return;
+    }
+    // Said first: hiding the field takes the focus from it, which ends it again.
+    this.sketchBeingRenamed = null;
+    this.el.rollRename.hidden = true;
+    this.el.rollTitle.hidden = false;
+    const title = this.el.rollRename.value.trim();
+    if (!keep || title === '') {
+      return;
+    }
+    const renamed = this.runtime.sketches.rename(id, title);
+    const showing = this.theOtherRollShowing;
+    if (renamed === null) {
+      return;
+    }
+    if (showing?.sketch?.id === id) {
+      this.theOtherRollShowing = { ...showing, what: renamed.title };
+      this.el.rollTitle.textContent = renamed.title;
+    }
   }
 
   /** Gives the chosen notes to a hand, or back to their pitch: one change. */

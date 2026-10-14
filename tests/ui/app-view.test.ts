@@ -4543,6 +4543,91 @@ describe('AppView', () => {
       }
     });
 
+    it('renames a sketch where its name is written, keeping it on Enter or a tap elsewhere and not on Escape', async () => {
+      const { view, sketches, files, midi, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff', atMs: 400, midi: 60 },
+          ],
+          beats: [],
+        },
+        'Sketch, 14.10.2026',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const title = element('roll-title');
+      const field = element<HTMLInputElement>('roll-rename');
+      const write = (name: string, key: string): void => {
+        title.click();
+        field.value = name;
+        field.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      };
+      expect(title.dataset['renamable']).toBe('true');
+      expect(title.title).toBe('Rename this sketch');
+      expect(field.hidden).toBe(true);
+
+      // A tap on the name puts the field in its place, the name in it to write over.
+      title.click();
+      expect([title.hidden, field.hidden]).toEqual([true, false]);
+      expect(field.value).toBe('Sketch, 14.10.2026');
+      expect(document.activeElement).toBe(field);
+      field.value = '  Waltz in A  ';
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      expect([title.hidden, field.hidden]).toEqual([false, true]);
+      expect(title.textContent).toBe('Waltz in A');
+      expect(sketches.find(sketch.id)?.title).toBe('Waltz in A');
+      expect(sketches.find(sketch.id)?.events).toHaveLength(2);
+
+      // Opened again, the new name is the one to write over.
+      title.click();
+      expect(field.value).toBe('Waltz in A');
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+
+      // Escape leaves the name as it was, and the viewer open.
+      write('Not this', 'Escape');
+      expect(title.textContent).toBe('Waltz in A');
+      expect(sketches.find(sketch.id)?.title).toBe('Waltz in A');
+      expect(element('sheet-roll').hidden).toBe(false);
+      // A name of nothing is no name.
+      write('   ', 'Enter');
+      expect(sketches.find(sketch.id)?.title).toBe('Waltz in A');
+      // A tap elsewhere keeps what was written.
+      title.click();
+      field.value = 'Waltz';
+      field.dispatchEvent(new FocusEvent('blur'));
+      expect(sketches.find(sketch.id)?.title).toBe('Waltz');
+      // The keys typed into it are letters, not the editor's.
+      title.click();
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+      expect(sketches.find(sketch.id)?.events).toHaveLength(2);
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+
+      // The list and the file go by the new name.
+      element<HTMLButtonElement>('roll-close').click();
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      expect(element('sketches-list').textContent).toContain('Waltz');
+      rowButton('sketches-list', 'Save this sketch as a MIDI file').click();
+      expect(files.saved.at(-1)?.fileName).toBe('Waltz.mid');
+      element<HTMLButtonElement>('scores-close').click();
+
+      // A recording is not renamed: it is what was played.
+      midi.noteOn(60, clock.now());
+      clock.advance(300);
+      midi.noteOff(60, clock.now());
+      element<HTMLButtonElement>('focus-keep').click();
+      rowButton('takes-list', 'Look at this take').click();
+      expect(title.dataset['renamable']).toBeUndefined();
+      expect(title.hasAttribute('title')).toBe(false);
+      title.click();
+      expect(field.hidden).toBe(true);
+    });
+
     it('shows a sketch in a metre the list does not offer as it is', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

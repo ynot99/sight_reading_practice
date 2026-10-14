@@ -1370,6 +1370,11 @@ describe('the stylesheet', () => {
 
     expect(fields).toBeDefined();
     expect(fields?.body).toMatch(/font-size\s*:\s*max\(16px/);
+
+    // And a field that takes the letters of the text around it says it again,
+    // after them: a class outranks the element.
+    const rename = rules().find((rule) => rule.selector === '.roll-rename');
+    expect(rename?.body).toMatch(/font\s*:\s*inherit;[\s\S]*font-size\s*:\s*max\(16px, 1em\)/);
   });
 
   it('stops a scroll at the edge of the score instead of handing it on', () => {

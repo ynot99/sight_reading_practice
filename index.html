@@ -460,6 +460,19 @@
           aria-modal="true" aria-label="What you played">
           <div class="sheet__head">
             <strong id="roll-title" class="sheet__title">What you played</strong>
+            <!--
+              A sketch's name, written over in place of the title: a tap on the
+              name of a sketch opens it, Enter or a tap elsewhere keeps it,
+              Escape leaves the name as it was.
+            -->
+            <input
+              id="roll-rename"
+              class="sheet__title roll-rename"
+              type="text"
+              maxlength="80"
+              aria-label="The sketch's name"
+              hidden
+            />
             <div class="sheet__tools">
             <button id="roll-play" type="button" class="button" title="Play" aria-label="Play">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"

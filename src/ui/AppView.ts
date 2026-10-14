@@ -479,11 +479,11 @@ function theBoxCornerAt(
 
 /**
  * Whether a press on a sketch adds to the notes chosen rather than choosing
- * alone: with Ctrl, Cmd or Shift held, as any editor has it - or from a finger
- * or a pen, which have no keys to hold.
+ * alone: with Ctrl, Cmd or Shift held, as any editor has it. A finger chooses
+ * several with the selection tool's box.
  */
 function addsToTheChoice(event: PointerEvent): boolean {
-  return event.ctrlKey || event.metaKey || event.shiftKey || event.pointerType !== 'mouse';
+  return event.ctrlKey || event.metaKey || event.shiftKey;
 }
 
 /** How far down the run the view stood, and the place down it a change of row height is held at. */
@@ -1889,6 +1889,12 @@ export class AppView {
       readonly editing: boolean;
       /** The keys chosen on it to be changed, a tap at a time. */
       readonly chosen: readonly KeyNamed[];
+      /**
+       * What a press on empty space does while it is edited: the pencil
+       * writes a note, and a finger moves the drawing; selection draws a box
+       * around the notes to choose, with a finger as with the mouse.
+       */
+      readonly tool: 'pencil' | 'selection';
       /** What it was before each change, the last last: its notes and its beats. */
       readonly before: readonly SketchAsItWas[];
     };
@@ -2092,6 +2098,7 @@ export class AppView {
     rollHandPitch: HTMLButtonElement;
     rollHandRight: HTMLButtonElement;
     rollDelete: HTMLButtonElement;
+    rollSelect: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
     rollTitle: HTMLElement;
     rollBox: HTMLElement;
@@ -2452,6 +2459,7 @@ export class AppView {
       rollHandPitch: requireElement(doc, 'roll-hand-pitch'),
       rollHandRight: requireElement(doc, 'roll-hand-right'),
       rollDelete: requireElement(doc, 'roll-delete'),
+      rollSelect: requireElement(doc, 'roll-select'),
       rollUndo: requireElement(doc, 'roll-undo'),
       rollTitle: requireElement(doc, 'roll-title'),
       rollBox: requireElement(doc, 'roll-box'),
@@ -8708,6 +8716,16 @@ export class AppView {
     this.listen(this.el.rollDelete, 'click', () => {
       this.deleteTheChosenKeys();
     });
+    this.listen(this.el.rollSelect, 'click', () => {
+      const showing = this.theOtherRollShowing;
+      const sketch = showing?.sketch;
+      if (showing === null || sketch === undefined) {
+        return;
+      }
+      const tool = sketch.tool === 'selection' ? 'pencil' : 'selection';
+      this.theOtherRollShowing = { ...showing, sketch: { ...sketch, tool } };
+      this.sayWhatCanBeChanged();
+    });
     this.listen(this.el.rollUndo, 'click', () => {
       this.putBackTheLastChange();
     });
@@ -11810,8 +11828,9 @@ export class AppView {
         : 'Edit the notes: a tap chooses one, a drag moves it';
     }
     this.el.rollEdit.setAttribute('aria-label', this.el.rollEdit.title);
-    // Only a recording has them, and they are there only while it is edited.
-    for (const button of [this.el.rollDelete, this.el.rollUndo]) {
+    this.el.rollSelect.setAttribute('aria-pressed', String(sketch?.tool === 'selection'));
+    // Only a sketch has them, and they are there only while it is edited.
+    for (const button of [this.el.rollSelect, this.el.rollDelete, this.el.rollUndo]) {
       button.hidden = sketch === undefined;
       if (editing) {
         delete button.dataset['away'];
@@ -12135,7 +12154,7 @@ export class AppView {
       why: 'A sketch: no bars to practise until it is written down.',
       ofTheOpenScore: false,
       barLabel: barsCountedOnItsBeats(roll),
-      sketch: { id, editing: false, chosen: [], before: [] },
+      sketch: { id, editing: false, chosen: [], before: [], tool: 'pencil' },
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -12185,6 +12204,11 @@ export class AppView {
     if (this.theKeyUnder(event) !== null || event.ctrlKey || event.metaKey || event.shiftKey) {
       return;
     }
+    // Choosing with the selection tool, a click on nothing chooses nothing.
+    if (this.theOtherRollShowing?.sketch?.tool === 'selection') {
+      this.choose([]);
+      return;
+    }
     this.addAKeyWhereTapped(event);
   }
 
@@ -12207,7 +12231,13 @@ export class AppView {
    * drawing there instead, as it always has: a tablet has no other way to.
    */
   private beginABox(event: PointerEvent): boolean {
-    if (event.pointerType !== 'mouse' || event.button !== 0 || this.theOtherRollShowing?.sketch?.editing !== true) {
+    const sketch = this.theOtherRollShowing?.sketch;
+    if (sketch?.editing !== true || event.button !== 0 || this.rollBoxDrawn !== null) {
+      return false;
+    }
+    // A mouse draws one with either tool; a finger or a pen only with the
+    // selection tool, having nothing else to move the drawing with.
+    if (event.pointerType !== 'mouse' && sketch.tool !== 'selection') {
       return false;
     }
     const onTheRuler = event.target instanceof Element && event.target.closest('.roll__ruler') !== null;

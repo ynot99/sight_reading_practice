@@ -4568,8 +4568,24 @@ body[data-take-on-keys='true'] #take-off-the-keys {
   .sheet__tools {
     order: 1;
     flex: 1 0 100%;
+    flex-wrap: wrap;
     gap: 6px;
   }
+
+  /*
+   * Seven of them with the selection tool, in the 326 pixels a phone of 390
+   * leaves: narrower at the sides, 40 pixels each, or the last is cut off.
+   * Narrower still, the last goes onto a line of its own rather than off.
+   */
+  .sheet__tools .button {
+    padding-inline: 10px;
+  }
+}
+
+/* A tool in use says so, as the hand a note is given to does. */
+.sheet__tools .button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--surface);
 }
 
 /*

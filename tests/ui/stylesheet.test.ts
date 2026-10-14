@@ -2235,10 +2235,19 @@ describe('searching the settings', () => {
     expect(wide?.body).toMatch(/display\s*:\s*flex/);
     expect(narrow?.body).toMatch(/order\s*:\s*1/);
     expect(narrow?.body).toMatch(/flex\s*:\s*1 0 100%/);
-    // Six of them in the row at 390 pixels: forty-eight each leave room for
-    // gaps of six, not eight.
+    // Seven of them in the row at 390 pixels with the selection tool: forty
+    // each, gaps of six; and on a narrower phone the last goes to a line of
+    // its own rather than off the sheet.
     expect(narrow?.body).toMatch(/gap\s*:\s*6px/);
+    expect(narrow?.body).toMatch(/flex-wrap\s*:\s*wrap/);
     expect(narrow?.at ?? 0).toBeGreaterThan(wide?.at ?? Infinity);
+    const narrower = rules().find((rule) => rule.selector === '.sheet__tools .button');
+    expect(inWhichMedia(narrower?.at ?? 0)).toBe(phone);
+    expect(narrower?.body).toMatch(/padding-inline\s*:\s*10px/);
+    expect(HTML).toMatch(/id="roll-edit"[\s\S]*id="roll-select"[\s\S]*id="roll-delete"/);
+    // A tool in use is filled, as a hand chosen is.
+    const pressed = rules().find((rule) => rule.selector === ".sheet__tools .button[aria-pressed='true']");
+    expect(pressed?.body).toMatch(/background\s*:\s*var\(--accent\)/);
     // One there only while editing keeps its room, so the others stay put.
     const away = rules().find((rule) => rule.selector === ".sheet__tools [data-away='true']");
     expect(away?.body).toMatch(/visibility\s*:\s*hidden/);

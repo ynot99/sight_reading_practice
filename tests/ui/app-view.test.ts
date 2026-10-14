@@ -4954,6 +4954,91 @@ describe('AppView', () => {
       expect(notes()).toBe(4);
     });
 
+    it('sounds a note of a sketch while it is held, at each pitch it is dragged to, and one written for as long as it is', async () => {
+      const { view, sketches, instrument, clock } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.25 },
+            { kind: 'noteOff', atMs: 400, midi: 60 },
+            { kind: 'noteOn', atMs: 500, midi: 64, velocity: 0.75 },
+            { kind: 'noteOff', atMs: 900, midi: 64 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Two',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const press = (type: string, where: { clientX: number; clientY: number }): void => {
+        element('roll-body').dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 61, pointerType: 'mouse', button: 0, ...where }));
+      };
+      const heard = (): (number | undefined)[][] => instrument.played.map((note) => [note.midi, note.velocity, note.atMs]);
+      const ended = (): (number | undefined)[][] => instrument.stopped.map((note) => [note.midi, note.atMs]);
+
+      // Held, it sounds as loud as it was struck, and goes on sounding.
+      press('pointerdown', at(100, 60));
+      expect(heard()).toEqual([[60, 0.25, undefined]]);
+      expect(ended()).toEqual([]);
+      // Dragged up a row, the new pitch; along its row, nothing new.
+      press('pointermove', { clientX: at(100, 60).clientX, clientY: at(100, 61).clientY });
+      expect(heard()).toEqual([
+        [60, 0.25, undefined],
+        [61, 0.25, undefined],
+      ]);
+      expect(ended()).toEqual([[60, undefined]]);
+      press('pointermove', { clientX: at(300, 60).clientX, clientY: at(100, 61).clientY });
+      expect(heard()).toHaveLength(2);
+      // Let go of, silent.
+      press('pointerup', { clientX: at(300, 60).clientX, clientY: at(100, 61).clientY });
+      expect(ended()).toEqual([
+        [60, undefined],
+        [61, undefined],
+      ]);
+
+      // A tap on a note sounds it, and lets it go.
+      instrument.played.length = 0;
+      instrument.stopped.length = 0;
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(600, 64) });
+      expect(heard()).toEqual([[64, 0.75, undefined]]);
+      expect(ended()).toEqual([[64, undefined]]);
+      // Taken away rather than let go of, silent too.
+      press('pointerdown', at(600, 64));
+      press('pointercancel', at(600, 64));
+      expect(ended()).toEqual([
+        [64, undefined],
+        [64, undefined],
+      ]);
+
+      // A note written where there was none: heard now, as loud as the notes around it, for the beat it is long.
+      instrument.played.length = 0;
+      instrument.stopped.length = 0;
+      const now = clock.now();
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(1_600, 67) });
+      expect(heard()).toEqual([[67, 0.75, now]]);
+      expect(ended()).toEqual([[67, now + 500]]);
+
+      // A box sounds nothing.
+      instrument.played.length = 0;
+      press('pointerdown', at(2_500, 70));
+      press('pointermove', at(2_000, 72));
+      press('pointerup', at(2_000, 72));
+      expect(heard()).toEqual([]);
+    });
+
     it('shows a sketch in a metre the list does not offer as it is', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

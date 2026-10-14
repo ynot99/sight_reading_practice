@@ -1794,6 +1794,11 @@ export class AppView {
    * number, and is what is drawn until the first pinch.
    */
   private rollRowPx = 13;
+  /**
+   * The note sounding while a key of a sketch is held: the key's own pitch,
+   * and the pitch it is dragged to as it goes, so the ear follows the hand.
+   */
+  private soundOfTheHeldKey: { readonly midi: number; readonly velocity: number } | null = null;
   /** The box a mouse is drawing over a sketch being edited, to choose the notes inside it. */
   private rollBoxDrawn: {
     readonly pointerId: number;
@@ -12380,6 +12385,11 @@ export class AppView {
     const snapped = this.el.rollSnap.checked ? theBeatNearest(roll, at.atMs, this.theRollsGrid()) : at.atMs;
     const downAtMs = Math.round(snapped + origin);
     const key = { midi, downAtMs, upAtMs: downAtMs + theBeatAt(roll, downAtMs), velocity: theUsualLoudness(stored.events) };
+    // Heard as it is written, for as long as it is: both ends handed to the
+    // instrument at once, so no timer outlives the drawing.
+    const now = this.runtime.clock.now();
+    this.runtime.pitchPlayer.play(midi, key.velocity, now);
+    this.runtime.pitchPlayer.stop(midi, now + (key.upAtMs - key.downAtMs));
     this.changeTheSketchShowing(takeWithAKeyAdded(stored.events, key), [...sketch.before, stored], [
       { midi, downAtMs },
     ]);
@@ -12442,7 +12452,30 @@ export class AppView {
       grip: this.theGripOn(key, event),
       upAtMs: key.upAtMs ?? rollEndedAtMs(showing.roll),
     };
+    this.soundTheHeldKey(key.midi, key.velocity);
     return true;
+  }
+
+  /**
+   * Sounds the key held at the pitch it is now at, until it is let go of or
+   * taken to another: a key moved to the row it was already on goes on
+   * sounding rather than being struck again.
+   */
+  private soundTheHeldKey(midi: number, velocity: number): void {
+    if (this.soundOfTheHeldKey?.midi === midi) {
+      return;
+    }
+    this.letTheHeldKeyFallSilent();
+    this.runtime.pitchPlayer.play(midi, velocity);
+    this.soundOfTheHeldKey = { midi, velocity };
+  }
+
+  private letTheHeldKeyFallSilent(): void {
+    const sounding = this.soundOfTheHeldKey;
+    if (sounding !== null) {
+      this.runtime.pitchPlayer.stop(sounding.midi);
+      this.soundOfTheHeldKey = null;
+    }
   }
 
   /**
@@ -12525,6 +12558,10 @@ export class AppView {
       drag.scene.highest - Math.max(...pitches),
       Math.max(lowest - Math.min(...pitches), -Math.round(downPx / this.rollLook.rowPx)),
     );
+    const sounding = this.soundOfTheHeldKey;
+    if (sounding !== null) {
+      this.soundTheHeldKey(drag.key.midi + bySemitones, sounding.velocity);
+    }
     this.showTheDrag(
       drag,
       stored,
@@ -12589,6 +12626,7 @@ export class AppView {
    * on the note, and the click of letting go is taken as answered here.
    */
   private letGoOfTheHeldKey(lifted: boolean): void {
+    this.letTheHeldKeyFallSilent();
     const drag = this.rollDrag;
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);

@@ -1240,6 +1240,41 @@ export function theKeyAt(
   );
 }
 
+/**
+ * The keys a box drawn over the drawing takes in: every note any part of
+ * which is inside it - between its two moments, on a row it crosses - each
+ * as wide as it is drawn, so what is taken in is what was seen inside.
+ * The corners may come in either order, as a box is dragged either way.
+ */
+export function theKeysInABox(
+  roll: RunRoll,
+  scene: RollScene,
+  corners: {
+    readonly fromMs: number;
+    readonly toMs: number;
+    readonly fromRow: number;
+    readonly toRow: number;
+  },
+  pxPerSecond: number,
+): readonly RolledPress[] {
+  const narrowestMs = (NARROWEST_PX / pxPerSecond) * 1000;
+  const earliest = Math.min(corners.fromMs, corners.toMs);
+  const latest = Math.max(corners.fromMs, corners.toMs);
+  const top = Math.min(corners.fromRow, corners.toRow);
+  const bottom = Math.max(corners.fromRow, corners.toRow);
+  const inside = scene.notes.filter(
+    (note) =>
+      note.row >= top &&
+      note.row <= bottom &&
+      note.fromMs <= latest &&
+      Math.max(note.untilMs, note.fromMs + narrowestMs) >= earliest,
+  );
+  const origin = rollBeganAtMs(roll);
+  return roll.presses.filter((press) =>
+    inside.some((note) => press.downAtMs - origin === note.fromMs && scene.highest - press.midi === note.row),
+  );
+}
+
 export function whatTheGridSaysAt(
   scene: RollScene,
   atMs: number,

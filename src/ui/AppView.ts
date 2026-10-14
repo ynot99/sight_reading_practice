@@ -202,6 +202,7 @@ import {
   theSceneOfTheRoll,
   whatThePedalSaysAt,
   theKeyAt,
+  theKeysInABox,
   whatTheGridSaysAt,
   whatTheRulerSaysAt,
   type RollCanvases,
@@ -460,6 +461,29 @@ const ROOM_IN_A_SKETCH = 8;
 interface SketchAsItWas {
   readonly events: readonly MidiFileEvent[];
   readonly beats: readonly HeardBeat[];
+}
+
+/** The corner of a box a pointer is at, kept inside the notes it chooses among. */
+function theBoxCornerAt(
+  box: { readonly grid: { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number } | null },
+  at: { readonly clientX: number; readonly clientY: number },
+): { readonly clientX: number; readonly clientY: number } {
+  const grid = box.grid;
+  return grid === null
+    ? at
+    : {
+        clientX: Math.min(grid.right, Math.max(grid.left, at.clientX)),
+        clientY: Math.min(grid.bottom, Math.max(grid.top, at.clientY)),
+      };
+}
+
+/**
+ * Whether a press on a sketch adds to the notes chosen rather than choosing
+ * alone: with Ctrl, Cmd or Shift held, as any editor has it - or from a finger
+ * or a pen, which have no keys to hold.
+ */
+function addsToTheChoice(event: PointerEvent): boolean {
+  return event.ctrlKey || event.metaKey || event.shiftKey || event.pointerType !== 'mouse';
 }
 
 /** How far down the run the view stood, and the place down it a change of row height is held at. */
@@ -1703,6 +1727,8 @@ export class AppView {
     readonly key: KeyNamed;
     /** Whether that key was among those chosen as it went down. */
     readonly wasChosen: boolean;
+    /** Whether a tap on it adds it to the notes chosen or takes it out, rather than choosing it alone. */
+    readonly adds: boolean;
     /** What of it was taken hold of: the whole note, moved, or its end, held longer or shorter. */
     readonly grip: 'whole' | 'end';
     /** When it was let go of, which a drag of its end moves. */
@@ -1768,6 +1794,22 @@ export class AppView {
    * number, and is what is drawn until the first pinch.
    */
   private rollRowPx = 13;
+  /** The box a mouse is drawing over a sketch being edited, to choose the notes inside it. */
+  private rollBoxDrawn: {
+    readonly pointerId: number;
+    /** Where it went down, on the screen. */
+    readonly clientX: number;
+    readonly clientY: number;
+    /** Where the stage the box is placed in stood as it began. */
+    readonly stageLeft: number;
+    readonly stageTop: number;
+    /** Where the notes stood, which the box is kept inside. */
+    readonly grid: { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number } | null;
+    /** Whether what it holds is added to the notes chosen, rather than chosen alone. */
+    readonly adds: boolean;
+    /** Whether it has gone far enough to be a box rather than a click. */
+    readonly drawn: boolean;
+  } | null = null;
   /** The sketch the score on the page was written down from, as it was then, and the score it gave. */
   private theSketchOnThePage: { readonly sketch: StoredSketch; readonly exercise: Exercise } | null = null;
   /** The sketch whose name is being written over, while it is. */
@@ -2052,6 +2094,7 @@ export class AppView {
     rollDelete: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
     rollTitle: HTMLElement;
+    rollBox: HTMLElement;
     rollRename: HTMLInputElement;
     rollBeats: HTMLElement;
     rollBeatsShown: HTMLInputElement;
@@ -2411,6 +2454,7 @@ export class AppView {
       rollDelete: requireElement(doc, 'roll-delete'),
       rollUndo: requireElement(doc, 'roll-undo'),
       rollTitle: requireElement(doc, 'roll-title'),
+      rollBox: requireElement(doc, 'roll-box'),
       rollRename: requireElement(doc, 'roll-rename'),
       rollBeats: requireElement(doc, 'roll-beats'),
       rollBeatsShown: requireElement(doc, 'roll-beats-shown'),
@@ -8671,7 +8715,7 @@ export class AppView {
       this.pinched = false;
       this.panned = false;
       this.stopTheFling();
-      if (this.rollFingers.size === 0 && this.takeHoldOfAKey(event)) {
+      if (this.rollFingers.size === 0 && (this.takeHoldOfAKey(event) || this.beginABox(event))) {
         return;
       }
       this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -8696,6 +8740,10 @@ export class AppView {
         this.dragTheHeldKey(event);
         return;
       }
+      if (this.rollBoxDrawn?.pointerId === event.pointerId) {
+        this.drawTheBox(event);
+        return;
+      }
       if (event.pointerType === 'mouse' && this.rollDrag === null && !this.rollFingers.has(event.pointerId)) {
         this.showTheGrip(event);
       }
@@ -8710,6 +8758,10 @@ export class AppView {
       this.listen(this.el.rollBody, ending, (event) => {
         if (this.rollDrag?.pointerId === event.pointerId) {
           this.letGoOfTheHeldKey(ending === 'pointerup');
+          return;
+        }
+        if (this.rollBoxDrawn?.pointerId === event.pointerId) {
+          this.chooseWhatTheBoxHolds(event, ending === 'pointerup');
           return;
         }
         if (!this.rollFingers.has(event.pointerId)) {
@@ -12123,18 +12175,123 @@ export class AppView {
   }
 
   /**
-   * A tap on a sketch being edited: on a note, it is added to the notes
-   * chosen or let go of from them, so several are chosen a tap at a time;
-   * where there is none, a note is written. The head stays where it is:
-   * placing it is listening's, and the ruler's.
+   * A click on a sketch being edited where the press found no note: a note
+   * is written there, unless a key held said the click was to choose - a
+   * choice adds nothing to the music. A note itself is answered when it is
+   * let go of: see `letGoOfTheHeldKey`. The head stays where it is: placing
+   * it is listening's, and the ruler's.
    */
   private chooseTheKeyTapped(event: MouseEvent): void {
-    const key = this.theKeyUnder(event);
-    if (key === null) {
-      this.addAKeyWhereTapped(event);
+    if (this.theKeyUnder(event) !== null || event.ctrlKey || event.metaKey || event.shiftKey) {
       return;
     }
-    this.chooseOrLetGo(key);
+    this.addAKeyWhereTapped(event);
+  }
+
+  /** Makes these the notes chosen, and only these. */
+  private choose(keys: readonly KeyNamed[]): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    if (showing === null || sketch === undefined) {
+      return;
+    }
+    const chosen = keys.map((key) => ({ midi: key.midi, downAtMs: key.downAtMs }));
+    this.theOtherRollShowing = { ...showing, sketch: { ...sketch, chosen } };
+    this.drawTheRollInto();
+    this.sayWhatCanBeChanged();
+  }
+
+  /**
+   * Begins a box to choose notes by, where a mouse goes down on a sketch being
+   * edited and no note is under it. Says whether it did. A finger moves the
+   * drawing there instead, as it always has: a tablet has no other way to.
+   */
+  private beginABox(event: PointerEvent): boolean {
+    if (event.pointerType !== 'mouse' || event.button !== 0 || this.theOtherRollShowing?.sketch?.editing !== true) {
+      return false;
+    }
+    const onTheRuler = event.target instanceof Element && event.target.closest('.roll__ruler') !== null;
+    if (onTheRuler) {
+      return false;
+    }
+    // Where the stage and the notes are, read once: the box is placed in the
+    // one by the pointer, and kept to the other, past whose edge there is no
+    // note to choose.
+    const stage = this.el.rollBox.parentElement?.getBoundingClientRect();
+    const grid = this.el.rollBody.firstElementChild?.querySelector<HTMLElement>('.roll__grid')?.getBoundingClientRect() ?? null;
+    // Begun on the pedal under the notes, it begins at their edge.
+    const from = theBoxCornerAt({ grid }, event);
+    this.rollBoxDrawn = {
+      pointerId: event.pointerId,
+      clientX: from.clientX,
+      clientY: from.clientY,
+      stageLeft: stage?.left ?? 0,
+      stageTop: stage?.top ?? 0,
+      grid,
+      adds: addsToTheChoice(event),
+      drawn: false,
+    };
+    // Followed past the edge of the drawing, as a box dragged off a desktop is.
+    if (typeof this.el.rollBody.setPointerCapture === 'function') {
+      try {
+        this.el.rollBody.setPointerCapture(event.pointerId);
+      } catch {
+        // A pointer the page no longer has: the box ends where the drawing does.
+      }
+    }
+    return true;
+  }
+
+  /** Draws the box from where the mouse went down to where it is: a box once it has gone somewhere. */
+  private drawTheBox(event: PointerEvent): void {
+    const box = this.rollBoxDrawn;
+    if (box === null) {
+      return;
+    }
+    if (!box.drawn && Math.hypot(event.clientX - box.clientX, event.clientY - box.clientY) < TAP_SLOP_PX) {
+      return;
+    }
+    this.rollBoxDrawn = { ...box, drawn: true };
+    // A drag, so the click on letting go writes no note.
+    this.panned = true;
+    const to = theBoxCornerAt(box, event);
+    const style = this.el.rollBox.style;
+    style.left = `${String(Math.min(box.clientX, to.clientX) - box.stageLeft)}px`;
+    style.top = `${String(Math.min(box.clientY, to.clientY) - box.stageTop)}px`;
+    style.width = `${String(Math.abs(to.clientX - box.clientX))}px`;
+    style.height = `${String(Math.abs(to.clientY - box.clientY))}px`;
+    this.el.rollBox.hidden = false;
+  }
+
+  /**
+   * Chooses the notes the box holds as it is let go of: those alone, or added
+   * to those chosen where a key held said so. Let go of off the page, it
+   * chooses nothing. A box never drawn was a click, which writes a note.
+   */
+  private chooseWhatTheBoxHolds(event: PointerEvent, lifted: boolean): void {
+    const box = this.rollBoxDrawn;
+    this.rollBoxDrawn = null;
+    this.el.rollBox.hidden = true;
+    const roll = this.theRoll();
+    const scene = this.drawnScene;
+    const sketch = this.theOtherRollShowing?.sketch;
+    const from = box === null ? null : this.thePointOnTheDrawing(box);
+    const to = box === null ? null : this.thePointOnTheDrawing(theBoxCornerAt(box, event));
+    if (box === null || !box.drawn || !lifted || roll === null || scene === null || sketch === undefined) {
+      return;
+    }
+    if (from === null || to === null) {
+      return;
+    }
+    const held = theKeysInABox(
+      roll,
+      scene,
+      { fromMs: from.atMs, toMs: to.atMs, fromRow: from.row, toRow: to.row },
+      Number(this.el.rollZoom.value),
+    );
+    this.choose(
+      box.adds ? [...sketch.chosen, ...held.filter((key) => !sketch.chosen.some((each) => sameKey(each, key)))] : held,
+    );
   }
 
   /** Adds a key to the notes chosen, or lets go of it where it was one of them. */
@@ -12234,6 +12391,7 @@ export class AppView {
       moved: null,
       key: { midi: key.midi, downAtMs: key.downAtMs },
       wasChosen: sketch.chosen.some((each) => sameKey(each, key)),
+      adds: addsToTheChoice(event),
       grip: this.theGripOn(key, event),
       upAtMs: key.upAtMs ?? rollEndedAtMs(showing.roll),
     };
@@ -12394,7 +12552,11 @@ export class AppView {
     if (drag.moved === null) {
       if (lifted) {
         this.panned = true;
-        this.chooseOrLetGo(drag.key);
+        if (drag.adds) {
+          this.chooseOrLetGo(drag.key);
+        } else {
+          this.choose([drag.key]);
+        }
       }
       return;
     }

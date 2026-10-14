@@ -11,6 +11,7 @@ import {
   theSceneOfTheRoll,
   whatThePedalSaysAt,
   theKeyAt,
+  theKeysInABox,
   whatTheGridSaysAt,
   whatTheRulerSaysAt,
   keepTheHeadInView,
@@ -894,6 +895,35 @@ describe('what a pointer resting on the drawing is told', () => {
     expect(theKeyAt(run, scene, 1200, row(MIDI.C4) + 1, zoom)).toBeNull();
     expect(theKeyAt(run, scene, 1012, row(MIDI.C4 + 2), zoom)).toBe(blip);
     expect(theKeyAt(run, scene, 1016, row(MIDI.C4 + 2), zoom)).toBeNull();
+  });
+
+  it('takes in every key a box touches any part of, as drawn, the box dragged either way', () => {
+    const first = press({ midi: MIDI.C4, downAtMs: 1000, upAtMs: 1500 });
+    const again = press({ midi: MIDI.C4, downAtMs: 1600, upAtMs: 2000 });
+    // Too short to see, so drawn two pixels wide, and taken in over them.
+    const blip = press({ midi: MIDI.C4 + 2, downAtMs: 1000, upAtMs: 1001 });
+    const above = press({ midi: MIDI.C4 + 4, downAtMs: 1000, upAtMs: 1500 });
+    const run = roll({ beats: grid, presses: [first, again, blip, above] });
+    const scene = sceneOf(run);
+    const row = (midi: number): number => scene.highest - midi;
+    const inBox = (fromMs: number, toMs: number, fromRow: number, toRow: number): readonly RolledPress[] =>
+      theKeysInABox(run, scene, { fromMs, toMs, fromRow, toRow }, zoom);
+
+    // The box's later side swept across where the first begins, its earlier
+    // side across where it ends: in from the moment either touches it.
+    for (let toMs = 900; toMs <= 1100; toMs += 5) {
+      expect(inBox(0, toMs, row(MIDI.C4), row(MIDI.C4)), String(toMs)).toEqual(toMs >= 1000 ? [first] : []);
+    }
+    for (let fromMs = 1400; fromMs <= 1590; fromMs += 5) {
+      expect(inBox(fromMs, 1590, row(MIDI.C4), row(MIDI.C4)), String(fromMs)).toEqual(fromMs <= 1500 ? [first] : []);
+    }
+    // The blip as wide as it is drawn: two pixels, 14 ms at this zoom.
+    expect(inBox(1014, 1100, row(MIDI.C4 + 2), row(MIDI.C4 + 2))).toEqual([blip]);
+    expect(inBox(1015, 1100, row(MIDI.C4 + 2), row(MIDI.C4 + 2))).toEqual([]);
+    // Every row from one corner's to the other's, and only those; either way round.
+    expect(inBox(0, 3000, row(MIDI.C4), row(MIDI.C4 + 2))).toEqual([first, again, blip]);
+    expect(inBox(3000, 0, row(MIDI.C4 + 2), row(MIDI.C4))).toEqual([first, again, blip]);
+    expect(inBox(1700, 900, row(MIDI.C4 + 4), row(MIDI.C4 + 3))).toEqual([above]);
   });
 
   it('answers for the press under an outline, and not for the outline', () => {

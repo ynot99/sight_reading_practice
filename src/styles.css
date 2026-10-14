@@ -1261,6 +1261,18 @@ textarea {
  * rather than against the run, so that scrolling the run does not carry them
  * off the side of it.
  */
+/*
+ * The box being drawn to choose notes: placed by the pointer, over the
+ * drawing and never in the way of it.
+ */
+.roll-box {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border: 1px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .roll-stage {
   position: relative;
   display: flex;

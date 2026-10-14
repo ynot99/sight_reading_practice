@@ -1362,6 +1362,16 @@ describe('the stylesheet', () => {
     expect(pressed?.body).toMatch(/transform\s*:/);
   });
 
+  it('lays the box that chooses notes over the drawing, out of the way of the pointer', () => {
+    // Placed by the pointer in the stage, and never the thing the pointer is
+    // over, or the drag drawing it would be taken by the box itself.
+    const ruleOf = (selector: string): string => rules().find((rule) => rule.selector === selector)?.body ?? '';
+    expect(ruleOf('.roll-box')).toMatch(/position\s*:\s*absolute/);
+    expect(ruleOf('.roll-box')).toMatch(/pointer-events\s*:\s*none/);
+    expect(ruleOf('.roll-stage')).toMatch(/position\s*:\s*relative/);
+    expect(HTML).toMatch(/<div class="roll-stage">\s*<div id="roll-body"[^>]*><\/div>[\s\S]*?<div id="roll-box"/);
+  });
+
   it('keeps a caret out of the range iOS magnifies the page for', () => {
     // Anything under 16px makes iOS zoom the whole page in on focus and never
     // undo it - which is a score left magnified because a bar number was

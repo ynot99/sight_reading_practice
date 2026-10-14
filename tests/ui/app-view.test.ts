@@ -8,7 +8,7 @@ import { LibrarySync } from '../../src/application/LibrarySync.js';
 import { SettingsSync } from '../../src/application/SettingsSync.js';
 import { DriveSync } from '../../src/application/DriveSync.js';
 import { resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DARK_SYSTEM_THEMES, PracticeController, TEMPO_STEP_PERCENT, THEMES } from '../../src/application/PracticeController.js';
 import {
   DEFAULT_STORAGE_KEY,
@@ -546,6 +546,18 @@ function createRig(
     files,
     trail,
   };
+}
+
+/**
+ * A tap on the drawing as a browser sends it: down, up, and the click after -
+ * a finger's unless said otherwise, which adds a note to those chosen or
+ * takes it out.
+ */
+function tapTheDrawing(init: PointerEventInit, on: Element = element('roll-body')): void {
+  for (const type of ['pointerdown', 'pointerup']) {
+    on.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 31, ...init }));
+  }
+  on.dispatchEvent(new MouseEvent('click', { bubbles: true, ...init }));
 }
 
 function element<T extends HTMLElement>(id: string): T {
@@ -4264,13 +4276,10 @@ describe('AppView', () => {
         ) || 0;
       const tapOn = (fromMs: number): void => {
         const note = view.rollScene?.notes.find((each) => each.fromMs === fromMs);
-        element('roll-body').dispatchEvent(
-          new MouseEvent('click', {
-            bubbles: true,
-            clientX: ((fromMs + 100) / 1000) * zoom,
-            clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown(),
-          }),
-        );
+        tapTheDrawing({
+          clientX: ((fromMs + 100) / 1000) * zoom,
+          clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown(),
+        });
       };
       const chosen = (): number[] =>
         (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
@@ -4279,9 +4288,7 @@ describe('AppView', () => {
       expect(chosen()).toEqual([1_000]);
       expect(headAt(element('roll-body'))).toBe('0.000');
       // The ruler still puts it somewhere to listen from, and writes nothing.
-      element('roll-body')
-        .querySelector('.roll__ruler')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: 0 }));
+      tapTheDrawing({ clientX: 0.6 * zoom, clientY: 0 }, element('roll-body').querySelector('.roll__ruler') ?? undefined);
       expect(headAt(element('roll-body'))).toBe('0.500');
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
       expect(chosen()).toEqual([1_000]);
@@ -4343,9 +4350,7 @@ describe('AppView', () => {
       // A tap where there is no note writes one: on the key of its row, on the
       // nearest beat, a beat long, as loud as the others, and chosen.
       const onTheRowOf = view.rollScene?.notes.find((note) => note.fromMs === 500)?.row ?? 0;
-      element('roll-body').dispatchEvent(
-        new MouseEvent('click', { bubbles: true, clientX: 1.4 * zoom, clientY: (onTheRowOf + 0.5) * 13 - scrolledDown() }),
-      );
+      tapTheDrawing({ clientX: 1.4 * zoom, clientY: (onTheRowOf + 0.5) * 13 - scrolledDown() });
       const written = (sketches.find(sketch?.id ?? '')?.events ?? []).filter((event) => event.kind !== 'sustain');
       expect(written.slice(-2)).toEqual([
         { kind: 'noteOn', atMs: 1_500, midi: 64, velocity: kept?.events[0]?.kind === 'noteOn' ? kept.events[0].velocity : -1 },
@@ -4355,9 +4360,7 @@ describe('AppView', () => {
       undo.click();
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
       // Below the lowest key there is nothing to write.
-      element('roll-body').dispatchEvent(
-        new MouseEvent('click', { bubbles: true, clientX: 1.4 * zoom, clientY: 88.5 * 13 - scrolledDown() }),
-      );
+      tapTheDrawing({ clientX: 1.4 * zoom, clientY: 88.5 * 13 - scrolledDown() });
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
       // And listening lets go of what was chosen, and of the keys nobody
       // played; the trash and the undo keep their places, out of sight, and a
@@ -4476,9 +4479,7 @@ describe('AppView', () => {
         ) || 0;
       const tapOn = (fromMs: number): void => {
         const note = view.rollScene?.notes.find((each) => each.fromMs === fromMs);
-        element('roll-body').dispatchEvent(
-          new MouseEvent('click', { bubbles: true, clientX: ((fromMs + 100) / 1000) * zoom, clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown() }),
-        );
+        tapTheDrawing({ clientX: ((fromMs + 100) / 1000) * zoom, clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown() });
       };
       const chosen = (): number[] =>
         (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
@@ -4693,6 +4694,145 @@ describe('AppView', () => {
       expect(element('roll-edit').title).toBe('Begin a sketch of this score to edit; the score stays as it is written');
     });
 
+    it('chooses one note by a click, more by Ctrl, Cmd or Shift and a click, or by a box drawn with the mouse', async () => {
+      // The notes laid out as a page lays them out, which jsdom does not: the
+      // box is kept to where they are.
+      const rectOf = HTMLElement.prototype.getBoundingClientRect;
+      HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement): DOMRect {
+        return this.classList.contains('roll__grid') ? new DOMRect(0, 0, 4_000, 3_000) : rectOf.call(this);
+      };
+      onTestFinished(() => {
+        HTMLElement.prototype.getBoundingClientRect = rectOf;
+      });
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 60],
+            [500, 62],
+            [1_000, 64],
+          ].flatMap(([atMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Three',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const scrolledDown = (): number =>
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const highest = view.rollScene?.highest ?? 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown(),
+      });
+      const chosen = (): number[] =>
+        (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+      const notes = (): number => sketches.find(sketch.id)?.noteCount ?? -1;
+      const mouse = (ms: number, midi: number, keys: PointerEventInit = {}): void => {
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(ms, midi), ...keys });
+      };
+      const body = element('roll-body');
+      const box = element('roll-box');
+      const drag = (from: [number, number], to: [number, number], keys: PointerEventInit = {}, ending = 'pointerup'): void => {
+        const init = { bubbles: true, pointerId: 41, pointerType: 'mouse', button: 0, ...keys };
+        body.dispatchEvent(new PointerEvent('pointerdown', { ...init, ...at(...from) }));
+        body.dispatchEvent(new PointerEvent('pointermove', { ...init, ...at(...to) }));
+        expect(box.hidden).toBe(false);
+        body.dispatchEvent(new PointerEvent(ending, { ...init, ...at(...to) }));
+        expect(box.hidden).toBe(true);
+        if (ending === 'pointerup') {
+          body.dispatchEvent(new MouseEvent('click', { bubbles: true, ...keys, ...at(...to) }));
+        }
+      };
+
+      // A click chooses that note alone.
+      mouse(600, 62);
+      expect(chosen()).toEqual([500]);
+      mouse(1_100, 64);
+      expect(chosen()).toEqual([1_000]);
+      // With Ctrl, Shift or Cmd it adds the note, or takes it out.
+      mouse(100, 60, { ctrlKey: true });
+      expect(chosen()).toEqual([0, 1_000]);
+      mouse(100, 60, { shiftKey: true });
+      expect(chosen()).toEqual([1_000]);
+      mouse(600, 62, { metaKey: true });
+      expect(chosen()).toEqual([500, 1_000]);
+      // And with one held, a click where there is no note writes none.
+      mouse(1_800, 60, { ctrlKey: true });
+      expect(notes()).toBe(3);
+
+      // A box from empty space, drawn as it goes, chooses what it touches alone,
+      // and the click it ends with writes nothing.
+      drag([950, 60], [50, 62]);
+      expect(chosen()).toEqual([0, 500]);
+      expect(notes()).toBe(3);
+      // With Ctrl held, what it touches is added.
+      drag([1_450, 64], [950, 64], { ctrlKey: true });
+      expect(chosen()).toEqual([0, 500, 1_000]);
+      // Taken off the page, it chooses nothing.
+      drag([950, 60], [50, 60], {}, 'pointercancel');
+      expect(chosen()).toEqual([0, 500, 1_000]);
+      // Dragged past the notes, it stops at their edge: there is nothing past it to choose.
+      const grid = body.querySelector<HTMLElement>('.roll__grid');
+      if (grid !== null) {
+        grid.getBoundingClientRect = () => new DOMRect(0, 0, 400, 300);
+      }
+      const from = at(950, 60);
+      const init = { bubbles: true, pointerId: 43, pointerType: 'mouse', button: 0 };
+      body.dispatchEvent(new PointerEvent('pointerdown', { ...init, ...from }));
+      body.dispatchEvent(new PointerEvent('pointermove', { ...init, clientX: 5_000, clientY: 5_000 }));
+      expect([box.style.width, box.style.height]).toEqual([`${String(400 - from.clientX)}px`, `${String(300 - from.clientY)}px`]);
+      body.dispatchEvent(new PointerEvent('pointermove', { ...init, clientX: -5_000, clientY: -5_000 }));
+      expect([box.style.left, box.style.top, box.style.width]).toEqual(['0px', '0px', `${String(from.clientX)}px`]);
+      body.dispatchEvent(new PointerEvent('pointercancel', { ...init, clientX: -5_000, clientY: -5_000 }));
+      // And begun under them, on the pedal, it begins at their edge.
+      body.dispatchEvent(new PointerEvent('pointerdown', { ...init, clientX: 100, clientY: 310 }));
+      body.dispatchEvent(new PointerEvent('pointermove', { ...init, clientX: 150, clientY: 250 }));
+      expect([box.style.top, box.style.height]).toEqual(['250px', '50px']);
+      body.dispatchEvent(new PointerEvent('pointercancel', { ...init, clientX: 150, clientY: 250 }));
+
+      // A finger has no keys to hold: its tap adds a note or takes it out, as it did.
+      tapTheDrawing({ pointerType: 'touch', ...at(100, 60) });
+      expect(chosen()).toEqual([500, 1_000]);
+      // And a plain click on empty space still writes a note.
+      mouse(1_800, 60);
+      expect(notes()).toBe(4);
+      const before = chosen();
+
+      // A finger drawn over empty space moves the drawing, as it always has,
+      // and a mouse drawn along the ruler draws no box either.
+      for (const [pointerType, from, to] of [
+        ['touch', at(2_500, 70), at(2_300, 72)],
+        ['mouse', { clientX: 50, clientY: 5 }, { clientX: 150, clientY: 5 }],
+      ] as const) {
+        const on = pointerType === 'mouse' ? (body.querySelector('.roll__ruler') ?? body) : body;
+        const init = { bubbles: true, pointerId: 42, pointerType, button: 0 };
+        on.dispatchEvent(new PointerEvent('pointerdown', { ...init, ...from }));
+        on.dispatchEvent(new PointerEvent('pointermove', { ...init, ...to }));
+        expect(box.hidden, pointerType).toBe(true);
+        on.dispatchEvent(new PointerEvent('pointerup', { ...init, ...to }));
+      }
+      expect(chosen()).toEqual(before);
+      expect(notes()).toBe(4);
+
+      // Listening, the mouse chooses nothing: it puts the marker.
+      element<HTMLButtonElement>('roll-edit').click();
+      const listening = { bubbles: true, pointerId: 44, pointerType: 'mouse', button: 0 };
+      body.dispatchEvent(new PointerEvent('pointerdown', { ...listening, ...at(950, 70) }));
+      body.dispatchEvent(new PointerEvent('pointermove', { ...listening, ...at(50, 72) }));
+      expect(box.hidden).toBe(true);
+      body.dispatchEvent(new PointerEvent('pointerup', { ...listening, ...at(50, 72) }));
+    });
+
     it('shows a sketch in a metre the list does not offer as it is', async () => {
       const { view, sketches } = createRig();
       await view.initialize();
@@ -4827,9 +4967,7 @@ describe('AppView', () => {
           element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
         ) || 0;
       const row = view.rollScene?.notes.find((note) => note.fromMs === 500)?.row ?? 0;
-      element('roll-body').dispatchEvent(
-        new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() }),
-      );
+      tapTheDrawing({ clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() });
       const notes = (): number => sketches.find(sketch.id)?.noteCount ?? -1;
       const press = (init: KeyboardEventInit, on: EventTarget = document.body): KeyboardEvent => {
         const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
@@ -4843,16 +4981,12 @@ describe('AppView', () => {
       expect(notes()).toBe(3);
 
       // Two chosen go together, and come back together.
-      element('roll-body').dispatchEvent(
-        new MouseEvent('click', { bubbles: true, clientX: 0.1 * zoom, clientY: (row + 2.5) * 13 - scrolledDown() }),
-      );
+      tapTheDrawing({ clientX: 0.1 * zoom, clientY: (row + 2.5) * 13 - scrolledDown() });
       press({ key: 'Delete', code: 'Delete' });
       expect(notes()).toBe(1);
       press({ key: 'z', code: 'KeyZ', ctrlKey: true });
       expect(notes()).toBe(3);
-      element('roll-body').dispatchEvent(
-        new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() }),
-      );
+      tapTheDrawing({ clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() });
       expect(press({ key: 'Delete', code: 'Delete' }).defaultPrevented).toBe(true);
       expect(notes()).toBe(2);
       // Redo is not offered, so its keys do nothing.
@@ -4861,18 +4995,14 @@ describe('AppView', () => {
       expect(press({ key: 'z', code: 'KeyZ', ctrlKey: true }).defaultPrevented).toBe(true);
       expect(notes()).toBe(3);
       // On a Mac, the command key; and Backspace as well as Delete.
-      element('roll-body').dispatchEvent(
-        new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() }),
-      );
+      tapTheDrawing({ clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() });
       press({ key: 'Backspace', code: 'Backspace' });
       expect(notes()).toBe(2);
       press({ key: 'z', code: 'KeyZ', metaKey: true });
       expect(notes()).toBe(3);
 
       // Listening, and with the viewer shut, the keys are nobody's here.
-      element('roll-body').dispatchEvent(
-        new MouseEvent('click', { bubbles: true, clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() }),
-      );
+      tapTheDrawing({ clientX: 0.6 * zoom, clientY: (row + 0.5) * 13 - scrolledDown() });
       press({ key: 'Delete', code: 'Delete' });
       expect(notes()).toBe(2);
       element<HTMLButtonElement>('roll-edit').click();
@@ -4913,9 +5043,7 @@ describe('AppView', () => {
         ) || 0;
       const tapOn = (fromMs: number): void => {
         const note = view.rollScene?.notes.find((each) => each.fromMs === fromMs);
-        element('roll-body').dispatchEvent(
-          new MouseEvent('click', { bubbles: true, clientX: ((fromMs + 100) / 1000) * zoom, clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown() }),
-        );
+        tapTheDrawing({ clientX: ((fromMs + 100) / 1000) * zoom, clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown() });
       };
 
       // A sketch has no passage to practise: the slider is in its place.
@@ -4994,9 +5122,7 @@ describe('AppView', () => {
         ) || 0;
       const tapOn = (fromMs: number): void => {
         const note = view.rollScene?.notes.find((each) => each.fromMs === fromMs);
-        element('roll-body').dispatchEvent(
-          new MouseEvent('click', { bubbles: true, clientX: ((fromMs + 100) / 1000) * zoom, clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown() }),
-        );
+        tapTheDrawing({ clientX: ((fromMs + 100) / 1000) * zoom, clientY: ((note?.row ?? 0) + 0.5) * 13 - scrolledDown() });
       };
 
       // Nothing chosen: dimmed, saying so, and doing nothing.

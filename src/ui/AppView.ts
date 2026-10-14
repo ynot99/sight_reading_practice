@@ -1248,10 +1248,17 @@ function takeTitle(savedAtMs: number): string {
 function whenItWas(atMs: number): string {
   const at = new Date(atMs);
   const pad = (value: number): string => String(value).padStart(2, '0');
-  return (
-    `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}, ` +
-    `${pad(at.getDate())}.${pad(at.getMonth() + 1)}.${at.getFullYear()}`
-  );
+  return `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}, ${theDayItWas(atMs)}`;
+}
+
+/**
+ * The day something was, without the time: what a sketch is named by, so its
+ * name fits beside its buttons on a phone and still says when it was begun.
+ */
+function theDayItWas(atMs: number): string {
+  const at = new Date(atMs);
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return `${pad(at.getDate())}.${pad(at.getMonth() + 1)}.${at.getFullYear()}`;
 }
 
 function takeFileName(savedAtMs: number): string {
@@ -8629,7 +8636,7 @@ export class AppView {
     });
     this.listen(this.el.sketchesNew, 'click', () => {
       const now = Date.now();
-      const sketch = this.runtime.sketches.begin({ events: [], beats: [] }, `Sketch, ${whenItWas(now)}`, now);
+      const sketch = this.runtime.sketches.begin({ events: [], beats: [] }, `Sketch, ${theDayItWas(now)}`, now);
       this.renderSketches();
       this.showTheSketch(sketch.id);
     });
@@ -11909,7 +11916,7 @@ export class AppView {
     if (take === null) {
       return;
     }
-    const sketch = this.runtime.sketches.begin(take, `Sketch of the take at ${whenItWas(take.savedAtMs)}`, Date.now());
+    const sketch = this.runtime.sketches.begin(take, `Sketch of a take, ${theDayItWas(take.savedAtMs)}`, Date.now());
     this.renderSketches();
     this.showTheSketch(sketch.id);
   }

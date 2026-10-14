@@ -4237,7 +4237,7 @@ describe('AppView', () => {
       edit.click();
       const sketch = sketches.list()[0];
       expect(sketches.list()).toHaveLength(1);
-      expect(sketch?.title).toMatch(/^Sketch of the take at \d\d:\d\d:\d\d, \d\d\.\d\d\.\d{4}$/);
+      expect(sketch?.title).toMatch(/^Sketch of a take, \d\d\.\d\d\.\d{4}$/);
       expect(element('roll-title').textContent).toBe(sketch?.title);
       // Opened being edited, in common time at 120 from its first note, since
       // it was played without the click: a bar line every two seconds, with
@@ -4526,6 +4526,23 @@ describe('AppView', () => {
       expect(metre.value).toBe('4/4');
     });
 
+    it('names a sketch by the day it was begun, without the time, so the name fits on a phone', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        // A day and a month of one figure each, at a minute to midnight.
+        vi.setSystemTime(new Date(2026, 8, 3, 23, 59, 30));
+        const { view, sketches } = createRig();
+        await view.initialize();
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        element<HTMLButtonElement>('sketches-new').click();
+
+        expect(sketches.list()[0]?.title).toBe('Sketch, 03.09.2026');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('shows a sketch in a metre the list does not offer as it is', async () => {
       const { view, sketches } = createRig();
       await view.initialize();
@@ -4624,7 +4641,7 @@ describe('AppView', () => {
       // One begun with nothing in it, opened to be written, in common time.
       element<HTMLButtonElement>('sketches-new').click();
       const empty = sketches.list()[0];
-      expect(empty?.title).toMatch(/^Sketch, \d\d:\d\d:\d\d, \d\d\.\d\d\.\d{4}$/);
+      expect(empty?.title).toMatch(/^Sketch, \d\d\.\d\d\.\d{4}$/);
       expect(empty?.noteCount).toBe(0);
       expect(empty?.beats.map((beat) => [beat.atMs, beat.beatsInBar])).toEqual([
         [0, 4],

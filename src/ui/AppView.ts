@@ -1768,6 +1768,8 @@ export class AppView {
    * number, and is what is drawn until the first pinch.
    */
   private rollRowPx = 13;
+  /** The sketch the score on the page was written down from, as it was then, and the score it gave. */
+  private theSketchOnThePage: { readonly sketch: StoredSketch; readonly exercise: Exercise } | null = null;
   /** The sketch whose name is being written over, while it is. */
   private sketchBeingRenamed: string | null = null;
   /**
@@ -9479,7 +9481,7 @@ export class AppView {
       write.textContent = 'Score';
       write.title = 'Write this sketch down as a score';
       write.setAttribute('aria-label', `Write ${sketch.title} down as a score`);
-      this.listen(write, 'click', () => void this.writeDown(sketch, sketch.title, this.el.sheetScores));
+      this.listen(write, 'click', () => void this.writeDownTheSketch(sketch.id, this.el.sheetScores));
 
       const save = this.doc.createElement('button');
       save.type = 'button';
@@ -9543,7 +9545,8 @@ export class AppView {
     },
     title: string,
     from: HTMLElement,
-  ): Promise<void> {
+    kept = true,
+  ): Promise<Exercise | null> {
     from.hidden = true;
     timeTheStart('score asked for', () => title);
     try {
@@ -9551,13 +9554,47 @@ export class AppView {
         thePlayingAsAFile(playing, title).slice().buffer,
         `${title}.mid`,
       );
-      await this.runtime.scores.keep(exercise, Date.now());
+      if (kept) {
+        await this.runtime.scores.keep(exercise, Date.now());
+      }
       await this.pickUpTheFile(exercise);
       this.sayWhatTheFileLeftOut(exercise, warnings);
+      return this.runtime.controller.openedExercise;
     } catch (error) {
       reportToTheConsole(`Could not write ${title} down.`, error);
       this.sayInTheMiddle(`Could not write ${title} down. ${whyAScoreWasRefused(error)}`);
+      return null;
     }
+  }
+
+  /**
+   * Writes a sketch down on the page, and remembers the page is the sketch's.
+   *
+   * Not kept among the scores: the sketch is what is kept, and a copy of it
+   * there was a second answer to what it says, which the sketch's next change
+   * would leave behind - and, kept by its name, one that a sketch of the same
+   * name wrote over.
+   */
+  private async writeDownTheSketch(id: string, from: HTMLElement): Promise<void> {
+    const sketch = this.runtime.sketches.find(id);
+    if (sketch === null) {
+      return;
+    }
+    const opened = await this.writeDown(sketch, sketch.title, from, false);
+    this.theSketchOnThePage = opened === null ? null : { sketch, exercise: opened };
+  }
+
+  /**
+   * The sketch the page was written down from, while the page is still that
+   * writing and the sketch is still there.
+   */
+  private theSketchOfThePage(): { readonly sketch: StoredSketch; readonly exercise: Exercise } | null {
+    const onThePage = this.theSketchOnThePage;
+    return onThePage !== null &&
+      onThePage.exercise === this.runtime.controller.openedExercise &&
+      this.runtime.sketches.find(onThePage.sketch.id) !== null
+      ? onThePage
+      : null;
   }
 
   /**
@@ -11494,6 +11531,15 @@ export class AppView {
     this.stopTheRoll();
     this.el.sheetRollOptions.hidden = true;
     this.el.sheetRoll.hidden = true;
+    // The page written from a sketch changed in it is written again, so the
+    // page and the sketch never disagree.
+    const onThePage = this.theSketchOfThePage();
+    if (onThePage !== null) {
+      const now = this.runtime.sketches.find(onThePage.sketch.id);
+      if (now !== null && now !== onThePage.sketch) {
+        void this.writeDownTheSketch(now.id, this.el.sheetRoll);
+      }
+    }
   }
 
   /**
@@ -11617,6 +11663,12 @@ export class AppView {
    * bars, with no performance to measure.
    */
   private showTheScoreRoll(): void {
+    // A page written from a sketch is looked at as the sketch, to be edited.
+    const onThePage = this.theSketchOfThePage();
+    if (onThePage !== null) {
+      this.showTheSketch(onThePage.sketch.id);
+      return;
+    }
     const timeline = this.runtime.controller.currentTimeline;
     const exercise = timeline?.exercise ?? this.runtime.controller.currentExercise;
     if (exercise === null || timeline === null) {

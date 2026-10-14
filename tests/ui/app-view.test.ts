@@ -4628,6 +4628,71 @@ describe('AppView', () => {
       expect(field.hidden).toBe(true);
     });
 
+    it('writes a sketch on the page without keeping a copy, looks at it as the sketch, and writes it again when it changes', async () => {
+      const { view, runtime, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [0, 500, 1_000, 1_500].flatMap((atMs, at) => [
+            { kind: 'noteOn' as const, atMs, midi: 60 + at, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: atMs + 400, midi: 60 + at },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Waltz',
+        1,
+      );
+      const kept = runtime.scores.list().length;
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Write this sketch down as a score').click();
+      await waitFor(() => runtime.controller.openedExercise?.title === 'Waltz');
+      const written = runtime.controller.openedExercise;
+      expect(written?.tempoBpm).toBe(120);
+      expect(runtime.scores.list()).toHaveLength(kept);
+
+      // The viewer of the page is the sketch, being edited.
+      element<HTMLButtonElement>('focus-roll').click();
+      expect(element('roll-title').textContent).toBe('Waltz');
+      expect(element('roll-edit').getAttribute('aria-pressed')).toBe('true');
+      expect(element('roll-velocity').hidden).toBe(false);
+
+      // Shut unchanged, the page stays as it was written.
+      element<HTMLButtonElement>('roll-close').click();
+      await Promise.resolve();
+      expect(runtime.controller.openedExercise).toBe(written);
+
+      // Changed, the page is written again from it.
+      element<HTMLButtonElement>('focus-roll').click();
+      const tempo = element<HTMLInputElement>('roll-tempo');
+      tempo.value = '90';
+      tempo.dispatchEvent(new Event('change'));
+      element<HTMLButtonElement>('roll-close').click();
+      await waitFor(() => runtime.controller.openedExercise !== written);
+      expect(runtime.controller.openedExercise?.tempoBpm).toBe(90);
+      expect(runtime.scores.list()).toHaveLength(kept);
+      // And looked at again, it is still the sketch.
+      element<HTMLButtonElement>('focus-roll').click();
+      expect(element('roll-title').textContent).toBe('Waltz');
+      element<HTMLButtonElement>('roll-close').click();
+
+      // Another score on the page is looked at as itself.
+      await runtime.controller.openScore(compoundBarExercise({ title: 'In six' }));
+      element<HTMLButtonElement>('focus-roll').click();
+      expect(element('roll-title').textContent).toBe('In six');
+      element<HTMLButtonElement>('roll-close').click();
+
+      // And a page whose sketch was deleted is looked at as the score it is.
+      rowButton('sketches-list', 'Write this sketch down as a score').click();
+      await waitFor(() => runtime.controller.openedExercise?.title === 'Waltz');
+      sketches.remove(sketch.id);
+      element<HTMLButtonElement>('focus-roll').click();
+      expect(element('sheet-roll').hidden).toBe(false);
+      expect(element('roll-title').textContent).toBe('Waltz');
+      expect(element('roll-edit').getAttribute('aria-pressed')).toBe('false');
+      expect(element('roll-edit').title).toBe('Begin a sketch of this score to edit; the score stays as it is written');
+    });
+
     it('shows a sketch in a metre the list does not offer as it is', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

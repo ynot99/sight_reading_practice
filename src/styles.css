@@ -2212,6 +2212,8 @@ textarea {
   border-radius: 6px;
   padding: 2px 4px;
   font: inherit;
+  /* Never below sixteen pixels, or Safari magnifies the page to type in it. */
+  font-size: max(16px, 1em);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2453,7 +2455,8 @@ select {
   border-radius: 6px;
   padding: 4px 8px;
   font: inherit;
-  font-size: 13px;
+  /* Never below sixteen pixels, or Safari magnifies the page to type in it. */
+  font-size: max(16px, 1em);
 }
 
 .sheet__input {
@@ -2464,6 +2467,8 @@ select {
   border-radius: 8px;
   padding: 8px 10px;
   font: inherit;
+  /* Never below sixteen pixels, or Safari magnifies the page to type in it. */
+  font-size: max(16px, 1em);
   width: 100%;
 }
 

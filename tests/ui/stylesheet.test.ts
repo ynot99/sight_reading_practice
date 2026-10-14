@@ -1371,10 +1371,25 @@ describe('the stylesheet', () => {
     expect(fields).toBeDefined();
     expect(fields?.body).toMatch(/font-size\s*:\s*max\(16px/);
 
-    // And a field that takes the letters of the text around it says it again,
-    // after them: a class outranks the element.
-    const rename = rules().find((rule) => rule.selector === '.roll-rename');
-    expect(rename?.body).toMatch(/font\s*:\s*inherit;[\s\S]*font-size\s*:\s*max\(16px, 1em\)/);
+    // And every rule that gives a field's class its letters says it again,
+    // after them: a class outranks the element, and `font: inherit` took the
+    // fields back to the 12 to 15 px of the text around them.
+    const fieldClasses = new Set(
+      [...HTML.matchAll(/<(?:input|select|textarea)\b[^>]*?class="([^"]*)"/g)].flatMap((match) =>
+        (match[1] ?? '').split(/\s+/),
+      ),
+    );
+    expect(fieldClasses.has('number-input')).toBe(true);
+    const lettered = rules().filter(
+      (rule) =>
+        /(^|;|\s)font(-size)?\s*:/.test(rule.body) &&
+        [...fieldClasses].some((name) => new RegExp(`\\.${name}(?![\\w-])`).test(rule.selector)),
+    );
+    expect(lettered.map((rule) => rule.selector)).toContain('.sheet__search');
+    for (const rule of lettered) {
+      const sizes = [...rule.body.matchAll(/font(?:-size)?\s*:[^;]*/g)].map((match) => match[0]);
+      expect(sizes.at(-1), rule.selector).toMatch(/^font-size\s*:\s*max\(16px, 1em\)/);
+    }
   });
 
   it('stops a scroll at the edge of the score instead of handing it on', () => {

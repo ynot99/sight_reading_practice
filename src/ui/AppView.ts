@@ -2137,6 +2137,7 @@ export class AppView {
     sheetPlaces: HTMLElement;
     focusPlaces: HTMLButtonElement;
     focusRoll: HTMLButtonElement;
+    focusSketch: HTMLButtonElement;
     placesClose: HTMLButtonElement;
     sheetModes: HTMLElement;
     modesGrid: HTMLElement;
@@ -2498,6 +2499,7 @@ export class AppView {
       sheetPlaces: requireElement(doc, 'sheet-places'),
       focusPlaces: requireElement(doc, 'focus-places'),
       focusRoll: requireElement(doc, 'focus-roll'),
+      focusSketch: requireElement(doc, 'focus-sketch'),
       placesClose: requireElement(doc, 'places-close'),
       sheetModes: requireElement(doc, 'sheet-modes'),
       modesGrid: requireElement(doc, 'modes-grid'),
@@ -4336,6 +4338,12 @@ export class AppView {
       this.syncControlsFromSettings();
     });
 
+    this.listen(this.el.focusSketch, 'click', () => {
+      const onThePage = this.theSketchOfThePage();
+      if (onThePage !== null) {
+        this.showTheSketch(onThePage.sketch.id);
+      }
+    });
     this.listen(this.el.focusRoll, 'click', () => {
       this.showTheScoreRoll();
     });
@@ -6854,6 +6862,8 @@ export class AppView {
         this.showThePerformance();
         // A score opened or a page generated: the corner is about the second.
         this.showTheRung();
+        // Another score on the page is no sketch's.
+        this.sayWhetherThePageIsASketch();
       }),
     );
 
@@ -9571,6 +9581,7 @@ export class AppView {
           if (yes) {
             this.runtime.sketches.remove(sketch.id);
             this.renderSketches();
+            this.sayWhetherThePageIsASketch();
           }
         });
       });
@@ -9652,6 +9663,12 @@ export class AppView {
     }
     const opened = await this.writeDown(sketch, sketch.title, from, false);
     this.theSketchOnThePage = opened === null ? null : { sketch, exercise: opened };
+    this.sayWhetherThePageIsASketch();
+  }
+
+  /** Shows the pencil beside the pills while the page is a sketch's, and only then. */
+  private sayWhetherThePageIsASketch(): void {
+    this.el.focusSketch.hidden = this.theSketchOfThePage() === null;
   }
 
   /**

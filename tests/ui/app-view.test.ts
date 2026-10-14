@@ -4645,6 +4645,8 @@ describe('AppView', () => {
         1,
       );
       const kept = runtime.scores.list().length;
+      const pencil = element<HTMLButtonElement>('focus-sketch');
+      expect(pencil.hidden).toBe(true);
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
       rowButton('sketches-list', 'Write this sketch down as a score').click();
@@ -4653,7 +4655,15 @@ describe('AppView', () => {
       expect(written?.tempoBpm).toBe(120);
       expect(runtime.scores.list()).toHaveLength(kept);
 
-      // The viewer of the page is the sketch, being edited.
+      // A pencil beside the pills, named, opens the sketch to be edited.
+      expect(pencil.hidden).toBe(false);
+      expect([pencil.title, pencil.getAttribute('aria-label')]).toEqual(['Edit this sketch', 'Edit this sketch']);
+      pencil.click();
+      expect(element('roll-title').textContent).toBe('Waltz');
+      expect(element('roll-edit').getAttribute('aria-pressed')).toBe('true');
+      element<HTMLButtonElement>('roll-close').click();
+
+      // The viewer of the page is the sketch too, being edited.
       element<HTMLButtonElement>('focus-roll').click();
       expect(element('roll-title').textContent).toBe('Waltz');
       expect(element('roll-edit').getAttribute('aria-pressed')).toBe('true');
@@ -4673,13 +4683,15 @@ describe('AppView', () => {
       await waitFor(() => runtime.controller.openedExercise !== written);
       expect(runtime.controller.openedExercise?.tempoBpm).toBe(90);
       expect(runtime.scores.list()).toHaveLength(kept);
+      expect(pencil.hidden).toBe(false);
       // And looked at again, it is still the sketch.
       element<HTMLButtonElement>('focus-roll').click();
       expect(element('roll-title').textContent).toBe('Waltz');
       element<HTMLButtonElement>('roll-close').click();
 
-      // Another score on the page is looked at as itself.
+      // Another score on the page is looked at as itself, and has no pencil.
       await runtime.controller.openScore(compoundBarExercise({ title: 'In six' }));
+      expect(pencil.hidden).toBe(true);
       element<HTMLButtonElement>('focus-roll').click();
       expect(element('roll-title').textContent).toBe('In six');
       element<HTMLButtonElement>('roll-close').click();
@@ -4687,7 +4699,14 @@ describe('AppView', () => {
       // And a page whose sketch was deleted is looked at as the score it is.
       rowButton('sketches-list', 'Write this sketch down as a score').click();
       await waitFor(() => runtime.controller.openedExercise?.title === 'Waltz');
-      sketches.remove(sketch.id);
+      expect(pencil.hidden).toBe(false);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Delete this sketch').click();
+      await confirmDeletion();
+      expect(sketches.find(sketch.id)).toBeNull();
+      expect(pencil.hidden).toBe(true);
+      element<HTMLButtonElement>('scores-close').click();
       element<HTMLButtonElement>('focus-roll').click();
       expect(element('sheet-roll').hidden).toBe(false);
       expect(element('roll-title').textContent).toBe('Waltz');

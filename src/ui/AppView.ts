@@ -62,7 +62,7 @@ import { drawTheLadderTrack, marksOfThePlace, type PlaceOnTheLadder } from './la
 import type { PracticeSettings } from '../application/PracticeController.js';
 import type { StoredTake } from '../application/TakeLibrary.js';
 import { isTypedInto, type TypedInto } from '../shared/typedInto.js';
-import { theSketchOfTheScore, type SketchKey, type StoredSketch } from '../application/SketchLibrary.js';
+import { theBeatsToBeginIn, theSketchOfTheScore, type SketchKey, type StoredSketch } from '../application/SketchLibrary.js';
 import type { DrillTask } from '../application/drill/SectionDrill.js';
 import type { ControlBinding } from '../application/ControlBinding.js';
 import {
@@ -1185,10 +1185,21 @@ function describeWhen(atMs: number, nowMs: number): string {
  * A take as a MIDI file. Written from the events, never stored as bytes: the
  * performance is the kept thing and the file is derived from it, the same way
  * the printed MusicXML is derived from an `Exercise`. In the bars of the click
- * it was played to, where it was played to one.
+ * it was played to, where it was played to one, and otherwise in those a
+ * sketch of it begins in: see `theTakeAsWritten`.
  */
 function theTakeAsAFile(take: StoredTake): Uint8Array {
-  return thePlayingAsAFile(take, takeName(take.savedAtMs));
+  return thePlayingAsAFile(theTakeAsWritten(take), takeName(take.savedAtMs));
+}
+
+/**
+ * A take with the beats it is written down in: the click it was played to,
+ * or, played without one, common time at 120 from its first note - the bars a
+ * sketch of it begins in (`theBeatsToBeginIn`), so its file, its score and
+ * its sketch agree about where every bar is.
+ */
+function theTakeAsWritten(take: StoredTake): StoredTake {
+  return { ...take, beats: theBeatsToBeginIn(take.events, take.beats) };
 }
 
 /** Some playing as a MIDI file, in the bars of its click where it has one, and in its key where it has one. */
@@ -9505,14 +9516,11 @@ export class AppView {
       write.type = 'button';
       write.textContent = 'Score';
       write.className = 'takes__score';
-      // Played without the click, a take has no bars to be written in, and
-      // a page of guessed ones is worse than none.
-      if (barsAreHeardIn(take.beats)) {
-        write.title = 'Write this take down as a score, in the bars of the click it was played to';
-      } else {
-        write.dataset['idle'] = 'true';
-        write.title = 'Write this take down as a score. Played without the click, it has no bars to be written in.';
-      }
+      // Played without the click, it is written in the bars a sketch of it
+      // would begin in, which the reader can count again in the sketch.
+      write.title = barsAreHeardIn(take.beats)
+        ? 'Write this take down as a score, in the bars of the click it was played to'
+        : 'Write this take down as a score, in common time at 120 from its first note: it was played without the click';
       write.setAttribute('aria-label', write.title);
       this.listen(write, 'click', () => void this.writeTheTakeDown(take.id));
 
@@ -9646,17 +9654,17 @@ export class AppView {
   }
 
   /**
-   * Opens a take played to the click as a score: the file it would be saved
-   * as, read the way a chosen MIDI file is, so its page is the one any other
-   * program opening that file is given the bars of. Kept on the shelf as an
-   * opened file is.
+   * Opens a take as a score: the file it would be saved as, read the way a
+   * chosen MIDI file is, so its page is the one any other program opening
+   * that file is given the bars of - the click's, or common time at 120 where
+   * it was played without one. Kept on the shelf as an opened file is.
    */
   private async writeTheTakeDown(id: string): Promise<void> {
     const take = this.runtime.takes.find(id);
-    if (take === null || !barsAreHeardIn(take.beats)) {
+    if (take === null) {
       return;
     }
-    await this.writeDown(take, takeTitle(take.savedAtMs), this.el.sheetTakes);
+    await this.writeDown(theTakeAsWritten(take), takeTitle(take.savedAtMs), this.el.sheetTakes);
   }
 
   /**

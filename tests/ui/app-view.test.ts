@@ -14137,7 +14137,7 @@ describe('AppView', () => {
       }
     }
 
-    it('writes a take played to the click down in its bars, and dims that for one played without', async () => {
+    it('writes a take played to the click down in its bars, and one played without in common time at 120', async () => {
       const { view, runtime, metronome, clock, midi, takes, files } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
@@ -14181,23 +14181,37 @@ describe('AppView', () => {
       expect([saved.beats, saved.tempoBpm]).toEqual([3, 100]);
       expect(saved.notes.map((note) => note.startTicks)).toEqual([0, 1, 2, 3].map((at) => at * saved.division));
 
-      // Played with the click stopped: there are no bars to write it in.
+      // Played with the click stopped: written in common time at 120 from its
+      // first note, the bars a sketch of it begins in, and saved so.
       clock.advance(10_000);
-      midi.noteOn(67, clock.now());
-      clock.advance(300);
-      midi.noteOff(67, clock.now());
+      for (const pitch of [67, 69]) {
+        midi.noteOn(pitch, clock.now());
+        clock.advance(500);
+        midi.noteOff(pitch, clock.now());
+      }
       element<HTMLButtonElement>('focus-keep').click();
       expect(takes.list()).toHaveLength(2);
       const without = element('takes-list').querySelectorAll<HTMLButtonElement>('button.takes__score')[0];
-      expect(without?.dataset['idle']).toBe('true');
+      expect(without?.dataset['idle']).toBeUndefined();
       expect(without?.title).toBe(
-        'Write this take down as a score. Played without the click, it has no bars to be written in.',
+        'Write this take down as a score, in common time at 120 from its first note: it was played without the click',
       );
       expect(without?.getAttribute('aria-label')).toBe(without?.title);
       const opened = runtime.controller.openedExercise;
       without?.click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(runtime.controller.openedExercise).toBe(opened);
+      await waitFor(() => runtime.controller.openedExercise !== opened);
+      const free = runtime.controller.openedExercise;
+      expect([free?.timeSignature.toString(), free?.tempoBpm]).toEqual(['4/4', 120]);
+      const freeSteps = free === null ? [] : buildTimeline(free).steps.filter((step) => step.expectedMidi.length > 0);
+      expect(freeSteps.map((step) => [step.expectedMidi, step.onsetTicks])).toEqual([
+        [[67], 0],
+        [[69], Duration.QUARTER.ticks],
+      ]);
+      element<HTMLButtonElement>('focus-takes').click();
+      element('takes-list').querySelectorAll<HTMLButtonElement>('button[title="Save this take as a MIDI file"]')[0]?.click();
+      const freeFile = readMidiFile(files.saved.at(-1)?.bytes ?? new Uint8Array());
+      expect([freeFile.beats, freeFile.beatType, freeFile.tempoBpm]).toEqual([4, 4, 120]);
+      expect(freeFile.notes.map((note) => note.startTicks)).toEqual([0, freeFile.division]);
     });
 
     it('moves a note of a sketch where it is dragged from, onto the beat', async () => {

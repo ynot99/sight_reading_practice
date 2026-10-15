@@ -16,6 +16,7 @@ import {
   unplug,
 } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
+import { beginThePlaybackTimings } from '../../shared/playbackTimings.js';
 import {
   buildMetronomeTick,
   isAccented,
@@ -182,6 +183,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
 
   start(): void {
     timeTheStart('metronome started');
+    beginThePlaybackTimings();
     // Told to start while it is already running, a pulse begins again rather
     // than doing nothing. A tick is "a counter since start()" - the port says
     // so - and a run leans on it: a bar begun by the reader's own press sets

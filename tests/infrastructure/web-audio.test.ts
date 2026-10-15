@@ -5,6 +5,7 @@ import { Duration } from '../../src/domain/model/Duration.js';
 import { WebAudioMetronome } from '../../src/infrastructure/audio/WebAudioMetronome.js';
 import { WebAudioPitchPlayer } from '../../src/infrastructure/audio/WebAudioPitchPlayer.js';
 import { AudioClockReading, outputLatencySeconds } from '../../src/infrastructure/audio/audioTime.js';
+import { beginThePlaybackTimings, noteAFrame, thePlaybackTimingsText } from '../../src/shared/playbackTimings.js';
 
 /**
  * The page's clock, held still for the length of `body`.
@@ -179,6 +180,20 @@ describe('WebAudioMetronome', () => {
   afterEach(() => {
     metronome.stop();
     vi.useRealTimers();
+  });
+
+  it('begins the playback timings again as it starts', () => {
+    const seconds = (): string[] => {
+      const lines = thePlaybackTimingsText('').split('\n');
+      return lines.slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1);
+    };
+    beginThePlaybackTimings();
+    noteAFrame();
+    expect(seconds()[0]?.trim().startsWith('0')).toBe(true);
+
+    metronome.start();
+
+    expect(seconds()).toEqual(['Nothing yet: start a playback, and copy this after it.']);
   });
 
   it('unplugs each click once it has sounded', () => {

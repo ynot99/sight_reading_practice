@@ -1803,6 +1803,24 @@
               </button>
             </div>
           </div>
+          <!--
+            How the last playback kept time, a line a second: when notes were
+            handed to the sound against when they were to be heard, the audio
+            clock against the page's, and the page's beats and frames. For a
+            playback seen out of step with its sound on a device only its
+            owner holds.
+          -->
+          <div class="control-group" data-pane="developers">
+            <label for="copy-timings">How the last playback kept time</label>
+            <div class="ladder-row">
+              <button id="copy-timings" type="button" class="button button--ghost">
+                Copy the playback timings
+              </button>
+              <button id="save-timings" type="button" class="button button--ghost">
+                Save them as a file
+              </button>
+            </div>
+          </div>
           <div class="control-group control-group--checks" data-pane="developers">
             <label><input id="trace-the-start" type="checkbox" /> Print start timings to the console</label>
             <p class="hint">

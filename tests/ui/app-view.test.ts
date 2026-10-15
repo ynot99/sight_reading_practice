@@ -54,6 +54,7 @@ import {
   theMusicsBeats,
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
+import { beginThePlaybackTimings } from '../../src/shared/playbackTimings.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { KeySignature } from '../../src/domain/model/KeySignature.js';
 import type { MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
@@ -1236,6 +1237,85 @@ describe('AppView', () => {
     } finally {
       vi.unstubAllGlobals();
       Reflect.deleteProperty(document, 'elementFromPoint');
+    }
+  });
+
+  it('keeps how a playback kept time, its beats and frames, and copies it for the reader to hand over', async () => {
+    let now = 1_000;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const frames = new Map<number, FrameRequestCallback>();
+    let asked = 0;
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      asked += 1;
+      frames.set(asked, callback);
+      return asked;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {
+      frames.delete(id);
+    });
+    const runTheFrames = (): void => {
+      const due = [...frames.values()];
+      frames.clear();
+      for (const frame of due) {
+        frame(0);
+      }
+    };
+    const written: string[] = [];
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (text: string): Promise<void> => {
+          written.push(text);
+          return Promise.resolve();
+        },
+      },
+    });
+    try {
+      const { view, runtime, metronome, files } = createRig();
+      await view.initialize();
+      await runtime.controller.openScore(twoBarExercise({ tempoBpm: 60 }));
+      await pressListen(runtime.controller);
+      // The pulse here is a stand-in that does not begin them, so they are begun as the real one does.
+      beginThePlaybackTimings();
+      metronome.advanceSubdivisions(1);
+      runTheFrames();
+      now = 1_020;
+      runTheFrames();
+      // Held for four seconds, and played on: no stall between.
+      runtime.controller.pauseListening();
+      runTheFrames();
+      now = 5_000;
+      element<HTMLButtonElement>('focus-play').click();
+      runTheFrames();
+      now = 5_016;
+      runTheFrames();
+
+      element<HTMLButtonElement>('copy-timings').click();
+      await Promise.resolve();
+      const lines = (written[0] ?? '').split('\n');
+      expect(lines[0]).toBe('How the last playback kept time');
+      expect(lines[1]).toContain(navigator.userAgent);
+      expect(lines[1]).toContain('falling notes on');
+      const rows = lines
+        .slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1)
+        .map((line) => line.trim().split(/\s+/));
+      // Seconds nought and four: a beat acted on in the first, and the frames' longest gaps.
+      expect(rows.map((row) => [row[0], row.at(-1)])).toEqual([
+        ['0', '20'],
+        ['4', '16'],
+      ]);
+      expect(Number(rows[0]?.at(-4))).toBeGreaterThan(0);
+      expect(element('backup-description').textContent).toBe('Copied the playback timings.');
+
+      // And as a file, the same text.
+      element<HTMLButtonElement>('save-timings').click();
+      const saved = files.saved.at(-1);
+      expect(saved?.fileName).toMatch(/^playback-timings-.*\.txt$/);
+      expect(new TextDecoder().decode(saved?.bytes)).toBe(written[0]);
+      expect(element('backup-description').textContent).toBe('Wrote the playback timings.');
+    } finally {
+      Reflect.deleteProperty(window.navigator, 'clipboard');
+      vi.restoreAllMocks();
     }
   });
 

@@ -437,6 +437,7 @@ const TAKE_COUNTER_MS = 500;
 import type { Unsubscribe } from '../shared/EventEmitter.js';
 import { fillSelect, requireElement } from './dom.js';
 import { keepTheTrail, timeTheStart, traceTheStart } from '../shared/timeTheStart.js';
+import { noteAFrame, noteTheFramesStopped, thePlaybackTimingsText } from '../shared/playbackTimings.js';
 
 /** How far a wheel's line is, for a wheel that counts in lines. */
 const LINE_PX = 16;
@@ -2381,6 +2382,8 @@ export class AppView {
     backupDescription: HTMLElement;
     saveJudging: HTMLButtonElement;
     copyJudging: HTMLButtonElement;
+    saveTimings: HTMLButtonElement;
+    copyTimings: HTMLButtonElement;
     toleranceValue: HTMLOutputElement;
     zoom: HTMLInputElement;
     zoomValue: HTMLOutputElement;
@@ -2747,6 +2750,8 @@ export class AppView {
       backupDescription: requireElement(doc, 'backup-description'),
       saveJudging: requireElement(doc, 'save-judging'),
       copyJudging: requireElement(doc, 'copy-judging'),
+      saveTimings: requireElement(doc, 'save-timings'),
+      copyTimings: requireElement(doc, 'copy-timings'),
       toleranceValue: requireElement(doc, 'tolerance-value'),
       zoom: requireElement(doc, 'zoom'),
       zoomValue: requireElement(doc, 'zoom-value'),
@@ -8428,6 +8433,46 @@ export class AppView {
     this.listen(this.el.copyJudging, 'click', () => {
       void this.copyJudgingLog();
     });
+
+    this.listen(this.el.saveTimings, 'click', () => {
+      this.runtime.files.save(
+        `playback-timings-${new Date(Date.now()).toISOString().replace(/[:.]/g, '-')}.txt`,
+        new TextEncoder().encode(this.playbackTimingsText()),
+        'text/plain',
+      );
+      this.el.backupDescription.textContent = 'Wrote the playback timings.';
+    });
+
+    this.listen(this.el.copyTimings, 'click', () => {
+      void this.copyThePlaybackTimings();
+    });
+  }
+
+  /** The playback's timings, under what the page can say of the device. */
+  private playbackTimingsText(): string {
+    const view = this.doc.defaultView;
+    const device = [
+      view?.navigator?.userAgent ?? 'an unknown browser',
+      `${String(view?.innerWidth ?? 0)}x${String(view?.innerHeight ?? 0)} at ${String(view?.devicePixelRatio ?? 1)}x`,
+      `falling notes ${this.runtime.controller.settings.keysShown === 'falling-notes' ? 'on' : 'off'}`,
+    ].join('; ');
+    return thePlaybackTimingsText(device);
+  }
+
+  /** To the clipboard, as the judging log goes, and saying so where it is refused. */
+  private async copyThePlaybackTimings(): Promise<void> {
+    const clipboard = this.doc.defaultView?.navigator?.clipboard;
+    if (clipboard === undefined) {
+      this.el.backupDescription.textContent =
+        'This browser will not let a page write to the clipboard. Save it as a file instead.';
+      return;
+    }
+    try {
+      await clipboard.writeText(this.playbackTimingsText());
+      this.el.backupDescription.textContent = 'Copied the playback timings.';
+    } catch {
+      this.el.backupDescription.textContent = 'The clipboard was refused. Save it as a file instead.';
+    }
   }
 
   /**
@@ -10959,6 +11004,8 @@ export class AppView {
     const frame = (): void => {
       this.fallingFrame = null;
       if (!this.notesAreFalling) {
+        // Held: the time until the notes fall again is no stall.
+        noteTheFramesStopped();
         // Played freely, the last note has risen out of the lane: it is
         // painted once more, empty, and the bar stops letting it through.
         if (this.inFreePlay) {
@@ -10968,6 +11015,7 @@ export class AppView {
         return;
       }
       this.paintTheFallingNotes();
+      noteAFrame();
       this.fallingFrame = view.requestAnimationFrame(frame);
     };
     this.fallingFrame = view.requestAnimationFrame(frame);
@@ -11014,6 +11062,7 @@ export class AppView {
   }
 
   private stopTheNotesFalling(): void {
+    noteTheFramesStopped();
     if (this.fallingFrame !== null) {
       this.doc.defaultView?.cancelAnimationFrame(this.fallingFrame);
       this.fallingFrame = null;

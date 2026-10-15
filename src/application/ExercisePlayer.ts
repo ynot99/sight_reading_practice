@@ -18,6 +18,7 @@ import {
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import type { IScoreCursor } from './ports/IScoreRenderer.js';
 import { timeTheStart } from '../shared/timeTheStart.js';
+import { noteABeatShown } from '../shared/playbackTimings.js';
 import {
   laidEndToEnd,
   metronomeBars,
@@ -1228,6 +1229,7 @@ export class ExercisePlayer {
     if (!this.playing || this.timeline === null || tick.positionTicks < this.countInTicks) {
       return;
     }
+    noteABeatShown(tick.scheduledTimeMs);
     // What has finished sounding is no longer anything to show. Asked as it
     // is heard, since that is what it is shown against.
     if (this.handedOver.some((note) => note.untilMs <= tick.scheduledTimeMs)) {

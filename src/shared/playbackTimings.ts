@@ -1,0 +1,203 @@
+/**
+ * How a playback kept time, second by second, for a device nobody here can
+ * hold: when each note was handed to the instrument against when it was to be
+ * heard, how far the audio clock had moved from the page's, how late the page
+ * acted on each beat, and how long it went between two frames of the falling
+ * notes.
+ *
+ * Kept because a playback seen out of step with its sound is four clocks that
+ * can each be the late one - the scheduler, the audio device, the page acting
+ * on a beat, and the frames - and from outside they all look the same. Held
+ * here rather than threaded through the callers, for the reason
+ * `timeTheStart` is: the metronome, both instruments, the player and the page
+ * each have one line to add, and the page reads it out.
+ */
+
+/** What one second of the playback did. */
+interface Second {
+  handed: number;
+  leastAheadMs: number | null;
+  late: number;
+  dropped: number;
+  driftMs: number | null;
+  heardOffMs: number | null;
+  outputMs: number | null;
+  baseMs: number | null;
+  ticks: number;
+  latestTickMs: number | null;
+  frames: number;
+  longestFrameMs: number | null;
+}
+
+/** How many seconds are kept: the last quarter of an hour. */
+const SECONDS_KEPT = 900;
+
+let began: number | null = null;
+let lastFrameAt: number | null = null;
+const seconds = new Map<number, Second>();
+
+/** The second a moment falls in, made where there is none yet; `null` before anything began. */
+function theSecondOf(now: number): Second | null {
+  if (began === null) {
+    return null;
+  }
+  const at = Math.floor((now - began) / 1000);
+  let second = seconds.get(at);
+  if (second === undefined) {
+    second = {
+      handed: 0,
+      leastAheadMs: null,
+      late: 0,
+      dropped: 0,
+      driftMs: null,
+      heardOffMs: null,
+      outputMs: null,
+      baseMs: null,
+      ticks: 0,
+      latestTickMs: null,
+      frames: 0,
+      longestFrameMs: null,
+    };
+    seconds.set(at, second);
+    for (const old of seconds.keys()) {
+      if (old > at - SECONDS_KEPT) {
+        break;
+      }
+      seconds.delete(old);
+    }
+  }
+  return second;
+}
+
+function least(kept: number | null, value: number): number {
+  return kept === null ? value : Math.min(kept, value);
+}
+
+function most(kept: number | null, value: number): number {
+  return kept === null ? value : Math.max(kept, value);
+}
+
+/** Begins the timings again, as the pulse starts. */
+export function beginThePlaybackTimings(): void {
+  began = performance.now();
+  lastFrameAt = null;
+  seconds.clear();
+}
+
+/** What the audio device says of its clock as a note is handed over. */
+export interface TheAudioClocks {
+  /** How far the audio clock's nought now stands from where the pulse read it, in ms of the page's clock. */
+  readonly driftMs: number;
+  /** How much later than placed a sound is heard, by the device's own account of what it has played; `null` where it gives none. */
+  readonly heardOffMs: number | null;
+  readonly outputMs: number | null;
+  readonly baseMs: number | null;
+}
+
+/**
+ * A note handed to the instrument, to be heard at a moment on the page's
+ * clock - or dropped as already gone.
+ */
+export function noteANoteHanded(atMs: number | undefined, dropped: boolean, clocks: TheAudioClocks | null): void {
+  const now = performance.now();
+  const second = theSecondOf(now);
+  if (second === null || atMs === undefined) {
+    return;
+  }
+  second.handed += 1;
+  const ahead = atMs - now;
+  second.leastAheadMs = least(second.leastAheadMs, ahead);
+  if (dropped) {
+    second.dropped += 1;
+  } else if (ahead < 0) {
+    second.late += 1;
+  }
+  if (clocks !== null) {
+    second.driftMs = clocks.driftMs;
+    second.heardOffMs = clocks.heardOffMs;
+    second.outputMs = clocks.outputMs;
+    second.baseMs = clocks.baseMs;
+  }
+}
+
+/** A beat acted on by the page - the marker moved, the keys lit - that was to be heard at a moment. */
+export function noteABeatShown(heardAtMs: number): void {
+  const now = performance.now();
+  const second = theSecondOf(now);
+  if (second === null) {
+    return;
+  }
+  second.ticks += 1;
+  second.latestTickMs = most(second.latestTickMs, now - heardAtMs);
+}
+
+/** A frame of the falling notes painted. */
+export function noteAFrame(): void {
+  const now = performance.now();
+  const second = theSecondOf(now);
+  if (second === null) {
+    return;
+  }
+  second.frames += 1;
+  if (lastFrameAt !== null) {
+    second.longestFrameMs = most(second.longestFrameMs, now - lastFrameAt);
+  }
+  lastFrameAt = now;
+}
+
+/** The falling notes stopped, so the next frame's gap is not a stall. */
+export function noteTheFramesStopped(): void {
+  lastFrameAt = null;
+}
+
+function said(value: number | null, width: number, signed = false): string {
+  if (value === null) {
+    return '-'.padStart(width);
+  }
+  const whole = Math.round(value);
+  return `${signed && whole > 0 ? '+' : ''}${String(whole)}`.padStart(width);
+}
+
+/** The timings as text to be read: what each column is, then a line a second. */
+export function thePlaybackTimingsText(device: string): string {
+  const lines = [
+    'How the last playback kept time',
+    device,
+    '',
+    'sec    - seconds since the pulse started',
+    'notes  - notes handed to the instrument',
+    'ahead  - the least time a note was handed before it was to be heard (ms; below 0 is late)',
+    'late   - notes handed after their moment, sounded late',
+    'drop   - notes handed too late to be sounded at all',
+    'drift  - how far the audio clock has moved from the page clock since the pulse started (ms; above 0, sounds later than placed)',
+    'heard  - how much later than placed a sound leaves the speaker, by the device\'s own account (ms)',
+    'out    - output latency the browser reports (ms), base latency after the slash',
+    'beats  - beats the page acted on (marker, keys)',
+    'b.late - the latest a beat was acted on after it was heard (ms)',
+    'frames - frames of falling notes painted; gap - the longest between two (ms)',
+    '',
+    '  sec notes ahead late drop drift heard   out/base beats b.late frames   gap',
+  ];
+  for (const [at, second] of [...seconds].sort(([one], [other]) => one - other)) {
+    lines.push(
+      [
+        said(at, 5),
+        said(second.handed, 5),
+        said(second.leastAheadMs, 5, true),
+        said(second.late, 4),
+        said(second.dropped, 4),
+        said(second.driftMs, 5, true),
+        said(second.heardOffMs, 5, true),
+        `${said(second.outputMs, 6)}/${said(second.baseMs, 3)}`,
+        said(second.ticks, 5),
+        said(second.latestTickMs, 6),
+        said(second.frames, 6),
+        said(second.longestFrameMs, 5),
+      ].join(' '),
+    );
+  }
+  if (seconds.size === 0) {
+    lines.push('Nothing yet: start a playback, and copy this after it.');
+  }
+  return lines.join('\n');
+}

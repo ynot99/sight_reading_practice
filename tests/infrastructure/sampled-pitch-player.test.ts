@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { IPitchPlayer, SampleLoading } from '../../src/application/ports/IPitchPlayer.js';
 import { SampledPitchPlayer } from '../../src/infrastructure/audio/SampledPitchPlayer.js';
 import { AudioClockReading } from '../../src/infrastructure/audio/audioTime.js';
+import { beginThePlaybackTimings, thePlaybackTimingsText } from '../../src/shared/playbackTimings.js';
 import {
   HIGHEST_SAMPLED_MIDI,
   LOWEST_SAMPLED_MIDI,
@@ -719,5 +720,21 @@ describe('SampledPitchPlayer', () => {
       player.stop(60);
       player.stopAll();
     }).not.toThrow();
+  });
+});
+
+describe('the playback timings, as the instrument sees them', () => {
+  it('counts each note handed over, and each dropped as gone', async () => {
+    const { player } = createPlayer();
+    await player.load();
+    beginThePlaybackTimings();
+
+    player.play(60, 1, performance.now() + 100);
+    player.play(62, 1, performance.now() - 3_000);
+
+    const lines = thePlaybackTimingsText('').split('\n');
+    const row = lines[lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1]?.trim().split(/\s+/) ?? [];
+    // Seconds, notes, least ahead, late, dropped.
+    expect([row[0], row[1], row[3], row[4]]).toEqual(['0', '2', '0', '1']);
   });
 });

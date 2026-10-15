@@ -12,10 +12,12 @@ import {
   audioTimeFor,
   beginRelease,
   takeBack,
+  theAudioClocks,
   tooLateToSound,
   unplug,
 } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
+import { noteANoteHanded } from '../../shared/playbackTimings.js';
 
 export type AudioFetcher = (url: string) => Promise<ArrayBuffer>;
 
@@ -257,7 +259,9 @@ export class SampledPitchPlayer
     // Asked before anything is fetched or decoded, so that a page catching up
     // after a stall does no work at all for the notes it is dropping.
     const context = this.ensureContext();
-    if (tooLateToSound(atMs, performance.now(), { context, reading: this.reading })) {
+    const gone = tooLateToSound(atMs, performance.now(), { context, reading: this.reading });
+    noteANoteHanded(atMs, gone, theAudioClocks(context, this.reading));
+    if (gone) {
       timeTheStart(
         'instrument: a note dropped as too late',
         () => `${String(Math.round(performance.now() - (atMs ?? 0)))} ms late`,

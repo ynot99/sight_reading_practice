@@ -1,3 +1,5 @@
+import type { TheAudioClocks } from '../../shared/playbackTimings.js';
+
 /**
  * How late a sound may be and still be worth making.
  *
@@ -99,6 +101,37 @@ export function audioTimeFor(
   const pageAtNought = reading?.of(context) ?? pageMsAtAudioNought(context);
   const at = (atMs - pageAtNought) / 1000 - outputLatencySeconds(context);
   return Math.max(context.currentTime, at);
+}
+
+/**
+ * How the audio clock stands against the page's as sounds are placed by a
+ * reading, for the playback's timings: how far it has moved since the
+ * reading, and - where the device says what it has played - how much later
+ * than placed a sound is heard.
+ */
+export function theAudioClocks(context: BaseAudioContext, reading: AudioClockReading): TheAudioClocks {
+  const held = reading.of(context);
+  const device = context as BaseAudioContext & {
+    outputLatency?: number;
+    baseLatency?: number;
+    getOutputTimestamp?: () => AudioTimestamp;
+  };
+  let heardOffMs: number | null = null;
+  const stamp = typeof device.getOutputTimestamp === 'function' ? device.getOutputTimestamp() : null;
+  if (stamp?.contextTime !== undefined && stamp.performanceTime !== undefined && stamp.performanceTime > 0) {
+    // A sound placed at audio time T leaves the speaker at the page's
+    // stamp-nought + T, and was placed to be heard at held + T + the latency
+    // taken off it.
+    heardOffMs = stamp.performanceTime - stamp.contextTime * 1000 - held - outputLatencySeconds(context) * 1000;
+  }
+  const ms = (seconds: number | undefined): number | null =>
+    typeof seconds === 'number' && Number.isFinite(seconds) ? seconds * 1000 : null;
+  return {
+    driftMs: pageMsAtAudioNought(context) - held,
+    heardOffMs,
+    outputMs: ms(device.outputLatency),
+    baseMs: ms(device.baseLatency),
+  };
 }
 
 /** Where the page's clock stood when the audio clock read nought, taken now. */

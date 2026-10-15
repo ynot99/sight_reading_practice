@@ -14888,6 +14888,20 @@ describe('AppView', () => {
       clock.advance(1_000);
       tap.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
       expect(runtime.controller.settings.freePlayBpm).toBe(80);
+
+      // The bar and the tempo of the score on the page, said before they are taken.
+      runtime.controller.setTempoBpm(72);
+      element<HTMLButtonElement>('free-beats-fewer').click();
+      const fromScore = element<HTMLButtonElement>('free-from-score');
+      const piece = runtime.controller.theFreeClickOfThePiece();
+      expect(piece?.bpm).toBe(72);
+      expect(fromScore.title).toBe(`Beat as the score on the page does: ${String(piece?.beats.length)} beats a bar at 72`);
+      expect(fromScore.getAttribute('aria-label')).toBe(fromScore.title);
+      fromScore.click();
+      expect(runtime.controller.settings.freePlayBpm).toBe(72);
+      expect(element<HTMLOutputElement>('focus-tempo').value).toBe('72');
+      expect(element<HTMLOutputElement>('free-beats-count').value).toBe(String(piece?.beats.length));
+      expect(runtime.controller.settings.freePlayBeats).toEqual(piece?.beats);
     });
 
     it('starts and stops the click in free play on a tap, at a tempo of its own the speed buttons set', async () => {

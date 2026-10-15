@@ -6335,6 +6335,44 @@ describe('the click in free play', () => {
     expect(controller.tapTheFreeTempo()).toBe(300);
   });
 
+  it('lays the click out as the piece on the stand beats it, at the tempo a run of it is taken at', async () => {
+    const { controller, metronome } = createController(true, undefined, { modeId: FREE_PLAY_MODE_ID });
+    // Nothing on the stand, nothing to take.
+    expect(controller.theFreeClickOfThePiece()).toBeNull();
+    controller.takeTheFreeClickFromThePiece();
+    expect(controller.settings.freePlayBpm).toBe(100);
+    await controller.openScore(twoBarExercise({ tempoBpm: 84 }));
+    controller.clickFreely(true);
+    controller.updateSettings({ freePlayBeats: ['beat', 'beat'], freePlayBpm: 100 });
+
+    // A beat a crotchet in 4/4, the first marked, at the run's tempo.
+    expect(controller.theFreeClickOfThePiece()).toEqual({ beats: ['accent', 'beat', 'beat', 'beat'], bpm: 84 });
+    controller.takeTheFreeClickFromThePiece();
+    expect([controller.settings.freePlayBeats, controller.settings.freePlayBpm]).toEqual([['accent', 'beat', 'beat', 'beat'], 84]);
+    expect([metronome.currentConfig.beatsOfTheBar, metronome.currentConfig.bpm]).toEqual([['accent', 'beat', 'beat', 'beat'], 84]);
+    // Taken at half the written tempo, half the clicks.
+    controller.setTempoBpm(42);
+    expect(controller.theFreeClickOfThePiece()?.bpm).toBe(42);
+
+    // In 6/8 two of a dotted crotchet: at 84 crotchets a minute, 56 of them.
+    await controller.openScore(compoundBarExercise({ tempoBpm: 84 }));
+    controller.setTempoBpm(84);
+    expect(controller.theFreeClickOfThePiece()).toEqual({ beats: ['accent', 'beat'], bpm: 56 });
+    // Never slower than a metronome goes.
+    controller.setTempoBpm(24);
+    expect(controller.theFreeClickOfThePiece()?.bpm).toBe(20);
+    // Nor more beats than a bar laid out beat by beat may have.
+    const sixteen = twoBarExercise({ timeSignature: new TimeSignature(16, 4) });
+    await controller.openScore({
+      ...sixteen,
+      staves: sixteen.staves.map((staff) => ({
+        ...staff,
+        measures: [bar(...[0, 1, 2, 3].map(() => noteEntry(p(staff.clef === 'bass' ? 'C3' : 'C4'), Duration.WHOLE)))],
+      })),
+    });
+    expect(controller.theFreeClickOfThePiece()?.beats).toHaveLength(12);
+  });
+
   it('keeps the beats heard, to be ruled across what was played, and lets them go with the frame', async () => {
     const { controller, metronome, clock } = createController(true, undefined, { modeId: FREE_PLAY_MODE_ID });
     await controller.loadNewExercise();

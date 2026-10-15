@@ -33,6 +33,7 @@ import type { IClock } from './ports/IClock.js';
 import { GeneratedExerciseProvider, type IExerciseProvider } from './ports/IExerciseProvider.js';
 import { OneOfTheGenerators } from '../domain/generation/OneOfTheGenerators.js';
 import { FEWEST_BEATS_LAID_OUT, MOST_BEATS_LAID_OUT, type BeatSound, type IMetronome, type MetronomeConfig } from './ports/IMetronome.js';
+import { Duration } from '../domain/model/Duration.js';
 import type { IMidiSource, MidiEvent, MidiNoteOnEvent } from './ports/IMidiSource.js';
 import type { IPitchPlayer } from './ports/IPitchPlayer.js';
 import { ExercisePlayer } from './ExercisePlayer.js';
@@ -3804,6 +3805,35 @@ export class PracticeController {
       freePlayBpm: Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, Math.round(bpm))),
     });
     return this.currentSettings.freePlayBpm;
+  }
+
+  /**
+   * The click in free play as the piece on the stand beats it: a beat for
+   * each felt beat of its bar - three in 3/4, two in 6/8 - the first marked,
+   * at the tempo a run of it is taken at, counted in those beats. Its opening
+   * bar and tempo, where either changes later. `null` with nothing on the
+   * stand.
+   */
+  theFreeClickOfThePiece(): { readonly beats: readonly BeatSound[]; readonly bpm: number } | null {
+    const exercise = this.exercise;
+    if (exercise === null) {
+      return null;
+    }
+    const metre = exercise.timeSignature;
+    const count = Math.min(MOST_BEATS_LAID_OUT, Math.round(metre.pulsesPerMeasure));
+    const bpm = (this.tempoBpm * Duration.QUARTER.ticks) / metre.ticksPerPulse;
+    return {
+      beats: Array.from({ length: count }, (_, at): BeatSound => (at === 0 ? 'accent' : 'beat')),
+      bpm: Math.min(MAX_TEMPO_BPM, Math.max(MIN_TEMPO_BPM, Math.round(bpm))),
+    };
+  }
+
+  /** Lays the click in free play out as the piece on the stand beats it: see `theFreeClickOfThePiece`. */
+  takeTheFreeClickFromThePiece(): void {
+    const click = this.theFreeClickOfThePiece();
+    if (click !== null) {
+      this.updateSettings({ freePlayBeats: click.beats, freePlayBpm: click.bpm });
+    }
   }
 
   /** A beat more in the bar of the click in free play, plain, or one fewer from its end. */

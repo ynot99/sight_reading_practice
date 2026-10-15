@@ -2038,6 +2038,7 @@ export class AppView {
     freeBeatsFewer: HTMLButtonElement;
     freeBeatsMore: HTMLButtonElement;
     freeBeatsCount: HTMLOutputElement;
+    freeFromScore: HTMLButtonElement;
     freeBeatsDots: HTMLElement;
     freeTap: HTMLButtonElement;
     metronomeOn: HTMLButtonElement;
@@ -2400,6 +2401,7 @@ export class AppView {
       freeBeatsFewer: requireElement(doc, 'free-beats-fewer'),
       freeBeatsMore: requireElement(doc, 'free-beats-more'),
       freeBeatsCount: requireElement(doc, 'free-beats-count'),
+      freeFromScore: requireElement(doc, 'free-from-score'),
       freeBeatsDots: requireElement(doc, 'free-beats-dots'),
       freeTap: requireElement(doc, 'free-tap'),
       metronomeOn: requireElement(doc, 'metronome-on'),
@@ -6748,6 +6750,10 @@ export class AppView {
       }
     };
     this.listen(this.el.freeTap, 'pointerdown', tapTheTempo);
+    this.listen(this.el.freeFromScore, 'click', () => {
+      controller.takeTheFreeClickFromThePiece();
+      this.syncControlsFromSettings();
+    });
     this.listen(this.el.freeTap, 'click', (event) => {
       if (event.detail === 0) {
         tapTheTempo();
@@ -8071,6 +8077,13 @@ export class AppView {
     this.applyPreview();
     this.describeMetronomeButton(settings);
     this.describeTheFreeBeats(settings);
+    // What it would take, said before it is pressed.
+    const fromThePiece = this.runtime.controller.theFreeClickOfThePiece();
+    this.el.freeFromScore.title =
+      fromThePiece === null
+        ? 'Beat as the score on the page does'
+        : `Beat as the score on the page does: ${countOf(fromThePiece.beats.length, 'beat')} a bar at ${String(fromThePiece.bpm)}`;
+    this.el.freeFromScore.setAttribute('aria-label', this.el.freeFromScore.title);
     this.renderHealth(this.runtime.controller.health);
     this.describeLadder();
     this.showTheRung();

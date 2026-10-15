@@ -540,6 +540,16 @@
                 <path d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.6-3.6c1.4-1.2 3.2-1.9 5.1-1.9 3.5 0 6.6 2.3 7.6 5.5l2.4-.8C21.1 11 17.2 8 12.5 8z" />
               </svg>
             </button>
+            <!--
+              What an undo put back, brought back again, for a finger with no
+              keyboard to hold Shift on.
+            -->
+            <button id="roll-redo" type="button" class="button" title="Redo" aria-label="Redo" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                class="take-transport__icon">
+                <path d="M18.4 10.6C16.55 9 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z" />
+              </svg>
+            </button>
             <button id="roll-options" type="button" class="button button--ghost roll__gear"
               title="Options" aria-label="Options">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
@@ -555,15 +565,6 @@
             <button id="roll-close" type="button" data-shuts class="button button--ghost sheet__close"
               title="Close" aria-label="Close">&times;</button>
           </div>
-          <!--
-            The bar as a row of squares, floating over the drawing.
-
-            Over it rather than beside it: the drawing is the thing worth the
-            room, and a strip of four small squares covers almost none of it.
-            His: "може варто їх додати щоб вони були у float стейті прям на
-            viewer десь зверху? Буде перекривати трішки, але це буде займати
-            меньше місця".
-          -->
           <!--
             The drawing and the map under it, as one thing: the map is the
             drawing's bottom edge, as the pitch map is its right one, and not a

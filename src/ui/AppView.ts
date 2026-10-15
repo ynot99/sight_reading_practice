@@ -2140,6 +2140,7 @@ export class AppView {
     rollDelete: HTMLButtonElement;
     rollSelect: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
+    rollRedo: HTMLButtonElement;
     rollTitle: HTMLElement;
     rollBox: HTMLElement;
     rollRename: HTMLInputElement;
@@ -2500,6 +2501,7 @@ export class AppView {
       rollDelete: requireElement(doc, 'roll-delete'),
       rollSelect: requireElement(doc, 'roll-select'),
       rollUndo: requireElement(doc, 'roll-undo'),
+      rollRedo: requireElement(doc, 'roll-redo'),
       rollTitle: requireElement(doc, 'roll-title'),
       rollBox: requireElement(doc, 'roll-box'),
       rollRename: requireElement(doc, 'roll-rename'),
@@ -8783,6 +8785,9 @@ export class AppView {
     this.listen(this.el.rollUndo, 'click', () => {
       this.putBackTheLastChange();
     });
+    this.listen(this.el.rollRedo, 'click', () => {
+      this.bringBackTheLastPutBack();
+    });
     this.listen(this.el.rollBody, 'pointerdown', (event) => {
       this.pinched = false;
       this.panned = false;
@@ -11834,7 +11839,7 @@ export class AppView {
     this.el.rollEdit.setAttribute('aria-label', this.el.rollEdit.title);
     this.el.rollSelect.setAttribute('aria-pressed', String(sketch?.tool === 'selection'));
     // Only a sketch has them, and they are there only while it is edited.
-    for (const button of [this.el.rollSelect, this.el.rollDelete, this.el.rollUndo]) {
+    for (const button of [this.el.rollSelect, this.el.rollDelete, this.el.rollUndo, this.el.rollRedo]) {
       button.hidden = sketch === undefined;
       if (editing) {
         delete button.dataset['away'];
@@ -11867,6 +11872,15 @@ export class AppView {
       this.el.rollUndo.title = `Undo (${this.theCommandKey()}Z). Nothing has been changed to put back.`;
     }
     this.el.rollUndo.setAttribute('aria-label', this.el.rollUndo.title);
+
+    if ((sketch?.after.length ?? 0) > 0) {
+      delete this.el.rollRedo.dataset['idle'];
+      this.el.rollRedo.title = `Bring back the last change put back (Shift+${this.theCommandKey()}Z)`;
+    } else {
+      this.el.rollRedo.dataset['idle'] = 'true';
+      this.el.rollRedo.title = `Redo (Shift+${this.theCommandKey()}Z). Nothing has been put back to bring back.`;
+    }
+    this.el.rollRedo.setAttribute('aria-label', this.el.rollRedo.title);
   }
 
   /**

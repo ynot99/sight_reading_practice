@@ -4533,16 +4533,17 @@ body[data-take-on-keys='true'] #take-off-the-keys {
     order: 1;
     flex: 1 0 100%;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
   }
 
   /*
-   * Seven of them with the selection tool, in the 326 pixels a phone of 390
-   * leaves: narrower at the sides, 40 pixels each, or the last is cut off.
-   * Narrower still, the last goes onto a line of its own rather than off.
+   * Eight of them with the selection tool and the redo, in the 326 pixels a
+   * phone of 390 leaves: narrower at the sides, 36 pixels each with gaps of
+   * four, or the last goes onto a line of its own. Narrower still it does,
+   * rather than off.
    */
   .sheet__tools .button {
-    padding-inline: 10px;
+    padding-inline: 8px;
   }
 }
 

@@ -4298,12 +4298,13 @@ describe('AppView', () => {
       const edit = element<HTMLButtonElement>('roll-edit');
       const remove = element<HTMLButtonElement>('roll-delete');
       const undo = element<HTMLButtonElement>('roll-undo');
+      const redo = element<HTMLButtonElement>('roll-redo');
       expect(edit.dataset['idle']).toBe('true');
       expect(edit.title).toBe('Edit the notes. Only a sketch is edited: begin one from a recording or a score.');
       edit.click();
       expect(edit.getAttribute('aria-pressed')).toBe('false');
       expect(sketches.list()).toHaveLength(0);
-      expect([remove.hidden, undo.hidden]).toEqual([true, true]);
+      expect([remove.hidden, undo.hidden, redo.hidden]).toEqual([true, true, true]);
       element<HTMLButtonElement>('roll-close').click();
 
       // Three notes half a second apart, played freely and kept.
@@ -4324,7 +4325,7 @@ describe('AppView', () => {
       expect(edit.dataset['idle']).toBeUndefined();
       expect(edit.title).toBe('Begin a sketch of this recording to edit; the recording stays as it was played');
       expect(edit.getAttribute('aria-label')).toBe(edit.title);
-      expect([remove.hidden, undo.hidden]).toEqual([true, true]);
+      expect([remove.hidden, undo.hidden, redo.hidden]).toEqual([true, true, true]);
       const highest = view.rollScene?.highest ?? 0;
       edit.click();
       const sketch = sketches.list()[0];
@@ -4338,13 +4339,16 @@ describe('AppView', () => {
       expect(edit.title).toBe('Back to listening: a tap puts the marker');
       expect(view.rollScene?.bars.map((bar) => bar.atMs)).toEqual([0, 2_000, 4_000]);
       expect([view.rollScene?.highest, view.rollScene?.rows]).toEqual([108, 88]);
-      expect([remove.hidden, undo.hidden]).toEqual([false, false]);
-      expect([remove.dataset['away'], undo.dataset['away']]).toEqual([undefined, undefined]);
+      expect([remove.hidden, undo.hidden, redo.hidden]).toEqual([false, false, false]);
+      expect([remove.dataset['away'], undo.dataset['away'], redo.dataset['away']]).toEqual([undefined, undefined, undefined]);
       expect(remove.dataset['idle']).toBe('true');
       expect(remove.title).toBe('Delete a note (Delete). Tap one to choose it.');
       expect(remove.getAttribute('aria-label')).toBe(remove.title);
       expect(undo.dataset['idle']).toBe('true');
       expect(undo.title).toBe('Undo (Ctrl+Z). Nothing has been changed to put back.');
+      expect(redo.dataset['idle']).toBe('true');
+      expect(redo.title).toBe('Redo (Shift+Ctrl+Z). Nothing has been put back to bring back.');
+      expect(redo.getAttribute('aria-label')).toBe(redo.title);
 
       // A finger on a note, a little into it, on its row; the grid stands at
       // the drawing's corner, and a row is thirteen pixels until it is drawn.
@@ -4423,6 +4427,16 @@ describe('AppView', () => {
       expect(undo.dataset['idle']).toBe('true');
       undo.click();
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
+      // Brought back one at a time by the button beside it, with no keyboard.
+      expect(redo.dataset['idle']).toBeUndefined();
+      expect(redo.title).toBe('Bring back the last change put back (Shift+Ctrl+Z)');
+      redo.click();
+      expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(2);
+      redo.click();
+      expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(1);
+      undo.click();
+      undo.click();
+      expect(sketches.find(sketch?.id ?? '')?.events).toEqual(kept?.events);
 
       // The chosen one tapped again is let go of.
       tapOn(500);
@@ -4442,6 +4456,8 @@ describe('AppView', () => {
         { kind: 'noteOff', atMs: 1_500, midi: 64 },
       ]);
       expect(chosen()).toEqual([1_000]);
+      // Something else done, there is nothing to bring back.
+      expect(redo.dataset['idle']).toBe('true');
       undo.click();
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
       // Below the lowest key there is nothing to write.

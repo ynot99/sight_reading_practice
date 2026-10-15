@@ -2253,20 +2253,20 @@ describe('searching the settings', () => {
     const wide = tools.find((rule) => inWhichMedia(rule.at) === '');
 
     expect(HTML).toMatch(
-      /<div class="sheet__tools">[\s\S]*id="roll-play"[\s\S]*id="roll-delete"[\s\S]*id="roll-undo"[\s\S]*id="roll-options"[\s\S]*<\/div>\s*<button id="roll-close"/,
+      /<div class="sheet__tools">[\s\S]*id="roll-play"[\s\S]*id="roll-delete"[\s\S]*id="roll-undo"[\s\S]*id="roll-redo"[\s\S]*id="roll-options"[\s\S]*<\/div>\s*<button id="roll-close"/,
     );
     expect(wide?.body).toMatch(/display\s*:\s*flex/);
     expect(narrow?.body).toMatch(/order\s*:\s*1/);
     expect(narrow?.body).toMatch(/flex\s*:\s*1 0 100%/);
-    // Seven of them in the row at 390 pixels with the selection tool: forty
-    // each, gaps of six; and on a narrower phone the last goes to a line of
-    // its own rather than off the sheet.
-    expect(narrow?.body).toMatch(/gap\s*:\s*6px/);
+    // Eight of them in the row at 390 pixels with the selection tool and the
+    // redo: thirty-six each, gaps of four; and on a narrower phone the last
+    // goes to a line of its own rather than off the sheet.
+    expect(narrow?.body).toMatch(/gap\s*:\s*4px/);
     expect(narrow?.body).toMatch(/flex-wrap\s*:\s*wrap/);
     expect(narrow?.at ?? 0).toBeGreaterThan(wide?.at ?? Infinity);
     const narrower = rules().find((rule) => rule.selector === '.sheet__tools .button');
     expect(inWhichMedia(narrower?.at ?? 0)).toBe(phone);
-    expect(narrower?.body).toMatch(/padding-inline\s*:\s*10px/);
+    expect(narrower?.body).toMatch(/padding-inline\s*:\s*8px/);
     expect(HTML).toMatch(/id="roll-edit"[\s\S]*id="roll-select"[\s\S]*id="roll-delete"/);
     // A tool in use is filled, as a hand chosen is.
     const pressed = rules().find((rule) => rule.selector === ".sheet__tools .button[aria-pressed='true']");

@@ -2354,6 +2354,42 @@ describe('AppView', () => {
       }
     });
 
+    it('keeps the slider in the lap a repeating performance is in when it is told to go on to other pieces', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      try {
+        const { view, runtime, metronome } = createRig();
+        await view.initialize();
+        element<HTMLButtonElement>('focus-repeat').click();
+        await pressListen(runtime.controller);
+        const scrub = element<HTMLInputElement>('listen-scrub');
+        // Round once, and into the second lap.
+        let last = 0;
+        let lapped = false;
+        for (let tick = 0; tick < 2_000 && !lapped; tick += 1) {
+          metronome.advanceSubdivisions(1);
+          const now = runtime.controller.performancePlace?.positionMs ?? 0;
+          lapped = now < last;
+          last = now;
+        }
+        metronome.advanceSubdivisions(4);
+        vi.advanceTimersByTime(100);
+        expect(lapped).toBe(true);
+        const before = Number(scrub.value);
+        expect(before).toBeGreaterThan(0);
+        expect(before).toBeLessThan(1_000);
+
+        // Going on to other pieces, the repeat stops; this lap plays out, and the slider stays in it.
+        element<HTMLButtonElement>('listen-goes-on').click();
+        vi.advanceTimersByTime(100);
+        const place = runtime.controller.performancePlace;
+        expect(runtime.controller.isListening).toBe(true);
+        expect(Number(scrub.value)).toBe(before);
+        expect(place?.positionMs).toBeLessThan(place?.durationMs ?? 0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('holds a playing performance while dragged, and plays on from where it is let go', async () => {
       const { view, runtime, renderer } = createRig();
       await view.initialize();

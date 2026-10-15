@@ -515,7 +515,10 @@ export class ExercisePlayer {
     // Through a count-in the music has not begun, so it stands where it will.
     const began = this.startedAtMs ?? this.countedInToMs;
     const elapsedMs = began === null ? 0 : Math.max(0, nowMs - began);
-    if (!this.looping || elapsedMs < this.firstLapMs || this.lapMs <= 0) {
+    // Laid out in laps rather than going round: a repeat turned off plays out
+    // the lap it is in, and stands in that lap until it ends, not at a
+    // distance from the top of a piece gone round already.
+    if (!this.laidInLaps || elapsedMs < this.firstLapMs || this.lapMs <= 0) {
       return within(along(this.fromTicks) + elapsedMs);
     }
     return within((elapsedMs - this.firstLapMs) % this.lapMs);

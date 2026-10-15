@@ -1820,6 +1820,26 @@ describe('where a performance stands, for a player outside the page', () => {
     }
   });
 
+  it('goes on along the lap it is in when the repeat is turned off partway round, across the whole lap', () => {
+    // Turned off in the second lap: the music plays that lap out, and its place
+    // is read as it was - not as a distance from the top of a piece gone round
+    // once already, which is past its end.
+    const { player, metronome, timeline } = rig(quickening());
+    player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never', repeat: true });
+    const began = untilTheMusic(metronome, 0);
+    // Into the second lap, half a second along it.
+    for (let tick = 0; tick < 256; tick += 1) {
+      const [at] = metronome.advanceSubdivisions(1);
+      if ((at?.scheduledTimeMs ?? 0) >= began + 6_500) {
+        break;
+      }
+    }
+    player.setRepeating(false);
+    for (let into = 500; into < 6_000; into += 250) {
+      expect(player.whereItStands(began + 6_000 + into)?.positionMs, String(into)).toBeCloseTo(into, 6);
+    }
+  });
+
   it('stops at the end of a performance that does not go round', () => {
     const { player, metronome, timeline } = rig(quickening());
     player.start(timeline, { staffNumber: null, click: 'pulse', clickWhen: 'never' });

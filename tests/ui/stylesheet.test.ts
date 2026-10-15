@@ -1819,6 +1819,14 @@ describe('the rows of the drawing and the pitch map beside them', () => {
     expect(declared(body('.roll-stage'), '--roll-pedal')).toBeDefined();
     expect(declared(body('.roll'), '--roll-ruler')).toBeUndefined();
   });
+
+  it('makes the pedal lane taller while a sketch is edited, for a finger to draw on', () => {
+    const plain = Number.parseFloat(declared(body('.roll-stage'), '--roll-pedal') ?? '0');
+    const editing = Number.parseFloat(declared(body(".roll-stage[data-editing='true']"), '--roll-pedal') ?? '0');
+
+    expect(plain).toBe(16);
+    expect(editing).toBeGreaterThanOrEqual(28);
+  });
 });
 
 describe('the mark a frame wears', () => {

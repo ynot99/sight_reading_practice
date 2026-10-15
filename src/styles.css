@@ -1302,6 +1302,11 @@ textarea {
   --roll-pedal: 16px;
 }
 
+/* A sketch being edited has its pedal drawn on, so its lane is tall enough for a finger. */
+.roll-stage[data-editing='true'] {
+  --roll-pedal: 28px;
+}
+
 /*
  * Scrollbars in the page's own colours.
  *

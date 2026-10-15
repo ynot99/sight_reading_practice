@@ -1214,6 +1214,88 @@ export function takeWithTheKeyCut(
 }
 
 /**
+ * A take's events with the pedal held down - or let go of - from one moment
+ * to another, and left as it was everywhere else: after the stretch it is
+ * where it was, half-pedalled or not.
+ *
+ * A stretch held down over a press of the pedal joins it into one; one that
+ * only meets another at an end stays a press of its own, let go of and
+ * pressed again at that instant, which is a change of pedal and not one long
+ * press. Let go of inside a press, it leaves two. `untilMs` may be endless,
+ * for a press still down at the end.
+ *
+ * At one instant the events are read in the order they stand, so a let-go
+ * written before a press there is a change of pedal; and inside the stretch an
+ * event that says nothing - a press while down, a let-go while up - is
+ * dropped rather than left to say it.
+ */
+export function takeWithThePedalAt(
+  events: readonly MidiFileEvent[],
+  fromMs: number,
+  untilMs: number,
+  down: boolean,
+): readonly MidiFileEvent[] {
+  if (!(untilMs > fromMs)) {
+    return events;
+  }
+  const pedalled = (event: MidiFileEvent): event is MidiFileEvent & { readonly kind: 'sustain' } =>
+    event.kind === 'sustain';
+  const isDown = (value: number): boolean => value >= 0.5;
+  /** How far down the pedal was just before a moment, as the events have it. */
+  const valueBefore = (atMs: number): number => events.filter(pedalled).filter((event) => event.atMs < atMs).at(-1)?.value ?? 0;
+  const atTheStart = events.filter(pedalled).filter((event) => event.atMs === fromMs);
+  const atTheEnd = events.filter(pedalled).filter((event) => event.atMs === untilMs);
+  const downBefore = isDown(valueBefore(fromMs));
+  // A press let go of exactly where this begins: meeting it, not over it.
+  const endedAtTheStart = downBefore && atTheStart.some((event) => !isDown(event.value));
+
+  const written: MidiFileEvent[] = [];
+  if (down) {
+    if (endedAtTheStart) {
+      written.push({ kind: 'sustain', atMs: fromMs, value: 0 });
+    }
+    written.push({ kind: 'sustain', atMs: fromMs, value: 1 });
+  } else {
+    written.push({ kind: 'sustain', atMs: fromMs, value: 0 });
+  }
+  if (Number.isFinite(untilMs)) {
+    const last = atTheEnd.at(-1);
+    if (last !== undefined) {
+      // What happens at the end already says what follows it; held down into
+      // a press beginning there, it is let go of first, so the two stay two.
+      if (down && isDown(last.value)) {
+        written.push({ kind: 'sustain', atMs: untilMs, value: 0 });
+      }
+    } else {
+      const after = valueBefore(untilMs);
+      if (isDown(after) !== down) {
+        written.push({ kind: 'sustain', atMs: untilMs, value: after });
+      }
+    }
+  }
+  const kept = events.filter((event) => !(pedalled(event) && event.atMs >= fromMs && event.atMs < untilMs));
+  // Written first, so at one instant they stand before what was there.
+  const ordered = inTheOrderPlayed([...written, ...kept]);
+  let held = false;
+  return ordered.filter((event) => {
+    if (!pedalled(event)) {
+      return true;
+    }
+    const says = isDown(event.value);
+    const inside = event.atMs >= fromMs && event.atMs <= untilMs;
+    if (event.atMs < fromMs) {
+      held = says;
+      return true;
+    }
+    if (inside && says === held && (event.value === 0 || event.value === 1)) {
+      return false;
+    }
+    held = says;
+    return true;
+  });
+}
+
+/**
  * Where the named keys go put on the grid: each begun on the line nearest
  * where it begins, and held as long as it was. One already on a line is left
  * out, and so is one that would begin on or sound over another of its pitch.

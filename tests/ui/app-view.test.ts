@@ -48,6 +48,7 @@ import {
   beatsWorthMarking,
   rollBeganAtMs,
   rollEndedAtMs,
+  rollOfTheTake,
   theKeysOfTheTake,
   theMusicsBeats,
   type RunRoll,
@@ -6086,6 +6087,106 @@ describe('AppView', () => {
       // A finger has no Alt to hold: its press is a press.
       altClick(620, { pointerType: 'touch' });
       expect(notes()).toEqual([[0, 1_000]]);
+    });
+
+    it('draws the pedal on its lane as notes are drawn: pressed by a drag, made longer by its end, moved, and taken out', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff', atMs: 400, midi: 60 },
+            { kind: 'sustain', atMs: 1_000, value: 1 },
+            { kind: 'sustain', atMs: 1_500, value: 0 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Pedalled',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const lane = (): Element => element('roll-body').querySelector('.roll__pedal') ?? element('roll-body');
+      const on = (type: string, ms: number, init: PointerEventInit = {}): void => {
+        lane().dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId: 77, pointerType: 'mouse', button: 0, clientX: (ms / 1000) * zoom, clientY: 0, ...init }),
+        );
+      };
+      const drag = (from: number, to: number, init: PointerEventInit = {}): void => {
+        clock.advance(1_000);
+        on('pointerdown', from, init);
+        on('pointermove', to, init);
+        on('pointerup', to, init);
+      };
+      const tap = (ms: number, init: PointerEventInit = {}): void => {
+        on('pointerdown', ms, init);
+        on('pointerup', ms, init);
+        lane().dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: (ms / 1000) * zoom, clientY: 0 }));
+      };
+      const pressed = (): (number | null)[][] =>
+        rollOfTheTake({ events: sketches.find(sketch.id)?.events ?? [], beats: [] }).pedal.map((span) => [span.downAtMs, span.upAtMs]);
+      const undo = (): void => element<HTMLButtonElement>('roll-undo').click();
+      const stage = element('roll-body').closest<HTMLElement>('.roll-stage');
+
+      // Being edited, its lane is tall enough for a finger.
+      expect(stage?.dataset['editing']).toBe('true');
+
+      // Drawn on the empty lane, from the beat nearest to the beat nearest.
+      drag(2_100, 2_900);
+      expect(pressed()).toEqual([
+        [1_000, 1_500],
+        [2_000, 3_000],
+      ]);
+      undo();
+      expect(pressed()).toEqual([[1_000, 1_500]]);
+      // Exactly with Shift; and back, from right to left, the same.
+      drag(2_900, 2_100, { shiftKey: true });
+      expect(pressed()).toEqual([
+        [1_000, 1_500],
+        [2_100, 2_900],
+      ]);
+      undo();
+      // Too short to be a press, nothing.
+      drag(2_100, 2_110, { shiftKey: true });
+      expect(pressed()).toEqual([[1_000, 1_500]]);
+
+      // Taken by its end, longer.
+      const nearTheEnd = 1_500 - (4 / zoom) * 1_000;
+      drag(nearTheEnd, nearTheEnd + 600);
+      expect(pressed()).toEqual([[1_000, 2_000]]);
+      undo();
+      // Taken in the middle, moved.
+      drag(1_200, 1_700);
+      expect(pressed()).toEqual([[1_500, 2_000]]);
+      undo();
+      expect(pressed()).toEqual([[1_000, 1_500]]);
+
+      // Two taps on it take it out, as a note's do; and so does the right button.
+      clock.advance(1_000);
+      tap(1_200);
+      expect(pressed()).toEqual([[1_000, 1_500]]);
+      tap(1_200);
+      expect(pressed()).toEqual([]);
+      undo();
+      lane().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 1.2 * zoom, clientY: 0 }));
+      expect(pressed()).toEqual([]);
+      undo();
+
+      // A tap on the empty lane puts the marker there, and writes nothing.
+      clock.advance(1_000);
+      tap(2_600);
+      expect(headAt(element('roll-body'))).toBe('2.500');
+      expect(pressed()).toEqual([[1_000, 1_500]]);
+      expect(sketches.find(sketch.id)?.noteCount).toBe(1);
+
+      // Listening, the lane is the drawing's and draws nothing.
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(stage?.dataset['editing']).toBe('false');
+      drag(2_100, 2_900);
+      expect(pressed()).toEqual([[1_000, 1_500]]);
     });
 
     it('copies across nothing a key still down at the end follows on from', async () => {

@@ -171,6 +171,7 @@ import {
   takeWithTheKeysChanged,
   takeWithTheKeysCopied,
   takeWithTheKeyCut,
+  takeWithThePedalAt,
   theKeysOfTheTake,
   theKeysOnTheGrid,
   type KeyChange,
@@ -216,6 +217,7 @@ import {
   type RollCanvases,
   type RollPitches,
   type RollScene,
+  type ScenePedal,
   scrollAfterZoom,
   shareOfTheRun,
   zoomAfterWheel,
@@ -454,6 +456,12 @@ function sameKey(one: KeyNamed, other: KeyNamed): boolean {
 
 /** How near the end of a note the mouse or a finger takes hold of its end, in pixels. */
 const GRIP_PX = 10;
+
+/**
+ * The pitch a press of the pedal is named by for a second tap on it: one no
+ * key has, so two taps, one on a note and one on the pedal, are never a pair.
+ */
+const THE_PEDALS_ROW = -1;
 
 /** What the pencil says where it begins a sketch of a take: in its viewer, and on the page written from it. */
 const BEGIN_A_SKETCH_OF_A_TAKE = 'Begin a sketch of this recording to edit; the recording stays as it was played';
@@ -1866,6 +1874,19 @@ export class AppView {
     readonly adds: boolean;
     /** Whether it has gone far enough to be a box rather than a click. */
     readonly drawn: boolean;
+  } | null = null;
+  /**
+   * The pedal's lane held by a pointer while a sketch is edited: a press of
+   * the pedal taken hold of by its end or as a whole, or none where a new one
+   * is being drawn; and the sketch as the pointer has it so far, once it has
+   * changed it.
+   */
+  private rollPedalDrag: {
+    readonly pointerId: number;
+    readonly fromMs: number;
+    readonly press: ScenePedal | null;
+    readonly grip: 'whole' | 'end';
+    readonly moved: readonly MidiFileEvent[] | null;
   } | null = null;
   /** The rows of the keys sounding now: see `lightTheSoundingRows`. */
   private soundingRows: readonly number[] = [];
@@ -8829,6 +8850,16 @@ export class AppView {
     // The menu a right click opens is taken on a note being edited: there it
     // takes the note out, as the trash would.
     this.listen(this.el.rollBody, 'contextmenu', (event) => {
+      // And on a press of the pedal, the press.
+      if (this.theOtherRollShowing?.sketch?.editing === true && this.isOnThePedal(event)) {
+        const at = this.theMomentUnder((event as MouseEvent).clientX);
+        const press = at === null ? null : this.thePedalPressAt(at);
+        if (press !== null) {
+          event.preventDefault();
+          this.letGoOfThePedalPress(press);
+        }
+        return;
+      }
       const key = this.theOtherRollShowing?.sketch?.editing === true ? this.theKeyUnder(event as MouseEvent) : null;
       if (key !== null) {
         event.preventDefault();
@@ -8864,7 +8895,10 @@ export class AppView {
       if (
         !middle &&
         this.rollFingers.size === 0 &&
-        (this.cutTheKeyUnder(event) || this.takeHoldOfAKey(event) || this.beginABox(event))
+        (this.takeHoldOfThePedal(event) ||
+          this.cutTheKeyUnder(event) ||
+          this.takeHoldOfAKey(event) ||
+          this.beginABox(event))
       ) {
         return;
       }
@@ -8894,6 +8928,10 @@ export class AppView {
           : null;
     });
     this.listen(this.el.rollBody, 'pointermove', (event) => {
+      if (this.rollPedalDrag?.pointerId === event.pointerId) {
+        this.dragThePedal(event);
+        return;
+      }
       if (this.rollDrag?.pointerId === event.pointerId) {
         this.dragTheHeldKey(event);
         return;
@@ -8914,6 +8952,10 @@ export class AppView {
     });
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
+        if (this.rollPedalDrag?.pointerId === event.pointerId) {
+          this.letGoOfThePedal(event, ending === 'pointerup');
+          return;
+        }
         if (this.rollDrag?.pointerId === event.pointerId) {
           this.letGoOfTheHeldKey(ending === 'pointerup' ? event : null);
           return;
@@ -12601,6 +12643,154 @@ export class AppView {
     return atMs === null || row === null ? null : { atMs, row };
   }
 
+  /** Whether an event is on the pedal's lane under the notes. */
+  private isOnThePedal(event: Event): boolean {
+    return event.target instanceof Element && event.target.closest('.roll__pedal') !== null;
+  }
+
+  /** The moment of the run under a point across the drawing, from its start; `null` off it. */
+  private theMomentUnder(clientX: number): number | null {
+    const grid = this.el.rollBody.firstElementChild?.querySelector<HTMLElement>('.roll__grid') ?? null;
+    if (grid === null) {
+      return null;
+    }
+    // The grid stands still over the run, which is where the view says.
+    return timeFromTap(clientX - grid.getBoundingClientRect().left + this.rollScroller.x, Number(this.el.rollZoom.value));
+  }
+
+  /** The press of the pedal drawn at a moment from the run's start, if there is one. */
+  private thePedalPressAt(atMs: number): ScenePedal | null {
+    return this.drawnScene?.pedal.find((press) => press.fromMs <= atMs && atMs <= press.untilMs) ?? null;
+  }
+
+  /**
+   * Takes hold of the pedal's lane of a sketch being edited, where a finger,
+   * a pen or the mouse goes down on it: a press of the pedal by its end - the
+   * last few pixels of it - or as a whole, or the place a new one is drawn
+   * from. Says whether it did.
+   */
+  private takeHoldOfThePedal(event: PointerEvent): boolean {
+    if (
+      this.theOtherRollShowing?.sketch?.editing !== true ||
+      !this.isOnThePedal(event) ||
+      (event.pointerType === 'mouse' && event.button !== 0)
+    ) {
+      return false;
+    }
+    const at = this.theMomentUnder(event.clientX);
+    if (at === null) {
+      return false;
+    }
+    const press = this.thePedalPressAt(at);
+    const pxPerMs = Number(this.el.rollZoom.value) / 1000;
+    const nearItsEnd =
+      press !== null &&
+      (press.untilMs - at) * pxPerMs <= Math.min(GRIP_PX, ((press.untilMs - press.fromMs) * pxPerMs) / 3);
+    this.rollPedalDrag = { pointerId: event.pointerId, fromMs: at, press, grip: nearItsEnd ? 'end' : 'whole', moved: null };
+    return true;
+  }
+
+  /**
+   * The sketch as the pointer on the pedal's lane has it so far: a press drawn
+   * from where it went down to where it is, or the press taken hold of made
+   * longer or shorter by its end, or moved - each on the nearest line of the
+   * grid where the marker is put on one, and exactly with Shift. Shown, and
+   * kept to be kept when the pointer lets go.
+   */
+  private dragThePedal(event: PointerEvent): void {
+    const drag = this.rollPedalDrag;
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const at = this.theMomentUnder(event.clientX);
+    if (drag === null || showing === null || sketch === undefined || stored === null || at === null) {
+      return;
+    }
+    const roll = showing.roll;
+    const origin = rollBeganAtMs(roll);
+    const snapping = this.el.rollSnap.checked && !event.shiftKey;
+    const snap = (ms: number): number => (snapping ? theBeatNearest(roll, ms, this.theRollsGrid()) : ms);
+    const onTheRun = (ms: number): number => Math.round(ms + origin);
+    const press = drag.press;
+    let moved: readonly MidiFileEvent[] | null = null;
+    if (press === null) {
+      const ends = [snap(drag.fromMs), snap(at)].sort((one, other) => one - other);
+      const [from = 0, until = 0] = ends;
+      if (until - from >= SHORTEST_NOTE_MS) {
+        moved = takeWithThePedalAt(stored.events, onTheRun(from), onTheRun(until), true);
+      }
+    } else {
+      const endless = press.open ? Number.POSITIVE_INFINITY : null;
+      const freed = takeWithThePedalAt(stored.events, onTheRun(press.fromMs), endless ?? onTheRun(press.untilMs), false);
+      if (drag.grip === 'end') {
+        const until = Math.max(snap(press.untilMs + (at - drag.fromMs)), press.fromMs + SHORTEST_NOTE_MS);
+        if (until !== press.untilMs) {
+          moved = takeWithThePedalAt(freed, onTheRun(press.fromMs), onTheRun(until), true);
+        }
+      } else {
+        const by = Math.max(0, snap(press.fromMs + (at - drag.fromMs))) - press.fromMs;
+        if (by !== 0) {
+          moved = takeWithThePedalAt(freed, onTheRun(press.fromMs + by), endless ?? onTheRun(press.untilMs + by), true);
+        }
+      }
+    }
+    this.rollPedalDrag = { ...drag, moved };
+    this.drawnScene = this.theSceneToDraw(rollOfTheTake({ ...stored, events: moved ?? stored.events }, ROOM_IN_A_SKETCH), sketch.chosen);
+    this.paintTheRoll();
+  }
+
+  /**
+   * Lets go of the pedal's lane: what a drag made of the sketch kept, one change
+   * put back as one, or drawn as it was where the pointer was taken away. A
+   * press let go of without a drag was a tap: the second of two on a press of
+   * the pedal takes it out, and one on the empty lane puts the marker there.
+   * The click of letting go is taken as answered here.
+   */
+  private letGoOfThePedal(event: PointerEvent, lifted: boolean): void {
+    const drag = this.rollPedalDrag;
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    this.rollPedalDrag = null;
+    if (drag === null) {
+      return;
+    }
+    this.panned = true;
+    if (drag.moved !== null) {
+      if (lifted && sketch !== undefined && stored !== null) {
+        this.changeTheSketchShowing(drag.moved, [...sketch.before, asItWas(stored, sketch.chosen)], sketch.chosen);
+      } else {
+        this.drawTheRollInto();
+      }
+      return;
+    }
+    if (!lifted) {
+      return;
+    }
+    if (drag.press === null) {
+      this.putTheHeadWhereItWasTapped(event);
+    } else if (this.isASecondTap(event, { midi: THE_PEDALS_ROW, downAtMs: drag.press.fromMs })) {
+      this.letGoOfThePedalPress(drag.press);
+    }
+  }
+
+  /** Takes a press of the pedal out of the sketch being edited: one change, put back as one. */
+  private letGoOfThePedalPress(press: ScenePedal): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (showing === null || sketch === undefined || stored === null) {
+      return;
+    }
+    const origin = rollBeganAtMs(showing.roll);
+    const events = takeWithThePedalAt(
+      stored.events,
+      Math.round(press.fromMs + origin),
+      press.open ? Number.POSITIVE_INFINITY : Math.round(press.untilMs + origin),
+      false,
+    );
+    this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], sketch.chosen);
+  }
+
   /**
    * Cuts the key of a sketch being edited in two where the mouse or a pen goes
    * down on it with Alt held: on the nearest line of the grid where the marker
@@ -13208,6 +13398,12 @@ export class AppView {
     const ghosts = this.theNotesAskedFor();
     const scene = this.theSceneToDraw(roll, this.theOtherRollShowing?.sketch?.chosen ?? [], ghosts);
     this.drawnScene = scene;
+    // Said before the drawing is measured: editing, the pedal's lane is
+    // taller, to be drawn on with a finger.
+    const stage = this.el.rollBody.closest<HTMLElement>('.roll-stage');
+    if (stage !== null) {
+      stage.dataset['editing'] = String(this.theOtherRollShowing?.sketch?.editing === true);
+    }
     this.el.rollBody.replaceChildren(drawTheRoll(scene));
     this.rollHeads = theHeadsOf(this.el.rollBody);
     this.rollCanvases = theCanvasesOf(this.el.rollBody);

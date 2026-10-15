@@ -27,6 +27,7 @@ import {
   takeWithTheKeysChanged,
   takeWithTheKeysCopied,
   takeWithTheKeyCut,
+  takeWithThePedalAt,
   theKeysOnTheGrid,
   takeWithAKeyAdded,
   theKeysOfTheTake,
@@ -1447,6 +1448,75 @@ describe('changing a recording', () => {
       expect(takeWithTheKeyCut(inTheOrderPlayed(events), c, at), String(at)).toBeNull();
     }
     expect(takeWithTheKeyCut(inTheOrderPlayed(events), { midi: MIDI.C4, downAtMs: 1 }, 400)).toBeNull();
+  });
+
+  it('holds the pedal down over a stretch, joining what it covers and keeping a press it only meets', () => {
+    const ped = (atMs: number, value: number): MidiFileEvent => ({ kind: 'sustain', atMs, value });
+    const spans = (events: readonly MidiFileEvent[]): (number | null)[][] =>
+      rollOfTheTake({ events, beats: [] }).pedal.map((span) => [span.downAtMs, span.upAtMs]);
+    const pressed = [ped(300, 1), ped(800, 0)];
+
+    // Where there was none.
+    expect(spans(takeWithThePedalAt([], 100, 500, true))).toEqual([[100, 500]]);
+    // Over the start of one, over its end, and inside it: one press.
+    expect(spans(takeWithThePedalAt(pressed, 100, 500, true))).toEqual([[100, 800]]);
+    expect(spans(takeWithThePedalAt(pressed, 600, 1_000, true))).toEqual([[300, 1_000]]);
+    expect(takeWithThePedalAt(pressed, 400, 600, true)).toEqual(pressed);
+    // Meeting one at either end: a change of pedal there, two presses.
+    expect(spans(takeWithThePedalAt(pressed, 800, 1_000, true))).toEqual([
+      [300, 800],
+      [800, 1_000],
+    ]);
+    expect(spans(takeWithThePedalAt(pressed, 100, 300, true))).toEqual([
+      [100, 300],
+      [300, 800],
+    ]);
+    // Nothing for a stretch of no length, pressing or letting go.
+    expect(takeWithThePedalAt(pressed, 500, 500, true)).toEqual(pressed);
+    expect(takeWithThePedalAt(pressed, 500, 500, false)).toEqual(pressed);
+  });
+
+  it('lets the pedal go over a stretch, leaving the rest pressed as it was, half-pedal and all', () => {
+    const ped = (atMs: number, value: number): MidiFileEvent => ({ kind: 'sustain', atMs, value });
+    const spans = (events: readonly MidiFileEvent[]): (number | null)[][] =>
+      rollOfTheTake({ events, beats: [] }).pedal.map((span) => [span.downAtMs, span.upAtMs]);
+    const pressed = [ped(300, 1), ped(800, 0)];
+
+    // Inside a press, two presses.
+    expect(spans(takeWithThePedalAt(pressed, 400, 600, false))).toEqual([
+      [300, 400],
+      [600, 800],
+    ]);
+    // The whole of it: nothing left saying anything.
+    expect(takeWithThePedalAt(pressed, 300, 800, false)).toEqual([]);
+    // Either of two that meet, and the other stays.
+    const changed = [ped(0, 1), ped(300, 0), ped(300, 1), ped(600, 0)];
+    expect(spans(takeWithThePedalAt(changed, 300, 600, false))).toEqual([[0, 300]]);
+    expect(spans(takeWithThePedalAt(changed, 0, 300, false))).toEqual([[300, 600]]);
+    // One still down at the end, let go of to the end.
+    expect(takeWithThePedalAt([ped(300, 1)], 300, Number.POSITIVE_INFINITY, false)).toEqual([]);
+
+    // A half-pedalled take keeps every value outside the stretch, and its notes.
+    const half = [
+      ped(0, 0.7),
+      ped(200, 0.9),
+      ped(400, 0.2),
+      on(450, MIDI.C4),
+      off(600, MIDI.C4),
+      ped(1_000, 0.8),
+      ped(1_100, 0.95),
+      ped(1_200, 0),
+    ];
+    const held = takeWithThePedalAt(half, 500, 700, true);
+    expect(held.filter((event) => event.atMs < 500 || event.atMs > 700)).toEqual(
+      half.filter((event) => event.atMs < 500 || event.atMs > 700),
+    );
+    expect(held.filter((event) => event.kind !== 'sustain')).toEqual([on(450, MIDI.C4), off(600, MIDI.C4)]);
+    expect(spans(held)).toEqual([
+      [0, 400],
+      [500, 700],
+      [1_000, 1_200],
+    ]);
   });
 
   it('puts keys on the nearest line of the grid, as long as they were, never on or over another of their pitch', () => {

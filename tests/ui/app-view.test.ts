@@ -5558,6 +5558,110 @@ describe('AppView', () => {
       expect(of(63)).toEqual([[500, 1_000]]);
     });
 
+    it('moves a note neither by a drag nor by an arrow over another of its pitch', async () => {
+      const { view, sketches, clock, instrument } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 400, 62],
+            [1_000, 1_500, 62],
+            [1_000, 1_500, 63],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Over',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const body = element('roll-body');
+      const pointer = (type: string, where: { clientX: number; clientY: number }): void => {
+        body.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 95, pointerType: 'mouse', button: 0, ...where }));
+      };
+      const notes = (): number[][] => {
+        const events = sketches.find(sketch.id)?.events ?? [];
+        return events.flatMap((event, index) => {
+          if (event.kind !== 'noteOn') {
+            return [];
+          }
+          const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === event.midi);
+          return [[event.midi, event.atMs, off?.atMs ?? -1]];
+        });
+      };
+      const key = (init: KeyboardEventInit): void => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+      };
+
+      // Dragged onto the other of its pitch, it stays where it last fitted.
+      pointer('pointerdown', at(100, 62));
+      pointer('pointermove', at(600, 62));
+      pointer('pointermove', at(1_100, 62));
+      pointer('pointerup', at(1_100, 62));
+      expect(notes()).toEqual([
+        [62, 500, 900],
+        [62, 1_000, 1_500],
+        [63, 1_000, 1_500],
+      ]);
+      // Dragged on past it, it goes where it fits again.
+      clock.advance(1_000);
+      pointer('pointerdown', at(600, 62));
+      pointer('pointermove', at(1_100, 62));
+      pointer('pointermove', at(1_600, 62));
+      pointer('pointerup', at(1_600, 62));
+      expect(notes()[2]).toEqual([62, 1_500, 1_900]);
+      element<HTMLButtonElement>('roll-undo').click();
+      // Held longer into it, it stops short of it.
+      clock.advance(1_000);
+      pointer('pointerdown', at(890, 62));
+      pointer('pointermove', at(990, 62));
+      pointer('pointermove', at(1_390, 62));
+      pointer('pointerup', at(1_390, 62));
+      expect(notes()[0]).toEqual([62, 500, 1_000]);
+
+      // Taken up a row onto 63, which holds that place, it stays, and is not heard there.
+      clock.advance(1_000);
+      instrument.played.length = 0;
+      pointer('pointerdown', at(1_100, 62));
+      pointer('pointermove', at(1_100, 63));
+      pointer('pointerup', at(1_100, 63));
+      expect(instrument.played.map((note) => note.midi)).toEqual([62]);
+      expect(notes().filter(([, down]) => down === 1_000).sort(([one = 0], [other = 0]) => one - other)).toEqual([
+        [62, 1_000, 1_500],
+        [63, 1_000, 1_500],
+      ]);
+      clock.advance(1_000);
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(600, 62) });
+
+      // An arrow steps over a place another of its pitch holds to the next that is free.
+      key({ key: 'ArrowRight' });
+      expect(notes().find(([midi, down]) => midi === 62 && down !== 1_000)).toEqual([62, 1_500, 2_000]);
+      key({ key: 'ArrowLeft' });
+      expect(notes().find(([midi, down]) => midi === 62 && down !== 1_000)).toEqual([62, 500, 1_000]);
+      // And up past a pitch taken: from 62 at 1000 over 63, to 64.
+      clock.advance(1_000);
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(1_100, 62) });
+      key({ key: 'ArrowUp' });
+      expect(notes().filter(([, down]) => down === 1_000).sort(([one = 0], [other = 0]) => one - other)).toEqual([
+        [63, 1_000, 1_500],
+        [64, 1_000, 1_500],
+      ]);
+    });
+
     it('shows a sketch in a metre the list does not offer as it is', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

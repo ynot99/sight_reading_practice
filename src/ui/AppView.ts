@@ -180,6 +180,7 @@ import {
   theNextLineOfTheGrid,
   theLineOfTheGridUnder,
   theEndAKeyFitsTo,
+  aKeyIsOverAnotherOfItsPitch,
   theMusicsPlaceAt,
   type GridChoice,
 } from '../application/session/RunRoll.js';
@@ -12678,11 +12679,7 @@ export class AppView {
       drag.scene.highest - Math.max(...pitches),
       Math.max(lowest - Math.min(...pitches), -Math.round(downPx / this.rollLook.rowPx)),
     );
-    const sounding = this.soundOfTheHeldKeys;
-    if (sounding !== null && sounding.bySemitones !== bySemitones) {
-      this.soundTheHeldKeys(sounding.keys, bySemitones);
-    }
-    this.showTheDrag(
+    const shown = this.showTheDrag(
       drag,
       stored,
       keys.map((key) => ({
@@ -12692,6 +12689,11 @@ export class AppView {
         upAtMs: key.upAtMs === null ? null : key.upAtMs + byMs,
       })),
     );
+    // Heard where they are shown: a place refused is not where they went.
+    const sounding = this.soundOfTheHeldKeys;
+    if (shown && sounding !== null && sounding.bySemitones !== bySemitones) {
+      this.soundTheHeldKeys(sounding.keys, bySemitones);
+    }
   }
 
   /**
@@ -12728,16 +12730,22 @@ export class AppView {
     );
   }
 
-  /** Paints the sketch as a drag has it so far, and keeps it to be kept when the pointer lets go. */
-  private showTheDrag(drag: NonNullable<AppView['rollDrag']>, stored: StoredSketch, changes: readonly KeyChange[]): void {
+  /**
+   * Paints the sketch as a drag has it so far, and keeps it to be kept when
+   * the pointer lets go - unless a key would be over another of its pitch,
+   * when the drag stays where it last fitted, to go on from there once it
+   * fits again. Says whether it was shown.
+   */
+  private showTheDrag(drag: NonNullable<AppView['rollDrag']>, stored: StoredSketch, changes: readonly KeyChange[]): boolean {
     const events = takeWithTheKeysChanged(stored.events, changes);
-    if (events === null) {
-      return;
-    }
     const to = changes.map(({ midi, downAtMs }) => ({ midi, downAtMs }));
+    if (events === null || aKeyIsOverAnotherOfItsPitch(events, to)) {
+      return false;
+    }
     this.rollDrag = { ...drag, moved: { to, events } };
     this.drawnScene = this.theSceneToDraw(rollOfTheTake({ ...stored, events }, ROOM_IN_A_SKETCH), to);
     this.paintTheRoll();
+    return true;
   }
 
   /**
@@ -12903,30 +12911,45 @@ export class AppView {
     if (keys.length === 0) {
       return;
     }
-    let byMs = 0;
+    const moved = (byMs: number, bySemitones: number): readonly (KeyChange & { readonly key: KeyOfTheTake })[] =>
+      keys.map((key) => ({
+        key,
+        midi: key.midi + bySemitones,
+        downAtMs: key.downAtMs + byMs,
+        upAtMs: key.upAtMs === null ? null : key.upAtMs + byMs,
+      }));
+    // A step onto a place another of a pitch holds goes on past it, to the
+    // next where every one fits - or nowhere, where none is left that way.
+    const fits = (changes: readonly KeyChange[]): readonly MidiFileEvent[] | null => {
+      const events = takeWithTheKeysChanged(stored.events, changes);
+      return events === null || aKeyIsOverAnotherOfItsPitch(events, changes) ? null : events;
+    };
+    let changes: readonly (KeyChange & { readonly key: KeyOfTheTake })[] | null = null;
+    let events: readonly MidiFileEvent[] | null = null;
     let bySemitones = 0;
     if (arrow === 'ArrowLeft' || arrow === 'ArrowRight') {
       const origin = rollBeganAtMs(showing.roll);
       const earliest = Math.min(...keys.map((key) => key.downAtMs));
-      const line = theNextLineOfTheGrid(showing.roll, earliest - origin, this.theRollsGrid(), arrow === 'ArrowRight' ? 1 : -1);
-      if (line === null) {
-        return;
+      for (let from = earliest - origin; events === null; ) {
+        const line = theNextLineOfTheGrid(showing.roll, from, this.theRollsGrid(), arrow === 'ArrowRight' ? 1 : -1);
+        if (line === null) {
+          return;
+        }
+        changes = moved(Math.round(line + origin) - earliest, 0);
+        events = fits(changes);
+        from = line;
       }
-      byMs = Math.round(line + origin) - earliest;
     } else {
-      bySemitones = (arrow === 'ArrowUp' ? 1 : -1) * (octave ? 12 : 1);
-      if (keys.some((key) => key.midi + bySemitones < LOWEST_KEY || key.midi + bySemitones > HIGHEST_KEY)) {
-        return;
+      const step = (arrow === 'ArrowUp' ? 1 : -1) * (octave ? 12 : 1);
+      for (bySemitones = step; events === null; bySemitones += step) {
+        if (keys.some((key) => key.midi + bySemitones < LOWEST_KEY || key.midi + bySemitones > HIGHEST_KEY)) {
+          return;
+        }
+        changes = moved(0, bySemitones);
+        events = fits(changes);
       }
     }
-    const changes = keys.map((key) => ({
-      key,
-      midi: key.midi + bySemitones,
-      downAtMs: key.downAtMs + byMs,
-      upAtMs: key.upAtMs === null ? null : key.upAtMs + byMs,
-    }));
-    const events = takeWithTheKeysChanged(stored.events, changes);
-    if (events === null) {
+    if (changes === null || events === null) {
       return;
     }
     if (bySemitones !== 0) {

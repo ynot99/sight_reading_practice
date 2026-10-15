@@ -10,6 +10,7 @@ import {
   theNextLineOfTheGrid,
   theLineOfTheGridUnder,
   theEndAKeyFitsTo,
+  aKeyIsOverAnotherOfItsPitch,
   PLAIN_GRID,
   theMusicsPlaceAt,
   theMusicsBeats,
@@ -618,6 +619,35 @@ describe('the beat a run was measured against', () => {
     // Cut to nothing is not written: a note may not end where it begins.
     expect(theEndAKeyFitsTo(events, { midi: 62, downAtMs: 1_000, upAtMs: 1_000 })).toBeNull();
     expect(theEndAKeyFitsTo([], { midi: 62, downAtMs: 1_000, upAtMs: 1_000 })).toBeNull();
+  });
+
+  it('says a key moved is over another of its pitch only where the two sound together, swept across it', () => {
+    const still: MidiFileEvent[] = [
+      { kind: 'noteOn', atMs: 1_000, midi: 62, velocity: 0.5 },
+      { kind: 'noteOff', atMs: 1_500, midi: 62 },
+    ];
+    const withAMoved = (down: number, midi = 62): MidiFileEvent[] => [
+      ...still,
+      { kind: 'noteOn', atMs: down, midi, velocity: 0.5 },
+      { kind: 'noteOff', atMs: down + 500, midi },
+    ];
+    for (let down = 0; down <= 2_000; down += 25) {
+      // Touching end to start is not over; any more is - begun on it above all.
+      expect(aKeyIsOverAnotherOfItsPitch(withAMoved(down), [{ midi: 62, downAtMs: down }]), String(down)).toBe(
+        down < 1_500 && down + 500 > 1_000,
+      );
+    }
+    // Another pitch is never over it.
+    expect(aKeyIsOverAnotherOfItsPitch(withAMoved(1_200, 64), [{ midi: 64, downAtMs: 1_200 }])).toBe(false);
+    // Two named are not asked of each other, and a pair over each other that is not named is no matter.
+    expect(aKeyIsOverAnotherOfItsPitch(withAMoved(1_200), [{ midi: 62, downAtMs: 1_200 }, { midi: 62, downAtMs: 1_000 }])).toBe(false);
+    expect(aKeyIsOverAnotherOfItsPitch([...withAMoved(1_200), ...withAMoved(3_000, 70).slice(2)], [{ midi: 70, downAtMs: 3_000 }])).toBe(
+      false,
+    );
+    // A key never let go of sounds on to the end.
+    const open: MidiFileEvent[] = [{ kind: 'noteOn', atMs: 0, midi: 62, velocity: 0.5 }, ...withAMoved(5_000).slice(2)];
+    expect(aKeyIsOverAnotherOfItsPitch(open, [{ midi: 62, downAtMs: 5_000 }])).toBe(true);
+    expect(aKeyIsOverAnotherOfItsPitch(open, [{ midi: 62, downAtMs: 0 }])).toBe(true);
   });
 
   it('gives a tie to the beat already begun', () => {

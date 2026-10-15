@@ -1113,6 +1113,36 @@ export function theEndAKeyFitsTo(
 }
 
 /**
+ * Whether any of the keys named - where they now are, after a move or a
+ * change of length - begins on or sounds over another key of its pitch
+ * that is not one of them. Only those are asked of: a sketch may already
+ * hold two of a pitch at once, read from a file, and that is no reason to
+ * refuse a move elsewhere. The keys named keep their places among
+ * themselves, and so cannot be over one another.
+ */
+export function aKeyIsOverAnotherOfItsPitch(events: readonly MidiFileEvent[], named: readonly KeyNamed[]): boolean {
+  const keys = theKeysOfTheTake(events);
+  const isNamed = (key: KeyOfTheTake): boolean =>
+    named.some((each) => each.midi === key.midi && each.downAtMs === key.downAtMs);
+  // Two keys answering to one name are one begun exactly on the other.
+  const onAnother = named.some(
+    (each) => keys.filter((key) => key.midi === each.midi && key.downAtMs === each.downAtMs).length > 1,
+  );
+  return onAnother || keys.some(
+    (key) =>
+      isNamed(key) &&
+      keys.some(
+        (other) =>
+          other !== key &&
+          !isNamed(other) &&
+          other.midi === key.midi &&
+          other.downAtMs < (key.upAtMs ?? Number.POSITIVE_INFINITY) &&
+          key.downAtMs < (other.upAtMs ?? Number.POSITIVE_INFINITY),
+      ),
+  );
+}
+
+/**
  * The line of the grid a moment is in the cell after: the last at or before
  * it - half a millisecond either side counting as on it - or the moment
  * itself where the grid has none so early. Where a note written there

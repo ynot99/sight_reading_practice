@@ -3862,6 +3862,81 @@ describe('AppView', () => {
       }
     });
 
+    it('sounds a key of the strip beside a sketch while the mouse holds it, a finger\'s tap for a moment, and outlines the keys of the chosen notes', async () => {
+      const { view, sketches, instrument, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 60],
+            [500, 64],
+          ].flatMap(([atMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Keys',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const body = element('roll-body');
+      const keyOf = (midi: number): HTMLElement => {
+        const found = body.querySelector<HTMLElement>(`.roll__key[data-midi='${String(midi)}']`);
+        if (found === null) {
+          throw new Error(`no key ${String(midi)}`);
+        }
+        return found;
+      };
+      const heard = (): (number | undefined)[][] => instrument.played.map((note) => [note.midi, note.velocity, note.atMs]);
+      const ended = (): (number | undefined)[][] => instrument.stopped.map((note) => [note.midi, note.atMs]);
+      const press = (type: string, on: Element, init: PointerEventInit = {}): void => {
+        on.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 71, pointerType: 'mouse', button: 0, ...init }));
+      };
+      const head = headAt(body);
+      const events = sketches.find(sketch.id)?.events;
+
+      // Held with the mouse: heard as loud as the notes are, lit while held.
+      press('pointerdown', keyOf(67));
+      expect(heard()).toEqual([[67, 0.5, undefined]]);
+      expect(keyOf(67).dataset['sounding']).toBe('true');
+      expect(ended()).toEqual([]);
+      press('pointerup', keyOf(67));
+      keyOf(67).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(ended()).toEqual([[67, undefined]]);
+      expect(keyOf(67).dataset['sounding']).toBeUndefined();
+      // Nothing written, chosen or moved by it.
+      expect(sketches.find(sketch.id)?.events).toEqual(events);
+      expect(headAt(body)).toBe(head);
+      // Another button sounds nothing: the right one, nor the side one.
+      for (const button of [2, 3]) {
+        press('pointerdown', keyOf(67), { button });
+        press('pointerup', keyOf(67), { button });
+      }
+      expect(heard()).toHaveLength(1);
+
+      // A finger moves the drawing from it as ever, and its tap is heard for a moment.
+      instrument.played.length = 0;
+      instrument.stopped.length = 0;
+      press('pointerdown', keyOf(65), { pointerType: 'touch', pointerId: 72 });
+      expect(heard()).toEqual([]);
+      press('pointerup', keyOf(65), { pointerType: 'touch', pointerId: 72 });
+      const now = clock.now();
+      keyOf(65).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(heard()).toEqual([[65, 0.5, now]]);
+      expect(ended()).toEqual([[65, now + 300]]);
+      expect(sketches.find(sketch.id)?.events).toEqual(events);
+      expect(headAt(body)).toBe(head);
+
+      // The key of a chosen note outlined, and only while it is chosen.
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'a', code: 'KeyA', ctrlKey: true }));
+      expect([...body.querySelectorAll<HTMLElement>(".roll__key[data-chosen='true']")].map((key) => key.dataset['midi'])).toEqual(['64', '60']);
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+      expect(body.querySelectorAll(".roll__key[data-chosen='true']")).toHaveLength(0);
+    });
+
     it('lights the row of a key sounding - played, or struck by the playback at the head - on the keys and down the strip', async () => {
       const giveBack = lendTheDrawingASize({ wide: 100, tall: 0 });
       vi.useFakeTimers();

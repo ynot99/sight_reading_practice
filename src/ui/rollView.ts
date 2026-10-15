@@ -1292,13 +1292,19 @@ export function drawTheRoll(scene: RollScene): HTMLElement {
 
   const keys = element('div', 'roll__keys');
   const strip = element('div', 'roll__keys-strip');
+  // The rows a chosen note is on, whose keys are outlined as it is.
+  const chosenRows = new Set(scene.notes.filter((note) => note.chosen === true).map((note) => note.row));
   for (let row = 0; row < scene.rows; row += 1) {
     const midi = scene.highest - row;
     const key = element('div', `roll__key${isBlack(midi) ? ' roll__key--black' : ''}`);
     key.style.top = atRow(row);
-    // Named only where the name is worth the room: every C, so the eye has
-    // somewhere to land, and the black keys by their shape alone.
-    key.textContent = midi % 12 === 0 ? midiToLabel(midi) : '';
+    // Every key named: a row is never shorter than its name, and a key
+    // pressed here is heard by that name.
+    key.textContent = midiToLabel(midi);
+    key.dataset['midi'] = String(midi);
+    if (chosenRows.has(row)) {
+      key.dataset['chosen'] = 'true';
+    }
     strip.append(key);
   }
   keys.append(strip);

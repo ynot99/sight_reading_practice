@@ -44,6 +44,7 @@ function beatOf(atMs: number, weight: BeatWeight, positionTicks: number): Rolled
 import type { BeatWeight } from '../../src/application/ports/IMetronome.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { MIDI } from '../support/fixtures.js';
+import { midiToLabel } from '../../src/domain/model/Pitch.js';
 import { drawTheProfile } from '../../src/ui/profileChart.js';
 import type { RollScene } from '../../src/ui/rollView.js';
 import type { ProfileAxis } from '../../src/domain/scoring/theProfile.js';
@@ -1184,6 +1185,20 @@ describe('the notes in view, by pitch', () => {
     );
 
     expect(theMapOfThePitches(pitches, { fromShare: 0.5, widthShare: 0.5 })).toHaveLength(1);
+  });
+
+  it('names every key of the strip, top down, and outlines the keys the chosen notes are on', () => {
+    const run = roll({
+      beats: barOfFour(0, 0),
+      presses: [press({ midi: MIDI.C4, downAtMs: 0, upAtMs: 400 }), press({ midi: MIDI.C4 + 4, downAtMs: 500, upAtMs: 900 })],
+    });
+    const scene = theSceneOfTheRoll({ roll: run, barLabel: () => null, chosen: [{ midi: MIDI.C4 + 4, downAtMs: 500 }] });
+    const keys = [...drawTheRoll(scene).querySelectorAll<HTMLElement>('.roll__key')];
+
+    expect(keys.map((key) => key.dataset['midi'])).toEqual(keys.map((_, row) => String(scene.highest - row)));
+    expect(keys.map((key) => key.textContent)).toEqual(keys.map((_, row) => midiToLabel(scene.highest - row)));
+    expect(keys.find((key) => key.dataset['midi'] === String(MIDI.C4 + 1))?.textContent).toBe('C#4');
+    expect(keys.filter((key) => key.dataset['chosen'] === 'true').map((key) => Number(key.dataset['midi']))).toEqual([MIDI.C4 + 4]);
   });
 
   it('gives each mark one row of the band the drawing draws', () => {

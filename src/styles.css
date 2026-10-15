@@ -1878,8 +1878,6 @@ textarea {
   inset: 0;
   transform: translateY(calc(-1 * var(--roll-y)));
   will-change: transform;
-  /* Names of the rows, with nothing to press. */
-  cursor: default;
 }
 
 .roll__key {
@@ -1902,6 +1900,12 @@ textarea {
 
 .roll__key--black {
   background: var(--surface-strong);
+}
+
+/* The key of a row a chosen note is on, outlined as the note is: no verdict, so the accent. */
+.roll__key[data-chosen='true'] {
+  box-shadow: inset 0 0 0 2px var(--roll-ink-chosen);
+  color: var(--text);
 }
 
 /* The key sounding, lit on the keys beside the drawing as its row is across it. */

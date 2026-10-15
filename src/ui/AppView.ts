@@ -1909,6 +1909,8 @@ export class AppView {
     readonly grip: 'whole' | 'end';
     readonly moved: readonly MidiFileEvent[] | null;
   } | null = null;
+  /** A key of the strip beside the drawing held down by a pointer, and sounding till it is let go of. */
+  private keyHeldOnTheStrip: { readonly pointerId: number; readonly midi: number } | null = null;
   /** The rows of the keys sounding now: see `lightTheSoundingRows`. */
   private soundingRows: readonly number[] = [];
   /** What the rows sounding last were, so a frame that changes nothing draws nothing. */
@@ -8796,6 +8798,15 @@ export class AppView {
       if (this.pinched || this.panned) {
         return;
       }
+      // A finger's tap on a key beside the drawing: heard for a moment.
+      const tapped = this.theKeyOfTheStripUnder(event);
+      const roll = this.theRoll();
+      if (tapped !== null && roll !== null) {
+        const now = this.runtime.clock.now();
+        this.runtime.pitchPlayer.play(tapped, theUsualLoudness(rollAsEvents(roll)), now);
+        this.runtime.pitchPlayer.stop(tapped, now + HEARD_ON_A_STEP_MS);
+        return;
+      }
       // The ruler places the marker whatever the drawing is for: editing, the
       // notes under it answer a tap, and the marker still has to be put
       // somewhere to listen from.
@@ -8922,7 +8933,8 @@ export class AppView {
       if (
         !middle &&
         this.rollFingers.size === 0 &&
-        (this.takeHoldOfThePedal(event) ||
+        (this.holdTheKeyOnTheStrip(event) ||
+          this.takeHoldOfThePedal(event) ||
           this.cutTheKeyUnder(event) ||
           this.takeHoldOfAKey(event) ||
           this.beginABox(event))
@@ -8979,6 +8991,10 @@ export class AppView {
     });
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
+        if (this.keyHeldOnTheStrip?.pointerId === event.pointerId) {
+          this.letGoOfTheKeyOnTheStrip();
+          return;
+        }
         if (this.rollPedalDrag?.pointerId === event.pointerId) {
           this.letGoOfThePedal(event, ending === 'pointerup');
           return;
@@ -12695,6 +12711,54 @@ export class AppView {
     return atMs === null || row === null ? null : { atMs, row };
   }
 
+  /** The key of the strip beside the drawing an event is on, or `null` off it. */
+  private theKeyOfTheStripUnder(event: Event): number | null {
+    const key = event.target instanceof Element ? event.target.closest<HTMLElement>('.roll__key') : null;
+    const midi = Number(key?.dataset['midi']);
+    return key !== null && Number.isInteger(midi) ? midi : null;
+  }
+
+  /**
+   * Sounds the key of the strip beside the drawing a mouse or a pen goes down
+   * on, as loud as the notes drawn are on the whole, until it is let go of -
+   * and lights its row while it sounds. Says whether it did. The click that
+   * follows is taken as answered: a key is no place to put the marker. A
+   * finger there moves the drawing up and down, as it always has, and a tap
+   * of one sounds the key for a moment (see the drawing's click).
+   */
+  private holdTheKeyOnTheStrip(event: PointerEvent): boolean {
+    const midi = this.theKeyOfTheStripUnder(event);
+    const roll = this.theRoll();
+    if (midi === null || roll === null || event.pointerType === 'touch' || (event.pointerType === 'mouse' && event.button !== 0)) {
+      return false;
+    }
+    this.letGoOfTheKeyOnTheStrip();
+    this.runtime.pitchPlayer.play(midi, theUsualLoudness(rollAsEvents(roll)));
+    this.keyHeldOnTheStrip = { pointerId: event.pointerId, midi };
+    this.panned = true;
+    // Heard until let go of wherever the pointer has gone by then.
+    if (typeof this.el.rollBody.setPointerCapture === 'function') {
+      try {
+        this.el.rollBody.setPointerCapture(event.pointerId);
+      } catch {
+        // A pointer the page no longer has: it is let go of where it leaves.
+      }
+    }
+    this.lightTheSoundingRows();
+    return true;
+  }
+
+  /** Lets go of the key held on the strip, if one is. */
+  private letGoOfTheKeyOnTheStrip(): void {
+    const held = this.keyHeldOnTheStrip;
+    if (held === null) {
+      return;
+    }
+    this.keyHeldOnTheStrip = null;
+    this.runtime.pitchPlayer.stop(held.midi);
+    this.lightTheSoundingRows();
+  }
+
   /** Whether an event is on the pedal's lane under the notes. */
   private isOnThePedal(event: Event): boolean {
     return event.target instanceof Element && event.target.closest('.roll__pedal') !== null;
@@ -14055,7 +14119,8 @@ export class AppView {
     const scene = this.drawnScene;
     const rows = new Set<number>();
     if (scene !== null && !this.el.sheetRoll.hidden) {
-      for (const midi of this.runtime.recorder.keysDown) {
+      const held = this.keyHeldOnTheStrip === null ? [] : [this.keyHeldOnTheStrip.midi];
+      for (const midi of [...this.runtime.recorder.keysDown, ...held]) {
         const row = scene.highest - midi;
         if (row >= 0 && row < scene.rows) {
           rows.add(row);

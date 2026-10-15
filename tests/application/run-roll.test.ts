@@ -26,6 +26,7 @@ import {
   takeWithoutTheKeys,
   takeWithTheKeysChanged,
   takeWithTheKeysCopied,
+  theKeysOnTheGrid,
   takeWithAKeyAdded,
   theKeysOfTheTake,
   type RolledBeat,
@@ -42,7 +43,7 @@ import type {
 } from '../../src/application/ports/IMidiSource.js';
 import type { NoteJudgedEvent } from '../../src/application/session/SessionEvents.js';
 import type { Take } from '../../src/application/PerformanceRecorder.js';
-import type { MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
+import { inTheOrderPlayed, type MidiFileEvent } from '../../src/domain/midi/MidiFile.js';
 import type { BeatWeight } from '../../src/application/ports/IMetronome.js';
 import { Duration } from '../../src/domain/model/Duration.js';
 import { MIDI, offBeatAfterALongNote, twoBarExercise, unisonInTwoVoices } from '../support/fixtures.js';
@@ -1417,6 +1418,59 @@ describe('changing a recording', () => {
     const sharp = MIDI.E4 + 2;
     expect(takeWithTheKeysCopied(events, [e], 0, 2)?.filter((event) => event.kind !== 'sustain' && event.midi === sharp)).toEqual([on(500, sharp)]);
     expect(takeWithTheKeysCopied(events, [c, { midi: MIDI.C4, downAtMs: 1 }], 1_000, 0)).toBeNull();
+  });
+
+  it('puts keys on the nearest line of the grid, as long as they were, never on or over another of their pitch', () => {
+    const key = (atMs: number, upAtMs: number, midi: number): MidiFileEvent[] => [on(atMs, midi), off(upAtMs, midi)];
+    const events = inTheOrderPlayed([
+      // Nearer the beat before, and nearer the one after.
+      ...key(120, 370, MIDI.C4),
+      ...key(380, 450, MIDI.E4),
+      // On a line already.
+      ...key(1_000, 1_200, MIDI.G4),
+      // Its nearest line is where another of its pitch, not chosen, begins.
+      ...key(1_500, 1_550, MIDI.D4),
+      ...key(1_620, 1_700, MIDI.D4),
+      // Moved first, it would sound over the next, not yet moved: it stays,
+      // and the next goes.
+      ...key(2_380, 2_980, MIDI.F4),
+      ...key(2_990, 3_100, MIDI.F4),
+      // Both nearest the same line: the first goes, and the second would begin on it.
+      ...key(4_100, 4_150, MIDI.C5),
+      ...key(4_200, 4_250, MIDI.C5),
+      // The first goes later, and the second, going earlier, would begin
+      // inside it where it went: the second stays.
+      ...key(6_260, 6_780, MIDI.F5),
+      ...key(7_030, 7_100, MIDI.F5),
+    ]);
+    const beats = [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 }));
+    const chosen = [
+      [MIDI.C4, 120],
+      [MIDI.E4, 380],
+      [MIDI.G4, 1_000],
+      [MIDI.D4, 1_620],
+      [MIDI.F4, 2_380],
+      [MIDI.F4, 2_990],
+      [MIDI.C5, 4_100],
+      [MIDI.C5, 4_200],
+      [MIDI.F5, 6_260],
+      [MIDI.F5, 7_030],
+    ].map(([midi = 0, downAtMs = 0]) => ({ midi, downAtMs }));
+
+    const changes = theKeysOnTheGrid(rollOfTheTake({ events, beats }), events, chosen, PLAIN_GRID);
+
+    expect(changes.map(({ key: { midi, downAtMs: from }, downAtMs, upAtMs }) => [midi, from, downAtMs, upAtMs])).toEqual([
+      [MIDI.C4, 120, 0, 250],
+      [MIDI.E4, 380, 500, 570],
+      [MIDI.F4, 2_990, 3_000, 3_110],
+      [MIDI.C5, 4_100, 4_000, 4_050],
+      [MIDI.F5, 6_260, 6_500, 7_020],
+    ]);
+    // On a grid cut finer, the nearer line of it.
+    const finer = theKeysOnTheGrid(rollOfTheTake({ events, beats }), events, chosen.slice(0, 1), { beats: true, parts: 4 });
+    expect(finer.map((change) => change.downAtMs)).toEqual([125]);
+    // None where a key named is not there.
+    expect(theKeysOnTheGrid(rollOfTheTake({ events, beats }), events, [{ midi: MIDI.C4, downAtMs: 1 }], PLAIN_GRID)).toEqual([]);
   });
 
   it('draws room past the end of a sketch where it is asked for, an empty one included', () => {

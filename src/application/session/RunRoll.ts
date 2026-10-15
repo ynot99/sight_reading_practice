@@ -1193,6 +1193,41 @@ export function takeWithTheKeysCopied(
 }
 
 /**
+ * Where the named keys go put on the grid: each begun on the line nearest
+ * where it begins, and held as long as it was. One already on a line is left
+ * out, and so is one that would begin on or sound over another of its pitch.
+ * Taken earliest first, each asked of against the others where they are by
+ * then, moved or not yet: putting two on the grid can bring them together.
+ */
+export function theKeysOnTheGrid(
+  roll: RunRoll,
+  events: readonly MidiFileEvent[],
+  named: readonly KeyNamed[],
+  choice: GridChoice,
+): readonly KeyChange[] {
+  const keys = theKeysNamed(events, named) ?? [];
+  const began = rollBeganAtMs(roll);
+  const placed: KeyChange[] = [];
+  for (const key of [...keys].sort((one, other) => one.downAtMs - other.downAtMs)) {
+    const byMs = Math.round(theBeatNearest(roll, key.downAtMs - began, choice) + began) - key.downAtMs;
+    if (byMs === 0) {
+      continue;
+    }
+    const change: KeyChange = {
+      key: { midi: key.midi, downAtMs: key.downAtMs },
+      midi: key.midi,
+      downAtMs: key.downAtMs + byMs,
+      upAtMs: key.upAtMs === null ? null : key.upAtMs + byMs,
+    };
+    const moved = takeWithTheKeysChanged(events, [...placed, change]);
+    if (moved !== null && !aKeyIsOverAnotherOfItsPitch(moved, [change])) {
+      placed.push(change);
+    }
+  }
+  return placed;
+}
+
+/**
  * The bars of a roll counted on its own downbeats, from one: for a drawing
  * that is of no score, whose bars have no other number.
  */

@@ -1587,8 +1587,13 @@ textarea {
   color: var(--surface);
 }
 
-.roll-hands[data-idle='true'] {
+.roll-hands[data-idle='true'],
+.roll-quantize[data-idle='true'] {
   opacity: 0.45;
+}
+
+.roll-quantize {
+  flex: none;
 }
 
 .roll-velocity__said {

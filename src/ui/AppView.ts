@@ -171,6 +171,7 @@ import {
   takeWithTheKeysChanged,
   takeWithTheKeysCopied,
   theKeysOfTheTake,
+  theKeysOnTheGrid,
   type KeyChange,
   type KeyNamed,
   type KeyOfTheTake,
@@ -2155,6 +2156,7 @@ export class AppView {
     rollHandLeft: HTMLButtonElement;
     rollHandPitch: HTMLButtonElement;
     rollHandRight: HTMLButtonElement;
+    rollQuantize: HTMLButtonElement;
     rollDelete: HTMLButtonElement;
     rollSelect: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
@@ -2516,6 +2518,7 @@ export class AppView {
       rollHandLeft: requireElement(doc, 'roll-hand-left'),
       rollHandPitch: requireElement(doc, 'roll-hand-pitch'),
       rollHandRight: requireElement(doc, 'roll-hand-right'),
+      rollQuantize: requireElement(doc, 'roll-quantize'),
       rollDelete: requireElement(doc, 'roll-delete'),
       rollSelect: requireElement(doc, 'roll-select'),
       rollUndo: requireElement(doc, 'roll-undo'),
@@ -8777,6 +8780,9 @@ export class AppView {
         this.giveTheChosenToAHand(hand);
       });
     }
+    this.listen(this.el.rollQuantize, 'click', () => {
+      this.putTheChosenOnTheGrid();
+    });
     this.listen(this.el.scoresShowScores, 'click', () => {
       this.showTheList('scores');
     });
@@ -11975,6 +11981,39 @@ export class AppView {
     this.el.rollVelocityLevel.value = String(theMiddleOf(loudness));
     this.markTheLoudness(loudness);
     this.sayWhichHand();
+    const quantizes = 'Quantize: each chosen note begun on the nearest line of the grid, as long as it was';
+    if (loudness.length === 0) {
+      this.el.rollQuantize.dataset['idle'] = 'true';
+      this.el.rollQuantize.title = `${quantizes}. Choose a note first.`;
+    } else {
+      delete this.el.rollQuantize.dataset['idle'];
+      this.el.rollQuantize.title = quantizes;
+    }
+    this.el.rollQuantize.setAttribute('aria-label', this.el.rollQuantize.title);
+  }
+
+  /**
+   * Puts the chosen notes on the grid shown, whether or not the marker is put
+   * on it: one change, put back as one, and none where every one already is
+   * or none can go. They stay chosen where they went.
+   */
+  private putTheChosenOnTheGrid(): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (showing === null || sketch === undefined || stored === null) {
+      return;
+    }
+    const changes = theKeysOnTheGrid(showing.roll, stored.events, sketch.chosen, this.theRollsGrid());
+    const events = changes.length === 0 ? null : takeWithTheKeysChanged(stored.events, changes);
+    if (events === null) {
+      return;
+    }
+    const chosen = sketch.chosen.map((each) => {
+      const moved = changes.find((change) => sameKey(change.key, each));
+      return moved === undefined ? each : { midi: moved.midi, downAtMs: moved.downAtMs };
+    });
+    this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], chosen);
   }
 
   /**

@@ -5872,6 +5872,74 @@ describe('AppView', () => {
       expect(notes()).toHaveLength(9);
     });
 
+    it('puts the chosen notes on the grid by the Quantize button, whether or not the marker is put on it', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [120, 370, 60],
+            [1_000, 1_200, 64],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Loose',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const quantize = element<HTMLButtonElement>('roll-quantize');
+      const notes = (): number[][] => {
+        const events = sketches.find(sketch.id)?.events ?? [];
+        return events.flatMap((event, index) => {
+          if (event.kind !== 'noteOn') {
+            return [];
+          }
+          const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === event.midi);
+          return [[event.midi, event.atMs, off?.atMs ?? -1]];
+        });
+      };
+      const chosen = (): number[] =>
+        (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+      const says = 'Quantize: each chosen note begun on the nearest line of the grid, as long as it was';
+
+      // Nothing chosen: dimmed, saying so, and doing nothing.
+      expect(quantize.dataset['idle']).toBe('true');
+      expect(quantize.title).toBe(`${says}. Choose a note first.`);
+      expect(quantize.getAttribute('aria-label')).toBe(quantize.title);
+      quantize.click();
+      expect(notes()).toEqual([
+        [60, 120, 370],
+        [64, 1_000, 1_200],
+      ]);
+
+      // Both chosen, with the marker put anywhere: the loose one goes onto the
+      // beat, as long as it was, and both stay chosen.
+      element<HTMLInputElement>('roll-snap').click();
+      expect(element<HTMLInputElement>('roll-snap').checked).toBe(false);
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'a', code: 'KeyA', ctrlKey: true }));
+      expect(quantize.dataset['idle']).toBeUndefined();
+      expect(quantize.title).toBe(says);
+      quantize.click();
+      expect(notes()).toEqual([
+        [60, 0, 250],
+        [64, 1_000, 1_200],
+      ]);
+      expect(chosen()).toEqual([0, 1_000]);
+      // Pressed again, nothing to change, and nothing more to undo for it.
+      quantize.click();
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(notes()).toEqual([
+        [60, 120, 370],
+        [64, 1_000, 1_200],
+      ]);
+      expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
+    });
+
     it('copies across nothing a key still down at the end follows on from', async () => {
       const { view, sketches, clock } = createRig();
       await view.initialize();

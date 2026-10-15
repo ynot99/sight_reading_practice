@@ -452,6 +452,9 @@ function sameKey(one: KeyNamed, other: KeyNamed): boolean {
 /** How near the end of a note the mouse or a finger takes hold of its end, in pixels. */
 const GRIP_PX = 10;
 
+/** What the pencil says where it begins a sketch of a take: in its viewer, and on the page written from it. */
+const BEGIN_A_SKETCH_OF_A_TAKE = 'Begin a sketch of this recording to edit; the recording stays as it was played';
+
 /** The shortest a note can be held: shorter is a click rather than a note. */
 const SHORTEST_NOTE_MS = 30;
 
@@ -1863,6 +1866,8 @@ export class AppView {
   } | null = null;
   /** The sketch the score on the page was written down from, as it was then, and the score it gave. */
   private theSketchOnThePage: { readonly sketch: StoredSketch; readonly exercise: Exercise } | null = null;
+  /** The take the score on the page was written down from, and the score it gave. */
+  private theTakeOnThePage: { readonly takeId: string; readonly exercise: Exercise } | null = null;
   /** The sketch whose name is being written over, while it is. */
   private sketchBeingRenamed: string | null = null;
   /**
@@ -4393,6 +4398,17 @@ export class AppView {
       const onThePage = this.theSketchOfThePage();
       if (onThePage !== null) {
         this.showTheSketch(onThePage.sketch.id);
+        return;
+      }
+      // A take's page: the sketch begins in the bars the page was written
+      // in, so from now on the page is the sketch's, written again from it
+      // when the editor shuts.
+      const takeId = this.theTakeOfThePage();
+      const exercise = this.runtime.controller.openedExercise;
+      const sketch = takeId === null ? null : this.beginASketchOf(takeId);
+      if (sketch !== null && exercise !== null) {
+        this.theSketchOnThePage = { sketch, exercise };
+        this.showThePencilBesideThePills();
       }
     });
     this.listen(this.el.focusRoll, 'click', () => {
@@ -6916,7 +6932,7 @@ export class AppView {
         // A score opened or a page generated: the corner is about the second.
         this.showTheRung();
         // Another score on the page is no sketch's.
-        this.sayWhetherThePageIsASketch();
+        this.showThePencilBesideThePills();
       }),
     );
 
@@ -9498,6 +9514,8 @@ export class AppView {
       ? all.filter((take) => take.shelf === 'kept')
       : all;
     this.el.takesEmpty.hidden = takes.length > 0;
+    // A take deleted takes the pencil off the page written from it.
+    this.showThePencilBesideThePills();
     this.el.takesEmpty.textContent =
       all.length > 0 && takes.length === 0
         ? 'Nothing kept for good yet. The star on a row puts it out of reach of the tidying.'
@@ -9654,7 +9672,7 @@ export class AppView {
           if (yes) {
             this.runtime.sketches.remove(sketch.id);
             this.renderSketches();
-            this.sayWhetherThePageIsASketch();
+            this.showThePencilBesideThePills();
           }
         });
       });
@@ -9676,20 +9694,27 @@ export class AppView {
    * Opens a take as a score: the file it would be saved as, read the way a
    * chosen MIDI file is, so its page is the one any other program opening
    * that file is given the bars of - the click's, or common time at 120 where
-   * it was played without one. Kept on the shelf as an opened file is.
+   * it was played without one.
+   *
+   * Not kept among the scores, for the reason a sketch's page is not: the
+   * take is what is kept, and every take written down was another score in
+   * the list. The pencil beside the pills begins a sketch of it instead.
    */
   private async writeTheTakeDown(id: string): Promise<void> {
     const take = this.runtime.takes.find(id);
     if (take === null) {
       return;
     }
-    await this.writeDown(theTakeAsWritten(take), takeTitle(take.savedAtMs), this.el.sheetTakes);
+    const opened = await this.writeDown(theTakeAsWritten(take), takeTitle(take.savedAtMs), this.el.sheetTakes);
+    this.theTakeOnThePage = opened === null ? null : { takeId: take.id, exercise: opened };
+    this.showThePencilBesideThePills();
   }
 
   /**
    * Opens some playing as a score: the file it would be saved as, read the
-   * way a chosen MIDI file is, and kept on the shelf as an opened file is.
-   * The sheet it was asked from goes first: the page is what was asked for.
+   * way a chosen MIDI file is, and not kept among the scores - what it was
+   * written from is what is kept. The sheet it was asked from goes first: the
+   * page is what was asked for.
    */
   private async writeDown(
     playing: {
@@ -9699,7 +9724,6 @@ export class AppView {
     },
     title: string,
     from: HTMLElement,
-    kept = true,
   ): Promise<Exercise | null> {
     from.hidden = true;
     timeTheStart('score asked for', () => title);
@@ -9708,9 +9732,6 @@ export class AppView {
         thePlayingAsAFile(playing, title).slice().buffer,
         `${title}.mid`,
       );
-      if (kept) {
-        await this.runtime.scores.keep(exercise, Date.now());
-      }
       await this.pickUpTheFile(exercise);
       this.sayWhatTheFileLeftOut(exercise, warnings);
       return this.runtime.controller.openedExercise;
@@ -9734,14 +9755,30 @@ export class AppView {
     if (sketch === null) {
       return;
     }
-    const opened = await this.writeDown(sketch, sketch.title, from, false);
+    const opened = await this.writeDown(sketch, sketch.title, from);
     this.theSketchOnThePage = opened === null ? null : { sketch, exercise: opened };
-    this.sayWhetherThePageIsASketch();
+    this.showThePencilBesideThePills();
   }
 
-  /** Shows the pencil beside the pills while the page is a sketch's, and only then. */
-  private sayWhetherThePageIsASketch(): void {
-    this.el.focusSketch.hidden = this.theSketchOfThePage() === null;
+  /**
+   * Shows the pencil beside the pills while the page is a sketch's, to edit
+   * it, or a take's, to begin a sketch of it; and only then.
+   */
+  private showThePencilBesideThePills(): void {
+    const ofASketch = this.theSketchOfThePage() !== null;
+    this.el.focusSketch.hidden = !ofASketch && this.theTakeOfThePage() === null;
+    this.el.focusSketch.title = ofASketch ? 'Edit this sketch' : BEGIN_A_SKETCH_OF_A_TAKE;
+    this.el.focusSketch.setAttribute('aria-label', this.el.focusSketch.title);
+  }
+
+  /** The take the page was written down from, while the page is still that writing and the take is still kept. */
+  private theTakeOfThePage(): string | null {
+    const onThePage = this.theTakeOnThePage;
+    return onThePage !== null &&
+      onThePage.exercise === this.runtime.controller.openedExercise &&
+      this.runtime.takes.find(onThePage.takeId) !== null
+      ? onThePage.takeId
+      : null;
   }
 
   /**
@@ -11835,7 +11872,7 @@ export class AppView {
       // A recording is a record of what was played: what is edited is a sketch
       // begun from it.
       delete this.el.rollEdit.dataset['idle'];
-      this.el.rollEdit.title = 'Begin a sketch of this recording to edit; the recording stays as it was played';
+      this.el.rollEdit.title = BEGIN_A_SKETCH_OF_A_TAKE;
     } else if (this.theOtherRollShowing?.isScore === true) {
       // And a score is what was written, for the same reason.
       delete this.el.rollEdit.dataset['idle'];
@@ -12147,14 +12184,15 @@ export class AppView {
    * Begins a sketch of a recording, a copy of it in its bars or the assumed
    * ones, and opens it to be edited. The recording is left as it was played.
    */
-  private beginASketchOf(id: string): void {
+  private beginASketchOf(id: string): StoredSketch | null {
     const take = this.runtime.takes.find(id);
     if (take === null) {
-      return;
+      return null;
     }
     const sketch = this.runtime.sketches.begin(take, `Sketch of a take, ${theDayItWas(take.savedAtMs)}`, Date.now());
     this.renderSketches();
     this.showTheSketch(sketch.id);
+    return sketch;
   }
 
   /** Begins a sketch of the score open now, and opens it to be edited. */

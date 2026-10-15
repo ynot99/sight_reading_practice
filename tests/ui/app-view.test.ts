@@ -14320,7 +14320,7 @@ describe('AppView', () => {
     }
 
     it('writes a take played to the click down in its bars, and one played without in common time at 120', async () => {
-      const { view, runtime, metronome, clock, midi, takes, files } = createRig();
+      const { view, runtime, metronome, clock, midi, takes, files, sketches } = createRig();
       await view.initialize();
       element<HTMLButtonElement>('focus-modes').click();
       frameButton('free').click();
@@ -14354,9 +14354,33 @@ describe('AppView', () => {
       const steps = exercise === null ? [] : buildTimeline(exercise).steps.filter((step) => step.expectedMidi.length > 0);
       expect(steps.map((step) => step.expectedMidi)).toEqual([[60], [62], [64], [65]]);
       expect(steps.map((step) => step.onsetTicks)).toEqual([0, 1, 2, 3].map((at) => at * Duration.QUARTER.ticks));
-      // On the shelf, as a file opened is, and the takes out of its way.
-      expect(runtime.scores.list().map((score) => score.title)).toContain(exercise?.title);
+      // Not among the scores, the take being what is kept; the takes out of its way.
+      expect(runtime.scores.list().map((score) => score.title)).not.toContain(exercise?.title);
       expect(element('sheet-takes').hidden).toBe(true);
+      // The pencil beside the pills begins a sketch of it, opened to be
+      // edited, in the bars of the page.
+      const pencil = element<HTMLButtonElement>('focus-sketch');
+      expect(pencil.hidden).toBe(false);
+      expect(pencil.title).toBe('Begin a sketch of this recording to edit; the recording stays as it was played');
+      expect(pencil.getAttribute('aria-label')).toBe(pencil.title);
+      pencil.click();
+      expect(sketches.list()).toHaveLength(1);
+      expect(element('sheet-roll').hidden).toBe(false);
+      expect(element('roll-edit').getAttribute('aria-pressed')).toBe('true');
+      expect(view.rollScene?.bars.slice(0, 2)).toEqual([
+        { atMs: 0, name: '1' },
+        { atMs: 1_800, name: '2' },
+      ]);
+      // From then on the page is the sketch's: the pencil edits it, and the
+      // page unchanged is not written again.
+      element<HTMLButtonElement>('roll-close').click();
+      expect(pencil.hidden).toBe(false);
+      expect(pencil.title).toBe('Edit this sketch');
+      expect(pencil.getAttribute('aria-label')).toBe(pencil.title);
+      expect(runtime.controller.openedExercise).toBe(exercise);
+      pencil.click();
+      expect(sketches.list()).toHaveLength(1);
+      element<HTMLButtonElement>('roll-close').click();
       // And saved as a file, in the same bars at the click's tempo.
       rowButton('takes-list', 'Save this take as a MIDI file').click();
       const saved = readMidiFile(files.saved[0]?.bytes ?? new Uint8Array());
@@ -14394,6 +14418,21 @@ describe('AppView', () => {
       const freeFile = readMidiFile(files.saved.at(-1)?.bytes ?? new Uint8Array());
       expect([freeFile.beats, freeFile.beatType, freeFile.tempoBpm]).toEqual([4, 4, 120]);
       expect(freeFile.notes.map((note) => note.startTicks)).toEqual([0, freeFile.division]);
+      // Another take's page is that take's, to begin a sketch of; deleted, the pencil goes.
+      expect([pencil.hidden, pencil.title]).toEqual([false, 'Begin a sketch of this recording to edit; the recording stays as it was played']);
+      rowButton('takes-list', 'Delete this take').click();
+      await confirmDeletion();
+      expect(takes.list()).toHaveLength(1);
+      expect(pencil.hidden).toBe(true);
+      // Another score opened over a take's page, the page is no take's.
+      rowButton('takes-list', write).click();
+      await waitFor(() => !pencil.hidden);
+      const writtenAgain = runtime.controller.openedExercise;
+      await runtime.scores.keep(twoBarExercise({ title: 'Kept' }), 1_000);
+      element<HTMLButtonElement>('focus-scores').click();
+      [...element('scores-list').querySelectorAll('button')].find((button) => button.textContent === 'Open')?.click();
+      await waitFor(() => runtime.controller.openedExercise !== writtenAgain);
+      expect(pencil.hidden).toBe(true);
     });
 
     it('moves a note of a sketch where it is dragged from, onto the beat', async () => {

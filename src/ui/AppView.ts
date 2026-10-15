@@ -1725,8 +1725,6 @@ export class AppView {
     readonly scene: RollScene;
     /** The key it went down on. */
     readonly key: KeyNamed;
-    /** Whether that key was among those chosen as it went down. */
-    readonly wasChosen: boolean;
     /** Whether a tap on it adds it to the notes chosen or takes it out, rather than choosing it alone. */
     readonly adds: boolean;
     /** What of it was taken hold of: the whole note, moved, or its end, held longer or shorter. */
@@ -1795,10 +1793,14 @@ export class AppView {
    */
   private rollRowPx = 13;
   /**
-   * The note sounding while a key of a sketch is held: the key's own pitch,
-   * and the pitch it is dragged to as it goes, so the ear follows the hand.
+   * What sounds while a key of a sketch is held: every key the hold would
+   * move, each at its own loudness, and how far up or down they have been
+   * taken - so the ear follows the hand, chord and all.
    */
-  private soundOfTheHeldKey: { readonly midi: number; readonly velocity: number } | null = null;
+  private soundOfTheHeldKeys: {
+    readonly keys: readonly { readonly midi: number; readonly velocity: number }[];
+    readonly bySemitones: number;
+  } | null = null;
   /** The box a mouse is drawing over a sketch being edited, to choose the notes inside it. */
   private rollBoxDrawn: {
     readonly pointerId: number;
@@ -8731,6 +8733,9 @@ export class AppView {
     this.listen(this.el.rollDelete, 'click', () => {
       this.deleteTheChosenKeys();
     });
+    this.listen(this.el.rollBody, 'dblclick', (event) => {
+      this.deleteTheKeyDoubleClicked(event as MouseEvent);
+    });
     this.listen(this.el.rollSelect, 'click', () => {
       const showing = this.theOtherRollShowing;
       const sketch = showing?.sketch;
@@ -12437,8 +12442,21 @@ export class AppView {
       return false;
     }
     const key = this.theKeyUnder(event);
-    if (key === null) {
+    const stored = this.runtime.sketches.find(sketch.id);
+    if (key === null || stored === null) {
       return false;
+    }
+    // Chosen as it is pressed, so it is lit while held: alone where it was
+    // not chosen, added or taken out with a key held. One already chosen
+    // stays among the rest, which a drag from it moves together; a press let
+    // go of without one chooses it alone - see `letGoOfTheHeldKey`.
+    const named = { midi: key.midi, downAtMs: key.downAtMs };
+    const adds = addsToTheChoice(event);
+    const wasChosen = sketch.chosen.some((each) => sameKey(each, key));
+    if (adds) {
+      this.chooseOrLetGo(named);
+    } else if (!wasChosen) {
+      this.choose([named]);
     }
     this.rollDrag = {
       pointerId: event.pointerId,
@@ -12446,35 +12464,38 @@ export class AppView {
       clientY: event.clientY,
       scene,
       moved: null,
-      key: { midi: key.midi, downAtMs: key.downAtMs },
-      wasChosen: sketch.chosen.some((each) => sameKey(each, key)),
-      adds: addsToTheChoice(event),
+      key: named,
+      adds,
       grip: this.theGripOn(key, event),
       upAtMs: key.upAtMs ?? rollEndedAtMs(showing.roll),
     };
-    this.soundTheHeldKey(key.midi, key.velocity);
+    this.soundTheHeldKeys(
+      this.theKeysDragged(this.rollDrag, stored.events).map((each) => ({ midi: each.midi, velocity: each.velocity })),
+      0,
+    );
     return true;
   }
 
   /**
-   * Sounds the key held at the pitch it is now at, until it is let go of or
-   * taken to another: a key moved to the row it was already on goes on
-   * sounding rather than being struck again.
+   * Sounds the keys held where they now are, until they are let go of or
+   * taken to another pitch: keys moved along their rows go on sounding
+   * rather than being struck again.
    */
-  private soundTheHeldKey(midi: number, velocity: number): void {
-    if (this.soundOfTheHeldKey?.midi === midi) {
-      return;
+  private soundTheHeldKeys(keys: readonly { readonly midi: number; readonly velocity: number }[], bySemitones: number): void {
+    this.letTheHeldKeysFallSilent();
+    for (const key of keys) {
+      this.runtime.pitchPlayer.play(key.midi + bySemitones, key.velocity);
     }
-    this.letTheHeldKeyFallSilent();
-    this.runtime.pitchPlayer.play(midi, velocity);
-    this.soundOfTheHeldKey = { midi, velocity };
+    this.soundOfTheHeldKeys = { keys, bySemitones };
   }
 
-  private letTheHeldKeyFallSilent(): void {
-    const sounding = this.soundOfTheHeldKey;
+  private letTheHeldKeysFallSilent(): void {
+    const sounding = this.soundOfTheHeldKeys;
     if (sounding !== null) {
-      this.runtime.pitchPlayer.stop(sounding.midi);
-      this.soundOfTheHeldKey = null;
+      for (const key of sounding.keys) {
+        this.runtime.pitchPlayer.stop(key.midi + sounding.bySemitones);
+      }
+      this.soundOfTheHeldKeys = null;
     }
   }
 
@@ -12512,11 +12533,12 @@ export class AppView {
 
   /**
    * The keys a drag from a held key changes, as they are in the sketch now:
-   * all the chosen ones where it was one of them, and only itself where it
-   * was not - a note dragged out of nowhere is moved alone, as in any editor.
+   * all the chosen ones where it is one of them, and only itself where it is
+   * not - one taken out of the choice as it was pressed is moved alone.
    */
   private theKeysDragged(drag: NonNullable<AppView['rollDrag']>, events: readonly MidiFileEvent[]): KeyOfTheTake[] {
-    const moving = drag.wasChosen ? (this.theOtherRollShowing?.sketch?.chosen ?? []) : [drag.key];
+    const chosen = this.theOtherRollShowing?.sketch?.chosen ?? [];
+    const moving = chosen.some((each) => sameKey(each, drag.key)) ? chosen : [drag.key];
     return theKeysOfTheTake(events).filter((key) => moving.some((each) => sameKey(each, key)));
   }
 
@@ -12558,9 +12580,9 @@ export class AppView {
       drag.scene.highest - Math.max(...pitches),
       Math.max(lowest - Math.min(...pitches), -Math.round(downPx / this.rollLook.rowPx)),
     );
-    const sounding = this.soundOfTheHeldKey;
-    if (sounding !== null) {
-      this.soundTheHeldKey(drag.key.midi + bySemitones, sounding.velocity);
+    const sounding = this.soundOfTheHeldKeys;
+    if (sounding !== null && sounding.bySemitones !== bySemitones) {
+      this.soundTheHeldKeys(sounding.keys, bySemitones);
     }
     this.showTheDrag(
       drag,
@@ -12626,7 +12648,7 @@ export class AppView {
    * on the note, and the click of letting go is taken as answered here.
    */
   private letGoOfTheHeldKey(lifted: boolean): void {
-    this.letTheHeldKeyFallSilent();
+    this.letTheHeldKeysFallSilent();
     const drag = this.rollDrag;
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
@@ -12637,9 +12659,8 @@ export class AppView {
     if (drag.moved === null) {
       if (lifted) {
         this.panned = true;
-        if (drag.adds) {
-          this.chooseOrLetGo(drag.key);
-        } else {
+        // Added or taken out as it was pressed; otherwise chosen alone.
+        if (!drag.adds) {
           this.choose([drag.key]);
         }
       }
@@ -12684,6 +12705,27 @@ export class AppView {
     const events = takeWithoutTheKeys(stored.events, sketch.chosen);
     if (events !== null) {
       this.changeTheSketchShowing(events, [...sketch.before, stored]);
+    }
+  }
+
+  /**
+   * Takes out the note a double click is on, while a sketch is edited: one
+   * change, put back as one. Only that note goes; the others chosen stay so.
+   */
+  private deleteTheKeyDoubleClicked(event: MouseEvent): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const key = sketch?.editing === true ? this.theKeyUnder(event) : null;
+    if (sketch === undefined || stored === null || key === null) {
+      return;
+    }
+    const events = takeWithoutTheKeys(stored.events, [key]);
+    if (events !== null) {
+      this.changeTheSketchShowing(
+        events,
+        [...sketch.before, stored],
+        sketch.chosen.filter((each) => !sameKey(each, key)),
+      );
     }
   }
 

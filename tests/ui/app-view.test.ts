@@ -5039,6 +5039,120 @@ describe('AppView', () => {
       expect(heard()).toEqual([]);
     });
 
+    it('lights a note as it is pressed, sounds every note a press would move, and takes a note out by a double click', async () => {
+      const { view, sketches, instrument } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 60, 0.25],
+            [500, 62, 0.5],
+            [1_000, 64, 0.75],
+          ].flatMap(([atMs = 0, midi = 0, velocity = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity },
+            { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Three',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const press = (type: string, where: { clientX: number; clientY: number }, keys: PointerEventInit = {}): void => {
+        element('roll-body').dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId: 71, pointerType: 'mouse', button: 0, ...where, ...keys }),
+        );
+      };
+      const chosen = (): number[] =>
+        (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+      const sounding = (): (number | undefined)[][] => instrument.played.map((note) => [note.midi, note.velocity]);
+      const silenced = (): number[] => instrument.stopped.map((note) => note.midi);
+      const fresh = (): void => {
+        instrument.played.length = 0;
+        instrument.stopped.length = 0;
+      };
+
+      // Pressed, a note is chosen alone at once, lit while it is held.
+      press('pointerdown', at(100, 60));
+      expect(chosen()).toEqual([0]);
+      press('pointerup', at(100, 60));
+      expect(chosen()).toEqual([0]);
+      // With Shift, added as it is pressed, and not taken out again on letting go.
+      press('pointerdown', at(600, 62), { shiftKey: true });
+      expect(chosen()).toEqual([0, 500]);
+      press('pointerup', at(600, 62), { shiftKey: true });
+      expect(chosen()).toEqual([0, 500]);
+
+      // Pressed among others chosen, they all stay chosen, and all sound.
+      fresh();
+      press('pointerdown', at(100, 60));
+      expect(chosen()).toEqual([0, 500]);
+      expect(sounding()).toEqual([
+        [60, 0.25],
+        [62, 0.5],
+      ]);
+      // Dragged a row up, all fall silent and sound a semitone higher.
+      press('pointermove', { clientX: at(100, 60).clientX, clientY: at(100, 61).clientY });
+      expect(silenced()).toEqual([60, 62]);
+      expect(sounding().slice(2)).toEqual([
+        [61, 0.25],
+        [63, 0.5],
+      ]);
+      // Taken away, every one is silent and nothing moved.
+      press('pointercancel', { clientX: at(100, 60).clientX, clientY: at(100, 61).clientY });
+      expect(silenced()).toEqual([60, 62, 61, 63]);
+      // Let go of without moving, the one pressed is chosen alone.
+      press('pointerdown', at(100, 60));
+      press('pointerup', at(100, 60));
+      expect(chosen()).toEqual([0]);
+
+      // A double click takes out the note it is on, and only that one.
+      press('pointerdown', at(600, 62), { shiftKey: true });
+      press('pointerup', at(600, 62), { shiftKey: true });
+      element('roll-body').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, ...at(1_100, 64) }));
+      expect(sketches.find(sketch.id)?.noteCount).toBe(2);
+      expect(chosen()).toEqual([0, 500]);
+      // Put back as one change.
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(sketches.find(sketch.id)?.noteCount).toBe(3);
+      // Taken out of the choice as it is pressed with Shift, a note dragged is moved alone.
+      press('pointerdown', at(100, 60));
+      press('pointerup', at(100, 60));
+      press('pointerdown', at(600, 62), { shiftKey: true });
+      press('pointerup', at(600, 62), { shiftKey: true });
+      expect(chosen()).toEqual([0, 500]);
+      press('pointerdown', at(600, 62), { shiftKey: true });
+      expect(chosen()).toEqual([0]);
+      press('pointermove', { clientX: at(1_100, 62).clientX, clientY: at(600, 62).clientY }, { shiftKey: true });
+      press('pointerup', { clientX: at(1_100, 62).clientX, clientY: at(600, 62).clientY }, { shiftKey: true });
+      expect(
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [[event.midi, event.atMs]] : [])),
+      ).toEqual([
+        [60, 0],
+        [62, 1_000],
+        [64, 1_000],
+      ]);
+      element<HTMLButtonElement>('roll-undo').click();
+      // On nothing, nothing; listening, nothing.
+      element('roll-body').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, ...at(2_500, 70) }));
+      expect(sketches.find(sketch.id)?.noteCount).toBe(3);
+      element<HTMLButtonElement>('roll-edit').click();
+      element('roll-body').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, ...at(1_100, 64) }));
+      expect(sketches.find(sketch.id)?.noteCount).toBe(3);
+    });
+
     it('shows a sketch in a metre the list does not offer as it is', async () => {
       const { view, sketches } = createRig();
       await view.initialize();
@@ -13669,12 +13783,13 @@ describe('AppView', () => {
       element<HTMLButtonElement>('roll-undo').click();
       expect(struck()).toEqual(now);
 
-      // Not chosen: taken hold of as it is pressed, and moved alone in the
-      // same gesture - exactly, the grid being off.
+      // Not chosen: taken hold of and chosen alone as it is pressed, so it is
+      // lit while held, and moved alone in the same gesture - exactly, the
+      // grid being off.
       tap(onNote(750, 62));
       const third = onNote(1_200, 64);
       point('pointerdown', third);
-      expect(chosen()).toEqual([[62, 750]]);
+      expect(chosen()).toEqual([[64, 1_200]]);
       point('pointermove', { x: third.x + 0.7 * 0.6 * zoom, y: third.y - 13 });
       point('pointerup', { x: third.x + 0.7 * 0.6 * zoom, y: third.y - 13 });
       expect(struck()).toEqual([...now.slice(0, 2), [65, (now[2]?.[1] ?? 0) + 420]]);

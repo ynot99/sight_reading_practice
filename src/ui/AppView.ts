@@ -138,7 +138,7 @@ import type { StoredScoreSummary } from '../application/ports/IScoreStore.js';
 import { replayFits } from '../application/runReplay.js';
 import type { NoteCounts } from '../domain/scoring/PerformanceReport.js';
 import type { ClosingCue, DrawnPassage, PassageEnd, ScorePageState } from '../application/ports/IScoreRenderer.js';
-import { barLines, barNumberOf, measureCount, pedalHeldUntil, spanMs, type Exercise } from '../domain/model/Exercise.js';
+import { barLines, barNumberOf, measureCount, pedalHeldUntil, type Exercise } from '../domain/model/Exercise.js';
 import type { ImportWarning } from '../domain/notation/MusicXmlParser.js';
 import { theHitErrors } from '../domain/scoring/theHitErrors.js';
 import { theProfile } from '../domain/scoring/theProfile.js';
@@ -214,7 +214,6 @@ import {
   type RollScene,
   scrollAfterZoom,
   shareOfTheRun,
-  theSquaresOfTheBar,
   zoomAfterWheel,
   LEAST_ROW,
   LEAST_ZOOM,
@@ -1754,8 +1753,6 @@ export class AppView {
   private rollInks: RollInks | null = null;
   /** What that map last drew, so a scroll that changes nothing on it redraws nothing. */
   private pitchMarksDrawn = '';
-  /** What the squares over the drawing last said, for the same reason: see `countTheBarOut`. */
-  private barSquaresDrawn = '';
   /** Clicks of the run already handed to the metronome by this playback. */
   private rollClicksSent = 0;
   /**
@@ -2134,8 +2131,6 @@ export class AppView {
     rollTitle: HTMLElement;
     rollBox: HTMLElement;
     rollRename: HTMLInputElement;
-    rollBeats: HTMLElement;
-    rollBeatsShown: HTMLInputElement;
     rollMap: HTMLElement;
     rollMapWindow: HTMLElement;
     rollMapHead: HTMLElement;
@@ -2496,8 +2491,6 @@ export class AppView {
       rollTitle: requireElement(doc, 'roll-title'),
       rollBox: requireElement(doc, 'roll-box'),
       rollRename: requireElement(doc, 'roll-rename'),
-      rollBeats: requireElement(doc, 'roll-beats'),
-      rollBeatsShown: requireElement(doc, 'roll-beats-shown'),
       rollMap: requireElement(doc, 'roll-map'),
       rollMapWindow: requireElement(doc, 'roll-map-window'),
       rollMapHead: requireElement(doc, 'roll-map-head'),
@@ -8653,9 +8646,6 @@ export class AppView {
       }
       this.showTheRowsWhereTheyWerePointedAt(event);
     });
-    this.listen(this.el.rollBeatsShown, 'change', () => {
-      this.countTheBarOut();
-    });
     this.listen(this.el.rollScrollPlayback, 'change', () => {
       this.runtime.controller.updateSettings({
         rollScrollPlayback: this.el.rollScrollPlayback.checked,
@@ -11023,76 +11013,6 @@ export class AppView {
     this.showTheView();
     this.sayWhatWouldBePractised();
     this.sayWhatThePictureIsOf();
-  }
-
-  /**
-   * Counts the bar out in written time, over the drawing.
-   *
-   * A row of squares saying where a metronome would have got to by now, drawn
-   * over a picture of where the reader actually got to - so the gap between the
-   * two is visible without anybody measuring anything. Red once written time
-   * has left the bar behind: a click over is a whole click late.
-   */
-  private countTheBarOut(): void {
-    const roll = this.theRoll();
-    const clickMs = this.theWrittenClickMs();
-    const bar =
-      roll === null || !this.el.rollBeatsShown.checked
-        ? null
-        : theSquaresOfTheBar(roll, this.headIsAtMs(), clickMs, this.theClicksInABar());
-    this.el.rollBeats.hidden = bar === null;
-    if (bar === null) {
-      return;
-    }
-    // Only when they say something new, which is once a click. Built again
-    // on every frame of a playback, they made the page lay itself out again
-    // every time - the drawing and every note in it included, which at five
-    // thousand notes was most of a quarter of a second a frame.
-    const said = `${String(bar.of)}:${String(bar.filled)}:${String(bar.overflowed)}`;
-    if (said === this.barSquaresDrawn) {
-      return;
-    }
-    this.barSquaresDrawn = said;
-    this.el.rollBeats.classList.toggle('roll-beats--over', bar.overflowed);
-    this.el.rollBeats.replaceChildren(
-      ...Array.from({ length: bar.of }, (_unused, at) => {
-        const square = this.doc.createElement('span');
-        square.className = at < bar.filled ? 'roll-beats__on' : 'roll-beats__off';
-        return square;
-      }),
-    );
-  }
-
-  /**
-   * How long one click of the grid lasts as the piece is written.
-   *
-   * The one thing the roll cannot say: it remembers when things happened, not
-   * how fast they were meant to. Taken from the exercise at the tempo the
-   * reader chose, which is the speed they were reading at.
-   */
-  private theClicksInABar(): number {
-    const exercise = this.runtime.controller.currentTimeline?.exercise ?? null;
-    const metre = exercise === null ? undefined : barLines(exercise)[0]?.timeSignature;
-    if (metre === undefined) {
-      return 0;
-    }
-    const parts = Math.max(1, Math.round(this.theRollsGrid().parts));
-    return Math.max(1, Math.round(metre.ticksPerMeasure / (metre.ticksPerPulse / parts)));
-  }
-
-  private theWrittenClickMs(): number {
-    const timeline = this.runtime.controller.currentTimeline;
-    const exercise = timeline?.exercise ?? null;
-    if (exercise === null) {
-      return 0;
-    }
-    const bars = barLines(exercise);
-    const first = bars[0]?.timeSignature;
-    if (first === undefined) {
-      return 0;
-    }
-    const parts = Math.max(1, Math.round(this.theRollsGrid().parts));
-    return spanMs(exercise, 0, Math.round(first.ticksPerPulse / parts));
   }
 
   /**
@@ -13580,8 +13500,7 @@ export class AppView {
   private describeTheRoll(): void {
     const player = this.runtime.takePlayer;
     const sounding = player.playing === RUN_ROLL_ID;
-    // Only when it turns over, for the reason the squares are: see
-    // `countTheBarOut`. The same icon set again is a new drawing to the page.
+    // Only when it turns over: the same icon set again is a new drawing to the page.
     const icon = sounding ? PAUSE_ICON : PLAY_ICON;
     if (this.el.rollPlayIcon.getAttribute('d') !== icon) {
       this.el.rollPlayIcon.setAttribute('d', icon);
@@ -13612,7 +13531,6 @@ export class AppView {
     heads.mark.style.setProperty('--roll-at', at);
     heads.place.style.setProperty('--roll-at', (this.rollPlacedAtMs / 1000).toFixed(3));
     this.sayWhereTheHeadIs();
-    this.countTheBarOut();
     if (!sounding) {
       return;
     }

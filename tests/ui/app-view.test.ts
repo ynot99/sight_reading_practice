@@ -48,6 +48,7 @@ import {
   beatsWorthMarking,
   rollBeganAtMs,
   rollEndedAtMs,
+  theKeysOfTheTake,
   theMusicsBeats,
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
@@ -6009,6 +6010,82 @@ describe('AppView', () => {
         [64, 1_000, 1_200],
       ]);
       expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
+    });
+
+    it('cuts a note in two with Alt and a click, on the nearest line of the grid, or exactly with Shift', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff', atMs: 1_000, midi: 60 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Cut',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - 60 + 0.5) * 13 - scrolledDown,
+      });
+      const notes = (): number[][] =>
+        theKeysOfTheTake(sketches.find(sketch.id)?.events ?? []).map((key) => [key.downAtMs, key.upAtMs ?? -1]);
+      const chosen = (): number[] =>
+        (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+      const altClick = (ms: number, init: PointerEventInit = {}): void => {
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, altKey: true, ...at(ms), ...init });
+      };
+
+      // On the beat nearest, both parts chosen, and the marker left where it was.
+      const head = headAt(element('roll-body'));
+      altClick(620);
+      expect(notes()).toEqual([
+        [0, 500],
+        [500, 1_000],
+      ]);
+      expect(chosen()).toEqual([0, 500]);
+      expect(headAt(element('roll-body'))).toBe(head);
+      // One change, put back as one.
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(notes()).toEqual([[0, 1_000]]);
+
+      // Exactly where it is clicked with Shift, or with the grid let go of.
+      altClick(620, { shiftKey: true });
+      expect(notes()).toEqual([
+        [0, 620],
+        [620, 1_000],
+      ]);
+      element<HTMLButtonElement>('roll-undo').click();
+      element<HTMLInputElement>('roll-snap').click();
+      altClick(380);
+      expect(notes()).toEqual([
+        [0, 380],
+        [380, 1_000],
+      ]);
+      element<HTMLButtonElement>('roll-undo').click();
+      // Never a part too short to hear, and never a drag or a choice instead.
+      altClick(10);
+      altClick(990);
+      expect([notes(), chosen()]).toEqual([[[0, 1_000]], []]);
+      // Without Alt a press is a press.
+      clock.advance(1_000);
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(620) });
+      expect([notes(), chosen()]).toEqual([[[0, 1_000]], [0]]);
+      // A finger has no Alt to hold: its press is a press.
+      altClick(620, { pointerType: 'touch' });
+      expect(notes()).toEqual([[0, 1_000]]);
     });
 
     it('copies across nothing a key still down at the end follows on from', async () => {

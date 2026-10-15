@@ -170,6 +170,7 @@ import {
   takeWithoutTheKeys,
   takeWithTheKeysChanged,
   takeWithTheKeysCopied,
+  takeWithTheKeyCut,
   theKeysOfTheTake,
   theKeysOnTheGrid,
   type KeyChange,
@@ -8860,7 +8861,11 @@ export class AppView {
       if (event.pointerType === 'mouse' && event.button === 2) {
         return;
       }
-      if (!middle && this.rollFingers.size === 0 && (this.takeHoldOfAKey(event) || this.beginABox(event))) {
+      if (
+        !middle &&
+        this.rollFingers.size === 0 &&
+        (this.cutTheKeyUnder(event) || this.takeHoldOfAKey(event) || this.beginABox(event))
+      ) {
         return;
       }
       if (middle) {
@@ -12594,6 +12599,43 @@ export class AppView {
     const atMs = timeFromTap(point.clientX - box.left + this.rollScroller.x, Number(this.el.rollZoom.value));
     const row = rowFromTap(point.clientY - box.top + this.rollScroller.y, this.rollLook.rowPx);
     return atMs === null || row === null ? null : { atMs, row };
+  }
+
+  /**
+   * Cuts the key of a sketch being edited in two where the mouse or a pen goes
+   * down on it with Alt held: on the nearest line of the grid where the marker
+   * is put on one, and exactly there with Shift or with the grid let go of -
+   * never leaving a part shorter than a note can be heard as. Both parts are
+   * chosen, one change put back as one. Says whether the press was taken.
+   */
+  private cutTheKeyUnder(event: PointerEvent): boolean {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    if (showing === null || sketch?.editing !== true || !event.altKey || event.pointerType === 'touch' || event.button !== 0) {
+      return false;
+    }
+    const key = this.theKeyUnder(event);
+    const at = this.thePointOnTheDrawing(event);
+    const stored = this.runtime.sketches.find(sketch.id);
+    if (key === null || at === null || stored === null) {
+      return false;
+    }
+    const origin = rollBeganAtMs(showing.roll);
+    const snapped = this.el.rollSnap.checked && !event.shiftKey ? theBeatNearest(showing.roll, at.atMs, this.theRollsGrid()) : at.atMs;
+    const atMs = Math.round(snapped + origin);
+    const endMs = key.upAtMs ?? rollEndedAtMs(showing.roll);
+    // Taken either way: an Alt-press on a note is a cut, never a drag.
+    if (atMs - key.downAtMs < SHORTEST_NOTE_MS || endMs - atMs < SHORTEST_NOTE_MS) {
+      return true;
+    }
+    const events = takeWithTheKeyCut(stored.events, key, atMs);
+    if (events !== null) {
+      this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], [
+        { midi: key.midi, downAtMs: key.downAtMs },
+        { midi: key.midi, downAtMs: atMs },
+      ]);
+    }
+    return true;
   }
 
   /**

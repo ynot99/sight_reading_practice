@@ -1193,6 +1193,27 @@ export function takeWithTheKeysCopied(
 }
 
 /**
+ * A take's events with a key cut in two at a moment inside it: the first part
+ * let go of there, and the second struck there, as loud and in the same hand,
+ * held to where the key was held - or `null` where the key is not there or
+ * the moment is not inside it.
+ */
+export function takeWithTheKeyCut(
+  events: readonly MidiFileEvent[],
+  named: KeyNamed,
+  atMs: number,
+): readonly MidiFileEvent[] | null {
+  const [key] = theKeysNamed(events, [named]) ?? [];
+  const struck = key === undefined ? undefined : events[key.on];
+  if (key === undefined || struck?.kind !== 'noteOn' || atMs <= key.downAtMs || atMs >= (key.upAtMs ?? Number.POSITIVE_INFINITY)) {
+    return null;
+  }
+  // At one moment a release is written before a press, so the release pairs
+  // with the first part and the original release is left to the second.
+  return inTheOrderPlayed([...events, { kind: 'noteOff', atMs, midi: key.midi }, { ...struck, atMs }]);
+}
+
+/**
  * Where the named keys go put on the grid: each begun on the line nearest
  * where it begins, and held as long as it was. One already on a line is left
  * out, and so is one that would begin on or sound over another of its pitch.

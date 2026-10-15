@@ -26,6 +26,7 @@ import {
   takeWithoutTheKeys,
   takeWithTheKeysChanged,
   takeWithTheKeysCopied,
+  takeWithTheKeyCut,
   theKeysOnTheGrid,
   takeWithAKeyAdded,
   theKeysOfTheTake,
@@ -1418,6 +1419,34 @@ describe('changing a recording', () => {
     const sharp = MIDI.E4 + 2;
     expect(takeWithTheKeysCopied(events, [e], 0, 2)?.filter((event) => event.kind !== 'sustain' && event.midi === sharp)).toEqual([on(500, sharp)]);
     expect(takeWithTheKeysCopied(events, [c, { midi: MIDI.C4, downAtMs: 1 }], 1_000, 0)).toBeNull();
+  });
+
+  it('cuts a key in two at a moment inside it, the second part as loud and in the same hand', () => {
+    const handed = { ...on(0, MIDI.C4), velocity: 0.25, hand: 'left' as const };
+    const events = [handed, off(1_000, MIDI.C4), on(200, MIDI.E4)];
+    const c = { midi: MIDI.C4, downAtMs: 0 };
+
+    const cut = takeWithTheKeyCut(inTheOrderPlayed(events), c, 400) ?? [];
+    expect(cut).toEqual([handed, on(200, MIDI.E4), off(400, MIDI.C4), { ...handed, atMs: 400 }, off(1_000, MIDI.C4)]);
+    // Read back, two keys where there was one, each ending where it should.
+    expect(theKeysOfTheTake(cut).filter((key) => key.midi === MIDI.C4).map((key) => [key.downAtMs, key.upAtMs])).toEqual([
+      [0, 400],
+      [400, 1_000],
+    ]);
+    // One still down at the end, cut, leaves its second part down.
+    expect(
+      theKeysOfTheTake(takeWithTheKeyCut(inTheOrderPlayed(events), { midi: MIDI.E4, downAtMs: 200 }, 900) ?? [])
+        .filter((key) => key.midi === MIDI.E4)
+        .map((key) => [key.downAtMs, key.upAtMs]),
+    ).toEqual([
+      [200, 900],
+      [900, null],
+    ]);
+    // Not at either end, nor outside, nor of a key not there.
+    for (const at of [0, 1_000, 1_200, -5]) {
+      expect(takeWithTheKeyCut(inTheOrderPlayed(events), c, at), String(at)).toBeNull();
+    }
+    expect(takeWithTheKeyCut(inTheOrderPlayed(events), { midi: MIDI.C4, downAtMs: 1 }, 400)).toBeNull();
   });
 
   it('puts keys on the nearest line of the grid, as long as they were, never on or over another of their pitch', () => {

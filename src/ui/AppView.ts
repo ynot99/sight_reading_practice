@@ -526,6 +526,22 @@ function addsToTheChoice(event: PointerEvent): boolean {
 const HEARD_ON_A_STEP_MS = 300;
 
 /**
+ * The keys to strike for notes heard together: one for each pitch among them,
+ * as hard as the hardest of that pitch. The instrument has one voice for a
+ * pitch, so a second strike of it at once only cuts the first off and starts
+ * it again.
+ */
+function oneKeyForEachPitch(
+  keys: readonly { readonly midi: number; readonly velocity: number }[],
+): readonly { readonly midi: number; readonly velocity: number }[] {
+  const hardest = new Map<number, number>();
+  for (const { midi, velocity } of keys) {
+    hardest.set(midi, Math.max(velocity, hardest.get(midi) ?? velocity));
+  }
+  return [...hardest].map(([midi, velocity]) => ({ midi, velocity }));
+}
+
+/**
  * How close two taps must come to be one double tap: as quick as the
  * double click a desktop counts, and as near as a finger lands twice.
  */
@@ -12906,7 +12922,7 @@ export class AppView {
       upAtMs: key.upAtMs ?? rollEndedAtMs(showing.roll),
     };
     this.soundTheHeldKeys(
-      this.theKeysDragged(this.rollDrag, stored.events).map((each) => ({ midi: each.midi, velocity: each.velocity })),
+      oneKeyForEachPitch(this.theKeysDragged(this.rollDrag, stored.events)),
       0,
     );
     return true;
@@ -13402,9 +13418,9 @@ export class AppView {
     if (bySemitones !== 0) {
       // Heard where they went, a moment each, both ends handed over at once.
       const now = this.runtime.clock.now();
-      for (const change of changes) {
-        this.runtime.pitchPlayer.play(change.midi, change.key.velocity, now);
-        this.runtime.pitchPlayer.stop(change.midi, now + HEARD_ON_A_STEP_MS);
+      for (const { midi, velocity } of oneKeyForEachPitch(changes.map(({ midi, key }) => ({ midi, velocity: key.velocity })))) {
+        this.runtime.pitchPlayer.play(midi, velocity, now);
+        this.runtime.pitchPlayer.stop(midi, now + HEARD_ON_A_STEP_MS);
       }
     }
     this.changeTheSketchShowing(

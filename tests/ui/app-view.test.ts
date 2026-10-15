@@ -5240,6 +5240,76 @@ describe('AppView', () => {
       expect(heard()).toEqual([]);
     });
 
+    it('strikes each pitch once among the chosen notes heard together, as hard as the hardest of it', async () => {
+      const { view, sketches, instrument } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            [0, 60, 0.5],
+            [500, 64, 0.5],
+            [1_000, 60, 0.75],
+            [1_500, 60, 0.25],
+          ].flatMap(([atMs = 0, midi = 0, velocity = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity },
+            { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Twice',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const press = (type: string, where: { clientX: number; clientY: number }): void => {
+        element('roll-body').dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 62, pointerType: 'mouse', button: 0, ...where }));
+      };
+      const inOrder = ([one = 0]: (number | undefined)[], [other = 0]: (number | undefined)[]): number => one - other;
+      const heard = (): (number | undefined)[][] => instrument.played.map((note) => [note.midi, note.velocity]).sort(inOrder);
+      const ended = (): (number | undefined)[][] => instrument.stopped.map((note) => [note.midi]).sort(inOrder);
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'a', code: 'KeyA', ctrlKey: true }));
+      instrument.played.length = 0;
+
+      // Held, the three Cs are one C, as hard as the hardest - neither the first nor the last.
+      press('pointerdown', at(100, 60));
+      expect(heard()).toEqual([
+        [60, 0.75],
+        [64, 0.5],
+      ]);
+      // Taken up a row, each pitch let go of once and struck once higher.
+      press('pointermove', { clientX: at(100, 60).clientX, clientY: at(100, 61).clientY });
+      expect(heard()).toEqual([
+        [60, 0.75],
+        [61, 0.75],
+        [64, 0.5],
+        [65, 0.5],
+      ]);
+      expect(ended()).toEqual([[60], [64]]);
+      press('pointerup', { clientX: at(100, 60).clientX, clientY: at(100, 61).clientY });
+      expect(ended()).toEqual([[60], [61], [64], [65]]);
+
+      // Stepped up by an arrow, the same.
+      instrument.played.length = 0;
+      instrument.stopped.length = 0;
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowUp' }));
+      expect(heard()).toEqual([
+        [62, 0.75],
+        [66, 0.5],
+      ]);
+      expect(ended()).toEqual([[62], [66]]);
+    });
+
     it('lights a note as it is pressed, sounds every note a press would move, and takes a note out by two taps or the right button', async () => {
       const { view, sketches, instrument, clock } = createRig();
       await view.initialize();

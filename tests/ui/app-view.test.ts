@@ -12424,7 +12424,7 @@ describe('AppView', () => {
       }
     });
 
-    it('puts the slider away and back from under the pedal, and keeps it where the keys are put away', async () => {
+    it('puts the slider away and back from under the pedal, and away with the keys too', async () => {
       const rig = createRig();
       await rig.view.initialize();
       const toggle = element('replay-keys').querySelector<HTMLButtonElement>('.replay-keys__slider-toggle');
@@ -12448,24 +12448,40 @@ describe('AppView', () => {
       expect(toggle.getAttribute('aria-pressed')).toBe('false');
       expect(toggle.title).toBe('Show the slider under the keys');
 
-      // With the keys put away it is the only way through the take, so it stays.
+      // With the keys put away it stays away, and the score is all there is.
       const keys = element<HTMLButtonElement>('focus-keyboard');
       const shows = (): string => rig.runtime.controller.settings.keysShown;
       while (shows() !== 'none') {
         keys.click();
       }
       expect(element('replay-keys').hidden).toBe(true);
-      expect(document.body.dataset['slider']).toBe('shown');
+      expect(document.body.dataset['slider']).toBe('put-away');
+      // Shown, it is shown there as well.
+      rig.runtime.controller.updateSettings({ sliderShown: true });
+      keys.click();
+      keys.click();
+      keys.click();
+      expect([shows(), document.body.dataset['slider']]).toEqual(['none', 'shown']);
       while (shows() !== 'falling-notes') {
         keys.click();
       }
+      toggle.click();
       expect(document.body.dataset['slider']).toBe('put-away');
-
       toggle.click();
       expect(document.body.dataset['slider']).toBe('shown');
 
       element<HTMLButtonElement>('take-off-the-keys').click();
       expect(document.body.dataset['slider']).toBeUndefined();
+
+      // A playback of the score the same: put away, and then the keys, and
+      // nothing is left under the music.
+      await pressListen(rig.runtime.controller);
+      expect([element('listen-on-keys').hidden, document.body.dataset['slider']]).toEqual([false, 'shown']);
+      toggle.click();
+      while (shows() !== 'none') {
+        keys.click();
+      }
+      expect([element('replay-keys').hidden, document.body.dataset['slider']]).toEqual([true, 'put-away']);
     });
 
     it('takes the transport back to the list when the list is opened again, playing on', async () => {

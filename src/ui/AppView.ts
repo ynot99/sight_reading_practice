@@ -10600,8 +10600,9 @@ export class AppView {
       delete this.doc.body.dataset['slider'];
       return;
     }
-    const shown = settings.sliderShown || this.el.replayKeys.hidden;
-    this.doc.body.dataset['slider'] = shown ? 'shown' : 'put-away';
+    // Put away, it stays away with the keys put away too, so the score can
+    // be all there is; the keyboard brought back brings its switch.
+    this.doc.body.dataset['slider'] = settings.sliderShown ? 'shown' : 'put-away';
   }
 
   /**

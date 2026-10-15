@@ -38,39 +38,36 @@ describe('the audio clock against the page clock, for the playback timings', () 
   const device = (more: Record<string, unknown> = {}): BaseAudioContext =>
     ({ currentTime: 2, outputLatency: 0.04, baseLatency: 0.005, ...more }) as unknown as BaseAudioContext;
 
-  it('says how far the audio clock has moved since the reading, and how late a sound leaves by the device\'s account', () => {
+  it('says how far the audio clock has moved since the reading, and the latencies reported', () => {
     vi.spyOn(performance, 'now').mockReturnValue(10_000);
     const reading = new AudioClockReading();
     reading.hold(7_950);
-    // Heard up to 1.9 s of its clock at 9.93 s of the page's: its nought, as
-    // heard, at 8.03 s - 80 ms after the reading, 40 of them the latency taken off.
+    let asked = 0;
+    // Its nought at 8 s of the page's clock now: 50 ms after the reading. And
+    // what the device says it has played is never asked.
     const clocks = theAudioClocks(
-      device({ getOutputTimestamp: () => ({ contextTime: 1.9, performanceTime: 9_930 }) }),
+      device({
+        getOutputTimestamp: () => {
+          asked += 1;
+          return { contextTime: 1.9, performanceTime: 9_930 };
+        },
+      }),
       reading,
     );
 
     expect(clocks.driftMs).toBeCloseTo(50);
-    expect(clocks.heardOffMs).toBeCloseTo(40);
     expect(clocks.outputMs).toBeCloseTo(40);
     expect(clocks.baseMs).toBeCloseTo(5);
+    expect(asked).toBe(0);
   });
 
   it('says nothing it was not told, and no drift from a reading taken fresh', () => {
     vi.spyOn(performance, 'now').mockReturnValue(10_000);
-    const fresh = new AudioClockReading();
 
-    const bare = theAudioClocks(
-      { currentTime: 2 } as unknown as BaseAudioContext,
-      fresh,
-    );
-    expect(bare).toEqual({ driftMs: 0, heardOffMs: null, outputMs: null, baseMs: null });
-    // A device that has played nothing yet stamps nought, which says nothing;
-    // nor does one whose own clock it stamps as nought while the page's moves.
-    expect(
-      theAudioClocks(device({ getOutputTimestamp: () => ({ contextTime: 0, performanceTime: 0 }) }), fresh).heardOffMs,
-    ).toBeNull();
-    expect(
-      theAudioClocks(device({ getOutputTimestamp: () => ({ contextTime: 0, performanceTime: 9_930 }) }), fresh).heardOffMs,
-    ).toBeNull();
+    expect(theAudioClocks({ currentTime: 2 } as unknown as BaseAudioContext, new AudioClockReading())).toEqual({
+      driftMs: 0,
+      outputMs: null,
+      baseMs: null,
+    });
   });
 });

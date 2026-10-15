@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LoopedSilence } from '../../src/infrastructure/media/MediaSessionKeys.js';
+import { beginThePlaybackTimings, thePlaybackTimingsText } from '../../src/shared/playbackTimings.js';
 
 describe('the silence that makes the page a player', () => {
   afterEach(() => {
@@ -60,6 +61,46 @@ describe('the silence that makes the page a player', () => {
     silence.play();
     expect(browser.made).toEqual(['blob:silence-0', 'blob:silence-1']);
     expect(browser.played.at(-1)).not.toBe(element);
+  });
+
+  it('tells the playback timings when it is asked to play and when it begins', () => {
+    const browser = stubTheBrowser();
+    const silence = new LoopedSilence();
+    beginThePlaybackTimings();
+    const happened = (): string[] =>
+      thePlaybackTimingsText('')
+        .split('\n')
+        .filter((line) => line.includes('silence'))
+        .map((line) => line.trim().replace(/^\+?\d+ +/, ''));
+
+    silence.play();
+    silence.pause();
+    silence.play();
+    browser.played[0]?.dispatchEvent(new Event('playing'));
+
+    expect(happened()).toEqual([
+      "the media keys' silence asked to play",
+      "the media keys' silence asked to play",
+      "the media keys' silence began playing",
+    ]);
+  });
+
+  it('asks nothing of the browser while it is playing already', () => {
+    const browser = stubTheBrowser();
+    const silence = new LoopedSilence();
+    beginThePlaybackTimings();
+
+    silence.play();
+    const [element] = browser.played;
+    if (element === undefined) {
+      throw new Error('Nothing played.');
+    }
+    Object.defineProperty(element, 'paused', { configurable: true, value: false });
+    silence.play();
+    silence.play();
+
+    expect(browser.played).toEqual([element]);
+    expect(thePlaybackTimingsText('').split('\n').filter((line) => line.includes('asked to play'))).toHaveLength(1);
   });
 
   it('lets go of nothing it never made', () => {

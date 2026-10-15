@@ -36,14 +36,14 @@ describe('how a playback kept time', () => {
 
   it('says of each second how far ahead notes were handed, how late the beats were acted on, and the longest frame', () => {
     timings.beginThePlaybackTimings();
-    const clocks = { driftMs: 2, heardOffMs: null, outputMs: 40, baseMs: 5 };
+    const clocks = { driftMs: 2, outputMs: 40, baseMs: 5 };
     now = 1_100;
     // Handed 200 ms ahead; on its moment, which is not late; 50 ms late,
     // sounded; 300 ms late, dropped; and one with no moment.
     timings.noteANoteHanded(1_300, false, clocks);
     timings.noteANoteHanded(1_100, false, clocks);
     now = 1_150;
-    timings.noteANoteHanded(1_100, false, { ...clocks, driftMs: 3.4, heardOffMs: 12.6 });
+    timings.noteANoteHanded(1_100, false, { ...clocks, driftMs: 3.4 });
     now = 1_200;
     timings.noteANoteHanded(900, true, null);
     timings.noteANoteHanded(undefined, false, clocks);
@@ -63,7 +63,7 @@ describe('how a playback kept time', () => {
     now = 2_900;
     timings.noteAFrame();
 
-    expect(rows()).toEqual(['0 4 -300 1 1 +3 +13 40/ 5 2 70 3 84 - -', '1 0 - 0 0 - - -/ - 0 - 2 500 - -']);
+    expect(rows()).toEqual(['0 4 -300 1 1 +3 40/ 5 2 70 3 84 - -', '1 0 - 0 0 - -/ - 0 - 2 500 - -']);
     const text = timings.thePlaybackTimingsText('a tablet');
     expect(text.split('\n').slice(0, 2)).toEqual(['How the last playback kept time', 'a tablet']);
   });
@@ -80,7 +80,7 @@ describe('how a playback kept time', () => {
     now = 5_060;
     timings.noteAFrame();
 
-    expect(rows()).toEqual(['0 0 - 0 0 - - -/ - 0 - 2 10 - -']);
+    expect(rows()).toEqual(['0 0 - 0 0 - -/ - 0 - 2 10 - -']);
   });
 
   it('says where the audio clock stood against its first look, and where its reading was taken again', () => {
@@ -106,6 +106,36 @@ describe('how a playback kept time', () => {
       ['-2', '-'],
       ['+92', '+92'],
     ]);
+  });
+
+  it('lists what happened once under the seconds, from the pulse\'s start, and only since it', () => {
+    timings.noteAnEvent('before anything');
+    timings.beginThePlaybackTimings();
+    timings.noteAnEvent('from an earlier pulse');
+    now = 2_000;
+    timings.beginThePlaybackTimings();
+    now = 2_040;
+    timings.noteAnEvent('the clocks read');
+    now = 2_400;
+    timings.noteAnEvent('the audio clock had stood 134 ms');
+    const lines = timings.thePlaybackTimingsText('a tablet').split('\n');
+
+    expect(lines.slice(lines.indexOf('What happened, ms since the pulse started:'))).toEqual([
+      'What happened, ms since the pulse started:',
+      '    +40  the clocks read',
+      '   +400  the audio clock had stood 134 ms',
+    ]);
+  });
+
+  it('keeps no more than two hundred of them', () => {
+    timings.beginThePlaybackTimings();
+    for (let at = 0; at < 250; at += 1) {
+      timings.noteAnEvent(`event ${String(at)}`);
+    }
+    const lines = timings.thePlaybackTimingsText('').split('\n');
+
+    expect(lines.filter((line) => line.includes('event '))).toHaveLength(200);
+    expect(lines.at(-1)).toContain('event 199');
   });
 
   it('keeps the last quarter of an hour', () => {

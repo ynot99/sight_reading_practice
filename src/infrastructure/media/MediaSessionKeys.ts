@@ -1,3 +1,4 @@
+import { noteAnEvent } from '../../shared/playbackTimings.js';
 import type { IMediaKeys, WhatIsSounding } from '../../application/ports/IMediaKeys.js';
 
 /** The corner of `navigator.mediaSession` this needs, named so a test can stand in. */
@@ -232,7 +233,19 @@ export class LoopedSilence implements SilentPlayer {
       this.url = URL.createObjectURL(new Blob([silentWav(SILENCE_SECONDS)], { type: 'audio/wav' }));
       this.element = new Audio(this.url);
       this.element.loop = true;
+      // When it really begins, for the playback's timings: a tablet may
+      // stand its audio device a moment as a player starts.
+      this.element.addEventListener('playing', () => {
+        noteAnEvent('the media keys\' silence began playing');
+      });
     }
+    // Asked at every step of the music, and already playing at all but the
+    // first: asked again, a browser may go to its audio device again each
+    // time, for nothing.
+    if (!this.element.paused) {
+      return;
+    }
+    noteAnEvent('the media keys\' silence asked to play');
     // Refused where the browser wants a press first. The music itself was
     // started by one, so this is the rare case, and the keys are then only
     // not handed over - nothing else depends on it.

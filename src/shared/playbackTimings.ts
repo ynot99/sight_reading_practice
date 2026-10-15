@@ -20,7 +20,6 @@ interface Second {
   late: number;
   dropped: number;
   driftMs: number | null;
-  heardOffMs: number | null;
   outputMs: number | null;
   baseMs: number | null;
   ticks: number;
@@ -36,6 +35,10 @@ const SECONDS_KEPT = 900;
 
 let began: number | null = null;
 let lastFrameAt: number | null = null;
+/** What happened once, and when: see `noteAnEvent`. */
+const events: { readonly atMs: number; readonly what: string }[] = [];
+/** How many events are kept: enough for a start, never a growing list. */
+const EVENTS_KEPT = 200;
 /** Where the pulse first saw the audio clock's nought on the page's clock, since it started. */
 let firstNought: number | null = null;
 const seconds = new Map<number, Second>();
@@ -54,7 +57,6 @@ function theSecondOf(now: number): Second | null {
       late: 0,
       dropped: 0,
       driftMs: null,
-      heardOffMs: null,
       outputMs: null,
       baseMs: null,
       ticks: 0,
@@ -89,6 +91,19 @@ export function beginThePlaybackTimings(): void {
   lastFrameAt = null;
   firstNought = null;
   seconds.clear();
+  events.length = 0;
+}
+
+/**
+ * Something that happened once, at a moment worth setting beside the
+ * seconds: the clocks read, the audio clock standing, the media keys'
+ * silence beginning to play.
+ */
+export function noteAnEvent(what: string): void {
+  if (began === null || events.length >= EVENTS_KEPT) {
+    return;
+  }
+  events.push({ atMs: performance.now() - began, what });
 }
 
 /**
@@ -117,8 +132,6 @@ export function noteTheClocksReadAgain(movedMs: number): void {
 export interface TheAudioClocks {
   /** How far the audio clock's nought now stands from where the pulse read it, in ms of the page's clock. */
   readonly driftMs: number;
-  /** How much later than placed a sound is heard, by the device's own account of what it has played; `null` where it gives none. */
-  readonly heardOffMs: number | null;
   readonly outputMs: number | null;
   readonly baseMs: number | null;
 }
@@ -143,7 +156,6 @@ export function noteANoteHanded(atMs: number | undefined, dropped: boolean, cloc
   }
   if (clocks !== null) {
     second.driftMs = clocks.driftMs;
-    second.heardOffMs = clocks.heardOffMs;
     second.outputMs = clocks.outputMs;
     second.baseMs = clocks.baseMs;
   }
@@ -199,7 +211,6 @@ export function thePlaybackTimingsText(device: string): string {
     'late   - notes handed after their moment, sounded late',
     'drop   - notes handed too late to be sounded at all',
     'drift  - how far the audio clock has moved from the page clock since the pulse started (ms; above 0, sounds later than placed)',
-    'heard  - how much later than placed a sound leaves the speaker, by the device\'s own account (ms)',
     'out    - output latency the browser reports (ms), base latency after the slash',
     'beats  - beats the page acted on (marker, keys)',
     'b.late - the latest a beat was acted on after it was heard (ms)',
@@ -207,7 +218,7 @@ export function thePlaybackTimingsText(device: string): string {
     'clock  - the earliest the audio clock\'s nought stood in the second, against the first look (ms; it rises while the audio clock stands)',
     'again  - how far the clocks\' reading was taken again in the second (ms)',
     '',
-    '  sec notes ahead late drop drift heard   out/base beats b.late frames   gap clock again',
+    '  sec notes ahead late drop drift   out/base beats b.late frames   gap clock again',
   ];
   for (const [at, second] of [...seconds].sort(([one], [other]) => one - other)) {
     lines.push(
@@ -218,7 +229,6 @@ export function thePlaybackTimingsText(device: string): string {
         said(second.late, 4),
         said(second.dropped, 4),
         said(second.driftMs, 5, true),
-        said(second.heardOffMs, 5, true),
         `${said(second.outputMs, 6)}/${said(second.baseMs, 3)}`,
         said(second.ticks, 5),
         said(second.latestTickMs, 6),
@@ -231,6 +241,12 @@ export function thePlaybackTimingsText(device: string): string {
   }
   if (seconds.size === 0) {
     lines.push('Nothing yet: start a playback, and copy this after it.');
+  }
+  if (events.length > 0) {
+    lines.push('', 'What happened, ms since the pulse started:');
+    for (const { atMs, what } of events) {
+      lines.push(`${said(atMs, 7, true)}  ${what}`);
+    }
   }
   return lines.join('\n');
 }

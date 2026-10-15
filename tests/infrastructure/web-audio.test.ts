@@ -194,7 +194,8 @@ describe('WebAudioMetronome', () => {
     metronome.start();
 
     // The frame before it gone; only the pulse's own first look at the clocks.
-    expect(seconds().map((row) => row.trim().split(/ +/)[11])).toEqual(['0']);
+    const table = seconds();
+    expect(table.slice(0, table.indexOf('')).map((row) => row.trim().split(/ +/)[10])).toEqual(['0']);
   });
 
   it('unplugs each click once it has sounded', () => {
@@ -236,10 +237,18 @@ describe('WebAudioMetronome', () => {
     expect(stamped.at(-1)).toBeLessThanOrEqual(92);
     // And the timings say where it was taken again.
     const lines = thePlaybackTimingsText('').split('\n');
-    const again = lines
-      .slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1)
-      .map((line) => line.trim().split(/ +/).at(-1));
+    const table = lines.slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1);
+    const again = table.slice(0, table.indexOf('')).map((line) => line.trim().split(/ +/).at(-1));
     expect(again.filter((said) => said !== '-').map(Number)).toEqual([stamped.at(-1)]);
+    // And what happened, in order: the clocks read, the audio clock standing
+    // as long as it stood, and the clocks read again by as much.
+    const happened = table.slice(table.indexOf('') + 2).map((line) => line.trim().replace(/^\+?\d+ +/, ''));
+    expect(happened).toEqual([
+      'the clocks read',
+      // As far as the pulse's looks saw it, every 20 ms.
+      `the audio clock had stood ${String(stamped.at(-1))} ms`,
+      `the clocks read again, ${String(stamped.at(-1))} ms apart`,
+    ]);
   });
 
   it('places the instruments\' sounds by the reading taken again', () => {
@@ -298,6 +307,8 @@ describe('WebAudioMetronome', () => {
     }
     const first = ticks[0]?.scheduledTimeMs ?? 0;
     expect(ticks.map((tick) => Math.abs(Math.round(tick.scheduledTimeMs - first - tick.index * 1_000)))).toEqual(ticks.map(() => 0));
+    // Nor is wandering inside its buffers, nor 5 ms, told as the clock standing.
+    expect(thePlaybackTimingsText('')).not.toContain('had stood');
   });
 
   it('takes the clocks apart again when the device wakes', () => {

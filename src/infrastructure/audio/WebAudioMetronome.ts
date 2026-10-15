@@ -16,7 +16,12 @@ import {
   unplug,
 } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
-import { beginThePlaybackTimings, noteTheAudioNought, noteTheClocksReadAgain } from '../../shared/playbackTimings.js';
+import {
+  beginThePlaybackTimings,
+  noteAnEvent,
+  noteTheAudioNought,
+  noteTheClocksReadAgain,
+} from '../../shared/playbackTimings.js';
 import {
   buildMetronomeTick,
   isAccented,
@@ -96,6 +101,12 @@ const CLOCKS_WATCHED_MS = 500;
  */
 const CLOCKS_APART_MS = 15;
 
+/** How far past where it settled the audio clock's nought may rise before the timings say it stood. */
+const CLOCK_STOOD_MS = 30;
+
+/** How little a standing clock's nought may rise between two looks and still be counted as having moved on. */
+const CLOCK_WANDERS_MS = 5;
+
 export class WebAudioMetronome implements IMetronome, IVolumeControl {
   private readonly emitter = new TypedEventEmitter<{ tick: MetronomeTick; placed: MetronomeTick }>();
   private readonly contextFactory: () => AudioContext;
@@ -135,6 +146,14 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
    */
   private watchedSince: number | null = null;
   private earliestNought: number | null = null;
+  /**
+   * For the timings to see the audio clock stand: the earliest its nought
+   * has been seen, and - while it is rising past that by more than a buffer -
+   * where it had got to at the last look. Kept across readings of the
+   * clocks: a device that slept between two has stood, and is told so.
+   */
+  private settledNought: number | null = null;
+  private standingTo: number | null = null;
   /** Where the audio clock stood when it was last asked to run: moved past, it is running. */
   private clockStoodAt = 0;
   private currentVolume = 1;
@@ -276,6 +295,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     this.clocksRead = true;
     this.watchedSince = null;
     this.earliestNought = null;
+    noteAnEvent('the clocks read');
     if (this.nextTickIndex === 0) {
       this.nextTickAudioTime = Math.max(
         this.nextTickAudioTime,
@@ -338,6 +358,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     const now = performance.now();
     const nought = now - context.currentTime * 1000;
     noteTheAudioNought(nought);
+    this.watchTheClockStand(nought);
     this.earliestNought = Math.min(this.earliestNought ?? nought, nought);
     this.watchedSince ??= now;
     if (now - this.watchedSince < CLOCKS_WATCHED_MS) {
@@ -348,10 +369,40 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
       this.audioEpochMs = this.earliestNought;
       this.reading.hold(this.audioEpochMs);
       noteTheClocksReadAgain(apart);
+      noteAnEvent(`the clocks read again, ${String(Math.round(apart))} ms apart`);
       timeTheStart('metronome: the clocks read again', () => `${String(Math.round(apart))} ms apart`);
     }
     this.watchedSince = now;
     this.earliestNought = null;
+  }
+
+  /**
+   * Tells the timings where the audio clock stood and for how long. Looked at
+   * every few milliseconds, a stand shows as its nought rising a little at
+   * each look, so it is told once the rising stops: from where it had
+   * settled to where it got.
+   */
+  private watchTheClockStand(nought: number): void {
+    const settled = this.settledNought;
+    if (settled === null) {
+      this.settledNought = nought;
+      return;
+    }
+    if (this.standingTo !== null) {
+      if (nought > this.standingTo + CLOCK_WANDERS_MS) {
+        this.standingTo = nought;
+        return;
+      }
+      noteAnEvent(`the audio clock had stood ${String(Math.round(this.standingTo - settled))} ms`);
+      this.settledNought = this.standingTo;
+      this.standingTo = null;
+      return;
+    }
+    if (nought - settled > CLOCK_STOOD_MS) {
+      this.standingTo = nought;
+      return;
+    }
+    this.settledNought = Math.min(settled, nought);
   }
 
   /** Schedules everything due soon, then delivers everything already due. */

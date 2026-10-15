@@ -106,36 +106,18 @@ export function audioTimeFor(
 /**
  * How the audio clock stands against the page's as sounds are placed by a
  * reading, for the playback's timings: how far it has moved since the
- * reading, and - where the device says what it has played - how much later
- * than placed a sound is heard.
+ * reading, and the latencies the browser reports.
+ *
+ * Not what the device says it has played (`getOutputTimestamp`): on his
+ * iPad the engine stamps its own clock at one moment while the page's runs
+ * on, and asked at every note it is a call to the audio thread for nothing.
  */
 export function theAudioClocks(context: BaseAudioContext, reading: AudioClockReading): TheAudioClocks {
-  const held = reading.of(context);
-  const device = context as BaseAudioContext & {
-    outputLatency?: number;
-    baseLatency?: number;
-    getOutputTimestamp?: () => AudioTimestamp;
-  };
-  let heardOffMs: number | null = null;
-  const stamp = typeof device.getOutputTimestamp === 'function' ? device.getOutputTimestamp() : null;
-  // A device that has played nothing yet stamps noughts, and one engine
-  // stamps its own clock nought for ever while the page's runs on.
-  if (
-    stamp?.contextTime !== undefined &&
-    stamp.performanceTime !== undefined &&
-    stamp.performanceTime > 0 &&
-    stamp.contextTime > 0
-  ) {
-    // A sound placed at audio time T leaves the speaker at the page's
-    // stamp-nought + T, and was placed to be heard at held + T + the latency
-    // taken off it.
-    heardOffMs = stamp.performanceTime - stamp.contextTime * 1000 - held - outputLatencySeconds(context) * 1000;
-  }
+  const device = context as BaseAudioContext & { outputLatency?: number; baseLatency?: number };
   const ms = (seconds: number | undefined): number | null =>
     typeof seconds === 'number' && Number.isFinite(seconds) ? seconds * 1000 : null;
   return {
-    driftMs: pageMsAtAudioNought(context) - held,
-    heardOffMs,
+    driftMs: pageMsAtAudioNought(context) - reading.of(context),
     outputMs: ms(device.outputLatency),
     baseMs: ms(device.baseLatency),
   };

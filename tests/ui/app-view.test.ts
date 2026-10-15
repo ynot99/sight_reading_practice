@@ -5488,8 +5488,7 @@ describe('AppView', () => {
       expect(top()).toEqual([100, 1_000]);
       key({ key: 'ArrowUp' });
       expect(top()).toEqual([101, 1_000]);
-      // With Ctrl or Alt held, or a list holding the focus, an arrow is not the editor's.
-      expect(key({ key: 'ArrowUp', ctrlKey: true }).defaultPrevented).toBe(false);
+      // With Alt held, or a list holding the focus, an arrow is not the editor's.
       expect(key({ key: 'ArrowUp', altKey: true }).defaultPrevented).toBe(false);
       expect(key({ key: 'ArrowUp' }, element('roll-key')).defaultPrevented).toBe(false);
       expect(key({ key: 'ArrowUp' }, element('roll-velocity-level')).defaultPrevented).toBe(false);
@@ -5740,6 +5739,170 @@ describe('AppView', () => {
         [63, 1_000, 1_500],
         [64, 1_000, 1_500],
       ]);
+    });
+
+    it('copies the chosen notes by Ctrl and an arrow: straight after them or before, up or down, past others of their pitch', async () => {
+      const { view, sketches, instrument } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 400, 60],
+            [500, 1_000, 64],
+            // In the way of the second copy of the 60.
+            [2_000, 2_400, 60],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Copies',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const inOrder = ([one = 0, a = 0]: number[], [other = 0, b = 0]: number[]): number => one - other || a - b;
+      const notes = (): number[][] => {
+        const events = sketches.find(sketch.id)?.events ?? [];
+        return events
+          .flatMap((event, index) => {
+            if (event.kind !== 'noteOn') {
+              return [];
+            }
+            const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === event.midi);
+            return [[event.atMs, event.midi, off?.atMs ?? -1]];
+          })
+          .sort(inOrder);
+      };
+      const chosen = (): number[][] =>
+        (view.rollScene?.notes ?? [])
+          .filter((note) => note.chosen === true)
+          .map((note) => [note.fromMs, (view.rollScene?.highest ?? 0) - note.row])
+          .sort(inOrder);
+      const key = (init: KeyboardEventInit): KeyboardEvent => {
+        const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+        document.body.dispatchEvent(event);
+        return event;
+      };
+      const original = [
+        [0, 60, 400],
+        [500, 64, 1_000],
+        [2_000, 60, 2_400],
+      ];
+
+      // Nothing chosen, Ctrl+D is left to the browser.
+      expect(key({ key: 'd', code: 'KeyD', ctrlKey: true }).defaultPrevented).toBe(false);
+      // The first two chosen, Ctrl+D copies them straight after themselves,
+      // from the first one's start to the last one's end, and chooses the copies.
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(100, 60) });
+      tapTheDrawing({ pointerType: 'mouse', button: 0, shiftKey: true, ...at(600, 64) });
+      expect(key({ key: 'd', code: 'KeyD', ctrlKey: true }).defaultPrevented).toBe(true);
+      expect(notes()).toEqual([...original, [1_000, 60, 1_400], [1_500, 64, 2_000]].sort(inOrder));
+      expect(chosen()).toEqual([
+        [1_000, 60],
+        [1_500, 64],
+      ]);
+      // Again with Cmd and the right arrow: the 60 would go onto the other
+      // 60, so the copies go on by as much again.
+      key({ key: 'ArrowRight', metaKey: true });
+      expect(chosen()).toEqual([
+        [3_000, 60],
+        [3_500, 64],
+      ]);
+      expect(notes()).toHaveLength(7);
+      // Back before them every place is taken, and before the beginning there is none.
+      const before = notes();
+      expect(key({ key: 'ArrowLeft', ctrlKey: true }).defaultPrevented).toBe(true);
+      expect(notes()).toEqual(before);
+
+      // An octave up with Shift, heard there; a semitone down without.
+      instrument.played.length = 0;
+      key({ key: 'ArrowUp', ctrlKey: true, shiftKey: true });
+      expect(instrument.played.map((note) => note.midi)).toEqual([72, 76]);
+      expect(chosen()).toEqual([
+        [3_000, 72],
+        [3_500, 76],
+      ]);
+      key({ key: 'ArrowDown', ctrlKey: true });
+      expect(chosen()).toEqual([
+        [3_000, 71],
+        [3_500, 75],
+      ]);
+      expect(notes().filter(([down = 0]) => down >= 3_000)).toEqual([
+        [3_000, 60, 3_400],
+        [3_000, 71, 3_400],
+        [3_000, 72, 3_400],
+        [3_500, 64, 4_000],
+        [3_500, 75, 4_000],
+        [3_500, 76, 4_000],
+      ]);
+      // Each copy is one change, put back as one.
+      key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+      expect(notes()).toHaveLength(9);
+    });
+
+    it('copies across nothing a key still down at the end follows on from', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            { kind: 'noteOn', atMs: 0, midi: 64, velocity: 0.5 },
+            { kind: 'noteOff', atMs: 400, midi: 64 },
+            { kind: 'noteOn', atMs: 500, midi: 60, velocity: 0.5 },
+          ],
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Held',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const key = (init: KeyboardEventInit): void => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+      };
+      const across = (): void => {
+        key({ key: 'ArrowRight', ctrlKey: true });
+        key({ key: 'ArrowLeft', ctrlKey: true });
+      };
+
+      // With another, the one held is over its copy wherever that goes.
+      key({ key: 'a', code: 'KeyA', ctrlKey: true });
+      across();
+      expect(sketches.find(sketch.id)?.events).toHaveLength(3);
+      // Alone, it has no length to go on from.
+      clock.advance(1_000);
+      tapTheDrawing({
+        pointerType: 'mouse',
+        button: 0,
+        clientX: 0.6 * zoom,
+        clientY: (highest - 60 + 0.5) * 13 - scrolledDown,
+      });
+      expect(view.rollScene?.notes.filter((note) => note.chosen === true).map((note) => note.fromMs)).toEqual([500]);
+      across();
+      expect(sketches.find(sketch.id)?.events).toHaveLength(3);
+      // Up or down it is copied all the same.
+      key({ key: 'ArrowUp', ctrlKey: true });
+      expect(sketches.find(sketch.id)?.events).toHaveLength(4);
     });
 
     it('shows a sketch in a metre the list does not offer as it is', async () => {

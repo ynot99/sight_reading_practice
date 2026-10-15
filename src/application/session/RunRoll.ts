@@ -1166,6 +1166,33 @@ export function takeWithAKeyAdded(
 }
 
 /**
+ * A take's events with a copy of each named key added beside it, moved by as
+ * much in time and in pitch, as loud and in the same hand; or `null` where
+ * any is not there. The keys copied stay where they are.
+ */
+export function takeWithTheKeysCopied(
+  events: readonly MidiFileEvent[],
+  named: readonly KeyNamed[],
+  byMs: number,
+  bySemitones: number,
+): readonly MidiFileEvent[] | null {
+  const keys = theKeysNamed(events, named);
+  if (keys === null) {
+    return null;
+  }
+  const copies = keys.flatMap((key): MidiFileEvent[] => {
+    const struck = events[key.on];
+    if (struck?.kind !== 'noteOn') {
+      return [];
+    }
+    const midi = key.midi + bySemitones;
+    const copy: MidiFileEvent = { ...struck, atMs: key.downAtMs + byMs, midi };
+    return key.upAtMs === null ? [copy] : [copy, { kind: 'noteOff', atMs: key.upAtMs + byMs, midi }];
+  });
+  return inTheOrderPlayed([...events, ...copies]);
+}
+
+/**
  * The bars of a roll counted on its own downbeats, from one: for a drawing
  * that is of no score, whose bars have no other number.
  */

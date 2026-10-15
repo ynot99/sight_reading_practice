@@ -169,6 +169,7 @@ import {
   takeWithAKeyAdded,
   takeWithoutTheKeys,
   takeWithTheKeysChanged,
+  takeWithTheKeysCopied,
   theKeysOfTheTake,
   type KeyChange,
   type KeyNamed,
@@ -12726,7 +12727,8 @@ export class AppView {
    * The keys an editor answers to, while a sketch is being edited and nothing
    * is being typed: Delete or Backspace takes the chosen notes out, and Ctrl+Z
    * (Cmd+Z on a Mac) puts back the last change - the trash and the undo
-   * buttons, without leaving the keyboard.
+   * buttons, without leaving the keyboard. The arrows move the chosen notes,
+   * and with Ctrl (Cmd) copy them there instead.
    */
   private editByTheKeys(event: KeyboardEvent): void {
     if (this.el.sheetRoll.hidden || this.theOtherRollShowing?.sketch?.editing !== true) {
@@ -12762,8 +12764,11 @@ export class AppView {
     } else if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
       this.deleteTheChosenKeys();
+    } else if (command && event.code === 'KeyD' && chosen.length > 0) {
+      // The other name for a copy just after, rather than a bookmark.
+      event.preventDefault();
+      this.moveTheChosenKeys('ArrowRight', false, true);
     } else if (
-      !command &&
       !event.altKey &&
       ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) &&
       // A list or a slider with the focus has its own use for them.
@@ -12771,7 +12776,7 @@ export class AppView {
       chosen.length > 0
     ) {
       event.preventDefault();
-      this.moveTheChosenKeys(event.key, event.shiftKey);
+      this.moveTheChosenKeys(event.key, event.shiftKey, command);
     }
   }
 
@@ -12836,8 +12841,13 @@ export class AppView {
    * grid, the earliest of them onto it and the rest by as much; up or down a
    * semitone, or an octave with Shift - and not at all where one would leave
    * the keyboard. One change each, heard where it goes up or down.
+   *
+   * Copying, the chosen stay and copies of them go there and are chosen
+   * instead - across, not to the next line but straight after them, or
+   * before, from the first one's start to the last one's end: a figure
+   * written again, and again on the next press.
    */
-  private moveTheChosenKeys(arrow: string, octave: boolean): void {
+  private moveTheChosenKeys(arrow: string, octave: boolean, copying: boolean): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
@@ -12857,38 +12867,63 @@ export class AppView {
       }));
     // A step onto a place another of a pitch holds goes on past it, to the
     // next where every one fits - or nowhere, where none is left that way.
-    const fits = (changes: readonly KeyChange[]): readonly MidiFileEvent[] | null => {
-      const events = takeWithTheKeysChanged(stored.events, changes);
-      return events === null || aKeyIsOverAnotherOfItsPitch(events, changes) ? null : events;
+    // The copies are asked of as the moved notes are: they are where those
+    // would have gone.
+    type Placed = {
+      readonly changes: readonly (KeyChange & { readonly key: KeyOfTheTake })[];
+      readonly events: readonly MidiFileEvent[];
     };
-    let changes: readonly (KeyChange & { readonly key: KeyOfTheTake })[] | null = null;
-    let events: readonly MidiFileEvent[] | null = null;
+    const fits = (byMs: number, bySemitones: number): Placed | null => {
+      const changes = moved(byMs, bySemitones);
+      const events = copying
+        ? takeWithTheKeysCopied(stored.events, keys, byMs, bySemitones)
+        : takeWithTheKeysChanged(stored.events, changes);
+      return events === null || aKeyIsOverAnotherOfItsPitch(events, changes) ? null : { changes, events };
+    };
+    let placed: Placed | null = null;
     let bySemitones = 0;
     if (arrow === 'ArrowLeft' || arrow === 'ArrowRight') {
       const origin = rollBeganAtMs(showing.roll);
       const earliest = Math.min(...keys.map((key) => key.downAtMs));
-      for (let from = earliest - origin; events === null; ) {
-        const line = theNextLineOfTheGrid(showing.roll, from, this.theRollsGrid(), arrow === 'ArrowRight' ? 1 : -1);
-        if (line === null) {
+      const towards = arrow === 'ArrowRight' ? 1 : -1;
+      if (copying) {
+        // A key still down at the end is over its copy wherever that goes,
+        // and alone it has no length to be followed on from.
+        const span = Math.max(...keys.map((key) => key.upAtMs ?? key.downAtMs)) - earliest;
+        if (span <= 0) {
           return;
         }
-        changes = moved(Math.round(line + origin) - earliest, 0);
-        events = fits(changes);
-        from = line;
+        const last = stored.events.at(-1)?.atMs ?? earliest;
+        // Past every event of the sketch a copy fits or never will.
+        for (let byMs = towards * span; placed === null; byMs += towards * span) {
+          if (earliest + byMs < origin || earliest + byMs > last + span) {
+            return;
+          }
+          placed = fits(byMs, 0);
+        }
+      } else {
+        for (let from = earliest - origin; placed === null; ) {
+          const line = theNextLineOfTheGrid(showing.roll, from, this.theRollsGrid(), towards);
+          if (line === null) {
+            return;
+          }
+          placed = fits(Math.round(line + origin) - earliest, 0);
+          from = line;
+        }
       }
     } else {
       const step = (arrow === 'ArrowUp' ? 1 : -1) * (octave ? 12 : 1);
-      for (bySemitones = step; events === null; bySemitones += step) {
+      for (bySemitones = step; placed === null; bySemitones += step) {
         if (keys.some((key) => key.midi + bySemitones < LOWEST_KEY || key.midi + bySemitones > HIGHEST_KEY)) {
           return;
         }
-        changes = moved(0, bySemitones);
-        events = fits(changes);
+        placed = fits(0, bySemitones);
       }
     }
-    if (changes === null || events === null) {
+    if (placed === null) {
       return;
     }
+    const { changes, events } = placed;
     if (bySemitones !== 0) {
       // Heard where they went, a moment each, both ends handed over at once.
       const now = this.runtime.clock.now();

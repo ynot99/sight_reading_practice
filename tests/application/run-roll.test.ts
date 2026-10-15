@@ -25,6 +25,7 @@ import {
   takeOfTheRun,
   takeWithoutTheKeys,
   takeWithTheKeysChanged,
+  takeWithTheKeysCopied,
   takeWithAKeyAdded,
   theKeysOfTheTake,
   type RolledBeat,
@@ -1395,6 +1396,27 @@ describe('changing a recording', () => {
       on(500, MIDI.E4),
       off(1_000, MIDI.E4),
     ]);
+  });
+
+  it('copies keys beside themselves, as loud and in the same hand, those copied staying', () => {
+    const handed = { ...on(0, MIDI.C4), velocity: 0.25, hand: 'left' as const };
+    const events = [handed, off(400, MIDI.C4), on(500, MIDI.E4), on(500, MIDI.G4), off(900, MIDI.G4)];
+    const c = { midi: MIDI.C4, downAtMs: 0 };
+    const e = { midi: MIDI.E4, downAtMs: 500 };
+
+    expect(takeWithTheKeysCopied(events, [c], 1_000, 12)).toEqual([
+      handed,
+      off(400, MIDI.C4),
+      on(500, MIDI.E4),
+      on(500, MIDI.G4),
+      off(900, MIDI.G4),
+      { ...handed, atMs: 1_000, midi: MIDI.C5 },
+      off(1_400, MIDI.C5),
+    ]);
+    // One still down at the end is copied still down.
+    const sharp = MIDI.E4 + 2;
+    expect(takeWithTheKeysCopied(events, [e], 0, 2)?.filter((event) => event.kind !== 'sustain' && event.midi === sharp)).toEqual([on(500, sharp)]);
+    expect(takeWithTheKeysCopied(events, [c, { midi: MIDI.C4, downAtMs: 1 }], 1_000, 0)).toBeNull();
   });
 
   it('draws room past the end of a sketch where it is asked for, an empty one included', () => {

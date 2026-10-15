@@ -2291,12 +2291,32 @@ describe('the two pills on a phone', () => {
     expect(narrow?.at ?? 0).toBeGreaterThan(wide?.at ?? 0);
     expect(narrow?.body).toMatch(/overflow-x\s*:\s*auto/);
     expect(narrow?.body).not.toMatch(/flex-wrap\s*:\s*wrap/);
-    // The bar is as wide as its transport row, whatever this row holds: the
-    // Keep button appearing may not widen it and move Play.
+    // Whatever this row holds, it asks the bar for no width: the Keep button
+    // appearing may not widen it and move Play.
     expect(narrow?.body).toMatch(/contain\s*:\s*inline-size/);
     expect(rules().find((rule) => rule.selector === '.focus-bar__opens > *')?.body).toMatch(
       /flex\s*:\s*none/,
     );
+  });
+
+  it('are given the width of the screen while they show, with the transport centred and every pill in view', () => {
+    // Sized by its transport row the bar was 294px, or 182 in free play, and
+    // the row cut off the eye and the takes.
+    const phone = '@media (max-width: 700px)';
+    const wide = rules().find(
+      (rule) => rule.selector === "body:not([data-bare='true']) .focus-bar:not([data-playing='true'])",
+    );
+    expect(inWhichMedia(wide?.at ?? 0)).toBe(phone);
+    expect(wide?.body).toMatch(/width\s*:\s*min\(calc\(100vw - 24px\),\s*420px\)/);
+    // Centred, Play stays where the row's own width put it.
+    const row = rules().find((rule) => rule.selector === '.focus-bar__row' && inWhichMedia(rule.at) === phone);
+    expect(row?.body).toMatch(/justify-content\s*:\s*center/);
+    // Seven of forty pixels fit 390 with the pencil, by a selector stronger
+    // than the one giving every icon button its forty-eight.
+    const pills = rules().find((rule) => rule.selector === '.focus-bar__opens .focus-bar__button--icon');
+    expect(inWhichMedia(pills?.at ?? 0)).toBe(phone);
+    expect(pills?.body).toMatch(/width\s*:\s*40px/);
+    expect(rules().find((rule) => rule.selector === '.focus-bar__button--icon')?.body).toMatch(/width\s*:\s*48px/);
   });
 
   it('leave no empty row behind while a run is going or the page is bare', () => {

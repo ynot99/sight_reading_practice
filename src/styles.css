@@ -3734,6 +3734,30 @@ body[data-take-on-keys='true'] .focus-bar__row > #focus-speed {
   }
 
   /*
+   * While the row of pills shows, the bar as wide as the screen leaves it:
+   * sized by its transport row it was 294px, or 182px in free play, and the
+   * row cut off the eye and the takes - wholly, once the pencil of a sketch
+   * stood among them. The transport row is centred in it, so Play stays
+   * under the thumb where it was; mid-run and bare, the row of pills goes
+   * and the bar folds to its buttons again.
+   */
+  body:not([data-bare='true']) .focus-bar:not([data-playing='true']) {
+    width: min(calc(100vw - 24px), 420px);
+  }
+
+  .focus-bar__row {
+    justify-content: center;
+  }
+
+  /*
+   * Narrower, so all seven fit 390px with the pencil: forty pixels each, as
+   * tall as they were.
+   */
+  .focus-bar__opens .focus-bar__button--icon {
+    width: 40px;
+  }
+
+  /*
    * The line where one pill ended and the other began, with room on both
    * sides of it. The room is also what cuts the eye at the edge: closer, the
    * eye ended exactly where the row does and the takes were wholly out of

@@ -4348,18 +4348,20 @@ describe('AppView', () => {
       tapOn(500);
       tapOn(500);
       expect(chosen()).toEqual([]);
-      // Two taps where there is no note write one: on the key of its row, on
-      // the nearest beat, a beat long, as loud as the others, and chosen.
+      // Two taps where there is no note write one: on the key of its row, in
+      // the cell of the grid tapped in, a beat long, as loud as the others, and chosen.
       const onTheRowOf = view.rollScene?.notes.find((note) => note.fromMs === 500)?.row ?? 0;
       tapTheDrawing({ clientX: 1.4 * zoom, clientY: (onTheRowOf + 0.5) * 13 - scrolledDown() });
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
       tapTheDrawing({ clientX: 1.4 * zoom, clientY: (onTheRowOf + 0.5) * 13 - scrolledDown() });
-      const written = (sketches.find(sketch?.id ?? '')?.events ?? []).filter((event) => event.kind !== 'sustain');
-      expect(written.slice(-2)).toEqual([
-        { kind: 'noteOn', atMs: 1_500, midi: 64, velocity: kept?.events[0]?.kind === 'noteOn' ? kept.events[0].velocity : -1 },
-        { kind: 'noteOff', atMs: 2_000, midi: 64 },
+      const written = (sketches.find(sketch?.id ?? '')?.events ?? []).filter(
+        (event) => event.kind !== 'sustain' && event.midi === 64 && event.atMs >= 1_000,
+      );
+      expect(written).toEqual([
+        { kind: 'noteOn', atMs: 1_000, midi: 64, velocity: kept?.events[0]?.kind === 'noteOn' ? kept.events[0].velocity : -1 },
+        { kind: 'noteOff', atMs: 1_500, midi: 64 },
       ]);
-      expect(chosen()).toEqual([1_500]);
+      expect(chosen()).toEqual([1_000]);
       undo.click();
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(3);
       // Below the lowest key there is nothing to write.
@@ -5480,6 +5482,80 @@ describe('AppView', () => {
       expect(chosen()).toEqual([]);
       key({ key: 'Escape' });
       expect(element('sheet-roll').hidden).toBe(true);
+    });
+
+    it('writes a note in the cell of the grid it is tapped in, never on or over another of its pitch', async () => {
+      const { view, sketches, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            // On the third beat, and one off the grid across the fifth and sixth.
+            [1_000, 1_500, 62],
+            [2_250, 2_750, 64],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Cells',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const twice = (ms: number, midi: number): void => {
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(ms, midi) });
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(ms, midi) });
+      };
+      const of = (midi: number): number[][] => {
+        const events = sketches.find(sketch.id)?.events ?? [];
+        return events.flatMap((event, index) => {
+          if (event.kind !== 'noteOn' || event.midi !== midi) {
+            return [];
+          }
+          const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === midi);
+          return [[event.atMs, off?.atMs ?? -1]];
+        });
+      };
+
+      // Just before a note, in the cell before its beat: the cell, not the note's beat.
+      twice(900, 62);
+      expect(of(62)).toEqual([
+        [500, 1_000],
+        [1_000, 1_500],
+      ]);
+      // Again and again there, nothing more: the place is taken.
+      twice(900, 62);
+      twice(700, 62);
+      expect(of(62)).toHaveLength(2);
+      // In a cell another of its pitch begins partway through, cut short where that one begins.
+      twice(2_100, 64);
+      expect(of(64)).toEqual([
+        [2_000, 2_250],
+        [2_250, 2_750],
+      ]);
+      // In the cell that one reaches into, nothing: its start would be inside it.
+      twice(2_900, 64);
+      expect(of(64)).toEqual([
+        [2_000, 2_250],
+        [2_250, 2_750],
+      ]);
+      // On another pitch the same cell is free.
+      twice(900, 63);
+      expect(of(63)).toEqual([[500, 1_000]]);
     });
 
     it('shows a sketch in a metre the list does not offer as it is', async () => {

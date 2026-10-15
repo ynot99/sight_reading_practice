@@ -1084,6 +1084,45 @@ export function takeWithTheKeysChanged(
   return inTheOrderPlayed([...events.map((event, at) => changed.get(at) ?? event), ...added]);
 }
 
+/**
+ * Where a key to be written of one pitch may end, so it neither begins on
+ * nor sounds over another of that pitch: as late as asked, cut short where
+ * the next of its pitch begins - or `null` where it would begin on or inside
+ * one, or be cut to nothing. Two of one pitch at once are one key twice to a
+ * file, whose second press nothing can let go of apart from the first, and
+ * one this editor could not tell from the other.
+ */
+export function theEndAKeyFitsTo(
+  events: readonly MidiFileEvent[],
+  key: { readonly midi: number; readonly downAtMs: number; readonly upAtMs: number },
+): number | null {
+  let end = key.upAtMs;
+  for (const other of theKeysOfTheTake(events)) {
+    if (other.midi !== key.midi) {
+      continue;
+    }
+    const otherEnd = other.upAtMs ?? Number.POSITIVE_INFINITY;
+    if (other.downAtMs <= key.downAtMs && otherEnd > key.downAtMs) {
+      return null;
+    }
+    if (other.downAtMs > key.downAtMs) {
+      end = Math.min(end, other.downAtMs);
+    }
+  }
+  return end > key.downAtMs ? end : null;
+}
+
+/**
+ * The line of the grid a moment is in the cell after: the last at or before
+ * it - half a millisecond either side counting as on it - or the moment
+ * itself where the grid has none so early. Where a note written there
+ * begins, as the cell tapped in rather than the line nearest it, which for a
+ * tap just before a note was that note's own beat.
+ */
+export function theLineOfTheGridUnder(roll: RunRoll, atMs: number, choice: GridChoice): number {
+  return theNextLineOfTheGrid(roll, atMs + 1, choice, -1) ?? atMs;
+}
+
 /** A take's events with a key added, struck and let go of, in its place in time. */
 export function takeWithAKeyAdded(
   events: readonly MidiFileEvent[],

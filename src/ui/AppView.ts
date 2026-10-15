@@ -178,6 +178,8 @@ import {
   type RunRoll,
   theBeatNearest,
   theNextLineOfTheGrid,
+  theLineOfTheGridUnder,
+  theEndAKeyFitsTo,
   theMusicsPlaceAt,
   type GridChoice,
 } from '../application/session/RunRoll.js';
@@ -12473,9 +12475,16 @@ export class AppView {
     }
     const roll = showing.roll;
     const origin = rollBeganAtMs(roll);
-    const snapped = this.el.rollSnap.checked ? theBeatNearest(roll, at.atMs, this.theRollsGrid()) : at.atMs;
+    // In the cell of the grid tapped in, from the line it begins on.
+    const snapped = this.el.rollSnap.checked ? theLineOfTheGridUnder(roll, at.atMs, this.theRollsGrid()) : at.atMs;
     const downAtMs = Math.round(snapped + origin);
-    const key = { midi, downAtMs, upAtMs: downAtMs + theBeatAt(roll, downAtMs), velocity: theUsualLoudness(stored.events) };
+    // Never on or over another of its pitch: cut short where the next begins,
+    // and not written where it would begin on or inside one.
+    const upAtMs = theEndAKeyFitsTo(stored.events, { midi, downAtMs, upAtMs: downAtMs + theBeatAt(roll, downAtMs) });
+    if (upAtMs === null) {
+      return;
+    }
+    const key = { midi, downAtMs, upAtMs, velocity: theUsualLoudness(stored.events) };
     // Heard as it is written, for as long as it is: both ends handed to the
     // instrument at once, so no timer outlives the drawing.
     const now = this.runtime.clock.now();

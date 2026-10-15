@@ -8,6 +8,8 @@ import {
   theWaits,
   theBeatNearest,
   theNextLineOfTheGrid,
+  theLineOfTheGridUnder,
+  theEndAKeyFitsTo,
   PLAIN_GRID,
   theMusicsPlaceAt,
   theMusicsBeats,
@@ -576,6 +578,46 @@ describe('the beat a run was measured against', () => {
     expect(theNextLineOfTheGrid(run, 500.4, PLAIN_GRID, -1)).toBe(0);
     // Cut finer, it steps by the parts.
     expect(theNextLineOfTheGrid(run, 500, { beats: true, parts: 2 }, 1)).toBe(750);
+  });
+
+  it('finds the cell of the grid a moment is in: the line at or before it, across the whole run', () => {
+    const run = rollOfTheTake({
+      events: [
+        { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+        { kind: 'noteOff', atMs: 1_900, midi: 60 },
+      ],
+      beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+    });
+    for (let at = 0; at <= 2_200; at += 25) {
+      expect(theLineOfTheGridUnder(run, at, PLAIN_GRID), String(at)).toBe(Math.min(2_000, Math.floor(at / 500) * 500));
+    }
+    // Half a millisecond short of a line is on it; before the first line, the moment itself.
+    expect(theLineOfTheGridUnder(run, 999.6, PLAIN_GRID)).toBe(1_000);
+    expect(theLineOfTheGridUnder(run, 999.4, PLAIN_GRID)).toBe(500);
+    expect(theLineOfTheGridUnder(run, -40, PLAIN_GRID)).toBe(-40);
+  });
+
+  it('lets a key be written only where none of its pitch is, cut short where the next begins', () => {
+    // One of 62 from 1000 to 1500, one of 64 there too, and one of 62 never let go of from 3000.
+    const events: MidiFileEvent[] = [
+      { kind: 'noteOn', atMs: 1_000, midi: 62, velocity: 0.5 },
+      { kind: 'noteOn', atMs: 1_000, midi: 64, velocity: 0.5 },
+      { kind: 'noteOff', atMs: 1_500, midi: 62 },
+      { kind: 'noteOff', atMs: 1_500, midi: 64 },
+      { kind: 'noteOn', atMs: 3_000, midi: 62, velocity: 0.5 },
+    ];
+    // A beat long, begun at every moment across them.
+    for (let down = 0; down <= 3_400; down += 50) {
+      const asked = { midi: 62, downAtMs: down, upAtMs: down + 500 };
+      const inside = (down >= 1_000 && down < 1_500) || down >= 3_000;
+      const expected = inside ? null : Math.min(down + 500, down < 1_000 ? 1_000 : 3_000);
+      expect(theEndAKeyFitsTo(events, asked), String(down)).toBe(expected);
+    }
+    // Another pitch is no matter.
+    expect(theEndAKeyFitsTo(events, { midi: 63, downAtMs: 1_000, upAtMs: 1_500 })).toBe(1_500);
+    // Cut to nothing is not written: a note may not end where it begins.
+    expect(theEndAKeyFitsTo(events, { midi: 62, downAtMs: 1_000, upAtMs: 1_000 })).toBeNull();
+    expect(theEndAKeyFitsTo([], { midi: 62, downAtMs: 1_000, upAtMs: 1_000 })).toBeNull();
   });
 
   it('gives a tie to the beat already begun', () => {

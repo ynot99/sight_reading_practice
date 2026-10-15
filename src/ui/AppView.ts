@@ -9111,14 +9111,17 @@ export class AppView {
   }
 
   /**
-   * Asks for everything to go, and makes the reader say so in words.
+   * Asks for everything to go, or a sketch, and makes the reader say so in
+   * words.
    *
    * A row is one score and a mis-tap on it costs a file that is still on the
    * disk. The shelf is the whole library, and on a tablet it is a thumb's
    * width from the row above it - so this one is not a button that can be
    * pressed by accident at all. Typed rather than held down or pressed
    * twice: it is the only sort of confirmation that cannot be given without
-   * having read the question.
+   * having read the question. A sketch is asked for the same way: it is
+   * music written by hand that is kept nowhere else, and gone it cannot be
+   * put back.
    */
   private askToTypeIt(question: string): Promise<boolean> {
     return this.ask(`${question} Type ${PURGE_WORD} to confirm.`, PURGE_WORD);
@@ -9668,7 +9671,7 @@ export class AppView {
       remove.title = 'Delete this sketch';
       remove.setAttribute('aria-label', `Delete ${sketch.title}`);
       this.listen(remove, 'click', () => {
-        void this.askToDelete(`Delete ${sketch.title}?`).then((yes) => {
+        void this.askToTypeIt(`Delete ${sketch.title}?`).then((yes) => {
           if (yes) {
             this.runtime.sketches.remove(sketch.id);
             this.renderSketches();

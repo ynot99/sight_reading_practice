@@ -4807,7 +4807,7 @@ describe('AppView', () => {
       element<HTMLButtonElement>('focus-scores').click();
       element<HTMLButtonElement>('scores-show-sketches').click();
       rowButton('sketches-list', 'Delete this sketch').click();
-      await confirmDeletion();
+      await confirmByTyping();
       expect(sketches.find(sketch.id)).toBeNull();
       expect(pencil.hidden).toBe(true);
       element<HTMLButtonElement>('scores-close').click();
@@ -6015,7 +6015,11 @@ describe('AppView', () => {
 
       element<HTMLButtonElement>('focus-scores').click();
       rowButton('sketches-list', 'Delete this sketch').click();
+      // Music written by hand and kept nowhere else: the word has to be typed.
+      expect(element('confirm-text').textContent).toBe(`Delete ${sketch?.title ?? ''}? Type DELETE to confirm.`);
       await confirmDeletion();
+      expect(sketches.list()).toHaveLength(1);
+      await confirmByTyping();
       expect(sketches.list()).toHaveLength(0);
       expect(element('sketches-empty').hidden).toBe(false);
 

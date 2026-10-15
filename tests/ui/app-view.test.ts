@@ -3859,6 +3859,77 @@ describe('AppView', () => {
       }
     });
 
+    it('lights the row of a key sounding - played, or struck by the playback at the head - on the keys and down the strip', async () => {
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 0 });
+      vi.useFakeTimers();
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.sketches.begin(
+          {
+            events: [
+              [0, 60],
+              [500, 64],
+            ].flatMap(([atMs = 0, midi = 0]) => [
+              { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: atMs + 500, midi },
+            ]),
+            beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+          },
+          'Lit',
+          1,
+        );
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        const highest = rig.view.rollScene?.highest ?? 0;
+        const lit = (): number[] =>
+          [...element('roll-body').querySelectorAll<HTMLElement>('.roll__key')].flatMap((key, row) =>
+            key.dataset['sounding'] === 'true' ? [highest - row] : [],
+          );
+        const marked = (): number =>
+          element('roll-pitch-map').querySelectorAll('.roll-pitch-map__mark--sounding').length;
+
+        // A key played on the instrument: its row, with no note on it in view.
+        rig.midi.noteOn(67, rig.clock.now());
+        expect([lit(), marked()]).toEqual([[67], 1]);
+        rig.midi.noteOn(72, rig.clock.now());
+        expect([lit(), marked()]).toEqual([[72, 67], 2]);
+        // Drawn again with the keys still down - a finer grid - and lit again.
+        const grid = element<HTMLSelectElement>('roll-grid');
+        grid.value = '2';
+        grid.dispatchEvent(new Event('change'));
+        expect([lit(), marked()]).toEqual([[72, 67], 2]);
+        rig.midi.noteOff(67, rig.clock.now());
+        rig.midi.noteOff(72, rig.clock.now());
+        expect([lit(), marked()]).toEqual([[], 0]);
+        // Below the lowest key there is no row to light.
+        rig.midi.noteOn(10, rig.clock.now());
+        expect([lit(), marked()]).toEqual([[], 0]);
+        rig.midi.noteOff(10, rig.clock.now());
+
+        // The drawing played back: the note under the head, and then the next.
+        element<HTMLButtonElement>('roll-play').click();
+        rig.clock.advance(100);
+        vi.advanceTimersByTime(100);
+        expect(lit()).toEqual([60]);
+        // At the moment one ends and the next begins, only the next.
+        rig.clock.advance(400);
+        vi.advanceTimersByTime(100);
+        expect([lit(), marked()]).toEqual([[64], 1]);
+        // Stopped, nothing sounds.
+        element<HTMLButtonElement>('roll-play').click();
+        expect(lit()).toEqual([]);
+        // Shut, the drawing is left as it was while keys are played.
+        element<HTMLButtonElement>('roll-close').click();
+        rig.midi.noteOn(67, rig.clock.now());
+        expect(lit()).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+        giveBack();
+      }
+    });
+
     it('scrolls up and down to where a finger is on the strip', async () => {
       // Centred on the finger, as along the run: half way down the strip is
       // half the rows' worth, less half of the sixty on the screen.

@@ -204,6 +204,7 @@ import {
   theCanvasesOf,
   theKeysStripOf,
   theMapOfThePitches,
+  stretchesIn,
   thePitchesOfTheRun,
   theSceneOfTheRoll,
   whatThePedalSaysAt,
@@ -1865,6 +1866,12 @@ export class AppView {
     /** Whether it has gone far enough to be a box rather than a click. */
     readonly drawn: boolean;
   } | null = null;
+  /** The rows of the keys sounding now: see `lightTheSoundingRows`. */
+  private soundingRows: readonly number[] = [];
+  /** What the rows sounding last were, so a frame that changes nothing draws nothing. */
+  private soundingRowsSaid = '';
+  /** The stretch of the run the map down the side last marked, to mark again when a key sounds. */
+  private pitchWindow: { readonly fromShare: number; readonly widthShare: number } | null = null;
   /** The sketch the score on the page was written down from, as it was then, and the score it gave. */
   private theSketchOnThePage: { readonly sketch: StoredSketch; readonly exercise: Exercise } | null = null;
   /** The take the score on the page was written down from, and the score it gave. */
@@ -7019,6 +7026,13 @@ export class AppView {
     );
 
     this.subscriptions.push(
+      // A key played lights its row on the drawing, whatever the page is doing.
+      this.runtime.recorder.events.on('keysChanged', () => {
+        this.lightTheSoundingRows();
+      }),
+    );
+
+    this.subscriptions.push(
       // The dot of each beat lit on the frame it is heard, as on a
       // metronome's own face; put out at once when the click stops.
       controller.events.on('freeClickPlaced', ({ beat, atMs }) => {
@@ -11509,10 +11523,11 @@ export class AppView {
   private markThePitchesIn(
     window: { readonly fromShare: number; readonly widthShare: number } | null,
   ): void {
+    this.pitchWindow = window;
     const marks =
       window === null || this.rollPitches === null
         ? []
-        : theMapOfThePitches(this.rollPitches, window);
+        : theMapOfThePitches(this.rollPitches, window, this.soundingRows);
     const said = marks.map((mark) => `${mark.kind}@${mark.fromShare}/${mark.heightShare}`).join();
     if (said === this.pitchMarksDrawn) {
       return;
@@ -13156,6 +13171,8 @@ export class AppView {
     this.rollCanvases = theCanvasesOf(this.el.rollBody);
     this.rollKeysStrip = theKeysStripOf(this.el.rollBody);
     this.rollInks = null;
+    // A new strip of keys, none of them lit yet.
+    this.soundingRowsSaid = '';
     this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.sketch?.editing === true, {
       freely: this.nothingOnTheDrawingIsJudged(),
       chosen: this.theOtherRollShowing?.sketch?.chosen ?? [],
@@ -13252,7 +13269,14 @@ export class AppView {
       rowPx: look.rowPx,
     };
     const density = this.doc.defaultView?.devicePixelRatio ?? 1;
-    paintTheGrid(sized(canvases.grid, scrolled.viewWidePx, scrolled.viewTallPx), scene, view, this.rollInks, density);
+    paintTheGrid(
+      sized(canvases.grid, scrolled.viewWidePx, scrolled.viewTallPx),
+      scene,
+      view,
+      this.rollInks,
+      density,
+      this.soundingRows,
+    );
     paintTheRuler(sized(canvases.ruler, scrolled.viewWidePx, look.rulerTallPx), scene, view, this.rollInks, density);
     paintThePedal(sized(canvases.pedal, scrolled.viewWidePx, look.pedalTallPx), scene, view, this.rollInks, density);
   }
@@ -13667,6 +13691,49 @@ export class AppView {
   }
 
   /**
+   * Lights the rows of the keys sounding now - held down on any input, or
+   * struck by the drawing's own playback where the head is - across the
+   * drawing, on its keys and down the map beside it. Only when they change:
+   * it is asked on every frame of a playback.
+   */
+  private lightTheSoundingRows(): void {
+    const scene = this.drawnScene;
+    const rows = new Set<number>();
+    if (scene !== null && !this.el.sheetRoll.hidden) {
+      for (const midi of this.runtime.recorder.keysDown) {
+        const row = scene.highest - midi;
+        if (row >= 0 && row < scene.rows) {
+          rows.add(row);
+        }
+      }
+      if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
+        const at = this.headIsAtMs();
+        for (const note of stretchesIn(scene.notes, at, at)) {
+          if (note.untilMs > at) {
+            rows.add(note.row);
+          }
+        }
+      }
+    }
+    const sounding = [...rows].sort((above, below) => above - below);
+    const said = sounding.join();
+    if (said === this.soundingRowsSaid) {
+      return;
+    }
+    this.soundingRowsSaid = said;
+    this.soundingRows = sounding;
+    this.rollKeysStrip?.querySelectorAll<HTMLElement>('.roll__key').forEach((key, row) => {
+      if (rows.has(row)) {
+        key.dataset['sounding'] = 'true';
+      } else {
+        delete key.dataset['sounding'];
+      }
+    });
+    this.paintTheRoll();
+    this.markThePitchesIn(this.pitchWindow);
+  }
+
+  /**
    * Puts the head where the sound is, and keeps it on screen.
    *
    * Scrolled only when it has left the middle of the view rather than on every
@@ -13707,6 +13774,7 @@ export class AppView {
     heads.mark.style.setProperty('--roll-at', at);
     heads.place.style.setProperty('--roll-at', (this.rollPlacedAtMs / 1000).toFixed(3));
     this.sayWhereTheHeadIs();
+    this.lightTheSoundingRows();
     if (!sounding) {
       return;
     }

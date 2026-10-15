@@ -45,6 +45,8 @@ export interface RollInks {
   readonly aside: string;
   /** The rim of a note chosen to be changed: no verdict, so the accent. */
   readonly chosen: string;
+  /** The band across a row whose key is sounding: no verdict, so the accent. */
+  readonly sounding: string;
   /** A note nothing judged, by the hand that plays it: colours no verdict wears. */
   readonly right: string;
   readonly left: string;
@@ -74,6 +76,7 @@ export const INKS: Readonly<Record<Exclude<keyof RollInks, 'font'>, string>> = {
   wrong: 'wrong',
   aside: 'aside',
   chosen: 'chosen',
+  sounding: 'sounding',
   right: 'right',
   left: 'left',
   tickDivision: 'tick-division',
@@ -314,6 +317,7 @@ export function paintTheGrid(
   view: RollViewport,
   inks: RollInks,
   density: number,
+  soundingRows: readonly number[] = [],
 ): void {
   const ready = readied(surface, density);
   if (ready === null) {
@@ -333,6 +337,14 @@ export function paintTheGrid(
 
   paint.fillStyle = inks.row;
   for (const row of scene.blackRows) {
+    if (shows(row)) {
+      paint.fillRect(0, y(row), widePx, rowPx);
+    }
+  }
+  // The rows of the keys sounding now, across the whole width: which row a
+  // key played is, found by looking rather than by counting.
+  paint.fillStyle = inks.sounding;
+  for (const row of soundingRows) {
     if (shows(row)) {
       paint.fillRect(0, y(row), widePx, rowPx);
     }

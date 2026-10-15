@@ -1163,6 +1163,21 @@ describe('the notes in view, by pitch', () => {
     expect(theSceneOfTheRoll({ roll: run, barLabel: () => null }).rows).toBe(29);
   });
 
+  it('marks a row whose key is sounding over everything, with a note in view on it or none', () => {
+    const pitches = thePitchesOfTheRun(spread());
+    const view = { fromShare: 0, widthShare: 0.1 };
+    const wrongRow = 2;
+    const emptyRow = 10;
+
+    expect(
+      theMapOfThePitches(pitches, view, [wrongRow, emptyRow]).map((mark) => [mark.kind, mark.fromShare]),
+    ).toEqual([
+      ['sounding', 2 / 29],
+      ['sounding', 10 / 29],
+      ['correct', 26 / 29],
+    ]);
+  });
+
   it('counts a note still sounding where the screen begins', () => {
     const pitches = thePitchesOfTheRun(
       roll({ presses: [press({ midi: MIDI.C4, downAtMs: 0, upAtMs: 9_000 })] }),

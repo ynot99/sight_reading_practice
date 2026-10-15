@@ -758,7 +758,7 @@ export function scrollForTheWindowAt(
 }
 
 /** What a mark down the side says about its row: the colour its notes are drawn in. */
-export type PitchMarkKind = 'chosen' | 'wrong' | 'correct' | 'right' | 'left' | 'plain';
+export type PitchMarkKind = 'sounding' | 'chosen' | 'wrong' | 'correct' | 'right' | 'left' | 'plain';
 
 /** One row with a note on it, as shares of the band from its top. */
 export interface PitchMark {
@@ -842,6 +842,7 @@ const HOW_TELLING: Readonly<Record<PitchMarkKind, number>> = {
   correct: 2,
   wrong: 3,
   chosen: 4,
+  sounding: 5,
 };
 
 /**
@@ -856,11 +857,14 @@ const HOW_TELLING: Readonly<Record<PitchMarkKind, number>> = {
  * "існують для мене часто ноти які вилазять out of view".
  *
  * One mark a row, in the colour its notes are drawn in. Where they differ the
- * wrong note wins, because it is the one worth scrolling to.
+ * wrong note wins, because it is the one worth scrolling to. A row whose key
+ * is sounding now is marked whatever is in view on it, and over everything:
+ * a key played is the row the reader is looking for.
  */
 export function theMapOfThePitches(
   pitches: RollPitches,
   inView: { readonly fromShare: number; readonly widthShare: number },
+  soundingRows: readonly number[] = [],
 ): readonly PitchMark[] {
   const fromMs = inView.fromShare * pitches.lengthMs;
   const untilMs = (inView.fromShare + inView.widthShare) * pitches.lengthMs;
@@ -872,6 +876,9 @@ export function theMapOfThePitches(
     if (had === undefined || HOW_TELLING[note.kind] > HOW_TELLING[had]) {
       rows.set(note.row, note.kind);
     }
+  }
+  for (const row of soundingRows) {
+    rows.set(row, 'sounding');
   }
   return [...rows]
     .sort(([above], [below]) => above - below)

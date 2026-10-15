@@ -1282,6 +1282,11 @@ textarea {
    * violet, neither of which a verdict wears.
    */
   --roll-ink-chosen: var(--accent);
+  /*
+   * A row whose key is sounding - played, or struck by the playback at the
+   * head: no verdict either, so the accent, faint enough to read through.
+   */
+  --roll-ink-sounding: color-mix(in srgb, var(--accent) 16%, transparent);
   --roll-ink-right: color-mix(in srgb, var(--accent) 70%, var(--surface));
   --roll-ink-left: color-mix(in srgb, var(--star-8) 70%, var(--surface));
   position: relative;
@@ -1488,6 +1493,11 @@ textarea {
 
 .roll-pitch-map__mark--chosen {
   background: var(--roll-ink-chosen);
+}
+
+/* Down the side the row sounding is marked whole, the ink across it being faint. */
+.roll-pitch-map__mark--sounding {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 /* A pixel in from the edges across it, for the reason the map's box is. */
@@ -1854,6 +1864,12 @@ textarea {
 
 .roll__key--black {
   background: var(--surface-strong);
+}
+
+/* The key sounding, lit on the keys beside the drawing as its row is across it. */
+.roll__key[data-sounding='true'] {
+  background: color-mix(in srgb, var(--accent) 45%, var(--surface));
+  color: var(--text);
 }
 
 .roll__grid {

@@ -61,6 +61,26 @@ describe('a stretch of playing ending', () => {
   });
 });
 
+describe('the keys down now', () => {
+  it('are every key held, said each time one goes down or comes up, and not for anything else', () => {
+    const harness = rig();
+    let said = 0;
+    harness.recorder.events.on('keysChanged', () => {
+      said += 1;
+    });
+
+    harness.midi.noteOn(60, harness.clock.now());
+    harness.midi.noteOn(64, harness.clock.now());
+    expect([...harness.recorder.keysDown].sort((a, b) => a - b)).toEqual([60, 64]);
+    harness.midi.noteOff(60, harness.clock.now());
+    expect(harness.recorder.keysDown).toEqual([64]);
+    harness.midi.control(7, 0.5, harness.clock.now());
+    harness.midi.noteOff(64, harness.clock.now());
+    expect(harness.recorder.keysDown).toEqual([]);
+    expect(said).toBe(4);
+  });
+});
+
 describe('keeping what was just played', () => {
   it('is already recording, with nothing switched on', () => {
     // The whole design: an idea worth keeping is noticed after it is played,

@@ -57,6 +57,8 @@ export interface RecorderEventMap {
    * moment anything could act on it anyway.
    */
   takeClosed: { readonly take: Take };
+  /** A key went down or came up: see `keysDown`. */
+  keysChanged: Record<string, never>;
 }
 
 interface Captured {
@@ -112,6 +114,15 @@ export class PerformanceRecorder {
 
   get events(): IEventSource<RecorderEventMap> {
     return this.emitter.asSource();
+  }
+
+  /**
+   * The keys down now, from every input at once - the instrument, the
+   * computer's keys and the keys on the screen - whatever the page is doing,
+   * since this hears them all whatever it is doing.
+   */
+  get keysDown(): readonly number[] {
+    return [...this.holding.keys()];
   }
 
   listenTo(source: IMidiSource): Unsubscribe {
@@ -208,10 +219,12 @@ export class PerformanceRecorder {
       case 'noteon':
         this.holding.set(event.midi, atMs);
         this.push({ kind: 'noteOn', atMs: 0, midi: event.midi, velocity: event.velocity }, atMs);
+        this.emitter.emit('keysChanged', {});
         return;
       case 'noteoff':
         this.holding.delete(event.midi);
         this.push({ kind: 'noteOff', atMs: 0, midi: event.midi }, atMs);
+        this.emitter.emit('keysChanged', {});
         return;
       case 'pedal':
         this.push({ kind: 'sustain', atMs: 0, value: event.value }, atMs);

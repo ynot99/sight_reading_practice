@@ -32,6 +32,7 @@ const INKS: RollInks = {
   wrong: 'wrong',
   aside: 'aside',
   chosen: 'chosen',
+  sounding: 'sounding',
   right: 'right',
   left: 'left',
   tickDivision: 'tick-division',
@@ -231,6 +232,21 @@ describe('painting the grid', () => {
     expect(recorder.inked('correct')).toHaveLength(1);
     expect(recorder.inked('wrong')).toHaveLength(1);
     expect(recorder.inked('aside')).toHaveLength(1);
+  });
+
+  it('lays a band across the whole width of each row sounding, under the notes, and none out of sight', () => {
+    const scene = sceneOf(roll({ presses: [press({ midi: 40 }), press({ midi: 90 })] }));
+    const { surface: canvas, recorder } = surface(700, 140);
+
+    // Ten rows of a band of fifty-five, from the top: the third is on the screen, the fiftieth is not.
+    paintTheGrid(canvas, scene, at(), INKS, 1, [2, 50]);
+
+    expect(recorder.inked('sounding')).toEqual([expect.objectContaining({ x: 0, y: 2 * 14, wide: 700, tall: 14 })]);
+    expect(recorder.order.indexOf('sounding')).toBeLessThan(recorder.order.indexOf('correct'));
+    // None sounding, none painted.
+    const { surface: still, recorder: none } = surface(700, 140);
+    paintTheGrid(still, scene, at(), INKS, 1);
+    expect(none.inked('sounding')).toEqual([]);
   });
 
   it('lays the waits under the rows, the bands under the presses, and the capsules over them', () => {

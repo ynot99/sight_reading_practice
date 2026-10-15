@@ -7,6 +7,8 @@ import {
   theRushes,
   theWaits,
   theBeatNearest,
+  theNextLineOfTheGrid,
+  PLAIN_GRID,
   theMusicsPlaceAt,
   theMusicsBeats,
   clicksBefore,
@@ -547,6 +549,33 @@ describe('the beat a run was measured against', () => {
     expect(theBeatNearest(played, 620)).toBe(1000);
     expect(theBeatNearest(played, 1400)).toBe(1000);
     expect(theBeatNearest(played, 5000)).toBe(2000);
+  });
+
+  it('steps to the next line of the grid either way, from a line or from between two, across the whole run', () => {
+    // Four beats of a click at 120, and a note on the first so the run has them.
+    const run = rollOfTheTake({
+      events: [
+        { kind: 'noteOn', atMs: 0, midi: 60, velocity: 0.5 },
+        { kind: 'noteOff', atMs: 1_900, midi: 60 },
+      ],
+      beats: [0, 500, 1_000, 1_500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+    });
+    const lines = theMusicsBeats(run, PLAIN_GRID).map((line) => line.atMs - rollBeganAtMs(run));
+    // And the bar line the last beat ends on.
+    expect(lines).toEqual([0, 500, 1_000, 1_500, 2_000]);
+    for (let at = -100; at <= 2_200; at += 25) {
+      const after = lines.filter((line) => line > at + 0.5);
+      const before = lines.filter((line) => line < at - 0.5);
+      expect(theNextLineOfTheGrid(run, at, PLAIN_GRID, 1), `${String(at)} on`).toBe(after.length === 0 ? null : Math.min(...after));
+      expect(theNextLineOfTheGrid(run, at, PLAIN_GRID, -1), `${String(at)} back`).toBe(before.length === 0 ? null : Math.max(...before));
+    }
+    // A note put on a line in whole milliseconds is on it, not beside it.
+    expect(theNextLineOfTheGrid(run, 500.4, PLAIN_GRID, 1)).toBe(1_000);
+    expect(theNextLineOfTheGrid(run, 499.6, PLAIN_GRID, 1)).toBe(1_000);
+    expect(theNextLineOfTheGrid(run, 499.6, PLAIN_GRID, -1)).toBe(0);
+    expect(theNextLineOfTheGrid(run, 500.4, PLAIN_GRID, -1)).toBe(0);
+    // Cut finer, it steps by the parts.
+    expect(theNextLineOfTheGrid(run, 500, { beats: true, parts: 2 }, 1)).toBe(750);
   });
 
   it('gives a tie to the beat already begun', () => {

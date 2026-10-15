@@ -4261,10 +4261,10 @@ describe('AppView', () => {
       expect([remove.hidden, undo.hidden]).toEqual([false, false]);
       expect([remove.dataset['away'], undo.dataset['away']]).toEqual([undefined, undefined]);
       expect(remove.dataset['idle']).toBe('true');
-      expect(remove.title).toBe('Delete a note. Tap one to choose it.');
+      expect(remove.title).toBe('Delete a note (Delete). Tap one to choose it.');
       expect(remove.getAttribute('aria-label')).toBe(remove.title);
       expect(undo.dataset['idle']).toBe('true');
-      expect(undo.title).toBe('Undo. Nothing has been changed to put back.');
+      expect(undo.title).toBe('Undo (Ctrl+Z). Nothing has been changed to put back.');
 
       // A finger on a note, a little into it, on its row; the grid stands at
       // the drawing's corner, and a row is thirteen pixels until it is drawn.
@@ -4297,10 +4297,10 @@ describe('AppView', () => {
       tapOn(500);
       expect(chosen()).toEqual([500, 1_000]);
       expect(remove.dataset['idle']).toBeUndefined();
-      expect(remove.title).toBe('Delete the 2 chosen notes');
+      expect(remove.title).toBe('Delete the 2 chosen notes (Delete)');
       tapOn(1_000);
       expect(chosen()).toEqual([500]);
-      expect(remove.title).toBe('Delete the chosen note, E4');
+      expect(remove.title).toBe('Delete the chosen note, E4 (Delete)');
 
       // A playback going is of the sketch before the change, so it is held.
       element<HTMLButtonElement>('roll-play').click();
@@ -4318,9 +4318,9 @@ describe('AppView', () => {
       expect(chosen()).toEqual([]);
       // Nothing is chosen once it has gone.
       expect(remove.dataset['idle']).toBe('true');
-      expect(remove.title).toBe('Delete a note. Tap one to choose it.');
+      expect(remove.title).toBe('Delete a note (Delete). Tap one to choose it.');
       expect(undo.dataset['idle']).toBeUndefined();
-      expect(undo.title).toBe('Put back the last change');
+      expect(undo.title).toBe('Put back the last change (Ctrl+Z; again with Shift)');
 
       // The last one out, then the one before it, comes back.
       tapOn(0);
@@ -5318,6 +5318,168 @@ describe('AppView', () => {
       await aFrameLater();
       expect(along()).toBe(300);
       expect(count()).toBe(2);
+    });
+
+    it('edits by the keys: all chosen, let go of, moved by the grid and by pitch, undone and redone, and back to the marker', async () => {
+      const { view, runtime, sketches, instrument, clock } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 60],
+            [500, 62],
+            [1_000, 100],
+          ].flatMap(([atMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Keys',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const key = (init: KeyboardEventInit, on: EventTarget = document.body): KeyboardEvent => {
+        const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+        on.dispatchEvent(event);
+        return event;
+      };
+      const struck = (): number[][] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) => (event.kind === 'noteOn' ? [[event.midi, event.atMs]] : []));
+      const chosen = (): number[] =>
+        (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+      // The note being moved: neither the one left at 60 nor the one at the top.
+      const moving = (): number[] | undefined => struck().find(([midi]) => midi !== 60 && (midi ?? 0) < 90);
+      const top = (): number[] | undefined => struck().find(([midi]) => (midi ?? 0) >= 90);
+      const choose = (ms: number, midi: number): void => {
+        clock.advance(1_000);
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(ms, midi) });
+      };
+
+      // Nothing chosen, an arrow is left to the page.
+      expect(key({ key: 'ArrowRight' }).defaultPrevented).toBe(false);
+      // Ctrl+A chooses every note, and Escape lets go of them, the sheet staying.
+      expect(key({ key: 'a', code: 'KeyA', ctrlKey: true }).defaultPrevented).toBe(true);
+      expect(chosen()).toEqual([0, 500, 1_000]);
+      expect(key({ key: 'Escape' }).defaultPrevented).toBe(true);
+      expect(chosen()).toEqual([]);
+      expect(element('sheet-roll').hidden).toBe(false);
+
+      // Across, a line of the grid at a time, and no further than its first.
+      choose(600, 62);
+      key({ key: 'ArrowRight' });
+      expect(moving()).toEqual([62, 1_000]);
+      key({ key: 'ArrowLeft' });
+      key({ key: 'ArrowLeft' });
+      expect(moving()).toEqual([62, 0]);
+      expect(chosen()).toEqual([0]);
+      const before = struck();
+      key({ key: 'ArrowLeft' });
+      expect(struck()).toEqual(before);
+      // Up a semitone, heard there; with Shift an octave.
+      instrument.played.length = 0;
+      instrument.stopped.length = 0;
+      const now = clock.now();
+      key({ key: 'ArrowUp' });
+      expect(instrument.played.map((note) => [note.midi, note.atMs])).toEqual([[63, now]]);
+      expect(instrument.stopped.map((note) => [note.midi, note.atMs])).toEqual([[63, now + 300]]);
+      key({ key: 'ArrowUp', shiftKey: true });
+      expect(moving()).toEqual([75, 0]);
+      key({ key: 'ArrowDown', shiftKey: true });
+      key({ key: 'ArrowDown' });
+      expect(moving()).toEqual([62, 0]);
+      // Not off the keyboard: a note at 100 goes up a semitone, not an octave.
+      choose(1_100, 100);
+      key({ key: 'ArrowUp', shiftKey: true });
+      expect(top()).toEqual([100, 1_000]);
+      key({ key: 'ArrowUp' });
+      expect(top()).toEqual([101, 1_000]);
+      // With Ctrl or Alt held, or a list holding the focus, an arrow is not the editor's.
+      expect(key({ key: 'ArrowUp', ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(key({ key: 'ArrowUp', altKey: true }).defaultPrevented).toBe(false);
+      expect(key({ key: 'ArrowUp' }, element('roll-key')).defaultPrevented).toBe(false);
+      expect(key({ key: 'ArrowUp' }, element('roll-velocity-level')).defaultPrevented).toBe(false);
+      expect(top()).toEqual([101, 1_000]);
+
+      // Undone with Ctrl+Z, done again with Ctrl+Shift+Z or Ctrl+Y, until something else is done.
+      key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+      expect(top()).toEqual([100, 1_000]);
+      key({ key: 'Z', code: 'KeyZ', ctrlKey: true, shiftKey: true });
+      expect(top()).toEqual([101, 1_000]);
+      // Two back, the step down to 62 before it too; and forward again one at a time.
+      key({ key: 'z', code: 'KeyZ', metaKey: true });
+      key({ key: 'z', code: 'KeyZ', metaKey: true });
+      expect([top(), moving()]).toEqual([
+        [100, 1_000],
+        [63, 0],
+      ]);
+      key({ key: 'y', code: 'KeyY', ctrlKey: true });
+      expect([top(), moving()]).toEqual([
+        [100, 1_000],
+        [62, 0],
+      ]);
+      key({ key: 'y', code: 'KeyY', ctrlKey: true });
+      expect(top()).toEqual([101, 1_000]);
+      choose(1_100, 101);
+      key({ key: 'ArrowDown' });
+      key({ key: 'y', code: 'KeyY', ctrlKey: true });
+      expect(top()).toEqual([100, 1_000]);
+
+      // Shift held as a note is dragged, it goes exactly where the pointer takes it.
+      const drag = { bubbles: true, pointerId: 91, pointerType: 'mouse', button: 0 };
+      const body = element('roll-body');
+      const from = at(100, 60);
+      body.dispatchEvent(new PointerEvent('pointerdown', { ...drag, ...from }));
+      body.dispatchEvent(new PointerEvent('pointermove', { ...drag, shiftKey: true, clientX: from.clientX + 0.15 * zoom, clientY: from.clientY }));
+      body.dispatchEvent(new PointerEvent('pointerup', { ...drag, shiftKey: true, clientX: from.clientX + 0.15 * zoom, clientY: from.clientY }));
+      expect(struck().find(([midi]) => midi === 60)).toEqual([60, 150]);
+      // And so does its end.
+      const end = at(540, 60);
+      body.dispatchEvent(new PointerEvent('pointerdown', { ...drag, ...end }));
+      body.dispatchEvent(new PointerEvent('pointermove', { ...drag, shiftKey: true, clientX: end.clientX + 0.13 * zoom, clientY: end.clientY }));
+      body.dispatchEvent(new PointerEvent('pointerup', { ...drag, shiftKey: true, clientX: end.clientX + 0.13 * zoom, clientY: end.clientY }));
+      expect(sketches.find(sketch.id)?.events.find((event) => event.kind === 'noteOff' && event.midi === 60)?.atMs).toBe(680);
+
+      // Shift+Space goes back to the marker, a playback going stopped.
+      clock.advance(1_000);
+      tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(1_480, 70) });
+      expect(headAt(body)).toBe('1.500');
+      element<HTMLButtonElement>('roll-play').click();
+      expect(runtime.takePlayer.playing).not.toBeNull();
+      expect(element('roll-play').title).toBe('Pause (Space)');
+      expect(key({ key: ' ', code: 'Space', shiftKey: true }).defaultPrevented).toBe(true);
+      expect(runtime.takePlayer.playing).toBeNull();
+      expect(headAt(body)).toBe('1.500');
+
+      // On a Mac or an iPad, the titles name the command key by its sign.
+      const platform = Object.getOwnPropertyDescriptor(Navigator.prototype, 'platform');
+      Object.defineProperty(Navigator.prototype, 'platform', { configurable: true, get: () => 'MacIntel' });
+      try {
+        key({ key: 'a', code: 'KeyA', metaKey: true });
+        expect(element('roll-undo').title).toBe('Put back the last change (⌘Z; again with Shift)');
+      } finally {
+        if (platform !== undefined) {
+          Object.defineProperty(Navigator.prototype, 'platform', platform);
+        }
+      }
+
+      // Escape lets go first, and with nothing chosen shuts the sheet.
+      key({ key: 'Escape' });
+      expect(chosen()).toEqual([]);
+      key({ key: 'Escape' });
+      expect(element('sheet-roll').hidden).toBe(true);
     });
 
     it('shows a sketch in a metre the list does not offer as it is', async () => {
@@ -6994,7 +7156,7 @@ describe('AppView', () => {
       expect(runtime.takePlayer.playing).toBeNull();
       expect(headAt(drawn)).toBe('0.300');
       expect(element<HTMLButtonElement>('roll-stop').dataset['idle']).toBeUndefined();
-      expect(element('roll-play').getAttribute('aria-label')).toBe('Play');
+      expect(element('roll-play').getAttribute('aria-label')).toBe('Play (Space)');
 
       element<HTMLButtonElement>('roll-stop').click();
 
@@ -7043,7 +7205,7 @@ describe('AppView', () => {
         clock.advance(500);
         vi.advanceTimersByTime(100);
         // Playing, it goes back to the marker; the marker stays where it was put.
-        expect(back.title).toBe('Back to where the marker was put');
+        expect(back.title).toBe('Back to where the marker was put (Shift+Space)');
         expect(icon()).not.toBe(stop);
         back.click();
       } finally {
@@ -7064,7 +7226,7 @@ describe('AppView', () => {
         vi.useRealTimers();
       }
       expect(headAt(drawn)).toBe('0.900');
-      expect(back.title).toBe('Back to where the marker was put');
+      expect(back.title).toBe('Back to where the marker was put (Shift+Space)');
       back.click();
       expect(headAt(drawn)).toBe('0.600');
 

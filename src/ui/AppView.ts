@@ -177,6 +177,7 @@ import {
   takeOfTheRun,
   type RunRoll,
   theBeatNearest,
+  theNextLineOfTheGrid,
   theMusicsPlaceAt,
   type GridChoice,
 } from '../application/session/RunRoll.js';
@@ -485,6 +486,9 @@ function theBoxCornerAt(
 function addsToTheChoice(event: PointerEvent): boolean {
   return event.ctrlKey || event.metaKey || event.shiftKey;
 }
+
+/** How long a note moved up or down by an arrow key is heard for, at its new pitch. */
+const HEARD_ON_A_STEP_MS = 300;
 
 /**
  * How close two taps must come to be one double tap: as quick as the
@@ -1919,6 +1923,8 @@ export class AppView {
       readonly tool: 'pencil' | 'selection';
       /** What it was before each change, the last last: its notes and its beats. */
       readonly before: readonly SketchAsItWas[];
+      /** What each undo took it back from, the last last, for a redo to bring back; gone at the next change. */
+      readonly after: readonly SketchAsItWas[];
     };
   } | null = null;
 
@@ -6167,6 +6173,8 @@ export class AppView {
           event.preventDefault();
           if (held) {
             this.stopTheRoll();
+          } else if (event.shiftKey) {
+            this.goBackToTheMarker();
           } else {
             this.togglePlayingTheRoll();
           }
@@ -11907,13 +11915,13 @@ export class AppView {
     const [only] = chosen;
     if (chosen.length === 0) {
       this.el.rollDelete.dataset['idle'] = 'true';
-      this.el.rollDelete.title = 'Delete a note. Tap one to choose it.';
+      this.el.rollDelete.title = 'Delete a note (Delete). Tap one to choose it.';
     } else {
       delete this.el.rollDelete.dataset['idle'];
       this.el.rollDelete.title =
         chosen.length === 1 && only !== undefined
-          ? `Delete the chosen note, ${midiToLabel(only.midi)}`
-          : `Delete the ${String(chosen.length)} chosen notes`;
+          ? `Delete the chosen note, ${midiToLabel(only.midi)} (Delete)`
+          : `Delete the ${String(chosen.length)} chosen notes (Delete)`;
     }
     this.el.rollDelete.setAttribute('aria-label', this.el.rollDelete.title);
 
@@ -11921,10 +11929,10 @@ export class AppView {
 
     if ((sketch?.before.length ?? 0) > 0) {
       delete this.el.rollUndo.dataset['idle'];
-      this.el.rollUndo.title = 'Put back the last change';
+      this.el.rollUndo.title = `Put back the last change (${this.theCommandKey()}Z; again with Shift)`;
     } else {
       this.el.rollUndo.dataset['idle'] = 'true';
-      this.el.rollUndo.title = 'Undo. Nothing has been changed to put back.';
+      this.el.rollUndo.title = `Undo (${this.theCommandKey()}Z). Nothing has been changed to put back.`;
     }
     this.el.rollUndo.setAttribute('aria-label', this.el.rollUndo.title);
   }
@@ -12046,6 +12054,16 @@ export class AppView {
       return now === undefined ? [] : [{ midi: key.midi, downAtMs: now.atMs }];
     });
     this.changeTheSketchShowing(paced.events, [...sketch.before, stored], chosen, paced.beats);
+  }
+
+  /**
+   * How the command key is written where a title names a shortcut: the Mac's
+   * and an iPad's sign, or Ctrl and a plus elsewhere. Asked of the browser,
+   * which knows the machine.
+   */
+  private theCommandKey(): string {
+    const platform = this.doc.defaultView?.navigator.platform ?? '';
+    return /Mac|iPhone|iPad/.test(platform) ? '\u2318' : 'Ctrl+';
   }
 
   /** Puts a field in place of the name of the sketch on the drawing, its name in it to write over. */
@@ -12218,7 +12236,7 @@ export class AppView {
       why: 'A sketch: no bars to practise until it is written down.',
       ofTheOpenScore: false,
       barLabel: barsCountedOnItsBeats(roll),
-      sketch: { id, editing: false, chosen: [], before: [], tool: 'pencil' },
+      sketch: { id, editing: false, chosen: [], before: [], after: [], tool: 'pencil' },
     };
     this.rollAtMs = 0;
     this.rollScroller.to(0, 0);
@@ -12635,12 +12653,15 @@ export class AppView {
     this.panned = true;
     const origin = rollBeganAtMs(showing.roll);
     const keys = this.theKeysDragged(drag, stored.events);
+    // On the grid where the marker is put on one, unless Shift is held now:
+    // then exactly where the pointer takes it.
+    const snapping = this.el.rollSnap.checked && !event.shiftKey;
     if (drag.grip === 'end') {
-      this.dragTheEndsOfTheKeys(drag, keys, stored, acrossPx, origin);
+      this.dragTheEndsOfTheKeys(drag, keys, stored, acrossPx, origin, snapping);
       return;
     }
     const wanted = drag.key.downAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
-    const at = this.el.rollSnap.checked ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
+    const at = snapping ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
     const byMs = Math.round(at + origin) - drag.key.downAtMs;
     const lowest = drag.scene.highest - drag.scene.rows + 1;
     const pitches = keys.map((key) => key.midi);
@@ -12676,13 +12697,14 @@ export class AppView {
     stored: StoredSketch,
     acrossPx: number,
     origin: number,
+    snapping: boolean,
   ): void {
     const showing = this.theOtherRollShowing;
     if (showing === null) {
       return;
     }
     const wanted = drag.upAtMs - origin + (acrossPx / Number(this.el.rollZoom.value)) * 1000;
-    const at = this.el.rollSnap.checked ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
+    const at = snapping ? theBeatNearest(showing.roll, wanted, this.theRollsGrid()) : wanted;
     const byMs = Math.round(at + origin) - drag.upAtMs;
     const end = rollEndedAtMs(showing.roll);
     this.showTheDrag(
@@ -12759,12 +12781,43 @@ export class AppView {
     if (isTypedInto(event.target as TypedInto | null)) {
       return;
     }
-    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === 'KeyZ') {
+    const command = (event.ctrlKey || event.metaKey) && !event.altKey;
+    const chosen = this.theOtherRollShowing?.sketch?.chosen ?? [];
+    if (command && event.code === 'KeyZ') {
+      // With Shift it is a redo, as everywhere; Ctrl+Y is the other name for one.
       event.preventDefault();
-      this.putBackTheLastChange();
+      if (event.shiftKey) {
+        this.bringBackTheLastPutBack();
+      } else {
+        this.putBackTheLastChange();
+      }
+    } else if (command && !event.shiftKey && event.code === 'KeyY') {
+      event.preventDefault();
+      this.bringBackTheLastPutBack();
+    } else if (command && !event.shiftKey && event.code === 'KeyA') {
+      // Every note, rather than every word on the page.
+      event.preventDefault();
+      const sketch = this.theOtherRollShowing?.sketch;
+      const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+      this.choose(stored === null ? [] : theKeysOfTheTake(stored.events));
+    } else if (event.key === 'Escape' && chosen.length > 0) {
+      // First what is chosen is let go of; the next Escape shuts the sheet.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.choose([]);
     } else if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
       this.deleteTheChosenKeys();
+    } else if (
+      !command &&
+      !event.altKey &&
+      ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) &&
+      // A list or a slider with the focus has its own use for them.
+      !isFormControl(event.target instanceof Element ? event.target : null) &&
+      chosen.length > 0
+    ) {
+      event.preventDefault();
+      this.moveTheChosenKeys(event.key, event.shiftKey);
     }
   }
 
@@ -12802,13 +12855,84 @@ export class AppView {
     }
   }
 
-  /** Puts the sketch back as it was before its last change. */
+  /** Puts the sketch back as it was before its last change, keeping what it was for a redo. */
   private putBackTheLastChange(): void {
-    const before = this.theOtherRollShowing?.sketch?.before ?? [];
-    const last = before.at(-1);
-    if (last !== undefined) {
-      this.changeTheSketchShowing(last.events, before.slice(0, -1), [], last.beats);
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const last = sketch?.before.at(-1);
+    if (sketch === undefined || stored === null || last === undefined) {
+      return;
     }
+    this.changeTheSketchShowing(last.events, sketch.before.slice(0, -1), [], last.beats, [...sketch.after, stored]);
+  }
+
+  /** Brings back what the last undo put back, while nothing has changed since. */
+  private bringBackTheLastPutBack(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const last = sketch?.after.at(-1);
+    if (sketch === undefined || stored === null || last === undefined) {
+      return;
+    }
+    this.changeTheSketchShowing(last.events, [...sketch.before, stored], [], last.beats, sketch.after.slice(0, -1));
+  }
+
+  /**
+   * Moves the chosen notes by an arrow key: across to the next line of the
+   * grid, the earliest of them onto it and the rest by as much; up or down a
+   * semitone, or an octave with Shift - and not at all where one would leave
+   * the keyboard. One change each, heard where it goes up or down.
+   */
+  private moveTheChosenKeys(arrow: string, octave: boolean): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (showing === null || sketch === undefined || stored === null) {
+      return;
+    }
+    const keys = theKeysOfTheTake(stored.events).filter((key) => sketch.chosen.some((each) => sameKey(each, key)));
+    if (keys.length === 0) {
+      return;
+    }
+    let byMs = 0;
+    let bySemitones = 0;
+    if (arrow === 'ArrowLeft' || arrow === 'ArrowRight') {
+      const origin = rollBeganAtMs(showing.roll);
+      const earliest = Math.min(...keys.map((key) => key.downAtMs));
+      const line = theNextLineOfTheGrid(showing.roll, earliest - origin, this.theRollsGrid(), arrow === 'ArrowRight' ? 1 : -1);
+      if (line === null) {
+        return;
+      }
+      byMs = Math.round(line + origin) - earliest;
+    } else {
+      bySemitones = (arrow === 'ArrowUp' ? 1 : -1) * (octave ? 12 : 1);
+      if (keys.some((key) => key.midi + bySemitones < LOWEST_KEY || key.midi + bySemitones > HIGHEST_KEY)) {
+        return;
+      }
+    }
+    const changes = keys.map((key) => ({
+      key,
+      midi: key.midi + bySemitones,
+      downAtMs: key.downAtMs + byMs,
+      upAtMs: key.upAtMs === null ? null : key.upAtMs + byMs,
+    }));
+    const events = takeWithTheKeysChanged(stored.events, changes);
+    if (events === null) {
+      return;
+    }
+    if (bySemitones !== 0) {
+      // Heard where they went, a moment each, both ends handed over at once.
+      const now = this.runtime.clock.now();
+      for (const change of changes) {
+        this.runtime.pitchPlayer.play(change.midi, change.key.velocity, now);
+        this.runtime.pitchPlayer.stop(change.midi, now + HEARD_ON_A_STEP_MS);
+      }
+    }
+    this.changeTheSketchShowing(
+      events,
+      [...sketch.before, stored],
+      changes.map(({ midi, downAtMs }) => ({ midi, downAtMs })),
+    );
   }
 
   /**
@@ -12821,6 +12945,7 @@ export class AppView {
     before: readonly SketchAsItWas[],
     chosen: readonly KeyNamed[] = [],
     beats?: readonly HeardBeat[],
+    after: readonly SketchAsItWas[] = [],
   ): void {
     const showing = this.theOtherRollShowing;
     const sketch = showing?.sketch;
@@ -12837,7 +12962,7 @@ export class AppView {
       ...showing,
       roll,
       barLabel: barsCountedOnItsBeats(roll),
-      sketch: { ...sketch, chosen, before },
+      sketch: { ...sketch, chosen, before, after },
     };
     this.drawTheRollInto();
     this.sayWhatCanBeChanged();
@@ -13197,6 +13322,12 @@ export class AppView {
       this.stopTheRoll();
       return;
     }
+    this.goBackToTheMarker();
+  }
+
+  /** Back to where the marker was put, a playback going stopped: what Shift+Space asks for. */
+  private goBackToTheMarker(): void {
+    const sounding = this.runtime.takePlayer.playing === RUN_ROLL_ID;
     if (sounding) {
       this.runtime.takePlayer.stop();
     }
@@ -13215,7 +13346,7 @@ export class AppView {
     }
     if (back) {
       delete this.el.rollStop.dataset['idle'];
-      this.el.rollStop.title = 'Back to where the marker was put';
+      this.el.rollStop.title = 'Back to where the marker was put (Shift+Space)';
     } else if (this.rollPlacedAtMs !== 0) {
       delete this.el.rollStop.dataset['idle'];
       this.el.rollStop.title = 'Back to the beginning, and the marker with it';
@@ -13410,7 +13541,7 @@ export class AppView {
     const icon = sounding ? PAUSE_ICON : PLAY_ICON;
     if (this.el.rollPlayIcon.getAttribute('d') !== icon) {
       this.el.rollPlayIcon.setAttribute('d', icon);
-      const label = sounding ? 'Pause' : 'Play';
+      const label = `${sounding ? 'Pause' : 'Play'} (Space)`;
       this.el.rollPlay.title = label;
       this.el.rollPlay.setAttribute('aria-label', label);
     }

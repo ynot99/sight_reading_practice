@@ -647,6 +647,26 @@ export function theBeatNearest(
 }
 
 /**
+ * The line of the grid next to a moment, one way or the other: the first
+ * after it, or the last before it - a moment on a line being on neither
+ * side of it. What an arrow key steps a note to. `null` where there is none
+ * that way. Moments as `theBeatNearest` has them, from the run's start.
+ */
+export function theNextLineOfTheGrid(
+  roll: RunRoll,
+  atMs: number,
+  choice: GridChoice,
+  way: 1 | -1,
+): number | null {
+  const began = rollBeganAtMs(roll);
+  // Half a millisecond either way: a note put on a line is put there in whole
+  // milliseconds, and a line may fall between two.
+  const lines = theMusicsBeats(roll, choice).map((line) => line.atMs - began);
+  const beyond = way === 1 ? lines.filter((at) => at > atMs + 0.5) : lines.filter((at) => at < atMs - 0.5);
+  return beyond.length === 0 ? null : way === 1 ? Math.min(...beyond) : Math.max(...beyond);
+}
+
+/**
  * The clicks falling due in the stretch of a playback about to be heard.
  *
  * Handed over in windows, the way the notes are: a click has to be placed on

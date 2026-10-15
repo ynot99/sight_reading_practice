@@ -486,6 +486,13 @@ function addsToTheChoice(event: PointerEvent): boolean {
   return event.ctrlKey || event.metaKey || event.shiftKey;
 }
 
+/**
+ * How close two taps must come to be one double tap: as quick as the
+ * double click a desktop counts, and as near as a finger lands twice.
+ */
+const DOUBLE_TAP_MS = 400;
+const DOUBLE_TAP_PX = 12;
+
 /** How far down the run the view stood, and the place down it a change of row height is held at. */
 interface RowsHeld {
   readonly scrolledDownPx: number;
@@ -1792,6 +1799,14 @@ export class AppView {
    * number, and is what is drawn until the first pinch.
    */
   private rollRowPx = 13;
+  /** The last tap on a sketch being edited, for the next to be its second. */
+  private theLastTap: {
+    readonly atMs: number;
+    readonly clientX: number;
+    readonly clientY: number;
+    /** The note it was on, or nothing where it was on empty space. */
+    readonly key: KeyNamed | null;
+  } | null = null;
   /**
    * What sounds while a key of a sketch is held: every key the hold would
    * move, each at its own loudness, and how far up or down they have been
@@ -8733,8 +8748,14 @@ export class AppView {
     this.listen(this.el.rollDelete, 'click', () => {
       this.deleteTheChosenKeys();
     });
-    this.listen(this.el.rollBody, 'dblclick', (event) => {
-      this.deleteTheKeyDoubleClicked(event as MouseEvent);
+    // The menu a right click opens is taken on a note being edited: there it
+    // takes the note out, as the trash would.
+    this.listen(this.el.rollBody, 'contextmenu', (event) => {
+      const key = this.theOtherRollShowing?.sketch?.editing === true ? this.theKeyUnder(event as MouseEvent) : null;
+      if (key !== null) {
+        event.preventDefault();
+        this.deleteTheKey(key);
+      }
     });
     this.listen(this.el.rollSelect, 'click', () => {
       const showing = this.theOtherRollShowing;
@@ -8753,15 +8774,29 @@ export class AppView {
       this.pinched = false;
       this.panned = false;
       this.stopTheFling();
-      if (this.rollFingers.size === 0 && (this.takeHoldOfAKey(event) || this.beginABox(event))) {
+      // The middle button moves the drawing wherever it goes down; the right
+      // one is the menu's, which a note being edited answers.
+      const middle = event.pointerType === 'mouse' && event.button === 1;
+      if (event.pointerType === 'mouse' && event.button === 2) {
         return;
+      }
+      if (!middle && this.rollFingers.size === 0 && (this.takeHoldOfAKey(event) || this.beginABox(event))) {
+        return;
+      }
+      if (middle) {
+        // Or the browser starts scrolling the page by it.
+        event.preventDefault();
       }
       this.rollFingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       this.beginAPinch();
-      // One finger, or a pen, moves the drawing; a mouse points at it, as it
-      // always has, and a second finger makes a pan a pinch.
+      // One finger, or a pen, moves the drawing, and so does a mouse over a
+      // sketch being edited without the selection tool, as over any editor's
+      // empty space; listening, a mouse points at it, as it always has. A
+      // second finger makes a pan a pinch.
+      const editingWithThePencil =
+        this.theOtherRollShowing?.sketch?.editing === true && this.theOtherRollShowing.sketch.tool === 'pencil';
       this.rollPan =
-        event.pointerType !== 'mouse' && this.rollFingers.size === 1
+        (event.pointerType !== 'mouse' || middle || editingWithThePencil) && this.rollFingers.size === 1
           ? {
               pointerId: event.pointerId,
               fromX: this.rollScroller.x,
@@ -8795,7 +8830,7 @@ export class AppView {
     for (const ending of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       this.listen(this.el.rollBody, ending, (event) => {
         if (this.rollDrag?.pointerId === event.pointerId) {
-          this.letGoOfTheHeldKey(ending === 'pointerup');
+          this.letGoOfTheHeldKey(ending === 'pointerup' ? event : null);
           return;
         }
         if (this.rollBoxDrawn?.pointerId === event.pointerId) {
@@ -11250,7 +11285,9 @@ export class AppView {
   private letThePanGo(event: PointerEvent, thrown: boolean): void {
     const pan = this.rollPan;
     this.rollPan = null;
-    if (pan === null || !pan.moved || !thrown) {
+    // A mouse lets go where it is, as a desktop editor's drawing stops under
+    // it; a finger's throw is what keeps a drawing going.
+    if (pan === null || !pan.moved || !thrown || event.pointerType === 'mouse') {
       return;
     }
     const speed = speedOf(pan.trail, event.timeStamp);
@@ -12228,15 +12265,46 @@ export class AppView {
    * it is listening's, and the ruler's.
    */
   private chooseTheKeyTapped(event: MouseEvent): void {
-    if (this.theKeyUnder(event) !== null || event.ctrlKey || event.metaKey || event.shiftKey) {
+    if (this.theKeyUnder(event) !== null) {
       return;
     }
-    // Choosing with the selection tool, a click on nothing chooses nothing.
-    if (this.theOtherRollShowing?.sketch?.tool === 'selection') {
+    const keyHeld = event.ctrlKey || event.metaKey || event.shiftKey;
+    // The second of two taps where there is nothing writes a note there.
+    if (this.isASecondTap(event, null) && !keyHeld) {
+      this.addAKeyWhereTapped(event);
+      return;
+    }
+    // One puts the marker there, to listen from, and lets go of the notes
+    // chosen - unless a key held says the click was to choose.
+    if (!keyHeld && (this.theOtherRollShowing?.sketch?.chosen.length ?? 0) > 0) {
       this.choose([]);
-      return;
     }
-    this.addAKeyWhereTapped(event);
+    this.putTheHeadWhereItWasTapped(event);
+  }
+
+  /**
+   * Whether a tap is the second of two on one place - the same note, or the
+   * same empty space - close enough together in time and on the screen, and
+   * neither with a key held. Worked out here rather than taken from the
+   * browser, which sends a double click for a mouse but not reliably for a
+   * finger on a tablet. A second tap is the end of a pair: the next starts
+   * another.
+   */
+  private isASecondTap(
+    event: { readonly clientX: number; readonly clientY: number; readonly ctrlKey: boolean; readonly metaKey: boolean; readonly shiftKey: boolean },
+    key: KeyNamed | null,
+  ): boolean {
+    const now = this.runtime.clock.now();
+    const last = this.theLastTap;
+    const plain = !event.ctrlKey && !event.metaKey && !event.shiftKey;
+    const second =
+      plain &&
+      last !== null &&
+      now - last.atMs <= DOUBLE_TAP_MS &&
+      Math.hypot(event.clientX - last.clientX, event.clientY - last.clientY) <= DOUBLE_TAP_PX &&
+      (key === null ? last.key === null : last.key !== null && sameKey(last.key, key));
+    this.theLastTap = second || !plain ? null : { atMs: now, clientX: event.clientX, clientY: event.clientY, key };
+    return second;
   }
 
   /** Makes these the notes chosen, and only these. */
@@ -12262,9 +12330,9 @@ export class AppView {
     if (sketch?.editing !== true || event.button !== 0 || this.rollBoxDrawn !== null) {
       return false;
     }
-    // A mouse draws one with either tool; a finger or a pen only with the
-    // selection tool, having nothing else to move the drawing with.
-    if (event.pointerType !== 'mouse' && sketch.tool !== 'selection') {
+    // Only with the selection tool, for a mouse as for a finger: without it,
+    // a drag from empty space moves the drawing.
+    if (sketch.tool !== 'selection') {
       return false;
     }
     const onTheRuler = event.target instanceof Element && event.target.closest('.roll__ruler') !== null;
@@ -12647,7 +12715,7 @@ export class AppView {
    * was where the pointer was taken away instead. Without a drag it was a tap
    * on the note, and the click of letting go is taken as answered here.
    */
-  private letGoOfTheHeldKey(lifted: boolean): void {
+  private letGoOfTheHeldKey(lifted: PointerEvent | null): void {
     this.letTheHeldKeysFallSilent();
     const drag = this.rollDrag;
     const sketch = this.theOtherRollShowing?.sketch;
@@ -12657,8 +12725,13 @@ export class AppView {
       return;
     }
     if (drag.moved === null) {
-      if (lifted) {
+      if (lifted !== null) {
         this.panned = true;
+        // The second of two taps on a note takes it out.
+        if (this.isASecondTap(lifted, drag.key)) {
+          this.deleteTheKey(drag.key);
+          return;
+        }
         // Added or taken out as it was pressed; otherwise chosen alone.
         if (!drag.adds) {
           this.choose([drag.key]);
@@ -12666,7 +12739,7 @@ export class AppView {
       }
       return;
     }
-    if (lifted && sketch !== undefined && stored !== null) {
+    if (lifted !== null && sketch !== undefined && stored !== null) {
       this.changeTheSketchShowing(drag.moved.events, [...sketch.before, stored], drag.moved.to);
     } else {
       this.drawTheRollInto();
@@ -12709,14 +12782,14 @@ export class AppView {
   }
 
   /**
-   * Takes out the note a double click is on, while a sketch is edited: one
-   * change, put back as one. Only that note goes; the others chosen stay so.
+   * Takes one note out of the sketch being edited - tapped twice, or clicked
+   * with the right button: one change, put back as one. Only that note goes;
+   * the others chosen stay so.
    */
-  private deleteTheKeyDoubleClicked(event: MouseEvent): void {
+  private deleteTheKey(key: KeyNamed): void {
     const sketch = this.theOtherRollShowing?.sketch;
     const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
-    const key = sketch?.editing === true ? this.theKeyUnder(event) : null;
-    if (sketch === undefined || stored === null || key === null) {
+    if (sketch === undefined || stored === null) {
       return;
     }
     const events = takeWithoutTheKeys(stored.events, [key]);

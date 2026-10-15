@@ -27,6 +27,8 @@ interface Second {
   latestTickMs: number | null;
   frames: number;
   longestFrameMs: number | null;
+  earliestNoughtMs: number | null;
+  readAgainMs: number | null;
 }
 
 /** How many seconds are kept: the last quarter of an hour. */
@@ -34,6 +36,8 @@ const SECONDS_KEPT = 900;
 
 let began: number | null = null;
 let lastFrameAt: number | null = null;
+/** Where the pulse first saw the audio clock's nought on the page's clock, since it started. */
+let firstNought: number | null = null;
 const seconds = new Map<number, Second>();
 
 /** The second a moment falls in, made where there is none yet; `null` before anything began. */
@@ -57,6 +61,8 @@ function theSecondOf(now: number): Second | null {
       latestTickMs: null,
       frames: 0,
       longestFrameMs: null,
+      earliestNoughtMs: null,
+      readAgainMs: null,
     };
     seconds.set(at, second);
     for (const old of seconds.keys()) {
@@ -81,7 +87,30 @@ function most(kept: number | null, value: number): number {
 export function beginThePlaybackTimings(): void {
   began = performance.now();
   lastFrameAt = null;
+  firstNought = null;
   seconds.clear();
+}
+
+/**
+ * Where the pulse saw the audio clock's nought on the page's clock, at one of
+ * its looks: kept as the earliest of each second, against the first look.
+ */
+export function noteTheAudioNought(noughtMs: number): void {
+  const second = theSecondOf(performance.now());
+  if (second === null) {
+    return;
+  }
+  firstNought ??= noughtMs;
+  second.earliestNoughtMs = least(second.earliestNoughtMs, noughtMs - firstNought);
+}
+
+/** The pulse took the clocks' difference again, moving its reading by so much. */
+export function noteTheClocksReadAgain(movedMs: number): void {
+  const second = theSecondOf(performance.now());
+  if (second === null) {
+    return;
+  }
+  second.readAgainMs = (second.readAgainMs ?? 0) + movedMs;
 }
 
 /** What the audio device says of its clock as a note is handed over. */
@@ -175,8 +204,10 @@ export function thePlaybackTimingsText(device: string): string {
     'beats  - beats the page acted on (marker, keys)',
     'b.late - the latest a beat was acted on after it was heard (ms)',
     'frames - frames of falling notes painted; gap - the longest between two (ms)',
+    'clock  - the earliest the audio clock\'s nought stood in the second, against the first look (ms; it rises while the audio clock stands)',
+    'again  - how far the clocks\' reading was taken again in the second (ms)',
     '',
-    '  sec notes ahead late drop drift heard   out/base beats b.late frames   gap',
+    '  sec notes ahead late drop drift heard   out/base beats b.late frames   gap clock again',
   ];
   for (const [at, second] of [...seconds].sort(([one], [other]) => one - other)) {
     lines.push(
@@ -193,6 +224,8 @@ export function thePlaybackTimingsText(device: string): string {
         said(second.latestTickMs, 6),
         said(second.frames, 6),
         said(second.longestFrameMs, 5),
+        said(second.earliestNoughtMs, 5, true),
+        said(second.readAgainMs, 5, true),
       ].join(' '),
     );
   }

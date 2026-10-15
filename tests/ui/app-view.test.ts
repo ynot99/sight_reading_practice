@@ -1300,11 +1300,11 @@ describe('AppView', () => {
         .slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1)
         .map((line) => line.trim().split(/\s+/));
       // Seconds nought and four: a beat acted on in the first, and the frames' longest gaps.
-      expect(rows.map((row) => [row[0], row.at(-1)])).toEqual([
+      expect(rows.map((row) => [row[0], row[12]])).toEqual([
         ['0', '20'],
         ['4', '16'],
       ]);
-      expect(Number(rows[0]?.at(-4))).toBeGreaterThan(0);
+      expect(Number(rows[0]?.[9])).toBeGreaterThan(0);
       expect(element('backup-description').textContent).toBe('Copied the playback timings.');
 
       // And as a file, the same text.

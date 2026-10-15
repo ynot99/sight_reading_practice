@@ -16,7 +16,7 @@ import {
   unplug,
 } from './audioTime.js';
 import { timeTheStart } from '../../shared/timeTheStart.js';
-import { beginThePlaybackTimings } from '../../shared/playbackTimings.js';
+import { beginThePlaybackTimings, noteTheAudioNought, noteTheClocksReadAgain } from '../../shared/playbackTimings.js';
 import {
   buildMetronomeTick,
   isAccented,
@@ -337,6 +337,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
   private keepTheClocksTogether(context: AudioContext): void {
     const now = performance.now();
     const nought = now - context.currentTime * 1000;
+    noteTheAudioNought(nought);
     this.earliestNought = Math.min(this.earliestNought ?? nought, nought);
     this.watchedSince ??= now;
     if (now - this.watchedSince < CLOCKS_WATCHED_MS) {
@@ -346,6 +347,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     if (Math.abs(apart) > CLOCKS_APART_MS) {
       this.audioEpochMs = this.earliestNought;
       this.reading.hold(this.audioEpochMs);
+      noteTheClocksReadAgain(apart);
       timeTheStart('metronome: the clocks read again', () => `${String(Math.round(apart))} ms apart`);
     }
     this.watchedSince = now;

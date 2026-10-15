@@ -63,7 +63,7 @@ describe('how a playback kept time', () => {
     now = 2_900;
     timings.noteAFrame();
 
-    expect(rows()).toEqual(['0 4 -300 1 1 +3 +13 40/ 5 2 70 3 84', '1 0 - 0 0 - - -/ - 0 - 2 500']);
+    expect(rows()).toEqual(['0 4 -300 1 1 +3 +13 40/ 5 2 70 3 84 - -', '1 0 - 0 0 - - -/ - 0 - 2 500 - -']);
     const text = timings.thePlaybackTimingsText('a tablet');
     expect(text.split('\n').slice(0, 2)).toEqual(['How the last playback kept time', 'a tablet']);
   });
@@ -80,7 +80,32 @@ describe('how a playback kept time', () => {
     now = 5_060;
     timings.noteAFrame();
 
-    expect(rows()).toEqual(['0 0 - 0 0 - - -/ - 0 - 2 10']);
+    expect(rows()).toEqual(['0 0 - 0 0 - - -/ - 0 - 2 10 - -']);
+  });
+
+  it('says where the audio clock stood against its first look, and where its reading was taken again', () => {
+    timings.noteTheAudioNought(500);
+    timings.noteTheClocksReadAgain(9);
+    // A pulse before this one saw it elsewhere, which this one does not count from.
+    timings.beginThePlaybackTimings();
+    timings.noteTheAudioNought(700);
+    timings.beginThePlaybackTimings();
+    now = 1_100;
+    timings.noteTheAudioNought(400);
+    now = 1_120;
+    timings.noteTheAudioNought(410);
+    timings.noteTheAudioNought(398);
+    // Then the audio clock stands 92 ms, and the reading follows it twice.
+    now = 2_100;
+    timings.noteTheAudioNought(492);
+    timings.noteTheAudioNought(495);
+    timings.noteTheClocksReadAgain(80);
+    timings.noteTheClocksReadAgain(12);
+
+    expect(rows().map((row) => row.split(' ').slice(-2))).toEqual([
+      ['-2', '-'],
+      ['+92', '+92'],
+    ]);
   });
 
   it('keeps the last quarter of an hour', () => {

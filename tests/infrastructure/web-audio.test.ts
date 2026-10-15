@@ -193,7 +193,8 @@ describe('WebAudioMetronome', () => {
 
     metronome.start();
 
-    expect(seconds()).toEqual(['Nothing yet: start a playback, and copy this after it.']);
+    // The frame before it gone; only the pulse's own first look at the clocks.
+    expect(seconds().map((row) => row.trim().split(/ +/)[11])).toEqual(['0']);
   });
 
   it('unplugs each click once it has sounded', () => {
@@ -233,6 +234,12 @@ describe('WebAudioMetronome', () => {
     expect(stamped[0]).toBe(0);
     expect(stamped.at(-1)).toBeGreaterThanOrEqual(75);
     expect(stamped.at(-1)).toBeLessThanOrEqual(92);
+    // And the timings say where it was taken again.
+    const lines = thePlaybackTimingsText('').split('\n');
+    const again = lines
+      .slice(lines.findIndex((line) => line.trim().startsWith('sec notes')) + 1)
+      .map((line) => line.trim().split(/ +/).at(-1));
+    expect(again.filter((said) => said !== '-').map(Number)).toEqual([stamped.at(-1)]);
   });
 
   it('places the instruments\' sounds by the reading taken again', () => {

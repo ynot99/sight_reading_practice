@@ -1659,6 +1659,14 @@ textarea {
    * container needs to be.
    */
   container-type: size;
+  /*
+   * The hand the drawing is pressed with, here rather than on the grid inside:
+   * a box drawn on a sketch takes the pointer to this element, and while it
+   * has it the pointer wears this element's shape - and still does after the
+   * click, until the mouse moves again. The grid inside is drawn anew on a
+   * click, too.
+   */
+  cursor: pointer;
 }
 
 .roll-body > .roll {
@@ -1870,6 +1878,8 @@ textarea {
   inset: 0;
   transform: translateY(calc(-1 * var(--roll-y)));
   will-change: transform;
+  /* Names of the rows, with nothing to press. */
+  cursor: default;
 }
 
 .roll__key {
@@ -1903,7 +1913,6 @@ textarea {
 .roll__grid {
   position: relative;
   overflow: hidden;
-  cursor: pointer;
   grid-row: 2;
   grid-column: 2;
 }

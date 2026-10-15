@@ -14111,6 +14111,24 @@ describe('AppView', () => {
       // Back at the beginning, which is the whole difference from holding it:
       // Stop has nothing left to do and says so.
       expect(element<HTMLButtonElement>('roll-stop').dataset['idle']).toBe('true');
+
+      // With the marker put further on, as the square button does: back to the
+      // marker first, and pressed again, to the beginning with the marker.
+      const drawn = element('roll-body');
+      // Exactly where tapped, rather than on the nearest beat of so short a run.
+      element<HTMLInputElement>('roll-snap').checked = false;
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 0.2 * Number(element<HTMLInputElement>('roll-zoom').value), clientY: 5 });
+      const marker = headAt(drawn);
+      expect(Number(marker)).toBeGreaterThan(0);
+      pressSpace();
+      clock.advance(300);
+      pressHeldSpace();
+      expect(runtime.takePlayer.playing).toBeNull();
+      expect(headAt(drawn)).toBe(marker);
+      expect(element<HTMLButtonElement>('roll-stop').dataset['idle']).toBeUndefined();
+      pressHeldSpace();
+      expect(headAt(drawn)).toBe('0.000');
+      expect(element<HTMLButtonElement>('roll-stop').dataset['idle']).toBe('true');
     });
 
     it('agrees with the pill about what play means', async () => {

@@ -6268,7 +6268,9 @@ export class AppView {
         if (event.code === 'Space' && this.thePictureIsInFront()) {
           event.preventDefault();
           if (held) {
-            this.stopTheRoll();
+            // The sheet's square button: back to the marker first, where
+            // there is anywhere to go back to, and from there to the beginning.
+            this.goBackInTheRoll();
           } else if (event.shiftKey) {
             this.goBackToTheMarker();
           } else {

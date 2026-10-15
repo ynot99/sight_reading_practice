@@ -118,7 +118,14 @@ export function theAudioClocks(context: BaseAudioContext, reading: AudioClockRea
   };
   let heardOffMs: number | null = null;
   const stamp = typeof device.getOutputTimestamp === 'function' ? device.getOutputTimestamp() : null;
-  if (stamp?.contextTime !== undefined && stamp.performanceTime !== undefined && stamp.performanceTime > 0) {
+  // A device that has played nothing yet stamps noughts, and one engine
+  // stamps its own clock nought for ever while the page's runs on.
+  if (
+    stamp?.contextTime !== undefined &&
+    stamp.performanceTime !== undefined &&
+    stamp.performanceTime > 0 &&
+    stamp.contextTime > 0
+  ) {
     // A sound placed at audio time T leaves the speaker at the page's
     // stamp-nought + T, and was placed to be heard at held + T + the latency
     // taken off it.

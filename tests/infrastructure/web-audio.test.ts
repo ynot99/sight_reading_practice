@@ -210,6 +210,89 @@ describe('WebAudioMetronome', () => {
     expect(envelope?.unplugged).toBe(true);
   });
 
+  it('reads the clocks again where the audio clock has stood since they were read', () => {
+    // Measured on his iPad: the audio clock's nought 90-95 ms later than the
+    // reading put it, from the first second to the last, so every tick was
+    // stamped that early and the falling notes reached the keys before the sound.
+    const both = (ms: number): void => {
+      for (let spent = 0; spent < ms; spent += 20) {
+        context.advance(0.02);
+        vi.advanceTimersByTime(20);
+      }
+    };
+    metronome.start();
+    both(40);
+    const first = ticks[0]?.scheduledTimeMs ?? 0;
+    // Its clock stands for 92 ms while the page's runs on, then moves with it.
+    vi.advanceTimersByTime(92);
+    both(3_000);
+    const stamped = ticks.map((tick) => Math.round((tick.scheduledTimeMs - first) - tick.index * 1_000));
+    // The beats placed before the clocks were watched long enough keep the
+    // old reading; every one after carries the new - to within where in its
+    // 20 ms the pulse happens to look at the clock.
+    expect(stamped[0]).toBe(0);
+    expect(stamped.at(-1)).toBeGreaterThanOrEqual(75);
+    expect(stamped.at(-1)).toBeLessThanOrEqual(92);
+  });
+
+  it('places the instruments\' sounds by the reading taken again', () => {
+    const reading = new AudioClockReading();
+    const pulse = new WebAudioMetronome(contextFactory(context), { schedulerIntervalMs: 20, scheduleAheadSec: 0.12 }, reading);
+    pulse.configure({
+      bpm: 60,
+      timeSignature: new TimeSignature(4, 4),
+      bars: [],
+      tempos: [],
+      subdivisionsPerPulse: 1,
+      click: 'pulse',
+      dropout: null,
+      endsAtTicks: null,
+      muted: false,
+    });
+    const both = (ms: number): void => {
+      for (let spent = 0; spent < ms; spent += 20) {
+        context.advance(0.02);
+        vi.advanceTimersByTime(20);
+      }
+    };
+    try {
+      pulse.start();
+      both(40);
+      const read = reading.of(context as unknown as AudioContext);
+      vi.advanceTimersByTime(92);
+      both(1_200);
+      const moved = reading.of(context as unknown as AudioContext) - read;
+      expect(moved).toBeGreaterThanOrEqual(75);
+      expect(moved).toBeLessThanOrEqual(92);
+    } finally {
+      pulse.stop();
+    }
+  });
+
+  it('keeps a reading the clocks agree with, however its buffers wander, and one a little out', () => {
+    // Each look of the pulse lands somewhere in a buffer of the audio clock,
+    // which reads that much behind the page's: never more than a buffer.
+    let page = 0;
+    let stood = 0;
+    const look = (behindMs: number): void => {
+      page += 20;
+      context.currentTime = (page - stood - behindMs) / 1000;
+      vi.advanceTimersByTime(20);
+    };
+    metronome.start();
+    look(0);
+    look(0);
+    // Then the audio clock stands 5 ms - inside the margin, so the reading
+    // is kept - and is looked at anywhere in its buffers from then on.
+    stood = 5;
+    const behind = [0, 22, 11, 18, 5, 14, 20, 3];
+    for (let at = 0; at < 150; at += 1) {
+      look(behind[at % behind.length] ?? 0);
+    }
+    const first = ticks[0]?.scheduledTimeMs ?? 0;
+    expect(ticks.map((tick) => Math.abs(Math.round(tick.scheduledTimeMs - first - tick.index * 1_000)))).toEqual(ticks.map(() => 0));
+  });
+
   it('takes the clocks apart again when the device wakes', () => {
     // A tablet suspends its audio device the moment the screen goes off: its
     // clock stops while the page's runs on, so a difference taken before the

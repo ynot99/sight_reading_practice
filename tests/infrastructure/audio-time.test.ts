@@ -64,9 +64,13 @@ describe('the audio clock against the page clock, for the playback timings', () 
       fresh,
     );
     expect(bare).toEqual({ driftMs: 0, heardOffMs: null, outputMs: null, baseMs: null });
-    // A device that has played nothing yet stamps nought, which says nothing.
+    // A device that has played nothing yet stamps nought, which says nothing;
+    // nor does one whose own clock it stamps as nought while the page's moves.
     expect(
       theAudioClocks(device({ getOutputTimestamp: () => ({ contextTime: 0, performanceTime: 0 }) }), fresh).heardOffMs,
+    ).toBeNull();
+    expect(
+      theAudioClocks(device({ getOutputTimestamp: () => ({ contextTime: 0, performanceTime: 9_930 }) }), fresh).heardOffMs,
     ).toBeNull();
   });
 });

@@ -86,6 +86,16 @@ const DEFAULT_CONFIG: MetronomeConfig = {
  * its due moment. Each tick also carries the exact time it represents, which
  * lets Flow mode grade timing without inheriting any scheduler jitter.
  */
+/** How long the clocks are watched before what stands between them is asked of. */
+const CLOCKS_WATCHED_MS = 500;
+
+/**
+ * How far the reading may stand from the clocks before it is taken again:
+ * wider than a buffer of the audio clock, which is what its readings wander
+ * by, and well inside what anybody sees or hears.
+ */
+const CLOCKS_APART_MS = 15;
+
 export class WebAudioMetronome implements IMetronome, IVolumeControl {
   private readonly emitter = new TypedEventEmitter<{ tick: MetronomeTick; placed: MetronomeTick }>();
   private readonly contextFactory: () => AudioContext;
@@ -118,6 +128,13 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
    * device last changed state - which waits for the device to be sounding.
    */
   private clocksRead = false;
+  /**
+   * The two clocks watched since the reading, a stretch at a time: when the
+   * stretch began, and the earliest the audio clock's nought has stood on the
+   * page's clock in it. See `keepTheClocksTogether`.
+   */
+  private watchedSince: number | null = null;
+  private earliestNought: number | null = null;
   /** Where the audio clock stood when it was last asked to run: moved past, it is running. */
   private clockStoodAt = 0;
   private currentVolume = 1;
@@ -257,6 +274,8 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     this.audioEpochMs = performance.now() - context.currentTime * 1000;
     this.reading.hold(this.audioEpochMs);
     this.clocksRead = true;
+    this.watchedSince = null;
+    this.earliestNought = null;
     if (this.nextTickIndex === 0) {
       this.nextTickAudioTime = Math.max(
         this.nextTickAudioTime,
@@ -299,6 +318,40 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     });
   }
 
+  /**
+   * Takes the clocks' difference again where it has moved since the reading.
+   *
+   * A device that says it is sounding may still stand: measured on his iPad,
+   * in the app he plays in, the audio clock's nought stood 90-95 ms later on
+   * the page's clock than where the reading put it, from the first second of
+   * a playback to the last. Every tick was stamped that far early, so the
+   * falling notes - drawn on the page's clock - reached the keys that long
+   * before the sound, the marker and the lit keys, which all follow the
+   * audio clock; and by a different amount at every start.
+   *
+   * Asked of a stretch at a time, at its earliest: the audio clock moves in
+   * whole buffers, so read between two of them its nought stands later than
+   * it is, and the earliest of many readings is the nearest. Taken again
+   * only past a margin wider than that, so a reading that holds is kept.
+   */
+  private keepTheClocksTogether(context: AudioContext): void {
+    const now = performance.now();
+    const nought = now - context.currentTime * 1000;
+    this.earliestNought = Math.min(this.earliestNought ?? nought, nought);
+    this.watchedSince ??= now;
+    if (now - this.watchedSince < CLOCKS_WATCHED_MS) {
+      return;
+    }
+    const apart = this.earliestNought - this.audioEpochMs;
+    if (Math.abs(apart) > CLOCKS_APART_MS) {
+      this.audioEpochMs = this.earliestNought;
+      this.reading.hold(this.audioEpochMs);
+      timeTheStart('metronome: the clocks read again', () => `${String(Math.round(apart))} ms apart`);
+    }
+    this.watchedSince = now;
+    this.earliestNought = null;
+  }
+
   /** Schedules everything due soon, then delivers everything already due. */
   private pump(): void {
     const context = this.ensureContext();
@@ -317,6 +370,7 @@ export class WebAudioMetronome implements IMetronome, IVolumeControl {
     if (!this.clocksRead && !this.readTheClocks(context)) {
       return;
     }
+    this.keepTheClocksTogether(context);
     const horizon = context.currentTime + this.options.scheduleAheadSec;
 
     // Not past a gate the run is holding: those ticks wait, keeping the

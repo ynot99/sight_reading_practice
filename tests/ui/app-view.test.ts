@@ -6865,6 +6865,56 @@ describe('AppView', () => {
       expect(staves).toEqual([2, 2]);
     });
 
+    it('goes back to the marker when a playback of the drawing runs out, wherever it was last held', async () => {
+      const { view, sketches, runtime, clock } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            [0, 400, 60],
+            [500, 900, 64],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Runs out',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const body = element('roll-body');
+      tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 0.5 * zoom, clientY: 5 });
+      expect(headAt(body)).toBe('0.500');
+      vi.useFakeTimers();
+      try {
+        const play = element<HTMLButtonElement>('roll-play');
+        const goOn = (ms: number): void => {
+          for (let spent = 0; spent < ms; spent += 50) {
+            clock.advance(50);
+            vi.advanceTimersByTime(50);
+          }
+        };
+        // Held a little way on, and played on from there.
+        play.click();
+        goOn(200);
+        play.click();
+        expect(runtime.takePlayer.playing).toBeNull();
+        expect(Number(headAt(body))).toBeGreaterThan(0.6);
+        play.click();
+        goOn(5_000);
+
+        expect(runtime.takePlayer.playing).toBeNull();
+        expect(headAt(body)).toBe('0.500');
+        expect(play.title).toBe('Play (Space)');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('writes nothing over the drawing on a frame that moves only the head', async () => {
       // Every write to the page makes it lay itself out again, the drawing and
       // its notes included. The play icon set again on every frame of a

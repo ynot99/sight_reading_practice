@@ -13967,14 +13967,18 @@ export class AppView {
     // The sound before the drawing, as a take's own following does: a frame
     // late on screen is nothing, a frame late in the ear is a gap.
     player.pump();
+    if (player.finished && player.playing === RUN_ROLL_ID) {
+      // Run out: back to where the marker was put, as a playback stopped
+      // there is. Where it last began - the place of the last pause - is
+      // nothing the reader can see.
+      this.goBackToTheMarker();
+      return;
+    }
     if (player.finished) {
       player.stop();
     }
-    // Something else took the player over, or it has run out. Either way this
-    // is no longer following anything.
-    // Something else took the player over, or it ran out. Either way this is no
-    // longer following anything - but the head stays where it got to, because
-    // the reader is about to look at that place.
+    // Something else took the player over, and this is no longer following
+    // anything.
     if (player.playing !== RUN_ROLL_ID) {
       this.holdTheRoll();
       return;

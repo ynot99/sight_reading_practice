@@ -6080,6 +6080,82 @@ describe('AppView', () => {
       }
     });
 
+    it('names the chord the chosen notes make over the drawing, spelled as the sketch\'s key spells it', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      sketches.begin(
+        {
+          events: [
+            [0, 400, 60],
+            [500, 900, 64],
+            [1_000, 1_400, 67],
+            [1_500, 1_900, 58],
+            [2_500, 2_900, 61],
+            [2_500, 2_900, 65],
+            [2_500, 2_900, 68],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Chords',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+      const highest = view.rollScene?.highest ?? 0;
+      const scrolledDown =
+        Number.parseFloat(
+          element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+        ) || 0;
+      const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+        clientX: (ms / 1000) * zoom,
+        clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+      });
+      const tap = (ms: number, midi: number, adding = true): void => {
+        tapTheDrawing({ pointerType: 'mouse', button: 0, shiftKey: adding, ...at(ms, midi) });
+      };
+      const chord = element<HTMLOutputElement>('roll-chord');
+      const said = (): string | null => (chord.hidden ? null : chord.textContent);
+
+      // Nothing chosen, and one note alone, is no chord.
+      expect(said()).toBeNull();
+      tap(100, 60, false);
+      expect(said()).toBeNull();
+      // Broken over time, the notes still make their chord.
+      tap(600, 64);
+      expect(said()).toBeNull();
+      tap(1_100, 67);
+      expect(said()).toBe('C');
+      // With a B flat below, a seventh over its bass.
+      tap(1_600, 58);
+      expect(said()).toBe('C7/B♭');
+      // Let go of, gone.
+      key({ key: 'Escape' });
+      expect(said()).toBeNull();
+
+      // In C, a black key is spelled as chord charts do; in a flat key, as a flat.
+      tap(2_600, 61, false);
+      tap(2_600, 65);
+      tap(2_600, 68);
+      expect(said()).toBe('C♯');
+      const keyOfTheSketch = element<HTMLSelectElement>('roll-key');
+      keyOfTheSketch.value = '-2:major';
+      keyOfTheSketch.dispatchEvent(new Event('change'));
+      expect(said()).toBe('D♭');
+
+      // Listening, nothing is chosen to name.
+      element<HTMLButtonElement>('roll-edit').click();
+      expect(said()).toBeNull();
+
+      function key(init: KeyboardEventInit): void {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+      }
+    });
+
     it('puts the chosen notes on the grid by the Quantize button, whether or not the marker is put on it', async () => {
       const { view, sketches } = createRig();
       await view.initialize();

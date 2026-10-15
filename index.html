@@ -576,6 +576,12 @@
             <!-- The box a mouse draws over a sketch being edited, to choose the notes inside it. -->
             <div id="roll-box" class="roll-box" hidden aria-hidden="true"></div>
             <!--
+              The chord the chosen notes make, over the top of the drawing and
+              nothing to press: a touch goes through to the notes under it.
+            -->
+            <output id="roll-chord" class="roll-chord" title="The chord the chosen notes make"
+              aria-live="polite" hidden></output>
+            <!--
               The notes in view by pitch, and the rows of them on the screen.
 
               The drawing's other scrollbar, as the map under it is the first:

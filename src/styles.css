@@ -1302,6 +1302,29 @@ textarea {
   --roll-pedal: 16px;
 }
 
+/*
+ * The chord the chosen notes make, under the ruler at the middle of the
+ * drawing: the same pill as the chord held in free play, smaller, since it
+ * stands over notes rather than over an empty lane.
+ */
+.roll-chord {
+  position: absolute;
+  top: calc(var(--roll-ruler) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 3px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) var(--over-the-page), transparent);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgb(16 24 40 / 22%);
+}
+
 /* A sketch being edited has its pedal drawn on, so its lane is tall enough for a finger. */
 .roll-stage[data-editing='true'] {
   --roll-pedal: 28px;

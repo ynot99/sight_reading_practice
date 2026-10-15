@@ -8,6 +8,7 @@ import {
   type PlayedWith,
 } from '../application/modes/challengeModes.js';
 import { barCells } from '../domain/scoring/barCells.js';
+import { nameTheChord } from '../domain/harmony/chordName.js';
 import { barsOfThePicture, tiersOfThePicture } from '../domain/scoring/ReadingPicture.js';
 import { LISTEN_MODE_ID } from '../application/modes/ListenFrame.js';
 import { FREE_PLAY_MODE_ID } from '../application/modes/FreePlayFrame.js';
@@ -2197,6 +2198,7 @@ export class AppView {
     rollRedo: HTMLButtonElement;
     rollTitle: HTMLElement;
     rollBox: HTMLElement;
+    rollChord: HTMLOutputElement;
     rollRename: HTMLInputElement;
     rollMap: HTMLElement;
     rollMapWindow: HTMLElement;
@@ -2560,6 +2562,7 @@ export class AppView {
       rollRedo: requireElement(doc, 'roll-redo'),
       rollTitle: requireElement(doc, 'roll-title'),
       rollBox: requireElement(doc, 'roll-box'),
+      rollChord: requireElement(doc, 'roll-chord'),
       rollRename: requireElement(doc, 'roll-rename'),
       rollMap: requireElement(doc, 'roll-map'),
       rollMapWindow: requireElement(doc, 'roll-map-window'),
@@ -8811,6 +8814,8 @@ export class AppView {
       if (sketch !== undefined) {
         const key = parseKeyValue(this.el.rollKey.value);
         this.runtime.sketches.changeTheKey(sketch.id, { fifths: key.fifths, mode: key.mode });
+        // The key spells the black keys of the chord's name.
+        this.nameTheChosenChord();
       }
     });
     this.listen(this.el.rollMetre, 'change', () => {
@@ -12005,6 +12010,7 @@ export class AppView {
     this.el.rollDelete.setAttribute('aria-label', this.el.rollDelete.title);
 
     this.sayHowLoudTheChosenAre();
+    this.nameTheChosenChord();
 
     if ((sketch?.before.length ?? 0) > 0) {
       delete this.el.rollUndo.dataset['idle'];
@@ -12023,6 +12029,27 @@ export class AppView {
       this.el.rollRedo.title = `Redo (Shift+${this.theCommandKey()}Z). Nothing has been put back to bring back.`;
     }
     this.el.rollRedo.setAttribute('aria-label', this.el.rollRedo.title);
+  }
+
+  /**
+   * The name of the chord the chosen notes of a sketch being edited make, over
+   * the drawing, wherever in time each is: a chord broken into a figure is
+   * still that chord. Spelled as the sketch's key spells its black keys. Not
+   * there while they make none with a name - and none is chosen but while a
+   * sketch is edited.
+   */
+  private nameTheChosenChord(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const chord =
+      sketch !== undefined && stored !== null
+        ? nameTheChord(
+            sketch.chosen.map((key) => key.midi),
+            stored.key.fifths,
+          )
+        : null;
+    this.el.rollChord.textContent = chord ?? '';
+    this.el.rollChord.hidden = chord === null;
   }
 
   /**

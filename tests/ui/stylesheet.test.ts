@@ -1820,6 +1820,14 @@ describe('the rows of the drawing and the pitch map beside them', () => {
     expect(declared(body('.roll'), '--roll-ruler')).toBeUndefined();
   });
 
+  it('names the chosen chord under the ruler of the drawing, out of the way of a touch', () => {
+    const pill = body('.roll-chord');
+
+    expect(pill).toMatch(/position\s*:\s*absolute/);
+    expect(pill).toMatch(/top\s*:\s*calc\(var\(--roll-ruler\)/);
+    expect(pill).toMatch(/pointer-events\s*:\s*none/);
+  });
+
   it('makes the pedal lane taller while a sketch is edited, for a finger to draw on', () => {
     const plain = Number.parseFloat(declared(body('.roll-stage'), '--roll-pedal') ?? '0');
     const editing = Number.parseFloat(declared(body(".roll-stage[data-editing='true']"), '--roll-pedal') ?? '0');

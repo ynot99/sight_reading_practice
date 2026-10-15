@@ -4045,6 +4045,12 @@ export class AppView {
     this.el.listenGoesOn.title = said;
     this.el.listenGoesOn.setAttribute('aria-label', said);
     this.el.listenGoesOnIcon.setAttribute('d', GOES_ON_DRAWN[goesOn]);
+    // A sketch or a take written down is on no shelf, and a playback of it
+    // plays it alone: none of the three has anything to say there.
+    const alone = this.runtime.controller.theScoreOpenStandsAlone;
+    for (const button of [this.el.listenPrevious, this.el.listenGoesOn, this.el.listenNext]) {
+      button.hidden = alone;
+    }
     // The two either side go through the shelf, the way the platform's keys
     // do, and have nowhere to go while nothing is kept: dimmed, and said so.
     const empty = this.runtime.scores.isEmpty;
@@ -4072,7 +4078,7 @@ export class AppView {
     const settings = controller.settings;
     this.el.focusRepeat.setAttribute('aria-pressed', String(settings.repeatRange));
     const listening = controller.isListening || controller.isListeningPaused;
-    if (listening && settings.playbackGoesOn !== 'this') {
+    if (listening && controller.playbackGoesOnFromHere !== 'this') {
       this.el.focusRepeat.dataset['idle'] = 'true';
       this.el.focusRepeat.title = 'Play the passage again and again. Not while the playback goes on to other pieces.';
     } else {
@@ -7172,7 +7178,7 @@ export class AppView {
       controller.playbackEvents.on('finished', () => {
         const asked = this.goingOn;
         setTimeout(() => {
-          if (asked === this.goingOn && controller.settings.playbackGoesOn !== 'this') {
+          if (asked === this.goingOn && controller.playbackGoesOnFromHere !== 'this') {
             void this.goOnToAnotherPiece(1);
           }
         }, 0);
@@ -9863,6 +9869,7 @@ export class AppView {
       );
       await this.pickUpTheFile(exercise);
       this.sayWhatTheFileLeftOut(exercise, warnings);
+      this.runtime.controller.playOnlyTheScoreOpen();
       return this.runtime.controller.openedExercise;
     } catch (error) {
       reportToTheConsole(`Could not write ${title} down.`, error);

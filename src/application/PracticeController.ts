@@ -903,6 +903,12 @@ export class PracticeController {
   private openingPresses: MidiNoteOnEvent[] = [];
   private listeningForTheOpening: Unsubscribe | null = null;
   private openedScore: Exercise | null = null;
+  /**
+   * The score open, when it is on no shelf - a sketch or a take written down -
+   * and so a playback of it has no other piece to go on to. Kept as the
+   * score itself, so opening any other leaves the shelf to answer again.
+   */
+  private standingAlone: Exercise | null = null;
   private player: ExercisePlayer | null = null;
   /** The music the page is currently showing, so it is drawn once. */
   private engravedXml: string | null = null;
@@ -2725,7 +2731,30 @@ export class PracticeController {
    * that went round for ever would never let the next one begin.
    */
   get playbackRepeats(): boolean {
-    return this.currentSettings.repeatRange && this.currentSettings.playbackGoesOn === 'this';
+    return this.currentSettings.repeatRange && this.playbackGoesOnFromHere === 'this';
+  }
+
+  /** Whether the score open is on no shelf: see `playOnlyTheScoreOpen`. */
+  get theScoreOpenStandsAlone(): boolean {
+    return this.openedScore !== null && this.standingAlone === this.openedScore;
+  }
+
+  /**
+   * What a playback of the score open goes on to: what the settings ask, or
+   * nothing where it stands alone - the shelf is not where it came from.
+   */
+  get playbackGoesOnFromHere(): PlaybackGoesOn {
+    return this.theScoreOpenStandsAlone ? 'this' : this.currentSettings.playbackGoesOn;
+  }
+
+  /**
+   * Says that the score open is on no shelf: a sketch or a take written
+   * down. A playback of it goes on to no other piece, and goes round where
+   * the repeat is asked for, whatever the settings say of the shelf. Said as
+   * it is opened, before anything of it is played.
+   */
+  playOnlyTheScoreOpen(): void {
+    this.standingAlone = this.openedScore;
   }
 
   get countsInEveryLap(): boolean {

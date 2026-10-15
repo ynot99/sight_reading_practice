@@ -2045,6 +2045,47 @@ describe('AppView', () => {
       expect(repeat.title).toBe('Play the passage again and again');
     });
 
+    it('plays a sketch written down alone, with nothing on the bar to go through the shelf by', async () => {
+      const rig = await aShelf();
+      rig.runtime.controller.updateSettings({ playbackGoesOn: 'list', countInBars: 0 });
+      rig.sketches.begin(
+        {
+          events: [0, 500, 1_000, 1_500].flatMap((atMs) => [
+            { kind: 'noteOn' as const, atMs, midi: 60, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: atMs + 400, midi: 60 },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Alone',
+        1,
+      );
+      const theThree = (): boolean[] =>
+        ['listen-previous', 'listen-goes-on', 'listen-next'].map((id) => element<HTMLButtonElement>(id).hidden === true);
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Write this sketch down as a score').click();
+      await vi.waitFor(() => {
+        expect(rig.runtime.controller.openedExercise?.title).toBe('Alone');
+      });
+      await pressListen(rig.runtime.controller);
+      expect(rig.runtime.controller.isListening).toBe(true);
+      expect(theThree()).toEqual([true, true, true]);
+      // The repeat has something to say again: the playback goes nowhere else.
+      expect(element('focus-repeat').dataset['idle']).toBeUndefined();
+
+      // Played to its end, it stays the page's.
+      rig.metronome.advanceSubdivisions(80);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(rig.runtime.controller.isListening).toBe(false);
+      expect(rig.runtime.controller.openedExercise?.title).toBe('Alone');
+
+      // A kept score open again, they are back.
+      await rig.runtime.controller.openScore(twoBarExercise({ title: 'Second' }));
+      await pressListen(rig.runtime.controller);
+      expect(theThree()).toEqual([false, false, false]);
+    });
+
     it('plays the next piece on the shelf once one ends, without moving it up the shelf', async () => {
       const rig = await aShelf();
       rig.runtime.controller.updateSettings({ playbackGoesOn: 'list', countInBars: 0 });

@@ -1308,6 +1308,35 @@ describe('what you played, drawn over the score', () => {
     expect(instrument.played.length).toBeGreaterThan(0);
   });
 
+  it('plays a score on no shelf alone, and goes round it where asked, until another is opened', async () => {
+    const { controller, metronome } = createController(true);
+    controller.updateSettings({ countInBars: 0, repeatRange: true, playbackGoesOn: 'random' });
+    await controller.openScore(twoBarExercise({ tempoBpm: 60, title: 'A sketch' }));
+    expect(controller.theScoreOpenStandsAlone).toBe(false);
+    expect(controller.playbackGoesOnFromHere).toBe('random');
+    expect(controller.playbackRepeats).toBe(false);
+
+    controller.playOnlyTheScoreOpen();
+    expect(controller.theScoreOpenStandsAlone).toBe(true);
+    expect(controller.playbackGoesOnFromHere).toBe('this');
+    expect(controller.playbackRepeats).toBe(true);
+    // And goes round, never finishing.
+    let finished = 0;
+    controller.playbackEvents.on('finished', () => {
+      finished += 1;
+    });
+    controller.listen();
+    metronome.advanceSubdivisions(40);
+    expect(finished).toBe(0);
+    controller.stopListening();
+
+    // Another score opened is the shelf's again, the settings answering.
+    await controller.openScore(twoBarExercise({ tempoBpm: 60, title: 'A kept one' }));
+    expect(controller.theScoreOpenStandsAlone).toBe(false);
+    expect(controller.playbackGoesOnFromHere).toBe('random');
+    expect(controller.playbackRepeats).toBe(false);
+  });
+
   it('does not go round a piece the playback goes on from', async () => {
     // A piece that went round for ever would never let the next one begin.
     const { controller, metronome } = createController(true);

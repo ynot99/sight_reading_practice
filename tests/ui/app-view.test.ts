@@ -4432,14 +4432,17 @@ describe('AppView', () => {
       expect(redo.title).toBe('Bring back the last change put back (Shift+Ctrl+Z)');
       redo.click();
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(2);
+      // With what was chosen when it was put back.
+      expect(chosen()).toEqual([0]);
       redo.click();
       expect(sketches.find(sketch?.id ?? '')?.noteCount).toBe(1);
       undo.click();
       undo.click();
       expect(sketches.find(sketch?.id ?? '')?.events).toEqual(kept?.events);
+      // As it was before the first was taken out, that one chosen again.
+      expect(chosen()).toEqual([500]);
 
       // The chosen one tapped again is let go of.
-      tapOn(500);
       tapOn(500);
       expect(chosen()).toEqual([]);
       // Two taps where there is no note write one: on the key of its row, in
@@ -6234,8 +6237,8 @@ describe('AppView', () => {
       left?.click();
       element<HTMLButtonElement>('roll-undo').click();
       expect(handsOf()).toEqual([undefined, undefined]);
-      tapOn(0);
-      tapOn(500);
+      // Put back, the two are still chosen, for another hand.
+      expect(pressed()).toEqual(['false', 'true', 'false']);
       left?.click();
 
       // One of them back to its pitch: the two differ, and neither is pressed.
@@ -14512,7 +14515,11 @@ describe('AppView', () => {
       ]);
       element<HTMLButtonElement>('roll-undo').click();
       expect(struck()).toEqual(now);
-      expect(chosen()).toEqual([]);
+      // Put back where they were, still in hand.
+      expect(chosen()).toEqual([
+        [60, 0],
+        [62, 750],
+      ]);
       // Taken far above the keyboard, the highest of them stops on its top key.
       tap(onNote(0, 60));
       tapTheDrawing({ pointerType: 'touch', shiftKey: true, clientX: onNote(750, 62).x, clientY: onNote(750, 62).y });

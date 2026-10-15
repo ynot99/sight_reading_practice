@@ -461,10 +461,23 @@ const SHORTEST_NOTE_MS = 30;
  */
 const ROOM_IN_A_SKETCH = 8;
 
-/** A sketch as it was before a change, to be put back: a change of metre or pace moves its beats as well. */
+/**
+ * A sketch as it was before a change, to be put back: a change of metre or
+ * pace moves its beats as well, and the notes chosen then are chosen again,
+ * so an undone move leaves in hand what was being moved.
+ */
 interface SketchAsItWas {
   readonly events: readonly MidiFileEvent[];
   readonly beats: readonly HeardBeat[];
+  readonly chosen: readonly KeyNamed[];
+}
+
+/** A sketch kept as it is now, with the notes chosen on it, for an undo or a redo to come back to. */
+function asItWas(
+  sketch: { readonly events: readonly MidiFileEvent[]; readonly beats: readonly HeardBeat[] },
+  chosen: readonly KeyNamed[],
+): SketchAsItWas {
+  return { events: sketch.events, beats: sketch.beats, chosen };
 }
 
 /** The corner of a box a pointer is at, kept inside the notes it chooses among. */
@@ -1933,7 +1946,7 @@ export class AppView {
        * around the notes to choose, with a finger as with the mouse.
        */
       readonly tool: 'pencil' | 'selection';
-      /** What it was before each change, the last last: its notes and its beats. */
+      /** What it was before each change, the last last: its notes, its beats and the notes chosen. */
       readonly before: readonly SketchAsItWas[];
       /** What each undo took it back from, the last last, for a redo to bring back; gone at the next change. */
       readonly after: readonly SketchAsItWas[];
@@ -11974,7 +11987,7 @@ export class AppView {
     }
     this.changeTheSketchShowing(
       stored.events,
-      [...(sketch?.before ?? []), stored],
+      [...(sketch?.before ?? []), asItWas(stored, sketch?.chosen ?? [])],
       sketch?.chosen,
       theClickInAnotherMetre(stored.events, stored.beats, beatsInBar, beatType),
     );
@@ -11999,7 +12012,7 @@ export class AppView {
       const now = paced.events[at];
       return now === undefined ? [] : [{ midi: key.midi, downAtMs: now.atMs }];
     });
-    this.changeTheSketchShowing(paced.events, [...sketch.before, stored], chosen, paced.beats);
+    this.changeTheSketchShowing(paced.events, [...sketch.before, asItWas(stored, sketch.chosen)], chosen, paced.beats);
   }
 
   /**
@@ -12069,7 +12082,7 @@ export class AppView {
       keys.map((key) => ({ key, midi: key.midi, downAtMs: key.downAtMs, upAtMs: key.upAtMs, hand })),
     );
     if (events !== null) {
-      this.changeTheSketchShowing(events, [...sketch.before, stored], sketch.chosen);
+      this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], sketch.chosen);
     }
   }
 
@@ -12126,7 +12139,7 @@ export class AppView {
     }));
     const events = takeWithTheKeysChanged(stored.events, changes);
     if (events !== null) {
-      this.changeTheSketchShowing(events, [...sketch.before, stored], sketch.chosen);
+      this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], sketch.chosen);
     }
   }
 
@@ -12443,7 +12456,7 @@ export class AppView {
     const now = this.runtime.clock.now();
     this.runtime.pitchPlayer.play(midi, key.velocity, now);
     this.runtime.pitchPlayer.stop(midi, now + (key.upAtMs - key.downAtMs));
-    this.changeTheSketchShowing(takeWithAKeyAdded(stored.events, key), [...sketch.before, stored], [
+    this.changeTheSketchShowing(takeWithAKeyAdded(stored.events, key), [...sketch.before, asItWas(stored, sketch.chosen)], [
       { midi, downAtMs },
     ]);
   }
@@ -12731,7 +12744,7 @@ export class AppView {
       return;
     }
     if (lifted !== null && sketch !== undefined && stored !== null) {
-      this.changeTheSketchShowing(drag.moved.events, [...sketch.before, stored], drag.moved.to);
+      this.changeTheSketchShowing(drag.moved.events, [...sketch.before, asItWas(stored, sketch.chosen)], drag.moved.to);
     } else {
       this.drawTheRollInto();
     }
@@ -12803,7 +12816,7 @@ export class AppView {
     }
     const events = takeWithoutTheKeys(stored.events, sketch.chosen);
     if (events !== null) {
-      this.changeTheSketchShowing(events, [...sketch.before, stored]);
+      this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)]);
     }
   }
 
@@ -12822,7 +12835,7 @@ export class AppView {
     if (events !== null) {
       this.changeTheSketchShowing(
         events,
-        [...sketch.before, stored],
+        [...sketch.before, asItWas(stored, sketch.chosen)],
         sketch.chosen.filter((each) => !sameKey(each, key)),
       );
     }
@@ -12836,7 +12849,13 @@ export class AppView {
     if (sketch === undefined || stored === null || last === undefined) {
       return;
     }
-    this.changeTheSketchShowing(last.events, sketch.before.slice(0, -1), [], last.beats, [...sketch.after, stored]);
+    this.changeTheSketchShowing(
+      last.events,
+      sketch.before.slice(0, -1),
+      last.chosen,
+      last.beats,
+      [...sketch.after, asItWas(stored, sketch.chosen)],
+    );
   }
 
   /** Brings back what the last undo put back, while nothing has changed since. */
@@ -12847,7 +12866,13 @@ export class AppView {
     if (sketch === undefined || stored === null || last === undefined) {
       return;
     }
-    this.changeTheSketchShowing(last.events, [...sketch.before, stored], [], last.beats, sketch.after.slice(0, -1));
+    this.changeTheSketchShowing(
+      last.events,
+      [...sketch.before, asItWas(stored, sketch.chosen)],
+      last.chosen,
+      last.beats,
+      sketch.after.slice(0, -1),
+    );
   }
 
   /**
@@ -12948,7 +12973,7 @@ export class AppView {
     }
     this.changeTheSketchShowing(
       events,
-      [...sketch.before, stored],
+      [...sketch.before, asItWas(stored, sketch.chosen)],
       changes.map(({ midi, downAtMs }) => ({ midi, downAtMs })),
     );
   }

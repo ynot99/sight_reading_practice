@@ -27,6 +27,10 @@ import {
   takeWithTheKeysChanged,
   takeWithTheKeysCopied,
   takeWithTheKeyCut,
+  takeWithTheNotesPasted,
+  theClipboardTextOf,
+  theNotesCopied,
+  theNotesOnTheClipboard,
   takeWithThePedalAt,
   theKeysOnTheGrid,
   takeWithAKeyAdded,
@@ -1420,6 +1424,140 @@ describe('changing a recording', () => {
     const sharp = MIDI.E4 + 2;
     expect(takeWithTheKeysCopied(events, [e], 0, 2)?.filter((event) => event.kind !== 'sustain' && event.midi === sharp)).toEqual([on(500, sharp)]);
     expect(takeWithTheKeysCopied(events, [c, { midi: MIDI.C4, downAtMs: 1 }], 1_000, 0)).toBeNull();
+  });
+
+  it('copies keys as notes from the first of them, earliest first, those still down left out', () => {
+    const handed = { ...on(300, MIDI.G4), velocity: 0.25, hand: 'left' as const };
+    const events = inTheOrderPlayed([
+      on(100, MIDI.E4),
+      off(200, MIDI.E4),
+      handed,
+      off(700, MIDI.G4),
+      on(300, MIDI.C4),
+      off(500, MIDI.C4),
+      on(400, MIDI.D4),
+      on(900, MIDI.F4),
+      off(950, MIDI.F4),
+    ]);
+    // The F not named; the D still down at the end.
+    const named = [
+      { midi: MIDI.G4, downAtMs: 300 },
+      { midi: MIDI.C4, downAtMs: 300 },
+      { midi: MIDI.D4, downAtMs: 400 },
+      { midi: MIDI.E4, downAtMs: 100 },
+    ];
+
+    expect(theNotesCopied(events, named)).toEqual([
+      { afterMs: 0, lengthMs: 100, midi: MIDI.E4, velocity: 0.7 },
+      { afterMs: 200, lengthMs: 200, midi: MIDI.C4, velocity: 0.7 },
+      { afterMs: 200, lengthMs: 400, midi: MIDI.G4, velocity: 0.25, hand: 'left' },
+    ]);
+  });
+
+  it('reads back the notes it wrote to the clipboard, and nothing else', () => {
+    const notes = [
+      { afterMs: 0, lengthMs: 100, midi: 0, velocity: 1 },
+      { afterMs: 200.5, lengthMs: 0.5, midi: 127, velocity: 0.01, hand: 'left' as const },
+      { afterMs: 200, lengthMs: 400, midi: MIDI.G4, velocity: 0.5, hand: 'right' as const },
+    ];
+    const text = theClipboardTextOf(notes);
+    expect(theNotesOnTheClipboard(text)).toEqual(notes);
+
+    const written = JSON.parse(text) as { copied: string; notes: Record<string, unknown>[] };
+    const withNote = (change: Record<string, unknown>): string =>
+      JSON.stringify({ ...written, notes: [...written.notes.slice(0, 2), { ...written.notes[2], ...change }] });
+    for (const change of [
+      { afterMs: -1 },
+      { afterMs: '0' },
+      { afterMs: null },
+      { lengthMs: 0 },
+      { lengthMs: -5 },
+      { lengthMs: undefined },
+      { midi: 60.5 },
+      { midi: -1 },
+      { midi: 128 },
+      { midi: '60' },
+      { velocity: 0 },
+      { velocity: 1.01 },
+      { velocity: true },
+      { hand: 'both' },
+      { hand: null },
+    ]) {
+      expect(theNotesOnTheClipboard(withNote(change)), JSON.stringify(change)).toBeNull();
+    }
+    // A number too large for a double is read as an endless one.
+    for (const field of ['afterMs', 'lengthMs']) {
+      const endless = withNote({ [field]: 'endless' }).replace('"endless"', '1e999');
+      expect(theNotesOnTheClipboard(endless), field).toBeNull();
+    }
+    for (const other of [
+      'C4 E4 G4',
+      '',
+      'null',
+      '[]',
+      JSON.stringify({ ...written, copied: 'another program' }),
+      JSON.stringify({ notes: written.notes }),
+      JSON.stringify({ ...written, notes: {} }),
+      JSON.stringify({ ...written, notes: [] }),
+      JSON.stringify({ ...written, notes: [...written.notes, 5] }),
+      JSON.stringify({ ...written, notes: [null] }),
+    ]) {
+      expect(theNotesOnTheClipboard(other), other).toBeNull();
+    }
+  });
+
+  it('pastes notes from a moment on, leaving out each that would be over another of its pitch', () => {
+    const events = [on(1_000, MIDI.C4), off(1_400, MIDI.C4), on(1_500, MIDI.D4), off(2_000, MIDI.D4)];
+    const handed = { afterMs: 300, lengthMs: 200, midi: MIDI.E4, velocity: 0.25, hand: 'left' as const };
+
+    // Into empty places, the first where asked, rounded to the millisecond.
+    const { events: pasted, pasted: keys } = takeWithTheNotesPasted(
+      events,
+      [{ afterMs: 0, lengthMs: 100, midi: MIDI.G4, velocity: 0.5 }, handed],
+      2_000.4,
+    );
+    expect(pasted).toEqual(
+      inTheOrderPlayed([
+        ...events,
+        { kind: 'noteOn', atMs: 2_000, midi: MIDI.G4, velocity: 0.5 },
+        off(2_100, MIDI.G4),
+        { kind: 'noteOn', atMs: 2_300, midi: MIDI.E4, velocity: 0.25, hand: 'left' },
+        off(2_500, MIDI.E4),
+      ]),
+    );
+    expect(keys).toEqual([
+      { midi: MIDI.G4, downAtMs: 2_000 },
+      { midi: MIDI.E4, downAtMs: 2_300 },
+    ]);
+
+    // Over a C, on a D, and sounding into that D: those three left out;
+    // ending where the C begins, and beginning where the D ends, kept.
+    const over = [
+      { afterMs: 400, lengthMs: 400, midi: MIDI.C4, velocity: 0.5 },
+      { afterMs: 700, lengthMs: 100, midi: MIDI.D4, velocity: 0.5 },
+      { afterMs: 0, lengthMs: 701, midi: MIDI.D4, velocity: 0.5 },
+      { afterMs: 0, lengthMs: 200, midi: MIDI.C4, velocity: 0.5 },
+      { afterMs: 1_200, lengthMs: 100, midi: MIDI.D4, velocity: 0.5 },
+    ];
+    expect(takeWithTheNotesPasted(events, over, 800).pasted).toEqual([
+      { midi: MIDI.C4, downAtMs: 800 },
+      { midi: MIDI.D4, downAtMs: 2_000 },
+    ]);
+    // Two pasted over each other: the second is left out.
+    expect(
+      takeWithTheNotesPasted(
+        [],
+        [
+          { afterMs: 0, lengthMs: 400, midi: MIDI.C4, velocity: 0.5 },
+          { afterMs: 200, lengthMs: 400, midi: MIDI.C4, velocity: 0.5 },
+          { afterMs: 0, lengthMs: 400, midi: MIDI.C4, velocity: 0.5 },
+        ],
+        0,
+      ),
+    ).toEqual({
+      events: [{ kind: 'noteOn', atMs: 0, midi: MIDI.C4, velocity: 0.5 }, off(400, MIDI.C4)],
+      pasted: [{ midi: MIDI.C4, downAtMs: 0 }],
+    });
   });
 
   it('cuts a key in two at a moment inside it, the second part as loud and in the same hand', () => {

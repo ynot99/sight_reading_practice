@@ -1193,6 +1193,131 @@ export function takeWithTheKeysCopied(
 }
 
 /**
+ * A note of a sketch as it is copied: where it begins after the first of those
+ * copied begins, how long it is held, its pitch, how hard and in which hand.
+ * Counted from the first, so pasted they begin wherever they are put.
+ */
+export interface NoteCopied {
+  readonly afterMs: number;
+  readonly lengthMs: number;
+  readonly midi: number;
+  readonly velocity: number;
+  readonly hand?: Hand;
+}
+
+/**
+ * What notes copied are called on the clipboard, so a paste can tell them
+ * from any other text there.
+ */
+const NOTES_ON_THE_CLIPBOARD = 'sight-reading-practice/notes';
+
+/**
+ * The named keys of a take as they are copied, earliest first. A key still
+ * down at the end has no length to be copied with, and is left out.
+ */
+export function theNotesCopied(events: readonly MidiFileEvent[], named: readonly KeyNamed[]): readonly NoteCopied[] {
+  const keys = theKeysOfTheTake(events).filter(
+    (key) => key.upAtMs !== null && named.some((each) => each.midi === key.midi && each.downAtMs === key.downAtMs),
+  );
+  const first = Math.min(...keys.map((key) => key.downAtMs));
+  return [...keys]
+    .sort((one, other) => one.downAtMs - other.downAtMs || one.midi - other.midi)
+    .map((key) => ({
+      afterMs: key.downAtMs - first,
+      lengthMs: (key.upAtMs ?? key.downAtMs) - key.downAtMs,
+      midi: key.midi,
+      velocity: key.velocity,
+      ...(key.hand === undefined ? {} : { hand: key.hand }),
+    }));
+}
+
+/** Notes copied as the text the clipboard holds. */
+export function theClipboardTextOf(notes: readonly NoteCopied[]): string {
+  return JSON.stringify({ copied: NOTES_ON_THE_CLIPBOARD, notes });
+}
+
+/**
+ * The notes a clipboard's text holds, or `null` where it holds anything
+ * else. The text may have come from anywhere, so every note is asked of, and
+ * one that is not a note refuses the whole: half a figure pasted is a wrong
+ * one.
+ */
+export function theNotesOnTheClipboard(text: string): readonly NoteCopied[] | null {
+  let read: unknown;
+  try {
+    read = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const said = read as { readonly copied?: unknown; readonly notes?: unknown } | null;
+  if (typeof said !== 'object' || said === null || said.copied !== NOTES_ON_THE_CLIPBOARD || !Array.isArray(said.notes)) {
+    return null;
+  }
+  // JSON reads a number too large for a double as an endless one.
+  const isANumber = (value: unknown): value is number => Number.isFinite(value);
+  const isAWholeNumber = (value: unknown): value is number => Number.isInteger(value);
+  const notes: NoteCopied[] = [];
+  for (const each of said.notes as readonly unknown[]) {
+    const note = each as Partial<Record<keyof NoteCopied, unknown>> | null;
+    if (
+      note === null ||
+      !isANumber(note.afterMs) ||
+      note.afterMs < 0 ||
+      !isANumber(note.lengthMs) ||
+      note.lengthMs <= 0 ||
+      !isAWholeNumber(note.midi) ||
+      note.midi < 0 ||
+      note.midi > 127 ||
+      !isANumber(note.velocity) ||
+      !(note.velocity > 0 && note.velocity <= 1) ||
+      !(note.hand === undefined || note.hand === 'left' || note.hand === 'right')
+    ) {
+      return null;
+    }
+    notes.push({
+      afterMs: note.afterMs,
+      lengthMs: note.lengthMs,
+      midi: note.midi,
+      velocity: note.velocity,
+      ...(note.hand === undefined ? {} : { hand: note.hand }),
+    });
+  }
+  return notes.length === 0 ? null : notes;
+}
+
+/**
+ * A take's events with notes copied put in from a moment on, and the keys
+ * they became. One that would begin on or sound over another of its pitch,
+ * there already or pasted before it, is left out: the rest of a figure is
+ * still worth having where one of its notes is already played.
+ */
+export function takeWithTheNotesPasted(
+  events: readonly MidiFileEvent[],
+  notes: readonly NoteCopied[],
+  atMs: number,
+): { readonly events: readonly MidiFileEvent[]; readonly pasted: readonly KeyNamed[] } {
+  let taken = events;
+  const pasted: KeyNamed[] = [];
+  for (const note of notes) {
+    const key: KeyNamed = { midi: note.midi, downAtMs: Math.round(atMs + note.afterMs) };
+    const struck: MidiFileEvent = {
+      kind: 'noteOn',
+      atMs: key.downAtMs,
+      midi: note.midi,
+      velocity: note.velocity,
+      ...(note.hand === undefined ? {} : { hand: note.hand }),
+    };
+    const released: MidiFileEvent = { kind: 'noteOff', atMs: Math.round(atMs + note.afterMs + note.lengthMs), midi: note.midi };
+    const withIt = inTheOrderPlayed([...taken, struck, released]);
+    if (!aKeyIsOverAnotherOfItsPitch(withIt, [key])) {
+      taken = withIt;
+      pasted.push(key);
+    }
+  }
+  return { events: taken, pasted };
+}
+
+/**
  * A take's events with a key cut in two at a moment inside it: the first part
  * let go of there, and the second struck there, as loud and in the same hand,
  * held to where the key was held - or `null` where the key is not there or

@@ -171,8 +171,12 @@ import {
   takeWithTheKeysChanged,
   takeWithTheKeysCopied,
   takeWithTheKeyCut,
+  takeWithTheNotesPasted,
   takeWithThePedalAt,
+  theClipboardTextOf,
   theKeysOfTheTake,
+  theNotesCopied,
+  theNotesOnTheClipboard,
   theKeysOnTheGrid,
   type KeyChange,
   type KeyNamed,
@@ -9010,6 +9014,9 @@ export class AppView {
     this.listen(this.doc, 'keydown', (event) => {
       this.editByTheKeys(event as KeyboardEvent);
     });
+    this.listen(this.doc, 'paste', (event) => {
+      this.pasteTheNotesCopied(event as ClipboardEvent);
+    });
     this.listen(this.doc, 'keydown', (event) => {
       if ((event as KeyboardEvent).key !== 'Escape') {
         return;
@@ -13096,7 +13103,9 @@ export class AppView {
    * is being typed: Delete or Backspace takes the chosen notes out, and Ctrl+Z
    * (Cmd+Z on a Mac) puts back the last change - the trash and the undo
    * buttons, without leaving the keyboard. The arrows move the chosen notes,
-   * and with Ctrl (Cmd) copy them there instead.
+   * and with Ctrl (Cmd) copy them there instead. Ctrl+C and Ctrl+X copy the
+   * chosen notes to the clipboard, and cut them; a paste is answered by
+   * `pasteTheNotesCopied`.
    */
   private editByTheKeys(event: KeyboardEvent): void {
     if (this.el.sheetRoll.hidden || this.theOtherRollShowing?.sketch?.editing !== true) {
@@ -13132,6 +13141,11 @@ export class AppView {
     } else if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
       this.deleteTheChosenKeys();
+    } else if (command && !event.shiftKey && (event.code === 'KeyC' || event.code === 'KeyX') && chosen.length > 0) {
+      // Written on the key rather than on the browser's copy, which a browser
+      // with no text chosen on the page need not send.
+      event.preventDefault();
+      this.copyTheChosenKeys(event.code === 'KeyX');
     } else if (command && event.code === 'KeyD' && chosen.length > 0) {
       // The other name for a copy just after, rather than a bookmark.
       event.preventDefault();
@@ -13145,6 +13159,60 @@ export class AppView {
     ) {
       event.preventDefault();
       this.moveTheChosenKeys(event.key, event.shiftKey, command);
+    }
+  }
+
+  /**
+   * Copies the chosen notes to the clipboard, as text a paste here can read
+   * back - into this sketch or another, in this tab or another - and cutting,
+   * takes them out as the trash would, to be put back by an undo should the
+   * clipboard refuse them.
+   */
+  private copyTheChosenKeys(cutting: boolean): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    const clipboard = this.doc.defaultView?.navigator?.clipboard;
+    // A page not served securely has no clipboard, and a cut there would only delete.
+    if (sketch === undefined || stored === null || clipboard === undefined) {
+      return;
+    }
+    const notes = theNotesCopied(stored.events, sketch.chosen);
+    if (notes.length > 0) {
+      void clipboard.writeText(theClipboardTextOf(notes)).catch(() => undefined);
+    }
+    if (cutting) {
+      this.deleteTheChosenKeys();
+    }
+  }
+
+  /**
+   * Puts notes copied into the sketch being edited, the first of them where
+   * the head is, and chooses them: one change, put back as one. Read off the
+   * browser's paste rather than asked of the clipboard, which a browser would
+   * first ask the reader's leave for. Anything else on the clipboard is left
+   * to the browser.
+   */
+  private pasteTheNotesCopied(event: ClipboardEvent): void {
+    const showing = this.theOtherRollShowing;
+    const sketch = showing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (
+      this.el.sheetRoll.hidden ||
+      showing === null ||
+      sketch?.editing !== true ||
+      stored === null ||
+      isTypedInto(event.target as TypedInto | null)
+    ) {
+      return;
+    }
+    const notes = theNotesOnTheClipboard(event.clipboardData?.getData('text/plain') ?? '');
+    if (notes === null) {
+      return;
+    }
+    event.preventDefault();
+    const { events, pasted } = takeWithTheNotesPasted(stored.events, notes, this.rollAtMs + rollBeganAtMs(showing.roll));
+    if (pasted.length > 0) {
+      this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], pasted);
     }
   }
 

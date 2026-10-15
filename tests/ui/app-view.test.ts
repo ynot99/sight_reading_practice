@@ -50,6 +50,7 @@ import {
   rollEndedAtMs,
   rollOfTheTake,
   theKeysOfTheTake,
+  theNotesOnTheClipboard,
   theMusicsBeats,
   type RunRoll,
 } from '../../src/application/session/RunRoll.js';
@@ -5943,6 +5944,140 @@ describe('AppView', () => {
       // Each copy is one change, put back as one.
       key({ key: 'z', code: 'KeyZ', ctrlKey: true });
       expect(notes()).toHaveLength(9);
+    });
+
+    it('copies and cuts the chosen notes to the clipboard by Ctrl+C and Ctrl+X, and pastes them where the head is', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [
+            [0, 400, 60],
+            [500, 1_000, 64],
+          ].flatMap(([atMs = 0, upAtMs = 0, midi = 0]) => [
+            { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+            { kind: 'noteOff' as const, atMs: upAtMs, midi },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Clipboard',
+        1,
+      );
+      const written: string[] = [];
+      Object.defineProperty(window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: (text: string): Promise<void> => {
+            written.push(text);
+            return Promise.resolve();
+          },
+        },
+      });
+      try {
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const highest = view.rollScene?.highest ?? 0;
+        const scrolledDown =
+          Number.parseFloat(
+            element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+          ) || 0;
+        const at = (ms: number, midi: number): { clientX: number; clientY: number } => ({
+          clientX: (ms / 1000) * zoom,
+          clientY: (highest - midi + 0.5) * 13 - scrolledDown,
+        });
+        const inOrder = ([one = 0, a = 0]: number[], [other = 0, b = 0]: number[]): number => one - other || a - b;
+        const notes = (): number[][] => {
+          const events = sketches.find(sketch.id)?.events ?? [];
+          return events
+            .flatMap((event, index) => {
+              if (event.kind !== 'noteOn') {
+                return [];
+              }
+              const off = events.slice(index + 1).find((later) => later.kind === 'noteOff' && later.midi === event.midi);
+              return [[event.atMs, event.midi, off?.atMs ?? -1]];
+            })
+            .sort(inOrder);
+        };
+        const chosen = (): number[][] =>
+          (view.rollScene?.notes ?? [])
+            .filter((note) => note.chosen === true)
+            .map((note) => [note.fromMs, (view.rollScene?.highest ?? 0) - note.row])
+            .sort(inOrder);
+        const key = (init: KeyboardEventInit): KeyboardEvent => {
+          const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+          document.body.dispatchEvent(event);
+          return event;
+        };
+        const paste = (text: string, on: Element = document.body): Event => {
+          const event = new Event('paste', { bubbles: true, cancelable: true });
+          Object.defineProperty(event, 'clipboardData', {
+            value: { getData: (type: string): string => (type === 'text/plain' ? text : '') },
+          });
+          on.dispatchEvent(event);
+          return event;
+        };
+        const original = [
+          [0, 60, 400],
+          [500, 64, 1_000],
+        ];
+
+        // Nothing chosen, Ctrl+C is left to the browser.
+        expect(key({ key: 'c', code: 'KeyC', ctrlKey: true }).defaultPrevented).toBe(false);
+        expect(written).toEqual([]);
+        // Both chosen, they are copied, and stay.
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(100, 60) });
+        tapTheDrawing({ pointerType: 'mouse', button: 0, shiftKey: true, ...at(600, 64) });
+        expect(key({ key: 'c', code: 'KeyC', metaKey: true }).defaultPrevented).toBe(true);
+        expect(written.map((text) => theNotesOnTheClipboard(text))).toEqual([
+          [
+            { afterMs: 0, lengthMs: 400, midi: 60, velocity: 0.5 },
+            { afterMs: 500, lengthMs: 500, midi: 64, velocity: 0.5 },
+          ],
+        ]);
+        expect(notes()).toEqual(original);
+
+        // With the head put at 3000, pasted from there, and chosen.
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(3_000, 50) });
+        expect(paste(written[0] ?? '').defaultPrevented).toBe(true);
+        expect(notes()).toEqual([...original, [3_000, 60, 3_400], [3_500, 64, 4_000]]);
+        expect(chosen()).toEqual([
+          [3_000, 60],
+          [3_500, 64],
+        ]);
+        // Pasted again there, every note is over itself: nothing changes.
+        expect(paste(written[0] ?? '').defaultPrevented).toBe(true);
+        expect(notes()).toHaveLength(4);
+        // One change, put back as one.
+        key({ key: 'z', code: 'KeyZ', ctrlKey: true });
+        expect(notes()).toEqual(original);
+
+        // Other text is the browser's; so is a paste into a field, or onto a sketch not being edited.
+        expect(paste('C E G').defaultPrevented).toBe(false);
+        const field = document.createElement('input');
+        field.type = 'text';
+        document.body.append(field);
+        expect(paste(written[0] ?? '', field).defaultPrevented).toBe(false);
+        field.remove();
+        element<HTMLButtonElement>('roll-edit').click();
+        expect(paste(written[0] ?? '').defaultPrevented).toBe(false);
+        element<HTMLButtonElement>('roll-edit').click();
+        expect(notes()).toEqual(original);
+
+        // Ctrl+X copies the chosen and takes them out.
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(600, 64) });
+        expect(key({ key: 'x', code: 'KeyX', ctrlKey: true }).defaultPrevented).toBe(true);
+        expect(theNotesOnTheClipboard(written.at(-1) ?? '')).toEqual([{ afterMs: 0, lengthMs: 500, midi: 64, velocity: 0.5 }]);
+        expect(notes()).toEqual([[0, 60, 400]]);
+        // With no clipboard to cut to, a cut takes nothing out.
+        Reflect.deleteProperty(window.navigator, 'clipboard');
+        tapTheDrawing({ pointerType: 'mouse', button: 0, ...at(100, 60) });
+        key({ key: 'x', code: 'KeyX', ctrlKey: true });
+        expect(notes()).toEqual([[0, 60, 400]]);
+      } finally {
+        Reflect.deleteProperty(window.navigator, 'clipboard');
+      }
     });
 
     it('puts the chosen notes on the grid by the Quantize button, whether or not the marker is put on it', async () => {

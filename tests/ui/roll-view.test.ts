@@ -1207,6 +1207,43 @@ describe('the notes in view, by pitch', () => {
     expect(both('correct', 'duplicate')).toEqual(['correct']);
   });
 
+  it('marks the notes nothing judged by their hand, and one chosen above all, as the drawing draws them', () => {
+    const kinds = (
+      presses: readonly RolledPress[],
+      drawing: { readonly freely?: boolean; readonly chosen?: readonly { midi: number; downAtMs: number }[] },
+    ): string[] =>
+      theMapOfThePitches(thePitchesOfTheRun(roll({ presses }), [], false, drawing), { fromShare: 0, widthShare: 1 }).map(
+        (mark) => mark.kind,
+      );
+    // Played freely: the right hand from middle C, the left below, or the hand said.
+    const right = press({ midi: MIDI.C4, verdict: null });
+    const left = press({ midi: MIDI.C4 - 1, verdict: null });
+    const toldLeft = press({ midi: MIDI.C4 + 4, verdict: null, hand: 'left' });
+    expect(kinds([right, left, toldLeft], { freely: true })).toEqual(['left', 'right', 'left']);
+    // In a run, a note nothing judged is grey, as before.
+    expect(kinds([right], {})).toEqual(['plain']);
+    // A chosen one is marked chosen, and wins its row over every other.
+    const later = press({ midi: MIDI.C4, downAtMs: 1_500, upAtMs: 1_800, verdict: 'wrong' });
+    expect(kinds([right, later], { freely: true, chosen: [{ midi: MIDI.C4, downAtMs: right.downAtMs }] })).toEqual(['chosen']);
+    expect(kinds([later, right], { freely: true, chosen: [{ midi: MIDI.C4, downAtMs: right.downAtMs }] })).toEqual(['chosen']);
+    // A judged one still wins over a hand's on its row.
+    expect(kinds([right, later], { freely: true })).toEqual(['wrong']);
+    expect(kinds([later, right], { freely: true })).toEqual(['wrong']);
+    const correct = press({ midi: MIDI.C4, downAtMs: 1_500, upAtMs: 1_800, verdict: 'correct' });
+    expect(kinds([right, correct], { freely: true })).toEqual(['correct']);
+    expect(kinds([correct, right], { freely: true })).toEqual(['correct']);
+    // A hand's note wins its row over a note asked for and never played.
+    const asked = [{ midi: MIDI.C4, fromTicks: Duration.QUARTER.ticks, untilTicks: 2 * Duration.QUARTER.ticks, stepIndex: 0 }];
+    const withAGhost = theMapOfThePitches(
+      thePitchesOfTheRun(roll({ beats: barOfFour(0, 0), presses: [right] }), asked, false, { freely: true }),
+      { fromShare: 0, widthShare: 1 },
+    ).map((mark) => mark.kind);
+    expect(withAGhost).toEqual(['right']);
+    // The chosen is asked by its pitch and its start.
+    expect(kinds([right], { freely: true, chosen: [{ midi: MIDI.C4 + 1, downAtMs: right.downAtMs }] })).toEqual(['right']);
+    expect(kinds([right], { freely: true, chosen: [{ midi: MIDI.C4, downAtMs: right.downAtMs + 1 }] })).toEqual(['right']);
+  });
+
   it('colours a mark as the drawing colours its note', () => {
     const kindOf = (verdict: RolledPress['verdict']): string | undefined =>
       theMapOfThePitches(thePitchesOfTheRun(roll({ presses: [press({ verdict })] })), {

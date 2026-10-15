@@ -12328,6 +12328,15 @@ export class AppView {
     return second;
   }
 
+  /**
+   * Whether the drawing is of playing nobody judged - a recording or a
+   * sketch - whose notes are coloured by the hand that plays them, on the
+   * drawing and on the strip beside it alike.
+   */
+  private nothingOnTheDrawingIsJudged(): boolean {
+    return this.theOtherRollShowing?.recording !== undefined || this.theOtherRollShowing?.sketch !== undefined;
+  }
+
   /** Makes these the notes chosen, and only these. */
   private choose(keys: readonly KeyNamed[]): void {
     const showing = this.theOtherRollShowing;
@@ -13027,7 +13036,7 @@ export class AppView {
       keepsTime: this.theRunKeptTime(),
       chosen,
       wholeKeyboard: this.theOtherRollShowing?.sketch?.editing === true,
-      freely: this.theOtherRollShowing?.recording !== undefined || this.theOtherRollShowing?.sketch !== undefined,
+      freely: this.nothingOnTheDrawingIsJudged(),
     });
   }
 
@@ -13051,7 +13060,10 @@ export class AppView {
     this.rollCanvases = theCanvasesOf(this.el.rollBody);
     this.rollKeysStrip = theKeysStripOf(this.el.rollBody);
     this.rollInks = null;
-    this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.sketch?.editing === true);
+    this.rollPitches = thePitchesOfTheRun(roll, ghosts, this.theOtherRollShowing?.sketch?.editing === true, {
+      freely: this.nothingOnTheDrawingIsJudged(),
+      chosen: this.theOtherRollShowing?.sketch?.chosen ?? [],
+    });
     this.applyTheZoom();
     this.el.rollMap.replaceChildren(
       drawTheMap(roll),

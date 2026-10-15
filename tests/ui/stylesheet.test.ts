@@ -1643,10 +1643,20 @@ describe('nothing on this page pulls', () => {
   });
 });
 
-/** An ink the MIDI viewer is painted in, as the stylesheet declares it on `.roll`. */
+/**
+ * An ink the MIDI viewer is painted in, as the stylesheet declares it: on
+ * `.roll`, or on the stage it stands in and inherits from, where the strip of
+ * pitches beside it shares it.
+ */
 function ink(name: string): string {
-  const roll = rules().find((rule) => rule.selector === '.roll')?.body ?? '';
-  return new RegExp(`--roll-ink-${name}\\s*:\\s*([^;]+);`).exec(roll)?.[1]?.trim() ?? '';
+  for (const selector of ['.roll', '.roll-stage']) {
+    const body = rules().find((rule) => rule.selector === selector)?.body ?? '';
+    const found = new RegExp(`--roll-ink-${name}\\s*:\\s*([^;]+);`).exec(body)?.[1]?.trim();
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return '';
 }
 
 describe('the inks the MIDI viewer is painted in', () => {
@@ -1657,6 +1667,19 @@ describe('the inks the MIDI viewer is painted in', () => {
     for (const name of Object.values(INKS)) {
       expect(ink(name), name).not.toBe('');
     }
+  });
+
+  it('marks the strip of pitches in the inks the notes are drawn in, declared where both see them', () => {
+    // The strip stands beside the drawing, not in it, so an ink declared on the
+    // drawing alone never reached it, and a hand's notes were marked grey.
+    const stage = rules().find((rule) => rule.selector === '.roll-stage')?.body ?? '';
+    for (const name of ['right', 'left', 'chosen']) {
+      expect(stage, name).toMatch(new RegExp(`--roll-ink-${name}\\s*:`));
+      expect(rules().find((rule) => rule.selector === `.roll-pitch-map__mark--${name}`)?.body, name).toMatch(
+        new RegExp(`background\\s*:\\s*var\\(--roll-ink-${name}\\)`),
+      );
+    }
+    expect(HTML).toMatch(/<div class="roll-stage">[\s\S]*id="roll-body"[\s\S]*id="roll-pitch-map"/);
   });
 
   it('paints the waits and the rows through, so what is behind them shows', () => {

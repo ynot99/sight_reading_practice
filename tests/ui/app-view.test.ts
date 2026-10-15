@@ -3815,6 +3815,50 @@ describe('AppView', () => {
       }
     });
 
+    it('marks the strip of a sketch in the colours its notes are drawn in, the chosen in its own', async () => {
+      const giveBack = lendTheDrawingASize({ wide: 100, tall: 0 });
+      try {
+        const rig = createRig();
+        await rig.view.initialize();
+        rig.sketches.begin(
+          {
+            events: [
+              [0, 72],
+              [0, 48],
+            ].flatMap(([atMs = 0, midi = 0]) => [
+              { kind: 'noteOn' as const, atMs, midi, velocity: 0.5 },
+              { kind: 'noteOff' as const, atMs: atMs + 400, midi },
+            ]),
+            beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+          },
+          'Hands',
+          1,
+        );
+        element<HTMLButtonElement>('focus-scores').click();
+        element<HTMLButtonElement>('scores-show-sketches').click();
+        rowButton('sketches-list', 'Edit this sketch').click();
+        const kinds = (): string[] =>
+          [...element('roll-pitch-map').querySelectorAll<HTMLElement>('.roll-pitch-map__mark')].map((mark) =>
+            [...mark.classList].filter((name) => name.startsWith('roll-pitch-map__mark--')).join(' '),
+          );
+
+        // The right hand's above, the left's below, not grey.
+        expect(kinds()).toEqual(['roll-pitch-map__mark--right', 'roll-pitch-map__mark--left']);
+
+        // Chosen, its row is marked chosen.
+        const zoom = Number(element<HTMLInputElement>('roll-zoom').value);
+        const highest = rig.view.rollScene?.highest ?? 0;
+        const down =
+          Number.parseFloat(
+            element('roll-body').querySelector<HTMLElement>('.roll__keys-strip')?.style.getPropertyValue('--roll-y') ?? '0',
+          ) || 0;
+        tapTheDrawing({ pointerType: 'mouse', button: 0, clientX: 0.1 * zoom, clientY: (highest - 48 + 0.5) * 13 - down });
+        expect(kinds()).toEqual(['roll-pitch-map__mark--right', 'roll-pitch-map__mark--chosen']);
+      } finally {
+        giveBack();
+      }
+    });
+
     it('scrolls up and down to where a finger is on the strip', async () => {
       // Centred on the finger, as along the run: half way down the strip is
       // half the rows' worth, less half of the sixty on the screen.

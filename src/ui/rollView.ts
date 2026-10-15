@@ -839,7 +839,7 @@ export function scrollForTheWindowAt(
 }
 
 /** What a mark down the side says about its row: the colour its notes are drawn in. */
-export type PitchMarkKind = 'wrong' | 'correct' | 'plain';
+export type PitchMarkKind = 'chosen' | 'wrong' | 'correct' | 'right' | 'left' | 'plain';
 
 /** One row with a note on it, as shares of the band from its top. */
 export interface PitchMark {
@@ -882,17 +882,25 @@ export function thePitchesOfTheRun(
   roll: RunRoll,
   ghosts: readonly RollGhost[] = [],
   wholeKeyboard = false,
+  drawing: Pick<RollDrawing, 'freely' | 'chosen'> = {},
 ): RollPitches {
   const origin = rollBeganAtMs(roll);
   const endMs = rollEndedAtMs(roll);
   const band = bandOf(roll.presses, ghosts, wholeKeyboard);
   const notes: PitchedNote[] = roll.presses.map((press) => {
-    const shade = shadeOf(press, false);
+    // Coloured as the drawing colours it - the hand, where nothing judged it -
+    // and a chosen one in the colour that marks it chosen.
+    const shade = shadeOf(press, drawing.freely === true);
+    const chosen = drawing.chosen?.some((each) => each.midi === press.midi && each.downAtMs === press.downAtMs) === true;
     return {
       row: band.high - press.midi,
       fromMs: press.downAtMs - origin,
       untilMs: (press.upAtMs ?? endMs) - origin,
-      kind: shade === 'correct' || shade === 'wrong' ? shade : 'plain',
+      kind: chosen
+        ? 'chosen'
+        : shade === 'correct' || shade === 'wrong' || shade === 'right' || shade === 'left'
+          ? shade
+          : 'plain',
     };
   });
   for (const { ghost, from, until } of placedGhosts(roll, ghosts)) {
@@ -904,8 +912,18 @@ export function thePitchesOfTheRun(
   return { rows: band.high - band.low + 1, lengthMs: endMs - origin, notes };
 }
 
-/** Which colour a row takes where its notes differ: the fault, then the note played right. */
-const HOW_TELLING: Readonly<Record<PitchMarkKind, number>> = { plain: 0, correct: 1, wrong: 2 };
+/**
+ * Which colour a row takes where its notes differ: a note chosen, being the
+ * one at work; then the fault, the note played right, and a hand's.
+ */
+const HOW_TELLING: Readonly<Record<PitchMarkKind, number>> = {
+  plain: 0,
+  left: 1,
+  right: 1,
+  correct: 2,
+  wrong: 3,
+  chosen: 4,
+};
 
 /**
  * The rows with a note in the stretch of the run on the screen.

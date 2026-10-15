@@ -22,6 +22,13 @@ const SKIP_SECONDS = 10;
 export interface SilentPlayer {
   play(): void;
   pause(): void;
+  /**
+   * Lets go of the element altogether. Paused, it was still a piece of
+   * media to the browser and to the platform's panel, which went on showing
+   * a paused player ten seconds long - the silence's own length - after the
+   * music was over.
+   */
+  release(): void;
 }
 
 /** The actions taken, and given back in the same order they were taken. */
@@ -82,7 +89,7 @@ export class MediaSessionKeys implements IMediaKeys {
       if (!this.held) {
         return;
       }
-      this.silence?.pause();
+      this.silence?.release();
       for (const action of ACTIONS) {
         take(session, action, null);
       }
@@ -216,13 +223,14 @@ const SILENCE_SECONDS = 10;
  * Silence on a loop in an `<audio>` element, made the first time it is asked
  * to play: a page that never plays a performance never builds it.
  */
-class LoopedSilence implements SilentPlayer {
+export class LoopedSilence implements SilentPlayer {
   private element: HTMLAudioElement | null = null;
+  private url: string | null = null;
 
   play(): void {
     if (this.element === null) {
-      const url = URL.createObjectURL(new Blob([silentWav(SILENCE_SECONDS)], { type: 'audio/wav' }));
-      this.element = new Audio(url);
+      this.url = URL.createObjectURL(new Blob([silentWav(SILENCE_SECONDS)], { type: 'audio/wav' }));
+      this.element = new Audio(this.url);
       this.element.loop = true;
     }
     // Refused where the browser wants a press first. The music itself was
@@ -233,6 +241,25 @@ class LoopedSilence implements SilentPlayer {
 
   pause(): void {
     this.element?.pause();
+  }
+
+  /**
+   * Emptied as a media element is let go of - its source taken away and
+   * loaded again - so the browser stops counting the page as a player; and
+   * its file freed. Made again the next time the music plays.
+   */
+  release(): void {
+    const element = this.element;
+    if (element !== null) {
+      element.pause();
+      element.removeAttribute('src');
+      element.load();
+    }
+    if (this.url !== null) {
+      URL.revokeObjectURL(this.url);
+    }
+    this.element = null;
+    this.url = null;
   }
 }
 

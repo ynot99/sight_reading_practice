@@ -30,6 +30,7 @@ class FakeSession implements MediaSessionLike {
 
 class FakeSilence implements SilentPlayer {
   playing = false;
+  released = 0;
 
   play(): void {
     this.playing = true;
@@ -37,6 +38,11 @@ class FakeSilence implements SilentPlayer {
 
   pause(): void {
     this.playing = false;
+  }
+
+  release(): void {
+    this.playing = false;
+    this.released += 1;
   }
 }
 
@@ -184,10 +190,16 @@ describe('the platform transport keys', () => {
 
     keys.sounding(performanceOf(false));
     expect(silence.playing).toBe(false);
+    // Held, it is kept, to play on with the music.
+    expect(silence.released).toBe(0);
 
     keys.sounding(performanceOf(true));
     keys.sounding(null);
+    // Over, it is let go of altogether, or the panel goes on showing a paused player.
     expect(silence.playing).toBe(false);
+    expect(silence.released).toBe(1);
+    keys.sounding(null);
+    expect(silence.released).toBe(1);
   });
 
   it('gives the keys back when there is nothing sounding', () => {

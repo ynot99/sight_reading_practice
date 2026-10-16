@@ -20,6 +20,42 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
     <title>Piano Sight-Reading Trainer</title>
+    <!--
+      What a search engine and a shared link say about the page. The page
+      itself is drawn by the program, so without these a crawler and a chat
+      preview see a title and nothing else. The addresses are whole, not
+      relative: a preview is fetched from somewhere else, and a canonical
+      address says which of the ways to reach the page is the page.
+    -->
+    <meta name="description" content="Practise piano sight-reading in the browser with a MIDI keyboard: generated exercises or your own MusicXML and MIDI scores, judged note by note. Free." />
+    <link rel="canonical" href="https://ynot99.github.io/sight_reading_practice/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Piano Sight-Reading Trainer" />
+    <meta property="og:title" content="Piano Sight-Reading Trainer" />
+    <meta property="og:description" content="Practise piano sight-reading in the browser with a MIDI keyboard: generated exercises or your own MusicXML and MIDI scores, judged note by note. Free." />
+    <meta property="og:url" content="https://ynot99.github.io/sight_reading_practice/" />
+    <meta property="og:image" content="https://ynot99.github.io/sight_reading_practice/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Piano Sight-Reading Trainer: a generated exercise of four bars on two staves" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Piano Sight-Reading Trainer" />
+    <meta name="twitter:description" content="Practise piano sight-reading in the browser with a MIDI keyboard: generated exercises or your own MusicXML and MIDI scores, judged note by note. Free." />
+    <meta name="twitter:image" content="https://ynot99.github.io/sight_reading_practice/og-image.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Piano Sight-Reading Trainer",
+        "url": "https://ynot99.github.io/sight_reading_practice/",
+        "description": "Practise piano sight-reading in the browser with a MIDI keyboard: generated exercises or your own MusicXML and MIDI scores, judged note by note. Free.",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Any, in a browser with Web MIDI",
+        "browserRequirements": "Requires JavaScript. Web MIDI for a keyboard; the computer keyboard and the screen's keys work without one.",
+        "image": "https://ynot99.github.io/sight_reading_practice/og-image.png",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
 
     <!--
       The theme chosen, said on the root before anything is painted. The
@@ -66,6 +102,16 @@
     <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png" />
   </head>
   <body>
+    <!--
+      For a page read without its program - a crawler that runs none, or a
+      browser with it turned off: what this is, in words, rather than an empty
+      page.
+    -->
+    <noscript>
+      <h1>Piano Sight-Reading Trainer</h1>
+      <p>Practise piano sight-reading in the browser with a MIDI keyboard: generated exercises or your own MusicXML and MIDI scores, judged note by note. Free.</p>
+      <p>It runs in the browser and needs JavaScript turned on.</p>
+    </noscript>
     <div class="app" id="app">
       <!--
         The picker itself has no button of its own any more: a score is opened

@@ -39,6 +39,13 @@ let lastFrameAt: number | null = null;
 const events: { readonly atMs: number; readonly what: string }[] = [];
 /** How many events are kept: enough for a start, never a growing list. */
 const EVENTS_KEPT = 200;
+/** What happened lately, on the page's clock, for a pulse to begin with what came just before it. */
+const lately: { readonly at: number; readonly what: string }[] = [];
+const LATELY_KEPT = 20;
+/** How long before a pulse begins what happened is still its own. */
+const BEFORE_THE_START_MS = 3_000;
+/** How long between two frames of the falling notes is told as the page having stood. */
+const FRAMES_STOOD_MS = 100;
 /** The playbacks before the last, as they were written out, the latest first. */
 const earlier: string[][] = [];
 /** How many playbacks before the last are kept. */
@@ -93,7 +100,8 @@ function most(kept: number | null, value: number): number {
 export function beginThePlaybackTimings(): void {
   // The one before kept as it was, for a start that went wrong to be copied
   // after the next one too: the first start of a page is not like the rest.
-  if (seconds.size > 0 || events.length > 0) {
+  // Nothing come of it is no playback, whatever came just before it.
+  if (seconds.size > 0 || events.some(({ atMs }) => atMs >= 0)) {
     earlier.unshift(thisPlayback());
     earlier.splice(EARLIER_KEPT);
   }
@@ -101,7 +109,14 @@ export function beginThePlaybackTimings(): void {
   lastFrameAt = null;
   firstNought = null;
   seconds.clear();
-  events.length = 0;
+  // Begun with what happened just before it, before nought: the page asks for
+  // the media keys' silence as it asks for the music, ahead of the pulse.
+  const from = began - BEFORE_THE_START_MS;
+  events.splice(
+    0,
+    events.length,
+    ...lately.filter(({ at }) => at >= from && at < (began ?? at)).map(({ at, what }) => ({ atMs: at - (began ?? at), what })),
+  );
 }
 
 /**
@@ -110,10 +125,13 @@ export function beginThePlaybackTimings(): void {
  * silence beginning to play.
  */
 export function noteAnEvent(what: string): void {
+  const now = performance.now();
+  lately.push({ at: now, what });
+  lately.splice(0, lately.length - LATELY_KEPT);
   if (began === null || events.length >= EVENTS_KEPT) {
     return;
   }
-  events.push({ atMs: performance.now() - began, what });
+  events.push({ atMs: now - began, what });
 }
 
 /**
@@ -192,6 +210,9 @@ export function noteAFrame(): void {
   second.frames += 1;
   if (lastFrameAt !== null) {
     second.longestFrameMs = most(second.longestFrameMs, now - lastFrameAt);
+    if (now - lastFrameAt > FRAMES_STOOD_MS) {
+      noteAnEvent(`the falling notes stood ${String(Math.round(now - lastFrameAt))} ms between two frames`);
+    }
   }
   lastFrameAt = now;
 }

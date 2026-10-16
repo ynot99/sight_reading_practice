@@ -105,23 +105,53 @@ describe('how a playback kept time', () => {
     ]);
   });
 
-  it('lists what happened once under the seconds, from the pulse\'s start, and only since it', () => {
-    timings.noteAnEvent('before anything');
+  it('lists what happened under the seconds, from the pulse\'s start, and the three seconds before it', () => {
+    now = 0;
+    timings.noteAnEvent('long before');
+    now = 1_000;
     timings.beginThePlaybackTimings();
-    timings.noteAnEvent('from an earlier pulse');
-    now = 2_000;
+    timings.noteAnEvent('at the earlier pulse');
+    now = 3_500;
+    timings.noteAnEvent('just before');
     timings.beginThePlaybackTimings();
-    now = 2_040;
+    now = 3_540;
     timings.noteAnEvent('the clocks read');
-    now = 2_400;
+    now = 3_900;
     timings.noteAnEvent('the audio clock had stood 134 ms');
     const lines = timings.thePlaybackTimingsText('a tablet').split('\n');
     const latest = lines.slice(lines.indexOf('The latest playback:'));
 
+    // Not what happened more than three seconds before, nor at the very
+    // moment it began, which is the pulse's own.
     expect(latest.slice(latest.indexOf('What happened, ms since the pulse started:'), latest.indexOf(''))).toEqual([
       'What happened, ms since the pulse started:',
+      '  -2500  at the earlier pulse',
       '    +40  the clocks read',
       '   +400  the audio clock had stood 134 ms',
+    ]);
+  });
+
+  it('carries into the first pulse of a page what came just before it, the last twenty of it', () => {
+    for (let at = 0; at < 30; at += 1) {
+      now = 900 + at;
+      timings.noteAnEvent(`asked ${String(at)}`);
+    }
+    now = 1_000;
+    timings.beginThePlaybackTimings();
+
+    const { before } = theLatestPlayback(timings.thePlaybackTimingsText(''));
+    expect(before).toEqual(Array.from({ length: 20 }, (_, at) => `asked ${String(at + 10)}`));
+  });
+
+  it('tells where the falling notes stood more than a tenth of a second between two frames', () => {
+    timings.beginThePlaybackTimings();
+    for (const at of [1_000, 1_150, 1_250, 1_270]) {
+      now = at;
+      timings.noteAFrame();
+    }
+
+    expect(theLatestPlayback(timings.thePlaybackTimingsText('')).happened).toEqual([
+      'the falling notes stood 150 ms between two frames',
     ]);
   });
 

@@ -1602,6 +1602,21 @@ function isFormControl(element: Element | null): boolean {
 }
 
 /**
+ * Whether a control is one pressed rather than typed into: a button, a box
+ * ticked, a slider dragged, a list chosen from. Pressed by the pointer, the
+ * browser leaves the focus on it all the same. A field typed into is never
+ * given up so: a key there is text, however the focus came.
+ */
+function pressedRatherThanTyped(element: Element | null): element is HTMLElement {
+  if (element === null) {
+    return false;
+  }
+  const tag = element.tagName;
+  const type = tag === 'INPUT' ? (element.getAttribute('type') ?? 'text') : '';
+  return tag === 'BUTTON' || tag === 'SELECT' || ['checkbox', 'radio', 'range'].includes(type);
+}
+
+/**
  * Why a score could not be taken, in words the reader can act on.
  *
  * Every refusal already carried a reason and the page threw most of them away:
@@ -2021,6 +2036,12 @@ export class AppView {
    * not served securely - and where it holds something else.
    */
   private notesCopiedHere: readonly NoteCopied[] | null = null;
+
+  /**
+   * Whether the control with the focus was given it by a pointer pressing
+   * it, rather than reached by the keyboard: see `bindSpaceBar`.
+   */
+  private focusCameByThePointer = false;
 
   /**
    * The notes chosen on a drawing that is not a sketch - a score, a
@@ -6381,7 +6402,12 @@ export class AppView {
       // Either key, as everywhere else here that takes a held gesture: which
       // of the two is the command key is the platform's business.
       const held = event.metaKey || event.ctrlKey;
-      if (isFormControl(this.doc.activeElement)) {
+      const focused = this.doc.activeElement;
+      if (event.code === 'Space' && this.focusCameByThePointer && pressedRatherThanTyped(focused)) {
+        // Pressed by the pointer, it keeps the focus, and the browser would
+        // press it again at the space bar - which was meant for the music.
+        focused.blur();
+      } else if (isFormControl(focused)) {
         return;
       }
       // Nor while a sheet stands over the page. These keys belong to whatever
@@ -6444,6 +6470,28 @@ export class AppView {
     this.doc.addEventListener('keydown', handler);
     this.subscriptions.push(() => {
       this.doc.removeEventListener('keydown', handler);
+    });
+
+    // How the focus came, as it comes: by a pointer pressed last, or by a
+    // key. The browser's own word for it, a visible focus, is no use here -
+    // it turns visible at the very key that asks, before anyone hears it.
+    let thePointerLast = false;
+    const pointed = (): void => {
+      thePointerLast = true;
+    };
+    const keyed = (): void => {
+      thePointerLast = false;
+    };
+    const focusCame = (): void => {
+      this.focusCameByThePointer = thePointerLast;
+    };
+    this.doc.addEventListener('pointerdown', pointed, true);
+    this.doc.addEventListener('keydown', keyed, true);
+    this.doc.addEventListener('focusin', focusCame, true);
+    this.subscriptions.push(() => {
+      this.doc.removeEventListener('pointerdown', pointed, true);
+      this.doc.removeEventListener('keydown', keyed, true);
+      this.doc.removeEventListener('focusin', focusCame, true);
     });
   }
 

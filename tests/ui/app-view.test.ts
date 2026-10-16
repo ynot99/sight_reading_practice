@@ -14967,16 +14967,69 @@ describe('AppView', () => {
       expect(runtime.controller.session).toBeNull();
     });
 
-    it('leaves a focused button to do its own job', async () => {
+    it('leaves a button the keyboard reached to do its own job', async () => {
       const { view, runtime } = createRig();
       await view.initialize();
 
+      // Reached by Tab, after a press somewhere else.
       const button = element<HTMLButtonElement>('focus-bare');
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true }));
       button.focus();
-      pressSpace(button);
+      expect(pressSpace(button)).toBe(false);
 
       // Space on a button is how a button is pressed; it must not also start.
       expect(runtime.controller.session).toBeNull();
+      expect(document.activeElement).toBe(button);
+    });
+
+    it('takes the space bar from a control the pointer pressed, which keeps the focus without asking for it', async () => {
+      const { view, runtime, renderer } = createRig();
+      await view.initialize();
+      /** Pressed by the pointer: the browser leaves the focus on it. */
+      const pressedByThePointer = (control: HTMLElement): void => {
+        control.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        control.focus();
+      };
+
+      // The run starts, and pauses at the next, the focus let go of each time.
+      for (const [id, status] of [
+        ['focus-bare', 'running'],
+        ['metronome-on', 'paused'],
+      ] as const) {
+        const button = element<HTMLButtonElement>(id);
+        pressedByThePointer(button);
+        expect(pressSpace(button), id).toBe(true);
+        expect(document.activeElement, id).not.toBe(button);
+        expect(runtime.controller.session?.status, id).toBe(status);
+      }
+      // A box ticked and a list chosen from, the same.
+      const ticked = document.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      const list = document.querySelector<HTMLSelectElement>('select');
+      for (const control of [ticked, list]) {
+        if (control === null) {
+          throw new Error('expected the control');
+        }
+        pressedByThePointer(control);
+        expect(pressSpace(control), control.id).toBe(true);
+        expect(document.activeElement, control.id).not.toBe(control);
+      }
+      // A field typed into never, however its focus came.
+      const typed = element<HTMLInputElement>('measures-value');
+      pressedByThePointer(typed);
+      expect(pressSpace(typed)).toBe(false);
+      expect(document.activeElement).toBe(typed);
+
+      // Only the space bar: the arrows are left to a slider the pointer
+      // dragged, which they move, and turn no page.
+      renderer.pageCount = 3;
+      const slider = element<HTMLInputElement>('tempo');
+      pressedByThePointer(slider);
+      const arrow = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true });
+      slider.dispatchEvent(arrow);
+      expect(arrow.defaultPrevented).toBe(false);
+      expect(renderer.pages.at).toBe(0);
+      expect(document.activeElement).toBe(slider);
     });
 
     function pressHeldSpace(target: Element = document.body): boolean {

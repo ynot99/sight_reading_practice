@@ -8968,17 +8968,18 @@ describe('AppView', () => {
 
       vi.useFakeTimers();
       try {
-        element<HTMLButtonElement>('roll-play').click();
-        clock.advance(200);
-        vi.advanceTimersByTime(100);
-
         // Asked for at a moment on the page's own clock, not at the moment it
         // fell in the run: the two clocks share nothing but a duration. The
-        // first beat of the run is already behind the sound by now, and saying
-        // so is what lets the metronome place it at once rather than late.
-        const at = runtime.takePlayer.positionMs;
-        expect(metronome.clicks[0]?.atMs).toBe(clock.now() + ((marking[0]?.atMs ?? 0) - began - at));
+        // first beat, at the start, handed over as the playback starts - as
+        // its notes are - so it falls with them: left for the first tick, it
+        // was placed a tick behind the sound, and heard late.
+        const startedAt = clock.now();
+        element<HTMLButtonElement>('roll-play').click();
+        expect(metronome.clicks[0]?.atMs).toBe(startedAt + ((marking[0]?.atMs ?? 0) - began));
+        expect(metronome.clicks[0]?.atMs).toBe(startedAt);
         expect(metronome.clicks[0]?.weight).toBe('downbeat');
+        clock.advance(200);
+        vi.advanceTimersByTime(100);
 
         // And every beat of the run exactly once, however many windows it took.
         for (let guard = 0; guard < 50 && runtime.takePlayer.playing !== null; guard += 1) {
@@ -8993,6 +8994,72 @@ describe('AppView', () => {
       expect(metronome.clicks).toHaveLength(marking.length);
       for (const asked of metronome.clicks) {
         expect(asked.weight).not.toBe('division');
+      }
+    });
+
+    it('hands the beat over at once wherever a playback starts or moves, on the picture and on the notes, so the first is not late', async () => {
+      const { view, runtime, midi, metronome, clock } = createRig();
+      await view.initialize();
+      runtime.controller.updateSettings({ modeId: FLOW_MODE_ID, countInBars: 0 });
+      element<HTMLButtonElement>('focus-play').click();
+      const step = runtime.controller.session?.currentStep;
+      midi.noteOn(step?.expectedMidi[0] ?? 60, 0);
+      metronome.advanceSubdivisions(8);
+      element<HTMLButtonElement>('focus-stop').click();
+      element<HTMLButtonElement>('run-roll-open').click();
+      const tapTheFirstBeat = (): void => {
+        const grid = element('roll-body').querySelector<HTMLElement>('.roll__grid');
+        if (grid === null) {
+          throw new Error('expected a grid to tap');
+        }
+        grid.getBoundingClientRect = () => ({ left: 0, top: 0, right: 0, bottom: 0,
+          width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+        grid.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 1 }));
+      };
+      const change = (id: string, value: string): void => {
+        const select = element<HTMLSelectElement>(id);
+        select.value = value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      // Each time, the beat the head stands on is asked for there and then,
+      // before any tick of the page's timer.
+      const theBeatIsAskedForNow = (what: string): void => {
+        expect(metronome.clicks[0]?.atMs, what).toBe(clock.now());
+        metronome.clicks.length = 0;
+      };
+
+      vi.useFakeTimers();
+      try {
+        metronome.clicks.length = 0;
+        element<HTMLButtonElement>('roll-play').click();
+        theBeatIsAskedForNow('started');
+        clock.advance(600);
+        vi.advanceTimersByTime(600);
+        metronome.clicks.length = 0;
+        // Moved back to the first beat while it sounds.
+        tapTheFirstBeat();
+        theBeatIsAskedForNow('moved');
+        change('roll-speed', '75');
+        theBeatIsAskedForNow('slowed');
+        change('roll-grid', '2');
+        theBeatIsAskedForNow('counted finer');
+        element<HTMLButtonElement>('roll-stop').click();
+        element<HTMLButtonElement>('roll-stop').click();
+        // Silent, a change asks for no beat.
+        change('roll-grid', '1');
+        change('roll-speed', '100');
+        expect(metronome.clicks).toEqual([]);
+        element<HTMLButtonElement>('roll-close').click();
+
+        // On the notes, from the beginning, and at another speed.
+        element<HTMLButtonElement>('run-replay').click();
+        expect(runtime.controller.replaying).toBe(true);
+        theBeatIsAskedForNow('shown again');
+        element<HTMLButtonElement>('focus-slower').click();
+        expect(element<HTMLSelectElement>('roll-speed').value).not.toBe('100');
+        theBeatIsAskedForNow('shown again slower');
+      } finally {
+        vi.useRealTimers();
       }
     });
 

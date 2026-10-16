@@ -9328,6 +9328,7 @@ export class AppView {
       if (roll !== null) {
         this.takeBackTheRollsClicks();
         this.rollClicksSent = clicksBefore(roll, this.headIsAtMs(), this.theRollsGrid());
+        this.clickAheadOfTheRoll();
       }
     });
     this.listen(this.el.rollSpeed, 'change', () => {
@@ -9338,6 +9339,7 @@ export class AppView {
       if (roll !== null) {
         this.takeBackTheRollsClicks();
         this.rollClicksSent = clicksBefore(roll, this.headIsAtMs(), this.theRollsGrid());
+        this.clickAheadOfTheRoll();
       }
       this.describeTheRoll();
     });
@@ -10696,7 +10698,8 @@ export class AppView {
     const from = this.replayAtMs;
     player.setSpeed(this.theRollsSpeed());
     player.play(RUN_REPLAY_ID, rollAsEvents(roll), from);
-    this.replayClicksSent = clicksBefore(roll, from, this.theRollsGrid());
+    // Those due at once handed over at once, as the notes are: see `clickAheadOfTheRoll`.
+    this.replayClicksSent = this.clickTheRunsBeats(roll, clicksBefore(roll, from, this.theRollsGrid()), from);
     this.runtime.controller.replayAt(from);
     this.showTheReplaysKeys(from);
     this.letTheKeysFollow();
@@ -11476,7 +11479,11 @@ export class AppView {
       player.setSpeed(this.theRollsSpeed());
       // Placed at the old speed, so taken back and handed over again.
       this.runtime.metronomeClick.takeBackTheClicks();
-      this.replayClicksSent = clicksBefore(roll, player.positionMs, this.theRollsGrid());
+      this.replayClicksSent = this.clickTheRunsBeats(
+        roll,
+        clicksBefore(roll, player.positionMs, this.theRollsGrid()),
+        player.positionMs,
+      );
     }
     this.describeTempo();
   }
@@ -14519,6 +14526,7 @@ export class AppView {
     this.rollClicksSent = clicksBefore(roll, this.rollAtMs, this.theRollsGrid());
     this.runtime.takePlayer.setSpeed(this.theRollsSpeed());
     this.runtime.takePlayer.play(RUN_ROLL_ID, rollAsEvents(roll), this.rollAtMs);
+    this.clickAheadOfTheRoll();
     if (this.rollTick === null) {
       this.rollTick = setInterval(() => this.followTheRoll(), TAKE_TICK_MS);
     }
@@ -14676,6 +14684,7 @@ export class AppView {
     this.rollClicksSent = clicksBefore(roll, at, this.theRollsGrid());
     if (this.runtime.takePlayer.playing === RUN_ROLL_ID) {
       this.runtime.takePlayer.seek(at);
+      this.clickAheadOfTheRoll();
     }
     this.describeTheRoll();
   }
@@ -14717,6 +14726,20 @@ export class AppView {
    * moments were recorded, and what they need is sounding at a time, not a
    * tempo to be counted at.
    */
+  /**
+   * Hands the metronome at once the clicks a playback of the drawing has due
+   * from where it now is, as the player hands over its notes the moment it
+   * starts or moves. Left to the next tick, a tick later, a beat at the very
+   * start was placed that far behind the sound and heard late, while every
+   * beat after it went out ahead in time.
+   */
+  private clickAheadOfTheRoll(): void {
+    const player = this.runtime.takePlayer;
+    if (player.playing === RUN_ROLL_ID) {
+      this.soundTheBeat(player.positionMs);
+    }
+  }
+
   private soundTheBeat(positionMs: number): void {
     const roll = this.theRoll();
     if (roll === null) {

@@ -220,6 +220,15 @@ export function silentWav(seconds: number, sampleRate = 8_000): Uint8Array<Array
 /** How long the silence goes before it loops. */
 const SILENCE_SECONDS = 10;
 
+/** How long the music stays stopped before the silence beside it is let go of. */
+export const LET_GO_AFTER_MS = 30_000;
+
+/** The timers the silence waits with, named so a test can stand in. */
+export interface SilenceTimers {
+  setTimeout(run: () => void, ms: number): ReturnType<typeof setTimeout>;
+  clearTimeout(id: ReturnType<typeof setTimeout>): void;
+}
+
 /**
  * Silence on a loop in an `<audio>` element, made the first time it is asked
  * to play: a page that never plays a performance never builds it.
@@ -227,8 +236,19 @@ const SILENCE_SECONDS = 10;
 export class LoopedSilence implements SilentPlayer {
   private element: HTMLAudioElement | null = null;
   private url: string | null = null;
+  private readonly timers: SilenceTimers;
+  /** The letting go waiting out `LET_GO_AFTER_MS`, while the music may still come back. */
+  private lettingGo: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(timers: SilenceTimers = { setTimeout: (run, ms) => setTimeout(run, ms), clearTimeout: (id) => clearTimeout(id) }) {
+    this.timers = timers;
+  }
 
   play(): void {
+    if (this.lettingGo !== null) {
+      this.timers.clearTimeout(this.lettingGo);
+      this.lettingGo = null;
+    }
     if (this.element === null) {
       this.url = URL.createObjectURL(new Blob([silentWav(SILENCE_SECONDS)], { type: 'audio/wav' }));
       this.element = new Audio(this.url);
@@ -257,11 +277,33 @@ export class LoopedSilence implements SilentPlayer {
   }
 
   /**
+   * Let go of once the music has stayed stopped a while: held at once, and
+   * emptied after `LET_GO_AFTER_MS` unless the music plays again first.
+   *
+   * Not at once. Emptied the moment the music stopped, the element was made
+   * again at the next start, and on his iPad a player beginning stands the
+   * audio device: about 70 ms just after it, measured, with the first notes
+   * already sounding - a stutter at every start, where before it the element
+   * lived on and only the first start had one. Kept for a run of starts and
+   * stops, it is begun once; let go of after a while, the platform's panel
+   * still stops showing a player of silence.
+   */
+  release(): void {
+    this.element?.pause();
+    if (this.element === null || this.lettingGo !== null) {
+      return;
+    }
+    // Its wait is called off by the next play, which a wait already out
+    // costs nothing.
+    this.lettingGo = this.timers.setTimeout(() => this.letGo(), LET_GO_AFTER_MS);
+  }
+
+  /**
    * Emptied as a media element is let go of - its source taken away and
    * loaded again - so the browser stops counting the page as a player; and
    * its file freed. Made again the next time the music plays.
    */
-  release(): void {
+  private letGo(): void {
     const element = this.element;
     if (element !== null) {
       element.pause();

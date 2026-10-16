@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LoopedSilence } from '../../src/infrastructure/media/MediaSessionKeys.js';
+import { LET_GO_AFTER_MS, LoopedSilence, type SilenceTimers } from '../../src/infrastructure/media/MediaSessionKeys.js';
 import { beginThePlaybackTimings, thePlaybackTimingsText } from '../../src/shared/playbackTimings.js';
 
 describe('the silence that makes the page a player', () => {
@@ -35,9 +35,34 @@ describe('the silence that makes the page a player', () => {
     return { made, freed, loaded, played };
   }
 
-  it('is let go of altogether when the music is over, its file freed, and made again for the next', () => {
+  /** Timers that wait until told: each waiting one, with how long it was asked to wait. */
+  function heldTimers(): SilenceTimers & { waiting: Map<number, { run: () => void; ms: number }>; runAll(): void } {
+    const waiting = new Map<number, { run: () => void; ms: number }>();
+    let made = 0;
+    return {
+      waiting,
+      setTimeout: (run, ms) => {
+        made += 1;
+        waiting.set(made, { run, ms });
+        return made as unknown as ReturnType<typeof setTimeout>;
+      },
+      clearTimeout: (id) => {
+        waiting.delete(id as unknown as number);
+      },
+      runAll: () => {
+        const due = [...waiting.values()];
+        waiting.clear();
+        for (const { run } of due) {
+          run();
+        }
+      },
+    };
+  }
+
+  it('is held when the music is over, and let go of altogether only once it has stayed over a while', () => {
     const browser = stubTheBrowser();
-    const silence = new LoopedSilence();
+    const timers = heldTimers();
+    const silence = new LoopedSilence(timers);
 
     silence.play();
     const [element] = browser.played;
@@ -49,15 +74,34 @@ describe('the silence that makes the page a player', () => {
     expect(browser.played).toEqual([element, element]);
     expect(browser.made).toHaveLength(1);
 
+    // Over: held at once, and nothing emptied - played again soon, it is the
+    // same element, begun once rather than made again.
+    const paused = vi.mocked(HTMLMediaElement.prototype.pause);
+    paused.mockClear();
     silence.release();
-    // Emptied as a media element is let go of: no source, loaded again.
+    expect(paused).toHaveBeenCalledTimes(1);
+    expect(element?.getAttribute('src')).toBe('blob:silence-0');
+    expect([...timers.waiting.values()].map(({ ms }) => ms)).toEqual([LET_GO_AFTER_MS]);
+    // Long enough for a run of starts and stops at the keys.
+    expect(LET_GO_AFTER_MS).toBeGreaterThanOrEqual(10_000);
+    silence.play();
+    expect(timers.waiting.size).toBe(0);
+    expect(browser.made).toHaveLength(1);
+    expect(browser.played.at(-1)).toBe(element);
+
+    // Over, and over twice, it waits once; once the wait is out, emptied as a
+    // media element is let go of: no source, loaded again, its file freed.
+    silence.release();
+    silence.release();
+    expect(timers.waiting.size).toBe(1);
+    timers.runAll();
     expect(element?.hasAttribute('src')).toBe(false);
     expect(browser.loaded).toEqual([element]);
     expect(browser.freed).toEqual(['blob:silence-0']);
 
-    // Let go of twice, nothing more; played again, a new one.
+    // Let go of again, nothing more to wait for; played again, a new one.
     silence.release();
-    expect(browser.freed).toHaveLength(1);
+    expect(timers.waiting.size).toBe(0);
     silence.play();
     expect(browser.made).toEqual(['blob:silence-0', 'blob:silence-1']);
     expect(browser.played.at(-1)).not.toBe(element);
@@ -105,9 +149,12 @@ describe('the silence that makes the page a player', () => {
 
   it('lets go of nothing it never made', () => {
     const browser = stubTheBrowser();
+    const timers = heldTimers();
 
-    new LoopedSilence().release();
+    new LoopedSilence(timers).release();
 
     expect([browser.freed, browser.loaded]).toEqual([[], []]);
+    // Nor waits to.
+    expect(timers.waiting.size).toBe(0);
   });
 });

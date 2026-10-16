@@ -7348,6 +7348,63 @@ describe('AppView', () => {
       expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
     });
 
+    it('strikes the chosen notes each a little harder or softer by the Humanize button, as one change', async () => {
+      const { view, sketches } = createRig();
+      await view.initialize();
+      const sketch = sketches.begin(
+        {
+          events: [0, 250, 500, 750].flatMap((atMs) => [
+            { kind: 'noteOn' as const, atMs, midi: 60, velocity: 64 / 127 },
+            { kind: 'noteOff' as const, atMs: atMs + 200, midi: 60 },
+          ]),
+          beats: [0, 500].map((atMs, beat) => ({ atMs, beat, beatsInBar: 4 })),
+        },
+        'Even',
+        1,
+      );
+      element<HTMLButtonElement>('focus-scores').click();
+      element<HTMLButtonElement>('scores-show-sketches').click();
+      rowButton('sketches-list', 'Edit this sketch').click();
+      const humanize = element<HTMLButtonElement>('roll-humanize');
+      const struck = (): number[][] =>
+        (sketches.find(sketch.id)?.events ?? []).flatMap((event) =>
+          event.kind === 'noteOn' ? [[event.atMs, Math.round(event.velocity * 127)]] : [],
+        );
+      const chosen = (): number[] =>
+        (view.rollScene?.notes ?? []).filter((note) => note.chosen === true).map((note) => note.fromMs);
+      const says = 'Humanize: each chosen note struck up to 10 steps harder or softer, as a hand would';
+      const even = [
+        [0, 64],
+        [250, 64],
+        [500, 64],
+        [750, 64],
+      ];
+
+      // Nothing chosen: dimmed, saying so, and doing nothing.
+      expect(humanize.dataset['idle']).toBe('true');
+      expect(humanize.title).toBe(`${says}. Choose a note first.`);
+      expect(humanize.getAttribute('aria-label')).toBe(humanize.title);
+      humanize.click();
+      expect(struck()).toEqual(even);
+
+      // All chosen: each struck within ten steps of where it was, where it was, and not all alike.
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'a', code: 'KeyA', ctrlKey: true }));
+      expect(humanize.dataset['idle']).toBeUndefined();
+      expect(humanize.title).toBe(says);
+      humanize.click();
+      const after = struck();
+      expect(after.map(([atMs]) => atMs)).toEqual([0, 250, 500, 750]);
+      for (const [, steps = 0] of after) {
+        expect(Math.abs(steps - 64)).toBeLessThanOrEqual(10);
+      }
+      expect(new Set(after.map(([, steps]) => steps)).size).toBeGreaterThan(1);
+      expect(chosen()).toEqual([0, 250, 500, 750]);
+      // Put back as one.
+      element<HTMLButtonElement>('roll-undo').click();
+      expect(struck()).toEqual(even);
+      expect(element<HTMLButtonElement>('roll-undo').dataset['idle']).toBe('true');
+    });
+
     it('cuts a note in two with Alt and a click, on the nearest line of the grid, or exactly with Shift', async () => {
       const { view, sketches, clock } = createRig();
       await view.initialize();

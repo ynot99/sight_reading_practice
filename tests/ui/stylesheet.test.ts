@@ -2257,9 +2257,12 @@ describe('searching the settings', () => {
     expect(body('.roll-velocity__tick')).toMatch(/position\s*:\s*absolute/);
     expect(body(".roll-velocity[data-idle='true'] .roll-velocity__track")).toMatch(/opacity\s*:\s*0?\.\d+/);
     // The hand the chosen notes are in, pressed in the accent; all three
-    // dimmed with none chosen, and Quantize with them.
+    // dimmed with none chosen, and Quantize and Humanize with them.
     expect(body(".roll-hands .button[aria-pressed='true']")).toMatch(/background\s*:\s*var\(--accent\)/);
-    expect(body(".roll-hands[data-idle='true'], .roll-quantize[data-idle='true']")).toMatch(/opacity\s*:\s*0?\.\d+/);
+    expect(body(".roll-hands[data-idle='true'], .roll-quantize[data-idle='true'], .roll-humanize[data-idle='true']")).toMatch(
+      /opacity\s*:\s*0?\.\d+/,
+    );
+    expect(body('.roll-quantize, .roll-humanize')).toMatch(/flex\s*:\s*none/);
     // And the row wraps on a phone rather than running off it, each name with
     // what it names, the slider's group taking the room.
     expect(body('.roll-velocity')).toMatch(/flex-wrap\s*:\s*wrap/);

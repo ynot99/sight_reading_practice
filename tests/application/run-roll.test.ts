@@ -35,6 +35,8 @@ import {
   theNotesOnTheClipboard,
   takeWithThePedalAt,
   theKeysOnTheGrid,
+  theKeysHumanized,
+  HUMANIZED_BY_AT_MOST,
   takeWithAKeyAdded,
   theKeysOfTheTake,
   type RolledBeat,
@@ -1762,6 +1764,69 @@ describe('changing a recording', () => {
       [500, 700],
       [1_000, 1_200],
     ]);
+  });
+
+  it('strikes the named keys each up to the most humanizing moves harder or softer, the same keys alike, all else as it was', () => {
+    const struck = (atMs: number, midi: number, steps: number): MidiFileEvent[] => [
+      { kind: 'noteOn', atMs, midi, velocity: steps / 127 },
+      off(atMs + 300, midi),
+    ];
+    const moved = new Map<number, number>();
+    // Across many chords, every loudness: the whole band either way is used, and nothing past it.
+    for (let chord = 0; chord < 200; chord += 1) {
+      const steps = 1 + ((chord * 37) % 127);
+      const events = inTheOrderPlayed([...struck(chord * 10, MIDI.C4, steps), ...struck(chord * 10, MIDI.E4, steps), ...struck(5_000, MIDI.G4, 64)]);
+      const named = [
+        { midi: MIDI.C4, downAtMs: chord * 10 },
+        { midi: MIDI.E4, downAtMs: chord * 10 },
+      ];
+      const changes = theKeysHumanized(events, named);
+      expect(changes).toEqual(theKeysHumanized(events, named));
+      for (const change of changes) {
+        const by = Math.round((change.velocity ?? 0) * 127) - steps;
+        expect(by).not.toBe(0);
+        expect(Math.abs(by)).toBeLessThanOrEqual(HUMANIZED_BY_AT_MOST);
+        expect(Math.round((change.velocity ?? 0) * 127)).toBeGreaterThanOrEqual(1);
+        expect(Math.round((change.velocity ?? 0) * 127)).toBeLessThanOrEqual(127);
+        expect([change.key.midi, change.midi, change.downAtMs, change.upAtMs]).toEqual([
+          change.key.midi,
+          change.key.midi,
+          chord * 10,
+          chord * 10 + 300,
+        ]);
+        moved.set(by, (moved.get(by) ?? 0) + 1);
+      }
+      // A key not named is never changed.
+      expect(changes.some((change) => change.key.midi === MIDI.G4)).toBe(false);
+    }
+    expect(Math.min(...moved.keys())).toBe(-HUMANIZED_BY_AT_MOST);
+    expect(Math.max(...moved.keys())).toBe(HUMANIZED_BY_AT_MOST);
+    // Two keys of one chord are not struck alike every time.
+    const alike = Array.from({ length: 50 }, (_, chord) => {
+      const events = inTheOrderPlayed([...struck(chord * 10, MIDI.C4, 64), ...struck(chord * 10, MIDI.E4, 64)]);
+      const changes = theKeysHumanized(events, [
+        { midi: MIDI.C4, downAtMs: chord * 10 },
+        { midi: MIDI.E4, downAtMs: chord * 10 },
+      ]);
+      const [first, second] = changes.map((change) => change.velocity);
+      return changes.length === 2 && first === second;
+    });
+    expect(alike.filter(Boolean).length).toBeLessThan(10);
+    // Humanized again, being other loudnesses by then, another answer.
+    const events = inTheOrderPlayed([...struck(0, MIDI.C4, 64), ...struck(0, MIDI.E4, 64)]);
+    const named = [
+      { midi: MIDI.C4, downAtMs: 0 },
+      { midi: MIDI.E4, downAtMs: 0 },
+    ];
+    const once = theKeysHumanized(events, named);
+    const after = takeWithTheKeysChanged(events, once) ?? [];
+    const steps = (changes: readonly { readonly velocity?: number }[]): number[] =>
+      changes.map((change) => Math.round((change.velocity ?? 0) * 127));
+    const firstBy = steps(once).map((each) => each - 64);
+    const againBy = steps(theKeysHumanized(after, named)).map((each, at) => each - (steps(once)[at] ?? 0));
+    expect(againBy).not.toEqual(firstBy);
+    // Nothing named, nothing changed.
+    expect(theKeysHumanized(events, [])).toEqual([]);
   });
 
   it('puts keys on the nearest line of the grid, as long as they were, never on or over another of their pitch', () => {

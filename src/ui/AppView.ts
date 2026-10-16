@@ -186,6 +186,8 @@ import {
   theNotesOnTheClipboard,
   type NoteCopied,
   theKeysOnTheGrid,
+  theKeysHumanized,
+  HUMANIZED_BY_AT_MOST,
   type KeyChange,
   type KeyNamed,
   type KeyOfTheTake,
@@ -2348,6 +2350,7 @@ export class AppView {
     rollHandPitch: HTMLButtonElement;
     rollHandRight: HTMLButtonElement;
     rollQuantize: HTMLButtonElement;
+    rollHumanize: HTMLButtonElement;
     rollDelete: HTMLButtonElement;
     rollSelect: HTMLButtonElement;
     rollUndo: HTMLButtonElement;
@@ -2729,6 +2732,7 @@ export class AppView {
       rollHandPitch: requireElement(doc, 'roll-hand-pitch'),
       rollHandRight: requireElement(doc, 'roll-hand-right'),
       rollQuantize: requireElement(doc, 'roll-quantize'),
+      rollHumanize: requireElement(doc, 'roll-humanize'),
       rollDelete: requireElement(doc, 'roll-delete'),
       rollSelect: requireElement(doc, 'roll-select'),
       rollUndo: requireElement(doc, 'roll-undo'),
@@ -9224,6 +9228,9 @@ export class AppView {
     this.listen(this.el.rollQuantize, 'click', () => {
       this.putTheChosenOnTheGrid();
     });
+    this.listen(this.el.rollHumanize, 'click', () => {
+      this.humanizeTheChosen();
+    });
     this.listen(this.el.scoresShowScores, 'click', () => {
       this.showTheList('scores');
     });
@@ -12806,6 +12813,22 @@ export class AppView {
       this.el.rollQuantize.title = quantizes;
     }
     this.el.rollQuantize.setAttribute('aria-label', this.el.rollQuantize.title);
+    const humanizes = `Humanize: each chosen note struck up to ${String(HUMANIZED_BY_AT_MOST)} steps harder or softer, as a hand would`;
+    sayWhetherIdle(this.el.rollHumanize, loudness.length === 0 ? `${humanizes}. Choose a note first.` : humanizes, loudness.length === 0);
+  }
+
+  /** The chosen notes each struck a little harder or softer: one change, put back as one. They stay chosen. */
+  private humanizeTheChosen(): void {
+    const sketch = this.theOtherRollShowing?.sketch;
+    const stored = sketch === undefined ? null : this.runtime.sketches.find(sketch.id);
+    if (sketch === undefined || stored === null) {
+      return;
+    }
+    const changes = theKeysHumanized(stored.events, sketch.chosen);
+    const events = changes.length === 0 ? null : takeWithTheKeysChanged(stored.events, changes);
+    if (events !== null) {
+      this.changeTheSketchShowing(events, [...sketch.before, asItWas(stored, sketch.chosen)], sketch.chosen);
+    }
   }
 
   /**

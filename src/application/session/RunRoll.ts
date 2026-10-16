@@ -9,6 +9,7 @@ import {
   type Exercise,
 } from '../../domain/model/Exercise.js';
 import { notesStruckAt, soundsFor, type ExerciseTimeline } from '../../domain/timeline/Timeline.js';
+import { createRng } from '../../domain/generation/Rng.js';
 import type { BeatWeight } from '../ports/IMetronome.js';
 import type {
   MidiNoteOffEvent,
@@ -1494,6 +1495,38 @@ export function takeWithThePedalAt(
     }
     held = says;
     return true;
+  });
+}
+
+/** How far humanizing moves a key's loudness at most, either way, in MIDI's 127 steps. */
+export const HUMANIZED_BY_AT_MOST = 10;
+
+/**
+ * The named keys each struck a little harder or softer, by up to
+ * `HUMANIZED_BY_AT_MOST` steps either way and within 1 to 127, as no hand
+ * strikes two keys alike: where they are and how long they are held left as
+ * they were. One that comes out as loud as it was is left out.
+ *
+ * Random, but drawn from the keys themselves - where each is and how loud -
+ * so the same keys give the same answer, and humanized again, being other
+ * loudnesses by then, give another.
+ */
+export function theKeysHumanized(events: readonly MidiFileEvent[], named: readonly KeyNamed[]): readonly KeyChange[] {
+  const keys = theKeysNamed(events, named) ?? [];
+  const steps = (key: KeyOfTheTake): number => Math.round(key.velocity * 127);
+  let seed = 0x811c9dc5;
+  for (const key of keys) {
+    for (const part of [key.midi, key.downAtMs, steps(key)]) {
+      seed = Math.imul(seed ^ Math.round(part), 0x01000193) >>> 0;
+    }
+  }
+  const rng = createRng(seed);
+  return keys.flatMap((key) => {
+    const was = steps(key);
+    const struck = Math.min(127, Math.max(1, was + rng.int(-HUMANIZED_BY_AT_MOST, HUMANIZED_BY_AT_MOST)));
+    return struck === was
+      ? []
+      : [{ key: { midi: key.midi, downAtMs: key.downAtMs }, midi: key.midi, downAtMs: key.downAtMs, upAtMs: key.upAtMs, velocity: struck / 127 }];
   });
 }
 

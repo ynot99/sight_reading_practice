@@ -1810,11 +1810,13 @@ textarea {
 }
 
 .roll-hands[data-idle='true'],
-.roll-quantize[data-idle='true'] {
+.roll-quantize[data-idle='true'],
+.roll-humanize[data-idle='true'] {
   opacity: 0.45;
 }
 
-.roll-quantize {
+.roll-quantize,
+.roll-humanize {
   flex: none;
 }
 
